@@ -1,6 +1,9 @@
 (*database/sql.DB).Close
 (*database/sql.Rows).Close
 (*database/sql.Stmt).Close
+(*github.com/cockroachdb/cockroach/vendor/github.com/pkg/sftp.clientConn).Close
+(*github.com/cockroachdb/cockroach/vendor/github.com/pkg/sftp.File).Close
+(*github.com/cockroachdb/cockroach/vendor/golang.org/x/crypto/ssh.Session).Close
 (*os.File).Close
 (io.Closer).Close
 (net.Conn).Close

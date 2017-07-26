@@ -388,6 +388,12 @@
 
 [[projects]]
   branch = "master"
+  name = "github.com/kr/fs"
+  packages = ["."]
+  revision = "2788f0dbd16903de03cb8186e5c7d97b69ad387b"
+
+[[projects]]
+  branch = "master"
   name = "github.com/kr/logfmt"
   packages = ["."]
   revision = "b84e30acd515aadc4b783ad4ff83aff3299bdfe0"
@@ -517,6 +523,12 @@
   version = "v0.8.0"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/pkg/sftp"
+  packages = ["."]
+  revision = "22f089b9c4056cf774ebd695b687d469f2ad4650"
+
+[[projects]]
   name = "github.com/prometheus/client_model"
   packages = ["go"]
   revision = "6f3806018612930941127f2a7c6c453ba2c527d2"
@@ -583,7 +595,7 @@
 
 [[projects]]
   name = "golang.org/x/crypto"
-  packages = ["bcrypt","blowfish","ssh/terminal"]
+  packages = ["bcrypt","blowfish","curve25519","ed25519","ed25519/internal/edwards25519","ssh","ssh/terminal"]
   revision = "728b753d0135da6801d45a38e6f43ff55779c5c2"
 
 [[projects]]
@@ -661,6 +673,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "ae8de04e8e36f3cc180ca9ce133a9577e8d670f566429a7a4274873f95b84b32"
+  inputs-digest = "f7ab65f3b9d17385a080aadceac05318a94426aac13787c92c6c681480a67411"
   solver-name = "gps-cdcl"
   solver-version = 1

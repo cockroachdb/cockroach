@@ -15,7 +15,13 @@
 package terrafarm
 
 import (
+	"bytes"
+	"io/ioutil"
+	"net"
 	"path/filepath"
+	"time"
+
+	"golang.org/x/crypto/ssh"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 )
@@ -31,19 +37,77 @@ func (f *Farmer) defaultKeyFile() string {
 	return filepath.Join(base, ".ssh/"+f.KeyName)
 }
 
-func (f *Farmer) ssh(host, keyfile, cmd string) (stdout string, stderr string, _ error) {
-	return f.run("ssh",
-		"-o", "ServerAliveInterval=5",
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-q", "-i", keyfile, sshUser+"@"+host, cmd)
+func (f *Farmer) getSSH(host, keyfile string) (*ssh.Client, error) {
+	if len(f.nodes) == 0 {
+		f.refresh()
+	}
+	for i := range f.nodes {
+		node := &f.nodes[i]
+		if node.hostname == host {
+			if c := node.ssh; c != nil {
+				return c, nil
+			}
+			c, err := newSSH(host, keyfile)
+			go func() {
+				defer func() { node.ssh = nil }()
+
+				t := time.NewTicker(5 * time.Second)
+				defer t.Stop()
+				for {
+					select {
+					case <-f.RPCContext.Stopper.ShouldStop():
+						return
+					case <-t.C:
+						if _, _, err := c.Conn.SendRequest("keepalive@golang.org", true, nil); err != nil {
+							// There's no useful response from these, so we
+							// can just abort if there's an error.
+							return
+						}
+					}
+				}
+			}()
+			node.ssh = c
+			return c, err
+		}
+	}
+	return newSSH(host, keyfile)
 }
 
-func (f *Farmer) scp(host, keyfile, src, dest string) error {
-	_, _, err := f.run("scp", "-r",
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-q", "-i", keyfile,
-		sshUser+"@"+host+":"+src, dest)
-	return err
+func newSSH(host, keyfile string) (*ssh.Client, error) {
+	privateKey, err := ioutil.ReadFile(keyfile)
+	if err != nil {
+		return nil, err
+	}
+	signer, err := ssh.ParsePrivateKey(privateKey)
+	if err != nil {
+		return nil, err
+	}
+	return ssh.Dial("tcp", net.JoinHostPort(host, "22"), &ssh.ClientConfig{
+		User: sshUser,
+		Auth: []ssh.AuthMethod{
+			ssh.PublicKeys(signer),
+		},
+	})
+}
+
+func (f *Farmer) ssh(host, keyfile, cmd string) (string, string, error) {
+	c, err := f.getSSH(host, keyfile)
+	if err != nil {
+		return "", "", err
+	}
+	s, err := c.NewSession()
+	if err != nil {
+		return "", "", err
+	}
+	defer s.Close()
+
+	var stdout, stderr bytes.Buffer
+
+	s.Stdout = &stdout
+	s.Stderr = &stderr
+
+	{
+		err := s.Run(cmd)
+		return stdout.String(), stderr.String(), err
+	}
 }
