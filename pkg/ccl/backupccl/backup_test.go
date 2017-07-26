@@ -372,6 +372,51 @@ func backupAndRestore(
 		}
 	}
 }
+
+func TestBackupRestoreSystemTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 0
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
+	defer cleanupFn()
+
+	tables := []string{"descriptor", "users", "zones"}
+
+	sqlDB.Exec(t, `CREATE DATABASE system_new`)
+
+	expectedFingerprints := make(map[string][][]string)
+	for _, table := range tables {
+		expectedFingerprints[table] = sqlDB.QueryStr(t,
+			fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE system.%s", table),
+		)
+	}
+
+	sqlDB.Exec(t, `BACKUP DATABASE system TO $1`, localFoo)
+	sqlDB.Exec(t, `RESTORE system.* FROM $1 WITH OPTIONS ('into_db'='system_new')`, localFoo)
+
+	for _, table := range tables {
+		a := sqlDB.QueryStr(t, fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE system_new.%s", table))
+		if e := expectedFingerprints[table]; !reflect.DeepEqual(e, a) {
+			t.Fatalf("fingerprints between system.%[1]s and system_new.%[1]s did not match:%s\n",
+				table, strings.Join(pretty.Diff(e, a), "\n"))
+		}
+	}
+
+	{
+		var e, a int
+		sqlDB.QueryRow(t, "SELECT COUNT(*) FROM [SHOW TABLES FROM system]").Scan(&e)
+		sqlDB.QueryRow(t, "SELECT COUNT(*) FROM [SHOW TABLES FROM system_new]").Scan(&a)
+		if e != a {
+			t.Fatalf("expected %d system tables in system_explicit, but got %d", e, a)
+		}
+	}
+
+	_, err := sqlDB.DB.Exec(`RESTORE system.* FROM $1`, localFoo)
+	if !testutils.IsError(err, `relation ".+" already exists`) {
+		t.Fatalf("expected 'relation already exists' error, but got %s", err)
+	}
+}
+
 func TestBackupRestoreSystemJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
