@@ -386,7 +386,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	s.sessionRegistry = sql.MakeSessionRegistry()
 	s.queryRegistry = sql.MakeQueryRegistry()
-	s.jobRegistry = jobs.MakeRegistry(s.clock, s.db, sqlExecutor, &s.nodeIDContainer)
+	s.jobRegistry = jobs.MakeRegistry(
+		s.clock, s.db, sqlExecutor, s.gossip, &s.nodeIDContainer, s.ClusterID)
 
 	s.admin = newAdminServer(s)
 	s.status = newStatusServer(
@@ -937,8 +938,8 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	})
 
-	if err := s.jobRegistry.WatchLiveness(
-		s.stopper, s.nodeLiveness, base.DefaultHeartbeatInterval,
+	if err := s.jobRegistry.Start(
+		s.stopper, s.nodeLiveness, base.DefaultHeartbeatInterval, base.DefaultHeartbeatInterval,
 	); err != nil {
 		return err
 	}

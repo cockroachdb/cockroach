@@ -21,13 +21,16 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
@@ -193,7 +196,7 @@ func (j *Job) Failed(ctx context.Context, err error) {
 	})
 	if internalErr != nil {
 		log.Errorf(ctx, "Job: ignoring error %v while logging failure for job %d: %+v",
-			err, j.id, internalErr)
+			err, *j.id, internalErr)
 	}
 	j.registry.unregister(*j.id)
 }
@@ -240,6 +243,26 @@ func (j *Job) WithTxn(txn *client.Txn) *Job {
 	return j
 }
 
+// DB returns the *client.DB associated with this job.
+func (j *Job) DB() *client.DB {
+	return j.registry.db
+}
+
+// Gossip returns the *gossip.Gossip associated with this job.
+func (j *Job) Gossip() *gossip.Gossip {
+	return j.registry.gossip
+}
+
+// NodeID returns the roachpb.NodeID associated with this job.
+func (j *Job) NodeID() roachpb.NodeID {
+	return j.registry.nodeID.Get()
+}
+
+// ClusterID returns the uuid.UUID cluster ID associated with this job.
+func (j *Job) ClusterID() uuid.UUID {
+	return j.registry.clusterID()
+}
+
 func (j *Job) runInTxn(
 	ctx context.Context, retryable func(context.Context, *client.Txn) error,
 ) error {
@@ -253,23 +276,29 @@ func (j *Job) runInTxn(
 	return j.registry.db.Txn(ctx, retryable)
 }
 
+func (j *Job) initialize(payload *Payload) (err error) {
+	j.Record.Description = payload.Description
+	j.Record.Username = payload.Username
+	j.Record.DescriptorIDs = payload.DescriptorIDs
+	if j.Record.Details, err = payload.UnwrapDetails(); err != nil {
+		return err
+	}
+	// Don't need to lock because we're the only one who has a handle on this
+	// Job so far.
+	j.mu.payload = *payload
+	return nil
+}
+
 func (j *Job) load(ctx context.Context) error {
-	return j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		payload, err := j.loadPayload(ctx, txn)
-		if err != nil {
-			return err
-		}
-		j.Record.Description = payload.Description
-		j.Record.Username = payload.Username
-		j.Record.DescriptorIDs = payload.DescriptorIDs
-		if j.Record.Details, err = payload.UnwrapDetails(); err != nil {
-			return err
-		}
-		// Don't need to lock because we're the only one who has a handle on this
-		// Job so far.
-		j.mu.payload = *payload
-		return nil
-	})
+	var payload *Payload
+	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		var err error
+		payload, err = j.loadPayload(ctx, txn)
+		return err
+	}); err != nil {
+		return err
+	}
+	return j.initialize(payload)
 }
 
 func (j *Job) loadPayload(ctx context.Context, txn *client.Txn) (*Payload, error) {
@@ -278,7 +307,6 @@ func (j *Job) loadPayload(ctx context.Context, txn *client.Txn) (*Payload, error
 	if err != nil {
 		return nil, err
 	}
-
 	return UnmarshalPayload(row[0])
 }
 
@@ -363,6 +391,14 @@ func (j *Job) update(
 		j.mu.Unlock()
 	}
 	return nil
+}
+
+func (j *Job) adopt(ctx context.Context) error {
+	return j.update(ctx, StatusRunning, func(payload *Payload) (bool, error) {
+		payload.Lease = j.registry.newLease()
+		j.initialize(payload)
+		return true, nil
+	})
 }
 
 // Type is the type of a Job.

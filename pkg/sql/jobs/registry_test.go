@@ -17,83 +17,118 @@
 package jobs
 
 import (
+	"math"
 	"testing"
 	"time"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-var dummyNodeID = func() *base.NodeIDContainer {
+var DummyNodeID = func() *base.NodeIDContainer {
 	nodeID := base.NodeIDContainer{}
 	nodeID.Reset(1)
 	return &nodeID
 }()
 
-// mockNodeLiveness allows simulating liveness failures without the full
+var DummyClusterID = func() func() uuid.UUID {
+	clusterID := uuid.MakeV4()
+	return func() uuid.UUID { return clusterID }
+}()
+
+// MockNodeLiveness allows simulating liveness failures without the full
 // storage.NodeLiveness machinery.
-type mockNodeLiveness struct {
+type MockNodeLiveness struct {
 	syncutil.Mutex
-	ch       chan struct{}
-	clock    *hlc.Clock
-	liveness storage.Liveness
+	SelfCh      chan struct{}
+	MapCh       chan struct{}
+	clock       *hlc.Clock
+	livenessMap map[roachpb.NodeID]*storage.Liveness
 }
 
-func newMockNodeLiveness(clock *hlc.Clock) *mockNodeLiveness {
-	return &mockNodeLiveness{
-		ch:    make(chan struct{}),
-		clock: clock,
-		liveness: storage.Liveness{
+func NewMockNodeLiveness(clock *hlc.Clock, nodes int) *MockNodeLiveness {
+	nl := &MockNodeLiveness{
+		SelfCh:      make(chan struct{}),
+		MapCh:       make(chan struct{}),
+		livenessMap: make(map[roachpb.NodeID]*storage.Liveness),
+		clock:       clock,
+	}
+	for i := 0; i < nodes; i++ {
+		nodeID := roachpb.NodeID(i + 1)
+		nl.livenessMap[nodeID] = &storage.Liveness{
 			Epoch:      1,
 			Expiration: hlc.MaxTimestamp,
-		},
+			NodeID:     nodeID,
+		}
 	}
+	return nl
 }
 
-// Self implements the nodeLiveness interface. On every call, a nonblocking send
-// is performed over nl.ch to allow tests to execute a callback.
-func (nl *mockNodeLiveness) Self() (*storage.Liveness, error) {
+// Self implements the nodeLiveness interface. It assumes the node ID is 1. On
+// every call, a nonblocking send is performed over nl.ch to allow tests to
+// execute a callback.
+func (nl *MockNodeLiveness) Self() (*storage.Liveness, error) {
 	select {
-	case nl.ch <- struct{}{}:
+	case nl.SelfCh <- struct{}{}:
 	default:
 	}
 	nl.Lock()
 	defer nl.Unlock()
-	return &nl.liveness, nil
+	const selfID = roachpb.NodeID(1)
+	return nl.livenessMap[selfID], nil
 }
 
-func (nl *mockNodeLiveness) incrementEpoch() {
+func (nl *MockNodeLiveness) GetLivenesses() (out []storage.Liveness) {
+	select {
+	case nl.MapCh <- struct{}{}:
+	default:
+	}
 	nl.Lock()
 	defer nl.Unlock()
-	nl.liveness.Epoch++
+	for _, liveness := range nl.livenessMap {
+		out = append(out, *liveness)
+	}
+	return out
 }
 
-func (nl *mockNodeLiveness) setExpiration(ts hlc.Timestamp) {
+func (nl *MockNodeLiveness) IncrementEpoch(id roachpb.NodeID) {
 	nl.Lock()
 	defer nl.Unlock()
-	nl.liveness.Expiration = ts
+	nl.livenessMap[id].Epoch++
 }
+
+func (nl *MockNodeLiveness) SetExpiration(id roachpb.NodeID, ts hlc.Timestamp) {
+	nl.Lock()
+	defer nl.Unlock()
+	nl.livenessMap[id].Expiration = ts
+}
+
 func TestRegistryCancelation(t *testing.T) {
 	ctx, stopper := context.Background(), stop.NewStopper()
 	defer stopper.Stop(ctx)
 
 	var db *client.DB
 	var ex sqlutil.InternalExecutor
+	var gossip *gossip.Gossip
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 
-	registry := MakeRegistry(clock, db, ex, dummyNodeID)
-	nodeLiveness := newMockNodeLiveness(clock)
+	registry := MakeRegistry(clock, db, ex, gossip, DummyNodeID, DummyClusterID)
+	nodeLiveness := NewMockNodeLiveness(clock, 1)
 
-	// Poll liveness as fast as the scheduler will allow to keep this test fast.
-	if err := registry.WatchLiveness(stopper, nodeLiveness, time.Nanosecond); err != nil {
+	const cancelInterval = time.Nanosecond
+	const adoptInterval = time.Duration(math.MaxInt64)
+	if err := registry.Start(stopper, nodeLiveness, cancelInterval, adoptInterval); err != nil {
 		t.Fatal(err)
 	}
 
@@ -105,8 +140,8 @@ func TestRegistryCancelation(t *testing.T) {
 		// Waiting for only the first call to nodeLiveness.Self is racy, as we'd
 		// perform our assertions concurrently with the registry loop's observation
 		// of our injected liveness failure, if any.
-		<-nodeLiveness.ch
-		<-nodeLiveness.ch
+		<-nodeLiveness.SelfCh
+		<-nodeLiveness.SelfCh
 	}
 
 	cancelCount := 0
@@ -117,6 +152,8 @@ func TestRegistryCancelation(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+
+	const nodeID = roachpb.NodeID(1)
 
 	// Jobs that complete while the node is live should not be canceled.
 	register(1, cancel)
@@ -130,7 +167,7 @@ func TestRegistryCancelation(t *testing.T) {
 	// Jobs that are in-progress when the liveness epoch is incremented should be
 	// canceled.
 	register(2, cancel)
-	nodeLiveness.incrementEpoch()
+	nodeLiveness.IncrementEpoch(nodeID)
 	wait()
 	if e, a := 1, cancelCount; e != a {
 		t.Fatalf("expected cancelCount of %d, but got %d", e, a)
@@ -149,7 +186,7 @@ func TestRegistryCancelation(t *testing.T) {
 	// Jobs that are in-progress when the liveness lease expires should be
 	// canceled.
 	register(4, cancel)
-	nodeLiveness.setExpiration(hlc.MinTimestamp)
+	nodeLiveness.SetExpiration(nodeID, hlc.MinTimestamp)
 	wait()
 	if e, a := 2, cancelCount; e != a {
 		t.Fatalf("expected cancelCount of %d, but got %d", e, a)
@@ -167,8 +204,9 @@ func TestRegistryCancelation(t *testing.T) {
 func TestRegistryRegister(t *testing.T) {
 	var db *client.DB
 	var ex sqlutil.InternalExecutor
+	var gossip *gossip.Gossip
 
-	registry := MakeRegistry(hlc.NewClock(hlc.UnixNano, time.Nanosecond), db, ex, dummyNodeID)
+	registry := MakeRegistry(hlc.NewClock(hlc.UnixNano, time.Nanosecond), db, ex, gossip, DummyNodeID, DummyClusterID)
 
 	if err := registry.register(42, func() {}); err != nil {
 		t.Fatal(err)
