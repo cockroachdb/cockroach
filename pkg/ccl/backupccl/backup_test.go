@@ -29,6 +29,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -372,6 +373,64 @@ func backupAndRestore(
 		}
 	}
 }
+
+func TestBackupRestoreSystemTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 0
+	ctx, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
+	defer cleanupFn()
+
+	// At the time this test was written, these were the only system tables that
+	// were reasonable for a user to backup and restore into another cluster.
+	tables := []string{"locations", "role_members", "users", "zones"}
+	tableSpec := "system." + strings.Join(tables, ", system.")
+
+	// Take a consistent fingerprint of the original tables.
+	var backupAsOf string
+	expectedFingerprints := map[string][][]string{}
+	err := crdb.ExecuteTx(ctx, sqlDB.DB, nil /* txopts */, func(tx *gosql.Tx) error {
+		for _, table := range tables {
+			rows, err := sqlDB.DB.Query("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE system." + table)
+			if err != nil {
+				return err
+			}
+			defer rows.Close()
+			expectedFingerprints[table], err = sqlutils.RowsToStrMatrix(rows)
+			if err != nil {
+				return err
+			}
+		}
+		// Record the transaction's timestamp so we can take a backup at the
+		// same time.
+		return sqlDB.DB.QueryRow("SELECT cluster_logical_timestamp()").Scan(&backupAsOf)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Backup and restore the tables into a new database.
+	sqlDB.Exec(t, `CREATE DATABASE system_new`)
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP %s TO '%s' AS OF SYSTEM TIME %s`, tableSpec, localFoo, backupAsOf))
+	sqlDB.Exec(t, fmt.Sprintf(`RESTORE %s FROM '%s' WITH into_db='system_new'`, tableSpec, localFoo))
+
+	// Verify the fingerprints match.
+	for _, table := range tables {
+		a := sqlDB.QueryStr(t, "SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE system_new."+table)
+		if e := expectedFingerprints[table]; !reflect.DeepEqual(e, a) {
+			t.Fatalf("fingerprints between system.%[1]s and system_new.%[1]s did not match:%s\n",
+				table, strings.Join(pretty.Diff(e, a), "\n"))
+		}
+	}
+
+	// Verify we can't shoot ourselves in the foot by accidentally restoring
+	// directly over the existing system tables.
+	_, err = sqlDB.DB.Exec(fmt.Sprintf(`RESTORE %s FROM '%s'`, tableSpec, localFoo))
+	if !testutils.IsError(err, `relation ".+" already exists`) {
+		t.Fatalf("expected 'relation already exists' error, but got %s", err)
+	}
+}
+
 func TestBackupRestoreSystemJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
