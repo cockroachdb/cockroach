@@ -42,7 +42,7 @@ import (
 type expectation struct {
 	DB                *gosql.DB
 	Record            jobs.Record
-	Type              string
+	Type              jobs.Type
 	Before            time.Time
 	FractionCompleted float32
 	Error             string
@@ -85,7 +85,7 @@ func (expected *expectation) verify(id *int64, expectedStatus jobs.Status) error
 	if e, a := expectedStatus, status; e != a {
 		return errors.Errorf("expected status %v, got %v", e, a)
 	}
-	if e, a := expected.Type, payload.Typ(); e != a {
+	if e, a := expected.Type, payload.Type(); e != a {
 		return errors.Errorf("expected type %v, got type %v", e, a)
 	}
 	if e, a := expected.FractionCompleted, payload.FractionCompleted; e != a {

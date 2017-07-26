@@ -18,6 +18,7 @@ package jobs
 
 import (
 	"fmt"
+	"strings"
 
 	"golang.org/x/net/context"
 
@@ -342,15 +343,8 @@ func (j *Job) update(
 	return nil
 }
 
-// Job types are named for the SQL query that creates them.
-const (
-	TypeBackup       string = "BACKUP"
-	TypeRestore      string = "RESTORE"
-	TypeSchemaChange string = "SCHEMA CHANGE"
-)
-
-// Typ returns the payload's job type.
-func (p *Payload) Typ() string {
+// Type returns the payload's job type.
+func (p *Payload) Type() Type {
 	switch p.Details.(type) {
 	case *Payload_Backup:
 		return TypeBackup
@@ -359,7 +353,7 @@ func (p *Payload) Typ() string {
 	case *Payload_SchemaChange:
 		return TypeSchemaChange
 	default:
-		panic("Payload.Typ called on a payload with an unknown details type")
+		panic("Payload.Type called on a payload with an unknown details type")
 	}
 }
 
@@ -415,4 +409,12 @@ func UnmarshalPayload(datum parser.Datum) (*Payload, error) {
 		return nil, err
 	}
 	return payload, nil
+}
+
+func (t Type) String() string {
+	// Protobufs, by convention, use CAPITAL_SNAKE_CASE for enum identifiers.
+	// Since Type's string representation is used as a SHOW JOBS output column, we
+	// simply swap underscores for spaces in the identifier for very SQL-esque
+	// names, like "BACKUP" and "SCHEMA CHANGE".
+	return strings.Replace(Type_name[int32(t)], "_", " ", -1)
 }
