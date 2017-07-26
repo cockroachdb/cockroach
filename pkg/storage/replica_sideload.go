@@ -15,14 +15,68 @@
 package storage
 
 import (
+	"math"
+	"runtime/debug"
+	"time"
+
 	"golang.org/x/net/context"
+	"golang.org/x/time/rate"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
 )
+
+var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
+	"kv.bulk_io_write.max_rate",
+	"the rate limit (bytes/sec) to use for writes to disk on behalf of bulk io ops",
+	math.MaxInt64,
+)
+
+const (
+	bulkIOWriteLimiterBurst    = 2 * 1024 * 1024 // 2MB
+	bulkIOWriteLimiterLongWait = 500 * time.Millisecond
+)
+
+// TODO(dan): This limiting should be per-store and shared between any
+// operations that need lots of disk throughput.
+var bulkIOWriteLimiter = rate.NewLimiter(
+	rate.Limit(bulkIOWriteLimit.Get()),
+	bulkIOWriteLimiterBurst,
+)
+
+func limitBulkIOWrite(ctx context.Context, cost int) {
+	// TODO(dan): If settings had callbacks, we could use one here to adjust the
+	// rate limit when it changed.
+	bulkIOWriteLimiter.SetLimit(rate.Limit(bulkIOWriteLimit.Get()))
+
+	// The limiter disallows anything greater than its burst (set to
+	// bulkIOWriteLimiterBurst), so cap the batch size if it would overflow.
+	//
+	// TODO(dan): This obviously means the limiter is no longer accounting for
+	// the full cost. I've tried calling WaitN in a loop to fully cover the
+	// cost, but that doesn't seem to be as smooth in practice (TPCH-10 restores
+	// on azure local disks), I think because the file is written all at once at
+	// the end. This could be fixed by writing the file in chunks, which also
+	// would likely help the overall smoothness, too.
+	if cost > bulkIOWriteLimiterBurst {
+		cost = bulkIOWriteLimiterBurst
+	}
+
+	begin := timeutil.Now()
+	if err := bulkIOWriteLimiter.WaitN(ctx, cost); err != nil {
+		log.Errorf(ctx, "error rate limiting bulk io write: %+v", err)
+	}
+
+	if d := timeutil.Since(begin); d > bulkIOWriteLimiterLongWait {
+		log.Warningf(ctx, "bulk io write limiter took %s (>%s):\n%s",
+			d, bulkIOWriteLimiterLongWait, debug.Stack())
+	}
+}
 
 var errSideloadedFileNotFound = errors.New("sideloaded file not found")
 

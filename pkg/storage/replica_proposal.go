@@ -579,6 +579,8 @@ func addSSTablePreApply(
 	}
 	path += ".ingested"
 
+	limitBulkIOWrite(ctx, len(sst.Data))
+
 	var move bool
 	if inmem, ok := eng.(engine.InMem); ok {
 		path = fmt.Sprintf("%x", checksum)
