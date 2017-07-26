@@ -346,6 +346,67 @@ func backupAndRestore(
 	}
 }
 
+func TestBackupRestoreSystemTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 0
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
+	defer cleanupFn()
+
+	tables := []string{"descriptor", "users"}
+
+	dirExplicit := filepath.Join(dir, "explicit")
+	dirImplicit := filepath.Join(dir, "implicit")
+
+	sqlDB.Exec(`CREATE DATABASE system_explicit`)
+	sqlDB.Exec(`CREATE DATABASE system_implicit`)
+
+	expectedFingerprints := make(map[string][][]string)
+	for _, table := range tables {
+		expectedFingerprints[table] = sqlDB.QueryStr(
+			fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE system.%s", table),
+		)
+	}
+
+	sqlDB.Exec(`BACKUP DATABASE system TO $1`, dirExplicit)
+	sqlDB.Exec(`BACKUP DATABASE data TO $1`, dirImplicit)
+	sqlDB.Exec(`RESTORE system.* FROM $1 WITH OPTIONS ('into_db'='system_explicit')`, dirExplicit)
+	sqlDB.Exec(`RESTORE system.* FROM $1 WITH OPTIONS ('into_db'='system_implicit')`, dirImplicit)
+
+	for _, table := range tables {
+		for _, db := range []string{"system_explicit", "system_implicit"} {
+			a := sqlDB.QueryStr(fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s.%s", db, table))
+			if e := expectedFingerprints[table]; !reflect.DeepEqual(e, a) {
+				t.Fatalf("fingerprints between system.%[2]s and %[1]s.%[2]s did not match:%s\n",
+					db, table, strings.Join(pretty.Diff(e, a), "\n"))
+			}
+		}
+	}
+
+	{
+		var e, a int
+		sqlDB.QueryRow("SELECT COUNT(*) FROM [SHOW TABLES FROM system]").Scan(&e)
+		sqlDB.QueryRow("SELECT COUNT(*) FROM [SHOW TABLES FROM system_explicit]").Scan(&a)
+		if e != a {
+			t.Fatalf("expected %d system tables in system_explicit, but got %d", e, a)
+		}
+	}
+
+	{
+		var a int
+		sqlDB.QueryRow("SELECT COUNT(*) FROM [SHOW TABLES FROM system_implicit]").Scan(&a)
+		if e := len(tables); e != a {
+			t.Fatalf("expected %d system tables in system_implicit, but got %d", e, a)
+		}
+	}
+
+	if _, err := sqlDB.DB.Exec(
+		`RESTORE system.* FROM $1`, dirImplicit,
+	); !testutils.IsError(err, `relation ".+" already exists`) {
+		t.Fatalf("expected 'relation already exists' error, but got %s", err)
+	}
+}
+
 func verifySystemJob(
 	db *sqlutils.SQLRunner, offset int, expectedType string, expected jobs.Record,
 ) error {
