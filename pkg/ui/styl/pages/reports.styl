@@ -124,3 +124,23 @@ $reports-table
   list-style-type none
   margin 0
   padding 0
+
+.certs-table
+  @extend $reports-table
+
+  &__cell
+    background-color white
+    padding 6px 12px
+    max-width none
+
+    &--header
+      background-color $link-color
+      text-align right
+
+    &--header-warning
+      color $alert-color
+
+.certs-entries-list
+  list-style-type none
+  margin 0
+  padding 0

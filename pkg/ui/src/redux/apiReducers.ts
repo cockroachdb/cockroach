@@ -75,6 +75,9 @@ export const refreshQueryPlan = queryPlanReducerObj.refresh;
 const problemRangesReducerObj = new CachedDataReducer(api.getProblemRanges, "problemRanges");
 export const refreshProblemRanges = problemRangesReducerObj.refresh;
 
+const certificatesReducerObj = new CachedDataReducer(api.getCertificates, "certificates");
+export const refreshCertificates = certificatesReducerObj.refresh;
+
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
   events: CachedDataReducerState<api.EventsResponseMessage>;
@@ -90,6 +93,7 @@ export interface APIReducersState {
   liveness: CachedDataReducerState<api.LivenessResponseMessage>;
   queryPlan: CachedDataReducerState<api.QueryPlanResponseMessage>;
   problemRanges: CachedDataReducerState<api.ProblemRangesResponseMessage>;
+  certificates: CachedDataReducerState<api.CertificatesResponseMessage>;
 }
 
 export default combineReducers<APIReducersState>({
@@ -107,6 +111,7 @@ export default combineReducers<APIReducersState>({
   [livenessReducerObj.actionNamespace]: livenessReducerObj.reducer,
   [queryPlanReducerObj.actionNamespace]: queryPlanReducerObj.reducer,
   [problemRangesReducerObj.actionNamespace]: problemRangesReducerObj.reducer,
+  [certificatesReducerObj.actionNamespace]: certificatesReducerObj.reducer,
 });
 
 export {CachedDataReducerState, KeyedCachedDataReducerState};

@@ -56,6 +56,9 @@ export type QueryPlanResponseMessage = protos.cockroach.server.serverpb.QueryPla
 export type ProblemRangesRequestMessage = protos.cockroach.server.serverpb.ProblemRangesRequest;
 export type ProblemRangesResponseMessage = protos.cockroach.server.serverpb.ProblemRangesResponse;
 
+export type CertificatesRequestMessage = protos.cockroach.server.serverpb.CertificatesRequest;
+export type CertificatesResponseMessage = protos.cockroach.server.serverpb.CertificatesResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
@@ -223,4 +226,9 @@ export function getQueryPlan(req: QueryPlanRequestMessage, timeout?: moment.Dura
 export function getProblemRanges(req: ProblemRangesRequestMessage, timeout?: moment.Duration): Promise<ProblemRangesResponseMessage> {
   const query = (!_.isEmpty(req.node_id)) ? `?node_id=${req.node_id}` : "";
   return timeoutFetch(serverpb.ProblemRangesResponse, `${STATUS_PREFIX}/problemranges${query}`, null, timeout);
+}
+
+// getCertificates returns information about a node's certificates.
+export function getCertificates(req: CertificatesRequestMessage, timeout?: moment.Duration): Promise<CertificatesResponseMessage> {
+  return timeoutFetch(serverpb.CertificatesResponse, `${STATUS_PREFIX}/certificates/${req.node_id}`, null, timeout);
 }
