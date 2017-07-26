@@ -54,6 +54,14 @@ const (
 // to durable storage.
 var BackupCheckpointInterval = time.Minute
 
+// BackupImplicitSQLDescriptors are descriptors for tables that are implicitly
+// included in every backup, plus their parent database descriptors.
+var BackupImplicitSQLDescriptors = []sqlbase.Descriptor{
+	*sqlbase.WrapDescriptor(&sqlbase.SystemDB),
+	*sqlbase.WrapDescriptor(&sqlbase.DescriptorTable),
+	*sqlbase.WrapDescriptor(&sqlbase.UsersTable),
+}
+
 // exportStorageFromURI returns an ExportStorage for the given URI.
 func exportStorageFromURI(ctx context.Context, uri string) (storageccl.ExportStorage, error) {
 	conf, err := storageccl.ExportStorageConfFromURI(uri)
@@ -340,6 +348,24 @@ func backup(
 		return BackupDescriptor{}, err
 	}
 
+	sqlDescs = append(sqlDescs, BackupImplicitSQLDescriptors...)
+
+	// Dedupe. Duplicate descriptors will cause restore to fail.
+	{
+		descsByID := make(map[sqlbase.ID]sqlbase.Descriptor)
+		for _, sqlDesc := range sqlDescs {
+			descsByID[sqlDesc.GetID()] = sqlDesc
+		}
+		sqlDescs = make([]sqlbase.Descriptor, len(descsByID))
+		for _, sqlDesc := range descsByID {
+			sqlDescs = append(sqlDescs, sqlDesc)
+		}
+	}
+
+	// Ensure interleaved tables appear after their parent. Since parents must be
+	// created before their children, simply sorting by ID accomplishes this.
+	sort.Slice(sqlDescs, func(i, j int) bool { return sqlDescs[i].GetID() < sqlDescs[j].GetID() })
+
 	for _, desc := range sqlDescs {
 		if dbDesc := desc.GetDatabase(); dbDesc != nil {
 			if err := p.CheckPrivilege(dbDesc, privilege.SELECT); err != nil {
@@ -348,8 +374,7 @@ func backup(
 		}
 	}
 
-	// Backup users, descriptors, and the entire keyspace for user data.
-	tables := []*sqlbase.TableDescriptor{&sqlbase.DescriptorTable, &sqlbase.UsersTable}
+	var tables []*sqlbase.TableDescriptor
 	for _, desc := range sqlDescs {
 		if tableDesc := desc.GetTable(); tableDesc != nil {
 			tables = append(tables, tableDesc)
