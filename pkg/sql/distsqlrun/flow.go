@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -76,6 +77,9 @@ type FlowCtx struct {
 	// tempStorage is used by some DistSQL processors to store Rows when the
 	// working set is larger than can be stored in memory.
 	tempStorage engine.Engine
+
+	// JobRegistry is used during backfill to load jobs which keep state.
+	JobRegistry *jobs.Registry
 }
 
 func (flowCtx *FlowCtx) setupTxn() *client.Txn {

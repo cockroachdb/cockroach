@@ -338,6 +338,30 @@ func (j *Job) update(
 	return nil
 }
 
+func setDetails(payload *Payload, details interface{}) error {
+	switch d := details.(type) {
+	case BackupDetails:
+		payload.Details = &Payload_Backup{Backup: &d}
+	case RestoreDetails:
+		payload.Details = &Payload_Restore{Restore: &d}
+	case SchemaChangeDetails:
+		payload.Details = &Payload_SchemaChange{SchemaChange: &d}
+	default:
+		return errors.Errorf("JobLogger: unsupported job details type %T", d)
+	}
+	return nil
+}
+
+// SetDetails sets the details field of the currently running tracked job.
+func (j *Job) SetDetails(ctx context.Context, details interface{}) error {
+	return j.update(ctx, StatusRunning, func(payload *Payload) (bool, error) {
+		if err := setDetails(payload, details); err != nil {
+			return false, err
+		}
+		return true, nil
+	})
+}
+
 // Job types are named for the SQL query that creates them.
 const (
 	TypeBackup       string = "BACKUP"

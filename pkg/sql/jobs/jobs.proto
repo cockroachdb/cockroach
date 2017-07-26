@@ -18,6 +18,7 @@ syntax = "proto3";
 package cockroach.sql.jobs;
 option go_package = "jobs";
 
+import "cockroach/pkg/roachpb/data.proto";
 import "gogoproto/gogo.proto";
 
 message BackupDetails {
@@ -28,8 +29,19 @@ message RestoreDetails {
   bytes low_water_mark = 1;
 }
 
+message ResumeSpanList {
+  repeated roachpb.Span resume_spans = 1 [(gogoproto.nullable) = false];
+}
+
 message SchemaChangeDetails {
-  // Intentionally empty.
+    int64 readAsOf = 1;
+    // A schema change can involve running multiple processors backfilling
+    // or deleting data. They occasionally checkpoint Spans so that the
+    // processing can resume in the event of a node failure. The spans are
+    // non-overlapping contiguous areas of the KV space that still need to
+    // be processed.
+    repeated ResumeSpanList resume_span_list = 2 [(gogoproto.nullable) = false];
+
 }
 
 message Payload {
