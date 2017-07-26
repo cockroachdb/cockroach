@@ -1616,7 +1616,7 @@ var Builtins = map[string][]Builtin{
 	"current_schemas": {
 		Builtin{
 			Types:      ArgTypes{{"include_pg_catalog", TypeBool}},
-			ReturnType: fixedReturnType(TypeStringArray),
+			ReturnType: fixedReturnType(TArray{TypeString}),
 			category:   categorySystemInfo,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				includePgCatalog := *(args[0].(*DBool))
