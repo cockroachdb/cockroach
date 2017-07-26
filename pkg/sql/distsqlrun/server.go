@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -105,6 +106,9 @@ type ServerConfig struct {
 	// NodeID is the id of the node on which this Server is running.
 	NodeID    *base.NodeIDContainer
 	ClusterID uuid.UUID
+
+	// JobRegistry manages jobs being used by this Server.
+	JobRegistry *jobs.Registry
 }
 
 // ServerImpl implements the server for the distributed SQL APIs.
@@ -218,6 +222,7 @@ func (ds *ServerImpl) setupFlow(
 		testingKnobs:   ds.TestingKnobs,
 		nodeID:         nodeID,
 		tempStorage:    ds.tempStorage,
+		JobRegistry:    ds.ServerConfig.JobRegistry,
 	}
 
 	ctx = flowCtx.AnnotateCtx(ctx)

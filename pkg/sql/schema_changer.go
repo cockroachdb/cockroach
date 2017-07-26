@@ -410,7 +410,7 @@ func (sc *SchemaChanger) exec(
 	}
 
 	// Find our job.
-	foundJobID := false
+	foundjobID := false
 	for _, g := range tableDesc.MutationJobs {
 		if g.MutationID == sc.mutationID {
 			job, err := sc.jobRegistry.LoadJob(ctx, g.JobID)
@@ -418,11 +418,11 @@ func (sc *SchemaChanger) exec(
 				return err
 			}
 			sc.job = job
-			foundJobID = true
+			foundjobID = true
 			break
 		}
 	}
-	if !foundJobID {
+	if !foundjobID {
 		// No job means we've already run and completed this schema change
 		// successfully, so we can just exit.
 		return nil
@@ -688,7 +688,12 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 				// mutation ID we're looking for.
 				break
 			}
-			desc.Mutations[i].ResumeSpans = nil
+
+			details, ok := sc.job.Record.Details.(jobs.SchemaChangeDetails)
+			if !ok {
+				return errors.Errorf("expected SchemaChangeDetails job type, got %T", sc.job.Record.Details)
+			}
+			details.ResumeSpanList[i].ResumeSpans = nil
 			log.Warningf(ctx, "reverse schema change mutation: %+v", mutation)
 			switch mutation.Direction {
 			case sqlbase.DescriptorMutation_ADD:
