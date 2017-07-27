@@ -109,3 +109,14 @@ func (o KVOptions) Format(buf *bytes.Buffer, f FmtFlags) {
 		}
 	}
 }
+
+// Load represents a LOAD statement.
+type Load struct {
+}
+
+var _ Statement = &Load{}
+
+// Format implements the NodeFormatter interface.
+func (node *Load) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("LOAD")
+}

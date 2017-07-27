@@ -253,6 +253,12 @@ func (n *Insert) StatementType() StatementType { return n.Returning.statementTyp
 func (*Insert) StatementTag() string { return "INSERT" }
 
 // StatementType implements the Statement interface.
+func (n *Load) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*Load) StatementTag() string { return "LOAD" }
+
+// StatementType implements the Statement interface.
 func (*ParenSelect) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -628,6 +634,7 @@ func (n *Explain) String() string                  { return AsString(n) }
 func (n *Grant) String() string                    { return AsString(n) }
 func (n *Help) String() string                     { return AsString(n) }
 func (n *Insert) String() string                   { return AsString(n) }
+func (n *Load) String() string                     { return AsString(n) }
 func (n *ParenSelect) String() string              { return AsString(n) }
 func (n *PauseJob) String() string                 { return AsString(n) }
 func (n *Prepare) String() string                  { return AsString(n) }
