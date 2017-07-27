@@ -437,6 +437,9 @@ func (p *planner) newPlan(
 	case *parser.Split:
 		return p.Split(ctx, n)
 	case *parser.Truncate:
+		if err := p.txn.SetSystemConfigTrigger(); err != nil {
+			return nil, err
+		}
 		return p.Truncate(ctx, n)
 	case *parser.UnionClause:
 		return p.UnionClause(ctx, n, desiredTypes)

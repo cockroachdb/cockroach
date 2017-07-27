@@ -147,8 +147,13 @@ func TestGetZoneConfig(t *testing.T) {
 	}
 
 	expectedCounter++
-	tb22 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE TABLE db2.tb2 (k INT PRIMARY KEY, v INT)`); err != nil {
+		t.Fatal(err)
+	}
+
+	expectedCounter++
+	tb22 := expectedCounter
+	if _, err := sqlDB.Exec(`TRUNCATE TABLE db2.tb2`); err != nil {
 		t.Fatal(err)
 	}
 
