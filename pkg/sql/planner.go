@@ -162,6 +162,14 @@ func (p *planner) User() string {
 	return p.session.User
 }
 
+func (p *planner) EvalContext() parser.EvalContext {
+	return p.evalCtx
+}
+
+func (p *planner) DistLoader() *DistLoader {
+	return &DistLoader{distSQLPlanner: p.session.distSQLPlanner}
+}
+
 // setTxn resets the current transaction in the planner and
 // initializes the timestamps used by SQL built-in functions from
 // the new txn object, if any.
