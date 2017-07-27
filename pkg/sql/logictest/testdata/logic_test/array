@@ -334,9 +334,6 @@ INSERT INTO a VALUES (ARRAY['foo'])
 statement error expected 'foo' to be of type int, found type string
 INSERT INTO a VALUES (ARRAY[1, 'foo'])
 
-statement error NULL values disallowed in ARRAYs
-INSERT INTO a VALUES (ARRAY[NULL::int])
-
 statement ok
 DELETE FROM a
 
@@ -356,6 +353,35 @@ SELECT b[2] FROM a ORDER BY b[1]
 2
 5
 NULL
+
+# NULL values
+
+statement ok
+DELETE FROM a
+
+statement ok
+INSERT INTO a VALUES (ARRAY[NULL::INT]), (ARRAY[NULL::INT, 1]), (ARRAY[1, NULL::INT]), (ARRAY[NULL::INT, NULL::INT])
+
+query T
+SELECT * FROM a
+----
+{NULL}
+{NULL,1}
+{1,NULL}
+{NULL,NULL}
+
+statement ok
+DELETE FROM a
+
+# Test with arrays bigger than 8 elements so the NULL bitmap has to be larger than a byte
+
+statement ok
+INSERT INTO a VALUES (ARRAY[1,2,3,4,5,6,7,8,NULL::INT])
+
+query T
+SELECT * FROM a
+----
+{1,2,3,4,5,6,7,8,NULL}
 
 statement ok
 DROP TABLE a
@@ -380,6 +406,19 @@ query T
 SELECT b FROM a
 ----
 {}
+
+# Test NULLs with strings
+
+statement ok
+DELETE FROM a
+
+statement ok
+INSERT INTO a VALUES (ARRAY[NULL::STRING, NULL::STRING, NULL::STRING, NULL::STRING, NULL::STRING, NULL::STRING, 'G'])
+
+query T
+SELECT * FROM a
+----
+{NULL,NULL,NULL,NULL,NULL,NULL,"G"}
 
 statement ok
 DROP TABLE a
