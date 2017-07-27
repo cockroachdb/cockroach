@@ -151,6 +151,7 @@ var keywords = map[string]int{
 	"LEVEL":                     LEVEL,
 	"LIKE":                      LIKE,
 	"LIMIT":                     LIMIT,
+	"LOAD":                      LOAD,
 	"LOCAL":                     LOCAL,
 	"LOCALTIME":                 LOCALTIME,
 	"LOCALTIMESTAMP":            LOCALTIMESTAMP,

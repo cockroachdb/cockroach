@@ -408,7 +408,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %token <str>   KEY KEYS KV
 
 %token <str>   LATERAL LC_CTYPE LC_COLLATE
-%token <str>   LEADING LEAST LEFT LEVEL LIKE LIMIT LOCAL
+%token <str>   LEADING LEAST LEFT LEVEL LIKE LIMIT LOAD LOCAL
 %token <str>   LOCALTIME LOCALTIMESTAMP LOW LSHIFT
 
 %token <str>   MATCH MINUTE MONTH
@@ -535,6 +535,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <Statement> deallocate_stmt
 %type <Statement> grant_stmt
 %type <Statement> insert_stmt
+%type <Statement> load_stmt
 %type <Statement> pause_stmt
 %type <Statement> release_stmt
 %type <Statement> reset_stmt
@@ -893,6 +894,7 @@ stmt:
 | grant_stmt
 | help_stmt
 | insert_stmt
+| load_stmt
 | pause_stmt
 | prepare_stmt
 | restore_stmt
@@ -1157,6 +1159,13 @@ restore_stmt:
   RESTORE targets FROM string_or_placeholder_list opt_as_of_clause opt_with_options
   {
     $$.val = &Restore{Targets: $2.targetList(), From: $4.exprs(), AsOf: $5.asOfClause(), Options: $6.kvOptions()}
+  }
+
+load_stmt:
+  LOAD
+  {
+    /* SKIP DOC */
+    $$.val = &Load{}
   }
 
 string_or_placeholder:
@@ -5629,6 +5638,7 @@ unreserved_keyword:
 | LC_COLLATE
 | LC_CTYPE
 | LEVEL
+| LOAD
 | LOCAL
 | LOW
 | MATCH

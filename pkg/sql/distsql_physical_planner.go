@@ -769,6 +769,85 @@ func (dsp *distSQLPlanner) CreateBackfiller(
 	return p, nil
 }
 
+// DistLoader uses DistSQL to convert external data formats (csv, etc) into
+// sstables of our mvcc-format key values.
+type DistLoader struct {
+	distSQLPlanner *distSQLPlanner
+}
+
+// LoadCSV TODO(dan): This entire method is a placeholder to get the distsql
+// plumbing worked out while mjibson works on the new processors and router. The
+// intention is to manually create the distsql plan, so we can have control over
+// where the work is scheduled, but then use the normal distsql machinery for
+// everything else. Currently, it runs a very simple flow just to make sure
+// everything gets set up correctly. It is in no way representative of the
+// actual flow that will be used for csv -> BACKUP, but is enough to get the
+// flow setup worked out.
+func (l *DistLoader) LoadCSV(
+	ctx context.Context,
+	db *client.DB,
+	evalCtx parser.EvalContext,
+	nodes []roachpb.NodeDescriptor,
+	rows *sqlbase.RowContainer,
+) error {
+	// Manually construct a plan that schedules a values processor on every
+	// node, each of which returns one row with a single column containing the
+	// node's nodeID. These are passed back and locally summed.
+	//
+	// TODO(dan/mjibson): Fill in the real planning code.
+	var p physicalPlan
+	for _, node := range nodes {
+		values := distsqlrun.ValuesCoreSpec{
+			Columns: []distsqlrun.DatumInfo{{
+				Encoding: sqlbase.DatumEncoding_VALUE,
+				Type:     sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
+			}},
+			RawBytes: [][]byte{
+				encoding.EncodeIntValue(nil, encoding.NoColumnID, int64(node.NodeID)),
+			},
+		}
+		proc := distsqlplan.Processor{
+			Node: node.NodeID,
+			Spec: distsqlrun.ProcessorSpec{
+				Core:    distsqlrun.ProcessorCoreUnion{Values: &values},
+				Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
+				StageID: 0,
+			},
+		}
+		pIdx := p.AddProcessor(proc)
+		p.ResultRouters = append(p.ResultRouters, pIdx)
+	}
+	// TODO(dan/mjibson): Fill in the real planning code.
+	p.planToStreamColMap = []int{0}
+
+	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		planCtx := l.distSQLPlanner.NewPlanningCtx(ctx, txn)
+		// Because we're not going through the normal pathways, we have to set up
+		// the nodeID -> nodeAddress map ourselves.
+		for _, node := range nodes {
+			planCtx.nodeAddresses[node.NodeID] = node.Address.String()
+		}
+		// TODO(dan): Consider making FinalizePlan take a map explicitly instead
+		// of this PlanCtx. https://reviewable.io/reviews/cockroachdb/cockroach/17279#-KqOrLpy9EZwbRKHLYe6:-KqOp00ntQEyzwEthAsl:bd4nzje
+		l.distSQLPlanner.FinalizePlan(&planCtx, &p)
+
+		rows.Clear(ctx)
+		recv, err := makeDistSQLReceiver(
+			ctx,
+			rows,
+			nil, /* rangeCache */
+			nil, /* leaseCache */
+			txn,
+			func(ts hlc.Timestamp) {},
+		)
+		if err != nil {
+			return err
+		}
+		return l.distSQLPlanner.Run(&planCtx, txn, &p, &recv, evalCtx)
+	})
+	return err
+}
+
 // selectRenders takes a physicalPlan that produces the results corresponding to
 // the select data source (a n.source) and updates it to produce results
 // corresponding to the render node itself. An evaluator stage is added if the
