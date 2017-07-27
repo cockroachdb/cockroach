@@ -1184,3 +1184,24 @@ service Internal {
 service External {
   rpc Batch (BatchRequest) returns (BatchResponse) {}
 }
+
+message GetBlobRequest {
+  optional string file = 1 [(gogoproto.nullable) = false];
+}
+
+message GetBlobResponse {
+  optional bytes payload = 1;
+}
+
+message PutBlobRequest {
+  optional string file = 1 [(gogoproto.nullable) = false];
+  optional bytes payload = 2;
+}
+
+message PutBlobResponse {
+}
+
+service Blob {
+  rpc Get (GetBlobRequest) returns (GetBlobResponse) {}
+  rpc Put (PutBlobRequest) returns (PutBlobResponse) {}
+}
