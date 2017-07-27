@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -1005,6 +1006,64 @@ func (s *adminServer) Liveness(
 	}, nil
 }
 
+func (s *adminServer) Jobs(
+	ctx context.Context, req *serverpb.JobsRequest,
+) (*serverpb.JobsResponse, error) {
+	args := sql.SessionArgs{User: s.getUser(req)}
+	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
+	defer session.Finish(s.server.sqlExecutor)
+
+	q := makeSQLQuery()
+	q.Append(`
+			SELECT id, type, description, username, descriptor_ids, status,
+				created, started, finished, modified, fraction_completed, error
+			FROM [SHOW JOBS]
+			WHERE true
+	`)
+	if req.Status != "" {
+		q.Append(" AND status = $", parser.NewDString(req.Status))
+	}
+	if req.Type != jobs.TypeUnspecified {
+		q.Append(" AND type = $", parser.NewDString(req.Type.String()))
+	}
+	q.Append("ORDER BY created DESC")
+	if req.Limit > 0 {
+		q.Append(" LIMIT $", parser.NewDInt(parser.DInt(req.Limit)))
+	}
+	r := s.server.sqlExecutor.ExecuteStatements(session, q.String(), q.QueryArguments())
+	defer r.Close(ctx)
+	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
+		return nil, s.serverError(err)
+	}
+
+	scanner := makeResultScanner(r.ResultList[0].Columns)
+	resp := serverpb.JobsResponse{
+		Jobs: make([]serverpb.JobsResponse_Job, r.ResultList[0].Rows.Len()),
+	}
+	for i := 0; i < len(resp.Jobs); i++ {
+		job := &resp.Jobs[i]
+		if err := scanner.ScanAll(
+			r.ResultList[0].Rows.At(i),
+			&job.ID,
+			&job.Type,
+			&job.Description,
+			&job.Username,
+			&job.DescriptorIDs,
+			&job.Status,
+			&job.Created,
+			&job.Started,
+			&job.Finished,
+			&job.Modified,
+			&job.FractionCompleted,
+			&job.Error,
+		); err != nil {
+			return nil, s.serverError(err)
+		}
+	}
+
+	return &resp, nil
+}
+
 // QueryPlan returns a JSON representation of a distsql physical query
 // plan.
 func (s *adminServer) QueryPlan(
@@ -1194,11 +1253,12 @@ func (rs resultScanner) IsNull(row parser.Datums, col string) (bool, error) {
 func (rs resultScanner) ScanIndex(row parser.Datums, index int, dst interface{}) error {
 	src := row[index]
 
+	if dst == nil {
+		return errors.Errorf("nil destination pointer passed in")
+	}
+
 	switch d := dst.(type) {
 	case *string:
-		if dst == nil {
-			return errors.Errorf("nil destination pointer passed in")
-		}
 		s, ok := parser.AsDString(src)
 		if !ok {
 			return errors.Errorf("source type assertion failed")
@@ -1206,39 +1266,60 @@ func (rs resultScanner) ScanIndex(row parser.Datums, index int, dst interface{})
 		*d = string(s)
 
 	case *bool:
-		if dst == nil {
-			return errors.Errorf("nil destination pointer passed in")
-		}
 		s, ok := src.(*parser.DBool)
 		if !ok {
 			return errors.Errorf("source type assertion failed")
 		}
 		*d = bool(*s)
 
-	case *int64:
-		if dst == nil {
-			return errors.Errorf("nil destination pointer passed in")
+	case *float32:
+		s, ok := src.(*parser.DFloat)
+		if !ok {
+			return errors.Errorf("source type assertion failed")
 		}
+		*d = float32(*s)
+
+	case *int64:
 		s, ok := parser.AsDInt(src)
 		if !ok {
 			return errors.Errorf("source type assertion failed")
 		}
 		*d = int64(s)
 
-	case *time.Time:
-		if dst == nil {
-			return errors.Errorf("nil destination pointer passed in")
+	case *[]sqlbase.ID:
+		s, ok := parser.AsDArray(src)
+		if !ok {
+			return errors.Errorf("source type assertion failed")
 		}
+		for i := 0; i < s.Len(); i++ {
+			id, ok := parser.AsDInt(s.Array[i])
+			if !ok {
+				return errors.Errorf("source type assertion failed on index %d", i)
+			}
+			*d = append(*d, sqlbase.ID(id))
+		}
+
+	case *time.Time:
 		s, ok := src.(*parser.DTimestamp)
 		if !ok {
 			return errors.Errorf("source type assertion failed")
 		}
 		*d = s.Time
 
-	case *[]byte:
-		if dst == nil {
-			return errors.Errorf("nil destination pointer passed in")
+	// Passing a **time.Time instead of a *time.Time means the source is allowed
+	// to be NULL, in which case nil is stored into *src.
+	case **time.Time:
+		s, ok := src.(*parser.DTimestamp)
+		if !ok {
+			if src != parser.DNull {
+				return errors.Errorf("source type assertion failed")
+			}
+			*d = nil
+			return nil
 		}
+		*d = &s.Time
+
+	case *[]byte:
 		s, ok := src.(*parser.DBytes)
 		if !ok {
 			return errors.Errorf("source type assertion failed")
@@ -1250,6 +1331,20 @@ func (rs resultScanner) ScanIndex(row parser.Datums, index int, dst interface{})
 		return errors.Errorf("unimplemented type for scanCol: %T", dst)
 	}
 
+	return nil
+}
+
+// ScanAll scans all the columns from the given row, in order, into dsts.
+func (rs resultScanner) ScanAll(row parser.Datums, dsts ...interface{}) error {
+	if len(row) != len(dsts) {
+		return fmt.Errorf(
+			"ScanAll: row has %d columns but %d dests provided", len(row), len(dsts))
+	}
+	for i := 0; i < len(row); i++ {
+		if err := rs.ScanIndex(row, i, dsts[i]); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
