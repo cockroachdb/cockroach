@@ -136,13 +136,14 @@ func startFakeServerGossips(
 	rRPCContext := newInsecureRPCContext(stopper)
 
 	rserver := rpc.NewServer(rRPCContext)
+	remote := newFakeGossipServer(rserver, stopper)
 	rln, err := netutil.ListenAndServeGRPC(stopper, rserver, util.IsolatedTestAddr)
 	if err != nil {
 		t.Fatal(err)
 	}
-	remote := newFakeGossipServer(rserver, stopper)
 	addr := rln.Addr()
 	remote.nodeAddr = util.MakeUnresolvedAddr(addr.Network(), addr.String())
+
 	return local, remote
 }
 
