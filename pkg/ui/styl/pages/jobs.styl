@@ -1,0 +1,20 @@
+.jobs-table
+  &__row
+    &--failed
+      & + &
+        border-top 1px solid $table-border-color
+      td
+        background-color $table-alert-fill-color
+      .jobs-table__cell--status
+        color $alert-color
+
+  &__cell
+    &--description
+      font-family Inconsolata-Regular
+      
+    &--status
+      text-transform capitalize
+
+  &__progress-bar
+    padding-right .7em
+    width 120px
