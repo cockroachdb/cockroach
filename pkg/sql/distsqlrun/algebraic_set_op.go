@@ -34,7 +34,7 @@ type algebraicSetOp struct {
 	opType                  AlgebraicSetOpSpec_SetOpType
 	ordering                Ordering
 	datumAlloc              *sqlbase.DatumAlloc
-	out                     procOutputHelper
+	processorBase
 }
 
 var _ processor = &algebraicSetOp{}
