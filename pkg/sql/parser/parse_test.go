@@ -706,6 +706,7 @@ func TestParse(t *testing.T) {
 		{`RESTORE DATABASE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'`},
 		{`BACKUP foo TO 'bar' WITH OPTIONS ('key1', 'key2'='value')`},
 		{`RESTORE foo FROM 'bar' WITH OPTIONS ('key1', 'key2'='value')`},
+		{`LOAD`},
 		{`SET ROW (1, true, NULL)`},
 
 		// Regression for #15926
