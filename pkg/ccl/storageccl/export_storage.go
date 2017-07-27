@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/blobs"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
@@ -113,7 +114,9 @@ func SanitizeExportStorageURI(path string) (string, error) {
 }
 
 // MakeExportStorage creates an ExportStorage from the given config.
-func MakeExportStorage(ctx context.Context, dest roachpb.ExportStorage) (ExportStorage, error) {
+func MakeExportStorage(
+	ctx context.Context, dest roachpb.ExportStorage, blobService *blobs.Service,
+) (ExportStorage, error) {
 	switch dest.Provider {
 	case roachpb.ExportStorageProvider_LocalFile:
 		return makeLocalStorage(dest.LocalFile.Path)

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/blobs"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -785,4 +786,9 @@ func (rec ReplicaEvalContext) GetLease() (roachpb.Lease, *roachpb.Lease, error) 
 	}
 	lease, nextLease := rec.repl.getLease()
 	return lease, nextLease, nil
+}
+
+// GetBlobService returns a gossip-backed dialer.
+func (rec ReplicaEvalContext) GetBlobService() *blobs.Service {
+	return rec.repl.store.cfg.BlobService
 }

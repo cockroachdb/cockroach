@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/storage/blobs"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -591,6 +592,7 @@ type StoreConfig struct {
 	StorePool    *StorePool
 	Transport    *RaftTransport
 	RPCContext   *rpc.Context
+	BlobService  *blobs.Service
 
 	// SQLExecutor is used by the store to execute SQL statements in a way that
 	// is more direct than using a sql.Executor.

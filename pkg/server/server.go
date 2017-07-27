@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/blobs"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ui"
@@ -336,6 +337,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.distSQLServer = distsqlrun.NewServer(ctx, distSQLCfg)
 	distsqlrun.RegisterDistSQLServer(s.grpc, s.distSQLServer)
 
+	blobService := blobs.NewBlobService(s.gossip.GetGRPCDialer(s.rpcContext), s.nodeIDContainer.Get(), os.TempDir())
+	roachpb.RegisterBlobServer(s.grpc, blobService)
+
 	// Set up admin memory metrics for use by admin SQL executors.
 	s.adminMemMetrics = sql.MakeMemMetrics("admin", cfg.HistogramWindowInterval())
 	s.registry.AddMetricStruct(s.adminMemMetrics)
@@ -367,6 +371,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		RangeLeaseActiveDuration:       active,
 		RangeLeaseRenewalDuration:      renewal,
 		TimeSeriesDataStore:            s.tsDB,
+		BlobService:                    blobService,
 
 		EnableEpochRangeLeases: true,
 	}
@@ -431,6 +436,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		HistogramWindowInterval: s.cfg.HistogramWindowInterval(),
 		RangeDescriptorCache:    s.distSender.RangeDescriptorCache(),
 		LeaseHolderCache:        s.distSender.LeaseHolderCache(),
+		BlobService:             blobService,
 	}
 	if sqlExecutorTestingKnobs := s.cfg.TestingKnobs.SQLExecutor; sqlExecutorTestingKnobs != nil {
 		execCfg.TestingKnobs = sqlExecutorTestingKnobs.(*sql.ExecutorTestingKnobs)

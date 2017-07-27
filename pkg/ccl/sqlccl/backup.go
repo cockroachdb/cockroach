@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/blobs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -55,17 +56,21 @@ const (
 var BackupCheckpointInterval = time.Minute
 
 // exportStorageFromURI returns an ExportStorage for the given URI.
-func exportStorageFromURI(ctx context.Context, uri string) (storageccl.ExportStorage, error) {
+func exportStorageFromURI(
+	ctx context.Context, uri string, blobService *blobs.Service,
+) (storageccl.ExportStorage, error) {
 	conf, err := storageccl.ExportStorageConfFromURI(uri)
 	if err != nil {
 		return nil, err
 	}
-	return storageccl.MakeExportStorage(ctx, conf)
+	return storageccl.MakeExportStorage(ctx, conf, blobService)
 }
 
 // readBackupDescriptor reads and unmarshals a BackupDescriptor from given base.
-func readBackupDescriptor(ctx context.Context, uri string) (BackupDescriptor, error) {
-	dir, err := exportStorageFromURI(ctx, uri)
+func readBackupDescriptor(
+	ctx context.Context, uri string, blobService *blobs.Service,
+) (BackupDescriptor, error) {
+	dir, err := exportStorageFromURI(ctx, uri, blobService)
 	if err != nil {
 		return BackupDescriptor{}, err
 	}
@@ -92,14 +97,14 @@ func readBackupDescriptor(ctx context.Context, uri string) (BackupDescriptor, er
 
 // ValidatePreviousBackups checks that the timestamps of previous backups are
 // consistent. The most recently backed-up time is returned.
-func ValidatePreviousBackups(ctx context.Context, uris []string) (hlc.Timestamp, error) {
+func ValidatePreviousBackups(ctx context.Context, uris []string, blobService *blobs.Service) (hlc.Timestamp, error) {
 	if len(uris) == 0 || len(uris) == 1 && uris[0] == "" {
 		// Full backup.
 		return hlc.Timestamp{}, nil
 	}
 	backups := make([]BackupDescriptor, len(uris))
 	for i, uri := range uris {
-		desc, err := readBackupDescriptor(ctx, uri)
+		desc, err := readBackupDescriptor(ctx, uri, blobService)
 		if err != nil {
 			return hlc.Timestamp{}, err
 		}
@@ -300,7 +305,7 @@ func backup(
 
 	var sqlDescs []sqlbase.Descriptor
 
-	exportStore, err := exportStorageFromURI(ctx, uri)
+	exportStore, err := exportStorageFromURI(ctx, uri, p.ExecCfg().BlobService)
 	if err != nil {
 		return BackupDescriptor{}, err
 	}
@@ -577,7 +582,7 @@ func backupPlanHook(
 		var startTime hlc.Timestamp
 		if backupStmt.IncrementalFrom != nil {
 			var err error
-			startTime, err = ValidatePreviousBackups(ctx, incrementalFrom)
+			startTime, err = ValidatePreviousBackups(ctx, incrementalFrom, p.ExecCfg().BlobService)
 			if err != nil {
 				return nil, err
 			}
@@ -669,7 +674,7 @@ func showBackupPlanHook(
 		if err != nil {
 			return nil, err
 		}
-		desc, err := readBackupDescriptor(ctx, str)
+		desc, err := readBackupDescriptor(ctx, str, p.ExecCfg().BlobService)
 		if err != nil {
 			return nil, err
 		}

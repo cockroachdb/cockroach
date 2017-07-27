@@ -210,7 +210,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 	for _, file := range args.Files {
 		log.VEventf(ctx, 2, "import file %s", file.Path)
 
-		dir, err := MakeExportStorage(ctx, file.Dir)
+		dir, err := MakeExportStorage(ctx, file.Dir, cArgs.EvalCtx.GetBlobService())
 		if err != nil {
 			return nil, err
 		}

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/blobs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
@@ -39,11 +40,13 @@ const (
 	restoreOptSkipMissingFKs = "skip_missing_foreign_keys"
 )
 
-func loadBackupDescs(ctx context.Context, uris []string) ([]BackupDescriptor, error) {
+func loadBackupDescs(
+	ctx context.Context, uris []string, blobService *blobs.Service,
+) ([]BackupDescriptor, error) {
 	backupDescs := make([]BackupDescriptor, len(uris))
 
 	for i, uri := range uris {
-		desc, err := readBackupDescriptor(ctx, uri)
+		desc, err := readBackupDescriptor(ctx, uri, blobService)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to read backup descriptor")
 		}
@@ -517,7 +520,9 @@ func restore(
 		tracing.FinishSpan(initSpan) // want late binding
 	}()
 
-	backupDescs, err := loadBackupDescs(initCtx, uris)
+	backupDescs, err := loadBackupDescs(
+		initCtx, uris, p.ExecCfg().BlobService,
+	)
 	if err != nil {
 		return failed, err
 	}
