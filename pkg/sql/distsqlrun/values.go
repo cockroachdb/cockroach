@@ -31,7 +31,7 @@ type valuesProcessor struct {
 	flowCtx *FlowCtx
 	columns []DatumInfo
 	data    [][]byte
-	out     procOutputHelper
+	processorBase
 }
 
 var _ processor = &valuesProcessor{}

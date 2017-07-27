@@ -43,7 +43,7 @@ type tableReader struct {
 	fetcher sqlbase.RowFetcher
 	alloc   sqlbase.DatumAlloc
 
-	out procOutputHelper
+	processorBase
 }
 
 var _ processor = &tableReader{}

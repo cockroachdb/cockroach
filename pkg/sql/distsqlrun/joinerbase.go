@@ -42,7 +42,7 @@ type joinerBase struct {
 	// is the desired behavior for USING and NATURAL JOIN.
 	numMergedEqualityColumns int
 
-	out procOutputHelper
+	processorBase
 }
 
 func (jb *joinerBase) init(

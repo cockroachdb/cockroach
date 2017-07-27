@@ -98,7 +98,7 @@ type aggregator struct {
 
 	buckets map[string]struct{} // The set of bucket keys.
 
-	out procOutputHelper
+	processorBase
 }
 
 var _ processor = &aggregator{}
