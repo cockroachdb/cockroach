@@ -18,6 +18,7 @@ package distsqlrun
 
 import (
 	"io"
+	math "math"
 	"time"
 
 	opentracing "github.com/opentracing/opentracing-go"
@@ -119,6 +120,8 @@ type ServerImpl struct {
 	// larger than memory. It can be nil, in which case processors should still
 	// gracefully OOM if the working set gets too large.
 	tempStorage engine.Engine
+	// diskMonitor is used to monitor temporary storage disk usage.
+	diskMonitor mon.MemoryMonitor
 }
 
 var _ DistSQLServer = &ServerImpl{}
@@ -130,11 +133,36 @@ func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
 		regexpCache:   parser.NewRegexpCache(512),
 		flowRegistry:  makeFlowRegistry(),
 		flowScheduler: newFlowScheduler(cfg.AmbientContext, cfg.Stopper),
-		memMonitor: mon.MakeMonitor("distsql",
-			cfg.Counter, cfg.Hist, -1 /* increment: use default block size */, noteworthyMemoryUsageBytes),
+		memMonitor: mon.MakeMonitor(
+			"distsql",
+			cfg.Counter,
+			cfg.Hist,
+			-1, /* increment: use default block size */
+			noteworthyMemoryUsageBytes,
+		),
 		tempStorage: cfg.TempStorage,
+		diskMonitor: mon.MakeMonitor(
+			"distsql-tempstorage",
+			nil,
+			nil,
+			-1,            /* increment: use default block size */
+			math.MaxInt64, // TODO(asubiotto): Choose noteworthy. Maybe fraction?
+		),
 	}
 	ds.memMonitor.Start(ctx, cfg.ParentMemoryMonitor, mon.BoundAccount{})
+	if ds.tempStorage == nil {
+		return ds
+	}
+
+	if capacity, err := ds.tempStorage.Capacity(); err != nil {
+		// TODO(asubiotto): Fatalf? Return error?
+		log.Warning(
+			ctx,
+			errors.Wrap(err, "could not get temporary storage capacity, disabling disk accounting"),
+		)
+	} else {
+		ds.diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(capacity.Capacity/4))
+	}
 	return ds
 }
 
@@ -219,6 +247,7 @@ func (ds *ServerImpl) setupFlow(
 		testingKnobs:   ds.TestingKnobs,
 		nodeID:         nodeID,
 		tempStorage:    ds.tempStorage,
+		diskMonitor:    &ds.diskMonitor,
 	}
 
 	ctx = flowCtx.AnnotateCtx(ctx)

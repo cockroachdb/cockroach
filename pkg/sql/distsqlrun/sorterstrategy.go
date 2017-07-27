@@ -79,7 +79,7 @@ func (ss *sortAllStrategy) Execute(ctx context.Context, s *sorter) error {
 	// The diskContainer will free the memory taken up by ss.rows as it is
 	// created from them.
 	diskContainer, err := makeDiskRowContainer(
-		ctx, ss.rows.types, ss.rows.ordering, ss.rows, s.tempStorage,
+		ctx, s.flowCtx.diskMonitor, ss.rows.types, ss.rows.ordering, ss.rows, s.tempStorage,
 	)
 	if err != nil {
 		return err
