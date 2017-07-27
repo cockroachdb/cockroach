@@ -305,10 +305,20 @@ func (c *RowContainer) PopFirst() {
 	if c.numCols != 0 {
 		c.deletedRows++
 		if c.deletedRows == c.rowsPerChunk {
-			c.deletedRows = 0
+			// We release the memory for rows in chunks. This includes the
+			// chunk slice (allocated by allocChunks) and the Datums.
+			size := c.chunkMemSize
+			for i, pos := 0, 0; i < c.rowsPerChunk; i, pos = i+1, pos+c.numCols {
+				size += c.rowSize(c.chunks[0][pos : pos+c.numCols])
+			}
 			// Reset the pointer so the slice can be garbage collected.
 			c.chunks[0] = nil
+			c.deletedRows = 0
 			c.chunks = c.chunks[1:]
+
+			// We don't have a context plumbed here, but that's ok: it's not actually
+			// used in the shrink paths.
+			c.memAcc.Shrink(context.TODO(), size)
 		}
 	}
 }
