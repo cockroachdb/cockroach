@@ -18,6 +18,7 @@ package jobs_test
 
 import (
 	gosql "database/sql"
+	"math"
 	"reflect"
 	"strings"
 	"testing"
@@ -27,11 +28,14 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/kr/pretty"
@@ -42,7 +46,7 @@ import (
 type expectation struct {
 	DB                *gosql.DB
 	Record            jobs.Record
-	Type              string
+	Type              jobs.Type
 	Before            time.Time
 	FractionCompleted float32
 	Error             string
@@ -85,7 +89,7 @@ func (expected *expectation) verify(id *int64, expectedStatus jobs.Status) error
 	if e, a := expectedStatus, status; e != a {
 		return errors.Errorf("expected status %v, got %v", e, a)
 	}
-	if e, a := expected.Type, payload.Typ(); e != a {
+	if e, a := expected.Type, payload.Type(); e != a {
 		return errors.Errorf("expected type %v, got type %v", e, a)
 	}
 	if e, a := expected.FractionCompleted, payload.FractionCompleted; e != a {
@@ -162,7 +166,7 @@ func TestJobLifecycle(t *testing.T) {
 		}
 		woodyJob := registry.NewJob(woodyRecord)
 
-		if err := woodyJob.Created(ctx); err != nil {
+		if err := woodyJob.Created(ctx, jobs.WithoutCancel); err != nil {
 			t.Fatal(err)
 		}
 		if err := woodyExpectation.verify(woodyJob.ID(), jobs.StatusPending); err != nil {
@@ -231,7 +235,7 @@ func TestJobLifecycle(t *testing.T) {
 		// Test modifying the job details before calling `Created`.
 		buzzJob.Record.Details = jobs.BackupDetails{}
 		buzzExpectation.Record.Details = jobs.BackupDetails{}
-		if err := buzzJob.Created(ctx); err != nil {
+		if err := buzzJob.Created(ctx, jobs.WithoutCancel); err != nil {
 			t.Fatal(err)
 		}
 		if err := buzzExpectation.verify(buzzJob.ID(), jobs.StatusPending); err != nil {
@@ -279,7 +283,7 @@ func TestJobLifecycle(t *testing.T) {
 		}
 		sidJob := registry.NewJob(sidRecord)
 
-		if err := sidJob.Created(ctx); err != nil {
+		if err := sidJob.Created(ctx, jobs.WithoutCancel); err != nil {
 			t.Fatal(err)
 		}
 		if err := sidExpectation.verify(sidJob.ID(), jobs.StatusPending); err != nil {
@@ -310,7 +314,7 @@ func TestJobLifecycle(t *testing.T) {
 		job := registry.NewJob(jobs.Record{
 			Details: 42,
 		})
-		_ = job.Created(ctx)
+		_ = job.Created(ctx, jobs.WithoutCancel)
 	})
 
 	t.Run("update before create fails", func(t *testing.T) {
@@ -324,10 +328,10 @@ func TestJobLifecycle(t *testing.T) {
 		job := registry.NewJob(jobs.Record{
 			Details: jobs.BackupDetails{},
 		})
-		if err := job.Created(ctx); err != nil {
+		if err := job.Created(ctx, jobs.WithoutCancel); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.Created(ctx); err != nil {
+		if err := job.Created(ctx, jobs.WithoutCancel); err != nil {
 			t.Fatal(err)
 		}
 		if err := job.Started(ctx); err != nil {
@@ -348,7 +352,7 @@ func TestJobLifecycle(t *testing.T) {
 		job := registry.NewJob(jobs.Record{
 			Details: jobs.BackupDetails{},
 		})
-		if err := job.Created(ctx); err != nil {
+		if err := job.Created(ctx, jobs.WithoutCancel); err != nil {
 			t.Fatal(err)
 		}
 		if err := job.Started(ctx); err != nil {
@@ -366,7 +370,7 @@ func TestJobLifecycle(t *testing.T) {
 		job := registry.NewJob(jobs.Record{
 			Details: jobs.BackupDetails{},
 		})
-		if err := job.Created(ctx); err != nil {
+		if err := job.Created(ctx, jobs.WithoutCancel); err != nil {
 			t.Fatal(err)
 		}
 		if err := job.Progressed(ctx, 0.5, jobs.Noop); !testutils.IsError(err, `job \d+ not started`) {
@@ -378,7 +382,7 @@ func TestJobLifecycle(t *testing.T) {
 		job := registry.NewJob(jobs.Record{
 			Details: jobs.BackupDetails{},
 		})
-		if err := job.Created(ctx); err != nil {
+		if err := job.Created(ctx, jobs.WithoutCancel); err != nil {
 			t.Fatal(err)
 		}
 		if err := job.Started(ctx); err != nil {
@@ -402,7 +406,7 @@ func TestJobLifecycle(t *testing.T) {
 			FractionCompleted: 1.0,
 		}
 		job := registry.NewJob(record)
-		if err := job.Created(ctx); err != nil {
+		if err := job.Created(ctx, jobs.WithoutCancel); err != nil {
 			t.Fatal(err)
 		}
 		if err := job.Started(ctx); err != nil {
@@ -428,7 +432,7 @@ func TestJobLifecycle(t *testing.T) {
 			Before: timeutil.Now(),
 		}
 		job := registry.NewJob(record)
-		if err := job.Created(ctx); err != nil {
+		if err := job.Created(ctx, jobs.WithoutCancel); err != nil {
 			t.Fatal(err)
 		}
 		if err := expect.verify(job.ID(), jobs.StatusPending); err != nil {
@@ -443,4 +447,122 @@ func TestJobLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+}
+
+func TestRoundtripJob(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	registry := s.JobRegistry().(*jobs.Registry)
+	defer s.Stopper().Stop(ctx)
+
+	storedJob := registry.NewJob(jobs.Record{
+		Description:   "beep boop",
+		Username:      "robot",
+		DescriptorIDs: sqlbase.IDs{42},
+		Details:       jobs.RestoreDetails{},
+	})
+	if err := storedJob.Created(ctx, jobs.WithoutCancel); err != nil {
+		t.Fatal(err)
+	}
+	retrievedJob, err := registry.LoadJob(ctx, *storedJob.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e, a := storedJob, retrievedJob; !reflect.DeepEqual(e, a) {
+		diff := strings.Join(pretty.Diff(e, a), "\n")
+		t.Fatalf("stored job did not match retrieved job:\n%s", diff)
+	}
+}
+
+func TestRegistryResume(t *testing.T) {
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	db := s.KVClient().(*client.DB)
+	ex := sql.InternalExecutor{LeaseManager: s.LeaseManager().(*sql.LeaseManager)}
+	gossip := s.Gossip()
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	nodeID := &base.NodeIDContainer{}
+
+	registry := jobs.MakeRegistry(clock, db, ex, gossip, nodeID, jobs.DummyClusterID)
+	nodeLiveness := jobs.NewMockNodeLiveness(clock, 4)
+
+	const cancelInterval = time.Duration(math.MaxInt64)
+	const adoptInterval = time.Nanosecond
+	if err := registry.Start(s.Stopper(), nodeLiveness, cancelInterval, adoptInterval); err != nil {
+		t.Fatal(err)
+	}
+
+	wait := func() {
+		<-nodeLiveness.MapCh
+		<-nodeLiveness.MapCh
+	}
+
+	jobMap := make(map[int64]roachpb.NodeID)
+	for i := 0; i < 3; i++ {
+		nodeID.Reset(roachpb.NodeID(i + 1))
+		job := registry.NewJob(jobs.Record{Details: jobs.BackupDetails{}})
+		if err := job.Created(ctx, func() {}); err != nil {
+			t.Fatal(err)
+		}
+		if err := job.Started(ctx); err != nil {
+			t.Fatal(err)
+		}
+		jobMap[*job.ID()] = nodeID.Get()
+	}
+
+	nodeID.Reset(4)
+
+	hookCallCount := 0
+	resumeCounts := make(map[roachpb.NodeID]int)
+	var newJobs []*jobs.Job
+	jobs.AddResumeHook(func(_ jobs.Type) func(context.Context, *jobs.Job) error {
+		hookCallCount++
+		return func(_ context.Context, job *jobs.Job) error {
+			resumeCounts[jobMap[*job.ID()]]++
+			newJobs = append(newJobs, job)
+			return nil
+		}
+	})
+
+	wait()
+	if e, a := 0, hookCallCount; e != a {
+		t.Fatalf("expected hookCallCount to be %d, but got %d", e, a)
+	}
+
+	wait()
+	if e, a := 0, hookCallCount; e != a {
+		t.Fatalf("expected hookCallCount to be %d, but got %d", e, a)
+	}
+
+	nodeLiveness.SetExpiration(1, hlc.MinTimestamp)
+	wait()
+	if hookCallCount == 0 {
+		t.Fatalf("expected hookCallCount to be non-zero, but got %d", hookCallCount)
+	}
+
+	wait()
+	if e, a := 1, resumeCounts[1]; e != a {
+		t.Fatalf("expected resumeCount to be %d, but got %d", e, a)
+	}
+
+	nodeLiveness.IncrementEpoch(3)
+	wait()
+	if e, a := 1, resumeCounts[3]; e != a {
+		t.Fatalf("expected resumeCount to be %d, but got %d", e, a)
+	}
+
+	if e, a := 0, resumeCounts[2]; e != a {
+		t.Fatalf("expected resumeCount to be %d, but got %d", e, a)
+	}
+
+	for _, newJob := range newJobs {
+		if e, a := roachpb.NodeID(4), newJob.Payload().Lease.NodeID; e != a {
+			t.Errorf("expected job %d to have been adopted by node %d, but was adopted by node %d",
+				*newJob.ID(), e, a)
+		}
+	}
 }

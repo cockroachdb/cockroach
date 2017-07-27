@@ -423,8 +423,10 @@ func backup(
 			job.Record.DescriptorIDs = append(job.Record.DescriptorIDs, desc.GetID())
 		}
 	}
-	if err := job.Created(ctx); err != nil {
-		return err
+
+	ctx, cancel := context.WithCancel(ctx)
+	if err := job.Created(ctx, cancel); err != nil {
+		return BackupDescriptor{}, err
 	}
 	if err := job.Started(ctx); err != nil {
 		return err

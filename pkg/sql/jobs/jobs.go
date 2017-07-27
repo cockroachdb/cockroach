@@ -21,13 +21,16 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
@@ -90,17 +93,35 @@ func (j *Job) ID() *int64 {
 	return j.id
 }
 
+// WithoutCancel indicates that the job should not have its leasing and
+// cancelation managed by Registry. This is only a temporary measure; eventually
+// all jobs will use the Registry's leasing and cancelation.
+var WithoutCancel func()
+
 // Created records the creation of a new job in the system.jobs table and
 // remembers the assigned ID of the job in the Job. The job information is read
-// from the Record field at the time Created is called.
-func (j *Job) Created(ctx context.Context) error {
+// from the Record field at the time Created is called. If cancelFn is not
+// WithoutCancel, the Registry will automatically acquire a lease for this job
+// and invoke cancelFn if the lease expires.
+func (j *Job) Created(ctx context.Context, cancelFn func()) error {
 	payload := &Payload{
 		Description:   j.Record.Description,
 		Username:      j.Record.Username,
 		DescriptorIDs: j.Record.DescriptorIDs,
 		Details:       WrapPayloadDetails(j.Record.Details),
 	}
-	return j.insert(ctx, payload)
+	if cancelFn != nil {
+		payload.Lease = j.registry.newLease()
+	}
+	if err := j.insert(ctx, payload); err != nil {
+		return err
+	}
+	if cancelFn != nil {
+		if err := j.registry.register(*j.id, cancelFn); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Started marks the tracked job as started.
@@ -175,14 +196,15 @@ func (j *Job) Failed(ctx context.Context, err error) {
 	})
 	if internalErr != nil {
 		log.Errorf(ctx, "Job: ignoring error %v while logging failure for job %d: %+v",
-			err, j.id, internalErr)
+			err, *j.id, internalErr)
 	}
+	j.registry.unregister(*j.id)
 }
 
 // Succeeded marks the tracked job as having succeeded and sets its fraction
 // completed to 1.0.
 func (j *Job) Succeeded(ctx context.Context) error {
-	return j.update(ctx, StatusSucceeded, func(payload *Payload) (bool, error) {
+	if err := j.update(ctx, StatusSucceeded, func(payload *Payload) (bool, error) {
 		if payload.FinishedMicros != 0 {
 			// Already finished - do nothing.
 			return false, nil
@@ -190,7 +212,11 @@ func (j *Job) Succeeded(ctx context.Context) error {
 		payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
 		payload.FractionCompleted = 1.0
 		return true, nil
-	})
+	}); err != nil {
+		return err
+	}
+	j.registry.unregister(*j.id)
+	return nil
 }
 
 // SetDetails sets the details field of the currently running tracked job.
@@ -217,6 +243,26 @@ func (j *Job) WithTxn(txn *client.Txn) *Job {
 	return j
 }
 
+// DB returns the *client.DB associated with this job.
+func (j *Job) DB() *client.DB {
+	return j.registry.db
+}
+
+// Gossip returns the *gossip.Gossip associated with this job.
+func (j *Job) Gossip() *gossip.Gossip {
+	return j.registry.gossip
+}
+
+// NodeID returns the roachpb.NodeID associated with this job.
+func (j *Job) NodeID() roachpb.NodeID {
+	return j.registry.nodeID.Get()
+}
+
+// ClusterID returns the uuid.UUID cluster ID associated with this job.
+func (j *Job) ClusterID() uuid.UUID {
+	return j.registry.clusterID()
+}
+
 func (j *Job) runInTxn(
 	ctx context.Context, retryable func(context.Context, *client.Txn) error,
 ) error {
@@ -230,23 +276,29 @@ func (j *Job) runInTxn(
 	return j.registry.db.Txn(ctx, retryable)
 }
 
+func (j *Job) initialize(payload *Payload) (err error) {
+	j.Record.Description = payload.Description
+	j.Record.Username = payload.Username
+	j.Record.DescriptorIDs = payload.DescriptorIDs
+	if j.Record.Details, err = payload.UnwrapDetails(); err != nil {
+		return err
+	}
+	// Don't need to lock because we're the only one who has a handle on this
+	// Job so far.
+	j.mu.payload = *payload
+	return nil
+}
+
 func (j *Job) load(ctx context.Context) error {
-	return j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		payload, err := j.loadPayload(ctx, txn)
-		if err != nil {
-			return err
-		}
-		j.Record.Description = payload.Description
-		j.Record.Username = payload.Username
-		j.Record.DescriptorIDs = payload.DescriptorIDs
-		if j.Record.Details, err = payload.UnwrapDetails(); err != nil {
-			return err
-		}
-		// Don't need to lock because we're the only one who has a handle on this
-		// Job so far.
-		j.mu.payload = *payload
-		return nil
-	})
+	var payload *Payload
+	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		var err error
+		payload, err = j.loadPayload(ctx, txn)
+		return err
+	}); err != nil {
+		return err
+	}
+	return j.initialize(payload)
 }
 
 func (j *Job) loadPayload(ctx context.Context, txn *client.Txn) (*Payload, error) {
@@ -255,7 +307,6 @@ func (j *Job) loadPayload(ctx context.Context, txn *client.Txn) (*Payload, error
 	if err != nil {
 		return nil, err
 	}
-
 	return UnmarshalPayload(row[0])
 }
 
@@ -342,15 +393,26 @@ func (j *Job) update(
 	return nil
 }
 
+func (j *Job) adopt(ctx context.Context) error {
+	return j.update(ctx, StatusRunning, func(payload *Payload) (bool, error) {
+		payload.Lease = j.registry.newLease()
+		j.initialize(payload)
+		return true, nil
+	})
+}
+
+// Type is the type of a Job.
+type Type string
+
 // Job types are named for the SQL query that creates them.
 const (
-	TypeBackup       string = "BACKUP"
-	TypeRestore      string = "RESTORE"
-	TypeSchemaChange string = "SCHEMA CHANGE"
+	TypeBackup       Type = "BACKUP"
+	TypeRestore      Type = "RESTORE"
+	TypeSchemaChange Type = "SCHEMA CHANGE"
 )
 
-// Typ returns the payload's job type.
-func (p *Payload) Typ() string {
+// Type returns the payload's job type.
+func (p *Payload) Type() Type {
 	switch p.Details.(type) {
 	case *Payload_Backup:
 		return TypeBackup
