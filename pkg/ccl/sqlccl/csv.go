@@ -25,12 +25,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -507,4 +509,55 @@ func makeBackup(
 	}
 	err = ioutil.WriteFile(filepath.Join(destDir, BackupDescriptorName), descBuf, 0666)
 	return int64(len(backupDesc.Files)), err
+}
+
+func loadPlanHook(
+	stmt parser.Statement, p sql.PlanHookState,
+) (func(context.Context) ([]parser.Datums, error), sqlbase.ResultColumns, error) {
+	loadStmt, ok := stmt.(*parser.Load)
+	if !ok {
+		return nil, nil, nil
+	}
+
+	// TODO(dan): This entire method is a placeholder to get the distsql
+	// plumbing worked out while mjibson works on the new processors and router.
+	// Currently, it "uses" distsql to compute an int and this method returns
+	// it.
+	header := sqlbase.ResultColumns{
+		{Name: "start_key", Typ: parser.TypeBytes},
+		{Name: "end_key", Typ: parser.TypeBytes},
+		{Name: "path", Typ: parser.TypeString},
+		{Name: "sha512", Typ: parser.TypeBytes},
+		{Name: "data_size", Typ: parser.TypeInt},
+	}
+	fn := func(ctx context.Context) ([]parser.Datums, error) {
+		// TODO(dan): Move this span into sql.
+		ctx, span := tracing.ChildSpan(ctx, loadStmt.StatementTag())
+		defer tracing.FinishSpan(span)
+
+		resp, err := p.ExecCfg().StatusServer.Nodes(ctx, &serverpb.NodesRequest{})
+		if err != nil {
+			return nil, err
+		}
+		var nodes []roachpb.NodeDescriptor
+		for _, node := range resp.Nodes {
+			nodes = append(nodes, node.Desc)
+		}
+
+		result, err := sql.LoadCSVDistributed(
+			ctx, p.ExecCfg().DB, p.EvalContext(), nodes, p.DistSQLPlanner())
+		ret := []parser.Datums{{
+			parser.DNull,
+			parser.DNull,
+			parser.DNull,
+			parser.DNull,
+			parser.NewDInt(parser.DInt(result)),
+		}}
+		return ret, nil
+	}
+	return fn, header, nil
+}
+
+func init() {
+	sql.AddPlanHook(loadPlanHook)
 }

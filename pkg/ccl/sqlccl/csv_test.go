@@ -9,6 +9,7 @@
 package sqlccl
 
 import (
+	"database/sql"
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
@@ -20,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -279,5 +282,27 @@ N|N
 	}
 	if sst != 2 {
 		t.Fatalf("created %d SSTs, expected %d", sst, 2)
+	}
+}
+
+func TestLoadStmt(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const nodes = 3
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(t, tc.Conns[0])
+
+	var startKey, endKey, sha512 []byte
+	var path sql.NullString
+	var result int
+	sqlDB.QueryRow(`LOAD`).Scan(&startKey, &endKey, &path, &sha512, &result)
+
+	// TODO(dan): This entire method is a placeholder to get the distsql
+	// plumbing worked out. It currently returns a single row, with the sum of
+	// the node ids (1+2+3=6) in the final column.
+	if expected := 6; result != expected {
+		t.Errorf("expected %d got %d", expected, result)
 	}
 }

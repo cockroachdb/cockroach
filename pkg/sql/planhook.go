@@ -42,8 +42,15 @@ var planHooks []planHookFn
 // interface as we find we need them, to avoid churn in the planHookFn sig and
 // the hooks that implement it.
 type PlanHookState interface {
+	EvalContext() parser.EvalContext
 	ExecCfg() *ExecutorConfig
 	LeaseMgr() *LeaseManager
+	// TODO(dan): Export distSQLPlanner and return it instead of interface{}.
+	// This is not just a blind refactor because distSQLPlanner has exported
+	// methods with unexported types in their signatures, which is a no-no on an
+	// exported struct. We could unexport those methods, but it seems like
+	// that was done intentionally.
+	DistSQLPlanner() interface{}
 	TypeAsString(e parser.Expr, op string) (func() (string, error), error)
 	TypeAsStringArray(e parser.Exprs, op string) (func() ([]string, error), error)
 	User() string
