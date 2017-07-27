@@ -60,7 +60,9 @@ message Payload {
 enum Type {
   option (gogoproto.goproto_enum_prefix) = false;
   option (gogoproto.goproto_enum_stringer) = false;
-  BACKUP = 0 [(gogoproto.enumvalue_customname) = "TypeBackup"];
-  RESTORE = 1 [(gogoproto.enumvalue_customname) = "TypeRestore"];
-  SCHEMA_CHANGE = 2 [(gogoproto.enumvalue_customname) = "TypeSchemaChange"];
+
+  UNSPECIFIED = 0 [(gogoproto.enumvalue_customname) = "TypeUnspecified"];
+  BACKUP = 1 [(gogoproto.enumvalue_customname) = "TypeBackup"];
+  RESTORE = 2 [(gogoproto.enumvalue_customname) = "TypeRestore"];
+  SCHEMA_CHANGE = 3 [(gogoproto.enumvalue_customname) = "TypeSchemaChange"];
 }

@@ -19,6 +19,7 @@ package cockroach.server.serverpb;
 option go_package = "serverpb";
 
 import "cockroach/pkg/config/config.proto";
+import "cockroach/pkg/sql/jobs/jobs.proto";
 import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
 import "cockroach/pkg/storage/liveness.proto";
 import "cockroach/pkg/storage/log.proto";
@@ -368,6 +369,36 @@ message LivenessResponse {
   repeated cockroach.storage.Liveness livenesses = 1 [(gogoproto.nullable) = false];
 }
 
+// JobsRequest requests system job information of the given status and type.
+message JobsRequest {
+  int32 limit = 1;
+  string status = 2;
+  cockroach.sql.jobs.Type type = 3;
+}
+
+// JobsResponse contains the job record for each matching job.
+message JobsResponse {
+  message Job {
+    int64 id = 1 [(gogoproto.customname) = "ID"];
+    string type = 2;
+    string description = 3;
+    string username = 4;
+    repeated uint32 descriptor_ids = 5 [
+      (gogoproto.customname) = "DescriptorIDs",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+    ];
+    string status = 6;
+    google.protobuf.Timestamp created = 7 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp started = 8 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp finished = 9 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp modified = 10 [(gogoproto.stdtime) = true];
+    float fraction_completed = 11;
+    string error = 12;
+  }
+
+  repeated Job jobs = 1 [(gogoproto.nullable) = false];
+}
+
 // RangeLogRequest request the history of a range from the range log.
 message RangeLogRequest {
   // TODO(tamird): use [(gogoproto.customname) = "RangeID"] below. Need to
@@ -510,6 +541,13 @@ service Admin {
   rpc Liveness(LivenessRequest) returns (LivenessResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/liveness"
+    };
+  }
+
+  // Jobs returns the job records for all jobs of the given status and type.
+  rpc Jobs(JobsRequest) returns (JobsResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/jobs"
     };
   }
 
