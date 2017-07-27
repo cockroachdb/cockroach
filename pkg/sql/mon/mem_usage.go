@@ -541,9 +541,14 @@ func (b *BoundAccount) ResizeItem(ctx context.Context, oldSz, newSz int64) error
 	return b.mon.ResizeItem(ctx, &b.MemoryAccount, oldSz, newSz)
 }
 
-// Grow is an accessor for b.mon.Grow.
+// Grow is an accessor for b.mon.GrowAccount.
 func (b *BoundAccount) Grow(ctx context.Context, x int64) error {
 	return b.mon.GrowAccount(ctx, &b.MemoryAccount, x)
+}
+
+// Shrink is an accessor for b.mon.ShrinkAccount.
+func (b *BoundAccount) Shrink(ctx context.Context, x int64) {
+	b.mon.ShrinkAccount(ctx, &b.MemoryAccount, x)
 }
 
 // reserveMemory declares an allocation to this monitor. An error is
