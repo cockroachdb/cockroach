@@ -22,11 +22,12 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
+	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/net/context"
 
@@ -36,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/pkg/errors"
 )
 
 // The constants below are the possible values of the KeepCluster field.
@@ -169,28 +169,67 @@ func (f *Farmer) AbsLogDir() string {
 
 // CollectLogs copies all possibly interesting files from all available peers
 // if LogDir is not empty.
-func (f *Farmer) CollectLogs() {
-	if f.LogDir == "" {
-		return
+func (f *Farmer) CollectLogs() error {
+	logDir := f.AbsLogDir()
+	if logDir == "" {
+		return nil
 	}
-	if err := os.MkdirAll(f.AbsLogDir(), 0777); err != nil {
-		fmt.Fprint(os.Stderr, err)
-		return
+	if err := os.MkdirAll(logDir, 0777); err != nil {
+		return err
 	}
 	const src = "logs"
+
 	for i := 0; i < f.NumNodes(); i++ {
-		if err := f.copyDir(f.Hostname(i), f.defaultKeyFile(), src,
-			filepath.Join(f.AbsLogDir(), "node."+strconv.Itoa(i))); err != nil {
-			f.logf("error collecting %s from host %s: %s\n", src, f.Hostname(i), err)
+		host := f.Hostname(i)
+		dest := filepath.Join(logDir, fmt.Sprintf("node.%d", i))
+
+		c, err := f.getSSH(host, f.defaultKeyFile())
+		if err != nil {
+			return errors.Wrapf(err, "could not establish ssh connection to %q", host)
+		}
+
+		sftp, err := sftp.NewClient(c)
+		if err != nil {
+			return errors.Wrapf(err, "could not establish stfp connection to %q", host)
+		}
+		defer sftp.Close()
+
+		for w := sftp.Walk(src); w.Step(); {
+			if err := w.Err(); err != nil {
+				return errors.Wrapf(err, "error walking %q on %q", src, host)
+			}
+			if err := func() error {
+				srcPath := w.Path()
+				srcFile, err := sftp.Open(srcPath)
+				if err != nil {
+					return errors.Wrapf(err, "could not open %q on %q", srcPath, host)
+				}
+				defer srcFile.Close()
+
+				destPath := filepath.Join(dest, srcFile.Name())
+				destFile, err := os.Create(destPath)
+				if err != nil {
+					return errors.Wrapf(err, "could not create destination file %q", destPath)
+				}
+				defer destFile.Close()
+				if _, err := io.Copy(destFile, srcFile); err != nil {
+					return errors.Wrapf(err, "could not copy %q on %q to %q", srcPath, host, destPath)
+				}
+				return errors.Wrapf(destFile.Close(), "could not close destination file %q", destPath)
+			}(); err != nil {
+				return err
+			}
 		}
 	}
+	return nil
 }
 
 // Destroy collects the logs and tears down the cluster.
 func (f *Farmer) Destroy(t testing.TB) error {
-	f.CollectLogs()
-	if f.LogDir != "" {
-		defer f.logf("logs copied to %s\n", f.AbsLogDir())
+	if err := f.CollectLogs(); err != nil {
+		f.logf("error collecting cluster logs: %s\n", err)
+	} else if logDir := f.AbsLogDir(); logDir != "" {
+		defer f.logf("logs copied to %s\n", logDir)
 	}
 
 	wd, err := os.Getwd()

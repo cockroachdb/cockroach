@@ -18,14 +18,11 @@ package terrafarm
 
 import (
 	"bytes"
-	"io"
 	"io/ioutil"
 	"net"
-	"os"
 	"path/filepath"
 	"time"
 
-	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -53,6 +50,24 @@ func (f *Farmer) getSSH(host, keyfile string) (*ssh.Client, error) {
 				return c, nil
 			}
 			c, err := newSSH(host, keyfile)
+			go func() {
+				defer func() { node.ssh = nil }()
+
+				t := time.NewTicker(5 * time.Second)
+				defer t.Stop()
+				for {
+					select {
+					case <-f.RPCContext.Stopper.ShouldStop():
+						return
+					case <-t.C:
+						if _, _, err := c.Conn.SendRequest("keepalive@golang.org", true, nil); err != nil {
+							// There's no useful response from these, so we
+							// can just abort if there's an error.
+							return
+						}
+					}
+				}
+			}()
 			node.ssh = c
 			return c, err
 		}
@@ -69,22 +84,13 @@ func newSSH(host, keyfile string) (*ssh.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	conn, err := (&net.Dialer{
-		KeepAlive: 5 * time.Second,
-	}).Dial("tcp", net.JoinHostPort(host, "22"))
-	if err != nil {
-		return nil, err
-	}
-	c, chans, reqs, err := ssh.NewClientConn(conn, host, &ssh.ClientConfig{
+	return ssh.Dial("tcp", net.JoinHostPort(host, "22"), &ssh.ClientConfig{
 		User: sshUser,
 		Auth: []ssh.AuthMethod{
 			ssh.PublicKeys(signer),
 		},
+		// HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	})
-	if err != nil {
-		return nil, err
-	}
-	return ssh.NewClient(c, chans, reqs), nil
 }
 
 func (f *Farmer) ssh(host, keyfile, cmd string) (string, string, error) {
@@ -104,43 +110,4 @@ func (f *Farmer) ssh(host, keyfile, cmd string) (string, string, error) {
 	s.Stderr = &stderr
 
 	return stdout.String(), stderr.String(), s.Run(cmd)
-}
-
-func (f *Farmer) copyDir(host, keyfile, src, dest string) error {
-	c, err := f.getSSH(host, keyfile)
-	if err != nil {
-		return err
-	}
-
-	sftp, err := sftp.NewClient(c)
-	if err != nil {
-		return err
-	}
-	defer sftp.Close()
-
-	for w := sftp.Walk(src); w.Step(); {
-		if err := w.Err(); err != nil {
-			return err
-		}
-		if err := func() error {
-			srcFile, err := sftp.Open(w.Path())
-			if err != nil {
-				return err
-			}
-			defer srcFile.Close()
-
-			destFile, err := os.Create(filepath.Join(dest, srcFile.Name()))
-			if err != nil {
-				return err
-			}
-			defer destFile.Close()
-			if _, err := io.Copy(destFile, srcFile); err != nil {
-				return err
-			}
-			return destFile.Close()
-		}(); err != nil {
-			return err
-		}
-	}
-	return nil
 }
