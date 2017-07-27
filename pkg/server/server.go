@@ -505,6 +505,21 @@ type ListenError struct {
 	Addr string
 }
 
+func (s *Server) isAnyStoreBootstrapped(ctx context.Context) (bool, error) {
+	for _, e := range s.engines {
+		if _, err := storage.ReadStoreIdent(ctx, e); err != nil {
+			// NotBootstrappedError is expected.
+			if _, ok := err.(*storage.NotBootstrappedError); !ok {
+				return false, err
+			}
+		} else {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 // Start starts the server on the specified port, starts gossip and initializes
 // the node using the engines from the server's context.
 //
@@ -569,6 +584,14 @@ func (s *Server) Start(ctx context.Context) error {
 	// if we wouldn't otherwise reach the point where we start serving on it.
 	var serveOnMux sync.Once
 	m := cmux.New(ln)
+
+	// Inject an initialization listener that will intercept all
+	// connections while the cluster is initializing.
+	initLActive := int32(0)
+	initL := m.Match(func(_ io.Reader) bool {
+		return atomic.LoadInt32(&initLActive) != 0
+	})
+
 	pgL := m.Match(pgwire.Match)
 	anyL := m.Match(cmux.Any())
 
@@ -624,6 +647,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	s.stopper.RunWorker(workersCtx, func(context.Context) {
 		<-s.stopper.ShouldQuiesce()
+		// TODO(bdarnell): Do we need to also close the other listeners?
 		netutil.FatalIfUnexpected(anyL.Close())
 		<-s.stopper.ShouldStop()
 		s.grpc.Stop()
@@ -720,60 +744,70 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.stopper.AddCloser(&s.engines)
 
-	// We might have to sleep a bit to protect against this node producing non-
-	// monotonic timestamps. Before restarting, its clock might have been driven
-	// by other nodes' fast clocks, but when we restarted, we lost all this
-	// information. For example, a client might have written a value at a
-	// timestamp that's in the future of the restarted node's clock, and if we
-	// don't do something, the same client's read would not return the written
-	// value. So, we wait up to MaxOffset; we couldn't have served timestamps more
-	// than MaxOffset in the future (assuming that MaxOffset was not changed, see
-	// #9733).
-	//
-	// As an optimization for tests, we don't sleep if all the stores are brand
-	// new. In this case, the node will not serve anything anyway until it
-	// synchronizes with other nodes.
-	{
-		anyStoreBootstrapped := false
-		for _, e := range s.engines {
-			if _, err := storage.ReadStoreIdent(ctx, e); err != nil {
-				// NotBootstrappedError is expected.
-				if _, ok := err.(*storage.NotBootstrappedError); !ok {
-					return err
-				}
-			} else {
-				anyStoreBootstrapped = true
-				break
-			}
+	if anyStoreBootstrapped, err := s.isAnyStoreBootstrapped(ctx); err != nil {
+		return err
+	} else if anyStoreBootstrapped {
+		// We might have to sleep a bit to protect against this node producing non-
+		// monotonic timestamps. Before restarting, its clock might have been driven
+		// by other nodes' fast clocks, but when we restarted, we lost all this
+		// information. For example, a client might have written a value at a
+		// timestamp that's in the future of the restarted node's clock, and if we
+		// don't do something, the same client's read would not return the written
+		// value. So, we wait up to MaxOffset; we couldn't have served timestamps more
+		// than MaxOffset in the future (assuming that MaxOffset was not changed, see
+		// #9733).
+		//
+		// As an optimization for tests, we don't sleep if all the stores are brand
+		// new. In this case, the node will not serve anything anyway until it
+		// synchronizes with other nodes.
+		var sleepDuration time.Duration
+		// Don't have to sleep for monotonicity when using clockless reads
+		// (nor can we, for we would sleep forever).
+		if maxOffset := s.clock.MaxOffset(); maxOffset != timeutil.ClocklessMaxOffset {
+			sleepDuration = maxOffset - timeutil.Since(startTime)
 		}
-		if anyStoreBootstrapped {
-			var sleepDuration time.Duration
-			// Don't have to sleep for monotonicity when using clockless reads
-			// (nor can we, for we would sleep forever).
-			if maxOffset := s.clock.MaxOffset(); maxOffset != timeutil.ClocklessMaxOffset {
-				sleepDuration = maxOffset - timeutil.Since(startTime)
-			}
-			if sleepDuration > 0 {
-				log.Infof(ctx, "sleeping for %s to guarantee HLC monotonicity", sleepDuration)
-				time.Sleep(sleepDuration)
-			}
+		if sleepDuration > 0 {
+			log.Infof(ctx, "sleeping for %s to guarantee HLC monotonicity", sleepDuration)
+			time.Sleep(sleepDuration)
 		}
+	} else if len(s.cfg.GossipBootstrapResolvers) == 0 {
+		// If the _unfiltered_ list of hosts from the --join flag is
+		// empty, then this node can bootstrap a new cluster. We disallow
+		// this if this node is being started with itself specified as a
+		// --join host, because that's too likely to be operator error.
+		if err = s.node.bootstrap(ctx, s.engines); err != nil {
+			return err
+		}
+		log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
+	} else {
+		log.Info(ctx, "no stores bootstrapped and --join flag specified, awaiting init command.")
+
+		initServer := newInitServer(s)
+		initServer.serve(ctx, initL)
+		atomic.StoreInt32(&initLActive, 1)
+
+		s.stopper.RunWorker(workersCtx, func(context.Context) {
+			serveOnMux.Do(func() {
+				netutil.FatalIfUnexpected(m.Serve())
+			})
+		})
+
+		if err = initServer.awaitBootstrap(); err != nil {
+			return nil
+		}
+
+		atomic.StoreInt32(&initLActive, 0)
 	}
 
 	// Now that we have a monotonic HLC wrt previous incarnations of the process,
-	// init all the replicas.
+	// init all the replicas.  At this point *some* store has been bootstrapped.
 	err = s.node.start(
 		ctx,
 		unresolvedAdvertAddr,
 		s.engines,
 		s.cfg.NodeAttributes,
-		s.cfg.Locality,
-		// If the _unfiltered_ list of hosts from the --join flag is
-		// empty, then this node can bootstrap a new cluster. We disallow
-		// this if this node is being started with itself specified as a
-		// --join host, because that's too likely to be operator error.
-		len(s.cfg.GossipBootstrapResolvers) == 0, /* canBootstrap */
-	)
+		s.cfg.Locality)
+
 	if err != nil {
 		return err
 	}

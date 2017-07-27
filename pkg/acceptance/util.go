@@ -366,9 +366,12 @@ func getConfigs(t *testing.T) []cluster.TestConfig {
 type configTestRunner func(context.Context, *testing.T, cluster.Cluster, cluster.TestConfig)
 
 // runTestOnConfigs retrieves the full list of test configurations and runs the
-// passed in test against each on serially.
+// passed in test against each on serially. If any options are specified, they may mutate
+// the test config before it runs.
 func runTestOnConfigs(
-	t *testing.T, testFunc func(context.Context, *testing.T, cluster.Cluster, cluster.TestConfig),
+	t *testing.T,
+	testFunc func(context.Context, *testing.T, cluster.Cluster, cluster.TestConfig),
+	options ...func(*cluster.TestConfig),
 ) {
 	cfgs := getConfigs(t)
 	if len(cfgs) == 0 {
@@ -376,6 +379,9 @@ func runTestOnConfigs(
 	}
 	ctx := context.Background()
 	for _, cfg := range cfgs {
+		for _, opt := range options {
+			opt(&cfg)
+		}
 		func() {
 			cluster := StartCluster(ctx, t, cfg)
 			log.Infof(ctx, "cluster started successfully")
@@ -416,62 +422,65 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 		l.Start(ctx)
 		c = l
 	}
-	wantedReplicas := 3
-	if numNodes := c.NumNodes(); numNodes < wantedReplicas {
-		wantedReplicas = numNodes
-	}
 
-	// Looks silly, but we actually start zero-node clusters in the
-	// reference tests.
-	if wantedReplicas > 0 {
+	if cfg.InitMode != cluster.INIT_NONE {
+		wantedReplicas := 3
+		if numNodes := c.NumNodes(); numNodes < wantedReplicas {
+			wantedReplicas = numNodes
+		}
 
-		log.Infof(ctx, "waiting for first range to have %d replicas", wantedReplicas)
+		// Looks silly, but we actually start zero-node clusters in the
+		// reference tests.
+		if wantedReplicas > 0 {
 
-		testutils.SucceedsSoon(t, func() error {
-			select {
-			case <-stopper.ShouldStop():
-				t.Fatal("interrupted")
-			case <-time.After(time.Second):
-			}
+			log.Infof(ctx, "waiting for first range to have %d replicas", wantedReplicas)
 
-			// Reconnect on every iteration; gRPC will eagerly tank the connection
-			// on transport errors. Always talk to node 0 because it's guaranteed
-			// to exist.
-			client, err := c.NewClient(ctx, 0)
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutils.SucceedsSoon(t, func() error {
+				select {
+				case <-stopper.ShouldStop():
+					t.Fatal("interrupted")
+				case <-time.After(time.Second):
+				}
 
-			var desc roachpb.RangeDescriptor
-			if err := client.GetProto(ctx, keys.RangeDescriptorKey(roachpb.RKeyMin), &desc); err != nil {
-				return err
-			}
-			foundReplicas := len(desc.Replicas)
+				// Reconnect on every iteration; gRPC will eagerly tank the connection
+				// on transport errors. Always talk to node 0 because it's guaranteed
+				// to exist.
+				client, err := c.NewClient(ctx, 0)
+				if err != nil {
+					t.Fatal(err)
+				}
 
-			if log.V(1) {
-				log.Infof(ctx, "found %d replicas", foundReplicas)
-			}
+				var desc roachpb.RangeDescriptor
+				if err := client.GetProto(ctx, keys.RangeDescriptorKey(roachpb.RKeyMin), &desc); err != nil {
+					return err
+				}
+				foundReplicas := len(desc.Replicas)
 
-			if foundReplicas < wantedReplicas {
-				return errors.Errorf("expected %d replicas, only found %d", wantedReplicas, foundReplicas)
-			}
-			return nil
-		})
-	}
+				if log.V(1) {
+					log.Infof(ctx, "found %d replicas", foundReplicas)
+				}
 
-	// Ensure that all nodes are serving SQL by making sure a simple
-	// read-only query succeeds.
-	for i := 0; i < c.NumNodes(); i++ {
-		testutils.SucceedsSoon(t, func() error {
-			db, err := gosql.Open("postgres", c.PGUrl(ctx, i))
-			if err != nil {
-				return err
-			}
-			if _, err := db.Exec("SHOW DATABASES;"); err != nil {
-				return err
-			}
-			return nil
-		})
+				if foundReplicas < wantedReplicas {
+					return errors.Errorf("expected %d replicas, only found %d", wantedReplicas, foundReplicas)
+				}
+				return nil
+			})
+		}
+
+		// Ensure that all nodes are serving SQL by making sure a simple
+		// read-only query succeeds.
+		for i := 0; i < c.NumNodes(); i++ {
+			testutils.SucceedsSoon(t, func() error {
+				db, err := gosql.Open("postgres", c.PGUrl(ctx, i))
+				if err != nil {
+					return err
+				}
+				if _, err := db.Exec("SHOW DATABASES;"); err != nil {
+					return err
+				}
+				return nil
+			})
+		}
 	}
 
 	completed = true
