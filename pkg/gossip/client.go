@@ -25,6 +25,7 @@ import (
 	"github.com/pkg/errors"
 	circuit "github.com/rubyist/circuitbreaker"
 	"golang.org/x/net/context"
+	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -335,4 +336,24 @@ func (c *client) gossip(
 			}
 		}
 	}
+}
+
+// GRPCDialer wraps up the logic required to grpc-dial a node by ID.
+type GRPCDialer struct {
+	rpcCtx *rpc.Context
+	gossip *Gossip
+}
+
+// GetGRPCDialer returns a grpc dialer that uses this gossip for resolution.
+func (g *Gossip) GetGRPCDialer(rpcCtx *rpc.Context) GRPCDialer {
+	return GRPCDialer{rpcCtx, g}
+}
+
+// Dial attempts to resolve a nodeID and dial it.
+func (d GRPCDialer) Dial(nodeID roachpb.NodeID) (*grpc.ClientConn, error) {
+	addr, err := d.gossip.GetNodeIDAddress(nodeID)
+	if err != nil {
+		return nil, errors.Wrap(err, "resolving node id")
+	}
+	return d.rpcCtx.GRPCDial(addr.String())
 }
