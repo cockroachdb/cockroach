@@ -210,7 +210,7 @@ func (r *RSG) Float64() float64 {
 }
 
 // GenerateRandomArg generates a random, valid, SQL function argument of
-// the spcified type.
+// the specified type.
 func (r *RSG) GenerateRandomArg(typ parser.Type) string {
 	if r.Intn(10) == 0 {
 		return "NULL"
@@ -252,7 +252,7 @@ func (r *RSG) GenerateRandomArg(typ parser.Type) string {
 		v = "NULL"
 	default:
 		// Check types that can't be compared using equality
-		switch typ.(type) {
+		switch parser.UnwrapType(typ).(type) {
 		case parser.TTuple,
 			parser.TArray:
 			v = "NULL"
