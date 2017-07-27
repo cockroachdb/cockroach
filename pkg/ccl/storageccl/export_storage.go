@@ -9,6 +9,7 @@
 package storageccl
 
 import (
+	"bytes"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -17,6 +18,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	gcs "cloud.google.com/go/storage"
@@ -41,6 +43,8 @@ const (
 	AzureAccountNameParam = "AZURE_ACCOUNT_NAME"
 	// AzureAccountKeyParam is the query parameter for account_key in an azure URI.
 	AzureAccountKeyParam = "AZURE_ACCOUNT_KEY"
+
+	MetadataNode = "METADATA_NODE"
 )
 
 // ExportStorageConfFromURI generates an ExportStorage config from a URI string.
@@ -94,6 +98,14 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 	case "nodelocal":
 		conf.Provider = roachpb.ExportStorageProvider_LocalFile
 		conf.LocalFile.Path = uri.Path
+	case "blobsharing":
+		conf.Provider = roachpb.ExportStorageProvider_BlobSharing
+		conf.Blob.Prefix = uri.Path
+		if i, err := strconv.Atoi(uri.Query().Get(MetadataNode)); err != nil {
+			return conf, errors.Errorf("uri missing or invalid %q parameter", MetadataNode)
+		} else {
+			conf.Blob.MetadataNode = roachpb.NodeID(i)
+		}
 	default:
 		return conf, errors.Errorf("unsupported storage scheme: %q", uri.Scheme)
 	}
@@ -128,6 +140,8 @@ func MakeExportStorage(
 		return makeGCSStorage(ctx, dest.GoogleCloudConfig)
 	case roachpb.ExportStorageProvider_Azure:
 		return makeAzureStorage(dest.AzureConfig)
+	case roachpb.ExportStorageProvider_BlobSharing:
+		return makeBlobStorage(dest.Blob, blobService)
 	}
 	return nil, errors.Errorf("unsupported export destination type: %s", dest.Provider.String())
 }
@@ -595,4 +609,61 @@ func (s *azureStorage) WriteMetadataFile(
 ) error {
 	_, err := s.WriteFile(ctx, basename, bytes.NewReader(content))
 	return err
+}
+
+type nodeBlobStorage struct {
+	conf         *roachpb.ExportStorage_BlobSharing
+	metadataNode roachpb.NodeID
+	service      *blobs.Service
+}
+
+var _ ExportStorage = &nodeBlobStorage{}
+
+func makeBlobStorage(
+	conf *roachpb.ExportStorage_BlobSharing, blobService *blobs.Service,
+) (ExportStorage, error) {
+	return &nodeBlobStorage{conf: conf, service: blobService}, nil
+}
+
+func (b *nodeBlobStorage) Conf() roachpb.ExportStorage {
+	return roachpb.ExportStorage{
+		Provider: roachpb.ExportStorageProvider_BlobSharing,
+		Blob:     b.conf,
+	}
+}
+
+func (b *nodeBlobStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
+	payload, err := b.service.ParseAndFetch(ctx, basename)
+	if err != nil {
+		return nil, err
+	}
+	return ioutil.NopCloser(bytes.NewReader(payload)), nil
+}
+
+func (b *nodeBlobStorage) WriteFile(_ context.Context, basename string, content io.ReadSeeker) (string, error) {
+	return b.service.StoreLocally(content, basename)
+}
+
+func (b *nodeBlobStorage) Delete(_ context.Context, basename string) error {
+	panic("unimplemented")
+}
+
+func (b *nodeBlobStorage) Close() error {
+	return nil
+}
+
+func (b *nodeBlobStorage) ReadMetadataFile(
+	ctx context.Context, basename string,
+) (io.ReadCloser, error) {
+	payload, err := b.service.Fetch(ctx, b.metadataNode, basename)
+	if err != nil {
+		return nil, err
+	}
+	return ioutil.NopCloser(bytes.NewReader(payload)), nil
+}
+
+func (b *nodeBlobStorage) WriteMetadataFile(
+	ctx context.Context, basename string, content []byte,
+) error {
+	return b.service.Send(ctx, b.conf.MetadataNode, basename, content)
 }

@@ -787,6 +787,7 @@ enum ExportStorageProvider {
   S3 = 3;
   GoogleCloud = 4;
   Azure = 5;
+  BlobSharing = 6;
 }
 
 message ExportStorage {
@@ -829,11 +830,18 @@ message ExportStorage {
     optional string account_name = 3 [(gogoproto.nullable) = false];
     optional string account_key = 4 [(gogoproto.nullable) = false];
   }
+  message BlobSharing {
+    option (gogoproto.equal) = true;
+
+    optional int32 metadataNode = 1 [(gogoproto.nullable) = false, (gogoproto.casttype) = "NodeID"];
+    optional string prefix = 2 [(gogoproto.nullable) = false];
+  }
   optional LocalFilePath LocalFile = 2 [(gogoproto.nullable) = false];
   optional Http HttpPath = 3 [(gogoproto.nullable) = false];
   optional GCS GoogleCloudConfig = 4;
   optional S3 S3Config = 5;
   optional Azure AzureConfig = 6;
+  optional BlobSharing blob = 7;
 }
 
 // WriteBatchRequest is arguments to the WriteBatch() method, to apply the
