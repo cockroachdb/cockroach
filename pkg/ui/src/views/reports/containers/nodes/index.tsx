@@ -132,7 +132,7 @@ class Nodes extends React.Component<NodesProps, {}> {
     }
     if (!_.isNil(filters.localityRegex)) {
       nodeIDsContext = nodeIDsContext.filter(nodeID => (
-        !filters.localityRegex.test(localityToString(nodesSummary.nodeStatusByID[nodeID].desc.locality))
+        filters.localityRegex.test(localityToString(nodesSummary.nodeStatusByID[nodeID].desc.locality))
       ));
     }
 
