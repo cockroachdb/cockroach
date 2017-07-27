@@ -11,6 +11,7 @@ package sqlccl_test
 import (
 	"bytes"
 	gosql "database/sql"
+	"database/sql/driver"
 	"fmt"
 	"hash/crc32"
 	"io"
@@ -51,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 const (
@@ -1615,6 +1617,31 @@ func TestBackupRestorePermissions(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+}
+
+func TestShowBackup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts)
+	defer cleanupFn()
+
+	now := timeutil.Now()
+
+	sqlDB.Exec(`BACKUP data.bank TO $1`, dir)
+
+	var unused driver.Value
+	var start, end time.Time
+	var dataSize uint64
+	sqlDB.QueryRow(`SELECT * FROM [SHOW BACKUP $1] WHERE "table" = 'bank'`, dir).Scan(
+		&unused, &unused, &start, &end, &dataSize,
+	)
+	if !now.After(start) || !end.After(now) {
+		t.Errorf("expected now (%s) to be in (%s, %s)", now, start, end)
+	}
+	if dataSize <= 0 {
+		t.Errorf("expected dataSize to be >0 got : %d", dataSize)
+	}
 }
 
 func TestBackupAzureAccountName(t *testing.T) {
