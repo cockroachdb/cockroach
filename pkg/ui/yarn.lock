@@ -915,7 +915,7 @@ babel-register@^6.24.1:
     mkdirp "^0.5.1"
     source-map-support "^0.4.2"
 
-babel-runtime@^6.18.0, babel-runtime@^6.22.0:
+babel-runtime@^6.18.0, babel-runtime@^6.22.0, babel-runtime@^6.23.0:
   version "6.23.0"
   resolved "https://registry.yarnpkg.com/babel-runtime/-/babel-runtime-6.23.0.tgz#0a9489f144de70efb3ce4300accdb329e2fc543b"
   dependencies:
@@ -4654,6 +4654,13 @@ raw-body@~2.2.0:
     bytes "2.4.0"
     iconv-lite "0.4.15"
     unpipe "1.0.0"
+
+rc-progress@^2.2.1:
+  version "2.2.1"
+  resolved "https://registry.yarnpkg.com/rc-progress/-/rc-progress-2.2.1.tgz#3fdefb16bf94f43c187cdbbdeb9fc5010b367ef9"
+  dependencies:
+    babel-runtime "^6.23.0"
+    prop-types "^15.5.8"
 
 rc@^1.1.7:
   version "1.2.1"

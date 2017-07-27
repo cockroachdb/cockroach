@@ -41,6 +41,10 @@ interface SortedTableProps<T> {
   // Callback that should be invoked when the user want to change the sort
   // setting.
   onChangeSortSetting?: { (ss: SortSetting): void };
+  // className to be applied to the table element.
+  className?: string;
+  // A function that returns the class to apply to a given row.
+  rowClass?: (obj: T) => string;
 }
 
 /**
@@ -104,13 +108,23 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, {}> {
       });
     });
 
+  rowClass = createSelector(
+    this.sorted,
+    (props: SortedTableProps<T>) => props.rowClass,
+    (sorted: T[], rowClass: (obj: T) => string) => {
+      return (index: number) => rowClass(sorted[index])
+    }
+  )
+
   render() {
     const { data, sortSetting, onChangeSortSetting } = this.props;
     if (data) {
       return <SortableTable count={data.length}
                             sortSetting={sortSetting}
                             onChangeSortSetting={onChangeSortSetting}
-                            columns={this.columns(this.props)}/>;
+                            columns={this.columns(this.props)}
+                            rowClass={this.rowClass(this.props)}
+                            className={this.props.className} />;
     }
     return <div>No results.</div>;
   }

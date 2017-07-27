@@ -67,6 +67,15 @@ export const refreshLogs = logsReducerObj.refresh;
 const livenessReducerObj = new CachedDataReducer(api.getLiveness, "liveness", moment.duration(10, "s"));
 export const refreshLiveness = livenessReducerObj.refresh;
 
+export const jobsSearchKey = (status: string, type: string, limit: number) => 
+  `${encodeURIComponent(status)}/${encodeURIComponent(type)}/${encodeURIComponent(limit.toString())}`
+
+const jobsRequestKey = (req: api.JobsRequestMessage): string =>
+  jobsSearchKey(req.status, req.type, req.limit)
+
+const jobsReducerObj = new KeyedCachedDataReducer(api.getJobs, "jobs", jobsRequestKey)
+export const refreshJobs = jobsReducerObj.refresh;
+
 export const queryToID = (req: api.QueryPlanRequestMessage): string => req.query;
 
 const queryPlanReducerObj = new CachedDataReducer(api.getQueryPlan, "queryPlan");
@@ -91,6 +100,7 @@ export interface APIReducersState {
   tableStats: KeyedCachedDataReducerState<api.TableStatsResponseMessage>;
   logs: CachedDataReducerState<api.LogEntriesResponseMessage>;
   liveness: CachedDataReducerState<api.LivenessResponseMessage>;
+  jobs: KeyedCachedDataReducerState<api.JobsResponseMessage>;
   queryPlan: CachedDataReducerState<api.QueryPlanResponseMessage>;
   problemRanges: CachedDataReducerState<api.ProblemRangesResponseMessage>;
   certificates: CachedDataReducerState<api.CertificatesResponseMessage>;
@@ -109,6 +119,7 @@ export default combineReducers<APIReducersState>({
   [tableStatsReducerObj.actionNamespace]: tableStatsReducerObj.reducer,
   [logsReducerObj.actionNamespace]: logsReducerObj.reducer,
   [livenessReducerObj.actionNamespace]: livenessReducerObj.reducer,
+  [jobsReducerObj.actionNamespace]: jobsReducerObj.reducer,
   [queryPlanReducerObj.actionNamespace]: queryPlanReducerObj.reducer,
   [problemRangesReducerObj.actionNamespace]: problemRangesReducerObj.reducer,
   [certificatesReducerObj.actionNamespace]: certificatesReducerObj.reducer,

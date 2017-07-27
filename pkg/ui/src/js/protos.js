@@ -7458,6 +7458,870 @@ export const cockroach = $root.cockroach = (() => {
                 return LivenessResponse;
             })();
 
+            serverpb.JobsRequest = (function() {
+
+                /**
+                 * Properties of a JobsRequest.
+                 * @typedef cockroach.server.serverpb.JobsRequest$Properties
+                 * @type {Object}
+                 * @property {number} [limit] JobsRequest limit.
+                 * @property {string} [status] JobsRequest status.
+                 * @property {string} [type] JobsRequest type.
+                 */
+
+                /**
+                 * Constructs a new JobsRequest.
+                 * @exports cockroach.server.serverpb.JobsRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.JobsRequest$Properties=} [properties] Properties to set
+                 */
+                function JobsRequest(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * JobsRequest limit.
+                 * @type {number}
+                 */
+                JobsRequest.prototype.limit = 0;
+
+                /**
+                 * JobsRequest status.
+                 * @type {string}
+                 */
+                JobsRequest.prototype.status = "";
+
+                /**
+                 * JobsRequest type.
+                 * @type {string}
+                 */
+                JobsRequest.prototype.type = "";
+
+                /**
+                 * Creates a new JobsRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.JobsRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.JobsRequest} JobsRequest instance
+                 */
+                JobsRequest.create = function create(properties) {
+                    return new JobsRequest(properties);
+                };
+
+                /**
+                 * Encodes the specified JobsRequest message. Does not implicitly {@link cockroach.server.serverpb.JobsRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.JobsRequest$Properties} message JobsRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                JobsRequest.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.limit != null && message.hasOwnProperty("limit"))
+                        writer.uint32(/* id 1, wireType 0 =*/8).int32(message.limit);
+                    if (message.status != null && message.hasOwnProperty("status"))
+                        writer.uint32(/* id 2, wireType 2 =*/18).string(message.status);
+                    if (message.type != null && message.hasOwnProperty("type"))
+                        writer.uint32(/* id 3, wireType 2 =*/26).string(message.type);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified JobsRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.JobsRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.JobsRequest$Properties} message JobsRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                JobsRequest.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a JobsRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.JobsRequest} JobsRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                JobsRequest.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.JobsRequest();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.limit = reader.int32();
+                            break;
+                        case 2:
+                            message.status = reader.string();
+                            break;
+                        case 3:
+                            message.type = reader.string();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a JobsRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.JobsRequest} JobsRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                JobsRequest.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a JobsRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                JobsRequest.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.limit != null && message.hasOwnProperty("limit"))
+                        if (!$util.isInteger(message.limit))
+                            return "limit: integer expected";
+                    if (message.status != null && message.hasOwnProperty("status"))
+                        if (!$util.isString(message.status))
+                            return "status: string expected";
+                    if (message.type != null && message.hasOwnProperty("type"))
+                        if (!$util.isString(message.type))
+                            return "type: string expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a JobsRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.JobsRequest} JobsRequest
+                 */
+                JobsRequest.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.JobsRequest)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.JobsRequest();
+                    if (object.limit != null)
+                        message.limit = object.limit | 0;
+                    if (object.status != null)
+                        message.status = String(object.status);
+                    if (object.type != null)
+                        message.type = String(object.type);
+                    return message;
+                };
+
+                /**
+                 * Creates a JobsRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.JobsRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.JobsRequest} JobsRequest
+                 */
+                JobsRequest.from = JobsRequest.fromObject;
+
+                /**
+                 * Creates a plain object from a JobsRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.JobsRequest} message JobsRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                JobsRequest.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults) {
+                        object.limit = 0;
+                        object.status = "";
+                        object.type = "";
+                    }
+                    if (message.limit != null && message.hasOwnProperty("limit"))
+                        object.limit = message.limit;
+                    if (message.status != null && message.hasOwnProperty("status"))
+                        object.status = message.status;
+                    if (message.type != null && message.hasOwnProperty("type"))
+                        object.type = message.type;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this JobsRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                JobsRequest.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this JobsRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                JobsRequest.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return JobsRequest;
+            })();
+
+            serverpb.JobsResponse = (function() {
+
+                /**
+                 * Properties of a JobsResponse.
+                 * @typedef cockroach.server.serverpb.JobsResponse$Properties
+                 * @type {Object}
+                 * @property {Array.<cockroach.server.serverpb.JobsResponse.Job$Properties>} [jobs] JobsResponse jobs.
+                 */
+
+                /**
+                 * Constructs a new JobsResponse.
+                 * @exports cockroach.server.serverpb.JobsResponse
+                 * @constructor
+                 * @param {cockroach.server.serverpb.JobsResponse$Properties=} [properties] Properties to set
+                 */
+                function JobsResponse(properties) {
+                    this.jobs = [];
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * JobsResponse jobs.
+                 * @type {Array.<cockroach.server.serverpb.JobsResponse.Job$Properties>}
+                 */
+                JobsResponse.prototype.jobs = $util.emptyArray;
+
+                /**
+                 * Creates a new JobsResponse instance using the specified properties.
+                 * @param {cockroach.server.serverpb.JobsResponse$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.JobsResponse} JobsResponse instance
+                 */
+                JobsResponse.create = function create(properties) {
+                    return new JobsResponse(properties);
+                };
+
+                /**
+                 * Encodes the specified JobsResponse message. Does not implicitly {@link cockroach.server.serverpb.JobsResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.JobsResponse$Properties} message JobsResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                JobsResponse.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.jobs != null && message.jobs.length)
+                        for (let i = 0; i < message.jobs.length; ++i)
+                            $root.cockroach.server.serverpb.JobsResponse.Job.encode(message.jobs[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified JobsResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.JobsResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.JobsResponse$Properties} message JobsResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                JobsResponse.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a JobsResponse message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.JobsResponse} JobsResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                JobsResponse.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.JobsResponse();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            if (!(message.jobs && message.jobs.length))
+                                message.jobs = [];
+                            message.jobs.push($root.cockroach.server.serverpb.JobsResponse.Job.decode(reader, reader.uint32()));
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a JobsResponse message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.JobsResponse} JobsResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                JobsResponse.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a JobsResponse message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                JobsResponse.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.jobs != null && message.hasOwnProperty("jobs")) {
+                        if (!Array.isArray(message.jobs))
+                            return "jobs: array expected";
+                        for (let i = 0; i < message.jobs.length; ++i) {
+                            let error = $root.cockroach.server.serverpb.JobsResponse.Job.verify(message.jobs[i]);
+                            if (error)
+                                return "jobs." + error;
+                        }
+                    }
+                    return null;
+                };
+
+                /**
+                 * Creates a JobsResponse message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.JobsResponse} JobsResponse
+                 */
+                JobsResponse.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.JobsResponse)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.JobsResponse();
+                    if (object.jobs) {
+                        if (!Array.isArray(object.jobs))
+                            throw TypeError(".cockroach.server.serverpb.JobsResponse.jobs: array expected");
+                        message.jobs = [];
+                        for (let i = 0; i < object.jobs.length; ++i) {
+                            if (typeof object.jobs[i] !== "object")
+                                throw TypeError(".cockroach.server.serverpb.JobsResponse.jobs: object expected");
+                            message.jobs[i] = $root.cockroach.server.serverpb.JobsResponse.Job.fromObject(object.jobs[i]);
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Creates a JobsResponse message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.JobsResponse.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.JobsResponse} JobsResponse
+                 */
+                JobsResponse.from = JobsResponse.fromObject;
+
+                /**
+                 * Creates a plain object from a JobsResponse message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.JobsResponse} message JobsResponse
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                JobsResponse.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.arrays || options.defaults)
+                        object.jobs = [];
+                    if (message.jobs && message.jobs.length) {
+                        object.jobs = [];
+                        for (let j = 0; j < message.jobs.length; ++j)
+                            object.jobs[j] = $root.cockroach.server.serverpb.JobsResponse.Job.toObject(message.jobs[j], options);
+                    }
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this JobsResponse message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                JobsResponse.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this JobsResponse to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                JobsResponse.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                JobsResponse.Job = (function() {
+
+                    /**
+                     * Properties of a Job.
+                     * @typedef cockroach.server.serverpb.JobsResponse.Job$Properties
+                     * @type {Object}
+                     * @property {Long} [id] Job id.
+                     * @property {string} [type] Job type.
+                     * @property {string} [description] Job description.
+                     * @property {string} [username] Job username.
+                     * @property {Array.<number>} [descriptor_ids] Job descriptor_ids.
+                     * @property {string} [status] Job status.
+                     * @property {google.protobuf.Timestamp$Properties} [created] Job created.
+                     * @property {google.protobuf.Timestamp$Properties} [started] Job started.
+                     * @property {google.protobuf.Timestamp$Properties} [finished] Job finished.
+                     * @property {google.protobuf.Timestamp$Properties} [modified] Job modified.
+                     * @property {number} [fraction_completed] Job fraction_completed.
+                     * @property {string} [error] Job error.
+                     */
+
+                    /**
+                     * Constructs a new Job.
+                     * @exports cockroach.server.serverpb.JobsResponse.Job
+                     * @constructor
+                     * @param {cockroach.server.serverpb.JobsResponse.Job$Properties=} [properties] Properties to set
+                     */
+                    function Job(properties) {
+                        this.descriptor_ids = [];
+                        if (properties)
+                            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * Job id.
+                     * @type {Long}
+                     */
+                    Job.prototype.id = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                    /**
+                     * Job type.
+                     * @type {string}
+                     */
+                    Job.prototype.type = "";
+
+                    /**
+                     * Job description.
+                     * @type {string}
+                     */
+                    Job.prototype.description = "";
+
+                    /**
+                     * Job username.
+                     * @type {string}
+                     */
+                    Job.prototype.username = "";
+
+                    /**
+                     * Job descriptor_ids.
+                     * @type {Array.<number>}
+                     */
+                    Job.prototype.descriptor_ids = $util.emptyArray;
+
+                    /**
+                     * Job status.
+                     * @type {string}
+                     */
+                    Job.prototype.status = "";
+
+                    /**
+                     * Job created.
+                     * @type {(google.protobuf.Timestamp$Properties|null)}
+                     */
+                    Job.prototype.created = null;
+
+                    /**
+                     * Job started.
+                     * @type {(google.protobuf.Timestamp$Properties|null)}
+                     */
+                    Job.prototype.started = null;
+
+                    /**
+                     * Job finished.
+                     * @type {(google.protobuf.Timestamp$Properties|null)}
+                     */
+                    Job.prototype.finished = null;
+
+                    /**
+                     * Job modified.
+                     * @type {(google.protobuf.Timestamp$Properties|null)}
+                     */
+                    Job.prototype.modified = null;
+
+                    /**
+                     * Job fraction_completed.
+                     * @type {number}
+                     */
+                    Job.prototype.fraction_completed = 0;
+
+                    /**
+                     * Job error.
+                     * @type {string}
+                     */
+                    Job.prototype.error = "";
+
+                    /**
+                     * Creates a new Job instance using the specified properties.
+                     * @param {cockroach.server.serverpb.JobsResponse.Job$Properties=} [properties] Properties to set
+                     * @returns {cockroach.server.serverpb.JobsResponse.Job} Job instance
+                     */
+                    Job.create = function create(properties) {
+                        return new Job(properties);
+                    };
+
+                    /**
+                     * Encodes the specified Job message. Does not implicitly {@link cockroach.server.serverpb.JobsResponse.Job.verify|verify} messages.
+                     * @param {cockroach.server.serverpb.JobsResponse.Job$Properties} message Job message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    Job.encode = function encode(message, writer) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (message.id != null && message.hasOwnProperty("id"))
+                            writer.uint32(/* id 1, wireType 0 =*/8).int64(message.id);
+                        if (message.type != null && message.hasOwnProperty("type"))
+                            writer.uint32(/* id 2, wireType 2 =*/18).string(message.type);
+                        if (message.description != null && message.hasOwnProperty("description"))
+                            writer.uint32(/* id 3, wireType 2 =*/26).string(message.description);
+                        if (message.username != null && message.hasOwnProperty("username"))
+                            writer.uint32(/* id 4, wireType 2 =*/34).string(message.username);
+                        if (message.descriptor_ids != null && message.descriptor_ids.length) {
+                            writer.uint32(/* id 5, wireType 2 =*/42).fork();
+                            for (let i = 0; i < message.descriptor_ids.length; ++i)
+                                writer.uint32(message.descriptor_ids[i]);
+                            writer.ldelim();
+                        }
+                        if (message.status != null && message.hasOwnProperty("status"))
+                            writer.uint32(/* id 6, wireType 2 =*/50).string(message.status);
+                        if (message.created != null && message.hasOwnProperty("created"))
+                            $root.google.protobuf.Timestamp.encode(message.created, writer.uint32(/* id 7, wireType 2 =*/58).fork()).ldelim();
+                        if (message.started != null && message.hasOwnProperty("started"))
+                            $root.google.protobuf.Timestamp.encode(message.started, writer.uint32(/* id 8, wireType 2 =*/66).fork()).ldelim();
+                        if (message.finished != null && message.hasOwnProperty("finished"))
+                            $root.google.protobuf.Timestamp.encode(message.finished, writer.uint32(/* id 9, wireType 2 =*/74).fork()).ldelim();
+                        if (message.modified != null && message.hasOwnProperty("modified"))
+                            $root.google.protobuf.Timestamp.encode(message.modified, writer.uint32(/* id 10, wireType 2 =*/82).fork()).ldelim();
+                        if (message.fraction_completed != null && message.hasOwnProperty("fraction_completed"))
+                            writer.uint32(/* id 11, wireType 5 =*/93).float(message.fraction_completed);
+                        if (message.error != null && message.hasOwnProperty("error"))
+                            writer.uint32(/* id 12, wireType 2 =*/98).string(message.error);
+                        return writer;
+                    };
+
+                    /**
+                     * Encodes the specified Job message, length delimited. Does not implicitly {@link cockroach.server.serverpb.JobsResponse.Job.verify|verify} messages.
+                     * @param {cockroach.server.serverpb.JobsResponse.Job$Properties} message Job message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    Job.encodeDelimited = function encodeDelimited(message, writer) {
+                        return this.encode(message, writer).ldelim();
+                    };
+
+                    /**
+                     * Decodes a Job message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.server.serverpb.JobsResponse.Job} Job
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    Job.decode = function decode(reader, length) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.JobsResponse.Job();
+                        while (reader.pos < end) {
+                            let tag = reader.uint32();
+                            switch (tag >>> 3) {
+                            case 1:
+                                message.id = reader.int64();
+                                break;
+                            case 2:
+                                message.type = reader.string();
+                                break;
+                            case 3:
+                                message.description = reader.string();
+                                break;
+                            case 4:
+                                message.username = reader.string();
+                                break;
+                            case 5:
+                                if (!(message.descriptor_ids && message.descriptor_ids.length))
+                                    message.descriptor_ids = [];
+                                if ((tag & 7) === 2) {
+                                    let end2 = reader.uint32() + reader.pos;
+                                    while (reader.pos < end2)
+                                        message.descriptor_ids.push(reader.uint32());
+                                } else
+                                    message.descriptor_ids.push(reader.uint32());
+                                break;
+                            case 6:
+                                message.status = reader.string();
+                                break;
+                            case 7:
+                                message.created = $root.google.protobuf.Timestamp.decode(reader, reader.uint32());
+                                break;
+                            case 8:
+                                message.started = $root.google.protobuf.Timestamp.decode(reader, reader.uint32());
+                                break;
+                            case 9:
+                                message.finished = $root.google.protobuf.Timestamp.decode(reader, reader.uint32());
+                                break;
+                            case 10:
+                                message.modified = $root.google.protobuf.Timestamp.decode(reader, reader.uint32());
+                                break;
+                            case 11:
+                                message.fraction_completed = reader.float();
+                                break;
+                            case 12:
+                                message.error = reader.string();
+                                break;
+                            default:
+                                reader.skipType(tag & 7);
+                                break;
+                            }
+                        }
+                        return message;
+                    };
+
+                    /**
+                     * Decodes a Job message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.server.serverpb.JobsResponse.Job} Job
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    Job.decodeDelimited = function decodeDelimited(reader) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader(reader);
+                        return this.decode(reader, reader.uint32());
+                    };
+
+                    /**
+                     * Verifies a Job message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    Job.verify = function verify(message) {
+                        if (typeof message !== "object" || message === null)
+                            return "object expected";
+                        if (message.id != null && message.hasOwnProperty("id"))
+                            if (!$util.isInteger(message.id) && !(message.id && $util.isInteger(message.id.low) && $util.isInteger(message.id.high)))
+                                return "id: integer|Long expected";
+                        if (message.type != null && message.hasOwnProperty("type"))
+                            if (!$util.isString(message.type))
+                                return "type: string expected";
+                        if (message.description != null && message.hasOwnProperty("description"))
+                            if (!$util.isString(message.description))
+                                return "description: string expected";
+                        if (message.username != null && message.hasOwnProperty("username"))
+                            if (!$util.isString(message.username))
+                                return "username: string expected";
+                        if (message.descriptor_ids != null && message.hasOwnProperty("descriptor_ids")) {
+                            if (!Array.isArray(message.descriptor_ids))
+                                return "descriptor_ids: array expected";
+                            for (let i = 0; i < message.descriptor_ids.length; ++i)
+                                if (!$util.isInteger(message.descriptor_ids[i]))
+                                    return "descriptor_ids: integer[] expected";
+                        }
+                        if (message.status != null && message.hasOwnProperty("status"))
+                            if (!$util.isString(message.status))
+                                return "status: string expected";
+                        if (message.created != null && message.hasOwnProperty("created")) {
+                            let error = $root.google.protobuf.Timestamp.verify(message.created);
+                            if (error)
+                                return "created." + error;
+                        }
+                        if (message.started != null && message.hasOwnProperty("started")) {
+                            let error = $root.google.protobuf.Timestamp.verify(message.started);
+                            if (error)
+                                return "started." + error;
+                        }
+                        if (message.finished != null && message.hasOwnProperty("finished")) {
+                            let error = $root.google.protobuf.Timestamp.verify(message.finished);
+                            if (error)
+                                return "finished." + error;
+                        }
+                        if (message.modified != null && message.hasOwnProperty("modified")) {
+                            let error = $root.google.protobuf.Timestamp.verify(message.modified);
+                            if (error)
+                                return "modified." + error;
+                        }
+                        if (message.fraction_completed != null && message.hasOwnProperty("fraction_completed"))
+                            if (typeof message.fraction_completed !== "number")
+                                return "fraction_completed: number expected";
+                        if (message.error != null && message.hasOwnProperty("error"))
+                            if (!$util.isString(message.error))
+                                return "error: string expected";
+                        return null;
+                    };
+
+                    /**
+                     * Creates a Job message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.server.serverpb.JobsResponse.Job} Job
+                     */
+                    Job.fromObject = function fromObject(object) {
+                        if (object instanceof $root.cockroach.server.serverpb.JobsResponse.Job)
+                            return object;
+                        let message = new $root.cockroach.server.serverpb.JobsResponse.Job();
+                        if (object.id != null)
+                            if ($util.Long)
+                                (message.id = $util.Long.fromValue(object.id)).unsigned = false;
+                            else if (typeof object.id === "string")
+                                message.id = parseInt(object.id, 10);
+                            else if (typeof object.id === "number")
+                                message.id = object.id;
+                            else if (typeof object.id === "object")
+                                message.id = new $util.LongBits(object.id.low >>> 0, object.id.high >>> 0).toNumber();
+                        if (object.type != null)
+                            message.type = String(object.type);
+                        if (object.description != null)
+                            message.description = String(object.description);
+                        if (object.username != null)
+                            message.username = String(object.username);
+                        if (object.descriptor_ids) {
+                            if (!Array.isArray(object.descriptor_ids))
+                                throw TypeError(".cockroach.server.serverpb.JobsResponse.Job.descriptor_ids: array expected");
+                            message.descriptor_ids = [];
+                            for (let i = 0; i < object.descriptor_ids.length; ++i)
+                                message.descriptor_ids[i] = object.descriptor_ids[i] >>> 0;
+                        }
+                        if (object.status != null)
+                            message.status = String(object.status);
+                        if (object.created != null) {
+                            if (typeof object.created !== "object")
+                                throw TypeError(".cockroach.server.serverpb.JobsResponse.Job.created: object expected");
+                            message.created = $root.google.protobuf.Timestamp.fromObject(object.created);
+                        }
+                        if (object.started != null) {
+                            if (typeof object.started !== "object")
+                                throw TypeError(".cockroach.server.serverpb.JobsResponse.Job.started: object expected");
+                            message.started = $root.google.protobuf.Timestamp.fromObject(object.started);
+                        }
+                        if (object.finished != null) {
+                            if (typeof object.finished !== "object")
+                                throw TypeError(".cockroach.server.serverpb.JobsResponse.Job.finished: object expected");
+                            message.finished = $root.google.protobuf.Timestamp.fromObject(object.finished);
+                        }
+                        if (object.modified != null) {
+                            if (typeof object.modified !== "object")
+                                throw TypeError(".cockroach.server.serverpb.JobsResponse.Job.modified: object expected");
+                            message.modified = $root.google.protobuf.Timestamp.fromObject(object.modified);
+                        }
+                        if (object.fraction_completed != null)
+                            message.fraction_completed = Number(object.fraction_completed);
+                        if (object.error != null)
+                            message.error = String(object.error);
+                        return message;
+                    };
+
+                    /**
+                     * Creates a Job message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.server.serverpb.JobsResponse.Job.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.server.serverpb.JobsResponse.Job} Job
+                     */
+                    Job.from = Job.fromObject;
+
+                    /**
+                     * Creates a plain object from a Job message. Also converts values to other types if specified.
+                     * @param {cockroach.server.serverpb.JobsResponse.Job} message Job
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    Job.toObject = function toObject(message, options) {
+                        if (!options)
+                            options = {};
+                        let object = {};
+                        if (options.arrays || options.defaults)
+                            object.descriptor_ids = [];
+                        if (options.defaults) {
+                            if ($util.Long) {
+                                let long = new $util.Long(0, 0, false);
+                                object.id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                            } else
+                                object.id = options.longs === String ? "0" : 0;
+                            object.type = "";
+                            object.description = "";
+                            object.username = "";
+                            object.status = "";
+                            object.created = null;
+                            object.started = null;
+                            object.finished = null;
+                            object.modified = null;
+                            object.fraction_completed = 0;
+                            object.error = "";
+                        }
+                        if (message.id != null && message.hasOwnProperty("id"))
+                            if (typeof message.id === "number")
+                                object.id = options.longs === String ? String(message.id) : message.id;
+                            else
+                                object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber() : message.id;
+                        if (message.type != null && message.hasOwnProperty("type"))
+                            object.type = message.type;
+                        if (message.description != null && message.hasOwnProperty("description"))
+                            object.description = message.description;
+                        if (message.username != null && message.hasOwnProperty("username"))
+                            object.username = message.username;
+                        if (message.descriptor_ids && message.descriptor_ids.length) {
+                            object.descriptor_ids = [];
+                            for (let j = 0; j < message.descriptor_ids.length; ++j)
+                                object.descriptor_ids[j] = message.descriptor_ids[j];
+                        }
+                        if (message.status != null && message.hasOwnProperty("status"))
+                            object.status = message.status;
+                        if (message.created != null && message.hasOwnProperty("created"))
+                            object.created = $root.google.protobuf.Timestamp.toObject(message.created, options);
+                        if (message.started != null && message.hasOwnProperty("started"))
+                            object.started = $root.google.protobuf.Timestamp.toObject(message.started, options);
+                        if (message.finished != null && message.hasOwnProperty("finished"))
+                            object.finished = $root.google.protobuf.Timestamp.toObject(message.finished, options);
+                        if (message.modified != null && message.hasOwnProperty("modified"))
+                            object.modified = $root.google.protobuf.Timestamp.toObject(message.modified, options);
+                        if (message.fraction_completed != null && message.hasOwnProperty("fraction_completed"))
+                            object.fraction_completed = message.fraction_completed;
+                        if (message.error != null && message.hasOwnProperty("error"))
+                            object.error = message.error;
+                        return object;
+                    };
+
+                    /**
+                     * Creates a plain object from this Job message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    Job.prototype.toObject = function toObject(options) {
+                        return this.constructor.toObject(this, options);
+                    };
+
+                    /**
+                     * Converts this Job to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    Job.prototype.toJSON = function toJSON() {
+                        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                    };
+
+                    return Job;
+                })();
+
+                return JobsResponse;
+            })();
+
             serverpb.RangeLogRequest = (function() {
 
                 /**
@@ -8559,6 +9423,33 @@ export const cockroach = $root.cockroach = (() => {
                  * @function
                  * @param {cockroach.server.serverpb.LivenessRequest|Object.<string,*>} request LivenessRequest message or plain object
                  * @returns {Promise<cockroach.server.serverpb.LivenessResponse>} Promise
+                 * @variation 2
+                 */
+
+                /**
+                 * Callback as used by {@link Admin#jobs}.
+                 * @typedef Admin_jobs_Callback
+                 * @type {function}
+                 * @param {?Error} error Error, if any
+                 * @param {cockroach.server.serverpb.JobsResponse} [response] JobsResponse
+                 */
+
+                /**
+                 * Calls Jobs.
+                 * @param {cockroach.server.serverpb.JobsRequest|Object.<string,*>} request JobsRequest message or plain object
+                 * @param {Admin_jobs_Callback} callback Node-style callback called with the error, if any, and JobsResponse
+                 * @returns {undefined}
+                 */
+                Admin.prototype.jobs = function jobs(request, callback) {
+                    return this.rpcCall(jobs, $root.cockroach.server.serverpb.JobsRequest, $root.cockroach.server.serverpb.JobsResponse, request, callback);
+                };
+
+                /**
+                 * Calls Jobs.
+                 * @name Admin#jobs
+                 * @function
+                 * @param {cockroach.server.serverpb.JobsRequest|Object.<string,*>} request JobsRequest message or plain object
+                 * @returns {Promise<cockroach.server.serverpb.JobsResponse>} Promise
                  * @variation 2
                  */
 
