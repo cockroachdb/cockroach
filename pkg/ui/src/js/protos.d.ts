@@ -4259,6 +4259,439 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
+            type JobsRequest$Properties = {
+                limit?: number;
+                status?: string;
+                type?: string;
+            };
+
+            /**
+             * Constructs a new JobsRequest.
+             * @exports cockroach.server.serverpb.JobsRequest
+             * @constructor
+             * @param {cockroach.server.serverpb.JobsRequest$Properties=} [properties] Properties to set
+             */
+            class JobsRequest {
+
+                /**
+                 * Constructs a new JobsRequest.
+                 * @exports cockroach.server.serverpb.JobsRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.JobsRequest$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.JobsRequest$Properties);
+
+                /**
+                 * JobsRequest limit.
+                 * @type {number}
+                 */
+                public limit: number;
+
+                /**
+                 * JobsRequest status.
+                 * @type {string}
+                 */
+                public status: string;
+
+                /**
+                 * JobsRequest type.
+                 * @type {string}
+                 */
+                public type: string;
+
+                /**
+                 * Creates a new JobsRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.JobsRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.JobsRequest} JobsRequest instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.JobsRequest$Properties): cockroach.server.serverpb.JobsRequest;
+
+                /**
+                 * Encodes the specified JobsRequest message. Does not implicitly {@link cockroach.server.serverpb.JobsRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.JobsRequest$Properties} message JobsRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.JobsRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified JobsRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.JobsRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.JobsRequest$Properties} message JobsRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.JobsRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a JobsRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.JobsRequest} JobsRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.JobsRequest;
+
+                /**
+                 * Decodes a JobsRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.JobsRequest} JobsRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.JobsRequest;
+
+                /**
+                 * Verifies a JobsRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a JobsRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.JobsRequest} JobsRequest
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.JobsRequest;
+
+                /**
+                 * Creates a JobsRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.JobsRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.JobsRequest} JobsRequest
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.JobsRequest;
+
+                /**
+                 * Creates a plain object from a JobsRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.JobsRequest} message JobsRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.JobsRequest, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this JobsRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this JobsRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            type JobsResponse$Properties = {
+                jobs?: cockroach.server.serverpb.JobsResponse.Job$Properties[];
+            };
+
+            /**
+             * Constructs a new JobsResponse.
+             * @exports cockroach.server.serverpb.JobsResponse
+             * @constructor
+             * @param {cockroach.server.serverpb.JobsResponse$Properties=} [properties] Properties to set
+             */
+            class JobsResponse {
+
+                /**
+                 * Constructs a new JobsResponse.
+                 * @exports cockroach.server.serverpb.JobsResponse
+                 * @constructor
+                 * @param {cockroach.server.serverpb.JobsResponse$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.JobsResponse$Properties);
+
+                /**
+                 * JobsResponse jobs.
+                 * @type {Array.<cockroach.server.serverpb.JobsResponse.Job$Properties>}
+                 */
+                public jobs: cockroach.server.serverpb.JobsResponse.Job$Properties[];
+
+                /**
+                 * Creates a new JobsResponse instance using the specified properties.
+                 * @param {cockroach.server.serverpb.JobsResponse$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.JobsResponse} JobsResponse instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.JobsResponse$Properties): cockroach.server.serverpb.JobsResponse;
+
+                /**
+                 * Encodes the specified JobsResponse message. Does not implicitly {@link cockroach.server.serverpb.JobsResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.JobsResponse$Properties} message JobsResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.JobsResponse$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified JobsResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.JobsResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.JobsResponse$Properties} message JobsResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.JobsResponse$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a JobsResponse message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.JobsResponse} JobsResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.JobsResponse;
+
+                /**
+                 * Decodes a JobsResponse message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.JobsResponse} JobsResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.JobsResponse;
+
+                /**
+                 * Verifies a JobsResponse message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a JobsResponse message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.JobsResponse} JobsResponse
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.JobsResponse;
+
+                /**
+                 * Creates a JobsResponse message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.JobsResponse.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.JobsResponse} JobsResponse
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.JobsResponse;
+
+                /**
+                 * Creates a plain object from a JobsResponse message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.JobsResponse} message JobsResponse
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.JobsResponse, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this JobsResponse message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this JobsResponse to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            namespace JobsResponse {
+
+                type Job$Properties = {
+                    id?: Long;
+                    type?: string;
+                    description?: string;
+                    username?: string;
+                    descriptor_ids?: number[];
+                    status?: string;
+                    created?: google.protobuf.Timestamp$Properties;
+                    started?: google.protobuf.Timestamp$Properties;
+                    finished?: google.protobuf.Timestamp$Properties;
+                    modified?: google.protobuf.Timestamp$Properties;
+                    fraction_completed?: number;
+                    error?: string;
+                };
+
+                /**
+                 * Constructs a new Job.
+                 * @exports cockroach.server.serverpb.JobsResponse.Job
+                 * @constructor
+                 * @param {cockroach.server.serverpb.JobsResponse.Job$Properties=} [properties] Properties to set
+                 */
+                class Job {
+
+                    /**
+                     * Constructs a new Job.
+                     * @exports cockroach.server.serverpb.JobsResponse.Job
+                     * @constructor
+                     * @param {cockroach.server.serverpb.JobsResponse.Job$Properties=} [properties] Properties to set
+                     */
+                    constructor(properties?: cockroach.server.serverpb.JobsResponse.Job$Properties);
+
+                    /**
+                     * Job id.
+                     * @type {Long}
+                     */
+                    public id: Long;
+
+                    /**
+                     * Job type.
+                     * @type {string}
+                     */
+                    public type: string;
+
+                    /**
+                     * Job description.
+                     * @type {string}
+                     */
+                    public description: string;
+
+                    /**
+                     * Job username.
+                     * @type {string}
+                     */
+                    public username: string;
+
+                    /**
+                     * Job descriptor_ids.
+                     * @type {Array.<number>}
+                     */
+                    public descriptor_ids: number[];
+
+                    /**
+                     * Job status.
+                     * @type {string}
+                     */
+                    public status: string;
+
+                    /**
+                     * Job created.
+                     * @type {(google.protobuf.Timestamp$Properties|null)}
+                     */
+                    public created: (google.protobuf.Timestamp$Properties|null);
+
+                    /**
+                     * Job started.
+                     * @type {(google.protobuf.Timestamp$Properties|null)}
+                     */
+                    public started: (google.protobuf.Timestamp$Properties|null);
+
+                    /**
+                     * Job finished.
+                     * @type {(google.protobuf.Timestamp$Properties|null)}
+                     */
+                    public finished: (google.protobuf.Timestamp$Properties|null);
+
+                    /**
+                     * Job modified.
+                     * @type {(google.protobuf.Timestamp$Properties|null)}
+                     */
+                    public modified: (google.protobuf.Timestamp$Properties|null);
+
+                    /**
+                     * Job fraction_completed.
+                     * @type {number}
+                     */
+                    public fraction_completed: number;
+
+                    /**
+                     * Job error.
+                     * @type {string}
+                     */
+                    public error: string;
+
+                    /**
+                     * Creates a new Job instance using the specified properties.
+                     * @param {cockroach.server.serverpb.JobsResponse.Job$Properties=} [properties] Properties to set
+                     * @returns {cockroach.server.serverpb.JobsResponse.Job} Job instance
+                     */
+                    public static create(properties?: cockroach.server.serverpb.JobsResponse.Job$Properties): cockroach.server.serverpb.JobsResponse.Job;
+
+                    /**
+                     * Encodes the specified Job message. Does not implicitly {@link cockroach.server.serverpb.JobsResponse.Job.verify|verify} messages.
+                     * @param {cockroach.server.serverpb.JobsResponse.Job$Properties} message Job message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encode(message: cockroach.server.serverpb.JobsResponse.Job$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Encodes the specified Job message, length delimited. Does not implicitly {@link cockroach.server.serverpb.JobsResponse.Job.verify|verify} messages.
+                     * @param {cockroach.server.serverpb.JobsResponse.Job$Properties} message Job message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encodeDelimited(message: cockroach.server.serverpb.JobsResponse.Job$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Decodes a Job message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.server.serverpb.JobsResponse.Job} Job
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.JobsResponse.Job;
+
+                    /**
+                     * Decodes a Job message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.server.serverpb.JobsResponse.Job} Job
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.JobsResponse.Job;
+
+                    /**
+                     * Verifies a Job message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    public static verify(message: { [k: string]: any }): string;
+
+                    /**
+                     * Creates a Job message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.server.serverpb.JobsResponse.Job} Job
+                     */
+                    public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.JobsResponse.Job;
+
+                    /**
+                     * Creates a Job message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.server.serverpb.JobsResponse.Job.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.server.serverpb.JobsResponse.Job} Job
+                     */
+                    public static from(object: { [k: string]: any }): cockroach.server.serverpb.JobsResponse.Job;
+
+                    /**
+                     * Creates a plain object from a Job message. Also converts values to other types if specified.
+                     * @param {cockroach.server.serverpb.JobsResponse.Job} message Job
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public static toObject(message: cockroach.server.serverpb.JobsResponse.Job, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Creates a plain object from this Job message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Converts this Job to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    public toJSON(): { [k: string]: any };
+                }
+            }
+
             type RangeLogRequest$Properties = {
                 range_id?: Long;
                 limit?: number;
@@ -4844,6 +5277,14 @@ export namespace cockroach {
                  * @returns {undefined}
                  */
                 public liveness(request: (cockroach.server.serverpb.LivenessRequest|{ [k: string]: any }), callback: Admin_liveness_Callback): void;
+
+                /**
+                 * Calls Jobs.
+                 * @param {cockroach.server.serverpb.JobsRequest|Object.<string,*>} request JobsRequest message or plain object
+                 * @param {Admin_jobs_Callback} callback Node-style callback called with the error, if any, and JobsResponse
+                 * @returns {undefined}
+                 */
+                public jobs(request: (cockroach.server.serverpb.JobsRequest|{ [k: string]: any }), callback: Admin_jobs_Callback): void;
 
                 /**
                  * Calls QueryPlan.
@@ -18928,6 +19369,8 @@ type Admin_settings_Callback = (error: Error, response?: cockroach.server.server
 type Admin_health_Callback = (error: Error, response?: cockroach.server.serverpb.HealthResponse) => void;
 
 type Admin_liveness_Callback = (error: Error, response?: cockroach.server.serverpb.LivenessResponse) => void;
+
+type Admin_jobs_Callback = (error: Error, response?: cockroach.server.serverpb.JobsResponse) => void;
 
 type Admin_queryPlan_Callback = (error: Error, response?: cockroach.server.serverpb.QueryPlanResponse) => void;
 
