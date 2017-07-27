@@ -63,12 +63,16 @@ $subnav-underline-height = 3px
     &.normal
       path
         fill $body-color
+      polyline, rect
+        stroke $body-color
 
       &.active, &.active:hover, &:hover
         color $link-color
 
         path
           fill $link-color
+        polyline, rect
+          stroke $link-color
 
     &.cockroach
       padding-top 10px

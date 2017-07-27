@@ -1,9 +1,4 @@
-// Author: Max Lang (max@cockroachlabs.com)
-
-// Exports the following icons as SVG strings:
-//
-// clusterIcon, cockroachIcon, databaseIcon, gearIcon
-// nodesIcon, storesIcon, usersIcon
+// Exports icons as SVG strings.
 
 export const clusterIcon: string = `<svg width="24px" height="24px" viewBox="0 0 24 24" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:sketch="http://www.bohemiancoding.com/sketch/ns">
   <!-- Generator: Sketch 3.3.3 (12081) - http://www.bohemiancoding.com/sketch -->
@@ -211,6 +206,15 @@ export const logsIcon: string = `<svg width="23px" height="24px" viewBox="0 0 23
         </g>
       </g>
     </g>
+  </g>
+</svg>`;
+
+export const jobsIcon: string = `<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 24 24" xml:space="preserve" width="24" height="24">
+  <g class="nc-icon-wrapper" fill="#959797">
+    <polyline data-color="color-2" fill="none" stroke="#959797" stroke-width="2" stroke-linecap="square" stroke-miterlimit="10" points=" 8,5 8,1 16,1 16,5 " stroke-linejoin="miter"></polyline>
+    <polyline fill="none" stroke="#959797" stroke-width="2" stroke-linecap="square" stroke-miterlimit="10" points="9,15 1,15 1,5 23,5 23,15 15,15 " stroke-linejoin="miter"></polyline>
+    <polyline fill="none" stroke="#959797" stroke-width="2" stroke-linecap="square" stroke-miterlimit="10" points="22,18 22,23 2,23 2,18 " stroke-linejoin="miter"></polyline>
+    <rect data-color="color-2" x="9" y="13" fill="none" stroke="#959797" stroke-width="2" stroke-linecap="square" stroke-miterlimit="10" width="6" height="4" stroke-linejoin="miter"></rect>
   </g>
 </svg>`;
 
