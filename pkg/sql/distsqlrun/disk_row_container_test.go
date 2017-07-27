@@ -15,13 +15,16 @@
 package distsqlrun
 
 import (
+	math "math"
 	"math/rand"
 	"testing"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -98,6 +101,16 @@ func TestDiskRowContainer(t *testing.T) {
 	rng := rand.New(rand.NewSource(int64(timeutil.Now().UnixNano())))
 
 	evalCtx := parser.MakeTestingEvalContext()
+	diskMonitor := mon.MakeMonitor(
+		"test-disk",
+		mon.DiskResource{},
+		nil, /* curCount */
+		nil, /* maxHist */
+		-1,  /* increment: use default block size */
+		math.MaxInt64,
+	)
+	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	defer diskMonitor.Stop(ctx)
 	t.Run("EncodeDecode", func(t *testing.T) {
 		for i := 0; i < 100; i++ {
 			// Test with different orderings so that we have a mix of key and
@@ -110,7 +123,7 @@ func TestDiskRowContainer(t *testing.T) {
 				row := sqlbase.RandEncDatumRowOfTypes(rng, types)
 				func() {
 					d, err := makeDiskRowContainer(
-						ctx, types, ordering, &memRowContainer{}, tempEngine,
+						ctx, &diskMonitor, types, ordering, &memRowContainer{}, tempEngine,
 					)
 					if err != nil {
 						t.Fatal(err)
@@ -181,6 +194,7 @@ func TestDiskRowContainer(t *testing.T) {
 
 				d, err := makeDiskRowContainer(
 					ctx,
+					&diskMonitor,
 					types,
 					ordering,
 					&memoryContainer,
@@ -251,4 +265,46 @@ func TestDiskRowContainer(t *testing.T) {
 			}()
 		}
 	})
+}
+
+func TestDiskRowContainerDiskFull(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tempEngine, err := engine.NewTempEngine(ctx, base.DefaultTestStoreSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tempEngine.Close()
+
+	// Make a monitor with no capacity.
+	monitor := mon.MakeMonitor(
+		"test-disk",
+		mon.DiskResource{},
+		nil, /* curCount */
+		nil, /* maxHist */
+		-1,  /* increment: use default block size */
+		math.MaxInt64,
+	)
+	monitor.Start(ctx, nil, mon.MakeStandaloneBudget(0 /* capacity */))
+
+	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+	d, err := makeDiskRowContainer(
+		ctx,
+		&monitor,
+		[]sqlbase.ColumnType{columnTypeInt},
+		sqlbase.ColumnOrdering{sqlbase.ColumnOrderInfo{ColIdx: 0, Direction: encoding.Ascending}},
+		&memRowContainer{},
+		tempEngine,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close(ctx)
+
+	row := sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(1)))}
+	err = d.AddRow(ctx, row)
+	if pgErr, ok := err.(*pgerror.Error); !(ok && pgErr.Code == pgerror.CodeDiskFullError) {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }

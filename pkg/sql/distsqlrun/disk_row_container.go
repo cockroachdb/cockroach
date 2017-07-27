@@ -18,6 +18,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -30,6 +31,8 @@ import (
 // created through NewIterator() to read the rows in sorted order.
 type diskRowContainer struct {
 	diskMap engine.SortedDiskMap
+	// diskAcc keeps track of disk usage.
+	diskAcc mon.BoundAccount
 	// bufferedRows buffers writes to the diskMap.
 	bufferedRows  engine.SortedDiskMapBatchWriter
 	scratchKey    []byte
@@ -62,6 +65,7 @@ var _ sortableRowContainer = &diskRowContainer{}
 // rowContainer and deletes them so rowContainer cannot be used after creating
 // a diskRowContainer. The caller must still Close() the rowContainer.
 // Arguments:
+//  - diskMonitor is used to monitor this diskRowContainer's disk usage.
 // 	- types is the schema of rows that will be added to this container.
 // 	- ordering is the output ordering; the order in which rows should be sorted.
 // 	- rowContainer contains the initial set of rows that this diskRowContainer
@@ -69,6 +73,7 @@ var _ sortableRowContainer = &diskRowContainer{}
 // 	- e is the underlying store that rows are stored on.
 func makeDiskRowContainer(
 	ctx context.Context,
+	diskMonitor *mon.BytesMonitor,
 	types []sqlbase.ColumnType,
 	ordering sqlbase.ColumnOrdering,
 	rowContainer *memRowContainer,
@@ -77,6 +82,7 @@ func makeDiskRowContainer(
 	diskMap := engine.NewRocksDBMap(e)
 	d := diskRowContainer{
 		diskMap:       diskMap,
+		diskAcc:       diskMonitor.MakeBoundAccount(),
 		types:         types,
 		ordering:      ordering,
 		scratchEncRow: make(sqlbase.EncDatumRow, len(types)),
@@ -154,10 +160,11 @@ func (d *diskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) 
 
 	// Put a unique row to keep track of duplicates. Note that this will not
 	// mess with key decoding.
-	if err := d.bufferedRows.Put(
-		encoding.EncodeUvarintAscending(d.scratchKey, d.rowID),
-		d.scratchVal,
-	); err != nil {
+	d.scratchKey = encoding.EncodeUvarintAscending(d.scratchKey, d.rowID)
+	if err := d.diskAcc.Grow(ctx, int64(len(d.scratchKey)+len(d.scratchVal))); err != nil {
+		return err
+	}
+	if err := d.bufferedRows.Put(d.scratchKey, d.scratchVal); err != nil {
 		return err
 	}
 	d.scratchKey = d.scratchKey[:0]
@@ -175,6 +182,7 @@ func (d *diskRowContainer) Close(ctx context.Context) {
 	// in the following Close.
 	_ = d.bufferedRows.Close(ctx)
 	d.diskMap.Close(ctx)
+	d.diskAcc.Close(ctx)
 }
 
 // keyValToRow decodes a key and a value byte slice stored with AddRow() into

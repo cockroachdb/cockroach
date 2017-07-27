@@ -16,10 +16,12 @@ package distsqlrun
 
 import (
 	"fmt"
+	math "math"
 	"math/rand"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -183,6 +185,24 @@ func TestSorter(t *testing.T) {
 	}
 	defer tempEngine.Close()
 
+	evalCtx := parser.MakeTestingEvalContext()
+	defer evalCtx.Stop(ctx)
+	diskMonitor := mon.MakeMonitor(
+		"test-disk",
+		mon.DiskResource{},
+		nil, /* curCount */
+		nil, /* maxHist */
+		-1,  /* increment: use default block size */
+		math.MaxInt64,
+	)
+	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	defer diskMonitor.Stop(ctx)
+	flowCtx := FlowCtx{
+		evalCtx:     evalCtx,
+		tempStorage: tempEngine,
+		diskMonitor: &diskMonitor,
+	}
+
 	for _, c := range testCases {
 		// Test with several memory limits:
 		// 0: Use the default limit.
@@ -200,12 +220,6 @@ func TestSorter(t *testing.T) {
 				}
 				in := NewRowBuffer(types, c.input, RowBufferArgs{})
 				out := &RowBuffer{}
-				evalCtx := parser.MakeTestingEvalContext()
-				defer evalCtx.Stop(ctx)
-				flowCtx := FlowCtx{
-					evalCtx:     evalCtx,
-					tempStorage: tempEngine,
-				}
 
 				s, err := newSorter(&flowCtx, &c.spec, in, &c.post, out)
 				if err != nil {

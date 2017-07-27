@@ -75,6 +75,10 @@ var distSQLUseTempStorage = settings.RegisterBoolSetting(
 
 var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_DISTSQL_MEMORY_USAGE", 10*1024)
 
+// All queries that spill over to disk will be limited to use
+// total space / diskBudgetTotalSizeDivisor.
+const diskBudgetTotalSizeDivisor = 4
+
 // ServerConfig encompasses the configuration required to create a
 // DistSQLServer.
 type ServerConfig struct {
@@ -116,6 +120,10 @@ type ServerImpl struct {
 	// larger than memory. It can be nil, in which case processors should still
 	// gracefully OOM if the working set gets too large.
 	tempStorage engine.Engine
+	// diskMonitor is used to monitor temporary storage disk usage. Actual disk
+	// space used will be a small multiple (~1.1) of this because of RocksDB
+	// space amplification.
+	diskMonitor mon.BytesMonitor
 }
 
 var _ DistSQLServer = &ServerImpl{}
@@ -138,6 +146,27 @@ func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
 		tempStorage: cfg.TempStorage,
 	}
 	ds.memMonitor.Start(ctx, cfg.ParentMemoryMonitor, mon.BoundAccount{})
+	if ds.tempStorage == nil {
+		return ds
+	}
+
+	capacity, err := ds.tempStorage.Capacity()
+	if err != nil {
+		log.Fatal(
+			ctx,
+			errors.Wrap(err, "could not get temporary storage capacity"),
+		)
+	}
+	diskMonitorBudget := capacity.Capacity / diskBudgetTotalSizeDivisor
+	ds.diskMonitor = mon.MakeMonitor(
+		"distsql-tempstorage",
+		mon.DiskResource{},
+		nil, /* curCount */
+		nil, /* maxHist */
+		-1,  /* increment: use default block size */
+		diskMonitorBudget/2, /* noteworthy */
+	)
+	ds.diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(diskMonitorBudget))
 	return ds
 }
 
@@ -228,6 +257,7 @@ func (ds *ServerImpl) setupFlow(
 		testingKnobs:   ds.TestingKnobs,
 		nodeID:         nodeID,
 		tempStorage:    ds.tempStorage,
+		diskMonitor:    &ds.diskMonitor,
 	}
 
 	ctx = flowCtx.AnnotateCtx(ctx)
