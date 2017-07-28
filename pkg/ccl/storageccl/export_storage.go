@@ -226,16 +226,16 @@ func (h *httpStorage) Conf() roachpb.ExportStorage {
 }
 
 func (h *httpStorage) ReadFile(_ context.Context, basename string) (io.ReadCloser, error) {
-	return runHTTPRequest(h.client, "GET", h.base, basename, nil)
+	return h.req("GET", basename, nil)
 }
 
 func (h *httpStorage) WriteFile(_ context.Context, basename string, content io.ReadSeeker) error {
-	_, err := runHTTPRequest(h.client, "PUT", h.base, basename, content)
+	_, err := h.req("PUT", basename, content)
 	return err
 }
 
 func (h *httpStorage) Delete(_ context.Context, basename string) error {
-	_, err := runHTTPRequest(h.client, "DELETE", h.base, basename, nil)
+	_, err := h.req("DELETE", basename, nil)
 	return err
 }
 
@@ -243,15 +243,15 @@ func (h *httpStorage) Close() error {
 	return nil
 }
 
-func runHTTPRequest(
-	c *http.Client, method, base, file string, body io.Reader,
+func (h *httpStorage) req(
+	method, file string, body io.Reader,
 ) (io.ReadCloser, error) {
 	url := base + file
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error constructing request %s %q", method, url)
 	}
-	resp, err := c.Do(req)
+	resp, err := h.client.Do(req)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error exeucting request %s %q", method, url)
 	}
