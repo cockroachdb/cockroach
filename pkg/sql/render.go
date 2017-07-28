@@ -50,7 +50,7 @@ type renderNode struct {
 	ivarHelper parser.IndexedVarHelper
 
 	// Rendering expressions for rows and corresponding output columns.
-	// populated by addOrMergeRenders()
+	// populated by addOrReuseRenders()
 	// as invoked initially by initTargets() and initWhere().
 	// sortNode peeks into the render array defined by initTargets() as an optimization.
 	// sortNode adds extra renderNode renders for sort columns not requested as select targets.
