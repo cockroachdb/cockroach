@@ -2457,24 +2457,6 @@ func TestStoreRangeMoveDecommissioning(t *testing.T) {
 	mtc.nodeLivenesses[decommingNodeIdx].
 		SetDecommissioning(ctx, decommingNodeID, true)
 
-	replacementNodeIdx := 2
-	replacementNodeID := mtc.idents[replacementNodeIdx].NodeID
-	replacementStoreID := mtc.idents[replacementNodeIdx].StoreID
-
-	var movedReplicas []roachpb.ReplicaDescriptor
-	for _, r := range origReplicas {
-		if r.NodeID == decommingNodeID {
-			movedReplicas = append(movedReplicas,
-				roachpb.ReplicaDescriptor{
-					NodeID:    replacementNodeID,
-					StoreID:   replacementStoreID,
-					ReplicaID: r.ReplicaID,
-				})
-		} else {
-			movedReplicas = append(movedReplicas, r)
-		}
-	}
-
 	testutils.SucceedsSoon(t, func() error {
 		// Force the repair queues on all stores to run.
 		for _, s := range mtc.stores {
@@ -2484,10 +2466,16 @@ func TestStoreRangeMoveDecommissioning(t *testing.T) {
 		// and the replica on the decommissioning node to be removed.
 		curReplicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
 		if len(curReplicas) != 3 {
-			return errors.Errorf("Expected 3 replicas, got %v", curReplicas)
+			return errors.Errorf("expected 3 replicas, got %v", curReplicas)
 		}
-		if !reflect.DeepEqual(movedReplicas, curReplicas) {
-			return errors.Errorf("Want: %s, have: %s", movedReplicas, curReplicas)
+		if reflect.DeepEqual(origReplicas, curReplicas) {
+			return errors.Errorf("expected replica to be moved, but found them to be same as original %v", origReplicas)
+		}
+		for _, r := range curReplicas {
+			if r.NodeID == decommingNodeID {
+				return errors.Errorf("expected replica to be moved off node %d, but got replicas %v",
+					decommingNodeID, curReplicas)
+			}
 		}
 		return nil
 	})
