@@ -282,3 +282,209 @@ func ignoreMisplannedRanges(metas []ProducerMetadata) []ProducerMetadata {
 	}
 	return res
 }
+
+// TestDeadlock sets up a scenario which leads to deadlock if the hash router
+// blocks whenever one of the consumers blocks (#17097).
+func TestDeadlock(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	t.Skip("#17097")
+
+	tc := serverutils.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(context.TODO())
+
+	// Set up the following network (a simplification of the one described in
+	// #17097):
+	//
+	//
+	//  +----------+        +----------+
+	//  |  Values  |        |  Values  |
+	//  +----------+        +-+------+-+
+	//         |              | hash |
+	//         |              +------+
+	//         |               |    |
+	//         |               |    |
+	//         v               v    |
+	//      +-------------------+   |
+	//      |     MergeJoin     |   |
+	//      +-------------------+   |
+	//                |             |
+	//                |             |
+	//                |             |
+	//                |             |
+	//                v             v
+	//              +-----------------+
+	//              |  ordered sync   |
+	//            +-+-----------------+-+
+	//            |       Response      |
+	//            +---------------------+
+	//
+	// This is not something we would end up with from a real SQL query but it's
+	// simple and exposes the deadlock: if the hash router outputs a large set of
+	// consecutive rows to the left side (which we can ensure by having a bunch of
+	// identical rows), the MergeJoiner would be blocked trying to write to the
+	// ordered sync, which in turn would block because it's trying to read from
+	// the other stream from the hash router. The other stream is blocked because
+	// the hash router is already in the process of pushing a row, and we have a
+	// deadlock.
+
+	// All our rows have a single integer column.
+	types := make([]sqlbase.ColumnType, 1)
+	types[0].SemanticType = sqlbase.ColumnType_INT
+
+	// The left values rows are consecutive values.
+	leftRows := make(sqlbase.EncDatumRows, 20)
+	for i := range leftRows {
+		leftRows[i] = sqlbase.EncDatumRow{
+			sqlbase.DatumToEncDatum(types[0], parser.NewDInt(parser.DInt(i))),
+		}
+	}
+	leftValuesSpec, err := generateValuesSpec(types, leftRows, 10 /* rows per chunk */)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The right values rows have groups of identical values (ensuring that large
+	// groups of rows go to the same hash bucket).
+	rightRows := make(sqlbase.EncDatumRows, 0)
+	for i := 1; i <= 20; i++ {
+		for j := 1; j <= 4*rowChannelBufSize; j++ {
+			rightRows = append(rightRows, sqlbase.EncDatumRow{
+				sqlbase.DatumToEncDatum(types[0], parser.NewDInt(parser.DInt(i))),
+			})
+		}
+	}
+
+	rightValuesSpec, err := generateValuesSpec(types, rightRows, 10 /* rows per chunk */)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	joinerSpec := MergeJoinerSpec{
+		LeftOrdering: Ordering{
+			Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}},
+		},
+		RightOrdering: Ordering{
+			Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}},
+		},
+		Type: JoinType_INNER,
+	}
+
+	txnProto := roachpb.NewTransaction(
+		"deadlock-test",
+		nil, // baseKey
+		roachpb.NormalUserPriority,
+		enginepb.SERIALIZABLE,
+		tc.Server(0).Clock().Now(),
+		0, // maxOffset
+	)
+
+	req := SetupFlowRequest{
+		Version: Version,
+		Txn:     *txnProto,
+		Flow: FlowSpec{
+			FlowID: FlowID{UUID: uuid.MakeV4()},
+			Processors: []ProcessorSpec{
+				{
+					Core: ProcessorCoreUnion{Values: &leftValuesSpec},
+					Output: []OutputRouterSpec{{
+						Type: OutputRouterSpec_PASS_THROUGH,
+						Streams: []StreamEndpointSpec{
+							{Type: StreamEndpointSpec_LOCAL, StreamID: 1},
+						},
+					}},
+				},
+				{
+					Core: ProcessorCoreUnion{Values: &rightValuesSpec},
+					Output: []OutputRouterSpec{{
+						Type:        OutputRouterSpec_BY_HASH,
+						HashColumns: []uint32{0},
+						Streams: []StreamEndpointSpec{
+							{Type: StreamEndpointSpec_LOCAL, StreamID: 2},
+							{Type: StreamEndpointSpec_LOCAL, StreamID: 3},
+						},
+					}},
+				},
+				{
+					Input: []InputSyncSpec{
+						{
+							Type:        InputSyncSpec_UNORDERED,
+							Streams:     []StreamEndpointSpec{{Type: StreamEndpointSpec_LOCAL, StreamID: 1}},
+							ColumnTypes: types,
+						},
+						{
+							Type:        InputSyncSpec_UNORDERED,
+							Streams:     []StreamEndpointSpec{{Type: StreamEndpointSpec_LOCAL, StreamID: 2}},
+							ColumnTypes: types,
+						},
+					},
+					Core: ProcessorCoreUnion{MergeJoiner: &joinerSpec},
+					Post: PostProcessSpec{
+						// Output only one (the left) column.
+						Projection:    true,
+						OutputColumns: []uint32{0},
+					},
+					Output: []OutputRouterSpec{{
+						Type: OutputRouterSpec_PASS_THROUGH,
+						Streams: []StreamEndpointSpec{
+							{Type: StreamEndpointSpec_LOCAL, StreamID: 4},
+						},
+					}},
+				},
+				{
+					Input: []InputSyncSpec{{
+						Type:     InputSyncSpec_ORDERED,
+						Ordering: Ordering{Columns: []Ordering_Column{{0, Ordering_Column_ASC}}},
+						Streams: []StreamEndpointSpec{
+							{Type: StreamEndpointSpec_LOCAL, StreamID: 4},
+							{Type: StreamEndpointSpec_LOCAL, StreamID: 3},
+						},
+						ColumnTypes: types,
+					}},
+					Core: ProcessorCoreUnion{Noop: &NoopCoreSpec{}},
+					Output: []OutputRouterSpec{{
+						Type:    OutputRouterSpec_PASS_THROUGH,
+						Streams: []StreamEndpointSpec{{Type: StreamEndpointSpec_SYNC_RESPONSE}},
+					}},
+				},
+			},
+		},
+	}
+	s := tc.Server(0)
+	conn, err := s.RPCContext().GRPCDial(s.ServingAddr())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stream, err := NewDistSQLClient(conn).RunSyncFlow(context.TODO())
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = stream.Send(&ConsumerSignal{SetupFlowRequest: &req})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var decoder StreamDecoder
+	var rows sqlbase.EncDatumRows
+	var metas []ProducerMetadata
+	for {
+		msg, err := stream.Recv()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			t.Fatal(err)
+		}
+		err = decoder.AddMessage(msg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rows, metas = testGetDecodedRows(t, &decoder, rows, metas)
+	}
+	metas = ignoreMisplannedRanges(metas)
+	if len(metas) != 0 {
+		t.Errorf("unexpected metadata (%d): %+v", len(metas), metas)
+	}
+	// TODO(radu): verify the results (should be the same with rightRows)
+}
