@@ -188,7 +188,7 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 	evalCtx := parser.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
-		EvalCtx: evalCtx,
+		EvalCtx:  evalCtx,
 		Settings: tc.Server(0).ClusterSettings(),
 		// Pass a DB without a TxnCoordSender.
 		txn:    client.NewTxn(client.NewDB(tc.Server(0).DistSender(), tc.Server(0).Clock())),
