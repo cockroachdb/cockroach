@@ -230,3 +230,44 @@ func TestStoreGossipSystemData(t *testing.T) {
 		return nil
 	})
 }
+
+// TestGossipSystemConfigOnLeaseChange verifies that the system-config gets
+// re-gossiped on lease transfer even if it hasn't changed. This helps prevent
+// situations where a previous leaseholder can restart and not receive the
+// system config because it was the original source of it within the gossip
+// network.
+func TestGossipSystemConfigOnLeaseChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := storage.TestStoreConfig(nil)
+	sc.TestingKnobs.DisableReplicateQueue = true
+	mtc := &multiTestContext{storeConfig: &sc}
+	defer mtc.Stop()
+	const numStores = 3
+	mtc.Start(t, numStores)
+
+	rangeID := mtc.stores[0].LookupReplica(roachpb.RKey(keys.SystemConfigSpan.Key), nil).RangeID
+	mtc.replicateRange(rangeID, 1, 2)
+
+	initialStoreIdx := -1
+	for i := range mtc.stores {
+		if mtc.stores[i].Gossip().InfoOriginatedHere(gossip.KeySystemConfig) {
+			initialStoreIdx = i
+		}
+	}
+	if initialStoreIdx == -1 {
+		t.Fatalf("no store has gossiped system config; gossip contents: %+v", mtc.stores[0].Gossip().GetInfoStatus())
+	}
+
+	newStoreIdx := (initialStoreIdx + 1) % numStores
+	mtc.transferLease(context.TODO(), rangeID, initialStoreIdx, newStoreIdx)
+
+	testutils.SucceedsSoon(t, func() error {
+		if mtc.stores[initialStoreIdx].Gossip().InfoOriginatedHere(gossip.KeySystemConfig) {
+			return errors.New("system config still most recently gossiped by original leaseholder")
+		}
+		if !mtc.stores[newStoreIdx].Gossip().InfoOriginatedHere(gossip.KeySystemConfig) {
+			return errors.New("system config not most recently gossiped by new leaseholder")
+		}
+		return nil
+	})
+}
