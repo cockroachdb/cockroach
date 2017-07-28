@@ -243,7 +243,7 @@ func (p *planner) Insert(
 	}
 
 	if err := in.run.initEditNode(
-		ctx, &in.editNodeBase, rows, in.tw, n.Returning, desiredTypes); err != nil {
+		ctx, &in.editNodeBase, rows, in.tw, tn, n.Returning, desiredTypes); err != nil {
 		return nil, err
 	}
 
