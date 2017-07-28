@@ -324,7 +324,8 @@ func newTransaction(
 		offset = clock.MaxOffset().Nanoseconds()
 		now = clock.Now()
 	}
-	return roachpb.NewTransaction(name, baseKey, userPriority, isolation, now, offset)
+	txn := roachpb.MakeTransaction(name, baseKey, userPriority, isolation, now, offset)
+	return &txn
 }
 
 // createReplicaSets creates new roachpb.ReplicaDescriptor protos based on an array of

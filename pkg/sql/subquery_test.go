@@ -27,7 +27,7 @@ import (
 // subquery returns an error.
 func TestStartSubqueriesReturnsError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sql := "SELECT 1 WHERE (SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL) > 0)"
+	sql := "SELECT 1 WHERE (SELECT CRDB_INTERNAL.FORCE_ERROR('xxx', 'forced') > 0)"
 	p := makeTestPlanner()
 	stmts, err := p.parser.Parse(sql)
 	if err != nil {
@@ -41,7 +41,7 @@ func TestStartSubqueriesReturnsError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := p.startSubqueryPlans(context.TODO(), plan); !testutils.IsError(err, `forced by crdb_internal\.force_retry\(\)`) {
-		t.Fatalf("expected error from force_retry(), got: %v", err)
+	if err := p.startSubqueryPlans(context.TODO(), plan); !testutils.IsError(err, `forced`) {
+		t.Fatalf("expected error from force_error(), got: %v", err)
 	}
 }

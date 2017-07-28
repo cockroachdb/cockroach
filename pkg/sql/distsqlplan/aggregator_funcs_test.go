@@ -35,12 +35,16 @@ import (
 // runTestFlow runs a flow with the given processors and returns the results.
 // Any errors stop the current test.
 func runTestFlow(
-	t *testing.T, srv serverutils.TestServerInterface, procs ...distsqlrun.ProcessorSpec,
+	t *testing.T,
+	srv serverutils.TestServerInterface,
+	txn *client.Txn,
+	procs ...distsqlrun.ProcessorSpec,
 ) sqlbase.EncDatumRows {
 	distSQLSrv := srv.DistSQLServer().(*distsqlrun.ServerImpl)
 
 	req := distsqlrun.SetupFlowRequest{
 		Version: distsqlrun.Version,
+		Txn:     *txn.Proto(),
 		Flow: distsqlrun.FlowSpec{
 			FlowID:     distsqlrun.FlowID{UUID: uuid.MakeV4()},
 			Processors: procs,
@@ -125,10 +129,12 @@ func checkDistAggregationInfo(
 		}
 	}
 
+	txn := client.NewTxn(srv.KVClient().(*client.DB))
+
 	// First run a flow that aggregates all the rows without any local stages.
 
 	rowsNonDist := runTestFlow(
-		t, srv,
+		t, srv, txn,
 		makeTableReader(1, numRows+1, 0),
 		distsqlrun.ProcessorSpec{
 			Input: []distsqlrun.InputSyncSpec{{
@@ -240,7 +246,7 @@ func checkDistAggregationInfo(
 	}
 
 	procs = append(procs, finalProc)
-	rowsDist := runTestFlow(t, srv, procs...)
+	rowsDist := runTestFlow(t, srv, txn, procs...)
 
 	if len(rowsDist[0]) != len(rowsNonDist[0]) {
 		t.Errorf("different row lengths (dist: %d non-dist: %d)", len(rowsDist[0]), len(rowsNonDist[0]))

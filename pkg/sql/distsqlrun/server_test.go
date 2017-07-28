@@ -22,6 +22,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -59,7 +60,9 @@ func TestServer(t *testing.T) {
 		OutputColumns: []uint32{0, 1}, // a
 	}
 
-	req := &SetupFlowRequest{Version: Version}
+	txn := client.NewTxn(kvDB)
+
+	req := &SetupFlowRequest{Version: Version, Txn: *txn.Proto()}
 	req.Flow = FlowSpec{
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &ts},
