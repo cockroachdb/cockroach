@@ -307,7 +307,7 @@ func (j *Job) runInTxn(
 ) error {
 	if j.txn != nil {
 		defer func() { j.txn = nil }()
-		return j.txn.Exec(ctx, client.TxnExecOptions{AutoRetry: true, AssignTimestampImmediately: true},
+		return j.txn.Exec(ctx, client.TxnExecOptions{AutoRetry: true},
 			func(ctx context.Context, txn *client.Txn, _ *client.TxnExecOptions) error {
 				return retryable(ctx, txn)
 			})

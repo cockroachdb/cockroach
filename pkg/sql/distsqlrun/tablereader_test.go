@@ -120,11 +120,10 @@ func TestTableReader(t *testing.T) {
 		evalCtx := parser.MakeTestingEvalContext()
 		defer evalCtx.Stop(context.Background())
 		flowCtx := FlowCtx{
-			evalCtx:  evalCtx,
-			txnProto: &roachpb.Transaction{},
+			evalCtx: evalCtx,
 			// Pass a DB without a TxnCoordSender.
-			remoteTxnDB: client.NewDB(s.DistSender(), s.Clock()),
-			nodeID:      s.NodeID(),
+			txn:    client.NewTxn(client.NewDB(s.DistSender(), s.Clock())),
+			nodeID: s.NodeID(),
 		}
 
 		out := &RowBuffer{}
@@ -188,11 +187,10 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 	evalCtx := parser.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
-		evalCtx:  evalCtx,
-		txnProto: &roachpb.Transaction{},
+		evalCtx: evalCtx,
 		// Pass a DB without a TxnCoordSender.
-		remoteTxnDB: client.NewDB(tc.Server(0).DistSender(), tc.Server(0).Clock()),
-		nodeID:      tc.Server(0).NodeID(),
+		txn:    client.NewTxn(client.NewDB(tc.Server(0).DistSender(), tc.Server(0).Clock())),
+		nodeID: tc.Server(0).NodeID(),
 	}
 	spec := TableReaderSpec{
 		Spans: []TableReaderSpan{{Span: td.PrimaryIndexSpan()}},
