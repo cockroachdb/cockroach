@@ -636,6 +636,10 @@ func (e *Executor) ExecutePreparedStatement(
 func (e *Executor) execPrepared(
 	session *Session, stmt *PreparedStatement, pinfo *parser.PlaceholderInfo,
 ) (StatementResults, error) {
+	if log.V(2) || logStatementsExecuteEnabled.Get() {
+		log.Infof(session.Ctx(), "execPrepared: %s", stmt.Str)
+	}
+
 	var stmts StatementList
 	if stmt.Statement != nil {
 		stmts = StatementList{{
