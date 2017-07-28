@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -134,7 +135,11 @@ func (cb *columnBackfiller) init() error {
 
 // runChunk implements the chunkBackfiller interface.
 func (cb *columnBackfiller) runChunk(
-	ctx context.Context, mutations []sqlbase.DescriptorMutation, sp roachpb.Span, chunkSize int64,
+	ctx context.Context,
+	mutations []sqlbase.DescriptorMutation,
+	sp roachpb.Span,
+	chunkSize int64,
+	readAsOf hlc.Timestamp,
 ) (roachpb.Key, error) {
 	tableDesc := cb.backfiller.spec.Table
 	err := cb.flowCtx.clientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {

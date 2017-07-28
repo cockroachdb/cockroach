@@ -2042,19 +2042,45 @@ func TestMVCCInitPut(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	err := MVCCInitPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, nil)
+	ctx := context.Background()
+	err := MVCCInitPut(ctx, engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// A repeat of the command will still succeed
-	err = MVCCInitPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 2}, value1, nil)
+	err = MVCCInitPut(ctx, engine, nil, testKey1, hlc.Timestamp{Logical: 2}, value1, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Delete.
+	err = MVCCDelete(ctx, engine, nil, testKey1, hlc.Timestamp{Logical: 3}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Reinserting the value fails if we fail on tombstones.
+	err = MVCCInitPut(ctx, engine, nil, testKey1, hlc.Timestamp{Logical: 4}, value1, true, nil)
+	switch e := err.(type) {
+	case *roachpb.ConditionFailedError:
+		if !bytes.Equal(e.ActualValue.RawBytes, nil) {
+			t.Fatalf("the value %s in get result is not a tombstone", e.ActualValue.RawBytes)
+		}
+	case nil:
+		t.Fatal("MVCCInitPut with a different value did not fail")
+	default:
+		t.Fatalf("unexpected error %T", e)
+	}
+
+	// But doesn't if we *don't* fail on tombstones.
+	err = MVCCInitPut(ctx, engine, nil, testKey1, hlc.Timestamp{Logical: 5}, value1, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// A repeat of the command with a different value will fail.
-	err = MVCCInitPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{Logical: 3}, value2, nil)
+	err = MVCCInitPut(ctx, engine, nil, testKey1, hlc.Timestamp{Logical: 6}, value2, false, nil)
 	switch e := err.(type) {
 	case *roachpb.ConditionFailedError:
 		if !bytes.Equal(e.ActualValue.RawBytes, value1.RawBytes) {
@@ -2068,7 +2094,7 @@ func TestMVCCInitPut(t *testing.T) {
 	}
 
 	for _, ts := range []hlc.Timestamp{{Logical: 1}, {Logical: 2}, {WallTime: 1}} {
-		value, _, err := MVCCGet(context.Background(), engine, testKey1, ts, true, nil)
+		value, _, err := MVCCGet(ctx, engine, testKey1, ts, true, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2077,12 +2103,18 @@ func TestMVCCInitPut(t *testing.T) {
 				value1.RawBytes, value.RawBytes)
 		}
 		// Ensure that the timestamp didn't get updated.
-		if expTS := (hlc.Timestamp{Logical: 1}); value.Timestamp != expTS {
+		expTS := (hlc.Timestamp{Logical: 1})
+		if ts.WallTime != 0 {
+			// If we're checking the future wall time case, the rewrite after delete
+			// will be present.
+			expTS.Logical = 5
+		}
+		if value.Timestamp != expTS {
 			t.Errorf("value at timestamp %s seen, expected %s", value.Timestamp, expTS)
 		}
 	}
 
-	value, _, pErr := MVCCGet(context.Background(), engine, testKey1, hlc.Timestamp{Logical: 0}, true, nil)
+	value, _, pErr := MVCCGet(ctx, engine, testKey1, hlc.Timestamp{Logical: 0}, true, nil)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -2100,14 +2132,14 @@ func TestMVCCInitPutWithTxn(t *testing.T) {
 
 	txn := *txn1
 	txn.Sequence++
-	err := MVCCInitPut(context.Background(), engine, nil, testKey1, clock.Now(), value1, &txn)
+	err := MVCCInitPut(context.Background(), engine, nil, testKey1, clock.Now(), value1, false, &txn)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// A repeat of the command will still succeed.
 	txn.Sequence++
-	err = MVCCInitPut(context.Background(), engine, nil, testKey1, clock.Now(), value1, &txn)
+	err = MVCCInitPut(context.Background(), engine, nil, testKey1, clock.Now(), value1, false, &txn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2116,7 +2148,7 @@ func TestMVCCInitPutWithTxn(t *testing.T) {
 	// will still succeed.
 	txn.Sequence++
 	txn.Epoch = 2
-	err = MVCCInitPut(context.Background(), engine, nil, testKey1, clock.Now(), value2, &txn)
+	err = MVCCInitPut(context.Background(), engine, nil, testKey1, clock.Now(), value2, false, &txn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2136,7 +2168,7 @@ func TestMVCCInitPutWithTxn(t *testing.T) {
 	}
 
 	// Write value4 with an old timestamp without txn...should get an error.
-	err = MVCCInitPut(context.Background(), engine, nil, testKey1, clock.Now(), value4, nil)
+	err = MVCCInitPut(context.Background(), engine, nil, testKey1, clock.Now(), value4, false, nil)
 	switch e := err.(type) {
 	case *roachpb.ConditionFailedError:
 		if !bytes.Equal(e.ActualValue.RawBytes, value2.RawBytes) {

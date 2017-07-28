@@ -138,7 +138,9 @@ message ConditionalPutResponse {
 // An InitPutRequest is the argument to the InitPut() method.
 //
 // - If key doesn't exist, sets value.
-// - If key exists, returns an error if value != existing value.
+// - If key exists, returns a ConditionFailedError if value != existing value
+//   If failOnTombstones is set to true, tombstone values count as mismatched
+//   values and will cause a ConditionFailedError.
 message InitPutRequest {
   option (gogoproto.equal) = true;
 
@@ -148,6 +150,8 @@ message InitPutRequest {
   // writing to virgin keyspace and no reads are necessary to
   // rationalize MVCC.
   optional bool blind = 3 [(gogoproto.nullable) = false];
+  // If true, tombstones cause ConditionFailedErrors.
+  optional bool failOnTombstones = 4 [(gogoproto.nullable) = false];
 }
 
 // A InitPutResponse is the return value from the InitPut() method.

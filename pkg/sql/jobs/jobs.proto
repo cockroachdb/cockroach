@@ -19,6 +19,7 @@ package cockroach.sql.jobs;
 option go_package = "jobs";
 
 import "gogoproto/gogo.proto";
+import "cockroach/pkg/util/hlc/timestamp.proto";
 
 message BackupDetails {
   // Intentionally empty.
@@ -29,7 +30,7 @@ message RestoreDetails {
 }
 
 message SchemaChangeDetails {
-  // Intentionally empty.
+ util.hlc.Timestamp readAsOf = 1 [(gogoproto.nullable) = false];
 }
 
 message Payload {
