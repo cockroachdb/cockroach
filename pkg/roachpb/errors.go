@@ -348,9 +348,9 @@ func NewTransactionAbortedError() *TransactionAbortedError {
 
 // NewHandledRetryableTxnError initializes a new HandledRetryableTxnError.
 func NewHandledRetryableTxnError(
-	msg string, txnID *uuid.UUID, txn Transaction,
+	msg string, txnID uuid.UUID, txn Transaction,
 ) *HandledRetryableTxnError {
-	return &HandledRetryableTxnError{Msg: msg, TxnID: txnID, Transaction: &txn}
+	return &HandledRetryableTxnError{Msg: msg, TxnID: &txnID, Transaction: &txn}
 }
 
 // NewTransactionPushError initializes a new TransactionPushError.

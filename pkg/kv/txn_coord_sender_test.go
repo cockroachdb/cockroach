@@ -230,38 +230,6 @@ func TestTxnCoordSenderBeginTransaction(t *testing.T) {
 	}
 }
 
-// TestTxnInitialTimestamp verifies that the timestamp requested
-// before the Txn is created is honored.
-func TestTxnInitialTimestamp(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s, sender := createTestDB(t)
-	defer s.Stop()
-	defer teardownHeartbeats(sender)
-
-	txn := client.NewTxn(s.DB)
-
-	// Request a specific timestamp.
-	refTimestamp := s.Clock.Now().Add(42, 69)
-	txn.Proto().OrigTimestamp = refTimestamp
-
-	// Put request will create a new transaction.
-	key := roachpb.Key("key")
-	txn.InternalSetPriority(10)
-	txn.SetDebugName("test txn")
-	if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
-		t.Fatal(err)
-	}
-	if err := txn.Put(context.TODO(), key, []byte("value")); err != nil {
-		t.Fatal(err)
-	}
-	if txn.Proto().OrigTimestamp != refTimestamp {
-		t.Errorf("expected txn orig ts to be %s; got %s", refTimestamp, txn.Proto().OrigTimestamp)
-	}
-	if txn.Proto().Timestamp != refTimestamp {
-		t.Errorf("expected txn ts to be %s; got %s", refTimestamp, txn.Proto().Timestamp)
-	}
-}
-
 // TestTxnCoordSenderBeginTransactionMinPriority verifies that when starting
 // a new transaction, a non-zero priority is treated as a minimum value.
 func TestTxnCoordSenderBeginTransactionMinPriority(t *testing.T) {
@@ -843,6 +811,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			expNewTransaction: true,
 			expPri:            10,
 			expTS:             plus20,
+			expOrigTS:         plus20,
 		},
 		{
 			// On failed push, new epoch begins just past the pushed timestamp.
@@ -903,7 +872,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			)
 			db := client.NewDB(ts, clock)
 			key := roachpb.Key("test-key")
-			origTxnProto := *roachpb.NewTransaction(
+			origTxnProto := roachpb.MakeTransaction(
 				"test txn",
 				key,
 				roachpb.UserPriority(0),
@@ -933,13 +902,6 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			txnReset := !roachpb.TxnIDEqual(origTxnProto.ID, txn.Proto().ID)
 			if txnReset != test.expNewTransaction {
 				t.Fatalf("expected txn reset: %t and got: %t", test.expNewTransaction, txnReset)
-			}
-			if test.expNewTransaction {
-				// Check that the timestamp has been reset.
-				zeroTS := hlc.Timestamp{}
-				if txn.Proto().OrigTimestamp != zeroTS {
-					t.Fatalf("expected txn OrigTimestamp: %s, but got: %s", zeroTS, txn.Proto())
-				}
 			}
 			if txn.Proto().Epoch != test.expEpoch {
 				t.Errorf("expected epoch = %d; got %d",
@@ -1017,11 +979,11 @@ func TestTxnMultipleCoord(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		txn := roachpb.NewTransaction("test", roachpb.Key("a"), 1, enginepb.SERIALIZABLE,
+		txn := roachpb.MakeTransaction("test", roachpb.Key("a"), 1, enginepb.SERIALIZABLE,
 			s.Clock.Now(), s.Clock.MaxOffset().Nanoseconds())
 		txn.Writing = tc.writing
 		reply, pErr := client.SendWrappedWith(context.Background(), sender, roachpb.Header{
-			Txn: txn,
+			Txn: &txn,
 		}, tc.args)
 		if pErr == nil != tc.ok {
 			t.Errorf("%d: %T (writing=%t): success_expected=%t, but got: %v",
@@ -1031,7 +993,7 @@ func TestTxnMultipleCoord(t *testing.T) {
 			continue
 		}
 
-		txn = reply.Header().Txn
+		txn = *reply.Header().Txn
 		if tc.writing != txn.Writing {
 			t.Errorf("%d: unexpected writing state: %s", i, txn)
 		}
@@ -1040,7 +1002,7 @@ func TestTxnMultipleCoord(t *testing.T) {
 		}
 		// Abort for clean shutdown.
 		if _, pErr := client.SendWrappedWith(context.Background(), sender, roachpb.Header{
-			Txn: txn,
+			Txn: &txn,
 		}, &roachpb.EndTransactionRequest{
 			Commit: false,
 		}); pErr != nil {
@@ -1080,7 +1042,8 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 	ba.Add(&roachpb.BeginTransactionRequest{Span: roachpb.Span{Key: key}})
 	ba.Add(&roachpb.PutRequest{Span: roachpb.Span{Key: key}})
 	ba.Add(&roachpb.EndTransactionRequest{})
-	ba.Txn = roachpb.NewTransaction("test", key, 0, 0, clock.Now(), 0)
+	txn := roachpb.MakeTransaction("test", key, 0, 0, clock.Now(), 0)
+	ba.Txn = &txn
 	_, pErr := ts.Send(context.Background(), ba)
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -1136,7 +1099,8 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 			ba.Add(&roachpb.BeginTransactionRequest{Span: roachpb.Span{Key: key}})
 			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{Key: key}})
 			ba.Add(&roachpb.EndTransactionRequest{})
-			ba.Txn = roachpb.NewTransaction("test", key, 0, 0, clock.Now(), 0)
+			txn := roachpb.MakeTransaction("test", key, 0, 0, clock.Now(), 0)
+			ba.Txn = &txn
 			_, pErr := ts.Send(context.Background(), ba)
 			if !testutils.IsPError(pErr, test.errMsg) {
 				t.Errorf("%d: error did not match %s: %v", i, test.errMsg, pErr)

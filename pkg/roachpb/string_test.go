@@ -17,7 +17,7 @@
 package roachpb_test
 
 import (
-	"strings"
+	"fmt"
 	"testing"
 
 	// Hook up the pretty printer.
@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -57,29 +56,27 @@ func TestTransactionString(t *testing.T) {
 	if str := txn.String(); str != expStr {
 		t.Errorf("expected txn %s; got %s", expStr, str)
 	}
-
-	var txnEmpty roachpb.Transaction
-	_ = txnEmpty.String() // prevent regression of NPE
-
-	cmd := storagebase.RaftCommand{
-		BatchRequest: &roachpb.BatchRequest{},
-	}
-	cmd.BatchRequest.Txn = &txn
-	if actStr, idStr := cmd.String(), txnID.String(); !strings.Contains(actStr, idStr) {
-		t.Fatalf("expected to find '%s' in '%s'", idStr, actStr)
-	}
 }
 
 func TestBatchRequestString(t *testing.T) {
 	br := roachpb.BatchRequest{}
-	br.Txn = new(roachpb.Transaction)
+	txn := roachpb.MakeTransaction(
+		"test",
+		nil, /* baseKey */
+		roachpb.NormalUserPriority,
+		enginepb.SERIALIZABLE,
+		hlc.Timestamp{}, // now
+		0,               // maxOffsetNs
+	)
+	br.Txn = &txn
 	for i := 0; i < 100; i++ {
 		br.Requests = append(br.Requests, roachpb.RequestUnion{Get: &roachpb.GetRequest{}})
 	}
 	br.Requests = append(br.Requests, roachpb.RequestUnion{EndTransaction: &roachpb.EndTransactionRequest{}})
 
-	e := `[txn: <nil>], Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), ... 76 skipped ..., Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), EndTransaction [/Min,/Min)`
+	e := fmt.Sprintf(`[txn: %s], Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), ... 76 skipped ..., Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), EndTransaction [/Min,/Min)`,
+		br.Txn.Short())
 	if e != br.String() {
-		t.Fatalf("e = %s, v = %s", e, br.String())
+		t.Fatalf("e = %s\nv = %s", e, br.String())
 	}
 }

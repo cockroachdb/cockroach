@@ -54,28 +54,16 @@ type FlowCtx struct {
 	// rpcCtx is used by the Outboxes that may be present in the flow for
 	// connecting to other nodes.
 	rpcCtx *rpc.Context
-	// txnProto is the transaction in which kv operations performed by processors
-	// in the flow must be performed.
-	txnProto *roachpb.Transaction
+	// The transaction in which kv operations performed by processors in the flow
+	// must be performed. Processors in the Flow will use this txn concurrently.
+	txn *client.Txn
 	// clientDB is a handle to the cluster. Used for performing requests outside
 	// of the transaction in which the flow's query is running.
 	clientDB *client.DB
-	// remoteTxnDB is a handle to the cluster that bypasses the local
-	// TxnCoordSender. Used via setupTxn() for running requests on behalf of the
-	// query's transaction.
-	remoteTxnDB *client.DB
 	// nodeID is the ID of the node on which the processors using this FlowCtx
 	// run.
 	nodeID       roachpb.NodeID
 	testingKnobs TestingKnobs
-}
-
-func (flowCtx *FlowCtx) setupTxn() *client.Txn {
-	txn := client.NewTxnWithProto(flowCtx.remoteTxnDB, *flowCtx.txnProto)
-	// DistSQL transactions get retryable errors that would otherwise be handled
-	// by the TxnCoordSender.
-	txn.AcceptUnhandledRetryableErrors()
-	return txn
 }
 
 type flowStatus int
