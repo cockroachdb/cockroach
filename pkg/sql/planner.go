@@ -194,6 +194,7 @@ func (p *planner) DistLoader() *DistLoader {
 // the new txn object, if any.
 func (p *planner) setTxn(txn *client.Txn) {
 	p.txn = txn
+	p.evalCtx.Txn = txn
 	if txn != nil {
 		p.evalCtx.SetClusterTimestamp(txn.OrigTimestamp())
 	} else {

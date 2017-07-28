@@ -15,6 +15,7 @@
 package roachpb_test
 
 import (
+	"fmt"
 	"testing"
 
 	// Hook up the pretty printer.
@@ -53,21 +54,27 @@ func TestTransactionString(t *testing.T) {
 	if str := txn.String(); str != expStr {
 		t.Errorf("expected txn %s; got %s", expStr, str)
 	}
-
-	var txnEmpty roachpb.Transaction
-	_ = txnEmpty.String() // prevent regression of NPE
 }
 
 func TestBatchRequestString(t *testing.T) {
 	br := roachpb.BatchRequest{}
-	br.Txn = new(roachpb.Transaction)
+	txn := roachpb.MakeTransaction(
+		"test",
+		nil, /* baseKey */
+		roachpb.NormalUserPriority,
+		enginepb.SERIALIZABLE,
+		hlc.Timestamp{}, // now
+		0,               // maxOffsetNs
+	)
+	br.Txn = &txn
 	for i := 0; i < 100; i++ {
 		br.Requests = append(br.Requests, roachpb.RequestUnion{Get: &roachpb.GetRequest{}})
 	}
 	br.Requests = append(br.Requests, roachpb.RequestUnion{EndTransaction: &roachpb.EndTransactionRequest{}})
 
-	e := `[txn: <nil>], Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), ... 76 skipped ..., Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), EndTransaction [/Min,/Min)`
+	e := fmt.Sprintf(`[txn: %s], Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), ... 76 skipped ..., Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), EndTransaction [/Min,/Min)`,
+		br.Txn.Short())
 	if e != br.String() {
-		t.Fatalf("e = %s, v = %s", e, br.String())
+		t.Fatalf("e = %s\nv = %s", e, br.String())
 	}
 }

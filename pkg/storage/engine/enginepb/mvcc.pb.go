@@ -79,6 +79,7 @@ func (IsolationType) EnumDescriptor() ([]byte, []int) { return fileDescriptorMvc
 // TxnMeta is the metadata of a Transaction record.
 type TxnMeta struct {
 	// id is a unique UUID value which identifies the transaction.
+	// This field is always filled in.
 	ID        *github_com_cockroachdb_cockroach_pkg_util_uuid.UUID `protobuf:"bytes,1,opt,name=id,customtype=github.com/cockroachdb/cockroach/pkg/util/uuid.UUID" json:"id,omitempty"`
 	Isolation IsolationType                                        `protobuf:"varint,2,opt,name=isolation,enum=cockroach.storage.engine.enginepb.IsolationType" json:"isolation"`
 	// key is the key which anchors the transaction. This is typically
