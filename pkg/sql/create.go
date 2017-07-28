@@ -442,13 +442,11 @@ func (n *createViewNode) Start(params runParams) error {
 		return err
 	}
 
-	err = desc.ValidateTable()
-	if err != nil {
+	if err = desc.ValidateTable(); err != nil {
 		return err
 	}
 
-	err = n.p.createDescriptorWithID(params.ctx, key, id, &desc)
-	if err != nil {
+	if err = n.p.createDescriptorWithID(params.ctx, key, id, &desc); err != nil {
 		return err
 	}
 
