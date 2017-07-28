@@ -236,6 +236,8 @@ type uncommittedDatabase struct {
 // end of each transaction on the session, or on hitting conditions such
 // as errors, or retries that result in transaction timestamp changes.
 type TableCollection struct {
+	// The timestamp used to pick tables. The timestamp falls within the
+	// validity window of every table in tables.
 	timestamp hlc.Timestamp
 	// A collection of table descriptor valid for the timestamp.
 	// They are released once the transaction using them is complete.
@@ -265,7 +267,9 @@ type TableCollection struct {
 	databaseCache *databaseCache
 }
 
-func (tc *TableCollection) maybeChangeTimestamp(ctx context.Context, txn *client.Txn) {
+// Check if the timestamp used so far to pick tables has changed because
+// of a transaction retry.
+func (tc *TableCollection) resetForTxnRetry(ctx context.Context, txn *client.Txn) {
 	if tc.timestamp != (hlc.Timestamp{}) && tc.timestamp != txn.OrigTimestamp() {
 		txn.ResetDeadline()
 		tc.releaseTables(ctx)
@@ -273,18 +277,18 @@ func (tc *TableCollection) maybeChangeTimestamp(ctx context.Context, txn *client
 }
 
 // getTableVersion returns a table descriptor with a version suitable for
-// the transaction. The table must be released by calling tc.releaseTables().
+// the transaction: table.ModificationTime <= txn.Timestamp < expirationTime.
+// The table must be released by calling tc.releaseTables().
 //
-// TODO(vivek): The suitability of the table version returned is only partial
-// checked. The expiration time for the table descriptor is added as a deadline
-// for the transaction. The ModificationTime of the table is not compared to the
-// timestamp of the transaction. Fix this to be such that:
-// table.ModificationTime <= txn.Timestamp < expirationTime
+// TODO(vivek): #6418 introduced a transaction deadline that is enforced at
+// the KV layer, and was introduced to manager the validity window of a
+// table descriptor. Since we will be checking for the valid use of a table
+// descriptor here, we do not need the extra check at the KV layer. However,
+// for a SNAPSHOT_ISOLATION transaction the commit timestamp of the transaction
+// can change, so we have kept the transaction deadline. It's worth
+// reconsidering if this is really needed.
 //
-// TODO(vivek): Rollback most of #6418. #6418 introduced a transaction deadline
-// that is enforced at the KV layer, and was introduced to manager the validity
-// window of a table descriptor. Since we will be checking for the valid use
-// of a table descriptor here, we do not need the extra check at the KV layer.
+// TODO(vivek): Allow cached descriptors for AS OF SYSTEM TIME queries.
 func (tc *TableCollection) getTableVersion(
 	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *parser.TableName,
 ) (*sqlbase.TableDescriptor, error) {
@@ -330,16 +334,16 @@ func (tc *TableCollection) getTableVersion(
 		}
 	}
 
+	// If the txn has been pushed the table collection is released and
+	// txn deadline is reset.
+	tc.resetForTxnRetry(ctx, txn)
+
 	if table, err := tc.getUncommittedTable(dbID, tn); err != nil {
 		return nil, err
 	} else if table != nil {
 		log.VEventf(ctx, 2, "found uncommitted table %d", table.ID)
 		return table, nil
 	}
-
-	// If the txn has been pushed the table collection is released and
-	// txn deadline is reset.
-	tc.maybeChangeTimestamp(ctx, txn)
 
 	// First, look to see if we already have the table.
 	// This ensures that, once a SQL transaction resolved name N to id X, it will
@@ -389,6 +393,10 @@ func (tc *TableCollection) getTableVersionByID(
 		return table, nil
 	}
 
+	// If the txn has been pushed the table collection is released and
+	// txn deadline is reset.
+	tc.resetForTxnRetry(ctx, txn)
+
 	for _, table := range tc.uncommittedTables {
 		if table.ID == tableID {
 			log.VEventf(ctx, 2, "found uncommitted table %d", tableID)
@@ -400,10 +408,6 @@ func (tc *TableCollection) getTableVersionByID(
 			return table, nil
 		}
 	}
-
-	// If the txn has been pushed the table collection is released and
-	// txn deadline is reset.
-	tc.maybeChangeTimestamp(ctx, txn)
 
 	// First, look to see if we already have the table -- including those
 	// via `getTableVersion`.

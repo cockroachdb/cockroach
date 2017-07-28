@@ -330,6 +330,9 @@ func (sc *SchemaChanger) maybeAddDropRename(
 				tbKey := tableKey{renameDetails.OldParentID, renameDetails.OldName}.Key()
 				b.Del(tbKey)
 			}
+			if err := txn.SetSystemConfigTrigger(); err != nil {
+				return err
+			}
 			return txn.Run(ctx, b)
 		}); err != nil {
 			return false, err
