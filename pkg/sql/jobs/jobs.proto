@@ -56,3 +56,11 @@ message Payload {
     SchemaChangeDetails schemaChange = 12;
   }
 }
+
+enum Type {
+  option (gogoproto.goproto_enum_prefix) = false;
+  option (gogoproto.goproto_enum_stringer) = false;
+  BACKUP = 0 [(gogoproto.enumvalue_customname) = "TypeBackup"];
+  RESTORE = 1 [(gogoproto.enumvalue_customname) = "TypeRestore"];
+  SCHEMA_CHANGE = 2 [(gogoproto.enumvalue_customname) = "TypeSchemaChange"];
+}

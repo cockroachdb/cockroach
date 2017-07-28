@@ -96,7 +96,7 @@ func MakeStorePoolNodeLivenessFunc(nodeLiveness *NodeLiveness) NodeLivenessFunc 
 		if liveness.Draining {
 			return nodeStatusUnknown
 		}
-		if liveness.isLive(hlc.Timestamp{WallTime: now.UnixNano()}, nodeLiveness.clock.MaxOffset()) {
+		if liveness.IsLive(hlc.Timestamp{WallTime: now.UnixNano()}, nodeLiveness.clock.MaxOffset()) {
 			return nodeStatusLive
 		}
 		return nodeStatusUnknown
