@@ -67,6 +67,10 @@ type benchmarkTest struct {
 }
 
 func (bt *benchmarkTest) Start(ctx context.Context) {
+	licenseKey := os.Getenv("COCKROACH_DEV_LICENSE")
+	if licenseKey == "" {
+		bt.b.Fatal("testing enterprise features requires setting COCKROACH_DEV_LICENSE")
+	}
 	bt.f = acceptance.MakeFarmer(bt.b, bt.prefix, acceptance.GetStopper())
 
 	bt.f.AddFlag("--max-offset=1s")
@@ -121,7 +125,10 @@ func (bt *benchmarkTest) Start(ctx context.Context) {
 		bt.b.Fatal(err)
 	}
 	defer sqlDB.Close()
-	sqlutils.MakeSQLRunner(bt.b, sqlDB).Exec("SET CLUSTER SETTING enterprise.enabled = true")
+	sqlutils.MakeSQLRunner(bt.b, sqlDB).Exec(
+		`SET CLUSTER SETTING cluster.organization = "Cockroach Labs - Production Testing"`)
+	sqlutils.MakeSQLRunner(bt.b, sqlDB).Exec(
+		fmt.Sprintf(`SET CLUSTER SETTING enterprise.license = "%s"`, licenseKey))
 
 	log.Info(ctx, "initial cluster is up")
 }
