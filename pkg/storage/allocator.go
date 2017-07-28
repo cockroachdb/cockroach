@@ -54,9 +54,11 @@ const (
 	minReplicaWeight = 0.001
 
 	// priorities for various repair operations.
-	addMissingReplicaPriority  float64 = 10000
-	removeDeadReplicaPriority  float64 = 1000
-	removeExtraReplicaPriority float64 = 100
+	addMissingReplicaPriority             float64 = 10000
+	addDecommissioningReplacementPriority float64 = 5000
+	removeDeadReplicaPriority             float64 = 1000
+	removeDecommissioningReplicaPriority  float64 = 200
+	removeExtraReplicaPriority            float64 = 100
 )
 
 var (
@@ -101,13 +103,15 @@ const (
 	AllocatorRemove
 	AllocatorAdd
 	AllocatorRemoveDead
+	AllocatorRemoveDecommissioning
 )
 
 var allocatorActionNames = map[AllocatorAction]string{
-	AllocatorNoop:       "noop",
-	AllocatorRemove:     "remove",
-	AllocatorAdd:        "add",
-	AllocatorRemoveDead: "remove dead",
+	AllocatorNoop:                  "noop",
+	AllocatorRemove:                "remove",
+	AllocatorAdd:                   "add",
+	AllocatorRemoveDead:            "remove dead",
+	AllocatorRemoveDecommissioning: "remove decommissioning",
 }
 
 func (a AllocatorAction) String() string {
@@ -213,43 +217,82 @@ func (a *Allocator) ComputeAction(
 	// TODO(mrtracy): Handle non-homogeneous and mismatched attribute sets.
 	need := int(zone.NumReplicas)
 	have := len(desc.Replicas)
+	quorum := computeQuorum(need)
 	if have < need {
 		// Range is under-replicated, and should add an additional replica.
 		// Priority is adjusted by the difference between the current replica
 		// count and the quorum of the desired replica count.
-		neededQuorum := computeQuorum(need)
-		priority := addMissingReplicaPriority + float64(neededQuorum-have)
+		priority := addMissingReplicaPriority + float64(quorum-have)
 		if log.V(3) {
-			log.Infof(ctx, "AllocatorAdd - need=%d, have=%d, priority=%.2f", need, have, priority)
+			log.Infof(ctx, "AllocatorAdd - missing replica need=%d, have=%d, priority=%.2f", need, have, priority)
 		}
 		return AllocatorAdd, priority
 	}
+
+	decommissioningReplicas := a.storePool.decommissioningReplicas(desc.RangeID, desc.Replicas)
+	if have == need && len(decommissioningReplicas) > 0 {
+		// Range has decommissioning replica(s). We should up-replicate to add
+		// another replica. The decommissioning replica(s) will be down-replicated
+		// later.
+		priority := addDecommissioningReplacementPriority
+		if log.V(3) {
+			log.Infof(ctx, "AllocatorAdd - replacement for %d decommissioning replicas priority=%.2f", len(decommissioningReplicas), priority)
+		}
+		return AllocatorAdd, priority
+	}
+
 	liveReplicas, deadReplicas := a.storePool.liveAndDeadReplicas(desc.RangeID, desc.Replicas)
+	if len(liveReplicas) < quorum {
+		// Do not take any removal action if we do not have a quorum of live
+		// replicas.
+		return AllocatorNoop, 0
+	}
+	// Removal actions follow.
 	if len(deadReplicas) > 0 {
 		// The range has dead replicas, which should be removed immediately.
-		// Adjust the priority by the number of dead replicas the range has.
-		quorum := computeQuorum(len(desc.Replicas))
-		if lr := len(liveReplicas); lr >= quorum {
+		removeDead := false
+		switch {
+		case have > need:
+			// Allow removal of a dead replica if we have more than we need.
+			// Reduce priority for this case?
+			removeDead = true
+		default: // have == need
 			// Only allow removal of a dead replica if we have a suitable allocation
 			// target that we can up-replicate to. This isn't necessarily the target
 			// we'll up-replicate to, just an indication that such a target exists.
-			_, err := a.AllocateTarget(
+			if _, err := a.AllocateTarget(
 				ctx,
 				zone.Constraints,
 				liveReplicas,
 				desc.RangeID,
 				true, /* relaxConstraints */
-			)
-			if err == nil {
-				priority := removeDeadReplicaPriority + float64(quorum-lr)
-				if log.V(3) {
-					log.Infof(ctx, "AllocatorRemoveDead - dead=%d, live=%d, quorum=%d, priority=%.2f",
-						len(deadReplicas), liveReplicas, quorum, priority)
-				}
-				return AllocatorRemoveDead, priority
+			); err == nil {
+				removeDead = true
 			}
 		}
+		if removeDead {
+			// Adjust the priority by the distance of live replicas from quorum.
+			priority := removeDeadReplicaPriority + float64(quorum-len(liveReplicas))
+			if log.V(3) {
+				log.Infof(ctx, "AllocatorRemoveDead - dead=%d, live=%d, quorum=%d, priority=%.2f",
+					len(deadReplicas), len(liveReplicas), quorum, priority)
+			}
+			return AllocatorRemoveDead, priority
+		}
 	}
+
+	if have > need && len(decommissioningReplicas) > 0 {
+		// Range is over-replicated, and has a decommissioning replica which
+		// should be removed.
+		priority := removeDecommissioningReplicaPriority
+		if log.V(3) {
+			log.Infof(
+				ctx, "AllocatorRemoveDecommissioning - need=%d, have=%d, num_decommissioning=%d, priority=%.2f",
+				need, have, len(decommissioningReplicas), priority)
+		}
+		return AllocatorRemoveDecommissioning, priority
+	}
+
 	if have > need {
 		// Range is over-replicated, and should remove a replica.
 		// Ranges with an even number of replicas get extra priority because

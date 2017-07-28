@@ -563,3 +563,93 @@ func TestGetLocalities(t *testing.T) {
 		}
 	}
 }
+
+func TestStorePoolDecommissioningReplicas(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper, g, _, sp, mnl := createTestStorePool(
+		TestTimeUntilStoreDead, false /* deterministic */, nodeStatusDead)
+	defer stopper.Stop(context.TODO())
+	sg := gossiputil.NewStoreGossiper(g)
+
+	stores := []*roachpb.StoreDescriptor{
+		{
+			StoreID: 1,
+			Node:    roachpb.NodeDescriptor{NodeID: 1},
+		},
+		{
+			StoreID: 2,
+			Node:    roachpb.NodeDescriptor{NodeID: 2},
+		},
+		{
+			StoreID: 3,
+			Node:    roachpb.NodeDescriptor{NodeID: 3},
+		},
+		{
+			StoreID: 4,
+			Node:    roachpb.NodeDescriptor{NodeID: 4},
+		},
+		{
+			StoreID: 5,
+			Node:    roachpb.NodeDescriptor{NodeID: 5},
+		},
+	}
+
+	replicas := []roachpb.ReplicaDescriptor{
+		{
+			NodeID:    1,
+			StoreID:   1,
+			ReplicaID: 1,
+		},
+		{
+			NodeID:    2,
+			StoreID:   2,
+			ReplicaID: 2,
+		},
+		{
+			NodeID:    3,
+			StoreID:   3,
+			ReplicaID: 4,
+		},
+		{
+			NodeID:    4,
+			StoreID:   4,
+			ReplicaID: 4,
+		},
+		{
+			NodeID:    5,
+			StoreID:   5,
+			ReplicaID: 5,
+		},
+	}
+
+	sg.GossipStores(stores, t)
+	for i := 1; i <= 5; i++ {
+		mnl.setNodeStatus(roachpb.NodeID(i), nodeStatusLive)
+	}
+
+	liveReplicas, deadReplicas := sp.liveAndDeadReplicas(0, replicas)
+	if len(liveReplicas) != 5 {
+		t.Fatalf("expected five live replicas, found %d (%v)", len(liveReplicas), liveReplicas)
+	}
+	if len(deadReplicas) > 0 {
+		t.Fatalf("expected no dead replicas initially, found %d (%v)", len(deadReplicas), deadReplicas)
+	}
+	// Mark node 4 as decommissioning.
+	mnl.setNodeStatus(4, nodeStatusDecommissioning)
+	// Mark node 5 as dead.
+	mnl.setNodeStatus(5, nodeStatusDead)
+
+	liveReplicas, deadReplicas = sp.liveAndDeadReplicas(0, replicas)
+	// Decommissioning replicas are considered live.
+	if a, e := liveReplicas, replicas[:4]; !reflect.DeepEqual(a, e) {
+		t.Fatalf("expected live replicas %+v; got %+v", e, a)
+	}
+	if a, e := deadReplicas, replicas[4:]; !reflect.DeepEqual(a, e) {
+		t.Fatalf("expected dead replicas %+v; got %+v", e, a)
+	}
+
+	decommissioningReplicas := sp.decommissioningReplicas(0, replicas)
+	if a, e := decommissioningReplicas, replicas[3:4]; !reflect.DeepEqual(a, e) {
+		t.Fatalf("expected decommissioning replicas %+v; got %+v", e, a)
+	}
+}
