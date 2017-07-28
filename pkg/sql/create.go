@@ -350,10 +350,12 @@ func (p *planner) CreateView(ctx context.Context, n *parser.CreateView) (planNod
 	// To avoid races with ongoing schema changes to tables that the view
 	// depends on, make sure we use the most recent versions of table
 	// descriptors rather than the copies in the lease cache.
+	defer func(prev bool) { p.avoidCachedDescriptors = prev }(p.avoidCachedDescriptors)
 	p.avoidCachedDescriptors = true
+
+	// Now generate the source plan.
 	sourcePlan, err := p.Select(ctx, n.AsSource, []parser.Type{})
 	if err != nil {
-		p.avoidCachedDescriptors = false
 		return nil, err
 	}
 
@@ -486,7 +488,6 @@ func (n *createViewNode) Start(params runParams) error {
 func (n *createViewNode) Close(ctx context.Context) {
 	n.sourcePlan.Close(ctx)
 	n.sourcePlan = nil
-	n.p.avoidCachedDescriptors = false
 }
 
 func (*createViewNode) Next(runParams) (bool, error) { return false, nil }
