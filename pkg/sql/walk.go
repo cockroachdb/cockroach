@@ -166,6 +166,9 @@ func (v *planVisitor) visit(plan planNode) {
 		for i, r := range n.render {
 			subplans = v.expr(name, "render", i, r, subplans)
 		}
+		if v.observer.attr != nil && n.source.info.viewDesc != nil {
+			v.observer.attr(name, "source view", n.source.info.viewDesc.Name)
+		}
 		v.subqueries(name, subplans)
 		v.visit(n.source.plan)
 

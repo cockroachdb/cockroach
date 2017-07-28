@@ -301,18 +301,52 @@ func expandRenderNode(
 
 	// Elide the render node if it renders its source as-is.
 
+	sourceRender, isSourceRender := r.source.plan.(*renderNode)
+
 	sourceCols := planColumns(r.source.plan)
-	if len(r.columns) == len(sourceCols) && r.source.info.viewDesc == nil {
-		// 1) we don't drop renderNodes which also interface to a view, because
-		// CREATE VIEW needs it.
-		// TODO(knz): make this optimization conditional on a flag, which can
-		// be set to false by CREATE VIEW.
-		//
-		// 2) we don't drop renderNodes which have a different number of
+	if len(r.columns) == len(sourceCols) &&
+		(r.source.info.viewDesc == nil || isSourceRender) {
+		// 1) we don't drop renderNodes which have a different number of
 		// columns than their sources, because some nodes currently assume
 		// the number of source columns doesn't change between
 		// instantiation and Start() (e.g. groupNode).
 		// TODO(knz): investigate this further and enable the optimization fully.
+		//
+		// 2) the condition about viewDesc is slightly complicated to
+		// understand and exhibits a current wart of the sourceInfo
+		// design. To understand the issue at hand, one has to understand
+		// that the dataSourceInfo struct that describes a planNode's
+		// mapping of names to column numbers is not carried by itself,
+		// but rather by its parent. So for a query like this:
+		//  (after CREATE VIEW v1 AS TABLE kv)
+		//  SELECT * FROM v1
+		// we have:
+		// - a scanNode for kv
+		// - a renderNode for `v1`,
+		// - a renderNode for the query SELECT, which indicates "its source is a view".
+		//
+		// (It is a current property of the planning engine that any *use*
+		// of a view can only occur in a context that also has a
+		// dataSourceInfo for its source.  In the example above this is a
+		// renderNode, but a join node is also possible with SELECT * FROM
+		// v1 a, v1 b for example. TABLE v1 is SELECT * FROM v1 in
+		// disguise.)
+		//
+		// Now here we would really like to elide the parent renderNode if
+		// it is a no-op. However, we can't afford to lose the bit that
+		// says "the source is a view", because CREATE VIEW needs this
+		// information for dependency analysis. The question then becomes,
+		// where can we put this bit?
+		//
+		// We can only put is somewhere where "there is room". (Ideally,
+		// each planNode would carry a bit saying "this planNode exists as
+		// a result of instantiating a view" and we could always propagate
+		// the bit from an elided renderNode to its source, whatever its
+		// type. But that's not currently possible). We know "there is
+		// room" on another renderNode, so if that's what we have a
+		// source, we know the optimization is safe, and we move the bit
+		// to the source below. If we can't be sure "there is room", we
+		// just can't elide the renderNode.
 
 		needRename := false
 		foundNonTrivialRender := false
@@ -341,6 +375,21 @@ func expandRenderNode(
 				for i, col := range r.columns {
 					mutSourceCols[i].Name = col.Name
 				}
+			}
+			if r.source.info.viewDesc != nil && isSourceRender {
+				// (isSourceRender should be true as per the condition above already,
+				// but it doesn't hurt to check.)
+				//
+				// If we do find that the source is a renderNode, it doesn't
+				// matter if "it is already occupied"
+				// (sourceRender.source.info.viewDesc != nil). We can safely
+				// overwrite that bit with the parent renderNode's bit. The reason
+				// why this is safe is that dependency analysis for correctness
+				// only cares about the "first layer" of dependency. When creating
+				// view v3 defined using v2 itself defined from v1, we don't care
+				// about losing the information that v2 contains a renderNode from
+				// v1 -- we only care about keeping the bit about v2.
+				sourceRender.source.info.viewDesc = r.source.info.viewDesc
 			}
 			return r.source.plan, nil
 		}
