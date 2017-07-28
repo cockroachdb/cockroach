@@ -392,16 +392,36 @@ func (rq *replicateQueue) processOneChange(
 			break
 		}
 		decommissioningReplica := decommissioningReplicas[0]
-		rq.metrics.RemoveReplicaCount.Inc(1)
-		if log.V(1) {
-			log.Infof(ctx, "removing decommissioning replica %+v from store", decommissioningReplica)
-		}
-		target := roachpb.ReplicationTarget{
-			NodeID:  decommissioningReplica.NodeID,
-			StoreID: decommissioningReplica.StoreID,
-		}
-		if err := rq.removeReplica(ctx, repl, target, desc); err != nil {
-			return false, err
+		if decommissioningReplica.StoreID == repl.store.StoreID() {
+			// As in the AllocatorRemove case, if we're trying to remove ourselves, we
+			// we must first transfer our lease away.
+			transferred, err := rq.transferLease(
+				ctx,
+				repl,
+				desc,
+				zone,
+				false, /* checkTransferLeaseSource */
+				false, /* checkCandidateFullness */
+			)
+			if err != nil {
+				return false, err
+			}
+			// Do not requeue as we transferred our lease away.
+			if transferred {
+				return false, nil
+			}
+		} else {
+			rq.metrics.RemoveReplicaCount.Inc(1)
+			if log.V(1) {
+				log.Infof(ctx, "removing decommissioning replica %+v from store", decommissioningReplica)
+			}
+			target := roachpb.ReplicationTarget{
+				NodeID:  decommissioningReplica.NodeID,
+				StoreID: decommissioningReplica.StoreID,
+			}
+			if err := rq.removeReplica(ctx, repl, target, desc); err != nil {
+				return false, err
+			}
 		}
 	case AllocatorRemoveDead:
 		if log.V(1) {
