@@ -43,7 +43,6 @@ var planHooks []planHookFn
 // the hooks that implement it.
 type PlanHookState interface {
 	ExecCfg() *ExecutorConfig
-	LeaseMgr() *LeaseManager
 	TypeAsString(e parser.Expr, op string) (func() (string, error), error)
 	TypeAsStringArray(e parser.Exprs, op string) (func() ([]string, error), error)
 	User() string
