@@ -223,6 +223,12 @@ func (ds *ServerImpl) setupFlow(
 	monitor.Start(ctx, &ds.memMonitor, mon.BoundAccount{})
 	acc := monitor.MakeBoundAccount()
 
+	// The flow will run in a Txn that bypasses the local TxnCoordSender.
+	txn := client.NewTxnWithProto(ds.FlowDB, req.Txn)
+	// DistSQL transactions get retryable errors that would otherwise be handled
+	// by the TxnCoordSender.
+	txn.AcceptUnhandledRetryableErrors()
+
 	location, err := sqlbase.TimeZoneStringToLocation(req.EvalContext.Location)
 	if err != nil {
 		tracing.FinishSpan(sp)
@@ -242,6 +248,7 @@ func (ds *ServerImpl) setupFlow(
 			// own context.
 			return ctx
 		},
+		Txn: txn,
 	}
 	evalCtx.SetStmtTimestamp(time.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 	evalCtx.SetTxnTimestamp(time.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
@@ -255,9 +262,8 @@ func (ds *ServerImpl) setupFlow(
 		id:             req.Flow.FlowID,
 		EvalCtx:        evalCtx,
 		rpcCtx:         ds.RPCContext,
-		txnProto:       &req.Txn,
+		txn:            txn,
 		clientDB:       ds.DB,
-		remoteTxnDB:    ds.FlowDB,
 		testingKnobs:   ds.TestingKnobs,
 		nodeID:         nodeID,
 		tempStorage:    ds.tempStorage,

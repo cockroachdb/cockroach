@@ -723,7 +723,8 @@ func (s *Session) serialize() serverpb.Session {
 	var kvTxnID *uuid.UUID
 	txn := s.TxnState.mu.txn
 	if txn != nil {
-		kvTxnID = txn.ID()
+		id := txn.ID()
+		kvTxnID = &id
 	}
 
 	activeQueries := make([]serverpb.ActiveQuery, 0, len(s.mu.ActiveQueries))

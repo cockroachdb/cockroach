@@ -16,6 +16,7 @@ package client_test
 
 import (
 	"bytes"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 func setup(t *testing.T) (serverutils.TestServerInterface, *client.DB) {
@@ -339,7 +341,15 @@ func TestDebugName(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-		const expected = "unnamed"
+		// Remove the txn ID, which will be added to the name if non-nil.
+		id := "00000000-b33f-b33f-b33f-000000000000"
+		uuid, err := uuid.FromString(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		txn.Proto().ID = &uuid
+
+		expected := fmt.Sprintf("unnamed (id: %s)", id)
 		if txn.DebugName() != expected {
 			t.Fatalf("expected \"%s\", but found \"%s\"", expected, txn.DebugName())
 		}
@@ -391,7 +401,7 @@ func TestCommonMethods(t *testing.T) {
 		{txnType, "Rollback"}:                        {},
 		{txnType, "CleanupOnError"}:                  {},
 		{txnType, "DebugName"}:                       {},
-		{txnType, "EnsureProto"}:                     {},
+		{txnType, "GenerateForcedRetryableError"}:    {},
 		{txnType, "InternalSetPriority"}:             {},
 		{txnType, "IsFinalized"}:                     {},
 		{txnType, "IsSerializableRestart"}:           {},

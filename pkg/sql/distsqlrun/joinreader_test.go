@@ -22,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -102,9 +101,8 @@ func TestJoinReader(t *testing.T) {
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
 				EvalCtx:  evalCtx,
-				txnProto: &roachpb.Transaction{},
 				// Pass a DB without a TxnCoordSender.
-				remoteTxnDB: client.NewDB(s.DistSender(), s.Clock()),
+				txn: client.NewTxn(client.NewDB(s.DistSender(), s.Clock())),
 			}
 
 			in := &RowBuffer{}
@@ -174,9 +172,8 @@ func TestJoinReaderDrain(t *testing.T) {
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
 		EvalCtx:  evalCtx,
-		txnProto: &roachpb.Transaction{},
 		// Pass a DB without a TxnCoordSender.
-		remoteTxnDB: client.NewDB(s.DistSender(), s.Clock()),
+		txn: client.NewTxn(client.NewDB(s.DistSender(), s.Clock())),
 	}
 
 	encRow := make(sqlbase.EncDatumRow, 1)
