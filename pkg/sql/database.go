@@ -131,6 +131,20 @@ func getDatabaseDesc(
 	return desc, err
 }
 
+// getDatabaseDescByID looks up the database descriptor given its ID,
+// returning nil if the descriptor is not found. If you want the "not
+// found" condition to return an error, use mustGetDatabaseDescByID() instead.
+func getDatabaseDescByID(
+	ctx context.Context, txn *client.Txn, id sqlbase.ID,
+) (*sqlbase.DatabaseDescriptor, error) {
+	desc := &sqlbase.DatabaseDescriptor{}
+	found, err := getDescriptorByID(ctx, txn, id, desc)
+	if !found {
+		return nil, err
+	}
+	return desc, err
+}
+
 // MustGetDatabaseDesc looks up the database descriptor given its name,
 // returning an error if the descriptor is not found.
 func MustGetDatabaseDesc(
@@ -142,6 +156,21 @@ func MustGetDatabaseDesc(
 	}
 	if desc == nil {
 		return nil, sqlbase.NewUndefinedDatabaseError(name)
+	}
+	return desc, nil
+}
+
+// MustGetDatabaseDescByID looks up the database descriptor given its ID,
+// returning an error if the descriptor is not found.
+func MustGetDatabaseDescByID(
+	ctx context.Context, txn *client.Txn, id sqlbase.ID,
+) (*sqlbase.DatabaseDescriptor, error) {
+	desc, err := getDatabaseDescByID(ctx, txn, id)
+	if err != nil {
+		return nil, err
+	}
+	if desc == nil {
+		return nil, sqlbase.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", id))
 	}
 	return desc, nil
 }
@@ -164,10 +193,22 @@ func (dc *databaseCache) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDe
 		return nil, err
 	}
 
-	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(id))
+	desc, err := dc.getCachedDatabaseDescByID(sqlbase.ID(id))
+	if err == nil && desc == nil {
+		return nil, fmt.Errorf("database %q has name entry, but no descriptor in system cache", name)
+	}
+	return desc, err
+}
+
+// getCachedDatabaseDescByID looks up the database descriptor from the descriptor cache,
+// given its ID.
+func (dc *databaseCache) getCachedDatabaseDescByID(
+	id sqlbase.ID,
+) (*sqlbase.DatabaseDescriptor, error) {
+	descKey := sqlbase.MakeDescMetadataKey(id)
 	descVal := dc.systemConfig.GetValue(descKey)
 	if descVal == nil {
-		return nil, fmt.Errorf("database %q has name entry, but no descriptor in system cache", name)
+		return nil, nil
 	}
 
 	desc := &sqlbase.Descriptor{}
@@ -177,7 +218,7 @@ func (dc *databaseCache) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDe
 
 	database := desc.GetDatabase()
 	if database == nil {
-		return nil, errors.Errorf("%q is not a database", name)
+		return nil, errors.Errorf("[%d] is not a database", id)
 	}
 
 	return database, database.Validate()
@@ -202,7 +243,40 @@ func getAllDatabaseDescs(
 	return dbDescs, nil
 }
 
-// getDatabaseID returns the ID of a database given its name. It
+// getDatabaseDesc returns the database descriptor given its name
+// if it exists in the cache, otherwise falls back to KV operations.
+func (dc *databaseCache) getDatabaseDesc(
+	ctx context.Context, txn *client.Txn, vt VirtualTabler, name string,
+) (*sqlbase.DatabaseDescriptor, error) {
+	// Lookup the database in the cache first, falling back to the KV store if it
+	// isn't present. The cache might cause the usage of a recently renamed
+	// database, but that's a race that could occur anyways.
+	desc, err := dc.getCachedDatabaseDesc(name)
+	if err != nil {
+		if log.V(3) {
+			log.Infof(ctx, "error getting database descriptor from cache: %s", err)
+		}
+		desc, err = MustGetDatabaseDesc(ctx, txn, vt, name)
+	}
+	return desc, err
+}
+
+// getDatabaseDescByID returns the database descriptor given its ID
+// if it exists in the cache, otherwise falls back to KV operations.
+func (dc *databaseCache) getDatabaseDescByID(
+	ctx context.Context, txn *client.Txn, id sqlbase.ID,
+) (*sqlbase.DatabaseDescriptor, error) {
+	desc, err := dc.getCachedDatabaseDescByID(id)
+	if err != nil {
+		if log.V(3) {
+			log.Infof(ctx, "error getting database descriptor from cache: %s", err)
+		}
+		desc, err = MustGetDatabaseDescByID(ctx, txn, id)
+	}
+	return desc, err
+}
+
+//getDatabaseID returns the ID of a database given its name. It
 // uses the descriptor cache if possible, otherwise falls back to KV
 // operations.
 func (dc *databaseCache) getDatabaseID(
@@ -216,19 +290,9 @@ func (dc *databaseCache) getDatabaseID(
 		return id, nil
 	}
 
-	// Lookup the database in the cache first, falling back to the KV store if it
-	// isn't present. The cache might cause the usage of a recently renamed
-	// database, but that's a race that could occur anyways.
-	desc, err := dc.getCachedDatabaseDesc(name)
+	desc, err := dc.getDatabaseDesc(ctx, txn, vt, name)
 	if err != nil {
-		if log.V(3) {
-			log.Infof(ctx, "error getting database descriptor: %s", err)
-		}
-		var err error
-		desc, err = MustGetDatabaseDesc(ctx, txn, vt, name)
-		if err != nil {
-			return 0, err
-		}
+		return 0, err
 	}
 
 	dc.setID(name, desc.ID)
