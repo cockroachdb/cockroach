@@ -743,6 +743,13 @@ func (t *Transaction) IsInitialized() bool {
 	return t.ID != nil
 }
 
+// AssertInitialized crashes if the transaction is not initialized.
+func (t *Transaction) AssertInitialized(ctx context.Context) {
+	if (t.ID == nil) || (t.OrigTimestamp == hlc.Timestamp{}) || (t.Timestamp == hlc.Timestamp{}) {
+		log.Fatalf(ctx, "uninitialized txn: %s", t)
+	}
+}
+
 // MakePriority generates a random priority value, biased by the specified
 // userPriority. If userPriority=100, the random priority will be 100x more
 // likely to be greater than if userPriority=1. If userPriority = 0.1, the

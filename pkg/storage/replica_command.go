@@ -98,7 +98,8 @@ func DefaultDeclareKeys(
 	} else {
 		spans.Add(SpanReadWrite, req.Header())
 	}
-	if header.Txn != nil && header.Txn.ID != nil {
+	if header.Txn != nil {
+		header.Txn.AssertInitialized(context.TODO())
 		spans.Add(SpanReadOnly, roachpb.Span{
 			Key: keys.AbortCacheKey(header.RangeID, *header.Txn.ID),
 		})
@@ -455,7 +456,8 @@ func verifyTransaction(h roachpb.Header, args roachpb.Request) error {
 func declareKeysWriteTransaction(
 	_ roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
 ) {
-	if header.Txn != nil && header.Txn.ID != nil {
+	if header.Txn != nil {
+		header.Txn.AssertInitialized(context.TODO())
 		spans.Add(SpanReadWrite, roachpb.Span{
 			Key: keys.TransactionKey(req.Header().Key, *header.Txn.ID),
 		})
@@ -559,7 +561,8 @@ func declareKeysEndTransaction(
 	for _, span := range et.IntentSpans {
 		spans.Add(SpanReadWrite, span)
 	}
-	if header.Txn != nil && header.Txn.ID != nil {
+	if header.Txn != nil {
+		header.Txn.AssertInitialized(context.TODO())
 		spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortCacheKey(header.RangeID, *header.Txn.ID)})
 	}
 
@@ -1336,7 +1339,8 @@ func declareKeysHeartbeatTransaction(
 	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
 ) {
 	declareKeysWriteTransaction(desc, header, req, spans)
-	if header.Txn != nil && header.Txn.ID != nil {
+	if header.Txn != nil {
+		header.Txn.AssertInitialized(context.TODO())
 		spans.Add(SpanReadOnly, roachpb.Span{
 			Key: keys.AbortCacheKey(header.RangeID, *header.Txn.ID),
 		})
