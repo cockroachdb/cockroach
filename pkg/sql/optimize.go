@@ -26,6 +26,10 @@ import (
 // includes calling expandPlan(). The SQL "prepare" phase, as well as
 // the EXPLAIN statement, should merely build the plan node(s) and
 // call optimizePlan(). This is called automatically by makePlan().
+//
+// The plan returned by optimizePlan *must* be Close()d, even in case
+// of error, because it may contain memory-registered data structures
+// and other things that need clean up.
 func (p *planner) optimizePlan(
 	ctx context.Context, plan planNode, needed []bool,
 ) (planNode, error) {
