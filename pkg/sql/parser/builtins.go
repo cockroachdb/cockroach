@@ -1632,7 +1632,7 @@ var Builtins = map[string][]Builtin{
 						return nil, err
 					}
 					err = ctx.Txn.GenerateForcedRetryableError("forced by crdb_internal.force_retry()")
-					err.(*roachpb.HandledRetryableTxnError).TxnID = &uuid
+					err.(*roachpb.HandledRetryableTxnError).TxnID = uuid
 					return nil, err
 				}
 				return DZero, nil
