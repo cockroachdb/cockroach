@@ -935,8 +935,7 @@ func (*GCResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []in
 // another transaction. The goal is to resolve the conflict. Note that
 // args.Key should be set to the txn ID of args.PusheeTxn, not
 // args.PusherTxn. This RPC is addressed to the range which owns the pushee's
-// txn record. If the pusher is not transactional, it must be set to a
-// Transaction record with only the Priority present.
+// txn record.
 //
 // Resolution is trivial if the txn which owns the intent has either
 // been committed or aborted already. Otherwise, the existing txn can
@@ -947,8 +946,9 @@ func (*GCResponse) Descriptor() ([]byte, []int) { return fileDescriptorApi, []in
 type PushTxnRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// Transaction which encountered the intent, if applicable. For a
-	// non-transactional operation, pusher_txn will be nil. Used to
-	// compare priorities and timestamps if priorities are equal.
+	// non-transactional pusher, pusher_txn will only have the priority set (in
+	// particular, ID won't be set). Used to compare priorities and timestamps if
+	// priorities are equal.
 	PusherTxn Transaction `protobuf:"bytes,2,opt,name=pusher_txn,json=pusherTxn" json:"pusher_txn"`
 	// Transaction to be pushed, as specified at the intent which led to
 	// the push transaction request. Note that this may not be the most
