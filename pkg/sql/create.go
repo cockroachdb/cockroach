@@ -320,11 +320,11 @@ func (*createUserNode) Close(context.Context)        {}
 func (*createUserNode) Values() parser.Datums        { return parser.Datums{} }
 
 type createViewNode struct {
-	p           *planner
-	n           *parser.CreateView
-	dbDesc      *sqlbase.DatabaseDescriptor
-	sourcePlan  planNode
-	sourceQuery string
+	p                 *planner
+	n                 *parser.CreateView
+	dbDesc            *sqlbase.DatabaseDescriptor
+	sourcePlan        planNode
+	sourcePlanColumns sqlbase.ResultColumns
 }
 
 // CreateView creates a view.
@@ -365,12 +365,13 @@ func (p *planner) CreateView(ctx context.Context, n *parser.CreateView) (planNod
 		// construction of the planNode fails, Close() won't be called on it.
 		if result == nil {
 			sourcePlan.Close(ctx)
-			p.avoidCachedDescriptors = false
 		}
 	}()
 
+	sourcePlanColumns := planMutableColumns(sourcePlan)
+
 	numColNames := len(n.ColumnNames)
-	numColumns := len(planColumns(sourcePlan))
+	numColumns := len(sourcePlanColumns)
 	if numColNames != 0 && numColNames != numColumns {
 		return nil, sqlbase.NewSyntaxError(fmt.Sprintf(
 			"CREATE VIEW specifies %d column name%s, but data source has %d column%s",
@@ -378,43 +379,236 @@ func (p *planner) CreateView(ctx context.Context, n *parser.CreateView) (planNod
 			numColumns, util.Pluralize(int64(numColumns))))
 	}
 
-	var queryBuf bytes.Buffer
-	var fmtErr error
-	parser.FormatNode(
-		&queryBuf,
-		parser.FmtReformatTableNames(
-			parser.FmtParsable,
-			func(t *parser.NormalizableTableName, buf *bytes.Buffer, f parser.FmtFlags) {
-				tn, err := p.QualifyWithDatabase(ctx, t)
-				if err != nil {
-					log.Warningf(ctx, "failed to qualify table name %q with database name: %v", t, err)
-					fmtErr = err
-					t.TableNameReference.Format(buf, f)
-				}
-				tn.Format(buf, f)
-			},
-		),
-		n.AsSource,
-	)
-	if fmtErr != nil {
-		return nil, fmtErr
+	// If the final column names differ from the plan's column names, or
+	// if the plan's columns are hidden, we need to add explicit renders
+	// that render to the final (demanded) column names.
+	//
+	// The reason to expose hidden columns is that otherwise the view's
+	// columns may appear hidden when using the view after creation.
+	//
+	// The reason to render with the desired column aliases is that
+	// queries to pg_catalog.pg_views need to find a SELECT query which
+	// renders the end result names, not the source result names.
+	needExplicitRenders := false
+	for i, desired := range n.ColumnNames {
+		if string(desired) != sourcePlanColumns[i].Name {
+			needExplicitRenders = true
+			break
+		}
 	}
-
-	// TODO(a-robinson): Support star expressions as soon as we can (#10028).
-	if p.planContainsStar(ctx, sourcePlan) {
-		return nil, fmt.Errorf("views do not currently support * expressions")
+	if !needExplicitRenders {
+		for i := range sourcePlanColumns {
+			if sourcePlanColumns[i].Hidden {
+				needExplicitRenders = true
+				break
+			}
+		}
+	}
+	if needExplicitRenders {
+		// <viewquery> -> SELECT @1 AS a, @2 AS b, @3 AS c FROM (<viewquery>)
+		//
+		// Note: this cannot be changed to SELECT origName AS newName FROM ...
+		// (i.e. use origName instead of an ordinal reference) because of
+		// views like `CREATE v(a) AS ARRAY[3]`. Here the computed column
+		// name is "ARRAY[3]" during view creation, but "ARRAY[3:::INT]"
+		// during view execution. So creation would cause a view
+		// descriptor containing `SELECT "ARRAY[3]" AS a FROM (SELECT
+		// ARRAY[3:::INT])` which would be broken.
+		renamedRenders := make(parser.SelectExprs, len(sourcePlanColumns))
+		for i, desired := range n.ColumnNames {
+			renamedRenders[i].Expr = parser.NewOrdinalReference(i)
+			renamedRenders[i].As = desired
+			sourcePlanColumns[i].Name = string(desired)
+		}
+		n.AsSource = &parser.Select{
+			Select: &parser.SelectClause{
+				Exprs: renamedRenders,
+				From: &parser.From{
+					Tables: []parser.TableExpr{
+						&parser.AliasedTableExpr{
+							Expr: &parser.Subquery{
+								Select: &parser.ParenSelect{Select: n.AsSource},
+							},
+						},
+					},
+				},
+			},
+		}
 	}
 
 	// Set result rather than just returnning to ensure the defer'ed cleanup
 	// doesn't trigger.
 	result = &createViewNode{
-		p:           p,
-		n:           n,
-		dbDesc:      dbDesc,
-		sourcePlan:  sourcePlan,
-		sourceQuery: queryBuf.String(),
+		p:                 p,
+		n:                 n,
+		dbDesc:            dbDesc,
+		sourcePlan:        sourcePlan,
+		sourcePlanColumns: sourcePlanColumns,
 	}
 	return result, nil
+}
+
+// prepareViewQuery ensures that any table referenced by the view's source query
+// becomes referenced by a table reference.
+// This may update the affected table descriptors.
+func (n *createViewNode) prepareViewQuery(
+	ctx context.Context,
+	viewDesc *sqlbase.TableDescriptor,
+	affected map[sqlbase.ID]*sqlbase.TableDescriptor,
+) error {
+	var queryBuf bytes.Buffer
+	var fmtErr error
+
+	processAndFormatTableRef := func(tref *parser.TableRef, buf *bytes.Buffer, f parser.FmtFlags) bool {
+		if fmtErr != nil {
+			return false
+		}
+		desc, ok := affected[sqlbase.ID(tref.TableID)]
+		if !ok {
+			fmtErr = errors.Errorf("table reference %q was not detected in dependency analysis", tref)
+			return false
+		}
+
+		// What are the columns that may be named by expressions
+		// in the view query, even if they are not subsequently used?
+		// For example:
+		//   SELECT k FROM (SELECT k, v FROM kv)
+		// column "v" is named but not needed.
+		var namedColIDs []parser.ColumnID
+		var namedColNames parser.NameList
+		if tref.As.Cols != nil {
+			// The user has specified the columns they want already,
+			// so we can use that, no questions asked.
+			namedColNames = tref.As.Cols
+			if tref.Columns != nil {
+				// The user also has specified in which order they want their
+				// columns, so use that.
+				// Example: [123(2,1) as kv(v,k)]
+				namedColIDs = tref.Columns
+			} else {
+				// The user has specified names, but no column IDs. They
+				// want all the columns in the table.
+				// Example: [123 as kv(k,v)] -> [123(1,2) as kv(k,v)]
+				namedColIDs = make([]parser.ColumnID, len(desc.Columns))
+				for i := range desc.Columns {
+					namedColIDs[i] = parser.ColumnID(desc.Columns[i].ID)
+				}
+			}
+			// Unfortunately, we're not done yet. The name list can be
+			// smaller than the ID list, in which case the "natural" names
+			// from the columns listed in the ID list are implicitly
+			// assumed. Make them explicit.
+			// Examples:
+			// [123 as kv(a)]      -> [123(1,2) as kv(a,v)]
+			// [123(2,1) as kv(v)] -> [123(2,1) as kv(v,k)]
+			// [123(2,1) as kv]    -> [123(2,1) as kv(v,k)]
+			for i := len(namedColNames); i < len(namedColIDs); i++ {
+				for _, col := range desc.Columns {
+					if col.ID == sqlbase.ColumnID(namedColIDs[i]) {
+						namedColNames = append(namedColNames, parser.Name(col.Name))
+						break
+					}
+				}
+			}
+		} else if tref.Columns != nil {
+			// The user hasn't specified column names, but
+			// they did specify a column list. Trust them.
+			// Example: [123(2,1)] -> [123(2,1) as kv(v,k)]
+			namedColIDs = tref.Columns
+			namedColNames = make(parser.NameList, len(tref.Columns))
+			for i, c := range tref.Columns {
+				for _, col := range desc.Columns {
+					if col.ID == sqlbase.ColumnID(c) {
+						namedColNames[i] = parser.Name(col.Name)
+						break
+					}
+				}
+			}
+		} else {
+			// The user has specified neither a column list
+			// nor a column name list, so they really want all the table.
+			// Example: [123] -> [123(1,2) as kv(k,v)]
+			namedColIDs = make([]parser.ColumnID, len(desc.Columns))
+			namedColNames = make(parser.NameList, len(desc.Columns))
+			for i := range desc.Columns {
+				namedColIDs[i] = parser.ColumnID(desc.Columns[i].ID)
+				namedColNames[i] = parser.Name(desc.Columns[i].Name)
+			}
+		}
+
+		// At this point, we have a full table reference with both a list
+		// of column IDs and a list of names, and both match in length.
+		// If some of the columns are not actually needed by the query, we
+		// want to *reduce* the table reference.
+
+		// TODO(knz): we would like to narrow down the list of
+		// column dependencies. #17269 #17280.
+
+		// Register the actual dependencies in the depended-on table's
+		// descriptor.
+		descIDs := make([]sqlbase.ColumnID, len(namedColIDs))
+		for i, c := range namedColIDs {
+			descIDs[i] = sqlbase.ColumnID(c)
+		}
+		desc.DependedOnBy = append(desc.DependedOnBy,
+			sqlbase.TableDescriptor_Reference{
+				ID:        viewDesc.ID,
+				ColumnIDs: descIDs,
+			})
+
+		// Reconnect the dependency list in the table reference.
+		tref.Columns = namedColIDs
+		tref.As.Cols = namedColNames
+		if tref.As.Alias == "" {
+			// If there was no explicit table alias in the table reference,
+			// populate it so there is no surprise if the table gets renamed.
+			tref.As.Alias = parser.Name(desc.Name)
+		}
+
+		return false
+	}
+
+	tableNameFormatter := func(t *parser.NormalizableTableName, buf *bytes.Buffer, f parser.FmtFlags) {
+		if fmtErr != nil {
+			return
+		}
+		node := func() parser.NodeFormatter {
+			// Qualify: this normalizes & qualifies.
+			tn, err := n.p.QualifyWithDatabase(ctx, t)
+			if err != nil {
+				fmtErr = err
+				return t.TableNameReference
+			}
+
+			desc, err := getTableOrViewDesc(ctx, n.p.txn, n.p.getVirtualTabler(), tn)
+			if err != nil {
+				fmtErr = errors.Errorf(
+					"internal error: cannot retrieve table descriptor for %q", parser.ErrString(tn))
+				log.Error(ctx, fmtErr)
+				return tn
+			}
+
+			if desc.ID == keys.VirtualDescriptorID {
+				// References a virtual table. There's no ID for it.
+				// Keep the virtual table name as-is.
+				return tn
+			}
+
+			return &parser.TableRef{TableID: int64(desc.ID)}
+		}()
+		parser.FormatNode(buf, f, node)
+	}
+
+	n.n.AsSource.Format(
+		&queryBuf,
+		parser.FmtReformatTableRefs(
+			parser.FmtReformatTableNames(parser.FmtParsable, tableNameFormatter),
+			processAndFormatTableRef))
+	if fmtErr != nil {
+		return fmtErr
+	}
+	viewDesc.ViewQuery = queryBuf.String()
+	return nil
 }
 
 func (n *createViewNode) Start(params runParams) error {
@@ -440,10 +634,9 @@ func (n *createViewNode) Start(params runParams) error {
 	desc, err := n.makeViewTableDesc(
 		params.ctx,
 		viewName,
-		n.n.ColumnNames,
 		n.dbDesc.ID,
 		id,
-		planColumns(n.sourcePlan),
+		n.sourcePlanColumns,
 		privs,
 		affected,
 		&n.p.evalCtx,
@@ -1120,7 +1313,6 @@ func (p *planner) finalizeInterleave(
 func (n *createViewNode) makeViewTableDesc(
 	ctx context.Context,
 	viewName string,
-	columnNames parser.NameList,
 	parentID sqlbase.ID,
 	id sqlbase.ID,
 	resultColumns []sqlbase.ResultColumn,
@@ -1135,17 +1327,13 @@ func (n *createViewNode) makeViewTableDesc(
 		FormatVersion: sqlbase.FamilyFormatVersion,
 		Version:       1,
 		Privileges:    privileges,
-		ViewQuery:     n.sourceQuery,
 	}
-	for i, colRes := range resultColumns {
+	for _, colRes := range resultColumns {
 		colType, err := parser.DatumTypeToColumnType(colRes.Typ)
 		if err != nil {
 			return desc, err
 		}
 		columnTableDef := parser.ColumnTableDef{Name: parser.Name(colRes.Name), Type: colType}
-		if len(columnNames) > i {
-			columnTableDef.Name = columnNames[i]
-		}
 		// We pass an empty search path here because there are no names to resolve.
 		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, nil, evalCtx)
 		if err != nil {
@@ -1155,6 +1343,16 @@ func (n *createViewNode) makeViewTableDesc(
 	}
 
 	n.resolveViewDependencies(ctx, &desc, affected)
+
+	// We fill the ViewQuery field here. This cannot be done later
+	// because AllocateIDs() below checks that the ViewQuery is
+	// initialized; also it is good for general API reuse that the view
+	// descriptor is ready for use when this method completes. This
+	// cannot be done earlier because we need the dependency analysis
+	// above.
+	if err := n.prepareViewQuery(ctx, &desc, affected); err != nil {
+		return desc, err
+	}
 
 	return desc, desc.AllocateIDs()
 }
@@ -1619,17 +1817,19 @@ func (b *backrefCollector) enterNode(ctx context.Context, _ string, plan planNod
 		if scan.index != nil && scan.isSecondaryIndex {
 			ref.IndexID = scan.index.ID
 		}
-		for i := range scan.cols {
-			// TODO(knz): We would like to only include the columns that are
-			// actually needed.
-			// Unfortunately, this breaks views defined like this:
-			//     CREATE VIEW xx AS SELECT k FROM (SELECT k, v FROM kv)
-			// See #17269.
-			//
-			// if scan.valNeededForCol[i] {
-			ref.ColumnIDs = append(ref.ColumnIDs, scan.cols[i].ID)
-			// }
-		}
+		// TODO(knz): We would like to only include the columns that are
+		// actually needed.
+		// Unfortunately, this breaks views defined like this:
+		//     CREATE VIEW xx AS SELECT k FROM (SELECT k, v FROM kv)
+		// See #17269.
+		//
+		// for i := range scan.cols {
+		//   if scan.valNeededForCol[i] {
+		//		ref.ColumnIDs = append(ref.ColumnIDs, scan.cols[i].ID)
+		//   }
+		// }
+		//
+		// In the meantime, the column dependencies are set by prepareViewQuery().
 		desc.DependedOnBy = append(desc.DependedOnBy, ref)
 	}
 	return true
@@ -1647,31 +1847,4 @@ func populateViewBackrefFromViewDesc(
 	}
 	ref := sqlbase.TableDescriptor_Reference{ID: tbl.ID}
 	desc.DependedOnBy = append(desc.DependedOnBy, ref)
-}
-
-// planContainsStar returns true if one of the render nodes in the
-// plan contains a star expansion.
-func (p *planner) planContainsStar(ctx context.Context, plan planNode) bool {
-	s := &starDetector{}
-	_ = walkPlan(ctx, plan, planObserver{enterNode: s.enterNode})
-	return s.foundStar
-}
-
-// starDetector supports planContainsStar().
-type starDetector struct {
-	foundStar bool
-}
-
-// enterNode implements the planObserver interface.
-func (s *starDetector) enterNode(_ context.Context, _ string, plan planNode) bool {
-	if s.foundStar {
-		return false
-	}
-	if sel, ok := plan.(*renderNode); ok {
-		if sel.isStar {
-			s.foundStar = true
-			return false
-		}
-	}
-	return true
 }

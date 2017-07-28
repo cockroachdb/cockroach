@@ -60,10 +60,6 @@ type renderNode struct {
 	render  []parser.TypedExpr
 	columns sqlbase.ResultColumns
 
-	// A piece of metadata to indicate whether a star expression was expanded
-	// during rendering.
-	isStar bool
-
 	// The number of initial columns - before adding any internal render
 	// targets for grouping, filtering or ordering. The original columns
 	// are columns[:numOriginalCols], the internally added ones are
@@ -334,13 +330,12 @@ func (r *renderNode) initTargets(
 			return err
 		}
 
-		cols, exprs, hasStar, err := r.planner.computeRenderAllowingStars(ctx, newTarget, desiredType,
+		cols, exprs, _, err := r.planner.computeRenderAllowingStars(ctx, newTarget, desiredType,
 			r.sourceInfo, r.ivarHelper, outputName)
 		if err != nil {
 			return err
 		}
 
-		r.isStar = r.isStar || hasStar
 		_ = r.addOrReuseRenders(cols, exprs, false)
 	}
 	// `groupBy` or `orderBy` may internally add additional columns which we

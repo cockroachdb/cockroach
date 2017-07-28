@@ -166,7 +166,6 @@ func (p *planner) groupBy(
 		if err != nil {
 			return nil, nil, err
 		}
-		r.isStar = r.isStar || hasStar
 		colIdxs := r.addOrReuseRenders(cols, exprs, true /* reuseExistingRender */)
 		if !hasStar {
 			groupStrs[symbolicExprStr(g)] = colIdxs[0]

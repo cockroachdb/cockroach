@@ -1560,19 +1560,15 @@ CREATE TABLE pg_catalog.pg_views (
 			if !desc.IsView() {
 				return nil
 			}
-			// Note that the view query printed will not include any column aliases
-			// specified outside the initial view query into the definition
-			// returned, unlike postgres. For example, for the view created via
-			//  `CREATE VIEW (a) AS SELECT b FROM foo`
-			// we'll only print `SELECT b FROM foo` as the view definition here,
-			// while postgres would more accurately print `SELECT b AS a FROM foo`.
-			// TODO(a-robinson): Insert column aliases into view query once we
-			// have a semantic query representation to work with (#10083).
+			viewQuery, err := p.simplifyViewQuery(ctx, prefix, desc.Name, desc.ViewQuery)
+			if err != nil {
+				return err
+			}
 			return addRow(
-				parser.NewDName(db.Name),          // schemaname
-				parser.NewDName(desc.Name),        // viewname
-				parser.DNull,                      // viewowner
-				parser.NewDString(desc.ViewQuery), // definition
+				parser.NewDName(db.Name),     // schemaname
+				parser.NewDName(desc.Name),   // viewname
+				parser.DNull,                 // viewowner
+				parser.NewDString(viewQuery), // definition
 			)
 		})
 	},

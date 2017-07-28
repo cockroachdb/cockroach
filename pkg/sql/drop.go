@@ -956,6 +956,11 @@ func (p *planner) dropViewImpl(
 			if err != nil {
 				return cascadeDroppedViews, err
 			}
+			// The dependency is also being deleted, so we don't have to remove the
+			// references.
+			if dependentDesc.Dropped() {
+				continue
+			}
 			cascadedViews, err := p.dropViewImpl(ctx, dependentDesc, behavior)
 			if err != nil {
 				return cascadeDroppedViews, err

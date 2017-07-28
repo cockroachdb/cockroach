@@ -188,7 +188,10 @@ func allocateNewTableIDs(
 // tableRewrites, as well as adjusting cross-table references to use the new
 // IDs.
 func rewriteTableDescs(
-	tables []*sqlbase.TableDescriptor, newTableIDs map[sqlbase.ID]sqlbase.ID, opt parser.KVOptions,
+	ctx context.Context,
+	tables []*sqlbase.TableDescriptor,
+	newTableIDs map[sqlbase.ID]sqlbase.ID,
+	opt parser.KVOptions,
 ) error {
 	for _, table := range tables {
 		newID, ok := newTableIDs[table.ID]
@@ -262,8 +265,13 @@ func rewriteTableDescs(
 			return errors.Errorf("cannot restore view when using %q option", restoreOptIntoDB)
 		}
 
+		log.VEventf(ctx, 2,
+			"checking dependencies of [%d] (%q): %v",
+			table.ID, parser.ErrString(parser.Name(table.Name)), table.DependsOn)
+		hasRestoredDep := false
 		for i, dest := range table.DependsOn {
 			if newID, ok := newTableIDs[dest]; ok {
+				hasRestoredDep = true
 				table.DependsOn[i] = newID
 			} else {
 				return errors.Errorf(
@@ -271,13 +279,24 @@ func rewriteTableDescs(
 					table.Name, dest)
 			}
 		}
+		if hasRestoredDep {
+			log.VEventf(ctx, 2,
+				"renaming table dependencies in view query for [%d] (%q): %q: %v",
+				table.ID, parser.ErrString(parser.Name(table.Name)), table.ViewQuery, newTableIDs)
+			if err := table.RewriteViewQueryForTableSubstitution(newTableIDs); err != nil {
+				return err
+			}
+			log.VEventf(ctx, 2,
+				"rewrote view query: %q", table.ViewQuery)
+		}
+
 		origRefs := table.DependedOnBy
 		table.DependedOnBy = nil
 		for _, ref := range origRefs {
 			if newID, ok := newTableIDs[ref.ID]; ok {
 				ref.ID = newID
-				table.DependedOnBy = append(table.DependedOnBy, ref)
 			}
+			table.DependedOnBy = append(table.DependedOnBy, ref)
 		}
 
 		// since this is a "new" table in eyes of new cluster, any leftover change
@@ -552,7 +571,7 @@ func restore(
 
 	// Assign new IDs and privileges to the tables, and update all references to
 	// use the new IDs.
-	if err := rewriteTableDescs(tables, newTableIDs, opt); err != nil {
+	if err := rewriteTableDescs(restoreCtx, tables, newTableIDs, opt); err != nil {
 		return failed, err
 	}
 

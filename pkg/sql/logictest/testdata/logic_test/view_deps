@@ -1,0 +1,73 @@
+# Dependent table names are relative
+
+statement ok
+CREATE TABLE t (x INT);
+  CREATE VIEW v1 AS SELECT * FROM t;
+  CREATE DATABASE test2;
+  CREATE VIEW test2.v2 AS SELECT * FROM test.t
+
+# SHOW CREATE shows referred-to tables with names relative to the given
+# view name's database. The referred-to table is fully qualified if it
+# "lives" in a different db than the view.
+query TT
+SHOW CREATE VIEW v1
+----
+v1 CREATE VIEW v1 (x) AS SELECT * FROM t
+
+query TT
+SHOW CREATE VIEW test2.v2
+----
+test2.v2 CREATE VIEW v2 (x) AS SELECT * FROM test.t
+
+statement ok
+SET DATABASE=test2
+
+query TT
+SHOW CREATE VIEW test.v1
+----
+test.v1 CREATE VIEW v1 (x) AS SELECT * FROM t
+
+query TT
+SHOW CREATE VIEW v2
+----
+v2 CREATE VIEW v2 (x) AS SELECT * FROM test.t
+
+# crdb_internal.create_statements shows table references
+# relative to the given database prefix, and fully qualifies
+# if the prefix is empty.
+
+query T
+SELECT    create_statement FROM "".crdb_internal.create_statements
+ WHERE    descriptor_type = 'view'
+ ORDER BY descriptor_name
+----
+CREATE VIEW v1 (x) AS SELECT * FROM test.t
+CREATE VIEW v2 (x) AS SELECT * FROM test.t
+
+query T
+SELECT    create_statement FROM "test".crdb_internal.create_statements
+ WHERE    descriptor_type = 'view'
+ ORDER BY descriptor_name
+----
+CREATE VIEW v1 (x) AS SELECT * FROM t
+
+query T
+SELECT    create_statement FROM "test2".crdb_internal.create_statements
+ WHERE    descriptor_type = 'view'
+ ORDER BY descriptor_name
+----
+CREATE VIEW v2 (x) AS SELECT * FROM test.t
+
+# The referenced table can get more columns,
+# The views do not get to see them.
+
+statement ok
+SET DATABASE=test; ALTER TABLE t ADD COLUMN y INT
+
+query T
+SELECT    create_statement FROM "".crdb_internal.create_statements
+ WHERE    descriptor_type = 'view'
+ ORDER BY descriptor_name
+----
+CREATE VIEW v1 (x) AS SELECT * FROM [51(1, 2) AS t (x, rowid)]
+CREATE VIEW v2 (x) AS SELECT * FROM [51(1, 2) AS t (x, rowid)]
