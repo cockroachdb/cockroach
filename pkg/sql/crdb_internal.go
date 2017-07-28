@@ -27,6 +27,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -783,6 +784,7 @@ var crdbInternalCreateStmtsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.create_statements (
   database_name    STRING NOT NULL,
+  descriptor_id    INT,
   descriptor_type  STRING NOT NULL,
   descriptor_name  STRING NOT NULL,
   create_statement STRING NOT NULL,
@@ -803,11 +805,13 @@ CREATE TABLE crdb_internal.create_statements (
 					descType = &typeView
 					stmt, err = p.showCreateView(ctx, parser.Name(table.Name), table)
 					for _, id := range table.DependsOn {
-						depTable, err := sqlbase.GetTableDescFromID(ctx, p.txn, id)
+						depTable, err := p.getTableDescByID(ctx, id)
 						if err != nil {
 							return err
 						}
-						depDb, err := sqlbase.GetDatabaseDescFromID(ctx, p.txn, depTable.ParentID)
+						depDb, err := p.session.tables.databaseCache.getDatabaseDescByID(
+							ctx, p.txn, depTable.ParentID,
+						)
 						if err != nil {
 							return err
 						}
@@ -831,8 +835,13 @@ CREATE TABLE crdb_internal.create_statements (
 				}
 				sort.Strings(depNames)
 
+				descID := parser.DNull
+				if table.ID != keys.VirtualDescriptorID {
+					descID = parser.NewDInt(parser.DInt(table.ID))
+				}
 				return addRow(
 					parser.NewDString(db.Name),
+					descID,
 					descType,
 					parser.NewDString(table.Name),
 					parser.NewDString(stmt),

@@ -192,7 +192,7 @@ EXPLAIN SHOW COLUMNS FROM foo
 5  render  ·         ·
 6  filter  ·         ·
 7  values  ·         ·
-7  ·       size      13 columns, 508 rows
+7  ·       size      13 columns, 509 rows
 5  render  ·         ·
 6  filter  ·         ·
 7  values  ·         ·
