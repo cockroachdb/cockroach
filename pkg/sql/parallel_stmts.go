@@ -105,7 +105,11 @@ func (pq *ParallelizeQueue) Add(ctx context.Context, plan planNode, exec func(pl
 
 		// Execute the plan.
 		err := exec(plan)
-
+		// TODO(andrei): we need some scheme here for determining what error to keep
+		// when we get multiple. If one of the statements gets a retryable error and
+		// aborts the txn, then the other statements are likely going to get other
+		// errors about their txn being toast. All these errors race to bubble up
+		// to here.
 		pq.mu.Lock()
 		if pq.err == nil {
 			// If we have not already seen an error since the last Wait, set the
