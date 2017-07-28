@@ -334,16 +334,16 @@ func (tc *TableCollection) getTableVersion(
 		}
 	}
 
+	// If the txn has been pushed the table collection is released and
+	// txn deadline is reset.
+	tc.resetForTxnRetry(ctx, txn)
+
 	if table, err := tc.getUncommittedTable(dbID, tn); err != nil {
 		return nil, err
 	} else if table != nil {
 		log.VEventf(ctx, 2, "found uncommitted table %d", table.ID)
 		return table, nil
 	}
-
-	// If the txn has been pushed the table collection is released and
-	// txn deadline is reset.
-	tc.resetForTxnRetry(ctx, txn)
 
 	// First, look to see if we already have the table.
 	// This ensures that, once a SQL transaction resolved name N to id X, it will
@@ -393,6 +393,10 @@ func (tc *TableCollection) getTableVersionByID(
 		return table, nil
 	}
 
+	// If the txn has been pushed the table collection is released and
+	// txn deadline is reset.
+	tc.resetForTxnRetry(ctx, txn)
+
 	for _, table := range tc.uncommittedTables {
 		if table.ID == tableID {
 			log.VEventf(ctx, 2, "found uncommitted table %d", tableID)
@@ -404,10 +408,6 @@ func (tc *TableCollection) getTableVersionByID(
 			return table, nil
 		}
 	}
-
-	// If the txn has been pushed the table collection is released and
-	// txn deadline is reset.
-	tc.resetForTxnRetry(ctx, txn)
 
 	// First, look to see if we already have the table -- including those
 	// via `getTableVersion`.

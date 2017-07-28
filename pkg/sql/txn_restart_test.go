@@ -1209,6 +1209,73 @@ SELECT * from t.test WHERE k = 'test_key';
 	}
 }
 
+// Verifies that the uncommitted descriptor cache is flushed on a txn restart.
+//
+// This test triggers the above scenario by triggering a restart by returning
+// ReadWithinUncertaintyIntervalError on the first transaction attempt.
+func TestFlushUncommitedDescriptorCacheOnRestart(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var cmdFilters CommandFilters
+	cmdFilters.AppendFilter(checkEndTransactionTrigger, true)
+	testKey := []byte("test_key")
+	testingKnobs := &storage.StoreTestingKnobs{
+		TestingEvalFilter: cmdFilters.runFilters,
+	}
+
+	params, _ := createTestServerParams()
+	params.Knobs.Store = testingKnobs
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	var restartDone int32
+	cleanupFilter := cmdFilters.AppendFilter(
+		func(args storagebase.FilterArgs) *roachpb.Error {
+			if atomic.LoadInt32(&restartDone) > 0 {
+				return nil
+			}
+
+			if req, ok := args.Req.(*roachpb.ScanRequest); ok {
+				if bytes.Contains(req.Key, testKey) {
+					atomic.AddInt32(&restartDone, 1)
+					// Return ReadWithinUncertaintyIntervalError.
+					txn := args.Hdr.Txn
+					txn.ResetObservedTimestamps()
+					now := s.Clock().Now()
+					txn.UpdateObservedTimestamp(s.(*server.TestServer).Gossip().NodeID.Get(), now)
+					return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now, now), txn)
+				}
+			}
+			return nil
+		}, false)
+	defer cleanupFilter()
+
+	sqlDB.SetMaxOpenConns(1)
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
+INSERT INTO t.test (k, v) VALUES ('test_key', 'test_val');
+`); err != nil {
+		t.Fatal(err)
+	}
+	// Read from a table, rename it, and then read from the table to trigger
+	// the retry. On the second attempt the first read from the table should
+	// not see the uncommitted renamed table.
+	if _, err := sqlDB.Exec(`
+BEGIN;
+SELECT * from t.test WHERE k = 'foobar';
+ALTER TABLE t.test RENAME TO t.foo;
+SELECT * from t.foo WHERE k = 'test_key';
+COMMIT;
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	if u := atomic.LoadInt32(&restartDone); u != 1 {
+		t.Errorf("expected exactly one restart, but got %d", u)
+	}
+}
+
 // Test that if as part of a transaction A we receive a retryable error intended
 // for a different transaction B, we don't retry transaction A.
 func TestRetryableErrorForWrongTxn(t *testing.T) {
