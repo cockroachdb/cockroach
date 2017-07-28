@@ -432,18 +432,23 @@ func (p *planner) QualifyWithDatabase(
 	return tn, nil
 }
 
+func (p *planner) getTableDescByID(
+	ctx context.Context, tableID sqlbase.ID,
+) (*sqlbase.TableDescriptor, error) {
+	descFunc := p.session.tables.getTableVersionByID
+	if p.avoidCachedDescriptors {
+		descFunc = sqlbase.GetTableDescFromID
+	}
+	return descFunc(ctx, p.txn, tableID)
+}
+
 func (p *planner) getTableScanByRef(
 	ctx context.Context,
 	tref *parser.TableRef,
 	hints *parser.IndexHints,
 	scanVisibility scanVisibility,
 ) (planDataSource, error) {
-	tableID := sqlbase.ID(tref.TableID)
-	descFunc := p.session.tables.getTableVersionByID
-	if p.avoidCachedDescriptors {
-		descFunc = sqlbase.GetTableDescFromID
-	}
-	desc, err := descFunc(ctx, p.txn, tableID)
+	desc, err := p.getTableDescByID(ctx, sqlbase.ID(tref.TableID))
 	if err != nil {
 		return planDataSource{}, errors.Errorf("%s: %v", parser.ErrString(tref), err)
 	}
