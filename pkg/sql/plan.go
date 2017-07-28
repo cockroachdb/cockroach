@@ -222,6 +222,9 @@ func (p *planner) makePlan(ctx context.Context, stmt parser.Statement) (planNode
 	needed := allColumns(plan)
 	plan, err = p.optimizePlan(ctx, plan, needed)
 	if err != nil {
+		// Once the plan has undergone optimization, it may contain
+		// monitor-registered memory, even in case of error.
+		plan.Close(ctx)
 		return nil, err
 	}
 
