@@ -5012,7 +5012,8 @@ func (r *Replica) maybeGossipSystemConfig(ctx context.Context) error {
 		return errors.Wrap(err, "could not load SystemConfig span")
 	}
 
-	if gossipedCfg, ok := r.store.Gossip().GetSystemConfig(); ok && gossipedCfg.Equal(loadedCfg) {
+	if gossipedCfg, ok := r.store.Gossip().GetSystemConfig(); ok && gossipedCfg.Equal(loadedCfg) &&
+		r.store.Gossip().InfoOriginatedHere(gossip.KeySystemConfig) {
 		log.VEventf(ctx, 2, "not gossiping unchanged system config")
 		return nil
 	}

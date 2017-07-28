@@ -811,6 +811,16 @@ func (g *Gossip) GetInfoProto(key string, msg proto.Message) error {
 	return proto.Unmarshal(bytes, msg)
 }
 
+// InfoOriginatedHere returns true iff the latest info for the provided key
+// originated on this node. This is useful for ensuring that the system config
+// is regossiped as soon as possible when its lease changes hands.
+func (g *Gossip) InfoOriginatedHere(key string) bool {
+	g.mu.Lock()
+	info := g.mu.is.getInfo(key)
+	g.mu.Unlock()
+	return info != nil && info.NodeID == g.NodeID.Get()
+}
+
 // GetInfoStatus returns the a copy of the contents of the infostore.
 func (g *Gossip) GetInfoStatus() InfoStatus {
 	g.mu.Lock()
