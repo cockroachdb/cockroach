@@ -19,6 +19,7 @@ func (t TxnMeta) Short() string {
 	if id := t.ID; id != nil {
 		return id.Short()
 	}
+	// There shouldn't be any nil IDs any more.
 	return "<nil>"
 }
 
