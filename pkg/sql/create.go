@@ -418,7 +418,8 @@ func (p *planner) CreateView(ctx context.Context, n *parser.CreateView) (planNod
 }
 
 func (n *createViewNode) Start(params runParams) error {
-	tKey := tableKey{parentID: n.dbDesc.ID, name: n.n.Name.TableName().Table()}
+	viewName := n.n.Name.TableName().Table()
+	tKey := tableKey{parentID: n.dbDesc.ID, name: viewName}
 	key := tKey.Key()
 	if exists, err := descExists(params.ctx, n.p.txn, key); err == nil && exists {
 		// TODO(a-robinson): Support CREATE OR REPLACE commands.
@@ -437,7 +438,16 @@ func (n *createViewNode) Start(params runParams) error {
 
 	affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
 	desc, err := n.makeViewTableDesc(
-		params.ctx, n.n, n.dbDesc.ID, id, planColumns(n.sourcePlan), privs, affected, &n.p.evalCtx)
+		params.ctx,
+		viewName,
+		n.n.ColumnNames,
+		n.dbDesc.ID,
+		id,
+		planColumns(n.sourcePlan),
+		privs,
+		affected,
+		&n.p.evalCtx,
+	)
 	if err != nil {
 		return err
 	}
@@ -1109,7 +1119,8 @@ func (p *planner) finalizeInterleave(
 // include the back-references.
 func (n *createViewNode) makeViewTableDesc(
 	ctx context.Context,
-	p *parser.CreateView,
+	viewName string,
+	columnNames parser.NameList,
 	parentID sqlbase.ID,
 	id sqlbase.ID,
 	resultColumns []sqlbase.ResultColumn,
@@ -1119,25 +1130,21 @@ func (n *createViewNode) makeViewTableDesc(
 ) (sqlbase.TableDescriptor, error) {
 	desc := sqlbase.TableDescriptor{
 		ID:            id,
+		Name:          viewName,
 		ParentID:      parentID,
 		FormatVersion: sqlbase.FamilyFormatVersion,
 		Version:       1,
 		Privileges:    privileges,
 		ViewQuery:     n.sourceQuery,
 	}
-	viewName, err := p.Name.Normalize()
-	if err != nil {
-		return desc, err
-	}
-	desc.Name = viewName.Table()
 	for i, colRes := range resultColumns {
 		colType, err := parser.DatumTypeToColumnType(colRes.Typ)
 		if err != nil {
 			return desc, err
 		}
 		columnTableDef := parser.ColumnTableDef{Name: parser.Name(colRes.Name), Type: colType}
-		if len(p.ColumnNames) > i {
-			columnTableDef.Name = p.ColumnNames[i]
+		if len(columnNames) > i {
+			columnTableDef.Name = columnNames[i]
 		}
 		// We pass an empty search path here because there are no names to resolve.
 		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, nil, evalCtx)
