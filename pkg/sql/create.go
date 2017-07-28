@@ -1614,10 +1614,15 @@ func (b *backrefCollector) enterNode(ctx context.Context, _ string, plan planNod
 			ref.IndexID = scan.index.ID
 		}
 		for i := range scan.cols {
-			// Only include the columns that are actually needed.
-			if scan.valNeededForCol[i] {
-				ref.ColumnIDs = append(ref.ColumnIDs, scan.cols[i].ID)
-			}
+			// TODO(knz): We would like to only include the columns that are
+			// actually needed.
+			// Unfortunately, this breaks views defined like this:
+			//     CREATE VIEW xx AS SELECT k FROM (SELECT k, v FROM kv)
+			// See #17269.
+			//
+			// if scan.valNeededForCol[i] {
+			ref.ColumnIDs = append(ref.ColumnIDs, scan.cols[i].ID)
+			// }
 		}
 		desc.DependedOnBy = append(desc.DependedOnBy, ref)
 	}
