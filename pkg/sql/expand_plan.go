@@ -301,12 +301,16 @@ func expandRenderNode(
 
 	// Elide the render node if it renders its source as-is.
 
+	sourceRender, isSourceRender := r.source.plan.(*renderNode)
+
 	sourceCols := planColumns(r.source.plan)
-	if len(r.columns) == len(sourceCols) && r.source.info.viewDesc == nil {
-		// 1) we don't drop renderNodes which also interface to a view, because
-		// CREATE VIEW needs it.
-		// TODO(knz): make this optimization conditional on a flag, which can
-		// be set to false by CREATE VIEW.
+	if len(r.columns) == len(sourceCols) &&
+		(r.source.info.viewDesc == nil || (isSourceRender && sourceRender.source.info.viewDesc == nil)) {
+		// 1) we don't drop renderNodes which also interface to a view,
+		// unless because the view information can be transferred to the
+		// source, because CREATE VIEW needs this information.
+		// TODO(knz): make this optimization conditional on a flag, which
+		// can be set to false by CREATE VIEW.
 		//
 		// 2) we don't drop renderNodes which have a different number of
 		// columns than their sources, because some nodes currently assume
@@ -341,6 +345,9 @@ func expandRenderNode(
 				for i, col := range r.columns {
 					mutSourceCols[i].Name = col.Name
 				}
+			}
+			if isSourceRender {
+				sourceRender.source.info.viewDesc = r.source.info.viewDesc
 			}
 			return r.source.plan, nil
 		}
