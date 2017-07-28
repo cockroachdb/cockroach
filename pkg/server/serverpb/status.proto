@@ -325,7 +325,8 @@ message Session {
   repeated ActiveQuery active_queries = 5 [(gogoproto.nullable) = false];
   // Timestamp of session's start.
   google.protobuf.Timestamp start = 6 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
-  // ID of the current KV transaction for this session.
+  // ID of the current KV transaction for this session. Nil if the session
+  // doesn't currently have a transaction.
   bytes kv_txn_id = 7 [(gogoproto.customname) = "KvTxnID",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
 }

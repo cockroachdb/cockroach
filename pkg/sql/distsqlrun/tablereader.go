@@ -184,7 +184,10 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	ctx, span := processorSpan(ctx, "table reader")
 	defer tracing.FinishSpan(span)
 
-	txn := tr.flowCtx.setupTxn()
+	txn := tr.flowCtx.txn
+	if txn == nil {
+		log.Fatalf(ctx, "joinReader outside of txn")
+	}
 
 	log.VEventf(ctx, 1, "starting")
 	if log.V(1) {

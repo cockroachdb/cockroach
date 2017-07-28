@@ -222,13 +222,21 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 			}
 		}
 		// Add in a random metadata key.
+		ts := hlc.Timestamp{WallTime: nowNanos}
+		txn := roachpb.NewTransaction(
+			"test",
+			nil, // baseKey
+			roachpb.NormalUserPriority,
+			enginepb.SERIALIZABLE,
+			ts,
+			base.DefaultMaxClockOffset.Nanoseconds(),
+		)
 		if err := engine.MVCCPut(
-			ctx, e, nil, randutil.RandBytes(rng, 1), hlc.Timestamp{WallTime: nowNanos},
+			ctx, e, nil, randutil.RandBytes(rng, 1), ts,
 			roachpb.MakeValueFromBytes(randutil.RandBytes(rng, rng.Intn(10))),
-			&roachpb.Transaction{TxnMeta: enginepb.TxnMeta{Timestamp: hlc.Timestamp{WallTime: nowNanos}}},
+			txn,
 		); err != nil {
-			_, isTransactionRetryError := err.(*roachpb.TransactionRetryError)
-			if !isTransactionRetryError {
+			if _, isWriteIntentErr := err.(*roachpb.WriteIntentError); !isWriteIntentErr {
 				t.Fatalf("%+v", err)
 			}
 		}

@@ -30,6 +30,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1746,6 +1747,9 @@ type EvalContext struct {
 	Ctx contextHolder
 
 	Planner EvalPlanner
+
+	// Ths transaction in which the statement is executing.
+	Txn *client.Txn
 
 	ReCache *RegexpCache
 	tmpDec  apd.Decimal

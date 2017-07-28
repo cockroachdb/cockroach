@@ -128,12 +128,6 @@ func (dsp *distSQLPlanner) Run(
 	recv.resultToStreamColMap = plan.planToStreamColMap
 	thisNodeID := dsp.nodeDesc.NodeID
 
-	// DistSQL needs to initialize the Transaction proto before we put it in the
-	// FlowRequest's below. This is because we might not have used the txn do to
-	// anything else (we might not have sent any requests through the client.Txn,
-	// which normally does this init).
-	txn.EnsureProto()
-
 	evalCtxProto := distsqlrun.MakeEvalContext(evalCtx)
 	for _, s := range evalCtx.SearchPath {
 		evalCtxProto.SearchPath = append(evalCtxProto.SearchPath, s)
@@ -300,7 +294,7 @@ func (r *distSQLReceiver) Push(
 					// non-retryable errors; we also should.
 					r.updateClock(retryErr.PErr.Now)
 					meta.Err = roachpb.NewHandledRetryableTxnError(
-						meta.Err.Error(), r.txn.Proto().ID, *r.txn.Proto())
+						meta.Err.Error(), *r.txn.Proto().ID, *r.txn.Proto())
 				}
 			}
 			r.err = meta.Err

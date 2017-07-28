@@ -680,23 +680,26 @@ const (
 // randomly chosen value to yield a final priority, used to settle
 // write conflicts in a way that avoids starvation of long-running
 // transactions (see Replica.PushTxn).
+//
+// baseKey can be nil, in which case it will be set when sending the first
+// write.
 func NewTransaction(
 	name string,
 	baseKey Key,
 	userPriority UserPriority,
 	isolation enginepb.IsolationType,
 	now hlc.Timestamp,
-	maxOffset int64,
+	maxOffsetNs int64,
 ) *Transaction {
 	u := uuid.MakeV4()
 	var maxTS hlc.Timestamp
-	if maxOffset == timeutil.ClocklessMaxOffset {
+	if maxOffsetNs == timeutil.ClocklessMaxOffset {
 		// For clockless reads, use the largest possible maxTS. This means we'll
 		// always restart if we see something in our future (but we do so at
 		// most once thanks to ObservedTimestamps).
 		maxTS.WallTime = math.MaxInt64
 	} else {
-		maxTS = now.Add(maxOffset, 0)
+		maxTS = now.Add(maxOffsetNs, 0)
 	}
 
 	return &Transaction{
@@ -740,9 +743,11 @@ func (t Transaction) Clone() Transaction {
 	return t
 }
 
-// IsInitialized returns true if the transaction has been initialized.
-func (t *Transaction) IsInitialized() bool {
-	return t.ID != nil
+// AssertInitialized crashes if the transaction is not initialized.
+func (t *Transaction) AssertInitialized(ctx context.Context) {
+	if (t.ID == nil) || (t.OrigTimestamp == hlc.Timestamp{}) || (t.Timestamp == hlc.Timestamp{}) {
+		log.Fatalf(ctx, "uninitialized txn: %s", t)
+	}
 }
 
 // MakePriority generates a random priority value, biased by the specified
@@ -831,13 +836,12 @@ func MakePriority(userPriority UserPriority) int32 {
 }
 
 // TxnIDEqual returns whether the transaction IDs are equal.
+// The IDs are passed by reference for efficiency, but they can't be nil.
 func TxnIDEqual(a, b *uuid.UUID) bool {
-	if a == nil && b == nil {
-		return true
-	} else if a != nil && b != nil {
-		return *a == *b
+	if a == nil || b == nil {
+		log.Fatalf(context.TODO(), "comparing nil txn ID: a: %v, b: %v", a, b)
 	}
-	return false
+	return *a == *b
 }
 
 // Restart reconfigures a transaction for restart. The epoch is
@@ -978,7 +982,9 @@ func (t Transaction) GetObservedTimestamp(nodeID NodeID) (hlc.Timestamp, bool) {
 //
 // In case retryErr tells us that a new Transaction needs to be created,
 // isolation and name help initialize this new transaction.
-func PrepareTransactionForRetry(ctx context.Context, pErr *Error, pri UserPriority) Transaction {
+func PrepareTransactionForRetry(
+	ctx context.Context, pErr *Error, pri UserPriority, clock *hlc.Clock,
+) Transaction {
 	if pErr.TransactionRestart == TransactionRestart_NONE {
 		log.Fatalf(ctx, "invalid retryable err (%T): %s", pErr.GetDetail(), pErr)
 	}
@@ -989,24 +995,35 @@ func PrepareTransactionForRetry(ctx context.Context, pErr *Error, pri UserPriori
 
 	aborted := false
 
-	// Figure out what updated Transaction the error should carry.
-	// TransactionAbortedError will not carry a Transaction, signaling to the
-	// recipient to start a brand new txn.
 	txnClone := txn.Clone()
 	txn = &txnClone
 	switch tErr := pErr.GetDetail().(type) {
 	case *TransactionAbortedError:
+		// The txn coming with a TransactionAbortedError is not supposed to be used
+		// for the restart. Instead, a brand new transaction is created.
 		aborted = true
 		// TODO(andrei): Should we preserve the ObservedTimestamps across the
 		// restart?
-		txn = &Transaction{
-			TxnMeta: enginepb.TxnMeta{
-				Priority:  txn.Priority,
-				Timestamp: txn.Timestamp,
-				Isolation: txn.Isolation,
-			},
-			Name: txn.Name,
+		errTxnPri := txn.Priority
+		// The OrigTimestamp of the new transaction is going to be the greater of
+		// two the current clock and the timestamp received in the error.
+		// TODO(andrei): Can we just use the clock since it has already been
+		// advanced to at least the error's timestamp?
+		now := clock.Now()
+		newTxnTimestamp := now
+		if newTxnTimestamp.Less(txn.Timestamp) {
+			newTxnTimestamp = txn.Timestamp
 		}
+		txn = NewTransaction(
+			txn.Name,
+			nil,                // baseKey
+			NormalUserPriority, // overwritten below
+			txn.Isolation,
+			newTxnTimestamp,
+			clock.MaxOffset().Nanoseconds(),
+		)
+		// Use the priority communicated back by the server.
+		txn.Priority = errTxnPri
 	case *ReadWithinUncertaintyIntervalError:
 		// If the reader encountered a newer write within the uncertainty
 		// interval, we advance the txn's timestamp just past the last observed

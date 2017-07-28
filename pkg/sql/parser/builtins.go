@@ -1698,6 +1698,10 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
+	// force_retry returns a retryable error during the specified duration, and 0
+	// afterwards. Used for testing.
+	// The second version allows one to create an error intended for a transaction
+	// different than the current one.
 	"crdb_internal.force_retry": {
 		Builtin{
 			Types:      ArgTypes{{"val", TypeInterval}},
@@ -1710,10 +1714,7 @@ var Builtins = map[string][]Builtin{
 					Nanos: int64(ctx.stmtTimestamp.Sub(ctx.txnTimestamp)),
 				}
 				if elapsed.Compare(minDuration) < 0 {
-					return nil, roachpb.NewHandledRetryableTxnError(
-						"forced by crdb_internal.force_retry()",
-						nil, /* txnID */
-						roachpb.Transaction{})
+					return nil, ctx.Txn.GenerateForcedRetryableError("forced by crdb_internal.force_retry()")
 				}
 				return DZero, nil
 			},
@@ -1737,8 +1738,9 @@ var Builtins = map[string][]Builtin{
 					if err != nil {
 						return nil, err
 					}
-					return nil, roachpb.NewHandledRetryableTxnError(
-						"forced by crdb_internal.force_retry()", &uuid, roachpb.Transaction{})
+					err = ctx.Txn.GenerateForcedRetryableError("forced by crdb_internal.force_retry()")
+					err.(*roachpb.HandledRetryableTxnError).TxnID = &uuid
+					return nil, err
 				}
 				return DZero, nil
 			},

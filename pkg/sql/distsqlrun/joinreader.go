@@ -112,7 +112,10 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 	var alloc sqlbase.DatumAlloc
 	spans := make(roachpb.Spans, 0, joinReaderBatchSize)
 
-	txn := jr.flowCtx.setupTxn()
+	txn := jr.flowCtx.txn
+	if txn == nil {
+		log.Fatalf(ctx, "joinReader outside of txn")
+	}
 
 	log.VEventf(ctx, 1, "starting")
 	if log.V(1) {
