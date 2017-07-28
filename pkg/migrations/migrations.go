@@ -65,6 +65,10 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:   "enable diagnostics reporting",
 		workFn: optInToDiagnosticsStatReporting,
 	},
+	{
+		name:   "establish conservative dependencies for views #17280 #17269",
+		workFn: repopulateViewDeps,
+	},
 }
 
 // migrationDescriptor describes a single migration hook that's used to modify
@@ -397,4 +401,44 @@ func optInToDiagnosticsStatReporting(ctx context.Context, r runner) error {
 		log.Warningf(ctx, "failed attempt to update setting: %s", err)
 	}
 	return err
+}
+
+// repopulateViewDeps ensures that each view V that depends on a table
+// T depends on all columns in T. (#17269)
+func repopulateViewDeps(ctx context.Context, r runner) error {
+	descKey := sqlbase.MakeAllDescsMetadataKey()
+
+	return r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		// Retrieve all the descriptors.
+		kvs, err := txn.Scan(ctx, descKey, descKey.PrefixEnd(), 0)
+		if err != nil {
+			return err
+		}
+
+		// For each descriptor, reset the depended-on list.
+		b := txn.NewBatch()
+		for _, kv := range kvs {
+			desc := &sqlbase.Descriptor{}
+			if err := kv.ValueProto(desc); err != nil {
+				return err
+			}
+			switch t := desc.Union.(type) {
+			case *sqlbase.Descriptor_Table:
+				tdesc := t.Table
+				columns := make([]sqlbase.ColumnID, len(tdesc.Columns))
+				for i, col := range tdesc.Columns {
+					columns[i] = col.ID
+				}
+				for i := range tdesc.DependedOnBy {
+					// Make all columns a dependency.
+					tdesc.DependedOnBy[i].ColumnIDs = columns
+				}
+				b.Put(sqlbase.MakeDescMetadataKey(desc.GetID()), desc)
+			}
+		}
+		if err := txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
+		return txn.Run(ctx, b)
+	})
 }

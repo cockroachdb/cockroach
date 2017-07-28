@@ -975,9 +975,12 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// columns not depended on by the view are unaffected.
-		db.Exec(`ALTER TABLE store.customers DROP COLUMN email`)
-		db.CheckQueryResults(`SELECT * FROM store.early_customers`, origEarlyCustomers)
+		// We want to be able to drop columns not used by the view,
+		// however the detection thereof is currently broken - #17269.
+		//
+		// // columns not depended on by the view are unaffected.
+		// db.Exec(`ALTER TABLE store.customers DROP COLUMN email`)
+		// db.CheckQueryResults(`SELECT * FROM store.early_customers`, origEarlyCustomers)
 
 		db.Exec(`DROP TABLE store.customers CASCADE`)
 	})
