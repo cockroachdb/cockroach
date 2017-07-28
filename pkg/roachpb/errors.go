@@ -349,10 +349,13 @@ func NewTransactionAbortedError() *TransactionAbortedError {
 }
 
 // NewHandledRetryableTxnError initializes a new HandledRetryableTxnError.
+//
+// txnID is the ID of the transaction being restarted.
+// txn is the transaction that the client should use for the next attempts.
 func NewHandledRetryableTxnError(
 	msg string, txnID uuid.UUID, txn Transaction,
 ) *HandledRetryableTxnError {
-	return &HandledRetryableTxnError{Msg: msg, TxnID: &txnID, Transaction: &txn}
+	return &HandledRetryableTxnError{Msg: msg, TxnID: txnID, Transaction: txn}
 }
 
 // NewTransactionPushError initializes a new TransactionPushError.
