@@ -61,6 +61,7 @@ type SchemaChanger struct {
 	// The SchemaChangeManager can attempt to execute this schema
 	// changer after this time.
 	execAfter      time.Time
+	readAsOf       hlc.Timestamp
 	testingKnobs   *SchemaChangerTestingKnobs
 	distSQLPlanner *distSQLPlanner
 	jobRegistry    *jobs.Registry
@@ -644,10 +645,14 @@ func (sc *SchemaChanger) notFirstInLine(ctx context.Context) (bool, error) {
 func (sc *SchemaChanger) runStateMachineAndBackfill(
 	ctx context.Context, lease *sqlbase.TableDescriptor_SchemaChangeLease, evalCtx parser.EvalContext,
 ) error {
+	if fn := sc.testingKnobs.RunBeforePublishWriteAndDelete; fn != nil {
+		fn()
+	}
 	// Run through mutation state machine before backfill.
 	if err := sc.RunStateMachineBeforeBackfill(ctx); err != nil {
 		return err
 	}
+
 	if err := sc.job.Progressed(ctx, .1, jobs.Noop); err != nil {
 		log.Warningf(ctx, "failed to log progress on job %v after completing state machine: %v",
 			sc.job.ID(), err)
@@ -808,8 +813,16 @@ type SchemaChangerTestingKnobs struct {
 	// AsyncExecNotification.
 	SyncFilter SyncSchemaChangersFilter
 
-	// RunBeforeBackfille is called just before starting the backfill.
+	// RunBeforePublishWriteAndDelete is called just before publishing the
+	// write+delete state for the schema change.
+	RunBeforePublishWriteAndDelete func()
+
+	// RunBeforeBackfill is called just before starting the backfill.
 	RunBeforeBackfill func() error
+
+	// RunBeforeBackfill is called just before starting the index backfill, after
+	// fixing the index backfill scan timestamp.
+	RunBeforeIndexBackfill func()
 
 	// RunBeforeBackfillChunk is called before executing each chunk of a
 	// backfill during a schema change operation. It is called with the

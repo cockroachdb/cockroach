@@ -156,7 +156,7 @@ func TestInitPut(t *testing.T) {
 	}), clock)
 
 	txn := NewTxn(db)
-	if pErr := txn.InitPut(context.Background(), "a", "b"); pErr != nil {
+	if pErr := txn.InitPut(context.Background(), "a", "b", false); pErr != nil {
 		t.Fatal(pErr)
 	}
 }

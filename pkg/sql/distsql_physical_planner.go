@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/pkg/errors"
@@ -689,12 +690,14 @@ func initBackfillerSpec(
 	duration time.Duration,
 	chunkSize int64,
 	otherTables []sqlbase.TableDescriptor,
+	readAsOf hlc.Timestamp,
 ) (distsqlrun.BackfillerSpec, error) {
 	ret := distsqlrun.BackfillerSpec{
 		Table:       desc,
 		Duration:    duration,
 		ChunkSize:   chunkSize,
 		OtherTables: otherTables,
+		ReadAsOf:    readAsOf,
 	}
 	switch backfillType {
 	case indexBackfill:
@@ -718,8 +721,9 @@ func (dsp *distSQLPlanner) CreateBackfiller(
 	chunkSize int64,
 	spans []roachpb.Span,
 	otherTables []sqlbase.TableDescriptor,
+	readAsOf hlc.Timestamp,
 ) (physicalPlan, error) {
-	spec, err := initBackfillerSpec(backfillType, desc, duration, chunkSize, otherTables)
+	spec, err := initBackfillerSpec(backfillType, desc, duration, chunkSize, otherTables, readAsOf)
 	if err != nil {
 		return physicalPlan{}, err
 	}
