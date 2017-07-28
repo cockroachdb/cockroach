@@ -340,7 +340,9 @@ func (ta *TxnAborter) statementFilter(ctx context.Context, stmt string, r sql.Re
 	ta.mu.Unlock()
 	if shouldAbort {
 		if err := ta.abortTxn(ri.key); err != nil {
-			r.Error(errors.Wrap(err, "TxnAborter failed to abort"))
+			if err := r.Error(errors.Wrap(err, "TxnAborter failed to abort")); err != nil {
+				panic(fmt.Sprintf("unexpected error: %s", err))
+			}
 		}
 	}
 }

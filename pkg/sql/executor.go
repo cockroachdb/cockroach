@@ -187,128 +187,6 @@ func (r *Result) Close(ctx context.Context) {
 	}
 }
 
-// ResultWriter is an interface which is used to store results from query
-// execution. Implementations could be buffered or immediately stream to
-// the client.
-type ResultWriter interface {
-	// BeginResult and SetColumns should be called any time we wish to start
-	// a result -- regardless of what the parser.StatementType is.
-	BeginResult(pgTag string, statementType parser.StatementType)
-	PGTag() string
-	StatementType() parser.StatementType
-	// SetColumns should be called prior to AddRow.
-	SetColumns(columns sqlbase.ResultColumns)
-	// IncrementRowsAffected increments a counter. This is used for
-	// parser.RowsAffected and parser.DDL since we care only about the number of
-	// rows affected. Should be called after BeginResult.
-	IncrementRowsAffected(n int)
-	// AddRow takes the passed in row and adds it to the current result. Should
-	// be called after BeginResult and SetColumns.
-	AddRow(ctx context.Context, row parser.Datums) error
-	// RowsAffected returns either the number of times AddRow was called, or the
-	// sum of all n passed into IncrementRowsAffected.
-	RowsAffected() int
-	// EndResult ends the current result. Cannot be called unless there's a
-	// corresponding BeginResult prior.
-	EndResult() error
-	// SendAck is a shortcut for BeginResult(pgTag, parser.Ack), EndResult().
-	SendAck(pgTag string) error
-	// Error sets an error. Depending on the implementation all other functions
-	// become no-ops.
-	Error(err error) error
-	// LastError returns either nil, or the error set in Error.
-	LastError() error
-	// EmptyQuery is used to indicate that there are no statements in the current
-	// sql string. Empty queries are different than queries with no results.
-	EmptyQuery()
-}
-
-type bufferedWriter struct {
-	session          *Session
-	results          ResultList
-	currentResult    Result
-	resultInProgress bool
-}
-
-func (b *bufferedWriter) BeginResult(pgTag string, statementType parser.StatementType) {
-	if b.resultInProgress {
-		panic("can't start new result before ending the previous")
-	}
-	b.resultInProgress = true
-	b.currentResult = Result{PGTag: pgTag, Type: statementType}
-}
-
-func (b *bufferedWriter) PGTag() string {
-	return b.currentResult.PGTag
-}
-
-func (b *bufferedWriter) StatementType() parser.StatementType {
-	return b.currentResult.Type
-}
-
-func (b *bufferedWriter) SetColumns(columns sqlbase.ResultColumns) {
-	if !b.resultInProgress {
-		panic("no result in progress")
-	}
-	b.currentResult.Columns = columns
-
-	if b.currentResult.Type == parser.Rows {
-		b.currentResult.Rows = sqlbase.NewRowContainer(
-			b.session.makeBoundAccount(), sqlbase.ColTypeInfoFromResCols(columns), 0,
-		)
-	}
-}
-
-func (b *bufferedWriter) IncrementRowsAffected(n int) {
-	if !b.resultInProgress {
-		panic("no result in progress")
-	}
-	b.currentResult.RowsAffected += n
-}
-
-func (b *bufferedWriter) AddRow(ctx context.Context, row parser.Datums) error {
-	if !b.resultInProgress {
-		panic("no result in progress")
-	}
-	_, err := b.currentResult.Rows.AddRow(ctx, row)
-	return err
-}
-
-func (b *bufferedWriter) RowsAffected() int {
-	if b.currentResult.Type == parser.Rows {
-		return b.currentResult.Rows.Len()
-	}
-	return b.currentResult.RowsAffected
-}
-
-func (b *bufferedWriter) EndResult() error {
-	if !b.resultInProgress {
-		panic("no result in progress")
-	}
-	b.resultInProgress = false
-	b.results = append(b.results, b.currentResult)
-	return nil
-}
-
-func (b *bufferedWriter) SendAck(pgTag string) error {
-	b.currentResult = Result{PGTag: pgTag, Type: parser.Ack}
-	b.results = append(b.results, b.currentResult)
-	return nil
-}
-
-func (b *bufferedWriter) EmptyQuery() {
-}
-
-func (b *bufferedWriter) Error(err error) error {
-	b.resultInProgress = true
-	b.currentResult.Err = err
-	return b.EndResult()
-}
-
-func (b *bufferedWriter) LastError() error {
-	return b.results[len(b.results)-1].Err
-}
-
 // An Executor executes SQL statements.
 // Executor is thread-safe.
 type Executor struct {
@@ -693,17 +571,20 @@ func (e *Executor) ExecuteStatementsBuffered(
 ) StatementResults {
 	b := &bufferedWriter{session: session}
 	session.ResultWriter = b
-	e.ExecuteStatements(session, stmts, pinfo)
+	err := e.ExecuteStatements(session, stmts, pinfo)
+	if err != nil && len(b.results) > 0 {
+		b.results[0].Err = err
+	}
 	return StatementResults{
 		ResultList: b.results,
-		Empty: len(b.results) == 0,
+		Empty:      len(b.results) == 0,
 	}
 }
 
 // ExecuteStatements executes the given statement(s) and returns a response.
 func (e *Executor) ExecuteStatements(
 	session *Session, stmts string, pinfo *parser.PlaceholderInfo,
-) {
+) error {
 	session.resetForBatch(e)
 	session.phaseTimes[sessionStartBatch] = timeutil.Now()
 
@@ -731,7 +612,7 @@ func (e *Executor) ExecuteStatements(
 
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
-	e.execRequest(session, stmts, pinfo, copyMsgNone)
+	return e.execRequest(session, stmts, pinfo, copyMsgNone)
 }
 
 // ExecutePreparedStatement executes the given statement and returns a response.
@@ -774,25 +655,17 @@ func (e *Executor) execPrepared(
 	}
 	// Send the Request for SQL execution and set the application-level error
 	// for each result in the reply.
-	e.execParsed(session, stmts, pinfo, copyMsgNone)
-	// This shouldn't ever happen since prepared statements are limited during
-	// creation to one statement, but just in case it does, throw an error.
-	// TODO(tohlson): handle this?
-	//if len(results.ResultList) > 1 {
-	//	results.Close(session.Ctx())
-	//	return StatementResults{}, pgerror.NewError(pgerror.CodeInternalError, "unexpected number of results")
-	//}
-	return nil
+	return e.execParsed(session, stmts, pinfo, copyMsgNone)
 }
 
 // CopyData adds data to the COPY buffer and executes if there are enough rows.
-func (e *Executor) CopyData(session *Session, data string) {
-	e.execRequest(session, data, nil, copyMsgData)
+func (e *Executor) CopyData(session *Session, data string) error {
+	return e.execRequest(session, data, nil, copyMsgData)
 }
 
 // CopyDone executes the buffered COPY data.
-func (e *Executor) CopyDone(session *Session) {
-	e.execRequest(session, "", nil, copyMsgDone)
+func (e *Executor) CopyDone(session *Session) error {
+	return e.execRequest(session, "", nil, copyMsgDone)
 }
 
 // CopyEnd ends the COPY mode. Any buffered data is discarded.
@@ -815,7 +688,7 @@ func (s *Session) CopyEnd(ctx context.Context) {
 // runTxnAttempt().
 func (e *Executor) execRequest(
 	session *Session, sql string, pinfo *parser.PlaceholderInfo, copymsg copyMsg,
-) {
+) error {
 	var stmts StatementList
 	var err error
 	txnState := &session.TxnState
@@ -851,22 +724,21 @@ func (e *Executor) execRequest(
 			// Rollback the txn.
 			txnState.updateStateAndCleanupOnErr(err, e)
 		}
-		session.ResultWriter.Error(err)
-		return
+		return session.ResultWriter.Error(err)
 	}
-	e.execParsed(session, stmts, pinfo, copymsg)
+	return e.execParsed(session, stmts, pinfo, copymsg)
 }
 
 func (e *Executor) execParsed(
 	session *Session, stmts StatementList, pinfo *parser.PlaceholderInfo, copymsg copyMsg,
-) {
+) error {
 	var avoidCachedDescriptors bool
 	txnState := &session.TxnState
 	resultWriter := session.ResultWriter
 
 	if len(stmts) == 0 {
 		resultWriter.EmptyQuery()
-		return
+		return nil
 	}
 
 	for len(stmts) > 0 {
@@ -897,8 +769,7 @@ func (e *Executor) execParsed(
 				var err error
 				protoTS, err = isAsOf(session, stmtsToExec[0].AST, e.cfg.Clock.Now())
 				if err != nil {
-					resultWriter.Error(err)
-					return
+					return resultWriter.Error(err)
 				}
 				if protoTS != nil {
 					// When running AS OF SYSTEM TIME queries, we want to use the
@@ -970,11 +841,15 @@ func (e *Executor) execParsed(
 		txn := txnState.mu.txn // this might be nil if the txn was already aborted.
 		err := txn.Exec(session.Ctx(), execOpt, txnClosure)
 
-		if err != nil {
+		_, isWireFailureErr := err.(ErrWireFailure)
+		if err != nil && !isWireFailureErr {
 			// The error might have come from auto-commit, in which case it wasn't
 			// captured in a result. Or, we might have had a RetryableTxnError that
 			// got converted to a non-retryable error when the txn closure was done.
-			resultWriter.Error(convertToErrWithPGCode(err))
+			if err := resultWriter.Error(convertToErrWithPGCode(err)); err != nil {
+				txn.CleanupOnError(session.Ctx(), err)
+				return err
+			}
 		}
 
 		if err != nil && (log.V(2) || logStatementsExecuteEnabled.Get()) {
@@ -1081,7 +956,9 @@ func (e *Executor) execParsed(
 			// Exec the schema changers (if the txn rolled back, the schema changers
 			// will short-circuit because the corresponding descriptor mutation is not
 			// found).
-			txnState.schemaChangers.execSchemaChanges(e, session)
+			if err := txnState.schemaChangers.execSchemaChanges(e, session); err != nil {
+				return err
+			}
 		}
 
 		// Figure out what statements to run on the next iteration.
@@ -1094,6 +971,8 @@ func (e *Executor) execParsed(
 			stmts = remainingStmts
 		}
 	}
+
+	return nil
 }
 
 // If the plan has a fast path we attempt to query that,
@@ -1296,7 +1175,7 @@ func getTransactionState(txnState *txnState) string {
 // runShowTransactionState returns the state of current transaction.
 func runShowTransactionState(session *Session) error {
 	resultWriter := session.ResultWriter
-	resultWriter.BeginResult((*parser.Show)(nil).StatementTag(), (*parser.Show)(nil).StatementType())
+	resultWriter.BeginResult((*parser.Show)(nil))
 	resultWriter.SetColumns(sqlbase.ResultColumns{{Name: "TRANSACTION STATUS", Typ: parser.TypeString}})
 
 	state := getTransactionState(&session.TxnState)
@@ -1321,14 +1200,14 @@ func (e *Executor) execStmtInAbortedTxn(session *Session, stmt Statement) error 
 	case *parser.CommitTransaction, *parser.RollbackTransaction:
 		resultWriter := session.ResultWriter
 		if txnState.State() == RestartWait {
-			rollbackSQLTransaction(txnState, resultWriter)
-			return nil
+			return rollbackSQLTransaction(txnState, resultWriter)
 		}
 		// Reset the state to allow new transactions to start.
 		// The KV txn has already been rolled back when we entered the Aborted state.
 		// Note: postgres replies to COMMIT of failed txn with "ROLLBACK" too.
 		txnState.resetStateAndTxn(NoTxn)
-		return resultWriter.SendAck((*parser.RollbackTransaction)(nil).StatementTag())
+		resultWriter.BeginResult((*parser.RollbackTransaction)(nil))
+		return resultWriter.EndResult()
 	case *parser.RollbackToSavepoint, *parser.Savepoint:
 		// We accept both the "ROLLBACK TO SAVEPOINT cockroach_restart" and the
 		// "SAVEPOINT cockroach_restart" commands to indicate client intent to
@@ -1405,7 +1284,8 @@ func (e *Executor) execStmtInCommitWaitTxn(session *Session, stmt Statement) err
 	case *parser.CommitTransaction, *parser.RollbackTransaction:
 		// Reset the state to allow new transactions to start.
 		txnState.resetStateAndTxn(NoTxn)
-		return session.ResultWriter.SendAck((*parser.CommitTransaction)(nil).StatementTag())
+		session.ResultWriter.BeginResult((*parser.CommitTransaction)(nil))
+		return session.ResultWriter.EndResult()
 	default:
 		err := sqlbase.NewTransactionCommittedError()
 		return err
@@ -1556,8 +1436,8 @@ func (e *Executor) execStmtInOpenTxn(
 		// RollbackTransaction is executed fully here; there's no planNode for it
 		// and a planner is not involved at all.
 		// Notice that we don't return any errors on rollback.
-		rollbackSQLTransaction(txnState, resultWriter)
-		return nil
+		// Notice that we don't return any errors on rollback.
+		return rollbackSQLTransaction(txnState, resultWriter)
 
 	case *parser.Savepoint:
 		if err := parser.ValidateRestartCheckpoint(s.Name); err != nil {
@@ -1573,12 +1453,8 @@ func (e *Executor) execStmtInOpenTxn(
 		// Note that Savepoint doesn't have a corresponding plan node.
 		// This here is all the execution there is.
 		txnState.retryIntent = true
-		// todo(tohlson): since previously all statements got a result attached....
-		// should I be using endResult() at a higher level than current and then
-		// sending the previously boring empty result ("" as pgtag, ack as statement
-		// type)?
-		resultWriter.SendAck("")
-		return nil
+		resultWriter.BeginResult((*parser.Savepoint)(nil))
+		return resultWriter.EndResult()
 
 	case *parser.RollbackToSavepoint:
 		if err := parser.ValidateRestartCheckpoint(s.Savepoint); err != nil {
@@ -1597,7 +1473,11 @@ func (e *Executor) execStmtInOpenTxn(
 			txnState.mu.txn.Proto().Restart(
 				0 /* userPriority */, 0 /* upgradePriority */, hlc.Timestamp{})
 		}
-		return err
+		if err != nil {
+			return err
+		}
+		resultWriter.BeginResult((*parser.Savepoint)(nil))
+		return resultWriter.EndResult()
 
 	case *parser.Prepare:
 		// This must be handled here instead of the common path below
@@ -1694,7 +1574,7 @@ func stmtAllowedInImplicitTxn(stmt Statement) bool {
 }
 
 // rollbackSQLTransaction rolls back a transaction. All errors are swallowed.
-func rollbackSQLTransaction(txnState *txnState, resultWriter ResultWriter) {
+func rollbackSQLTransaction(txnState *txnState, resultWriter ResultWriter) error {
 	if !txnState.TxnIsOpen() && txnState.State() != RestartWait {
 		panic(fmt.Sprintf("rollbackSQLTransaction called on txn in wrong state: %s (txn: %s)",
 			txnState.State(), txnState.mu.txn.Proto()))
@@ -1702,11 +1582,14 @@ func rollbackSQLTransaction(txnState *txnState, resultWriter ResultWriter) {
 	err := txnState.mu.txn.Rollback(txnState.Ctx)
 	if err != nil {
 		log.Warningf(txnState.Ctx, "txn rollback failed. The error was swallowed: %s", err)
-		resultWriter.Error(err)
+		if err = resultWriter.Error(err); err != nil {
+			return err
+		}
 	}
 	// We're done with this txn.
 	txnState.resetStateAndTxn(NoTxn)
-	resultWriter.SendAck((*parser.RollbackTransaction)(nil).StatementTag())
+	resultWriter.BeginResult((*parser.RollbackTransaction)(nil))
+	return resultWriter.EndResult()
 }
 
 type commitType int
@@ -1743,7 +1626,8 @@ func commitSQLTransaction(
 		txnState.resetStateAndTxn(NoTxn)
 	}
 
-	return resultWriter.SendAck((*parser.CommitTransaction)(nil).StatementTag())
+	resultWriter.BeginResult((*parser.CommitTransaction)(nil))
+	return resultWriter.EndResult()
 }
 
 // exectDistSQL converts a classic plan to a distributed SQL physical plan and
@@ -1884,9 +1768,9 @@ func (e *Executor) shouldUseDistSQL(planner *planner, plan planNode) (bool, erro
 }
 
 func setupWriter(stmt Statement, plan planNode, writer ResultWriter) error {
-	statementType := stmt.AST.StatementType()
-	writer.BeginResult(stmt.AST.StatementTag(), statementType)
-	if statementType == parser.Rows {
+	stmtAst := stmt.AST
+	writer.BeginResult(stmtAst)
+	if stmtAst.StatementType() == parser.Rows {
 		columns := planColumns(plan)
 		writer.SetColumns(columns)
 		for _, c := range columns {

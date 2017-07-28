@@ -1094,7 +1094,7 @@ func (scc *schemaChangers) queueSchemaChanger(schemaChanger SchemaChanger) {
 // scheduling the schema change has finished.
 //
 // The list of closures is cleared after (attempting) execution.
-func (scc *schemaChangers) execSchemaChanges(e *Executor, session *Session) {
+func (scc *schemaChangers) execSchemaChanges(e *Executor, session *Session) error {
 	ctx := session.Ctx()
 	// Release the leases once a transaction is complete.
 	session.tables.releaseTables(ctx)
@@ -1115,7 +1115,9 @@ func (scc *schemaChangers) execSchemaChanges(e *Executor, session *Session) {
 				}
 				if err == sqlbase.ErrDescriptorNotFound {
 				} else if sqlbase.IsPermanentSchemaChangeError(err) {
-					session.ResultWriter.Error(err)
+					if err := session.ResultWriter.Error(err); err != nil {
+						return err
+					}
 				} else {
 					// retryable error.
 					continue
@@ -1125,6 +1127,7 @@ func (scc *schemaChangers) execSchemaChanges(e *Executor, session *Session) {
 		}
 	}
 	scc.schemaChangers = scc.schemaChangers[:0]
+	return nil
 }
 
 // maybeRecover catches SQL panics and does some log reporting before

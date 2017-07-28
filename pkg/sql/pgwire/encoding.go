@@ -266,12 +266,6 @@ func (b *writeBuffer) initMsg(typ serverMessageType) {
 	_, b.err = b.wrapped.Write(b.putbuf[:5]) // message type + message length
 }
 
-func (b *writeBuffer) flushWriter(buf *bytes.Buffer, w io.Writer) error {
-	n, err := buf.WriteTo(w)
-	b.bytecount.Inc(int64(n))
-	return err
-}
-
 // finishMsg attempts to write the data it has accumulated to the provided io.Writer.
 // If the writeBuffer previously encountered an error since the last call to initMsg,
 // or if it encounters an error while writing to w, it will return an error.
