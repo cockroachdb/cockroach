@@ -30,7 +30,7 @@ message RestoreDetails {
 }
 
 message SchemaChangeDetails {
- util.hlc.Timestamp readAsOf = 1 [(gogoproto.nullable) = false];
+ util.hlc.Timestamp read_as_of = 1 [(gogoproto.nullable) = false];
 }
 
 message Payload {
