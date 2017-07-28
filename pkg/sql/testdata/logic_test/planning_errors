@@ -1,0 +1,8 @@
+# Check that plans that fail during expansion/optimization do not cause
+# memory leaks. #17274
+
+statement error index "aa" is not covering
+CREATE TABLE kv(k INT, v INT);
+ CREATE INDEX aa ON kv(v);
+ SELECT k FROM crdb_internal.leases, kv@{FORCE_INDEX=aa,NO_INDEX_JOIN};
+
