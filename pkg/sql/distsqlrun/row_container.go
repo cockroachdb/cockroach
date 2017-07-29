@@ -109,9 +109,9 @@ func makeRowContainer(
 }
 
 // Less is part of heap.Interface and is only meant to be used internally.
-func (sv *memRowContainer) Less(i, j int) bool {
-	cmp := sqlbase.CompareDatums(sv.ordering, sv.evalCtx, sv.At(i), sv.At(j))
-	if sv.invertSorting {
+func (mc *memRowContainer) Less(i, j int) bool {
+	cmp := sqlbase.CompareDatums(mc.ordering, mc.evalCtx, mc.At(i), mc.At(j))
+	if mc.invertSorting {
 		cmp = -cmp
 	}
 	return cmp < 0
@@ -119,66 +119,66 @@ func (sv *memRowContainer) Less(i, j int) bool {
 
 // EncRow returns the idx-th row as an EncDatumRow. The slice itself is reused
 // so it is only valid until the next call to EncRow.
-func (sv *memRowContainer) EncRow(idx int) sqlbase.EncDatumRow {
-	datums := sv.At(idx)
+func (mc *memRowContainer) EncRow(idx int) sqlbase.EncDatumRow {
+	datums := mc.At(idx)
 	for i, d := range datums {
-		sv.scratchEncRow[i] = sqlbase.DatumToEncDatum(sv.types[i], d)
+		mc.scratchEncRow[i] = sqlbase.DatumToEncDatum(mc.types[i], d)
 	}
-	return sv.scratchEncRow
+	return mc.scratchEncRow
 }
 
 // AddRow adds a row to the container.
-func (sv *memRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
-	if len(row) != len(sv.types) {
-		log.Fatalf(ctx, "invalid row length %d, expected %d", len(row), len(sv.types))
+func (mc *memRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
+	if len(row) != len(mc.types) {
+		log.Fatalf(ctx, "invalid row length %d, expected %d", len(row), len(mc.types))
 	}
 	for i := range row {
-		err := row[i].EnsureDecoded(&sv.datumAlloc)
+		err := row[i].EnsureDecoded(&mc.datumAlloc)
 		if err != nil {
 			return err
 		}
-		sv.scratchRow[i] = row[i].Datum
+		mc.scratchRow[i] = row[i].Datum
 	}
-	_, err := sv.RowContainer.AddRow(ctx, sv.scratchRow)
+	_, err := mc.RowContainer.AddRow(ctx, mc.scratchRow)
 	return err
 }
 
-func (sv *memRowContainer) Sort() {
-	sv.invertSorting = false
-	sort.Sort(sv)
+func (mc *memRowContainer) Sort() {
+	mc.invertSorting = false
+	sort.Sort(mc)
 }
 
 // Push is part of heap.Interface.
-func (sv *memRowContainer) Push(_ interface{}) { panic("unimplemented") }
+func (mc *memRowContainer) Push(_ interface{}) { panic("unimplemented") }
 
 // Pop is part of heap.Interface.
-func (sv *memRowContainer) Pop() interface{} { panic("unimplemented") }
+func (mc *memRowContainer) Pop() interface{} { panic("unimplemented") }
 
 // MaybeReplaceMax replaces the maximum element with the given row, if it is smaller.
 // Assumes InitMaxHeap was called.
-func (sv *memRowContainer) MaybeReplaceMax(row sqlbase.EncDatumRow) error {
-	max := sv.At(0)
-	cmp, err := row.CompareToDatums(&sv.datumAlloc, sv.ordering, sv.evalCtx, max)
+func (mc *memRowContainer) MaybeReplaceMax(row sqlbase.EncDatumRow) error {
+	max := mc.At(0)
+	cmp, err := row.CompareToDatums(&mc.datumAlloc, mc.ordering, mc.evalCtx, max)
 	if err != nil {
 		return err
 	}
 	if cmp < 0 {
 		// row is smaller than the max; replace.
 		for i := range row {
-			if err := row[i].EnsureDecoded(&sv.datumAlloc); err != nil {
+			if err := row[i].EnsureDecoded(&mc.datumAlloc); err != nil {
 				return err
 			}
 			max[i] = row[i].Datum
 		}
-		heap.Fix(sv, 0)
+		heap.Fix(mc, 0)
 	}
 	return nil
 }
 
 // InitMaxHeap rearranges the rows in the rowContainer into a Max-Heap.
-func (sv *memRowContainer) InitMaxHeap() {
-	sv.invertSorting = true
-	heap.Init(sv)
+func (mc *memRowContainer) InitMaxHeap() {
+	mc.invertSorting = true
+	heap.Init(mc)
 }
 
 // memRowIterator is a rowIterator that iterates over a memRowContainer. This
@@ -194,8 +194,8 @@ var _ rowIterator = memRowIterator{}
 // memRowContainer. Note that this iterator doesn't iterate over a snapshot
 // of memRowContainer and that it deletes rows as soon as they are iterated
 // over.
-func (sv *memRowContainer) NewIterator(_ context.Context) rowIterator {
-	return memRowIterator{memRowContainer: sv}
+func (mc *memRowContainer) NewIterator(_ context.Context) rowIterator {
+	return memRowIterator{memRowContainer: mc}
 }
 
 // Rewind implements the rowIterator interface.
