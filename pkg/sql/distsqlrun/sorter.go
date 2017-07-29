@@ -118,9 +118,9 @@ func (s *sorter) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 		evalCtx := s.flowCtx.evalCtx
 		evalCtx.Mon = &limitedMon
-		sv = makeRowContainer(s.ordering, s.rawInput.Types(), &evalCtx)
+		sv.init(s.ordering, s.rawInput.Types(), &evalCtx)
 	} else {
-		sv = makeRowContainer(s.ordering, s.rawInput.Types(), &s.flowCtx.evalCtx)
+		sv.init(s.ordering, s.rawInput.Types(), &s.flowCtx.evalCtx)
 	}
 	// Construct the optimal sorterStrategy.
 	var ss sorterStrategy
@@ -130,13 +130,13 @@ func (s *sorter) Run(ctx context.Context, wg *sync.WaitGroup) {
 			// optimizations are possible so we simply load all rows into memory and
 			// sort all values in-place. It has a worst-case time complexity of
 			// O(n*log(n)) and a worst-case space complexity of O(n).
-			ss = newSortAllStrategy(sv, useTempStorage)
+			ss = newSortAllStrategy(&sv, useTempStorage)
 		} else {
 			// No specified ordering match length but specified limit; we can optimize
 			// our sort procedure by maintaining a max-heap populated with only the
 			// smallest k rows seen. It has a worst-case time complexity of
 			// O(n*log(k)) and a worst-case space complexity of O(k).
-			ss = newSortTopKStrategy(sv, s.count)
+			ss = newSortTopKStrategy(&sv, s.count)
 		}
 	} else {
 		// Ordering match length is specified. We will be able to use existing
@@ -146,7 +146,7 @@ func (s *sorter) Run(ctx context.Context, wg *sync.WaitGroup) {
 		// chunk and then output.
 		// TODO(irfansharif): Add optimization for case where both ordering match
 		// length and limit is specified.
-		ss = newSortChunksStrategy(sv)
+		ss = newSortChunksStrategy(&sv)
 	}
 
 	sortErr := ss.Execute(ctx, s)

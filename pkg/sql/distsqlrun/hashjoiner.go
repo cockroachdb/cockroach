@@ -105,8 +105,8 @@ func newHashJoiner(
 		buckets:           make(map[string]bucket),
 		bucketsAcc:        flowCtx.evalCtx.Mon.MakeBoundAccount(),
 	}
-	h.rows[leftSide] = makeRowContainer(nil /* ordering */, leftSource.Types(), &flowCtx.evalCtx)
-	h.rows[rightSide] = makeRowContainer(nil /* ordering */, rightSource.Types(), &flowCtx.evalCtx)
+	h.rows[leftSide].init(nil /* ordering */, leftSource.Types(), &flowCtx.evalCtx)
+	h.rows[rightSide].init(nil /* ordering */, rightSource.Types(), &flowCtx.evalCtx)
 
 	numMergedColumns := 0
 	if spec.MergedColumns {

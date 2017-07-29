@@ -94,18 +94,16 @@ type memRowContainer struct {
 var _ heap.Interface = &memRowContainer{}
 var _ sortableRowContainer = &memRowContainer{}
 
-func makeRowContainer(
+func (mc *memRowContainer) init(
 	ordering sqlbase.ColumnOrdering, types []sqlbase.ColumnType, evalCtx *parser.EvalContext,
-) memRowContainer {
+) {
 	acc := evalCtx.Mon.MakeBoundAccount()
-	return memRowContainer{
-		RowContainer:  sqlbase.MakeRowContainer(acc, sqlbase.ColTypeInfoFromColTypes(types), 0),
-		types:         types,
-		ordering:      ordering,
-		scratchRow:    make(parser.Datums, len(types)),
-		scratchEncRow: make(sqlbase.EncDatumRow, len(types)),
-		evalCtx:       evalCtx,
-	}
+	mc.RowContainer.Init(acc, sqlbase.ColTypeInfoFromColTypes(types), 0)
+	mc.types = types
+	mc.ordering = ordering
+	mc.scratchRow = make(parser.Datums, len(types))
+	mc.scratchEncRow = make(sqlbase.EncDatumRow, len(types))
+	mc.evalCtx = evalCtx
 }
 
 // Less is part of heap.Interface and is only meant to be used internally.

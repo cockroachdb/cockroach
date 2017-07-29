@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 const (
@@ -72,6 +73,10 @@ type RowContainer struct {
 	// memAcc tracks the current memory consumption of this
 	// RowContainer.
 	memAcc mon.BoundAccount
+
+	// We should not copy this structure around; each copy would have a different
+	// memAcc (among other things like aliasing chunks).
+	noCopy util.NoCopy
 }
 
 // ColTypeInfo is a type that allows multiple representations of column type
@@ -139,21 +144,19 @@ func (ti ColTypeInfo) Type(idx int) parser.Type {
 // column selections could cause unchecked and potentially dangerous
 // memory growth.
 func NewRowContainer(acc mon.BoundAccount, ti ColTypeInfo, rowCapacity int) *RowContainer {
-	c := MakeRowContainer(acc, ti, rowCapacity)
-	return &c
+	c := &RowContainer{}
+	c.Init(acc, ti, rowCapacity)
+	return c
 }
 
-// MakeRowContainer is the non-pointer version of NewRowContainer, suitable to
-// avoid unnecessary indirections when RowContainer is already part of an on-heap
-// structure.
-func MakeRowContainer(acc mon.BoundAccount, ti ColTypeInfo, rowCapacity int) RowContainer {
+// Init can be used instead of NewRowContainer if we have a RowContainer that is
+// already part of an on-heap structure.
+func (c *RowContainer) Init(acc mon.BoundAccount, ti ColTypeInfo, rowCapacity int) {
 	nCols := ti.NumColumns()
 
-	c := RowContainer{
-		numCols:        nCols,
-		memAcc:         acc,
-		preallocChunks: 1,
-	}
+	c.numCols = nCols
+	c.memAcc = acc
+	c.preallocChunks = 1
 
 	if nCols != 0 {
 		c.rowsPerChunk = (targetChunkSize + nCols - 1) / nCols
@@ -179,8 +182,6 @@ func MakeRowContainer(acc mon.BoundAccount, ti ColTypeInfo, rowCapacity int) Row
 	// chunk and the slice pointing at the chunk.
 	c.chunkMemSize = SizeOfDatum * int64(c.rowsPerChunk*c.numCols)
 	c.chunkMemSize += SizeOfDatums
-
-	return c
 }
 
 // Clear resets the container and releases the associated memory. This allows
