@@ -73,7 +73,7 @@ func makeDiskRowContainer(
 	ctx context.Context,
 	types []sqlbase.ColumnType,
 	ordering sqlbase.ColumnOrdering,
-	rowContainer memRowContainer,
+	rowContainer *memRowContainer,
 	e engine.Engine,
 ) (diskRowContainer, error) {
 	diskMap := engine.NewRocksDBMap(e)
