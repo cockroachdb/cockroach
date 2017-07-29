@@ -17,7 +17,6 @@ package sql
 import (
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -113,13 +112,16 @@ func (m *LeaseManager) ExpireLeases(clock *hlc.Clock) {
 // A transaction is allowed to use the table descriptor as long as the txn
 // timestamp < expiration time.
 func (m *LeaseManager) AcquireAndAssertMinVersion(
-	ctx context.Context, txn *client.Txn, tableID sqlbase.ID, minVersion sqlbase.DescriptorVersion,
+	ctx context.Context,
+	timestamp hlc.Timestamp,
+	tableID sqlbase.ID,
+	minVersion sqlbase.DescriptorVersion,
 ) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
 	t := m.findTableState(tableID, true)
 	if err := t.ensureVersion(ctx, minVersion, m); err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
-	table, err := t.acquire(ctx, txn, m)
+	table, err := t.acquire(ctx, timestamp, m)
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
 	}

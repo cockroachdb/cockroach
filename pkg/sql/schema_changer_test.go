@@ -1346,13 +1346,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		}
 		// Grab a lease at the latest version so that we are confident
 		// that all future leases will be taken at the latest version.
-		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			table, _, err := leaseMgr.AcquireAndAssertMinVersion(ctx, txn, id, version+1)
-			if err != nil {
-				return err
-			}
-			return leaseMgr.Release(table)
-		}); err != nil {
+		table, _, err := leaseMgr.AcquireAndAssertMinVersion(ctx, s.Clock().Now(), id, version+1)
+		if err != nil {
+			t.Error(err)
+		}
+		if err := leaseMgr.Release(table); err != nil {
 			t.Error(err)
 		}
 	}

@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/pkg/errors"
 )
 
 type leaseTest struct {
@@ -108,28 +109,14 @@ func (t *leaseTest) expectLeases(descID sqlbase.ID, expected string) {
 func (t *leaseTest) acquire(
 	nodeID uint32, descID sqlbase.ID,
 ) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
-	var table *sqlbase.TableDescriptor
-	var expiration hlc.Timestamp
-	err := t.kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-		var err error
-		table, expiration, err = t.node(nodeID).Acquire(ctx, txn, descID)
-		return err
-	})
-	return table, expiration, err
+	return t.node(nodeID).Acquire(context.TODO(), t.server.Clock().Now(), descID)
 }
 
 func (t *leaseTest) acquireMinVersion(
 	nodeID uint32, descID sqlbase.ID, minVersion sqlbase.DescriptorVersion,
 ) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
-	var table *sqlbase.TableDescriptor
-	var expiration hlc.Timestamp
-	err := t.kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-		var err error
-		table, expiration, err =
-			t.node(nodeID).AcquireAndAssertMinVersion(ctx, txn, descID, minVersion)
-		return err
-	})
-	return table, expiration, err
+	return t.node(nodeID).AcquireAndAssertMinVersion(
+		context.TODO(), t.server.Clock().Now(), descID, minVersion)
 }
 
 func (t *leaseTest) mustAcquire(
@@ -574,14 +561,7 @@ func isDeleted(tableID sqlbase.ID, cfg config.SystemConfig) bool {
 func acquire(
 	ctx context.Context, s *server.TestServer, descID sqlbase.ID,
 ) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
-	var table *sqlbase.TableDescriptor
-	var expiration hlc.Timestamp
-	err := s.DB().Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-		var err error
-		table, expiration, err = s.LeaseManager().(*sql.LeaseManager).Acquire(ctx, txn, descID)
-		return err
-	})
-	return table, expiration, err
+	return s.LeaseManager().(*sql.LeaseManager).Acquire(ctx, s.Clock().Now(), descID)
 }
 
 // Test that once a table is marked as deleted, a lease's refcount dropping to 0
@@ -817,5 +797,84 @@ INSERT INTO t.timestamp VALUES ('a', 'b');
 
 	if err := tx.Commit(); !testutils.IsError(err, "transaction deadline exceeded") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// Test that a lease on a table descriptor is always acquired on the latest
+// version of a descriptor.
+func TestLeaseAtLatestVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := createTestServerParams()
+	errChan := make(chan error, 1)
+	params.Knobs = base.TestingKnobs{
+		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: sql.LeaseStoreTestingKnobs{
+				LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, _ error) {
+					if table.Name == "kv" {
+						var err error
+						if table.Version != 2 {
+							err = errors.Errorf("not seeing latest version")
+						}
+						errChan <- err
+					}
+				},
+			},
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+BEGIN;
+CREATE DATABASE t;
+CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE t.timestamp (k CHAR PRIMARY KEY, v CHAR);
+INSERT INTO t.kv VALUES ('a', 'b');
+COMMIT;
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Insert an entry so that the transaction is guaranteed to be
+	// assigned a timestamp.
+	if _, err := tx.Exec(`
+INSERT INTO t.timestamp VALUES ('a', 'b');
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Increment the table version after the txn has started.
+	leaseMgr := s.LeaseManager().(*sql.LeaseManager)
+	if _, err := leaseMgr.Publish(
+		context.TODO(), tableDesc.ID, func(table *sqlbase.TableDescriptor) error {
+			// Do nothing: increments the version.
+			return nil
+		}, nil); err != nil {
+		t.Error(err)
+	}
+
+	// This select will see version 1 of the table. It will first
+	// acquire a lease on version 2 and note that the table descriptor is
+	// invalid for the transaction, so it will read the previous version
+	// and use it.
+	rows, err := tx.Query(`SELECT * FROM t.kv`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows.Close()
+
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := <-errChan; err != nil {
+		t.Fatal(err)
 	}
 }
