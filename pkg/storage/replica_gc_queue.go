@@ -138,6 +138,14 @@ func (rgcq *replicaGCQueue) shouldQueue(
 	var isCandidate bool
 	if raftStatus := repl.RaftStatus(); raftStatus != nil {
 		isCandidate = (raftStatus.SoftState.RaftState == raft.StateCandidate)
+	} else {
+		// If a replica doesn't have an active raft group, we should check whether
+		// we're decommissioning. If so, we should process the replica because it
+		// has probably already been removed from its raft group but doesn't know it.
+		// Without this, node decommissioning can stall on such dormant ranges.
+		if liveness, _ := repl.store.cfg.NodeLiveness.Self(); liveness != nil && liveness.Decommissioning {
+			return true, replicaGCPriorityDefault
+		}
 	}
 	return replicaGCShouldQueueImpl(now, lastCheck, lastActivity, isCandidate)
 }
