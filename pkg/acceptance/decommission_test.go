@@ -87,15 +87,13 @@ func testDecommissionInner(
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() {
-			_ = db.Close()
-		}()
 		if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING server.remote_debugging.mode = 'any'"); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING server.time_until_store_dead = '15s'"); err != nil {
 			t.Fatal(err)
 		}
+		_ = db.Close()
 	}
 
 	log.Info(ctx, "decommissioning first node from the second, polling the status manually")
@@ -199,12 +197,51 @@ func testDecommissionInner(
 		}
 	}
 
-	// The first node spontaneously combusts.
+	// Kill the first node and verify that we can decommission it while it's down,
+	// bringing it back up to verify that its replicas still get removed.
 	log.Info(ctx, "intentionally killing first node")
 	if err := c.Kill(ctx, 0); err != nil {
 		t.Fatal(err)
 	}
+	log.Info(ctx, "decommission first node, starting with it down but restarting it for verification")
+	{
+		target := idMap[0]
+		o, err := decommission(ctx, c, 2, target, "decommission", "--wait", "live")
+		if err != nil {
+			t.Fatal(err)
+		}
+		log.Infof(ctx, o)
+		if err := c.Restart(ctx, 0); err != nil {
+			t.Fatal(err)
+		}
+		// Run a second time to wait until the replicas have all been GC'ed.
+		o, err = decommission(ctx, c, 2, target, "decommission", "--wait", "live")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ok, err := regexp.MatchString(strconv.Itoa(int(target))+`\s+true\s+0\s+true\s+true`, o); !ok || err != nil {
+			t.Fatalf("node did not decommission: ok=%t, err=%s, output:\n%s", ok, err, o)
+		}
+	}
 
+	// Now we want to test decommissioning a truly dead node. Make sure we don't
+	// waste too much time waiting for the node to be recognized as dead. Note that
+	// we don't want to set this number too low or everything will seem dead to the
+	// allocator at all times, so nothing will ever happen.
+	{
+		db, err := gosql.Open("postgres", c.PGUrl(ctx, 1))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING server.time_until_store_dead = '15s'"); err != nil {
+			t.Fatal(err)
+		}
+		_ = db.Close()
+	}
+	log.Info(ctx, "intentionally killing first node")
+	if err := c.Kill(ctx, 0); err != nil {
+		t.Fatal(err)
+	}
 	// It is being decommissioned in absentia, meaning that its replicas are
 	// being removed due to deadness. We can't see that reflected in the output
 	// since the current mechanism gets its replica counts from what the node
