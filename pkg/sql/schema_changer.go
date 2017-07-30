@@ -709,7 +709,7 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 				record := sc.job.Record
 				record.Description = "ROLL BACK " + record.Description
 				job := sc.jobRegistry.NewJob(record)
-				if err := job.Created(ctx); err != nil {
+				if err := job.Created(ctx, jobs.WithoutCancel); err != nil {
 					return err
 				}
 				if err := job.Started(ctx); err != nil {
