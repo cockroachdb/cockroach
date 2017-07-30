@@ -33268,6 +33268,215 @@ export const cockroach = $root.cockroach = (() => {
              */
             const jobs = {};
 
+            jobs.Lease = (function() {
+
+                /**
+                 * Properties of a Lease.
+                 * @typedef cockroach.sql.jobs.Lease$Properties
+                 * @type {Object}
+                 * @property {number} [node_id] Lease node_id.
+                 * @property {Long} [epoch] Lease epoch.
+                 */
+
+                /**
+                 * Constructs a new Lease.
+                 * @exports cockroach.sql.jobs.Lease
+                 * @constructor
+                 * @param {cockroach.sql.jobs.Lease$Properties=} [properties] Properties to set
+                 */
+                function Lease(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * Lease node_id.
+                 * @type {number}
+                 */
+                Lease.prototype.node_id = 0;
+
+                /**
+                 * Lease epoch.
+                 * @type {Long}
+                 */
+                Lease.prototype.epoch = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                /**
+                 * Creates a new Lease instance using the specified properties.
+                 * @param {cockroach.sql.jobs.Lease$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.jobs.Lease} Lease instance
+                 */
+                Lease.create = function create(properties) {
+                    return new Lease(properties);
+                };
+
+                /**
+                 * Encodes the specified Lease message. Does not implicitly {@link cockroach.sql.jobs.Lease.verify|verify} messages.
+                 * @param {cockroach.sql.jobs.Lease$Properties} message Lease message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                Lease.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.node_id);
+                    if (message.epoch != null && message.hasOwnProperty("epoch"))
+                        writer.uint32(/* id 2, wireType 0 =*/16).int64(message.epoch);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified Lease message, length delimited. Does not implicitly {@link cockroach.sql.jobs.Lease.verify|verify} messages.
+                 * @param {cockroach.sql.jobs.Lease$Properties} message Lease message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                Lease.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a Lease message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.jobs.Lease} Lease
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                Lease.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.sql.jobs.Lease();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.node_id = reader.uint32();
+                            break;
+                        case 2:
+                            message.epoch = reader.int64();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a Lease message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.jobs.Lease} Lease
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                Lease.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a Lease message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                Lease.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        if (!$util.isInteger(message.node_id))
+                            return "node_id: integer expected";
+                    if (message.epoch != null && message.hasOwnProperty("epoch"))
+                        if (!$util.isInteger(message.epoch) && !(message.epoch && $util.isInteger(message.epoch.low) && $util.isInteger(message.epoch.high)))
+                            return "epoch: integer|Long expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a Lease message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.jobs.Lease} Lease
+                 */
+                Lease.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.sql.jobs.Lease)
+                        return object;
+                    let message = new $root.cockroach.sql.jobs.Lease();
+                    if (object.node_id != null)
+                        message.node_id = object.node_id >>> 0;
+                    if (object.epoch != null)
+                        if ($util.Long)
+                            (message.epoch = $util.Long.fromValue(object.epoch)).unsigned = false;
+                        else if (typeof object.epoch === "string")
+                            message.epoch = parseInt(object.epoch, 10);
+                        else if (typeof object.epoch === "number")
+                            message.epoch = object.epoch;
+                        else if (typeof object.epoch === "object")
+                            message.epoch = new $util.LongBits(object.epoch.low >>> 0, object.epoch.high >>> 0).toNumber();
+                    return message;
+                };
+
+                /**
+                 * Creates a Lease message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.jobs.Lease.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.jobs.Lease} Lease
+                 */
+                Lease.from = Lease.fromObject;
+
+                /**
+                 * Creates a plain object from a Lease message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.jobs.Lease} message Lease
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                Lease.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults) {
+                        object.node_id = 0;
+                        if ($util.Long) {
+                            let long = new $util.Long(0, 0, false);
+                            object.epoch = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                        } else
+                            object.epoch = options.longs === String ? "0" : 0;
+                    }
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        object.node_id = message.node_id;
+                    if (message.epoch != null && message.hasOwnProperty("epoch"))
+                        if (typeof message.epoch === "number")
+                            object.epoch = options.longs === String ? String(message.epoch) : message.epoch;
+                        else
+                            object.epoch = options.longs === String ? $util.Long.prototype.toString.call(message.epoch) : options.longs === Number ? new $util.LongBits(message.epoch.low >>> 0, message.epoch.high >>> 0).toNumber() : message.epoch;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this Lease message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                Lease.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this Lease to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                Lease.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return Lease;
+            })();
+
             jobs.BackupDetails = (function() {
 
                 /**
@@ -33787,6 +33996,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @property {Array.<number>} [descriptor_ids] Payload descriptor_ids.
                  * @property {number} [fraction_completed] Payload fraction_completed.
                  * @property {string} [error] Payload error.
+                 * @property {cockroach.sql.jobs.Lease$Properties} [lease] Payload lease.
                  * @property {cockroach.sql.jobs.BackupDetails$Properties} [backup] Payload backup.
                  * @property {cockroach.sql.jobs.RestoreDetails$Properties} [restore] Payload restore.
                  * @property {cockroach.sql.jobs.SchemaChangeDetails$Properties} [schemaChange] Payload schemaChange.
@@ -33853,6 +34063,12 @@ export const cockroach = $root.cockroach = (() => {
                  * @type {string}
                  */
                 Payload.prototype.error = "";
+
+                /**
+                 * Payload lease.
+                 * @type {(cockroach.sql.jobs.Lease$Properties|null)}
+                 */
+                Payload.prototype.lease = null;
 
                 /**
                  * Payload backup.
@@ -33923,6 +34139,8 @@ export const cockroach = $root.cockroach = (() => {
                         writer.uint32(/* id 7, wireType 5 =*/61).float(message.fraction_completed);
                     if (message.error != null && message.hasOwnProperty("error"))
                         writer.uint32(/* id 8, wireType 2 =*/66).string(message.error);
+                    if (message.lease != null && message.hasOwnProperty("lease"))
+                        $root.cockroach.sql.jobs.Lease.encode(message.lease, writer.uint32(/* id 9, wireType 2 =*/74).fork()).ldelim();
                     if (message.backup != null && message.hasOwnProperty("backup"))
                         $root.cockroach.sql.jobs.BackupDetails.encode(message.backup, writer.uint32(/* id 10, wireType 2 =*/82).fork()).ldelim();
                     if (message.restore != null && message.hasOwnProperty("restore"))
@@ -33987,6 +34205,9 @@ export const cockroach = $root.cockroach = (() => {
                             break;
                         case 8:
                             message.error = reader.string();
+                            break;
+                        case 9:
+                            message.lease = $root.cockroach.sql.jobs.Lease.decode(reader, reader.uint32());
                             break;
                         case 10:
                             message.backup = $root.cockroach.sql.jobs.BackupDetails.decode(reader, reader.uint32());
@@ -34055,6 +34276,11 @@ export const cockroach = $root.cockroach = (() => {
                     if (message.error != null && message.hasOwnProperty("error"))
                         if (!$util.isString(message.error))
                             return "error: string expected";
+                    if (message.lease != null && message.hasOwnProperty("lease")) {
+                        let error = $root.cockroach.sql.jobs.Lease.verify(message.lease);
+                        if (error)
+                            return "lease." + error;
+                    }
                     if (message.backup != null && message.hasOwnProperty("backup")) {
                         properties.details = 1;
                         let error = $root.cockroach.sql.jobs.BackupDetails.verify(message.backup);
@@ -34131,6 +34357,11 @@ export const cockroach = $root.cockroach = (() => {
                         message.fraction_completed = Number(object.fraction_completed);
                     if (object.error != null)
                         message.error = String(object.error);
+                    if (object.lease != null) {
+                        if (typeof object.lease !== "object")
+                            throw TypeError(".cockroach.sql.jobs.Payload.lease: object expected");
+                        message.lease = $root.cockroach.sql.jobs.Lease.fromObject(object.lease);
+                    }
                     if (object.backup != null) {
                         if (typeof object.backup !== "object")
                             throw TypeError(".cockroach.sql.jobs.Payload.backup: object expected");
@@ -34190,6 +34421,7 @@ export const cockroach = $root.cockroach = (() => {
                             object.modified_micros = options.longs === String ? "0" : 0;
                         object.fraction_completed = 0;
                         object.error = "";
+                        object.lease = null;
                     }
                     if (message.description != null && message.hasOwnProperty("description"))
                         object.description = message.description;
@@ -34219,6 +34451,8 @@ export const cockroach = $root.cockroach = (() => {
                         object.fraction_completed = message.fraction_completed;
                     if (message.error != null && message.hasOwnProperty("error"))
                         object.error = message.error;
+                    if (message.lease != null && message.hasOwnProperty("lease"))
+                        object.lease = $root.cockroach.sql.jobs.Lease.toObject(message.lease, options);
                     if (message.backup != null && message.hasOwnProperty("backup")) {
                         object.backup = $root.cockroach.sql.jobs.BackupDetails.toObject(message.backup, options);
                         if (options.oneofs)
