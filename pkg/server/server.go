@@ -384,7 +384,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	s.sessionRegistry = sql.MakeSessionRegistry()
 	s.queryRegistry = sql.MakeQueryRegistry()
-	s.jobRegistry = jobs.MakeRegistry(s.db, sqlExecutor, s.gossip, &s.nodeIDContainer, s.ClusterID)
+	s.jobRegistry = jobs.MakeRegistry(
+		s.clock, s.db, sqlExecutor, s.gossip, &s.nodeIDContainer, s.ClusterID)
 
 	s.admin = newAdminServer(s)
 	s.status = newStatusServer(
@@ -934,6 +935,12 @@ func (s *Server) Start(ctx context.Context) error {
 			}
 		}
 	})
+
+	if err := s.jobRegistry.Start(
+		ctx, s.stopper, s.nodeLiveness, jobs.DefaultCancelInterval, jobs.DefaultAdoptInterval,
+	); err != nil {
+		return err
+	}
 
 	// Initialize grpc-gateway mux and context.
 	jsonpb := &protoutil.JSONPb{

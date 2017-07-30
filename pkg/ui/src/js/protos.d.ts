@@ -17752,6 +17752,126 @@ export namespace cockroach {
          */
         namespace jobs {
 
+            type Lease$Properties = {
+                node_id?: number;
+                epoch?: Long;
+            };
+
+            /**
+             * Constructs a new Lease.
+             * @exports cockroach.sql.jobs.Lease
+             * @constructor
+             * @param {cockroach.sql.jobs.Lease$Properties=} [properties] Properties to set
+             */
+            class Lease {
+
+                /**
+                 * Constructs a new Lease.
+                 * @exports cockroach.sql.jobs.Lease
+                 * @constructor
+                 * @param {cockroach.sql.jobs.Lease$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.sql.jobs.Lease$Properties);
+
+                /**
+                 * Lease node_id.
+                 * @type {number}
+                 */
+                public node_id: number;
+
+                /**
+                 * Lease epoch.
+                 * @type {Long}
+                 */
+                public epoch: Long;
+
+                /**
+                 * Creates a new Lease instance using the specified properties.
+                 * @param {cockroach.sql.jobs.Lease$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.jobs.Lease} Lease instance
+                 */
+                public static create(properties?: cockroach.sql.jobs.Lease$Properties): cockroach.sql.jobs.Lease;
+
+                /**
+                 * Encodes the specified Lease message. Does not implicitly {@link cockroach.sql.jobs.Lease.verify|verify} messages.
+                 * @param {cockroach.sql.jobs.Lease$Properties} message Lease message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.sql.jobs.Lease$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified Lease message, length delimited. Does not implicitly {@link cockroach.sql.jobs.Lease.verify|verify} messages.
+                 * @param {cockroach.sql.jobs.Lease$Properties} message Lease message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.sql.jobs.Lease$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a Lease message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.jobs.Lease} Lease
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.sql.jobs.Lease;
+
+                /**
+                 * Decodes a Lease message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.jobs.Lease} Lease
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.sql.jobs.Lease;
+
+                /**
+                 * Verifies a Lease message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a Lease message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.jobs.Lease} Lease
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.sql.jobs.Lease;
+
+                /**
+                 * Creates a Lease message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.jobs.Lease.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.jobs.Lease} Lease
+                 */
+                public static from(object: { [k: string]: any }): cockroach.sql.jobs.Lease;
+
+                /**
+                 * Creates a plain object from a Lease message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.jobs.Lease} message Lease
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.sql.jobs.Lease, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this Lease message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this Lease to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
             type BackupDetails$Properties = {};
 
             /**
@@ -18092,6 +18212,7 @@ export namespace cockroach {
                 descriptor_ids?: number[];
                 fraction_completed?: number;
                 error?: string;
+                lease?: cockroach.sql.jobs.Lease$Properties;
                 backup?: cockroach.sql.jobs.BackupDetails$Properties;
                 restore?: cockroach.sql.jobs.RestoreDetails$Properties;
                 schemaChange?: cockroach.sql.jobs.SchemaChangeDetails$Properties;
@@ -18160,6 +18281,12 @@ export namespace cockroach {
                  * @type {string}
                  */
                 public error: string;
+
+                /**
+                 * Payload lease.
+                 * @type {(cockroach.sql.jobs.Lease$Properties|null)}
+                 */
+                public lease: (cockroach.sql.jobs.Lease$Properties|null);
 
                 /**
                  * Payload backup.
