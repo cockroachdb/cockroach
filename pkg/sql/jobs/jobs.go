@@ -48,13 +48,15 @@ type Job struct {
 	// Started, etc., have Registry call a setupFn and a workFn as appropriate.
 	registry *Registry
 
-	id     *int64
-	Record Record
-	txn    *client.Txn
+	id       *int64
+	Record   Record
+	txn      *client.Txn
+	cancelFn func()
 
 	mu struct {
 		syncutil.Mutex
-		payload Payload
+		payload  Payload
+		canceled bool
 	}
 }
 
@@ -94,17 +96,36 @@ func (j *Job) ID() *int64 {
 	return j.id
 }
 
+// WithoutCancel indicates that the job should not have its leasing and
+// cancelation managed by Registry. This is only a temporary measure; eventually
+// all jobs will use the Registry's leasing and cancelation.
+var WithoutCancel func()
+
 // Created records the creation of a new job in the system.jobs table and
 // remembers the assigned ID of the job in the Job. The job information is read
-// from the Record field at the time Created is called.
-func (j *Job) Created(ctx context.Context) error {
+// from the Record field at the time Created is called. If cancelFn is not nil,
+// the Registry will automatically acquire a lease for this job and invoke
+// cancelFn if the lease expires.
+func (j *Job) Created(ctx context.Context, cancelFn func()) error {
 	payload := &Payload{
 		Description:   j.Record.Description,
 		Username:      j.Record.Username,
 		DescriptorIDs: j.Record.DescriptorIDs,
 		Details:       WrapPayloadDetails(j.Record.Details),
 	}
-	return j.insert(ctx, payload)
+	if cancelFn != nil {
+		payload.Lease = j.registry.newLease()
+	}
+	if err := j.insert(ctx, payload); err != nil {
+		return err
+	}
+	if cancelFn != nil {
+		j.cancelFn = cancelFn
+		if err := j.registry.register(*j.id, j); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Started marks the tracked job as started.
@@ -179,14 +200,16 @@ func (j *Job) Failed(ctx context.Context, err error) {
 	})
 	if internalErr != nil {
 		log.Errorf(ctx, "Job: ignoring error %v while logging failure for job %d: %+v",
-			err, j.id, internalErr)
+			err, *j.id, internalErr)
 	}
+	j.registry.unregister(*j.id)
 }
 
 // Succeeded marks the tracked job as having succeeded and sets its fraction
 // completed to 1.0.
 func (j *Job) Succeeded(ctx context.Context) error {
-	return j.update(ctx, StatusSucceeded, func(payload *Payload) (bool, error) {
+	defer j.registry.unregister(*j.id)
+	if err := j.update(ctx, StatusSucceeded, func(payload *Payload) (bool, error) {
 		if payload.FinishedMicros != 0 {
 			// Already finished - do nothing.
 			return false, nil
@@ -194,7 +217,10 @@ func (j *Job) Succeeded(ctx context.Context) error {
 		payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
 		payload.FractionCompleted = 1.0
 		return true, nil
-	})
+	}); err != nil {
+		return err
+	}
+	return nil
 }
 
 // FinishedWith is a shortcut for automatically calling Succeeded or Failed
@@ -209,6 +235,24 @@ func (j *Job) Succeeded(ctx context.Context) error {
 //
 // where RunJob handles writing to system.jobs automatically.
 func (j *Job) FinishedWith(ctx context.Context, err error) error {
+	j.mu.Lock()
+	canceled := j.mu.canceled
+	j.mu.Unlock()
+	if canceled {
+		// The registry canceled the job because its lease expired. This job will be
+		// retried, potentially on another node, so we must report an ambiguous
+		// result to the client because we don't know its fate.
+		//
+		// TODO(benesch): In rare cases, this can return an ambiguous result error
+		// when the result was not, in fact, ambigious. Specifically, if the job
+		// succeeds or fails with a non-lease-related error immediately before it
+		// loses its lease, we'll have knowledge of its true status but will blindly
+		// report an ambiguous result. Ideally, we'd additionally check for
+		// `errors.Cause(err) == context.Canceled`, but that yields false negatives
+		// when using errors.Wrapf, and we'd much rather have false positives (too
+		// many ambiguous results) than false negatives (too few ambiguous results).
+		return roachpb.NewAmbiguousResultError("job lease expired")
+	}
 	if err != nil {
 		j.Failed(ctx, err)
 	} else if err := j.Succeeded(ctx); err != nil {
@@ -276,23 +320,29 @@ func (j *Job) runInTxn(
 	return j.registry.db.Txn(ctx, retryable)
 }
 
+func (j *Job) initialize(payload *Payload) (err error) {
+	j.Record.Description = payload.Description
+	j.Record.Username = payload.Username
+	j.Record.DescriptorIDs = payload.DescriptorIDs
+	if j.Record.Details, err = payload.UnwrapDetails(); err != nil {
+		return err
+	}
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	j.mu.payload = *payload
+	return nil
+}
+
 func (j *Job) load(ctx context.Context) error {
-	return j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		payload, err := j.loadPayload(ctx, txn)
-		if err != nil {
-			return err
-		}
-		j.Record.Description = payload.Description
-		j.Record.Username = payload.Username
-		j.Record.DescriptorIDs = payload.DescriptorIDs
-		if j.Record.Details, err = payload.UnwrapDetails(); err != nil {
-			return err
-		}
-		// Don't need to lock because we're the only one who has a handle on this
-		// Job so far.
-		j.mu.payload = *payload
-		return nil
-	})
+	var payload *Payload
+	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		var err error
+		payload, err = j.loadPayload(ctx, txn)
+		return err
+	}); err != nil {
+		return err
+	}
+	return j.initialize(payload)
 }
 
 func (j *Job) loadPayload(ctx context.Context, txn *client.Txn) (*Payload, error) {
@@ -386,6 +436,27 @@ func (j *Job) update(
 		j.mu.Unlock()
 	}
 	return nil
+}
+
+func (j *Job) adopt(ctx context.Context, oldLease *Lease) error {
+	return j.update(ctx, StatusRunning, func(payload *Payload) (bool, error) {
+		if !payload.Lease.Equal(oldLease) {
+			return false, errors.Errorf("current lease %v did not match expected lease %v",
+				payload.Lease, oldLease)
+		}
+		payload.Lease = j.registry.newLease()
+		if err := j.initialize(payload); err != nil {
+			return false, err
+		}
+		return true, nil
+	})
+}
+
+func (j *Job) cancel() {
+	j.cancelFn()
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	j.mu.canceled = true
 }
 
 // Type returns the payload's job type.
