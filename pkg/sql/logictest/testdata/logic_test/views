@@ -38,17 +38,6 @@ a b
 2 98
 3 97
 
-statement ok
-CREATE VIEW v7 AS SELECT a, b FROM (SELECT a, b FROM v1)
-
-query ITTT
-EXPLAIN SELECT * FROM v7
-----
-0  render  ·      ·
-1  scan    ·      ·
-1  ·       table  t@primary
-1  ·       spans  ALL
-
 query II colnames,rowsort
 SELECT * FROM v2
 ----
@@ -243,9 +232,6 @@ DROP VIEW v2
 
 statement ok
 DROP VIEW test2.v1
-
-statement ok
-DROP VIEW v7
 
 statement ok
 DROP VIEW v6
