@@ -18,8 +18,20 @@ syntax = "proto3";
 package cockroach.sql.jobs;
 option go_package = "jobs";
 
-import "gogoproto/gogo.proto";
 import "cockroach/pkg/util/hlc/timestamp.proto";
+import "gogoproto/gogo.proto";
+
+message Lease {
+  option (gogoproto.equal) = true;
+
+  // The ID of the node that holds the lease.
+  uint32 node_id = 1 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+  // The epoch of the lease holder's node liveness entry.
+  int64 epoch = 2;
+}
 
 message BackupDetails {
   // Intentionally empty.
@@ -49,7 +61,7 @@ message Payload {
   float fraction_completed = 7;
   string error = 8;
   // ID 9 is intentionally reserved for lease information.
-  reserved 9;
+  Lease lease = 9;
   oneof details {
     BackupDetails backup = 10;
     RestoreDetails restore = 11;
