@@ -216,42 +216,29 @@ func TestMirrorRouter(t *testing.T) {
 // not closed, and ConsumerClosed should be returned afterwards.
 func TestConsumerStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mirrorRouterFactory := func() (RowReceiver, []RowSource, error) {
-		bufs := make([]*RowBuffer, 2)
-		recvs := make([]RowReceiver, 2)
-		srcs := make([]RowSource, 2)
-		for i := 0; i < 2; i++ {
-			bufs[i] = &RowBuffer{}
-			recvs[i] = bufs[i]
-			srcs[i] = bufs[i]
-		}
-		mr, err := makeMirrorRouter(recvs)
-		return mr, srcs, err
-	}
-	hashRouterFactory := func() (RowReceiver, []RowSource, error) {
-		bufs := make([]*RowBuffer, 2)
-		recvs := make([]RowReceiver, 2)
-		srcs := make([]RowSource, 2)
-		for i := 0; i < 2; i++ {
-			bufs[i] = &RowBuffer{}
-			recvs[i] = bufs[i]
-			srcs[i] = bufs[i]
-		}
-		mr, err := makeHashRouter([]uint32{0} /* hashCols */, recvs)
-		return mr, srcs, err
-	}
-
 	testCases := []struct {
-		name          string
-		routerFactory func() (RowReceiver, []RowSource, error)
+		name string
+		spec OutputRouterSpec
 	}{
-		{"MirrorRouter", mirrorRouterFactory},
-		{"HashRouter", hashRouterFactory},
+		{
+			name: "MirrorRouter",
+			spec: OutputRouterSpec{Type: OutputRouterSpec_MIRROR},
+		},
+		{
+			name: "HashRouter",
+			spec: OutputRouterSpec{Type: OutputRouterSpec_BY_HASH, HashColumns: []uint32{0}},
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			router, srcs, err := tc.routerFactory()
+			bufs := make([]*RowBuffer, 2)
+			recvs := make([]RowReceiver, 2)
+			for i := 0; i < 2; i++ {
+				bufs[i] = &RowBuffer{}
+				recvs[i] = bufs[i]
+			}
+			router, err := makeRouter(&tc.spec, recvs)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -260,11 +247,11 @@ func TestConsumerStatus(t *testing.T) {
 			var row0, row1 sqlbase.EncDatumRow
 			if hr, ok := router.(*hashRouter); ok {
 				var err error
-				row0, err = preimageAttack(hr, 0, len(srcs))
+				row0, err = preimageAttack(hr, 0, len(bufs))
 				if err != nil {
 					t.Fatal(err)
 				}
-				row1, err = preimageAttack(hr, 1, len(srcs))
+				row1, err = preimageAttack(hr, 1, len(bufs))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -283,7 +270,7 @@ func TestConsumerStatus(t *testing.T) {
 
 			// Start draining stream 0. Keep expecting NeedMoreRows, regardless on
 			// which stream we send.
-			srcs[0].ConsumerDone()
+			bufs[0].ConsumerDone()
 			consumerStatus = router.Push(row0, ProducerMetadata{})
 			if consumerStatus != NeedMoreRows {
 				t.Fatalf("expected status %d, got: %d", NeedMoreRows, consumerStatus)
@@ -294,7 +281,7 @@ func TestConsumerStatus(t *testing.T) {
 			}
 
 			// Close stream 0. Continue to expect NeedMoreRows.
-			srcs[0].ConsumerClosed()
+			bufs[0].ConsumerClosed()
 			consumerStatus = router.Push(row0, ProducerMetadata{})
 			if consumerStatus != NeedMoreRows {
 				t.Fatalf("expected status %d, got: %d", NeedMoreRows, consumerStatus)
@@ -306,7 +293,7 @@ func TestConsumerStatus(t *testing.T) {
 
 			// Start draining stream 1. Now that all streams are draining, expect
 			// DrainRequested.
-			srcs[1].ConsumerDone()
+			bufs[1].ConsumerDone()
 			consumerStatus = router.Push(row1, ProducerMetadata{})
 			if consumerStatus != DrainRequested {
 				t.Fatalf("expected status %d, got: %d", DrainRequested, consumerStatus)
@@ -315,7 +302,7 @@ func TestConsumerStatus(t *testing.T) {
 			// Close stream 1. Everything's closed now, but the routers currently
 			// only detect this when trying to send metadata - so we still expect
 			// DrainRequested.
-			srcs[1].ConsumerClosed()
+			bufs[1].ConsumerClosed()
 			consumerStatus = router.Push(row1, ProducerMetadata{})
 			if consumerStatus != DrainRequested {
 				t.Fatalf("expected status %d, got: %d", DrainRequested, consumerStatus)
@@ -323,7 +310,6 @@ func TestConsumerStatus(t *testing.T) {
 
 			// Attempt to send some metadata. This will cause the router to observe
 			// that everything's closed now.
-			srcs[1].ConsumerClosed()
 			consumerStatus = router.Push(
 				nil /* row */, ProducerMetadata{Err: errors.Errorf("test error")})
 			if consumerStatus != ConsumerClosed {
@@ -354,86 +340,71 @@ func preimageAttack(hr *hashRouter, streamIdx int, numStreams int) (sqlbase.EncD
 // stream that's not closed.
 func TestMetadataIsForwarded(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mirrorRouterFactory := func() (RowReceiver, []RowSource, error) {
-		bufs := make([]*RowBuffer, 2)
-		recvs := make([]RowReceiver, 2)
-		srcs := make([]RowSource, 2)
-		for i := 0; i < 2; i++ {
-			bufs[i] = &RowBuffer{}
-			recvs[i] = bufs[i]
-			srcs[i] = bufs[i]
-		}
-		mr, err := makeMirrorRouter(recvs)
-		return mr, srcs, err
-	}
-	hashRouterFactory := func() (RowReceiver, []RowSource, error) {
-		bufs := make([]*RowBuffer, 2)
-		recvs := make([]RowReceiver, 2)
-		srcs := make([]RowSource, 2)
-		for i := 0; i < 2; i++ {
-			bufs[i] = &RowBuffer{}
-			recvs[i] = bufs[i]
-			srcs[i] = bufs[i]
-		}
-		mr, err := makeHashRouter([]uint32{0} /* hashCols */, recvs)
-		return mr, srcs, err
-	}
 
 	testCases := []struct {
-		name          string
-		routerFactory func() (RowReceiver, []RowSource, error)
+		name string
+		spec OutputRouterSpec
 	}{
-		{"MirrorRouter", mirrorRouterFactory},
-		{"HashRouter", hashRouterFactory},
+		{
+			name: "MirrorRouter",
+			spec: OutputRouterSpec{Type: OutputRouterSpec_MIRROR},
+		},
+		{
+			name: "HashRouter",
+			spec: OutputRouterSpec{Type: OutputRouterSpec_BY_HASH, HashColumns: []uint32{0}},
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			router, srcs, err := tc.routerFactory()
+			bufs := make([]*RowBuffer, 2)
+			recvs := make([]RowReceiver, 2)
+			for i := 0; i < 2; i++ {
+				bufs[i] = &RowBuffer{}
+				recvs[i] = bufs[i]
+			}
+			router, err := makeRouter(&tc.spec, recvs)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			// Push metadata. It should be fwd to src[0].
+			// Push metadata; it should go to stream 0.
 			consumerStatus := router.Push(
 				nil /* row */, ProducerMetadata{Err: errors.Errorf("test error 1")})
 			if consumerStatus != NeedMoreRows {
 				t.Fatalf("expected status %d, got: %d", NeedMoreRows, consumerStatus)
 			}
 
-			// Call src[0].ConsumerDone() and then push metadata. It should still be
-			// fwd to src[0].
-			srcs[0].ConsumerDone()
+			bufs[0].ConsumerDone()
+			// Push metadata; it should still go to stream 0.
 			consumerStatus = router.Push(
 				nil /* row */, ProducerMetadata{Err: errors.Errorf("test error 2")})
 			if consumerStatus != NeedMoreRows {
 				t.Fatalf("expected status %d, got: %d", NeedMoreRows, consumerStatus)
 			}
 
-			// Call src[0].ConsumerClosed() and then push metadata. It should be fwd
-			// to src[1].
-			srcs[0].ConsumerClosed()
+			bufs[0].ConsumerClosed()
+			// Metadata should now go to stream 1.
 			consumerStatus = router.Push(
 				nil /* row */, ProducerMetadata{Err: errors.Errorf("test error 3")})
 			if consumerStatus != NeedMoreRows {
 				t.Fatalf("expected status %d, got: %d", NeedMoreRows, consumerStatus)
 			}
 
-			// Call src[1].ConsumerClosed() and then push metadata. It should not be
-			// fwd anywhere.
-			srcs[1].ConsumerClosed()
+			bufs[1].ConsumerClosed()
+			// Metadata should not go anywhere.
 			consumerStatus = router.Push(
 				nil /* row */, ProducerMetadata{Err: errors.Errorf("test error 4")})
 			if consumerStatus != ConsumerClosed {
 				t.Fatalf("expected status %d, got: %d", ConsumerClosed, consumerStatus)
 			}
 
-			r0 := getRecordsSummary(srcs[0])
+			r0 := getRecordsSummary(bufs[0])
 			exp0 := "test error 1, test error 2"
 			if r0 != exp0 {
 				t.Fatalf("expected records: %q, got: %q", exp0, r0)
 			}
-			r1 := getRecordsSummary(srcs[1])
+			r1 := getRecordsSummary(bufs[1])
 			exp1 := "test error 3"
 			if r1 != exp1 {
 				t.Fatalf("expected records: %q, got: %q", exp1, r1)
