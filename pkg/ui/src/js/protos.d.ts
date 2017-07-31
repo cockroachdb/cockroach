@@ -18001,6 +18001,8 @@ export namespace cockroach {
 
             type RestoreDetails$Properties = {
                 low_water_mark?: Uint8Array;
+                table_rewrites?: { [k: string]: cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties };
+                uris?: string[];
             };
 
             /**
@@ -18024,6 +18026,18 @@ export namespace cockroach {
                  * @type {Uint8Array}
                  */
                 public low_water_mark: Uint8Array;
+
+                /**
+                 * RestoreDetails table_rewrites.
+                 * @type {Object.<string,cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties>}
+                 */
+                public table_rewrites: { [k: string]: cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties };
+
+                /**
+                 * RestoreDetails uris.
+                 * @type {Array.<string>}
+                 */
+                public uris: string[];
 
                 /**
                  * Creates a new RestoreDetails instance using the specified properties.
