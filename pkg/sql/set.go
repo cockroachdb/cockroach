@@ -113,7 +113,7 @@ func (p *planner) setClusterSetting(
 		}
 	case 1:
 		// TODO(dt): validate and properly encode str according to type.
-		encoded, err := p.toSettingString(name, typ, v[0])
+		encoded, err := p.toSettingString(ctx, ie, name, typ, v[0])
 		if err != nil {
 			return nil, err
 		}
@@ -130,7 +130,7 @@ func (p *planner) setClusterSetting(
 }
 
 func (p *planner) toSettingString(
-	name string, setting settings.Setting, raw parser.Expr,
+	ctx context.Context, ie InternalExecutor, name string, setting settings.Setting, raw parser.Expr,
 ) (string, error) {
 	typeCheckAndParse := func(t parser.Type, f func(parser.Datum) (string, error)) (string, error) {
 		typed, err := parser.TypeCheckAndRequire(raw, nil, t, name)
@@ -152,6 +152,31 @@ func (p *planner) toSettingString(
 					return "", err
 				}
 				return string(*s), nil
+			}
+			return "", errors.Errorf("cannot use %s %T value for string setting", d.ResolvedType(), d)
+		})
+	case *settings.StateMachineSetting:
+		return typeCheckAndParse(parser.TypeString, func(d parser.Datum) (string, error) {
+			if s, ok := d.(*parser.DString); ok {
+				datums, err := ie.QueryRowInTransaction(
+					ctx, "retrieve-prev-setting", p.txn, "SELECT value FROM system.settings WHERE name = $1", name,
+				)
+				if err != nil {
+					return "", err
+				}
+				var prevRawVal []byte
+				if len(datums) != 0 {
+					dStr, ok := datums[0].(*parser.DString)
+					if !ok {
+						return "", errors.New("the existing value is not a string")
+					}
+					prevRawVal = []byte(string(*dStr))
+				}
+				newBytes, _, err := setting.Validate(prevRawVal, (*string)(s))
+				if err != nil {
+					return "", err
+				}
+				return string(newBytes), nil
 			}
 			return "", errors.Errorf("cannot use %s %T value for string setting", d.ResolvedType(), d)
 		})

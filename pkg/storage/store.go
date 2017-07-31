@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -170,6 +171,11 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 		clock = hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	}
 	sc := StoreConfig{
+		ExposedClusterVersion: migration.NewExposedClusterVersion(func() base.ClusterVersion {
+			return base.ClusterVersion{
+				UseVersion: base.ServerVersion, // all features active
+			}
+		}, nil),
 		AmbientCtx:                     log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:                          clock,
 		RaftTickInterval:               100 * time.Millisecond,
@@ -583,6 +589,7 @@ var _ client.Sender = &Store{}
 // a store; the rest will have sane defaults set if omitted.
 type StoreConfig struct {
 	AmbientCtx log.AmbientContext
+	*migration.ExposedClusterVersion
 
 	Clock        *hlc.Clock
 	DB           *client.DB

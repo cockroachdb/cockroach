@@ -28,6 +28,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -783,7 +784,7 @@ func (r *Replica) handleReplicatedEvalResult(
 		// that all we need to synchronize is disk i/o, and there is no overlap
 		// between files *removed* during truncation and those active in Raft.
 
-		if util.IsMigrated() {
+		if r.store.cfg.IsActive(base.VersionRaftLogTruncationBelowRaft) {
 			// Truncate the Raft log.
 			start := engine.MakeMVCCMetadataKey(keys.RaftLogKey(r.RangeID, 0))
 			end := engine.MakeMVCCMetadataKey(

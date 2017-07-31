@@ -15,6 +15,7 @@
 package settings_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 	"unicode"
@@ -23,6 +24,66 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/pkg/errors"
 )
+
+type dummy struct {
+	msg1       string
+	growsbyone string
+}
+
+func (d *dummy) Unmarshal(data []byte) error {
+	s := string(data)
+	parts := strings.Split(s, ".")
+	if len(parts) != 2 {
+		return errors.Errorf("expected two parts, not %v", parts)
+	}
+	*d = dummy{
+		msg1: parts[0], growsbyone: parts[1],
+	}
+	return nil
+}
+
+func (d *dummy) Marshal() ([]byte, error) {
+	if c := d.msg1 + d.growsbyone; strings.Contains(c, ".") {
+		return nil, errors.New("must not contain dots: " + c)
+	}
+	return []byte(d.msg1 + "." + d.growsbyone), nil
+}
+
+var dummyTransformer = func(old []byte, update *string) ([]byte, interface{}, error) {
+	var oldD dummy
+
+	// If no old value supplied, fill in the default.
+	if old == nil {
+		oldD.msg1 = "default"
+		oldD.growsbyone = "-"
+		var err error
+		old, err = oldD.Marshal()
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	if err := oldD.Unmarshal(old); err != nil {
+		return nil, nil, err
+	}
+
+	if update == nil {
+		// Round-trip the existing value, but only if it passes sanity checks.
+		b, err := oldD.Marshal()
+		if err != nil {
+			return nil, nil, err
+		}
+		return b, &oldD, err
+	}
+
+	// We have a new proposed update to the value, validate it.
+	if len(*update) != len(oldD.growsbyone)+1 {
+		return nil, nil, errors.New("dashes component must grow by exactly one")
+	}
+	newD := oldD
+	newD.growsbyone = *update
+	b, err := newD.Marshal()
+	return b, &newD, err
+}
 
 const mb = int64(1024 * 1024)
 
@@ -34,6 +95,7 @@ var changes = struct {
 	dA       int
 	eA       int
 	byteSize int
+	mA       int
 }{}
 
 var boolTA = settings.RegisterBoolSetting("bool.t", "", true).OnChange(func() { changes.boolTA++ })
@@ -47,6 +109,7 @@ var dA = settings.RegisterDurationSetting("d", "", time.Second).OnChange(func() 
 var eA = settings.RegisterEnumSetting("e", "", "foo", map[int64]string{1: "foo", 2: "bar", 3: "baz"}).
 	OnChange(func() { changes.eA++ })
 var byteSize = settings.RegisterByteSizeSetting("zzz", "", mb).OnChange(func() { changes.byteSize++ })
+var mA = settings.RegisterStateMachineSetting("statemachine", "foo", dummyTransformer).OnChange(func() { changes.mA++ })
 
 func init() {
 	settings.RegisterBoolSetting("sekretz", "", false).Hide()
@@ -79,6 +142,40 @@ var iVal = settings.RegisterValidatedIntSetting(
 	})
 
 func TestCache(t *testing.T) {
+	t.Run("StateMachineSetting", func(t *testing.T) {
+		mB := settings.RegisterStateMachineSetting("local.m", "foo", dummyTransformer)
+		if exp, act := "&{default -}", mB.String(); exp != act {
+			t.Fatalf("wanted %q, got %q", exp, act)
+		}
+		growsTooFast := "grows too fast"
+		if _, _, err := mB.Validate(nil, &growsTooFast); !testutils.IsError(err, "must grow by exactly one") {
+			t.Fatal(err)
+		}
+		hasDots := "a."
+		if _, _, err := mB.Validate(nil, &hasDots); !testutils.IsError(err, "must not contain dots") {
+			t.Fatal(err)
+		}
+		ab := "ab"
+		if _, _, err := mB.Validate(nil, &ab); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := mB.Validate([]byte("takes.precedence"), &ab); !testutils.IsError(err, "must grow by exactly one") {
+			t.Fatal(err)
+		}
+		precedenceX := "precedencex"
+		if _, _, err := mB.Validate([]byte("takes.precedence"), &precedenceX); err != nil {
+			t.Fatal(err)
+		}
+		u := settings.MakeUpdater()
+		if err := u.Set("local.m", "default.XX", "m"); err != nil {
+			t.Fatal(err)
+		}
+		u.Done()
+		if exp, act := "&{default XX}", mB.String(); exp != act {
+			t.Fatalf("wanted %q, got %q", exp, act)
+		}
+	})
+
 	t.Run("defaults", func(t *testing.T) {
 		if expected, actual := false, boolFA.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
@@ -125,6 +222,9 @@ func TestCache(t *testing.T) {
 		if expected, actual := int64(1), eA.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
+		if expected, actual := "default.-", mA.Get(); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
 	})
 
 	t.Run("lookup", func(t *testing.T) {
@@ -148,6 +248,9 @@ func TestCache(t *testing.T) {
 		}
 		if actual, ok := settings.Lookup("e"); !ok || eA != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", eA, actual, ok)
+		}
+		if actual, ok := settings.Lookup("statemachine"); !ok || mA != actual {
+			t.Fatalf("expected %v, got %v (exists: %v)", mA, actual, ok)
 		}
 		if actual, ok := settings.Lookup("dne"); ok {
 			t.Fatalf("expected nothing, got %v", actual)
@@ -219,6 +322,15 @@ func TestCache(t *testing.T) {
 		if err := u.Set("byteSize.Val", settings.EncodeInt(mb*5), "z"); err != nil {
 			t.Fatal(err)
 		}
+		if expected, actual := 0, changes.mA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
+		}
+		if err := u.Set("statemachine", "default.AB", "m"); err != nil {
+			t.Fatal(err)
+		}
+		if expected, actual := 1, changes.mA; expected != actual {
+			t.Fatalf("expected %d, got %d", expected, actual)
+		}
 		if expected, actual := 0, changes.eA; expected != actual {
 			t.Fatalf("expected %d, got %d", expected, actual)
 		}
@@ -268,6 +380,9 @@ func TestCache(t *testing.T) {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := mb*5, byteSizeVal.Get(); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
+		if expected, actual := "default.AB", mA.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
 
@@ -438,6 +553,20 @@ func TestCache(t *testing.T) {
 		if expected, actual := beforeIVal, iVal.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
 		}
+
+		beforeMarsh := mA.Get()
+		{
+			u := settings.MakeUpdater()
+			if err := u.Set("statemachine", "too.many.dots", "m"); !testutils.IsError(err,
+				"expected two parts",
+			) {
+				t.Fatal(err)
+			}
+			u.Done()
+		}
+		if expected, actual := beforeMarsh, mA.Get(); expected != actual {
+			t.Fatalf("expected %v, got %v", expected, actual)
+		}
 	})
 
 	t.Run("mocks", func(t *testing.T) {
@@ -514,6 +643,21 @@ func TestCache(t *testing.T) {
 			}
 			f()
 			if expected, actual := mb, byteSize.Get(); expected != actual {
+				t.Fatalf("expected %v, got %v", expected, actual)
+			}
+		}
+
+		{
+			f := settings.TestingSetStatemachine(&mA, settings.TransformerFn(
+				func(_ []byte, _ *string) ([]byte, interface{}, error) {
+					return []byte("encfoo"), "foo", nil
+				},
+			))
+			if expected, actual := "encfoo", mA.Get(); expected != actual {
+				t.Fatalf("expected %v, got %v", expected, actual)
+			}
+			f()
+			if expected, actual := "default.-", mA.Get(); expected != actual {
 				t.Fatalf("expected %v, got %v", expected, actual)
 			}
 		}
