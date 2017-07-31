@@ -36,6 +36,16 @@ message BackupDetails {
 }
 
 message RestoreDetails {
+  message TableRewrite {
+    uint32 table_id = 1 [
+      (gogoproto.customname) = "TableID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+    ];
+    uint32 parent_id = 2 [
+      (gogoproto.customname) = "ParentID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+    ];
+  }
   bytes low_water_mark = 1;
 }
 
