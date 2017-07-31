@@ -31,9 +31,10 @@ TAGS         :=
 TESTS        :=.## Tests to run for use with `make test`.
 BENCHES      :=## Benchmarks to run for use with `make bench`.
 FILES        :=## Space delimited list of logic test files to run, for make testlogic.
-TESTTIMEOUT  := 4m
-RACETIMEOUT  := 15m
-BENCHTIMEOUT := 5m
+TESTTIMEOUT  := 4m## Test timeout to use for regular tests.
+RACETIMEOUT  := 15m## Test timeout to use for race tests.
+ACCEPTANCETIMEOUT := 30m## Test timeout to use for acceptance tests.
+BENCHTIMEOUT := 5m## Test timeout to use for benchmarks.
 TESTFLAGS    :=## Extra flags to pass to the go test runner, e.g. "-v --vmodule=raft=1"
 STRESSFLAGS  :=## Extra flags to pass to `stress` during `make stress`.
 DUPLFLAGS    := -t 100
@@ -268,6 +269,8 @@ upload-coverage: $(BOOTSTRAP_TARGET)
 	@build/upload-coverage.sh
 
 .PHONY: acceptance
+acceptance: TESTTIMEOUT := $(ACCEPTANCETIMEOUT)
+acceptance: export TESTTIMEOUT := $(TESTTIMEOUT)
 acceptance: ## Run acceptance tests.
 	@pkg/acceptance/run.sh
 
