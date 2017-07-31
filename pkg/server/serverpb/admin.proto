@@ -332,6 +332,30 @@ message DrainResponse {
   repeated int32 on = 1;
 }
 
+// DecommissionRequest requests the server to set the Decommissioning flag on
+// all nodes specified by 'node_id' to the value of 'decommissioning'.
+message DecommissionRequest {
+  repeated string node_id = 1 [(gogoproto.customname) = "NodeID"];
+  bool decommissioning = 2;
+}
+
+// DecommissionResponse is the response to a successful DecommissionRequest and
+// lists all nodes, their statuses, replica count, decommissioning flag and
+// draining flag after having processing the request.
+message DecommissionResponse {
+  message Value {
+    int32 node_id = 1 [ (gogoproto.customname) = "NodeID"];
+    bool is_live = 2;
+    int64 replica_count = 3;
+    bool decommissioning = 4;
+    bool draining = 5;
+  }
+  // NodeIDs of affected nodes.
+  repeated int32 node_id = 1 [(gogoproto.customname) = "NodeID"];
+  // Value of all nodes.
+  repeated Value nodes = 2 [(gogoproto.nullable) = false];
+}
+
 // SettingsRequest inquires what are the current settings in the cluster.
 message SettingsRequest {
   // The array of setting names to retrieve.
@@ -525,6 +549,14 @@ service Admin {
   rpc Drain(DrainRequest) returns (stream DrainResponse) {
     option (google.api.http) = {
       post: "/_admin/v1/drain"
+      body: "*"
+    };
+  }
+
+  // Decommission puts the node into the specified decommissioning state
+  rpc Decommission(DecommissionRequest) returns (DecommissionResponse) {
+    option (google.api.http) = {
+      post: "/_admin/v1/decommission"
       body: "*"
     };
   }

@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
@@ -1088,6 +1089,66 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+// Decommission sets the decommission flag to the specified value on the specified node(s).
+func (s *adminServer) Decommission(
+	ctx context.Context, req *serverpb.DecommissionRequest,
+) (*serverpb.DecommissionResponse, error) {
+	var nodeIDs []roachpb.NodeID
+	if len(req.NodeID) > 0 {
+		nodeIDs = make([]roachpb.NodeID, len(req.NodeID))
+		for i, sNodeID := range req.NodeID {
+			if nodeID, err := strconv.Atoi(sNodeID); err == nil {
+				nodeIDs[i] = roachpb.NodeID(nodeID)
+			} else {
+				return nil, err
+			}
+		}
+	} else {
+		// If no NodeIDs are specified, decommission the current node. This is
+		// used by `quit --decommission`
+		nodeIDs = []roachpb.NodeID{s.server.NodeID()}
+	}
+	s.server.Decommission(req.Decommissioning, nodeIDs)
+	// Get the number of replicas on each node.
+	var nodeStatuses []status.NodeStatus
+	if res, err := s.server.status.Nodes(ctx, &serverpb.NodesRequest{}); err != nil {
+		return nil, err
+	} else {
+		nodeStatuses = res.Nodes
+	}
+	nodeReplicas := make(map[roachpb.NodeID]int64)
+	for _, nodeStatus := range nodeStatuses {
+		nodeID := nodeStatus.Desc.NodeID
+		var replicas float64 = 0
+		for _, storeStatus := range nodeStatus.StoreStatuses {
+			replicas += storeStatus.Metrics["replicas"]
+		}
+		nodeReplicas[nodeID] = int64(replicas)
+	}
+	// Get node liveness.
+	nl := s.server.nodeLiveness
+	ls := nl.GetLivenesses()
+	// Construct response.
+	res := serverpb.DecommissionResponse{
+		NodeID: make([]int32, len(nodeIDs)),
+		Nodes:  make([]serverpb.DecommissionResponse_Value, len(ls)),
+	}
+	for i, nodeID := range nodeIDs {
+		res.NodeID[i] = int32(nodeID)
+	}
+	for i, l := range ls {
+		res.Nodes[i] = serverpb.DecommissionResponse_Value{}
+		res.Nodes[i].NodeID = int32(l.NodeID)
+		if live, err := nl.IsLive(l.NodeID); err != nil {
+			res.Nodes[i].IsLive = live
+		} // Else default value is false
+		res.Nodes[i].ReplicaCount = nodeReplicas[l.NodeID]
+		res.Nodes[i].Decommissioning = l.Decommissioning
+		res.Nodes[i].Draining = l.Draining
+	}
+	return &res, nil
 }
 
 // sqlQuery allows you to incrementally build a SQL query that uses

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -74,7 +75,7 @@ func runLsNodes(cmd *cobra.Command, args []string) error {
 	return printQueryOutput(os.Stdout, lsNodesColumnHeaders, newRowSliceIter(rows), "", cliCtx.tableDisplayFormat)
 }
 
-var nodesColumnHeaders = []string{
+var statusNodesColumnHeaders = []string{
 	"id",
 	"address",
 	"build",
@@ -140,7 +141,7 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 		return errors.Errorf("expected no arguments or a single node ID")
 	}
 
-	return printQueryOutput(os.Stdout, nodesColumnHeaders, newRowSliceIter(nodeStatusesToRows(nodeStatuses)), "",
+	return printQueryOutput(os.Stdout, statusNodesColumnHeaders, newRowSliceIter(nodeStatusesToRows(nodeStatuses)), "",
 		cliCtx.tableDisplayFormat)
 }
 
@@ -185,16 +186,111 @@ func nodeStatusesToRows(statuses []status.NodeStatus) [][]string {
 	return rows
 }
 
+var decommissionNodesColumnHeaders = []string{
+	"id",
+	"is_live",
+	"replicas",
+	"is_decommissioning",
+	"is_draining",
+}
+
+var decommissionNodeCmd = &cobra.Command{
+	Use:   "decommission [<node ID>]+",
+	Short: "decommissions the node(s)",
+	Long: `
+	Marks the nodes, provided in a comma-separated list, as decommissioning.
+	This will cause leases and replicas to be removed from these nodes.
+	`,
+	RunE: MaybeDecorateGRPCError(runDecommissionNode),
+}
+
+func setDecommission(nodeIDs []string, decommission bool) error {
+	c, stopper, err := getAdminClient()
+	if err != nil {
+		return err
+	}
+	ctx := stopperContext(stopper)
+	defer stopper.Stop(ctx)
+
+	req := &serverpb.DecommissionRequest{
+		NodeID:          nodeIDs,
+		Decommissioning: decommission,
+	}
+	//var resp &serverpb.DecommissionResponse
+	resp, err := c.Decommission(ctx, req)
+	if err != nil {
+		return err
+	}
+	//var xnodeStatuses []serverpb.DecommissionResponse_Value = resp.Nodes
+	return printQueryOutput(os.Stdout, decommissionNodesColumnHeaders,
+		newRowSliceIter(decommissionResponseValueToRows(resp.Nodes)), "", cliCtx.tableDisplayFormat)
+}
+
+func runDecommissionNode(cmd *cobra.Command, args []string) error {
+	var nodeIDs []string
+	switch len(args) {
+	case 1:
+		nodeIDs = strings.Split(args[0], ",")
+	default:
+		return usageAndError(cmd)
+	}
+	return setDecommission(nodeIDs, true)
+}
+
+// decommissionResponseValueToRow converts DecommissionResponse_Values to
+// SQL-like result rows, so that we can pretty-print them.
+func decommissionResponseValueToRows(statuses []serverpb.DecommissionResponse_Value) [][]string {
+	// Create results that are like the results for SQL results, so that we can pretty-print them.
+	var rows [][]string
+	for _, node := range statuses {
+		rows = append(rows, []string{
+			strconv.FormatInt(int64(node.NodeID), 10),
+			strconv.FormatBool(node.IsLive),
+			strconv.FormatInt(node.ReplicaCount, 10),
+			strconv.FormatBool(node.Decommissioning),
+			strconv.FormatBool(node.Draining),
+		})
+	}
+	return rows
+}
+
+var recommissionNodeCmd = &cobra.Command{
+	Use:   "recommission [<node ID>]+",
+	Short: "recommissions the node(s)",
+	Long: `
+	Resets the decommissioning state for the nodes, provided in a comma-separated
+	list. For this to take effect, you must restart these nodes.
+	`,
+	RunE: MaybeDecorateGRPCError(runRecommissionNode),
+}
+
+func runRecommissionNode(cmd *cobra.Command, args []string) error {
+	var nodeIDs []string
+	switch len(args) {
+	case 1:
+		nodeIDs = strings.Split(args[0], ",")
+	default:
+		return usageAndError(cmd)
+	}
+	if err := setDecommission(nodeIDs, false); err != nil {
+		return err
+	}
+	fmt.Fprintln(os.Stdout, "The affected nodes must be restarted for changes to take effect.")
+	return nil
+}
+
 // Sub-commands for node command.
 var nodeCmds = []*cobra.Command{
 	lsNodesCmd,
 	statusNodeCmd,
+	decommissionNodeCmd,
+	recommissionNodeCmd,
 }
 
 var nodeCmd = &cobra.Command{
 	Use:   "node [command]",
-	Short: "list nodes and show their status",
-	Long:  "List nodes and show their status.",
+	Short: "list nodes, show their status and de/recommission them",
+	Long:  "List nodes, show their status; decommission and recommission nodes.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cmd.Usage()
 	},

@@ -62,6 +62,7 @@ var debugCtx = debugContext{
 // server-specific values of some flags.
 var serverInsecure bool
 var serverSSLCertsDir string
+var serverDecommission bool
 
 // InitCLIDefaults is used for testing.
 func InitCLIDefaults() {
@@ -387,6 +388,9 @@ func init() {
 		stringFlag(f, &debugCtx.inputFile, cliflags.GossipInputFile, "")
 		boolFlag(f, &debugCtx.printSystemConfig, cliflags.PrintSystemConfig, false)
 	}
+
+	// Quit command.
+	boolFlag(quitCmd.Flags(), &serverDecommission, cliflags.Decommission, false)
 }
 
 func extraServerFlagInit() {
