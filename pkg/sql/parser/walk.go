@@ -209,7 +209,7 @@ func (expr *FuncExpr) CopyNode() *FuncExpr {
 		if len(windowDef.OrderBy) > 0 {
 			newOrderBy := make(OrderBy, len(windowDef.OrderBy))
 			for i, o := range windowDef.OrderBy {
-				newOrderBy[i] = &Order{Expr: o.Expr, Direction: o.Direction}
+				newOrderBy[i] = &Order{OrderType: o.OrderType, Expr: o.Expr, Direction: o.Direction}
 			}
 			windowDef.OrderBy = newOrderBy
 		}
@@ -240,6 +240,9 @@ func (expr *FuncExpr) Walk(v Visitor) Expr {
 			}
 		}
 		for i := range expr.WindowDef.OrderBy {
+			if expr.WindowDef.OrderBy[i].OrderType != OrderByColumn {
+				continue
+			}
 			e, changed := WalkExpr(v, expr.WindowDef.OrderBy[i].Expr)
 			if changed {
 				if ret == expr {
@@ -693,6 +696,9 @@ func (stmt *ReturningExprs) CopyNode() *ReturningExprs {
 func walkOrderBy(v Visitor, order OrderBy) (OrderBy, bool) {
 	copied := false
 	for i := range order {
+		if order[i].OrderType != OrderByColumn {
+			continue
+		}
 		e, changed := WalkExpr(v, order[i].Expr)
 		if changed {
 			if !copied {
