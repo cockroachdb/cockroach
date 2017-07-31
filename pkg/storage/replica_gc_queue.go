@@ -143,8 +143,11 @@ func (rgcq *replicaGCQueue) shouldQueue(
 		// we're decommissioning. If so, we should process the replica because it
 		// has probably already been removed from its raft group but doesn't know it.
 		// Without this, node decommissioning can stall on such dormant ranges.
-		if liveness, _ := repl.store.cfg.NodeLiveness.Self(); liveness != nil && liveness.Decommissioning {
-			return true, replicaGCPriorityDefault
+		// Make sure NodeLiveness isn't nil because it can be in tests/benchmarks.
+		if repl.store.cfg.NodeLiveness != nil {
+			if liveness, _ := repl.store.cfg.NodeLiveness.Self(); liveness != nil && liveness.Decommissioning {
+				return true, replicaGCPriorityDefault
+			}
 		}
 	}
 	return replicaGCShouldQueueImpl(now, lastCheck, lastActivity, isCandidate)
