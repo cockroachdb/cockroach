@@ -16,7 +16,7 @@ if [[ "$TC_BUILD_BRANCH" != *alpha* ]] && [ "$TEAMCITY_BUILDCONF_NAME" == 'Publi
 	docker build --tag=$image:{latest,"$TC_BUILD_BRANCH"} build/deploy
 
 	build/builder.sh make TYPE=release-linux-gnu testbuild TAGS=acceptance PKG=./pkg/acceptance
-	(cd pkg/acceptance && ./acceptance.test -i $image -b /cockroach/cockroach -nodes 3 -test.v -test.timeout -5m)
+	(cd pkg/acceptance && ./acceptance.test -i $image -b /cockroach/cockroach -nodes 4 -test.v -test.timeout -5m)
 
 	sed "s/<EMAIL>/$DOCKER_EMAIL/;s/<AUTH>/$DOCKER_AUTH/" < build/.dockercfg.in > ~/.dockercfg
 	docker push "$image:latest"
