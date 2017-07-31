@@ -124,6 +124,7 @@ func (p *planner) makeIndexJoin(
 	// Create a new scanNode that will be used with the primary index.
 	table := p.Scan()
 	table.desc = origScan.desc
+	table.descCopy = origScan.descCopy
 	// Note: initDescDefaults can only error out if its 2nd argument is not nil.
 	_ = table.initDescDefaults(origScan.scanVisibility, nil)
 	table.initOrdering(0)
@@ -194,7 +195,7 @@ func (p *planner) makeIndexJoin(
 
 	indexScan.initOrdering(exactPrefix)
 
-	primaryKeyPrefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(&table.desc, table.index.ID))
+	primaryKeyPrefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(table.desc, table.index.ID))
 
 	node := &indexJoinNode{
 		index:             indexScan,
@@ -255,7 +256,7 @@ func (n *indexJoinNode) Next(params runParams) (bool, error) {
 
 			vals := n.index.Values()
 			primaryIndexKey, _, err := sqlbase.EncodeIndexKey(
-				&n.table.desc, n.table.index, n.colIDtoRowIndex, vals, n.primaryKeyPrefix)
+				n.table.desc, n.table.index, n.colIDtoRowIndex, vals, n.primaryKeyPrefix)
 			if err != nil {
 				return false, err
 			}

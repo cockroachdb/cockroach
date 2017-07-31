@@ -436,7 +436,7 @@ func (n *createViewNode) Start(params runParams) error {
 	// Inherit permissions from the database descriptor.
 	privs := n.dbDesc.GetPrivileges()
 
-	affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+	affected := make(map[sqlbase.ID]sqlbase.TableDescriptor)
 	desc, err := n.makeViewTableDesc(
 		params.ctx,
 		viewName,
@@ -462,7 +462,7 @@ func (n *createViewNode) Start(params runParams) error {
 
 	// Persist the back-references in all referenced table descriptors.
 	for _, updated := range affected {
-		if err := n.p.saveNonmutationAndNotify(params.ctx, updated); err != nil {
+		if err := n.p.saveNonmutationAndNotify(params.ctx, &updated); err != nil {
 			return err
 		}
 	}
@@ -1125,7 +1125,7 @@ func (n *createViewNode) makeViewTableDesc(
 	id sqlbase.ID,
 	resultColumns []sqlbase.ResultColumn,
 	privileges *sqlbase.PrivilegeDescriptor,
-	affected map[sqlbase.ID]*sqlbase.TableDescriptor,
+	affected map[sqlbase.ID]sqlbase.TableDescriptor,
 	evalCtx *parser.EvalContext,
 ) (sqlbase.TableDescriptor, error) {
 	desc := sqlbase.TableDescriptor{
@@ -1549,14 +1549,14 @@ func makeCheckConstraint(
 func (n *createViewNode) resolveViewDependencies(
 	ctx context.Context,
 	tbl *sqlbase.TableDescriptor,
-	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
+	backrefs map[sqlbase.ID]sqlbase.TableDescriptor,
 ) {
 	n.p.populateViewBackrefs(ctx, n.sourcePlan, tbl, backrefs)
 
 	// Also create the forward references in the new view's descriptor.
 	tbl.DependsOn = make([]sqlbase.ID, 0, len(backrefs))
-	for _, backref := range backrefs {
-		tbl.DependsOn = append(tbl.DependsOn, backref.ID)
+	for id := range backrefs {
+		tbl.DependsOn = append(tbl.DependsOn, id)
 	}
 }
 
@@ -1566,16 +1566,19 @@ func (p *planner) populateViewBackrefs(
 	ctx context.Context,
 	plan planNode,
 	tbl *sqlbase.TableDescriptor,
-	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
+	backrefs map[sqlbase.ID]sqlbase.TableDescriptor,
 ) {
 	b := &backrefCollector{p: p, tbl: tbl, backrefs: backrefs}
 	_ = walkPlan(ctx, plan, planObserver{enterNode: b.enterNode})
 }
 
 type backrefCollector struct {
-	p        *planner
-	tbl      *sqlbase.TableDescriptor
-	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor
+	p   *planner
+	tbl *sqlbase.TableDescriptor
+	// backrefs contains the descriptor back-references. We store copies
+	// instead of pointers so as to not modify the descriptors in-place
+	// when updating dependencies.
+	backrefs map[sqlbase.ID]sqlbase.TableDescriptor
 }
 
 // enterNode is used by a planObserver.
@@ -1609,8 +1612,7 @@ func (b *backrefCollector) enterNode(ctx context.Context, _ string, plan planNod
 	} else if scan, ok := plan.(*scanNode); ok {
 		desc, ok := b.backrefs[scan.desc.ID]
 		if !ok {
-			desc = &scan.desc
-			b.backrefs[desc.ID] = desc
+			desc = *scan.desc
 		}
 		ref := sqlbase.TableDescriptor_Reference{
 			ID:        b.tbl.ID,
@@ -1631,6 +1633,7 @@ func (b *backrefCollector) enterNode(ctx context.Context, _ string, plan planNod
 			// }
 		}
 		desc.DependedOnBy = append(desc.DependedOnBy, ref)
+		b.backrefs[scan.desc.ID] = desc
 	}
 	return true
 }
@@ -1638,15 +1641,15 @@ func (b *backrefCollector) enterNode(ctx context.Context, _ string, plan planNod
 func populateViewBackrefFromViewDesc(
 	dependency *sqlbase.TableDescriptor,
 	tbl *sqlbase.TableDescriptor,
-	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
+	backrefs map[sqlbase.ID]sqlbase.TableDescriptor,
 ) {
 	desc, ok := backrefs[dependency.ID]
 	if !ok {
-		desc = dependency
-		backrefs[desc.ID] = desc
+		desc = *dependency
 	}
 	ref := sqlbase.TableDescriptor_Reference{ID: tbl.ID}
 	desc.DependedOnBy = append(desc.DependedOnBy, ref)
+	backrefs[desc.ID] = desc
 }
 
 // planContainsStar returns true if one of the render nodes in the
