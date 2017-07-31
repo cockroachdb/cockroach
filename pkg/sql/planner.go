@@ -162,6 +162,17 @@ func (p *planner) User() string {
 	return p.session.User
 }
 
+func (p *planner) EvalContext() parser.EvalContext {
+	return p.evalCtx
+}
+
+// TODO(dan): This is here to implement PlanHookState, but it's not clear that
+// this is the right abstraction. We could also export distSQLPlanner, for
+// example. Revisit.
+func (p *planner) DistLoader() *DistLoader {
+	return &DistLoader{distSQLPlanner: p.session.distSQLPlanner}
+}
+
 // setTxn resets the current transaction in the planner and
 // initializes the timestamps used by SQL built-in functions from
 // the new txn object, if any.
