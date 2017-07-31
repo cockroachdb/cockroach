@@ -118,6 +118,15 @@ type Builtin struct {
 	// get rid of this blacklist.
 	distsqlBlacklist bool
 
+	// Set to true when a function's definition can handle NULL arguments. When
+	// set, the function will be given the chance to see NULL arguments. When not,
+	// the function will evaluate directly to NULL in the presence of any NULL
+	// arguments.
+	//
+	// NOTE: when set, a function should be prepared for any of its arguments to
+	// be NULL and should act accordingly.
+	nullableArgs bool
+
 	// Set to true when a function may change at every row whether or
 	// not it is applied to an expression that contains row-dependent
 	// variables. Used e.g. by `random` and aggregate functions.
@@ -295,8 +304,9 @@ var Builtins = map[string][]Builtin{
 	// NULL arguments are ignored.
 	"concat": {
 		Builtin{
-			Types:      VariadicType{TypeString},
-			ReturnType: fixedReturnType(TypeString),
+			Types:        VariadicType{TypeString},
+			ReturnType:   fixedReturnType(TypeString),
+			nullableArgs: true,
 			fn: func(evalCtx *EvalContext, args Datums) (Datum, error) {
 				var buffer bytes.Buffer
 				for _, d := range args {
@@ -317,8 +327,9 @@ var Builtins = map[string][]Builtin{
 
 	"concat_ws": {
 		Builtin{
-			Types:      VariadicType{TypeString},
-			ReturnType: fixedReturnType(TypeString),
+			Types:        VariadicType{TypeString},
+			ReturnType:   fixedReturnType(TypeString),
+			nullableArgs: true,
 			fn: func(evalCtx *EvalContext, args Datums) (Datum, error) {
 				if len(args) == 0 {
 					return nil, errInsufficientArgs
@@ -894,21 +905,22 @@ var Builtins = map[string][]Builtin{
 
 	"greatest": {
 		Builtin{
-			Types:      HomogeneousType{},
-			ReturnType: identityReturnType(0),
-			category:   categoryComparison,
+			Types:        HomogeneousType{},
+			ReturnType:   identityReturnType(0),
+			nullableArgs: true,
+			category:     categoryComparison,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				return pickFromTuple(ctx, true /* greatest */, args)
 			},
 			Info: "Returns the element with the greatest value.",
 		},
 	},
-
 	"least": {
 		Builtin{
-			Types:      HomogeneousType{},
-			ReturnType: identityReturnType(0),
-			category:   categoryComparison,
+			Types:        HomogeneousType{},
+			ReturnType:   identityReturnType(0),
+			nullableArgs: true,
+			category:     categoryComparison,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				return pickFromTuple(ctx, false /* !greatest */, args)
 			},
@@ -2061,8 +2073,9 @@ func feedHash(h hash.Hash, args Datums) {
 func hashBuiltin(newHash func() hash.Hash, info string) []Builtin {
 	return []Builtin{
 		{
-			Types:      VariadicType{TypeString},
-			ReturnType: fixedReturnType(TypeString),
+			Types:        VariadicType{TypeString},
+			ReturnType:   fixedReturnType(TypeString),
+			nullableArgs: true,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				h := newHash()
 				feedHash(h, args)
@@ -2071,8 +2084,9 @@ func hashBuiltin(newHash func() hash.Hash, info string) []Builtin {
 			Info: info,
 		},
 		{
-			Types:      VariadicType{TypeBytes},
-			ReturnType: fixedReturnType(TypeString),
+			Types:        VariadicType{TypeBytes},
+			ReturnType:   fixedReturnType(TypeString),
+			nullableArgs: true,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				h := newHash()
 				feedHash(h, args)
@@ -2086,8 +2100,9 @@ func hashBuiltin(newHash func() hash.Hash, info string) []Builtin {
 func hash32Builtin(newHash func() hash.Hash32, info string) []Builtin {
 	return []Builtin{
 		{
-			Types:      VariadicType{TypeString},
-			ReturnType: fixedReturnType(TypeInt),
+			Types:        VariadicType{TypeString},
+			ReturnType:   fixedReturnType(TypeInt),
+			nullableArgs: true,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				h := newHash()
 				feedHash(h, args)
@@ -2096,8 +2111,9 @@ func hash32Builtin(newHash func() hash.Hash32, info string) []Builtin {
 			Info: info,
 		},
 		{
-			Types:      VariadicType{TypeBytes},
-			ReturnType: fixedReturnType(TypeInt),
+			Types:        VariadicType{TypeBytes},
+			ReturnType:   fixedReturnType(TypeInt),
+			nullableArgs: true,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				h := newHash()
 				feedHash(h, args)
@@ -2110,8 +2126,9 @@ func hash32Builtin(newHash func() hash.Hash32, info string) []Builtin {
 func hash64Builtin(newHash func() hash.Hash64, info string) []Builtin {
 	return []Builtin{
 		{
-			Types:      VariadicType{TypeString},
-			ReturnType: fixedReturnType(TypeInt),
+			Types:        VariadicType{TypeString},
+			ReturnType:   fixedReturnType(TypeInt),
+			nullableArgs: true,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				h := newHash()
 				feedHash(h, args)
@@ -2120,8 +2137,9 @@ func hash64Builtin(newHash func() hash.Hash64, info string) []Builtin {
 			Info: info,
 		},
 		{
-			Types:      VariadicType{TypeBytes},
-			ReturnType: fixedReturnType(TypeInt),
+			Types:        VariadicType{TypeBytes},
+			ReturnType:   fixedReturnType(TypeInt),
+			nullableArgs: true,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				h := newHash()
 				feedHash(h, args)
