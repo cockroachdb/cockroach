@@ -194,6 +194,28 @@ func (j *Job) Succeeded(ctx context.Context) error {
 	})
 }
 
+// FinishedWith is a shortcut for automatically calling Succeeded or Failed
+// based on the presence of err. Any non-nil error is taken to mean that the job
+// has failed. The error returned, if any, is serious enough that it should not
+// be logged and ignored.
+//
+// TODO(benesch): Fix this wonky API. Once schema change leases are managed by
+// this package, replace Succeeded, Failed, and FinishedWith with an API like
+//
+//      func (r *Registry) RunJob(setupFn func() Details, workFn func() error) (result, error)
+//
+// where RunJob handles writing to system.jobs automatically.
+func (j *Job) FinishedWith(ctx context.Context, err error) error {
+	if err != nil {
+		j.Failed(ctx, err)
+	} else if err := j.Succeeded(ctx); err != nil {
+		// No callers of Succeeded do anything but log the error, so that behavior
+		// is baked into the API of FinishedWith.
+		log.Errorf(ctx, "ignoring error while marking job %d as successful: %+v", *j.id, err)
+	}
+	return nil
+}
+
 // SetDetails sets the details field of the currently running tracked job.
 func (j *Job) SetDetails(ctx context.Context, details interface{}) error {
 	return j.update(ctx, "", func(payload *Payload) (bool, error) {
