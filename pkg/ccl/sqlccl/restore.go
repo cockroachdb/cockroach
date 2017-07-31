@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/intervalccl"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
@@ -334,6 +335,7 @@ const (
 	backupSpan importEntryType = iota
 	backupFile
 	tableSpan
+	completedSpan
 	request
 )
 
@@ -379,10 +381,23 @@ type importEntry struct {
 // NB: All grouping operates in the pre-rewrite keyspace, meaning the keyranges
 // as they were backed up, not as they're being restored.
 func makeImportSpans(
-	tableSpans []roachpb.Span, backups []BackupDescriptor,
+	tableSpans []roachpb.Span, backups []BackupDescriptor, lowWaterMark roachpb.Key,
 ) ([]importEntry, hlc.Timestamp, error) {
-	// Put the merged table data covering first into the OverlapCoveringMerge
-	// input.
+	// Put the covering for the already-completed spans into the
+	// OverlapCoveringMerge input first. Payloads are returned in the same order
+	// that they appear in the input; putting the completedSpan first means we'll
+	// see it first when iterating over the output of OverlapCoveringMerge and
+	// avoid doing unnecessary work.
+	completedCovering := intervalccl.Covering{
+		{
+			Start:   []byte(keys.MinKey),
+			End:     []byte(lowWaterMark),
+			Payload: importEntry{entryType: completedSpan},
+		},
+	}
+
+	// Put the merged table data covering into the OverlapCoveringMerge input
+	// next.
 	var tableSpanCovering intervalccl.Covering
 	for _, span := range tableSpans {
 		tableSpanCovering = append(tableSpanCovering, intervalccl.Range{
@@ -394,7 +409,8 @@ func makeImportSpans(
 			},
 		})
 	}
-	backupCoverings := []intervalccl.Covering{tableSpanCovering}
+
+	backupCoverings := []intervalccl.Covering{completedCovering, tableSpanCovering}
 
 	// Iterate over backups creating two coverings for each. First the spans
 	// that were backed up, then the files in the backup. The latter is a subset
@@ -440,6 +456,7 @@ func makeImportSpans(
 
 	// Translate the output of OverlapCoveringMerge into requests.
 	var requestEntries []importEntry
+rangeLoop:
 	for _, importRange := range importRanges {
 		needed := false
 		var ts hlc.Timestamp
@@ -448,6 +465,8 @@ func makeImportSpans(
 		for _, p := range payloads {
 			ie := p.(importEntry)
 			switch ie.entryType {
+			case completedSpan:
+				continue rangeLoop
 			case tableSpan:
 				needed = true
 			case backupSpan:
@@ -603,7 +622,8 @@ func restore(
 
 	// Pivot the backups, which are grouped by time, into requests for import,
 	// which are grouped by keyrange.
-	importSpans, _, err := makeImportSpans(spans, backupDescs)
+	lowWaterMark := job.Record.Details.(jobs.RestoreDetails).LowWaterMark
+	importSpans, _, err := makeImportSpans(spans, backupDescs, lowWaterMark)
 	if err != nil {
 		return failed, errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
 	}
@@ -627,8 +647,9 @@ func restore(
 	}
 
 	progressLogger := jobProgressLogger{
-		job:         job,
-		totalChunks: len(importSpans),
+		job:           job,
+		totalChunks:   len(importSpans),
+		startFraction: job.Payload().FractionCompleted,
 		progressedFn: func(progressedCtx context.Context, details interface{}) {
 			switch d := details.(type) {
 			case *jobs.Payload_Restore:
@@ -862,13 +883,16 @@ func restorePlanHook(
 		job := p.ExecCfg().JobRegistry.NewJob(jobs.Record{
 			Description: description,
 			Username:    p.User(),
-			Details:     jobs.RestoreDetails{},
 			DescriptorIDs: func() (sqlDescIDs []sqlbase.ID) {
 				for _, tableRewrite := range tableRewrites {
 					sqlDescIDs = append(sqlDescIDs, tableRewrite.TableID)
 				}
 				return sqlDescIDs
 			}(),
+			Details: jobs.RestoreDetails{
+				TableRewrites: tableRewrites,
+				URIs:          from,
+			},
 		})
 		res, restoreErr := restore(
 			ctx,
@@ -901,6 +925,41 @@ func restorePlanHook(
 	return fn, header, nil
 }
 
+func restoreResumeHook(typ jobs.Type) func(ctx context.Context, job *jobs.Job) error {
+	if typ != jobs.TypeRestore {
+		return nil
+	}
+
+	return func(ctx context.Context, job *jobs.Job) error {
+		details := job.Record.Details.(jobs.RestoreDetails)
+
+		backupDescs, err := loadBackupDescs(ctx, details.URIs)
+		if err != nil {
+			return err
+		}
+		lastBackupDesc := backupDescs[len(backupDescs)-1]
+
+		var sqlDescs []sqlbase.Descriptor
+		for _, desc := range lastBackupDesc.Descriptors {
+			if _, ok := details.TableRewrites[desc.GetID()]; ok {
+				sqlDescs = append(sqlDescs, desc)
+			}
+		}
+
+		_, err = restore(
+			ctx,
+			job.DB(),
+			job.Gossip(),
+			backupDescs,
+			sqlDescs,
+			details.TableRewrites,
+			job,
+		)
+		return err
+	}
+}
+
 func init() {
 	sql.AddPlanHook(restorePlanHook)
+	jobs.AddResumeHook(restoreResumeHook)
 }

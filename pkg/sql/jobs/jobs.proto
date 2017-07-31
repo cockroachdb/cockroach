@@ -51,6 +51,10 @@ message RestoreDetails {
     ];
   }
   bytes low_water_mark = 1;
+  map<uint32, TableRewrite> table_rewrites = 2 [
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+  ];
+  repeated string uris = 3 [(gogoproto.customname) = "URIs"];
 }
 
 message SchemaChangeDetails {
