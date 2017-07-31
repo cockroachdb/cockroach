@@ -33,6 +33,7 @@
 #include "db.h"
 #include "encoding.h"
 #include "eventlistener.h"
+#include "cppgo.h"
 
 extern "C" {
 static void __attribute__((noreturn)) die_missing_symbol(const char* name) {
@@ -2542,4 +2543,13 @@ const rocksdb::Comparator* CockroachComparator() {
 
 rocksdb::WriteBatch::Handler* GetDBBatchInserter(::rocksdb::WriteBatchBase* batch) {
   return new DBBatchInserter(batch);
+}
+
+void TestCppGo(uintptr_t txn_data) {
+  go::roachpb::Transaction txn(reinterpret_cast<const void*>(txn_data));
+  fprintf(stderr, "TestCppGo: %s\n", txn.name().as_string().c_str());
+  for (auto ts : txn.observed_timestamps()) {
+    fprintf(stderr, "  %d %lld/%d\n", ts.node_id(),
+            ts.timestamp().wall_time(), ts.timestamp().logical());
+  }
 }
