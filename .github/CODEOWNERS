@@ -33,6 +33,8 @@ pkg/sql/distsql*.go   @cockroachdb/sql-planning @cockroachdb/distsql
 pkg/sql/distsqlplan/* @cockroachdb/sql-planning @cockroachdb/distsql
 pkg/sql/distsqlrun/*  @cockroachdb/sql-execution @cockroachdb/distsql
 
+pkg/ui @cockroachdb/admin-ui
+
 build/*     @cockroachdb/build
 c-deps/*    @cockroachdb/build
 githooks/*  @cockroachdb/build
