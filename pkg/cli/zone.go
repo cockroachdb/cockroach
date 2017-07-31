@@ -415,11 +415,11 @@ func runRmZone(cmd *cobra.Command, args []string) error {
 
 // A setZoneCmd command creates a new or updates an existing zone config.
 var setZoneCmd = &cobra.Command{
-	Use:   "set [options] <database[.table]> <zone-config>",
+	Use:   "set [options] <database[.table]> -f file.yaml",
 	Short: "create or update zone config for object ID",
 	Long: `
 Create or update the zone config for the specified database or table to the
-specified zone-config.
+specified zone-config from the given file ("-" for stdin).
 
 The zone config format has the following YAML schema:
 
