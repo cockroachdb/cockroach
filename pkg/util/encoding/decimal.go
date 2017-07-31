@@ -15,8 +15,6 @@
 // An ordered key encoding scheme for arbitrary-precision fixed-point
 // numeric values based on sqlite4's key encoding:
 // http://sqlite.org/src4/doc/trunk/www/key_encoding.wiki
-//
-// Author: Nathan VanBenschoten (nvanbenschoten@gmail.com)
 
 package encoding
 

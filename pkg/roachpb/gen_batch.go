@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Radu Berinde (radu@cockroachlabs.com)
 
 // This file generates batch_generated.go. It can be run via:
 //    go run -tags gen-batch gen_batch.go

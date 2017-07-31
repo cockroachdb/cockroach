@@ -16,8 +16,6 @@
 
 // File I/O for logs.
 
-// Author: Bram Gruneir (bram@cockroachlabs.com)
-
 package log
 
 import (
