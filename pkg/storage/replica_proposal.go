@@ -581,15 +581,12 @@ func addSSTablePreApply(
 
 	limitBulkIOWrite(ctx, len(sst.Data))
 
-	var move bool
 	if inmem, ok := eng.(engine.InMem); ok {
 		path = fmt.Sprintf("%x", checksum)
-		move = false
 		if err := inmem.WriteFile(path, sst.Data); err != nil {
 			panic(err)
 		}
 	} else {
-		move = true
 		// TODO(tschottdorf): remove this once sideloaded storage guarantees its
 		// existence.
 		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
@@ -610,6 +607,7 @@ func addSSTablePreApply(
 		}
 	}
 
+	const move = true
 	if err := eng.IngestExternalFile(ctx, path, move); err != nil {
 		panic(err)
 	}
