@@ -11,11 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
-// Author: Jiang-Ming Yang (jiangming.yang@gmail.com)
-// Author: Tobias Schottdorf (tobias.schottdorf@gmail.com)
-// Author: Bram Gruneir (bram+code@cockroachlabs.com)
 
 package storage
 

@@ -12,10 +12,6 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 //
-// Author: Radu Berinde (radu@cockroachlabs.com)
-// Author: Irfan Sharif (irfansharif@cockroachlabs.com)
-// Author: Andrei Matei (andreimatei1@gmail.com)
-//
 // Routers are used by processors to direct outgoing rows to (potentially)
 // multiple streams; see docs/RFCS/distributed_sql.md
 

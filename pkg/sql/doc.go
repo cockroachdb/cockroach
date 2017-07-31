@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Peter Mattis (peter.mattis@gmail.com)
 
 /*
 Package sql provides the user-facing API for access to a Cockroach datastore. As

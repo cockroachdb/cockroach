@@ -13,8 +13,6 @@
 // permissions and limitations under the License.
 //
 // This code is based on: https://github.com/google/btree
-//
-// Author: Jingguo Yao (yaojingguo@gmail.com)
 
 package interval
 
