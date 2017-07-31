@@ -32,9 +32,10 @@ const (
 
 type jobProgressLogger struct {
 	// These fields must be externally initialized.
-	job          *jobs.Job
-	totalChunks  int
-	progressedFn jobs.ProgressedFn
+	job           *jobs.Job
+	startFraction float32
+	totalChunks   int
+	progressedFn  jobs.ProgressedFn
 
 	// The remaining fields are for internal use only.
 	mu struct {
@@ -49,6 +50,7 @@ func (jpl *jobProgressLogger) chunkFinished(ctx context.Context) error {
 	jpl.mu.Lock()
 	jpl.mu.completedChunks++
 	fraction := float32(jpl.mu.completedChunks) / float32(jpl.totalChunks)
+	fraction = fraction*(1-jpl.startFraction) + jpl.startFraction
 	shouldLogProgress := fraction-jpl.mu.lastReportedFraction > progressFractionThreshold ||
 		jpl.mu.lastReportedAt.Add(progressTimeThreshold).Before(timeutil.Now())
 	if shouldLogProgress {
