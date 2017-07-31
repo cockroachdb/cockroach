@@ -331,9 +331,10 @@
   revision = "9af46dd5a1713e8b5cd71106287eba3cefdde50b"
 
 [[projects]]
+  branch = "master"
   name = "github.com/grpc-ecosystem/grpc-gateway"
-  packages = ["protoc-gen-grpc-gateway","protoc-gen-grpc-gateway/descriptor","protoc-gen-grpc-gateway/generator","protoc-gen-grpc-gateway/gengateway","protoc-gen-grpc-gateway/httprule","runtime","runtime/internal","third_party/googleapis/google/api","utilities"]
-  revision = "fdcb7eab2d6ed4919e83ddcef4f199c161611e1f"
+  packages = ["protoc-gen-grpc-gateway","protoc-gen-grpc-gateway/descriptor","protoc-gen-grpc-gateway/generator","protoc-gen-grpc-gateway/gengateway","protoc-gen-grpc-gateway/httprule","runtime","runtime/internal","utilities"]
+  revision = "f2862b476edcef83412c7af8687c9cd8e4097c0f"
 
 [[projects]]
   name = "github.com/grpc-ecosystem/grpc-opentracing"
@@ -660,6 +661,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "f9ae1d1f3ee2271b84771ce05b074f3438cc66b54910b9355d1789b157e774ad"
+  inputs-digest = "ae8de04e8e36f3cc180ca9ce133a9577e8d670f566429a7a4274873f95b84b32"
   solver-name = "gps-cdcl"
   solver-version = 1
