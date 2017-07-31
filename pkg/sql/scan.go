@@ -42,7 +42,7 @@ var scanNodePool = sync.Pool{
 // reconstructing them into rows.
 type scanNode struct {
 	p     *planner
-	desc  sqlbase.TableDescriptor
+	desc  *sqlbase.TableDescriptor
 	index *sqlbase.IndexDescriptor
 
 	// Set if an index was explicitly specified.
@@ -125,7 +125,7 @@ func (n *scanNode) disableBatchLimit() {
 }
 
 func (n *scanNode) Start(runParams) error {
-	return n.fetcher.Init(&n.desc, n.colIdxMap, n.index, n.reverse, n.isSecondaryIndex, n.cols,
+	return n.fetcher.Init(n.desc, n.colIdxMap, n.index, n.reverse, n.isSecondaryIndex, n.cols,
 		n.valNeededForCol, false /* returnRangeInfo */, &n.p.alloc)
 }
 
@@ -197,10 +197,10 @@ func (n *scanNode) initTable(
 	scanVisibility scanVisibility,
 	wantedColumns []parser.ColumnID,
 ) error {
-	n.desc = *desc
+	n.desc = desc
 
 	if !p.skipSelectPrivilegeChecks {
-		if err := p.CheckPrivilege(&n.desc, privilege.SELECT); err != nil {
+		if err := p.CheckPrivilege(n.desc, privilege.SELECT); err != nil {
 			return err
 		}
 	}

@@ -194,7 +194,7 @@ func (p *planner) makeIndexJoin(
 
 	indexScan.initOrdering(exactPrefix)
 
-	primaryKeyPrefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(&table.desc, table.index.ID))
+	primaryKeyPrefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(table.desc, table.index.ID))
 
 	node := &indexJoinNode{
 		index:             indexScan,
@@ -255,7 +255,7 @@ func (n *indexJoinNode) Next(params runParams) (bool, error) {
 
 			vals := n.index.Values()
 			primaryIndexKey, _, err := sqlbase.EncodeIndexKey(
-				&n.table.desc, n.table.index, n.colIDtoRowIndex, vals, n.primaryKeyPrefix)
+				n.table.desc, n.table.index, n.colIDtoRowIndex, vals, n.primaryKeyPrefix)
 			if err != nil {
 				return false, err
 			}
