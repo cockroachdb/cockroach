@@ -121,7 +121,20 @@ CREATE TABLE system.jobs (
 	INDEX (status, created),
 	FAMILY (id, status, created, payload)
 );`
-)
+
+	SessionsTableSchema = `
+CREATE TABLE system.sessions (
+    id         SERIAL     PRIMARY KEY,
+    secret     UUID       NOT NULL,
+    username   STRING     NOT NULL,
+    createdAt  TIMESTAMP  NOT NULL DEFAULT now(),
+    expiresAt  TIMESTAMP  NOT NULL,
+    revokedAt  TIMESTAMP,
+    lastUsedAt TIMESTAMP  NOT NULL DEFAULT now(),
+    auditInfo  STRING,
+    INDEX(expiresAt),
+    INDEX(createdAt)
+);`
 
 func pk(name string) IndexDescriptor {
 	return IndexDescriptor{
@@ -172,7 +185,8 @@ var SystemAllowedPrivileges = map[ID]privilege.Lists{
 	// users will be able to modify system tables' schemas at will. CREATE and
 	// DROP privileges are allowed on the above system tables for backwards
 	// compatibility reasons only!
-	keys.JobsTableID: {privilege.ReadWriteData},
+	keys.JobsTableID:     {privilege.ReadWriteData},
+	keys.SessionsTableID: {privilege.ReadWriteData},
 }
 
 // SystemDesiredPrivileges returns the desired privilege list (i.e., the
@@ -190,6 +204,7 @@ var (
 	colTypeString    = ColumnType{SemanticType: ColumnType_STRING}
 	colTypeBytes     = ColumnType{SemanticType: ColumnType_BYTES}
 	colTypeTimestamp = ColumnType{SemanticType: ColumnType_TIMESTAMP}
+	colTypeUUID      = ColumnType{SemanticType: ColumnType_UUID}
 	singleASC        = []IndexDescriptor_Direction{IndexDescriptor_ASC}
 	singleID1        = []ColumnID{1}
 )
@@ -519,6 +534,64 @@ var (
 		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.JobsTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
+	}
+
+	SessionsTable = TableDescriptor{
+		Name:     "sessions",
+		ID:       19,
+		ParentID: 1,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "id", ID: 1, Type: colTypeInt, DefaultExpr: &uniqueRowIDString},
+			{Name: "secret", ID: 2, Type: colTypeUUID},
+			{Name: "username", ID: 3, Type: colTypeString},
+			{Name: "createdat", ID: 4, Type: colTypeTimestamp, DefaultExpr: &nowString},
+			{Name: "expiresat", ID: 5, Type: colTypeTimestamp},
+			{Name: "revokedat", ID: 6, Type: colTypeTimestamp, Nullable: true},
+			{Name: "lastusedat", ID: 7, Type: colTypeTimestamp, DefaultExpr: &nowString},
+			{Name: "auditinfo", ID: 8, Type: colTypeString},
+		},
+		NextColumnID: 9,
+		Families: []ColumnFamilyDescriptor{
+			{Name: "primary", ID: 0, ColumnNames: []string{"key"}, ColumnIDs: singleID1},
+			{Name: "primary", ID: 0, ColumnNames: []string{"key"}, ColumnIDs: singleID1},
+			{Name: "primary", ID: 0, ColumnNames: []string{"key"}, ColumnIDs: singleID1},
+			{Name: "primary", ID: 0, ColumnNames: []string{"key"}, ColumnIDs: singleID1},
+			{Name: "primary", ID: 0, ColumnNames: []string{"key"}, ColumnIDs: singleID1},
+			{Name: "primary", ID: 0, ColumnNames: []string{"key"}, ColumnIDs: singleID1},
+			{Name: "primary", ID: 0, ColumnNames: []string{"key"}, ColumnIDs: singleID1},
+			{Name: "primary", ID: 0, ColumnNames: []string{"key"}, ColumnIDs: singleID1},
+		},
+		NextFamilyID: 9,
+		PrimaryIndex: pk("id"),
+		Indexes: []IndexDescriptor{
+			{
+				Name:             "jobs_status_created_idx",
+				ID:               2,
+				Unique:           false,
+				ColumnNames:      []string{"status", "created"},
+				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
+				ColumnIDs:        []ColumnID{2, 3},
+				ExtraColumnIDs:   []ColumnID{1},
+			},
+			{
+				Name:             "jobs_status_created_idx",
+				ID:               2,
+				Unique:           false,
+				ColumnNames:      []string{"status", "created"},
+				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
+				ColumnIDs:        []ColumnID{2, 3},
+				ExtraColumnIDs:   []ColumnID{1},
+			},
+		},
+		NextIndexID: 4,
+		Privileges: &PrivilegeDescriptor{
+			Users: []UserPrivileges{
+				{User: "root", Privileges: 0x1f0},
+			},
+		},
+		NextMutationID: 1,
+		FormatVersion:  3,
 	}
 )
 
