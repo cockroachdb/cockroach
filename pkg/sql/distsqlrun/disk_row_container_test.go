@@ -109,7 +109,7 @@ func TestDiskRowContainer(t *testing.T) {
 				for i := range types {
 					types[i] = sqlbase.RandColumnType(rng)
 				}
-				row := sqlbase.EncDatumRow(sqlbase.RandEncDatumSliceOfTypes(rng, types))
+				row := sqlbase.RandEncDatumRowOfTypes(rng, types)
 				func() {
 					d, err := makeDiskRowContainer(
 						ctx, types, ordering, &memRowContainer{}, tempEngine,

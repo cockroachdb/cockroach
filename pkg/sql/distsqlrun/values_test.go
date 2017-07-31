@@ -28,6 +28,35 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
+// generateValueSpec generates a ValuesCoreSpec that encodes the given rows. We pass
+// the types as well because zero rows are allowed.
+func generateValuesSpec(
+	colTypes []sqlbase.ColumnType, rows sqlbase.EncDatumRows, rowsPerChunk int,
+) (ValuesCoreSpec, error) {
+	var spec ValuesCoreSpec
+	spec.Columns = make([]DatumInfo, len(colTypes))
+	for i := range spec.Columns {
+		spec.Columns[i].Type = colTypes[i]
+		spec.Columns[i].Encoding = sqlbase.DatumEncoding_VALUE
+	}
+
+	var a sqlbase.DatumAlloc
+	for i := 0; i < len(rows); {
+		var buf []byte
+		for end := i + rowsPerChunk; i < len(rows) && i < end; i++ {
+			for j, info := range spec.Columns {
+				var err error
+				buf, err = rows[i][j].Encode(&a, info.Encoding, buf)
+				if err != nil {
+					return ValuesCoreSpec{}, err
+				}
+			}
+		}
+		spec.RawBytes = append(spec.RawBytes, buf)
+	}
+	return spec, nil
+}
+
 func TestValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rng, _ := randutil.NewPseudoRand()
@@ -35,37 +64,12 @@ func TestValues(t *testing.T) {
 		for _, numCols := range []int{1, 3} {
 			for _, rowsPerChunk := range []int{1, 2, 5} {
 				t.Run(fmt.Sprintf("%d-%d-%d", numRows, numCols, rowsPerChunk), func(t *testing.T) {
-					var a sqlbase.DatumAlloc
-					var spec ValuesCoreSpec
-					spec.Columns = make([]DatumInfo, numCols)
-					for i := range spec.Columns {
-						spec.Columns[i].Type = sqlbase.RandColumnType(rng)
-						spec.Columns[i].Encoding = sqlbase.DatumEncoding_VALUE
-					}
+					colTypes := sqlbase.RandColumnTypes(rng, numCols)
+					inRows := sqlbase.RandEncDatumRowsOfTypes(rng, numRows, colTypes)
 
-					// Generate random rows.
-					inRows := make(sqlbase.EncDatumRows, numRows)
-					for i := 0; i < numRows; i++ {
-						inRows[i] = make(sqlbase.EncDatumRow, numCols)
-						for j, info := range spec.Columns {
-							d := sqlbase.RandDatum(rng, info.Type, true)
-							inRows[i][j] = sqlbase.DatumToEncDatum(info.Type, d)
-						}
-					}
-
-					// Encode the rows.
-					for i := 0; i < numRows; {
-						var buf []byte
-						for end := i + rowsPerChunk; i < numRows && i < end; i++ {
-							for j, info := range spec.Columns {
-								var err error
-								buf, err = inRows[i][j].Encode(&a, info.Encoding, buf)
-								if err != nil {
-									t.Fatal(err)
-								}
-							}
-						}
-						spec.RawBytes = append(spec.RawBytes, buf)
+					spec, err := generateValuesSpec(colTypes, inRows, rowsPerChunk)
+					if err != nil {
+						t.Fatal(err)
 					}
 
 					out := &RowBuffer{}
@@ -98,6 +102,7 @@ func TestValues(t *testing.T) {
 
 					evalCtx := parser.NewTestingEvalContext()
 					defer evalCtx.Stop(context.Background())
+					var a sqlbase.DatumAlloc
 					for i := 0; i < numRows; i++ {
 						if len(res[i]) != numCols {
 							t.Fatalf("row %d incorrect length %d, expected %d", i, len(res[i]), numCols)
