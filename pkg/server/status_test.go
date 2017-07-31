@@ -605,18 +605,6 @@ func TestNodesGRPCResponse(t *testing.T) {
 	}
 }
 
-func TestHandleDebugRange(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s := startServer(t)
-	defer s.Stopper().Stop(context.TODO())
-
-	if body, err := getText(s, s.AdminURL()+rangeDebugEndpoint+"?id=1"); err != nil {
-		t.Fatal(err)
-	} else if !bytes.Contains(body, []byte("<TITLE>Range ID:1</TITLE>")) {
-		t.Errorf("expected \"<title>Range Id: 1</title>\" got: \n%s", body)
-	}
-}
-
 func TestCertificatesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ts := startServer(t)
@@ -664,5 +652,67 @@ func TestCertificatesResponse(t *testing.T) {
 	} else if a, e := cert.Data, nodeFile; !bytes.Equal(a, e) {
 		t.Errorf("mismatched contents: %s vs %s", a, e)
 	}
+}
 
+func TestRangeResponse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer storage.EnableLeaseHistory(100)()
+	ts := startServer(t)
+	defer ts.Stopper().Stop(context.TODO())
+
+	// Perform a scan to ensure that all the raft groups are initialized.
+	if _, err := ts.db.Scan(context.Background(), keys.LocalMax, roachpb.KeyMax, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	var response serverpb.RangeResponse
+	if err := getStatusJSONProto(ts, "range/1", &response); err != nil {
+		t.Fatal(err)
+	}
+
+	// This is a single node cluster, so only expect a single response.
+	if e, a := 1, len(response.ResponsesByNodeID); e != a {
+		t.Errorf("got the wrong number of responses, expected %d, actual %d", e, a)
+	}
+
+	// Make sure the rangelog has some values in it.
+	if e, a := 1, len(response.RangeLog.Events); e != a {
+		t.Errorf("range log has the wrong size, expected %d, actual %d", e, a)
+	}
+
+	node1Response := response.ResponsesByNodeID[response.NodeID]
+
+	// The response should come back as valid.
+	if !node1Response.Response {
+		t.Errorf("node1's response returned as false, expected true")
+	}
+
+	// The response should include just the one range.
+	if e, a := 1, len(node1Response.Infos); e != a {
+		t.Errorf("got the wrong number of ranges in the response, expected %d, actual %d", e, a)
+	}
+
+	info := node1Response.Infos[0]
+	expReplica := roachpb.ReplicaDescriptor{
+		NodeID:    1,
+		StoreID:   1,
+		ReplicaID: 1,
+	}
+
+	// Check some other values.
+	if len(info.State.Desc.Replicas) != 1 || info.State.Desc.Replicas[0] != expReplica {
+		t.Errorf("unexpected replica list %+v", info.State.Desc.Replicas)
+	}
+
+	if info.State.Lease == nil || *info.State.Lease == (roachpb.Lease{}) {
+		t.Error("expected a nontrivial Lease")
+	}
+
+	if info.State.LastIndex == 0 {
+		t.Error("expected positive LastIndex")
+	}
+
+	if e, a := 1, len(info.LeaseHistory); e != a {
+		t.Errorf("expected a lease history length of %d, actual %d\n%+v", e, a, info)
+	}
 }

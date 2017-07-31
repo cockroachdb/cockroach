@@ -19,7 +19,7 @@ import { Provider } from "react-redux";
 import { Router, Route, IndexRoute, IndexRedirect } from "react-router";
 
 import {
-  tableNameAttr, databaseNameAttr, nodeIDAttr, dashboardNameAttr,
+  tableNameAttr, databaseNameAttr, nodeIDAttr, dashboardNameAttr, rangeIDAttr,
 } from "src/util/constants";
 
 import { store, history } from "src/redux/state";
@@ -45,6 +45,7 @@ import ProblemRanges from "src/views/reports/containers/problemRanges";
 import Network from "src/views/reports/containers/network";
 import Nodes from "src/views/reports/containers/nodes";
 import Certificates from "src/views/reports/containers/certificates";
+import Range from "src/views/reports/containers/range";
 
 import { alertDataSync } from "src/redux/alerts";
 
@@ -86,6 +87,7 @@ ReactDOM.render(
           <Route path="network" component={ Network } />
           <Route path="nodes" component={ Nodes } />
           <Route path={`certificates/:${nodeIDAttr}`} component={ Certificates } />
+          <Route path={`range/:${rangeIDAttr}`} component={ Range } />
         </Route>
       </Route>
     </Router>
