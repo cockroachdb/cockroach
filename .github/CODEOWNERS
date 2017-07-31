@@ -11,7 +11,7 @@ pkg/kv/*         @cockroachdb/core
 pkg/roachpb/*    @cockroachdb/core
 pkg/rpc/*        @cockroachdb/core
 pkg/server/*     @cockroachdb/core
-pkg/migrations/* @cockroachdb/core @cockroachdb/sql
+pkg/migration/*  @cockroachdb/core @cockroachdb/sql
 
 pkg/ccl/*        @cockroachdb/sql-ccl
 pkg/cli/*        @cockroachdb/sql-ui
