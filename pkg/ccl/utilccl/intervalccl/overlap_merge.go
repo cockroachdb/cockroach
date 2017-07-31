@@ -11,6 +11,8 @@ package intervalccl
 import (
 	"bytes"
 	"sort"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // Range is an interval with a payload.
@@ -33,6 +35,20 @@ func (c Covering) Less(i, j int) bool {
 		return cmp < 0
 	}
 	return bytes.Compare(c[i].End, c[j].End) < 0
+}
+
+// CoveringFromSpans creates a covering with a fixed payload from a slice of
+// roachpb.Spans.
+func CoveringFromSpans(spans []roachpb.Span, payload interface{}) Covering {
+	var covering Covering
+	for _, span := range spans {
+		covering = append(covering, Range{
+			Start:   []byte(span.Key),
+			End:     []byte(span.EndKey),
+			Payload: payload,
+		})
+	}
+	return covering
 }
 
 // OverlapCoveringMerge returns the set of intervals covering every range in the
