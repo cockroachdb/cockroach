@@ -273,6 +273,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// this monitor will be setting their own noteworthy limits.
 	rootSQLMemoryMonitor := mon.MakeMonitor(
 		"root",
+		mon.MemoryResource{},
 		nil,           /* curCount */
 		nil,           /* maxHist */
 		-1,            /* increment: use default increment */

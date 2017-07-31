@@ -43,10 +43,10 @@ func TestMemoryAllocations(t *testing.T) {
 	t.Logf("random seed: %v", seed)
 
 	ctx := context.Background()
-	accs := make([]MemoryAccount, 4)
+	accs := make([]BytesAccount, 4)
 
-	var pool MemoryMonitor
-	var m MemoryMonitor
+	var pool BytesMonitor
+	var m BytesMonitor
 	var paramHeader func()
 
 	// The following invariants will be checked at every step of the
@@ -131,11 +131,11 @@ func TestMemoryAllocations(t *testing.T) {
 	}
 
 	for _, max := range maxs {
-		pool = MakeMonitor("test", nil, nil, 1, 1000)
+		pool = MakeMonitor("test", MemoryResource{}, nil, nil, 1, 1000)
 		pool.Start(ctx, nil, MakeStandaloneBudget(max))
 
 		for _, hf := range hysteresisFactors {
-			maxAllocatedButUnusedMemoryBlocks = hf
+			maxAllocatedButUnusedBlocks = hf
 
 			for _, pb := range preBudgets {
 				mmax := pb + max
@@ -145,7 +145,7 @@ func TestMemoryAllocations(t *testing.T) {
 
 					// We start with a fresh monitor for every set of
 					// parameters.
-					m = MakeMonitor("test", nil, nil, pa, 1000)
+					m = MakeMonitor("test", MemoryResource{}, nil, nil, pa, 1000)
 					m.Start(ctx, &pool, MakeStandaloneBudget(pb))
 
 					for i := 0; i < numAccountOps; i++ {
@@ -205,16 +205,16 @@ func TestMemoryAllocations(t *testing.T) {
 	}
 }
 
-func TestMemoryAccount(t *testing.T) {
+func TestBytesAccount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	m := MakeMonitor("test", nil, nil, 1, 1000)
+	m := MakeMonitor("test", MemoryResource{}, nil, nil, 1, 1000)
 	m.Start(ctx, nil, MakeStandaloneBudget(100))
 	m.poolAllocationSize = 1
-	maxAllocatedButUnusedMemoryBlocks = 1
+	maxAllocatedButUnusedBlocks = 1
 
-	var a1, a2 MemoryAccount
+	var a1, a2 BytesAccount
 
 	m.OpenAccount(&a1)
 	m.OpenAccount(&a2)
@@ -263,28 +263,28 @@ func TestMemoryAccount(t *testing.T) {
 	m.Stop(ctx)
 }
 
-func TestMemoryMonitor(t *testing.T) {
+func TestBytesMonitor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	m := MakeMonitor("test", nil, nil, 1, 1000)
+	m := MakeMonitor("test", MemoryResource{}, nil, nil, 1, 1000)
 	m.Start(ctx, nil, MakeStandaloneBudget(100))
-	maxAllocatedButUnusedMemoryBlocks = 1
+	maxAllocatedButUnusedBlocks = 1
 
-	if err := m.reserveMemory(ctx, 10); err != nil {
+	if err := m.reserveBytes(ctx, 10); err != nil {
 		t.Fatalf("monitor refused small allocation: %v", err)
 	}
-	if err := m.reserveMemory(ctx, 91); err == nil {
+	if err := m.reserveBytes(ctx, 91); err == nil {
 		t.Fatalf("monitor accepted excessive allocation: %v", err)
 	}
-	if err := m.reserveMemory(ctx, 90); err != nil {
+	if err := m.reserveBytes(ctx, 90); err != nil {
 		t.Fatalf("monitor refused top allocation: %v", err)
 	}
 	if m.mu.curAllocated != 100 {
 		t.Fatalf("incorrect current allocation: got %d, expected %d", m.mu.curAllocated, 100)
 	}
 
-	m.releaseMemory(ctx, 90) // Should succeed without panic.
+	m.releaseBytes(ctx, 90) // Should succeed without panic.
 	if m.mu.curAllocated != 10 {
 		t.Fatalf("incorrect current allocation: got %d, expected %d", m.mu.curAllocated, 10)
 	}
@@ -292,21 +292,21 @@ func TestMemoryMonitor(t *testing.T) {
 		t.Fatalf("incorrect max allocation: got %d, expected %d", m.mu.maxAllocated, 100)
 	}
 
-	m.releaseMemory(ctx, 10) // Should succeed without panic.
+	m.releaseBytes(ctx, 10) // Should succeed without panic.
 	if m.mu.curAllocated != 0 {
 		t.Fatalf("incorrect current allocation: got %d, expected %d", m.mu.curAllocated, 0)
 	}
 
-	limitedMonitor := MakeMonitorWithLimit("testlimit", 10, nil, nil, 1, 1000)
+	limitedMonitor := MakeMonitorWithLimit("testlimit", MemoryResource{}, 10, nil, nil, 1, 1000)
 	limitedMonitor.Start(ctx, &m, BoundAccount{})
 
-	if err := limitedMonitor.reserveMemory(ctx, 10); err != nil {
+	if err := limitedMonitor.reserveBytes(ctx, 10); err != nil {
 		t.Fatalf("limited monitor refused small allocation: %v", err)
 	}
-	if err := limitedMonitor.reserveMemory(ctx, 1); err == nil {
+	if err := limitedMonitor.reserveBytes(ctx, 1); err == nil {
 		t.Fatal("limited monitor allowed allocation over limit")
 	}
-	limitedMonitor.releaseMemory(ctx, 10)
+	limitedMonitor.releaseBytes(ctx, 10)
 
 	limitedMonitor.Stop(ctx)
 	m.Stop(ctx)

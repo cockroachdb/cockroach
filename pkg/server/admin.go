@@ -67,7 +67,7 @@ var errAdminAPIError = grpc.Errorf(codes.Internal, "An internal server error "+
 // the cockroach cluster.
 type adminServer struct {
 	server     *Server
-	memMonitor mon.MemoryMonitor
+	memMonitor mon.BytesMonitor
 	memMetrics *sql.MemoryMetrics
 }
 
@@ -83,7 +83,12 @@ func newAdminServer(s *Server) *adminServer {
 	// TODO(knz): We do not limit memory usage by admin operations
 	// yet. Is this wise?
 	server.memMonitor = mon.MakeUnlimitedMonitor(
-		context.Background(), "admin", nil, nil, noteworthyAdminMemoryUsageBytes,
+		context.Background(),
+		"admin",
+		mon.MemoryResource{},
+		nil,
+		nil,
+		noteworthyAdminMemoryUsageBytes,
 	)
 	return server
 }

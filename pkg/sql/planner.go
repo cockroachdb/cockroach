@@ -112,16 +112,19 @@ func makeInternalPlanner(
 
 	s.mon = mon.MakeUnlimitedMonitor(ctx,
 		"internal-root",
+		mon.MemoryResource{},
 		memMetrics.CurBytesCount, memMetrics.MaxBytesHist,
 		noteworthyInternalMemoryUsageBytes)
 
 	s.sessionMon = mon.MakeMonitor("internal-session",
+		mon.MemoryResource{},
 		memMetrics.SessionCurBytesCount,
 		memMetrics.SessionMaxBytesHist,
 		-1, noteworthyInternalMemoryUsageBytes/5)
 	s.sessionMon.Start(ctx, &s.mon, mon.BoundAccount{})
 
 	s.TxnState.mon = mon.MakeMonitor("internal-txn",
+		mon.MemoryResource{},
 		memMetrics.TxnCurBytesCount,
 		memMetrics.TxnMaxBytesHist,
 		-1, noteworthyInternalMemoryUsageBytes/5)
