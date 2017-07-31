@@ -106,7 +106,7 @@ func (p *planner) Delete(
 	}
 
 	if err := dn.run.initEditNode(
-		ctx, &dn.editNodeBase, rows, &dn.tw, n.Returning, desiredTypes); err != nil {
+		ctx, &dn.editNodeBase, rows, &dn.tw, tn, n.Returning, desiredTypes); err != nil {
 		return nil, err
 	}
 

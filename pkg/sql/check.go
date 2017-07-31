@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+// checkHelper validates check constraints on rows, on INSERT and UPDATE.
 type checkHelper struct {
 	exprs        []parser.TypedExpr
 	cols         []sqlbase.ColumnDescriptor
