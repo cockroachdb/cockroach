@@ -94,7 +94,7 @@ func (p *planner) selectIndex(
 		// No where-clause, no ordering, and no specified index.
 		s.initOrdering(0)
 		var err error
-		s.spans, err = makeSpans(nil, &s.desc, s.index)
+		s.spans, err = makeSpans(nil, s.desc, s.index)
 		if err != nil {
 			return nil, errors.Wrapf(err, "table ID = %d, index ID = %d", s.desc.ID, s.index.ID)
 		}
@@ -106,17 +106,17 @@ func (p *planner) selectIndex(
 		// An explicit secondary index was requested. Only add it to the candidate
 		// indexes list.
 		candidates = append(candidates, &indexInfo{
-			desc:  &s.desc,
+			desc:  s.desc,
 			index: s.specifiedIndex,
 		})
 	} else {
 		candidates = append(candidates, &indexInfo{
-			desc:  &s.desc,
+			desc:  s.desc,
 			index: &s.desc.PrimaryIndex,
 		})
 		for i := range s.desc.Indexes {
 			candidates = append(candidates, &indexInfo{
-				desc:  &s.desc,
+				desc:  s.desc,
 				index: &s.desc.Indexes[i],
 			})
 		}
