@@ -96,6 +96,8 @@ message RangeDescriptor {
 // Percentiles contains a handful of hard-coded percentiles meant to summarize
 // a distribution.
 message Percentiles {
+  option (gogoproto.goproto_stringer) = false;
+
   optional double p10 = 1 [(gogoproto.nullable) = false];
   optional double p25 = 2 [(gogoproto.nullable) = false];
   optional double p50 = 3 [(gogoproto.nullable) = false];
@@ -105,6 +107,8 @@ message Percentiles {
 
 // StoreCapacity contains capacity information for a storage device.
 message StoreCapacity {
+  option (gogoproto.goproto_stringer) = false;
+
   optional int64 capacity = 1 [(gogoproto.nullable) = false];
   optional int64 available = 2 [(gogoproto.nullable) = false];
   optional int32 range_count = 3 [(gogoproto.nullable) = false];
