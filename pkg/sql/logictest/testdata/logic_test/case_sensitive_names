@@ -225,10 +225,10 @@ SELECT * FROM a@"I"
 statement error index "Foo" not found
 SELECT * FROM a@"Foo"
 
-statement error index a@"I" not found
+statement error index "I" not found
 SELECT * FROM a ORDER BY INDEX a@"I"
 
-statement error index a@"Foo" not found
+statement error index "Foo" not found
 SELECT * FROM a ORDER BY INDEX a@"Foo"
 
 statement error index "I" does not exist

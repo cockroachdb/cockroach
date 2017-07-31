@@ -34,7 +34,7 @@ func (node *AlterTable) Format(buf *bytes.Buffer, f FmtFlags) {
 	if node.IfExists {
 		buf.WriteString("IF EXISTS ")
 	}
-	FormatNode(buf, f, node.Table)
+	FormatNode(buf, f, &node.Table)
 	buf.WriteByte(' ')
 	FormatNode(buf, f, node.Cmds)
 }
