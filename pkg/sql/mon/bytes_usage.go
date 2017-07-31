@@ -28,44 +28,39 @@ import (
 	"golang.org/x/net/context"
 )
 
-// MemoryAccount and MemoryMonitor together form the
-// mechanism by which memory consumption by the server on behalf of db
-// clients is tracked and constrained. The primary motivation is to
-// avoid common cases of memory blow-ups due to user error or
-// unoptimized queries; a secondary motivation in the longer term is
-// to offer more detailed metrics to users to track and explain memory
-// consumption.
+// BytesAccount and BytesMonitor together form the mechanism by which
+// allocations are tracked and constrained (e.g. memory allocations by the
+// server on behalf of db clients). The primary motivation is to avoid common
+// cases of memory or disk blow-ups due to user error or unoptimized queries; a
+// secondary motivation in the longer term is to offer more detailed metrics to
+// users to track and explain memory/disk usage.
 //
 // The overall mechanism functions as follows:
 //
-// - components in CockroachDB that wish to have their allocations
-//   tracked declare/register their allocations to an instance of
-//   MemoryMonitor. To do this, each component maintains one or
-//   more instances of MemoryAccount, one per "category" of
-//   allocation, and issue requests to Grow, Resize or Close to their
-//   monitor. Grow/Resize requests can be denied (return an error),
-//   which indicates the memory budget has been reached.
+// - components in CockroachDB that wish to have their allocations tracked
+//   declare/register their allocations to an instance of BytesMonitor. To do
+//   this, each component maintains one or more instances of BytesAccount, one
+//   per "category" of allocation, and issue requests to Grow, Resize or Close
+//   to their monitor. Grow/Resize requests can be denied (return an error),
+//   which indicates the budget has been reached.
 //
-// - different instances of MemoryAccount are associated to different
-//   usage categories in components, in principle to track different
-//   object lifetimes. Each account tracks the total amount of memory
-//   allocated in that category and enables declaring all the memory
-//   as released at once using Close() when all objects in that
-//   category are released back to Go's heap.
+// - different instances of BytesAccount are associated to different usage
+//   categories in components, in principle to track different object lifetimes.
+//   Each account tracks the total amount of bytes allocated in that category
+//   and enables declaring all the bytes as released at once using Close().
 //
-// - MemoryMonitor checks the total sum of allocations across
-//   accounts, but also serves as endpoint for statistics. Therefore
-//   each db client connection should use a separate monitor for its
-//   allocations, so that statistics can be separated per connection.
+// - BytesMonitor checks the total sum of allocations across accounts, but also
+//   serves as endpoint for statistics. Therefore each db client connection
+//   should use a separate monitor for its allocations, so that statistics can
+//   be separated per connection.
 //
-// - a MemoryMonitor can be used standalone, and operate independently
-//   from other monitors; however, since we also want to constrain
-//   global memory usage across all connections, multiple instance of
-//   MemoryMonitors can coordinate with each other by referring to a
-//   shared MemoryMonitor, also known as "pool". When operating in
-//   that mode, each MemoryMonitor reports allocations declared to it
-//   by component accounts also to the pool; and refusal by the pool
-//   is reported back to the component. In addition, allocations are
+// - a BytesMonitor can be used standalone, and operate independently from other
+//   monitors; however, since we also want to constrain global bytes usage
+//   across all connections, multiple instance of BytesMonitors can coordinate
+//   with each other by referring to a shared BytesMonitor, also known as
+//   "pool". When operating in that mode, each BytesMonitor reports allocations
+//   declared to it by component accounts also to the pool; and refusal by the
+//   pool is reported back to the component. In addition, allocations are
 //   "buffered" to reduce pressure on the mutex of the shared pool.
 //
 // General use cases:
@@ -156,44 +151,47 @@ import (
 // - in addition to the per-connection monitors, the pgwire server
 //   owns and uses an additional shared monitor. This is an
 //   optimization: when a pgwire connection is opened, the server
-//   pre-reserves some memory (`baseSQLMemoryBudget`) using a
+//   pre-reserves some bytes (`baseSQLMemoryBudget`) using a
 //   per-connection "base account" to the shared server monitor. By
 //   doing so, the server capitalizes on the fact that a monitor
 //   "buffers" allocations from the pool and thus each connection
-//   receives a starter memory budget without needing to hit the
+//   receives a starter bytes budget without needing to hit the
 //   shared pool and its mutex.
 //
 // Finally, a simplified API is provided in session_mem_usage.go
-// (WrappedMemoryAccount) to simplify the interface offered to SQL
-// components using memory accounts linked to the session-bound
-// monitor.
+// (WrappedMemoryAccount) to simplify the interface offered to SQL components
+// using accounts linked to the session-bound monitor.
 
-// MemoryMonitor defines an object that can track and limit
-// memory usage by other CockroachDB components.
-// The monitor must be set up via Start/Stop before
-// and after use.
+// BytesMonitor defines an object that can track and limit memory/disk usage by
+// other CockroachDB components. The monitor must be set up via Start/Stop
+// before and after use.
 // The various counters express sizes in bytes.
-type MemoryMonitor struct {
+type BytesMonitor struct {
 	mu struct {
 		syncutil.Mutex
 
-		// curAllocated tracks the current amount of memory allocated at
-		// this monitor by its client components.
+		// curAllocated tracks the current amount of bytes allocated at this
+		// monitor by its client components.
 		curAllocated int64
 
-		// maxAllocated tracks the high water mark of allocations.
-		// Used for monitoring.
+		// maxAllocated tracks the high water mark of allocations. Used for
+		// monitoring.
 		maxAllocated int64
 
-		// curBudget represents the budget allocated at the pool on behalf
-		// of this monitor.
-		curBudget MemoryAccount
+		// curBudget represents the budget allocated at the pool on behalf of
+		// this monitor.
+		curBudget BytesAccount
 	}
 
 	// name identifies this monitor in logging messages.
 	name string
 
-	// reserved indicates how much memory was already reserved for this
+	// resource specifies what kind of resource the monitor is tracking
+	// allocations for. Specific behavior is delegated to this resource (e.g.
+	// budget exceeded errors).
+	resource Resource
+
+	// reserved indicates how many bytes were already reserved for this
 	// monitor before it was instantiated. Allocations registered to
 	// this monitor are first deducted from this budget. If there is no
 	// pool, reserved determines the maximum allocation capacity of this
@@ -209,41 +207,42 @@ type MemoryMonitor struct {
 	// monitors are affected by this limit.
 	limit int64
 
-	// pool specifies where to send requests to increase or decrease
-	// curBudget. May be nil for a standalone monitor.
-	pool *MemoryMonitor
+	// pool specifies where to send requests to increase or decrease curBudget.
+	// May be nil for a standalone monitor.
+	pool *BytesMonitor
 
-	// poolAllocationSize specifies the allocation unit for requests to
-	// the pool.
+	// poolAllocationSize specifies the allocation unit for requests to the
+	// pool.
 	poolAllocationSize int64
 
-	// noteworthyUsageBytes is the size beyond which total allocations
-	// start to become reported in the logs.
+	// noteworthyUsageBytes is the size beyond which total allocations start to
+	// become reported in the logs.
 	noteworthyUsageBytes int64
 
 	curBytesCount *metric.Counter
 	maxBytesHist  *metric.Histogram
 }
 
-// maxAllocatedButUnusedMemoryBlocks determines the maximum difference
-// between the amount of memory used by a monitor and the amount of
-// memory reserved at the upstream pool before the monitor
-// relinquishes the memory back to the pool. This is useful so that a
-// monitor currently at the boundary of a block does not cause
-// contention when accounts cause its allocation counter to grow and
-// shrink slightly beyond and beneath an allocation block
-// boundary. The difference is expressed as a number of blocks of size
-// `poolAllocationSize`.
-var maxAllocatedButUnusedMemoryBlocks = envutil.EnvOrDefaultInt("COCKROACH_MAX_ALLOCATED_UNUSED_BLOCKS", 10)
+// maxAllocatedButUnusedBlocks determines the maximum difference between the
+// amount of bytes used by a monitor and the amount of bytes reserved at the
+// upstream pool before the monitor relinquishes the bytes back to the pool.
+// This is useful so that a monitor currently at the boundary of a block does
+// not cause contention when accounts cause its allocation counter to grow and
+// shrink slightly beyond and beneath an allocation block boundary. The
+// difference is expressed as a number of blocks of size `poolAllocationSize`.
+var maxAllocatedButUnusedBlocks = envutil.EnvOrDefaultInt("COCKROACH_MAX_ALLOCATED_UNUSED_BLOCKS", 10)
 
-// DefaultPoolAllocationSize specifies the unit of allocation used by
-// a monitor to reserve and release memory to a pool.
-var DefaultPoolAllocationSize = envutil.EnvOrDefaultInt64("COCKROACH_MEMORY_ALLOCATION_CHUNK_SIZE", 10*1024)
+// DefaultPoolAllocationSize specifies the unit of allocation used by a monitor
+// to reserve and release bytes to a pool.
+var DefaultPoolAllocationSize = envutil.EnvOrDefaultInt64("COCKROACH_ALLOCATION_CHUNK_SIZE", 10*1024)
 
 // MakeMonitor creates a new monitor.
 // Arguments:
 // - name is used to annotate log messages, can be used to distinguish
 //   monitors.
+//
+// - resource specifies what kind of resource the monitor is tracking
+//   allocations for (e.g. memory or disk).
 //
 // - curCount and maxHist are the metric objects to update with usage
 //   statistics.
@@ -257,32 +256,35 @@ var DefaultPoolAllocationSize = envutil.EnvOrDefaultInt64("COCKROACH_MEMORY_ALLO
 //   or math.MaxInt64 to never log.
 func MakeMonitor(
 	name string,
+	res Resource,
 	curCount *metric.Counter,
 	maxHist *metric.Histogram,
 	increment int64,
 	noteworthy int64,
-) MemoryMonitor {
-	return MakeMonitorWithLimit(name, math.MaxInt64, curCount, maxHist, increment, noteworthy)
+) BytesMonitor {
+	return MakeMonitorWithLimit(name, res, math.MaxInt64, curCount, maxHist, increment, noteworthy)
 }
 
 // MakeMonitorWithLimit creates a new monitor with a limit local to this
 // monitor.
 func MakeMonitorWithLimit(
 	name string,
+	res Resource,
 	limit int64,
 	curCount *metric.Counter,
 	maxHist *metric.Histogram,
 	increment int64,
 	noteworthy int64,
-) MemoryMonitor {
+) BytesMonitor {
 	if increment <= 0 {
 		increment = DefaultPoolAllocationSize
 	}
 	if limit <= 0 {
 		limit = math.MaxInt64
 	}
-	return MemoryMonitor{
+	return BytesMonitor{
 		name:                 name,
+		resource:             res,
 		limit:                limit,
 		noteworthyUsageBytes: noteworthy,
 		curBytesCount:        curCount,
@@ -293,9 +295,10 @@ func MakeMonitorWithLimit(
 
 // MakeMonitorInheritWithLimit creates a new monitor with a limit local to this
 // monitor with all other attributes inherited from the passed in monitor.
-func MakeMonitorInheritWithLimit(name string, limit int64, m *MemoryMonitor) MemoryMonitor {
+func MakeMonitorInheritWithLimit(name string, limit int64, m *BytesMonitor) BytesMonitor {
 	return MakeMonitorWithLimit(
 		name,
+		m.resource,
 		limit,
 		m.curBytesCount,
 		m.maxBytesHist,
@@ -306,13 +309,12 @@ func MakeMonitorInheritWithLimit(name string, limit int64, m *MemoryMonitor) Mem
 
 // Start begins a monitoring region.
 // Arguments:
-// - pool is the upstream memory monitor that provision allocations
-//   exceeding the pre-reserved budget. If pool is nil, no upstream
-//   allocations are possible and the pre-reserved budget determines the
-//   entire capacity of this monitor.
+// - pool is the upstream monitor that provision allocations exceeding the
+//   pre-reserved budget. If pool is nil, no upstream allocations are possible
+//   and the pre-reserved budget determines the entire capacity of this monitor.
 //
 // - reserved is the pre-reserved budget (see above).
-func (mm *MemoryMonitor) Start(ctx context.Context, pool *MemoryMonitor, reserved BoundAccount) {
+func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved BoundAccount) {
 	if mm.mu.curAllocated != 0 {
 		panic(fmt.Sprintf("%s: started with %d bytes left over", mm.name, mm.mu.curAllocated))
 	}
@@ -336,21 +338,23 @@ func (mm *MemoryMonitor) Start(ctx context.Context, pool *MemoryMonitor, reserve
 	}
 }
 
-// MakeUnlimitedMonitor creates a new monitor and starts the monitor
-// in "detached" mode without a pool and without a maximum budget.
+// MakeUnlimitedMonitor creates a new monitor and starts the monitor in
+// "detached" mode without a pool and without a maximum budget.
 func MakeUnlimitedMonitor(
 	ctx context.Context,
 	name string,
+	res Resource,
 	curCount *metric.Counter,
 	maxHist *metric.Histogram,
 	noteworthy int64,
-) MemoryMonitor {
+) BytesMonitor {
 	if log.V(2) {
 		log.InfofDepth(ctx, 1, "%s: starting unlimited monitor", name)
 
 	}
-	return MemoryMonitor{
+	return BytesMonitor{
 		name:                 name,
+		resource:             res,
 		limit:                math.MaxInt64,
 		noteworthyUsageBytes: noteworthy,
 		curBytesCount:        curCount,
@@ -362,26 +366,26 @@ func MakeUnlimitedMonitor(
 
 // EmergencyStop completes a monitoring region, and disables checking
 // that all accounts have been closed.
-func (mm *MemoryMonitor) EmergencyStop(ctx context.Context) {
+func (mm *BytesMonitor) EmergencyStop(ctx context.Context) {
 	mm.doStop(ctx, false)
 }
 
 // Stop completes a monitoring region.
-func (mm *MemoryMonitor) Stop(ctx context.Context) {
+func (mm *BytesMonitor) Stop(ctx context.Context) {
 	mm.doStop(ctx, true)
 }
 
-func (mm *MemoryMonitor) doStop(ctx context.Context, check bool) {
+func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 	// NB: No need to lock mm.mu here, when StopMonitor() is called the
 	// monitor is not shared any more.
 	if log.V(1) {
-		log.InfofDepth(ctx, 1, "%s, memory usage max %s",
+		log.InfofDepth(ctx, 1, "%s, bytes usage max %s",
 			mm.name,
 			humanizeutil.IBytes(mm.mu.maxAllocated))
 	}
 
 	if check && mm.mu.curAllocated != 0 {
-		panic(fmt.Sprintf("%s: unexpected leftover memory: %d bytes",
+		panic(fmt.Sprintf("%s: unexpected %d leftover bytes",
 			mm.name,
 			mm.mu.curAllocated))
 	}
@@ -404,44 +408,40 @@ func (mm *MemoryMonitor) doStop(ctx context.Context, check bool) {
 	mm.reserved.Clear(ctx)
 }
 
-// MemoryAccount tracks the cumulated allocations for one client of
-// MemoryPool or MemoryMonitor. MemoryMonitor has an account
-// to its pool; MemoryMonitor clients have an account to the
-// monitor. This allows each client to release all the memory at once
-// when it completes its work.
+// BytesAccount tracks the cumulated allocations for one client of a pool or
+// monitor. BytesMonitor has an account to its pool; BytesMonitor clients have
+// an account to the monitor. This allows each client to release all the bytes
+// at once when it completes its work.
 //
-// See the comments in mem_usage.go for a fuller picture of how
-// these accounts are used in CockroachDB.
-type MemoryAccount struct {
+// See the comments in bytes_usage.go for a fuller picture of how these accounts
+// are used in CockroachDB.
+type BytesAccount struct {
 	curAllocated int64
 }
 
 // CurrentlyAllocated returns the number of bytes currently allocated through
 // this account.
-func (acc MemoryAccount) CurrentlyAllocated() int64 {
+func (acc BytesAccount) CurrentlyAllocated() int64 {
 	return acc.curAllocated
 }
 
 // OpenAccount creates a new empty account.
-func (mm *MemoryMonitor) OpenAccount(_ *MemoryAccount) {
-	// TODO(knz): conditionally track accounts in the memory monitor
-	// (#9122).
+func (mm *BytesMonitor) OpenAccount(_ *BytesAccount) {
+	// TODO(knz): conditionally track accounts in the monitor (#9122).
 }
 
 // OpenAndInitAccount creates a new account and pre-allocates some
-// initial amount of memory.
-func (mm *MemoryMonitor) OpenAndInitAccount(
-	ctx context.Context, acc *MemoryAccount, initialAllocation int64,
+// initial amount of bytes.
+func (mm *BytesMonitor) OpenAndInitAccount(
+	ctx context.Context, acc *BytesAccount, initialAllocation int64,
 ) error {
 	mm.OpenAccount(acc)
 	return mm.GrowAccount(ctx, acc, initialAllocation)
 }
 
 // GrowAccount requests a new allocation in an account.
-func (mm *MemoryMonitor) GrowAccount(
-	ctx context.Context, acc *MemoryAccount, extraSize int64,
-) error {
-	if err := mm.reserveMemory(ctx, extraSize); err != nil {
+func (mm *BytesMonitor) GrowAccount(ctx context.Context, acc *BytesAccount, extraSize int64) error {
+	if err := mm.reserveBytes(ctx, extraSize); err != nil {
 		return err
 	}
 	acc.curAllocated += extraSize
@@ -449,28 +449,28 @@ func (mm *MemoryMonitor) GrowAccount(
 }
 
 // CloseAccount releases all the cumulated allocations of an account at once.
-func (mm *MemoryMonitor) CloseAccount(ctx context.Context, acc *MemoryAccount) {
+func (mm *BytesMonitor) CloseAccount(ctx context.Context, acc *BytesAccount) {
 	if acc.curAllocated == 0 {
 		// Fast path so as to avoid locking the monitor.
 		return
 	}
-	mm.releaseMemory(ctx, acc.curAllocated)
+	mm.releaseBytes(ctx, acc.curAllocated)
 }
 
 // ClearAccount releases all the cumulated allocations of an account at once
 // and primes it for reuse.
-func (mm *MemoryMonitor) ClearAccount(ctx context.Context, acc *MemoryAccount) {
+func (mm *BytesMonitor) ClearAccount(ctx context.Context, acc *BytesAccount) {
 	mm.CloseAccount(ctx, acc)
 	acc.curAllocated = 0
 }
 
 // ShrinkAccount releases part of the cumulated allocations by the specified size.
-func (mm *MemoryMonitor) ShrinkAccount(ctx context.Context, acc *MemoryAccount, delta int64) {
+func (mm *BytesMonitor) ShrinkAccount(ctx context.Context, acc *BytesAccount, delta int64) {
 	if acc.curAllocated < delta {
-		panic(fmt.Sprintf("%s: no memory in account to release, current %d, free %d",
+		panic(fmt.Sprintf("%s: no bytes in account to release, current %d, free %d",
 			mm.name, acc.curAllocated, delta))
 	}
-	mm.releaseMemory(ctx, delta)
+	mm.releaseBytes(ctx, delta)
 	acc.curAllocated -= delta
 }
 
@@ -481,8 +481,8 @@ func (mm *MemoryMonitor) ShrinkAccount(ctx context.Context, acc *MemoryAccount, 
 // then GrowAccount because if the Clear succeeds and the Grow fails
 // the original item becomes invisible from the perspective of the
 // monitor.
-func (mm *MemoryMonitor) ResizeItem(
-	ctx context.Context, acc *MemoryAccount, oldSize, newSize int64,
+func (mm *BytesMonitor) ResizeItem(
+	ctx context.Context, acc *BytesAccount, oldSize, newSize int64,
 ) error {
 	delta := newSize - oldSize
 	switch {
@@ -494,69 +494,66 @@ func (mm *MemoryMonitor) ResizeItem(
 	return nil
 }
 
-// BoundAccount implements a MemoryAccount attached to a specific
-// monitor.
+// BoundAccount implements a BytesAccount attached to a specific monitor.
 type BoundAccount struct {
-	MemoryAccount
-	mon *MemoryMonitor
+	BytesAccount
+	mon *BytesMonitor
 }
 
 // MakeStandaloneBudget creates a BoundAccount suitable for root
 // monitors.
 func MakeStandaloneBudget(capacity int64) BoundAccount {
-	return BoundAccount{MemoryAccount: MemoryAccount{curAllocated: capacity}}
+	return BoundAccount{BytesAccount: BytesAccount{curAllocated: capacity}}
 }
 
 // MakeBoundAccount greates a BoundAccount connected to the given monitor.
-func (mm *MemoryMonitor) MakeBoundAccount() BoundAccount {
+func (mm *BytesMonitor) MakeBoundAccount() BoundAccount {
 	return BoundAccount{mon: mm}
 }
 
 // Clear is an accessor for b.mon.ClearAccount.
 func (b *BoundAccount) Clear(ctx context.Context) {
 	if b.mon == nil {
-		// An account created by MakeStandaloneBudget is disconnected
-		// from any monitor -- "memory out of the aether". This needs not be
-		// closed.
+		// An account created by MakeStandaloneBudget is disconnected from any
+		// monitor -- "bytes out of the aether". This needs not be closed.
 		return
 	}
-	b.mon.ClearAccount(ctx, &b.MemoryAccount)
+	b.mon.ClearAccount(ctx, &b.BytesAccount)
 }
 
 // Close is an accessor for b.mon.CloseAccount.
 func (b *BoundAccount) Close(ctx context.Context) {
 	if b.mon == nil {
-		// An account created by MakeStandaloneBudget is disconnected
-		// from any monitor -- "memory out of the aether". This needs not be
-		// closed.
+		// An account created by MakeStandaloneBudget is disconnected from any
+		// monitor -- "bytes out of the aether". This needs not be closed.
 		return
 	}
-	b.mon.CloseAccount(ctx, &b.MemoryAccount)
+	b.mon.CloseAccount(ctx, &b.BytesAccount)
 }
 
 // ResizeItem is an accessor for b.mon.ResizeItem.
 func (b *BoundAccount) ResizeItem(ctx context.Context, oldSz, newSz int64) error {
-	return b.mon.ResizeItem(ctx, &b.MemoryAccount, oldSz, newSz)
+	return b.mon.ResizeItem(ctx, &b.BytesAccount, oldSz, newSz)
 }
 
 // Grow is an accessor for b.mon.GrowAccount.
 func (b *BoundAccount) Grow(ctx context.Context, x int64) error {
-	return b.mon.GrowAccount(ctx, &b.MemoryAccount, x)
+	return b.mon.GrowAccount(ctx, &b.BytesAccount, x)
 }
 
 // Shrink is an accessor for b.mon.ShrinkAccount.
 func (b *BoundAccount) Shrink(ctx context.Context, x int64) {
-	b.mon.ShrinkAccount(ctx, &b.MemoryAccount, x)
+	b.mon.ShrinkAccount(ctx, &b.BytesAccount, x)
 }
 
-// reserveMemory declares an allocation to this monitor. An error is
-// returned if the allocation is denied.
-func (mm *MemoryMonitor) reserveMemory(ctx context.Context, x int64) error {
+// reserveBytes declares an allocation to this monitor. An error is returned if
+// the allocation is denied.
+func (mm *BytesMonitor) reserveBytes(ctx context.Context, x int64) error {
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
 	// Check the local limit first.
 	if mm.mu.curAllocated+x > mm.limit {
-		return newMemoryError(mm.name, x, mm.limit)
+		return pgerror.AnnotateError(mm.name, mm.resource.NewBudgetExceededError(x, mm.limit))
 	}
 	// Check whether we need to request an increase of our budget.
 	if mm.mu.curAllocated > mm.mu.curBudget.curAllocated+mm.reserved.curAllocated-x {
@@ -574,11 +571,11 @@ func (mm *MemoryMonitor) reserveMemory(ctx context.Context, x int64) error {
 
 	// Report "large" queries to the log for further investigation.
 	if mm.mu.curAllocated > mm.noteworthyUsageBytes {
-		// We only report changes in binary magnitude of the size.  This
-		// is to limit the amount of log messages when a size blowup is
-		// caused by many small allocations.
+		// We only report changes in binary magnitude of the size. This is to
+		// limit the amount of log messages when a size blowup is caused by
+		// many small allocations.
 		if util.RoundUpPowerOfTwo(mm.mu.curAllocated) != util.RoundUpPowerOfTwo(mm.mu.curAllocated-x) {
-			log.Infof(ctx, "%s: memory usage increases to %s (+%d)",
+			log.Infof(ctx, "%s: bytes usage increases to %s (+%d)",
 				mm.name,
 				humanizeutil.IBytes(mm.mu.curAllocated), x)
 		}
@@ -593,13 +590,13 @@ func (mm *MemoryMonitor) reserveMemory(ctx context.Context, x int64) error {
 	return nil
 }
 
-// releaseMemory releases memory previously successfully registered
-// via reserveMemory().
-func (mm *MemoryMonitor) releaseMemory(ctx context.Context, sz int64) {
+// releaseBytes releases bytes previously successfully registered via
+// reserveBytes().
+func (mm *BytesMonitor) releaseBytes(ctx context.Context, sz int64) {
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
 	if mm.mu.curAllocated < sz {
-		panic(fmt.Sprintf("%s: no memory to release, current %d, free %d",
+		panic(fmt.Sprintf("%s: no bytes to release, current %d, free %d",
 			mm.name, mm.mu.curAllocated, sz))
 	}
 	mm.mu.curAllocated -= sz
@@ -616,17 +613,13 @@ func (mm *MemoryMonitor) releaseMemory(ctx context.Context, sz int64) {
 	}
 }
 
-func newMemoryError(name string, requested int64, budget int64) error {
-	return pgerror.NewErrorf(pgerror.CodeOutOfMemoryError,
-		"%s: memory budget exceeded: %d bytes requested, %d bytes in budget",
-		name, requested, budget)
-}
-
-// increaseBudget requests more memory from the pool.
-func (mm *MemoryMonitor) increaseBudget(ctx context.Context, minExtra int64) error {
-	// NB: mm.mu Already locked by reserveMemory().
+// increaseBudget requests more bytes from the pool.
+func (mm *BytesMonitor) increaseBudget(ctx context.Context, minExtra int64) error {
+	// NB: mm.mu Already locked by reserveBytes().
 	if mm.pool == nil {
-		return newMemoryError(mm.name, minExtra, mm.reserved.curAllocated)
+		return pgerror.AnnotateError(
+			mm.name, mm.resource.NewBudgetExceededError(minExtra, mm.reserved.curAllocated),
+		)
 	}
 	minExtra = mm.roundSize(minExtra)
 	if log.V(2) {
@@ -638,14 +631,14 @@ func (mm *MemoryMonitor) increaseBudget(ctx context.Context, minExtra int64) err
 
 // roundSize rounds its argument to the smallest greater or equal
 // multiple of `poolAllocationSize`.
-func (mm *MemoryMonitor) roundSize(sz int64) int64 {
+func (mm *BytesMonitor) roundSize(sz int64) int64 {
 	chunks := (sz + mm.poolAllocationSize - 1) / mm.poolAllocationSize
 	return chunks * mm.poolAllocationSize
 }
 
-// releaseBudget relinquishes all the monitor's memory back to the
+// releaseBudget relinquishes all the monitor's allocated bytes back to the
 // pool.
-func (mm *MemoryMonitor) releaseBudget(ctx context.Context) {
+func (mm *BytesMonitor) releaseBudget(ctx context.Context) {
 	// NB: mm.mu need not be locked here, as this is only called from StopMonitor().
 	if log.V(2) {
 		log.Infof(ctx, "%s: releasing %d bytes to the pool", mm.name, mm.mu.curBudget.curAllocated)
@@ -653,14 +646,13 @@ func (mm *MemoryMonitor) releaseBudget(ctx context.Context) {
 	mm.pool.ClearAccount(ctx, &mm.mu.curBudget)
 }
 
-// adjustBudget ensures that the monitor does not keep much more
-// memory reserved from the pool than it currently has allocated.
-// Memory is relinquished when there are at least
-// maxAllocatedButUnusedMemoryBlocks*poolAllocationSize bytes reserved
-// but unallocated.
-func (mm *MemoryMonitor) adjustBudget(ctx context.Context) {
-	// NB: mm.mu Already locked by releaseMemory().
-	margin := mm.poolAllocationSize * int64(maxAllocatedButUnusedMemoryBlocks)
+// adjustBudget ensures that the monitor does not keep many more bytes reserved
+// from the pool than it currently has allocated. Bytes are relinquished when
+// there are at least maxAllocatedButUnusedBlocks*poolAllocationSize bytes
+// reserved but unallocated.
+func (mm *BytesMonitor) adjustBudget(ctx context.Context) {
+	// NB: mm.mu Already locked by releaseBytes().
+	margin := mm.poolAllocationSize * int64(maxAllocatedButUnusedBlocks)
 
 	neededBytes := mm.mu.curAllocated
 	if neededBytes <= mm.reserved.curAllocated {
@@ -674,7 +666,7 @@ func (mm *MemoryMonitor) adjustBudget(ctx context.Context) {
 }
 
 // GetCurrentAllocationForTesting returns the number of bytes that have
-// currently been allocated in the MemoryMonitor. Intended for use in testing.
-func (mm *MemoryMonitor) GetCurrentAllocationForTesting() int64 {
+// currently been allocated in the BytesMonitor. Intended for use in testing.
+func (mm *BytesMonitor) GetCurrentAllocationForTesting() int64 {
 	return mm.mu.curAllocated
 }
