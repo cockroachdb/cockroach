@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -50,8 +51,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 const (
@@ -645,6 +648,157 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 	} else if !os.IsNotExist(err) {
 		t.Fatal(err)
 	}
+}
+
+func createAndWaitForJob(db *gosql.DB, descriptorIDs []sqlbase.ID, details jobs.Details) error {
+	now := timeutil.ToUnixMicros(timeutil.Now())
+	payload, err := protoutil.Marshal(&jobs.Payload{
+		Username:       security.RootUser,
+		DescriptorIDs:  descriptorIDs,
+		StartedMicros:  now,
+		ModifiedMicros: now,
+		Details:        jobs.WrapPayloadDetails(details),
+		Lease:          &jobs.Lease{NodeID: 1},
+	})
+	if err != nil {
+		return err
+	}
+	var jobID int64
+	if err := db.QueryRow(
+		`INSERT INTO system.jobs (created, status, payload) VALUES ($1, $2, $3) RETURNING id`,
+		timeutil.FromUnixMicros(now), jobs.StatusRunning, payload,
+	).Scan(&jobID); err != nil {
+		return err
+	}
+	return util.RetryForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
+		var status string
+		if err := db.QueryRow(
+			`SELECT status FROM system.jobs WHERE id = $1`, jobID,
+		).Scan(&status); err != nil {
+			return err
+		}
+		if e, a := jobs.StatusSucceeded, jobs.Status(status); e != a {
+			return errors.Errorf("expected backup status %s, but got %s", e, a)
+		}
+		return nil
+	})
+}
+
+// TestBackupRestoreResume tests whether backup and restore jobs are properly
+// resumed after a coordinator failure. It synthesizes a partially-complete
+// backup job and a partially-complete restore job, both with expired leases, by
+// writing checkpoints directly to system.jobs, then verifies they are resumed
+// and successfully completed within a few seconds. The test additionally
+// verifies that backup and restore do not re-perform work the checkpoint claims
+// to have completed.
+func TestBackupRestoreResume(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	defer func(oldInterval time.Duration) {
+		jobs.DefaultAdoptInterval = oldInterval
+	}(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+
+	ctx := context.Background()
+
+	const numAccounts = 1000
+	_, dir, tc, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts)
+	defer cleanupFn()
+
+	backupTableDesc := sqlbase.GetTableDescriptor(tc.Servers[0].DB(), "data", "bank")
+
+	t.Run("backup", func(t *testing.T) {
+		backupStartKey := backupTableDesc.PrimaryIndexSpan().Key
+		backupEndKey, err := sqlbase.MakePrimaryIndexKey(backupTableDesc, numAccounts/2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		backupCompletedSpan := roachpb.Span{Key: backupStartKey, EndKey: backupEndKey}
+		backupDesc, err := protoutil.Marshal(&sqlccl.BackupDescriptor{
+			Files: []sqlccl.BackupDescriptor_File{
+				{Path: "garbage-checkpoint", Span: backupCompletedSpan},
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		backupDir := filepath.Join(dir, "backup")
+		// TODO(benesch): avoid duplicating this TrimPrefix in several tests.
+		backupDirRaw := strings.TrimPrefix(backupDir, "nodelocal:")
+		if err := os.MkdirAll(backupDirRaw, 0755); err != nil {
+			t.Fatal(err)
+		}
+		checkpointFile := filepath.Join(backupDirRaw, sqlccl.BackupDescriptorCheckpointName)
+		if err := ioutil.WriteFile(checkpointFile, backupDesc, 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := createAndWaitForJob(sqlDB.DB, []sqlbase.ID{backupTableDesc.ID}, jobs.BackupDetails{
+			EndTime: tc.Servers[0].Clock().Now(),
+			URI:     backupDir,
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		// If the backup properly took the (incorrect) checkpoint into account, it
+		// won't have tried to re-export any keys within backupCompletedSpan.
+		backupDescriptorFile := filepath.Join(backupDirRaw, sqlccl.BackupDescriptorName)
+		backupDescriptorBytes, err := ioutil.ReadFile(backupDescriptorFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var backupDescriptor sqlccl.BackupDescriptor
+		if err := backupDescriptor.Unmarshal(backupDescriptorBytes); err != nil {
+			t.Fatal(err)
+		}
+		for _, file := range backupDescriptor.Files {
+			if file.Span.Overlaps(backupCompletedSpan) && file.Path != "garbage-checkpoint" {
+				t.Fatalf("backup re-exported checkpointed span %s", file.Span)
+			}
+		}
+	})
+
+	t.Run("restore", func(t *testing.T) {
+		restoreDir := filepath.Join(dir, "restore")
+		sqlDB.Exec(`BACKUP DATABASE DATA TO $1`, restoreDir)
+		sqlDB.Exec(`CREATE DATABASE restoredb`)
+		restoreDatabaseID, err := sqlutils.QueryDatabaseID(sqlDB.DB, "restoredb")
+		if err != nil {
+			t.Fatal(err)
+		}
+		restoreTableID, err := sql.GenerateUniqueDescID(ctx, tc.Servers[0].DB())
+		if err != nil {
+			t.Fatal(err)
+		}
+		restoreLowWaterMark, err := sqlbase.MakePrimaryIndexKey(backupTableDesc, numAccounts/2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := createAndWaitForJob(sqlDB.DB, []sqlbase.ID{restoreTableID}, jobs.RestoreDetails{
+			TableRewrites: map[sqlbase.ID]*jobs.RestoreDetails_TableRewrite{
+				backupTableDesc.ID: {
+					ParentID: sqlbase.ID(restoreDatabaseID),
+					TableID:  restoreTableID,
+				},
+			},
+			URIs:         []string{restoreDir},
+			LowWaterMark: restoreLowWaterMark,
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		// If the restore properly took the (incorrect) low-water mark into account,
+		// the first half of the table will be missing.
+		var restoredCount int64
+		sqlDB.QueryRow(`SELECT COUNT(*) FROM restoredb.bank`).Scan(&restoredCount)
+		if e, a := int64(numAccounts)/2, restoredCount; e != a {
+			t.Fatalf("expected %d restored rows, but got %d\n", e, a)
+		}
+		sqlDB.Exec(`DELETE FROM data.bank WHERE id < $1`, numAccounts/2)
+		sqlDB.CheckQueryResults(
+			`SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE restoredb.bank`,
+			sqlDB.QueryStr(`SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE data.bank`),
+		)
+	})
 }
 
 func TestBackupRestoreInterleaved(t *testing.T) {
