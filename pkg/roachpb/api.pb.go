@@ -155,6 +155,7 @@
 		StoreDeadReplicas
 		Locality
 		Tier
+		Version
 */
 package roachpb
 
