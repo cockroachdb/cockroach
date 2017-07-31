@@ -101,35 +101,37 @@ EXPLAIN(METADATA) SELECT k FROM kv JOIN (VALUES (1,2)) AS z(a,b) ON kv.k = z.a O
 query ITTTTT
 EXPLAIN(METADATA) SELECT k FROM kv a NATURAL JOIN kv ORDER BY INDEX kv@foo
 ----
-0  sort    ·         ·                (k)                                                                                  ·
-0  ·       order     -v               ·                                                                                    ·
-1  render  ·         ·                (k, v)                                                                               ·
-2  join    ·         ·                (k, v[omitted], k[hidden,omitted], v[hidden,omitted], k[hidden,omitted], v[hidden])  ·
-2  ·       type      inner            ·                                                                                    ·
-2  ·       equality  (k, v) = (k, v)  ·                                                                                    ·
-3  scan    ·         ·                (k, v)                                                                               ·
-3  ·       table     kv@primary       ·                                                                                    ·
-3  ·       spans     ALL              ·                                                                                    ·
-3  scan    ·         ·                (k, v)                                                                               ·
-3  ·       table     kv@primary       ·                                                                                    ·
-3  ·       spans     ALL              ·                                                                                    ·
+0  sort    ·               ·                (k)                                                                                  ·
+0  ·       order           -v               ·                                                                                    ·
+1  render  ·               ·                (k, v)                                                                               ·
+2  join    ·               ·                (k, v[omitted], k[hidden,omitted], v[hidden,omitted], k[hidden,omitted], v[hidden])  ·
+2  ·       type            inner            ·                                                                                    ·
+2  ·       equality        (k, v) = (k, v)  ·                                                                                    ·
+2  ·       mergeJoinOrder  +"(k=k)"         ·                                                                                    ·
+3  scan    ·               ·                (k, v)                                                                               +k,unique
+3  ·       table           kv@primary       ·                                                                                    ·
+3  ·       spans           ALL              ·                                                                                    ·
+3  scan    ·               ·                (k, v)                                                                               +k,unique
+3  ·       table           kv@primary       ·                                                                                    ·
+3  ·       spans           ALL              ·                                                                                    ·
 
 # The underlying index can be forced manually, of course.
 query ITTTTT
 EXPLAIN(METADATA) SELECT k FROM kv@foo a NATURAL JOIN kv@foo ORDER BY INDEX kv@foo
 ----
-0  sort    ·         ·                (k)                                                                                  ·
-0  ·       order     -v               ·                                                                                    ·
-1  render  ·         ·                (k, v)                                                                               ·
-2  join    ·         ·                (k, v[omitted], k[hidden,omitted], v[hidden,omitted], k[hidden,omitted], v[hidden])  ·
-2  ·       type      inner            ·                                                                                    ·
-2  ·       equality  (k, v) = (k, v)  ·                                                                                    ·
-3  scan    ·         ·                (k, v)                                                                               ·
-3  ·       table     kv@foo           ·                                                                                    ·
-3  ·       spans     ALL              ·                                                                                    ·
-3  scan    ·         ·                (k, v)                                                                               ·
-3  ·       table     kv@foo           ·                                                                                    ·
-3  ·       spans     ALL              ·                                                                                    ·
+0  sort    ·               ·                  (k)                                                                                  ·
+0  ·       order           -v                 ·                                                                                    ·
+1  render  ·               ·                  (k, v)                                                                               ·
+2  join    ·               ·                  (k, v[omitted], k[hidden,omitted], v[hidden,omitted], k[hidden,omitted], v[hidden])  ·
+2  ·       type            inner              ·                                                                                    ·
+2  ·       equality        (k, v) = (k, v)    ·                                                                                    ·
+2  ·       mergeJoinOrder  -"(v=v)",+"(k=k)"  ·                                                                                    ·
+3  scan    ·               ·                  (k, v)                                                                               -v,+k,unique
+3  ·       table           kv@foo             ·                                                                                    ·
+3  ·       spans           ALL                ·                                                                                    ·
+3  scan    ·               ·                  (k, v)                                                                               -v,+k,unique
+3  ·       table           kv@foo             ·                                                                                    ·
+3  ·       spans           ALL                ·                                                                                    ·
 
 # Check the extended syntax cannot be used in case of renames.
 statement error source name "kv" not found in FROM clause

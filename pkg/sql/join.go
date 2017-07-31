@@ -134,6 +134,13 @@ type joinNode struct {
 	// pred represents the join predicate.
 	pred *joinPredicate
 
+	// mergeJoinOrdering is set during expandPlan if the left and right sides have
+	// similar ordering on the equality columns (or a subset of them). The column
+	// indices refer to equality columns: a ColIdx of i refers to left column
+	// pred.leftEqualityIndices[i] and right column pred.rightEqualityIndices[i].
+	// See computeMergeJoinOrdering. This information is used by distsql planning.
+	mergeJoinOrdering sqlbase.ColumnOrdering
+
 	// columns contains the metadata for the results of this node.
 	columns sqlbase.ResultColumns
 
