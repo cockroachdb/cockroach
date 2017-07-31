@@ -17,19 +17,32 @@ package jobs
 import (
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // Registry creates Jobs, and will soon manage their leases and cancelation.
 type Registry struct {
-	db *client.DB
-	ex sqlutil.InternalExecutor
+	db        *client.DB
+	ex        sqlutil.InternalExecutor
+	gossip    *gossip.Gossip
+	nodeID    *base.NodeIDContainer
+	clusterID func() uuid.UUID
 }
 
 // MakeRegistry creates a new Registry.
-func MakeRegistry(db *client.DB, ex sqlutil.InternalExecutor) *Registry {
-	return &Registry{db: db, ex: ex}
+func MakeRegistry(
+	db *client.DB,
+	ex sqlutil.InternalExecutor,
+	gossip *gossip.Gossip,
+	nodeID *base.NodeIDContainer,
+	clusterID func() uuid.UUID,
+) *Registry {
+	r := &Registry{db: db, ex: ex, gossip: gossip, nodeID: nodeID, clusterID: clusterID}
+	return r
 }
 
 // NewJob creates a new Job.
