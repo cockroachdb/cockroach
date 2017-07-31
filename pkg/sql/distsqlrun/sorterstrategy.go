@@ -44,13 +44,13 @@ type sorterStrategy interface {
 //
 // The strategy is intended to be used when all values need to be sorted.
 type sortAllStrategy struct {
-	rows           memRowContainer
+	rows           *memRowContainer
 	useTempStorage bool
 }
 
 var _ sorterStrategy = &sortAllStrategy{}
 
-func newSortAllStrategy(rows memRowContainer, useTempStorage bool) sorterStrategy {
+func newSortAllStrategy(rows *memRowContainer, useTempStorage bool) sorterStrategy {
 	return &sortAllStrategy{
 		rows:           rows,
 		useTempStorage: useTempStorage,
@@ -61,7 +61,7 @@ func newSortAllStrategy(rows memRowContainer, useTempStorage bool) sorterStrateg
 // memory error, the strategy will fall back to use disk.
 func (ss *sortAllStrategy) Execute(ctx context.Context, s *sorter) error {
 	defer ss.rows.Close(ctx)
-	row, err := ss.executeImpl(ctx, s, &ss.rows)
+	row, err := ss.executeImpl(ctx, s, ss.rows)
 	// TODO(asubiotto): A memory error could also be returned if a limit other
 	// than the COCKROACH_WORK_MEM was reached. We should distinguish between
 	// these cases and log the event to facilitate debugging of queries that
@@ -162,13 +162,13 @@ func (ss *sortAllStrategy) executeImpl(
 //
 // TODO(asubiotto): Use diskRowContainer for these other strategies.
 type sortTopKStrategy struct {
-	rows memRowContainer
+	rows *memRowContainer
 	k    int64
 }
 
 var _ sorterStrategy = &sortTopKStrategy{}
 
-func newSortTopKStrategy(rows memRowContainer, k int64) sorterStrategy {
+func newSortTopKStrategy(rows *memRowContainer, k int64) sorterStrategy {
 	ss := &sortTopKStrategy{
 		rows: rows,
 		k:    k,
@@ -227,13 +227,13 @@ func (ss *sortTopKStrategy) Execute(ctx context.Context, s *sorter) error {
 // If we're scanning an index with a prefix matching an ordering prefix, we only accumulate values
 // for equal fields in this prefix, sort the accumulated chunk and then output.
 type sortChunksStrategy struct {
-	rows  memRowContainer
+	rows  *memRowContainer
 	alloc sqlbase.DatumAlloc
 }
 
 var _ sorterStrategy = &sortChunksStrategy{}
 
-func newSortChunksStrategy(rows memRowContainer) sorterStrategy {
+func newSortChunksStrategy(rows *memRowContainer) sorterStrategy {
 	return &sortChunksStrategy{
 		rows: rows,
 	}
