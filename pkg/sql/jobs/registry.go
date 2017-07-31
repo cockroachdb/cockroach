@@ -100,8 +100,8 @@ func (r *Registry) LoadJob(ctx context.Context, jobID int64) (*Job, error) {
 const DefaultCancelInterval = base.DefaultHeartbeatInterval
 
 // DefaultAdoptInterval is a reasonable interval at which to poll system.jobs
-// for jobs with expired leases.
-const DefaultAdoptInterval = 30 * time.Second
+// for jobs with expired leases. Mutable for testing.
+var DefaultAdoptInterval = 30 * time.Second
 
 // Start polls the current node for liveness failures and cancels all registered
 // jobs if it observes a failure.
