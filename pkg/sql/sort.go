@@ -500,9 +500,9 @@ func (p *planner) rewriteIndexOrderings(
 						break
 					}
 				}
-			}
-			if idxDesc == nil {
-				return nil, errors.Errorf("index %s@%s not found", o.Table, o.Index)
+				if idxDesc == nil {
+					return nil, errors.Errorf("index %q not found", parser.ErrString(o.Index))
+				}
 			}
 
 			// Now, expand the ORDER BY clause by an equivalent clause using that
