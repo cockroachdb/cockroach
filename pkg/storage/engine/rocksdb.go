@@ -79,6 +79,10 @@ func prettyPrintKey(cKey C.DBKey) *C.char {
 	return C.CString(mvccKey.String())
 }
 
+func testCppGo(txn *roachpb.Transaction) {
+	C.TestCppGo(C.uintptr_t(uintptr(unsafe.Pointer(txn))))
+}
+
 const (
 	// defaultBlockSize configures the size of a black. When reading a key-value
 	// pair from a table file, RocksDB loads an entire block into memory. The
