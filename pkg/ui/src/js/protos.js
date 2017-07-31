@@ -33483,6 +33483,9 @@ export const cockroach = $root.cockroach = (() => {
                  * Properties of a BackupDetails.
                  * @typedef cockroach.sql.jobs.BackupDetails$Properties
                  * @type {Object}
+                 * @property {cockroach.util.hlc.Timestamp$Properties} [start_time] BackupDetails start_time.
+                 * @property {cockroach.util.hlc.Timestamp$Properties} [end_time] BackupDetails end_time.
+                 * @property {string} [uri] BackupDetails uri.
                  */
 
                 /**
@@ -33497,6 +33500,24 @@ export const cockroach = $root.cockroach = (() => {
                             if (properties[keys[i]] != null)
                                 this[keys[i]] = properties[keys[i]];
                 }
+
+                /**
+                 * BackupDetails start_time.
+                 * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
+                 */
+                BackupDetails.prototype.start_time = null;
+
+                /**
+                 * BackupDetails end_time.
+                 * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
+                 */
+                BackupDetails.prototype.end_time = null;
+
+                /**
+                 * BackupDetails uri.
+                 * @type {string}
+                 */
+                BackupDetails.prototype.uri = "";
 
                 /**
                  * Creates a new BackupDetails instance using the specified properties.
@@ -33516,6 +33537,12 @@ export const cockroach = $root.cockroach = (() => {
                 BackupDetails.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
+                    if (message.start_time != null && message.hasOwnProperty("start_time"))
+                        $root.cockroach.util.hlc.Timestamp.encode(message.start_time, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+                    if (message.end_time != null && message.hasOwnProperty("end_time"))
+                        $root.cockroach.util.hlc.Timestamp.encode(message.end_time, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+                    if (message.uri != null && message.hasOwnProperty("uri"))
+                        writer.uint32(/* id 3, wireType 2 =*/26).string(message.uri);
                     return writer;
                 };
 
@@ -33544,6 +33571,15 @@ export const cockroach = $root.cockroach = (() => {
                     while (reader.pos < end) {
                         let tag = reader.uint32();
                         switch (tag >>> 3) {
+                        case 1:
+                            message.start_time = $root.cockroach.util.hlc.Timestamp.decode(reader, reader.uint32());
+                            break;
+                        case 2:
+                            message.end_time = $root.cockroach.util.hlc.Timestamp.decode(reader, reader.uint32());
+                            break;
+                        case 3:
+                            message.uri = reader.string();
+                            break;
                         default:
                             reader.skipType(tag & 7);
                             break;
@@ -33573,6 +33609,19 @@ export const cockroach = $root.cockroach = (() => {
                 BackupDetails.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
+                    if (message.start_time != null && message.hasOwnProperty("start_time")) {
+                        let error = $root.cockroach.util.hlc.Timestamp.verify(message.start_time);
+                        if (error)
+                            return "start_time." + error;
+                    }
+                    if (message.end_time != null && message.hasOwnProperty("end_time")) {
+                        let error = $root.cockroach.util.hlc.Timestamp.verify(message.end_time);
+                        if (error)
+                            return "end_time." + error;
+                    }
+                    if (message.uri != null && message.hasOwnProperty("uri"))
+                        if (!$util.isString(message.uri))
+                            return "uri: string expected";
                     return null;
                 };
 
@@ -33584,7 +33633,20 @@ export const cockroach = $root.cockroach = (() => {
                 BackupDetails.fromObject = function fromObject(object) {
                     if (object instanceof $root.cockroach.sql.jobs.BackupDetails)
                         return object;
-                    return new $root.cockroach.sql.jobs.BackupDetails();
+                    let message = new $root.cockroach.sql.jobs.BackupDetails();
+                    if (object.start_time != null) {
+                        if (typeof object.start_time !== "object")
+                            throw TypeError(".cockroach.sql.jobs.BackupDetails.start_time: object expected");
+                        message.start_time = $root.cockroach.util.hlc.Timestamp.fromObject(object.start_time);
+                    }
+                    if (object.end_time != null) {
+                        if (typeof object.end_time !== "object")
+                            throw TypeError(".cockroach.sql.jobs.BackupDetails.end_time: object expected");
+                        message.end_time = $root.cockroach.util.hlc.Timestamp.fromObject(object.end_time);
+                    }
+                    if (object.uri != null)
+                        message.uri = String(object.uri);
+                    return message;
                 };
 
                 /**
@@ -33602,8 +33664,22 @@ export const cockroach = $root.cockroach = (() => {
                  * @param {$protobuf.ConversionOptions} [options] Conversion options
                  * @returns {Object.<string,*>} Plain object
                  */
-                BackupDetails.toObject = function toObject() {
-                    return {};
+                BackupDetails.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults) {
+                        object.start_time = null;
+                        object.end_time = null;
+                        object.uri = "";
+                    }
+                    if (message.start_time != null && message.hasOwnProperty("start_time"))
+                        object.start_time = $root.cockroach.util.hlc.Timestamp.toObject(message.start_time, options);
+                    if (message.end_time != null && message.hasOwnProperty("end_time"))
+                        object.end_time = $root.cockroach.util.hlc.Timestamp.toObject(message.end_time, options);
+                    if (message.uri != null && message.hasOwnProperty("uri"))
+                        object.uri = message.uri;
+                    return object;
                 };
 
                 /**
