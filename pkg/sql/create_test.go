@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/migrations"
+	"github.com/cockroachdb/cockroach/pkg/migration/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -96,7 +96,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	if kvs, err := kvDB.Scan(ctx, start, start.PrefixEnd(), 0); err != nil {
 		t.Fatal(err)
 	} else {
-		migrationDescriptors, _, err := migrations.AdditionalInitialDescriptors(ctx, kvDB)
+		migrationDescriptors, _, err := sqlmigrations.AdditionalInitialDescriptors(ctx, kvDB)
 		if err != nil {
 			t.Fatal(err)
 		}
