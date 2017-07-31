@@ -315,7 +315,7 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 		}
 	}
 
-	tu.insertRows = sqlbase.MakeRowContainer(
+	tu.insertRows.Init(
 		tu.mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0,
 	)
 

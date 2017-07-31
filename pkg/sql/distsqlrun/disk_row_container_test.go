@@ -112,7 +112,7 @@ func TestDiskRowContainer(t *testing.T) {
 				row := sqlbase.EncDatumRow(sqlbase.RandEncDatumSliceOfTypes(rng, types))
 				func() {
 					d, err := makeDiskRowContainer(
-						ctx, types, ordering, memRowContainer{}, tempEngine,
+						ctx, types, ordering, &memRowContainer{}, tempEngine,
 					)
 					if err != nil {
 						t.Fatal(err)
@@ -171,7 +171,8 @@ func TestDiskRowContainer(t *testing.T) {
 			func() {
 				// Make the diskRowContainer with half of these rows and insert
 				// the other half normally.
-				memoryContainer := makeRowContainer(ordering, types, &evalCtx)
+				var memoryContainer memRowContainer
+				memoryContainer.init(ordering, types, &evalCtx)
 				defer memoryContainer.Close(ctx)
 				midIdx := len(rows) / 2
 				for i := 0; i < midIdx; i++ {
@@ -184,7 +185,7 @@ func TestDiskRowContainer(t *testing.T) {
 					ctx,
 					types,
 					ordering,
-					memoryContainer,
+					&memoryContainer,
 					tempEngine,
 				)
 				if err != nil {
@@ -199,7 +200,8 @@ func TestDiskRowContainer(t *testing.T) {
 
 				// Make another row container that stores all the rows then sort
 				// it to compare equality.
-				sortedRows := makeRowContainer(ordering, types, &evalCtx)
+				var sortedRows memRowContainer
+				sortedRows.init(ordering, types, &evalCtx)
 				defer sortedRows.Close(ctx)
 				for _, row := range rows {
 					if err := sortedRows.AddRow(ctx, row); err != nil {
