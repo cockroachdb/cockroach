@@ -164,10 +164,10 @@ func getViewDesc(
 	return desc, nil
 }
 
-// mustGetTableOrViewDesc returns a table descriptor for either a table or
+// MustGetTableOrViewDesc returns a table descriptor for either a table or
 // view, or an error if the descriptor is not found. allowAdding when set allows
 // a table descriptor in the ADD state to also be returned.
-func mustGetTableOrViewDesc(
+func MustGetTableOrViewDesc(
 	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *parser.TableName, allowAdding bool,
 ) (*sqlbase.TableDescriptor, error) {
 	desc, err := getTableOrViewDesc(ctx, txn, vt, tn)
@@ -185,10 +185,10 @@ func mustGetTableOrViewDesc(
 	return desc, nil
 }
 
-// mustGetTableDesc returns a table descriptor for a table, or an error if
+// MustGetTableDesc returns a table descriptor for a table, or an error if
 // the descriptor is not found. allowAdding when set allows a table descriptor
 // in the ADD state to also be returned.
-func mustGetTableDesc(
+func MustGetTableDesc(
 	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *parser.TableName, allowAdding bool,
 ) (*sqlbase.TableDescriptor, error) {
 	desc, err := getTableDesc(ctx, txn, vt, tn)
@@ -307,7 +307,7 @@ func (tc *TableCollection) getTableVersion(
 		//   so they cannot be leased. Instead, we simply return the static
 		//   descriptor and rely on the immutability privileges set on the
 		//   descriptors to cause upper layers to reject mutations statements.
-		tbl, err := mustGetTableDesc(ctx, txn, vt, tn, false /*allowAdding*/)
+		tbl, err := MustGetTableDesc(ctx, txn, vt, tn, false /*allowAdding*/)
 		if err != nil {
 			return nil, err
 		}
@@ -742,7 +742,7 @@ func (p *planner) findTableContainingIndex(
 	result = nil
 	for i := range tns {
 		tn := &tns[i]
-		tableDesc, err := mustGetTableDesc(
+		tableDesc, err := MustGetTableDesc(
 			ctx, p.txn, p.getVirtualTabler(), tn, true, /*allowAdding*/
 		)
 		if err != nil {
@@ -836,4 +836,23 @@ func (p *planner) getTableAndIndex(
 		index = idx
 	}
 	return tableDesc, &index, nil
+}
+
+// resolveTableNameFromID computes a table name suitable for logging
+// from the table ID and the ID-to-desc mappings.
+func resolveTableNameFromID(
+	ctx context.Context,
+	tableID sqlbase.ID,
+	tables map[sqlbase.ID]*sqlbase.TableDescriptor,
+	databases map[sqlbase.ID]*sqlbase.DatabaseDescriptor,
+) string {
+	table := tables[tableID]
+	tn := parser.TableName{TableName: parser.Name(table.Name), DatabaseName: "?"}
+	if parentDB, ok := databases[table.ParentID]; ok {
+		tn.DatabaseName = parser.Name(parentDB.Name)
+	} else {
+		log.Errorf(ctx, "relation [%d] (%q) has no parent database (corrupted schema?)",
+			tableID, parser.ErrString(&tn))
+	}
+	return parser.ErrString(&tn)
 }

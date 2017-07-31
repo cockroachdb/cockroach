@@ -126,10 +126,6 @@ type dataSourceInfo struct {
 	// column but might be different if the statement renames
 	// them using AS.
 	sourceAliases sourceAliases
-
-	// viewDesc is nothing more than an annotation used to indicate that the
-	// columns are defined as part of a view.
-	viewDesc *sqlbase.TableDescriptor
 }
 
 // planDataSource contains the data source information for data
@@ -548,7 +544,7 @@ func (p *planner) getTableDesc(
 		// specified time, and never lease anything. The proto transaction already
 		// has its timestamps set correctly so getTableOrViewDesc will fetch with
 		// the correct timestamp.
-		return mustGetTableOrViewDesc(
+		return MustGetTableOrViewDesc(
 			ctx, p.txn, p.getVirtualTabler(), tn, false /*allowAdding*/)
 	}
 	return p.session.tables.getTableVersion(ctx, p.txn, p.getVirtualTabler(), tn)
@@ -613,15 +609,27 @@ func (p *planner) getViewPlan(
 		defer func() { p.skipSelectPrivilegeChecks = false }()
 	}
 
+	// Register the dependency to the planner, if requested.
+	if p.planDeps != nil {
+		usedColumns := make([]sqlbase.ColumnID, len(desc.Columns))
+		for i := range desc.Columns {
+			usedColumns[i] = desc.Columns[i].ID
+		}
+		deps := p.planDeps[desc.ID]
+		deps.desc = desc
+		deps.deps = append(deps.deps, sqlbase.TableDescriptor_Reference{ColumnIDs: usedColumns})
+		p.planDeps[desc.ID] = deps
+
+		// We are only interested in the dependency to this view descriptor. Any
+		// further dependency by the view's query should not be tracked in this planner.
+		defer func(prev planDependencies) { p.planDeps = prev }(p.planDeps)
+		p.planDeps = nil
+	}
+
 	// TODO(a-robinson): Support ORDER BY and LIMIT in views. Is it as simple as
 	// just passing the entire select here or will inserting an ORDER BY in the
 	// middle of a query plan break things?
-	plan, err := p.getSubqueryPlan(ctx, *tn, sel.Select, sqlbase.ResultColumnsFromColDescs(desc.Columns))
-	if err != nil {
-		return plan, err
-	}
-	plan.info.viewDesc = desc
-	return plan, nil
+	return p.getSubqueryPlan(ctx, *tn, sel.Select, sqlbase.ResultColumnsFromColDescs(desc.Columns))
 }
 
 // getSubqueryPlan builds a planDataSource for a select statement, including

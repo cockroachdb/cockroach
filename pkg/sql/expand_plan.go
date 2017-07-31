@@ -302,13 +302,8 @@ func expandRenderNode(
 	// Elide the render node if it renders its source as-is.
 
 	sourceCols := planColumns(r.source.plan)
-	if len(r.columns) == len(sourceCols) && r.source.info.viewDesc == nil {
-		// 1) we don't drop renderNodes which also interface to a view, because
-		// CREATE VIEW needs it.
-		// TODO(knz): make this optimization conditional on a flag, which can
-		// be set to false by CREATE VIEW.
-		//
-		// 2) we don't drop renderNodes which have a different number of
+	if len(r.columns) == len(sourceCols) {
+		// We don't drop renderNodes which have a different number of
 		// columns than their sources, because some nodes currently assume
 		// the number of source columns doesn't change between
 		// instantiation and Start() (e.g. groupNode).

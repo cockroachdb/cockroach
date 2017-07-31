@@ -27,6 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -501,4 +504,218 @@ func TestCreateSystemTable(t *testing.T) {
 	if err := mgr.EnsureMigrations(ctx); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestUpdateViewDependenciesMigration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	// Start up a test server without running the view update migration. We also
+	// hijack the migration process to capture the SQL memory metric object, needed below.
+	var memMetrics *sql.MemoryMetrics
+	backwardCompatibleMigrations = []migrationDescriptor{
+		{
+			name:   "create system.settings table",
+			workFn: createSettingsTable,
+		},
+		{
+			name: "capture mem metrics",
+			workFn: func(ctx context.Context, r runner) error {
+				memMetrics = r.memMetrics
+				return nil
+			},
+		},
+	}
+	var s serverutils.TestServerInterface
+	var kvDB *client.DB
+
+	t.Run("starting server", func(t *testing.T) {
+		s, _, kvDB = serverutils.StartServer(t, base.TestServerArgs{})
+	})
+
+	defer s.Stopper().Stop(ctx)
+	e := s.Executor().(*sql.Executor)
+
+	t.Run("create test tables", func(t *testing.T) {
+		session := sql.NewSession(ctx, sql.SessionArgs{User: security.RootUser}, e, nil, memMetrics)
+		session.StartUnlimitedMonitor()
+		defer session.Finish(e)
+
+		const createStmts = `
+CREATE DATABASE test;
+CREATE DATABASE test2;
+SET DATABASE=test;
+
+CREATE TABLE t(x INT, y INT);
+CREATE VIEW v1 AS SELECT x FROM t WHERE false;
+CREATE VIEW v2 AS SELECT x FROM v1;
+
+CREATE TABLE u(x INT, y INT);
+CREATE VIEW v3 AS SELECT x FROM (SELECT x, y FROM u);
+
+CREATE VIEW v4 AS SELECT id from system.descriptor;
+
+CREATE TABLE w(x INT);
+CREATE VIEW test2.v5 AS SELECT x FROM w;
+`
+		res := e.ExecuteStatements(session, createStmts, nil)
+		defer res.Close(ctx)
+		if err := checkQueryResults(res.ResultList, 11); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	testDesc := []struct {
+		dbName parser.Name
+		tname  parser.Name
+		desc   *sqlbase.TableDescriptor
+	}{
+		{"test", "t", nil},
+		{"test", "v1", nil},
+		{"test", "u", nil},
+		{"test", "w", nil},
+		{"system", "descriptor", nil},
+	}
+
+	t.Run("fetch descriptors", func(t *testing.T) {
+		vt := e.GetVirtualTabler()
+
+		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			for i := range testDesc {
+				desc, err := sql.MustGetTableOrViewDesc(ctx, txn, vt, &parser.TableName{DatabaseName: testDesc[i].dbName, TableName: testDesc[i].tname}, true)
+				if err != nil {
+					return err
+				}
+				testDesc[i].desc = desc
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	// Now, corrupt the descriptors by breaking their dependency information.
+	t.Run("break descriptors", func(t *testing.T) {
+		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			if err := txn.SetSystemConfigTrigger(); err != nil {
+				return err
+			}
+			for _, t := range testDesc {
+				t.desc.UpVersion = true
+				t.desc.DependedOnBy = nil
+				t.desc.DependedOnBy = nil
+
+				descKey := sqlbase.MakeDescMetadataKey(t.desc.GetID())
+				descVal := sqlbase.WrapDescriptor(t.desc)
+				if err := txn.Put(ctx, descKey, descVal); err != nil {
+					return err
+				}
+			}
+
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run("delete tables", func(t *testing.T) {
+			// Break further by deleting the referenced tables. This has become possible
+			// because the dependency links have been broken above.
+			session := sql.NewSession(ctx, sql.SessionArgs{User: security.RootUser}, e, nil, memMetrics)
+			session.StartUnlimitedMonitor()
+			defer session.Finish(e)
+
+			res := e.ExecuteStatements(session, `DROP TABLE test.t; DROP VIEW test.v1; DROP TABLE test.u; DROP TABLE test.w`, nil)
+			defer res.Close(ctx)
+			if err := checkQueryResults(res.ResultList, 4); err != nil {
+				t.Fatal(err)
+			}
+		})
+	})
+
+	// Check the views are effectively broken.
+	t.Run("check views are broken", func(t *testing.T) {
+		session := sql.NewSession(ctx, sql.SessionArgs{User: security.RootUser}, e, nil, memMetrics)
+		session.StartUnlimitedMonitor()
+		defer session.Finish(e)
+
+		for _, vname := range []string{"test.v2", "test.v3", "test2.v5"} {
+			t.Run(vname, func(t *testing.T) {
+				res := e.ExecuteStatements(session, fmt.Sprintf(`TABLE %s`, vname), nil)
+				defer res.Close(ctx)
+				if len(res.ResultList) != 1 {
+					t.Fatalf("expected 1 result, got %d", len(res.ResultList))
+				}
+				if !testutils.IsError(res.ResultList[0].Err, `relation "test.*" does not exist`) {
+					t.Fatalf("unexpected error: %v", res.ResultList[0].Err)
+				}
+			})
+		}
+	})
+
+	// Restore missing dependencies for the rest of the test.
+	t.Run("restore dependencies", func(t *testing.T) {
+		session := sql.NewSession(ctx, sql.SessionArgs{User: security.RootUser}, e, nil, memMetrics)
+		session.StartUnlimitedMonitor()
+		defer session.Finish(e)
+
+		res := e.ExecuteStatements(session,
+			`CREATE TABLE test.t(x INT, y INT);
+CREATE TABLE test.u(x INT, y INT);
+CREATE TABLE test.w(x INT);
+CREATE VIEW test.v1 AS SELECT x FROM test.t WHERE false;`, nil)
+		defer res.Close(ctx)
+		if err := checkQueryResults(res.ResultList, 4); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	// Run the migration outside the context of a migration manager
+	// such that its work gets done but the key indicating it's been completed
+	// doesn't get written.
+	t.Run("fix view deps manually", func(t *testing.T) {
+		if err := repopulateViewDeps(ctx, runner{db: kvDB, sqlExecutor: e}); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	// Check that the views are fixed now.
+	t.Run("check views working", func(t *testing.T) {
+		session := sql.NewSession(ctx, sql.SessionArgs{User: security.RootUser}, e, nil, memMetrics)
+		session.StartUnlimitedMonitor()
+		defer session.Finish(e)
+
+		// Check the views can be queried.
+		res := e.ExecuteStatements(session,
+			`TABLE test.v1; TABLE test.v2; TABLE test.v3; TABLE test.v4; TABLE test2.v5`, nil)
+		defer res.Close(ctx)
+		if err := checkQueryResults(res.ResultList, 5); err != nil {
+			t.Fatal(err)
+		}
+
+		// Check that the tables cannot be dropped any more.
+		for _, tn := range []string{"t", "u", "w"} {
+			res := e.ExecuteStatements(session, fmt.Sprintf(`DROP TABLE test.%s`, tn), nil)
+			defer res.Close(ctx)
+			if len(res.ResultList) != 1 {
+				t.Fatalf("expected 1 result, got %d", len(res.ResultList))
+			}
+			if !testutils.IsError(res.ResultList[0].Err, `cannot drop relation .* because view .* depends on it`) {
+				t.Fatalf("unexpected error: %v", res.ResultList[0].Err)
+			}
+		}
+	})
+
+	// Finally, try running the migration and make sure it still succeeds.
+	// This verifies the idempotency of the migration.
+	t.Run("run migration", func(t *testing.T) {
+		mgr := NewManager(s.Stopper(), kvDB, e, s.Clock(), memMetrics, "clientID")
+		backwardCompatibleMigrations = append(backwardCompatibleMigrations, migrationDescriptor{
+			name:   "repopulate view dependencies",
+			workFn: repopulateViewDeps,
+		})
+		if err := mgr.EnsureMigrations(ctx); err != nil {
+			t.Fatal(err)
+		}
+	})
+
 }

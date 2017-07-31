@@ -71,6 +71,9 @@ type TestServerInterface interface {
 	// LeaseManager() returns the *sql.LeaseManager as an interface{}.
 	LeaseManager() interface{}
 
+	// Executor() returns the *sql.Executor as an interface{}.
+	Executor() interface{}
+
 	// Gossip returns the gossip used by the TestServer.
 	Gossip() *gossip.Gossip
 
