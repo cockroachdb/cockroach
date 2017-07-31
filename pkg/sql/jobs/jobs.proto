@@ -34,7 +34,9 @@ message Lease {
 }
 
 message BackupDetails {
-  // Intentionally empty.
+  util.hlc.Timestamp start_time = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp end_time = 2 [(gogoproto.nullable) = false];
+  string uri = 3 [(gogoproto.customname) = "URI"];
 }
 
 message RestoreDetails {

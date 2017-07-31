@@ -17872,7 +17872,11 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
-            type BackupDetails$Properties = {};
+            type BackupDetails$Properties = {
+                start_time?: cockroach.util.hlc.Timestamp$Properties;
+                end_time?: cockroach.util.hlc.Timestamp$Properties;
+                uri?: string;
+            };
 
             /**
              * Constructs a new BackupDetails.
@@ -17889,6 +17893,24 @@ export namespace cockroach {
                  * @param {cockroach.sql.jobs.BackupDetails$Properties=} [properties] Properties to set
                  */
                 constructor(properties?: cockroach.sql.jobs.BackupDetails$Properties);
+
+                /**
+                 * BackupDetails start_time.
+                 * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
+                 */
+                public start_time: (cockroach.util.hlc.Timestamp$Properties|null);
+
+                /**
+                 * BackupDetails end_time.
+                 * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
+                 */
+                public end_time: (cockroach.util.hlc.Timestamp$Properties|null);
+
+                /**
+                 * BackupDetails uri.
+                 * @type {string}
+                 */
+                public uri: string;
 
                 /**
                  * Creates a new BackupDetails instance using the specified properties.
