@@ -42,7 +42,9 @@ var planHooks []planHookFn
 // interface as we find we need them, to avoid churn in the planHookFn sig and
 // the hooks that implement it.
 type PlanHookState interface {
+	EvalContext() parser.EvalContext
 	ExecCfg() *ExecutorConfig
+	DistLoader() *DistLoader
 	TypeAsString(e parser.Expr, op string) (func() (string, error), error)
 	TypeAsStringArray(e parser.Exprs, op string) (func() ([]string, error), error)
 	User() string
