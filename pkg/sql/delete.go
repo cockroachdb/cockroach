@@ -159,7 +159,7 @@ func (d *deleteNode) Next(params runParams) (bool, error) {
 				return false, err
 			}
 			// We're done. Finish the batch.
-			err = d.tw.finalize(params.ctx, traceKV)
+			_, err = d.tw.finalize(params.ctx, traceKV)
 		}
 		return false, err
 	}

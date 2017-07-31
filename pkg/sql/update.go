@@ -421,7 +421,7 @@ func (u *updateNode) Next(params runParams) (bool, error) {
 				return false, err
 			}
 			// We're done. Finish the batch.
-			err = u.tw.finalize(params.ctx, params.p.session.Tracing.KVTracingEnabled())
+			_, err = u.tw.finalize(params.ctx, params.p.session.Tracing.KVTracingEnabled())
 		}
 		return false, err
 	}

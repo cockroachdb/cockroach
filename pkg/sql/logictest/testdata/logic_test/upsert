@@ -40,10 +40,6 @@ INSERT INTO kv VALUES (2, 10) ON CONFLICT (k) DO UPDATE SET k = 3, v = 10
 statement error UPSERT/ON CONFLICT DO UPDATE command cannot affect row a second time
 UPSERT INTO kv VALUES (10, 10), (10, 11)
 
-# TODO(dan): Implement RETURNING with upsert
-statement error unimplemented: RETURNING is not supported with UPSERT \(see issue https://github.com/cockroachdb/cockroach/issues/6637\)
-UPSERT INTO kv VALUES (10, 10) RETURNING *
-
 statement ok
 INSERT INTO kv VALUES (9, 9) ON CONFLICT (k) DO UPDATE SET (k, v) = (excluded.k + 2, excluded.v + 3)
 
@@ -65,6 +61,11 @@ SELECT * FROM kv ORDER BY (k, v)
 11 12
 13 13
 
+query II
+INSERT INTO kv VALUES (10, 10), (11, 11) ON CONFLICT (k) DO UPDATE SET v = excluded.v RETURNING *
+----
+10 10
+11 11
 
 statement ok
 CREATE TABLE abc (
@@ -160,6 +161,72 @@ INSERT INTO excluded VALUES (1, 1) ON CONFLICT (a) DO UPDATE SET b = excluded.b
 
 statement error ambiguous source name: "excluded"
 UPSERT INTO excluded VALUES (1, 1)
+
+# Tests for upsert/on conflict returning
+statement ok
+CREATE TABLE upsert_returning (a INT PRIMARY KEY, b INT, c INT, d INT DEFAULT -1)
+
+statement ok
+INSERT INTO upsert_returning VALUES (1, 1, NULL)
+
+# Handle INSERT ... ON CONFLICT ... RETURNING
+query IIII
+INSERT INTO upsert_returning (a, c) VALUES (1, 1), (2, 2) ON CONFLICT (a) DO UPDATE SET c = excluded.c RETURNING *
+----
+1 1 1 -1
+2 NULL 2 -1
+
+# Handle INSERT ... ON CONFLICT DO NOTHING ... RETURNING
+query IIII
+INSERT INTO upsert_returning (a, c) VALUES (1, 1), (3, 3) ON CONFLICT (a) DO NOTHING RETURNING *
+----
+3 NULL 3 -1
+
+# Handle UPSERT ... RETURNING
+query IIII
+UPSERT INTO upsert_returning (a, c) VALUES (1, 10), (3, 30) RETURNING *
+----
+1 1 10 -1
+3 NULL 30 -1
+
+# Ensure returned values are inserted values after conflict resolution
+query I
+SELECT b FROM upsert_returning WHERE a = 1
+----
+1
+
+query I
+INSERT INTO upsert_returning (a, b) VALUES (1, 1) ON CONFLICT (a) DO UPDATE SET b = excluded.b + upsert_returning.b + 1 RETURNING b
+----
+3
+
+# Handle expressions within returning clause
+query I
+UPSERT INTO upsert_returning (a, b) VALUES (1, 2), (2, 3), (4, 3) RETURNING a+b+d
+----
+2
+4
+6
+
+# Handle upsert fast path with autocommit
+query IIII
+UPSERT INTO upsert_returning VALUES (1, 2, 3, 4), (5, 6, 7, 8) RETURNING *
+----
+1 2 3 4
+5 6 7 8
+
+# Handle upsert fast path without autocommit
+statement ok
+BEGIN
+
+query IIII
+upsert INTO upsert_returning VALUES (1, 5, 4, 3), (6, 5, 4, 3) RETURNING *
+----
+1 5 4 3
+6 5 4 3
+
+statement ok
+COMMIT
 
 # For #6710. Add an unused column to disable the fast path which doesn't have this bug.
 statement ok
