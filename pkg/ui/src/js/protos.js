@@ -26825,6 +26825,241 @@ export const cockroach = $root.cockroach = (() => {
             return Tier;
         })();
 
+        roachpb.Version = (function() {
+
+            /**
+             * Properties of a Version.
+             * @typedef cockroach.roachpb.Version$Properties
+             * @type {Object}
+             * @property {number} [major] Version major.
+             * @property {number} [minor] Version minor.
+             * @property {number} [patch] Version patch.
+             * @property {number} [unstable] Version unstable.
+             */
+
+            /**
+             * Constructs a new Version.
+             * @exports cockroach.roachpb.Version
+             * @constructor
+             * @param {cockroach.roachpb.Version$Properties=} [properties] Properties to set
+             */
+            function Version(properties) {
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * Version major.
+             * @type {number}
+             */
+            Version.prototype.major = 0;
+
+            /**
+             * Version minor.
+             * @type {number}
+             */
+            Version.prototype.minor = 0;
+
+            /**
+             * Version patch.
+             * @type {number}
+             */
+            Version.prototype.patch = 0;
+
+            /**
+             * Version unstable.
+             * @type {number}
+             */
+            Version.prototype.unstable = 0;
+
+            /**
+             * Creates a new Version instance using the specified properties.
+             * @param {cockroach.roachpb.Version$Properties=} [properties] Properties to set
+             * @returns {cockroach.roachpb.Version} Version instance
+             */
+            Version.create = function create(properties) {
+                return new Version(properties);
+            };
+
+            /**
+             * Encodes the specified Version message. Does not implicitly {@link cockroach.roachpb.Version.verify|verify} messages.
+             * @param {cockroach.roachpb.Version$Properties} message Version message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            Version.encode = function encode(message, writer) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (message.major != null && message.hasOwnProperty("major"))
+                    writer.uint32(/* id 1, wireType 0 =*/8).int32(message.major);
+                if (message.minor != null && message.hasOwnProperty("minor"))
+                    writer.uint32(/* id 2, wireType 0 =*/16).int32(message.minor);
+                if (message.patch != null && message.hasOwnProperty("patch"))
+                    writer.uint32(/* id 3, wireType 0 =*/24).int32(message.patch);
+                if (message.unstable != null && message.hasOwnProperty("unstable"))
+                    writer.uint32(/* id 4, wireType 0 =*/32).int32(message.unstable);
+                return writer;
+            };
+
+            /**
+             * Encodes the specified Version message, length delimited. Does not implicitly {@link cockroach.roachpb.Version.verify|verify} messages.
+             * @param {cockroach.roachpb.Version$Properties} message Version message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            Version.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a Version message from the specified reader or buffer.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {cockroach.roachpb.Version} Version
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            Version.decode = function decode(reader, length) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.roachpb.Version();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    switch (tag >>> 3) {
+                    case 1:
+                        message.major = reader.int32();
+                        break;
+                    case 2:
+                        message.minor = reader.int32();
+                        break;
+                    case 3:
+                        message.patch = reader.int32();
+                        break;
+                    case 4:
+                        message.unstable = reader.int32();
+                        break;
+                    default:
+                        reader.skipType(tag & 7);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a Version message from the specified reader or buffer, length delimited.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {cockroach.roachpb.Version} Version
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            Version.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a Version message.
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {?string} `null` if valid, otherwise the reason why it is not
+             */
+            Version.verify = function verify(message) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (message.major != null && message.hasOwnProperty("major"))
+                    if (!$util.isInteger(message.major))
+                        return "major: integer expected";
+                if (message.minor != null && message.hasOwnProperty("minor"))
+                    if (!$util.isInteger(message.minor))
+                        return "minor: integer expected";
+                if (message.patch != null && message.hasOwnProperty("patch"))
+                    if (!$util.isInteger(message.patch))
+                        return "patch: integer expected";
+                if (message.unstable != null && message.hasOwnProperty("unstable"))
+                    if (!$util.isInteger(message.unstable))
+                        return "unstable: integer expected";
+                return null;
+            };
+
+            /**
+             * Creates a Version message from a plain object. Also converts values to their respective internal types.
+             * @param {Object.<string,*>} object Plain object
+             * @returns {cockroach.roachpb.Version} Version
+             */
+            Version.fromObject = function fromObject(object) {
+                if (object instanceof $root.cockroach.roachpb.Version)
+                    return object;
+                let message = new $root.cockroach.roachpb.Version();
+                if (object.major != null)
+                    message.major = object.major | 0;
+                if (object.minor != null)
+                    message.minor = object.minor | 0;
+                if (object.patch != null)
+                    message.patch = object.patch | 0;
+                if (object.unstable != null)
+                    message.unstable = object.unstable | 0;
+                return message;
+            };
+
+            /**
+             * Creates a Version message from a plain object. Also converts values to their respective internal types.
+             * This is an alias of {@link cockroach.roachpb.Version.fromObject}.
+             * @function
+             * @param {Object.<string,*>} object Plain object
+             * @returns {cockroach.roachpb.Version} Version
+             */
+            Version.from = Version.fromObject;
+
+            /**
+             * Creates a plain object from a Version message. Also converts values to other types if specified.
+             * @param {cockroach.roachpb.Version} message Version
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            Version.toObject = function toObject(message, options) {
+                if (!options)
+                    options = {};
+                let object = {};
+                if (options.defaults) {
+                    object.major = 0;
+                    object.minor = 0;
+                    object.patch = 0;
+                    object.unstable = 0;
+                }
+                if (message.major != null && message.hasOwnProperty("major"))
+                    object.major = message.major;
+                if (message.minor != null && message.hasOwnProperty("minor"))
+                    object.minor = message.minor;
+                if (message.patch != null && message.hasOwnProperty("patch"))
+                    object.patch = message.patch;
+                if (message.unstable != null && message.hasOwnProperty("unstable"))
+                    object.unstable = message.unstable;
+                return object;
+            };
+
+            /**
+             * Creates a plain object from this Version message. Also converts values to other types if specified.
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            Version.prototype.toObject = function toObject(options) {
+                return this.constructor.toObject(this, options);
+            };
+
+            /**
+             * Converts this Version to JSON.
+             * @returns {Object.<string,*>} JSON object
+             */
+            Version.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            return Version;
+        })();
+
         roachpb.RaftTruncatedState = (function() {
 
             /**

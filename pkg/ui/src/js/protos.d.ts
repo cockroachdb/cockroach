@@ -14638,6 +14638,140 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
+        type Version$Properties = {
+            major?: number;
+            minor?: number;
+            patch?: number;
+            unstable?: number;
+        };
+
+        /**
+         * Constructs a new Version.
+         * @exports cockroach.roachpb.Version
+         * @constructor
+         * @param {cockroach.roachpb.Version$Properties=} [properties] Properties to set
+         */
+        class Version {
+
+            /**
+             * Constructs a new Version.
+             * @exports cockroach.roachpb.Version
+             * @constructor
+             * @param {cockroach.roachpb.Version$Properties=} [properties] Properties to set
+             */
+            constructor(properties?: cockroach.roachpb.Version$Properties);
+
+            /**
+             * Version major.
+             * @type {number}
+             */
+            public major: number;
+
+            /**
+             * Version minor.
+             * @type {number}
+             */
+            public minor: number;
+
+            /**
+             * Version patch.
+             * @type {number}
+             */
+            public patch: number;
+
+            /**
+             * Version unstable.
+             * @type {number}
+             */
+            public unstable: number;
+
+            /**
+             * Creates a new Version instance using the specified properties.
+             * @param {cockroach.roachpb.Version$Properties=} [properties] Properties to set
+             * @returns {cockroach.roachpb.Version} Version instance
+             */
+            public static create(properties?: cockroach.roachpb.Version$Properties): cockroach.roachpb.Version;
+
+            /**
+             * Encodes the specified Version message. Does not implicitly {@link cockroach.roachpb.Version.verify|verify} messages.
+             * @param {cockroach.roachpb.Version$Properties} message Version message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            public static encode(message: cockroach.roachpb.Version$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified Version message, length delimited. Does not implicitly {@link cockroach.roachpb.Version.verify|verify} messages.
+             * @param {cockroach.roachpb.Version$Properties} message Version message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            public static encodeDelimited(message: cockroach.roachpb.Version$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a Version message from the specified reader or buffer.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {cockroach.roachpb.Version} Version
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.roachpb.Version;
+
+            /**
+             * Decodes a Version message from the specified reader or buffer, length delimited.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {cockroach.roachpb.Version} Version
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.roachpb.Version;
+
+            /**
+             * Verifies a Version message.
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {?string} `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): string;
+
+            /**
+             * Creates a Version message from a plain object. Also converts values to their respective internal types.
+             * @param {Object.<string,*>} object Plain object
+             * @returns {cockroach.roachpb.Version} Version
+             */
+            public static fromObject(object: { [k: string]: any }): cockroach.roachpb.Version;
+
+            /**
+             * Creates a Version message from a plain object. Also converts values to their respective internal types.
+             * This is an alias of {@link cockroach.roachpb.Version.fromObject}.
+             * @function
+             * @param {Object.<string,*>} object Plain object
+             * @returns {cockroach.roachpb.Version} Version
+             */
+            public static from(object: { [k: string]: any }): cockroach.roachpb.Version;
+
+            /**
+             * Creates a plain object from a Version message. Also converts values to other types if specified.
+             * @param {cockroach.roachpb.Version} message Version
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            public static toObject(message: cockroach.roachpb.Version, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+            /**
+             * Creates a plain object from this Version message. Also converts values to other types if specified.
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this Version to JSON.
+             * @returns {Object.<string,*>} JSON object
+             */
+            public toJSON(): { [k: string]: any };
+        }
+
         type RaftTruncatedState$Properties = {
             index?: Long;
             term?: Long;
