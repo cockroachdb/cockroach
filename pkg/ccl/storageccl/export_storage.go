@@ -11,6 +11,7 @@ package storageccl
 import (
 	"encoding/base64"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -200,7 +201,8 @@ func (*localFileStorage) Close() error {
 
 type httpStorage struct {
 	client *http.Client
-	base   string
+	base   *url.URL
+	hosts  []string
 }
 
 var _ ExportStorage = &httpStorage{}
@@ -213,29 +215,33 @@ func makeHTTPStorage(base string) (ExportStorage, error) {
 		return nil, errors.Errorf("HTTP storage path must end in '/'")
 	}
 	client := &http.Client{Transport: &http.Transport{}}
-	return &httpStorage{client: client, base: base}, nil
+	uri, err := url.Parse(base)
+	if err != nil {
+		return nil, err
+	}
+	return &httpStorage{client: client, base: uri, hosts: strings.Split(uri.Host, ",")}, nil
 }
 
 func (h *httpStorage) Conf() roachpb.ExportStorage {
 	return roachpb.ExportStorage{
 		Provider: roachpb.ExportStorageProvider_Http,
 		HttpPath: roachpb.ExportStorage_Http{
-			BaseUri: h.base,
+			BaseUri: h.base.String(),
 		},
 	}
 }
 
 func (h *httpStorage) ReadFile(_ context.Context, basename string) (io.ReadCloser, error) {
-	return runHTTPRequest(h.client, "GET", h.base, basename, nil)
+	return h.req("GET", basename, nil)
 }
 
 func (h *httpStorage) WriteFile(_ context.Context, basename string, content io.ReadSeeker) error {
-	_, err := runHTTPRequest(h.client, "PUT", h.base, basename, content)
+	_, err := h.req("PUT", basename, content)
 	return err
 }
 
 func (h *httpStorage) Delete(_ context.Context, basename string) error {
-	_, err := runHTTPRequest(h.client, "DELETE", h.base, basename, nil)
+	_, err := h.req("DELETE", basename, nil)
 	return err
 }
 
@@ -243,15 +249,22 @@ func (h *httpStorage) Close() error {
 	return nil
 }
 
-func runHTTPRequest(
-	c *http.Client, method, base, file string, body io.Reader,
-) (io.ReadCloser, error) {
-	url := base + file
+func (h *httpStorage) req(method, file string, body io.Reader) (io.ReadCloser, error) {
+	dest := *h.base
+	if hosts := len(h.hosts); hosts > 1 {
+		hash := fnv.New32a()
+		if _, err := hash.Write([]byte(file)); err != nil {
+			panic(errors.Wrap(err, `"It never returns an error." -- https://golang.org/pkg/hash`))
+		}
+		dest.Host = h.hosts[int(hash.Sum32())%hosts]
+	}
+	dest.Path += file
+	url := dest.String()
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error constructing request %s %q", method, url)
 	}
-	resp, err := c.Do(req)
+	resp, err := h.client.Do(req)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error exeucting request %s %q", method, url)
 	}

@@ -11,12 +11,15 @@ package storageccl
 import (
 	"bytes"
 	"crypto/rand"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/rlmcpherson/s3gof3r"
@@ -42,28 +45,32 @@ func testExportToTarget(t *testing.T, args roachpb.ExportStorage) {
 	}
 
 	t.Run("simple round trip", func(t *testing.T) {
-		name := "somebytes"
-		sampleBytes := []byte("hello world")
+		sampleName := "somebytes"
+		sampleBytes := "hello world"
 
-		if err := s.WriteFile(ctx, name, bytes.NewReader(sampleBytes)); err != nil {
-			t.Fatal(err)
-		}
+		for i := 0; i < 10; i++ {
+			name := fmt.Sprintf("%s-%d", sampleName, i)
+			payload := []byte(strings.Repeat(sampleBytes, i))
+			if err := s.WriteFile(ctx, name, bytes.NewReader(payload)); err != nil {
+				t.Fatal(err)
+			}
 
-		r, err := s.ReadFile(ctx, name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer r.Close()
+			r, err := s.ReadFile(ctx, name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer r.Close()
 
-		res, err := ioutil.ReadAll(r)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !bytes.Equal(res, sampleBytes) {
-			t.Fatalf("got %v expected %v", res, sampleBytes)
-		}
-		if err := s.Delete(ctx, name); err != nil {
-			t.Fatal(err)
+			res, err := ioutil.ReadAll(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(res, payload) {
+				t.Fatalf("got %v expected %v", res, payload)
+			}
+			if err := s.Delete(ctx, name); err != nil {
+				t.Fatal(err)
+			}
 		}
 	})
 
@@ -120,38 +127,81 @@ func TestPutHttp(t *testing.T) {
 	tmp, dirCleanup := testutils.TempDir(t)
 	defer dirCleanup()
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
-		localfile := filepath.Join(tmp, filepath.Base(r.URL.Path))
-		switch r.Method {
-		case "PUT":
-			f, err := os.Create(localfile)
-			if err != nil {
-				http.Error(w, err.Error(), 500)
-				return
-			}
-			defer f.Close()
+	makeServer := func() (*url.URL, func() int, func()) {
+		var files int
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			defer r.Body.Close()
-			if _, err := io.Copy(f, r.Body); err != nil {
-				http.Error(w, err.Error(), 500)
-				return
+			localfile := filepath.Join(tmp, filepath.Base(r.URL.Path))
+			switch r.Method {
+			case "PUT":
+				f, err := os.Create(localfile)
+				if err != nil {
+					http.Error(w, err.Error(), 500)
+					return
+				}
+				defer f.Close()
+				defer r.Body.Close()
+				if _, err := io.Copy(f, r.Body); err != nil {
+					http.Error(w, err.Error(), 500)
+					return
+				}
+				files++
+			case "GET":
+				http.ServeFile(w, r, localfile)
+			case "DELETE":
+				if err := os.Remove(localfile); err != nil {
+					http.Error(w, err.Error(), 500)
+					return
+				}
+			default:
+				http.Error(w, "unsupported method "+r.Method, 400)
 			}
-		case "GET":
-			http.ServeFile(w, r, localfile)
-		case "DELETE":
-			if err := os.Remove(localfile); err != nil {
-				http.Error(w, err.Error(), 500)
-				return
-			}
-		default:
-			http.Error(w, "unsupported method "+r.Method, 400)
+		}))
+		t.Logf("Mock HTTP Storage %q", srv.URL)
+		uri, err := url.Parse(srv.URL)
+		if err != nil {
+			srv.Close()
+			t.Fatal(err)
 		}
-	}))
-	defer srv.Close()
-	t.Logf("Mock HTTP Storage %q", srv.URL)
-	testExportToTarget(t, roachpb.ExportStorage{
-		Provider: roachpb.ExportStorageProvider_Http,
-		HttpPath: roachpb.ExportStorage_Http{BaseUri: srv.URL + "/"},
+		return uri, func() int { return files }, srv.Close
+	}
+
+	t.Run("singleHost", func(t *testing.T) {
+		srv, files, cleanup := makeServer()
+		defer cleanup()
+		testExportToTarget(t, roachpb.ExportStorage{
+			Provider: roachpb.ExportStorageProvider_Http,
+			HttpPath: roachpb.ExportStorage_Http{BaseUri: srv.String() + "/"},
+		})
+		if wrote := files(); wrote != 11 {
+			t.Fatal("expected 11 files to be written to single http store")
+		}
+	})
+
+	t.Run("multiHost", func(t *testing.T) {
+		srv1, files1, cleanup1 := makeServer()
+		defer cleanup1()
+		srv2, files2, cleanup2 := makeServer()
+		defer cleanup2()
+		srv3, files3, cleanup3 := makeServer()
+		defer cleanup3()
+
+		combined := *srv1
+		combined.Host = strings.Join([]string{srv1.Host, srv2.Host, srv3.Host}, ",")
+
+		testExportToTarget(t, roachpb.ExportStorage{
+			Provider: roachpb.ExportStorageProvider_Http,
+			HttpPath: roachpb.ExportStorage_Http{BaseUri: combined.String() + "/"},
+		})
+		if expected, actual := 3, files1(); expected != actual {
+			t.Fatalf("expected %d files written to http host 1, got %d", expected, actual)
+		}
+		if expected, actual := 4, files2(); expected != actual {
+			t.Fatalf("expected %d files written to http host 2, got %d", expected, actual)
+		}
+		if expected, actual := 4, files3(); expected != actual {
+			t.Fatalf("expected %d files written to http host 3, got %d", expected, actual)
+		}
 	})
 }
 
