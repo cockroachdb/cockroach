@@ -605,18 +605,6 @@ func TestNodesGRPCResponse(t *testing.T) {
 	}
 }
 
-func TestHandleDebugRange(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s := startServer(t)
-	defer s.Stopper().Stop(context.TODO())
-
-	if body, err := getText(s, s.AdminURL()+rangeDebugEndpoint+"?id=1"); err != nil {
-		t.Fatal(err)
-	} else if !bytes.Contains(body, []byte("<TITLE>Range ID:1</TITLE>")) {
-		t.Errorf("expected \"<title>Range Id: 1</title>\" got: \n%s", body)
-	}
-}
-
 func TestCertificatesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ts := startServer(t)

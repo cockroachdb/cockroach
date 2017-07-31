@@ -59,6 +59,9 @@ export type ProblemRangesResponseMessage = protos.cockroach.server.serverpb.Prob
 export type CertificatesRequestMessage = protos.cockroach.server.serverpb.CertificatesRequest;
 export type CertificatesResponseMessage = protos.cockroach.server.serverpb.CertificatesResponse;
 
+export type RangeRequestMessage = protos.cockroach.server.serverpb.RangeRequest;
+export type RangeResponseMessage = protos.cockroach.server.serverpb.RangeResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
@@ -101,9 +104,9 @@ export function toArrayBuffer(encodedRequest: Uint8Array): ArrayBuffer {
 // objects themselves. TResponseBuilder is an interface implemented by
 // the builder objects provided at runtime by protobuf.js.
 function timeoutFetch<TResponse$Properties, TResponse, TResponseBuilder extends {
-  new (properties?: TResponse$Properties): TResponse
+  new(properties?: TResponse$Properties): TResponse
   encode(message: TResponse$Properties, writer?: protobuf.Writer): protobuf.Writer
-  decode(reader: (protobuf.Reader|Uint8Array), length?: number): TResponse;
+  decode(reader: (protobuf.Reader | Uint8Array), length?: number): TResponse;
 }>(builder: TResponseBuilder, url: string, req: TRequest = null, timeout: moment.Duration = moment.duration(30, "s")): Promise<TResponse> {
   const params: RequestInit = {
     headers: {
@@ -231,4 +234,9 @@ export function getProblemRanges(req: ProblemRangesRequestMessage, timeout?: mom
 // getCertificates returns information about a node's certificates.
 export function getCertificates(req: CertificatesRequestMessage, timeout?: moment.Duration): Promise<CertificatesResponseMessage> {
   return timeoutFetch(serverpb.CertificatesResponse, `${STATUS_PREFIX}/certificates/${req.node_id}`, null, timeout);
+}
+
+// getRange returns information about a range form all nodes.
+export function getRange(req: RangeRequestMessage, timeout?: moment.Duration): Promise<RangeResponseMessage> {
+  return timeoutFetch(serverpb.RangeResponse, `${STATUS_PREFIX}/range/${req.range_id}`, null, timeout);
 }

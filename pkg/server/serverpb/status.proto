@@ -23,6 +23,7 @@ import "cockroach/pkg/gossip/gossip.proto";
 import "cockroach/pkg/roachpb/data.proto";
 import "cockroach/pkg/server/status/status.proto";
 import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
+import "cockroach/pkg/storage/log.proto";
 import "cockroach/pkg/storage/storagebase/state.proto";
 import "cockroach/pkg/util/log/log.proto";
 import "cockroach/pkg/util/unresolved_addr.proto";
@@ -424,6 +425,49 @@ message ProblemRangesResponse {
   ];
 }
 
+message RangeRequest {
+  // TODO(tamird): use [(gogoproto.customname) = "RangeID"] below. Need to
+  // figure out how to teach grpc-gateway about custom names.
+  int64 range_id = 1;
+}
+
+message RangeResponse {
+  message NodeResponse {
+    bool response = 1;
+    string error_message = 2;
+    repeated RangeInfo infos = 3 [(gogoproto.nullable) = false];
+  }
+  message RangeLog {
+    // To avoid porting the pretty printing of keys and descriptors to
+    // javascript, they will be precomputed on the serverside.
+    message PrettyInfo {
+      string updated_desc = 1;
+      string new_desc = 2;
+      string added_replica = 3;
+      string removed_replica = 4;
+    }
+    repeated storage.RangeLogEvent events = 1 [(gogoproto.nullable) = false];
+    repeated PrettyInfo pretty_infos = 2 [(gogoproto.nullable) = false];
+    string error_message = 3;
+  }
+
+  // NodeID is the node that submitted all the requests.
+  int32 node_id = 1 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+  int64 range_id = 2 [
+    (gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+  map<int32, NodeResponse> responses_by_node_id = 3 [
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
+    (gogoproto.customname) = "ResponsesByNodeID",
+    (gogoproto.nullable) = false
+  ];
+  RangeLog range_log = 4 [(gogoproto.nullable) = false];
+}
+
 service Status {
   rpc Certificates(CertificatesRequest) returns (CertificatesResponse) {
     option (google.api.http) = {
@@ -519,6 +563,11 @@ service Status {
   rpc ProblemRanges(ProblemRangesRequest) returns (ProblemRangesResponse) {
     option (google.api.http) = {
       get: "/_status/problemranges"
+    };
+  }
+  rpc Range(RangeRequest) returns (RangeResponse) {
+    option (google.api.http) = {
+      get: "/_status/range/{range_id}"
     };
   }
 }
