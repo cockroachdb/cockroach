@@ -490,6 +490,10 @@ INSERT INTO return AS r VALUES (5, 6)
 # statement ok
 # INSERT INTO return AS r VALUES (5, 6) RETURNING r.a
 
+# #17008: allow fully-qualified table names in RETURNING clauses
+statement ok
+INSERT INTO return VALUES (5, 6) RETURNING test.return.a
+
 statement error cannot use "x.\*" in this context
 INSERT INTO return VALUES (1, 2) RETURNING x.*[1]
 

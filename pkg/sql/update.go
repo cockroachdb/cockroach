@@ -83,13 +83,14 @@ func (r *editNodeRun) initEditNode(
 	en *editNodeBase,
 	rows planNode,
 	tw tableWriter,
+	tn *parser.TableName,
 	re parser.ReturningClause,
 	desiredTypes []parser.Type,
 ) error {
 	r.rows = rows
 	r.tw = tw
 
-	rh, err := en.p.newReturningHelper(ctx, re, desiredTypes, en.tableDesc.Name, en.tableDesc.Columns)
+	rh, err := en.p.newReturningHelper(ctx, re, desiredTypes, tn, en.tableDesc.Columns)
 	if err != nil {
 		return err
 	}
@@ -224,7 +225,6 @@ func addOrMergeExpr(
 // Privileges: UPDATE and SELECT on table. We currently always use a select statement.
 //   Notes: postgres requires UPDATE. Requires SELECT with WHERE clause with table.
 //          mysql requires UPDATE. Also requires SELECT with WHERE clause with table.
-// TODO(guanqun): need to support CHECK in UPDATE
 func (p *planner) Update(
 	ctx context.Context, n *parser.Update, desiredTypes []parser.Type,
 ) (planNode, error) {
@@ -393,7 +393,7 @@ func (p *planner) Update(
 		return nil, err
 	}
 	if err := un.run.initEditNode(
-		ctx, &un.editNodeBase, rows, &un.tw, n.Returning, desiredTypes); err != nil {
+		ctx, &un.editNodeBase, rows, &un.tw, tn, n.Returning, desiredTypes); err != nil {
 		return nil, err
 	}
 	return un, nil
