@@ -1,0 +1,42 @@
+# https://github.com/blog/2392-introducing-code-owners
+# https://help.github.com/articles/about-codeowners/
+#
+# Code owners are automatically requested for review when someone
+# opens a pull request that modifies code that they own.
+#
+
+pkg/gossip/*     @cockroachdb/core
+pkg/internal/*   @cockroachdb/core
+pkg/kv/*         @cockroachdb/core
+pkg/roachpb/*    @cockroachdb/core
+pkg/rpc/*        @cockroachdb/core
+pkg/server/*     @cockroachdb/core
+pkg/migrations/* @cockroachdb/core @cockroachdb/sql
+
+pkg/ccl/*        @cockroachdb/sql-ccl
+pkg/cli/*        @cockroachdb/sql-ui
+
+pkg/sql/*        @cockroachdb/sql
+
+pkg/sql/parser/* @cockroachdb/sql-language
+pkg/sql/pgwire/* @cockroachdb/sql-wiring
+
+pkg/sql/*.go      @cockroachdb/sql-planning @cockroachdb/sql-execution
+pkg/sql/executor* @cockroachdb/sql-execution
+pkg/sql/mon/*     @cockroachdb/sql-execution
+
+pkg/sql/schema*   @cockroachdb/sql-async
+pkg/sql/lease*    @cockroachdb/sql-async
+pkg/sql/jobs/*    @cockroachdb/sql-async
+
+pkg/sql/distsql*.go   @cockroachdb/sql-planning @cockroachdb/distsql
+pkg/sql/distsqlplan/* @cockroachdb/sql-planning @cockroachdb/distsql
+pkg/sql/distsqlrun/*  @cockroachdb/sql-execution @cockroachdb/distsql
+
+build/*     @cockroachdb/build
+c-deps/*    @cockroachdb/build
+githooks/*  @cockroachdb/build
+scripts/*   @cockroachdb/build
+**/Makefile @cockroachdb/build
+/Gopkg.*    @cockroachdb/build
+/.*         @cockroachdb/build
