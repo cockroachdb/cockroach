@@ -195,6 +195,36 @@ func (BinOp) preferred() bool {
 	return false
 }
 
+func appendToMaybeNullArray(typ Type, left Datum, right Datum) (Datum, error) {
+	result := NewDArray(typ)
+	if left != DNull {
+		for _, e := range MustBeDArray(left).Array {
+			if err := result.Append(e); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if err := result.Append(right); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func prependToMaybeNullArray(typ Type, left Datum, right Datum) (Datum, error) {
+	result := NewDArray(typ)
+	if err := result.Append(left); err != nil {
+		return nil, err
+	}
+	if right != DNull {
+		for _, e := range MustBeDArray(right).Array {
+			if err := result.Append(e); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return result, nil
+}
+
 // TODO(justin): these might be improved by making arrays into an interface and
 // then introducing a ConcatenatedArray implementation which just references two
 // existing arrays. This would optimize the common case of appending an element
@@ -208,18 +238,7 @@ func initArrayElementConcatenation() {
 			ReturnType:   TArray{typ},
 			nullableArgs: true,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				result := NewDArray(typ)
-				if left != DNull {
-					for _, e := range MustBeDArray(left).Array {
-						if err := result.Append(e); err != nil {
-							return nil, err
-						}
-					}
-				}
-				if err := result.Append(right); err != nil {
-					return nil, err
-				}
-				return result, nil
+				return appendToMaybeNullArray(typ, left, right)
 			},
 		})
 
@@ -229,21 +248,32 @@ func initArrayElementConcatenation() {
 			ReturnType:   TArray{typ},
 			nullableArgs: true,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				result := NewDArray(typ)
-				if err := result.Append(left); err != nil {
-					return nil, err
-				}
-				if right != DNull {
-					for _, e := range MustBeDArray(right).Array {
-						if err := result.Append(e); err != nil {
-							return nil, err
-						}
-					}
-				}
-				return result, nil
+				return prependToMaybeNullArray(typ, left, right)
 			},
 		})
 	}
+}
+
+func concatArrays(typ Type, left Datum, right Datum) (Datum, error) {
+	if left == DNull && right == DNull {
+		return DNull, nil
+	}
+	result := NewDArray(typ)
+	if left != DNull {
+		for _, e := range MustBeDArray(left).Array {
+			if err := result.Append(e); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if right != DNull {
+		for _, e := range MustBeDArray(right).Array {
+			if err := result.Append(e); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return result, nil
 }
 
 func initArrayToArrayConcatenation() {
@@ -255,25 +285,7 @@ func initArrayToArrayConcatenation() {
 			ReturnType:   TArray{typ},
 			nullableArgs: true,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				if left == DNull && right == DNull {
-					return DNull, nil
-				}
-				result := NewDArray(typ)
-				if left != DNull {
-					for _, e := range MustBeDArray(left).Array {
-						if err := result.Append(e); err != nil {
-							return nil, err
-						}
-					}
-				}
-				if right != DNull {
-					for _, e := range MustBeDArray(right).Array {
-						if err := result.Append(e); err != nil {
-							return nil, err
-						}
-					}
-				}
-				return result, nil
+				return concatArrays(typ, left, right)
 			},
 		})
 	}
