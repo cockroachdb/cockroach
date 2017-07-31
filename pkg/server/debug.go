@@ -146,7 +146,7 @@ func init() {
       </tr>
       <tr>
         <td>range status</td>
-        <td><a href="/debug/range?id=1">range</a></td>
+        <td><a href="../#/reports/range/1">range</a></td>
       </tr>
       <tr>
         <td>problem ranges</td>

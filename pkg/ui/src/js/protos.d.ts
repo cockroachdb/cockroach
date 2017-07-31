@@ -11207,6 +11207,647 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
+            type RangeRequest$Properties = {
+                range_id?: Long;
+            };
+
+            /**
+             * Constructs a new RangeRequest.
+             * @exports cockroach.server.serverpb.RangeRequest
+             * @constructor
+             * @param {cockroach.server.serverpb.RangeRequest$Properties=} [properties] Properties to set
+             */
+            class RangeRequest {
+
+                /**
+                 * Constructs a new RangeRequest.
+                 * @exports cockroach.server.serverpb.RangeRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.RangeRequest$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.RangeRequest$Properties);
+
+                /**
+                 * RangeRequest range_id.
+                 * @type {Long}
+                 */
+                public range_id: Long;
+
+                /**
+                 * Creates a new RangeRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.RangeRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.RangeRequest} RangeRequest instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.RangeRequest$Properties): cockroach.server.serverpb.RangeRequest;
+
+                /**
+                 * Encodes the specified RangeRequest message. Does not implicitly {@link cockroach.server.serverpb.RangeRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.RangeRequest$Properties} message RangeRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.RangeRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified RangeRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.RangeRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.RangeRequest$Properties} message RangeRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.RangeRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a RangeRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.RangeRequest} RangeRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.RangeRequest;
+
+                /**
+                 * Decodes a RangeRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.RangeRequest} RangeRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.RangeRequest;
+
+                /**
+                 * Verifies a RangeRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a RangeRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.RangeRequest} RangeRequest
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.RangeRequest;
+
+                /**
+                 * Creates a RangeRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.RangeRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.RangeRequest} RangeRequest
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.RangeRequest;
+
+                /**
+                 * Creates a plain object from a RangeRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.RangeRequest} message RangeRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.RangeRequest, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this RangeRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this RangeRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            type RangeResponse$Properties = {
+                node_id?: number;
+                range_id?: Long;
+                responses_by_node_id?: { [k: string]: cockroach.server.serverpb.RangeResponse.NodeResponse$Properties };
+                range_log?: cockroach.server.serverpb.RangeResponse.RangeLog$Properties;
+            };
+
+            /**
+             * Constructs a new RangeResponse.
+             * @exports cockroach.server.serverpb.RangeResponse
+             * @constructor
+             * @param {cockroach.server.serverpb.RangeResponse$Properties=} [properties] Properties to set
+             */
+            class RangeResponse {
+
+                /**
+                 * Constructs a new RangeResponse.
+                 * @exports cockroach.server.serverpb.RangeResponse
+                 * @constructor
+                 * @param {cockroach.server.serverpb.RangeResponse$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.RangeResponse$Properties);
+
+                /**
+                 * RangeResponse node_id.
+                 * @type {number}
+                 */
+                public node_id: number;
+
+                /**
+                 * RangeResponse range_id.
+                 * @type {Long}
+                 */
+                public range_id: Long;
+
+                /**
+                 * RangeResponse responses_by_node_id.
+                 * @type {Object.<string,cockroach.server.serverpb.RangeResponse.NodeResponse$Properties>}
+                 */
+                public responses_by_node_id: { [k: string]: cockroach.server.serverpb.RangeResponse.NodeResponse$Properties };
+
+                /**
+                 * RangeResponse range_log.
+                 * @type {(cockroach.server.serverpb.RangeResponse.RangeLog$Properties|null)}
+                 */
+                public range_log: (cockroach.server.serverpb.RangeResponse.RangeLog$Properties|null);
+
+                /**
+                 * Creates a new RangeResponse instance using the specified properties.
+                 * @param {cockroach.server.serverpb.RangeResponse$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.RangeResponse} RangeResponse instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.RangeResponse$Properties): cockroach.server.serverpb.RangeResponse;
+
+                /**
+                 * Encodes the specified RangeResponse message. Does not implicitly {@link cockroach.server.serverpb.RangeResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.RangeResponse$Properties} message RangeResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.RangeResponse$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified RangeResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.RangeResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.RangeResponse$Properties} message RangeResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.RangeResponse$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a RangeResponse message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.RangeResponse} RangeResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.RangeResponse;
+
+                /**
+                 * Decodes a RangeResponse message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.RangeResponse} RangeResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.RangeResponse;
+
+                /**
+                 * Verifies a RangeResponse message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a RangeResponse message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.RangeResponse} RangeResponse
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.RangeResponse;
+
+                /**
+                 * Creates a RangeResponse message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.RangeResponse.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.RangeResponse} RangeResponse
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.RangeResponse;
+
+                /**
+                 * Creates a plain object from a RangeResponse message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.RangeResponse} message RangeResponse
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.RangeResponse, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this RangeResponse message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this RangeResponse to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            namespace RangeResponse {
+
+                type NodeResponse$Properties = {
+                    response?: boolean;
+                    error_message?: string;
+                    infos?: cockroach.server.serverpb.RangeInfo$Properties[];
+                };
+
+                /**
+                 * Constructs a new NodeResponse.
+                 * @exports cockroach.server.serverpb.RangeResponse.NodeResponse
+                 * @constructor
+                 * @param {cockroach.server.serverpb.RangeResponse.NodeResponse$Properties=} [properties] Properties to set
+                 */
+                class NodeResponse {
+
+                    /**
+                     * Constructs a new NodeResponse.
+                     * @exports cockroach.server.serverpb.RangeResponse.NodeResponse
+                     * @constructor
+                     * @param {cockroach.server.serverpb.RangeResponse.NodeResponse$Properties=} [properties] Properties to set
+                     */
+                    constructor(properties?: cockroach.server.serverpb.RangeResponse.NodeResponse$Properties);
+
+                    /**
+                     * NodeResponse response.
+                     * @type {boolean}
+                     */
+                    public response: boolean;
+
+                    /**
+                     * NodeResponse error_message.
+                     * @type {string}
+                     */
+                    public error_message: string;
+
+                    /**
+                     * NodeResponse infos.
+                     * @type {Array.<cockroach.server.serverpb.RangeInfo$Properties>}
+                     */
+                    public infos: cockroach.server.serverpb.RangeInfo$Properties[];
+
+                    /**
+                     * Creates a new NodeResponse instance using the specified properties.
+                     * @param {cockroach.server.serverpb.RangeResponse.NodeResponse$Properties=} [properties] Properties to set
+                     * @returns {cockroach.server.serverpb.RangeResponse.NodeResponse} NodeResponse instance
+                     */
+                    public static create(properties?: cockroach.server.serverpb.RangeResponse.NodeResponse$Properties): cockroach.server.serverpb.RangeResponse.NodeResponse;
+
+                    /**
+                     * Encodes the specified NodeResponse message. Does not implicitly {@link cockroach.server.serverpb.RangeResponse.NodeResponse.verify|verify} messages.
+                     * @param {cockroach.server.serverpb.RangeResponse.NodeResponse$Properties} message NodeResponse message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encode(message: cockroach.server.serverpb.RangeResponse.NodeResponse$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Encodes the specified NodeResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.RangeResponse.NodeResponse.verify|verify} messages.
+                     * @param {cockroach.server.serverpb.RangeResponse.NodeResponse$Properties} message NodeResponse message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encodeDelimited(message: cockroach.server.serverpb.RangeResponse.NodeResponse$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Decodes a NodeResponse message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.server.serverpb.RangeResponse.NodeResponse} NodeResponse
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.RangeResponse.NodeResponse;
+
+                    /**
+                     * Decodes a NodeResponse message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.server.serverpb.RangeResponse.NodeResponse} NodeResponse
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.RangeResponse.NodeResponse;
+
+                    /**
+                     * Verifies a NodeResponse message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    public static verify(message: { [k: string]: any }): string;
+
+                    /**
+                     * Creates a NodeResponse message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.server.serverpb.RangeResponse.NodeResponse} NodeResponse
+                     */
+                    public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.RangeResponse.NodeResponse;
+
+                    /**
+                     * Creates a NodeResponse message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.server.serverpb.RangeResponse.NodeResponse.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.server.serverpb.RangeResponse.NodeResponse} NodeResponse
+                     */
+                    public static from(object: { [k: string]: any }): cockroach.server.serverpb.RangeResponse.NodeResponse;
+
+                    /**
+                     * Creates a plain object from a NodeResponse message. Also converts values to other types if specified.
+                     * @param {cockroach.server.serverpb.RangeResponse.NodeResponse} message NodeResponse
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public static toObject(message: cockroach.server.serverpb.RangeResponse.NodeResponse, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Creates a plain object from this NodeResponse message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Converts this NodeResponse to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    public toJSON(): { [k: string]: any };
+                }
+
+                type RangeLog$Properties = {
+                    events?: cockroach.storage.RangeLogEvent$Properties[];
+                    pretty_infos?: cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo$Properties[];
+                    error_message?: string;
+                };
+
+                /**
+                 * Constructs a new RangeLog.
+                 * @exports cockroach.server.serverpb.RangeResponse.RangeLog
+                 * @constructor
+                 * @param {cockroach.server.serverpb.RangeResponse.RangeLog$Properties=} [properties] Properties to set
+                 */
+                class RangeLog {
+
+                    /**
+                     * Constructs a new RangeLog.
+                     * @exports cockroach.server.serverpb.RangeResponse.RangeLog
+                     * @constructor
+                     * @param {cockroach.server.serverpb.RangeResponse.RangeLog$Properties=} [properties] Properties to set
+                     */
+                    constructor(properties?: cockroach.server.serverpb.RangeResponse.RangeLog$Properties);
+
+                    /**
+                     * RangeLog events.
+                     * @type {Array.<cockroach.storage.RangeLogEvent$Properties>}
+                     */
+                    public events: cockroach.storage.RangeLogEvent$Properties[];
+
+                    /**
+                     * RangeLog pretty_infos.
+                     * @type {Array.<cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo$Properties>}
+                     */
+                    public pretty_infos: cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo$Properties[];
+
+                    /**
+                     * RangeLog error_message.
+                     * @type {string}
+                     */
+                    public error_message: string;
+
+                    /**
+                     * Creates a new RangeLog instance using the specified properties.
+                     * @param {cockroach.server.serverpb.RangeResponse.RangeLog$Properties=} [properties] Properties to set
+                     * @returns {cockroach.server.serverpb.RangeResponse.RangeLog} RangeLog instance
+                     */
+                    public static create(properties?: cockroach.server.serverpb.RangeResponse.RangeLog$Properties): cockroach.server.serverpb.RangeResponse.RangeLog;
+
+                    /**
+                     * Encodes the specified RangeLog message. Does not implicitly {@link cockroach.server.serverpb.RangeResponse.RangeLog.verify|verify} messages.
+                     * @param {cockroach.server.serverpb.RangeResponse.RangeLog$Properties} message RangeLog message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encode(message: cockroach.server.serverpb.RangeResponse.RangeLog$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Encodes the specified RangeLog message, length delimited. Does not implicitly {@link cockroach.server.serverpb.RangeResponse.RangeLog.verify|verify} messages.
+                     * @param {cockroach.server.serverpb.RangeResponse.RangeLog$Properties} message RangeLog message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encodeDelimited(message: cockroach.server.serverpb.RangeResponse.RangeLog$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Decodes a RangeLog message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.server.serverpb.RangeResponse.RangeLog} RangeLog
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.RangeResponse.RangeLog;
+
+                    /**
+                     * Decodes a RangeLog message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.server.serverpb.RangeResponse.RangeLog} RangeLog
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.RangeResponse.RangeLog;
+
+                    /**
+                     * Verifies a RangeLog message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    public static verify(message: { [k: string]: any }): string;
+
+                    /**
+                     * Creates a RangeLog message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.server.serverpb.RangeResponse.RangeLog} RangeLog
+                     */
+                    public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.RangeResponse.RangeLog;
+
+                    /**
+                     * Creates a RangeLog message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.server.serverpb.RangeResponse.RangeLog.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.server.serverpb.RangeResponse.RangeLog} RangeLog
+                     */
+                    public static from(object: { [k: string]: any }): cockroach.server.serverpb.RangeResponse.RangeLog;
+
+                    /**
+                     * Creates a plain object from a RangeLog message. Also converts values to other types if specified.
+                     * @param {cockroach.server.serverpb.RangeResponse.RangeLog} message RangeLog
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public static toObject(message: cockroach.server.serverpb.RangeResponse.RangeLog, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Creates a plain object from this RangeLog message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Converts this RangeLog to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    public toJSON(): { [k: string]: any };
+                }
+
+                namespace RangeLog {
+
+                    type PrettyInfo$Properties = {
+                        updated_desc?: string;
+                        new_desc?: string;
+                        added_replica?: string;
+                        removed_replica?: string;
+                    };
+
+                    /**
+                     * Constructs a new PrettyInfo.
+                     * @exports cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo
+                     * @constructor
+                     * @param {cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo$Properties=} [properties] Properties to set
+                     */
+                    class PrettyInfo {
+
+                        /**
+                         * Constructs a new PrettyInfo.
+                         * @exports cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo
+                         * @constructor
+                         * @param {cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo$Properties=} [properties] Properties to set
+                         */
+                        constructor(properties?: cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo$Properties);
+
+                        /**
+                         * PrettyInfo updated_desc.
+                         * @type {string}
+                         */
+                        public updated_desc: string;
+
+                        /**
+                         * PrettyInfo new_desc.
+                         * @type {string}
+                         */
+                        public new_desc: string;
+
+                        /**
+                         * PrettyInfo added_replica.
+                         * @type {string}
+                         */
+                        public added_replica: string;
+
+                        /**
+                         * PrettyInfo removed_replica.
+                         * @type {string}
+                         */
+                        public removed_replica: string;
+
+                        /**
+                         * Creates a new PrettyInfo instance using the specified properties.
+                         * @param {cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo$Properties=} [properties] Properties to set
+                         * @returns {cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo} PrettyInfo instance
+                         */
+                        public static create(properties?: cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo$Properties): cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo;
+
+                        /**
+                         * Encodes the specified PrettyInfo message. Does not implicitly {@link cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo.verify|verify} messages.
+                         * @param {cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo$Properties} message PrettyInfo message or plain object to encode
+                         * @param {$protobuf.Writer} [writer] Writer to encode to
+                         * @returns {$protobuf.Writer} Writer
+                         */
+                        public static encode(message: cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                        /**
+                         * Encodes the specified PrettyInfo message, length delimited. Does not implicitly {@link cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo.verify|verify} messages.
+                         * @param {cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo$Properties} message PrettyInfo message or plain object to encode
+                         * @param {$protobuf.Writer} [writer] Writer to encode to
+                         * @returns {$protobuf.Writer} Writer
+                         */
+                        public static encodeDelimited(message: cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                        /**
+                         * Decodes a PrettyInfo message from the specified reader or buffer.
+                         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                         * @param {number} [length] Message length if known beforehand
+                         * @returns {cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo} PrettyInfo
+                         * @throws {Error} If the payload is not a reader or valid buffer
+                         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                         */
+                        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo;
+
+                        /**
+                         * Decodes a PrettyInfo message from the specified reader or buffer, length delimited.
+                         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                         * @returns {cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo} PrettyInfo
+                         * @throws {Error} If the payload is not a reader or valid buffer
+                         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                         */
+                        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo;
+
+                        /**
+                         * Verifies a PrettyInfo message.
+                         * @param {Object.<string,*>} message Plain object to verify
+                         * @returns {?string} `null` if valid, otherwise the reason why it is not
+                         */
+                        public static verify(message: { [k: string]: any }): string;
+
+                        /**
+                         * Creates a PrettyInfo message from a plain object. Also converts values to their respective internal types.
+                         * @param {Object.<string,*>} object Plain object
+                         * @returns {cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo} PrettyInfo
+                         */
+                        public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo;
+
+                        /**
+                         * Creates a PrettyInfo message from a plain object. Also converts values to their respective internal types.
+                         * This is an alias of {@link cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo.fromObject}.
+                         * @function
+                         * @param {Object.<string,*>} object Plain object
+                         * @returns {cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo} PrettyInfo
+                         */
+                        public static from(object: { [k: string]: any }): cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo;
+
+                        /**
+                         * Creates a plain object from a PrettyInfo message. Also converts values to other types if specified.
+                         * @param {cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo} message PrettyInfo
+                         * @param {$protobuf.ConversionOptions} [options] Conversion options
+                         * @returns {Object.<string,*>} Plain object
+                         */
+                        public static toObject(message: cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                        /**
+                         * Creates a plain object from this PrettyInfo message. Also converts values to other types if specified.
+                         * @param {$protobuf.ConversionOptions} [options] Conversion options
+                         * @returns {Object.<string,*>} Plain object
+                         */
+                        public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                        /**
+                         * Converts this PrettyInfo to JSON.
+                         * @returns {Object.<string,*>} JSON object
+                         */
+                        public toJSON(): { [k: string]: any };
+                    }
+                }
+            }
+
             /**
              * Constructs a new Status service.
              * @exports cockroach.server.serverpb.Status
@@ -11373,6 +12014,14 @@ export namespace cockroach {
                  * @returns {undefined}
                  */
                 public problemRanges(request: (cockroach.server.serverpb.ProblemRangesRequest|{ [k: string]: any }), callback: Status_problemRanges_Callback): void;
+
+                /**
+                 * Calls Range.
+                 * @param {cockroach.server.serverpb.RangeRequest|Object.<string,*>} request RangeRequest message or plain object
+                 * @param {Status_range_Callback} callback Node-style callback called with the error, if any, and RangeResponse
+                 * @returns {undefined}
+                 */
+                public range(request: (cockroach.server.serverpb.RangeRequest|{ [k: string]: any }), callback: Status_range_Callback): void;
             }
 
             type UserLoginRequest$Properties = {
@@ -21773,6 +22422,8 @@ type Status_logFile_Callback = (error: Error, response?: cockroach.server.server
 type Status_logs_Callback = (error: Error, response?: cockroach.server.serverpb.LogEntriesResponse) => void;
 
 type Status_problemRanges_Callback = (error: Error, response?: cockroach.server.serverpb.ProblemRangesResponse) => void;
+
+type Status_range_Callback = (error: Error, response?: cockroach.server.serverpb.RangeResponse) => void;
 
 type Authentication_userLogin_Callback = (error: Error, response?: cockroach.server.serverpb.UserLoginResponse) => void;
 

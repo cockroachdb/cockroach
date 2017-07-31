@@ -144,3 +144,114 @@ $reports-table
   list-style-type none
   margin 0
   padding 0
+
+.connections-table
+  @extend $reports-table
+  font-size 12px
+
+  &__row
+    text-align left
+    vertical-align top
+    alternating-background white $table-border-color
+
+    &&--header
+      background-color green
+
+    &&--warning
+      color $alert-color
+
+  &__cell
+    white-space normal
+    max-width none
+
+.log-entries-list
+  list-style-type none
+  margin 0
+  padding 0
+
+.log-table
+  @extend $reports-table
+  font-size 12px
+
+  &__row
+    text-align left
+    vertical-align top
+    alternating-background white $table-border-color
+
+    &&--header
+      background-color orange
+
+  &__cell
+    white-space normal
+    max-width none
+
+.lease-table
+  @extend $reports-table
+  font-size 12px
+
+  &__row
+    text-align left
+    vertical-align top
+    alternating-background white $table-border-color
+
+    &&--header
+      background-color green
+
+  &__cell
+    white-space normal
+    max-width none
+
+.range-table
+  @extend $reports-table
+
+  &__cell
+    background-color white
+    padding 6px 12px
+
+    &--header
+      background-color $link-color
+      text-align right
+
+    &--header-warning
+      color yellow
+
+    &--raftstate-leader
+      color green
+
+    &--raftstate-follower
+      color blue
+
+    &--raftstate-candidate
+      color orange
+
+    &--raftstate-precandidate
+      color darkorange
+
+    &--raftstate-dormant
+      color gray
+
+    &--raftstate-unknown
+      color red
+
+    &--lease-holder
+      color green
+
+    &--lease-follower
+      color blue
+
+    &--different-from-leader-warning
+      color red
+
+    &--local-replica
+      color green
+
+    &--dormant
+      color lightgray
+
+    &--dropped-commands
+      color orange
+
+.range-entries-list
+  list-style-type none
+  margin 0
+  padding 0
