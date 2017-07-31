@@ -22,13 +22,16 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
@@ -238,6 +241,26 @@ func (j *Job) Payload() Payload {
 func (j *Job) WithTxn(txn *client.Txn) *Job {
 	j.txn = txn
 	return j
+}
+
+// DB returns the *client.DB associated with this job.
+func (j *Job) DB() *client.DB {
+	return j.registry.db
+}
+
+// Gossip returns the *gossip.Gossip associated with this job.
+func (j *Job) Gossip() *gossip.Gossip {
+	return j.registry.gossip
+}
+
+// NodeID returns the roachpb.NodeID associated with this job.
+func (j *Job) NodeID() roachpb.NodeID {
+	return j.registry.nodeID.Get()
+}
+
+// ClusterID returns the uuid.UUID cluster ID associated with this job.
+func (j *Job) ClusterID() uuid.UUID {
+	return j.registry.clusterID()
 }
 
 func (j *Job) runInTxn(
