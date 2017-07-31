@@ -384,7 +384,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	s.sessionRegistry = sql.MakeSessionRegistry()
 	s.queryRegistry = sql.MakeQueryRegistry()
-	s.jobRegistry = jobs.MakeRegistry(s.db, sqlExecutor)
+	s.jobRegistry = jobs.MakeRegistry(s.db, sqlExecutor, s.gossip, &s.nodeIDContainer, s.ClusterID)
 
 	s.admin = newAdminServer(s)
 	s.status = newStatusServer(
