@@ -12,8 +12,6 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 //
-// Author: Radu Berinde (radu@cockroachlabs.com)
-//
 // A "shadow" tracer can be any opentracing.Tracer implementation that is used
 // in addition to the normal functionality of our tracer. It works by attaching
 // a shadow span to every span, and attaching a shadow context to every span
