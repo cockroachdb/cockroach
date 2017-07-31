@@ -125,6 +125,9 @@ func (dsp *distSQLPlanner) Run(
 
 	log.VEvent(ctx, 1, "running DistSQL plan")
 
+	dsp.distSQLSrv.ServerConfig.Metrics.QueryStart()
+	defer dsp.distSQLSrv.ServerConfig.Metrics.QueryStop()
+
 	recv.resultToStreamColMap = plan.planToStreamColMap
 	thisNodeID := dsp.nodeDesc.NodeID
 
