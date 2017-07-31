@@ -84,7 +84,7 @@ func init() {
 }
 
 var flagDuration = flag.Duration("d", cluster.DefaultDuration, "duration to run the test")
-var flagNodes = flag.Int("nodes", 3, "number of nodes")
+var flagNodes = flag.Int("nodes", 4, "number of nodes")
 var flagStores = flag.Int("stores", 1, "number of stores to use for each node")
 var flagRemote = flag.Bool("remote", false, "run the test using terrafarm instead of docker")
 var flagCwd = flag.String("cwd", "../cloud/aws", "directory to run terraform from")
