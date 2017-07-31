@@ -33800,6 +33800,201 @@ export const cockroach = $root.cockroach = (() => {
                     return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
                 };
 
+                RestoreDetails.TableRewrite = (function() {
+
+                    /**
+                     * Properties of a TableRewrite.
+                     * @typedef cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties
+                     * @type {Object}
+                     * @property {number} [table_id] TableRewrite table_id.
+                     * @property {number} [parent_id] TableRewrite parent_id.
+                     */
+
+                    /**
+                     * Constructs a new TableRewrite.
+                     * @exports cockroach.sql.jobs.RestoreDetails.TableRewrite
+                     * @constructor
+                     * @param {cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties=} [properties] Properties to set
+                     */
+                    function TableRewrite(properties) {
+                        if (properties)
+                            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * TableRewrite table_id.
+                     * @type {number}
+                     */
+                    TableRewrite.prototype.table_id = 0;
+
+                    /**
+                     * TableRewrite parent_id.
+                     * @type {number}
+                     */
+                    TableRewrite.prototype.parent_id = 0;
+
+                    /**
+                     * Creates a new TableRewrite instance using the specified properties.
+                     * @param {cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties=} [properties] Properties to set
+                     * @returns {cockroach.sql.jobs.RestoreDetails.TableRewrite} TableRewrite instance
+                     */
+                    TableRewrite.create = function create(properties) {
+                        return new TableRewrite(properties);
+                    };
+
+                    /**
+                     * Encodes the specified TableRewrite message. Does not implicitly {@link cockroach.sql.jobs.RestoreDetails.TableRewrite.verify|verify} messages.
+                     * @param {cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties} message TableRewrite message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    TableRewrite.encode = function encode(message, writer) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (message.table_id != null && message.hasOwnProperty("table_id"))
+                            writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.table_id);
+                        if (message.parent_id != null && message.hasOwnProperty("parent_id"))
+                            writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.parent_id);
+                        return writer;
+                    };
+
+                    /**
+                     * Encodes the specified TableRewrite message, length delimited. Does not implicitly {@link cockroach.sql.jobs.RestoreDetails.TableRewrite.verify|verify} messages.
+                     * @param {cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties} message TableRewrite message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    TableRewrite.encodeDelimited = function encodeDelimited(message, writer) {
+                        return this.encode(message, writer).ldelim();
+                    };
+
+                    /**
+                     * Decodes a TableRewrite message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.sql.jobs.RestoreDetails.TableRewrite} TableRewrite
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    TableRewrite.decode = function decode(reader, length) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.sql.jobs.RestoreDetails.TableRewrite();
+                        while (reader.pos < end) {
+                            let tag = reader.uint32();
+                            switch (tag >>> 3) {
+                            case 1:
+                                message.table_id = reader.uint32();
+                                break;
+                            case 2:
+                                message.parent_id = reader.uint32();
+                                break;
+                            default:
+                                reader.skipType(tag & 7);
+                                break;
+                            }
+                        }
+                        return message;
+                    };
+
+                    /**
+                     * Decodes a TableRewrite message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.sql.jobs.RestoreDetails.TableRewrite} TableRewrite
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    TableRewrite.decodeDelimited = function decodeDelimited(reader) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader(reader);
+                        return this.decode(reader, reader.uint32());
+                    };
+
+                    /**
+                     * Verifies a TableRewrite message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    TableRewrite.verify = function verify(message) {
+                        if (typeof message !== "object" || message === null)
+                            return "object expected";
+                        if (message.table_id != null && message.hasOwnProperty("table_id"))
+                            if (!$util.isInteger(message.table_id))
+                                return "table_id: integer expected";
+                        if (message.parent_id != null && message.hasOwnProperty("parent_id"))
+                            if (!$util.isInteger(message.parent_id))
+                                return "parent_id: integer expected";
+                        return null;
+                    };
+
+                    /**
+                     * Creates a TableRewrite message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.jobs.RestoreDetails.TableRewrite} TableRewrite
+                     */
+                    TableRewrite.fromObject = function fromObject(object) {
+                        if (object instanceof $root.cockroach.sql.jobs.RestoreDetails.TableRewrite)
+                            return object;
+                        let message = new $root.cockroach.sql.jobs.RestoreDetails.TableRewrite();
+                        if (object.table_id != null)
+                            message.table_id = object.table_id >>> 0;
+                        if (object.parent_id != null)
+                            message.parent_id = object.parent_id >>> 0;
+                        return message;
+                    };
+
+                    /**
+                     * Creates a TableRewrite message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.sql.jobs.RestoreDetails.TableRewrite.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.jobs.RestoreDetails.TableRewrite} TableRewrite
+                     */
+                    TableRewrite.from = TableRewrite.fromObject;
+
+                    /**
+                     * Creates a plain object from a TableRewrite message. Also converts values to other types if specified.
+                     * @param {cockroach.sql.jobs.RestoreDetails.TableRewrite} message TableRewrite
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    TableRewrite.toObject = function toObject(message, options) {
+                        if (!options)
+                            options = {};
+                        let object = {};
+                        if (options.defaults) {
+                            object.table_id = 0;
+                            object.parent_id = 0;
+                        }
+                        if (message.table_id != null && message.hasOwnProperty("table_id"))
+                            object.table_id = message.table_id;
+                        if (message.parent_id != null && message.hasOwnProperty("parent_id"))
+                            object.parent_id = message.parent_id;
+                        return object;
+                    };
+
+                    /**
+                     * Creates a plain object from this TableRewrite message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    TableRewrite.prototype.toObject = function toObject(options) {
+                        return this.constructor.toObject(this, options);
+                    };
+
+                    /**
+                     * Converts this TableRewrite to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    TableRewrite.prototype.toJSON = function toJSON() {
+                        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                    };
+
+                    return TableRewrite;
+                })();
+
                 return RestoreDetails;
             })();
 

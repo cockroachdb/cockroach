@@ -18090,6 +18090,129 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
+            namespace RestoreDetails {
+
+                type TableRewrite$Properties = {
+                    table_id?: number;
+                    parent_id?: number;
+                };
+
+                /**
+                 * Constructs a new TableRewrite.
+                 * @exports cockroach.sql.jobs.RestoreDetails.TableRewrite
+                 * @constructor
+                 * @param {cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties=} [properties] Properties to set
+                 */
+                class TableRewrite {
+
+                    /**
+                     * Constructs a new TableRewrite.
+                     * @exports cockroach.sql.jobs.RestoreDetails.TableRewrite
+                     * @constructor
+                     * @param {cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties=} [properties] Properties to set
+                     */
+                    constructor(properties?: cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties);
+
+                    /**
+                     * TableRewrite table_id.
+                     * @type {number}
+                     */
+                    public table_id: number;
+
+                    /**
+                     * TableRewrite parent_id.
+                     * @type {number}
+                     */
+                    public parent_id: number;
+
+                    /**
+                     * Creates a new TableRewrite instance using the specified properties.
+                     * @param {cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties=} [properties] Properties to set
+                     * @returns {cockroach.sql.jobs.RestoreDetails.TableRewrite} TableRewrite instance
+                     */
+                    public static create(properties?: cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties): cockroach.sql.jobs.RestoreDetails.TableRewrite;
+
+                    /**
+                     * Encodes the specified TableRewrite message. Does not implicitly {@link cockroach.sql.jobs.RestoreDetails.TableRewrite.verify|verify} messages.
+                     * @param {cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties} message TableRewrite message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encode(message: cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Encodes the specified TableRewrite message, length delimited. Does not implicitly {@link cockroach.sql.jobs.RestoreDetails.TableRewrite.verify|verify} messages.
+                     * @param {cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties} message TableRewrite message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encodeDelimited(message: cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Decodes a TableRewrite message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.sql.jobs.RestoreDetails.TableRewrite} TableRewrite
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.sql.jobs.RestoreDetails.TableRewrite;
+
+                    /**
+                     * Decodes a TableRewrite message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.sql.jobs.RestoreDetails.TableRewrite} TableRewrite
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.sql.jobs.RestoreDetails.TableRewrite;
+
+                    /**
+                     * Verifies a TableRewrite message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    public static verify(message: { [k: string]: any }): string;
+
+                    /**
+                     * Creates a TableRewrite message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.jobs.RestoreDetails.TableRewrite} TableRewrite
+                     */
+                    public static fromObject(object: { [k: string]: any }): cockroach.sql.jobs.RestoreDetails.TableRewrite;
+
+                    /**
+                     * Creates a TableRewrite message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.sql.jobs.RestoreDetails.TableRewrite.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.jobs.RestoreDetails.TableRewrite} TableRewrite
+                     */
+                    public static from(object: { [k: string]: any }): cockroach.sql.jobs.RestoreDetails.TableRewrite;
+
+                    /**
+                     * Creates a plain object from a TableRewrite message. Also converts values to other types if specified.
+                     * @param {cockroach.sql.jobs.RestoreDetails.TableRewrite} message TableRewrite
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public static toObject(message: cockroach.sql.jobs.RestoreDetails.TableRewrite, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Creates a plain object from this TableRewrite message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Converts this TableRewrite to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    public toJSON(): { [k: string]: any };
+                }
+            }
+
             type SchemaChangeDetails$Properties = {
                 read_as_of?: cockroach.util.hlc.Timestamp$Properties;
             };
