@@ -19,10 +19,8 @@ package sql
 import (
 	"bytes"
 	"fmt"
-	"reflect"
 	"sync"
 
-	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -31,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -44,10 +41,9 @@ var scanNodePool = sync.Pool{
 // A scanNode handles scanning over the key/value pairs for a table and
 // reconstructing them into rows.
 type scanNode struct {
-	p        *planner
-	desc     *sqlbase.TableDescriptor
-	descCopy sqlbase.TableDescriptor
-	index    *sqlbase.IndexDescriptor
+	p     *planner
+	desc  *sqlbase.TableDescriptor
+	index *sqlbase.IndexDescriptor
 
 	// Set if an index was explicitly specified.
 	specifiedIndex *sqlbase.IndexDescriptor
@@ -133,11 +129,7 @@ func (n *scanNode) Start(runParams) error {
 		n.valNeededForCol, false /* returnRangeInfo */, &n.p.alloc)
 }
 
-func (n *scanNode) Close(ctx context.Context) {
-	if n.desc != nil && !reflect.DeepEqual(n.descCopy, *n.desc) {
-		log.Fatalf(ctx, "scanNode.desc unexpectedly modified:\n%s",
-			pretty.Diff(*n.desc, n.descCopy))
-	}
+func (n *scanNode) Close(context.Context) {
 	*n = scanNode{}
 	scanNodePool.Put(n)
 }
@@ -206,7 +198,6 @@ func (n *scanNode) initTable(
 	wantedColumns []parser.ColumnID,
 ) error {
 	n.desc = desc
-	n.descCopy = *desc
 
 	if !p.skipSelectPrivilegeChecks {
 		if err := p.CheckPrivilege(n.desc, privilege.SELECT); err != nil {
