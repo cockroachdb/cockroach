@@ -838,7 +838,7 @@ func restorePlanHook(
 			Username:    p.User(),
 			Details:     jobs.RestoreDetails{},
 		})
-		res, err := restore(
+		res, restoreErr := restore(
 			ctx,
 			p.ExecCfg().DB,
 			p.ExecCfg().Gossip,
@@ -848,15 +848,11 @@ func restorePlanHook(
 			restoreStmt.Options,
 			job,
 		)
-		if err != nil {
-			job.Failed(ctx, err)
+		if err := job.FinishedWith(ctx, restoreErr); err != nil {
 			return nil, err
 		}
-		if err := job.Succeeded(ctx); err != nil {
-			// An error while marking the job as successful is not important enough to
-			// merit failing the entire restore.
-			log.Errorf(ctx, "RESTORE ignoring error while marking job %d (%s) as successful: %+v",
-				job.ID(), description, err)
+		if restoreErr != nil {
+			return nil, restoreErr
 		}
 		// TODO(benesch): emit periodic progress updates once we have the
 		// infrastructure to stream responses.
