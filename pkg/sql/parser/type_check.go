@@ -397,6 +397,9 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 			expr.WindowDef.Partitions[i] = typedPartition
 		}
 		for i, orderBy := range expr.WindowDef.OrderBy {
+			if orderBy.OrderType != OrderByColumn {
+				return nil, errors.New("ORDER BY INDEX in window definition is not supported")
+			}
 			typedOrderBy, err := orderBy.Expr.TypeCheck(ctx, TypeAny)
 			if err != nil {
 				return nil, err
