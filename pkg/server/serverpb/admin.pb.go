@@ -92,6 +92,8 @@
 		ProblemRangesRequest
 		Failure
 		ProblemRangesResponse
+		RangeRequest
+		RangeResponse
 */
 package serverpb
 
