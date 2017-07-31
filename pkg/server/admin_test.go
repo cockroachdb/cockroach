@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -41,10 +42,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -1063,6 +1066,66 @@ func TestHealthAPI(t *testing.T) {
 	var resp serverpb.HealthResponse
 	if err := getAdminJSONProto(s, "health", &resp); !testutils.IsError(err, expected) {
 		t.Errorf("expected %q error, got %v", expected, err)
+	}
+}
+
+func TestAdminAPIJobs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+	sqlDB := sqlutils.MakeSQLRunner(t, conn)
+
+	testJobs := []struct {
+		id      int64
+		status  jobs.Status
+		details jobs.Details
+	}{
+		{1, jobs.StatusRunning, jobs.RestoreDetails{}},
+		{2, jobs.StatusRunning, jobs.BackupDetails{}},
+		{3, jobs.StatusSucceeded, jobs.BackupDetails{}},
+	}
+	for _, job := range testJobs {
+		payload := jobs.Payload{Details: jobs.WrapPayloadDetails(job.details)}
+		payloadBytes, err := payload.Marshal()
+		if err != nil {
+			t.Fatal(err)
+		}
+		sqlDB.Exec(
+			`INSERT INTO system.jobs (id, status, payload) VALUES ($1, $2, $3)`,
+			job.id, job.status, payloadBytes,
+		)
+	}
+
+	const invalidJobType = math.MaxInt32
+
+	testCases := []struct {
+		uri         string
+		expectedIDs []int64
+	}{
+		{"jobs", []int64{3, 2, 1}},
+		{"jobs?limit=1", []int64{3}},
+		{"jobs?status=running", []int64{2, 1}},
+		{"jobs?status=succeeded", []int64{3}},
+		{"jobs?status=pending", []int64{}},
+		{"jobs?status=garbage", []int64{}},
+		{fmt.Sprintf("jobs?type=%d", jobs.TypeBackup), []int64{3, 2}},
+		{fmt.Sprintf("jobs?type=%d", jobs.TypeRestore), []int64{1}},
+		{fmt.Sprintf("jobs?type=%d", invalidJobType), []int64{}},
+		{fmt.Sprintf("jobs?status=running&type=%d", jobs.TypeBackup), []int64{2}},
+	}
+	for i, testCase := range testCases {
+		var res serverpb.JobsResponse
+		if err := getAdminJSONProto(s, testCase.uri, &res); err != nil {
+			t.Fatal(err)
+		}
+		resIDs := []int64{}
+		for _, job := range res.Jobs {
+			resIDs = append(resIDs, job.ID)
+		}
+		if e, a := testCase.expectedIDs, resIDs; !reflect.DeepEqual(e, a) {
+			t.Errorf("%d: expected job IDs %v, but got %v", i, e, a)
+		}
 	}
 }
 
