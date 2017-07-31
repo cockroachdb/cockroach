@@ -637,21 +637,18 @@ func backupPlanHook(
 			Username:    p.User(),
 			Details:     jobs.BackupDetails{},
 		})
-		if err := backup(ctx,
+		backupErr := backup(ctx,
 			p.ExecCfg().DB,
 			p.ExecCfg().Gossip,
 			exportStore,
 			job,
 			&backupDesc,
-		); err != nil {
-			job.Failed(ctx, err)
+		)
+		if err := job.FinishedWith(ctx, backupErr); err != nil {
 			return nil, err
 		}
-		if err := job.Succeeded(ctx); err != nil {
-			// An error while marking the job as successful is not important enough to
-			// merit failing the entire backup.
-			log.Errorf(ctx, "BACKUP ignoring error while marking job %d (%s) as successful: %+v",
-				job.ID(), description, err)
+		if backupErr != nil {
+			return nil, backupErr
 		}
 		// TODO(benesch): emit periodic progress updates once we have the
 		// infrastructure to stream responses.
