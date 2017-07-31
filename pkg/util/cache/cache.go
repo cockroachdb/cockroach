@@ -13,8 +13,6 @@
 // permissions and limitations under the License.
 //
 // This code is based on: https://github.com/golang/groupcache/
-//
-// Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 package cache
 

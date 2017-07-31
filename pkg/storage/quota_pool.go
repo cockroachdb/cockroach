@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Irfan Sharif (irfansharif@cockroachlabs.com)
 
 // The code below is a modified version of a similar structure found in
 // grpc-go (github.com/grpc/grpc-go/blob/b2fae0c/transport/control.go).
