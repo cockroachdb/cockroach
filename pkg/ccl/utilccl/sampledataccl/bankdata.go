@@ -382,8 +382,7 @@ func (d *bankData) NextSplit() ([]string, bool) {
 	if d.splitIdx+1 >= d.Ranges {
 		return nil, false
 	}
-	// TODO(dan): This doesn't make evenly sized splits.
-	split := []string{strconv.Itoa(d.splitIdx)}
+	split := []string{strconv.Itoa((d.splitIdx + 1) * (d.Rows / d.Ranges))}
 	d.splitIdx++
 	return split, true
 }
