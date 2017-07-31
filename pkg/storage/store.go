@@ -1513,6 +1513,10 @@ func (s *Store) Bootstrap(ctx context.Context, ident roachpb.StoreIdent) error {
 		return errors.Errorf("store %s is already bootstrapped", s)
 	}
 	ctx = s.AnnotateCtx(ctx)
+
+	// TODO(tschottdorf): write a ClusterVersion here (before checking whether
+	// the engine is empty, to tolerate crashes). Needs some plumbing.
+
 	if err := checkEngineEmpty(ctx, s.engine); err != nil {
 		return errors.Wrap(err, "cannot verify empty engine for bootstrap")
 	}

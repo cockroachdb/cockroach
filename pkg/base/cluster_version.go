@@ -21,7 +21,7 @@ var (
 	// by this binary. If this binary is started using a store that has
 	// data marked with an earlier version than MinimumSupportedVersion,
 	// then the binary will exit with an error.
-	MinimumSupportedVersion = VersionBase
+	MinimumSupportedVersion = VersionMajorOneMinorZero
 
 	// ServerVersion is the version of this binary.
 	ServerVersion = VersionSplitHardStateBelowRaft
@@ -39,8 +39,8 @@ var (
 	// VersionRaftLogTruncationBelowRaft is https://github.com/cockroachdb/cockroach/pull/16993.
 	VersionRaftLogTruncationBelowRaft = roachpb.Version{Major: 1, Minor: 0, Unstable: 1}
 
-	// VersionBase is the empty version and corresponds to any binary
-	// older than 1.0.1, though these binaries won't know anything
-	// about the mechanism in which this version is used.
-	VersionBase = roachpb.Version{Major: 1}
+	// VersionMajorOneMinorZero corresponds to any binary older than 1.0-1,
+	// though these binaries won't know anything about the mechanism in which
+	// this version is used.
+	VersionMajorOneMinorZero = roachpb.Version{Major: 1}
 )

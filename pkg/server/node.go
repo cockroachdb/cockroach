@@ -456,7 +456,7 @@ func (n *Node) initStores(
 	// Read persisted ClusterVersion from each configured store to
 	// verify there are no stores with data too old or too new for this
 	// binary.
-	if _, err := n.stores.ReadClusterVersion(ctx); err != nil {
+	if _, err := n.stores.SynthesizeClusterVersion(ctx); err != nil {
 		return err
 	}
 
