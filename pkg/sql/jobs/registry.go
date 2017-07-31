@@ -101,7 +101,10 @@ const DefaultCancelInterval = base.DefaultHeartbeatInterval
 
 // DefaultAdoptInterval is a reasonable interval at which to poll system.jobs
 // for jobs with expired leases.
-const DefaultAdoptInterval = 30 * time.Second
+//
+// DefaultAdoptInterval is mutable for testing. NB: Updates to this value after
+// Registry.Start has been called will not have any effect.
+var DefaultAdoptInterval = 30 * time.Second
 
 // Start polls the current node for liveness failures and cancels all registered
 // jobs if it observes a failure.
