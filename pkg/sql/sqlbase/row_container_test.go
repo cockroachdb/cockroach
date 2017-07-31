@@ -35,7 +35,9 @@ func TestRowContainer(t *testing.T) {
 				for i := range resCol {
 					resCol[i] = ResultColumn{Typ: parser.TypeInt}
 				}
-				m := mon.MakeUnlimitedMonitor(context.Background(), "test", nil, nil, math.MaxInt64)
+				m := mon.MakeUnlimitedMonitor(
+					context.Background(), "test", mon.MemoryResource, nil, nil, math.MaxInt64,
+				)
 				rc := NewRowContainer(m.MakeBoundAccount(), ColTypeInfoFromResCols(resCol), 0)
 				row := make(parser.Datums, numCols)
 				for i := 0; i < numRows; i++ {

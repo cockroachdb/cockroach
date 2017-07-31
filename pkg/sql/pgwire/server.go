@@ -106,8 +106,8 @@ type Server struct {
 		draining      bool
 	}
 
-	sqlMemoryPool mon.MemoryMonitor
-	connMonitor   mon.MemoryMonitor
+	sqlMemoryPool mon.BytesMonitor
+	connMonitor   mon.BytesMonitor
 }
 
 // ServerMetrics is the set of metrics for the pgwire server.
@@ -150,7 +150,7 @@ func MakeServer(
 	cfg *base.Config,
 	executor *sql.Executor,
 	internalMemMetrics *sql.MemoryMetrics,
-	parentMemoryMonitor *mon.MemoryMonitor,
+	parentMemoryMonitor *mon.BytesMonitor,
 	histogramWindow time.Duration,
 ) *Server {
 	server := &Server{
@@ -160,12 +160,14 @@ func MakeServer(
 		metrics:    makeServerMetrics(internalMemMetrics, histogramWindow),
 	}
 	server.sqlMemoryPool = mon.MakeMonitor("sql",
+		mon.MemoryResource,
 		server.metrics.SQLMemMetrics.CurBytesCount,
 		server.metrics.SQLMemMetrics.MaxBytesHist,
 		0, noteworthySQLMemoryUsageBytes)
 	server.sqlMemoryPool.Start(context.Background(), parentMemoryMonitor, mon.BoundAccount{})
 
 	server.connMonitor = mon.MakeMonitor("conn",
+		mon.MemoryResource,
 		server.metrics.ConnMemMetrics.CurBytesCount,
 		server.metrics.ConnMemMetrics.MaxBytesHist,
 		int64(connReservationBatchSize)*baseSQLMemoryBudget, noteworthyConnMemoryUsageBytes)

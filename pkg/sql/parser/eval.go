@@ -1871,7 +1871,7 @@ type EvalContext struct {
 
 	collationEnv CollationEnvironment
 
-	Mon *mon.MemoryMonitor
+	Mon *mon.BytesMonitor
 
 	// ActiveMemAcc is the account to which values are allocated during
 	// evaluation. It can change over the course of evaluation, such as on a
@@ -1884,6 +1884,7 @@ func MakeTestingEvalContext() EvalContext {
 	ctx := EvalContext{}
 	monitor := mon.MakeMonitor(
 		"test-monitor",
+		mon.MemoryResource,
 		nil,           /* curCount */
 		nil,           /* maxHist */
 		-1,            /* increment */

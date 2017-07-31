@@ -225,7 +225,7 @@ type tableUpserter struct {
 	conflictIndex sqlbase.IndexDescriptor
 	isUpsertAlias bool
 	alloc         *sqlbase.DatumAlloc
-	mon           *mon.MemoryMonitor
+	mon           *mon.BytesMonitor
 	collectRows   bool
 
 	// These are set for ON CONFLICT DO UPDATE, but not for DO NOTHING

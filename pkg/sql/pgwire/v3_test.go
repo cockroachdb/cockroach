@@ -35,7 +35,9 @@ import (
 
 func makeTestV3Conn(c net.Conn) v3Conn {
 	metrics := makeServerMetrics(nil, metric.TestSampleInterval)
-	mon := mon.MakeUnlimitedMonitor(context.Background(), "test", nil, nil, 1000)
+	mon := mon.MakeUnlimitedMonitor(
+		context.Background(), "test", mon.MemoryResource, nil, nil, 1000,
+	)
 	exec := sql.NewExecutor(
 		sql.ExecutorConfig{
 			AmbientCtx:              log.AmbientContext{Tracer: tracing.NewTracer()},
