@@ -59,7 +59,7 @@ data "template_file" "supervisor" {
     # If join_all is true, --join is instead all nodes.
     join_address = "${var.join_all == "true" ? join(",", google_compute_instance.cockroach.*.network_interface.0.access_config.0.assigned_nat_ip) : element(concat(split(",", ""), google_compute_instance.cockroach.*.network_interface.0.access_config.0.assigned_nat_ip), count.index == 0 ? 0 : 1)}"
     cockroach_flags = "${var.cockroach_flags}"
-    # If the following changes, (*terrafarm.Farmer).Add() must change too.
+    # If the following changes, (*terrafarm.Farmer).Resize must change too.
     cockroach_env = "${var.cockroach_env}"
     benchmark_name = "${var.benchmark_name}"
   }
