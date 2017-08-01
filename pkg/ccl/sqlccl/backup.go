@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -475,9 +476,10 @@ func backup(
 			mu.Lock()
 			for _, file := range res.(*roachpb.ExportResponse).Files {
 				mu.files = append(mu.files, BackupDescriptor_File{
-					Span:   file.Span,
-					Path:   file.Path,
-					Sha512: file.Sha512,
+					Span:     file.Span,
+					Path:     file.Path,
+					Sha512:   file.Sha512,
+					DataSize: uint64(file.Exported.DataSize),
 				})
 				mu.exported.Add(file.Exported)
 			}
@@ -694,6 +696,7 @@ func showBackupPlanHook(
 		{Name: "table", Typ: parser.TypeString},
 		{Name: "start_time", Typ: parser.TypeTimestamp},
 		{Name: "end_time", Typ: parser.TypeTimestamp},
+		{Name: "size_bytes", Typ: parser.TypeInt},
 	}
 	fn := func(ctx context.Context) ([]parser.Datums, error) {
 		// TODO(dan): Move this span into sql.
@@ -717,14 +720,28 @@ func showBackupPlanHook(
 				}
 			}
 		}
+		descSizes := make(map[sqlbase.ID]uint64)
+		for _, file := range desc.Files {
+			// TODO(dan): This assumes each file in the backup only contains
+			// data from a single table, which is usually but not always
+			// correct. It does not account for interleaved tables or if a
+			// BACKUP happened to catch a newly created table that hadn't yet
+			// been split into its own range.
+			_, tableID, err := encoding.DecodeUvarintAscending(file.Span.Key)
+			if err != nil {
+				continue
+			}
+			descSizes[sqlbase.ID(tableID)] += file.DataSize
+		}
 		for _, descriptor := range desc.Descriptors {
 			if table := descriptor.GetTable(); table != nil {
 				dbName := descs[table.ParentID]
 				temp := parser.Datums{
 					parser.NewDString(dbName),
 					parser.NewDString(table.Name),
-					parser.MakeDTimestamp(time.Unix(0, desc.StartTime.WallTime), time.Second),
-					parser.MakeDTimestamp(time.Unix(0, desc.EndTime.WallTime), time.Second),
+					parser.MakeDTimestamp(time.Unix(0, desc.StartTime.WallTime), time.Nanosecond),
+					parser.MakeDTimestamp(time.Unix(0, desc.EndTime.WallTime), time.Nanosecond),
+					parser.NewDInt(parser.DInt(descSizes[table.ID])),
 				}
 				ret = append(ret, temp)
 			}
