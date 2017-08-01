@@ -183,29 +183,20 @@ func (nl *NodeLiveness) SetDraining(ctx context.Context, drain bool) {
 // record as decommissioning.
 func (nl *NodeLiveness) SetDecommissioning(
 	ctx context.Context, nodeID roachpb.NodeID, decommission bool,
-) {
+) error {
 	ctx = nl.ambientCtx.AnnotateCtx(ctx)
-	var err error
-	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
-		var liveness *Liveness
-		liveness, err = nl.GetLiveness(nodeID)
-		if err != nil {
-			if errors.Cause(err) == ErrNoLivenessRecord {
-				continue // expected, though should be rare in practice
-			}
-			break // failure
-		}
-		err = nl.setDecommissioningInternal(ctx, nodeID, liveness, decommission)
-		if err != nil {
+	liveness, err := nl.GetLiveness(nodeID)
+	if err != nil {
+		return errors.Wrap(err, "unable to get liveness")
+	}
+	for {
+		if err := nl.setDecommissioningInternal(ctx, nodeID, liveness, decommission); err != nil {
 			if errors.Cause(err) == errChangeDecommissioningFailed {
 				continue // expected when epoch incremented
 			}
-			break // failure
+			return err
 		}
-		break // success
-	}
-	if err != nil {
-		log.Errorf(ctx, "unable to mark node as decommissioning: %s", err)
+		return nil
 	}
 }
 
@@ -273,11 +264,13 @@ func (nl *NodeLiveness) setDecommissioningInternal(
 	}
 	newLiveness.Decommissioning = decommission
 	return nl.updateLiveness(ctx, &newLiveness, liveness, func(actual Liveness) error {
+		// FIXME(tschottdorf) nl.setSelf(actual)
 		if actual.Decommissioning == newLiveness.Decommissioning {
 			return nil
 		}
 		return errChangeDecommissioningFailed
 	})
+	// FIXME(tschottdorf) nl.setSelf(newLiveness)
 }
 
 // GetLivenessThreshold returns the maximum duration between heartbeats

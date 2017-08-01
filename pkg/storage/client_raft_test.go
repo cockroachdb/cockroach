@@ -2455,8 +2455,10 @@ func TestStoreRangeMoveDecommissioning(t *testing.T) {
 	ctx := context.Background()
 	decommingNodeIdx := 2
 	decommingNodeID := mtc.idents[decommingNodeIdx].NodeID
-	mtc.nodeLivenesses[decommingNodeIdx].
-		SetDecommissioning(ctx, decommingNodeID, true)
+	if err := mtc.nodeLivenesses[decommingNodeIdx].
+		SetDecommissioning(ctx, decommingNodeID, true); err != nil {
+		t.Fatal(err)
+	}
 
 	testutils.SucceedsSoon(t, func() error {
 		// Force the repair queues on all stores to run.
