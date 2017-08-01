@@ -4059,21 +4059,21 @@ func (s *Store) updateCommandQueueGauges() error {
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
 		rep.cmdQMu.Lock()
 
-		writes := rep.cmdQMu.global.localMetrics.writeCommands
-		writes += rep.cmdQMu.local.localMetrics.writeCommands
+		writes := rep.cmdQMu.queues[spanGlobal].localMetrics.writeCommands
+		writes += rep.cmdQMu.queues[spanLocal].localMetrics.writeCommands
 
-		reads := rep.cmdQMu.global.localMetrics.readCommands
-		reads += rep.cmdQMu.local.localMetrics.readCommands
+		reads := rep.cmdQMu.queues[spanGlobal].localMetrics.readCommands
+		reads += rep.cmdQMu.queues[spanLocal].localMetrics.readCommands
 
-		treeSize := int64(rep.cmdQMu.global.treeSize())
-		treeSize += int64(rep.cmdQMu.local.treeSize())
+		treeSize := int64(rep.cmdQMu.queues[spanGlobal].treeSize())
+		treeSize += int64(rep.cmdQMu.queues[spanLocal].treeSize())
 
-		maxOverlaps := rep.cmdQMu.global.localMetrics.maxOverlapsSeen
-		if locMax := rep.cmdQMu.local.localMetrics.maxOverlapsSeen; locMax > maxOverlaps {
+		maxOverlaps := rep.cmdQMu.queues[spanGlobal].localMetrics.maxOverlapsSeen
+		if locMax := rep.cmdQMu.queues[spanLocal].localMetrics.maxOverlapsSeen; locMax > maxOverlaps {
 			maxOverlaps = locMax
 		}
-		rep.cmdQMu.global.localMetrics.maxOverlapsSeen = 0
-		rep.cmdQMu.local.localMetrics.maxOverlapsSeen = 0
+		rep.cmdQMu.queues[spanGlobal].localMetrics.maxOverlapsSeen = 0
+		rep.cmdQMu.queues[spanLocal].localMetrics.maxOverlapsSeen = 0
 		rep.cmdQMu.Unlock()
 
 		cqSize := writes + reads
