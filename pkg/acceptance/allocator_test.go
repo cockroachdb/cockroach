@@ -159,10 +159,17 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 	}
 
 	log.Info(ctx, "restarting cluster with archived store(s)")
+	ch := make(chan error)
 	for i := 0; i < at.f.NumNodes(); i++ {
-		if err := at.f.Restart(ctx, i); err != nil {
-			t.Fatalf("error restarting node %d: %s", i, err)
+		go func(i int) { ch <- at.f.Restart(ctx, i) }(i)
+	}
+	for i := 0; i < at.f.NumNodes(); i++ {
+		if err := <-ch; err != nil {
+			t.Errorf("error restarting node %d: %s", i, err)
 		}
+	}
+	if t.Failed() {
+		t.FailNow()
 	}
 	at.f.Assert(ctx, t)
 

@@ -68,7 +68,15 @@ func TestFiveNodesAndWriters(t *testing.T) {
 	assertClusterUp := func() {
 		f.Assert(ctx, t)
 		for i := 0; i < f.NumNodes(); i++ {
-			f.AssertState(ctx, t, f.Hostname(i), "block_writer", "RUNNING")
+			if ch := f.GetProcDone(i, "block_writer"); ch == nil {
+				t.Fatalf("block writer not running on node %d", i)
+			} else {
+				select {
+				case err := <-ch:
+					t.Fatalf("block writer exited on node %d: %s", i, err)
+				default:
+				}
+			}
 		}
 	}
 
