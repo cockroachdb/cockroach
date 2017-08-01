@@ -594,7 +594,7 @@ func (rb *RowBuffer) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 
 // ConsumerDone is part of the RowSource interface.
 func (rb *RowBuffer) ConsumerDone() {
-	rb.ConsumerStatus = DrainRequested
+	atomic.StoreUint32((*uint32)(&rb.ConsumerStatus), uint32(DrainRequested))
 	if rb.args.OnConsumerDone != nil {
 		rb.args.OnConsumerDone(rb)
 	}
@@ -602,7 +602,7 @@ func (rb *RowBuffer) ConsumerDone() {
 
 // ConsumerClosed is part of the RowSource interface.
 func (rb *RowBuffer) ConsumerClosed() {
-	rb.ConsumerStatus = ConsumerClosed
+	atomic.StoreUint32((*uint32)(&rb.ConsumerStatus), uint32(ConsumerClosed))
 	if rb.args.OnConsumerClosed != nil {
 		rb.args.OnConsumerClosed(rb)
 	}
