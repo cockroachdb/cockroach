@@ -49,6 +49,9 @@ type cliContext struct {
 
 	// tableDisplayFormat indicates how to format result tables.
 	tableDisplayFormat tableDisplayFormat
+
+	// showTimes indicates whether to display query times after each result line.
+	showTimes bool
 }
 
 type tableDisplayFormat int

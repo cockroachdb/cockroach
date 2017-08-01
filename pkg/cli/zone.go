@@ -402,7 +402,7 @@ func runRmZone(cmd *cobra.Command, args []string) error {
 		}
 
 		if err := runQueryAndFormatResults(conn, os.Stdout,
-			makeQuery(`DELETE FROM system.zones WHERE id=$1`, id), cliCtx.tableDisplayFormat); err != nil {
+			makeQuery(`DELETE FROM system.zones WHERE id=$1`, id)); err != nil {
 			return err
 		}
 
