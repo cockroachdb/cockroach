@@ -59,7 +59,7 @@ type ShowColumns struct {
 // Format implements the NodeFormatter interface.
 func (node *ShowColumns) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("SHOW COLUMNS FROM ")
-	FormatNode(buf, f, node.Table)
+	FormatNode(buf, f, &node.Table)
 }
 
 // ShowDatabases represents a SHOW DATABASES statement.
@@ -99,7 +99,7 @@ type ShowIndex struct {
 // Format implements the NodeFormatter interface.
 func (node *ShowIndex) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("SHOW INDEXES FROM ")
-	FormatNode(buf, f, node.Table)
+	FormatNode(buf, f, &node.Table)
 }
 
 // ShowQueries represents a SHOW QUERIES statement
@@ -156,7 +156,7 @@ func (node *ShowConstraints) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("SHOW CONSTRAINTS")
 	if node.Table.TableNameReference != nil {
 		buf.WriteString(" FROM ")
-		FormatNode(buf, f, node.Table)
+		FormatNode(buf, f, &node.Table)
 	}
 }
 
@@ -197,7 +197,7 @@ type ShowCreateTable struct {
 // Format implements the NodeFormatter interface.
 func (node *ShowCreateTable) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("SHOW CREATE TABLE ")
-	FormatNode(buf, f, node.Table)
+	FormatNode(buf, f, &node.Table)
 }
 
 // ShowCreateView represents a SHOW CREATE VIEW statement.
@@ -208,7 +208,7 @@ type ShowCreateView struct {
 // Format implements the NodeFormatter interface.
 func (node *ShowCreateView) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("SHOW CREATE VIEW ")
-	FormatNode(buf, f, node.View)
+	FormatNode(buf, f, &node.View)
 }
 
 // ShowTransactionStatus represents a SHOW TRANSACTION STATUS statement.

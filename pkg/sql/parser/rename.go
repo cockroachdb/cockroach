@@ -56,9 +56,9 @@ func (node *RenameTable) Format(buf *bytes.Buffer, f FmtFlags) {
 	if node.IfExists {
 		buf.WriteString("IF EXISTS ")
 	}
-	FormatNode(buf, f, node.Name)
+	FormatNode(buf, f, &node.Name)
 	buf.WriteString(" RENAME TO ")
-	FormatNode(buf, f, node.NewName)
+	FormatNode(buf, f, &node.NewName)
 }
 
 // RenameIndex represents a RENAME INDEX statement.
@@ -94,7 +94,7 @@ func (node *RenameColumn) Format(buf *bytes.Buffer, f FmtFlags) {
 	if node.IfExists {
 		buf.WriteString("IF EXISTS ")
 	}
-	FormatNode(buf, f, node.Table)
+	FormatNode(buf, f, &node.Table)
 	buf.WriteString(" RENAME COLUMN ")
 	FormatNode(buf, f, node.Name)
 	buf.WriteString(" TO ")

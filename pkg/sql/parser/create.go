@@ -121,7 +121,7 @@ func (node *CreateIndex) Format(buf *bytes.Buffer, f FmtFlags) {
 		buf.WriteByte(' ')
 	}
 	buf.WriteString("ON ")
-	FormatNode(buf, f, node.Table)
+	FormatNode(buf, f, &node.Table)
 	buf.WriteString(" (")
 	FormatNode(buf, f, node.Columns)
 	buf.WriteByte(')')
@@ -347,7 +347,7 @@ func (node *ColumnTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 			FormatNode(buf, f, node.References.ConstraintName)
 		}
 		buf.WriteString(" REFERENCES ")
-		FormatNode(buf, f, node.References.Table)
+		FormatNode(buf, f, &node.References.Table)
 		if node.References.Col != "" {
 			buf.WriteString(" (")
 			FormatNode(buf, f, node.References.Col)
@@ -522,7 +522,7 @@ func (node *ForeignKeyConstraintTableDef) Format(buf *bytes.Buffer, f FmtFlags) 
 	buf.WriteString("FOREIGN KEY (")
 	FormatNode(buf, f, node.FromCols)
 	buf.WriteString(") REFERENCES ")
-	FormatNode(buf, f, node.Table)
+	FormatNode(buf, f, &node.Table)
 
 	if len(node.ToCols) > 0 {
 		buf.WriteByte(' ')
@@ -636,7 +636,7 @@ func (node *CreateTable) Format(buf *bytes.Buffer, f FmtFlags) {
 	if node.IfNotExists {
 		buf.WriteString("IF NOT EXISTS ")
 	}
-	FormatNode(buf, f, node.Table)
+	FormatNode(buf, f, &node.Table)
 	if node.As() {
 		if len(node.AsColumnNames) > 0 {
 			buf.WriteString(" (")
@@ -690,7 +690,7 @@ type CreateView struct {
 // Format implements the NodeFormatter interface.
 func (node *CreateView) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("CREATE VIEW ")
-	FormatNode(buf, f, node.Name)
+	FormatNode(buf, f, &node.Name)
 
 	if len(node.ColumnNames) > 0 {
 		buf.WriteByte(' ')
