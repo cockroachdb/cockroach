@@ -162,9 +162,9 @@ func (r *Registry) maybeCancelJobs(ctx context.Context, nl nodeLiveness) {
 	// Additionally consider handling the case where our locally-cached liveness
 	// record is expired, but a non-expired liveness record has, in fact, been
 	// successfully persisted. Rather than canceling all jobs immediately, we
-	// could instead block them from doing more work while we wait to see if we
-	// managed a successful heartbeat at the current epoch. This would require
-	// quite a bit of plumbing, though, and it's not clear it's worth it.
+	// could instead wait to see if we managed a successful heartbeat at the
+	// current epoch. The additional complexity this requires is not clearly
+	// worthwhile.
 	sameEpoch := liveness.Epoch == r.mu.epoch
 	if !sameEpoch || !liveness.IsLive(r.clock.Now(), r.clock.MaxOffset()) {
 		r.cancelAll(ctx)
