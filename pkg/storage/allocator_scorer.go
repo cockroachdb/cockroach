@@ -94,17 +94,18 @@ type candidate struct {
 	store           roachpb.StoreDescriptor
 	valid           bool
 	constraintScore float64
+	convergesScore  int
 	balanceScore    balanceDimensions
 	rangeCount      int
 	details         string
 }
 
 func (c candidate) String() string {
-	return fmt.Sprintf("s%d, valid:%t, con:%.2f, balance:%s, rangeCount:%d, details:(%s)",
-		c.store.StoreID, c.valid, c.constraintScore, c.balanceScore, c.rangeCount, c.details)
+	return fmt.Sprintf("s%d, valid:%t, constraint:%.2f, converges:%d, balance:%s, rangeCount:%d, details:(%s)",
+		c.store.StoreID, c.valid, c.constraintScore, c.convergesScore, c.balanceScore, c.rangeCount, c.details)
 }
 
-// less first compares valid, then constraint scores, then range counts.
+// less returns true if o is a better fit for some range than c is.
 func (c candidate) less(o candidate) bool {
 	if !o.valid {
 		return false
@@ -114,6 +115,9 @@ func (c candidate) less(o candidate) bool {
 	}
 	if c.constraintScore != o.constraintScore {
 		return c.constraintScore < o.constraintScore
+	}
+	if c.convergesScore != o.convergesScore {
+		return c.convergesScore < o.convergesScore
 	}
 	if c.balanceScore.totalScore() != o.balanceScore.totalScore() {
 		return c.balanceScore.totalScore() < o.balanceScore.totalScore()
@@ -154,6 +158,7 @@ var _ sort.Interface = byScoreAndID(nil)
 func (c byScoreAndID) Len() int { return len(c) }
 func (c byScoreAndID) Less(i, j int) bool {
 	if c[i].constraintScore == c[j].constraintScore &&
+		c[i].convergesScore == c[j].convergesScore &&
 		c[i].balanceScore.totalScore() == c[j].balanceScore.totalScore() &&
 		c[i].rangeCount == c[j].rangeCount &&
 		c[i].valid == c[j].valid {
@@ -182,7 +187,9 @@ func (cl candidateList) best() candidateList {
 		return cl
 	}
 	for i := 1; i < len(cl); i++ {
-		if cl[i].constraintScore < cl[0].constraintScore {
+		if cl[i].constraintScore < cl[0].constraintScore ||
+			(cl[i].constraintScore == cl[len(cl)-1].constraintScore &&
+				cl[i].convergesScore < cl[len(cl)-1].convergesScore) {
 			return cl[:i]
 		}
 	}
@@ -205,7 +212,9 @@ func (cl candidateList) worst() candidateList {
 	}
 	// Find the worst constraint values.
 	for i := len(cl) - 2; i >= 0; i-- {
-		if cl[i].constraintScore > cl[len(cl)-1].constraintScore {
+		if cl[i].constraintScore > cl[len(cl)-1].constraintScore ||
+			(cl[i].constraintScore == cl[len(cl)-1].constraintScore &&
+				cl[i].convergesScore > cl[len(cl)-1].convergesScore) {
 			return cl[i+1:]
 		}
 	}
@@ -224,7 +233,7 @@ func (cl candidateList) betterThan(c candidate) candidateList {
 }
 
 // selectGood randomly chooses a good candidate store from a sorted (by score
-// reserved) candidate list using the provided random generator.
+// reversed) candidate list using the provided random generator.
 func (cl candidateList) selectGood(randGen allocatorRand) *roachpb.StoreDescriptor {
 	if len(cl) == 0 {
 		return nil
@@ -298,8 +307,7 @@ func allocateCandidates(
 			constraintScore: diversityScore + float64(preferredMatched),
 			balanceScore:    balanceScore,
 			rangeCount:      int(s.Capacity.RangeCount),
-			details: fmt.Sprintf("diversity=%.2f, preferred=%d",
-				diversityScore, preferredMatched),
+			details:         fmt.Sprintf("diversity=%.2f, preferred=%d", diversityScore, preferredMatched),
 		})
 	}
 	if deterministic {
@@ -341,7 +349,7 @@ func removeCandidates(
 		}
 		diversityScore := diversityRemovalScore(s.Node.NodeID, existingNodeLocalities)
 		balanceScore := balanceScore(sl, s.Capacity, rangeInfo)
-		var convergesScore float64
+		var convergesScore int
 		if !rebalanceFromConvergesOnMean(sl, s.Capacity, rangeInfo) {
 			// If removing this candidate replica does not converge the store
 			// stats to their means, we make it less attractive for removal by
@@ -353,11 +361,11 @@ func removeCandidates(
 		candidates = append(candidates, candidate{
 			store:           s,
 			valid:           true,
-			constraintScore: diversityScore + float64(preferredMatched) + convergesScore,
+			constraintScore: diversityScore + float64(preferredMatched),
+			convergesScore:  convergesScore,
 			balanceScore:    balanceScore,
 			rangeCount:      int(s.Capacity.RangeCount),
-			details: fmt.Sprintf("diversity=%.2f, preferred=%d, converge=%.2f",
-				diversityScore, preferredMatched, convergesScore),
+			details:         fmt.Sprintf("diversity=%.2f, preferred=%d", diversityScore, preferredMatched),
 		})
 	}
 	if deterministic {
@@ -456,7 +464,7 @@ func rebalanceCandidates(
 			}
 			diversityScore := diversityRemovalScore(s.Node.NodeID, existingNodeLocalities)
 			balanceScore := balanceScore(sl, s.Capacity, rangeInfo)
-			var convergesScore float64
+			var convergesScore int
 			if !rebalanceFromConvergesOnMean(sl, s.Capacity, rangeInfo) {
 				// Similarly to in removeCandidates, any replica whose removal
 				// would not converge the range stats to their means is given a
@@ -467,18 +475,18 @@ func rebalanceCandidates(
 			existingCandidates = append(existingCandidates, candidate{
 				store:           s,
 				valid:           true,
-				constraintScore: diversityScore + float64(storeInfo.matched) + convergesScore,
+				constraintScore: diversityScore + float64(storeInfo.matched),
+				convergesScore:  convergesScore,
 				balanceScore:    balanceScore,
 				rangeCount:      int(s.Capacity.RangeCount),
-				details: fmt.Sprintf("diversity=%.2f, preferred=%d, converge=%.2f",
-					diversityScore, storeInfo.matched, convergesScore),
+				details:         fmt.Sprintf("diversity=%.2f, preferred=%d", diversityScore, storeInfo.matched),
 			})
 		} else {
 			if !storeInfo.ok || !maxCapacityOK {
 				continue
 			}
 			balanceScore := balanceScore(sl, s.Capacity, rangeInfo)
-			var convergesScore float64
+			var convergesScore int
 			if rebalanceToConvergesOnMean(sl, s.Capacity, rangeInfo) {
 				// This is the counterpart of !rebalanceFromConvergesOnMean from
 				// the existing candidates. Candidates whose addition would
@@ -496,11 +504,11 @@ func rebalanceCandidates(
 			candidates = append(candidates, candidate{
 				store:           s,
 				valid:           true,
-				constraintScore: diversityScore + float64(storeInfo.matched) + convergesScore,
+				constraintScore: diversityScore + float64(storeInfo.matched),
+				convergesScore:  convergesScore,
 				balanceScore:    balanceScore,
 				rangeCount:      int(s.Capacity.RangeCount),
-				details: fmt.Sprintf("diversity=%.2f, preferred=%d, converge=%.2f",
-					diversityScore, storeInfo.matched, convergesScore),
+				details:         fmt.Sprintf("diversity=%.2f, preferred=%d", diversityScore, storeInfo.matched),
 			})
 		}
 	}
