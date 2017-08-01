@@ -768,6 +768,35 @@ type DistLoader struct {
 	distSQLPlanner *distSQLPlanner
 }
 
+// bufferedRowWriter is a thin wrapper around a RowContainer.
+type bufferedRowWriter struct {
+	statementType parser.StatementType
+	rowContainer  *sqlbase.RowContainer
+	rowsAffected  int
+}
+
+func newBufferedRowWriter(
+	statementType parser.StatementType, rowContainer *sqlbase.RowContainer,
+) *bufferedRowWriter {
+	return &bufferedRowWriter{statementType: statementType, rowContainer: rowContainer}
+}
+
+// StatementType implements the rowResultWriter interface.
+func (b *bufferedRowWriter) StatementType() parser.StatementType {
+	return b.statementType
+}
+
+// IncrementRowsAffected implements the rowResultWriter interface.
+func (b *bufferedRowWriter) IncrementRowsAffected(n int) {
+	b.rowsAffected += n
+}
+
+// AddRow implements the rowResultWriter interface.
+func (b *bufferedRowWriter) AddRow(ctx context.Context, row parser.Datums) error {
+	_, err := b.rowContainer.AddRow(ctx, row)
+	return err
+}
+
 // LoadCSV TODO(dan): This entire method is a placeholder to get the distsql
 // plumbing worked out while mjibson works on the new processors and router. The
 // intention is to manually create the distsql plan, so we can have control over
@@ -840,7 +869,8 @@ func (l *DistLoader) LoadCSV(
 	)
 
 	ci := sqlbase.ColTypeInfoFromColTypes([]sqlbase.ColumnType{colTypeBytes})
-	rows := sqlbase.NewRowContainer(*evalCtx.ActiveMemAcc, ci, 0)
+	rowContainer := sqlbase.NewRowContainer(*evalCtx.ActiveMemAcc, ci, 0)
+	rowResultWriter := newBufferedRowWriter(parser.Rows, rowContainer)
 
 	planCtx := l.distSQLPlanner.NewPlanningCtx(ctx, nil)
 	// Because we're not going through the normal pathways, we have to set up
@@ -854,7 +884,7 @@ func (l *DistLoader) LoadCSV(
 
 	recv, err := makeDistSQLReceiver(
 		ctx,
-		rows,
+		rowResultWriter,
 		nil, /* rangeCache */
 		nil, /* leaseCache */
 		nil, /* txn - the flow does not read or write the database */
@@ -866,7 +896,7 @@ func (l *DistLoader) LoadCSV(
 	// TODO(dan): We really don't need the txn for this flow, so remove it once
 	// Run works without one.
 	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		rows.Clear(ctx)
+		rowContainer.Clear(ctx)
 		return l.distSQLPlanner.Run(&planCtx, txn, &p, &recv, evalCtx)
 	}); err != nil {
 		return err
@@ -875,12 +905,12 @@ func (l *DistLoader) LoadCSV(
 		return recv.err
 	}
 
-	n := rows.Len()
+	n := rowContainer.Len()
 	tableSpan := tableDesc.TableSpan()
 	prevKey := tableSpan.Key
 	var spans roachpb.Spans
 	for i := oversample - 1; i < n; i += oversample {
-		row := rows.At(i)
+		row := rowContainer.At(i)
 		b := row[0].(*parser.DBytes)
 		k, err := keys.EnsureSafeSplitKey(roachpb.Key(*b))
 		if err != nil {
@@ -892,7 +922,7 @@ func (l *DistLoader) LoadCSV(
 		})
 		prevKey = k
 	}
-	rows.Close(ctx)
+	rowContainer.Close(ctx)
 	spans = append(spans, roachpb.Span{
 		Key:    prevKey,
 		EndKey: tableSpan.EndKey,
