@@ -1239,7 +1239,7 @@ Available Commands:
   sql         open a sql shell
   user        get, set, list and remove users
   zone        get, set, list and remove zones
-  node        list nodes and show their status
+  node        list, inspect or remove nodes
   dump        dump sql tables
 
   gen         generate auxiliary files
@@ -1390,8 +1390,8 @@ func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
-	if !reflect.DeepEqual(cols, nodesColumnHeaders) {
-		t.Fatalf("columns (%s) don't match expected (%s)", cols, nodesColumnHeaders)
+	if !reflect.DeepEqual(cols, statusNodesColumnHeaders) {
+		t.Fatalf("columns (%s) don't match expected (%s)", cols, statusNodesColumnHeaders)
 	}
 
 	checkSeparatorLine(t, s)
@@ -1497,7 +1497,7 @@ func extractFields(line string) ([]string, error) {
 	// fields has two extra entries, one for the empty token to the left of the first
 	// |, and another empty one to the right of the final |. So, we need to take those
 	// out.
-	if a, e := len(fields), len(nodesColumnHeaders)+2; a != e {
+	if a, e := len(fields), len(statusNodesColumnHeaders)+2; a != e {
 		return nil, errors.Errorf("can't extract fields: # of fields (%d) != expected (%d)", a, e)
 	}
 	fields = fields[1 : len(fields)-1]

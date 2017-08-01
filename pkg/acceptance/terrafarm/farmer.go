@@ -395,10 +395,11 @@ func (f *Farmer) AssertAndStop(ctx context.Context, t testing.TB) {
 }
 
 // ExecRoot executes the given command with super-user privileges.
-func (f *Farmer) ExecRoot(ctx context.Context, i int, cmd []string) error {
+func (f *Farmer) ExecRoot(ctx context.Context, i int, cmd []string) (string, string, error) {
 	// TODO(tschottdorf): This doesn't handle escapes properly. May it never
 	// have to.
-	return f.Exec(i, "sudo "+strings.Join(cmd, " "))
+	// TODO(tschottdorf): Exec() knows stdout/stderr, easy to actually return it if needed.
+	return "", "", f.Exec(i, "sudo "+strings.Join(cmd, " "))
 }
 
 // Kill terminates the cockroach process running on the given node number.

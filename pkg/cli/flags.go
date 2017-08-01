@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/kr/text"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -60,6 +61,47 @@ var debugCtx = debugContext{
 // server-specific values of some flags.
 var serverInsecure bool
 var serverSSLCertsDir string
+var serverDecommission bool
+
+type nodeDecommissionWaitType int
+
+const (
+	nodeDecommissionWaitAll nodeDecommissionWaitType = iota
+	nodeDecommissionWaitLive
+	nodeDecommissionWaitNone
+)
+
+func (s *nodeDecommissionWaitType) String() string {
+	switch *s {
+	case nodeDecommissionWaitAll:
+		return "all"
+	case nodeDecommissionWaitLive:
+		return "live"
+	case nodeDecommissionWaitNone:
+		return "none"
+	}
+	return "???"
+}
+
+func (s *nodeDecommissionWaitType) Type() string {
+	return "string"
+}
+
+func (s *nodeDecommissionWaitType) Set(value string) error {
+	switch value {
+	case "all":
+		*s = nodeDecommissionWaitAll
+	case "live":
+		*s = nodeDecommissionWaitLive
+	case "none":
+		*s = nodeDecommissionWaitNone
+	default:
+		return errors.New("invalid value")
+	}
+	return nil
+}
+
+var nodeDecommissionWait nodeDecommissionWaitType
 
 // InitCLIDefaults is used for testing.
 func InitCLIDefaults() {
@@ -389,6 +431,13 @@ func init() {
 		stringFlag(f, &debugCtx.inputFile, cliflags.GossipInputFile, "")
 		boolFlag(f, &debugCtx.printSystemConfig, cliflags.PrintSystemConfig, false)
 	}
+
+	// Quit command.
+	boolFlag(quitCmd.Flags(), &serverDecommission, cliflags.Decommission, false)
+
+	// Decommission command.
+	varFlag(decommissionNodeCmd.Flags(), &nodeDecommissionWait, cliflags.Wait)
+
 }
 
 func extraServerFlagInit() {
