@@ -200,7 +200,10 @@ func sqlStdToDuration(s string) (duration.Duration, error) {
 				part = part[1:]
 			}
 		}
-		if part[0] == '-' {
+		if len(part) == 0 {
+			return d, errors.Errorf(errInvalidSQLDuration, s)
+		}
+		if part[0] == '-' || part[0] == '+' {
 			return d, errors.Errorf(errInvalidSQLDuration, s)
 		}
 
