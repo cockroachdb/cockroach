@@ -17,7 +17,7 @@ package parser
 
 import "testing"
 
-func TestSQLIntervalSyntax(t *testing.T) {
+func TestValidSQLIntervalSyntax(t *testing.T) {
 	testData := []struct {
 		input  string
 		output string
@@ -83,6 +83,63 @@ func TestSQLIntervalSyntax(t *testing.T) {
 		if err != nil {
 			t.Errorf("%d: %q: %v", i, test.input, err)
 			continue
+		}
+		s := dur.String()
+		if s != test.output {
+			t.Errorf(`%d: %q: got "%s", expected "%s"`, i, test.input, s, test.output)
+			continue
+		}
+
+		dur2, err := parseDuration(s)
+		if err != nil {
+			t.Errorf(`%d: %q: repr "%s" is not parsable: %v`, i, test.input, s, err)
+			continue
+		}
+		s2 := dur2.String()
+		if s2 != s {
+			t.Errorf(`%d: %q: repr "%s" does not round-trip, got "%s" instead`,
+				i, test.input, s, s2)
+		}
+
+		// Test that a Datum recognizes the format.
+		di, err := parseDInterval(test.input, second)
+		if err != nil {
+			t.Errorf(`%d: %q: unrecognized as datum: %v`, i, test.input, err)
+			continue
+		}
+		s3 := di.Duration.String()
+		if s3 != test.output {
+			t.Errorf(`%d: %q: as datum, got "%s", expected "%s"`, i, test.input, s3, test.output)
+		}
+	}
+}
+
+func TestInvalidSQLIntervalSyntax(t *testing.T) {
+	testData := []struct {
+		input  string
+		output string
+		error  string
+	}{
+		{`+`, ``, `invalid input syntax for type interval +`},
+		{`++`, ``, `invalid input syntax for type interval ++`},
+		{`--`, ``, `invalid input syntax for type interval --`},
+	}
+	for i, test := range testData {
+		dur, err := sqlStdToDuration(test.input)
+		if err != nil {
+			if test.error != "" {
+				if err.Error() != test.error {
+					t.Errorf(`%d: %q: got error "%v", expected "%s"`, i, test.input, err, test.error)
+				}
+			} else {
+				t.Errorf("%d: %q: %v", i, test.input, err)
+			}
+			continue
+		} else {
+			if test.error != "" {
+				t.Errorf(`%d: %q: expected error "%q"`, i, test.input, test.error)
+				continue
+			}
 		}
 		s := dur.String()
 		if s != test.output {
