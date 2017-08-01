@@ -157,9 +157,11 @@ func (rs ReportingSettings) HasCrashReportsEnabled() bool {
 
 // DistSQLSettings is the subset of ClusterSettings affecting DistSQL.
 type DistSQLSettings struct {
-	DistSQLUseTempStorage *settings.BoolSetting
-	DistributeIndexJoin   *settings.BoolSetting
-	PlanMergeJoins        *settings.BoolSetting
+	DistSQLUseTempStorage      *settings.BoolSetting
+	DistSQLUseTempStorageSorts *settings.BoolSetting
+	DistSQLUseTempStorageJoins *settings.BoolSetting
+	DistributeIndexJoin        *settings.BoolSetting
+	PlanMergeJoins             *settings.BoolSetting
 }
 
 // SQLStatsSettings is the subset of ClusterSettings affecting SQL statistics
@@ -454,6 +456,18 @@ func MakeClusterSettings() *Settings {
 		"sql.defaults.distsql.tempstorage",
 		"set to true to enable use of disk for larger distributed sql queries",
 		false,
+	)
+
+	s.DistSQLUseTempStorageSorts = r.RegisterBoolSetting(
+		"sql.defaults.distsql.tempstorage.sorts",
+		"set to true to enable use of disk for distributed sql sorts. sql.defaults.distsql.tempstorage must be true",
+		true,
+	)
+
+	s.DistSQLUseTempStorageJoins = r.RegisterBoolSetting(
+		"sql.defaults.distsql.tempstorage.joins",
+		"set to true to enable use of disk for distributed sql joins. sql.defaults.distsql.tempstorage must be true",
+		true,
 	)
 
 	// StmtStatsEnable determines whether to collect per-statement
