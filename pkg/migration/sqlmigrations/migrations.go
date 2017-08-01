@@ -319,18 +319,6 @@ func migrationKey(migration migrationDescriptor) roachpb.Key {
 	return append(keys.MigrationPrefix, roachpb.RKey(migration.name)...)
 }
 
-func checkQueryResults(results []sql.Result, numResults int) error {
-	for _, result := range results {
-		if result.Err != nil {
-			return result.Err
-		}
-	}
-	if a, e := len(results), numResults; a != e {
-		return errors.Errorf("number of results %d != expected %d", a, e)
-	}
-	return nil
-}
-
 func eventlogUniqueIDDefault(ctx context.Context, r runner) error {
 	const alterStmt = `ALTER TABLE system.eventlog ALTER COLUMN "uniqueID" SET DEFAULT uuid_v4();`
 
@@ -343,10 +331,10 @@ func eventlogUniqueIDDefault(ctx context.Context, r runner) error {
 	// arbitrarily long time.
 	var err error
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
-		res := r.sqlExecutor.ExecuteStatements(session, alterStmt, nil)
-		defer res.Close(ctx)
-		err = checkQueryResults(res.ResultList, 1)
+		var res sql.StatementResults
+		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, alterStmt, nil, 1)
 		if err == nil {
+			res.Close(ctx)
 			break
 		}
 		log.Warningf(ctx, "failed attempt to update system.eventlog schema: %s", err)
@@ -406,9 +394,10 @@ func optInToDiagnosticsStatReporting(ctx context.Context, r runner) error {
 	// arbitrarily long time.
 	var err error
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
-		res := r.sqlExecutor.ExecuteStatements(session, setStmt, nil)
-		err = checkQueryResults(res.ResultList, 1)
+		var res sql.StatementResults
+		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, setStmt, nil, 1)
 		if err == nil {
+			res.Close(ctx)
 			break
 		}
 		log.Warningf(ctx, "failed attempt to update setting: %v", err)

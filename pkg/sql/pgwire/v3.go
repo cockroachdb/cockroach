@@ -27,6 +27,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"bytes"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"io"
 )
 
 //go:generate stringer -type=clientMessageType
@@ -104,6 +106,10 @@ const (
 	authOK                int32 = 0
 	authCleartextPassword int32 = 3
 )
+
+// connResultsBufferSizeBytes refers to the size of the result set which we
+// buffer into memory prior to flushing to the client.
+const connResultsBufferSizeBytes = 16 << 10
 
 // preparedStatementMeta is pgwire-specific metadata which is attached to each
 // sql.PreparedStatement on a v3Conn's sql.Session.
@@ -187,6 +193,55 @@ type v3Conn struct {
 	metrics *ServerMetrics
 
 	sqlMemoryPool *mon.BytesMonitor
+
+	streamingState streamingState
+}
+
+type streamingState struct {
+	// Query state.
+	// formatCodes is an array of which indicates whether each column of a row
+	// should be sent as binary or text format. If it is nil then we send as text.
+	formatCodes     []formatCode
+	sendDescription bool
+	limit           int
+	emptyQuery      bool
+	err             error
+
+	// Current transaction state.
+	hasSentResults bool
+
+	// TODO(tso): this can theoretically be combined with v3conn.writeBuf.
+	// Currently we write to write to the v3conn.writeBuf, then we take those
+	// bytes and write them to buf. We do this since we need to length prefix
+	// each message and this is icky to figure out ahead of time.
+	buf bytes.Buffer
+	// txnStartIdx is the start of the current transaction in the buf. We keep
+	// track of this so that we can reset the current transaction if we retry.
+	txnStartIdx int
+
+	// Current statement state.
+	pgTag         string
+	columns       sqlbase.ResultColumns
+	statementType parser.StatementType
+	rowsAffected  int
+	// firstRow is true when we haven't sent a row back in a result of type
+	// parser.Rows. We only want to send the description once per result.
+	firstRow bool
+	// copyIn is set to true if we are currently copying in so that we do not
+	// send parser.RowsAffected command complete tags.
+	copyIn bool
+}
+
+func (s *streamingState) reset(formatCodes []formatCode, sendDescription bool, limit int) {
+	s.formatCodes = formatCodes
+	s.sendDescription = sendDescription
+	s.limit = limit
+	s.emptyQuery = false
+	s.hasSentResults = false
+	s.txnStartIdx = 0
+	s.err = nil
+	s.copyIn = false
+	s.buf.Reset()
 }
 
 func makeV3Conn(
@@ -511,14 +566,21 @@ func (c *v3Conn) sendAuthPasswordRequest() (string, error) {
 }
 
 func (c *v3Conn) handleSimpleQuery(buf *readBuffer) error {
+	defer c.session.FinishPlan()
 	query, err := buf.getString()
 	if err != nil {
 		return err
 	}
 
 	tracing.AnnotateTrace()
-	results := c.executor.ExecuteStatements(c.session, query, nil)
-	return c.finishExecute(results, nil, true, 0)
+	c.streamingState.reset(nil, true /* sendDescription */, 0)
+	c.session.ResultWriter = c
+	if err := c.executor.ExecuteStatements(c.session, query, nil); err != nil {
+		if err := c.setError(err); err != nil {
+			return err
+		}
+	}
+	return c.done()
 }
 
 // maxPreparedStatementArgs is the maximum number of arguments a prepared
@@ -650,7 +712,7 @@ func (c *v3Conn) handleDescribe(ctx context.Context, buf *readBuffer) error {
 			return err
 		}
 
-		return c.sendRowDescription(ctx, stmt.Columns, nil, canSendNoData(stmt.Statement))
+		return c.sendRowDescription(ctx, stmt.Columns, nil, canSendNoData(stmt.Statement), c.wr)
 	case preparePortal:
 		portal, ok := c.session.PreparedPortals.Get(name)
 		if !ok {
@@ -658,7 +720,7 @@ func (c *v3Conn) handleDescribe(ctx context.Context, buf *readBuffer) error {
 		}
 
 		portalMeta := portal.ProtocolMeta.(preparedPortalMeta)
-		return c.sendRowDescription(ctx, portal.Stmt.Columns, portalMeta.outFormats, canSendNoData(portal.Stmt.Statement))
+		return c.sendRowDescription(ctx, portal.Stmt.Columns, portalMeta.outFormats, canSendNoData(portal.Stmt.Statement), c.wr)
 	default:
 		return errors.Errorf("unknown describe type: %s", typ)
 	}
@@ -828,6 +890,7 @@ func (c *v3Conn) handleBind(ctx context.Context, buf *readBuffer) error {
 }
 
 func (c *v3Conn) handleExecute(buf *readBuffer) error {
+	defer c.session.FinishPlan()
 	portalName, err := buf.getString()
 	if err != nil {
 		return err
@@ -849,37 +912,22 @@ func (c *v3Conn) handleExecute(buf *readBuffer) error {
 	}
 
 	tracing.AnnotateTrace()
-
-	results, err := c.executor.ExecutePreparedStatement(c.session, stmt, pinfo)
+	c.streamingState.reset(portalMeta.outFormats, false /* sendDescription */, int(limit))
+	c.session.ResultWriter = c
+	err = c.executor.ExecutePreparedStatement(c.session, stmt, pinfo)
 	if err != nil {
-		return c.sendError(err)
+		if err := c.setError(err); err != nil {
+			return err
+		}
 	}
-	return c.finishExecute(results, portalMeta.outFormats, false, int(limit))
+	return c.done()
 }
 
-func (c *v3Conn) finishExecute(
-	results sql.StatementResults, formatCodes []formatCode, sendDescription bool, limit int,
-) error {
-	// Delay evaluation of c.session.Ctx().
-	defer func() {
-		results.Close(c.session.Ctx())
-		c.session.FinishPlan()
-	}()
-
-	tracing.AnnotateTrace()
-	if results.Empty {
-		// Skip executor and just send EmptyQueryResponse.
-		c.writeBuf.initMsg(serverMsgEmptyQuery)
-		return c.writeBuf.finishMsg(c.wr)
-	}
-	return c.sendResponse(c.session.Ctx(), results.ResultList, formatCodes, sendDescription, limit)
-}
-
-func (c *v3Conn) sendCommandComplete(tag []byte) error {
+func (c *v3Conn) sendCommandComplete(tag []byte, w io.Writer) error {
 	c.writeBuf.initMsg(serverMsgCommandComplete)
 	c.writeBuf.write(tag)
 	c.writeBuf.nullTerminate()
-	return c.writeBuf.finishMsg(c.wr)
+	return c.writeBuf.finishMsg(w)
 }
 
 // TODO(andrei): Figure out the correct codes to send for all the errors
@@ -947,119 +995,6 @@ func (c *v3Conn) sendError(err error) error {
 	return c.wr.Flush()
 }
 
-// sendResponse sends the results as a query response.
-func (c *v3Conn) sendResponse(
-	ctx context.Context,
-	results sql.ResultList,
-	formatCodes []formatCode,
-	sendDescription bool,
-	limit int,
-) error {
-	if len(results) == 0 {
-		return c.sendCommandComplete(nil)
-	}
-	for _, result := range results {
-		if result.Err != nil {
-			if err := c.sendError(result.Err); err != nil {
-				return err
-			}
-			break
-		}
-		if limit != 0 && result.Rows != nil && result.Rows.Len() > limit {
-			if err := c.sendInternalError(fmt.Sprintf("execute row count limits not supported: %d of %d", limit, result.Rows.Len())); err != nil {
-				return err
-			}
-			break
-		}
-
-		if result.PGTag == "INSERT" {
-			// From the postgres docs (49.5. Message Formats):
-			// `INSERT oid rows`... oid is the object ID of the inserted row if
-			//	rows is 1 and the target table has OIDs; otherwise oid is 0.
-			result.PGTag = "INSERT 0"
-		}
-		tag := append(c.tagBuf[:0], result.PGTag...)
-
-		switch result.Type {
-		case parser.RowsAffected:
-			// Send CommandComplete.
-			tag = append(tag, ' ')
-			tag = strconv.AppendInt(tag, int64(result.RowsAffected), 10)
-			if err := c.sendCommandComplete(tag); err != nil {
-				return err
-			}
-
-		case parser.Rows:
-			if sendDescription {
-				// We're not allowed to send a NoData message here, even if there are
-				// 0 result columns, since we're responding to a "Simple Query".
-				if err := c.sendRowDescription(ctx, result.Columns, formatCodes, false); err != nil {
-					return err
-				}
-			}
-
-			// Send DataRows.
-			nRows := result.Rows.Len()
-			for rowIdx := 0; rowIdx < nRows; rowIdx++ {
-				row := result.Rows.At(rowIdx)
-				c.writeBuf.initMsg(serverMsgDataRow)
-				c.writeBuf.putInt16(int16(len(row)))
-				for i, col := range row {
-					fmtCode := formatText
-					if formatCodes != nil {
-						fmtCode = formatCodes[i]
-					}
-					switch fmtCode {
-					case formatText:
-						c.writeBuf.writeTextDatum(ctx, col, c.session.Location)
-					case formatBinary:
-						c.writeBuf.writeBinaryDatum(ctx, col, c.session.Location)
-					default:
-						c.writeBuf.setError(errors.Errorf("unsupported format code %s", fmtCode))
-					}
-				}
-				if err := c.writeBuf.finishMsg(c.wr); err != nil {
-					return err
-				}
-			}
-
-			// Send CommandComplete.
-			tag = append(tag, ' ')
-			tag = strconv.AppendUint(tag, uint64(result.Rows.Len()), 10)
-			if err := c.sendCommandComplete(tag); err != nil {
-				return err
-			}
-
-		case parser.Ack, parser.DDL:
-			if result.PGTag == "SELECT" {
-				tag = append(tag, ' ')
-				tag = strconv.AppendInt(tag, int64(result.RowsAffected), 10)
-			}
-			if err := c.sendCommandComplete(tag); err != nil {
-				return err
-			}
-
-		case parser.CopyIn:
-			rows, err := c.copyIn(ctx, result.Columns)
-			if err != nil {
-				return err
-			}
-
-			// Send CommandComplete.
-			tag = append(tag, ' ')
-			tag = strconv.AppendInt(tag, rows, 10)
-			if err := c.sendCommandComplete(tag); err != nil {
-				return err
-			}
-
-		default:
-			panic(fmt.Sprintf("unexpected result type %v", result.Type))
-		}
-	}
-
-	return nil
-}
-
 // sendRowDescription sends a row description over the wire for the given
 // slice of columns. canSendNoData indicates that the current state of the
 // connection allows for short circuiting by sending the NoData message if
@@ -1069,11 +1004,15 @@ func (c *v3Conn) sendResponse(
 // Query section of the docs here:
 // https://www.postgresql.org/docs/9.6/static/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
 func (c *v3Conn) sendRowDescription(
-	ctx context.Context, columns []sqlbase.ResultColumn, formatCodes []formatCode, canSendNoData bool,
+	ctx context.Context,
+	columns []sqlbase.ResultColumn,
+	formatCodes []formatCode,
+	canSendNoData bool,
+	w io.Writer,
 ) error {
 	if len(columns) == 0 && canSendNoData {
 		c.writeBuf.initMsg(serverMsgNoData)
-		return c.writeBuf.finishMsg(c.wr)
+		return c.writeBuf.finishMsg(w)
 	}
 
 	c.writeBuf.initMsg(serverMsgRowDescription)
@@ -1105,13 +1044,12 @@ func (c *v3Conn) sendRowDescription(
 			c.writeBuf.putInt16(int16(formatCodes[i]))
 		}
 	}
-	return c.writeBuf.finishMsg(c.wr)
+	return c.writeBuf.finishMsg(w)
 }
 
 // copyIn processes COPY IN data and returns the number of rows inserted.
 // See: https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-COPY
 func (c *v3Conn) copyIn(ctx context.Context, columns []sqlbase.ResultColumn) (int64, error) {
-	var rows int64
 	defer c.session.CopyEnd(ctx)
 
 	c.writeBuf.initMsg(serverMsgCopyInResponse)
@@ -1121,30 +1059,33 @@ func (c *v3Conn) copyIn(ctx context.Context, columns []sqlbase.ResultColumn) (in
 		c.writeBuf.putInt16(int16(formatText))
 	}
 	if err := c.writeBuf.finishMsg(c.wr); err != nil {
-		return 0, err
+		return 0, sql.NewWireFailureError(err)
 	}
 	if err := c.wr.Flush(); err != nil {
-		return 0, err
+		return 0, sql.NewWireFailureError(err)
 	}
 
 	for {
 		typ, n, err := c.readBuf.readTypedMsg(c.rd)
 		c.metrics.BytesInCount.Inc(int64(n))
 		if err != nil {
-			return rows, err
+			return 0, err
 		}
-		var sr sql.StatementResults
 		var done bool
 		switch typ {
 		case clientMsgCopyData:
 			// Note: sql.Executor gets its Context from c.session.context, which
 			// has been bound by v3Conn.setupSession().
-			sr = c.executor.CopyData(c.session, string(c.readBuf.msg))
+			if err := c.executor.CopyData(c.session, string(c.readBuf.msg)); err != nil {
+				return 0, err
+			}
 
 		case clientMsgCopyDone:
 			// Note: sql.Executor gets its Context from c.session.context, which
 			// has been bound by v3Conn.setupSession().
-			sr = c.executor.CopyDone(c.session)
+			if err := c.executor.CopyDone(c.session); err != nil {
+				return 0, err
+			}
 			done = true
 
 		case clientMsgCopyFail:
@@ -1154,18 +1095,279 @@ func (c *v3Conn) copyIn(ctx context.Context, columns []sqlbase.ResultColumn) (in
 			// Spec says to "ignore Flush and Sync messages received during copy-in mode".
 
 		default:
-			return rows, c.sendError(newUnrecognizedMsgTypeErr(typ))
-		}
-		for _, res := range sr.ResultList {
-			rows += int64(res.RowsAffected)
-			if res.Err != nil {
-				return rows, c.sendError(res.Err)
-			}
+			return 0, c.sendError(newUnrecognizedMsgTypeErr(typ))
 		}
 		if done {
-			return rows, nil
+			return int64(c.streamingState.rowsAffected), nil
 		}
 	}
+}
+
+// NewGroupResultWriter implements the ResultWriter interface.
+func (c *v3Conn) NewGroupResultWriter() sql.GroupResultWriter {
+	return c
+}
+
+// SetEmptyQuery implements the ResultWriter interface.
+func (c *v3Conn) SetEmptyQuery() {
+	c.streamingState.emptyQuery = true
+}
+
+// SetEmptyQuery implements the GroupResultWriter interface.
+func (c *v3Conn) NewStatementResultWriter() sql.StatementResultWriter {
+	return c
+}
+
+// ResultsSentToClient implements the GroupResultWriter interface.
+func (c *v3Conn) ResultsSentToClient() bool {
+	return c.streamingState.hasSentResults
+}
+
+// End implements the GroupResultWriter interface.
+func (c *v3Conn) End() {
+	s := &c.streamingState
+	s.txnStartIdx = s.buf.Len()
+	s.emptyQuery = false
+	s.hasSentResults = false
+}
+
+// Reset implements the GroupResultWriter interface.
+func (c *v3Conn) Reset(ctx context.Context) {
+	s := &c.streamingState
+	if s.hasSentResults {
+		panic("cannot reset if we've already sent results for this txn")
+	}
+	s.emptyQuery = false
+	s.buf.Truncate(s.txnStartIdx)
+}
+
+// BeginResult implements the StatementResultWriter interface.
+func (c *v3Conn) BeginResult(stmt parser.Statement) {
+	state := &c.streamingState
+	state.pgTag = stmt.StatementTag()
+	state.statementType = stmt.StatementType()
+	state.rowsAffected = 0
+	state.firstRow = true
+}
+
+// GetPGTag implements the StatementResultWriter interface.
+func (c *v3Conn) PGTag() string {
+	return c.streamingState.pgTag
+}
+
+// SetColumns implements the StatementResultWriter interface.
+func (c *v3Conn) SetColumns(columns sqlbase.ResultColumns) {
+	c.streamingState.columns = columns
+}
+
+// RowsAffected implements the StatementResultWriter interface.
+func (c *v3Conn) RowsAffected() int {
+	return c.streamingState.rowsAffected
+}
+
+// EndResult implements the StatementResultWriter interface.
+func (c *v3Conn) EndResult() error {
+	state := &c.streamingState
+	if state.err != nil {
+		return state.err
+	}
+	if state.copyIn {
+		return nil
+	}
+
+	ctx := c.session.Ctx()
+	formatCodes := state.formatCodes
+	limit := state.limit
+
+	if err := c.flush(false /* forceSend */); err != nil {
+		return err
+	}
+
+	if limit != 0 && state.statementType == parser.Rows && state.rowsAffected > state.limit {
+		return c.setError(pgerror.NewError(
+			pgerror.CodeInternalError,
+			fmt.Sprintf("execute row count limits not supported: %d of %d", limit, state.rowsAffected),
+		))
+	}
+
+	if state.pgTag == "INSERT" {
+		// From the postgres docs (49.5. Message Formats):
+		// `INSERT oid rows`... oid is the object ID of the inserted row if
+		//	rows is 1 and the target table has OIDs; otherwise oid is 0.
+		state.pgTag = "INSERT 0"
+	}
+	tag := append(c.tagBuf[:0], state.pgTag...)
+
+	switch state.statementType {
+	case parser.RowsAffected:
+		tag = append(tag, ' ')
+		tag = strconv.AppendInt(tag, int64(state.rowsAffected), 10)
+		return c.sendCommandComplete(tag, &state.buf)
+
+	case parser.Rows:
+		if state.firstRow && state.sendDescription {
+			// We're not allowed to send a NoData message here, even if there are
+			// 0 result columns, since we're responding to a "Simple Query".
+			if err := c.sendRowDescription(ctx, state.columns, formatCodes, false, &state.buf); err != nil {
+				return err
+			}
+		}
+
+		tag = append(tag, ' ')
+		tag = strconv.AppendUint(tag, uint64(state.rowsAffected), 10)
+		return c.sendCommandComplete(tag, &state.buf)
+
+	case parser.Ack, parser.DDL:
+		if state.pgTag == "SELECT" {
+			tag = append(tag, ' ')
+			tag = strconv.AppendInt(tag, int64(state.rowsAffected), 10)
+		}
+		return c.sendCommandComplete(tag, &state.buf)
+
+	case parser.CopyIn:
+		state.copyIn = true
+		rowsInserted, err := c.copyIn(ctx, state.columns)
+		state.copyIn = false
+		if err != nil {
+			if err := c.setError(err); err != nil {
+				return err
+			}
+		}
+
+		tag = append(tag, ' ')
+		tag = strconv.AppendInt(tag, rowsInserted, 10)
+		return c.sendCommandComplete(tag, &state.buf)
+
+	default:
+		panic(fmt.Sprintf("unexpected result type %v", state.statementType))
+	}
+}
+
+func (c *v3Conn) setError(err error) error {
+	if _, isWireFailure := err.(sql.WireFailureError); isWireFailure {
+		return err
+	}
+
+	state := &c.streamingState
+	if state.err != nil {
+		return state.err
+	}
+
+	state.hasSentResults = true
+	state.err = err
+	state.buf.Truncate(state.txnStartIdx)
+	if err := c.flush(true); err != nil {
+		return sql.NewWireFailureError(err)
+	}
+	if err := c.sendError(err); err != nil {
+		return sql.NewWireFailureError(err)
+	}
+	return nil
+}
+
+// StatementType implements the StatementResultWriter interface.
+func (c *v3Conn) StatementType() parser.StatementType {
+	return c.streamingState.statementType
+}
+
+// IncrementRowsAffected implements the StatementResultWriter interface.
+func (c *v3Conn) IncrementRowsAffected(n int) {
+	c.streamingState.rowsAffected += n
+}
+
+// AddRow implements the StatementResultWriter interface.
+func (c *v3Conn) AddRow(ctx context.Context, row parser.Datums) error {
+	state := &c.streamingState
+	if state.err != nil {
+		return state.err
+	}
+
+	formatCodes := state.formatCodes
+	state.rowsAffected++
+	if len(state.columns) == 0 || state.statementType != parser.Rows {
+		return nil
+	}
+
+	if state.firstRow {
+		if state.sendDescription {
+			// We're not allowed to send a NoData message here, even if there are
+			// 0 result columns, since we're responding to a "Simple Query".
+			if err := c.sendRowDescription(ctx, state.columns, formatCodes, false, &state.buf); err != nil {
+				return err
+			}
+		}
+		state.firstRow = false
+	}
+
+	c.writeBuf.initMsg(serverMsgDataRow)
+	c.writeBuf.putInt16(int16(len(row)))
+	for i, col := range row {
+		fmtCode := formatText
+		if formatCodes != nil {
+			fmtCode = formatCodes[i]
+		}
+		switch fmtCode {
+		case formatText:
+			c.writeBuf.writeTextDatum(ctx, col, c.session.Location)
+		case formatBinary:
+			c.writeBuf.writeBinaryDatum(ctx, col, c.session.Location)
+		default:
+			c.writeBuf.setError(errors.Errorf("unsupported format code %s", fmtCode))
+		}
+	}
+
+	if err := c.writeBuf.finishMsg(&state.buf); err != nil {
+		return err
+	}
+
+	return c.flush(false /* forceSend */)
+}
+
+func (c *v3Conn) done() error {
+	if err := c.flush(true /* forceSend */); err != nil {
+		return err
+	}
+
+	state := &c.streamingState
+	if state.err != nil {
+		return nil
+	}
+
+	var err error
+	if state.emptyQuery {
+		c.writeBuf.initMsg(serverMsgEmptyQuery)
+		err = c.writeBuf.finishMsg(c.wr)
+	} else if !state.hasSentResults {
+		err = c.sendCommandComplete(nil, c.wr)
+	}
+
+	if err != nil {
+		return sql.NewWireFailureError(err)
+	}
+	return nil
+}
+
+// flush writes the streaming buffer to the underlying connection. If force
+// is true then we will write any data we have buffered, otherwise we will
+// only write when we exceed our buffer size.
+func (c *v3Conn) flush(forceSend bool) error {
+	state := &c.streamingState
+	if state.buf.Len() == 0 {
+		return nil
+	}
+
+	if forceSend || state.buf.Len() > connResultsBufferSizeBytes {
+		state.hasSentResults = true
+		state.txnStartIdx = 0
+		if _, err := state.buf.WriteTo(c.wr); err != nil {
+			return sql.NewWireFailureError(err)
+		}
+		if err := c.wr.Flush(); err != nil {
+			return sql.NewWireFailureError(err)
+		}
+	}
+
+	return nil
 }
 
 func newUnrecognizedMsgTypeErr(typ clientMessageType) error {
