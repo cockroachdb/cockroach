@@ -355,9 +355,17 @@ $(ARCHIVE).tmp: .buildinfo/tag .buildinfo/rev
 .buildinfo:
 	@mkdir -p $@
 
+# Do not use plumbing commands, like git diff-index, in this target. Our build
+# process modifies files quickly enough that plumbing commands report false
+# positives on filesystems with only one second of resolution as a performance
+# optimization. Porcelain commands, like git diff, exist to detect and remove
+# these false positives.
+#
+# For details, see the "Possible timestamp problems with diff-files?" thread on
+# the Git mailing list (http://marc.info/?l=git&m=131687596307197).
 .buildinfo/tag: | .buildinfo
 	@{ git describe --tags --exact-match 2> /dev/null || git rev-parse --short HEAD; } | tr -d \\n > $@
-	@git diff-index --quiet HEAD || echo -dirty >> $@
+	@git diff --quiet HEAD || echo -dirty >> $@
 
 .buildinfo/rev: | .buildinfo
 	@git rev-parse HEAD > $@
