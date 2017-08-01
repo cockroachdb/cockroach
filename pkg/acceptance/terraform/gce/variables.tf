@@ -104,7 +104,7 @@ variable "cockroach_root_disk_type" {
 #
 #   http://supervisord.org/subprocess.html#subprocess-environment
 #
-# If this changes, (*terrafarm.Farmer).Add() must change too.
+# If this changes, (*terrafarm.Farmer).Resize must change too.
 variable "cockroach_env" {
   default = ""
 }
