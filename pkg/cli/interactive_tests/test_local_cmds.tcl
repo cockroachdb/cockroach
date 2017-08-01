@@ -7,6 +7,13 @@ start_server $argv
 spawn $argv sql
 eexpect root@
 
+start_test "Check that times are displayed by default on interactive terminals."
+send "select 1;\r"
+eexpect "(1 row)"
+eexpect "Time:"
+eexpect root@
+end_test
+
 start_test "Check that \\? prints the help text."
 send "\\?\r"
 eexpect "You are using"
@@ -57,7 +64,7 @@ end_test
 
 start_test "Check that \\set without argument prints the current options"
 send "\\set\r"
-eexpect "4 rows"
+eexpect "5 rows"
 eexpect "display_format\ttsv"
 eexpect root@
 end_test
@@ -72,9 +79,10 @@ end_test
 
 start_test "Check that \\set can change the display format"
 send "\\set display_format csv\r\\set\r"
-eexpect "4 rows"
+eexpect "5 rows"
 eexpect "display_format,csv"
 eexpect root@
+send "\\set display_format tsv\r"
 end_test
 
 start_test "Check that a built-in command in the middle of a token (eg a string) is processed locally."
@@ -86,6 +94,30 @@ send "world';\r"
 eexpect "1 row"
 eexpect "hello\\\\nworld"
 eexpect root@
+end_test
+
+start_test "Check that \\set can change the display of query times"
+# by default, times are not displayed because we started with --display=tsv.
+send "select 1;\r"
+eexpect "1 row"
+expect {
+    "Time:" {
+	report "unexpected Time"
+	exit 1
+    }
+    root@ {}
+}
+# check the override
+send "\\set show_times\r\\set\r"
+eexpect "5 rows"
+eexpect "show_times\ttrue"
+eexpect root@
+send "select 1;\r"
+eexpect "1 row"
+eexpect "Time:"
+eexpect root@
+# restore
+send "\\unset show_times\r"
 end_test
 
 # Finally terminate with Ctrl+C.

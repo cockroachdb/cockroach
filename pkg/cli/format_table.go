@@ -96,16 +96,14 @@ func newRowIter(rows *sqlRows, showMoreChars bool) *rowIter {
 // printQueryOutput takes a list of column names and a list of row contents
 // writes a formatted table to 'w', or simply the tag if empty. Note that
 // printQueryOutput expects the tag to already be properly formatted.
-func printQueryOutput(
-	w io.Writer, cols []string, allRows rowStrIter, tag string, displayFormat tableDisplayFormat,
-) error {
+func printQueryOutput(w io.Writer, cols []string, allRows rowStrIter, tag string) error {
 	if len(cols) == 0 {
 		// This operation did not return rows, just show the tag.
 		fmt.Fprintln(w, tag)
 		return nil
 	}
 
-	switch displayFormat {
+	switch cliCtx.tableDisplayFormat {
 	case tableDisplayPretty:
 		// Initialize tablewriter and set column names as the header row.
 		table := tablewriter.NewWriter(w)
@@ -141,7 +139,7 @@ func printQueryOutput(
 			util.Pluralize(int64(len(allRowsSlice))))
 
 		csvWriter := csv.NewWriter(w)
-		if displayFormat == tableDisplayTSV {
+		if cliCtx.tableDisplayFormat == tableDisplayTSV {
 			csvWriter.Comma = '\t'
 		}
 		_ = csvWriter.Write(cols)
