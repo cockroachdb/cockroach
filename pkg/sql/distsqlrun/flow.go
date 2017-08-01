@@ -103,7 +103,7 @@ type Flow struct {
 	flowRegistry *flowRegistry
 	processors   []processor
 	// startables are entities that must be started when the flow starts;
-	// currently these are outboxes.
+	// currently these are outboxes and routers.
 	startables []startable
 	// syncFlowConsumer is a special outbox which instead of sending rows to
 	// another host, returns them directly (as a result to a SetupSyncFlow RPC,
@@ -208,7 +208,10 @@ func (f *Flow) setupOutboundStream(spec StreamEndpointSpec) (RowReceiver, error)
 	}
 }
 
-func (f *Flow) setupRouter(spec *OutputRouterSpec) (RowReceiver, error) {
+// setupRouter initializes a router and the outbound streams.
+//
+// Pass-through routers are not supported; they should be handled separately.
+func (f *Flow) setupRouter(spec *OutputRouterSpec) (router, error) {
 	streams := make([]RowReceiver, len(spec.Streams))
 	for i := range spec.Streams {
 		var err error
@@ -236,13 +239,40 @@ func (f *Flow) makeProcessor(ps *ProcessorSpec, inputs []RowSource) (processor, 
 	}
 	outputs := make([]RowReceiver, len(ps.Output))
 	for i := range ps.Output {
-		var err error
-		outputs[i], err = f.setupRouter(&ps.Output[i])
+		spec := &ps.Output[i]
+		if spec.Type == OutputRouterSpec_PASS_THROUGH {
+			// There is no entity that corresponds to a pass-through router - we just
+			// use its output stream directly.
+			if len(spec.Streams) != 1 {
+				return nil, errors.Errorf("expected one stream for passthrough router")
+			}
+			var err error
+			outputs[i], err = f.setupOutboundStream(spec.Streams[0])
+			if err != nil {
+				return nil, err
+			}
+			continue
+		}
+
+		r, err := f.setupRouter(spec)
 		if err != nil {
 			return nil, err
 		}
+		outputs[i] = r
+		f.startables = append(f.startables, r)
 	}
-	return newProcessor(&f.FlowCtx, &ps.Core, &ps.Post, inputs, outputs)
+	proc, err := newProcessor(&f.FlowCtx, &ps.Core, &ps.Post, inputs, outputs)
+	if err != nil {
+		return nil, err
+	}
+	// Initialize any routers (the setupRouter case above).
+	types := proc.OutputTypes()
+	for _, o := range outputs {
+		if r, ok := o.(router); ok {
+			r.init(&f.FlowCtx, types)
+		}
+	}
+	return proc, nil
 }
 
 func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
