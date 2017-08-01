@@ -1,5 +1,5 @@
 - Feature Name: distsql buffering hash router
-- Status: draft
+- Status: completed
 - Start Date: 2017-07-19
 - Authors: Radu
 - RFC PR: [#17105](https://github.com/cockroachdb/cockroach/pull/17105)
