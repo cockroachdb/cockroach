@@ -96,7 +96,7 @@ func (ro *routerOutput) addMetadataLocked(meta ProducerMetadata) {
 	ro.mu.metadataBuf = append(ro.mu.metadataBuf, meta)
 }
 
-// addRowLocked adds a row to rowBuf (potentially evicting an older row into
+// addRowLocked adds a row to rowBuf (potentially evicting the oldest row into
 // rowContainer).
 func (ro *routerOutput) addRowLocked(ctx context.Context, row sqlbase.EncDatumRow) error {
 	if ro.mu.streamStatus != NeedMoreRows {
@@ -198,9 +198,14 @@ func (rb *routerBase) start(ctx context.Context, wg *sync.WaitGroup) {
 			streamStatus := NeedMoreRows
 			ro.mu.Lock()
 			for {
-				// Send any metadata that has been buffered.
+				// Send any metadata that has been buffered. Note that we are not
+				// maintaining the relative ordering between metadata items and rows
+				// (but it doesn't matter).
 				if len(ro.mu.metadataBuf) > 0 {
 					m := ro.mu.metadataBuf[0]
+					// Reset the value so any objects it refers to can be garbage
+					// collected.
+					ro.mu.metadataBuf[0] = ProducerMetadata{}
 					ro.mu.metadataBuf = ro.mu.metadataBuf[1:]
 
 					ro.mu.Unlock()
