@@ -118,9 +118,8 @@ func (f *Farmer) AddEnvVar(key, value string) {
 	}
 }
 
-// Add provisions the given number of nodes.
-func (f *Farmer) Add(nodes int) error {
-	nodes += f.NumNodes()
+// Resize resizes a cluster given the desired number of nodes.
+func (f *Farmer) Resize(nodes int) error {
 	args := []string{
 		fmt.Sprintf("-var=num_instances=\"%d\"", nodes),
 		fmt.Sprintf("-var=stores=%s", f.Stores),
@@ -135,15 +134,16 @@ func (f *Farmer) Add(nodes int) error {
 	}
 
 	if nodes == 0 {
-		return f.runErr("terraform", f.appendDefaults(append([]string{"destroy", "--force"}, args...))...)
+		args = f.appendDefaults(append([]string{"destroy", "--force"}, args...))
+	} else {
+		args = f.appendDefaults(append([]string{"apply"}, args...))
 	}
-	return f.apply(args...)
-}
+	if stdout, stderr, err := f.run("terraform", args...); err != nil {
+		return fmt.Errorf("failed: %s\nstdout: %s\nstderr: %s", stdout, stderr, err)
+	}
+	f.refresh()
 
-// Resize is the counterpart to Add which resizes a cluster given
-// the desired number of nodes.
-func (f *Farmer) Resize(nodes int) error {
-	return f.Add(nodes - f.NumNodes())
+	return nil
 }
 
 // AbsLogDir returns the absolute log dir to which logs are written.

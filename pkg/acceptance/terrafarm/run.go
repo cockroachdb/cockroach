@@ -17,7 +17,6 @@ package terrafarm
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 	"io"
 	"os/exec"
 	"strings"
@@ -53,14 +52,6 @@ func (f *Farmer) run(cmd string, args ...string) (string, string, error) {
 	return outBuf.String(), errBuf.String(), err
 }
 
-func (f *Farmer) runErr(cmd string, args ...string) error {
-	o, e, err := f.run(cmd, args...)
-	if err != nil {
-		return fmt.Errorf("failed: %s\nstdout: %s\nstderr: %s", o, e, err)
-	}
-	return nil
-}
-
 func (f *Farmer) appendDefaults(args []string) []string {
 	return append(
 		args,
@@ -68,15 +59,6 @@ func (f *Farmer) appendDefaults(args []string) []string {
 		"-var=key_name="+f.KeyName,
 		"-state="+f.StateFile,
 		`-var=prefix="`+f.Prefix+`"`)
-}
-
-func (f *Farmer) apply(args ...string) error {
-	args = f.appendDefaults(append([]string{"apply"}, args...))
-	if err := f.runErr("terraform", args...); err != nil {
-		return err
-	}
-	f.refresh()
-	return nil
 }
 
 func (f *Farmer) output(key string) []string {
