@@ -26,7 +26,7 @@ type CopyFrom struct {
 // Format implements the NodeFormatter interface.
 func (node *CopyFrom) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("COPY ")
-	FormatNode(buf, f, node.Table)
+	FormatNode(buf, f, &node.Table)
 	if len(node.Columns) > 0 {
 		buf.WriteString(" (")
 		FormatNode(buf, f, node.Columns)
