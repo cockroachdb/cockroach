@@ -33,7 +33,7 @@ type distinct struct {
 	distinctCols map[uint32]struct{}
 	memAcc       mon.BoundAccount
 	datumAlloc   sqlbase.DatumAlloc
-	out          procOutputHelper
+	processorBase
 }
 
 var _ processor = &distinct{}

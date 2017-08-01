@@ -37,7 +37,6 @@ type sorter struct {
 	input NoMetadataRowSource
 	// rawInput is the true input, not wrapped in a NoMetadataRowSource.
 	rawInput RowSource
-	out      procOutputHelper
 	ordering sqlbase.ColumnOrdering
 	matchLen uint32
 	// count is the maximum number of rows that the sorter will push to the
@@ -50,6 +49,8 @@ type sorter struct {
 	// tempStorage is used to store rows when the working set is larger than can
 	// be stored in memory.
 	tempStorage engine.Engine
+
+	processorBase
 }
 
 var _ processor = &sorter{}

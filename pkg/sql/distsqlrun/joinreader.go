@@ -41,7 +41,8 @@ type joinReader struct {
 	alloc   sqlbase.DatumAlloc
 
 	input RowSource
-	out   procOutputHelper
+
+	processorBase
 }
 
 var _ processor = &joinReader{}

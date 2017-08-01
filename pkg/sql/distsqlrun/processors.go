@@ -31,6 +31,10 @@ import (
 // processor is a common interface implemented by all processors, used by the
 // higher-level flow orchestration code.
 type processor interface {
+	// OutputTypes returns the column types of the results (that are to be fed
+	// through an output router).
+	OutputTypes() []sqlbase.ColumnType
+
 	// Run is the main loop of the processor.
 	// If wg is non-nil, wg.Done is called before exiting.
 	Run(ctx context.Context, wg *sync.WaitGroup)
@@ -295,6 +299,15 @@ func (h *procOutputHelper) close() {
 	h.output.ProducerDone()
 }
 
+type processorBase struct {
+	out procOutputHelper
+}
+
+// OutputTypes is part of the processor interface.
+func (pb *processorBase) OutputTypes() []sqlbase.ColumnType {
+	return pb.out.outputTypes
+}
+
 // noopProcessor is a processor that simply passes rows through from the
 // synchronizer to the post-processing stage. It can be useful for its
 // post-processing or in the last stage of a computation, where we may only
@@ -302,7 +315,7 @@ func (h *procOutputHelper) close() {
 type noopProcessor struct {
 	flowCtx *FlowCtx
 	input   RowSource
-	out     procOutputHelper
+	processorBase
 }
 
 var _ processor = &noopProcessor{}
