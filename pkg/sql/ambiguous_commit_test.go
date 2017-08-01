@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -121,18 +123,25 @@ func TestAmbiguousCommit(t *testing.T) {
 				},
 			}
 
-			{
-				storeTestingKnobs := new(storage.StoreTestingKnobs)
-
-				if ambiguousSuccess {
-					storeTestingKnobs.TestingResponseFilter = func(args roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
+			if ambiguousSuccess {
+				params.Knobs.Store = &storage.StoreTestingKnobs{
+					TestingResponseFilter: func(args roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
 						if req, ok := args.GetArg(roachpb.ConditionalPut); ok {
 							return maybeRPCError(req.(*roachpb.ConditionalPutRequest))
 						}
 						return nil
-					}
+					},
 				}
-				params.Knobs.Store = storeTestingKnobs
+			}
+
+			// Avoid distSQL so we can reliably hydrate the intended dist
+			// sender's cache below.
+			{
+				distSQLOverride := &settings.EnumSetting{}
+				settings.TestingSetEnum(&distSQLOverride, int64(sql.DistSQLOff))
+				params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+					OverrideDistSQLMode: distSQLOverride,
+				}
 			}
 
 			testClusterArgs := base.TestClusterArgs{
