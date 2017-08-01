@@ -215,6 +215,7 @@ func (ib *indexBackfiller) runChunk(
 		return nil, err
 	}
 
+	retried := false
 	// Write the new index values.
 	if err := ib.flowCtx.clientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		batch := txn.NewBatch()
@@ -223,9 +224,15 @@ func (ib *indexBackfiller) runChunk(
 			// Since we're not regenerating the index entries here, if the
 			// transaction restarts the values might already have their checksums
 			// set which is invalid - clear them.
-			entry.Value.ClearChecksum()
+			if retried {
+				rawBytes := entry.Value.RawBytes
+				entry.Value.RawBytes = make([]byte, len(rawBytes))
+				copy(entry.Value.RawBytes, rawBytes)
+				entry.Value.ClearChecksum()
+			}
 			batch.InitPut(entry.Key, &entry.Value, true /* failOnTombstones */)
 		}
+		retried = true
 		if err := txn.CommitInBatch(ctx, batch); err != nil {
 			if _, ok := batch.MustPErr().GetDetail().(*roachpb.ConditionFailedError); ok {
 				return pgerror.NewError(pgerror.CodeUniqueViolationError, "")
