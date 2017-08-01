@@ -15,10 +15,13 @@
 package terrafarm
 
 import (
+	"bufio"
 	"bytes"
+	"io"
 	"io/ioutil"
 	"net"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -38,9 +41,6 @@ func (f *Farmer) defaultKeyFile() string {
 }
 
 func (f *Farmer) getSSH(host, keyfile string) (*ssh.Client, error) {
-	if len(f.nodes) == 0 {
-		f.refresh()
-	}
 	for i := range f.nodes {
 		node := &f.nodes[i]
 		if node.hostname == host {
@@ -101,13 +101,30 @@ func (f *Farmer) ssh(host, keyfile, cmd string) (string, string, error) {
 	}
 	defer s.Close()
 
-	var stdout, stderr bytes.Buffer
-
-	s.Stdout = &stdout
-	s.Stderr = &stderr
+	var wg sync.WaitGroup
+	var outBuf, errBuf bytes.Buffer
+	for writer, fn := range map[io.Writer]func() (io.Reader, error){
+		&outBuf: s.StdoutPipe,
+		&errBuf: s.StderrPipe,
+	} {
+		r, err := fn()
+		if err != nil {
+			return outBuf.String(), errBuf.String(), err
+		}
+		wg.Add(1)
+		go func(writer io.Writer) {
+			defer wg.Done()
+			scanner := bufio.NewScanner(io.TeeReader(r, writer))
+			for scanner.Scan() {
+				f.logf("%s\n", scanner.Text())
+			}
+		}(writer)
+	}
 
 	{
+		f.logf("+ %s\n", cmd)
 		err := s.Run(cmd)
-		return stdout.String(), stderr.String(), err
+		wg.Wait()
+		return outBuf.String(), errBuf.String(), err
 	}
 }

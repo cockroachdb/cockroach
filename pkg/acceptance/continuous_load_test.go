@@ -119,7 +119,8 @@ func (cl continuousLoadTest) Run(ctx context.Context, t testing.TB) {
 		}
 		f.MustDestroy(t)
 	}()
-	f.AddVars["benchmark_name"] = cl.BenchmarkPrefix + cl.shortTestTimeout()
+	f.BenchmarkName = cl.BenchmarkPrefix + cl.shortTestTimeout()
+
 	if err := f.Resize(cl.NumNodes); err != nil {
 		t.Fatal(err)
 	}
