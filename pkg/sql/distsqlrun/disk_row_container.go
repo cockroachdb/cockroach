@@ -60,25 +60,20 @@ type diskRowContainer struct {
 
 var _ sortableRowContainer = &diskRowContainer{}
 
-// makeDiskRowContainer creates a diskRowContainer with the rows from the passed
-// in rowContainer. Note that makeDiskRowContainer consumes the rows from
-// rowContainer and deletes them so rowContainer cannot be used after creating
-// a diskRowContainer. The caller must still Close() the rowContainer.
+// makeDiskRowContainer creates a diskRowContainer with the given engine as the
+// underlying store that rows are stored on.
 // Arguments:
 // 	- diskMonitor is used to monitor this diskRowContainer's disk usage.
 // 	- types is the schema of rows that will be added to this container.
 // 	- ordering is the output ordering; the order in which rows should be sorted.
-// 	- rowContainer contains the initial set of rows that this diskRowContainer
-// 	  is created with.
 // 	- e is the underlying store that rows are stored on.
 func makeDiskRowContainer(
 	ctx context.Context,
 	diskMonitor *mon.BytesMonitor,
 	types []sqlbase.ColumnType,
 	ordering sqlbase.ColumnOrdering,
-	rowContainer *memRowContainer,
 	e engine.Engine,
-) (diskRowContainer, error) {
+) diskRowContainer {
 	diskMap := engine.NewRocksDBMap(e)
 	d := diskRowContainer{
 		diskMap:       diskMap,
@@ -118,24 +113,7 @@ func makeDiskRowContainer(
 		d.encodings[i] = sqlbase.EncodingDirToDatumEncoding(orderInfo.Direction)
 	}
 
-	i := rowContainer.NewIterator(ctx)
-	defer i.Close()
-
-	for i.Rewind(); ; i.Next() {
-		if ok, err := i.Valid(); err != nil {
-			return diskRowContainer{}, err
-		} else if !ok {
-			break
-		}
-		row, err := i.Row()
-		if err != nil {
-			return diskRowContainer{}, err
-		}
-		if err := d.AddRow(ctx, row); err != nil {
-			return diskRowContainer{}, errors.Wrap(err, "could not add row")
-		}
-	}
-	return d, nil
+	return d
 }
 
 func (d *diskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
