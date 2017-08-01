@@ -1625,10 +1625,10 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 const hasNullFlag = 1 << 4
 
 func encodeArrayHeader(h arrayHeader, buf []byte) ([]byte, error) {
-	// The byte we append here is formatted as follows:
-	// * The high 4 bits encode the number of dimensions in the array.
-	// * The lowest bit records whether the array contains NULLs.
-	// * The remaining bits are reserved.
+	// The header byte we append here is formatted as follows:
+	// * The low 4 bits encode the number of dimensions in the array.
+	// * The high 4 bits are flags, with the lowest representing whether the array
+	//   contains NULLs, and the rest reserved.
 	headerByte := h.numDimensions
 	if h.hasNulls {
 		headerByte = headerByte | hasNullFlag
