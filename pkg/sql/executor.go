@@ -1496,7 +1496,8 @@ func (e *Executor) execStmtInOpenTxn(
 		// Note that Savepoint doesn't have a corresponding plan node.
 		// This here is all the execution there is.
 		txnState.retryIntent = true
-		return nil
+		statementResultWriter.BeginResult((*parser.Savepoint)(nil))
+		return statementResultWriter.EndResult()
 
 	case *parser.RollbackToSavepoint:
 		if err := parser.ValidateRestartCheckpoint(s.Savepoint); err != nil {
@@ -1515,7 +1516,11 @@ func (e *Executor) execStmtInOpenTxn(
 			txnState.mu.txn.Proto().Restart(
 				0 /* userPriority */, 0 /* upgradePriority */, hlc.Timestamp{})
 		}
-		return err
+		if err != nil {
+			return err
+		}
+		statementResultWriter.BeginResult((*parser.Savepoint)(nil))
+		return statementResultWriter.EndResult()
 
 	case *parser.Prepare:
 		// This must be handled here instead of the common path below
