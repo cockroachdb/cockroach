@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 type sqlConnI interface {
@@ -449,6 +450,7 @@ func runQuery(
 func runQueryAndFormatResults(
 	conn *sqlConn, w io.Writer, fn queryFunc, displayFormat tableDisplayFormat,
 ) error {
+	startTime := timeutil.Now()
 	rows, err := fn(conn)
 	if err != nil {
 		return err
@@ -471,6 +473,16 @@ func runQueryAndFormatResults(
 		formattedTag := getFormattedTag(rows.Tag(), rows.Result())
 		if err := printQueryOutput(w, cols, newRowIter(rows, true), formattedTag, displayFormat); err != nil {
 			return err
+		}
+		if isInteractive && displayFormat == tableDisplayPretty {
+			// Present the time since the last result, or since the
+			// beginning of execution. Currently the execution engine makes
+			// all the work upfront so most of the time is accounted for by
+			// the 1st result; this is subject to change once CockroachDB
+			// evolves to stream results as statements are executed.
+			newNow := timeutil.Now()
+			fmt.Fprintf(w, "(time: %s)\n", newNow.Sub(startTime))
+			startTime = newNow
 		}
 
 		if more, err := rows.NextResultSet(); err != nil {
