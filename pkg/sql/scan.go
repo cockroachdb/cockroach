@@ -229,7 +229,7 @@ func (n *scanNode) lookupSpecifiedIndex(indexHints *parser.IndexHints) error {
 			}
 		}
 		if n.specifiedIndex == nil {
-			return errors.Errorf("index \"%s\" not found", indexName)
+			return errors.Errorf("index %q not found", parser.ErrString(indexHints.Index))
 		}
 	} else if indexHints.IndexID != 0 {
 		// Search index by ID.
@@ -244,7 +244,7 @@ func (n *scanNode) lookupSpecifiedIndex(indexHints *parser.IndexHints) error {
 			}
 		}
 		if n.specifiedIndex == nil {
-			return errors.Errorf("index %d not found", indexHints.IndexID)
+			return errors.Errorf("index [%d] not found", indexHints.IndexID)
 		}
 	}
 	return nil
@@ -267,7 +267,7 @@ func filterColumns(
 				}
 			}
 			if !found {
-				return nil, errors.Errorf("column %d does not exist", wc)
+				return nil, errors.Errorf("column [%d] does not exist", wc)
 			}
 		}
 		dst = appendUnselectedColumns(dst, wantedColumns, src)

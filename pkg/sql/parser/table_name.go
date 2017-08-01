@@ -39,14 +39,14 @@ type NormalizableTableName struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (nt NormalizableTableName) Format(buf *bytes.Buffer, f FmtFlags) {
+func (nt *NormalizableTableName) Format(buf *bytes.Buffer, f FmtFlags) {
 	if f.tableNameFormatter != nil {
-		f.tableNameFormatter(&nt, buf, f)
+		f.tableNameFormatter(nt, buf, f)
 	} else {
 		FormatNode(buf, f, nt.TableNameReference)
 	}
 }
-func (nt NormalizableTableName) String() string { return AsString(nt) }
+func (nt *NormalizableTableName) String() string { return AsString(nt) }
 
 // Normalize checks if the table name is already normalized and
 // normalizes it as necessary.
@@ -260,8 +260,8 @@ type TableNameWithIndex struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (n TableNameWithIndex) Format(buf *bytes.Buffer, f FmtFlags) {
-	FormatNode(buf, f, n.Table)
+func (n *TableNameWithIndex) Format(buf *bytes.Buffer, f FmtFlags) {
+	FormatNode(buf, f, &n.Table)
 	if !n.SearchTable {
 		buf.WriteByte('@')
 		FormatNode(buf, f, n.Index)
