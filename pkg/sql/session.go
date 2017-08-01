@@ -292,6 +292,8 @@ type Session struct {
 	// indicate to Finish() that the session is already closed.
 	emergencyShutdown bool
 
+	ResultWriter ResultWriter
+
 	Tracing SessionTracing
 
 	tables TableCollection
