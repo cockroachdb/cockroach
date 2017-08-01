@@ -73,6 +73,18 @@ var distSQLUseTempStorage = settings.RegisterBoolSetting(
 	false,
 )
 
+var distSQLUseTempStorageSorts = settings.RegisterBoolSetting(
+	"sql.defaults.distsql.tempstorage.sorts",
+	"set to true to enable use of disk for distributed sql sorts. sql.defaults.distsql.tempstorage must be true",
+	true,
+)
+
+var distSQLUseTempStorageJoins = settings.RegisterBoolSetting(
+	"sql.defaults.distsql.tempstorage.joins",
+	"set to true to enable use of disk for distributed sql joins. sql.defaults.distsql.tempstorage must be true",
+	true,
+)
+
 // workMemBytes specifies the maximum amount of memory in bytes a processor can
 // use. This limit is only observed if the use of temporary storage is enabled.
 var workMemBytes = envutil.EnvOrDefaultInt64("COCKROACH_WORK_MEM", 64*1024*1024 /* 64MB */)

@@ -158,7 +158,7 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 		defer log.Infof(ctx, "exiting hash joiner run")
 	}
 
-	useTempStorage := distSQLUseTempStorage.Get() ||
+	useTempStorage := (distSQLUseTempStorage.Get() && distSQLUseTempStorageJoins.Get()) ||
 		h.testingKnobMemLimit > 0 ||
 		h.testingKnobMemFailPoint != unset
 	evalCtx := h.flowCtx.evalCtx
