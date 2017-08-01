@@ -1197,7 +1197,7 @@ func (ds *DistSender) sendToReplicas(
 					ds.metrics.NotLeaseHolderErrCount.Inc(1)
 					if lh := tErr.LeaseHolder; lh != nil {
 						// If the replica we contacted knows the new lease holder, update the cache.
-						ds.updateLeaseHolderCache(ctx, rangeID, *lh)
+						ds.leaseHolderCache.Update(ctx, rangeID, *lh)
 
 						// If the implicated leaseholder is not a known replica,
 						// return a RangeNotFoundError to signal eviction of the
@@ -1248,25 +1248,4 @@ func (ds *DistSender) sendToReplicas(
 			transport.SendNext(ctx, done)
 		}
 	}
-}
-
-// updateLeaseHolderCache updates the cached lease holder for the given range.
-func (ds *DistSender) updateLeaseHolderCache(
-	ctx context.Context, rangeID roachpb.RangeID, newLeaseHolder roachpb.ReplicaDescriptor,
-) {
-	if log.V(1) {
-		if oldLeaseHolder, ok := ds.leaseHolderCache.Lookup(ctx, rangeID); ok {
-			if (newLeaseHolder == roachpb.ReplicaDescriptor{}) {
-				log.Infof(ctx, "r%d: evicting cached lease holder %+v", rangeID, oldLeaseHolder)
-			} else if newLeaseHolder != oldLeaseHolder {
-				log.Infof(
-					ctx, "r%d: replacing cached lease holder %+v with %+v",
-					rangeID, oldLeaseHolder, newLeaseHolder,
-				)
-			}
-		} else {
-			log.Infof(ctx, "r%d: caching new lease holder %+v", rangeID, newLeaseHolder)
-		}
-	}
-	ds.leaseHolderCache.Update(ctx, rangeID, newLeaseHolder)
 }
