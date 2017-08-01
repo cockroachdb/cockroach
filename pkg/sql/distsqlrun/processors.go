@@ -45,8 +45,9 @@ type procOutputHelper struct {
 
 	filter      *exprHelper
 	renderExprs []exprHelper
-	renderTypes []sqlbase.ColumnType
 	outputCols  []uint32
+
+	outputTypes []sqlbase.ColumnType
 
 	// offset is the number of rows that are suppressed.
 	offset uint64
@@ -60,6 +61,8 @@ type procOutputHelper struct {
 // init sets up a procOutputHelper. The types describe the internal schema of
 // the processor (as described for each processor core spec); they can be
 // omitted if there is no filtering expression.
+// Note that the types slice may be stored directly; the caller should not
+// modify it.
 func (h *procOutputHelper) init(
 	post *PostProcessSpec,
 	types []sqlbase.ColumnType,
@@ -91,15 +94,21 @@ func (h *procOutputHelper) init(
 			// nil indicates no projection; use an empty slice.
 			h.outputCols = make([]uint32, 0)
 		}
+		h.outputTypes = make([]sqlbase.ColumnType, len(h.outputCols))
+		for i, c := range h.outputCols {
+			h.outputTypes[i] = types[c]
+		}
 	} else if len(post.RenderExprs) > 0 {
 		h.renderExprs = make([]exprHelper, len(post.RenderExprs))
-		h.renderTypes = make([]sqlbase.ColumnType, len(post.RenderExprs))
+		h.outputTypes = make([]sqlbase.ColumnType, len(post.RenderExprs))
 		for i, expr := range post.RenderExprs {
 			if err := h.renderExprs[i].init(expr, types, evalCtx); err != nil {
 				return err
 			}
-			h.renderTypes[i] = sqlbase.DatumTypeToColumnType(h.renderExprs[i].expr.ResolvedType())
+			h.outputTypes[i] = sqlbase.DatumTypeToColumnType(h.renderExprs[i].expr.ResolvedType())
 		}
+	} else {
+		h.outputTypes = types
 	}
 
 	h.offset = post.Offset
@@ -254,7 +263,7 @@ func (h *procOutputHelper) emitRow(
 			if err != nil {
 				return ConsumerClosed, err
 			}
-			outRow[i] = sqlbase.DatumToEncDatum(h.renderTypes[i], datum)
+			outRow[i] = sqlbase.DatumToEncDatum(h.outputTypes[i], datum)
 		}
 	} else if h.outputCols != nil {
 		// Projection.
