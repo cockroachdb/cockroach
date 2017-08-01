@@ -494,10 +494,10 @@ func (node *Order) Format(buf *bytes.Buffer, f FmtFlags) {
 	} else {
 		if node.Index == "" {
 			buf.WriteString("PRIMARY KEY ")
-			FormatNode(buf, f, node.Table)
+			FormatNode(buf, f, &node.Table)
 		} else {
 			buf.WriteString("INDEX ")
-			FormatNode(buf, f, node.Table)
+			FormatNode(buf, f, &node.Table)
 			buf.WriteByte('@')
 			FormatNode(buf, f, node.Index)
 		}
