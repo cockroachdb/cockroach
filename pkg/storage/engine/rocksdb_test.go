@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -367,7 +368,7 @@ func TestReadAmplification(t *testing.T) {
 func TestConcurrentBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	if testutils.NightlyStress() {
+	if testutils.NightlyStress() || util.RaceEnabled {
 		t.Skip()
 	}
 
