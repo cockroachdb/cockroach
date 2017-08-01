@@ -21,6 +21,7 @@ rangelog
 settings
 ui
 users
+web_sessions
 zones
 
 query T
@@ -49,24 +50,27 @@ fetched: /namespace/primary/1/'ui'/id -> 14
 output row: [1 'ui' 14]
 fetched: /namespace/primary/1/'users'/id -> 4
 output row: [1 'users' 4]
+fetched: /namespace/primary/1/'web_sessions'/id -> 19
+output row: [1 'web_sessions' 19]
 fetched: /namespace/primary/1/'zones'/id -> 5
 output row: [1 'zones' 5]
 
 query ITI rowsort
 SELECT * FROM system.namespace
 ----
-0 system     1
-0 test       50
-1 descriptor 3
-1 eventlog   12
-1 jobs       15
-1 lease      11
-1 namespace  2
-1 rangelog   13
-1 settings   6
-1 ui         14
-1 users      4
-1 zones      5
+0 system        1
+0 test          50
+1 descriptor    3
+1 eventlog      12
+1 jobs          15
+1 lease         11
+1 namespace     2
+1 rangelog      13
+1 settings      6
+1 ui            14
+1 users         4
+1 web_sessions  19
+1 zones         5
 
 query I rowsort
 SELECT id FROM system.descriptor
@@ -82,6 +86,7 @@ SELECT id FROM system.descriptor
 13
 14
 15
+19
 50
 
 # Verify we can read "protobuf" columns.

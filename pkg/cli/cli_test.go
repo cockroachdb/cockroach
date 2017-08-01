@@ -400,7 +400,7 @@ func Example_ranges() {
 	// 	0: node-id=1 store-id=1
 	// /System/"tse"-"ranges3" [4]
 	// 	0: node-id=1 store-id=1
-	// "ranges3"-/Table/SystemConfigSpan/Start [11]
+	// "ranges3"-/Table/SystemConfigSpan/Start [15]
 	// 	0: node-id=1 store-id=1
 	// /Table/SystemConfigSpan/Start-/Table/11 [5]
 	// 	0: node-id=1 store-id=1
@@ -412,9 +412,17 @@ func Example_ranges() {
 	// 	0: node-id=1 store-id=1
 	// /Table/14-/Table/15 [9]
 	// 	0: node-id=1 store-id=1
-	// /Table/15-/Max [10]
+	// /Table/15-/Table/16 [10]
 	// 	0: node-id=1 store-id=1
-	// 11 result(s)
+	// /Table/16-/Table/17 [11]
+	// 	0: node-id=1 store-id=1
+	// /Table/17-/Table/18 [12]
+	// 	0: node-id=1 store-id=1
+	// /Table/18-/Table/19 [13]
+	// 	0: node-id=1 store-id=1
+	// /Table/19-/Max [14]
+	// 	0: node-id=1 store-id=1
+	// 15 result(s)
 }
 
 func Example_logging() {
@@ -475,7 +483,7 @@ func Example_max_results() {
 	// 	0: node-id=1 store-id=1
 	// /System/"tse"-"max_results3" [4]
 	// 	0: node-id=1 store-id=1
-	// "max_results3"-"max_results4" [11]
+	// "max_results3"-"max_results4" [15]
 	// 	0: node-id=1 store-id=1
 	// 5 result(s)
 }
@@ -1429,7 +1437,7 @@ func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
 	}{
 		{"live_bytes", 5, 50000},
 		{"key_bytes", 6, 30000},
-		{"value_bytes", 7, 50000},
+		{"value_bytes", 7, 100000},
 		{"intent_bytes", 8, 30000},
 		{"system_bytes", 9, 30000},
 		{"leader_ranges", 10, 3},
@@ -1615,6 +1623,10 @@ writing ` + os.DevNull + `
   debug/nodes/1/ranges/8
   debug/nodes/1/ranges/9
   debug/nodes/1/ranges/10
+  debug/nodes/1/ranges/11
+  debug/nodes/1/ranges/12
+  debug/nodes/1/ranges/13
+  debug/nodes/1/ranges/14
   debug/schema/system@details
   debug/schema/system/descriptor
   debug/schema/system/eventlog
@@ -1625,6 +1637,7 @@ writing ` + os.DevNull + `
   debug/schema/system/settings
   debug/schema/system/ui
   debug/schema/system/users
+  debug/schema/system/web_sessions
   debug/schema/system/zones
 `
 

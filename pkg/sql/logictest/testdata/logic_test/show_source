@@ -144,6 +144,7 @@ rangelog
 settings
 ui
 users
+web_sessions
 zones
 
 query ITTTT colnames
