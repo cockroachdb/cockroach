@@ -321,7 +321,7 @@ func (ta *TxnAborter) GetExecCount(stmt string) (int, bool) {
 	return 0, false
 }
 
-func (ta *TxnAborter) statementFilter(ctx context.Context, stmt string, res *sql.Result) {
+func (ta *TxnAborter) statementFilter(ctx context.Context, stmt string, r sql.ResultWriter) {
 	ta.mu.Lock()
 	ri, ok := ta.mu.stmtsToAbort[stmt]
 	shouldAbort := false
@@ -331,7 +331,7 @@ func (ta *TxnAborter) statementFilter(ctx context.Context, stmt string, res *sql
 			log.VEventf(ctx, 1, "TxnAborter sees satisfied statement %q", stmt)
 			ri.satisfied = true
 		}
-		if ri.abortCount > 0 && res.Err == nil {
+		if ri.abortCount > 0 && r.GetError() == nil {
 			log.Infof(ctx, "TxnAborter aborting txn for statement %q", stmt)
 			ri.abortCount--
 			shouldAbort = true
@@ -340,7 +340,9 @@ func (ta *TxnAborter) statementFilter(ctx context.Context, stmt string, res *sql
 	ta.mu.Unlock()
 	if shouldAbort {
 		if err := ta.abortTxn(ri.key); err != nil {
-			res.Err = errors.Wrap(err, "TxnAborter failed to abort")
+			if err := r.SetError(errors.Wrap(err, "TxnAborter failed to abort")); err != nil {
+				panic(fmt.Sprintf("unexpected error: %s", err))
+			}
 		}
 	}
 }
@@ -1454,7 +1456,7 @@ func TestPushedTxnDetectionInFirstBatch(t *testing.T) {
 	var s serverutils.TestServerInterface
 	params, _ := createTestServerParams()
 	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
-		StatementFilter: func(ctx context.Context, stmt string, r *sql.Result) {
+		StatementFilter: func(ctx context.Context, stmt string, r sql.ResultWriter) {
 			if atomic.LoadInt64(&injectRead) == 0 {
 				return
 			}

@@ -400,7 +400,7 @@ func TestShowQueries(t *testing.T) {
 				UseDatabase: "test",
 				Knobs: base.TestingKnobs{
 					SQLExecutor: &sql.ExecutorTestingKnobs{
-						StatementFilter: func(ctx context.Context, stmt string, res *sql.Result) {
+						StatementFilter: func(ctx context.Context, stmt string, resultWriter sql.ResultWriter) {
 							if stmt == selectStmt {
 								const showQuery = "SELECT node_id, query FROM [SHOW CLUSTER QUERIES]"
 

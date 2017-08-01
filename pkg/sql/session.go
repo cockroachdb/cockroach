@@ -292,6 +292,8 @@ type Session struct {
 	// indicate to Finish() that the session is already closed.
 	emergencyShutdown bool
 
+	ResultWriter ResultWriter
+
 	Tracing SessionTracing
 
 	tables TableCollection
@@ -878,6 +880,8 @@ func (ts *txnState) resetForNewSQLTxn(
 	isolation enginepb.IsolationType,
 	priority roachpb.UserPriority,
 ) {
+	s.ResultWriter.ResetForNewTransaction()
+
 	if ts.sp != nil {
 		panic(fmt.Sprintf("txnState.reset() called on ts with active span. How come "+
 			"finishSQLTxn() wasn't called previously? ts: %+v", ts))
@@ -1115,14 +1119,9 @@ func (scc *schemaChangerCollection) queueSchemaChanger(schemaChanger SchemaChang
 // scheduling the schema change has finished.
 //
 // The list of closures is cleared after (attempting) execution.
-//
-// Args:
-//  results: The results from all statements in the group that scheduled the
-//    schema changes we're about to execute. Results corresponding to the
-//    schema change statements will be changed in case an error occurs.
 func (scc *schemaChangerCollection) execSchemaChanges(
-	ctx context.Context, e *Executor, session *Session, results ResultList,
-) {
+	ctx context.Context, e *Executor, session *Session, resultWriter StatementResultWriter,
+) error {
 	// Release the leases once a transaction is complete.
 	session.tables.releaseTables(ctx)
 	if e.cfg.SchemaChangerTestingKnobs.SyncFilter != nil {
@@ -1152,7 +1151,9 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 					// statements in the current batch; we can't modify the results of older
 					// statements.
 					if scEntry.epoch == scc.curGroupNum {
-						results[scEntry.idx] = Result{Err: err}
+						if err := resultWriter.SetError(err); err != nil {
+							return err
+						}
 					}
 				} else {
 					// retryable error.
@@ -1163,6 +1164,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		}
 	}
 	scc.schemaChangers = scc.schemaChangers[:0]
+	return nil
 }
 
 // maybeRecover catches SQL panics and does some log reporting before
