@@ -285,19 +285,17 @@ const (
 	ZonesTableID      = 5
 	SettingsTableID   = 6
 
-	// Reserved IDs for other system tables. If you're adding a new system table,
-	// it probably belongs here.
+	// Reserved IDs for other system tables. Note that some of these IDs refer
+	// to "Ranges" instead of a Table - these IDs are needed to store custom
+	// configuration for non-table ranges (e.g. Zone Configs).
 	// NOTE: IDs must be <= MaxReservedDescID.
-	LeaseTableID      = 11
-	EventLogTableID   = 12
-	RangeEventTableID = 13
-	UITableID         = 14
-	JobsTableID       = 15
-
-	// Reserved IDs used to refer to certain parts of the system ranges that
-	// come before the system config span and user table ranges.
-	// NOTE: IDs must be <= MaxReservedDescID.
+	LeaseTableID       = 11
+	EventLogTableID    = 12
+	RangeEventTableID  = 13
+	UITableID          = 14
+	JobsTableID        = 15
 	MetaRangesID       = 16
 	SystemRangesID     = 17
 	TimeseriesRangesID = 18
+	WebSessionsTableID = 19
 )
