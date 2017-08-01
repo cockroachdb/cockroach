@@ -1762,45 +1762,47 @@ func TestQuotaPool(t *testing.T) {
 	}()
 	wg.Wait()
 
-	// In order to verify write throttling we insert a value 3/4th the size of
-	// total quota available in the system. This should effectively go through
-	// and block the subsequent insert of the same size. We check to see whether
-	// or not after this write has gone through by verifying that the total
-	// quota available has decreased as expected.
-	//
-	// Following this we unblock the 'slow' replica allowing it to catch up to
-	// the first write. This in turn releases quota back to the pool and the
-	// second write, previously blocked by virtue of there not being enough
-	// quota, is now free to proceed. We expect the final quota in the system
-	// to be the same as what we started with.
-	key := roachpb.Key("k")
-	value := bytes.Repeat([]byte("v"), (3*quota)/4)
-	_, pErr := client.SendWrapped(context.Background(), leaderRepl, putArgs(key, value))
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
+	func() {
+		defer followerRepl.RaftUnlock()
 
-	if curQuota := leaderRepl.QuotaAvailable(); curQuota > quota/4 {
-		t.Fatalf("didn't observe the expected quota acquisition, available: %d", curQuota)
-	}
-
-	testutils.SucceedsSoonDepth(1, t, func() error {
-		if qLen := leaderRepl.QuotaReleaseQueueLen(); qLen != 1 {
-			return errors.Errorf("expected 1 queued quota release, found: %d", qLen)
-		}
-		if cLen := leaderRepl.CommandSizesLen(); cLen != 0 {
-			return errors.Errorf("expected zero-length command sizes map, found %d", cLen)
-		}
-		return nil
-	})
-
-	ch := make(chan *roachpb.Error, 1)
-	go func() {
+		// In order to verify write throttling we insert a value 3/4th the size of
+		// total quota available in the system. This should effectively go through
+		// and block the subsequent insert of the same size. We check to see whether
+		// or not after this write has gone through by verifying that the total
+		// quota available has decreased as expected.
+		//
+		// Following this we unblock the 'slow' replica allowing it to catch up to
+		// the first write. This in turn releases quota back to the pool and the
+		// second write, previously blocked by virtue of there not being enough
+		// quota, is now free to proceed. We expect the final quota in the system
+		// to be the same as what we started with.
+		key := roachpb.Key("k")
+		value := bytes.Repeat([]byte("v"), (3*quota)/4)
 		_, pErr := client.SendWrapped(context.Background(), leaderRepl, putArgs(key, value))
-		ch <- pErr
-	}()
+		if pErr != nil {
+			t.Fatal(pErr)
+		}
 
-	followerRepl.RaftUnlock()
+		if curQuota := leaderRepl.QuotaAvailable(); curQuota > quota/4 {
+			t.Fatalf("didn't observe the expected quota acquisition, available: %d", curQuota)
+		}
+
+		testutils.SucceedsSoonDepth(1, t, func() error {
+			if qLen := leaderRepl.QuotaReleaseQueueLen(); qLen != 1 {
+				return errors.Errorf("expected 1 queued quota release, found: %d", qLen)
+			}
+			if cLen := leaderRepl.CommandSizesLen(); cLen != 0 {
+				return errors.Errorf("expected zero-length command sizes map, found %d", cLen)
+			}
+			return nil
+		})
+
+		ch := make(chan *roachpb.Error, 1)
+		go func() {
+			_, pErr := client.SendWrapped(context.Background(), leaderRepl, putArgs(key, value))
+			ch <- pErr
+		}()
+	}()
 
 	testutils.SucceedsSoonDepth(1, t, func() error {
 		if curQuota := leaderRepl.QuotaAvailable(); curQuota != quota {
