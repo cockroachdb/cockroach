@@ -74,15 +74,28 @@ func (ss *sortAllStrategy) Execute(ctx context.Context, s *sorter) error {
 		return errors.Wrap(err, "external storage not provided on this cockroach node")
 	}
 	log.VEventf(ctx, 2, "falling back to disk")
-	// The diskContainer will free the memory taken up by ss.rows as it is
-	// created from them.
-	diskContainer, err := makeDiskRowContainer(
-		ctx, ss.rows.types, ss.rows.ordering, ss.rows, s.tempStorage,
-	)
-	if err != nil {
-		return err
-	}
+	diskContainer := makeDiskRowContainer(ctx, ss.rows.types, ss.rows.ordering, s.tempStorage)
 	defer diskContainer.Close(ctx)
+
+	// Transfer the rows from memory to disk. Note that this frees up the
+	// memory taken up by ss.rows.
+	i := ss.rows.NewIterator(ctx)
+	defer i.Close()
+	for i.Rewind(); ; i.Next() {
+		if ok, err := i.Valid(); err != nil {
+			return err
+		} else if !ok {
+			break
+		}
+		memRow, err := i.Row()
+		if err != nil {
+			return err
+		}
+		if err := diskContainer.AddRow(ctx, memRow); err != nil {
+			return err
+		}
+	}
+
 	// Add the row that caused the memory container to run out of memory.
 	if err := diskContainer.AddRow(ctx, row); err != nil {
 		return err
