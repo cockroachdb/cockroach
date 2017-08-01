@@ -190,9 +190,11 @@ func (nl *NodeLiveness) SetDecommissioning(
 		var liveness *Liveness
 		liveness, err = nl.GetLiveness(nodeID)
 		if err != nil {
-			if errors.Cause(err) == ErrNoLivenessRecord {
-				continue // expected, though should be rare in practice
-			}
+			// errors.Cause(err) == ErrNoLivenessRecord can occur here, though
+			// it should be rare in practice for nodes that actually exist, and
+			// earlier code retried it. When a NodeID does *not* actually exist,
+			// this would get stuck forever, so break here and let callers who
+			// are sure they need a retry do it themselves.
 			break // failure
 		}
 		err = nl.setDecommissioningInternal(ctx, nodeID, liveness, decommission)
@@ -272,12 +274,18 @@ func (nl *NodeLiveness) setDecommissioningInternal(
 		newLiveness = *liveness
 	}
 	newLiveness.Decommissioning = decommission
-	return nl.updateLiveness(ctx, &newLiveness, liveness, func(actual Liveness) error {
+	err := nl.updateLiveness(ctx, &newLiveness, liveness, func(actual Liveness) error {
+		nl.setSelf(actual)
 		if actual.Decommissioning == newLiveness.Decommissioning {
 			return nil
 		}
 		return errChangeDecommissioningFailed
 	})
+	if err != nil {
+		return err
+	}
+	nl.setSelf(newLiveness)
+	return nil
 }
 
 // GetLivenessThreshold returns the maximum duration between heartbeats
