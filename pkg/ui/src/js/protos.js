@@ -33268,12 +33268,224 @@ export const cockroach = $root.cockroach = (() => {
              */
             const jobs = {};
 
+            jobs.Lease = (function() {
+
+                /**
+                 * Properties of a Lease.
+                 * @typedef cockroach.sql.jobs.Lease$Properties
+                 * @type {Object}
+                 * @property {number} [node_id] Lease node_id.
+                 * @property {Long} [epoch] Lease epoch.
+                 */
+
+                /**
+                 * Constructs a new Lease.
+                 * @exports cockroach.sql.jobs.Lease
+                 * @constructor
+                 * @param {cockroach.sql.jobs.Lease$Properties=} [properties] Properties to set
+                 */
+                function Lease(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * Lease node_id.
+                 * @type {number}
+                 */
+                Lease.prototype.node_id = 0;
+
+                /**
+                 * Lease epoch.
+                 * @type {Long}
+                 */
+                Lease.prototype.epoch = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                /**
+                 * Creates a new Lease instance using the specified properties.
+                 * @param {cockroach.sql.jobs.Lease$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.jobs.Lease} Lease instance
+                 */
+                Lease.create = function create(properties) {
+                    return new Lease(properties);
+                };
+
+                /**
+                 * Encodes the specified Lease message. Does not implicitly {@link cockroach.sql.jobs.Lease.verify|verify} messages.
+                 * @param {cockroach.sql.jobs.Lease$Properties} message Lease message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                Lease.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.node_id);
+                    if (message.epoch != null && message.hasOwnProperty("epoch"))
+                        writer.uint32(/* id 2, wireType 0 =*/16).int64(message.epoch);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified Lease message, length delimited. Does not implicitly {@link cockroach.sql.jobs.Lease.verify|verify} messages.
+                 * @param {cockroach.sql.jobs.Lease$Properties} message Lease message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                Lease.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a Lease message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.jobs.Lease} Lease
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                Lease.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.sql.jobs.Lease();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.node_id = reader.uint32();
+                            break;
+                        case 2:
+                            message.epoch = reader.int64();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a Lease message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.jobs.Lease} Lease
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                Lease.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a Lease message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                Lease.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        if (!$util.isInteger(message.node_id))
+                            return "node_id: integer expected";
+                    if (message.epoch != null && message.hasOwnProperty("epoch"))
+                        if (!$util.isInteger(message.epoch) && !(message.epoch && $util.isInteger(message.epoch.low) && $util.isInteger(message.epoch.high)))
+                            return "epoch: integer|Long expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a Lease message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.jobs.Lease} Lease
+                 */
+                Lease.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.sql.jobs.Lease)
+                        return object;
+                    let message = new $root.cockroach.sql.jobs.Lease();
+                    if (object.node_id != null)
+                        message.node_id = object.node_id >>> 0;
+                    if (object.epoch != null)
+                        if ($util.Long)
+                            (message.epoch = $util.Long.fromValue(object.epoch)).unsigned = false;
+                        else if (typeof object.epoch === "string")
+                            message.epoch = parseInt(object.epoch, 10);
+                        else if (typeof object.epoch === "number")
+                            message.epoch = object.epoch;
+                        else if (typeof object.epoch === "object")
+                            message.epoch = new $util.LongBits(object.epoch.low >>> 0, object.epoch.high >>> 0).toNumber();
+                    return message;
+                };
+
+                /**
+                 * Creates a Lease message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.jobs.Lease.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.jobs.Lease} Lease
+                 */
+                Lease.from = Lease.fromObject;
+
+                /**
+                 * Creates a plain object from a Lease message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.jobs.Lease} message Lease
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                Lease.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults) {
+                        object.node_id = 0;
+                        if ($util.Long) {
+                            let long = new $util.Long(0, 0, false);
+                            object.epoch = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                        } else
+                            object.epoch = options.longs === String ? "0" : 0;
+                    }
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        object.node_id = message.node_id;
+                    if (message.epoch != null && message.hasOwnProperty("epoch"))
+                        if (typeof message.epoch === "number")
+                            object.epoch = options.longs === String ? String(message.epoch) : message.epoch;
+                        else
+                            object.epoch = options.longs === String ? $util.Long.prototype.toString.call(message.epoch) : options.longs === Number ? new $util.LongBits(message.epoch.low >>> 0, message.epoch.high >>> 0).toNumber() : message.epoch;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this Lease message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                Lease.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this Lease to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                Lease.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return Lease;
+            })();
+
             jobs.BackupDetails = (function() {
 
                 /**
                  * Properties of a BackupDetails.
                  * @typedef cockroach.sql.jobs.BackupDetails$Properties
                  * @type {Object}
+                 * @property {cockroach.util.hlc.Timestamp$Properties} [start_time] BackupDetails start_time.
+                 * @property {cockroach.util.hlc.Timestamp$Properties} [end_time] BackupDetails end_time.
+                 * @property {string} [uri] BackupDetails uri.
                  */
 
                 /**
@@ -33288,6 +33500,24 @@ export const cockroach = $root.cockroach = (() => {
                             if (properties[keys[i]] != null)
                                 this[keys[i]] = properties[keys[i]];
                 }
+
+                /**
+                 * BackupDetails start_time.
+                 * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
+                 */
+                BackupDetails.prototype.start_time = null;
+
+                /**
+                 * BackupDetails end_time.
+                 * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
+                 */
+                BackupDetails.prototype.end_time = null;
+
+                /**
+                 * BackupDetails uri.
+                 * @type {string}
+                 */
+                BackupDetails.prototype.uri = "";
 
                 /**
                  * Creates a new BackupDetails instance using the specified properties.
@@ -33307,6 +33537,12 @@ export const cockroach = $root.cockroach = (() => {
                 BackupDetails.encode = function encode(message, writer) {
                     if (!writer)
                         writer = $Writer.create();
+                    if (message.start_time != null && message.hasOwnProperty("start_time"))
+                        $root.cockroach.util.hlc.Timestamp.encode(message.start_time, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+                    if (message.end_time != null && message.hasOwnProperty("end_time"))
+                        $root.cockroach.util.hlc.Timestamp.encode(message.end_time, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+                    if (message.uri != null && message.hasOwnProperty("uri"))
+                        writer.uint32(/* id 3, wireType 2 =*/26).string(message.uri);
                     return writer;
                 };
 
@@ -33335,6 +33571,15 @@ export const cockroach = $root.cockroach = (() => {
                     while (reader.pos < end) {
                         let tag = reader.uint32();
                         switch (tag >>> 3) {
+                        case 1:
+                            message.start_time = $root.cockroach.util.hlc.Timestamp.decode(reader, reader.uint32());
+                            break;
+                        case 2:
+                            message.end_time = $root.cockroach.util.hlc.Timestamp.decode(reader, reader.uint32());
+                            break;
+                        case 3:
+                            message.uri = reader.string();
+                            break;
                         default:
                             reader.skipType(tag & 7);
                             break;
@@ -33364,6 +33609,19 @@ export const cockroach = $root.cockroach = (() => {
                 BackupDetails.verify = function verify(message) {
                     if (typeof message !== "object" || message === null)
                         return "object expected";
+                    if (message.start_time != null && message.hasOwnProperty("start_time")) {
+                        let error = $root.cockroach.util.hlc.Timestamp.verify(message.start_time);
+                        if (error)
+                            return "start_time." + error;
+                    }
+                    if (message.end_time != null && message.hasOwnProperty("end_time")) {
+                        let error = $root.cockroach.util.hlc.Timestamp.verify(message.end_time);
+                        if (error)
+                            return "end_time." + error;
+                    }
+                    if (message.uri != null && message.hasOwnProperty("uri"))
+                        if (!$util.isString(message.uri))
+                            return "uri: string expected";
                     return null;
                 };
 
@@ -33375,7 +33633,20 @@ export const cockroach = $root.cockroach = (() => {
                 BackupDetails.fromObject = function fromObject(object) {
                     if (object instanceof $root.cockroach.sql.jobs.BackupDetails)
                         return object;
-                    return new $root.cockroach.sql.jobs.BackupDetails();
+                    let message = new $root.cockroach.sql.jobs.BackupDetails();
+                    if (object.start_time != null) {
+                        if (typeof object.start_time !== "object")
+                            throw TypeError(".cockroach.sql.jobs.BackupDetails.start_time: object expected");
+                        message.start_time = $root.cockroach.util.hlc.Timestamp.fromObject(object.start_time);
+                    }
+                    if (object.end_time != null) {
+                        if (typeof object.end_time !== "object")
+                            throw TypeError(".cockroach.sql.jobs.BackupDetails.end_time: object expected");
+                        message.end_time = $root.cockroach.util.hlc.Timestamp.fromObject(object.end_time);
+                    }
+                    if (object.uri != null)
+                        message.uri = String(object.uri);
+                    return message;
                 };
 
                 /**
@@ -33393,8 +33664,22 @@ export const cockroach = $root.cockroach = (() => {
                  * @param {$protobuf.ConversionOptions} [options] Conversion options
                  * @returns {Object.<string,*>} Plain object
                  */
-                BackupDetails.toObject = function toObject() {
-                    return {};
+                BackupDetails.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults) {
+                        object.start_time = null;
+                        object.end_time = null;
+                        object.uri = "";
+                    }
+                    if (message.start_time != null && message.hasOwnProperty("start_time"))
+                        object.start_time = $root.cockroach.util.hlc.Timestamp.toObject(message.start_time, options);
+                    if (message.end_time != null && message.hasOwnProperty("end_time"))
+                        object.end_time = $root.cockroach.util.hlc.Timestamp.toObject(message.end_time, options);
+                    if (message.uri != null && message.hasOwnProperty("uri"))
+                        object.uri = message.uri;
+                    return object;
                 };
 
                 /**
@@ -33424,6 +33709,8 @@ export const cockroach = $root.cockroach = (() => {
                  * @typedef cockroach.sql.jobs.RestoreDetails$Properties
                  * @type {Object}
                  * @property {Uint8Array} [low_water_mark] RestoreDetails low_water_mark.
+                 * @property {Object.<string,cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties>} [table_rewrites] RestoreDetails table_rewrites.
+                 * @property {Array.<string>} [uris] RestoreDetails uris.
                  */
 
                 /**
@@ -33433,6 +33720,8 @@ export const cockroach = $root.cockroach = (() => {
                  * @param {cockroach.sql.jobs.RestoreDetails$Properties=} [properties] Properties to set
                  */
                 function RestoreDetails(properties) {
+                    this.table_rewrites = {};
+                    this.uris = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                             if (properties[keys[i]] != null)
@@ -33444,6 +33733,18 @@ export const cockroach = $root.cockroach = (() => {
                  * @type {Uint8Array}
                  */
                 RestoreDetails.prototype.low_water_mark = $util.newBuffer([]);
+
+                /**
+                 * RestoreDetails table_rewrites.
+                 * @type {Object.<string,cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties>}
+                 */
+                RestoreDetails.prototype.table_rewrites = $util.emptyObject;
+
+                /**
+                 * RestoreDetails uris.
+                 * @type {Array.<string>}
+                 */
+                RestoreDetails.prototype.uris = $util.emptyArray;
 
                 /**
                  * Creates a new RestoreDetails instance using the specified properties.
@@ -33465,6 +33766,14 @@ export const cockroach = $root.cockroach = (() => {
                         writer = $Writer.create();
                     if (message.low_water_mark != null && message.hasOwnProperty("low_water_mark"))
                         writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.low_water_mark);
+                    if (message.table_rewrites != null && message.hasOwnProperty("table_rewrites"))
+                        for (let keys = Object.keys(message.table_rewrites), i = 0; i < keys.length; ++i) {
+                            writer.uint32(/* id 2, wireType 2 =*/18).fork().uint32(/* id 1, wireType 0 =*/8).uint32(keys[i]);
+                            $root.cockroach.sql.jobs.RestoreDetails.TableRewrite.encode(message.table_rewrites[keys[i]], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim().ldelim();
+                        }
+                    if (message.uris != null && message.uris.length)
+                        for (let i = 0; i < message.uris.length; ++i)
+                            writer.uint32(/* id 3, wireType 2 =*/26).string(message.uris[i]);
                     return writer;
                 };
 
@@ -33489,12 +33798,25 @@ export const cockroach = $root.cockroach = (() => {
                 RestoreDetails.decode = function decode(reader, length) {
                     if (!(reader instanceof $Reader))
                         reader = $Reader.create(reader);
-                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.sql.jobs.RestoreDetails();
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.sql.jobs.RestoreDetails(), key;
                     while (reader.pos < end) {
                         let tag = reader.uint32();
                         switch (tag >>> 3) {
                         case 1:
                             message.low_water_mark = reader.bytes();
+                            break;
+                        case 2:
+                            reader.skip().pos++;
+                            if (message.table_rewrites === $util.emptyObject)
+                                message.table_rewrites = {};
+                            key = reader.uint32();
+                            reader.pos++;
+                            message.table_rewrites[key] = $root.cockroach.sql.jobs.RestoreDetails.TableRewrite.decode(reader, reader.uint32());
+                            break;
+                        case 3:
+                            if (!(message.uris && message.uris.length))
+                                message.uris = [];
+                            message.uris.push(reader.string());
                             break;
                         default:
                             reader.skipType(tag & 7);
@@ -33528,6 +33850,25 @@ export const cockroach = $root.cockroach = (() => {
                     if (message.low_water_mark != null && message.hasOwnProperty("low_water_mark"))
                         if (!(message.low_water_mark && typeof message.low_water_mark.length === "number" || $util.isString(message.low_water_mark)))
                             return "low_water_mark: buffer expected";
+                    if (message.table_rewrites != null && message.hasOwnProperty("table_rewrites")) {
+                        if (!$util.isObject(message.table_rewrites))
+                            return "table_rewrites: object expected";
+                        let key = Object.keys(message.table_rewrites);
+                        for (let i = 0; i < key.length; ++i) {
+                            if (!$util.key32Re.test(key[i]))
+                                return "table_rewrites: integer key{k:uint32} expected";
+                            let error = $root.cockroach.sql.jobs.RestoreDetails.TableRewrite.verify(message.table_rewrites[key[i]]);
+                            if (error)
+                                return "table_rewrites." + error;
+                        }
+                    }
+                    if (message.uris != null && message.hasOwnProperty("uris")) {
+                        if (!Array.isArray(message.uris))
+                            return "uris: array expected";
+                        for (let i = 0; i < message.uris.length; ++i)
+                            if (!$util.isString(message.uris[i]))
+                                return "uris: string[] expected";
+                    }
                     return null;
                 };
 
@@ -33545,6 +33886,23 @@ export const cockroach = $root.cockroach = (() => {
                             $util.base64.decode(object.low_water_mark, message.low_water_mark = $util.newBuffer($util.base64.length(object.low_water_mark)), 0);
                         else if (object.low_water_mark.length)
                             message.low_water_mark = object.low_water_mark;
+                    if (object.table_rewrites) {
+                        if (typeof object.table_rewrites !== "object")
+                            throw TypeError(".cockroach.sql.jobs.RestoreDetails.table_rewrites: object expected");
+                        message.table_rewrites = {};
+                        for (let keys = Object.keys(object.table_rewrites), i = 0; i < keys.length; ++i) {
+                            if (typeof object.table_rewrites[keys[i]] !== "object")
+                                throw TypeError(".cockroach.sql.jobs.RestoreDetails.table_rewrites: object expected");
+                            message.table_rewrites[keys[i]] = $root.cockroach.sql.jobs.RestoreDetails.TableRewrite.fromObject(object.table_rewrites[keys[i]]);
+                        }
+                    }
+                    if (object.uris) {
+                        if (!Array.isArray(object.uris))
+                            throw TypeError(".cockroach.sql.jobs.RestoreDetails.uris: array expected");
+                        message.uris = [];
+                        for (let i = 0; i < object.uris.length; ++i)
+                            message.uris[i] = String(object.uris[i]);
+                    }
                     return message;
                 };
 
@@ -33567,10 +33925,25 @@ export const cockroach = $root.cockroach = (() => {
                     if (!options)
                         options = {};
                     let object = {};
+                    if (options.arrays || options.defaults)
+                        object.uris = [];
+                    if (options.objects || options.defaults)
+                        object.table_rewrites = {};
                     if (options.defaults)
                         object.low_water_mark = options.bytes === String ? "" : [];
                     if (message.low_water_mark != null && message.hasOwnProperty("low_water_mark"))
                         object.low_water_mark = options.bytes === String ? $util.base64.encode(message.low_water_mark, 0, message.low_water_mark.length) : options.bytes === Array ? Array.prototype.slice.call(message.low_water_mark) : message.low_water_mark;
+                    let keys2;
+                    if (message.table_rewrites && (keys2 = Object.keys(message.table_rewrites)).length) {
+                        object.table_rewrites = {};
+                        for (let j = 0; j < keys2.length; ++j)
+                            object.table_rewrites[keys2[j]] = $root.cockroach.sql.jobs.RestoreDetails.TableRewrite.toObject(message.table_rewrites[keys2[j]], options);
+                    }
+                    if (message.uris && message.uris.length) {
+                        object.uris = [];
+                        for (let j = 0; j < message.uris.length; ++j)
+                            object.uris[j] = message.uris[j];
+                    }
                     return object;
                 };
 
@@ -33590,6 +33963,201 @@ export const cockroach = $root.cockroach = (() => {
                 RestoreDetails.prototype.toJSON = function toJSON() {
                     return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
                 };
+
+                RestoreDetails.TableRewrite = (function() {
+
+                    /**
+                     * Properties of a TableRewrite.
+                     * @typedef cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties
+                     * @type {Object}
+                     * @property {number} [table_id] TableRewrite table_id.
+                     * @property {number} [parent_id] TableRewrite parent_id.
+                     */
+
+                    /**
+                     * Constructs a new TableRewrite.
+                     * @exports cockroach.sql.jobs.RestoreDetails.TableRewrite
+                     * @constructor
+                     * @param {cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties=} [properties] Properties to set
+                     */
+                    function TableRewrite(properties) {
+                        if (properties)
+                            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * TableRewrite table_id.
+                     * @type {number}
+                     */
+                    TableRewrite.prototype.table_id = 0;
+
+                    /**
+                     * TableRewrite parent_id.
+                     * @type {number}
+                     */
+                    TableRewrite.prototype.parent_id = 0;
+
+                    /**
+                     * Creates a new TableRewrite instance using the specified properties.
+                     * @param {cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties=} [properties] Properties to set
+                     * @returns {cockroach.sql.jobs.RestoreDetails.TableRewrite} TableRewrite instance
+                     */
+                    TableRewrite.create = function create(properties) {
+                        return new TableRewrite(properties);
+                    };
+
+                    /**
+                     * Encodes the specified TableRewrite message. Does not implicitly {@link cockroach.sql.jobs.RestoreDetails.TableRewrite.verify|verify} messages.
+                     * @param {cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties} message TableRewrite message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    TableRewrite.encode = function encode(message, writer) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (message.table_id != null && message.hasOwnProperty("table_id"))
+                            writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.table_id);
+                        if (message.parent_id != null && message.hasOwnProperty("parent_id"))
+                            writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.parent_id);
+                        return writer;
+                    };
+
+                    /**
+                     * Encodes the specified TableRewrite message, length delimited. Does not implicitly {@link cockroach.sql.jobs.RestoreDetails.TableRewrite.verify|verify} messages.
+                     * @param {cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties} message TableRewrite message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    TableRewrite.encodeDelimited = function encodeDelimited(message, writer) {
+                        return this.encode(message, writer).ldelim();
+                    };
+
+                    /**
+                     * Decodes a TableRewrite message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.sql.jobs.RestoreDetails.TableRewrite} TableRewrite
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    TableRewrite.decode = function decode(reader, length) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.sql.jobs.RestoreDetails.TableRewrite();
+                        while (reader.pos < end) {
+                            let tag = reader.uint32();
+                            switch (tag >>> 3) {
+                            case 1:
+                                message.table_id = reader.uint32();
+                                break;
+                            case 2:
+                                message.parent_id = reader.uint32();
+                                break;
+                            default:
+                                reader.skipType(tag & 7);
+                                break;
+                            }
+                        }
+                        return message;
+                    };
+
+                    /**
+                     * Decodes a TableRewrite message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.sql.jobs.RestoreDetails.TableRewrite} TableRewrite
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    TableRewrite.decodeDelimited = function decodeDelimited(reader) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader(reader);
+                        return this.decode(reader, reader.uint32());
+                    };
+
+                    /**
+                     * Verifies a TableRewrite message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    TableRewrite.verify = function verify(message) {
+                        if (typeof message !== "object" || message === null)
+                            return "object expected";
+                        if (message.table_id != null && message.hasOwnProperty("table_id"))
+                            if (!$util.isInteger(message.table_id))
+                                return "table_id: integer expected";
+                        if (message.parent_id != null && message.hasOwnProperty("parent_id"))
+                            if (!$util.isInteger(message.parent_id))
+                                return "parent_id: integer expected";
+                        return null;
+                    };
+
+                    /**
+                     * Creates a TableRewrite message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.jobs.RestoreDetails.TableRewrite} TableRewrite
+                     */
+                    TableRewrite.fromObject = function fromObject(object) {
+                        if (object instanceof $root.cockroach.sql.jobs.RestoreDetails.TableRewrite)
+                            return object;
+                        let message = new $root.cockroach.sql.jobs.RestoreDetails.TableRewrite();
+                        if (object.table_id != null)
+                            message.table_id = object.table_id >>> 0;
+                        if (object.parent_id != null)
+                            message.parent_id = object.parent_id >>> 0;
+                        return message;
+                    };
+
+                    /**
+                     * Creates a TableRewrite message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.sql.jobs.RestoreDetails.TableRewrite.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.jobs.RestoreDetails.TableRewrite} TableRewrite
+                     */
+                    TableRewrite.from = TableRewrite.fromObject;
+
+                    /**
+                     * Creates a plain object from a TableRewrite message. Also converts values to other types if specified.
+                     * @param {cockroach.sql.jobs.RestoreDetails.TableRewrite} message TableRewrite
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    TableRewrite.toObject = function toObject(message, options) {
+                        if (!options)
+                            options = {};
+                        let object = {};
+                        if (options.defaults) {
+                            object.table_id = 0;
+                            object.parent_id = 0;
+                        }
+                        if (message.table_id != null && message.hasOwnProperty("table_id"))
+                            object.table_id = message.table_id;
+                        if (message.parent_id != null && message.hasOwnProperty("parent_id"))
+                            object.parent_id = message.parent_id;
+                        return object;
+                    };
+
+                    /**
+                     * Creates a plain object from this TableRewrite message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    TableRewrite.prototype.toObject = function toObject(options) {
+                        return this.constructor.toObject(this, options);
+                    };
+
+                    /**
+                     * Converts this TableRewrite to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    TableRewrite.prototype.toJSON = function toJSON() {
+                        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                    };
+
+                    return TableRewrite;
+                })();
 
                 return RestoreDetails;
             })();
@@ -33787,6 +34355,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @property {Array.<number>} [descriptor_ids] Payload descriptor_ids.
                  * @property {number} [fraction_completed] Payload fraction_completed.
                  * @property {string} [error] Payload error.
+                 * @property {cockroach.sql.jobs.Lease$Properties} [lease] Payload lease.
                  * @property {cockroach.sql.jobs.BackupDetails$Properties} [backup] Payload backup.
                  * @property {cockroach.sql.jobs.RestoreDetails$Properties} [restore] Payload restore.
                  * @property {cockroach.sql.jobs.SchemaChangeDetails$Properties} [schemaChange] Payload schemaChange.
@@ -33853,6 +34422,12 @@ export const cockroach = $root.cockroach = (() => {
                  * @type {string}
                  */
                 Payload.prototype.error = "";
+
+                /**
+                 * Payload lease.
+                 * @type {(cockroach.sql.jobs.Lease$Properties|null)}
+                 */
+                Payload.prototype.lease = null;
 
                 /**
                  * Payload backup.
@@ -33923,6 +34498,8 @@ export const cockroach = $root.cockroach = (() => {
                         writer.uint32(/* id 7, wireType 5 =*/61).float(message.fraction_completed);
                     if (message.error != null && message.hasOwnProperty("error"))
                         writer.uint32(/* id 8, wireType 2 =*/66).string(message.error);
+                    if (message.lease != null && message.hasOwnProperty("lease"))
+                        $root.cockroach.sql.jobs.Lease.encode(message.lease, writer.uint32(/* id 9, wireType 2 =*/74).fork()).ldelim();
                     if (message.backup != null && message.hasOwnProperty("backup"))
                         $root.cockroach.sql.jobs.BackupDetails.encode(message.backup, writer.uint32(/* id 10, wireType 2 =*/82).fork()).ldelim();
                     if (message.restore != null && message.hasOwnProperty("restore"))
@@ -33987,6 +34564,9 @@ export const cockroach = $root.cockroach = (() => {
                             break;
                         case 8:
                             message.error = reader.string();
+                            break;
+                        case 9:
+                            message.lease = $root.cockroach.sql.jobs.Lease.decode(reader, reader.uint32());
                             break;
                         case 10:
                             message.backup = $root.cockroach.sql.jobs.BackupDetails.decode(reader, reader.uint32());
@@ -34055,6 +34635,11 @@ export const cockroach = $root.cockroach = (() => {
                     if (message.error != null && message.hasOwnProperty("error"))
                         if (!$util.isString(message.error))
                             return "error: string expected";
+                    if (message.lease != null && message.hasOwnProperty("lease")) {
+                        let error = $root.cockroach.sql.jobs.Lease.verify(message.lease);
+                        if (error)
+                            return "lease." + error;
+                    }
                     if (message.backup != null && message.hasOwnProperty("backup")) {
                         properties.details = 1;
                         let error = $root.cockroach.sql.jobs.BackupDetails.verify(message.backup);
@@ -34131,6 +34716,11 @@ export const cockroach = $root.cockroach = (() => {
                         message.fraction_completed = Number(object.fraction_completed);
                     if (object.error != null)
                         message.error = String(object.error);
+                    if (object.lease != null) {
+                        if (typeof object.lease !== "object")
+                            throw TypeError(".cockroach.sql.jobs.Payload.lease: object expected");
+                        message.lease = $root.cockroach.sql.jobs.Lease.fromObject(object.lease);
+                    }
                     if (object.backup != null) {
                         if (typeof object.backup !== "object")
                             throw TypeError(".cockroach.sql.jobs.Payload.backup: object expected");
@@ -34190,6 +34780,7 @@ export const cockroach = $root.cockroach = (() => {
                             object.modified_micros = options.longs === String ? "0" : 0;
                         object.fraction_completed = 0;
                         object.error = "";
+                        object.lease = null;
                     }
                     if (message.description != null && message.hasOwnProperty("description"))
                         object.description = message.description;
@@ -34219,6 +34810,8 @@ export const cockroach = $root.cockroach = (() => {
                         object.fraction_completed = message.fraction_completed;
                     if (message.error != null && message.hasOwnProperty("error"))
                         object.error = message.error;
+                    if (message.lease != null && message.hasOwnProperty("lease"))
+                        object.lease = $root.cockroach.sql.jobs.Lease.toObject(message.lease, options);
                     if (message.backup != null && message.hasOwnProperty("backup")) {
                         object.backup = $root.cockroach.sql.jobs.BackupDetails.toObject(message.backup, options);
                         if (options.oneofs)

@@ -160,7 +160,7 @@ func TestJobLifecycle(t *testing.T) {
 		}
 		woodyJob := registry.NewJob(woodyRecord)
 
-		if err := woodyJob.Created(ctx); err != nil {
+		if err := woodyJob.Created(ctx, jobs.WithoutCancel); err != nil {
 			t.Fatal(err)
 		}
 		if err := woodyExpectation.verify(woodyJob.ID(), jobs.StatusPending); err != nil {
@@ -229,7 +229,7 @@ func TestJobLifecycle(t *testing.T) {
 		// Test modifying the job details before calling `Created`.
 		buzzJob.Record.Details = jobs.BackupDetails{}
 		buzzExpectation.Record.Details = jobs.BackupDetails{}
-		if err := buzzJob.Created(ctx); err != nil {
+		if err := buzzJob.Created(ctx, jobs.WithoutCancel); err != nil {
 			t.Fatal(err)
 		}
 		if err := buzzExpectation.verify(buzzJob.ID(), jobs.StatusPending); err != nil {
@@ -277,7 +277,7 @@ func TestJobLifecycle(t *testing.T) {
 		}
 		sidJob := registry.NewJob(sidRecord)
 
-		if err := sidJob.Created(ctx); err != nil {
+		if err := sidJob.Created(ctx, jobs.WithoutCancel); err != nil {
 			t.Fatal(err)
 		}
 		if err := sidExpectation.verify(sidJob.ID(), jobs.StatusPending); err != nil {
@@ -298,6 +298,75 @@ func TestJobLifecycle(t *testing.T) {
 		}
 	})
 
+	t.Run("FinishedWith", func(t *testing.T) {
+		makeJob := func() (*jobs.Job, expectation) {
+			record := jobs.Record{Details: jobs.BackupDetails{}}
+			expect := expectation{
+				DB:                sqlDB,
+				Record:            record,
+				Type:              jobs.TypeBackup,
+				Before:            timeutil.Now(),
+				FractionCompleted: 1.0,
+			}
+			job := registry.NewJob(record)
+			if err := job.Created(ctx, jobs.WithoutCancel); err != nil {
+				t.Fatal(err)
+			}
+			if err := job.Started(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if err := job.Progressed(ctx, 1.0, jobs.Noop); err != nil {
+				t.Fatal(err)
+			}
+			return job, expect
+		}
+
+		t.Run("nil error marks job as successful", func(t *testing.T) {
+			job, expect := makeJob()
+			if err := job.FinishedWith(ctx, nil); err != nil {
+				t.Fatal(err)
+			}
+			if err := expect.verify(job.ID(), jobs.StatusSucceeded); err != nil {
+				t.Fatal(err)
+			}
+		})
+
+		t.Run("non-nil error marks job as failed", func(t *testing.T) {
+			job, expect := makeJob()
+			expect.Error = "boom"
+			if err := job.FinishedWith(ctx, errors.New(expect.Error)); err != nil {
+				t.Fatal(err)
+			}
+			if err := expect.verify(job.ID(), jobs.StatusFailed); err != nil {
+				t.Fatal(err)
+			}
+		})
+
+		t.Run("internal errors are swallowed if marking job as successful", func(t *testing.T) {
+			job, _ := makeJob()
+			if _, err := sqlDB.Exec(
+				`UPDATE system.jobs SET payload = 'garbage' WHERE id = $1`, *job.ID(),
+			); err != nil {
+				t.Fatal(err)
+			}
+			if err := job.FinishedWith(ctx, nil); err != nil {
+				t.Fatal(err)
+			}
+		})
+
+		t.Run("internal errors are swallowed if marking job as failed", func(t *testing.T) {
+			job, _ := makeJob()
+			if _, err := sqlDB.Exec(
+				`UPDATE system.jobs SET payload = 'garbage' WHERE id = $1`, *job.ID(),
+			); err != nil {
+				t.Fatal(err)
+			}
+			if err := job.FinishedWith(ctx, errors.New("boom")); err != nil {
+				t.Fatal(err)
+			}
+		})
+	})
+
 	t.Run("bad job details fail", func(t *testing.T) {
 		defer func() {
 			if r, ok := recover().(string); !ok || !strings.Contains(r, "unknown details type int") {
@@ -308,7 +377,7 @@ func TestJobLifecycle(t *testing.T) {
 		job := registry.NewJob(jobs.Record{
 			Details: 42,
 		})
-		_ = job.Created(ctx)
+		_ = job.Created(ctx, jobs.WithoutCancel)
 	})
 
 	t.Run("update before create fails", func(t *testing.T) {
@@ -322,10 +391,10 @@ func TestJobLifecycle(t *testing.T) {
 		job := registry.NewJob(jobs.Record{
 			Details: jobs.BackupDetails{},
 		})
-		if err := job.Created(ctx); err != nil {
+		if err := job.Created(ctx, jobs.WithoutCancel); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.Created(ctx); err != nil {
+		if err := job.Created(ctx, jobs.WithoutCancel); err != nil {
 			t.Fatal(err)
 		}
 		if err := job.Started(ctx); err != nil {
@@ -346,7 +415,7 @@ func TestJobLifecycle(t *testing.T) {
 		job := registry.NewJob(jobs.Record{
 			Details: jobs.BackupDetails{},
 		})
-		if err := job.Created(ctx); err != nil {
+		if err := job.Created(ctx, jobs.WithoutCancel); err != nil {
 			t.Fatal(err)
 		}
 		if err := job.Started(ctx); err != nil {
@@ -364,7 +433,7 @@ func TestJobLifecycle(t *testing.T) {
 		job := registry.NewJob(jobs.Record{
 			Details: jobs.BackupDetails{},
 		})
-		if err := job.Created(ctx); err != nil {
+		if err := job.Created(ctx, jobs.WithoutCancel); err != nil {
 			t.Fatal(err)
 		}
 		if err := job.Progressed(ctx, 0.5, jobs.Noop); !testutils.IsError(err, `job \d+ not started`) {
@@ -376,7 +445,7 @@ func TestJobLifecycle(t *testing.T) {
 		job := registry.NewJob(jobs.Record{
 			Details: jobs.BackupDetails{},
 		})
-		if err := job.Created(ctx); err != nil {
+		if err := job.Created(ctx, jobs.WithoutCancel); err != nil {
 			t.Fatal(err)
 		}
 		if err := job.Started(ctx); err != nil {
@@ -400,7 +469,7 @@ func TestJobLifecycle(t *testing.T) {
 			FractionCompleted: 1.0,
 		}
 		job := registry.NewJob(record)
-		if err := job.Created(ctx); err != nil {
+		if err := job.Created(ctx, jobs.WithoutCancel); err != nil {
 			t.Fatal(err)
 		}
 		if err := job.Started(ctx); err != nil {
@@ -426,7 +495,7 @@ func TestJobLifecycle(t *testing.T) {
 			Before: timeutil.Now(),
 		}
 		job := registry.NewJob(record)
-		if err := job.Created(ctx); err != nil {
+		if err := job.Created(ctx, jobs.WithoutCancel); err != nil {
 			t.Fatal(err)
 		}
 		if err := expect.verify(job.ID(), jobs.StatusPending); err != nil {

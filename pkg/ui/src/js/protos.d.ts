@@ -17752,7 +17752,131 @@ export namespace cockroach {
          */
         namespace jobs {
 
-            type BackupDetails$Properties = {};
+            type Lease$Properties = {
+                node_id?: number;
+                epoch?: Long;
+            };
+
+            /**
+             * Constructs a new Lease.
+             * @exports cockroach.sql.jobs.Lease
+             * @constructor
+             * @param {cockroach.sql.jobs.Lease$Properties=} [properties] Properties to set
+             */
+            class Lease {
+
+                /**
+                 * Constructs a new Lease.
+                 * @exports cockroach.sql.jobs.Lease
+                 * @constructor
+                 * @param {cockroach.sql.jobs.Lease$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.sql.jobs.Lease$Properties);
+
+                /**
+                 * Lease node_id.
+                 * @type {number}
+                 */
+                public node_id: number;
+
+                /**
+                 * Lease epoch.
+                 * @type {Long}
+                 */
+                public epoch: Long;
+
+                /**
+                 * Creates a new Lease instance using the specified properties.
+                 * @param {cockroach.sql.jobs.Lease$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.jobs.Lease} Lease instance
+                 */
+                public static create(properties?: cockroach.sql.jobs.Lease$Properties): cockroach.sql.jobs.Lease;
+
+                /**
+                 * Encodes the specified Lease message. Does not implicitly {@link cockroach.sql.jobs.Lease.verify|verify} messages.
+                 * @param {cockroach.sql.jobs.Lease$Properties} message Lease message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.sql.jobs.Lease$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified Lease message, length delimited. Does not implicitly {@link cockroach.sql.jobs.Lease.verify|verify} messages.
+                 * @param {cockroach.sql.jobs.Lease$Properties} message Lease message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.sql.jobs.Lease$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a Lease message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.jobs.Lease} Lease
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.sql.jobs.Lease;
+
+                /**
+                 * Decodes a Lease message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.jobs.Lease} Lease
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.sql.jobs.Lease;
+
+                /**
+                 * Verifies a Lease message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a Lease message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.jobs.Lease} Lease
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.sql.jobs.Lease;
+
+                /**
+                 * Creates a Lease message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.jobs.Lease.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.jobs.Lease} Lease
+                 */
+                public static from(object: { [k: string]: any }): cockroach.sql.jobs.Lease;
+
+                /**
+                 * Creates a plain object from a Lease message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.jobs.Lease} message Lease
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.sql.jobs.Lease, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this Lease message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this Lease to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            type BackupDetails$Properties = {
+                start_time?: cockroach.util.hlc.Timestamp$Properties;
+                end_time?: cockroach.util.hlc.Timestamp$Properties;
+                uri?: string;
+            };
 
             /**
              * Constructs a new BackupDetails.
@@ -17769,6 +17893,24 @@ export namespace cockroach {
                  * @param {cockroach.sql.jobs.BackupDetails$Properties=} [properties] Properties to set
                  */
                 constructor(properties?: cockroach.sql.jobs.BackupDetails$Properties);
+
+                /**
+                 * BackupDetails start_time.
+                 * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
+                 */
+                public start_time: (cockroach.util.hlc.Timestamp$Properties|null);
+
+                /**
+                 * BackupDetails end_time.
+                 * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
+                 */
+                public end_time: (cockroach.util.hlc.Timestamp$Properties|null);
+
+                /**
+                 * BackupDetails uri.
+                 * @type {string}
+                 */
+                public uri: string;
 
                 /**
                  * Creates a new BackupDetails instance using the specified properties.
@@ -17859,6 +18001,8 @@ export namespace cockroach {
 
             type RestoreDetails$Properties = {
                 low_water_mark?: Uint8Array;
+                table_rewrites?: { [k: string]: cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties };
+                uris?: string[];
             };
 
             /**
@@ -17882,6 +18026,18 @@ export namespace cockroach {
                  * @type {Uint8Array}
                  */
                 public low_water_mark: Uint8Array;
+
+                /**
+                 * RestoreDetails table_rewrites.
+                 * @type {Object.<string,cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties>}
+                 */
+                public table_rewrites: { [k: string]: cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties };
+
+                /**
+                 * RestoreDetails uris.
+                 * @type {Array.<string>}
+                 */
+                public uris: string[];
 
                 /**
                  * Creates a new RestoreDetails instance using the specified properties.
@@ -17968,6 +18124,129 @@ export namespace cockroach {
                  * @returns {Object.<string,*>} JSON object
                  */
                 public toJSON(): { [k: string]: any };
+            }
+
+            namespace RestoreDetails {
+
+                type TableRewrite$Properties = {
+                    table_id?: number;
+                    parent_id?: number;
+                };
+
+                /**
+                 * Constructs a new TableRewrite.
+                 * @exports cockroach.sql.jobs.RestoreDetails.TableRewrite
+                 * @constructor
+                 * @param {cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties=} [properties] Properties to set
+                 */
+                class TableRewrite {
+
+                    /**
+                     * Constructs a new TableRewrite.
+                     * @exports cockroach.sql.jobs.RestoreDetails.TableRewrite
+                     * @constructor
+                     * @param {cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties=} [properties] Properties to set
+                     */
+                    constructor(properties?: cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties);
+
+                    /**
+                     * TableRewrite table_id.
+                     * @type {number}
+                     */
+                    public table_id: number;
+
+                    /**
+                     * TableRewrite parent_id.
+                     * @type {number}
+                     */
+                    public parent_id: number;
+
+                    /**
+                     * Creates a new TableRewrite instance using the specified properties.
+                     * @param {cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties=} [properties] Properties to set
+                     * @returns {cockroach.sql.jobs.RestoreDetails.TableRewrite} TableRewrite instance
+                     */
+                    public static create(properties?: cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties): cockroach.sql.jobs.RestoreDetails.TableRewrite;
+
+                    /**
+                     * Encodes the specified TableRewrite message. Does not implicitly {@link cockroach.sql.jobs.RestoreDetails.TableRewrite.verify|verify} messages.
+                     * @param {cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties} message TableRewrite message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encode(message: cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Encodes the specified TableRewrite message, length delimited. Does not implicitly {@link cockroach.sql.jobs.RestoreDetails.TableRewrite.verify|verify} messages.
+                     * @param {cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties} message TableRewrite message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encodeDelimited(message: cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Decodes a TableRewrite message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.sql.jobs.RestoreDetails.TableRewrite} TableRewrite
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.sql.jobs.RestoreDetails.TableRewrite;
+
+                    /**
+                     * Decodes a TableRewrite message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.sql.jobs.RestoreDetails.TableRewrite} TableRewrite
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.sql.jobs.RestoreDetails.TableRewrite;
+
+                    /**
+                     * Verifies a TableRewrite message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    public static verify(message: { [k: string]: any }): string;
+
+                    /**
+                     * Creates a TableRewrite message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.jobs.RestoreDetails.TableRewrite} TableRewrite
+                     */
+                    public static fromObject(object: { [k: string]: any }): cockroach.sql.jobs.RestoreDetails.TableRewrite;
+
+                    /**
+                     * Creates a TableRewrite message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.sql.jobs.RestoreDetails.TableRewrite.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.jobs.RestoreDetails.TableRewrite} TableRewrite
+                     */
+                    public static from(object: { [k: string]: any }): cockroach.sql.jobs.RestoreDetails.TableRewrite;
+
+                    /**
+                     * Creates a plain object from a TableRewrite message. Also converts values to other types if specified.
+                     * @param {cockroach.sql.jobs.RestoreDetails.TableRewrite} message TableRewrite
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public static toObject(message: cockroach.sql.jobs.RestoreDetails.TableRewrite, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Creates a plain object from this TableRewrite message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Converts this TableRewrite to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    public toJSON(): { [k: string]: any };
+                }
             }
 
             type SchemaChangeDetails$Properties = {
@@ -18092,6 +18371,7 @@ export namespace cockroach {
                 descriptor_ids?: number[];
                 fraction_completed?: number;
                 error?: string;
+                lease?: cockroach.sql.jobs.Lease$Properties;
                 backup?: cockroach.sql.jobs.BackupDetails$Properties;
                 restore?: cockroach.sql.jobs.RestoreDetails$Properties;
                 schemaChange?: cockroach.sql.jobs.SchemaChangeDetails$Properties;
@@ -18160,6 +18440,12 @@ export namespace cockroach {
                  * @type {string}
                  */
                 public error: string;
+
+                /**
+                 * Payload lease.
+                 * @type {(cockroach.sql.jobs.Lease$Properties|null)}
+                 */
+                public lease: (cockroach.sql.jobs.Lease$Properties|null);
 
                 /**
                  * Payload backup.
