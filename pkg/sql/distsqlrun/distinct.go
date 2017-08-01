@@ -25,6 +25,8 @@ import (
 )
 
 type distinct struct {
+	processorBase
+
 	flowCtx      *FlowCtx
 	input        RowSource
 	lastGroupKey sqlbase.EncDatumRow
@@ -33,7 +35,6 @@ type distinct struct {
 	distinctCols map[uint32]struct{}
 	memAcc       mon.BoundAccount
 	datumAlloc   sqlbase.DatumAlloc
-	out          procOutputHelper
 }
 
 var _ processor = &distinct{}

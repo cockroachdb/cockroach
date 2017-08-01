@@ -31,13 +31,14 @@ import (
 // that this is a no-grouping aggregator and therefore it does not produce a global ordering but
 // simply guarantees an intra-stream ordering on the physical output stream.
 type sorter struct {
+	processorBase
+
 	flowCtx *FlowCtx
 	// input is a row source without metadata; the metadata is directed straight
 	// to out.output.
 	input NoMetadataRowSource
 	// rawInput is the true input, not wrapped in a NoMetadataRowSource.
 	rawInput RowSource
-	out      procOutputHelper
 	ordering sqlbase.ColumnOrdering
 	matchLen uint32
 	// count is the maximum number of rows that the sorter will push to the

@@ -32,6 +32,8 @@ import (
 const joinReaderBatchSize = 100
 
 type joinReader struct {
+	processorBase
+
 	flowCtx *FlowCtx
 
 	desc  sqlbase.TableDescriptor
@@ -41,7 +43,6 @@ type joinReader struct {
 	alloc   sqlbase.DatumAlloc
 
 	input RowSource
-	out   procOutputHelper
 }
 
 var _ processor = &joinReader{}
