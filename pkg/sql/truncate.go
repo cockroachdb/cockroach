@@ -51,7 +51,7 @@ func (p *planner) Truncate(ctx context.Context, n *parser.Truncate) (planNode, e
 			return nil, err
 		}
 
-		tableDesc, err := mustGetTableOrViewDesc(
+		tableDesc, err := MustGetTableOrViewDesc(
 			ctx, p.txn, p.getVirtualTabler(), tn, true, /* allowAdding */
 		)
 		if err != nil {

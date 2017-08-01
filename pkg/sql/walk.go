@@ -359,7 +359,7 @@ func (v *planVisitor) visit(plan planNode) {
 
 	case *createViewNode:
 		if v.observer.attr != nil {
-			v.observer.attr(name, "query", n.sourceQuery)
+			v.observer.attr(name, "query", parser.AsStringWithFlags(n.n.AsSource, parser.FmtParsable))
 		}
 		v.visit(n.sourcePlan)
 

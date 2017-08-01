@@ -201,7 +201,8 @@ func (sc *SchemaChanger) ExtendLease(
 	return nil
 }
 
-func dropTableName(
+// DropTableName removes a mapping from name to ID from the KV database.
+func DropTableName(
 	ctx context.Context, tableDesc *sqlbase.TableDescriptor, db *client.DB, traceKV bool,
 ) error {
 	_, nameKey, _ := GetKeysForTableDescriptor(tableDesc)
@@ -227,7 +228,8 @@ func dropTableName(
 	})
 }
 
-func dropTableDesc(
+// DropTableDesc removes a descriptor from the KV database.
+func DropTableDesc(
 	ctx context.Context, tableDesc *sqlbase.TableDescriptor, db *client.DB, traceKV bool,
 ) error {
 	zoneKey, _, descKey := GetKeysForTableDescriptor(tableDesc)
@@ -269,7 +271,7 @@ func (sc *SchemaChanger) maybeAddDropRename(
 			return false, err
 		}
 
-		if err := dropTableName(ctx, table /* false */, &sc.db, false /* traceKV */); err != nil {
+		if err := DropTableName(ctx, table /* false */, &sc.db, false /* traceKV */); err != nil {
 			return false, err
 		}
 
@@ -282,7 +284,7 @@ func (sc *SchemaChanger) maybeAddDropRename(
 			return false, err
 		}
 
-		return true, dropTableDesc(ctx, table, &sc.db, false /* traceKV */)
+		return true, DropTableDesc(ctx, table, &sc.db, false /* traceKV */)
 	}
 
 	if table.Adding() {

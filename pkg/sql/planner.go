@@ -74,6 +74,10 @@ type planner struct {
 	// query.
 	cancelChecker CancelChecker
 
+	// planDeps, if non-nil, collects the table/view dependencies for this query.
+	// This is (currently) used by CREATE VIEW.
+	planDeps planDependencies
+
 	// Avoid allocations by embedding commonly used objects and visitors.
 	parser                parser.Parser
 	subqueryVisitor       subqueryVisitor
