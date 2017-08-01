@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -497,6 +500,195 @@ func TestCreateSystemTable(t *testing.T) {
 	backwardCompatibleMigrations = append(backwardCompatibleMigrations, migrationDescriptor{
 		name:   "create system.jobs table",
 		workFn: createJobsTable,
+	})
+	if err := mgr.EnsureMigrations(ctx); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUpdateViewDependenciesMigration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	// remove the view update migration so we can test its effects.
+	newMigrations := make([]migrationDescriptor, 0, len(backwardCompatibleMigrations))
+	for _, m := range backwardCompatibleMigrations {
+		if strings.HasPrefix(m.name, "establish conservative dependencies for views") {
+			continue
+		}
+		newMigrations = append(newMigrations, m)
+	}
+
+	// We also hijack the migration process to capture the SQL memory
+	// metric object, needed below.
+	var memMetrics *sql.MemoryMetrics
+	backwardCompatibleMigrations = append(newMigrations,
+		migrationDescriptor{
+			name: "capture mem metrics",
+			workFn: func(ctx context.Context, r runner) error {
+				memMetrics = r.memMetrics
+				return nil
+			},
+		})
+
+	t.Log("starting server")
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	t.Log("create test tables")
+
+	const createStmts = `
+CREATE DATABASE test;
+CREATE DATABASE test2;
+SET DATABASE=test;
+
+CREATE TABLE t(x INT, y INT);
+CREATE VIEW v1 AS SELECT x FROM t WHERE false;
+CREATE VIEW v2 AS SELECT x FROM v1;
+
+CREATE TABLE u(x INT, y INT);
+CREATE VIEW v3 AS SELECT x FROM (SELECT x, y FROM u);
+
+CREATE VIEW v4 AS SELECT id from system.descriptor;
+
+CREATE TABLE w(x INT);
+CREATE VIEW test2.v5 AS SELECT x FROM w;
+
+CREATE TABLE x(x INT);
+CREATE INDEX y ON x(x);
+CREATE VIEW v6 AS SELECT x FROM x@y;
+`
+	if _, err := sqlDB.Exec(createStmts); err != nil {
+		t.Fatal(err)
+	}
+
+	testDesc := []struct {
+		dbName parser.Name
+		tname  parser.Name
+		desc   *sqlbase.TableDescriptor
+	}{
+		{"test", "t", nil},
+		{"test", "v1", nil},
+		{"test", "u", nil},
+		{"test", "w", nil},
+		{"test", "x", nil},
+		{"system", "descriptor", nil},
+	}
+
+	t.Log("fetch descriptors")
+
+	e := s.Executor().(*sql.Executor)
+	vt := e.GetVirtualTabler()
+
+	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		for i := range testDesc {
+			desc, err := sql.MustGetTableOrViewDesc(ctx, txn, vt,
+				&parser.TableName{DatabaseName: testDesc[i].dbName, TableName: testDesc[i].tname}, true)
+			if err != nil {
+				return err
+			}
+			testDesc[i].desc = desc
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now, corrupt the descriptors by breaking their dependency information.
+	t.Log("break descriptors")
+	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
+		for _, t := range testDesc {
+			t.desc.UpVersion = true
+			t.desc.DependedOnBy = nil
+			t.desc.DependedOnBy = nil
+
+			descKey := sqlbase.MakeDescMetadataKey(t.desc.GetID())
+			descVal := sqlbase.WrapDescriptor(t.desc)
+			if err := txn.Put(ctx, descKey, descVal); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Break further by deleting the referenced tables. This has become possible
+	// because the dependency links have been broken above.
+	t.Log("delete tables")
+
+	if _, err := sqlDB.Exec(`
+DROP TABLE test.t;
+DROP VIEW test.v1;
+DROP TABLE test.u;
+DROP TABLE test.w;
+DROP INDEX test.x@y;
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check the views are effectively broken.
+	t.Log("check views are broken")
+
+	for _, vname := range []string{"test.v2", "test.v3", "test2.v5", "test.v6"} {
+		_, err := sqlDB.Exec(fmt.Sprintf(`TABLE %s`, vname))
+		if !testutils.IsError(err, `relation ".*" does not exist|index ".*" not found`) {
+			t.Fatalf("%s: unexpected error: %v", vname, err)
+		}
+	}
+
+	// Restore missing dependencies for the rest of the test.
+	t.Log("restore dependencies")
+
+	if _, err := sqlDB.Exec(`
+CREATE TABLE test.t(x INT, y INT);
+CREATE TABLE test.u(x INT, y INT);
+CREATE TABLE test.w(x INT);
+CREATE VIEW test.v1 AS SELECT x FROM test.t WHERE false;
+CREATE INDEX y ON test.x(x);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run the migration outside the context of a migration manager
+	// such that its work gets done but the key indicating it's been completed
+	// doesn't get written.
+	t.Log("fix view deps manually")
+	if err := repopulateViewDeps(ctx, runner{db: kvDB, sqlExecutor: e}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that the views are fixed now.
+	t.Log("check views working")
+
+	// Check the views can be queried.
+	for _, vname := range []string{"test.v1", "test.v2", "test.v3", "test.v4", "test2.v5", "test.v6"} {
+		if _, err := sqlDB.Exec(fmt.Sprintf("TABLE %s", vname)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Check that the tables cannot be dropped any more.
+	for _, tn := range []string{"TABLE test.t", "TABLE test.u", "TABLE test.w", "INDEX test.x@y"} {
+		_, err := sqlDB.Exec(fmt.Sprintf(`DROP %s`, tn))
+		if !testutils.IsError(err,
+			`cannot drop (relation|index) .* because view .* depends on it`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	}
+
+	// Finally, try running the migration and make sure it still succeeds.
+	// This verifies the idempotency of the migration.
+	t.Log("run migration")
+
+	mgr := NewManager(s.Stopper(), kvDB, e, s.Clock(), memMetrics, "clientID")
+	backwardCompatibleMigrations = append(backwardCompatibleMigrations, migrationDescriptor{
+		name:   "repopulate view dependencies",
+		workFn: repopulateViewDeps,
 	})
 	if err := mgr.EnsureMigrations(ctx); err != nil {
 		t.Fatal(err)

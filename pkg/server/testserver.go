@@ -452,6 +452,11 @@ func (ts *TestServer) LeaseManager() interface{} {
 	return ts.leaseMgr
 }
 
+// Executor is part of TestServerInterface.
+func (ts *TestServer) Executor() interface{} {
+	return ts.sqlExecutor
+}
+
 // GetNode exposes the Server's Node.
 func (ts *TestServer) GetNode() *Node {
 	return ts.node

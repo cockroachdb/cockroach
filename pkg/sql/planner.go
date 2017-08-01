@@ -74,6 +74,13 @@ type planner struct {
 	// query.
 	cancelChecker CancelChecker
 
+	// planDeps, if non-nil, collects the table/view dependencies for this query.
+	// Any planNode constructors that resolves a table name or reference in the query
+	// to a descriptor must register this descriptor into planDeps.
+	// This is (currently) used by CREATE VIEW.
+	// TODO(knz): Remove this in favor of a better encapsulated mechanism.
+	planDeps planDependencies
+
 	// Avoid allocations by embedding commonly used objects and visitors.
 	parser                parser.Parser
 	subqueryVisitor       subqueryVisitor

@@ -67,7 +67,7 @@ func (p *planner) ShowFingerprints(
 		txn.SetFixedTimestamp(ts)
 
 		var err error
-		tableDesc, err = mustGetTableDesc(
+		tableDesc, err = MustGetTableDesc(
 			ctx, txn, p.getVirtualTabler(), tn, false /*allowAdding*/)
 		return err
 	}); err != nil {
