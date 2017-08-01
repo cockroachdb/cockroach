@@ -128,10 +128,17 @@ func testGossipRestartInner(
 		}
 
 		log.Infof(ctx, "restarting all nodes")
+		ch := make(chan error)
 		for i := 0; i < num; i++ {
-			if err := c.Restart(ctx, i); err != nil {
-				t.Fatal(err)
+			go func(i int) { ch <- c.Restart(ctx, i) }(i)
+		}
+		for i := 0; i < num; i++ {
+			if err := <-ch; err != nil {
+				t.Errorf("error restarting node %d: %s", i, err)
 			}
+		}
+		if t.Failed() {
+			t.FailNow()
 		}
 
 		log.Infof(ctx, "waiting for gossip to be connected")

@@ -4,7 +4,7 @@ resource "google_compute_firewall" "default" {
 
   allow {
     protocol = "tcp"
-    ports = ["${var.sql_port}", "${var.http_port}", 9001 ]
+    ports = [26257, 8080]
   }
 
   source_ranges = ["0.0.0.0/0"]

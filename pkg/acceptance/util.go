@@ -217,21 +217,9 @@ func MakeFarmer(t testing.TB, prefix string, stopper *stop.Stopper) *terrafarm.F
 		}
 		logDir = filepath.Join(pwd, logDir)
 	}
-	stores := "--store=/mnt/data0"
-	for j := 1; j < *flagStores; j++ {
+	var stores string
+	for j := 0; j < *flagStores; j++ {
 		stores += " --store=/mnt/data" + strconv.Itoa(j)
-	}
-
-	// Pass variables to be passed to the Terraform config.
-	terraformVars := make(map[string]string)
-	if *flagTFCockroachBinary != "" {
-		terraformVars["cockroach_binary"] = *flagTFCockroachBinary
-	}
-	if *flagTFCockroachFlags != "" {
-		terraformVars["cockroach_flags"] = *flagTFCockroachFlags
-	}
-	if *flagTFCockroachEnv != "" {
-		terraformVars["cockroach_env"] = *flagTFCockroachEnv
 	}
 
 	var name string
@@ -287,21 +275,29 @@ func MakeFarmer(t testing.TB, prefix string, stopper *stop.Stopper) *terrafarm.F
 	}, clientClock, stopper)
 	rpcContext.HeartbeatCB = func() {
 		if err := rpcContext.RemoteClocks.VerifyClockOffset(context.Background()); err != nil {
-			log.Fatal(context.Background(), err)
+			t.Fatal(err)
 		}
 	}
 
+	// Disable update checks for test clusters by setting the required
+	// environment variable.
+	cockroachEnv := "COCKROACH_SKIP_UPDATE_CHECK=1"
+	if len(*flagTFCockroachEnv) > 0 {
+		cockroachEnv += " " + strings.Join(strings.Split(*flagTFCockroachEnv, ","), " ")
+	}
+
 	f := &terrafarm.Farmer{
-		Output:      os.Stderr,
-		Cwd:         *flagCwd,
-		LogDir:      logDir,
-		KeyName:     *flagKeyName,
-		Stores:      strconv.Quote(stores),
-		Prefix:      name,
-		StateFile:   name + ".tfstate",
-		AddVars:     terraformVars,
-		KeepCluster: flagTFKeepCluster.String(),
-		RPCContext:  rpcContext,
+		Output:          os.Stderr,
+		Cwd:             *flagCwd,
+		LogDir:          logDir,
+		KeyName:         *flagKeyName,
+		CockroachBinary: *flagTFCockroachBinary,
+		CockroachFlags:  stores + " " + *flagTFCockroachFlags,
+		CockroachEnv:    cockroachEnv,
+		Prefix:          name,
+		StateFile:       name + ".tfstate",
+		KeepCluster:     flagTFKeepCluster.String(),
+		RPCContext:      rpcContext,
 	}
 	log.Infof(context.Background(), "logging to %s", logDir)
 	return f

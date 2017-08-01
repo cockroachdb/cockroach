@@ -55,11 +55,7 @@ type benchmarkTest struct {
 	cockroachDiskSizeGB int
 	// storeURL is the Google Cloud Storage URL from which the test will
 	// download stores. Nothing is downloaded if storeURL is empty.
-	storeURL string
-	// skipClusterInit controls the --join flags for the nodes. If false (the
-	// default), then the first node will be empty and thus init the cluster,
-	// and each node will have the previous node as its join flag. If true,
-	// then all nodes will have all nodes in their join flags.
+	storeURL        string
 	skipClusterInit bool
 
 	f *terrafarm.Farmer
@@ -71,8 +67,7 @@ func (bt *benchmarkTest) Start(ctx context.Context) {
 		bt.b.Fatal("testing enterprise features requires setting COCKROACH_DEV_LICENSE")
 	}
 	bt.f = acceptance.MakeFarmer(bt.b, bt.prefix, acceptance.GetStopper())
-
-	bt.f.AddVars["join_all"] = fmt.Sprint(bt.skipClusterInit)
+	bt.f.SkipClusterInit = bt.skipClusterInit
 
 	log.Infof(ctx, "creating cluster with %d node(s)", bt.nodes)
 	if err := bt.f.Resize(bt.nodes); err != nil {
