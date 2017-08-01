@@ -64,6 +64,7 @@ var serverSSLCertsDir string
 // InitCLIDefaults is used for testing.
 func InitCLIDefaults() {
 	cliCtx.tableDisplayFormat = tableDisplayTSV
+	cliCtx.showTimes = false
 	dumpCtx.dumpMode = dumpBoth
 }
 
@@ -356,7 +357,10 @@ func init() {
 	// By default, these commands print their output as pretty-formatted
 	// tables on terminals, and TSV when redirected to a file. The user
 	// can override with --format.
+	// By default, query times are not displayed. The default is overridden
+	// in the CLI shell.
 	cliCtx.tableDisplayFormat = tableDisplayTSV
+	cliCtx.showTimes = false
 	if isInteractive {
 		cliCtx.tableDisplayFormat = tableDisplayPretty
 	}

@@ -261,6 +261,12 @@ var options = map[string]struct {
 		func(c *cliState, _ []string) error { c.normalizeHistory = true; return nil },
 		func(c *cliState) error { c.normalizeHistory = false; return nil },
 	},
+	`show_times`: {
+		0,
+		true,
+		func(c *cliState, _ []string) error { cliCtx.showTimes = true; return nil },
+		func(c *cliState) error { cliCtx.showTimes = false; return nil },
+	},
 }
 
 // handleSet supports the \set client-side command.
@@ -273,8 +279,9 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 				{"errexit", strconv.FormatBool(c.errExit)},
 				{"check_syntax", strconv.FormatBool(c.checkSyntax)},
 				{"normalize_history", strconv.FormatBool(c.normalizeHistory)},
+				{"show_times", strconv.FormatBool(cliCtx.showTimes)},
 			}),
-			"set", cliCtx.tableDisplayFormat)
+			"set")
 		if err != nil {
 			panic(err)
 		}
@@ -854,8 +861,7 @@ func (c *cliState) doRunStatement(nextState cliStateEnum) cliStateEnum {
 	c.lastKnownTxnStatus = " ?"
 
 	// Now run the statement/query.
-	c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(c.concatLines),
-		cliCtx.tableDisplayFormat)
+	c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(c.concatLines))
 	if c.exitErr != nil {
 		fmt.Fprintln(stderr, c.exitErr)
 		if c.errExit {
@@ -892,6 +898,12 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 			// chzyer/readline is exceptionally slow at reading long lines, so we
 			// only use it in interactive mode.
 			if isInteractive {
+				// If interactive and the table display format is "pretty", also
+				// enable printing of times.
+				if cliCtx.tableDisplayFormat == tableDisplayPretty {
+					cliCtx.showTimes = true
+				}
+
 				// The readline initialization is not placed in
 				// the doStart() method because of the defer.
 				c.ins, c.exitErr = readline.NewEx(config)
@@ -951,10 +963,9 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 
 // runOneStatement executes one statement and terminates
 // on error.
-func runStatements(conn *sqlConn, stmts []string, displayFormat tableDisplayFormat) error {
+func runStatements(conn *sqlConn, stmts []string) error {
 	for _, stmt := range stmts {
-		if err := runQueryAndFormatResults(conn, os.Stdout, makeQuery(stmt),
-			displayFormat); err != nil {
+		if err := runQueryAndFormatResults(conn, os.Stdout, makeQuery(stmt)); err != nil {
 			return err
 		}
 	}
@@ -985,7 +996,7 @@ func runTerm(cmd *cobra.Command, args []string) error {
 
 	if len(sqlCtx.execStmts) > 0 {
 		// Single-line sql; run as simple as possible, without noise on stdout.
-		return runStatements(conn, sqlCtx.execStmts, cliCtx.tableDisplayFormat)
+		return runStatements(conn, sqlCtx.execStmts)
 	}
 	// Use the same as the default global readline config.
 	conf := readline.Config{

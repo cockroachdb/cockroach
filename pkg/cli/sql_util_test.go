@@ -101,9 +101,10 @@ func TestRunQuery(t *testing.T) {
 	// Use a buffer as the io.Writer.
 	var b bytes.Buffer
 
+	cliCtx.tableDisplayFormat = tableDisplayPretty
+
 	// Non-query statement.
-	if err := runQueryAndFormatResults(conn, &b, makeQuery(`SET DATABASE=system`),
-		tableDisplayPretty); err != nil {
+	if err := runQueryAndFormatResults(conn, &b, makeQuery(`SET DATABASE=system`)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -136,7 +137,7 @@ SET
 	}
 
 	if err := runQueryAndFormatResults(conn, &b,
-		makeQuery(`SHOW COLUMNS FROM system.namespace`), tableDisplayPretty); err != nil {
+		makeQuery(`SHOW COLUMNS FROM system.namespace`)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -158,8 +159,7 @@ SET
 
 	// Test placeholders.
 	if err := runQueryAndFormatResults(conn, &b,
-		makeQuery(`SELECT * FROM system.namespace WHERE name=$1`, "descriptor"),
-		tableDisplayPretty); err != nil {
+		makeQuery(`SELECT * FROM system.namespace WHERE name=$1`, "descriptor")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -178,7 +178,7 @@ SET
 
 	// Test multiple results.
 	if err := runQueryAndFormatResults(conn, &b,
-		makeQuery(`SELECT 1; SELECT 2, 3; SELECT 'hello'`), tableDisplayPretty); err != nil {
+		makeQuery(`SELECT 1; SELECT 2, 3; SELECT 'hello'`)); err != nil {
 		t.Fatal(err)
 	}
 

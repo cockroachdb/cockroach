@@ -69,7 +69,7 @@ func runLsNodes(cmd *cobra.Command, args []string) error {
 		})
 	}
 
-	return printQueryOutput(os.Stdout, lsNodesColumnHeaders, newRowSliceIter(rows), "", cliCtx.tableDisplayFormat)
+	return printQueryOutput(os.Stdout, lsNodesColumnHeaders, newRowSliceIter(rows), "")
 }
 
 var nodesColumnHeaders = []string{
@@ -138,8 +138,7 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 		return errors.Errorf("expected no arguments or a single node ID")
 	}
 
-	return printQueryOutput(os.Stdout, nodesColumnHeaders, newRowSliceIter(nodeStatusesToRows(nodeStatuses)), "",
-		cliCtx.tableDisplayFormat)
+	return printQueryOutput(os.Stdout, nodesColumnHeaders, newRowSliceIter(nodeStatusesToRows(nodeStatuses)), "")
 }
 
 // nodeStatusesToRows converts NodeStatuses to SQL-like result rows, so that we can pretty-print
