@@ -86,10 +86,10 @@ func TestRegistryResume(t *testing.T) {
 
 	const jobCount = 3
 
-	wait := func() {
-		// Every turn of the registry's liveness poll loop will generate exactly one
-		// call to nodeLiveness.GetLivenesses. Only after we've witnessed one call
-		// for each job, plus one more call, can we be sure that all work has been
+	drainAdoptionLoop := func() {
+		// Every turn of the registry's adoption loop will generate exactly one call
+		// to nodeLiveness.GetLivenesses. Only after we've witnessed one call for
+		// each job, plus one more call, can we be sure that all work has been
 		// completed.
 		//
 		// Waiting for only jobCount calls to nodeLiveness.GetLivenesses is racy, as
@@ -117,39 +117,41 @@ func TestRegistryResume(t *testing.T) {
 
 	hookCallCount := 0
 	resumeCounts := make(map[roachpb.NodeID]int)
+	resumeCalled := make(chan struct{})
 	var newJobs []*jobs.Job
 	jobs.AddResumeHook(func(_ jobs.Type) func(context.Context, *jobs.Job) error {
 		hookCallCount++
 		return func(_ context.Context, job *jobs.Job) error {
 			resumeCounts[jobMap[*job.ID()]]++
 			newJobs = append(newJobs, job)
+			resumeCalled <- struct{}{}
 			return nil
 		}
 	})
 
-	wait()
+	drainAdoptionLoop()
 	if e, a := 0, hookCallCount; e != a {
 		t.Fatalf("expected hookCallCount to be %d, but got %d", e, a)
 	}
 
-	wait()
+	drainAdoptionLoop()
 	if e, a := 0, hookCallCount; e != a {
 		t.Fatalf("expected hookCallCount to be %d, but got %d", e, a)
 	}
 
 	nodeLiveness.FakeSetExpiration(1, hlc.MinTimestamp)
-	wait()
+	drainAdoptionLoop()
 	if hookCallCount == 0 {
 		t.Fatalf("expected hookCallCount to be non-zero, but got %d", hookCallCount)
 	}
 
-	wait()
+	<-resumeCalled
 	if e, a := 1, resumeCounts[1]; e != a {
 		t.Fatalf("expected resumeCount to be %d, but got %d", e, a)
 	}
 
 	nodeLiveness.FakeIncrementEpoch(3)
-	wait()
+	<-resumeCalled
 	if e, a := 1, resumeCounts[3]; e != a {
 		t.Fatalf("expected resumeCount to be %d, but got %d", e, a)
 	}
