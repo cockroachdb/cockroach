@@ -17,6 +17,8 @@ package server
 import (
 	"bytes"
 	"fmt"
+	"math"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -1143,6 +1145,90 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+// DecommissionStatus returns the DecommissionStatus for all or the given nodes.
+func (s *adminServer) DecommissionStatus(
+	ctx context.Context, req *serverpb.DecommissionStatusRequest,
+) (*serverpb.DecommissionStatusResponse, error) {
+	// Get the number of replicas on each node. We *may* not need all of them,
+	// but that would be more complicated than seems worth it right now.
+	ns, err := s.server.status.Nodes(ctx, &serverpb.NodesRequest{})
+	if err != nil {
+		return nil, errors.Wrap(err, "loading node statuses")
+	}
+
+	nodeIDs := req.NodeIDs
+	// If no nodeIDs given, use all nodes.
+	if len(nodeIDs) == 0 {
+		for _, status := range ns.Nodes {
+			nodeIDs = append(nodeIDs, status.Desc.NodeID)
+		}
+	}
+
+	// Compute the replica counts for the target nodes only. This map doubles as
+	// a lookup table to check whether we care about a given node.
+	replicaCounts := make(map[roachpb.NodeID]int64)
+	for _, nodeID := range nodeIDs {
+		replicaCounts[nodeID] = math.MaxInt64
+	}
+
+	for _, nodeStatus := range ns.Nodes {
+		nodeID := nodeStatus.Desc.NodeID
+		if _, ok := replicaCounts[nodeID]; !ok {
+			continue // not interested in this node
+		}
+		var replicas float64
+		for _, storeStatus := range nodeStatus.StoreStatuses {
+			replicas += storeStatus.Metrics["replicas"]
+		}
+		replicaCounts[nodeID] = int64(replicas)
+	}
+
+	var res serverpb.DecommissionStatusResponse
+
+	for nodeID := range replicaCounts {
+		l, err := s.server.nodeLiveness.GetLiveness(nodeID)
+		if err != nil {
+			return nil, errors.Wrapf(err, "unable to get liveness for %d", nodeID)
+		}
+		nodeResp := serverpb.DecommissionStatusResponse_Status{
+			NodeID:          l.NodeID,
+			ReplicaCount:    replicaCounts[l.NodeID],
+			Decommissioning: l.Decommissioning,
+			Draining:        l.Draining,
+		}
+		if l.IsLive(s.server.clock.Now(), s.server.clock.MaxOffset()) {
+			nodeResp.IsLive = true
+		}
+
+		res.Status = append(res.Status, nodeResp)
+	}
+
+	sort.Slice(res.Status, func(i, j int) bool {
+		return res.Status[i].NodeID < res.Status[j].NodeID
+	})
+
+	return &res, nil
+}
+
+// Decommission sets the decommission flag to the specified value on the specified node(s).
+func (s *adminServer) Decommission(
+	ctx context.Context, req *serverpb.DecommissionRequest,
+) (*serverpb.DecommissionStatusResponse, error) {
+	nodeIDs := req.NodeIDs
+	if nodeIDs == nil {
+		// If no NodeIDs are specified, decommission the current node. This is
+		// used by `quit --decommission`.
+		nodeIDs = []roachpb.NodeID{s.server.NodeID()}
+	}
+
+	// Mark the target nodes as decommissioning. They'll find out as they
+	// heartbeat their liveness.
+	if err := s.server.Decommission(ctx, req.Decommissioning, nodeIDs); err != nil {
+		return nil, err
+	}
+	return s.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{NodeIDs: nodeIDs})
 }
 
 // sqlQuery allows you to incrementally build a SQL query that uses
