@@ -45,7 +45,7 @@ func runGetUser(cmd *cobra.Command, args []string) error {
 	}
 	defer conn.Close()
 	return runQueryAndFormatResults(conn, os.Stdout,
-		makeQuery(`SELECT * FROM system.users WHERE username=$1`, args[0]), cliCtx.tableDisplayFormat)
+		makeQuery(`SELECT * FROM system.users WHERE username=$1`, args[0]))
 }
 
 // A lsUsersCmd command displays a list of users.
@@ -68,7 +68,7 @@ func runLsUsers(cmd *cobra.Command, args []string) error {
 	}
 	defer conn.Close()
 	return runQueryAndFormatResults(conn, os.Stdout,
-		makeQuery(`SELECT username FROM system.users`), cliCtx.tableDisplayFormat)
+		makeQuery(`SELECT username FROM system.users`))
 }
 
 // A rmUserCmd command removes the user for the specified username.
@@ -91,8 +91,7 @@ func runRmUser(cmd *cobra.Command, args []string) error {
 	}
 	defer conn.Close()
 	return runQueryAndFormatResults(conn, os.Stdout,
-		makeQuery(`DELETE FROM system.users WHERE username=$1`, args[0]),
-		cliCtx.tableDisplayFormat)
+		makeQuery(`DELETE FROM system.users WHERE username=$1`, args[0]))
 }
 
 // A setUserCmd command creates a new or updates an existing user.
@@ -138,8 +137,7 @@ func runSetUser(cmd *cobra.Command, args []string) error {
 	// TODO(asubiotto): Implement appropriate server-side authorization rules
 	// for users to be able to change their own passwords.
 	return runQueryAndFormatResults(conn, os.Stdout,
-		makeQuery(`UPSERT INTO system.users VALUES ($1, $2)`, username, hashed),
-		cliCtx.tableDisplayFormat)
+		makeQuery(`UPSERT INTO system.users VALUES ($1, $2)`, username, hashed))
 }
 
 var userCmds = []*cobra.Command{
