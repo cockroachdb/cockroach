@@ -73,8 +73,6 @@ func (bt *benchmarkTest) Start(ctx context.Context) {
 	}
 	bt.f = acceptance.MakeFarmer(bt.b, bt.prefix, acceptance.GetStopper())
 
-	bt.f.AddFlag("--max-offset=1s")
-
 	bt.f.AddVars["join_all"] = fmt.Sprint(bt.skipClusterInit)
 
 	if bt.cockroachDiskSizeGB != 0 {
