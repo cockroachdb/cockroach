@@ -17,6 +17,7 @@ package grpcutil
 
 import (
 	"errors"
+	"fmt"
 	"regexp"
 	"testing"
 	"time"
@@ -34,49 +35,58 @@ func TestShouldPrint(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, tc := range []struct {
-		format      string
-		args        []interface{}
-		alwaysPrint bool
-	}{
-		// format: no match, args: no match
-		{format: "bar=%s", args: []interface{}{errors.New("baz")}, alwaysPrint: true},
-		// format: match, args: no match
-		{format: "foobar=%s", args: []interface{}{errors.New("baz")}, alwaysPrint: true},
-		// format: no match, args: match
-		{format: "bar=%s", args: []interface{}{errors.New("a1")}, alwaysPrint: true},
-		// format: match, args: match
-		{format: "foobar=%s", args: []interface{}{errors.New("a1")}, alwaysPrint: false},
-	} {
-		curriedShouldPrint := func() bool {
-			return shouldPrint(formatRe, argRe, duration, tc.format, tc.args...)
-		}
+	for _, formatMatch := range []bool{false, true} {
+		t.Run(fmt.Sprintf("formatMatch=%t", formatMatch), func(t *testing.T) {
+			for _, argsMatch := range []bool{false, true} {
+				t.Run(fmt.Sprintf("argsMatch=%t", argsMatch), func(t *testing.T) {
+					format := "bar=%s"
+					if formatMatch {
+						format = "foobar=%s"
+					}
+					args := []interface{}{errors.New("baz")}
+					if argsMatch {
+						args = []interface{}{errors.New("a1")}
+					}
+					curriedShouldPrint := func() bool {
+						return shouldPrint(formatRe, argRe, duration, format, args...)
+					}
 
-		// First call should always print.
-		if !curriedShouldPrint() {
-			t.Errorf("expected first call to print: %v", tc)
-		}
+					// First call should always print.
+					if !curriedShouldPrint() {
+						t.Error("expected first call to print")
+					}
 
-		// Call from another goroutine should always print.
-		done := make(chan bool)
-		go func() {
-			done <- curriedShouldPrint()
-		}()
-		if !<-done {
-			t.Errorf("expected other-goroutine call to print: %v", tc)
-		}
+					// Call from another goroutine should always print.
+					done := make(chan bool)
+					go func() {
+						done <- curriedShouldPrint()
+					}()
+					if !<-done {
+						t.Error("expected other-goroutine call to print")
+					}
 
-		// Should print if non-matching.
-		if didPrint := curriedShouldPrint(); didPrint != tc.alwaysPrint {
-			t.Errorf("expected second call print=%t, got print=%t: %v", tc.alwaysPrint, didPrint, tc)
-		}
+					// Should print if non-matching.
+					alwaysPrint := !(formatMatch && argsMatch)
 
-		// Should print after sleep.
-		if !tc.alwaysPrint {
-			time.Sleep(duration)
-		}
-		if !curriedShouldPrint() {
-			t.Errorf("expected third call to print: %v", tc)
-		}
+					if alwaysPrint {
+						if !curriedShouldPrint() {
+							t.Error("expected second call to print")
+						}
+					} else {
+						if curriedShouldPrint() {
+							t.Error("unexpected second call to print")
+						}
+					}
+
+					// Should print after sleep.
+					if !alwaysPrint {
+						time.Sleep(duration)
+					}
+					if !curriedShouldPrint() {
+						t.Error("expected third call to print")
+					}
+				})
+			}
+		})
 	}
 }
