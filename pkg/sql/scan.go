@@ -208,6 +208,7 @@ func (n *scanNode) initTable(
 			return err
 		}
 	}
+
 	n.noIndexJoin = (indexHints != nil && indexHints.NoIndexJoin)
 	return n.initDescDefaults(scanVisibility, wantedColumns)
 }
@@ -309,6 +310,35 @@ func (n *scanNode) initDescDefaults(
 	if err != nil {
 		return err
 	}
+
+	// Register the dependency to the planner, if requested.
+	if n.p.planDeps != nil {
+		indexID := sqlbase.IndexID(0)
+		if n.specifiedIndex != nil {
+			indexID = n.specifiedIndex.ID
+		}
+		var usedColumns []sqlbase.ColumnID
+		if wantedColumns == nil {
+			usedColumns = make([]sqlbase.ColumnID, len(n.desc.Columns))
+			for i := range n.desc.Columns {
+				usedColumns[i] = n.desc.Columns[i].ID
+			}
+		} else {
+			usedColumns = make([]sqlbase.ColumnID, len(wantedColumns))
+			for i, c := range wantedColumns {
+				usedColumns[i] = sqlbase.ColumnID(c)
+			}
+		}
+		deps := n.p.planDeps[n.desc.ID]
+		deps.desc = n.desc
+		deps.deps = append(deps.deps, sqlbase.TableDescriptor_Reference{
+			IndexID:   indexID,
+			ColumnIDs: usedColumns,
+		})
+		n.p.planDeps[n.desc.ID] = deps
+	}
+
+	// Set up the rest of the scanNode.
 	switch scanVisibility {
 	case publicColumns:
 		// Mutations are invisible.
