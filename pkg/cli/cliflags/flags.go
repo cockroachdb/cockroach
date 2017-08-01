@@ -478,4 +478,29 @@ If specified, takes priority over host/port flags.`,
 If specified, print the system config contents. Beware that the output will be
 long and not particularly human-readable.`,
 	}
+
+	Decommission = FlagInfo{
+		Name: "decommission",
+		Description: `
+If specified, decommissions the node and waits for it to rebalance before
+shutting down the node.`,
+	}
+
+	Wait = FlagInfo{
+		Name: "wait",
+		Description: `
+Specifies when to return after having marked the targets as decommissioning.
+Takes any of the following values:
+<PRE>
+
+- all:  waits until all target nodes' replica counts have dropped to zero.
+  This is the default. Use this unless you are targeting down nodes. In the presence
+  of down nodes, this will likely wait forever.
+- live: waits until all live target nodes' replica counts have dropped to zero.
+  Use this when targeting down nodes only. When the process returns, manually verify
+  that the cluster is fully replicated before proceeding with node removal.
+- none: marks the targets as decommissioning, but does not wait for the process to complete.
+  Use when polling manually from an external system.
+</PRE>`,
+	}
 )

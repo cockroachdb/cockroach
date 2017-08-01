@@ -739,7 +739,9 @@ func testNodeLivenessSetDecommissioning(t *testing.T, decommissionNodeIdx int) {
 	}
 
 	// Set a node to decommissioning state.
-	callerNodeLiveness.SetDecommissioning(ctx, nodeID, true)
+	if err := callerNodeLiveness.SetDecommissioning(ctx, nodeID, true); err != nil {
+		t.Fatal(err)
+	}
 	verifyNodeIsDecommissioning(t, mtc, nodeID)
 
 	// Stop and restart the store to verify that a restarted server retains the
