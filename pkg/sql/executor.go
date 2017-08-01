@@ -956,8 +956,9 @@ func (e *Executor) execParsed(
 			// Exec the schema changers (if the txn rolled back, the schema changers
 			// will short-circuit because the corresponding descriptor mutation is not
 			// found).
-			session.tables.releaseTables(session.Ctx())
-			txnState.schemaChangers.execSchemaChanges(session.Ctx(), e, session, ResultList{})
+			if err := txnState.schemaChangers.execSchemaChanges(e, session); err != nil {
+				return err
+			}
 		}
 
 		// Figure out what statements to run on the next iteration.
@@ -1080,8 +1081,6 @@ func (e *Executor) execStmtsInCurrentTxn(
 			log.HasSpanOrEvent(session.Ctx()) {
 			log.VEventf(session.Ctx(), 2, "executing %d/%d: %s", i+1, len(stmts), stmt)
 		}
-
-		txnState.schemaChangers.curStatementIdx = i
 
 		queryID := e.generateQueryID().GetString()
 
