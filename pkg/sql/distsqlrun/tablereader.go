@@ -32,6 +32,8 @@ import (
 // desired column values to an output RowReceiver.
 // See docs/RFCS/distributed_sql.md
 type tableReader struct {
+	processorBase
+
 	flowCtx *FlowCtx
 
 	tableID   sqlbase.ID
@@ -40,8 +42,6 @@ type tableReader struct {
 
 	fetcher sqlbase.RowFetcher
 	alloc   sqlbase.DatumAlloc
-
-	out procOutputHelper
 }
 
 var _ processor = &tableReader{}
