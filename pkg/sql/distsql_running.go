@@ -208,7 +208,7 @@ func (dsp *distSQLPlanner) Run(
 	return nil
 }
 
-// distSQLReceiver is a RowReceiver that stores incoming rows in a RowContainer.
+// distSQLReceiver is a RowReceiver that sends results to a StatementResultWriter.
 // This is where the DistSQL execution meets the SQL Session - the RowContainer
 // comes from a client Session.
 //
@@ -217,14 +217,11 @@ func (dsp *distSQLPlanner) Run(
 type distSQLReceiver struct {
 	ctx context.Context
 
-	// rows is the container where we store the results; if we only need the count
-	// of the rows, it is nil.
-	rows *sqlbase.RowContainer
+	// resultWriter is the interface which we sent results to.
+	resultWriter RowResultWriter
 	// resultToStreamColMap maps result columns to columns in the distsqlrun results
 	// stream.
 	resultToStreamColMap []int
-	// numRows counts the number of rows we received when rows is nil.
-	numRows int64
 
 	// err represents the error that we received either from a producer or
 	// internally in the operation of the distSQLReceiver. If set, this will
@@ -264,19 +261,19 @@ var _ distsqlrun.RowReceiver = &distSQLReceiver{}
 // on errors. Nil if the flow overall doesn't run in a transaction.
 func makeDistSQLReceiver(
 	ctx context.Context,
-	sink *sqlbase.RowContainer,
+	resultWriter RowResultWriter,
 	rangeCache *kv.RangeDescriptorCache,
 	leaseCache *kv.LeaseHolderCache,
 	txn *client.Txn,
 	updateClock func(observedTs hlc.Timestamp),
 ) (distSQLReceiver, error) {
 	return distSQLReceiver{
-		ctx:         ctx,
-		rows:        sink,
-		rangeCache:  rangeCache,
-		leaseCache:  leaseCache,
-		txn:         txn,
-		updateClock: updateClock,
+		ctx:          ctx,
+		resultWriter: resultWriter,
+		rangeCache:   rangeCache,
+		leaseCache:   leaseCache,
+		txn:          txn,
+		updateClock:  updateClock,
 	}, nil
 }
 
@@ -329,9 +326,9 @@ func (r *distSQLReceiver) Push(
 		return r.status
 	}
 
-	if r.rows == nil {
+	if r.resultWriter.StatementType() != parser.Rows {
 		// We only need the row count.
-		r.numRows++
+		r.resultWriter.IncrementRowsAffected(1)
 		return r.status
 	}
 	if r.row == nil {
@@ -347,7 +344,7 @@ func (r *distSQLReceiver) Push(
 		r.row[i] = row[resIdx].Datum
 	}
 	// Note that AddRow accounts for the memory used by the Datums.
-	if _, err := r.rows.AddRow(r.ctx, r.row); err != nil {
+	if err := r.resultWriter.AddRow(r.ctx, r.row); err != nil {
 		r.err = err
 		// TODO(andrei): We should drain here. Metadata from this query would be
 		// useful, particularly as it was likely a large query (since AddRow()
