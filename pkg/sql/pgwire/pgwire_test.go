@@ -1665,3 +1665,35 @@ func TestPGWireResultChange(t *testing.T) {
 		t.Fatalf("expected %d rows, got %d", count, countAfter)
 	}
 }
+
+func TestPGWireTooManyArguments(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), t.Name(), url.User(security.RootUser))
+	defer cleanupFn()
+
+	db, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	query := "SELECT"
+
+	args := make([]interface{}, 1 << 16)
+	for i := 1; i <= 1 << 16; i++ {
+		comma := ","
+		if i == 1 {
+			comma = ""
+		}
+		query += fmt.Sprintf("%s $%d::int", comma, i)
+		args[i-1] = i
+	}
+	query += ";"
+
+	if _, err := db.Prepare(query); !testutils.IsError(err, "more than 65535 arguments") {
+		t.Fatal("unexpected error: %v", err)
+	}
+}

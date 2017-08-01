@@ -517,6 +517,13 @@ func (c *v3Conn) handleSimpleQuery(buf *readBuffer) error {
 	return c.finishExecute(results, nil, true, 0)
 }
 
+// maxPreparedStatementArgs is the maximum number of arguments a prepared
+// statement can have when prepared via the Postgres wire protocol. This is not
+// documented by Postgres, but is a consequence of the fact that a 16-bit
+// integer in the wire format is used to indicate the number of values to bind
+// during prepared statement execution.
+const maxPreparedStatementArgs int = (1 << 16) - 1
+
 func (c *v3Conn) handleParse(buf *readBuffer) error {
 	name, err := buf.getString()
 	if err != nil {
@@ -567,6 +574,9 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 	}
 	// Convert the inferred SQL types back to an array of pgwire Oids.
 	inTypes := make([]oid.Oid, 0, len(stmt.SQLTypes))
+	if len(stmt.SQLTypes) > maxPreparedStatementArgs {
+		return c.sendError(pgerror.NewError(pgerror.CodeProtocolViolationError, "more than 65535 arguments to prepared statement"))
+	}
 	for k, t := range stmt.SQLTypes {
 		i, err := strconv.Atoi(k)
 		if err != nil || i < 1 {
