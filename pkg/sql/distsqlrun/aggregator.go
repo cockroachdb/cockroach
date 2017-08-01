@@ -83,6 +83,8 @@ func GetAggregateInfo(
 // aggregator's output schema is comprised of what is specified by the
 // accompanying SELECT expressions.
 type aggregator struct {
+	processorBase
+
 	flowCtx     *FlowCtx
 	input       RowSource
 	funcs       []*aggregateFuncHolder
@@ -95,8 +97,6 @@ type aggregator struct {
 	aggregations []AggregatorSpec_Aggregation
 
 	buckets map[string]struct{} // The set of bucket keys.
-
-	out procOutputHelper
 }
 
 var _ processor = &aggregator{}

@@ -26,10 +26,11 @@ import (
 // valuesProcessor is a processor that has no inputs and generates "pre-canned"
 // rows.
 type valuesProcessor struct {
+	processorBase
+
 	flowCtx *FlowCtx
 	columns []DatumInfo
 	data    [][]byte
-	out     procOutputHelper
 }
 
 var _ processor = &valuesProcessor{}

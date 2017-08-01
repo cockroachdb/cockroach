@@ -28,11 +28,12 @@ import (
 // algebraicSetOp is a processor for the algebraic set operations,
 // currently just EXCEPT ALL.
 type algebraicSetOp struct {
+	processorBase
+
 	leftSource, rightSource RowSource
 	opType                  AlgebraicSetOpSpec_SetOpType
 	ordering                Ordering
 	datumAlloc              *sqlbase.DatumAlloc
-	out                     procOutputHelper
 }
 
 var _ processor = &algebraicSetOp{}
