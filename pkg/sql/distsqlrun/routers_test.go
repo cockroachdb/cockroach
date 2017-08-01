@@ -31,7 +31,28 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-func TestHashRouter(t *testing.T) {
+// setupRouter creates and starts a router. Returns the router and a WaitGroup
+// that tracks the lifetime of the background router goroutines.
+func setupRouter(
+	t *testing.T,
+	evalCtx *parser.EvalContext,
+	spec OutputRouterSpec,
+	inputTypes []sqlbase.ColumnType,
+	streams []RowReceiver,
+) (router, *sync.WaitGroup) {
+	r, err := makeRouter(&spec, streams)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	flowCtx := FlowCtx{evalCtx: *evalCtx}
+	r.init(&flowCtx, inputTypes)
+	wg := &sync.WaitGroup{}
+	r.start(context.TODO(), wg)
+	return r, wg
+}
+
+func TestRouters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const numCols = 6
 	const numRows = 200
@@ -46,49 +67,72 @@ func TestHashRouter(t *testing.T) {
 	vals := sqlbase.RandEncDatumSlices(rng, numCols, numRows/10)
 
 	testCases := []struct {
-		hashColumns []uint32
-		numBuckets  int
+		spec       OutputRouterSpec
+		numBuckets int
 	}{
-		{[]uint32{0}, 2},
-		{[]uint32{3}, 4},
-		{[]uint32{1, 3}, 4},
-		{[]uint32{5, 2}, 3},
-		{[]uint32{0, 1, 2, 3, 4}, 5},
+		{
+			spec:       OutputRouterSpec{Type: OutputRouterSpec_BY_HASH, HashColumns: []uint32{0}},
+			numBuckets: 4,
+		},
+		{
+			spec:       OutputRouterSpec{Type: OutputRouterSpec_BY_HASH, HashColumns: []uint32{0}},
+			numBuckets: 2,
+		},
+		{
+			spec:       OutputRouterSpec{Type: OutputRouterSpec_BY_HASH, HashColumns: []uint32{3}},
+			numBuckets: 4,
+		},
+		{
+			spec:       OutputRouterSpec{Type: OutputRouterSpec_BY_HASH, HashColumns: []uint32{1, 3}},
+			numBuckets: 4,
+		},
+		{
+			spec:       OutputRouterSpec{Type: OutputRouterSpec_BY_HASH, HashColumns: []uint32{5, 2}},
+			numBuckets: 3,
+		},
+		{
+			spec:       OutputRouterSpec{Type: OutputRouterSpec_BY_HASH, HashColumns: []uint32{0, 1, 2, 3, 4}},
+			numBuckets: 5,
+		},
+		{
+			spec:       OutputRouterSpec{Type: OutputRouterSpec_MIRROR},
+			numBuckets: 2,
+		},
+		{
+			spec:       OutputRouterSpec{Type: OutputRouterSpec_MIRROR},
+			numBuckets: 3,
+		},
+		{
+			spec:       OutputRouterSpec{Type: OutputRouterSpec_MIRROR},
+			numBuckets: 4,
+		},
 	}
 
 	for _, tc := range testCases {
-		t.Run("", func(t *testing.T) {
+		t.Run(tc.spec.Type.String(), func(t *testing.T) {
 			bufs := make([]*RowBuffer, tc.numBuckets)
 			recvs := make([]RowReceiver, tc.numBuckets)
 			for i := 0; i < tc.numBuckets; i++ {
 				bufs[i] = &RowBuffer{}
 				recvs[i] = bufs[i]
 			}
-			hr, err := makeHashRouter(tc.hashColumns, recvs)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			flowCtx := FlowCtx{evalCtx: parser.MakeTestingEvalContext()}
 
 			types := make([]sqlbase.ColumnType, numCols)
 			for i := range types {
 				types[i] = vals[i][0].Type
 			}
-			hr.init(&flowCtx, types)
-			var wg sync.WaitGroup
-			hr.start(context.TODO(), &wg)
+			r, wg := setupRouter(t, evalCtx, tc.spec, types, recvs)
 
 			for i := 0; i < numRows; i++ {
 				row := make(sqlbase.EncDatumRow, numCols)
 				for j := 0; j < numCols; j++ {
 					row[j] = vals[j][rng.Intn(len(vals[j]))]
 				}
-				if status := hr.Push(row, ProducerMetadata{}); status != NeedMoreRows {
+				if status := r.Push(row, ProducerMetadata{}); status != NeedMoreRows {
 					t.Fatalf("unexpected status: %d", status)
 				}
 			}
-			hr.ProducerDone()
+			r.ProducerDone()
 			wg.Wait()
 
 			rows := make([]sqlbase.EncDatumRows, len(bufs))
@@ -99,33 +143,69 @@ func TestHashRouter(t *testing.T) {
 				rows[i] = getRowsFromBuffer(t, b)
 			}
 
-			for bIdx := range rows {
-				for _, row := range rows[bIdx] {
-					// Verify there are no rows that
-					//  - have the same values with this row on all the hashColumns, and
-					//  - ended up in a different bucket
-					for b2Idx, r2 := range rows {
-						if b2Idx == bIdx {
-							continue
-						}
-						for _, row2 := range r2 {
-							equal := true
-							for _, c := range tc.hashColumns {
-								cmp, err := row[c].Compare(alloc, evalCtx, &row2[c])
-								if err != nil {
-									t.Fatal(err)
-								}
-								if cmp != 0 {
-									equal = false
-									break
-								}
+			switch tc.spec.Type {
+			case OutputRouterSpec_BY_HASH:
+				for bIdx := range rows {
+					for _, row := range rows[bIdx] {
+						// Verify there are no rows that
+						//  - have the same values with this row on all the hashColumns, and
+						//  - ended up in a different bucket
+						for b2Idx, r2 := range rows {
+							if b2Idx == bIdx {
+								continue
 							}
-							if equal {
-								t.Errorf("rows %s and %s in different buckets", row, row2)
+							for _, row2 := range r2 {
+								equal := true
+								for _, c := range tc.spec.HashColumns {
+									cmp, err := row[c].Compare(alloc, evalCtx, &row2[c])
+									if err != nil {
+										t.Fatal(err)
+									}
+									if cmp != 0 {
+										equal = false
+										break
+									}
+								}
+								if equal {
+									t.Errorf("rows %s and %s in different buckets", row, row2)
+								}
 							}
 						}
 					}
 				}
+
+			case OutputRouterSpec_MIRROR:
+				// Verify each row is sent to each of the output streams.
+				for bIdx, r := range rows {
+					if bIdx == 0 {
+						continue
+					}
+					if len(rows[bIdx]) != len(rows[0]) {
+						t.Errorf("buckets %d and %d have different number of rows", 0, bIdx)
+					}
+
+					// Verify that the i-th row is the same across all buffers.
+					for i, row := range r {
+						row2 := rows[0][i]
+
+						equal := true
+						for j, c := range row {
+							cmp, err := c.Compare(alloc, evalCtx, &row2[j])
+							if err != nil {
+								t.Fatal(err)
+							}
+							if cmp != 0 {
+								equal = false
+								break
+							}
+						}
+						if !equal {
+							t.Errorf("rows %s and %s found in one bucket and not the other", row, row2)
+						}
+					}
+				}
+			default:
+				t.Fatalf("unknown router type %d", tc.spec.Type)
 			}
 		})
 	}
@@ -146,97 +226,16 @@ func getRowsFromBuffer(t *testing.T, buf *RowBuffer) sqlbase.EncDatumRows {
 	return res
 }
 
-func TestMirrorRouter(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	const numCols = 6
-	const numRows = 20
-
-	rng, _ := randutil.NewPseudoRand()
-	alloc := &sqlbase.DatumAlloc{}
-	evalCtx := parser.NewTestingEvalContext()
-	defer evalCtx.Stop(context.Background())
-
-	vals := sqlbase.RandEncDatumSlices(rng, numCols, numRows)
-
-	for numBuckets := 2; numBuckets <= 4; numBuckets++ {
-		bufs := make([]*RowBuffer, numBuckets)
-		recvs := make([]RowReceiver, numBuckets)
-		for i := 0; i < numBuckets; i++ {
-			bufs[i] = &RowBuffer{}
-			recvs[i] = bufs[i]
-		}
-		mr, err := makeMirrorRouter(recvs)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		flowCtx := FlowCtx{evalCtx: parser.MakeTestingEvalContext()}
-		types := make([]sqlbase.ColumnType, numCols)
-		for i := range types {
-			types[i] = vals[i][0].Type
-		}
-		mr.init(&flowCtx, types)
-		var wg sync.WaitGroup
-		mr.start(context.TODO(), &wg)
-
-		for i := 0; i < numRows; i++ {
-			row := make(sqlbase.EncDatumRow, numCols)
-			for j := 0; j < numCols; j++ {
-				row[j] = vals[j][rng.Intn(len(vals[j]))]
-			}
-			if status := mr.Push(row, ProducerMetadata{}); status != NeedMoreRows {
-				t.Fatalf("unexpected status: %d", status)
-			}
-		}
-		mr.ProducerDone()
-		wg.Wait()
-
-		rows := make([]sqlbase.EncDatumRows, len(bufs))
-		for i, b := range bufs {
-			if !b.ProducerClosed {
-				t.Fatalf("bucket not closed: %d", i)
-			}
-			rows[i] = getRowsFromBuffer(t, b)
-		}
-
-		// Verify each row is sent to each of the output streams.
-		for bIdx, r := range rows {
-			if bIdx == 0 {
-				continue
-			}
-			if len(rows[bIdx]) != len(rows[0]) {
-				t.Errorf("buckets %d and %d have different number of rows", 0, bIdx)
-			}
-
-			// Verify that the i-th row is the same across all buffers.
-			for i, row := range r {
-				row2 := rows[0][i]
-
-				equal := true
-				for j, c := range row {
-					cmp, err := c.Compare(alloc, evalCtx, &row2[j])
-					if err != nil {
-						t.Fatal(err)
-					}
-					if cmp != 0 {
-						equal = false
-						break
-					}
-				}
-				if !equal {
-					t.Errorf("rows %s and %s found in one bucket and not the other", row, row2)
-				}
-			}
-		}
-	}
-}
-
 // Test that the correct status is returned to producers: NeedMoreRows should be
 // returned while there's at least one consumer that's not draining, then
 // DrainRequested should be returned while there's at least one consumer that's
 // not closed, and ConsumerClosed should be returned afterwards.
 func TestConsumerStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	evalCtx := parser.NewTestingEvalContext()
+	defer evalCtx.Stop(context.Background())
+
 	testCases := []struct {
 		name string
 		spec OutputRouterSpec
@@ -259,15 +258,9 @@ func TestConsumerStatus(t *testing.T) {
 				bufs[i] = &RowBuffer{}
 				recvs[i] = bufs[i]
 			}
-			router, err := makeRouter(&tc.spec, recvs)
-			if err != nil {
-				t.Fatal(err)
-			}
+
 			colTypes := []sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_INT}}
-			flowCtx := FlowCtx{evalCtx: parser.MakeTestingEvalContext()}
-			router.init(&flowCtx, colTypes)
-			var wg sync.WaitGroup
-			router.start(context.TODO(), &wg)
+			router, wg := setupRouter(t, evalCtx, tc.spec, colTypes, recvs)
 
 			// row0 will be a row that the hash router sends to the first stream, row1
 			// to the 2nd stream.
@@ -379,6 +372,9 @@ func preimageAttack(
 func TestMetadataIsForwarded(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	evalCtx := parser.NewTestingEvalContext()
+	defer evalCtx.Stop(context.Background())
+
 	testCases := []struct {
 		name string
 		spec OutputRouterSpec
@@ -401,14 +397,7 @@ func TestMetadataIsForwarded(t *testing.T) {
 				chans[i].InitWithBufSize(nil /* no column types */, 1)
 				recvs[i] = &chans[i]
 			}
-			router, err := makeRouter(&tc.spec, recvs)
-			if err != nil {
-				t.Fatal(err)
-			}
-			flowCtx := FlowCtx{evalCtx: parser.MakeTestingEvalContext()}
-			router.init(&flowCtx, nil /* no column types */)
-			var wg sync.WaitGroup
-			router.start(context.TODO(), &wg)
+			router, wg := setupRouter(t, evalCtx, tc.spec, nil /* no columns */, recvs)
 
 			err1 := errors.Errorf("test error 1")
 			err2 := errors.Errorf("test error 2")
@@ -555,7 +544,7 @@ func TestRouterBlocks(t *testing.T) {
 				wg.Done()
 			}()
 
-			// We are no reading from the row channels; the router should become
+			// We are not reading from the row channels; the router should become
 			// blocked after trying to send a row to each stream. We sample the number
 			// of rows sent and verify that it stops increasing.
 			var lastVal uint32
