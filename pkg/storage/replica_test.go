@@ -2327,7 +2327,7 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 	// Wait until both commands are in the command queue.
 	testutils.SucceedsSoon(t, func() error {
 		tc.repl.cmdQMu.Lock()
-		chans := tc.repl.cmdQMu.global.getWait(false, hlc.Timestamp{}, []roachpb.Span{{Key: key1}, {Key: key2}})
+		chans := tc.repl.cmdQMu.queues[spanGlobal].getWait(false, hlc.Timestamp{}, []roachpb.Span{{Key: key1}, {Key: key2}})
 		tc.repl.cmdQMu.Unlock()
 		if a, e := len(chans), 2; a < e {
 			return errors.Errorf("%d of %d commands in the command queue", a, e)
@@ -6362,7 +6362,7 @@ func TestReplicaTryAbandon(t *testing.T) {
 	func() {
 		tc.repl.cmdQMu.Lock()
 		defer tc.repl.cmdQMu.Unlock()
-		if s := tc.repl.cmdQMu.global.String(); s == "" {
+		if s := tc.repl.cmdQMu.queues[spanGlobal].String(); s == "" {
 			t.Fatal("expected non-empty command queue")
 		}
 	}()
@@ -6378,7 +6378,7 @@ func TestReplicaTryAbandon(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		tc.repl.cmdQMu.Lock()
 		defer tc.repl.cmdQMu.Unlock()
-		if s := tc.repl.cmdQMu.global.String(); s != "" {
+		if s := tc.repl.cmdQMu.queues[spanGlobal].String(); s != "" {
 			return errors.Errorf("expected empty command queue, but found\n%s", s)
 		}
 		return nil

@@ -260,11 +260,13 @@ type Replica struct {
 		//
 		// Locking notes: Replica.mu < Replica.cmdQMu
 		syncutil.Mutex
-		// Enforces at most one command is running per key(s). The global
-		// component tracks user writes (i.e. all keys for which keys.Addr is
-		// the identity), the local component the rest (e.g. RangeDescriptor,
-		// transaction record, Lease, ...).
-		global, local *CommandQueue
+		// Enforces at most one command is running per key(s) within each span
+		// scope. The globally-scoped component tracks user writes (i.e. all
+		// keys for which keys.Addr is the identity), the locally-scoped component
+		// the rest (e.g. RangeDescriptor, transaction record, Lease, ...).
+		// Commands with different accesses but the same scope are stored in the
+		// same component.
+		queues [numSpanScope]*CommandQueue
 	}
 
 	mu struct {
@@ -624,8 +626,8 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	}
 
 	r.cmdQMu.Lock()
-	r.cmdQMu.global = NewCommandQueue(true /* optimizeOverlap */)
-	r.cmdQMu.local = NewCommandQueue(false /* !optimizeOverlap */)
+	r.cmdQMu.queues[spanGlobal] = NewCommandQueue(true /* optimizeOverlap */)
+	r.cmdQMu.queues[spanLocal] = NewCommandQueue(false /* !optimizeOverlap */)
 	r.cmdQMu.Unlock()
 
 	r.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
@@ -1795,14 +1797,18 @@ func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest) error {
 	return nil
 }
 
+// batchCmdSet holds a *cmd for each permutation of SpanAccess and spanScope. The
+// batch is divided into separate *cmds for access type (read-only or read/write)
+// and key scope (local or global; used to facilitate use by the separate local
+// and global command queues).
+type batchCmdSet [numSpanAccess][numSpanScope]*cmd
+
 // endCmds holds necessary information to end a batch after Raft
 // command processing.
 type endCmds struct {
 	repl *Replica
-	cmds [numSpanAccess]struct {
-		global, local *cmd
-	}
-	ba roachpb.BatchRequest
+	cmds batchCmdSet
+	ba   roachpb.BatchRequest
 }
 
 // done removes pending commands from the command queue and updates
@@ -1831,9 +1837,10 @@ func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry pr
 	}
 
 	ec.repl.cmdQMu.Lock()
-	for i := range ec.cmds {
-		ec.repl.cmdQMu.global.remove(ec.cmds[i].global)
-		ec.repl.cmdQMu.local.remove(ec.cmds[i].local)
+	for i := SpanAccess(0); i < numSpanAccess; i++ {
+		for j := spanScope(0); j < numSpanScope; j++ {
+			ec.repl.cmdQMu.queues[j].remove(ec.cmds[i][j])
+		}
 	}
 	ec.repl.cmdQMu.Unlock()
 }
@@ -1960,9 +1967,7 @@ func collectSpans(desc roachpb.RangeDescriptor, ba *roachpb.BatchRequest) (*Span
 func (r *Replica) beginCmds(
 	ctx context.Context, ba *roachpb.BatchRequest, spans *SpanSet,
 ) (*endCmds, error) {
-	var cmds [numSpanAccess]struct {
-		global, local *cmd
-	}
+	var cmds batchCmdSet
 	clocklessReads := r.store.Clock().MaxOffset() == timeutil.ClocklessMaxOffset
 	// Don't use the command queue for inconsistent reads.
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
@@ -1980,17 +1985,24 @@ func (r *Replica) beginCmds(
 			return nil, err
 		}
 
-		// Get the requested timestamp. This is used for non-interference
-		// of earlier reads with later writes, but only for the global
-		// command queue. Reads and writes to local keys are specified as
-		// having a zero timestamp which will cause them to always
-		// interfere. This is done to avoid confusion with local keys
-		// declared as part of proposer evaluated KV.
-		reqGlobalTS := ba.Timestamp
-		if txn := ba.Txn; txn != nil {
-			reqGlobalTS = txn.OrigTimestamp
+		// Get the requested timestamp for a given scope. This is used for
+		// non-interference of earlier reads with later writes, but only for
+		// the global command queue. Reads and writes to local keys are specified
+		// as having a zero timestamp which will cause them to always interfere.
+		// This is done to avoid confusion with local keys declared as part of
+		// proposer evaluated KV.
+		scopeTS := func(scope spanScope) hlc.Timestamp {
+			switch scope {
+			case spanGlobal:
+				if txn := ba.Txn; txn != nil {
+					return txn.OrigTimestamp
+				}
+				return ba.Timestamp
+			case spanLocal:
+				return hlc.Timestamp{}
+			}
+			panic("unexpected scope")
 		}
-		var reqLocalTS hlc.Timestamp
 
 		r.cmdQMu.Lock()
 		var chans []<-chan struct{}
@@ -1999,13 +2011,15 @@ func (r *Replica) beginCmds(
 		for i := SpanAccess(0); i < numSpanAccess; i++ {
 			// With clockless reads, everything is treated as writing.
 			readOnly := i == SpanReadOnly && !clocklessReads
-			chans = append(chans, r.cmdQMu.global.getWait(readOnly, reqGlobalTS, spans.getSpans(i, spanGlobal))...)
-			chans = append(chans, r.cmdQMu.local.getWait(readOnly, reqLocalTS, spans.getSpans(i, spanLocal))...)
+			for j := spanScope(0); j < numSpanScope; j++ {
+				chans = append(chans, r.cmdQMu.queues[j].getWait(readOnly, scopeTS(j), spans.getSpans(i, j))...)
+			}
 		}
 		for i := SpanAccess(0); i < numSpanAccess; i++ {
 			readOnly := i == SpanReadOnly && !clocklessReads // ditto above
-			cmds[i].global = r.cmdQMu.global.add(readOnly, reqGlobalTS, spans.getSpans(i, spanGlobal))
-			cmds[i].local = r.cmdQMu.local.add(readOnly, reqLocalTS, spans.getSpans(i, spanLocal))
+			for j := spanScope(0); j < numSpanScope; j++ {
+				cmds[i][j] = r.cmdQMu.queues[j].add(readOnly, scopeTS(j), spans.getSpans(i, j))
+			}
 		}
 		r.cmdQMu.Unlock()
 
@@ -2039,8 +2053,8 @@ func (r *Replica) beginCmds(
 						case <-ch:
 						case <-slowTimer.C:
 							r.cmdQMu.Lock()
-							g := r.cmdQMu.global.String()
-							l := r.cmdQMu.local.String()
+							g := r.cmdQMu.queues[spanGlobal].String()
+							l := r.cmdQMu.queues[spanLocal].String()
 							r.cmdQMu.Unlock()
 							log.Warningf(r.AnnotateCtx(context.Background()),
 								"have been waiting %s for dependencies: cmds:\n%+v\nglobal:\n%s\n"+
@@ -2056,9 +2070,10 @@ func (r *Replica) beginCmds(
 						}
 					}
 					r.cmdQMu.Lock()
-					for i := range cmds {
-						r.cmdQMu.global.remove(cmds[i].global)
-						r.cmdQMu.local.remove(cmds[i].local)
+					for i := SpanAccess(0); i < numSpanAccess; i++ {
+						for j := spanScope(0); j < numSpanScope; j++ {
+							r.cmdQMu.queues[j].remove(cmds[i][j])
+						}
 					}
 					r.cmdQMu.Unlock()
 				}()
