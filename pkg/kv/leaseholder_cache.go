@@ -25,6 +25,8 @@ import (
 
 // A LeaseHolderCache is a cache of replica descriptors keyed by range ID.
 type LeaseHolderCache struct {
+	// NB: This can't be a RWMutex for lookup because UnorderedCache.Get
+	// manipulates an internal LRU list.
 	mu    syncutil.Mutex
 	cache *cache.UnorderedCache
 }
@@ -51,12 +53,12 @@ func (lc *LeaseHolderCache) Lookup(
 	defer lc.mu.Unlock()
 	if v, ok := lc.cache.Get(rangeID); ok {
 		if log.V(2) {
-			log.Infof(ctx, "lookup lease holder for r%d: %s", rangeID, v)
+			log.Infof(ctx, "r%d: lookup leaseholder: %s", rangeID, v)
 		}
 		return v.(roachpb.ReplicaDescriptor), true
 	}
 	if log.V(2) {
-		log.Infof(ctx, "lookup lease holder for r%d: not found", rangeID)
+		log.Infof(ctx, "r%d: lookup leaseholder: not found", rangeID)
 	}
 	return roachpb.ReplicaDescriptor{}, false
 }
@@ -71,12 +73,12 @@ func (lc *LeaseHolderCache) Update(
 	defer lc.mu.Unlock()
 	if (repDesc == roachpb.ReplicaDescriptor{}) {
 		if log.V(2) {
-			log.Infof(ctx, "evicting lease holder for r%d", rangeID)
+			log.Infof(ctx, "r%d: evicting leaseholder", rangeID)
 		}
 		lc.cache.Del(rangeID)
 	} else {
 		if log.V(2) {
-			log.Infof(ctx, "updating lease holder for r%d: %s", rangeID, repDesc)
+			log.Infof(ctx, "r%d: updating leaseholder: %s", rangeID, repDesc)
 		}
 		lc.cache.Add(rangeID, repDesc)
 	}
