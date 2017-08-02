@@ -531,7 +531,7 @@ func Example_zone() {
 	// range_min_bytes: 1048576
 	// range_max_bytes: 67108864
 	// gc:
-	//   ttlseconds: 86400
+	//   ttlseconds: 90000
 	// num_replicas: 1
 	// constraints: [us-east-1a, ssd]
 	// zone ls
@@ -542,7 +542,7 @@ func Example_zone() {
 	// range_min_bytes: 1048576
 	// range_max_bytes: 67108864
 	// gc:
-	//   ttlseconds: 86400
+	//   ttlseconds: 90000
 	// num_replicas: 1
 	// constraints: []
 	// zone get system.nonexistent
@@ -552,7 +552,7 @@ func Example_zone() {
 	// range_min_bytes: 1048576
 	// range_max_bytes: 67108864
 	// gc:
-	//   ttlseconds: 86400
+	//   ttlseconds: 90000
 	// num_replicas: 1
 	// constraints: [us-east-1a, ssd]
 	// zone set system.lease --file=./testdata/zone_attrs.yaml
@@ -565,7 +565,7 @@ func Example_zone() {
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
-	//   ttlseconds: 86400
+	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: [us-east-1a, ssd]
 	// zone get system
@@ -573,7 +573,7 @@ func Example_zone() {
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
-	//   ttlseconds: 86400
+	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: [us-east-1a, ssd]
 	// zone rm system
@@ -586,21 +586,21 @@ func Example_zone() {
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
-	//   ttlseconds: 86400
+	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: []
 	// zone set .system --file=./testdata/zone_range_max_bytes.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
-	//   ttlseconds: 86400
+	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: []
 	// zone set .timeseries --file=./testdata/zone_range_max_bytes.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
-	//   ttlseconds: 86400
+	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: []
 	// zone get .system
@@ -608,7 +608,7 @@ func Example_zone() {
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
-	//   ttlseconds: 86400
+	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: []
 	// zone ls
@@ -620,7 +620,7 @@ func Example_zone() {
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
-	//   ttlseconds: 86400
+	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: []
 	// zone get system
@@ -628,14 +628,14 @@ func Example_zone() {
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
-	//   ttlseconds: 86400
+	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: []
 	// zone set .default --disable-replication
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
-	//   ttlseconds: 86400
+	//   ttlseconds: 90000
 	// num_replicas: 1
 	// constraints: []
 	// zone get system
@@ -643,7 +643,7 @@ func Example_zone() {
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
-	//   ttlseconds: 86400
+	//   ttlseconds: 90000
 	// num_replicas: 1
 	// constraints: []
 	// zone rm .meta
