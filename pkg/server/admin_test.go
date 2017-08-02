@@ -66,7 +66,7 @@ func postAdminJSONProto(
 // getText fetches the HTTP response body as text in the form of a
 // byte slice from the specified URL.
 func getText(ts serverutils.TestServerInterface, url string) ([]byte, error) {
-	httpClient, err := ts.GetHTTPClient()
+	httpClient, err := ts.GetAuthenticatedHTTPClient()
 	if err != nil {
 		return nil, err
 	}
@@ -1059,7 +1059,9 @@ func TestHealthAPI(t *testing.T) {
 	}
 	s.Clock().Update(self.Expiration.Add(1, 0))
 
-	expected := "node is not live"
+	// Health API is not accessible if the node is not accessible, because it
+	// cannot verify the authentication session.
+	expected := "500 Internal Server Error"
 	var resp serverpb.HealthResponse
 	if err := getAdminJSONProto(s, "health", &resp); !testutils.IsError(err, expected) {
 		t.Errorf("expected %q error, got %v", expected, err)

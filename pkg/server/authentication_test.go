@@ -19,8 +19,8 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	gosql "database/sql"
-	"encoding/base64"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"testing"
@@ -33,9 +33,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
+	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/gogo/protobuf/jsonpb"
 	"github.com/lib/pq"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
@@ -66,7 +69,13 @@ func (insecureCtx) HTTPRequestScheme() string {
 // Verify client certificate enforcement and user whitelisting.
 func TestSSLEnforcement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// This test is verifying the (unimplemented) authentication of SSL
+		// client certificates over HTTP endpoints. Web session authentication
+		// is disabled in order to avoid the need to authenticate the individual
+		// clients being instantiated.
+		DisableWebSessionAuthentication: true,
+	})
 	defer s.Stopper().Stop(context.TODO())
 
 	// HTTPS with client certs for security.RootUser.
@@ -278,10 +287,10 @@ WHERE id = $1`
 	// Timestamps.
 	verifyTimestamp := func(actual time.Time, early time.Time, late time.Time) error {
 		if actual.Before(early) {
-			return fmt.Errorf("time %s was before early bound %s", actual, early)
+			return errors.Errorf("time %s was before early bound %s", actual, early)
 		}
 		if late.Before(actual) {
-			return fmt.Errorf("time %s was after late bound %s", actual, late)
+			return errors.Errorf("time %s was after late bound %s", actual, late)
 		}
 		return nil
 	}
@@ -305,6 +314,82 @@ WHERE id = $1`
 	}
 	if sessAuditInfo.Valid {
 		t.Fatalf("sess had auditInfo %s, wanted null", sessAuditInfo.String)
+	}
+}
+
+func TestVerifySession(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+	ts := s.(*TestServer)
+
+	sessionUsername := "testUser"
+	id, origSecret, err := ts.authentication.newAuthSession(context.TODO(), sessionUsername)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		testname     string
+		cookie       serverpb.SessionCookie
+		shouldVerify bool
+	}{
+		{
+			testname: "Valid cookie",
+			cookie: serverpb.SessionCookie{
+				ID:     id,
+				Secret: origSecret,
+			},
+			shouldVerify: true,
+		},
+		{
+			testname: "No secret",
+			cookie: serverpb.SessionCookie{
+				ID: id,
+			},
+			shouldVerify: false,
+		},
+		{
+			testname: "Wrong secret",
+			cookie: serverpb.SessionCookie{
+				ID:     id,
+				Secret: []byte{0x01, 0x02, 0x03, 0x04},
+			},
+			shouldVerify: false,
+		},
+		{
+			testname: "No ID",
+			cookie: serverpb.SessionCookie{
+				Secret: origSecret,
+			},
+			shouldVerify: false,
+		},
+		{
+			testname: "Wrong ID",
+			cookie: serverpb.SessionCookie{
+				ID:     123456,
+				Secret: origSecret,
+			},
+			shouldVerify: false,
+		},
+		{
+			testname:     "Empty cookie",
+			cookie:       serverpb.SessionCookie{},
+			shouldVerify: false,
+		},
+	} {
+		t.Run(tc.testname, func(t *testing.T) {
+			valid, username, err := ts.authentication.verifySession(context.TODO(), &tc.cookie)
+			if err != nil {
+				t.Fatalf("test got error %s, wanted no error", err)
+			}
+			if a, e := valid, tc.shouldVerify; a != e {
+				t.Fatalf("cookie %v verification = %t, wanted %t", tc.cookie, a, e)
+			}
+			if a, e := username, sessionUsername; tc.shouldVerify && a != e {
+				t.Fatalf("cookie %v verification returned username %s, wanted %s", tc.cookie, a, e)
+			}
+		})
 	}
 }
 
@@ -365,33 +450,28 @@ func TestAuthenticationAPIUserLogin(t *testing.T) {
 	}
 
 	// Validate the returned cookie.
-	// http.Cookie doesn't export ReadCookies, so we construct a request
-	// and use the Cookies() method.
+	// Go's http package doesn't export "readCookies", so we construct a request
+	// and use the Cookies() method of that object.
 	var cookie *http.Cookie
 	{
 		header := http.Header{}
 		header.Set("cookie", rawCookie)
 		request := http.Request{Header: header}
+		var err error
 		cookie, err = request.Cookie(sessionCookieName)
 		if err != nil {
 			t.Fatalf("could not retrieve session cookie: %s", err)
 		}
 	}
 
-	// Cookie value should be a base64 encoded protobuf.
-	cookieBytes, err := base64.StdEncoding.DecodeString(cookie.Value)
+	sessionCookie, err := decodeSessionCookie(cookie)
 	if err != nil {
-		t.Fatalf("expected cookie to be base64 encoded, got %s: %s", cookie.Value, err)
-	}
-	var sessionCookieValue serverpb.SessionCookie
-	if err := sessionCookieValue.Unmarshal(cookieBytes); err != nil {
-		t.Fatalf("failed to unmarshal session cookie value: %s", err)
+		t.Fatalf("failed to decode session cookie: %s", err)
 	}
 
 	// Look up session in database and verify hashed secret value and username.
-	id := sessionCookieValue.Id
 	query := `SELECT "hashedSecret", "username" FROM system.web_sessions WHERE id = $1`
-	result := db.QueryRow(query, id)
+	result := db.QueryRow(query, sessionCookie.ID)
 	var (
 		sessHashedSecret []byte
 		sessUsername     string
@@ -405,13 +485,92 @@ func TestAuthenticationAPIUserLogin(t *testing.T) {
 	}
 
 	hasher := sha256.New()
-	hashedSecret := hasher.Sum(sessionCookieValue.Secret)
+	hashedSecret := hasher.Sum(sessionCookie.Secret)
 	if a, e := sessHashedSecret, hashedSecret; !bytes.Equal(a, e) {
 		t.Fatalf(
 			"session secret hash was %v, wanted %v (derived from original secret %v)",
 			a,
 			e,
-			sessionCookieValue.Secret,
+			sessionCookie.Secret,
 		)
+	}
+}
+
+// TestAuthenticationMux verifies that the authentication handler is used by all
+// of the APIs it should be protecting. Authentication is enabled by default for
+// the test server, and every test which accesses APIs uses an authenticated
+// client (except for a few that specifically override it).  Therefore, this
+// test verifies that authentication mux is attached to services at all by
+// testing an endpoint of each with a verified and unverified client.
+func TestAuthenticationMux(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+	tsrv := s.(*TestServer)
+
+	// Both the normal and authenticated client will be used for each test.
+	normalClient, err := tsrv.GetHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	authClient, err := tsrv.GetAuthenticatedHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	runRequest := func(
+		client http.Client, method string, path string, body []byte, expected int,
+	) error {
+		req, err := http.NewRequest(method, tsrv.AdminURL()+path, bytes.NewBuffer(body))
+		if err != nil {
+			return err
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if a, e := resp.StatusCode, expected; a != e {
+			message, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				message = []byte(err.Error())
+			}
+			return errors.Errorf("got status code %d (msg %s), wanted %d", a, string(message), e)
+		}
+		return nil
+	}
+
+	// Generate request for time series API.
+	tsReq := tspb.TimeSeriesQueryRequest{
+		StartNanos: 0,
+		EndNanos:   100 * 1e9,
+		Queries:    []tspb.Query{{Name: "test.metric"}},
+	}
+	var tsReqBuffer bytes.Buffer
+	marshalFn := (&jsonpb.Marshaler{}).Marshal
+	if err := marshalFn(&tsReqBuffer, &tsReq); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		method string
+		path   string
+		body   []byte
+	}{
+		{"GET", adminPrefix + "users", nil},
+		{"GET", statusPrefix + "sessions", nil},
+		{"POST", ts.URLPrefix + "query", tsReqBuffer.Bytes()},
+	} {
+		t.Run("path="+tc.path, func(t *testing.T) {
+			// Verify normal client returns 401 Unauthorized.
+			if err := runRequest(normalClient, tc.method, tc.path, tc.body, http.StatusUnauthorized); err != nil {
+				t.Fatalf("request %s failed when not authorized: %s", tc.path, err)
+			}
+
+			// Verify authenticated client returns 200 OK.
+			if err := runRequest(authClient, tc.method, tc.path, tc.body, http.StatusOK); err != nil {
+				t.Fatalf("request %s failed when authorized: %s", tc.path, err)
+			}
+		})
 	}
 }

@@ -102,9 +102,12 @@ type TestServerInterface interface {
 
 	// AdminURL returns the URL for the admin UI.
 	AdminURL() string
-	// GetHTTPClient returns an http client connected to the server. It uses the
-	// context client TLS config.
+	// GetHTTPClient returns an http client configured with the client TLS
+	// config required by the TestServer's configuration.
 	GetHTTPClient() (http.Client, error)
+	// GetAuthenticatedHTTPClient returns an http client which has been
+	// authenticated to access Admin API methods (via a cookie).
+	GetAuthenticatedHTTPClient() (http.Client, error)
 
 	// MustGetSQLCounter returns the value of a counter metric from the server's
 	// SQL Executor. Runs in O(# of metrics) time, which is fine for test code.
@@ -195,7 +198,7 @@ func StartServerRaw(args base.TestServerArgs) (TestServerInterface, error) {
 // GetJSONProto uses the supplied client to GET the URL specified by the parameters
 // and unmarshals the result into response.
 func GetJSONProto(ts TestServerInterface, path string, response proto.Message) error {
-	httpClient, err := ts.GetHTTPClient()
+	httpClient, err := ts.GetAuthenticatedHTTPClient()
 	if err != nil {
 		return err
 	}
@@ -205,7 +208,7 @@ func GetJSONProto(ts TestServerInterface, path string, response proto.Message) e
 // PostJSONProto uses the supplied client to POST request to the URL specified by
 // the parameters and unmarshals the result into response.
 func PostJSONProto(ts TestServerInterface, path string, request, response proto.Message) error {
-	httpClient, err := ts.GetHTTPClient()
+	httpClient, err := ts.GetAuthenticatedHTTPClient()
 	if err != nil {
 		return err
 	}

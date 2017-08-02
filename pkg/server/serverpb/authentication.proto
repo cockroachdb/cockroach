@@ -16,6 +16,7 @@ syntax = "proto3";
 package cockroach.server.serverpb;
 option go_package = "serverpb";
 
+import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
 
 // UserLoginRequest contains credentials a user must provide to log in.
@@ -48,7 +49,7 @@ message UserLogoutResponse {
 // from successful login requests.
 message SessionCookie {
 	// The unique ID of the session.
-	int64 id = 1;
+	int64 id = 1 [(gogoproto.customname) = "ID"];
 	// The secret needed to verify ownership of a session.
 	bytes secret = 2;
 }

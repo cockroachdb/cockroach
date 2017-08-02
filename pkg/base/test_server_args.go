@@ -80,6 +80,10 @@ type TestServerArgs struct {
 
 	// If set, the recording of events to the event log tables is disabled.
 	DisableEventLog bool
+
+	// If set, web session authentication will be disabled, even if the server
+	// is running in secure mode.
+	DisableWebSessionAuthentication bool
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test
