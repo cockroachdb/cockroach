@@ -111,8 +111,6 @@ var flagTFCockroachFlags = flag.String("tf.cockroach-flags", "",
 	"command-line flags to pass to cockroach for allocator tests")
 var flagTFCockroachEnv = flag.String("tf.cockroach-env", "",
 	"supervisor-style environment variables to pass to cockroach")
-var flagTFDiskType = flag.String("tf.disk-type", "pd-standard",
-	"type of disk (either 'pd-standard' for spinny disk, or 'pd-ssd' for SSD)")
 
 // Allocator test flags.
 var flagATMaxStdDev = flag.Float64("at.std-dev", 10,
@@ -235,7 +233,6 @@ func MakeFarmer(t testing.TB, prefix string, stopper *stop.Stopper) *terrafarm.F
 	if *flagTFCockroachEnv != "" {
 		terraformVars["cockroach_env"] = *flagTFCockroachEnv
 	}
-	terraformVars["cockroach_disk_type"] = *flagTFDiskType
 
 	var name string
 	if *flagTFReuseCluster == "" {
