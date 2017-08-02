@@ -453,14 +453,6 @@ func (r *RocksDB) open() error {
 }
 
 func (r *RocksDB) syncLoop() {
-	// Lock the OS thread to prevent other goroutines from running on it. We
-	// don't want other goroutines to run on this thread because of the
-	// relatively long (multiple millisecond) Cgo calls that are
-	// performed. Scheduling other goroutines on this thread would introduce
-	// latency to those goroutines whenever this goroutine needs to sync the WAL.
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-
 	s := &r.syncer
 	s.Lock()
 	defer s.Unlock()
