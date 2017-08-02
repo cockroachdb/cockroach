@@ -2,7 +2,7 @@
 
 This example deploys CockroachDB on [Kubernetes](https://kubernetes.io) as a
 a
-[StatefulSet](http://kubernetes.io/docs/concepts/abstractions/controllers/statefulsets/).
+[StatefulSet](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/).
 Kubernetes is an open source system for managing containerized applications
 across multiple hosts, providing basic mechanisms for deployment, maintenance,
 and scaling of applications.
@@ -58,8 +58,8 @@ running CockroachDB on some external storage. Note that CockroachDB already
 does replication and thus, for better performance, should not be deployed on a
 persistent volume which already replicates internally. High-performance use
 cases on a private Kubernetes cluster may want to consider a
-[DaemonSet](http://kubernetes.io/docs/admin/daemons/) deployment until
-StatefulSets support node-local storage
+[DaemonSet](https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/)
+deployment until StatefulSets support node-local storage
 ([open issue here](https://github.com/kubernetes/kubernetes/issues/7562)).
 
 ### Recovery after persistent storage failure
@@ -86,17 +86,17 @@ deployment and maintenance.
 ### Locally on minikube
 
 Set up your minikube cluster following the
-[instructions provided in the Kubernetes docs](http://kubernetes.io/docs/getting-started-guides/minikube/).
+[instructions provided in the Kubernetes docs](https://kubernetes.io/docs/getting-started-guides/minikube/).
 
 ### On AWS
 
 Set up your cluster following the
-[instructions provided in the Kubernetes docs](http://kubernetes.io/docs/getting-started-guides/aws/).
+[instructions provided in the Kubernetes docs](https://kubernetes.io/docs/getting-started-guides/aws/).
 
 ### On GCE
 
 You can either set up your cluster following the
-[instructions provided in the Kubernetes docs](http://kubernetes.io/docs/getting-started-guides/gce/)
+[instructions provided in the Kubernetes docs](https://kubernetes.io/docs/getting-started-guides/gce/)
 or by using the hosted
 [Container Engine](https://cloud.google.com/container-engine/docs) service:
 
