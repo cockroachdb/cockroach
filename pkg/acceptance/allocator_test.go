@@ -63,7 +63,6 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"strconv"
 	"testing"
 	"time"
 
@@ -108,11 +107,6 @@ type allocatorTest struct {
 	// Prefix is the prefix that will be prepended to all resources created by
 	// Terraform.
 	Prefix string
-	// CockroachDiskSizeGB is the size, in gigabytes, of the disks allocated
-	// for CockroachDB nodes. Leaving this as 0 accepts the default in the
-	// Terraform configs. This must be in GB, because Terraform only accepts
-	// disk size for GCE in GB.
-	CockroachDiskSizeGB int
 	// Run some schema changes during the rebalancing.
 	RunSchemaChanges bool
 
@@ -130,10 +124,6 @@ func (at *allocatorTest) Cleanup(t *testing.T) {
 
 func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 	at.f = MakeFarmer(t, at.Prefix, stopper)
-
-	if at.CockroachDiskSizeGB != 0 {
-		at.f.AddVars["cockroach_disk_size"] = strconv.Itoa(at.CockroachDiskSizeGB)
-	}
 
 	log.Infof(ctx, "creating cluster with %d node(s)", at.StartNodes)
 	if err := at.f.Resize(at.StartNodes); err != nil {
@@ -525,11 +515,10 @@ func TestRebalance_3To5Small(t *testing.T) {
 func TestUpreplicate_1To3Medium(t *testing.T) {
 	ctx := context.Background()
 	at := allocatorTest{
-		StartNodes:          1,
-		EndNodes:            3,
-		StoreURL:            urlStore1m,
-		Prefix:              "uprep-1to3m",
-		CockroachDiskSizeGB: 250, // GB
+		StartNodes: 1,
+		EndNodes:   3,
+		StoreURL:   urlStore1m,
+		Prefix:     "uprep-1to3m",
 	}
 	at.RunAndCleanup(ctx, t)
 }
@@ -540,11 +529,10 @@ func TestUpreplicate_1To3Medium(t *testing.T) {
 func TestUpreplicate_1To6Medium(t *testing.T) {
 	ctx := context.Background()
 	at := allocatorTest{
-		StartNodes:          1,
-		EndNodes:            6,
-		StoreURL:            urlStore1m,
-		Prefix:              "uprep-1to6m",
-		CockroachDiskSizeGB: 250, // GB
+		StartNodes: 1,
+		EndNodes:   6,
+		StoreURL:   urlStore1m,
+		Prefix:     "uprep-1to6m",
 	}
 	at.RunAndCleanup(ctx, t)
 }
@@ -555,12 +543,11 @@ func TestUpreplicate_1To6Medium(t *testing.T) {
 func TestSteady_6Medium(t *testing.T) {
 	ctx := context.Background()
 	at := allocatorTest{
-		StartNodes:          6,
-		EndNodes:            6,
-		StoreURL:            urlStore6m,
-		Prefix:              "steady-6m",
-		CockroachDiskSizeGB: 250, // GB
-		RunSchemaChanges:    true,
+		StartNodes:       6,
+		EndNodes:         6,
+		StoreURL:         urlStore6m,
+		Prefix:           "steady-6m",
+		RunSchemaChanges: true,
 	}
 	at.RunAndCleanup(ctx, t)
 }
