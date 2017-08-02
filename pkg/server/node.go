@@ -459,6 +459,7 @@ func (n *Node) initStores(
 	if _, err := n.stores.SynthesizeClusterVersion(ctx); err != nil {
 		return err
 	}
+	// Also populate bootstrap list
 
 	// Connect gossip before starting bootstrap. For new nodes, connecting
 	// to the gossip network is necessary to get the cluster ID.
@@ -533,8 +534,14 @@ func (n *Node) bootstrapStores(
 		NodeID:    n.Descriptor.NodeID,
 		StoreID:   firstID,
 	}
+
+	cv, err := n.stores.SynthesizeClusterVersion(ctx)
+	if err != nil {
+		log.Fatalf(ctx, "error retrieving cluster version for bootstrap: %s", err)
+	}
+
 	for _, s := range bootstraps {
-		if err := s.Bootstrap(ctx, sIdent); err != nil {
+		if err := s.Bootstrap(ctx, sIdent, cv); err != nil {
 			log.Fatal(ctx, err)
 		}
 		if err := s.Start(ctx, stopper); err != nil {

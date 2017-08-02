@@ -359,9 +359,8 @@ func (ls *Stores) SynthesizeClusterVersion(ctx context.Context) (base.ClusterVer
 
 	getVersion := func(s *Store) (base.ClusterVersion, error) {
 		var cv base.ClusterVersion
-		if _, err := engine.MVCCGetProto(
-			ctx, s.engine, keys.StoreClusterVersionKey(), hlc.Timestamp{}, true, nil, &cv,
-		); err != nil {
+		cv, err := ReadClusterVersion(ctx, s.engine)
+		if err != nil {
 			return base.ClusterVersion{}, err
 		}
 
@@ -414,7 +413,6 @@ func (ls *Stores) SynthesizeClusterVersion(ctx context.Context) (base.ClusterVer
 			minUseVersion.Version = cv.UseVersion
 			minUseVersion.origin = fmt.Sprint(s)
 		}
-		fmt.Println("minUseVersion ", minUseVersion)
 
 		return true // want more
 	})
@@ -466,7 +464,7 @@ func (ls *Stores) WriteClusterVersion(ctx context.Context, cv base.ClusterVersio
 	var err error
 	ls.storeMap.Range(func(k, v interface{}) bool {
 		s := v.(*Store)
-		err = engine.MVCCPutProto(ctx, s.engine, nil, keys.StoreClusterVersionKey(), hlc.Timestamp{}, nil, &cv)
+		err = WriteClusterVersion(ctx, s.Engine(), cv)
 		if err != nil {
 			log.Errorf(ctx, "error writing version to store %s: %s", s, err)
 		}
