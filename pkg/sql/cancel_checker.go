@@ -16,11 +16,10 @@ package sql
 
 import (
 	"errors"
-	"sync/atomic"
 )
 
 // Interval of rows to wait between cancellation checks.
-const cancelCheckInterval int64 = 100000
+const cancelCheckInterval int64 = 1000
 
 // CancelChecker is an interface for an abstract cancellation checker,
 // implemented by cancelChecker and nullCancelChecker.
@@ -63,16 +62,8 @@ func makeCancelChecker(stmt *Statement) CancelChecker {
 
 // check returns an error if the associated query has been cancelled.
 func (c *cancelChecker) Check() error {
-	if !c.isCancelled && c.rowsSinceLastCheck%cancelCheckInterval == 0 {
-		// Atomically check shared cancellation flag first.
-		c.isCancelled = atomic.LoadInt32(&c.queryMeta.isCancelled) == 1
-
-		select {
-		case <-c.queryMeta.ctx.Done():
-			c.isCancelled = true
-		default:
-			// c.isCancelled unchanged
-		}
+	if !c.isCancelled {
+		c.isCancelled = c.queryMeta.isQueryCancelled(c.rowsSinceLastCheck%cancelCheckInterval == 0)
 	}
 
 	c.rowsSinceLastCheck++
