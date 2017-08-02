@@ -708,7 +708,10 @@ func restore(
 	})
 
 	var importIdx int
-	for importRequest := range importRequestsCh {
+	for ir := range importRequestsCh {
+		// Copy ir so we can use it in the goroutine below.
+		importRequest := ir
+
 		importCtx, importSpan := tracing.ChildSpan(gCtx, "import")
 		idx := importIdx
 		importIdx++
