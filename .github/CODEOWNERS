@@ -12,6 +12,7 @@
 /pkg/roachpb/          @cockroachdb/core
 /pkg/rpc/              @cockroachdb/core
 /pkg/server/           @cockroachdb/core
+/pkg/storage/          @cockroachdb/core
 /pkg/migration/        @cockroachdb/core @cockroachdb/sql
 
 /pkg/ccl/              @cockroachdb/sql-ccl
