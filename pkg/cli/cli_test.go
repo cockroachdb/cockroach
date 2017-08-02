@@ -1248,6 +1248,7 @@ Available Commands:
   help        Help about any command
 
 Flags:
+  -h, --help                             help for cockroach
       --log-backtrace-at traceLocation   when logging hits line file:N, emit a stack trace (default :0)
       --log-dir string                   if non-empty, write log files in this directory
       --log-dir-max-size bytes           maximum combined size of all log files (default 100 MiB)

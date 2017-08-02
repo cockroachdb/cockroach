@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"fmt"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"strconv"
 	"testing"
@@ -350,7 +349,7 @@ func TestNodeStatusResponse(t *testing.T) {
 	if len(nodeStatuses) != 1 {
 		t.Errorf("too many node statuses returned - expected:1 actual:%d", len(nodeStatuses))
 	}
-	if !reflect.DeepEqual(s.node.Descriptor, nodeStatuses[0].Desc) {
+	if !proto.Equal(&s.node.Descriptor, &nodeStatuses[0].Desc) {
 		t.Errorf("node status descriptors are not equal\nexpected:%+v\nactual:%+v\n", s.node.Descriptor, nodeStatuses[0].Desc)
 	}
 
@@ -361,7 +360,7 @@ func TestNodeStatusResponse(t *testing.T) {
 		if err := getStatusJSONProto(s, "nodes/"+oldNodeStatus.Desc.NodeID.String(), &nodeStatus); err != nil {
 			t.Fatal(err)
 		}
-		if !reflect.DeepEqual(s.node.Descriptor, nodeStatus.Desc) {
+		if !proto.Equal(&s.node.Descriptor, &nodeStatus.Desc) {
 			t.Errorf("node status descriptors are not equal\nexpected:%+v\nactual:%+v\n", s.node.Descriptor, nodeStatus.Desc)
 		}
 	}

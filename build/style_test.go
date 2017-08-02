@@ -663,10 +663,7 @@ func TestStyle(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := stream.ForEach(stream.Sequence(
-			filter,
-			stream.GrepNot(`((\.pb|\.pb\.gw|embedded|_string|\.ir|\.tmpl)\.go|sql/ir/irgen/parser/(yaccpar|irgen\.y):|sql/parser/(yaccpar|sql\.y):)`),
-		), func(s string) {
+		if err := stream.ForEach(filter, func(s string) {
 			t.Error(s)
 		}); err != nil {
 			t.Error(err)

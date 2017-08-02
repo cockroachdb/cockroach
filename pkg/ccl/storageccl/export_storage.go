@@ -399,9 +399,9 @@ func (g *gcsStorage) Close() error {
 }
 
 type azureStorage struct {
-	conf   *roachpb.ExportStorage_Azure
-	client azr.BlobStorageClient
-	prefix string
+	conf      *roachpb.ExportStorage_Azure
+	container *azr.Container
+	prefix    string
 }
 
 var _ ExportStorage = &azureStorage{}
@@ -414,10 +414,11 @@ func makeAzureStorage(conf *roachpb.ExportStorage_Azure) (ExportStorage, error) 
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create azure client")
 	}
+	blobClient := client.GetBlobService()
 	return &azureStorage{
-		conf:   conf,
-		client: client.GetBlobService(),
-		prefix: conf.Prefix,
+		conf:      conf,
+		container: blobClient.GetContainerReference(conf.Container),
+		prefix:    conf.Prefix,
 	}, err
 }
 
@@ -444,9 +445,11 @@ func (s *azureStorage) WriteFile(
 
 	const maxAttempts = 3
 
+	blob := s.container.GetBlobReference(name)
+
 	writeFile := func() error {
 		if err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
-			return s.client.CreateBlockBlob(s.conf.Container, name)
+			return blob.CreateBlockBlob(nil)
 		}); err != nil {
 			return errors.Wrap(err, "creating block blob")
 		}
@@ -478,7 +481,7 @@ func (s *azureStorage) WriteFile(
 			i++
 			blocks = append(blocks, azr.Block{ID: id, Status: azr.BlockStatusUncommitted})
 			return retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
-				return s.client.PutBlock(s.conf.Container, name, id, b)
+				return blob.PutBlock(id, b, nil)
 			})
 		}
 
@@ -487,7 +490,7 @@ func (s *azureStorage) WriteFile(
 		}
 
 		err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
-			return s.client.PutBlockList(s.conf.Container, name, blocks)
+			return blob.PutBlockList(blocks, nil)
 		})
 		return errors.Wrap(err, "putting block list")
 	}
@@ -531,15 +534,12 @@ func chunkReader(r io.Reader, size int, f func([]byte) error) error {
 }
 
 func (s *azureStorage) ReadFile(_ context.Context, basename string) (io.ReadCloser, error) {
-	r, err := s.client.GetBlob(s.conf.Container, path.Join(s.prefix, basename))
+	r, err := s.container.GetBlobReference(path.Join(s.prefix, basename)).Get(nil)
 	return r, errors.Wrap(err, "failed to create azure reader")
 }
 
 func (s *azureStorage) Delete(_ context.Context, basename string) error {
-	return errors.Wrap(
-		s.client.DeleteBlob(s.conf.Container, path.Join(s.prefix, basename), nil),
-		"deleting blob",
-	)
+	return errors.Wrap(s.container.GetBlobReference(path.Join(s.prefix, basename)).Delete(nil), "deleting blob")
 }
 
 func (s *azureStorage) Close() error {

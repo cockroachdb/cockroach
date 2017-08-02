@@ -84,6 +84,7 @@ func newSSH(host, keyfile string) (*ssh.Client, error) {
 		Auth: []ssh.AuthMethod{
 			ssh.PublicKeys(signer),
 		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	})
 }
 
