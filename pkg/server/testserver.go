@@ -17,6 +17,9 @@ package server
 import (
 	"fmt"
 	"net/http"
+	"net/http/cookiejar"
+	"net/url"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -32,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
@@ -83,6 +87,9 @@ func makeTestConfig() Config {
 	// Set standard user for intra-cluster traffic.
 	cfg.User = security.NodeUser
 	cfg.MetricsSampleInterval = metric.TestSampleInterval
+
+	// Enable web session authentication.
+	cfg.EnableWebSessionAuthentication = true
 
 	return cfg
 }
@@ -149,6 +156,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.ListeningURLFile != "" {
 		cfg.ListeningURLFile = params.ListeningURLFile
 	}
+	if params.DisableWebSessionAuthentication {
+		cfg.EnableWebSessionAuthentication = false
+	}
 
 	// Ensure we have the correct number of engines. Add in-memory ones where
 	// needed. There must be at least one store/engine.
@@ -195,6 +205,13 @@ type TestServer struct {
 	Cfg *Config
 	// server is the embedded Cockroach server struct.
 	*Server
+	// authClient is an http.Client that has been authenticated to access the
+	// Admin UI.
+	authClient struct {
+		httpClient http.Client
+		once       sync.Once
+		err        error
+	}
 }
 
 // Stopper returns the embedded server's Stopper.
@@ -405,6 +422,47 @@ func (ts *TestServer) AdminURL() string {
 // GetHTTPClient implements TestServerInterface.
 func (ts *TestServer) GetHTTPClient() (http.Client, error) {
 	return ts.Cfg.GetHTTPClient()
+}
+
+// GetAuthenticatedHTTPClient implements TestServerInterface.
+func (ts *TestServer) GetAuthenticatedHTTPClient() (http.Client, error) {
+	ts.authClient.once.Do(func() {
+		// Create an authentication session for an arbitrary user. We do not
+		// currently have an authorization mechanism, so a specific user is not
+		// necessary.
+		ts.authClient.err = func() error {
+			id, secret, err := ts.authentication.newAuthSession(context.TODO(), "authentic_user")
+			if err != nil {
+				return err
+			}
+			// Encode a session cookie and store it in a cookie jar.
+			cookie, err := encodeSessionCookie(&serverpb.SessionCookie{
+				ID:     id,
+				Secret: secret,
+			})
+			if err != nil {
+				return err
+			}
+			cookieJar, err := cookiejar.New(nil)
+			if err != nil {
+				return err
+			}
+			url, err := url.Parse(ts.AdminURL())
+			if err != nil {
+				return err
+			}
+			cookieJar.SetCookies(url, []*http.Cookie{cookie})
+			// Create an httpClient and attach the cookie jar to the client.
+			ts.authClient.httpClient, err = ts.Cfg.GetHTTPClient()
+			if err != nil {
+				return err
+			}
+			ts.authClient.httpClient.Jar = cookieJar
+			return nil
+		}()
+	})
+
+	return ts.authClient.httpClient, ts.authClient.err
 }
 
 // MustGetSQLCounter implements TestServerInterface.
