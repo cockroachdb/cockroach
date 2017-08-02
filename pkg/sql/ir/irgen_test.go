@@ -16,11 +16,12 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"strconv"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/ir/irgen/test/d"
+	d "github.com/cockroachdb/cockroach/pkg/sql/ir/example/base"
 )
 
 func makeSampleExpr(a d.Allocator) d.Expr {
@@ -51,6 +52,17 @@ func format(ref d.Expr) string {
 		return fmt.Sprintf("(%s %s %s)", format(b.Left()), op, format(b.Right()))
 	default:
 		panic("unknown Expr tag")
+	}
+}
+
+func TestExprFormatSExpr(t *testing.T) {
+	a := d.NewAllocator()
+	e := makeSampleExpr(a)
+
+	var buf bytes.Buffer
+	e.FormatSExpr(&buf)
+	if buf.String() != "(BinExpr Left: (ConstExpr Datum: 3) Op: Mul Right: (BinExpr Left: (ConstExpr Datum: 1) Op: Add Right: (ConstExpr Datum: 2)))" {
+		t.Fatalf("unexpected: %q", buf.String())
 	}
 }
 
