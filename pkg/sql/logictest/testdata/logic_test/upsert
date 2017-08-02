@@ -320,10 +320,39 @@ SELECT * FROM issue_14052_2;
 statement ok
 CREATE TABLE issue_16873 (col int PRIMARY KEY, date TIMESTAMP);
 
+# n.b. the fully-qualified names below are required, as there are two providers of
+# the column named `col` here, the original table and the `excluded` pseudo-table.
 statement ok
 INSERT INTO issue_16873 VALUES (1,clock_timestamp())
-ON CONFLICT (col) DO UPDATE SET date = clock_timestamp() WHERE col = 1;
+ON CONFLICT (col) DO UPDATE SET date = clock_timestamp() WHERE issue_16873.col = 1;
 
 statement ok
 INSERT INTO issue_16873 VALUES (1,clock_timestamp())
-ON CONFLICT (col) DO UPDATE SET date = clock_timestamp() WHERE col = 1;
+ON CONFLICT (col) DO UPDATE SET date = clock_timestamp() WHERE issue_16873.col = 1;
+
+# For #17339.  Support WHERE clause in ON CONFLICT handling.
+statement ok
+CREATE TABLE issue_17339 (a int primary key, b int);
+
+statement ok
+INSERT INTO issue_17339 VALUES (1, 1), (2, 0);
+
+statement ok
+INSERT INTO issue_17339 VALUES (1, 0), (2, 2)
+ON CONFLICT (a) DO UPDATE SET b = excluded.b WHERE excluded.b > issue_17339.b;
+
+query II
+SELECT * FROM issue_17339 ORDER BY a;
+----
+1 1
+2 2
+
+statement ok
+INSERT INTO issue_17339 VALUES (1, 0), (2, 1)
+ON CONFLICT (a) DO UPDATE SET b = excluded.b WHERE TRUE;
+
+query II
+SELECT * FROM issue_17339 ORDER BY a;
+----
+1 0
+2 1
