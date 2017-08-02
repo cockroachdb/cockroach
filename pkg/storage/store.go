@@ -173,11 +173,10 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 		clock = hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	}
 	sc := StoreConfig{
-		ExposedClusterVersion: migration.NewExposedClusterVersion(func() base.ClusterVersion {
-			return base.ClusterVersion{
-				UseVersion: base.ServerVersion, // all features active
-			}
-		}, nil),
+		ExposedClusterVersion: migration.NewExposedClusterVersion(base.ClusterVersion{
+			MinimumVersion: base.ServerVersion,
+			UseVersion:     base.ServerVersion, // all features active
+		}),
 		AmbientCtx:                     log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:                          clock,
 		RaftTickInterval:               100 * time.Millisecond,

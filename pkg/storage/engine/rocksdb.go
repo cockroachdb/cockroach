@@ -388,7 +388,15 @@ func newMemRocksDB(
 
 // String formatter.
 func (r *RocksDB) String() string {
-	return fmt.Sprintf("%s=%s", r.Attrs(), r.cfg.Dir)
+	dir := r.cfg.Dir
+	if r.cfg.Dir == "" {
+		dir = "<in-mem>"
+	}
+	attrs := r.Attrs().String()
+	if attrs == "" {
+		attrs = "<no-attributes>"
+	}
+	return fmt.Sprintf("%s=%s", attrs, dir)
 }
 
 func (r *RocksDB) open() error {

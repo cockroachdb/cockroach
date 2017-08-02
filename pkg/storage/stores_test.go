@@ -512,7 +512,7 @@ func TestStoresClusterVersionIncompatible(t *testing.T) {
 			cv.MinimumVersion = ls.serverVersion
 			// UseVersion is way too high for this node.
 			cv.UseVersion = roachpb.Version{Major: 9}
-			return `store \[n0,s\d+\] requires at least v9\.0, but running version is 1.0-1`
+			return `engine <no-attributes>=<in-mem> requires at least v9\.0, but running version is 1.0-1`
 		},
 		"StoreTooNewMinVersion": func(cv *base.ClusterVersion, ls *Stores) string {
 			ls.minSupportedVersion = vOne
@@ -521,7 +521,7 @@ func TestStoresClusterVersionIncompatible(t *testing.T) {
 			// sure it doesn't change the outcome.
 			cv.UseVersion = ls.serverVersion
 			cv.MinimumVersion = roachpb.Version{Major: 9}
-			return `store \[n0,s\d+\] requires at least v9\.0, but running version is 1.0-1`
+			return `engine <no-attributes>=<in-mem> requires at least v9\.0, but running version is 1.0-1`
 		},
 		"StoreTooOldUseVersion": func(cv *base.ClusterVersion, ls *Stores) string {
 			// This is what the running node requires from its stores.
@@ -532,7 +532,7 @@ func TestStoresClusterVersionIncompatible(t *testing.T) {
 			cv.MinimumVersion = ls.serverVersion
 			// UseVersion is way too low.
 			cv.UseVersion = roachpb.Version{Major: 4}
-			return `store \[n0,s\d+\] at v4\.0 too old for running version 9\.0 \(requires at least v5\.0\)`
+			return `engine <no-attributes>=<in-mem> at v4\.0 too old for running version 9\.0 \(requires at least v5\.0\)`
 		},
 		"StoreTooOldMinVersion": func(cv *base.ClusterVersion, ls *Stores) string {
 			// Like the previous test case, but this time cv.MinimumVersion is the culprit.
@@ -540,7 +540,7 @@ func TestStoresClusterVersionIncompatible(t *testing.T) {
 			ls.serverVersion = roachpb.Version{Major: 9}
 			cv.MinimumVersion = ls.serverVersion
 			cv.UseVersion = roachpb.Version{Major: 4}
-			return `store \[n0,s\d+\] at v4\.0 too old for running version 9\.0 \(requires at least v5\.0\)`
+			return `engine <no-attributes>=<in-mem> at v4\.0 too old for running version 9\.0 \(requires at least v5\.0\)`
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

@@ -62,7 +62,7 @@ type TransformerFn func(old []byte, update *string) (finalV []byte, finalObj int
 // machine with the result.
 type StateMachineSetting struct {
 	v           atomic.Value // []byte (marshalled state)
-	transformer TransformerFn
+	Transformer TransformerFn
 	common
 }
 
@@ -70,7 +70,7 @@ var _ Setting = &StateMachineSetting{}
 
 func (s *StateMachineSetting) String() string {
 	encV := []byte(s.Get())
-	_, iface, err := s.transformer(encV, nil)
+	_, iface, err := s.Transformer(encV, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -86,7 +86,7 @@ func (*StateMachineSetting) Typ() string {
 func (s *StateMachineSetting) Get() string {
 	encV := s.v.Load()
 	if encV == nil {
-		defV, _, err := s.transformer(nil, nil)
+		defV, _, err := s.Transformer(nil, nil)
 		if err != nil {
 			panic(err)
 		}
@@ -99,11 +99,11 @@ func (s *StateMachineSetting) Get() string {
 // state, unencoded state, or an error. If no update is given, round trips
 // current state.
 func (s *StateMachineSetting) Validate(old []byte, update *string) ([]byte, interface{}, error) {
-	return s.transformer(old, update)
+	return s.Transformer(old, update)
 }
 
 func (s *StateMachineSetting) set(finalEncodedV []byte) error {
-	if _, _, err := s.transformer(finalEncodedV, nil); err != nil {
+	if _, _, err := s.Transformer(finalEncodedV, nil); err != nil {
 		return err
 	}
 	if bytes.Equal([]byte(s.Get()), finalEncodedV) {
@@ -115,7 +115,12 @@ func (s *StateMachineSetting) set(finalEncodedV []byte) error {
 }
 
 func (s *StateMachineSetting) setToDefault() {
-	defV, _, err := s.transformer(nil, nil)
+	if s.Transformer == nil {
+		// HACK: see pkg/migration/version.go. We initialize the default value (and hence the transformer)
+		// post-init, but the setting must be defined at init time.
+		return
+	}
+	defV, _, err := s.Transformer(nil, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -128,7 +133,7 @@ func (s *StateMachineSetting) setToDefault() {
 // for StateMachineSetting for details.
 func RegisterStateMachineSetting(key, desc string, transformer TransformerFn) *StateMachineSetting {
 	setting := &StateMachineSetting{
-		transformer: transformer,
+		Transformer: transformer,
 	}
 	register(key, desc, setting)
 	return setting
@@ -138,7 +143,7 @@ func RegisterStateMachineSetting(key, desc string, transformer TransformerFn) *S
 // TestingSetBool for more details.
 func TestingSetStatemachine(s **StateMachineSetting, transformer TransformerFn) func() {
 	saved := *s
-	tmp := &StateMachineSetting{transformer: transformer}
+	tmp := &StateMachineSetting{Transformer: transformer}
 	*s = tmp
 	return func() {
 		*s = saved
