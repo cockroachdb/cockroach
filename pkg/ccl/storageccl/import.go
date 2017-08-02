@@ -159,7 +159,7 @@ func (b *sstBatcher) Finish(ctx context.Context, db *client.DB) error {
 
 	const maxAddSSTableRetries = 10
 	for i := 0; ; i++ {
-		log.Event(ctx, "sending AddSSTable")
+		log.VEventf(ctx, 2, "sending AddSSTable [%s,%s)", start, end)
 		// TODO(dan): This will fail if the range has split.
 		err := db.ExperimentalAddSSTable(ctx, start, end, sstBytes)
 		if err == nil {
@@ -208,7 +208,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 	var rows rowCounter
 	var iters []engine.SimpleIterator
 	for _, file := range args.Files {
-		log.VEventf(ctx, 2, "import file %s", file.Path)
+		log.VEventf(ctx, 2, "import file %s %s", file.Path, args.Span.Key)
 
 		dir, err := MakeExportStorage(ctx, file.Dir)
 		if err != nil {
