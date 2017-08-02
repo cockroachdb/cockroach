@@ -843,9 +843,6 @@ func (n *Node) Batch(
 // and "child of remote span" cases are important, as this RPC can be called
 // either through the network or directly if the caller is local.
 //
-// remoteTranceContext is the span context of this remote call. Can be
-// nil if this call is not remote.
-//
 // It returns the derived context and a cleanup function to be called when
 // servicing the RPC is done. The cleanup function will close the span and, in
 // case the span was the child of a remote span and "snowball tracing" was
