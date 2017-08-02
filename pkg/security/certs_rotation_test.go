@@ -57,8 +57,10 @@ func TestRotateCerts(t *testing.T) {
 	}
 
 	// Start a test server with first set of certs.
+	// Disable web session auth for simplicity.
 	params := base.TestServerArgs{
-		SSLCertsDir: certsDir,
+		SSLCertsDir:                     certsDir,
+		DisableWebSessionAuthentication: true,
 	}
 	s, _, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
