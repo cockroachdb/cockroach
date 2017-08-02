@@ -175,8 +175,12 @@ type queryMeta struct {
 	// Current phase of execution of query.
 	phase queryPhase
 
-	// Context associated with this query.
+	// Context associated with this query's transaction.
 	ctx context.Context
+
+	// Cancellation function for the context associated with this query's transaction.
+	// Set to session.txnState.cancel in executor.
+	ctxCancel context.CancelFunc
 
 	// Flag that denotes if this query has been cancelled yet. Set and checked
 	// using sync.atomic.{Load,Store}Int32.
@@ -184,6 +188,38 @@ type queryMeta struct {
 
 	// Reference to the Session that contains this query.
 	session *Session
+}
+
+// cancel cancels the query associated with this queryMeta, by atomically
+// setting the cancelled flag and closing the associated txn context.
+func (q *queryMeta) cancel() {
+	q.ctxCancel()
+
+	atomic.StoreInt32(&q.isCancelled, 1)
+}
+
+// isCancelled atomically checks the cancellation flag, as well as the txn
+// context (if checkTxn = true), for whether the query has been cancelled.
+// Checking the context is a slower operation but must still be done occasionally.
+// A CANCEL QUERY directed at this query will set the flag as well
+// as close the context, but if the CANCEL is directed at another query within
+// the same transaction (which could be running in parallel), then the shared
+// transaction context will be closed but isCancelled won't be set to true.
+func (q *queryMeta) isQueryCancelled(checkTxn bool) bool {
+	if atomic.LoadInt32(&q.isCancelled) == 1 {
+		return true
+	}
+
+	if !checkTxn {
+		return false
+	}
+
+	select {
+	case <-q.ctx.Done():
+		return true
+	default:
+		return false
+	}
 }
 
 // Session contains the state of a SQL client connection.
@@ -800,6 +836,11 @@ type txnState struct {
 	// Ctx is the context for everything running in this SQL txn.
 	Ctx context.Context
 
+	// cancel is the cancellation function for the above context. Called upon
+	// COMMIT/ROLLBACK of the transaction to release resources associated with
+	// the context. nil when no txn is in progress.
+	cancel context.CancelFunc
+
 	// implicitTxn if set if the transaction was automatically created for a
 	// single statement.
 	implicitTxn bool
@@ -938,7 +979,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	}
 
 	ts.sp = sp
-	ts.Ctx = ctx
+	ts.Ctx, ts.cancel = context.WithCancel(ctx)
 	ts.SetState(FirstBatch)
 	s.Tracing.onNewSQLTxn(ts.sp)
 
@@ -990,6 +1031,10 @@ func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
 // called before resetForNewSQLTxn() is called for starting another SQL txn.
 func (ts *txnState) finishSQLTxn(s *Session) {
 	ts.mon.Stop(ts.Ctx)
+	if ts.cancel != nil {
+		ts.cancel()
+		ts.cancel = nil
+	}
 	if ts.sp == nil {
 		panic("No span in context? Was resetForNewSQLTxn() called previously?")
 	}
