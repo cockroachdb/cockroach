@@ -55,14 +55,14 @@ type stmtStats struct {
 // StmtStatsEnable determines whether to collect per-statement
 // statistics.
 var StmtStatsEnable = settings.RegisterBoolSetting(
-	"sql.metrics.statement_details.enabled", "collect per-statement query statistics ", true,
+	"sql.metrics.statement_details.enabled", "collect per-statement query statistics", true,
 )
 
 // SQLStatsCollectionLatencyThreshold specifies the minimum amount of time
 // consumed by a SQL statement before it is collected for statistics reporting.
 var SQLStatsCollectionLatencyThreshold = settings.RegisterDurationSetting(
 	"sql.metrics.statement_details.threshold",
-	"minmum execution time to cause statics to be collected",
+	"minimum execution time to cause statistics to be collected",
 	0,
 )
 
