@@ -41,11 +41,10 @@
 /pkg/sql/distsqlplan/  @cockroachdb/distsql @cockroachdb/sql-planning
 /pkg/sql/distsqlrun/   @cockroachdb/distsql @cockroachdb/sql-execution
 
-# We purposefully sink testlogic into a non-existent team to disable
-# notifications otherwise caught by the @sql-rest team.  Typically,
-# testlogic changes are part of a bigger change that will trigger
-# notifications to the correct sub-team.
-/pkg/sql/testlogic/    @cockroachdb/nonexistent
+# We purposefully disable testlogic notifications to disable notifications
+# otherwise caught by the @sql-rest team. Typically, testlogic changes are part
+# of a bigger change that will trigger notifications to the correct sub-team.
+/pkg/sql/testlogic/
 
 /pkg/ui/               @cockroachdb/admin-ui
 
