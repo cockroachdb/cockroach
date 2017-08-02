@@ -206,7 +206,8 @@ func (p *planner) Insert(
 			}
 
 			helper, err := p.makeUpsertHelper(
-				ctx, tn, en.tableDesc, ri.InsertCols, updateCols, updateExprs, conflictIndex)
+				ctx, tn, en.tableDesc, ri.InsertCols, updateCols, updateExprs, conflictIndex, n.OnConflict.Where,
+			)
 			if err != nil {
 				return nil, err
 			}
