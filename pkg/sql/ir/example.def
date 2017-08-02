@@ -23,7 +23,12 @@ struct All {
   ConstExpr CE = 2
   BinExpr BE = 3
   BinOp BO = 4
-  All A = 5
+  AllOrExpr A = 5
+}
+
+sum AllOrExpr {
+  All = 1
+  BinExpr = 2
 }
 
 prim int64
