@@ -344,9 +344,18 @@ func (f *Farmer) WaitReady(d time.Duration) error {
 // ascertain cluster health.
 // TODO(tschottdorf): unimplemented when nodes are expected down.
 func (f *Farmer) Assert(ctx context.Context, t testing.TB) {
+	const cmd = "pidof cockroach"
+
 	for i, node := range f.nodes {
-		if err := f.Exec(i, "ps "+node.pid); err != nil {
-			t.Fatal(err)
+		stdout, stderr, err := f.ssh(f.Hostname(i), f.defaultKeyFile(), cmd)
+		if err != nil {
+			t.Fatalf("failed: %s: %s\nstdout:\n%s\nstderr:\n%s", cmd, err, stdout, stderr)
+		}
+		for _, pid := range strings.Fields(strings.TrimSpace(stdout)) {
+			if pid == node.pid {
+				continue
+			}
+			t.Errorf("unexpected cockroach pid %s; expected %s", pid, node.pid)
 		}
 	}
 }
@@ -454,9 +463,10 @@ func (f *Farmer) Start(ctx context.Context, i int, name string) error {
 	})
 	cmd := "./" + name
 	switch name {
+	// TODO(tamird,petermattis): replace this with "kv".
 	case "block_writer":
 		cmd += fmt.Sprintf("--tolerate-errors --min-block-bytes=8 --max-block-bytes=128 --benchmark-name %s %s", f.BenchmarkName, f.nodes[i].url)
-	case "photots":
+	case "photos":
 		cmd += fmt.Sprintf("--users 1 --benchmark-name %s --db %s", f.BenchmarkName, f.nodes[i].url)
 	}
 	cmd += fmt.Sprintf(" 1>logs/%[1]s.stdout 2>logs/%[1]s.stderr", name)
