@@ -201,6 +201,10 @@ type tableUpsertEvaler interface {
 	// eval returns the values for the update case of an upsert, given the row
 	// that would have been inserted and the existing (conflicting) values.
 	eval(insertRow parser.Datums, existingRow parser.Datums) (parser.Datums, error)
+
+	// shouldUpdate returns the result of evaluating the WHERE clause of the
+	// ON CONFLICT ... DO UPDATE clause.
+	shouldUpdate(insertRow parser.Datums, existingRow parser.Datums) (bool, error)
 }
 
 // tableUpserter handles writing kvs and forming table rows for upserts.
@@ -430,18 +434,24 @@ func (tu *tableUpserter) flush(
 			// If len(tu.updateCols) == 0, then we're in the DO NOTHING case.
 			if len(tu.updateCols) > 0 {
 				existingValues := existingRow[:len(tu.ru.FetchCols)]
-				updateValues, err := tu.evaler.eval(insertRow, existingValues)
+				shouldUpdate, err := tu.evaler.shouldUpdate(insertRow, existingValues)
 				if err != nil {
 					return nil, err
 				}
-				updatedRow, err := tu.ru.UpdateRow(ctx, b, existingValues, updateValues, traceKV)
-				if err != nil {
-					return nil, err
-				}
-				if tu.collectRows {
-					_, err = tu.rowsUpserted.AddRow(ctx, updatedRow)
+				if shouldUpdate {
+					updateValues, err := tu.evaler.eval(insertRow, existingValues)
 					if err != nil {
 						return nil, err
+					}
+					updatedRow, err := tu.ru.UpdateRow(ctx, b, existingValues, updateValues, traceKV)
+					if err != nil {
+						return nil, err
+					}
+					if tu.collectRows {
+						_, err = tu.rowsUpserted.AddRow(ctx, updatedRow)
+						if err != nil {
+							return nil, err
+						}
 					}
 				}
 			}

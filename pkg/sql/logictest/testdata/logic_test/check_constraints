@@ -149,7 +149,7 @@ statement error failed to satisfy CHECK constraint
 INSERT INTO t5 VALUES (1, 10, 20) ON CONFLICT (k) DO NOTHING
 
 statement error failed to satisfy CHECK constraint
-INSERT INTO t5 VALUES (2, 11, 12) ON CONFLICT (k) DO UPDATE SET b = 12 WHERE k = 2
+INSERT INTO t5 VALUES (2, 11, 12) ON CONFLICT (k) DO UPDATE SET b = 12 WHERE t5.k = 2
 
 statement error failed to satisfy CHECK constraint
 UPSERT INTO t5 VALUES (2, 11, 12)
@@ -173,13 +173,13 @@ SELECT * FROM t5
 2 11  9
 
 statement error failed to satisfy CHECK constraint
-INSERT INTO t5 VALUES (2, 11, 12) ON CONFLICT (k) DO UPDATE SET b = 12 WHERE k = 2
+INSERT INTO t5 VALUES (2, 11, 12) ON CONFLICT (k) DO UPDATE SET b = 12 WHERE t5.k = 2
 
 statement error failed to satisfy CHECK constraint
 UPSERT INTO t5 VALUES (2, 11, 12)
 
 statement error failed to satisfy CHECK constraint
-INSERT INTO t5 VALUES (2, 11, 12) ON CONFLICT (k) DO UPDATE SET b = t5.a + 1 WHERE k = 2
+INSERT INTO t5 VALUES (2, 11, 12) ON CONFLICT (k) DO UPDATE SET b = t5.a + 1 WHERE t5.k = 2
 
 query III rowsort
 SELECT * FROM t5
