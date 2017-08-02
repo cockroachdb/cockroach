@@ -6,57 +6,60 @@
 #
 # Remember, *the last rule to match wins.*
 
-/pkg/gossip/           @cockroachdb/core
-/pkg/internal/         @cockroachdb/core
-/pkg/kv/               @cockroachdb/core
-/pkg/roachpb/          @cockroachdb/core
-/pkg/rpc/              @cockroachdb/core
-/pkg/server/           @cockroachdb/core
-/pkg/migration/        @cockroachdb/core @cockroachdb/sql
+/pkg/gossip/                @cockroachdb/core
+/pkg/internal/              @cockroachdb/core
+/pkg/kv/                    @cockroachdb/core
+/pkg/roachpb/               @cockroachdb/core
+/pkg/rpc/                   @cockroachdb/core
+/pkg/server/                @cockroachdb/core
+/pkg/storage/               @cockroachdb/core
+/pkg/migration/             @cockroachdb/core @cockroachdb/sql
 
-/pkg/ccl/              @cockroachdb/sql-ccl
-/pkg/cli/              @cockroachdb/sql-ui
+/pkg/ccl/                   @cockroachdb/sql-ccl
+/pkg/cli/                   @cockroachdb/sql-ui
 
-/pkg/sql/              @cockroachdb/sql-rest
+/pkg/sql/                   @cockroachdb/sql-rest
 
-/pkg/sql/parser/       @cockroachdb/sql-language
-/pkg/sql/ir/           @cockroachdb/sql-language
+/pkg/sql/parser/            @cockroachdb/sql-language
+/pkg/sql/ir/                @cockroachdb/sql-language
 
-/pkg/sql/pgwire/       @cockroachdb/sql-wiring
-/pkg/sql/privilege/    @cockroachdb/sql-wiring @cockroachdb/sql-language @cockroachdb/sql-execution
+/pkg/sql/pgwire/            @cockroachdb/sql-wiring
+/pkg/sql/privilege/         @cockroachdb/sql-wiring @cockroachdb/sql-language @cockroachdb/sql-execution
 
-/pkg/sql/sqlbase/      @cockroachdb/sql-planning @cockroachdb/sql-execution @cockroachdb/sql-async
+/pkg/sql/sqlbase/           @cockroachdb/sql-planning @cockroachdb/sql-execution @cockroachdb/sql-async
 
-/pkg/sql/*.go          @cockroachdb/sql-planning @cockroachdb/sql-execution
+/pkg/sql/*.go               @cockroachdb/sql-planning @cockroachdb/sql-execution
 
-/pkg/sql/executor*     @cockroachdb/sql-execution
-/pkg/sql/mon/          @cockroachdb/sql-execution
+/pkg/sql/executor*          @cockroachdb/sql-execution
+/pkg/sql/mon/               @cockroachdb/sql-execution
 /pkg/sql/sqlutil/*executor* @cockroachdb/sql-execution
 
-/pkg/sql/schema*       @cockroachdb/sql-async
-/pkg/sql/lease*        @cockroachdb/sql-async
-/pkg/sql/jobs/         @cockroachdb/sql-async
+/pkg/sql/schema*            @cockroachdb/sql-async
+/pkg/sql/lease*             @cockroachdb/sql-async
+/pkg/sql/jobs/              @cockroachdb/sql-async
 
-/pkg/sql/distsql*.go   @cockroachdb/distsql @cockroachdb/sql-planning
-/pkg/sql/distsqlplan/  @cockroachdb/distsql @cockroachdb/sql-planning
-/pkg/sql/distsqlrun/   @cockroachdb/distsql @cockroachdb/sql-execution
+/pkg/sql/distsql*.go        @cockroachdb/distsql @cockroachdb/sql-planning
+/pkg/sql/distsqlplan/       @cockroachdb/distsql @cockroachdb/sql-planning
+/pkg/sql/distsqlrun/        @cockroachdb/distsql @cockroachdb/sql-execution
 
-# We purposefully sink testlogic into a non-existent team to disable
-# notifications otherwise caught by the @sql-rest team.  Typically,
-# testlogic changes are part of a bigger change that will trigger
-# notifications to the correct sub-team.
-/pkg/sql/testlogic/    @cockroachdb/nonexistent
+# We purposefully disable testlogic notifications to disable notifications
+# otherwise caught by the @sql-rest team. Typically, testlogic changes are part
+# of a bigger change that will trigger notifications to the correct sub-team.
+/pkg/sql/testlogic/
 
-/pkg/ui/               @cockroachdb/admin-ui
+/pkg/ui/                    @cockroachdb/admin-ui
+/pkg/ui/embedded.go
+/pkg/ui/src/js/protos.d.ts
+/pkg/ui/src/js/protos.js
 
-/build/                @cockroachdb/build
-/c-deps/               @cockroachdb/build
-/githooks/             @cockroachdb/build
-/scripts/              @cockroachdb/build
-**/Makefile            @cockroachdb/build
-/Gopkg.*               @cockroachdb/build
-/.*                    @cockroachdb/build
-/.github/              @cockroachdb/build
+/build/                     @cockroachdb/build
+/c-deps/                    @cockroachdb/build
+/githooks/                  @cockroachdb/build
+/scripts/                   @cockroachdb/build
+**/Makefile                 @cockroachdb/build
+/Gopkg.*                    @cockroachdb/build
+/.*                         @cockroachdb/build
+/.github/                   @cockroachdb/build
 
-/c-deps/libroach/      @cockroachdb/core
-/c-deps/libroach/ccl/  @cockroachdb/core @cockroachdb/sql-ccl
+/c-deps/libroach/           @cockroachdb/core
+/c-deps/libroach/ccl/       @cockroachdb/core @cockroachdb/sql-ccl
