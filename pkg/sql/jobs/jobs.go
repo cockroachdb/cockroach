@@ -529,3 +529,4 @@ func (t Type) String() string {
 	// names, like "BACKUP" and "SCHEMA CHANGE".
 	return strings.Replace(Type_name[int32(t)], "_", " ", -1)
 }
+foo
