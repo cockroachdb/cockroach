@@ -75,13 +75,13 @@ var (
 	// localStoreIdentSuffix stores an immutable identifier for this
 	// store, created when the store is first bootstrapped.
 	localStoreIdentSuffix = []byte("iden")
-	// localStoreGossipSuffix stores gossip bootstrap metadata for this
-	// store, updated any time new gossip hosts are encountered.
-	localStoreGossipSuffix = []byte("goss")
 	// localStoreClusterVersionSuffix stores the cluster-wide version
 	// information for this store, updated any time the operator
 	// updates the minimum cluster version.
 	localStoreClusterVersionSuffix = []byte("cver")
+	// localStoreGossipSuffix stores gossip bootstrap metadata for this
+	// store, updated any time new gossip hosts are encountered.
+	localStoreGossipSuffix = []byte("goss")
 	// localStoreLastUpSuffix stores the last timestamp that a store's node
 	// acknowledged that it was still running. This value will be regularly
 	// refreshed on all stores for a running node; the intention of this value

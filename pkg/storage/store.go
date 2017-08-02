@@ -173,11 +173,10 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 		clock = hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	}
 	sc := StoreConfig{
-		ExposedClusterVersion: migration.NewExposedClusterVersion(func() base.ClusterVersion {
-			return base.ClusterVersion{
-				UseVersion: base.ServerVersion, // all features active
-			}
-		}, nil),
+		ExposedClusterVersion: migration.NewExposedClusterVersion(base.ClusterVersion{
+			MinimumVersion: base.ServerVersion,
+			UseVersion:     base.ServerVersion, // all features active
+		}),
 		AmbientCtx:                     log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:                          clock,
 		RaftTickInterval:               100 * time.Millisecond,
@@ -1540,7 +1539,9 @@ func (s *Store) GossipDeadReplicas(ctx context.Context) error {
 // the engine contents before writing the new store ident. The engine
 // should be completely empty. It returns an error if called on a
 // non-empty engine.
-func (s *Store) Bootstrap(ctx context.Context, ident roachpb.StoreIdent) error {
+func (s *Store) Bootstrap(
+	ctx context.Context, ident roachpb.StoreIdent, cv base.ClusterVersion,
+) error {
 	if (s.Ident != roachpb.StoreIdent{}) {
 		return errors.Errorf("store %s is already bootstrapped", s)
 	}
@@ -1549,16 +1550,26 @@ func (s *Store) Bootstrap(ctx context.Context, ident roachpb.StoreIdent) error {
 		return errors.Wrap(err, "cannot verify empty engine for bootstrap")
 	}
 	s.Ident = ident
+
+	batch := s.engine.NewBatch()
 	if err := engine.MVCCPutProto(
 		ctx,
-		s.engine,
+		batch,
 		nil,
 		keys.StoreIdentKey(),
 		hlc.Timestamp{},
 		nil,
 		&s.Ident,
 	); err != nil {
+		batch.Close()
 		return err
+	}
+	if err := WriteClusterVersion(ctx, batch, cv); err != nil {
+		batch.Close()
+		return errors.Wrap(err, "cannot write cluster version")
+	}
+	if err := batch.Commit(true); err != nil {
+		return errors.Wrap(err, "persisting bootstrap data")
 	}
 
 	s.NotifyBootstrapped()
@@ -4201,6 +4212,20 @@ func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (enginepb.
 	})
 
 	return output, count
+}
+
+// WriteClusterVersion writes the given cluster version to the store-local cluster version key.
+func WriteClusterVersion(
+	ctx context.Context, writer engine.ReadWriter, cv base.ClusterVersion,
+) error {
+	return engine.MVCCPutProto(ctx, writer, nil, keys.StoreClusterVersionKey(), hlc.Timestamp{}, nil, &cv)
+}
+
+// ReadClusterVersion reads the the cluster version from the store-local version key.
+func ReadClusterVersion(ctx context.Context, reader engine.Reader) (base.ClusterVersion, error) {
+	var cv base.ClusterVersion
+	_, err := engine.MVCCGetProto(ctx, reader, keys.StoreClusterVersionKey(), hlc.Timestamp{}, true, nil, &cv)
+	return cv, err
 }
 
 // The methods below can be used to control a store's queues. Stopping a queue

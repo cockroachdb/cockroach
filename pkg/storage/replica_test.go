@@ -168,7 +168,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 			ClusterID: uuid.MakeV4(),
 			NodeID:    1,
 			StoreID:   1,
-		}); err != nil {
+		}, base.BootstrapVersion()); err != nil {
 			t.Fatal(err)
 		}
 		// Now that we have our actual store, monkey patch the sender used in cfg.DB.

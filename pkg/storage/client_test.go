@@ -153,7 +153,7 @@ func createTestStoreWithEngine(
 	store := storage.NewStore(storeCfg, eng, nodeDesc)
 	ctx := context.Background()
 	if bootstrap {
-		if err := store.Bootstrap(ctx, roachpb.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
+		if err := store.Bootstrap(ctx, roachpb.StoreIdent{NodeID: 1, StoreID: 1}, base.BootstrapVersion()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -745,7 +745,7 @@ func (m *multiTestContext) addStore(idx int) {
 		if err := store.Bootstrap(ctx, roachpb.StoreIdent{
 			NodeID:  roachpb.NodeID(idx + 1),
 			StoreID: roachpb.StoreID(idx + 1),
-		}); err != nil {
+		}, base.BootstrapVersion()); err != nil {
 			m.t.Fatal(err)
 		}
 

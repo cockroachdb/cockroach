@@ -18,6 +18,8 @@ import (
 	"bytes"
 	"fmt"
 	"sync/atomic"
+
+	"github.com/kr/pretty"
 )
 
 // A TransformerFn encapsulates the logic of a StateMachineSetting.
@@ -61,16 +63,20 @@ type TransformerFn func(old []byte, update *string) (finalV []byte, finalObj int
 // previous state, the suggested state transition, and then overwrite the state
 // machine with the result.
 type StateMachineSetting struct {
-	v           atomic.Value // []byte (marshalled state)
-	transformer TransformerFn
+	v     atomic.Value // []byte (marshalled state)
+	trans atomic.Value // TransformerFn
 	common
 }
 
 var _ Setting = &StateMachineSetting{}
 
+func (s *StateMachineSetting) transformer() TransformerFn {
+	return s.trans.Load().(TransformerFn)
+}
+
 func (s *StateMachineSetting) String() string {
 	encV := []byte(s.Get())
-	_, iface, err := s.transformer(encV, nil)
+	_, iface, err := s.transformer()(encV, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -86,7 +92,7 @@ func (*StateMachineSetting) Typ() string {
 func (s *StateMachineSetting) Get() string {
 	encV := s.v.Load()
 	if encV == nil {
-		defV, _, err := s.transformer(nil, nil)
+		defV, _, err := s.transformer()(nil, nil)
 		if err != nil {
 			panic(err)
 		}
@@ -99,11 +105,11 @@ func (s *StateMachineSetting) Get() string {
 // state, unencoded state, or an error. If no update is given, round trips
 // current state.
 func (s *StateMachineSetting) Validate(old []byte, update *string) ([]byte, interface{}, error) {
-	return s.transformer(old, update)
+	return s.transformer()(old, update)
 }
 
 func (s *StateMachineSetting) set(finalEncodedV []byte) error {
-	if _, _, err := s.transformer(finalEncodedV, nil); err != nil {
+	if _, _, err := s.transformer()(finalEncodedV, nil); err != nil {
 		return err
 	}
 	if bytes.Equal([]byte(s.Get()), finalEncodedV) {
@@ -115,7 +121,12 @@ func (s *StateMachineSetting) set(finalEncodedV []byte) error {
 }
 
 func (s *StateMachineSetting) setToDefault() {
-	defV, _, err := s.transformer(nil, nil)
+	if s.transformer() == nil {
+		// HACK: see pkg/migration/version.go. We initialize the default value (and hence the transformer)
+		// post-init, but the setting must be defined at init time.
+		return
+	}
+	defV, _, err := s.transformer()(nil, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -124,12 +135,22 @@ func (s *StateMachineSetting) setToDefault() {
 	}
 }
 
+// SetTransformer switches out the setting's transformer. Use with caution.
+func (s *StateMachineSetting) SetTransformer(t TransformerFn) {
+	if exT := s.transformer(); exT != nil && t != nil {
+		panic(fmt.Sprintf("cannot set the transformer twice, already have %s", pretty.Sprint(exT)))
+	}
+	s.trans.Store(t)
+}
+
 // RegisterStateMachineSetting registers a StateMachineSetting. See the comment
 // for StateMachineSetting for details.
 func RegisterStateMachineSetting(key, desc string, transformer TransformerFn) *StateMachineSetting {
-	setting := &StateMachineSetting{
-		transformer: transformer,
+	if transformer != nil {
+		panic("XXX")
 	}
+	setting := &StateMachineSetting{}
+	setting.trans.Store(transformer)
 	register(key, desc, setting)
 	return setting
 }
@@ -138,7 +159,8 @@ func RegisterStateMachineSetting(key, desc string, transformer TransformerFn) *S
 // TestingSetBool for more details.
 func TestingSetStatemachine(s **StateMachineSetting, transformer TransformerFn) func() {
 	saved := *s
-	tmp := &StateMachineSetting{transformer: transformer}
+	tmp := &StateMachineSetting{}
+	tmp.trans.Store(transformer)
 	*s = tmp
 	return func() {
 		*s = saved

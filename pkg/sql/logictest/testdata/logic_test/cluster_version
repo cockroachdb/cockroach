@@ -1,9 +1,12 @@
 # LogicTest: default
 
+# TODO(tschottdorf): we need a way to bootstrap an older version here or we're
+# not going to be able to test the actual upgrade path.
+
 query T
 SHOW CLUSTER SETTING version
 ----
-1.0
+1.0-2
 
 user testuser
 
@@ -24,27 +27,27 @@ SET CLUSTER SETTING version = '1.0-0.0'
 statement error cannot upgrade to 2.0: node running 1.0.\d
 SET CLUSTER SETTING version = '2.0'
 
-statement error cannot upgrade directly from 1.0 to 2.1
+statement error cannot upgrade directly from 1.0-\d to 2.1
 SET CLUSTER SETTING version = '2.1'
 
-statement error cannot downgrade from 1.0 to 0.9
+statement error cannot downgrade from 1.0-\d to 0.9
 SET CLUSTER SETTING version = '0.9'
 
 statement ok
-SET CLUSTER SETTING version = '1.0'
+SET CLUSTER SETTING version = '1.0-2'
 
 query T
 SHOW CLUSTER SETTING version
 ----
-1.0
+1.0-2
 
-statement error cannot upgrade to 1.0-9999: node running 1.0.\d
+statement error cannot upgrade to 1.0-9999: node running 1.0-\d+
 SET CLUSTER SETTING version = '1.0-9999'
 
-statement error cannot upgrade directly from 1.0 to 1.2
+statement error cannot upgrade directly from 1.0-\d+ to 1.2
 SET CLUSTER SETTING version = '1.2'
 
-statement error cannot upgrade to 1.1: node running 1.0.\d
+statement error cannot upgrade to 1.1: node running 1.0-\d+
 SET CLUSTER SETTING version = '1.1'
 
 statement ok

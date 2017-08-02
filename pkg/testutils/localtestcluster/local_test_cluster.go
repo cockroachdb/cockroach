@@ -145,7 +145,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSende
 	cfg.HistogramWindowInterval = metric.TestSampleInterval
 	ltc.Store = storage.NewStore(cfg, ltc.Eng, nodeDesc)
 	ctx := context.TODO()
-	if err := ltc.Store.Bootstrap(ctx, roachpb.StoreIdent{NodeID: nodeID, StoreID: 1}); err != nil {
+	if err := ltc.Store.Bootstrap(ctx, roachpb.StoreIdent{NodeID: nodeID, StoreID: 1}, base.BootstrapVersion()); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
 	ltc.Stores.AddStore(ltc.Store)
