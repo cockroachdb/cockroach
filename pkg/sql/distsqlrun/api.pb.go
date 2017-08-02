@@ -17,6 +17,7 @@
 		ConsumerSignal
 		DrainRequest
 		Error
+		VersionMismatchError
 		Expression
 		Ordering
 		StreamEndpointSpec

@@ -627,6 +627,11 @@ func NewError(err error) *Error {
 			Detail: &Error_RetryableTxnError{
 				RetryableTxnError: retryErr,
 			}}
+	} else if versionMismatchError, ok := err.(*VersionMismatchError); ok {
+		return &Error{
+			Detail: &Error_VersionMismatchError{
+				VersionMismatchError: versionMismatchError,
+			}}
 	} else {
 		// Anything unrecognized is an "internal error".
 		return &Error{
@@ -646,6 +651,8 @@ func (e *Error) ErrorDetail() error {
 		return t.PGError
 	case *Error_RetryableTxnError:
 		return t.RetryableTxnError
+	case *Error_VersionMismatchError:
+		return t.VersionMismatchError
 	default:
 		panic(fmt.Sprintf("bad error detail: %+v", t))
 	}

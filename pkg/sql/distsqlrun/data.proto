@@ -36,9 +36,19 @@ message Error {
   oneof detail {
     pgerror.Error pg_error = 1 [(gogoproto.customname) = "PGError"];
     roachpb.UnhandledRetryableError retryableTxnError = 2;
+    // VersionMismatchError is only returned by SetupFlowRequests.
+    VersionMismatchError version_mismatch_error = 3;
     // TODO(andrei): Add AmbiguousResultError here once DistSQL starts executing
     // writes.
   }
+}
+
+// VersionMismatchError is returned by SetupFlowRequest when the requested
+// version is outside of [server_min_version..server_version].
+message VersionMismatchError {
+  optional uint32 requested_version = 1 [(gogoproto.nullable) = false];
+  optional uint32 server_version = 2 [(gogoproto.nullable) = false];
+  optional uint32 server_min_version = 3 [(gogoproto.nullable) = false];
 }
 
 message Expression {

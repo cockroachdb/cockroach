@@ -15,6 +15,8 @@
 package distsqlrun
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
@@ -48,4 +50,26 @@ func convertToSpecOrdering(columnOrdering sqlbase.ColumnOrdering) Ordering {
 		}
 	}
 	return specOrdering
+}
+
+// VersionMismatchErrorPrefix is a prefix of the VersionMismatchError's message.
+// This can be used to check for this error even when it's coming from servers
+// that were returning it as an untyped "internal error".
+const VersionMismatchErrorPrefix = "version mismatch in flow request:"
+
+// NewVersionMismatchError creates a new VersionMismatchError.
+func NewVersionMismatchError(
+	requestedVersion uint32, serverMinVersion uint32, serverVersion uint32,
+) error {
+	return &VersionMismatchError{
+		RequestedVersion: uint32(requestedVersion),
+		ServerMinVersion: uint32(serverMinVersion),
+		ServerVersion:    uint32(serverVersion),
+	}
+}
+
+// Error implements the error interface.
+func (e *VersionMismatchError) Error() string {
+	return fmt.Sprintf("%s %d; this node accepts %d through %d",
+		VersionMismatchErrorPrefix, e.RequestedVersion, e.ServerMinVersion, e.ServerVersion)
 }
