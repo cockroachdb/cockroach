@@ -168,7 +168,7 @@ func (n *setZoneConfigNode) Start(params runParams) error {
 	} else if err != nil {
 		return err
 	}
-	if err := yaml.Unmarshal([]byte(*yamlConfig), &proto); err != nil {
+	if err := yaml.UnmarshalStrict([]byte(*yamlConfig), &proto); err != nil {
 		return fmt.Errorf("could not parse zone config: %s", err)
 	}
 	if err := proto.Validate(); err != nil {

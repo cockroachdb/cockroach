@@ -20,34 +20,90 @@ required = [
 
 ignored = [
   # Non-existent package used by a toy program in c-deps/protobuf.
-  "github.com/google/protobuf/examples/tutorial"
+  "github.com/google/protobuf/examples/tutorial",
 ]
-
-# https://github.com/cockroachdb/raven-go/pulls/1 avoids banned go/build import.
-[[constraint]]
-  name = "github.com/getsentry/raven-go"
-  revision = "221b2b44fb33f84ed3ea13f3aed62ff48c85636b"
-  source = "https://github.com/cockroachdb/raven-go"
 
 # The collation tables must never change.
 [[constraint]]
   name = "golang.org/x/text"
   revision = "470f45bf29f4147d6fbd7dfd0a02a848e49f5bf4"
 
-# https://github.com/docker/docker/issues/29362
+# https://github.com/grpc/grpc-go/pull/1506#issuecomment-337652759
 [[constraint]]
-  name = "github.com/docker/docker"
-  revision = "7248742ae7127347a52ab9d215451c213b7b59da"
+  name = "google.golang.org/grpc"
+  version = "<1.7.0"
 
-# TODO(dt,mjibson): API changed
-[[constraint]]
-  name = "github.com/Azure/azure-sdk-for-go"
-  revision = "8dd1f3ff407c300cff0a4bfedd969111ca5a7903"
-
+# https://github.com/coreos/etcd/commit/f03ed33
 [[constraint]]
   name = "github.com/coreos/etcd"
   branch = "master"
 
+# Used for the API client; we want the latest.
 [[constraint]]
-  name = "github.com/cockroachdb/stress"
+  name = "github.com/docker/docker"
+  branch = "master"
+
+# https://github.com/getsentry/raven-go/pull/139
+[[constraint]]
+  name = "github.com/getsentry/raven-go"
+  source = "https://github.com/cockroachdb/raven-go"
+
+# Used for benchmarks, should be recent.
+[[constraint]]
+  name = "github.com/go-sql-driver/mysql"
+  branch = "master"
+
+# https://github.com/gogo/protobuf/commit/9aee220
+[[constraint]]
+  name = "github.com/gogo/protobuf"
+  branch = "master"
+
+# https://github.com/grpc-ecosystem/grpc-gateway/commit/893772d
+[[constraint]]
+  name = "github.com/grpc-ecosystem/grpc-gateway"
+  branch = "master"
+
+# https://github.com/jteeuwen/go-bindata/pull/158
+[[constraint]]
+  name = "github.com/jteeuwen/go-bindata"
+  source = "https://github.com/dim13/go-bindata"
+  branch = "master"
+
+# https://github.com/mattn/goveralls/commit/42c8a69
+[[constraint]]
+  name = "github.com/mattn/goveralls"
+  branch = "master"
+
+# https://github.com/montanaflynn/stats/releases (latest is 2015-10-14)
+[[constraint]]
+  name = "github.com/montanaflynn/stats"
+  branch = "master"
+
+# https://github.com/rubyist/circuitbreaker/commit/af95830
+[[constraint]]
+  name = "github.com/rubyist/circuitbreaker"
+  branch = "master"
+
+# https://github.com/sasha-s/go-deadlock/commit/3bab8aa
+[[constraint]]
+  name = "github.com/sasha-s/go-deadlock"
+  branch = "master"
+
+# https://github.com/satori/go.uuid/commit/0aa62d5
+[[constraint]]
+  name = "github.com/satori/go.uuid"
+  branch = "master"
+
+# https://github.com/apache/thrift/commit/5b4c6bf
+[[override]]
+  name = "github.com/apache/thrift"
+  branch = "master"
+
+# github.com/docker/docker depends on a few functions not included in the
+# latest release: reference.{FamiliarName,ParseNormalizedNamed,TagNameOnly}.
+#
+# https://github.com/docker/distribution/commit/429c75f
+# https://github.com/docker/distribution/commit/2caeb61
+[[override]]
+  name = "github.com/docker/distribution"
   branch = "master"

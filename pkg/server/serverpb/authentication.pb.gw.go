@@ -78,7 +78,15 @@ func RegisterAuthenticationHandlerFromEndpoint(ctx context.Context, mux *runtime
 // RegisterAuthenticationHandler registers the http handlers for service Authentication to "mux".
 // The handlers forward requests to the grpc endpoint over "conn".
 func RegisterAuthenticationHandler(ctx context.Context, mux *runtime.ServeMux, conn *grpc.ClientConn) error {
-	client := NewAuthenticationClient(conn)
+	return RegisterAuthenticationHandlerClient(ctx, mux, NewAuthenticationClient(conn))
+}
+
+// RegisterAuthenticationHandler registers the http handlers for service Authentication to "mux".
+// The handlers forward requests to the grpc endpoint over the given implementation of "AuthenticationClient".
+// Note: the gRPC framework executes interceptors within the gRPC handler. If the passed in "AuthenticationClient"
+// doesn't go through the normal gRPC flow (creating a gRPC client etc.) then it will be up to the passed in
+// "AuthenticationClient" to call the correct interceptors.
+func RegisterAuthenticationHandlerClient(ctx context.Context, mux *runtime.ServeMux, client AuthenticationClient) error {
 
 	mux.Handle("POST", pattern_Authentication_UserLogin_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())

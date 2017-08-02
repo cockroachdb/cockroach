@@ -93,7 +93,7 @@ func testMonotonicInserts(t *testing.T, distSQLMode sql.DistSQLExecMode) {
 	if testing.Short() {
 		t.Skip("short flag")
 	}
-
+	ctx := context.Background()
 	tc := testcluster.StartTestCluster(
 		t, 3,
 		base.TestClusterArgs{
@@ -101,8 +101,7 @@ func testMonotonicInserts(t *testing.T, distSQLMode sql.DistSQLExecMode) {
 			ServerArgs:      base.TestServerArgs{},
 		},
 	)
-	defer tc.Stopper().Stop(context.TODO())
-	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
 
 	for _, server := range tc.Servers {
 		st := server.ClusterSettings()
@@ -136,7 +135,7 @@ INSERT INTO mono.mono VALUES(-1, '0', -1, -1)`); err != nil {
 
 		var exRow, insRow mtRow
 		var attempt int
-		if err := crdb.ExecuteTx(client.DB, func(tx *gosql.Tx) error {
+		if err := crdb.ExecuteTx(ctx, client.DB, nil, func(tx *gosql.Tx) error {
 			attempt++
 			l("attempt %d", attempt)
 			if err := tx.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(

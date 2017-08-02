@@ -611,7 +611,15 @@ func RegisterStatusHandlerFromEndpoint(ctx context.Context, mux *runtime.ServeMu
 // RegisterStatusHandler registers the http handlers for service Status to "mux".
 // The handlers forward requests to the grpc endpoint over "conn".
 func RegisterStatusHandler(ctx context.Context, mux *runtime.ServeMux, conn *grpc.ClientConn) error {
-	client := NewStatusClient(conn)
+	return RegisterStatusHandlerClient(ctx, mux, NewStatusClient(conn))
+}
+
+// RegisterStatusHandler registers the http handlers for service Status to "mux".
+// The handlers forward requests to the grpc endpoint over the given implementation of "StatusClient".
+// Note: the gRPC framework executes interceptors within the gRPC handler. If the passed in "StatusClient"
+// doesn't go through the normal gRPC flow (creating a gRPC client etc.) then it will be up to the passed in
+// "StatusClient" to call the correct interceptors.
+func RegisterStatusHandlerClient(ctx context.Context, mux *runtime.ServeMux, client StatusClient) error {
 
 	mux.Handle("GET", pattern_Status_Certificates_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())

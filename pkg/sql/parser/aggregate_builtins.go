@@ -350,10 +350,7 @@ func (a *arrayAggregate) Add(ctx context.Context, datum Datum, _ ...Datum) error
 	if err := a.acc.Grow(ctx, int64(datum.Size())); err != nil {
 		return err
 	}
-	if err := a.arr.Append(datum); err != nil {
-		return err
-	}
-	return nil
+	return a.arr.Append(datum)
 }
 
 // Result returns an array of all datums passed to Add.

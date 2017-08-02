@@ -175,7 +175,7 @@ func (z *zeroSum) worker() {
 			// Node is currently offline.
 			continue
 		}
-		err := crdb.ExecuteTx(db, func(tx *gosql.Tx) error {
+		err := crdb.ExecuteTx(context.Background(), db, nil, func(tx *gosql.Tx) error {
 			rows, err := tx.Query(`SELECT id, balance FROM accounts WHERE id IN ($1, $2)`, from, to)
 			if err != nil {
 				return err
