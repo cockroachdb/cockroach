@@ -21,8 +21,10 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -192,5 +194,58 @@ func TestScatter(t *testing.T) {
 		if count < 20 {
 			t.Errorf("less than 20 leaseholders on host %d (only %d)", i, count)
 		}
+	}
+}
+
+// TestScatterResponse ensures that ALTER TABLE... SCATTER includes one row of
+// output per range in the table. It does *not* test that scatter properly
+// distributes replicas and leases; see TestScatter for that.
+//
+// TODO(benesch): consider folding this test into TestScatter once TestScatter
+// is unskipped.
+func TestScatterResponse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	sqlutils.CreateTable(
+		t, sqlDB, "t",
+		"k INT PRIMARY KEY, v INT",
+		1000,
+		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(10)),
+	)
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
+
+	r := sqlutils.MakeSQLRunner(t, sqlDB)
+	r.Exec("ALTER TABLE test.t SPLIT AT (SELECT i*10 FROM generate_series(1, 99) AS g(i))")
+	rows := r.Query("ALTER TABLE test.t SCATTER")
+
+	i := 0
+	for ; rows.Next(); i++ {
+		var actualKey []byte
+		var pretty string
+		if err := rows.Scan(&actualKey, &pretty); err != nil {
+			t.Fatal(err)
+		}
+		var expectedKey roachpb.Key
+		if i == 0 {
+			expectedKey = keys.MakeTablePrefix(uint32(tableDesc.ID))
+		} else {
+			var err error
+			expectedKey, err = sqlbase.MakePrimaryIndexKey(tableDesc, i*10)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		if e, a := expectedKey, roachpb.Key(actualKey); !e.Equal(a) {
+			t.Errorf("%d: expected split key %s, but got %s", i, e, a)
+		}
+		if e, a := expectedKey.String(), pretty; e != a {
+			t.Errorf("%d: expected pretty split key %s, but got %s", i, e, a)
+		}
+	}
+	if e, a := 100, i; e != a {
+		t.Fatalf("expected %d rows, but got %d", e, a)
 	}
 }
