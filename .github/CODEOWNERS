@@ -43,3 +43,6 @@
 /Gopkg.*               @cockroachdb/build
 /.*                    @cockroachdb/build
 /.github/              @cockroachdb/build
+
+/c-deps/libroach/      @cockroachdb/core
+/c-deps/libroach/ccl/  @cockroachdb/core @cockroachdb/sql-ccl
