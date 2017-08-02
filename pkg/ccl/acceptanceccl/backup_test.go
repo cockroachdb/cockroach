@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"strconv"
 	"testing"
 	"time"
 
@@ -74,10 +73,6 @@ func (bt *benchmarkTest) Start(ctx context.Context) {
 	bt.f = acceptance.MakeFarmer(bt.b, bt.prefix, acceptance.GetStopper())
 
 	bt.f.AddVars["join_all"] = fmt.Sprint(bt.skipClusterInit)
-
-	if bt.cockroachDiskSizeGB != 0 {
-		bt.f.AddVars["cockroach_disk_size"] = strconv.Itoa(bt.cockroachDiskSizeGB)
-	}
 
 	log.Infof(ctx, "creating cluster with %d node(s)", bt.nodes)
 	if err := bt.f.Resize(bt.nodes); err != nil {
