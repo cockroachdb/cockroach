@@ -520,7 +520,7 @@ func TestSpanStatsResponse(t *testing.T) {
 	ts := startServer(t)
 	defer ts.Stopper().Stop(context.TODO())
 
-	httpClient, err := ts.GetHTTPClient()
+	httpClient, err := ts.GetAuthenticatedHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}

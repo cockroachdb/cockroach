@@ -212,8 +212,10 @@ func TestUseCerts(t *testing.T) {
 
 	// Start a test server and override certs.
 	// We use a real context since we want generated certs.
+	// Disable web session authentication for simplicity.
 	params := base.TestServerArgs{
-		SSLCertsDir: certsDir,
+		SSLCertsDir:                     certsDir,
+		DisableWebSessionAuthentication: true,
 	}
 	s, _, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())

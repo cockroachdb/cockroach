@@ -961,6 +961,13 @@ func (s *Server) Start(ctx context.Context) error {
 	gwCtx, gwCancel := context.WithCancel(s.AnnotateCtx(context.Background()))
 	s.stopper.AddCloser(stop.CloserFn(gwCancel))
 
+	var authHandler http.Handler
+	if s.cfg.RequireWebSession() {
+		authHandler = newAuthenticationMux(s.authentication, gwMux)
+	} else {
+		authHandler = gwMux
+	}
+
 	// Setup HTTP<->gRPC handlers.
 	conn, err := s.rpcContext.GRPCDial(s.cfg.Addr)
 	if err != nil {
@@ -979,11 +986,9 @@ func (s *Server) Start(ctx context.Context) error {
 		AssetInfo: ui.AssetInfo,
 	}))
 
-	// TODO(marc): when cookie-based authentication exists,
-	// apply it for all web endpoints.
-	s.mux.Handle(adminPrefix, gwMux)
-	s.mux.Handle(ts.URLPrefix, gwMux)
-	s.mux.Handle(statusPrefix, gwMux)
+	s.mux.Handle(adminPrefix, authHandler)
+	s.mux.Handle(ts.URLPrefix, authHandler)
+	s.mux.Handle(statusPrefix, authHandler)
 	s.mux.Handle(authPrefix, gwMux)
 	s.mux.Handle("/health", gwMux)
 	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))

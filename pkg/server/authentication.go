@@ -15,6 +15,7 @@
 package server
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -130,16 +131,9 @@ func (s *authenticationServer) UserLogin(
 		Id:     id,
 		Secret: secret,
 	}
-	cookieValueBytes, err := cookieValue.Marshal()
+	cookie, err := encodeSessionCookie(cookieValue)
 	if err != nil {
 		return nil, apiError(ctx, err)
-	}
-
-	cookie := http.Cookie{
-		Name:     sessionCookieName,
-		Value:    base64.StdEncoding.EncodeToString(cookieValueBytes),
-		HttpOnly: true,
-		Secure:   true,
 	}
 
 	// Set the cookie header on the outgoing response.
@@ -155,6 +149,82 @@ func (s *authenticationServer) UserLogout(
 	ctx context.Context, req *serverpb.UserLogoutRequest,
 ) (*serverpb.UserLogoutResponse, error) {
 	return nil, grpc.Errorf(codes.Unimplemented, "Logout method has not yet been implemented.")
+}
+
+// verifySession verifies the existence and validity of the session claimed by
+// the supplied SessionCookie. Returns three parameters: a boolean indicating if
+// the session was valid, the username associated with the session (if
+// validated), and an error for any internal errors which prevented validation.
+func (s *authenticationServer) verifySession(
+	ctx context.Context, cookie *serverpb.SessionCookie,
+) (bool, string, error) {
+	// Look up session in database and verify hashed secret value.
+	const sessionQuery = `
+SELECT "hashedSecret", "username", "expiresAt", "revokedAt"
+FROM system.web_sessions
+WHERE id = $1`
+
+	var (
+		sessionFound bool
+		hashedSecret []byte
+		username     string
+		expiresAt    time.Time
+		isRevoked    bool
+	)
+
+	if err := s.server.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		datum, err := s.executor.QueryRowInTransaction(
+			ctx,
+			"lookup-auth-session",
+			txn,
+			sessionQuery,
+			cookie.Id,
+		)
+		if err != nil {
+			return err
+		}
+
+		if datum.Len() == 0 {
+			return nil
+		}
+		if datum.Len() != 4 ||
+			datum[0].ResolvedType() != parser.TypeBytes ||
+			datum[1].ResolvedType() != parser.TypeString ||
+			datum[2].ResolvedType() != parser.TypeTimestamp {
+			return fmt.Errorf("values returned from auth session lookup do not match expectation")
+		}
+
+		// Extract datum values.
+		sessionFound = true
+		hashedSecret = []byte(*datum[0].(*parser.DBytes))
+		username = string(*datum[1].(*parser.DString))
+		expiresAt = datum[2].(*parser.DTimestamp).Time
+		isRevoked = !(datum[3].ResolvedType() == parser.TypeNull)
+		return nil
+	}); err != nil {
+		return false, "", err
+	}
+
+	if !sessionFound {
+		return false, "", nil
+	}
+
+	if isRevoked {
+		return false, "", nil
+	}
+
+	now := s.server.clock.PhysicalTime()
+	if !now.Before(expiresAt) {
+		return false, "", nil
+	}
+
+	hasher := sha256.New()
+	hashedCookieSecret := hasher.Sum(cookie.Secret)
+	if !bytes.Equal(hashedSecret, hashedCookieSecret) {
+		return false, "", nil
+	}
+
+	return true, username, nil
 }
 
 // verifyPassword verifies the passed username/password pair against the
@@ -225,6 +295,80 @@ RETURNING id
 	}
 
 	return id, secret, nil
+}
+
+// authenticationMux implements http.Handler, and is used to provide session
+// authentication for an arbitrary "inner" handler.
+type authenticationMux struct {
+	server *authenticationServer
+	inner  http.Handler
+}
+
+func newAuthenticationMux(s *authenticationServer, inner http.Handler) authenticationMux {
+	return authenticationMux{
+		server: s,
+		inner:  inner,
+	}
+}
+
+// ServeHTTP implements http.Handler.
+func (am authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	// Validate the returned cookie.
+	rawCookie, err := req.Cookie(sessionCookieName)
+	if err != nil {
+		http.Error(w, "A valid authentication session is required.", http.StatusUnauthorized)
+		return
+	}
+
+	const msgInvalidSession = "The provided authentication session could not be validated."
+	cookie, err := decodeSessionCookie(rawCookie)
+	if err != nil {
+		http.Error(w, msgInvalidSession, http.StatusUnauthorized)
+		return
+	}
+
+	valid, _, err := am.server.verifySession(req.Context(), cookie)
+	if err != nil {
+		http.Error(w, apiError(req.Context(), err).Error(), http.StatusInternalServerError)
+		return
+	}
+	if !valid {
+		http.Error(w, msgInvalidSession, http.StatusUnauthorized)
+		return
+	}
+
+	// TODO: At this point, we should set the session ID and username on the
+	// request context. However, GRPC Gateway does not correctly use the request
+	// context, and even if it did we are not providing any authorization for
+	// API methods (only authentication).
+	am.inner.ServeHTTP(w, req)
+}
+
+func encodeSessionCookie(sessionCookie *serverpb.SessionCookie) (*http.Cookie, error) {
+	cookieValueBytes, err := sessionCookie.Marshal()
+	if err != nil {
+		return nil, err
+	}
+
+	return &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    base64.StdEncoding.EncodeToString(cookieValueBytes),
+		HttpOnly: true,
+		Secure:   true,
+	}, nil
+}
+
+func decodeSessionCookie(encodedCookie *http.Cookie) (*serverpb.SessionCookie, error) {
+	// Cookie value should be a base64 encoded protobuf.
+	cookieBytes, err := base64.StdEncoding.DecodeString(encodedCookie.Value)
+	if err != nil {
+		return nil, fmt.Errorf("session cookie could not be decoded: %s", err)
+	}
+	var sessionCookieValue serverpb.SessionCookie
+	if err := sessionCookieValue.Unmarshal(cookieBytes); err != nil {
+		return nil, fmt.Errorf("session cookie could not be unmarshalled: %s", err)
+	}
+	return &sessionCookieValue, nil
 }
 
 // authenticationHeaderMatcher is a GRPC header matcher function, which provides
