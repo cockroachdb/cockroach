@@ -636,7 +636,9 @@ func (ds *DistSender) Send(
 		reply.Responses = append(reply.Responses, rpl.Responses...)
 		reply.CollectedSpans = append(reply.CollectedSpans, rpl.CollectedSpans...)
 	}
-	reply.BatchResponse_Header = rplChunks[len(rplChunks)-1].BatchResponse_Header
+	lastHeader := rplChunks[len(rplChunks)-1].BatchResponse_Header
+	lastHeader.CollectedSpans = reply.CollectedSpans
+	reply.BatchResponse_Header = lastHeader
 	return reply, nil
 }
 
