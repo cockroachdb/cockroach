@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -132,6 +133,15 @@ func MakeExportStorage(ctx context.Context, dest roachpb.ExportStorage) (ExportS
 
 // ExportStorage provides functions to read and write files in some storage,
 // namely various cloud storage providers, for example to store backups.
+// Generally an implementation is instantiated pointing to some base path or
+// prefix and then gets and puts files using the various methods to interact
+// with individual files contained within that path or prefix.
+// However, implementations must also allow callers to provide the full path to
+// a given file as the "base" path, and then read or write it with the methods
+// below by simply passing an empty filename. Implementations that use stdlib's
+// `path.Join` to concatenate their base path with the provided filename will
+// find its semantics well suited to this -- it elides empty components and does
+// not append surplus slashes.
 type ExportStorage interface {
 	io.Closer
 
@@ -174,17 +184,17 @@ func (l *localFileStorage) Conf() roachpb.ExportStorage {
 func (l *localFileStorage) WriteFile(
 	_ context.Context, basename string, content io.ReadSeeker,
 ) error {
-	if err := os.MkdirAll(l.base, 0755); err != nil {
+	p := filepath.Join(l.base, basename)
+	if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
 		return errors.Wrap(err, "creating local export storage path")
 	}
-	path := filepath.Join(l.base, basename)
-	f, err := os.Create(path)
+	f, err := os.Create(p)
 	if err != nil {
-		return errors.Wrapf(err, "creating local export file %q", path)
+		return errors.Wrapf(err, "creating local export file %q", p)
 	}
 	defer f.Close()
 	_, err = io.Copy(f, content)
-	return errors.Wrapf(err, "writing to local export file %q", path)
+	return errors.Wrapf(err, "writing to local export file %q", p)
 }
 
 func (l *localFileStorage) ReadFile(_ context.Context, basename string) (io.ReadCloser, error) {
@@ -210,9 +220,6 @@ var _ ExportStorage = &httpStorage{}
 func makeHTTPStorage(base string) (ExportStorage, error) {
 	if base == "" {
 		return nil, errors.Errorf("HTTP storage requested but base path not provided")
-	}
-	if base[len(base)-1] != '/' {
-		return nil, errors.Errorf("HTTP storage path must end in '/'")
 	}
 	client := &http.Client{Transport: &http.Transport{}}
 	uri, err := url.Parse(base)
@@ -252,13 +259,16 @@ func (h *httpStorage) Close() error {
 func (h *httpStorage) req(method, file string, body io.Reader) (io.ReadCloser, error) {
 	dest := *h.base
 	if hosts := len(h.hosts); hosts > 1 {
+		if file == "" {
+			return nil, errors.New("cannot use a multi-host HTTP basepath for single file")
+		}
 		hash := fnv.New32a()
 		if _, err := hash.Write([]byte(file)); err != nil {
 			panic(errors.Wrap(err, `"It never returns an error." -- https://golang.org/pkg/hash`))
 		}
 		dest.Host = h.hosts[int(hash.Sum32())%hosts]
 	}
-	dest.Path += file
+	dest.Path = path.Join(dest.Path, file)
 	url := dest.String()
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
@@ -305,7 +315,7 @@ func (s *s3Storage) Conf() roachpb.ExportStorage {
 }
 
 func (s *s3Storage) WriteFile(_ context.Context, basename string, content io.ReadSeeker) error {
-	w, err := s.bucket.PutWriter(filepath.Join(s.prefix, basename), nil, nil)
+	w, err := s.bucket.PutWriter(path.Join(s.prefix, basename), nil, nil)
 	if err != nil {
 		return errors.Wrap(err, "creating s3 writer")
 	}
@@ -315,12 +325,12 @@ func (s *s3Storage) WriteFile(_ context.Context, basename string, content io.Rea
 }
 
 func (s *s3Storage) ReadFile(_ context.Context, basename string) (io.ReadCloser, error) {
-	r, _, err := s.bucket.GetReader(filepath.Join(s.prefix, basename), nil)
+	r, _, err := s.bucket.GetReader(path.Join(s.prefix, basename), nil)
 	return r, errors.Wrap(err, "failed to create s3 reader")
 }
 
 func (s *s3Storage) Delete(_ context.Context, basename string) error {
-	return s.bucket.Delete(filepath.Join(s.prefix, basename))
+	return s.bucket.Delete(path.Join(s.prefix, basename))
 }
 
 func (s *s3Storage) Close() error {
@@ -366,7 +376,7 @@ func (g *gcsStorage) WriteFile(ctx context.Context, basename string, content io.
 		if _, err := content.Seek(0, io.SeekStart); err != nil {
 			return err
 		}
-		w := g.bucket.Object(filepath.Join(g.prefix, basename)).NewWriter(ctx)
+		w := g.bucket.Object(path.Join(g.prefix, basename)).NewWriter(ctx)
 		if _, err := io.Copy(w, content); err != nil {
 			_ = w.Close()
 			return err
@@ -377,11 +387,11 @@ func (g *gcsStorage) WriteFile(ctx context.Context, basename string, content io.
 }
 
 func (g *gcsStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
-	return g.bucket.Object(filepath.Join(g.prefix, basename)).NewReader(ctx)
+	return g.bucket.Object(path.Join(g.prefix, basename)).NewReader(ctx)
 }
 
 func (g *gcsStorage) Delete(ctx context.Context, basename string) error {
-	return g.bucket.Object(filepath.Join(g.prefix, basename)).Delete(ctx)
+	return g.bucket.Object(path.Join(g.prefix, basename)).Delete(ctx)
 }
 
 func (g *gcsStorage) Close() error {
@@ -421,7 +431,7 @@ func (s *azureStorage) Conf() roachpb.ExportStorage {
 func (s *azureStorage) WriteFile(
 	ctx context.Context, basename string, content io.ReadSeeker,
 ) error {
-	name := filepath.Join(s.prefix, basename)
+	name := path.Join(s.prefix, basename)
 	// A blob in Azure is composed of an ordered list of blocks. To create a
 	// blob, we must first create an empty block blob (i.e., a blob backed
 	// by blocks). Then we upload the blocks. Blocks can only by 4 MiB (in
@@ -521,13 +531,13 @@ func chunkReader(r io.Reader, size int, f func([]byte) error) error {
 }
 
 func (s *azureStorage) ReadFile(_ context.Context, basename string) (io.ReadCloser, error) {
-	r, err := s.client.GetBlob(s.conf.Container, filepath.Join(s.prefix, basename))
+	r, err := s.client.GetBlob(s.conf.Container, path.Join(s.prefix, basename))
 	return r, errors.Wrap(err, "failed to create azure reader")
 }
 
 func (s *azureStorage) Delete(_ context.Context, basename string) error {
 	return errors.Wrap(
-		s.client.DeleteBlob(s.conf.Container, filepath.Join(s.prefix, basename), nil),
+		s.client.DeleteBlob(s.conf.Container, path.Join(s.prefix, basename), nil),
 		"deleting blob",
 	)
 }
