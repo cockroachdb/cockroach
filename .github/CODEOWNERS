@@ -4,6 +4,7 @@
 # Code owners are automatically requested for review when someone
 # opens a pull request that modifies code that they own.
 #
+# Remember, *the last rule to match wins.*
 
 /pkg/gossip/           @cockroachdb/core
 /pkg/internal/         @cockroachdb/core
@@ -16,14 +17,21 @@
 /pkg/ccl/              @cockroachdb/sql-ccl
 /pkg/cli/              @cockroachdb/sql-ui
 
-/pkg/sql/              @cockroachdb/sql
+/pkg/sql/              @cockroachdb/sql-rest
 
 /pkg/sql/parser/       @cockroachdb/sql-language
+/pkg/sql/ir/           @cockroachdb/sql-language
+
 /pkg/sql/pgwire/       @cockroachdb/sql-wiring
+/pkg/sql/privilege/    @cockroachdb/sql-wiring @cockroachdb/sql-language @cockroachdb/sql-execution
+
+/pkg/sql/sqlbase/      @cockroachdb/sql-planning @cockroachdb/sql-execution @cockroachdb/sql-async
 
 /pkg/sql/*.go          @cockroachdb/sql-planning @cockroachdb/sql-execution
+
 /pkg/sql/executor*     @cockroachdb/sql-execution
 /pkg/sql/mon/          @cockroachdb/sql-execution
+/pkg/sql/sqlutil/*executor* @cockroachdb/sql-execution
 
 /pkg/sql/schema*       @cockroachdb/sql-async
 /pkg/sql/lease*        @cockroachdb/sql-async
@@ -33,7 +41,13 @@
 /pkg/sql/distsqlplan/  @cockroachdb/distsql @cockroachdb/sql-planning
 /pkg/sql/distsqlrun/   @cockroachdb/distsql @cockroachdb/sql-execution
 
-/pkg/ui                @cockroachdb/admin-ui
+# We purposefully sink testlogic into a non-existent team to disable
+# notifications otherwise caught by the @sql-rest team.  Typically,
+# testlogic changes are part of a bigger change that will trigger
+# notifications to the correct sub-team.
+/pkg/sql/testlogic/    @cockroachdb/nonexistent
+
+/pkg/ui/               @cockroachdb/admin-ui
 
 /build/                @cockroachdb/build
 /c-deps/               @cockroachdb/build
