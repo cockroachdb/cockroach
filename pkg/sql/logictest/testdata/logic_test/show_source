@@ -74,7 +74,7 @@ sql.distsql.distribute_index_joins                 true           b     if set, 
 sql.distsql.merge_joins.enabled                    true           b     if set, we plan merge joins when possible
 sql.metrics.statement_details.dump_to_logs         false          b     dump collected statement statistics to node logs when periodically cleared
 sql.metrics.statement_details.enabled              true           b     collect per-statement query statistics
-sql.metrics.statement_details.threshold            0s             d     minmum execution time to cause statics to be collected
+sql.metrics.statement_details.threshold            0s             d     minimum execution time to cause statistics to be collected
 sql.trace.log_statement_execute                    false          b     set to true to enable logging of executed statements
 sql.trace.session_eventlog.enabled                 false          b     set to true to enable session tracing
 sql.trace.txn.enable_threshold                     0s             d     duration beyond which all transactions are traced (set to 0 to disable)
