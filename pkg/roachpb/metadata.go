@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/pkg/errors"
 )
 
@@ -222,6 +223,51 @@ func (r ReplicaDescriptor) Validate() error {
 		return errors.Errorf("ReplicaID must not be zero")
 	}
 	return nil
+}
+
+// PercentilesFromData derives percentiles from a slice of data points.
+// Sorts the input data if it isn't already sorted.
+func PercentilesFromData(data []float64) Percentiles {
+	sort.Float64s(data)
+
+	return Percentiles{
+		P10: percentileFromSortedData(data, 10),
+		P25: percentileFromSortedData(data, 25),
+		P50: percentileFromSortedData(data, 50),
+		P75: percentileFromSortedData(data, 75),
+		P90: percentileFromSortedData(data, 90),
+	}
+}
+
+func percentileFromSortedData(data []float64, percent float64) float64 {
+	if len(data) == 0 {
+		return 0
+	}
+	if percent < 0 {
+		percent = 0
+	}
+	if percent >= 100 {
+		return data[len(data)-1]
+	}
+	// TODO(a-robinson): Use go's rounding function once we're using 1.10.
+	idx := int(float64(len(data)) * percent / 100.0)
+	return data[idx]
+}
+
+// String returns a string representation of the Percentiles.
+func (p Percentiles) String() string {
+	return fmt.Sprintf("p10=%.2f p25=%.2f p50=%.2f p75=%.2f p90=%.2f",
+		p.P10, p.P25, p.P50, p.P75, p.P90)
+}
+
+// String returns a string representation of the StoreCapacity.
+func (sc StoreCapacity) String() string {
+	return fmt.Sprintf("diskAvailable=%s/%s (%.2f%%), "+
+		"ranges=%d, leases=%d, writes=%.2f,"+
+		"bytesPerReplica={%s}, writesPerReplica={%s}",
+		humanizeutil.IBytes(sc.Capacity-sc.Available), humanizeutil.IBytes(sc.Capacity),
+		sc.FractionUsed()*100, sc.RangeCount, sc.LeaseCount, sc.WritesPerSecond,
+		sc.BytesPerReplica, sc.WritesPerReplica)
 }
 
 // FractionUsed computes the fraction of storage capacity that is in use.

@@ -419,6 +419,10 @@ type Store struct {
 	// gossip interval. Updated atomically.
 	gossipRangeCountdown int32
 	gossipLeaseCountdown int32
+	// gossipWritesPerSecondVal serves a similar purpose, but simply records
+	// the most recently gossiped value so that we can tell if a newly measured
+	// value differs by enough to justify re-gossiping the store.
+	gossipWritesPerSecondVal syncutil.AtomicFloat64
 
 	coalescedMu struct {
 		syncutil.Mutex
@@ -1400,6 +1404,10 @@ func (s *Store) GossipStore(ctx context.Context) error {
 		log.Fatalf(ctx, "not connected to gossip")
 	}
 
+	// Temporarily indicate that we're gossiping the store capacity to avoid
+	// recursively triggering a gossip of the store capacity.
+	syncutil.StoreFloat64(&s.gossipWritesPerSecondVal, -1)
+
 	storeDesc, err := s.Descriptor()
 	if err != nil {
 		return errors.Wrapf(err, "problem getting store descriptor for store %+v", s.Ident)
@@ -1411,6 +1419,7 @@ func (s *Store) GossipStore(ctx context.Context) error {
 	atomic.StoreInt32(&s.gossipRangeCountdown, int32(math.Ceil(math.Max(rangeCountdown, 1))))
 	leaseCountdown := float64(storeDesc.Capacity.LeaseCount) * s.cfg.GossipWhenCapacityDeltaExceedsFraction
 	atomic.StoreInt32(&s.gossipLeaseCountdown, int32(math.Ceil(math.Max(leaseCountdown, 1))))
+	syncutil.StoreFloat64(&s.gossipWritesPerSecondVal, storeDesc.Capacity.WritesPerSecond)
 
 	// Unique gossip key per store.
 	gossipStoreKey := gossip.MakeStoreKey(storeDesc.StoreID)
@@ -1476,6 +1485,29 @@ func (s *Store) maybeGossipOnCapacityChange(ctx context.Context, cce capacityCha
 				}
 			}); err != nil {
 			log.Warningf(ctx, "unable to gossip on capacity change: %s", err)
+		}
+	}
+}
+
+// recordNewWritesPerSecond takes a recently calculated value for the number
+// of key writes the store is handling and decides whether it has changed enough
+// to justify re-gossiping the store's capacity.
+func (s *Store) recordNewWritesPerSecond(newVal float64) {
+	oldVal := syncutil.LoadFloat64(&s.gossipWritesPerSecondVal)
+	if oldVal == -1 {
+		// Gossiping of store capacity is already ongoing.
+		return
+	}
+	if newVal < oldVal*.5 || newVal > oldVal*1.5 {
+		ctx := s.AnnotateCtx(context.TODO())
+		if err := s.stopper.RunAsyncTask(
+			ctx, "storage.Store: gossip on writes-per-second change",
+			func(ctx context.Context) {
+				if err := s.GossipStore(ctx); err != nil {
+					log.Warningf(ctx, "error gossiping on writes-per-second change: %s", err)
+				}
+			}); err != nil {
+			log.Warningf(ctx, "unable to gossip on writes-per-second change: %s", err)
 		}
 	}
 }
@@ -1951,6 +1983,7 @@ func (s *Store) SplitRange(ctx context.Context, origRng, newRng *Replica) error 
 	// Clear the original range's request stats, since they include requests for
 	// spans that are now owned by the new range.
 	origRng.leaseholderStats.resetRequestCounts()
+	origRng.writeStats.splitRequestCounts(newRng.writeStats)
 
 	if kr := s.mu.replicasByKey.ReplaceOrInsert(origRng); kr != nil {
 		return errors.Errorf("replicasByKey unexpectedly contains %s when inserting replica %s", kr, origRng)
@@ -2007,6 +2040,9 @@ func (s *Store) MergeRange(
 		subsumingRng.leaseholderStats.resetRequestCounts()
 	}
 	if subsumingRng.writeStats != nil {
+		// Note: this could be drastically improved by adding a replicaStats method
+		// that merges stats. Resetting stats is typically bad for the rebalancing
+		// logic that depends on them.
 		subsumingRng.writeStats.resetRequestCounts()
 	}
 
@@ -2294,14 +2330,54 @@ func (s *Store) Attrs() roachpb.Attributes {
 
 // Capacity returns the capacity of the underlying storage engine. Note that
 // this does not include reservations.
+// Note that Capacity() has the side effect of updating some of the store's
+// internal statistics about its replicas.
 func (s *Store) Capacity() (roachpb.StoreCapacity, error) {
 	capacity, err := s.engine.Capacity()
-	if err == nil {
-		capacity.RangeCount = int32(s.ReplicaCount())
-		capacity.LeaseCount = int32(s.LeaseCount())
-		capacity.WritesPerSecond = s.WritesPerSecond()
+	if err != nil {
+		return capacity, err
 	}
-	return capacity, err
+
+	capacity.RangeCount = int32(s.ReplicaCount())
+
+	now := s.cfg.Clock.Now()
+	var leaseCount int32
+	var totalWritesPerSecond float64
+	bytesPerReplica := make([]float64, 0, capacity.RangeCount)
+	writesPerReplica := make([]float64, 0, capacity.RangeCount)
+	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
+		if r.ownsValidLease(now) {
+			leaseCount++
+		}
+		bytesPerReplica = append(bytesPerReplica, float64(r.GetMVCCStats().LiveBytes))
+		// TODO(a-robinson): How dangerous is it that this number will be incorrectly
+		// low the first time or two it gets gossiped when a store starts? We can't
+		// easily have a countdown as its value changes like for leases/replicas.
+		if qps, dur := r.writeStats.avgQPS(); dur >= MinStatsDuration {
+			totalWritesPerSecond += qps
+			writesPerReplica = append(writesPerReplica, qps)
+		}
+		return true
+	})
+	capacity.LeaseCount = leaseCount
+	capacity.WritesPerSecond = totalWritesPerSecond
+	capacity.BytesPerReplica = roachpb.PercentilesFromData(bytesPerReplica)
+	capacity.WritesPerReplica = roachpb.PercentilesFromData(writesPerReplica)
+	s.recordNewWritesPerSecond(totalWritesPerSecond)
+
+	return capacity, nil
+}
+
+// ReplicaCount returns the number of replicas contained by this store. This
+// method is O(n) in the number of replicas and should not be called from
+// performance critical code.
+func (s *Store) ReplicaCount() int {
+	var count int
+	s.mu.replicas.Range(func(k, v interface{}) bool {
+		count++
+		return true
+	})
+	return count
 }
 
 // Registry returns the store registry.
@@ -2366,49 +2442,6 @@ func (s *Store) deadReplicas() roachpb.StoreDeadReplicas {
 		StoreID:  s.Ident.StoreID,
 		Replicas: deadReplicas,
 	}
-}
-
-// ReplicaCount returns the number of replicas contained by this store. This
-// method is O(n) in the number of replicas and should not be called from
-// performance critical code.
-func (s *Store) ReplicaCount() int {
-	var count int
-	s.mu.replicas.Range(func(k, v interface{}) bool {
-		count++
-		return true
-	})
-	return count
-}
-
-// LeaseCount returns the number of replicas this store holds leases for.
-func (s *Store) LeaseCount() int {
-	now := s.cfg.Clock.Now()
-
-	var leaseCount int
-	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
-		if r.ownsValidLease(now) {
-			leaseCount++
-		}
-		return true
-	})
-
-	return leaseCount
-}
-
-// WritesPerSecond returns the approximate number of keys the store is writing
-// per second.
-//
-// TODO(a-robinson): How dangerous is it that this number will be incorrectly
-// low the first time or two it gets gossiped when a store starts? We can't
-// easily have a countdown as its value changes like we can for leases/replicas.
-func (s *Store) WritesPerSecond() float64 {
-	var writeCount float64
-	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
-		qps, _ := r.writeStats.avgQPS()
-		writeCount += qps
-		return true
-	})
-	return writeCount
 }
 
 // Send fetches a range based on the header's replica, assembles method, args &
@@ -3969,7 +4002,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		leaseEpochCount               int64
 		raftLeaderNotLeaseHolderCount int64
 		quiescentCount                int64
-		AveragewritesPerSecond        float64
+		averageWritesPerSecond        float64
 
 		rangeCount                int64
 		unavailableRangeCount     int64
@@ -4016,8 +4049,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		}
 		behindCount += metrics.BehindCount
 		selfBehindCount += metrics.SelfBehindCount
-		qps, _ := rep.writeStats.avgQPS()
-		AveragewritesPerSecond += qps
+		if qps, dur := rep.writeStats.avgQPS(); dur >= MinStatsDuration {
+			averageWritesPerSecond += qps
+		}
 		return true // more
 	})
 
@@ -4027,7 +4061,8 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.LeaseExpirationCount.Update(leaseExpirationCount)
 	s.metrics.LeaseEpochCount.Update(leaseEpochCount)
 	s.metrics.QuiescentCount.Update(quiescentCount)
-	s.metrics.AverageWritesPerSecond.Update(AveragewritesPerSecond)
+	s.metrics.AverageWritesPerSecond.Update(averageWritesPerSecond)
+	s.recordNewWritesPerSecond(averageWritesPerSecond)
 
 	s.metrics.RangeCount.Update(rangeCount)
 	s.metrics.UnavailableRangeCount.Update(unavailableRangeCount)
