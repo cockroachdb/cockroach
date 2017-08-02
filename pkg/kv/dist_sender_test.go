@@ -793,7 +793,7 @@ func TestEvictCacheOnError(t *testing.T) {
 			RangeDescriptorDB: defaultMockRangeDescriptorDB,
 		}
 		ds := NewDistSender(cfg, g)
-		ds.updateLeaseHolderCache(context.TODO(), 1, leaseHolder)
+		ds.leaseHolderCache.Update(context.TODO(), 1, leaseHolder)
 		key := roachpb.Key("a")
 		put := roachpb.NewPut(key, roachpb.MakeValueFromString("value"))
 
