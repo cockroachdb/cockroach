@@ -19,16 +19,20 @@ import (
 	"strconv"
 )
 
+// SexprFormatter is implemented by any type that can write its own string
+// representation into the provided buffer.
 type SexprFormatter interface {
-	FormatSExpr(buf *bytes.Buffer)
+	FormatSExpr(*bytes.Buffer)
 }
 
+// FormatSExprInt64 writes the base 10 string representation of x into buf.
 func FormatSExprInt64(buf *bytes.Buffer, x int64) {
 	buf.WriteString(strconv.FormatInt(x, 10))
 }
 
 // @for enum
 
+// FormatSExpr implements the SexprFormatter interface.
 func (x Enum) FormatSExpr(buf *bytes.Buffer) {
 	buf.WriteString(x.String())
 }
@@ -37,6 +41,7 @@ func (x Enum) FormatSExpr(buf *bytes.Buffer) {
 
 // @for struct
 
+// FormatSExpr implements the SexprFormatter interface.
 func (x Struct) FormatSExpr(buf *bytes.Buffer) {
 	buf.WriteString("(Struct")
 
@@ -59,6 +64,7 @@ func (x Struct) FormatSExpr(buf *bytes.Buffer) {
 
 // @for sum
 
+// FormatSExpr implements the SexprFormatter interface.
 func (x Sum) FormatSExpr(buf *bytes.Buffer) {
 	switch x.Tag() {
 	// @for item

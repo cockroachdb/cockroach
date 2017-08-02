@@ -69,7 +69,15 @@ func RegisterTimeSeriesHandlerFromEndpoint(ctx context.Context, mux *runtime.Ser
 // RegisterTimeSeriesHandler registers the http handlers for service TimeSeries to "mux".
 // The handlers forward requests to the grpc endpoint over "conn".
 func RegisterTimeSeriesHandler(ctx context.Context, mux *runtime.ServeMux, conn *grpc.ClientConn) error {
-	client := NewTimeSeriesClient(conn)
+	return RegisterTimeSeriesHandlerClient(ctx, mux, NewTimeSeriesClient(conn))
+}
+
+// RegisterTimeSeriesHandler registers the http handlers for service TimeSeries to "mux".
+// The handlers forward requests to the grpc endpoint over the given implementation of "TimeSeriesClient".
+// Note: the gRPC framework executes interceptors within the gRPC handler. If the passed in "TimeSeriesClient"
+// doesn't go through the normal gRPC flow (creating a gRPC client etc.) then it will be up to the passed in
+// "TimeSeriesClient" to call the correct interceptors.
+func RegisterTimeSeriesHandlerClient(ctx context.Context, mux *runtime.ServeMux, client TimeSeriesClient) error {
 
 	mux.Handle("POST", pattern_TimeSeries_Query_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())

@@ -543,10 +543,7 @@ func TestTxnTimestampRegression(t *testing.T) {
 		}
 
 		// Write now to keyB, which will get a higher timestamp than keyB was written at.
-		if err := txn.Put(ctx, keyB, "value2"); err != nil {
-			return err
-		}
-		return nil
+		return txn.Put(ctx, keyB, "value2")
 	})
 	if err != nil {
 		t.Fatal(err)

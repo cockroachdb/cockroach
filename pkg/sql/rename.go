@@ -241,10 +241,7 @@ func (p *planner) RenameTable(ctx context.Context, n *parser.RenameTable) (planN
 		if err := expectDescriptorID(systemConfig, newTbKey, descID); err != nil {
 			return err
 		}
-		if err := expectDescriptor(systemConfig, descKey, descDesc); err != nil {
-			return err
-		}
-		return nil
+		return expectDescriptor(systemConfig, descKey, descDesc)
 	})
 
 	return &zeroNode{}, nil

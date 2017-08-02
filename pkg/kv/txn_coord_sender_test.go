@@ -1302,11 +1302,7 @@ func TestTxnCommit(t *testing.T) {
 			return err
 		}
 
-		if err := txn.CommitOrCleanup(ctx); err != nil {
-			return err
-		}
-
-		return nil
+		return txn.CommitOrCleanup(ctx)
 	}); err != nil {
 		t.Fatal(err)
 	}

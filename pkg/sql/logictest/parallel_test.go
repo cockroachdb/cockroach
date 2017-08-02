@@ -134,8 +134,7 @@ func (t *parallelTest) run(dir string) {
 		t.Fatalf("%s: %s", mainFile, err)
 	}
 	var spec parTestSpec
-	err = yaml.Unmarshal(yamlData, &spec)
-	if err != nil {
+	if err := yaml.UnmarshalStrict(yamlData, &spec); err != nil {
 		t.Fatalf("%s: %s", mainFile, err)
 	}
 

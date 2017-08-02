@@ -30,7 +30,7 @@ import (
 )
 
 func init() {
-	grpclog.SetLogger(&logger{})
+	grpclog.SetLoggerV2(&logger{})
 }
 
 // NB: This interface is implemented by a pointer because using a value causes
@@ -41,11 +41,53 @@ func init() {
 // Also NB: we pass a depth of 2 here because all logging calls originate from
 // the logging adapter file in grpc, which is an additional stack frame away
 // from the actual logging site.
-var _ grpclog.Logger = (*logger)(nil)
+var _ grpclog.LoggerV2 = (*logger)(nil)
 
 type logger struct{}
 
+func (*logger) Info(args ...interface{}) {
+	log.InfofDepth(context.TODO(), 2, "", args...)
+}
+
+func (*logger) Infoln(args ...interface{}) {
+	log.InfofDepth(context.TODO(), 2, "", args...)
+}
+
+func (*logger) Infof(format string, args ...interface{}) {
+	log.InfofDepth(context.TODO(), 2, format, args...)
+}
+
+func (*logger) Warning(args ...interface{}) {
+	log.WarningfDepth(context.TODO(), 2, "", args...)
+}
+
+func (*logger) Warningln(args ...interface{}) {
+	log.WarningfDepth(context.TODO(), 2, "", args...)
+}
+
+func (*logger) Warningf(format string, args ...interface{}) {
+	if shouldPrint(transportFailedRe, connectionRefusedRe, time.Minute, format, args...) {
+		log.WarningfDepth(context.TODO(), 2, format, args...)
+	}
+}
+
+func (*logger) Error(args ...interface{}) {
+	log.ErrorfDepth(context.TODO(), 2, "", args...)
+}
+
+func (*logger) Errorln(args ...interface{}) {
+	log.ErrorfDepth(context.TODO(), 2, "", args...)
+}
+
+func (*logger) Errorf(format string, args ...interface{}) {
+	log.ErrorfDepth(context.TODO(), 2, format, args...)
+}
+
 func (*logger) Fatal(args ...interface{}) {
+	log.FatalfDepth(context.TODO(), 2, "", args...)
+}
+
+func (*logger) Fatalln(args ...interface{}) {
 	log.FatalfDepth(context.TODO(), 2, "", args...)
 }
 
@@ -53,15 +95,13 @@ func (*logger) Fatalf(format string, args ...interface{}) {
 	log.FatalfDepth(context.TODO(), 2, format, args...)
 }
 
-func (*logger) Fatalln(args ...interface{}) {
-	log.FatalfDepth(context.TODO(), 2, "", args...)
+func (*logger) V(int) bool {
+	// Proxying this to log.VDepth doesn't work because the argument type
+	// to that function is unexported.
+	return true
 }
 
-func (*logger) Print(args ...interface{}) {
-	log.InfofDepth(context.TODO(), 2, "", args...)
-}
-
-// https://github.com/grpc/grpc-go/blob/955c867/clientconn.go#L836
+// https://github.com/grpc/grpc-go/blob/v1.7.0/clientconn.go#L937
 var (
 	transportFailedRe   = regexp.MustCompile("^" + regexp.QuoteMeta("grpc: addrConn.resetTransport failed to create client transport:"))
 	connectionRefusedRe = regexp.MustCompile(
@@ -76,16 +116,6 @@ var (
 		}, "|"),
 	)
 )
-
-func (*logger) Printf(format string, args ...interface{}) {
-	if shouldPrint(transportFailedRe, connectionRefusedRe, time.Minute, format, args...) {
-		log.InfofDepth(context.TODO(), 2, format, args...)
-	}
-}
-
-func (*logger) Println(args ...interface{}) {
-	log.InfofDepth(context.TODO(), 2, "", args...)
-}
 
 var spamMu = struct {
 	syncutil.Mutex

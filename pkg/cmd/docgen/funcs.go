@@ -40,8 +40,10 @@ var functionsCmd = &cobra.Command{
 			outDir = args[0]
 		}
 
-		if stat, err := os.Stat(outDir); err != nil || !stat.IsDir() {
-			return errors.Errorf("%s does not exist", outDir)
+		if stat, err := os.Stat(outDir); err != nil {
+			return err
+		} else if !stat.IsDir() {
+			return errors.Errorf("%q is not a directory", outDir)
 		}
 
 		if err := ioutil.WriteFile(
@@ -54,13 +56,9 @@ var functionsCmd = &cobra.Command{
 		); err != nil {
 			return err
 		}
-		if err := ioutil.WriteFile(
+		return ioutil.WriteFile(
 			filepath.Join(outDir, "operators.md"), generateOperators(), 0644,
-		); err != nil {
-			return err
-		}
-
-		return nil
+		)
 	},
 }
 

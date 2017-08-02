@@ -208,7 +208,7 @@ func (n *dropDatabaseNode) Start(params runParams) error {
 
 	// Log Drop Database event. This is an auditable log event and is recorded
 	// in the same transaction as the table descriptor update.
-	if err := MakeEventLogger(p.LeaseMgr()).InsertEventRecord(
+	return MakeEventLogger(p.LeaseMgr()).InsertEventRecord(
 		ctx,
 		p.txn,
 		EventLogDropDatabase,
@@ -220,10 +220,7 @@ func (n *dropDatabaseNode) Start(params runParams) error {
 			User                  string
 			DroppedTablesAndViews []string
 		}{n.n.Name.String(), n.n.String(), p.session.User, tbNameStrings},
-	); err != nil {
-		return err
-	}
-	return nil
+	)
 }
 
 func (*dropDatabaseNode) Next(runParams) (bool, error) { return false, nil }
@@ -633,10 +630,7 @@ func (p *planner) canRemoveInterleave(
 		return pgerror.UnimplementedWithIssueErrorf(
 			8036, "%q is interleaved by table %q", from, table.Name)
 	}
-	if err := p.CheckPrivilege(table, privilege.CREATE); err != nil {
-		return err
-	}
-	return nil
+	return p.CheckPrivilege(table, privilege.CREATE)
 }
 
 func (p *planner) canRemoveDependentView(
