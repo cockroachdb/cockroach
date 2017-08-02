@@ -173,7 +173,7 @@ func (*explainDistSQLNode) Close(context.Context) {}
 var explainDistSQLColumns = sqlbase.ResultColumns{
 	{Name: "Automatic", Typ: parser.TypeBool},
 	{Name: "URL", Typ: parser.TypeString},
-	{Name: "JSON", Typ: parser.TypeString},
+	{Name: "JSON", Typ: parser.TypeString, Hidden: true},
 }
 
 func (n *explainDistSQLNode) Start(params runParams) error {
