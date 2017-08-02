@@ -173,7 +173,7 @@ func init() {
       </tr>
       <tr>
         <td>raft</td>
-        <td><a href="/_status/raft">raft</a></td>
+        <td><a href="/_status/raft">raft</a>, <a href="../#/raft/messages/all">messages</a></td>
       </tr>
       <tr>
         <td>security</td>

@@ -17,6 +17,7 @@ export default class Layout extends React.Component<{}, {}> {
       <div className="nav-container">
         <ul className="nav">
           <ListLink to="/raft/ranges">Ranges</ListLink>
+          <ListLink to="/raft/messages/all">Messages</ListLink>
         </ul>
       </div>
       { this.props.children }
