@@ -803,8 +803,6 @@ func TestBackupRestoreResume(t *testing.T) {
 
 func TestBackupRestoreInterleaved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#17402 currently flaky")
-
 	const numAccounts = 10
 
 	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts)
