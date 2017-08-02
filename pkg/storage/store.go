@@ -4180,10 +4180,14 @@ func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (enginepb.
 	return output, count
 }
 
-func WriteClusterVersion(ctx context.Context, writer engine.ReadWriter, cv base.ClusterVersion) error {
+// WriteClusterVersion writes the given cluster version to the store-local cluster version key.
+func WriteClusterVersion(
+	ctx context.Context, writer engine.ReadWriter, cv base.ClusterVersion,
+) error {
 	return engine.MVCCPutProto(ctx, writer, nil, keys.StoreClusterVersionKey(), hlc.Timestamp{}, nil, &cv)
 }
 
+// ReadClusterVersion reads the the cluster version from the store-local version key.
 func ReadClusterVersion(ctx context.Context, reader engine.Reader) (base.ClusterVersion, error) {
 	var cv base.ClusterVersion
 	_, err := engine.MVCCGetProto(ctx, reader, keys.StoreClusterVersionKey(), hlc.Timestamp{}, true, nil, &cv)

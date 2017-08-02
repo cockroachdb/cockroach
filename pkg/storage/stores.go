@@ -338,11 +338,16 @@ func (ls *Stores) updateBootstrapInfoLocked(bi *gossip.BootstrapInfo) error {
 	return err
 }
 
-// SynthesizeClusterVersion reads and returns the ClusterVersion protobuf (written to
-// any of the configured stores). The returned value is also replicated to all
-// stores for consistency, in case a new store was added or an old store
-// re-configured. In case of non-identical versions across the stores, returns a
-// version that carries the largest MinVersion and the smallest UseVersion.
+// SynthesizeClusterVersion reads and returns the ClusterVersion protobuf
+// (written to any of the configured stores (all of which are bootstrapped)).
+// The returned value is also replicated to all stores for consistency, in case
+// a new store was added or an old store re-configured. In case of non-identical
+// versions across the stores, returns a version that carries the largest
+// MinVersion and the smallest UseVersion.
+//
+// If there aren't any stores, returns a ClusterVersion with MinSupportedVersion
+// and UseVersion set to the minimum supported version and server version of the
+// build, respectively.
 func (ls *Stores) SynthesizeClusterVersion(ctx context.Context) (base.ClusterVersion, error) {
 	// Find the most recent bootstrap info.
 	type originVersion struct {
@@ -350,7 +355,10 @@ func (ls *Stores) SynthesizeClusterVersion(ctx context.Context) (base.ClusterVer
 		origin string
 	}
 
-	var maxMinVersion originVersion
+	maxMinVersion := originVersion{
+		Version: ls.minSupportedVersion,
+		origin:  "(no store)",
+	}
 
 	minUseVersion := originVersion{
 		Version: ls.serverVersion,
@@ -389,8 +397,6 @@ func (ls *Stores) SynthesizeClusterVersion(ctx context.Context) (base.ClusterVer
 		if err != nil {
 			return false
 		}
-
-		fmt.Println("READ ", cv)
 
 		// Avoid running a binary with a store that is too new. For example,
 		// restarting into 1.1 after having upgraded to 1.2 doesn't work.
