@@ -48,6 +48,8 @@
 /pkg/sql/testlogic/    @cockroachdb/nonexistent
 
 /pkg/ui/               @cockroachdb/admin-ui
+/pkg/ui/embedded.go    @cockroachdb/nonexistent
+/pkg/ui/src/js/protos* @cockroachdb/nonexistent
 
 /build/                @cockroachdb/build
 /c-deps/               @cockroachdb/build
