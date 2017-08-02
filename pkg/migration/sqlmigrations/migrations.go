@@ -344,8 +344,8 @@ func eventlogUniqueIDDefault(ctx context.Context, r runner) error {
 	var err error
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
 		res := r.sqlExecutor.ExecuteStatements(session, alterStmt, nil)
-		defer res.Close(ctx)
 		err = checkQueryResults(res.ResultList, 1)
+		res.Close(ctx)
 		if err == nil {
 			break
 		}

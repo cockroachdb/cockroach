@@ -383,13 +383,9 @@ func (p *planner) CreateView(ctx context.Context, n *parser.CreateView) (planNod
 		return nil, err
 	}
 
-	numColNames := len(n.ColumnNames)
-	numColumns := len(sourceColumns)
-	if numColNames != 0 && numColNames != numColumns {
-		return nil, sqlbase.NewSyntaxError(fmt.Sprintf(
-			"CREATE VIEW specifies %d column name%s, but data source has %d column%s",
-			numColNames, util.Pluralize(int64(numColNames)),
-			numColumns, util.Pluralize(int64(numColumns))))
+	n.AsSource, err = enforceViewResultColumnNames(n.AsSource, n.ColumnNames, sourceColumns)
+	if err != nil {
+		return nil, err
 	}
 
 	log.VEventf(ctx, 2, "collected view dependencies:\n%s", planDeps.String())
@@ -422,10 +418,17 @@ func (n *createViewNode) Start(params runParams) error {
 	// Inherit permissions from the database descriptor.
 	privs := n.dbDesc.GetPrivileges()
 
+	// Update and format the AST of the view query to use numeric table references
+	// instead of names.
+	viewQuery, err := n.p.prepareViewQuery(params.ctx, n.n.AsSource, n.planDeps)
+	if err != nil {
+		return err
+	}
+
 	desc, err := n.makeViewTableDesc(
 		params.ctx,
 		viewName,
-		n.n.ColumnNames,
+		viewQuery,
 		n.dbDesc.ID,
 		id,
 		n.sourceColumns,
@@ -1115,7 +1118,7 @@ func (p *planner) finalizeInterleave(
 func (n *createViewNode) makeViewTableDesc(
 	ctx context.Context,
 	viewName string,
-	columnNames parser.NameList,
+	viewQuery string,
 	parentID sqlbase.ID,
 	id sqlbase.ID,
 	resultColumns []sqlbase.ResultColumn,
@@ -1129,17 +1132,14 @@ func (n *createViewNode) makeViewTableDesc(
 		FormatVersion: sqlbase.FamilyFormatVersion,
 		Version:       1,
 		Privileges:    privileges,
-		ViewQuery:     parser.AsStringWithFlags(n.n.AsSource, parser.FmtParsable),
+		ViewQuery:     viewQuery,
 	}
-	for i, colRes := range resultColumns {
+	for _, colRes := range resultColumns {
 		colType, err := parser.DatumTypeToColumnType(colRes.Typ)
 		if err != nil {
 			return desc, err
 		}
 		columnTableDef := parser.ColumnTableDef{Name: parser.Name(colRes.Name), Type: colType}
-		if len(columnNames) > i {
-			columnTableDef.Name = columnNames[i]
-		}
 		// We pass an empty search path here because there are no names to resolve.
 		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, nil, evalCtx)
 		if err != nil {
@@ -1531,31 +1531,4 @@ func makeCheckConstraint(
 		}
 	}
 	return &sqlbase.TableDescriptor_CheckConstraint{Expr: parser.Serialize(d.Expr), Name: name}, nil
-}
-
-// planContainsStar returns true if one of the render nodes in the
-// plan contains a star expansion.
-func (p *planner) planContainsStar(ctx context.Context, plan planNode) bool {
-	s := &starDetector{}
-	_ = walkPlan(ctx, plan, planObserver{enterNode: s.enterNode})
-	return s.foundStar
-}
-
-// starDetector supports planContainsStar().
-type starDetector struct {
-	foundStar bool
-}
-
-// enterNode implements the planObserver interface.
-func (s *starDetector) enterNode(_ context.Context, _ string, plan planNode) bool {
-	if s.foundStar {
-		return false
-	}
-	if sel, ok := plan.(*renderNode); ok {
-		if sel.isStar {
-			s.foundStar = true
-			return false
-		}
-	}
-	return true
 }

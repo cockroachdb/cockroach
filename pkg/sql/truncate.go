@@ -159,7 +159,8 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 		return err
 	}
 	if err := reassignReferencedTables(tables, tableDesc.ID, newID); err != nil {
-		return err
+		return errors.Wrapf(err,
+			"truncating [%d] (%q)", tableDesc.ID, parser.ErrString(parser.Name(tableDesc.Name)))
 	}
 
 	for _, table := range tables {
@@ -288,8 +289,17 @@ func reassignReferencedTables(tables []*sqlbase.TableDescriptor, oldID, newID sq
 		}
 
 		for i, dest := range table.DependsOn {
+			referencesOldTable := false
 			if dest == oldID {
+				referencesOldTable = true
 				table.DependsOn[i] = newID
+			}
+			if referencesOldTable {
+				if err := table.RewriteViewQueryForTableSubstitution(
+					map[sqlbase.ID]sqlbase.ID{oldID: newID},
+				); err != nil {
+					return err
+				}
 			}
 		}
 		origRefs := table.DependedOnBy

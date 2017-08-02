@@ -2070,3 +2070,32 @@ func (desc *ColumnDescriptor) SQLString() string {
 	}
 	return buf.String()
 }
+
+// RewriteViewQueryForTableSubstitution renames all occurrences of oldID
+// by newID in the table's ViewQuery.
+func (desc *TableDescriptor) RewriteViewQueryForTableSubstitution(idMapping map[ID]ID) error {
+	if !desc.IsView() {
+		return nil
+	}
+
+	// First extract the query AST.
+	stmt, err := parser.ParseOne(desc.ViewQuery)
+	if err != nil {
+		return errors.Wrapf(err,
+			"parsing view [%d] (%q)", desc.ID, parser.ErrString(parser.Name(desc.Name)))
+	}
+
+	// Now perform the replacement. For this we hijack (*TableRef).Format().
+	var queryBuf bytes.Buffer
+	stmt.Format(&queryBuf, parser.FmtReformatTableRefs(parser.FmtParsable,
+		func(n *parser.TableRef, _ *bytes.Buffer, _ parser.FmtFlags) bool {
+			// Are we referencing the old ID?
+			if newID, ok := idMapping[ID(n.TableID)]; ok {
+				n.TableID = int64(newID)
+			}
+			// Let the formatter do its job with the result.
+			return false
+		}))
+	desc.ViewQuery = queryBuf.String()
+	return nil
+}
