@@ -22,6 +22,34 @@ import (
 	"github.com/pkg/errors"
 )
 
+// CanBump computes whether an update from version o to version n is possible.
+// The main constraint is that major and minor can't change at the same time,
+// and that they can change by at most one. We are more flexible with the
+// Unstable component, which may change by more than one (but also has to be
+// changed in isolation; this could be relaxed if necessary).
+func (v Version) CanBump(o Version) bool {
+	if o.Less(v) {
+		return false
+	}
+	unstableN := o.Unstable - v.Unstable
+	if unstableN > 1 {
+		unstableN = 1
+	}
+
+	var dist int32
+	for _, d := range []int32{
+		o.Major - v.Major,
+		o.Minor - v.Minor,
+		o.Patch - v.Patch,
+		unstableN,
+	} {
+		if d > 0 {
+			dist += d
+		}
+	}
+	return dist <= 1
+}
+
 // Less compares two Versions.
 func (v Version) Less(otherV Version) bool {
 	if v.Major < otherV.Major {

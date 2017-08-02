@@ -114,6 +114,7 @@ message NodeDescriptor {
   optional util.UnresolvedAddr address = 2 [(gogoproto.nullable) = false];
   optional Attributes attrs = 3 [(gogoproto.nullable) = false];
   optional Locality locality = 4 [(gogoproto.nullable) = false];
+  optional Version ServerVersion = 5 [(gogoproto.nullable) = false];
 }
 
 // StoreDescriptor holds store information including store attributes, node

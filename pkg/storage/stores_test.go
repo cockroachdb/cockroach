@@ -22,6 +22,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -235,7 +236,7 @@ func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores,
 
 	// Create two stores with ranges we care about.
 	stores := []*Store{}
-	for i := 0; i < 2; i++ {
+	for i := 0; i < count; i++ {
 		cfg.Transport = NewDummyRaftTransport()
 		eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 		stopper.AddCloser(eng)
@@ -341,10 +342,220 @@ func TestStoresGossipStorageReadLatest(t *testing.T) {
 	ls3 := NewStores(log.AmbientContext{}, ls.clock)
 	ls3.AddStore(stores[0])
 	verifyBI.Reset()
-	if err := ls2.ReadBootstrapInfo(&verifyBI); err != nil {
+	if err := ls3.ReadBootstrapInfo(&verifyBI); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(bi, verifyBI) {
 		t.Errorf("bootstrap info %+v not equal to expected %+v", verifyBI, bi)
+	}
+}
+
+// TestStoresClusterVersionReadWrite verifies that the cluster version is
+// written to all stores and that missing versions are filled in appropriately.
+func TestStoresClusterVersionWriteSynthesize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	_, stores, _, stopper := createStores(3, t)
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+
+	makeStores := func() *Stores {
+		ls := NewStores(log.AmbientContext{}, stores[0].Clock())
+		// Hard-code MinSupportedVersion of 1.0 for this test.
+		ls.minSupportedVersion = base.VersionMajorOneMinorZero
+		// Hard-code ServerVersion of 1.1 for this test.
+		ls.serverVersion = roachpb.Version{Major: 1, Minor: 1}
+
+		return ls
+	}
+
+	ls0 := makeStores()
+	ls0.AddStore(stores[0])
+
+	versionA := roachpb.Version{Major: 1, Minor: 0, Unstable: 1} // 1.0-1
+	versionB := roachpb.Version{Major: 1, Minor: 0, Unstable: 2} // 1.0-2
+	versionC := roachpb.Version{Major: 1, Minor: 1}              // 1.1-0
+
+	// Verify that the initial read of an empty store synthesizes v1.0-0. This
+	// is the code path that runs after starting the 1.1 binary for the first
+	// time after the rolling upgrade from 1.0.
+	//
+	// Do it twice because after the first iteration, we have written these
+	// values to storage, so the second time around the synthesis does not
+	// happen.
+	for i := 0; i < 2; i++ {
+		if initialCV, err := ls0.SynthesizeClusterVersion(ctx); err != nil {
+			t.Fatal(err)
+		} else {
+			expCV := base.ClusterVersion{
+				MinimumVersion: base.VersionMajorOneMinorZero,
+				UseVersion:     base.VersionMajorOneMinorZero,
+			}
+			if !reflect.DeepEqual(initialCV, expCV) {
+				t.Fatalf("expected %+v; got %+v", expCV, initialCV)
+			}
+		}
+	}
+
+	// Bump a version to something more modern (but supported by this binary).
+	// Note that there's still only one store.
+	{
+		cv := base.ClusterVersion{
+			MinimumVersion: versionA,
+			UseVersion:     versionB,
+		}
+		if err := ls0.WriteClusterVersion(ctx, cv); err != nil {
+			t.Fatal(err)
+		}
+
+		// Verify the same thing comes back on read.
+		if newCV, err := ls0.SynthesizeClusterVersion(ctx); err != nil {
+			t.Fatal(err)
+		} else {
+			expCV := cv
+			if !reflect.DeepEqual(newCV, cv) {
+				t.Fatalf("expected %+v; got %+v", expCV, newCV)
+			}
+		}
+	}
+
+	// Make a stores with store0 and store1. It reads as v1.0 because store1 has
+	// no entry, lowering the use version to v1.0 (but not the min version).
+	{
+		ls01 := makeStores()
+		ls01.AddStore(stores[0])
+		ls01.AddStore(stores[1])
+
+		expCV := base.ClusterVersion{
+			MinimumVersion: versionA,
+			UseVersion:     base.VersionMajorOneMinorZero,
+		}
+		if cv, err := ls01.SynthesizeClusterVersion(ctx); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(cv, expCV) {
+			t.Fatalf("expected %+v, got %+v", expCV, cv)
+		}
+
+		// Verify the same thing comes back on read of either of the stores (i.e.,
+		// we wrote the updated version to both).
+		for _, store := range stores[:2] {
+			ls := makeStores()
+			ls.AddStore(store)
+			if cv, err := ls.SynthesizeClusterVersion(ctx); err != nil {
+				t.Fatal(err)
+			} else if !reflect.DeepEqual(cv, expCV) {
+				t.Fatalf("expected %+v; got %+v", expCV, cv)
+			}
+		}
+
+		// Write an updated UseVersion to both stores.
+		cv := base.ClusterVersion{
+			MinimumVersion: versionA,
+			UseVersion:     versionB,
+		}
+		if err := ls01.WriteClusterVersion(ctx, cv); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Third node comes along, for now it's alone. It has a higher (but
+	// compatible) MinimumVersion, and a lower use version.
+	cv := base.ClusterVersion{
+		MinimumVersion: versionC,
+		UseVersion:     versionA,
+	}
+
+	{
+		ls3 := makeStores()
+		ls3.AddStore(stores[2])
+		if err := ls3.WriteClusterVersion(ctx, cv); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	ls012 := makeStores()
+	for _, store := range stores {
+		ls012.AddStore(store)
+	}
+
+	// Reading across all stores, we expect to pick up the highest min version
+	// and the lowest useVersion both from the third store.
+	expCV := base.ClusterVersion{
+		MinimumVersion: versionC,
+		UseVersion:     versionA,
+	}
+	if cv, err := ls012.SynthesizeClusterVersion(ctx); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(cv, expCV) {
+		t.Fatalf("expected %+v, got %+v", expCV, cv)
+	}
+}
+
+// TestStoresPersistedClusterVersionMismatch verifies an error occurs when
+// setting up the cluster version from stores that are incompatible with the
+// running binary.
+func TestStoresClusterVersionIncompatible(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+
+	vOneDashOne := roachpb.Version{Major: 1, Unstable: 1}
+	vOne := roachpb.Version{Major: 1}
+
+	type testFn func(*base.ClusterVersion, *Stores) string
+	for name, setter := range map[string]testFn{
+		"StoreTooNewUseVersion": func(cv *base.ClusterVersion, ls *Stores) string {
+			// This is what the running node requires from its stores.
+			ls.minSupportedVersion = vOne
+			// This is what the node is running.
+			ls.serverVersion = vOneDashOne
+			// MinimumVersion is harmless, it's the "running" version.
+			cv.MinimumVersion = ls.serverVersion
+			// UseVersion is way too high for this node.
+			cv.UseVersion = roachpb.Version{Major: 9}
+			return `engine <no-attributes>=<in-mem> requires at least v9\.0, but running version is 1.0-1`
+		},
+		"StoreTooNewMinVersion": func(cv *base.ClusterVersion, ls *Stores) string {
+			ls.minSupportedVersion = vOne
+			ls.serverVersion = vOneDashOne
+			// These two are switched compared to previous test case to make
+			// sure it doesn't change the outcome.
+			cv.UseVersion = ls.serverVersion
+			cv.MinimumVersion = roachpb.Version{Major: 9}
+			return `engine <no-attributes>=<in-mem> requires at least v9\.0, but running version is 1.0-1`
+		},
+		"StoreTooOldUseVersion": func(cv *base.ClusterVersion, ls *Stores) string {
+			// This is what the running node requires from its stores.
+			ls.minSupportedVersion = roachpb.Version{Major: 5}
+			// This is what the node is running.
+			ls.serverVersion = roachpb.Version{Major: 9}
+			// MinimumVersion is compatible in this test case.
+			cv.MinimumVersion = ls.serverVersion
+			// UseVersion is way too low.
+			cv.UseVersion = roachpb.Version{Major: 4}
+			return `engine <no-attributes>=<in-mem> at v4\.0 too old for running version 9\.0 \(requires at least v5\.0\)`
+		},
+		"StoreTooOldMinVersion": func(cv *base.ClusterVersion, ls *Stores) string {
+			// Like the previous test case, but this time cv.MinimumVersion is the culprit.
+			ls.minSupportedVersion = roachpb.Version{Major: 5}
+			ls.serverVersion = roachpb.Version{Major: 9}
+			cv.MinimumVersion = ls.serverVersion
+			cv.UseVersion = roachpb.Version{Major: 4}
+			return `engine <no-attributes>=<in-mem> at v4\.0 too old for running version 9\.0 \(requires at least v5\.0\)`
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, stores, ls, stopper := createStores(1, t)
+			defer stopper.Stop(ctx)
+			ls.AddStore(stores[0])
+			// Configure versions and write.
+			var cv base.ClusterVersion
+			expErr := setter(&cv, ls)
+			if err := ls.WriteClusterVersion(ctx, cv); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := ls.SynthesizeClusterVersion(ctx); !testutils.IsError(err, expErr) {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
 	}
 }

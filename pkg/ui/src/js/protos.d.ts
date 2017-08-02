@@ -14463,6 +14463,7 @@ export namespace cockroach {
             address?: cockroach.util.UnresolvedAddr$Properties;
             attrs?: cockroach.roachpb.Attributes$Properties;
             locality?: cockroach.roachpb.Locality$Properties;
+            ServerVersion?: cockroach.roachpb.Version$Properties;
         };
 
         /**
@@ -14504,6 +14505,12 @@ export namespace cockroach {
              * @type {(cockroach.roachpb.Locality$Properties|null)}
              */
             public locality: (cockroach.roachpb.Locality$Properties|null);
+
+            /**
+             * NodeDescriptor ServerVersion.
+             * @type {(cockroach.roachpb.Version$Properties|null)}
+             */
+            public ServerVersion: (cockroach.roachpb.Version$Properties|null);
 
             /**
              * Creates a new NodeDescriptor instance using the specified properties.

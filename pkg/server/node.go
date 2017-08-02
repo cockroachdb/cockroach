@@ -202,8 +202,8 @@ func bootstrapCluster(
 		// StoreConfig doesn't really matter.
 		s := storage.NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: FirstNodeID})
 
-		// Bootstrap store to persist the store ident.
-		if err := s.Bootstrap(ctx, sIdent); err != nil {
+		// Bootstrap store to persist the store ident and cluster version.
+		if err := s.Bootstrap(ctx, sIdent, base.BootstrapVersion()); err != nil {
 			return uuid.UUID{}, err
 		}
 		// Create first range, writing directly to engine. Note this does
@@ -281,6 +281,7 @@ func (n *Node) initDescriptor(addr net.Addr, attrs roachpb.Attributes, locality 
 	n.Descriptor.Address = util.MakeUnresolvedAddr(addr.Network(), addr.String())
 	n.Descriptor.Attrs = attrs
 	n.Descriptor.Locality = locality
+	n.Descriptor.ServerVersion = base.ServerVersion
 }
 
 // initNodeID updates the internal NodeDescriptor with the given ID. If zero is
@@ -346,12 +347,38 @@ func (n *Node) start(
 	attrs roachpb.Attributes,
 	locality roachpb.Locality,
 ) error {
-	n.storeCfg.ExposedClusterVersion = migration.NewDefaultExposedClusterVersion(engines)
+
 	n.initDescriptor(addr, attrs, locality)
 
-	// Initialize stores.
-	if err := n.initStores(ctx, engines, n.stopper); err != nil {
+	initEngines, bootstrapEngines, cv, err := n.inspectEngines(ctx, engines)
+	if err != nil {
 		return err
+	}
+	n.storeCfg.ExposedClusterVersion = migration.NewDefaultExposedClusterVersion(cv)
+
+	// Initialize the stores we're going to start.
+	stores, err := n.initStores(ctx, initEngines, n.stopper)
+	if err != nil {
+		return err
+	}
+
+	// Initialize the stores we need to bootstrap first.
+	bootstraps, err := n.initStores(ctx, bootstrapEngines, n.stopper)
+	if err != nil {
+		return err
+	}
+
+	if err := n.startStores(ctx, stores, n.stopper); err != nil {
+		return err
+	}
+
+	// Bootstrap any uninitialized stores asynchronously.
+	if len(bootstraps) > 0 {
+		if err := n.stopper.RunAsyncTask(ctx, "node.Node: bootstrapping stores", func(ctx context.Context) {
+			n.bootstrapStores(ctx, bootstraps, n.stopper)
+		}); err != nil {
+			return err
+		}
 	}
 
 	n.startedAt = n.storeCfg.Clock.Now().WallTime
@@ -384,6 +411,32 @@ func (n *Node) SetDraining(drain bool) error {
 	})
 }
 
+func (n *Node) inspectEngines(
+	ctx context.Context, engines []engine.Engine,
+) (
+	initEngines []engine.Engine,
+	bootstrapEngines []engine.Engine,
+	_ base.ClusterVersion,
+	_ error,
+) {
+	for _, engine := range engines {
+		_, err := storage.ReadStoreIdent(ctx, engine)
+		if _, notBootstrapped := err.(*storage.NotBootstrappedError); notBootstrapped {
+			bootstrapEngines = append(bootstrapEngines, engine)
+			continue
+		} else if err != nil {
+			return nil, nil, base.ClusterVersion{}, err
+		}
+		initEngines = append(initEngines, engine)
+	}
+
+	cv, err := storage.SynthesizeClusterVersionFromEngines(ctx, initEngines, base.MinimumSupportedVersion, base.ServerVersion)
+	if err != nil {
+		return nil, nil, base.ClusterVersion{}, err
+	}
+	return initEngines, bootstrapEngines, cv, nil
+}
+
 // initStores initializes the Stores map from ID to Store. Stores are
 // added to the local sender if already bootstrapped. A bootstrapped
 // Store has a valid ident with cluster, node and Store IDs set. If
@@ -392,23 +445,22 @@ func (n *Node) SetDraining(drain bool) error {
 // have been determined.
 func (n *Node) initStores(
 	ctx context.Context, engines []engine.Engine, stopper *stop.Stopper,
-) error {
-	var bootstraps []*storage.Store
-
-	if len(engines) == 0 {
-		return errors.Errorf("no engines")
-	}
+) ([]*storage.Store, error) {
+	var stores []*storage.Store
 	for _, e := range engines {
 		s := storage.NewStore(n.storeCfg, e, &n.Descriptor)
 		log.Eventf(ctx, "created store for engine: %s", e)
-		// Initialize each store in turn, handling un-bootstrapped errors by
-		// adding the store to the bootstraps list.
+
+		stores = append(stores, s)
+	}
+	return stores, nil
+}
+
+func (n *Node) startStores(
+	ctx context.Context, stores []*storage.Store, stopper *stop.Stopper,
+) error {
+	for _, s := range stores {
 		if err := s.Start(ctx, stopper); err != nil {
-			if _, ok := err.(*storage.NotBootstrappedError); ok {
-				log.Infof(ctx, "store %s not bootstrapped", s)
-				bootstraps = append(bootstraps, s)
-				continue
-			}
 			return errors.Errorf("failed to start store: %s", err)
 		}
 		if s.Ident.ClusterID == (uuid.UUID{}) || s.Ident.NodeID == 0 {
@@ -419,6 +471,7 @@ func (n *Node) initStores(
 			return errors.Errorf("could not query store capacity: %s", err)
 		}
 		log.Infof(ctx, "initialized store %s: %+v", s, capacity)
+
 		n.addStore(s)
 	}
 
@@ -452,6 +505,14 @@ func (n *Node) initStores(
 		return fmt.Errorf("failed to initialize the gossip interface: %s", err)
 	}
 
+	// Read persisted ClusterVersion from each configured store to
+	// verify there are no stores with data too old or too new for this
+	// binary.
+	if _, err := n.stores.SynthesizeClusterVersion(ctx); err != nil {
+		return err
+	}
+	// Also populate bootstrap list
+
 	// Connect gossip before starting bootstrap. For new nodes, connecting
 	// to the gossip network is necessary to get the cluster ID.
 	if err := n.connectGossip(ctx); err != nil {
@@ -465,15 +526,6 @@ func (n *Node) initStores(
 		n.initNodeID(ctx, 0)
 		n.initialBoot = true
 		log.Eventf(ctx, "allocated node ID %d", n.Descriptor.NodeID)
-	}
-
-	// Bootstrap any uninitialized stores asynchronously.
-	if len(bootstraps) > 0 {
-		if err := stopper.RunAsyncTask(ctx, "node.Node: bootstrapping stores", func(ctx context.Context) {
-			n.bootstrapStores(ctx, bootstraps, stopper)
-		}); err != nil {
-			return err
-		}
 	}
 
 	return nil
@@ -525,8 +577,14 @@ func (n *Node) bootstrapStores(
 		NodeID:    n.Descriptor.NodeID,
 		StoreID:   firstID,
 	}
+
+	cv, err := n.stores.SynthesizeClusterVersion(ctx)
+	if err != nil {
+		log.Fatalf(ctx, "error retrieving cluster version for bootstrap: %s", err)
+	}
+
 	for _, s := range bootstraps {
-		if err := s.Bootstrap(ctx, sIdent); err != nil {
+		if err := s.Bootstrap(ctx, sIdent, cv); err != nil {
 			log.Fatal(ctx, err)
 		}
 		if err := s.Start(ctx, stopper); err != nil {
