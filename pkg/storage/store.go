@@ -1508,29 +1508,37 @@ func (s *Store) GossipDeadReplicas(ctx context.Context) error {
 // the engine contents before writing the new store ident. The engine
 // should be completely empty. It returns an error if called on a
 // non-empty engine.
-func (s *Store) Bootstrap(ctx context.Context, ident roachpb.StoreIdent) error {
+func (s *Store) Bootstrap(
+	ctx context.Context, ident roachpb.StoreIdent, cv base.ClusterVersion,
+) error {
 	if (s.Ident != roachpb.StoreIdent{}) {
 		return errors.Errorf("store %s is already bootstrapped", s)
 	}
 	ctx = s.AnnotateCtx(ctx)
-
-	// TODO(tschottdorf): write a ClusterVersion here (before checking whether
-	// the engine is empty, to tolerate crashes). Needs some plumbing.
-
 	if err := checkEngineEmpty(ctx, s.engine); err != nil {
 		return errors.Wrap(err, "cannot verify empty engine for bootstrap")
 	}
 	s.Ident = ident
+
+	batch := s.engine.NewBatch()
 	if err := engine.MVCCPutProto(
 		ctx,
-		s.engine,
+		batch,
 		nil,
 		keys.StoreIdentKey(),
 		hlc.Timestamp{},
 		nil,
 		&s.Ident,
 	); err != nil {
+		batch.Close()
 		return err
+	}
+	if err := WriteClusterVersion(ctx, batch, cv); err != nil {
+		batch.Close()
+		return errors.Wrap(err, "cannot write cluster version")
+	}
+	if err := batch.Commit(true); err != nil {
+		return errors.Wrap(err, "persisting bootstrap data")
 	}
 
 	s.NotifyBootstrapped()

@@ -44,3 +44,12 @@ var (
 	// this version is used.
 	VersionMajorOneMinorZero = roachpb.Version{Major: 1}
 )
+
+// BootstrapVersion is the version that a new cluster bootstrapped from this
+// binary should have.
+func BootstrapVersion() ClusterVersion {
+	return ClusterVersion{
+		UseVersion:     ServerVersion,
+		MinimumVersion: MinimumSupportedVersion,
+	}
+}

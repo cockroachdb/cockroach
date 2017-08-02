@@ -202,8 +202,8 @@ func bootstrapCluster(
 		// StoreConfig doesn't really matter.
 		s := storage.NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: FirstNodeID})
 
-		// Bootstrap store to persist the store ident.
-		if err := s.Bootstrap(ctx, sIdent); err != nil {
+		// Bootstrap store to persist the store ident and cluster version.
+		if err := s.Bootstrap(ctx, sIdent, base.BootstrapVersion()); err != nil {
 			return uuid.UUID{}, err
 		}
 		// Create first range, writing directly to engine. Note this does
