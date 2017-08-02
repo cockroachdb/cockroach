@@ -623,6 +623,9 @@ func (n *createTableNode) Start(params runParams) error {
 		return err
 	}
 
+	// Initialize ModificationTime to the creation time.
+	desc.ModificationTime = params.p.txn.OrigTimestamp()
+
 	// We need to validate again after adding the FKs.
 	// Only validate the table because backreferences aren't created yet.
 	// Everything is validated below.

@@ -372,3 +372,79 @@ func TestParallelCreateConflictingTables(t *testing.T) {
 		descIDStart,
 	)
 }
+
+// Test that the modification time on a table descriptor is initialized.
+func TestTableReadErrorsBeforeTableCreation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := createTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.timestamp (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tx1, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx2, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Insert an entry so that the transactions are guaranteed to be
+	// assigned a timestamp.
+	if _, err := tx1.Exec(`
+INSERT INTO t.timestamp VALUES ('a', 'b');
+`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx2.Exec(`
+INSERT INTO t.timestamp VALUES ('c', 'd');
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create table kv and INSERT a value so that a table lease is acquired.
+	if _, err := sqlDB.Exec(`
+CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
+INSERT INTO t.kv VALUES ('a', 'b');
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// This select should not see any data.
+	if _, err := tx1.Query(`SELECT * FROM t.kv`); !testutils.IsError(err, "id 52 is not a table") {
+		t.Fatalf("err = %v", err)
+	}
+
+	if err := tx1.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`
+CREATE TABLE t.dup AS SELECT * FROM t.kv;
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Acquire a table lease.
+	if _, err := sqlDB.Exec(`
+INSERT INTO t.dup VALUES ('c', 'd');
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// This select should not see any data.
+	if _, err := tx2.Query(`SELECT * FROM t.dup`); !testutils.IsError(err, "id 53 is not a table") {
+		t.Fatalf("err = %v", err)
+	}
+
+	if err := tx2.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+}
