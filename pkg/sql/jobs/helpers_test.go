@@ -82,7 +82,8 @@ func (nl *FakeNodeLiveness) Self() (*storage.Liveness, error) {
 	}
 	nl.mu.Lock()
 	defer nl.mu.Unlock()
-	return nl.mu.livenessMap[FakeNodeID.Get()], nil
+	selfCopy := *nl.mu.livenessMap[FakeNodeID.Get()]
+	return &selfCopy, nil
 }
 
 // GetLivenesses implements the implicit storage.NodeLiveness interface.
