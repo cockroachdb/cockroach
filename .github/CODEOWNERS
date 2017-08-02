@@ -5,40 +5,41 @@
 # opens a pull request that modifies code that they own.
 #
 
-pkg/gossip/*     @cockroachdb/core
-pkg/internal/*   @cockroachdb/core
-pkg/kv/*         @cockroachdb/core
-pkg/roachpb/*    @cockroachdb/core
-pkg/rpc/*        @cockroachdb/core
-pkg/server/*     @cockroachdb/core
-pkg/migration/*  @cockroachdb/core @cockroachdb/sql
+/pkg/gossip/           @cockroachdb/core
+/pkg/internal/         @cockroachdb/core
+/pkg/kv/               @cockroachdb/core
+/pkg/roachpb/          @cockroachdb/core
+/pkg/rpc/              @cockroachdb/core
+/pkg/server/           @cockroachdb/core
+/pkg/migration/        @cockroachdb/core @cockroachdb/sql
 
-pkg/ccl/*        @cockroachdb/sql-ccl
-pkg/cli/*        @cockroachdb/sql-ui
+/pkg/ccl/              @cockroachdb/sql-ccl
+/pkg/cli/              @cockroachdb/sql-ui
 
-pkg/sql/*        @cockroachdb/sql
+/pkg/sql/              @cockroachdb/sql
 
-pkg/sql/parser/* @cockroachdb/sql-language
-pkg/sql/pgwire/* @cockroachdb/sql-wiring
+/pkg/sql/parser/       @cockroachdb/sql-language
+/pkg/sql/pgwire/       @cockroachdb/sql-wiring
 
-pkg/sql/*.go      @cockroachdb/sql-planning @cockroachdb/sql-execution
-pkg/sql/executor* @cockroachdb/sql-execution
-pkg/sql/mon/*     @cockroachdb/sql-execution
+/pkg/sql/*.go          @cockroachdb/sql-planning @cockroachdb/sql-execution
+/pkg/sql/executor*     @cockroachdb/sql-execution
+/pkg/sql/mon/          @cockroachdb/sql-execution
 
-pkg/sql/schema*   @cockroachdb/sql-async
-pkg/sql/lease*    @cockroachdb/sql-async
-pkg/sql/jobs/*    @cockroachdb/sql-async
+/pkg/sql/schema*       @cockroachdb/sql-async
+/pkg/sql/lease*        @cockroachdb/sql-async
+/pkg/sql/jobs/         @cockroachdb/sql-async
 
-pkg/sql/distsql*.go   @cockroachdb/sql-planning @cockroachdb/distsql
-pkg/sql/distsqlplan/* @cockroachdb/sql-planning @cockroachdb/distsql
-pkg/sql/distsqlrun/*  @cockroachdb/sql-execution @cockroachdb/distsql
+/pkg/sql/distsql*.go   @cockroachdb/distsql @cockroachdb/sql-planning
+/pkg/sql/distsqlplan/  @cockroachdb/distsql @cockroachdb/sql-planning
+/pkg/sql/distsqlrun/   @cockroachdb/distsql @cockroachdb/sql-execution
 
-pkg/ui @cockroachdb/admin-ui
+/pkg/ui                @cockroachdb/admin-ui
 
-build/*     @cockroachdb/build
-c-deps/*    @cockroachdb/build
-githooks/*  @cockroachdb/build
-scripts/*   @cockroachdb/build
-**/Makefile @cockroachdb/build
-/Gopkg.*    @cockroachdb/build
-/.*         @cockroachdb/build
+/build/                @cockroachdb/build
+/c-deps/               @cockroachdb/build
+/githooks/             @cockroachdb/build
+/scripts/              @cockroachdb/build
+**/Makefile            @cockroachdb/build
+/Gopkg.*               @cockroachdb/build
+/.*                    @cockroachdb/build
+/.github/              @cockroachdb/build
