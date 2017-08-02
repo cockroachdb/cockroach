@@ -13,9 +13,13 @@
 // permissions and limitations under the License.
 //
 
-package d
+package base
 
-// template.go can almost be compiled by itself. This file fills the gap.
+import "bytes"
+
+// This file contains shim Go functions that make it possible for the
+// Go compiler (and linters) to check the templates *before* they are
+// transformed into generated code.
 
 // Type is a mock struct type.
 type Type struct{ ref *node }
@@ -25,3 +29,9 @@ func macroGetExtraRefs(x extraStruct) []*node { return nil }
 func macroGetName(ref *node) Type { return Type{} }
 
 func macroSetName(ref *node, extra *extraStruct, x Type) {}
+
+// FormatSExpr implements the SexprFormatter interface.
+func (t Type) FormatSExpr(buf *bytes.Buffer) {}
+
+// FormatSExprTypName is a stub for Sexpr formatters for primitive types.
+func FormatSExprTypName(buf *bytes.Buffer, x Type) {}
