@@ -1096,24 +1096,17 @@ func TestNonRetryableErrorOnCommit(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
-	hitError := false
-	cleanupFilter := cmdFilters.AppendFilter(
-		func(args storagebase.FilterArgs) *roachpb.Error {
-			if req, ok := args.Req.(*roachpb.EndTransactionRequest); ok {
-				if bytes.Contains(req.Key, []byte(keys.SystemConfigSpan.Key)) {
-					hitError = true
-					return roachpb.NewErrorWithTxn(fmt.Errorf("testError"), args.Hdr.Txn)
-				}
+	defer cmdFilters.AppendFilter(func(args storagebase.FilterArgs) *roachpb.Error {
+		if req, ok := args.Req.(*roachpb.EndTransactionRequest); ok {
+			if bytes.Contains(req.Key, []byte(keys.SystemConfigSpan.Key)) {
+				return roachpb.NewErrorWithTxn(errors.New(t.Name()), args.Hdr.Txn)
 			}
-			return nil
-		}, false)
-	defer cleanupFilter()
+		}
+		return nil
+	}, false)()
 
-	if _, err := sqlDB.Exec("CREATE DATABASE t"); !testutils.IsError(err, "pq: testError") {
+	if _, err := sqlDB.Exec("CREATE DATABASE t"); !testutils.IsError(err, t.Name()) {
 		t.Errorf("unexpected error %v", err)
-	}
-	if !hitError {
-		t.Errorf("expected to hit error, but it didn't happen")
 	}
 }
 
