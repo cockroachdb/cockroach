@@ -15,7 +15,6 @@
 package config_test
 
 import (
-	"reflect"
 	"sort"
 	"testing"
 
@@ -523,10 +522,10 @@ constraints: [foo, +duck=foo, -duck=foo]
 	}
 
 	var unmarshaled config.ZoneConfig
-	if err := yaml.Unmarshal(body, &unmarshaled); err != nil {
+	if err := yaml.UnmarshalStrict(body, &unmarshaled); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(unmarshaled, original) {
-		t.Errorf("yaml.Unmarshal(%q) = %+v; not %+v", body, unmarshaled, original)
+	if !proto.Equal(&unmarshaled, &original) {
+		t.Errorf("yaml.UnmarshalStrict(%q) = %+v; not %+v", body, unmarshaled, original)
 	}
 }

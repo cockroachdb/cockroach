@@ -16,6 +16,7 @@ package acceptance
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -23,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/docker/docker/api/types/container"
-	"strings"
 )
 
 const testGlob = "../cli/interactive_tests/test*.tcl"

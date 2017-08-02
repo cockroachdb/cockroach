@@ -375,7 +375,15 @@ func RegisterAdminHandlerFromEndpoint(ctx context.Context, mux *runtime.ServeMux
 // RegisterAdminHandler registers the http handlers for service Admin to "mux".
 // The handlers forward requests to the grpc endpoint over "conn".
 func RegisterAdminHandler(ctx context.Context, mux *runtime.ServeMux, conn *grpc.ClientConn) error {
-	client := NewAdminClient(conn)
+	return RegisterAdminHandlerClient(ctx, mux, NewAdminClient(conn))
+}
+
+// RegisterAdminHandler registers the http handlers for service Admin to "mux".
+// The handlers forward requests to the grpc endpoint over the given implementation of "AdminClient".
+// Note: the gRPC framework executes interceptors within the gRPC handler. If the passed in "AdminClient"
+// doesn't go through the normal gRPC flow (creating a gRPC client etc.) then it will be up to the passed in
+// "AdminClient" to call the correct interceptors.
+func RegisterAdminHandlerClient(ctx context.Context, mux *runtime.ServeMux, client AdminClient) error {
 
 	mux.Handle("GET", pattern_Admin_Users_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
 		ctx, cancel := context.WithCancel(req.Context())

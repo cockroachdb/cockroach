@@ -487,6 +487,30 @@ func TestStyle(t *testing.T) {
 		}
 	})
 
+	t.Run("TestYaml", func(t *testing.T) {
+		t.Parallel()
+		cmd, stderr, filter, err := dirCmd(pkg.Dir, "git", "grep", "-nE", `\byaml\.Unmarshal\(`, "--", "*.go")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter,func(s string) {
+			t.Errorf(`%s <- forbidden; use "yaml.UnmarshalStrict" instead`, s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
 	t.Run("TestImportNames", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(pkg.Dir, "git", "grep", "-nE", `^(import|\s+)(\w+ )?"database/sql"$`, "--", "*.go")
@@ -859,10 +883,7 @@ func TestStyle(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := stream.ForEach(stream.Sequence(
-			filter,
-			stream.GrepNot(`((\.pb|\.pb\.gw|embedded|_string|\.ir|\.tmpl)\.go|sql/ir/irgen/parser/(yaccpar|irgen\.y):|sql/parser/(yaccpar|sql\.y):)`),
-		), func(s string) {
+		if err := stream.ForEach(filter, func(s string) {
 			t.Error(s)
 		}); err != nil {
 			t.Error(err)

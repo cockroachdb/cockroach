@@ -477,7 +477,7 @@ func (n *createViewNode) Start(params runParams) error {
 
 	// Log Create View event. This is an auditable log event and is
 	// recorded in the same transaction as the table descriptor update.
-	if err := MakeEventLogger(n.p.LeaseMgr()).InsertEventRecord(
+	return MakeEventLogger(n.p.LeaseMgr()).InsertEventRecord(
 		params.ctx,
 		n.p.txn,
 		EventLogCreateView,
@@ -488,11 +488,7 @@ func (n *createViewNode) Start(params runParams) error {
 			Statement string
 			User      string
 		}{n.n.Name.String(), n.n.String(), n.p.session.User},
-	); err != nil {
-		return err
-	}
-
-	return nil
+	)
 }
 
 func (n *createViewNode) Close(ctx context.Context) {}

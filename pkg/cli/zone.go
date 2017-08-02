@@ -400,12 +400,11 @@ func runRmZone(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("unable to remove special zone %s", args[0])
 		}
 
-		if err := runQueryAndFormatResults(conn, os.Stdout,
-			makeQuery(`DELETE FROM system.zones WHERE id=$1`, id)); err != nil {
-			return err
-		}
-
-		return nil
+		return runQueryAndFormatResults(
+			conn,
+			os.Stdout,
+			makeQuery(`DELETE FROM system.zones WHERE id=$1`, id),
+		)
 	})
 }
 
@@ -503,7 +502,7 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("error reading zone config: %s", err)
 		}
-		if err := yaml.Unmarshal(conf, &zone); err != nil {
+		if err := yaml.UnmarshalStrict(conf, &zone); err != nil {
 			return fmt.Errorf("unable to parse zoneConfig file: %s", err)
 		}
 

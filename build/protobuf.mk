@@ -68,8 +68,8 @@ $(PROTOC_PLUGIN):
 $(GRPC_GATEWAY_PLUGIN):
 	$(GO_INSTALL) $(REPO_ROOT)/vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
 
-REPO_NAME := cockroachdb
-IMPORT_PREFIX := github.com/$(REPO_NAME)/
+ORG_NAME := cockroachdb
+IMPORT_PREFIX := github.com/$(ORG_NAME)/
 
 GO_SOURCES_TARGET := $(LOCAL_BIN)/.go_protobuf_sources
 $(GO_SOURCES_TARGET): $(PROTOC) $(PROTOC_PLUGIN) $(GO_PROTOS) $(GOGOPROTO_PROTO)
@@ -78,11 +78,9 @@ $(GO_SOURCES_TARGET): $(PROTOC) $(PROTOC_PLUGIN) $(GO_PROTOS) $(GOGOPROTO_PROTO)
 	  $(PROTOC) -I.:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --plugin=$(PROTOC_PLUGIN) --$(PLUGIN_SUFFIX)_out=$(MAPPINGS),plugins=grpc,import_prefix=$(IMPORT_PREFIX):$(ORG_ROOT) $$dir/*.proto; \
 	done
 	$(SED_INPLACE) '/import _/d' $(GO_SOURCES)
-	$(SED_INPLACE) '/gogoproto/d' $(GO_SOURCES)
 	$(SED_INPLACE) -E 's!import (fmt|math) "$(IMPORT_PREFIX)(fmt|math)"! !g' $(GO_SOURCES)
-	# Fixup standard packages wrongly imported by gogo because of import_prefix.
-	$(SED_INPLACE) -E 's!$(IMPORT_PREFIX)(bytes|errors|fmt|io|github\.com|golang\.org|google\.golang\.org)!\1!g' $(GO_SOURCES)
-	$(SED_INPLACE) -E 's!$(REPO_NAME)/(etcd)!coreos/\1!g' $(GO_SOURCES)
+	$(SED_INPLACE) -E 's!$(ORG_NAME)/(etcd)!coreos/\1!g' $(GO_SOURCES)
+	$(SED_INPLACE) -E 's!$(IMPORT_PREFIX)(bytes|encoding/binary|errors|fmt|io|math|github\.com|(google\.)?golang\.org)!\1!g' $(GO_SOURCES)
 	gofmt -s -w $(GO_SOURCES)
 	touch $@
 

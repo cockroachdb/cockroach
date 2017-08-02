@@ -46,10 +46,7 @@ func (p *planner) setTransactionModes(modes parser.TransactionModes) error {
 	if err := p.setUserPriority(modes.UserPriority); err != nil {
 		return err
 	}
-	if err := p.setReadWriteMode(modes.ReadWriteMode); err != nil {
-		return err
-	}
-	return nil
+	return p.setReadWriteMode(modes.ReadWriteMode)
 }
 
 func (p *planner) setIsolationLevel(level parser.IsolationLevel) error {
