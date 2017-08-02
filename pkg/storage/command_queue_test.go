@@ -476,16 +476,16 @@ func TestCommandQueueTimestamps(t *testing.T) {
 	}
 }
 
-// TestCommandQueueEnclosed verifies that the command queue doesn't
+// TestCommandQueueEnclosedRead verifies that the command queue doesn't
 // fail to return read-only dependencies that a candidate read/write
-// span depends on, despite there being an overlapping span which
-// completely encloses the candidate. See #14434.
+// span depends on, despite there being an overlapping span read/write
+// which completely encloses the candidate. See #14434.
 //
 //      Span  TS  RO  a  b  depends
 //         1   2   T  -     n/a
 //         2   3   F  ---   n/a
 // Candidate   1   F  -     spans 1, 2
-func TestCommandQueueEnclosed(t *testing.T) {
+func TestCommandQueueEnclosedRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	cq := NewCommandQueue(true)
 
@@ -499,12 +499,59 @@ func TestCommandQueueEnclosed(t *testing.T) {
 		mkSpan("a", ""),
 	}
 
+	// Add command 1.
 	cmd1 := cq.add(true, makeTS(2, 0), nil, spans1)
-	cmd2 := cq.add(false, makeTS(3, 0), nil, spans2)
 
-	pre := cq.getPrereqs(false, makeTS(1, 0), spansCandidate)
-	expPre := []*cmd{cmd2, cmd1}
-	if !reflect.DeepEqual(expPre, pre) {
+	// Add command 2.
+	pre := cq.getPrereqs(false, makeTS(3, 0), spans2)
+	if expPre := []*cmd(nil); !reflect.DeepEqual(expPre, pre) {
+		t.Errorf("expected prereq commands %+v; got %+v", expPre, pre)
+	}
+	cmd2 := cq.add(false, makeTS(3, 0), pre, spans2)
+
+	// Add command 3.
+	pre = cq.getPrereqs(false, makeTS(1, 0), spansCandidate)
+	if expPre := []*cmd{cmd2, cmd1}; !reflect.DeepEqual(expPre, pre) {
+		t.Errorf("expected prereq commands %+v; got %+v", expPre, pre)
+	}
+}
+
+// TestCommandQueueEnclosedWrite verifies that the command queue doesn't
+// fail to return read/write dependencies that a candidate read/write
+// span depends on, despite there being an overlapping read-only span
+// which completely encloses the candidate.
+//
+//      Span  TS  RO  a  b  depends
+//         1   3   F  -     n/a
+//         2   2   T  ---   n/a
+// Candidate   1   F  -     spans 1, 2
+func TestCommandQueueEnclosedWrite(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	cq := NewCommandQueue(true)
+
+	spans1 := []roachpb.Span{
+		mkSpan("a", ""),
+	}
+	spans2 := []roachpb.Span{
+		mkSpan("a", "b"),
+	}
+	spansCandidate := []roachpb.Span{
+		mkSpan("a", ""),
+	}
+
+	// Add command 1.
+	cmd1 := cq.add(false, makeTS(3, 0), nil, spans1)
+
+	// Add command 2.
+	pre := cq.getPrereqs(true, makeTS(2, 0), spans2)
+	if expPre := []*cmd(nil); !reflect.DeepEqual(expPre, pre) {
+		t.Errorf("expected prereq commands %+v; got %+v", expPre, pre)
+	}
+	cmd2 := cq.add(true, makeTS(2, 0), nil, spans2)
+
+	// Add command 3.
+	pre = cq.getPrereqs(false, makeTS(1, 0), spansCandidate)
+	if expPre := []*cmd{cmd2, cmd1}; !reflect.DeepEqual(expPre, pre) {
 		t.Errorf("expected prereq commands %+v; got %+v", expPre, pre)
 	}
 }
