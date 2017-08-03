@@ -66,7 +66,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn: optInToDiagnosticsStatReporting,
 	},
 	{
-		name:   "establish conservative dependencies for views #17280 #17269",
+		name:   "establish conservative dependencies for views #17280 #17269 #17306",
 		workFn: repopulateViewDeps,
 	},
 	{
@@ -344,6 +344,7 @@ func eventlogUniqueIDDefault(ctx context.Context, r runner) error {
 	var err error
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
 		res := r.sqlExecutor.ExecuteStatements(session, alterStmt, nil)
+		defer res.Close(ctx)
 		err = checkQueryResults(res.ResultList, 1)
 		if err == nil {
 			break
@@ -410,47 +411,16 @@ func optInToDiagnosticsStatReporting(ctx context.Context, r runner) error {
 		if err == nil {
 			break
 		}
-		log.Warningf(ctx, "failed attempt to update setting: %s", err)
+		log.Warningf(ctx, "failed attempt to update setting: %v", err)
 	}
 	return err
 }
 
-// repopulateViewDeps ensures that each view V that depends on a table
-// T depends on all columns in T. (#17269)
+// repopulateViewDeps recomputes the dependencies of all views, as
+// they might not have been computed properly previously.
+// (#17269 #17306)
 func repopulateViewDeps(ctx context.Context, r runner) error {
-	descKey := sqlbase.MakeAllDescsMetadataKey()
-
 	return r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		// Retrieve all the descriptors.
-		kvs, err := txn.Scan(ctx, descKey, descKey.PrefixEnd(), 0)
-		if err != nil {
-			return err
-		}
-
-		// For each descriptor, reset the depended-on list.
-		b := txn.NewBatch()
-		for _, kv := range kvs {
-			desc := &sqlbase.Descriptor{}
-			if err := kv.ValueProto(desc); err != nil {
-				return err
-			}
-			switch t := desc.Union.(type) {
-			case *sqlbase.Descriptor_Table:
-				tdesc := t.Table
-				columns := make([]sqlbase.ColumnID, len(tdesc.Columns))
-				for i, col := range tdesc.Columns {
-					columns[i] = col.ID
-				}
-				for i := range tdesc.DependedOnBy {
-					// Make all columns a dependency.
-					tdesc.DependedOnBy[i].ColumnIDs = columns
-				}
-				b.Put(sqlbase.MakeDescMetadataKey(desc.GetID()), desc)
-			}
-		}
-		if err := txn.SetSystemConfigTrigger(); err != nil {
-			return err
-		}
-		return txn.Run(ctx, b)
+		return sql.RecomputeViewDependencies(ctx, txn, r.sqlExecutor)
 	})
 }

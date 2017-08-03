@@ -147,8 +147,6 @@ func applyLimit(plan planNode, numRows int64, soft bool) {
 		if n.sourcePlan != nil {
 			applyLimit(n.sourcePlan, numRows, soft)
 		}
-	case *createViewNode:
-		setUnlimited(n.sourcePlan)
 	case *explainDistSQLNode:
 		setUnlimited(n.plan)
 	case *traceNode:
@@ -171,6 +169,7 @@ func applyLimit(plan planNode, numRows int64, soft bool) {
 	case *createDatabaseNode:
 	case *createIndexNode:
 	case *createUserNode:
+	case *createViewNode:
 	case *dropDatabaseNode:
 	case *dropIndexNode:
 	case *dropTableNode:

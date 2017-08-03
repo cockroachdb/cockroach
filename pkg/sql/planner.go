@@ -49,10 +49,18 @@ type planner struct {
 	semaCtx parser.SemaContext
 	evalCtx parser.EvalContext
 
-	// If set, table descriptors will only be fetched at the time of the
-	// transaction, not leased. This is used for things like AS OF SYSTEM TIME
-	// queries and building query plans for views when they're created.
-	// It's used in layers below the executor to modify the behavior of SELECT.
+	// avoidCachedDescriptors, when true, instructs all code that
+	// accesses table/view descriptors to force reading the descriptors
+	// within the transaction. This is necessary to:
+	// - ensure that queries ran with AS OF SYSTEM TIME get the right
+	//   version of descriptors.
+	// - queries that create/update descriptors read all their dependencies
+	//   in the same txn that they write new descriptors or update their
+	//   dependencies, so that update/creation appears transactional
+	//   to the rest of the cluster.
+	// Code that sets this to true should probably also check that
+	// the txn isolation level is SERIALIZABLE, and reject any update
+	// if it is SNAPSHOT.
 	avoidCachedDescriptors bool
 
 	// If set, the planner should skip checking for the SELECT privilege when
@@ -73,6 +81,13 @@ type planner struct {
 	// cancelChecker is used by planNodes to check for cancellation of the associated
 	// query.
 	cancelChecker CancelChecker
+
+	// planDeps, if non-nil, collects the table/view dependencies for this query.
+	// Any planNode constructors that resolves a table name or reference in the query
+	// to a descriptor must register this descriptor into planDeps.
+	// This is (currently) used by CREATE VIEW.
+	// TODO(knz): Remove this in favor of a better encapsulated mechanism.
+	planDeps planDependencies
 
 	// Avoid allocations by embedding commonly used objects and visitors.
 	parser                parser.Parser
