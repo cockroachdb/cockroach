@@ -333,7 +333,7 @@ func TestSampleRate(t *testing.T) {
 	}
 }
 
-func TestLoadStmt(t *testing.T) {
+func TestImportStmt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const nodes = 3
@@ -382,18 +382,69 @@ func TestLoadStmt(t *testing.T) {
 		files = append(files, fmt.Sprintf(`'nodelocal://%s'`, path))
 	}
 
-	var result int
-	backupPath := filepath.Join(dir, "backup")
-	sqlDB.QueryRow(
-		fmt.Sprintf(
-			`LOAD CSV TABLE $1 FROM %s TO $2`,
-			strings.Join(files, ", "),
-		),
-		fmt.Sprintf("nodelocal://%s", tablePath),
-		fmt.Sprintf("nodelocal://%s", backupPath),
-	).Scan(&result)
+	t.Run("schema-in-file", func(t *testing.T) {
+		var result int
+		backupPath := filepath.Join(dir, "backup")
+		sqlDB.QueryRow(
+			fmt.Sprintf(
+				`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) USING TEMP STORE $2`,
+				strings.Join(files, ", "),
+			),
+			fmt.Sprintf("nodelocal://%s", tablePath),
+			fmt.Sprintf("nodelocal://%s", backupPath),
+		).Scan(&result)
 
-	if expected := 1; result < expected {
-		t.Errorf("expected >= %d, got %d", expected, result)
-	}
+		if expected := 1; result < expected {
+			t.Errorf("expected >= %d, got %d", expected, result)
+		}
+	})
+
+	t.Run("schema-in-query", func(t *testing.T) {
+		var result int
+		backupPath := filepath.Join(dir, t.Name())
+		sqlDB.QueryRow(
+			fmt.Sprintf(
+				`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) USING TEMP STORE $1`,
+				strings.Join(files, ", "),
+			),
+			fmt.Sprintf("nodelocal://%s", backupPath),
+		).Scan(&result)
+
+		if expected := 1; result < expected {
+			t.Errorf("expected >= %d, got %d", expected, result)
+		}
+	})
+
+	t.Run("schema-in-file-dist", func(t *testing.T) {
+		var result int
+		backupPath := filepath.Join(dir, t.Name())
+		sqlDB.QueryRow(
+			fmt.Sprintf(
+				`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH OPTIONS('distributed') USING TEMP STORE $2`,
+				strings.Join(files, ", "),
+			),
+			fmt.Sprintf("nodelocal://%s", tablePath),
+			fmt.Sprintf("nodelocal://%s", backupPath),
+		).Scan(&result)
+
+		if expected := 1; result < expected {
+			t.Errorf("expected >= %d, got %d", expected, result)
+		}
+	})
+
+	t.Run("schema-in-query-dist", func(t *testing.T) {
+		var result int
+		backupPath := filepath.Join(dir, t.Name())
+		sqlDB.QueryRow(
+			fmt.Sprintf(
+				`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) WITH OPTIONS('distributed') USING TEMP STORE $1`,
+				strings.Join(files, ", "),
+			),
+			fmt.Sprintf("nodelocal://%s", backupPath),
+		).Scan(&result)
+
+		if expected := 1; result < expected {
+			t.Errorf("expected >= %d, got %d", expected, result)
+		}
+	})
 }
