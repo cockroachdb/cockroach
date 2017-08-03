@@ -56,7 +56,7 @@ var crdbInternal = virtualSchema{
 		crdbInternalBuiltinFunctionsTable,
 		crdbInternalCreateStmtsTable,
 		crdbInternalTableColumnsTable,
-		crdbInternalTableIndicesTable,
+		crdbInternalTableIndexesTable,
 		crdbInternalIndexColumnsTable,
 		crdbInternalBackwardDependenciesTable,
 		crdbInternalForwardDependenciesTable,
@@ -792,7 +792,6 @@ CREATE TABLE crdb_internal.create_statements (
   descriptor_type  STRING NOT NULL,
   descriptor_name  STRING NOT NULL,
   create_statement STRING NOT NULL,
-  dependencies     STRING NOT NULL,
   state            STRING NOT NULL
 )
 `,
@@ -804,40 +803,16 @@ CREATE TABLE crdb_internal.create_statements (
 				var err error
 				var typeView = parser.DString("view")
 				var typeTable = parser.DString("table")
-				deps := make(map[parser.TableName]struct{})
 				if table.IsView() {
 					descType = &typeView
 					stmt, err = p.showCreateView(ctx, parser.Name(table.Name), table)
-					for _, id := range table.DependsOn {
-						depTable, err := p.getTableDescByID(ctx, id)
-						if err != nil {
-							return err
-						}
-						depDb, err := p.session.tables.databaseCache.getDatabaseDescByID(
-							ctx, p.txn, depTable.ParentID,
-						)
-						if err != nil {
-							return err
-						}
-						tn := parser.TableName{
-							DatabaseName:            parser.Name(depDb.Name),
-							TableName:               parser.Name(depTable.Name),
-							DBNameOriginallyOmitted: depDb.Name == prefix,
-						}
-						deps[tn] = struct{}{}
-					}
 				} else {
 					descType = &typeTable
-					stmt, err = p.showCreateTable(ctx, parser.Name(table.Name), prefix, table, deps)
+					stmt, err = p.showCreateTable(ctx, parser.Name(table.Name), prefix, table)
 				}
 				if err != nil {
 					return err
 				}
-				depNames := make([]string, 0, len(deps))
-				for depName := range deps {
-					depNames = append(depNames, depName.String())
-				}
-				sort.Strings(depNames)
 
 				descID := parser.DNull
 				if table.ID != keys.VirtualDescriptorID {
@@ -854,7 +829,6 @@ CREATE TABLE crdb_internal.create_statements (
 					descType,
 					parser.NewDString(table.Name),
 					parser.NewDString(stmt),
-					parser.NewDString(strings.Join(depNames, ", ")),
 					parser.NewDString(table.State.String()),
 				)
 			})
@@ -906,8 +880,8 @@ CREATE TABLE crdb_internal.table_columns (
 	},
 }
 
-// crdbInternalTableIndicesTable exposes the index descriptors.
-var crdbInternalTableIndicesTable = virtualSchemaTable{
+// crdbInternalTableIndexesTable exposes the index descriptors.
+var crdbInternalTableIndexesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.table_indexes (
   descriptor_id    INT,
@@ -994,6 +968,9 @@ CREATE TABLE crdb_internal.index_columns (
 						colName := parser.DNull
 						colDir := parser.DNull
 						if i >= len(idx.ColumnNames) {
+							// We log an error here, instead of reporting an error
+							// to the user, because we really want to see the
+							// erroneous data in the virtual table.
 							log.Errorf(ctx, "index descriptor for [%d@%d] (%s.%s@%s) has more key column IDs (%d) than names (%d) (corrupted schema?)",
 								table.ID, idx.ID, db.Name, table.Name, idx.Name,
 								len(idx.ColumnIDs), len(idx.ColumnNames))
@@ -1001,6 +978,7 @@ CREATE TABLE crdb_internal.index_columns (
 							colName = parser.NewDString(idx.ColumnNames[i])
 						}
 						if i >= len(idx.ColumnDirections) {
+							// See comment above.
 							log.Errorf(ctx, "index descriptor for [%d@%d] (%s.%s@%s) has more key column IDs (%d) than directions (%d) (corrupted schema?)",
 								table.ID, idx.ID, db.Name, table.Name, idx.Name,
 								len(idx.ColumnIDs), len(idx.ColumnDirections))

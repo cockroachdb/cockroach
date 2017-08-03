@@ -128,10 +128,10 @@ SELECT * FROM crdb_internal.builtin_functions WHERE function = ''
 ----
 function  signature  category  details
 
-query ITITTTTT colnames
+query ITITTTT colnames
 SELECT * FROM crdb_internal.create_statements WHERE database_name = ''
 ----
-database_id  database_name  descriptor_id  descriptor_type  descriptor_name  create_statement  dependencies  state
+database_id  database_name  descriptor_id  descriptor_type  descriptor_name  create_statement  state
 
 query ITITTBTB colnames
 SELECT * FROM crdb_internal.table_columns WHERE descriptor_name = ''

@@ -53,11 +53,7 @@ func (p *planner) showCreateView(
 // the prefix when the given table references other tables in the
 // current database.
 func (p *planner) showCreateTable(
-	ctx context.Context,
-	tn parser.Name,
-	dbPrefix string,
-	desc *sqlbase.TableDescriptor,
-	deps map[parser.TableName]struct{},
+	ctx context.Context, tn parser.Name, dbPrefix string, desc *sqlbase.TableDescriptor,
 ) (string, error) {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "CREATE TABLE %s (", tn)
@@ -102,12 +98,9 @@ func (p *planner) showCreateTable(
 				&fkTableName,
 				quoteNames(fkIdx.ColumnNames...),
 			)
-			if deps != nil {
-				deps[fkTableName] = struct{}{}
-			}
 		}
 		fmt.Fprintf(&buf, ",\n\t%s", idx.SQLString(""))
-		if err := p.showCreateInterleave(ctx, &idx, &buf, dbPrefix, deps); err != nil {
+		if err := p.showCreateInterleave(ctx, &idx, &buf, dbPrefix); err != nil {
 			return "", err
 		}
 	}
@@ -135,7 +128,7 @@ func (p *planner) showCreateTable(
 
 	buf.WriteString("\n)")
 
-	if err := p.showCreateInterleave(ctx, &desc.PrimaryIndex, &buf, dbPrefix, deps); err != nil {
+	if err := p.showCreateInterleave(ctx, &desc.PrimaryIndex, &buf, dbPrefix); err != nil {
 		return "", err
 	}
 
@@ -158,11 +151,7 @@ func quoteNames(names ...string) string {
 // it is equal to the given dbPrefix. This allows us to elide the prefix
 // when the given index is interleaved in a table of the current database.
 func (p *planner) showCreateInterleave(
-	ctx context.Context,
-	idx *sqlbase.IndexDescriptor,
-	buf *bytes.Buffer,
-	dbPrefix string,
-	deps map[parser.TableName]struct{},
+	ctx context.Context, idx *sqlbase.IndexDescriptor, buf *bytes.Buffer, dbPrefix string,
 ) error {
 	if len(idx.Interleave.Ancestors) == 0 {
 		return nil
@@ -180,9 +169,6 @@ func (p *planner) showCreateInterleave(
 		DatabaseName:            parser.Name(parentDbDesc.Name),
 		TableName:               parser.Name(parentTable.Name),
 		DBNameOriginallyOmitted: parentDbDesc.Name == dbPrefix,
-	}
-	if deps != nil {
-		deps[parentName] = struct{}{}
 	}
 	var sharedPrefixLen int
 	for _, ancestor := range intl.Ancestors {
