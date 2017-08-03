@@ -9,9 +9,11 @@
 package sqlccl
 
 import (
-	gosql "database/sql"
+	"bytes"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -19,6 +21,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -285,6 +288,51 @@ N|N
 	}
 }
 
+func TestSampleRate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const (
+		numRows = 10000
+		keySize = 100
+		valSize = 50
+	)
+
+	tests := []struct {
+		sampleSize float64
+		expected   int
+	}{
+		{0, numRows},
+		{100, numRows},
+		{1000, 1448},
+		{10000, 126},
+		{100000, 13},
+		{1000000, 1},
+	}
+	kv := roachpb.KeyValue{
+		Key:   bytes.Repeat([]byte("0"), keySize),
+		Value: roachpb.Value{RawBytes: bytes.Repeat([]byte("0"), valSize)},
+	}
+
+	for _, tc := range tests {
+		t.Run(fmt.Sprint(tc.sampleSize), func(t *testing.T) {
+			sr := sampleRate{
+				rnd:        rand.New(rand.NewSource(0)),
+				sampleSize: tc.sampleSize,
+			}
+
+			var sampled int
+			for i := 0; i < numRows; i++ {
+				if sr.sample(kv) {
+					sampled++
+				}
+			}
+			if sampled != tc.expected {
+				t.Fatalf("got %d, expected %d", sampled, tc.expected)
+			}
+		})
+	}
+}
+
 func TestLoadStmt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -294,15 +342,58 @@ func TestLoadStmt(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(t, tc.Conns[0])
 
-	var startKey, endKey, sha512 []byte
-	var path gosql.NullString
-	var result int
-	sqlDB.QueryRow(`LOAD`).Scan(&startKey, &endKey, &path, &sha512, &result)
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	tablePath := filepath.Join(dir, "table")
+	if err := ioutil.WriteFile(tablePath, []byte(`
+		CREATE TABLE t (
+			a int primary key,
+			b string,
+			index (b),
+			index (a, b)
+		)
+	`), 0666); err != nil {
+		t.Fatal(err)
+	}
+	csvPath := filepath.Join(dir, "csv")
+	if err := os.Mkdir(csvPath, 0777); err != nil {
+		t.Fatal(err)
+	}
+	var files []string
+	const (
+		numFiles    = 5
+		rowsPerFile = 100000
+	)
+	for fn := 0; fn < numFiles; fn++ {
+		path := filepath.Join(csvPath, fmt.Sprintf("data-%d", fn))
+		f, err := os.Create(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := 0; i < rowsPerFile; i++ {
+			x := fn*rowsPerFile + i
+			if _, err := fmt.Fprintf(f, "%d,%c\n", x, 'A'+x%26); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := f.Close(); err != nil {
+			t.Fatal(err)
+		}
+		files = append(files, fmt.Sprintf(`'nodelocal://%s'`, path))
+	}
 
-	// TODO(dan): This entire method is a placeholder to get the distsql
-	// plumbing worked out. It currently returns a single row, with the sum of
-	// the node ids (1+2+3=6) in the final column.
-	if expected := 6; result != expected {
-		t.Errorf("expected %d got %d", expected, result)
+	var result int
+	backupPath := filepath.Join(dir, "backup")
+	sqlDB.QueryRow(
+		fmt.Sprintf(
+			`LOAD CSV TABLE $1 FROM %s TO $2`,
+			strings.Join(files, ", "),
+		),
+		fmt.Sprintf("nodelocal://%s", tablePath),
+		fmt.Sprintf("nodelocal://%s", backupPath),
+	).Scan(&result)
+
+	if expected := 1; result < expected {
+		t.Errorf("expected >= %d, got %d", expected, result)
 	}
 }
