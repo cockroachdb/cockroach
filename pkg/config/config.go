@@ -47,7 +47,15 @@ var (
 		RangeMinBytes: 1 << 20,  // 1 MB
 		RangeMaxBytes: 64 << 20, // 64 MB
 		GC: GCPolicy{
-			TTLSeconds: 24 * 60 * 60, // 1 day
+			// Use 25 hours instead of the previous 24 to make users successful by
+			// default. Users desiring to take incremental backups every 24h may
+			// incorrectly assume that the previous default 24h was sufficient to do
+			// that. But the equation for incremental backups is:
+			// 	GC TTLSeconds >= (desired backup interval) + (time to perform incremental backup)
+			// We think most new users' incremental backups will complete within an
+			// hour, and larger clusters will have more experienced operators and will
+			// understand how to change these settings if needed.
+			TTLSeconds: 25 * 60 * 60,
 		},
 	}
 
