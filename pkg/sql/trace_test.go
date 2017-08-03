@@ -134,6 +134,27 @@ func TestTrace(t *testing.T) {
 				"/cockroach.roachpb.Internal/Batch",
 			},
 		},
+		{
+			name: "ShowTraceForSplitBatch",
+			getRows: func(_ *testing.T, sqlDB *gosql.DB) (*gosql.Rows, error) {
+				if _, err := sqlDB.Exec("SET DISTSQL = OFF"); err != nil {
+					t.Fatal(err)
+				}
+
+				// Deleting from a multi-range table will result in a 2PC transaction
+				// and will split the underlying BatchRequest/BatchResponse. Tracing
+				// in the presence of multi-part batches is what we want to test here.
+				return sqlDB.Query(
+					"SELECT operation op FROM [SHOW TRACE FOR DELETE FROM test.bar] " +
+						"WHERE message LIKE '%1 DelRng%' ORDER BY op")
+			},
+			expSpans: []string{
+				"kv.DistSender: sending partial batch",
+				"starting plan",
+				"/cockroach.roachpb.Internal/Batch",
+				"/cockroach.roachpb.Internal/Batch",
+			},
+		},
 	}
 
 	for _, test := range testData {
@@ -141,7 +162,7 @@ func TestTrace(t *testing.T) {
 
 		t.Run(test.name, func(t *testing.T) {
 			// Session tracing needs to work regardless of whether tracing is enabled, so
-			// we're goint to test both cases.
+			// we're going to test both cases.
 			//
 			// We'll also check traces from all nodes. The point is to be sure that we
 			// test a node that is different than the leaseholder for the range, so that
@@ -160,7 +181,13 @@ func TestTrace(t *testing.T) {
 					clusterDB := cluster.ServerConn(0)
 					if _, err := clusterDB.Exec(`
 						CREATE DATABASE test;
+
+						--- test.foo is a single range table.
 						CREATE TABLE test.foo (id INT PRIMARY KEY);
+						
+						--- test.bar is a multi-range table.
+						CREATE TABLE test.bar (id INT PRIMARY KEY);
+						ALTER TABLE  test.bar SPLIT AT VALUES (5);
 					`); err != nil {
 						t.Fatal(err)
 					}
