@@ -245,3 +245,8 @@ PREPARE groupbyhaving AS SELECT min(1) FROM foo WHERE a = $1 GROUP BY a HAVING c
 query I
 EXECUTE groupbyhaving(1)
 ----
+
+# Mismatch between expected and hinted types
+
+statement error expected \$1 to be of type int, found type float
+PREPARE wrongType(float) AS INSERT INTO foo VALUES ($1)
