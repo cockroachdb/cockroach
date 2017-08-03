@@ -784,38 +784,67 @@ func (l *DistLoader) LoadCSV(
 	ctx context.Context,
 	db *client.DB,
 	evalCtx parser.EvalContext,
+	thisNode roachpb.NodeID,
 	nodes []roachpb.NodeDescriptor,
-	rows *sqlbase.RowContainer,
+	resultRows *sqlbase.RowContainer,
+	tableDesc *sqlbase.TableDescriptor,
+	from []string,
+	to string,
 ) error {
-	// Manually construct a plan that schedules a values processor on every
-	// node, each of which returns one row with a single column containing the
-	// node's nodeID. These are passed back and locally summed.
-	//
-	// TODO(dan/mjibson): Fill in the real planning code.
+	const (
+		splitSize  = 1024 * 1024 * 32 // 32MB
+		oversample = 3
+		sampleSize = splitSize / oversample
+	)
+
 	var p physicalPlan
-	for _, node := range nodes {
-		values := distsqlrun.ValuesCoreSpec{
-			Columns: []distsqlrun.DatumInfo{{
-				Encoding: sqlbase.DatumEncoding_VALUE,
-				Type:     sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
-			}},
-			RawBytes: [][]byte{
-				encoding.EncodeIntValue(nil, encoding.NoColumnID, int64(node.NodeID)),
-			},
+	colTypeBytes := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}
+	stageID := p.NewStageID()
+
+	// Stage 1: for each input file, assign it to a node
+	for i, input := range from {
+		// TODO(mjibson): attempt to intelligently schedule http files to matching cockroach nodes
+		rcs := distsqlrun.ReadCSVSpec{
+			SampleSize: sampleSize,
+			TableDesc:  *tableDesc,
+			Uri:        input,
 		}
+		node := nodes[i%len(nodes)]
 		proc := distsqlplan.Processor{
 			Node: node.NodeID,
 			Spec: distsqlrun.ProcessorSpec{
-				Core:    distsqlrun.ProcessorCoreUnion{Values: &values},
+				Core:    distsqlrun.ProcessorCoreUnion{ReadCSV: &rcs},
 				Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
-				StageID: 0,
+				StageID: stageID,
 			},
 		}
 		pIdx := p.AddProcessor(proc)
 		p.ResultRouters = append(p.ResultRouters, pIdx)
 	}
-	// TODO(dan/mjibson): Fill in the real planning code.
+
+	// We only need the key during sorting.
 	p.planToStreamColMap = []int{0}
+	p.ResultTypes = []sqlbase.ColumnType{colTypeBytes, colTypeBytes}
+
+	kvOrdering := distsqlrun.Ordering{
+		Columns: []distsqlrun.Ordering_Column{{
+			ColIdx:    0,
+			Direction: distsqlrun.Ordering_Column_ASC,
+		}},
+	}
+
+	sorterSpec := distsqlrun.SorterSpec{
+		OutputOrdering: kvOrdering,
+	}
+
+	p.AddSingleGroupStage(thisNode,
+		distsqlrun.ProcessorCoreUnion{Sorter: &sorterSpec},
+		distsqlrun.PostProcessSpec{},
+		[]sqlbase.ColumnType{colTypeBytes},
+	)
+
+	ci := sqlbase.ColTypeInfoFromColTypes([]sqlbase.ColumnType{colTypeBytes})
+	rows := sqlbase.NewRowContainer(*evalCtx.ActiveMemAcc, ci, 0)
 
 	planCtx := l.distSQLPlanner.NewPlanningCtx(ctx, nil)
 	// Because we're not going through the normal pathways, we have to set up
@@ -827,7 +856,6 @@ func (l *DistLoader) LoadCSV(
 	// of this PlanCtx. https://reviewable.io/reviews/cockroachdb/cockroach/17279#-KqOrLpy9EZwbRKHLYe6:-KqOp00ntQEyzwEthAsl:bd4nzje
 	l.distSQLPlanner.FinalizePlan(&planCtx, &p)
 
-	rows.Clear(ctx)
 	recv, err := makeDistSQLReceiver(
 		ctx,
 		rows,
@@ -841,9 +869,40 @@ func (l *DistLoader) LoadCSV(
 	}
 	// TODO(dan): We really don't need the txn for this flow, so remove it once
 	// Run works without one.
-	return db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		return l.distSQLPlanner.Run(&planCtx, txn, &p, &recv, evalCtx)
+	}); err != nil {
+		return err
+	}
+	if recv.err != nil {
+		return recv.err
+	}
+
+	n := rows.Len()
+	tableSpan := tableDesc.TableSpan()
+	prevKey := tableSpan.Key
+	var spans roachpb.Spans
+	for i := oversample - 1; i < n; i += oversample {
+		row := rows.At(i)
+		b := row[0].(*parser.DBytes)
+		k, err := keys.EnsureSafeSplitKey(roachpb.Key(*b))
+		if err != nil {
+			continue
+		}
+		spans = append(spans, roachpb.Span{
+			Key:    prevKey,
+			EndKey: k,
+		})
+		prevKey = k
+	}
+	rows.Close(ctx)
+	spans = append(spans, roachpb.Span{
+		Key:    prevKey,
+		EndKey: tableSpan.EndKey,
 	})
+
+	_, err = resultRows.AddRow(ctx, parser.Datums{parser.NewDInt(parser.DInt(len(spans)))})
+	return err
 }
 
 // selectRenders takes a physicalPlan that produces the results corresponding to

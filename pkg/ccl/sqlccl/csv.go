@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"runtime"
 	"sort"
@@ -53,9 +54,6 @@ func LoadCSV(
 	}
 	if dest == "" {
 		return 0, 0, 0, errors.New("no destination specified")
-	}
-	if comma == 0 {
-		comma = ','
 	}
 	if len(dataFiles) == 0 {
 		dataFiles = []string{fmt.Sprintf("%s.dat", table)}
@@ -205,6 +203,9 @@ func readCSV(
 	expectedColsExtra := expectedCols + 1
 	done := ctx.Done()
 	var count int64
+	if comma == 0 {
+		comma = ','
+	}
 	for _, dataFile := range dataFiles {
 		select {
 		case <-done:
@@ -563,21 +564,75 @@ func loadPlanHook(
 		return nil, nil, nil
 	}
 
+	// No enterprise check here: LOAD is always available.
+
+	if err := p.RequireSuperUser("LOAD"); err != nil {
+		return nil, nil, err
+	}
+
+	tableFn, err := p.TypeAsString(loadStmt.Table, "LOAD")
+	if err != nil {
+		return nil, nil, err
+	}
+	fromFn, err := p.TypeAsStringArray(loadStmt.From, "LOAD")
+	if err != nil {
+		return nil, nil, err
+	}
+	toFn, err := p.TypeAsString(loadStmt.To, "LOAD")
+	if err != nil {
+		return nil, nil, err
+	}
+
 	// TODO(dan): This entire method is a placeholder to get the distsql
 	// plumbing worked out while mjibson works on the new processors and router.
 	// Currently, it "uses" distsql to compute an int and this method returns
 	// it.
 	header := sqlbase.ResultColumns{
-		{Name: "start_key", Typ: parser.TypeBytes},
-		{Name: "end_key", Typ: parser.TypeBytes},
-		{Name: "path", Typ: parser.TypeString},
-		{Name: "sha512", Typ: parser.TypeBytes},
 		{Name: "data_size", Typ: parser.TypeInt},
 	}
 	fn := func(ctx context.Context) ([]parser.Datums, error) {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, loadStmt.StatementTag())
 		defer tracing.FinishSpan(span)
+
+		table, err := tableFn()
+		if err != nil {
+			return nil, err
+		}
+		from, err := fromFn()
+		if err != nil {
+			return nil, err
+		}
+		to, err := toFn()
+		if err != nil {
+			return nil, err
+		}
+
+		var tableDesc *sqlbase.TableDescriptor
+		if err := func() error {
+			dest, err := storageccl.ExportStorageConfFromURI(table)
+			if err != nil {
+				return err
+			}
+			es, err := storageccl.MakeExportStorage(ctx, dest)
+			if err != nil {
+				return err
+			}
+			defer es.Close()
+			r, err := es.ReadFile(ctx, "")
+			if err != nil {
+				return err
+			}
+			defer r.Close()
+			b, err := ioutil.ReadAll(r)
+			if err != nil {
+				return err
+			}
+			tableDesc, err = parseCSVTableDescriptor(ctx, string(b), defaultCSVParentID, defaultCSVTableID)
+			return err
+		}(); err != nil {
+			return nil, err
+		}
 
 		evalCtx := p.EvalContext()
 
@@ -592,8 +647,9 @@ func loadPlanHook(
 		}
 
 		// TODO(dan/mjibson): Fill in the real planning code.
-		ci := sqlbase.ColTypeInfoFromColTypes(
-			[]sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_INT}})
+		ci := sqlbase.ColTypeInfoFromColTypes([]sqlbase.ColumnType{
+			{SemanticType: sqlbase.ColumnType_INT},
+		})
 		rows := sqlbase.NewRowContainer(evalCtx.Mon.MakeBoundAccount(), ci, 0)
 		defer func() {
 			if rows != nil {
@@ -601,7 +657,7 @@ func loadPlanHook(
 			}
 		}()
 
-		if err := p.DistLoader().LoadCSV(ctx, p.ExecCfg().DB, evalCtx, nodes, rows); err != nil {
+		if err := p.DistLoader().LoadCSV(ctx, p.ExecCfg().DB, evalCtx, p.ExecCfg().NodeID.Get(), nodes, rows, tableDesc, from, to); err != nil {
 			return nil, err
 		}
 
@@ -612,10 +668,6 @@ func loadPlanHook(
 		}
 
 		ret := []parser.Datums{{
-			parser.DNull,
-			parser.DNull,
-			parser.DNull,
-			parser.DNull,
 			parser.NewDInt(parser.DInt(total)),
 		}}
 		return ret, nil
@@ -628,30 +680,132 @@ var csvOutputTypes = []sqlbase.ColumnType{
 	{SemanticType: sqlbase.ColumnType_BYTES},
 }
 
-func newCSVProcessor(flowCtx *distsqlrun.FlowCtx, spec distsqlrun.ReadCSVSpec, output distsqlrun.RowReceiver) (distsqlrun.Processor, error) {
-	cp := &CSVProcessor{}
+func newCSVProcessor(
+	flowCtx *distsqlrun.FlowCtx, spec distsqlrun.ReadCSVSpec, output distsqlrun.RowReceiver,
+) (distsqlrun.Processor, error) {
+	cp := &csvProcessor{
+		comma:      spec.Comma,
+		comment:    spec.Comment,
+		nullif:     spec.Nullif,
+		sampleSize: spec.SampleSize,
+		tableDesc:  spec.TableDesc,
+		uri:        spec.Uri,
+		output:     output,
+	}
 	if err := cp.out.Init(&distsqlrun.PostProcessSpec{}, csvOutputTypes, &flowCtx.EvalCtx, output); err != nil {
 		return nil, err
 	}
 	return cp, nil
 }
 
-type CSVProcessor struct {
-	out distsqlrun.ProcOutputHelper
+type csvProcessor struct {
+	comma      rune
+	comment    rune
+	nullif     *string
+	sampleSize int32
+	tableDesc  sqlbase.TableDescriptor
+	uri        string
+	out        distsqlrun.ProcOutputHelper
+	output     distsqlrun.RowReceiver
 }
 
-var _ distsqlrun.Processor = &CSVProcessor{}
+var _ distsqlrun.Processor = &csvProcessor{}
 
-func (cp *CSVProcessor) OutputTypes() []sqlbase.ColumnType {
+func (cp *csvProcessor) OutputTypes() []sqlbase.ColumnType {
 	return csvOutputTypes
 }
 
-func (cp *CSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (cp *csvProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
-	// TODO(mjibson): produce rows
+
+	group, gCtx := errgroup.WithContext(ctx)
+	done := gCtx.Done()
+	recordCh := make(chan csvRecord)
+	kvCh := make(chan roachpb.KeyValue)
+	sampleCh := make(chan sqlbase.EncDatumRow)
+
+	// Read CSV into CSV records
+	group.Go(func() error {
+		defer close(recordCh)
+		_, err := readCSV(gCtx, cp.comma, cp.comment, len(cp.tableDesc.VisibleColumns()), []string{cp.uri}, recordCh)
+		return err
+	})
+	// Convert CSV records to KVs
+	group.Go(func() error {
+		defer close(kvCh)
+		return groupWorkers(gCtx, runtime.NumCPU(), func(ctx context.Context) error {
+			return convertRecord(ctx, recordCh, kvCh, cp.nullif, &cp.tableDesc)
+		})
+	})
+	// Sample KVs
+	group.Go(func() error {
+		defer close(sampleCh)
+		var fn sampleFunc
+		if cp.sampleSize == 0 {
+			fn = sampleAll
+		} else {
+			sr := sampleRate{
+				rnd:        rand.New(rand.NewSource(rand.Int63())),
+				sampleSize: float64(cp.sampleSize),
+			}
+			fn = sr.sample
+		}
+		typeBytes := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}
+		for kv := range kvCh {
+			if fn(kv) {
+				row := sqlbase.EncDatumRow{
+					sqlbase.DatumToEncDatum(typeBytes, parser.NewDBytes(parser.DBytes(kv.Key))),
+					sqlbase.DatumToEncDatum(typeBytes, parser.NewDBytes(parser.DBytes(kv.Value.RawBytes))),
+				}
+				select {
+				case <-done:
+					return gCtx.Err()
+				case sampleCh <- row:
+				}
+			}
+		}
+		return nil
+	})
+	// Send sampled KVs to dist sql
+	group.Go(func() error {
+		for row := range sampleCh {
+			cs, err := cp.out.EmitRow(gCtx, row)
+			if err != nil {
+				return err
+			}
+			if cs != distsqlrun.NeedMoreRows {
+				return errors.New("unexpected closure of consumer")
+			}
+		}
+		return nil
+	})
+	if err := group.Wait(); err != nil {
+		distsqlrun.DrainAndClose(ctx, cp.output, err)
+		return
+	}
+
 	cp.out.Close()
+}
+
+type sampleFunc func(roachpb.KeyValue) bool
+
+// sampleRate is a sampleFunc that samples a row with a probability of the
+// row's size / the sample size.
+type sampleRate struct {
+	rnd        *rand.Rand
+	sampleSize float64
+}
+
+func (s sampleRate) sample(kv roachpb.KeyValue) bool {
+	sz := float64(len(kv.Key) + len(kv.Value.RawBytes))
+	prob := sz / s.sampleSize
+	return prob > s.rnd.Float64()
+}
+
+func sampleAll(kv roachpb.KeyValue) bool {
+	return true
 }
 
 func init() {
