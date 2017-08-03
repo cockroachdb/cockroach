@@ -20,6 +20,7 @@ import (
 	"sort"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -58,17 +60,43 @@ func LoadCSV(
 	if len(dataFiles) == 0 {
 		dataFiles = []string{fmt.Sprintf("%s.dat", table)}
 	}
-	tableDefStr, err := ioutil.ReadFile(table)
+	createTable, err := readCreateTableFromStore(ctx, fmt.Sprintf("nodelocal://%s", table))
 	if err != nil {
 		return 0, 0, 0, err
 	}
 
 	var parentID sqlbase.ID = defaultCSVParentID
 
-	tableDesc, err := parseCSVTableDescriptor(ctx, string(tableDefStr), parentID, defaultCSVTableID)
+	tableDesc, err := makeCSVTableDescriptor(ctx, createTable, parentID, defaultCSVTableID)
 	if err != nil {
 		return 0, 0, 0, err
 	}
+
+	for i, f := range dataFiles {
+		dataFiles[i] = fmt.Sprintf("nodelocal://%s", f)
+	}
+	// TODO(mjibson): allow users to optionally specify a full URI to an export store.
+	dest = fmt.Sprintf("nodelocal://%s", dest)
+
+	return doLocalCSVTransform(
+		ctx, parentID, tableDesc, dest, dataFiles, comma, comment, nullif, sstMaxSize,
+	)
+}
+
+func doLocalCSVTransform(
+	ctx context.Context,
+	parentID sqlbase.ID,
+	tableDesc *sqlbase.TableDescriptor,
+	dest string,
+	dataFiles []string,
+	comma, comment rune,
+	nullif *string,
+	sstMaxSize int64,
+) (csvCount, kvCount, sstCount int64, err error) {
+
+	// Some channels are buffered because reads happen in bursts, so having lots
+	// of pre-computed data improves overall performance.
+	const chanSize = 10000
 
 	rocksdbDest, err := ioutil.TempDir("", "cockroach-csv-rocksdb")
 	if err != nil {
@@ -79,16 +107,6 @@ func LoadCSV(
 			log.Infof(ctx, "could not remove temp directory %s: %s", rocksdbDest, err)
 		}
 	}()
-
-	for i, f := range dataFiles {
-		dataFiles[i] = fmt.Sprintf("nodelocal://%s", f)
-	}
-	// TODO(mjibson): allow users to optionally specify a full URI to an export store.
-	dest = fmt.Sprintf("nodelocal://%s", dest)
-
-	// Some channels are buffered because reads happen in bursts, so having lots
-	// of pre-computed data improves overall performance.
-	const chanSize = 10000
 
 	group, gCtx := errgroup.WithContext(ctx)
 	recordCh := make(chan csvRecord, chanSize)
@@ -124,9 +142,34 @@ const (
 	// We need to choose arbitrary database and table IDs. These aren't important,
 	// but they do match what would happen when creating a new database and
 	// table on an empty cluster.
-	defaultCSVParentID = keys.MaxReservedDescID + 1
-	defaultCSVTableID  = defaultCSVParentID + 1
+	defaultCSVParentID sqlbase.ID = keys.MaxReservedDescID + 1
+	defaultCSVTableID  sqlbase.ID = defaultCSVParentID + 1
 )
+
+func readCreateTableFromStore(ctx context.Context, filename string) (*parser.CreateTable, error) {
+	store, err := exportStorageFromURI(ctx, filename)
+	if err != nil {
+		return nil, err
+	}
+	reader, err := store.ReadFile(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+	tableDefStr, err := ioutil.ReadAll(reader)
+	if err != nil {
+		return nil, err
+	}
+	stmt, err := parser.ParseOne(string(tableDefStr))
+	if err != nil {
+		return nil, err
+	}
+	create, ok := stmt.(*parser.CreateTable)
+	if !ok {
+		return nil, errors.New("expected CREATE TABLE statement in table file")
+	}
+	return create, nil
+}
 
 // parseCSVTableDescriptor creates a table descriptor from a string and
 // checks it for features not supported during CSV loading.
@@ -141,6 +184,12 @@ func parseCSVTableDescriptor(
 	if !ok {
 		return nil, errors.New("expected CREATE TABLE statement in table file")
 	}
+	return makeCSVTableDescriptor(ctx, create, parentID, tableID)
+}
+
+func makeCSVTableDescriptor(
+	ctx context.Context, create *parser.CreateTable, parentID, tableID sqlbase.ID,
+) (*sqlbase.TableDescriptor, error) {
 	if create.IfNotExists {
 		return nil, errors.New("unsupported IF NOT EXISTS")
 	}
@@ -556,31 +605,38 @@ func makeBackup(
 	return int64(len(backupDesc.Files)), err
 }
 
-func loadPlanHook(
+func importPlanHook(
 	stmt parser.Statement, p sql.PlanHookState,
 ) (func(context.Context, chan<- parser.Datums) error, sqlbase.ResultColumns, error) {
-	loadStmt, ok := stmt.(*parser.Load)
+	importStmt, ok := stmt.(*parser.Import)
 	if !ok {
 		return nil, nil, nil
 	}
-
 	// No enterprise check here: LOAD is always available.
-
-	if err := p.RequireSuperUser("LOAD"); err != nil {
+	if err := p.RequireSuperUser("IMPORT"); err != nil {
 		return nil, nil, err
 	}
 
-	tableFn, err := p.TypeAsString(loadStmt.Table, "LOAD")
+	filesFn, err := p.TypeAsStringArray(importStmt.Files, "IMPORT")
 	if err != nil {
 		return nil, nil, err
 	}
-	fromFn, err := p.TypeAsStringArray(loadStmt.From, "LOAD")
+	tempFn, err := p.TypeAsString(importStmt.Temp, "IMPORT")
 	if err != nil {
 		return nil, nil, err
 	}
-	toFn, err := p.TypeAsString(loadStmt.To, "LOAD")
-	if err != nil {
-		return nil, nil, err
+
+	var createFileFn func() (string, error)
+	if importStmt.CreateDefs == nil {
+		createFileFn, err = p.TypeAsString(importStmt.CreateFile, "IMPORT")
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	if importStmt.FileFormat != "CSV" {
+		// not possible with current parser rules.
+		return nil, nil, errors.Errorf("unsupported import format: %q", importStmt.FileFormat)
 	}
 
 	// TODO(dan): This entire method is a placeholder to get the distsql
@@ -592,79 +648,123 @@ func loadPlanHook(
 	}
 	fn := func(ctx context.Context, resultsCh chan<- parser.Datums) error {
 		// TODO(dan): Move this span into sql.
-		ctx, span := tracing.ChildSpan(ctx, loadStmt.StatementTag())
+		ctx, span := tracing.ChildSpan(ctx, importStmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
-		table, err := tableFn()
+		files, err := filesFn()
 		if err != nil {
 			return err
 		}
-		from, err := fromFn()
-		if err != nil {
-			return err
-		}
-		to, err := toFn()
+		temp, err := tempFn()
 		if err != nil {
 			return err
 		}
 
-		var tableDesc *sqlbase.TableDescriptor
-		if err := func() error {
-			dest, err := storageccl.ExportStorageConfFromURI(table)
-			if err != nil {
-				return err
+		comma := ','
+		if commaOverride, ok := importStmt.Options.Get("comma"); ok {
+			if len(commaOverride) > 1 {
+				return errors.New("'comma' must be a single character")
 			}
-			es, err := storageccl.MakeExportStorage(ctx, dest)
-			if err != nil {
-				return err
-			}
-			defer es.Close()
-			r, err := es.ReadFile(ctx, "")
-			if err != nil {
-				return err
-			}
-			defer r.Close()
-			b, err := ioutil.ReadAll(r)
-			if err != nil {
-				return err
-			}
-			tableDesc, err = parseCSVTableDescriptor(ctx, string(b), defaultCSVParentID, defaultCSVTableID)
-			return err
-		}(); err != nil {
-			return err
+			comma, _ = utf8.DecodeRuneInString(commaOverride)
 		}
 
-		evalCtx := p.EvalContext()
+		comment := ','
+		if override, ok := importStmt.Options.Get("comment"); ok {
+			if len(override) > 1 {
+				return errors.New("'comment' must be a single character")
+			}
+			comment, _ = utf8.DecodeRuneInString(override)
+		}
 
-		// TODO(dan): Filter out unhealthy nodes.
-		resp, err := p.ExecCfg().StatusServer.Nodes(ctx, &serverpb.NodesRequest{})
+		var nullif *string
+		if override, ok := importStmt.Options.Get("nullif"); ok {
+			nullif = &override
+		}
+
+		sstMaxSize := int64(1024 * 1024 * 50)
+		if override, ok := importStmt.Options.Get("sstmaxsize"); ok {
+			sz, err := humanizeutil.ParseBytes(override)
+			if err != nil {
+				return err
+			}
+			sstMaxSize = sz
+		}
+
+		distributed := false
+		if override, ok := importStmt.Options.Get("distributed"); ok {
+			if override != "" {
+				return errors.New("option 'distributed' does not take a value")
+			}
+			distributed = true
+		}
+
+		var create *parser.CreateTable
+		if importStmt.CreateDefs != nil {
+			normName := parser.NormalizableTableName{TableNameReference: importStmt.Table}
+			create = &parser.CreateTable{Table: normName, Defs: importStmt.CreateDefs}
+		} else {
+			filename, err := createFileFn()
+			if err != nil {
+				return err
+			}
+			create, err = readCreateTableFromStore(ctx, filename)
+			if err != nil {
+				return err
+			}
+			if named, parsed := importStmt.Table.String(), create.Table.String(); parsed != named {
+				return errors.Errorf("importing table %q, but file specifies a schema for table %q", named, parsed)
+			}
+		}
+
+		parentID := defaultCSVParentID
+		tableDesc, err := makeCSVTableDescriptor(ctx, create, parentID, defaultCSVTableID)
 		if err != nil {
 			return err
 		}
-		var nodes []roachpb.NodeDescriptor
-		for _, node := range resp.Nodes {
-			nodes = append(nodes, node.Desc)
-		}
 
-		// TODO(dan/mjibson): Fill in the real planning code.
-		ci := sqlbase.ColTypeInfoFromColTypes([]sqlbase.ColumnType{
-			{SemanticType: sqlbase.ColumnType_INT},
-		})
-		rows := sqlbase.NewRowContainer(evalCtx.Mon.MakeBoundAccount(), ci, 0)
-		defer func() {
-			if rows != nil {
-				rows.Close(ctx)
+		var total int64
+
+		if distributed {
+
+			evalCtx := p.EvalContext()
+
+			// TODO(dan): Filter out unhealthy nodes.
+			resp, err := p.ExecCfg().StatusServer.Nodes(ctx, &serverpb.NodesRequest{})
+			if err != nil {
+				return err
 			}
-		}()
 
-		if err := p.DistLoader().LoadCSV(ctx, p.ExecCfg().DB, evalCtx, p.ExecCfg().NodeID.Get(), nodes, rows, tableDesc, from, to); err != nil {
-			return err
-		}
+			var nodes []roachpb.NodeDescriptor
+			for _, node := range resp.Nodes {
+				nodes = append(nodes, node.Desc)
+			}
 
-		var total int
-		for i := 0; i < rows.Len(); i++ {
-			row := rows.At(i)
-			total += int(*row[0].(*parser.DInt))
+			// TODO(dan/mjibson): Fill in the real planning code.
+			ci := sqlbase.ColTypeInfoFromColTypes([]sqlbase.ColumnType{
+				{SemanticType: sqlbase.ColumnType_INT},
+			})
+			rows := sqlbase.NewRowContainer(evalCtx.Mon.MakeBoundAccount(), ci, 0)
+			defer func() {
+				if rows != nil {
+					rows.Close(ctx)
+				}
+			}()
+
+			if err := p.DistLoader().LoadCSV(
+				ctx, p.ExecCfg().DB, evalCtx, p.ExecCfg().NodeID.Get(), nodes, rows, tableDesc, files, temp,
+			); err != nil {
+				return err
+			}
+			for i := 0; i < rows.Len(); i++ {
+				row := rows.At(i)
+				total += int64(*row[0].(*parser.DInt))
+			}
+		} else {
+			_, _, total, err = doLocalCSVTransform(ctx, parentID, tableDesc, temp, files,
+				comma, comment, nullif, sstMaxSize)
+			if err != nil {
+				return err
+			}
 		}
 
 		resultsCh <- parser.Datums{
@@ -809,6 +909,6 @@ func sampleAll(kv roachpb.KeyValue) bool {
 }
 
 func init() {
-	sql.AddPlanHook(loadPlanHook)
+	sql.AddPlanHook(importPlanHook)
 	distsqlrun.NewReadCSVProcessor = newReadCSVProcessor
 }
