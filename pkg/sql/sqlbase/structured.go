@@ -45,6 +45,13 @@ func (ids IDs) Len() int           { return len(ids) }
 func (ids IDs) Less(i, j int) bool { return ids[i] < ids[j] }
 func (ids IDs) Swap(i, j int)      { ids[i], ids[j] = ids[j], ids[i] }
 
+// TableDescriptors is a sortable list of *TableDescriptors.
+type TableDescriptors []*TableDescriptor
+
+func (t TableDescriptors) Len() int           { return len(t) }
+func (t TableDescriptors) Less(i, j int) bool { return t[i].ID < t[j].ID }
+func (t TableDescriptors) Swap(i, j int)      { t[i], t[j] = t[j], t[i] }
+
 // ColumnID is a custom type for ColumnDescriptor IDs.
 type ColumnID parser.ColumnID
 

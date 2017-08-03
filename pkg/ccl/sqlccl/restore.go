@@ -10,6 +10,7 @@ package sqlccl
 
 import (
 	"runtime"
+	"sort"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -213,11 +214,22 @@ func allocateTableRewrites(
 
 	// Allocate new IDs for each table.
 	//
-	// NB: we do this in a standalone transaction, not one that covers the entire
-	// restore since restarts would be terrible (and our bulk import primitive are
-	// non-transactional), but this does mean if something fails during restore
-	// we've "leaked" the IDs, in that the generator will have been incremented.
+	// NB: we do this in a standalone transaction, not one that covers the
+	// entire restore since restarts would be terrible (and our bulk import
+	// primitive are non-transactional), but this does mean if something fails
+	// during restore we've "leaked" the IDs, in that the generator will have
+	// been incremented.
+	//
+	// NB: The ordering of the new IDs must be the same as the old ones,
+	// otherwise the keys may sort differently after they're rekeyed. We could
+	// handle this by chunking the AddSSTable calls more finely in Import, but
+	// it would be a big performance hit.
+	tables := make([]*sqlbase.TableDescriptor, 0, len(tablesByID))
 	for _, table := range tablesByID {
+		tables = append(tables, table)
+	}
+	sort.Sort(sqlbase.TableDescriptors(tables))
+	for _, table := range tables {
 		newTableID, err := sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
 		if err != nil {
 			return nil, err
