@@ -27,15 +27,16 @@ import (
 // found in system.users.
 func GetUserHashedPassword(
 	ctx context.Context, executor *Executor, metrics *MemoryMetrics, username string,
-) ([]byte, error) {
+) (bool, []byte, error) {
 	normalizedUsername := parser.Name(username).Normalize()
 	// The root user is not in system.users.
 	if normalizedUsername == security.RootUser {
-		return nil, nil
+		return true, nil, nil
 	}
 
 	var hashedPassword []byte
-	if err := executor.cfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	var exists bool
+	err := executor.cfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		p := makeInternalPlanner("get-pwd", txn, security.RootUser, metrics)
 		defer finishInternalPlanner(p)
 		const getHashedPassword = `SELECT "hashedPassword" FROM system.users ` +
@@ -45,13 +46,12 @@ func GetUserHashedPassword(
 			return errors.Errorf("error looking up user %s", normalizedUsername)
 		}
 		if len(values) == 0 {
-			return errors.Errorf("user %s does not exist", normalizedUsername)
+			return nil
 		}
+		exists = true
 		hashedPassword = []byte(*(values[0].(*parser.DBytes)))
 		return nil
-	}); err != nil {
-		return nil, err
-	}
+	})
 
-	return hashedPassword, nil
+	return exists, hashedPassword, err
 }
