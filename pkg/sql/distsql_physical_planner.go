@@ -595,7 +595,7 @@ func getOutputColumnsFromScanNode(n *scanNode) []uint32 {
 }
 
 func (dsp *distSQLPlanner) convertOrdering(
-	planOrdering sqlbase.ColumnOrdering, planToStreamColMap []int,
+	planOrdering []orderingColumnGroup, planToStreamColMap []int,
 ) distsqlrun.Ordering {
 	if len(planOrdering) == 0 {
 		return distsqlrun.Ordering{}
@@ -603,8 +603,15 @@ func (dsp *distSQLPlanner) convertOrdering(
 	ordering := distsqlrun.Ordering{
 		Columns: make([]distsqlrun.Ordering_Column, 0, len(planOrdering)),
 	}
-	for _, col := range planOrdering {
-		streamColIdx := planToStreamColMap[col.ColIdx]
+	for _, group := range planOrdering {
+		streamColIdx := -1
+		for col, ok := group.cols.Next(0); ok; col, ok = group.cols.Next(col + 1) {
+			streamColIdx = planToStreamColMap[col]
+			if streamColIdx != -1 {
+				break
+			}
+		}
+
 		if streamColIdx == -1 {
 			panic("column in ordering not part of processor output")
 		}
@@ -612,7 +619,7 @@ func (dsp *distSQLPlanner) convertOrdering(
 			ColIdx:    uint32(streamColIdx),
 			Direction: distsqlrun.Ordering_Column_ASC,
 		}
-		if col.Direction == encoding.Descending {
+		if group.dir == encoding.Descending {
 			oc.Direction = distsqlrun.Ordering_Column_DESC
 		}
 		ordering.Columns = append(ordering.Columns, oc)
@@ -867,12 +874,20 @@ func (dsp *distSQLPlanner) addSorters(p *physicalPlan, n *sortNode) {
 
 	if matchLen < len(n.ordering) {
 		// Sorting is needed; we add a stage of sorting processors.
-		ordering := dsp.convertOrdering(n.ordering, p.planToStreamColMap)
-		if len(ordering.Columns) != len(n.ordering) {
-			panic(fmt.Sprintf(
-				"not all columns in sort ordering available: %v; %v", n.ordering, ordering.Columns,
-			))
+		var ordering distsqlrun.Ordering
+		ordering.Columns = make([]distsqlrun.Ordering_Column, len(n.ordering))
+		for i, o := range n.ordering {
+			streamColIdx := p.planToStreamColMap[o.ColIdx]
+			if streamColIdx == -1 {
+				panic(fmt.Sprintf("column %d in sort ordering not available", o.ColIdx))
+			}
+			ordering.Columns[i].ColIdx = uint32(streamColIdx)
+			ordering.Columns[i].Direction = distsqlrun.Ordering_Column_ASC
+			if o.Direction == encoding.Descending {
+				ordering.Columns[i].Direction = distsqlrun.Ordering_Column_DESC
+			}
 		}
+
 		p.AddNoGroupingStage(
 			distsqlrun.ProcessorCoreUnion{
 				Sorter: &distsqlrun.SorterSpec{

@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
@@ -133,16 +134,14 @@ func (o *ordinalityNode) optimizeOrdering() {
 		// different set of columns. However since ordinalityNode is
 		// currently the only case where this happens we consider it's not
 		// worth the hassle and just use the source ordering.
-		o.ordering = origOrdering
+		o.ordering = origOrdering.copy()
 	} else {
 		// No ordering defined in the source, so create a new one.
-		o.ordering.exactMatchCols = origOrdering.exactMatchCols
-		o.ordering.ordering = sqlbase.ColumnOrdering{
-			sqlbase.ColumnOrderInfo{
-				ColIdx:    len(o.columns) - 1,
-				Direction: encoding.Ascending,
-			},
-		}
+		o.ordering.exactMatchCols = origOrdering.exactMatchCols.Copy()
+		o.ordering.ordering = []orderingColumnGroup{{
+			cols: util.MakeFastIntSet(uint32(len(o.columns) - 1)),
+			dir:  encoding.Ascending,
+		}}
 		o.ordering.unique = true
 	}
 }

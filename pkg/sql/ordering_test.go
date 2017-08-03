@@ -15,6 +15,7 @@
 package sql
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -37,7 +38,48 @@ type computeOrderCase struct {
 	cases    []desiredCase
 }
 
-func defTestCase(expected, expectedReverse int, desired ...sqlbase.ColumnOrderInfo) desiredCase {
+const asc = encoding.Ascending
+const desc = encoding.Descending
+
+// Sample usage:
+//   makeColumnGroups(1, 2, asc, 5, desc, 4, 6, asc) -> (1/2)+,5-,(4/6)+
+func makeColumnGroups(args ...interface{}) []orderingColumnGroup {
+	var res []orderingColumnGroup
+	var curGroup util.FastIntSet
+	for _, a := range args {
+		switch v := a.(type) {
+		case int:
+			curGroup.Add(uint32(v))
+		case encoding.Direction:
+			res = append(res, orderingColumnGroup{
+				cols: curGroup,
+				dir:  v,
+			})
+			curGroup = util.FastIntSet{}
+		default:
+			panic(fmt.Sprintf("unknown type %T", a))
+		}
+	}
+	if !curGroup.Empty() {
+		panic("last arg must be a direction")
+	}
+	return res
+}
+
+// Sample usage:
+//   makeColumnOrdering(1, asc, 2, desc, 3, asc) -> 1+,2-,3+
+func makeColumnOrdering(args ...interface{}) sqlbase.ColumnOrdering {
+	var res sqlbase.ColumnOrdering
+	for i := 0; i < len(args); i += 2 {
+		res = append(res, sqlbase.ColumnOrderInfo{
+			ColIdx:    args[i].(int),
+			Direction: args[i+1].(encoding.Direction),
+		})
+	}
+	return res
+}
+
+func defTestCase(expected, expectedReverse int, desired sqlbase.ColumnOrdering) desiredCase {
 	// The line number is used to identify testcases in error messages.
 	_, line, _ := caller.Lookup(1)
 	return desiredCase{
@@ -51,15 +93,6 @@ func defTestCase(expected, expectedReverse int, desired ...sqlbase.ColumnOrderIn
 func TestComputeOrderingMatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// Helper function to create a ColumnOrderInfo. The "simple" composite
-	// literal syntax causes vet to warn about unkeyed literals and the explicit
-	// syntax is too verbose.
-	o := func(colIdx int, direction encoding.Direction) sqlbase.ColumnOrderInfo {
-		return sqlbase.ColumnOrderInfo{ColIdx: colIdx, Direction: direction}
-	}
-
-	asc := encoding.Ascending
-	desc := encoding.Descending
 	testSets := []computeOrderCase{
 		{
 			// No existing ordering.
@@ -68,33 +101,33 @@ func TestComputeOrderingMatch(t *testing.T) {
 				unique:   false,
 			},
 			cases: []desiredCase{
-				defTestCase(0, 0, o(1, desc), o(5, asc)),
+				defTestCase(0, 0, makeColumnOrdering(1, desc, 5, asc)),
 			},
 		},
 		{
 			// Ordering with no exact-match columns.
 			existing: orderingInfo{
-				ordering: sqlbase.ColumnOrdering{o(1, desc), o(2, asc)},
+				ordering: makeColumnGroups(1, desc, 2, asc),
 				unique:   false,
 			},
 			cases: []desiredCase{
-				defTestCase(1, 0, o(1, desc), o(5, asc)),
-				defTestCase(0, 1, o(1, asc), o(5, asc), o(2, asc)),
+				defTestCase(1, 0, makeColumnOrdering(1, desc, 5, asc)),
+				defTestCase(0, 1, makeColumnOrdering(1, asc, 5, asc, 2, asc)),
 			},
 		},
 		{
 			// Ordering with no exact-match columns but with distinct.
 			existing: orderingInfo{
-				ordering: sqlbase.ColumnOrdering{o(1, desc), o(2, asc)},
+				ordering: makeColumnGroups(1, desc, 2, asc),
 				unique:   true,
 			},
 			cases: []desiredCase{
-				defTestCase(1, 0, o(1, desc), o(5, asc)),
-				defTestCase(3, 0, o(1, desc), o(2, asc), o(5, asc)),
-				defTestCase(4, 0, o(1, desc), o(2, asc), o(5, asc), o(6, desc)),
-				defTestCase(0, 1, o(1, asc), o(5, asc), o(2, asc)),
-				defTestCase(0, 3, o(1, asc), o(2, desc), o(5, asc)),
-				defTestCase(0, 4, o(1, asc), o(2, desc), o(5, asc), o(6, asc)),
+				defTestCase(1, 0, makeColumnOrdering(1, desc, 5, asc)),
+				defTestCase(3, 0, makeColumnOrdering(1, desc, 2, asc, 5, asc)),
+				defTestCase(4, 0, makeColumnOrdering(1, desc, 2, asc, 5, asc, 6, desc)),
+				defTestCase(0, 1, makeColumnOrdering(1, asc, 5, asc, 2, asc)),
+				defTestCase(0, 3, makeColumnOrdering(1, asc, 2, desc, 5, asc)),
+				defTestCase(0, 4, makeColumnOrdering(1, asc, 2, desc, 5, asc, 6, asc)),
 			},
 		},
 		{
@@ -105,43 +138,43 @@ func TestComputeOrderingMatch(t *testing.T) {
 				unique:         false,
 			},
 			cases: []desiredCase{
-				defTestCase(1, 1, o(2, desc), o(5, asc), o(1, asc)),
-				defTestCase(0, 0, o(5, asc), o(2, asc)),
+				defTestCase(1, 1, makeColumnOrdering(2, desc, 5, asc, 1, asc)),
+				defTestCase(0, 0, makeColumnOrdering(5, asc, 2, asc)),
 			},
 		},
 		{
 			// Ordering with exact-match columns.
 			existing: orderingInfo{
 				exactMatchCols: util.MakeFastIntSet(0, 5, 6),
-				ordering:       sqlbase.ColumnOrdering{o(1, desc), o(2, asc)},
+				ordering:       makeColumnGroups(1, desc, 2, asc),
 				unique:         false,
 			},
 			cases: []desiredCase{
-				defTestCase(2, 0, o(1, desc), o(5, asc)),
-				defTestCase(2, 1, o(5, asc), o(1, desc)),
-				defTestCase(2, 2, o(0, desc), o(5, asc)),
-				defTestCase(1, 0, o(1, desc), o(2, desc)),
-				defTestCase(5, 2, o(0, asc), o(6, desc), o(1, desc), o(5, desc), o(2, asc)),
-				defTestCase(2, 2, o(0, asc), o(6, desc), o(2, asc), o(5, desc), o(1, desc)),
+				defTestCase(2, 0, makeColumnOrdering(1, desc, 5, asc)),
+				defTestCase(2, 1, makeColumnOrdering(5, asc, 1, desc)),
+				defTestCase(2, 2, makeColumnOrdering(0, desc, 5, asc)),
+				defTestCase(1, 0, makeColumnOrdering(1, desc, 2, desc)),
+				defTestCase(5, 2, makeColumnOrdering(0, asc, 6, desc, 1, desc, 5, desc, 2, asc)),
+				defTestCase(2, 2, makeColumnOrdering(0, asc, 6, desc, 2, asc, 5, desc, 1, desc)),
 			},
 		},
 		{
 			// Ordering with exact-match columns and distinct.
 			existing: orderingInfo{
 				exactMatchCols: util.MakeFastIntSet(0, 5, 6),
-				ordering:       sqlbase.ColumnOrdering{o(1, desc), o(2, asc)},
+				ordering:       makeColumnGroups(1, desc, 2, asc),
 				unique:         true,
 			},
 			cases: []desiredCase{
-				defTestCase(2, 0, o(1, desc), o(5, asc)),
-				defTestCase(2, 1, o(5, asc), o(1, desc)),
-				defTestCase(4, 0, o(1, desc), o(5, asc), o(2, asc), o(7, desc)),
-				defTestCase(4, 1, o(5, asc), o(1, desc), o(2, asc), o(7, desc)),
-				defTestCase(2, 2, o(0, desc), o(5, asc)),
-				defTestCase(2, 1, o(5, asc), o(1, desc), o(2, desc)),
-				defTestCase(1, 0, o(1, desc), o(2, desc)),
-				defTestCase(6, 2, o(0, asc), o(6, desc), o(1, desc), o(5, desc), o(2, asc), o(9, asc)),
-				defTestCase(2, 2, o(0, asc), o(6, desc), o(2, asc), o(5, desc), o(1, desc)),
+				defTestCase(2, 0, makeColumnOrdering(1, desc, 5, asc)),
+				defTestCase(2, 1, makeColumnOrdering(5, asc, 1, desc)),
+				defTestCase(4, 0, makeColumnOrdering(1, desc, 5, asc, 2, asc, 7, desc)),
+				defTestCase(4, 1, makeColumnOrdering(5, asc, 1, desc, 2, asc, 7, desc)),
+				defTestCase(2, 2, makeColumnOrdering(0, desc, 5, asc)),
+				defTestCase(2, 1, makeColumnOrdering(5, asc, 1, desc, 2, desc)),
+				defTestCase(1, 0, makeColumnOrdering(1, desc, 2, desc)),
+				defTestCase(6, 2, makeColumnOrdering(0, asc, 6, desc, 1, desc, 5, desc, 2, asc, 9, asc)),
+				defTestCase(2, 2, makeColumnOrdering(0, asc, 6, desc, 2, asc, 5, desc, 1, desc)),
 			},
 		},
 	}
@@ -163,15 +196,6 @@ func TestComputeOrderingMatch(t *testing.T) {
 func TestTrimOrdering(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// Helper function to create a ColumnOrderInfo. The "simple" composite
-	// literal syntax causes vet to warn about unkeyed literals and the explicit
-	// syntax is too verbose.
-	o := func(colIdx int, direction encoding.Direction) sqlbase.ColumnOrderInfo {
-		return sqlbase.ColumnOrderInfo{ColIdx: colIdx, Direction: direction}
-	}
-
-	asc := encoding.Ascending
-	desc := encoding.Descending
 	testCases := []struct {
 		name     string
 		ord      orderingInfo
@@ -181,24 +205,24 @@ func TestTrimOrdering(t *testing.T) {
 		{
 			name: "basic-prefix-1",
 			ord: orderingInfo{
-				ordering: sqlbase.ColumnOrdering{o(1, asc), o(2, desc)},
+				ordering: makeColumnGroups(1, asc, 2, desc),
 				unique:   true,
 			},
-			desired: sqlbase.ColumnOrdering{o(1, asc)},
+			desired: makeColumnOrdering(1, asc),
 			expected: orderingInfo{
-				ordering: sqlbase.ColumnOrdering{o(1, asc)},
+				ordering: makeColumnGroups(1, asc),
 				unique:   false,
 			},
 		},
 		{
 			name: "direction-mismatch",
 			ord: orderingInfo{
-				ordering: sqlbase.ColumnOrdering{o(1, asc), o(2, desc)},
+				ordering: makeColumnGroups(1, asc, 2, desc),
 				unique:   true,
 			},
-			desired: sqlbase.ColumnOrdering{o(1, desc)},
+			desired: makeColumnOrdering(1, desc),
 			expected: orderingInfo{
-				ordering: sqlbase.ColumnOrdering{},
+				ordering: makeColumnGroups(),
 				unique:   false,
 			},
 		},
@@ -206,13 +230,13 @@ func TestTrimOrdering(t *testing.T) {
 			name: "exact-match-columns-1",
 			ord: orderingInfo{
 				exactMatchCols: util.MakeFastIntSet(0, 5, 6),
-				ordering:       sqlbase.ColumnOrdering{o(1, desc), o(2, desc)},
+				ordering:       makeColumnGroups(1, desc, 2, desc),
 				unique:         true,
 			},
-			desired: sqlbase.ColumnOrdering{o(5, asc), o(1, desc)},
+			desired: makeColumnOrdering(5, asc, 1, desc),
 			expected: orderingInfo{
 				exactMatchCols: util.MakeFastIntSet(0, 5, 6),
-				ordering:       sqlbase.ColumnOrdering{o(1, desc)},
+				ordering:       makeColumnGroups(1, desc),
 				unique:         false,
 			},
 		},
@@ -220,13 +244,13 @@ func TestTrimOrdering(t *testing.T) {
 			name: "exact-match-columns-2",
 			ord: orderingInfo{
 				exactMatchCols: util.MakeFastIntSet(0, 5, 6),
-				ordering:       sqlbase.ColumnOrdering{o(1, desc), o(2, desc), o(3, asc)},
+				ordering:       makeColumnGroups(1, desc, 2, desc, 3, asc),
 				unique:         true,
 			},
-			desired: sqlbase.ColumnOrdering{o(5, asc), o(1, desc), o(0, desc), o(2, desc)},
+			desired: makeColumnOrdering(5, asc, 1, desc, 0, desc, 2, desc),
 			expected: orderingInfo{
 				exactMatchCols: util.MakeFastIntSet(0, 5, 6),
-				ordering:       sqlbase.ColumnOrdering{o(1, desc), o(2, desc)},
+				ordering:       makeColumnGroups(1, desc, 2, desc),
 				unique:         false,
 			},
 		},
@@ -234,13 +258,13 @@ func TestTrimOrdering(t *testing.T) {
 			name: "no-match",
 			ord: orderingInfo{
 				exactMatchCols: util.MakeFastIntSet(0, 5, 6),
-				ordering:       sqlbase.ColumnOrdering{o(1, desc), o(2, desc), o(3, asc)},
+				ordering:       makeColumnGroups(1, desc, 2, desc, 3, asc),
 				unique:         true,
 			},
-			desired: sqlbase.ColumnOrdering{o(5, asc), o(4, asc)},
+			desired: makeColumnOrdering(5, asc, 4, asc),
 			expected: orderingInfo{
 				exactMatchCols: util.MakeFastIntSet(0, 5, 6),
-				ordering:       sqlbase.ColumnOrdering{},
+				ordering:       makeColumnGroups(),
 				unique:         false,
 			},
 		},
@@ -249,8 +273,17 @@ func TestTrimOrdering(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.ord.trim(tc.desired)
-			if !reflect.DeepEqual(tc.ord, tc.expected) {
+			if !tc.ord.exactMatchCols.Equals(tc.expected.exactMatchCols) ||
+				tc.ord.unique != tc.expected.unique ||
+				len(tc.ord.ordering) != len(tc.expected.ordering) {
 				t.Errorf("expected %v, got %v", tc.expected, tc.ord)
+			}
+			for i, o := range tc.ord.ordering {
+				if !o.cols.Equals(tc.expected.ordering[i].cols) ||
+					o.dir != tc.expected.ordering[i].dir {
+					t.Errorf("expected %v, got %v", tc.expected, tc.ord)
+					break
+				}
 			}
 		})
 	}
@@ -259,15 +292,6 @@ func TestTrimOrdering(t *testing.T) {
 func TestComputeMergeJoinOrdering(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// Helper function to create a ColumnOrderInfo. The "simple" composite
-	// literal syntax causes vet to warn about unkeyed literals and the explicit
-	// syntax is too verbose.
-	o := func(colIdx int, direction encoding.Direction) sqlbase.ColumnOrderInfo {
-		return sqlbase.ColumnOrderInfo{ColIdx: colIdx, Direction: direction}
-	}
-
-	asc := encoding.Ascending
-	desc := encoding.Descending
 	testCases := []struct {
 		name       string
 		a, b       orderingInfo
@@ -277,14 +301,14 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 		{
 			name: "basic",
 			a: orderingInfo{
-				ordering: sqlbase.ColumnOrdering{o(1, asc), o(2, desc), o(3, asc)},
+				ordering: makeColumnGroups(1, asc, 2, desc, 3, asc),
 			},
 			b: orderingInfo{
-				ordering: sqlbase.ColumnOrdering{o(3, asc), o(4, desc)},
+				ordering: makeColumnGroups(3, asc, 4, desc),
 			},
 			colA:     []int{1, 2},
 			colB:     []int{3, 4},
-			expected: sqlbase.ColumnOrdering{o(0, asc), o(1, desc)},
+			expected: makeColumnOrdering(0, asc, 1, desc),
 		},
 		{
 			name: "exact-match-a",
@@ -292,87 +316,87 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 				exactMatchCols: util.MakeFastIntSet(1, 2),
 			},
 			b: orderingInfo{
-				ordering: sqlbase.ColumnOrdering{o(3, asc), o(4, desc)},
+				ordering: makeColumnGroups(3, asc, 4, desc),
 			},
 			colA:     []int{1, 2},
 			colB:     []int{3, 4},
-			expected: sqlbase.ColumnOrdering{o(0, asc), o(1, desc)},
+			expected: makeColumnOrdering(0, asc, 1, desc),
 		},
 		{
 			name: "exact-match-b",
 			a: orderingInfo{
-				ordering: sqlbase.ColumnOrdering{o(1, asc), o(2, desc), o(3, asc)},
+				ordering: makeColumnGroups(1, asc, 2, desc, 3, asc),
 			},
 			b: orderingInfo{
 				exactMatchCols: util.MakeFastIntSet(3, 4),
 			},
 			colA:     []int{1, 2},
 			colB:     []int{3, 4},
-			expected: sqlbase.ColumnOrdering{o(0, asc), o(1, desc)},
+			expected: makeColumnOrdering(0, asc, 1, desc),
 		},
 		{
 			name: "exact-match-both",
 			a: orderingInfo{
-				ordering:       sqlbase.ColumnOrdering{o(2, desc)},
+				ordering:       makeColumnGroups(2, desc),
 				exactMatchCols: util.MakeFastIntSet(1),
 			},
 			b: orderingInfo{
-				ordering:       sqlbase.ColumnOrdering{o(3, asc)},
+				ordering:       makeColumnGroups(3, asc),
 				exactMatchCols: util.MakeFastIntSet(4),
 			},
 			colA:     []int{1, 2},
 			colB:     []int{3, 4},
-			expected: sqlbase.ColumnOrdering{o(1, desc), o(0, asc)},
+			expected: makeColumnOrdering(1, desc, 0, asc),
 		},
 		{
 			name: "unique-a",
 			a: orderingInfo{
-				ordering: sqlbase.ColumnOrdering{o(1, asc)},
+				ordering: makeColumnGroups(1, asc),
 				unique:   true,
 			},
 			b: orderingInfo{
-				ordering: sqlbase.ColumnOrdering{o(3, asc), o(4, desc)},
+				ordering: makeColumnGroups(3, asc, 4, desc),
 			},
 			colA:     []int{1, 2},
 			colB:     []int{3, 4},
-			expected: sqlbase.ColumnOrdering{o(0, asc), o(1, desc)},
+			expected: makeColumnOrdering(0, asc, 1, desc),
 		},
 		{
 			name: "unique-b",
 			a: orderingInfo{
-				ordering: sqlbase.ColumnOrdering{o(1, asc), o(2, desc)},
+				ordering: makeColumnGroups(1, asc, 2, desc),
 			},
 			b: orderingInfo{
-				ordering: sqlbase.ColumnOrdering{o(3, asc)},
+				ordering: makeColumnGroups(3, asc),
 				unique:   true,
 			},
 			colA:     []int{1, 2},
 			colB:     []int{3, 4},
-			expected: sqlbase.ColumnOrdering{o(0, asc), o(1, desc)},
+			expected: makeColumnOrdering(0, asc, 1, desc),
 		},
 		{
 			name: "partial-ordering-1",
 			a: orderingInfo{
-				ordering: sqlbase.ColumnOrdering{o(1, asc), o(3, asc), o(2, desc)},
+				ordering: makeColumnGroups(1, asc, 3, asc, 2, desc),
 			},
 			b: orderingInfo{
-				ordering: sqlbase.ColumnOrdering{o(3, asc), o(4, desc)},
+				ordering: makeColumnGroups(3, asc, 4, desc),
 			},
 			colA:     []int{1, 2},
 			colB:     []int{3, 4},
-			expected: sqlbase.ColumnOrdering{o(0, asc)},
+			expected: makeColumnOrdering(0, asc),
 		},
 		{
 			name: "partial-ordering-2",
 			a: orderingInfo{
-				ordering: sqlbase.ColumnOrdering{o(1, asc), o(2, desc), o(3, asc)},
+				ordering: makeColumnGroups(1, asc, 2, desc, 3, asc),
 			},
 			b: orderingInfo{
-				ordering: sqlbase.ColumnOrdering{o(3, asc), o(5, desc), o(4, desc)},
+				ordering: makeColumnGroups(3, asc, 5, desc, 4, desc),
 			},
 			colA:     []int{1, 2},
 			colB:     []int{3, 4},
-			expected: sqlbase.ColumnOrdering{o(0, asc)},
+			expected: makeColumnOrdering(0, asc),
 		},
 	}
 	for _, tc := range testCases {
