@@ -105,6 +105,14 @@ message StreamEndpointSpec {
                                 (gogoproto.casttype) = "StreamID"];
   // Serving address for the target host, only used for outgoing REMOTE streams.
   optional string target_addr = 3 [(gogoproto.nullable) = false];
+  // Address to attempt if connecting to target_addr fails or is slow. Only used
+  // for outgoing remote streams.
+  // It's guaranteed that at most one of the attempts to connect to
+  // {target_addr, fallback_addr} will succeed (so it's safe to attempt them in
+  // parallel) - they will not both accept the incoming stream.
+  //
+  // If the field is left null, then no fallback will be used.
+  optional string fallback_addr = 4;
 }
 
 // InputSyncSpec is the specification for an input synchronizer; it decides how

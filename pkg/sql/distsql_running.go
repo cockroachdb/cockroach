@@ -15,6 +15,8 @@
 package sql
 
 import (
+	"strings"
+
 	"golang.org/x/net/context"
 
 	opentracing "github.com/opentracing/opentracing-go"
@@ -29,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -128,6 +131,7 @@ func (dsp *distSQLPlanner) Run(
 
 	recv.resultToStreamColMap = plan.planToStreamColMap
 	thisNodeID := dsp.nodeDesc.NodeID
+	thisNodeAddr := planCtx.nodeAddresses[thisNodeID]
 
 	// DistSQL needs to initialize the Transaction proto before we put it in the
 	// FlowRequest's below. This is because we might not have used the txn do to
@@ -151,6 +155,10 @@ func (dsp *distSQLPlanner) Run(
 			// Skip this node.
 			continue
 		}
+
+		addFallbackToOutputStreams(&flowSpec, thisNodeAddr)
+		flows[nodeID] = flowSpec
+
 		req := &distsqlrun.SetupFlowRequest{
 			Version:     distsqlrun.Version,
 			Txn:         *txn.Proto(),
@@ -175,25 +183,59 @@ func (dsp *distSQLPlanner) Run(
 	}
 
 	var firstErr error
+	var flowsToRunLocally []roachpb.NodeID
 	// Now wait for all the flows to be scheduled on remote nodes. Note that we
 	// are not waiting for the flows themselves to complete.
 	for i := 0; i < len(flows)-1; i++ {
 		res := <-resultChan
-		if firstErr == nil {
-			firstErr = res.err
+		if res.err != nil {
+			// Flows for which we've gotten an error will be run locally iff we know for
+			// sure that the server where we attempted to schedule them did not, in
+			// fact, schedule them (we don't want to schedule the same flow on two
+			// nodes, as that might corrupt results in cases some producers connect to
+			// one node and other to the other).
+			// Note that admission control errors are not recovered in this way - we
+			// don't want to overload the local node in case another node is overloaded.
+			// TODO(andrei, radu): this should be reconsidered when we integrate the
+			// local flow with local admission control.
+			if isVersionMismatchErr(res.err) || netutil.ErrIsGRPCUnavailable(res.err) {
+				// Flows that failed to schedule because of version mismatch will be run
+				// locally.
+				flowsToRunLocally = append(flowsToRunLocally, res.nodeID)
+				continue
+			}
+			if firstErr == nil {
+				firstErr = res.err
+			}
 		}
-		// TODO(radu): accumulate the flows that we failed to set up and move them
-		// into the local flow.
 	}
 	if firstErr != nil {
+		// TODO(andrei): we should "poison" the local flow registry's entry for this
+		// flow, such that remote flows that have been successfully schedule don't
+		// block waiting for the gateway flow to start (until the connection timeout
+		// expires).
 		return firstErr
+	}
+
+	// Merge the flowsToRunLocally (if any) into the local flow.
+	localFlow := flows[thisNodeID]
+	if len(flowsToRunLocally) > 0 {
+		addressesToRewrite := make(map[string]struct{})
+		for _, failedNodeID := range flowsToRunLocally {
+			log.VEventf(ctx, 2, "scheduling locally flow for node: %d", failedNodeID)
+			// Copy over the processors to the local flow.
+			localFlow.Processors = append(localFlow.Processors, flows[failedNodeID].Processors...)
+			addressesToRewrite[planCtx.nodeAddresses[failedNodeID]] = struct{}{}
+		}
+		// Rewrite the streams that are now local.
+		rewriteStreamsToLocal(&localFlow, addressesToRewrite)
 	}
 
 	// Set up the flow on this node.
 	localReq := distsqlrun.SetupFlowRequest{
 		Version:     distsqlrun.Version,
 		Txn:         *txn.Proto(),
-		Flow:        flows[thisNodeID],
+		Flow:        localFlow,
 		EvalContext: evalCtxProto,
 	}
 	ctx, flow, err := dsp.distSQLSrv.SetupSyncFlow(ctx, &localReq, recv)
@@ -206,6 +248,77 @@ func (dsp *distSQLPlanner) Run(
 	flow.Cleanup(ctx)
 
 	return nil
+}
+
+// rewriteStreamToLocal rewrites all the streams in flow that are either inbound
+// from or outbound to any node in addressesToRewrite (identified by the node's
+// address) to local streams. This is called after the respective processors
+// have been moved to run locally.
+func rewriteStreamsToLocal(flow *distsqlrun.FlowSpec, addressesToRewrite map[string]struct{}) {
+	// Two steps:
+	// 1. Rewrite the outgoing endpoints, identifying them by
+	// addresses of failed nodes. Also collect all the stream IDs. These need
+	// collecting because only outgoing endpoints have addresses in the spec, but
+	// we also need to rewrite the incoming endpoints.
+	// 2. Rewrite the incoming endpoints.
+	streamIDs := make(map[distsqlrun.StreamID]struct{})
+	for i := range flow.Processors {
+		proc := &flow.Processors[i]
+		for j := range proc.Output {
+			output := &proc.Output[j]
+			for k := range output.Streams {
+				outputStream := &output.Streams[k]
+				if _, ok := addressesToRewrite[outputStream.TargetAddr]; ok {
+					outputStream.Type = distsqlrun.StreamEndpointSpec_LOCAL
+					outputStream.TargetAddr = ""
+					streamIDs[outputStream.StreamID] = struct{}{}
+				}
+			}
+		}
+	}
+
+	for i := range flow.Processors {
+		proc := &flow.Processors[i]
+		for j := range proc.Input {
+			input := &proc.Input[j]
+			for k := range input.Streams {
+				inputStream := &input.Streams[k]
+				if _, ok := streamIDs[inputStream.StreamID]; ok {
+					inputStream.Type = distsqlrun.StreamEndpointSpec_LOCAL
+				}
+			}
+		}
+	}
+}
+
+// addFallbackToOutputStreams fills in the FallbackAddr field of all the output
+// streams in the flow to the specified gatewayAddr
+func addFallbackToOutputStreams(flow *distsqlrun.FlowSpec, gatewayAddr string) {
+	for i := range flow.Processors {
+		proc := &flow.Processors[i]
+		for j := range proc.Output {
+			output := &proc.Output[j]
+			for k := range output.Streams {
+				outputStream := &output.Streams[k]
+				if outputStream.Type == distsqlrun.StreamEndpointSpec_REMOTE {
+					outputStream.FallbackAddr = &gatewayAddr
+				}
+			}
+		}
+	}
+}
+
+// isVersionMismatchErr checks whether the error is a DistSQL version mismatch
+// error, indicating that a SetupFlow request failed because a remote node is
+// incompatible.
+func isVersionMismatchErr(err error) bool {
+	// We check both the error string and the error type. We'd like to check just
+	// the type, but 1.0 didn't have a typed error.
+	if strings.HasPrefix(err.Error(), distsqlrun.VersionMismatchErrorPrefix) {
+		return true
+	}
+	_, ok := err.(*distsqlrun.VersionMismatchError)
+	return ok
 }
 
 // distSQLReceiver is a RowReceiver that stores incoming rows in a RowContainer.

@@ -267,6 +267,11 @@ func (fr *flowRegistry) ConnectInboundStream(
 
 	s, ok := entry.inboundStreams[streamID]
 	if !ok {
+		// This error is expected when the client trying to connect this stream is
+		// using this server as the "fallback" but the registry hasn't been
+		// configured for this inbound stream (presumably because the primary server
+		// has been setup successfully, or at least it's not clear that it hasn't
+		// been setup successfully).
 		return nil, nil, nil, errors.Errorf("flow %s: no inbound stream %d", flowID, streamID)
 	}
 	if s.connected {

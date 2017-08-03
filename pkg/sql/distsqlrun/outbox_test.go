@@ -58,7 +58,7 @@ func TestOutbox(t *testing.T) {
 	}
 	flowID := FlowID{uuid.MakeV4()}
 	streamID := StreamID(42)
-	outbox := newOutbox(&flowCtx, addr.String(), flowID, streamID)
+	outbox := newOutbox(&flowCtx, addr.String(), "" /* fallbackAddr */, flowID, streamID)
 	var outboxWG sync.WaitGroup
 	// Start the outbox. This should cause the stream to connect, even though
 	// we're not sending any rows.
@@ -212,7 +212,7 @@ func TestOutboxInitializesStreamBeforeRecevingAnyRows(t *testing.T) {
 	}
 	flowID := FlowID{uuid.MakeV4()}
 	streamID := StreamID(42)
-	outbox := newOutbox(&flowCtx, addr.String(), flowID, streamID)
+	outbox := newOutbox(&flowCtx, addr.String(), "" /* fallbackAddr */, flowID, streamID)
 
 	var outboxWG sync.WaitGroup
 	// Start the outbox. This should cause the stream to connect, even though
@@ -281,7 +281,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			var expectedErr error
 			consumerReceivedMsg := make(chan struct{})
 			if tc.outboxIsClient {
-				outbox = newOutbox(&flowCtx, addr.String(), flowID, streamID)
+				outbox = newOutbox(&flowCtx, addr.String(), "" /* fallbackAddr */, flowID, streamID)
 				outbox.start(context.TODO(), &wg)
 
 				// Wait for the outbox to connect the stream.
