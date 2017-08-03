@@ -17,6 +17,7 @@ import (
 	"os"
 	"runtime"
 	"sort"
+	"sync"
 	"time"
 
 	"golang.org/x/net/context"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -560,21 +562,75 @@ func loadPlanHook(
 		return nil, nil, nil
 	}
 
+	// No enterprise check here: LOAD is always available.
+
+	if err := p.RequireSuperUser("LOAD"); err != nil {
+		return nil, nil, err
+	}
+
+	tableFn, err := p.TypeAsString(loadStmt.Table, "LOAD")
+	if err != nil {
+		return nil, nil, err
+	}
+	fromFn, err := p.TypeAsStringArray(loadStmt.From, "LOAD")
+	if err != nil {
+		return nil, nil, err
+	}
+	toFn, err := p.TypeAsString(loadStmt.To, "LOAD")
+	if err != nil {
+		return nil, nil, err
+	}
+
 	// TODO(dan): This entire method is a placeholder to get the distsql
 	// plumbing worked out while mjibson works on the new processors and router.
 	// Currently, it "uses" distsql to compute an int and this method returns
 	// it.
 	header := sqlbase.ResultColumns{
-		{Name: "start_key", Typ: parser.TypeBytes},
-		{Name: "end_key", Typ: parser.TypeBytes},
-		{Name: "path", Typ: parser.TypeString},
-		{Name: "sha512", Typ: parser.TypeBytes},
 		{Name: "data_size", Typ: parser.TypeInt},
 	}
 	fn := func(ctx context.Context) ([]parser.Datums, error) {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, loadStmt.StatementTag())
 		defer tracing.FinishSpan(span)
+
+		table, err := tableFn()
+		if err != nil {
+			return nil, err
+		}
+		from, err := fromFn()
+		if err != nil {
+			return nil, err
+		}
+		to, err := toFn()
+		if err != nil {
+			return nil, err
+		}
+
+		var tableDesc *sqlbase.TableDescriptor
+		if err := func() error {
+			dest, err := storageccl.ExportStorageConfFromURI(table)
+			if err != nil {
+				return err
+			}
+			es, err := storageccl.MakeExportStorage(ctx, dest)
+			if err != nil {
+				return err
+			}
+			defer es.Close()
+			r, err := es.ReadFile(ctx, "")
+			if err != nil {
+				return err
+			}
+			defer r.Close()
+			b, err := ioutil.ReadAll(r)
+			if err != nil {
+				return err
+			}
+			tableDesc, err = parseCSVTableDescriptor(ctx, string(b), defaultCSVParentID, defaultCSVTableID)
+			return err
+		}(); err != nil {
+			return nil, err
+		}
 
 		evalCtx := p.EvalContext()
 
@@ -598,7 +654,7 @@ func loadPlanHook(
 			}
 		}()
 
-		if err := p.DistLoader().LoadCSV(ctx, p.ExecCfg().DB, evalCtx, nodes, rows); err != nil {
+		if err := p.DistLoader().LoadCSV(ctx, p.ExecCfg().DB, evalCtx, p.ExecCfg().NodeID.Get(), nodes, rows, tableDesc, from, to); err != nil {
 			return nil, err
 		}
 
@@ -609,10 +665,6 @@ func loadPlanHook(
 		}
 
 		ret := []parser.Datums{{
-			parser.DNull,
-			parser.DNull,
-			parser.DNull,
-			parser.DNull,
 			parser.NewDInt(parser.DInt(total)),
 		}}
 		return ret, nil

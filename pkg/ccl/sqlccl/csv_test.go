@@ -9,9 +9,9 @@
 package sqlccl
 
 import (
-	gosql "database/sql"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -294,15 +294,58 @@ func TestLoadStmt(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(t, tc.Conns[0])
 
-	var startKey, endKey, sha512 []byte
-	var path gosql.NullString
-	var result int
-	sqlDB.QueryRow(`LOAD`).Scan(&startKey, &endKey, &path, &sha512, &result)
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	tablePath := filepath.Join(dir, "table")
+	if err := ioutil.WriteFile(tablePath, []byte(`
+		CREATE TABLE t (
+			a int primary key,
+			b string,
+			index (b),
+			index (a, b)
+		)
+	`), 0666); err != nil {
+		t.Fatal(err)
+	}
+	csvPath := filepath.Join(dir, "csv")
+	if err := os.Mkdir(csvPath, 0777); err != nil {
+		t.Fatal(err)
+	}
+	var files []string
+	const (
+		numFiles    = 5
+		rowsPerFile = 10000
+	)
+	for fn := 0; fn < numFiles; fn++ {
+		path := filepath.Join(csvPath, fmt.Sprintf("data-%d", fn))
+		f, err := os.Create(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := 0; i < rowsPerFile; i++ {
+			x := fn*rowsPerFile + i
+			if _, err := fmt.Fprintf(f, "%d,%s\n", x, 'A'+x%26); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := f.Close(); err != nil {
+			t.Fatal(err)
+		}
+		files = append(files, fmt.Sprintf(`'nodelocal://%s'`, path))
+	}
 
-	// TODO(dan): This entire method is a placeholder to get the distsql
-	// plumbing worked out. It currently returns a single row, with the sum of
-	// the node ids (1+2+3=6) in the final column.
-	if expected := 6; result != expected {
+	var result int
+	backupPath := filepath.Join(dir, "backup")
+	sqlDB.QueryRow(
+		fmt.Sprintf(
+			`LOAD CSV TABLE $1 FROM %s TO $2`,
+			strings.Join(files, ", "),
+		),
+		fmt.Sprintf("nodelocal://%s", tablePath),
+		fmt.Sprintf("nodelocal://%s", backupPath),
+	).Scan(&result)
+
+	if expected := 0; result != expected {
 		t.Errorf("expected %d got %d", expected, result)
 	}
 }
