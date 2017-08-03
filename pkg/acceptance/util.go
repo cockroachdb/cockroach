@@ -590,32 +590,20 @@ type CheckGossipFunc func(map[string]gossip.Info) error
 // CheckGossip fetches the gossip infoStore from each node and invokes the given
 // function. The test passes if the function returns 0 for every node,
 // retrying for up to the given duration.
-func CheckGossip(
-	ctx context.Context, t testing.TB, c cluster.Cluster, d time.Duration, f CheckGossipFunc,
-) {
-	err := util.RetryForDuration(d, func() error {
-		select {
-		case <-stopper.ShouldStop():
-			t.Fatalf("interrupted")
-			return nil
-		case <-time.After(1 * time.Second):
-		}
-
+func CheckGossip(ctx context.Context, c cluster.Cluster, d time.Duration, f CheckGossipFunc) error {
+	return errors.Wrapf(util.RetryForDuration(d, func() error {
 		var infoStatus gossip.InfoStatus
 		for i := 0; i < c.NumNodes(); i++ {
 			if err := httputil.GetJSON(cluster.HTTPClient, c.URL(ctx, i)+"/_status/gossip/local", &infoStatus); err != nil {
 				return errors.Wrapf(err, "failed to get gossip status from node %d", i)
 			}
 			if err := f(infoStatus.Infos); err != nil {
-				return errors.Errorf("node %d: %s", i, err)
+				return errors.Wrapf(err, "node %d", i)
 			}
 		}
 
 		return nil
-	})
-	if err != nil {
-		t.Fatal(errors.Errorf("condition failed to evaluate within %s: %s", d, err))
-	}
+	}), "condition failed to evaluate within %s", d)
 }
 
 // HasPeers returns a CheckGossipFunc that passes when the given

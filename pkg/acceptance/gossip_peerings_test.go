@@ -50,14 +50,18 @@ func testGossipPeeringsInner(
 	}
 
 	for timeutil.Now().Before(deadline) {
-		CheckGossip(ctx, t, c, waitTime, HasPeers(num))
+		if err := CheckGossip(ctx, c, waitTime, HasPeers(num)); err != nil {
+			t.Fatal(err)
+		}
 
 		// Restart the first node.
 		log.Infof(ctx, "restarting node 0")
 		if err := c.Restart(ctx, 0); err != nil {
 			t.Fatal(err)
 		}
-		CheckGossip(ctx, t, c, waitTime, HasPeers(num))
+		if err := CheckGossip(ctx, c, waitTime, HasPeers(num)); err != nil {
+			t.Fatal(err)
+		}
 
 		// Restart another node (if there is one).
 		var pickedNode int
@@ -68,7 +72,9 @@ func testGossipPeeringsInner(
 		if err := c.Restart(ctx, pickedNode); err != nil {
 			t.Fatal(err)
 		}
-		CheckGossip(ctx, t, c, waitTime, HasPeers(num))
+		if err := CheckGossip(ctx, c, waitTime, HasPeers(num)); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -104,9 +110,15 @@ func testGossipRestartInner(
 
 	for timeutil.Now().Before(deadline) {
 		log.Infof(ctx, "waiting for initial gossip connections")
-		CheckGossip(ctx, t, c, waitTime, HasPeers(num))
-		CheckGossip(ctx, t, c, waitTime, hasClusterID)
-		CheckGossip(ctx, t, c, waitTime, hasSentinel)
+		if err := CheckGossip(ctx, c, waitTime, HasPeers(num)); err != nil {
+			t.Fatal(err)
+		}
+		if err := CheckGossip(ctx, c, waitTime, hasClusterID); err != nil {
+			t.Fatal(err)
+		}
+		if err := CheckGossip(ctx, c, waitTime, hasSentinel); err != nil {
+			t.Fatal(err)
+		}
 
 		log.Infof(ctx, "killing all nodes")
 		for i := 0; i < num; i++ {
@@ -123,9 +135,15 @@ func testGossipRestartInner(
 		}
 
 		log.Infof(ctx, "waiting for gossip to be connected")
-		CheckGossip(ctx, t, c, waitTime, HasPeers(num))
-		CheckGossip(ctx, t, c, waitTime, hasClusterID)
-		CheckGossip(ctx, t, c, waitTime, hasSentinel)
+		if err := CheckGossip(ctx, c, waitTime, HasPeers(num)); err != nil {
+			t.Fatal(err)
+		}
+		if err := CheckGossip(ctx, c, waitTime, hasClusterID); err != nil {
+			t.Fatal(err)
+		}
+		if err := CheckGossip(ctx, c, waitTime, hasSentinel); err != nil {
+			t.Fatal(err)
+		}
 
 		for i := 0; i < num; i++ {
 			db, err := c.NewClient(ctx, i)
