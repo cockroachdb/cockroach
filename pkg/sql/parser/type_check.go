@@ -797,6 +797,13 @@ func (expr *Placeholder) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, e
 	// during Execute all placeholders are replaced from the AST before type
 	// checking.
 	if typ, ok := ctx.Placeholders.Type(expr.Name); ok {
+		if !desired.Equivalent(typ) {
+			// This indicates there's a conflict between what the type system thinks
+			// the type for this position should be, and the actual type of the
+			// placeholder. This actual placeholder type could be either a type hint
+			// (from pgwire or from a SQL PREPARE), or the actual value type.
+			return nil, unexpectedTypeError{expr, desired, typ}
+		}
 		expr.typ = typ
 		return expr, nil
 	}
