@@ -26,12 +26,16 @@ import (
 // implementation of certain sql statements to live outside of the sql package.
 //
 // To intercept a statement the function should return a non-nil function for
-// `fn` as well as the appropriate sqlbase.ResultColumns describing the results it will
-// return (if any). `fn` will be called during the `Start` phase of plan
-// execution.
+// `fn` as well as the appropriate sqlbase.ResultColumns describing the results
+// it will return (if any). `fn` will be called in a goroutine during the
+// `Start` phase of plan execution.
+//
+// The channel argument to `fn` is used to return results with the client. It's
+// a blocking channel, so implementors should be careful to only use blocking
+// sends on it when necessary.
 type planHookFn func(
 	parser.Statement, PlanHookState,
-) (fn func(context.Context) ([]parser.Datums, error), header sqlbase.ResultColumns, err error)
+) (fn func(context.Context, chan<- parser.Datums) error, header sqlbase.ResultColumns, err error)
 
 var planHooks []planHookFn
 
@@ -51,36 +55,46 @@ type PlanHookState interface {
 
 // AddPlanHook adds a hook used to short-circuit creating a planNode from a
 // parser.Statement. If the func returned by the hook is non-nil, it is used to
-// construct a planNode that runs that func during Start.
+// construct a planNode that runs that func in a goroutine during Start.
 func AddPlanHook(f planHookFn) {
 	planHooks = append(planHooks, f)
 }
 
-// hookFnNode is a planNode implemented in terms of a function. It runs the
-// provided function during Start and serves the results it returned.
+// hookFnNode is a planNode implemented in terms of a function. It begins the
+// provided function during Start and serves the results it returns over the
+// channel.
 type hookFnNode struct {
-	f func(context.Context) ([]parser.Datums, error)
-
+	f      func(context.Context, chan<- parser.Datums) error
 	header sqlbase.ResultColumns
 
-	res    []parser.Datums
-	resIdx int
+	resultsCh chan parser.Datums
+	errCh     chan error
+
+	row parser.Datums
 }
 
 func (*hookFnNode) Close(context.Context) {}
 
 func (f *hookFnNode) Start(params runParams) error {
-	var err error
-	f.res, err = f.f(params.ctx)
-	f.resIdx = -1
-	return err
+	// TODO(dan): Make sure the resultCollector is set to flush after every row.
+	f.resultsCh = make(chan parser.Datums)
+	f.errCh = make(chan error)
+	go func() {
+		defer close(f.resultsCh)
+		f.errCh <- f.f(params.ctx, f.resultsCh)
+		close(f.errCh)
+	}()
+	return nil
 }
 
-func (f *hookFnNode) Next(runParams) (bool, error) {
-	if f.res == nil {
-		return false, nil
+func (f *hookFnNode) Next(params runParams) (bool, error) {
+	select {
+	case <-params.ctx.Done():
+		return false, params.ctx.Err()
+	case err := <-f.errCh:
+		return false, err
+	case f.row = <-f.resultsCh:
+		return true, nil
 	}
-	f.resIdx++
-	return f.resIdx < len(f.res), nil
 }
-func (f *hookFnNode) Values() parser.Datums { return f.res[f.resIdx] }
+func (f *hookFnNode) Values() parser.Datums { return f.row }

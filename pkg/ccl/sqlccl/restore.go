@@ -829,7 +829,7 @@ func restore(
 
 func restorePlanHook(
 	stmt parser.Statement, p sql.PlanHookState,
-) (func(context.Context) ([]parser.Datums, error), sqlbase.ResultColumns, error) {
+) (func(context.Context, chan<- parser.Datums) error, sqlbase.ResultColumns, error) {
 	restoreStmt, ok := stmt.(*parser.Restore)
 	if !ok {
 		return nil, nil, nil
@@ -858,30 +858,30 @@ func restorePlanHook(
 		{Name: "system_records", Typ: parser.TypeInt},
 		{Name: "bytes", Typ: parser.TypeInt},
 	}
-	fn := func(ctx context.Context) ([]parser.Datums, error) {
+	fn := func(ctx context.Context, resultsCh chan<- parser.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
 		from, err := fromFn()
 		if err != nil {
-			return nil, err
+			return err
 		}
 		backupDescs, err := loadBackupDescs(ctx, from)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		sqlDescs, err := selectTargets(backupDescs, restoreStmt.Targets)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		tableRewrites, err := allocateTableRewrites(ctx, p, sqlDescs, restoreStmt.Options)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		description, err := restoreJobDescription(restoreStmt, from)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		job := p.ExecCfg().JobRegistry.NewJob(jobs.Record{
 			Description: description,
@@ -907,14 +907,13 @@ func restorePlanHook(
 			job,
 		)
 		if err := job.FinishedWith(ctx, restoreErr); err != nil {
-			return nil, err
+			return err
 		}
 		if restoreErr != nil {
-			return nil, restoreErr
+			return restoreErr
 		}
-		// TODO(benesch): emit periodic progress updates once we have the
-		// infrastructure to stream responses.
-		ret := []parser.Datums{{
+		// TODO(benesch): emit periodic progress updates.
+		resultsCh <- parser.Datums{
 			parser.NewDInt(parser.DInt(*job.ID())),
 			parser.NewDString(string(jobs.StatusSucceeded)),
 			parser.NewDFloat(parser.DFloat(1.0)),
@@ -922,8 +921,8 @@ func restorePlanHook(
 			parser.NewDInt(parser.DInt(res.IndexEntries)),
 			parser.NewDInt(parser.DInt(res.SystemRecords)),
 			parser.NewDInt(parser.DInt(res.DataSize)),
-		}}
-		return ret, nil
+		}
+		return nil
 	}
 	return fn, header, nil
 }
