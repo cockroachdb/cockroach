@@ -85,7 +85,9 @@ func TestFiveNodesAndWriters(t *testing.T) {
 	if err := f.WaitReady(3 * time.Minute); err != nil {
 		t.Fatal(err)
 	}
-	CheckGossip(ctx, t, f, longWaitTime, HasPeers(size))
+	if err := CheckGossip(ctx, f, longWaitTime, HasPeers(size)); err != nil {
+		t.Fatal(err)
+	}
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)

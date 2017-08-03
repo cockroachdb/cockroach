@@ -110,7 +110,9 @@ func (bt *benchmarkTest) Start(ctx context.Context) {
 			}
 		}
 	}
-	acceptance.CheckGossip(ctx, bt.b, bt.f, longWaitTime, acceptance.HasPeers(bt.nodes))
+	if err := acceptance.CheckGossip(ctx, bt.f, longWaitTime, acceptance.HasPeers(bt.nodes)); err != nil {
+		bt.b.Fatal(err)
+	}
 	bt.f.Assert(ctx, bt.b)
 
 	sqlDB, err := gosql.Open("postgres", bt.f.PGUrl(ctx, 0))

@@ -123,7 +123,9 @@ func (cl continuousLoadTest) Run(ctx context.Context, t testing.TB) {
 	if err := f.Resize(cl.NumNodes); err != nil {
 		t.Fatal(err)
 	}
-	CheckGossip(ctx, t, f, longWaitTime, HasPeers(cl.NumNodes))
+	if err := CheckGossip(ctx, f, longWaitTime, HasPeers(cl.NumNodes)); err != nil {
+		t.Fatal(err)
+	}
 	start := timeutil.Now()
 	if err := f.StartLoad(ctx, cl.Process, *flagCLTWriters); err != nil {
 		t.Fatal(err)
