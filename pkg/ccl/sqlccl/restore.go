@@ -800,13 +800,7 @@ func restore(
 			}
 			mu.Unlock()
 
-			if err := progressLogger.chunkFinished(progressCtx); err != nil {
-				// Errors while updating progress are not important enough to merit
-				// failing the entire restore.
-				log.Errorf(progressCtx, "RESTORE ignoring error while updating progress on job %d (%s): %+v",
-					job.ID(), job.Record.Description, err)
-			}
-			return nil
+			return progressLogger.chunkFinished(progressCtx)
 		})
 	}
 

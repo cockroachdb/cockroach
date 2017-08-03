@@ -536,10 +536,7 @@ func backup(
 			mu.Unlock()
 
 			if err := progressLogger.chunkFinished(ctx); err != nil {
-				// Errors while updating progress are not important enough to merit
-				// failing the entire backup.
-				log.Errorf(ctx, "BACKUP ignoring error while updating progress on job %d (%s): %+v",
-					job.ID(), job.Record.Description, err)
+				return err
 			}
 
 			if checkpointFiles != nil {
