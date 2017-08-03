@@ -100,10 +100,13 @@ SELECT version, "nodeID" FROM system.lease WHERE "descID" = $1 ORDER BY version,
 }
 
 func (t *leaseTest) expectLeases(descID sqlbase.ID, expected string) {
-	leases := t.getLeases(descID)
-	if expected != leases {
-		t.Fatalf("expected %s, but found %s", expected, leases)
-	}
+	testutils.SucceedsSoon(t, func() error {
+		leases := t.getLeases(descID)
+		if expected != leases {
+			return errors.Errorf("expected %s, but found %s", expected, leases)
+		}
+		return nil
+	})
 }
 
 func (t *leaseTest) acquire(
@@ -238,6 +241,7 @@ func TestLeaseManager(testingT *testing.T) {
 	if _, _, err := t.acquireMinVersion(1, descID, 2); !testutils.IsError(err, expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
 	}
+	t.expectLeases(descID, "/1/1")
 
 	// Publish a new version and explicitly acquire it.
 	l2, _ = t.mustAcquire(1, descID)
