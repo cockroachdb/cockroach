@@ -41,10 +41,10 @@ type joinReader struct {
 	alloc   sqlbase.DatumAlloc
 
 	input RowSource
-	out   procOutputHelper
+	out   ProcOutputHelper
 }
 
-var _ processor = &joinReader{}
+var _ Processor = &joinReader{}
 
 func newJoinReader(
 	flowCtx *FlowCtx,
@@ -69,7 +69,7 @@ func newJoinReader(
 		types[i] = spec.Table.Columns[i].Type
 	}
 
-	if err := jr.out.init(post, types, &flowCtx.evalCtx, output); err != nil {
+	if err := jr.out.Init(post, types, &flowCtx.EvalCtx, output); err != nil {
 		return nil, err
 	}
 
@@ -136,7 +136,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 				if len(spans) == 0 {
 					// No fetching needed since we have collected no spans and
 					// the input has signalled that no more records are coming.
-					jr.out.close()
+					jr.out.Close()
 					return nil
 				}
 				break
@@ -182,7 +182,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 		if len(spans) != joinReaderBatchSize {
 			// This was the last batch.
 			sendTraceData(ctx, jr.out.output)
-			jr.out.close()
+			jr.out.Close()
 			return nil
 		}
 	}

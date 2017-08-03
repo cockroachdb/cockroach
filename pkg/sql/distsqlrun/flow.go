@@ -50,8 +50,8 @@ type FlowCtx struct {
 
 	// id is a unique identifier for a flow.
 	id FlowID
-	// evalCtx is used by all the processors in the flow to evaluate expressions.
-	evalCtx parser.EvalContext
+	// EvalCtx is used by all the processors in the flow to evaluate expressions.
+	EvalCtx parser.EvalContext
 	// rpcCtx is used by the Outboxes that may be present in the flow for
 	// connecting to other nodes.
 	rpcCtx *rpc.Context
@@ -97,7 +97,7 @@ type Flow struct {
 	FlowCtx
 
 	flowRegistry *flowRegistry
-	processors   []processor
+	processors   []Processor
 	outboxes     []*outbox
 	// syncFlowConsumer is a special outbox which instead of sending rows to
 	// another host, returns them directly (as a result to a SetupSyncFlow RPC,
@@ -214,7 +214,7 @@ func (f *Flow) setupRouter(spec *OutputRouterSpec) (RowReceiver, error) {
 	return makeRouter(spec, streams)
 }
 
-func checkNumInOut(inputs []RowSource, outputs []RowReceiver, numIn, numOut int) error {
+func CheckNumInOut(inputs []RowSource, outputs []RowReceiver, numIn, numOut int) error {
 	if len(inputs) != numIn {
 		return errors.Errorf("expected %d input(s), got %d", numIn, len(inputs))
 	}
@@ -224,7 +224,7 @@ func checkNumInOut(inputs []RowSource, outputs []RowReceiver, numIn, numOut int)
 	return nil
 }
 
-func (f *Flow) makeProcessor(ps *ProcessorSpec, inputs []RowSource) (processor, error) {
+func (f *Flow) makeProcessor(ps *ProcessorSpec, inputs []RowSource) (Processor, error) {
 	if len(ps.Output) != 1 {
 		return nil, errors.Errorf("only single-output processors supported")
 	}
@@ -279,7 +279,7 @@ func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
 					streams[i] = rowChan
 				}
 				var err error
-				sync, err = makeOrderedSync(convertToColumnOrdering(is.Ordering), &f.evalCtx, streams)
+				sync, err = makeOrderedSync(convertToColumnOrdering(is.Ordering), &f.EvalCtx, streams)
 				if err != nil {
 					return err
 				}
@@ -291,7 +291,7 @@ func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
 		}
 	}
 
-	f.processors = make([]processor, len(spec.Processors))
+	f.processors = make([]Processor, len(spec.Processors))
 
 	for i := range spec.Processors {
 		var err error
@@ -339,8 +339,8 @@ func (f *Flow) Cleanup(ctx context.Context) {
 		panic("flow cleanup called twice")
 	}
 	// This closes the account and monitor opened in ServerImpl.setupFlow.
-	f.evalCtx.ActiveMemAcc.Close(ctx)
-	f.evalCtx.Stop(ctx)
+	f.EvalCtx.ActiveMemAcc.Close(ctx)
+	f.EvalCtx.Stop(ctx)
 	if log.V(1) {
 		log.Infof(ctx, "cleaning up")
 	}

@@ -28,17 +28,17 @@ import (
 	"github.com/pkg/errors"
 )
 
-// processor is a common interface implemented by all processors, used by the
+// Processor is a common interface implemented by all processors, used by the
 // higher-level flow orchestration code.
-type processor interface {
+type Processor interface {
 	// Run is the main loop of the processor.
 	// If wg is non-nil, wg.Done is called before exiting.
 	Run(ctx context.Context, wg *sync.WaitGroup)
 }
 
-// procOutputHelper is a helper type that performs filtering and projection on
+// ProcOutputHelper is a helper type that performs filtering and projection on
 // the output of a processor.
-type procOutputHelper struct {
+type ProcOutputHelper struct {
 	numInternalCols int
 	output          RowReceiver
 	rowAlloc        sqlbase.EncDatumRowAlloc
@@ -57,10 +57,10 @@ type procOutputHelper struct {
 	rowIdx uint64
 }
 
-// init sets up a procOutputHelper. The types describe the internal schema of
+// Init sets up a procOutputHelper. The types describe the internal schema of
 // the processor (as described for each processor core spec); they can be
 // omitted if there is no filtering expression.
-func (h *procOutputHelper) init(
+func (h *ProcOutputHelper) Init(
 	post *PostProcessSpec,
 	types []sqlbase.ColumnType,
 	evalCtx *parser.EvalContext,
@@ -114,7 +114,7 @@ func (h *procOutputHelper) init(
 
 // neededColumns calculates the set of internal processor columns that are
 // actually used by the post-processing stage.
-func (h *procOutputHelper) neededColumns() []bool {
+func (h *ProcOutputHelper) neededColumns() []bool {
 	needed := make([]bool, h.numInternalCols)
 	if h.outputCols == nil && h.renderExprs == nil {
 		// No projection or rendering; all columns are needed.
@@ -168,7 +168,7 @@ func (h *procOutputHelper) neededColumns() []bool {
 // both the inputs and the output have been properly closed.
 func emitHelper(
 	ctx context.Context,
-	output *procOutputHelper,
+	output *ProcOutputHelper,
 	row sqlbase.EncDatumRow,
 	meta ProducerMetadata,
 	inputs ...RowSource,
@@ -183,13 +183,13 @@ func emitHelper(
 		consumerStatus = output.output.Push(nil /* row */, meta)
 	} else {
 		var err error
-		consumerStatus, err = output.emitRow(ctx, row)
+		consumerStatus, err = output.EmitRow(ctx, row)
 		if err != nil {
 			output.output.Push(nil /* row */, ProducerMetadata{Err: err})
 			for _, input := range inputs {
 				input.ConsumerClosed()
 			}
-			output.close()
+			output.Close()
 			return false
 		}
 	}
@@ -205,7 +205,7 @@ func emitHelper(
 		for _, input := range inputs {
 			input.ConsumerClosed()
 		}
-		output.close()
+		output.Close()
 		return false
 	default:
 		log.Fatalf(ctx, "unexpected consumerStatus: %d", consumerStatus)
@@ -213,7 +213,7 @@ func emitHelper(
 	}
 }
 
-// emitRow sends a row through the post-processing stage. The same row can be
+// EmitRow sends a row through the post-processing stage. The same row can be
 // reused.
 //
 // It returns the consumer's status that was observed when pushing this row. If
@@ -221,7 +221,7 @@ func emitHelper(
 // rendering processing; the output has not been closed.
 //
 // Note: check out emitHelper() for a useful wrapper.
-func (h *procOutputHelper) emitRow(
+func (h *ProcOutputHelper) EmitRow(
 	ctx context.Context, row sqlbase.EncDatumRow,
 ) (ConsumerStatus, error) {
 	if h.rowIdx >= h.maxRowIdx {
@@ -282,7 +282,7 @@ func (h *procOutputHelper) emitRow(
 	return NeedMoreRows, nil
 }
 
-func (h *procOutputHelper) close() {
+func (h *ProcOutputHelper) Close() {
 	h.output.ProducerDone()
 }
 
@@ -293,16 +293,16 @@ func (h *procOutputHelper) close() {
 type noopProcessor struct {
 	flowCtx *FlowCtx
 	input   RowSource
-	out     procOutputHelper
+	out     ProcOutputHelper
 }
 
-var _ processor = &noopProcessor{}
+var _ Processor = &noopProcessor{}
 
 func newNoopProcessor(
 	flowCtx *FlowCtx, input RowSource, post *PostProcessSpec, output RowReceiver,
 ) (*noopProcessor, error) {
 	n := &noopProcessor{flowCtx: flowCtx, input: input}
-	if err := n.out.init(post, input.Types(), &flowCtx.evalCtx, output); err != nil {
+	if err := n.out.Init(post, input.Types(), &flowCtx.EvalCtx, output); err != nil {
 		return nil, err
 	}
 	return n, nil
@@ -331,7 +331,7 @@ func (n *noopProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 		row, meta := n.input.Next()
 		if row == nil && meta.Empty() {
 			sendTraceData(ctx, n.out.output)
-			n.out.close()
+			n.out.Close()
 			return
 		}
 		if !emitHelper(ctx, &n.out, row, meta, n.input) {
@@ -346,51 +346,51 @@ func newProcessor(
 	post *PostProcessSpec,
 	inputs []RowSource,
 	outputs []RowReceiver,
-) (processor, error) {
+) (Processor, error) {
 	if core.Noop != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+		if err := CheckNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
 		}
 		return newNoopProcessor(flowCtx, inputs[0], post, outputs[0])
 	}
 	if core.Values != nil {
-		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+		if err := CheckNumInOut(inputs, outputs, 0, 1); err != nil {
 			return nil, err
 		}
 		return newValuesProcessor(flowCtx, core.Values, post, outputs[0])
 	}
 	if core.TableReader != nil {
-		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+		if err := CheckNumInOut(inputs, outputs, 0, 1); err != nil {
 			return nil, err
 		}
 		return newTableReader(flowCtx, core.TableReader, post, outputs[0])
 	}
 	if core.JoinReader != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+		if err := CheckNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
 		}
 		return newJoinReader(flowCtx, core.JoinReader, inputs[0], post, outputs[0])
 	}
 	if core.Sorter != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+		if err := CheckNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
 		}
 		return newSorter(flowCtx, core.Sorter, inputs[0], post, outputs[0])
 	}
 	if core.Distinct != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+		if err := CheckNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
 		}
 		return newDistinct(flowCtx, core.Distinct, inputs[0], post, outputs[0])
 	}
 	if core.Aggregator != nil {
-		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+		if err := CheckNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
 		}
 		return newAggregator(flowCtx, core.Aggregator, inputs[0], post, outputs[0])
 	}
 	if core.MergeJoiner != nil {
-		if err := checkNumInOut(inputs, outputs, 2, 1); err != nil {
+		if err := CheckNumInOut(inputs, outputs, 2, 1); err != nil {
 			return nil, err
 		}
 		return newMergeJoiner(
@@ -398,13 +398,13 @@ func newProcessor(
 		)
 	}
 	if core.HashJoiner != nil {
-		if err := checkNumInOut(inputs, outputs, 2, 1); err != nil {
+		if err := CheckNumInOut(inputs, outputs, 2, 1); err != nil {
 			return nil, err
 		}
 		return newHashJoiner(flowCtx, core.HashJoiner, inputs[0], inputs[1], post, outputs[0])
 	}
 	if core.Backfiller != nil {
-		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+		if err := CheckNumInOut(inputs, outputs, 0, 1); err != nil {
 			return nil, err
 		}
 		switch core.Backfiller.Type {
@@ -415,7 +415,7 @@ func newProcessor(
 		}
 	}
 	if core.SetOp != nil {
-		if err := checkNumInOut(inputs, outputs, 2, 1); err != nil {
+		if err := CheckNumInOut(inputs, outputs, 2, 1); err != nil {
 			return nil, err
 		}
 		return newAlgebraicSetOp(flowCtx, core.SetOp, inputs[0], inputs[1], post, outputs[0])

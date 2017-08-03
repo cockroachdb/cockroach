@@ -37,7 +37,7 @@ type sorter struct {
 	input NoMetadataRowSource
 	// rawInput is the true input, not wrapped in a NoMetadataRowSource.
 	rawInput RowSource
-	out      procOutputHelper
+	out      ProcOutputHelper
 	ordering sqlbase.ColumnOrdering
 	matchLen uint32
 	// count is the maximum number of rows that the sorter will push to the
@@ -52,7 +52,7 @@ type sorter struct {
 	tempStorage engine.Engine
 }
 
-var _ processor = &sorter{}
+var _ Processor = &sorter{}
 
 func newSorter(
 	flowCtx *FlowCtx, spec *SorterSpec, input RowSource, post *PostProcessSpec, output RowReceiver,
@@ -72,7 +72,7 @@ func newSorter(
 		count:       count,
 		tempStorage: flowCtx.tempStorage,
 	}
-	if err := s.out.init(post, input.Types(), &flowCtx.evalCtx, output); err != nil {
+	if err := s.out.Init(post, input.Types(), &flowCtx.EvalCtx, output); err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -109,16 +109,16 @@ func (s *sorter) Run(ctx context.Context, wg *sync.WaitGroup) {
 			limit = workMem
 		}
 		limitedMon := mon.MakeMonitorInheritWithLimit(
-			"sortall-limited", limit, s.flowCtx.evalCtx.Mon,
+			"sortall-limited", limit, s.flowCtx.EvalCtx.Mon,
 		)
-		limitedMon.Start(ctx, s.flowCtx.evalCtx.Mon, mon.BoundAccount{})
+		limitedMon.Start(ctx, s.flowCtx.EvalCtx.Mon, mon.BoundAccount{})
 		defer limitedMon.Stop(ctx)
 
-		evalCtx := s.flowCtx.evalCtx
+		evalCtx := s.flowCtx.EvalCtx
 		evalCtx.Mon = &limitedMon
 		sv.init(s.ordering, s.rawInput.Types(), &evalCtx)
 	} else {
-		sv.init(s.ordering, s.rawInput.Types(), &s.flowCtx.evalCtx)
+		sv.init(s.ordering, s.rawInput.Types(), &s.flowCtx.EvalCtx)
 	}
 	// Construct the optimal sorterStrategy.
 	var ss sorterStrategy

@@ -32,10 +32,10 @@ type algebraicSetOp struct {
 	opType                  AlgebraicSetOpSpec_SetOpType
 	ordering                Ordering
 	datumAlloc              *sqlbase.DatumAlloc
-	out                     procOutputHelper
+	out                     ProcOutputHelper
 }
 
-var _ processor = &algebraicSetOp{}
+var _ Processor = &algebraicSetOp{}
 
 func newAlgebraicSetOp(
 	flowCtx *FlowCtx,
@@ -73,7 +73,7 @@ func newAlgebraicSetOp(
 		}
 	}
 
-	err := e.out.init(post, leftSource.Types(), &flowCtx.evalCtx, output)
+	err := e.out.Init(post, leftSource.Types(), &flowCtx.EvalCtx, output)
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +175,7 @@ func (e *algebraicSetOp) exceptAll(ctx context.Context) error {
 				}
 				scratch = encoded[:0]
 				if _, ok := rightMap[string(encoded)]; !ok {
-					status, err := e.out.emitRow(ctx, encDatumRow)
+					status, err := e.out.EmitRow(ctx, encDatumRow)
 					if status == ConsumerClosed {
 						return nil
 					}
@@ -195,7 +195,7 @@ func (e *algebraicSetOp) exceptAll(ctx context.Context) error {
 		}
 		if cmp < 0 {
 			for _, encDatumRow := range leftRows {
-				status, err := e.out.emitRow(ctx, encDatumRow)
+				status, err := e.out.EmitRow(ctx, encDatumRow)
 				if status == ConsumerClosed {
 					return nil
 				}
@@ -222,7 +222,7 @@ func (e *algebraicSetOp) exceptAll(ctx context.Context) error {
 	if len(rightRows) == 0 {
 		// Emit all accumulated left rows.
 		for _, encDatumRow := range leftRows {
-			status, err := e.out.emitRow(ctx, encDatumRow)
+			status, err := e.out.EmitRow(ctx, encDatumRow)
 			if status == ConsumerClosed {
 				return nil
 			}
@@ -239,7 +239,7 @@ func (e *algebraicSetOp) exceptAll(ctx context.Context) error {
 				return err
 			}
 			for _, row := range leftRows {
-				status, err := e.out.emitRow(ctx, row)
+				status, err := e.out.EmitRow(ctx, row)
 				if status == ConsumerClosed {
 					return nil
 				}

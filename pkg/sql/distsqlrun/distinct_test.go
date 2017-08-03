@@ -139,7 +139,7 @@ func TestDistinct(t *testing.T) {
 
 			evalCtx := parser.MakeTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			flowCtx := FlowCtx{evalCtx: evalCtx}
+			flowCtx := FlowCtx{EvalCtx: evalCtx}
 
 			d, err := newDistinct(&flowCtx, &ds, in, &PostProcessSpec{}, out)
 			if err != nil {
