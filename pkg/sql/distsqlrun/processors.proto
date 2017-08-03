@@ -118,6 +118,7 @@ message ProcessorCoreUnion {
   optional ValuesCoreSpec values = 10;
   optional BackfillerSpec backfiller = 11;
   optional AlgebraicSetOpSpec setOp = 12;
+  optional ReadCSVSpec readCSV = 13;
 }
 
 // NoopCoreSpec indicates a "no-op" processor core. This is used when we just
@@ -427,4 +428,13 @@ message AlgebraicSetOpSpec {
   // that ordering can be used to optimize resource usage in the processor.
   optional Ordering ordering = 1 [(gogoproto.nullable) = false];
   optional SetOpType op_type = 2 [(gogoproto.nullable) = false];
+}
+
+message ReadCSVSpec {
+  optional int32 comma = 1 [(gogoproto.nullable) = false];
+  optional int32 comment = 2 [(gogoproto.nullable) = false];
+  optional string nullif = 3 [(gogoproto.nullable) = true];
+  optional int32 sample_size = 4 [(gogoproto.nullable) = false];
+  optional sqlbase.TableDescriptor table_desc = 5 [(gogoproto.nullable) = false];
+  optional string uri = 6 [(gogoproto.nullable) = false];
 }

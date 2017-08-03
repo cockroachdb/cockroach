@@ -456,8 +456,20 @@ func newProcessor(
 		}
 		return newAlgebraicSetOp(flowCtx, core.SetOp, inputs[0], inputs[1], post, outputs[0])
 	}
+	if core.ReadCSV != nil {
+		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+			return nil, err
+		}
+		if NewReadCSVProcessor == nil {
+			return nil, errors.New("ReadCSV processor unimplemented")
+		}
+		return NewReadCSVProcessor(flowCtx, *core.ReadCSV, outputs[0])
+	}
 	return nil, errors.Errorf("unsupported processor core %s", core)
 }
+
+// NewReadCSVProcessor is externally implemented.
+var NewReadCSVProcessor func(*FlowCtx, ReadCSVSpec, RowReceiver) (Processor, error)
 
 // Equals returns true if two aggregation specifiers are identical (and thus
 // will always yield the same result).

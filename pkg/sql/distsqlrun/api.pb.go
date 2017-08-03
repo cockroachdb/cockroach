@@ -43,6 +43,7 @@
 		BackfillerSpec
 		FlowSpec
 		AlgebraicSetOpSpec
+		ReadCSVSpec
 */
 package distsqlrun
 

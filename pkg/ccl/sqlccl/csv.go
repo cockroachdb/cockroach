@@ -17,6 +17,7 @@ import (
 	"os"
 	"runtime"
 	"sort"
+	"sync"
 	"time"
 
 	"golang.org/x/net/context"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -621,6 +623,38 @@ func loadPlanHook(
 	return fn, header, nil
 }
 
+var csvOutputTypes = []sqlbase.ColumnType{
+	{SemanticType: sqlbase.ColumnType_BYTES},
+	{SemanticType: sqlbase.ColumnType_BYTES},
+}
+
+func newCSVProcessor(flowCtx *distsqlrun.FlowCtx, spec distsqlrun.ReadCSVSpec, output distsqlrun.RowReceiver) (distsqlrun.Processor, error) {
+	cp := &CSVProcessor{}
+	if err := cp.out.Init(&distsqlrun.PostProcessSpec{}, csvOutputTypes, &flowCtx.EvalCtx, output); err != nil {
+		return nil, err
+	}
+	return cp, nil
+}
+
+type CSVProcessor struct {
+	out distsqlrun.ProcOutputHelper
+}
+
+var _ distsqlrun.Processor = &CSVProcessor{}
+
+func (cp *CSVProcessor) OutputTypes() []sqlbase.ColumnType {
+	return csvOutputTypes
+}
+
+func (cp *CSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
+	if wg != nil {
+		defer wg.Done()
+	}
+	// TODO(mjibson): produce rows
+	cp.out.Close()
+}
+
 func init() {
 	sql.AddPlanHook(loadPlanHook)
+	distsqlrun.NewReadCSVProcessor = newCSVProcessor
 }
