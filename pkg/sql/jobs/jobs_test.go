@@ -436,8 +436,10 @@ func TestJobLifecycle(t *testing.T) {
 		if err := job.Created(ctx, jobs.WithoutCancel); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.Progressed(ctx, 0.5, jobs.Noop); !testutils.IsError(err, `job \d+ not started`) {
-			t.Fatalf("expected 'job not started' error, but got %v", err)
+		if err := job.Progressed(ctx, 0.5, jobs.Noop); !testutils.IsError(
+			err, `expected running job, but job has status 'pending'`,
+		) {
+			t.Fatalf("expected 'expected running job' error, but got %v", err)
 		}
 	})
 
@@ -454,8 +456,10 @@ func TestJobLifecycle(t *testing.T) {
 		if err := job.Succeeded(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.Progressed(ctx, 0.5, jobs.Noop); !testutils.IsError(err, `job \d+ already finished`) {
-			t.Fatalf("expected 'job already finished' error, but got %v", err)
+		if err := job.Progressed(ctx, 0.5, jobs.Noop); !testutils.IsError(
+			err, `expected running job, but job has status 'succeeded'`,
+		) {
+			t.Fatalf("expected 'expected running job' error, but got %v", err)
 		}
 	})
 
