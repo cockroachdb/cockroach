@@ -9,12 +9,12 @@
 package sqlccl
 
 import (
+	"bytes"
 	"encoding/csv"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
-	"path/filepath"
 	"runtime"
 	"sort"
 	"time"
@@ -79,6 +79,11 @@ func LoadCSV(
 			log.Infof(ctx, "could not remove temp directory %s: %s", rocksdbDest, err)
 		}
 	}()
+
+	for i, f := range dataFiles {
+		dataFiles[i] = fmt.Sprintf("nodelocal://%s", f)
+	}
+	dest = fmt.Sprintf("nodelocal://%s", dest)
 
 	// Some channels are buffered because reads happen in bursts, so having lots
 	// of pre-computed data improves overall performance.
@@ -204,11 +209,19 @@ func readCSV(
 		default:
 		}
 		err := func() error {
-			f, err := os.Open(dataFile)
+			conf, err := storageccl.ExportStorageConfFromURI(dataFile)
 			if err != nil {
 				return err
 			}
-			defer f.Close()
+			es, err := storageccl.MakeExportStorage(ctx, conf)
+			if err != nil {
+				return err
+			}
+			defer es.Close()
+			f, err := es.ReadFile(ctx, "")
+			if err != nil {
+				return err
+			}
 			cr := csv.NewReader(f)
 			cr.Comma = comma
 			cr.FieldsPerRecord = -1
@@ -484,6 +497,16 @@ func makeBackup(
 		FormatVersion: BackupFormatInitialVersion,
 	}
 
+	conf, err := storageccl.ExportStorageConfFromURI(destDir)
+	if err != nil {
+		return 0, err
+	}
+	es, err := storageccl.MakeExportStorage(ctx, conf)
+	if err != nil {
+		return 0, err
+	}
+	defer es.Close()
+
 	i := 0
 	for sst := range contentCh {
 		backupDesc.EntryCounts.DataSize += sst.size
@@ -493,8 +516,7 @@ func makeBackup(
 		}
 		i++
 		name := fmt.Sprintf("%d.sst", i)
-		path := filepath.Join(destDir, name)
-		if err := ioutil.WriteFile(path, sst.data, 0666); err != nil {
+		if err := es.WriteFile(ctx, name, bytes.NewReader(sst.data)); err != nil {
 			return 0, err
 		}
 
@@ -526,7 +548,7 @@ func makeBackup(
 	if err != nil {
 		return 0, err
 	}
-	err = ioutil.WriteFile(filepath.Join(destDir, BackupDescriptorName), descBuf, 0666)
+	err = es.WriteFile(ctx, BackupDescriptorName, bytes.NewReader(descBuf))
 	return int64(len(backupDesc.Files)), err
 }
 
