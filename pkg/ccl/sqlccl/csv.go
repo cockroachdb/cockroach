@@ -555,7 +555,7 @@ func makeBackup(
 
 func loadPlanHook(
 	stmt parser.Statement, p sql.PlanHookState,
-) (func(context.Context) ([]parser.Datums, error), sqlbase.ResultColumns, error) {
+) (func(context.Context, chan<- parser.Datums) error, sqlbase.ResultColumns, error) {
 	loadStmt, ok := stmt.(*parser.Load)
 	if !ok {
 		return nil, nil, nil
@@ -572,7 +572,7 @@ func loadPlanHook(
 		{Name: "sha512", Typ: parser.TypeBytes},
 		{Name: "data_size", Typ: parser.TypeInt},
 	}
-	fn := func(ctx context.Context) ([]parser.Datums, error) {
+	fn := func(ctx context.Context, resultsCh chan<- parser.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, loadStmt.StatementTag())
 		defer tracing.FinishSpan(span)
@@ -582,7 +582,7 @@ func loadPlanHook(
 		// TODO(dan): Filter out unhealthy nodes.
 		resp, err := p.ExecCfg().StatusServer.Nodes(ctx, &serverpb.NodesRequest{})
 		if err != nil {
-			return nil, err
+			return err
 		}
 		var nodes []roachpb.NodeDescriptor
 		for _, node := range resp.Nodes {
@@ -600,7 +600,7 @@ func loadPlanHook(
 		}()
 
 		if err := p.DistLoader().LoadCSV(ctx, p.ExecCfg().DB, evalCtx, nodes, rows); err != nil {
-			return nil, err
+			return err
 		}
 
 		var total int
@@ -609,14 +609,14 @@ func loadPlanHook(
 			total += int(*row[0].(*parser.DInt))
 		}
 
-		ret := []parser.Datums{{
+		resultsCh <- parser.Datums{
 			parser.DNull,
 			parser.DNull,
 			parser.DNull,
 			parser.DNull,
 			parser.NewDInt(parser.DInt(total)),
-		}}
-		return ret, nil
+		}
+		return nil
 	}
 	return fn, header, nil
 }
