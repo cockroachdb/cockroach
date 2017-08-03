@@ -282,11 +282,9 @@ func ignoreMisplannedRanges(metas []ProducerMetadata) []ProducerMetadata {
 }
 
 // TestLimitedBufferingDeadlock sets up a scenario which leads to deadlock if
-// the hash router blocks whenever one of the consumers blocks (#17097).
+// a single consumer can block the entire router (#17097).
 func TestLimitedBufferingDeadlock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	t.Skip("#17097")
 
 	tc := serverutils.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.TODO())

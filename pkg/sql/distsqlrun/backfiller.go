@@ -64,6 +64,12 @@ type backfiller struct {
 	alloc   sqlbase.DatumAlloc
 }
 
+// OutputTypes is part of the processor interface.
+func (*backfiller) OutputTypes() []sqlbase.ColumnType {
+	// No output types.
+	return nil
+}
+
 // Run is part of the processor interface.
 func (b *backfiller) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if wg != nil {
