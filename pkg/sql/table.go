@@ -566,15 +566,26 @@ func (p *planner) getAliasedTableName(n parser.TableExpr) (*parser.TableName, er
 func (p *planner) createSchemaChangeJob(
 	ctx context.Context, tableDesc *sqlbase.TableDescriptor, stmt string,
 ) (sqlbase.MutationID, error) {
+	span := tableDesc.PrimaryIndexSpan()
 	mutationID, err := tableDesc.FinalizeMutation()
 	if err != nil {
 		return sqlbase.InvalidMutationID, err
+	}
+	var spanList []jobs.ResumeSpanList
+	for i := 0; i < len(tableDesc.Mutations); i++ {
+		if tableDesc.Mutations[i].MutationID == mutationID {
+			spanList = append(spanList,
+				jobs.ResumeSpanList{
+					ResumeSpans: []roachpb.Span{span},
+				},
+			)
+		}
 	}
 	jobRecord := jobs.Record{
 		Description:   stmt,
 		Username:      p.User(),
 		DescriptorIDs: sqlbase.IDs{tableDesc.GetID()},
-		Details:       jobs.SchemaChangeDetails{},
+		Details:       jobs.SchemaChangeDetails{ResumeSpanList: spanList},
 	}
 	job := p.ExecCfg().JobRegistry.NewJob(jobRecord)
 	if err := job.WithTxn(p.txn).Created(ctx, jobs.WithoutCancel); err != nil {

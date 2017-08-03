@@ -1644,7 +1644,6 @@ func (desc *TableDescriptor) AddColumnMutation(
 	c ColumnDescriptor, direction DescriptorMutation_Direction,
 ) {
 	m := DescriptorMutation{Descriptor_: &DescriptorMutation_Column{Column: &c}, Direction: direction}
-	m.ResumeSpans = append(m.ResumeSpans, desc.PrimaryIndexSpan())
 	desc.addMutation(m)
 }
 
@@ -1656,7 +1655,6 @@ func (desc *TableDescriptor) AddIndexMutation(
 		return err
 	}
 	m := DescriptorMutation{Descriptor_: &DescriptorMutation_Index{Index: &idx}, Direction: direction}
-	m.ResumeSpans = append(m.ResumeSpans, desc.PrimaryIndexSpan())
 	desc.addMutation(m)
 	return nil
 }
