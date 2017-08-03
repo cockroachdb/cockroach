@@ -44,6 +44,7 @@ type Cluster interface {
 	// dismantle the cluster.
 	AssertAndStop(context.Context, testing.TB)
 	// ExecRoot executes the given command with super-user privileges.
+	// Returns stdout, stderr, and an error.
 	ExecRoot(ctx context.Context, i int, cmd []string) (string, string, error)
 	// Kill terminates the cockroach process running on the given node number.
 	// The given integer must be in the range [0,NumNodes()-1].

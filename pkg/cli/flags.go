@@ -96,7 +96,7 @@ func (s *nodeDecommissionWaitType) Set(value string) error {
 	case "none":
 		*s = nodeDecommissionWaitNone
 	default:
-		return errors.New("invalid value")
+		return errors.New("invalid value, must be any of 'all', 'live', 'none'")
 	}
 	return nil
 }
@@ -369,6 +369,12 @@ func init() {
 		stringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, base.DefaultCertsDirectory)
 	}
 
+	// Decommission command.
+	varFlag(decommissionNodeCmd.Flags(), &nodeDecommissionWait, cliflags.Wait)
+
+	// Quit command.
+	boolFlag(quitCmd.Flags(), &serverDecommission, cliflags.Decommission, false)
+
 	zf := setZoneCmd.Flags()
 	stringFlag(zf, &zoneConfig, cliflags.ZoneConfig, "")
 	boolFlag(zf, &zoneDisableReplication, cliflags.ZoneDisableReplication, false)
@@ -431,13 +437,6 @@ func init() {
 		stringFlag(f, &debugCtx.inputFile, cliflags.GossipInputFile, "")
 		boolFlag(f, &debugCtx.printSystemConfig, cliflags.PrintSystemConfig, false)
 	}
-
-	// Quit command.
-	boolFlag(quitCmd.Flags(), &serverDecommission, cliflags.Decommission, false)
-
-	// Decommission command.
-	varFlag(decommissionNodeCmd.Flags(), &nodeDecommissionWait, cliflags.Wait)
-
 }
 
 func extraServerFlagInit() {

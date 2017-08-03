@@ -196,18 +196,19 @@ var decommissionNodesColumnHeaders = []string{
 }
 
 var decommissionNodeCmd = &cobra.Command{
-	Use:   "decommission <nodeID1> [<nodeID2> ...]",
+	Use:   "decommission [<nodeID1> <nodeID2> ...]",
 	Short: "decommissions the node(s)",
 	Long: `
 Marks the nodes with the supplied IDs as decommissioning.
 This will cause leases and replicas to be removed from these nodes.
+
+When called without any targets, lists decommissioning status of
+all known nodes.
 	`,
 	RunE: MaybeDecorateGRPCError(runDecommissionNode),
 }
 
-func setDecommission(
-	ctx context.Context, c serverpb.AdminClient, strNodeIDs []string, decommission bool,
-) (*serverpb.DecommissionStatusResponse, error) {
+func parseNodeIDs(strNodeIDs []string) ([]roachpb.NodeID, error) {
 	nodeIDs := make([]roachpb.NodeID, 0, len(strNodeIDs))
 	for _, str := range strNodeIDs {
 		i, err := strconv.ParseInt(str, 10, 32)
@@ -216,12 +217,7 @@ func setDecommission(
 		}
 		nodeIDs = append(nodeIDs, roachpb.NodeID(i))
 	}
-
-	req := &serverpb.DecommissionRequest{
-		NodeIDs:         nodeIDs,
-		Decommissioning: decommission,
-	}
-	return c.Decommission(ctx, req)
+	return nodeIDs, nil
 }
 
 func runDecommissionNode(cmd *cobra.Command, args []string) error {
@@ -246,6 +242,10 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 func runDecommissionNodeImpl(
 	ctx context.Context, c serverpb.AdminClient, wait nodeDecommissionWaitType, args []string,
 ) error {
+	nodeIDs, err := parseNodeIDs(args)
+	if err != nil {
+		return err
+	}
 	minReplicaCount := int64(math.MaxInt64)
 	opts := retry.Options{
 		InitialBackoff: 5 * time.Millisecond,
@@ -253,7 +253,12 @@ func runDecommissionNodeImpl(
 		MaxBackoff:     20 * time.Second,
 	}
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
-		resp, err := setDecommission(ctx, c, args, true)
+		req := &serverpb.DecommissionRequest{
+			NodeIDs:         nodeIDs,
+			Decommissioning: true,
+		}
+		resp, err := c.Decommission(ctx, req)
+
 		if err != nil {
 			return errors.Wrap(err, "while trying to mark as decommissioning")
 		}
@@ -269,7 +274,13 @@ func runDecommissionNodeImpl(
 			allDecommissioning = allDecommissioning && status.Decommissioning
 		}
 		if replicaCount == 0 && allDecommissioning {
-			fmt.Fprintln(os.Stdout, "The target nodes may now be removed from the cluster.")
+			if wait == nodeDecommissionWaitAll {
+				fmt.Fprintln(os.Stdout, "All target nodes report that they hold no more data. "+
+					"Please verify cluster health before removing the nodes.")
+			} else {
+				fmt.Fprintln(os.Stdout, "Decommissioning finished. Please verify cluster health "+
+					"before removing the nodes.")
+			}
 			break
 		}
 		if wait == nodeDecommissionWaitNone {
@@ -322,6 +333,11 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return usageAndError(cmd)
 	}
+	nodeIDs, err := parseNodeIDs(args)
+	if err != nil {
+		return err
+	}
+
 	c, stopper, err := getAdminClient()
 	if err != nil {
 		return err
@@ -329,7 +345,11 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 	ctx := stopperContext(stopper)
 	defer stopper.Stop(ctx)
 
-	resp, err := setDecommission(ctx, c, args, false)
+	req := &serverpb.DecommissionRequest{
+		NodeIDs:         nodeIDs,
+		Decommissioning: false,
+	}
+	resp, err := c.Decommission(ctx, req)
 	if err != nil {
 		return err
 	}

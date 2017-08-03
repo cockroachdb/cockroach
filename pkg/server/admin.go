@@ -1151,7 +1151,7 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 func (s *adminServer) DecommissionStatus(
 	ctx context.Context, req *serverpb.DecommissionStatusRequest,
 ) (*serverpb.DecommissionStatusResponse, error) {
-	// Get the number of replicas on each node. We *may* don't need all of them,
+	// Get the number of replicas on each node. We *may* not need all of them,
 	// but that would be more complicated than seems worth it right now.
 	ns, err := s.server.status.Nodes(ctx, &serverpb.NodesRequest{})
 	if err != nil {
@@ -1198,7 +1198,7 @@ func (s *adminServer) DecommissionStatus(
 			Decommissioning: l.Decommissioning,
 			Draining:        l.Draining,
 		}
-		if live, err := s.server.nodeLiveness.IsLive(nodeID); err == nil && live {
+		if l.IsLive(s.server.clock.Now(), s.server.clock.MaxOffset()) {
 			nodeResp.IsLive = true
 		}
 

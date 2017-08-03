@@ -625,9 +625,7 @@ func (m *DecommissionRequest) String() string            { return proto.CompactT
 func (*DecommissionRequest) ProtoMessage()               {}
 func (*DecommissionRequest) Descriptor() ([]byte, []int) { return fileDescriptorAdmin, []int{21} }
 
-// DecommissionStatusResponse is the response to a successful DecommissionRequest and
-// lists all nodes, their statuses, replica count, decommissioning flag and
-// draining flag after having processing the request.
+// DecommissionStatusResponse lists decommissioning statuses for a number of NodeIDs.
 type DecommissionStatusResponse struct {
 	// Status of all affected nodes.
 	Status []DecommissionStatusResponse_Status `protobuf:"bytes,2,rep,name=status" json:"status"`
@@ -938,7 +936,7 @@ type AdminClient interface {
 	Drain(ctx context.Context, in *DrainRequest, opts ...grpc.CallOption) (Admin_DrainClient, error)
 	// Decommission puts the node(s) into the specified decommissioning state.
 	Decommission(ctx context.Context, in *DecommissionRequest, opts ...grpc.CallOption) (*DecommissionStatusResponse, error)
-	// Decommission puts the node into the specified decommissioning state
+	// DecommissionStatus retrieves the decommissioning status of the specified nodes.
 	DecommissionStatus(ctx context.Context, in *DecommissionStatusRequest, opts ...grpc.CallOption) (*DecommissionStatusResponse, error)
 	// URL: /_admin/v1/rangelog/1
 	// URL: /_admin/v1/rangelog/1?limit=100
@@ -1202,7 +1200,7 @@ type AdminServer interface {
 	Drain(*DrainRequest, Admin_DrainServer) error
 	// Decommission puts the node(s) into the specified decommissioning state.
 	Decommission(context.Context, *DecommissionRequest) (*DecommissionStatusResponse, error)
-	// Decommission puts the node into the specified decommissioning state
+	// DecommissionStatus retrieves the decommissioning status of the specified nodes.
 	DecommissionStatus(context.Context, *DecommissionStatusRequest) (*DecommissionStatusResponse, error)
 	// URL: /_admin/v1/rangelog/1
 	// URL: /_admin/v1/rangelog/1?limit=100

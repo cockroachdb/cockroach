@@ -490,7 +490,7 @@ shutting down the node.`,
 		Name: "wait",
 		Description: `
 Specifies when to return after having marked the targets as decommissioning.
-Takes either of the following values:
+Takes any of the following values:
 <PRE>
 
 - all:  waits until all target nodes' replica counts have dropped to zero.

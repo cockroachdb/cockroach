@@ -275,7 +275,7 @@ func (nl *NodeLiveness) setDecommissioningInternal(
 	}
 	newLiveness.Decommissioning = decommission
 	err := nl.updateLiveness(ctx, &newLiveness, liveness, func(actual Liveness) error {
-		nl.setSelf(actual)
+		// FIXME(tschottdorf) nl.setSelf(actual)
 		if actual.Decommissioning == newLiveness.Decommissioning {
 			return nil
 		}
@@ -284,7 +284,7 @@ func (nl *NodeLiveness) setDecommissioningInternal(
 	if err != nil {
 		return err
 	}
-	nl.setSelf(newLiveness)
+	// FIXME(tschottdorf) nl.setSelf(newLiveness)
 	return nil
 }
 
