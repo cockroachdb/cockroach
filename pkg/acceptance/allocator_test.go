@@ -129,7 +129,9 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 	if err := at.f.Resize(at.StartNodes); err != nil {
 		t.Fatal(err)
 	}
-	CheckGossip(ctx, t, at.f, longWaitTime, HasPeers(at.StartNodes))
+	if err := CheckGossip(ctx, at.f, longWaitTime, HasPeers(at.StartNodes)); err != nil {
+		t.Fatal(err)
+	}
 	at.f.Assert(ctx, t)
 	log.Info(ctx, "initial cluster is up")
 
@@ -169,7 +171,9 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 		t.Fatal(err)
 	}
 
-	CheckGossip(ctx, t, at.f, longWaitTime, HasPeers(at.EndNodes))
+	if err := CheckGossip(ctx, at.f, longWaitTime, HasPeers(at.EndNodes)); err != nil {
+		t.Fatal(err)
+	}
 	at.f.Assert(ctx, t)
 
 	log.Infof(ctx, "starting load on cluster")
