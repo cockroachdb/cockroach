@@ -96,13 +96,19 @@ const (
 	FlowFinished
 )
 
+type startable interface {
+	start(ctx context.Context, wg *sync.WaitGroup)
+}
+
 // Flow represents a flow which consists of processors and streams.
 type Flow struct {
 	FlowCtx
 
 	flowRegistry *flowRegistry
 	processors   []processor
-	outboxes     []*outbox
+	// startables are entities that must be started when the flow starts;
+	// currently these are outboxes and routers.
+	startables []startable
 	// syncFlowConsumer is a special outbox which instead of sending rows to
 	// another host, returns them directly (as a result to a SetupSyncFlow RPC,
 	// or to the local host).
@@ -187,7 +193,7 @@ func (f *Flow) setupOutboundStream(spec StreamEndpointSpec) (RowReceiver, error)
 
 	case StreamEndpointSpec_REMOTE:
 		outbox := newOutbox(&f.FlowCtx, spec.TargetAddr, f.id, sid)
-		f.outboxes = append(f.outboxes, outbox)
+		f.startables = append(f.startables, outbox)
 		return outbox, nil
 
 	case StreamEndpointSpec_LOCAL:
@@ -206,7 +212,10 @@ func (f *Flow) setupOutboundStream(spec StreamEndpointSpec) (RowReceiver, error)
 	}
 }
 
-func (f *Flow) setupRouter(spec *OutputRouterSpec) (RowReceiver, error) {
+// setupRouter initializes a router and the outbound streams.
+//
+// Pass-through routers are not supported; they should be handled separately.
+func (f *Flow) setupRouter(spec *OutputRouterSpec) (router, error) {
 	streams := make([]RowReceiver, len(spec.Streams))
 	for i := range spec.Streams {
 		var err error
@@ -234,13 +243,40 @@ func (f *Flow) makeProcessor(ps *ProcessorSpec, inputs []RowSource) (processor, 
 	}
 	outputs := make([]RowReceiver, len(ps.Output))
 	for i := range ps.Output {
-		var err error
-		outputs[i], err = f.setupRouter(&ps.Output[i])
+		spec := &ps.Output[i]
+		if spec.Type == OutputRouterSpec_PASS_THROUGH {
+			// There is no entity that corresponds to a pass-through router - we just
+			// use its output stream directly.
+			if len(spec.Streams) != 1 {
+				return nil, errors.Errorf("expected one stream for passthrough router")
+			}
+			var err error
+			outputs[i], err = f.setupOutboundStream(spec.Streams[0])
+			if err != nil {
+				return nil, err
+			}
+			continue
+		}
+
+		r, err := f.setupRouter(spec)
 		if err != nil {
 			return nil, err
 		}
+		outputs[i] = r
+		f.startables = append(f.startables, r)
 	}
-	return newProcessor(&f.FlowCtx, &ps.Core, &ps.Post, inputs, outputs)
+	proc, err := newProcessor(&f.FlowCtx, &ps.Core, &ps.Post, inputs, outputs)
+	if err != nil {
+		return nil, err
+	}
+	// Initialize any routers (the setupRouter case above).
+	types := proc.OutputTypes()
+	for _, o := range outputs {
+		if r, ok := o.(router); ok {
+			r.init(&f.FlowCtx, types)
+		}
+	}
+	return proc, nil
 }
 
 func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
@@ -311,20 +347,20 @@ func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
 func (f *Flow) Start(ctx context.Context, doneFn func()) {
 	f.doneFn = doneFn
 	log.VEventf(
-		ctx, 1, "starting (%d processors, %d outboxes)", len(f.outboxes), len(f.processors),
+		ctx, 1, "starting (%d processors, %d startables)", len(f.processors), len(f.startables),
 	)
 	f.status = FlowRunning
 
 	// Once we call RegisterFlow, the inbound streams become accessible; we must
 	// set up the WaitGroup counter before.
-	f.waitGroup.Add(len(f.inboundStreams) + len(f.outboxes) + len(f.processors))
+	f.waitGroup.Add(len(f.inboundStreams) + len(f.processors))
 
 	f.flowRegistry.RegisterFlow(ctx, f.id, f, f.inboundStreams, flowStreamDefaultTimeout)
 	if log.V(1) {
 		log.Infof(ctx, "registered flow %s", f.id.Short())
 	}
-	for _, o := range f.outboxes {
-		o.start(ctx, &f.waitGroup)
+	for _, s := range f.startables {
+		s.start(ctx, &f.waitGroup)
 	}
 	for _, p := range f.processors {
 		go p.Run(ctx, &f.waitGroup)

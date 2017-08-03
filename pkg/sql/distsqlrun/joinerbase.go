@@ -22,6 +22,8 @@ import (
 )
 
 type joinerBase struct {
+	processorBase
+
 	leftSource, rightSource RowSource
 
 	joinType    joinType
@@ -39,8 +41,6 @@ type joinerBase struct {
 	// columns must be merged at the beginning of each result row. This
 	// is the desired behavior for USING and NATURAL JOIN.
 	numMergedEqualityColumns int
-
-	out procOutputHelper
 }
 
 func (jb *joinerBase) init(
