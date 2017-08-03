@@ -54,6 +54,7 @@ var keywords = map[string]int{
 	"COVERING":                  COVERING,
 	"CREATE":                    CREATE,
 	"CROSS":                     CROSS,
+	"CSV":                       CSV,
 	"CUBE":                      CUBE,
 	"CURRENT":                   CURRENT,
 	"CURRENT_CATALOG":           CURRENT_CATALOG,
