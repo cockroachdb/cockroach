@@ -19877,6 +19877,945 @@ export const cockroach = $root.cockroach = (() => {
                 return Status;
             })();
 
+            serverpb.UserLoginRequest = (function() {
+
+                /**
+                 * Properties of a UserLoginRequest.
+                 * @typedef cockroach.server.serverpb.UserLoginRequest$Properties
+                 * @type {Object}
+                 * @property {string} [username] UserLoginRequest username.
+                 * @property {string} [password] UserLoginRequest password.
+                 */
+
+                /**
+                 * Constructs a new UserLoginRequest.
+                 * @exports cockroach.server.serverpb.UserLoginRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.UserLoginRequest$Properties=} [properties] Properties to set
+                 */
+                function UserLoginRequest(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * UserLoginRequest username.
+                 * @type {string}
+                 */
+                UserLoginRequest.prototype.username = "";
+
+                /**
+                 * UserLoginRequest password.
+                 * @type {string}
+                 */
+                UserLoginRequest.prototype.password = "";
+
+                /**
+                 * Creates a new UserLoginRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.UserLoginRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.UserLoginRequest} UserLoginRequest instance
+                 */
+                UserLoginRequest.create = function create(properties) {
+                    return new UserLoginRequest(properties);
+                };
+
+                /**
+                 * Encodes the specified UserLoginRequest message. Does not implicitly {@link cockroach.server.serverpb.UserLoginRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.UserLoginRequest$Properties} message UserLoginRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                UserLoginRequest.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.username != null && message.hasOwnProperty("username"))
+                        writer.uint32(/* id 1, wireType 2 =*/10).string(message.username);
+                    if (message.password != null && message.hasOwnProperty("password"))
+                        writer.uint32(/* id 2, wireType 2 =*/18).string(message.password);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified UserLoginRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.UserLoginRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.UserLoginRequest$Properties} message UserLoginRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                UserLoginRequest.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a UserLoginRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.UserLoginRequest} UserLoginRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                UserLoginRequest.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.UserLoginRequest();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.username = reader.string();
+                            break;
+                        case 2:
+                            message.password = reader.string();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a UserLoginRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.UserLoginRequest} UserLoginRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                UserLoginRequest.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a UserLoginRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                UserLoginRequest.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.username != null && message.hasOwnProperty("username"))
+                        if (!$util.isString(message.username))
+                            return "username: string expected";
+                    if (message.password != null && message.hasOwnProperty("password"))
+                        if (!$util.isString(message.password))
+                            return "password: string expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a UserLoginRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.UserLoginRequest} UserLoginRequest
+                 */
+                UserLoginRequest.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.UserLoginRequest)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.UserLoginRequest();
+                    if (object.username != null)
+                        message.username = String(object.username);
+                    if (object.password != null)
+                        message.password = String(object.password);
+                    return message;
+                };
+
+                /**
+                 * Creates a UserLoginRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.UserLoginRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.UserLoginRequest} UserLoginRequest
+                 */
+                UserLoginRequest.from = UserLoginRequest.fromObject;
+
+                /**
+                 * Creates a plain object from a UserLoginRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.UserLoginRequest} message UserLoginRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                UserLoginRequest.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults) {
+                        object.username = "";
+                        object.password = "";
+                    }
+                    if (message.username != null && message.hasOwnProperty("username"))
+                        object.username = message.username;
+                    if (message.password != null && message.hasOwnProperty("password"))
+                        object.password = message.password;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this UserLoginRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                UserLoginRequest.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this UserLoginRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                UserLoginRequest.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return UserLoginRequest;
+            })();
+
+            serverpb.UserLoginResponse = (function() {
+
+                /**
+                 * Properties of a UserLoginResponse.
+                 * @typedef cockroach.server.serverpb.UserLoginResponse$Properties
+                 * @type {Object}
+                 */
+
+                /**
+                 * Constructs a new UserLoginResponse.
+                 * @exports cockroach.server.serverpb.UserLoginResponse
+                 * @constructor
+                 * @param {cockroach.server.serverpb.UserLoginResponse$Properties=} [properties] Properties to set
+                 */
+                function UserLoginResponse(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * Creates a new UserLoginResponse instance using the specified properties.
+                 * @param {cockroach.server.serverpb.UserLoginResponse$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.UserLoginResponse} UserLoginResponse instance
+                 */
+                UserLoginResponse.create = function create(properties) {
+                    return new UserLoginResponse(properties);
+                };
+
+                /**
+                 * Encodes the specified UserLoginResponse message. Does not implicitly {@link cockroach.server.serverpb.UserLoginResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.UserLoginResponse$Properties} message UserLoginResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                UserLoginResponse.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified UserLoginResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.UserLoginResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.UserLoginResponse$Properties} message UserLoginResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                UserLoginResponse.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a UserLoginResponse message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.UserLoginResponse} UserLoginResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                UserLoginResponse.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.UserLoginResponse();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a UserLoginResponse message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.UserLoginResponse} UserLoginResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                UserLoginResponse.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a UserLoginResponse message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                UserLoginResponse.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a UserLoginResponse message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.UserLoginResponse} UserLoginResponse
+                 */
+                UserLoginResponse.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.UserLoginResponse)
+                        return object;
+                    return new $root.cockroach.server.serverpb.UserLoginResponse();
+                };
+
+                /**
+                 * Creates a UserLoginResponse message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.UserLoginResponse.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.UserLoginResponse} UserLoginResponse
+                 */
+                UserLoginResponse.from = UserLoginResponse.fromObject;
+
+                /**
+                 * Creates a plain object from a UserLoginResponse message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.UserLoginResponse} message UserLoginResponse
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                UserLoginResponse.toObject = function toObject() {
+                    return {};
+                };
+
+                /**
+                 * Creates a plain object from this UserLoginResponse message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                UserLoginResponse.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this UserLoginResponse to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                UserLoginResponse.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return UserLoginResponse;
+            })();
+
+            serverpb.UserLogoutRequest = (function() {
+
+                /**
+                 * Properties of a UserLogoutRequest.
+                 * @typedef cockroach.server.serverpb.UserLogoutRequest$Properties
+                 * @type {Object}
+                 */
+
+                /**
+                 * Constructs a new UserLogoutRequest.
+                 * @exports cockroach.server.serverpb.UserLogoutRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.UserLogoutRequest$Properties=} [properties] Properties to set
+                 */
+                function UserLogoutRequest(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * Creates a new UserLogoutRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.UserLogoutRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.UserLogoutRequest} UserLogoutRequest instance
+                 */
+                UserLogoutRequest.create = function create(properties) {
+                    return new UserLogoutRequest(properties);
+                };
+
+                /**
+                 * Encodes the specified UserLogoutRequest message. Does not implicitly {@link cockroach.server.serverpb.UserLogoutRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.UserLogoutRequest$Properties} message UserLogoutRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                UserLogoutRequest.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified UserLogoutRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.UserLogoutRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.UserLogoutRequest$Properties} message UserLogoutRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                UserLogoutRequest.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a UserLogoutRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.UserLogoutRequest} UserLogoutRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                UserLogoutRequest.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.UserLogoutRequest();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a UserLogoutRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.UserLogoutRequest} UserLogoutRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                UserLogoutRequest.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a UserLogoutRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                UserLogoutRequest.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a UserLogoutRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.UserLogoutRequest} UserLogoutRequest
+                 */
+                UserLogoutRequest.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.UserLogoutRequest)
+                        return object;
+                    return new $root.cockroach.server.serverpb.UserLogoutRequest();
+                };
+
+                /**
+                 * Creates a UserLogoutRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.UserLogoutRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.UserLogoutRequest} UserLogoutRequest
+                 */
+                UserLogoutRequest.from = UserLogoutRequest.fromObject;
+
+                /**
+                 * Creates a plain object from a UserLogoutRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.UserLogoutRequest} message UserLogoutRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                UserLogoutRequest.toObject = function toObject() {
+                    return {};
+                };
+
+                /**
+                 * Creates a plain object from this UserLogoutRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                UserLogoutRequest.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this UserLogoutRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                UserLogoutRequest.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return UserLogoutRequest;
+            })();
+
+            serverpb.UserLogoutResponse = (function() {
+
+                /**
+                 * Properties of a UserLogoutResponse.
+                 * @typedef cockroach.server.serverpb.UserLogoutResponse$Properties
+                 * @type {Object}
+                 */
+
+                /**
+                 * Constructs a new UserLogoutResponse.
+                 * @exports cockroach.server.serverpb.UserLogoutResponse
+                 * @constructor
+                 * @param {cockroach.server.serverpb.UserLogoutResponse$Properties=} [properties] Properties to set
+                 */
+                function UserLogoutResponse(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * Creates a new UserLogoutResponse instance using the specified properties.
+                 * @param {cockroach.server.serverpb.UserLogoutResponse$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.UserLogoutResponse} UserLogoutResponse instance
+                 */
+                UserLogoutResponse.create = function create(properties) {
+                    return new UserLogoutResponse(properties);
+                };
+
+                /**
+                 * Encodes the specified UserLogoutResponse message. Does not implicitly {@link cockroach.server.serverpb.UserLogoutResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.UserLogoutResponse$Properties} message UserLogoutResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                UserLogoutResponse.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified UserLogoutResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.UserLogoutResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.UserLogoutResponse$Properties} message UserLogoutResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                UserLogoutResponse.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a UserLogoutResponse message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.UserLogoutResponse} UserLogoutResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                UserLogoutResponse.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.UserLogoutResponse();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a UserLogoutResponse message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.UserLogoutResponse} UserLogoutResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                UserLogoutResponse.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a UserLogoutResponse message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                UserLogoutResponse.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a UserLogoutResponse message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.UserLogoutResponse} UserLogoutResponse
+                 */
+                UserLogoutResponse.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.UserLogoutResponse)
+                        return object;
+                    return new $root.cockroach.server.serverpb.UserLogoutResponse();
+                };
+
+                /**
+                 * Creates a UserLogoutResponse message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.UserLogoutResponse.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.UserLogoutResponse} UserLogoutResponse
+                 */
+                UserLogoutResponse.from = UserLogoutResponse.fromObject;
+
+                /**
+                 * Creates a plain object from a UserLogoutResponse message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.UserLogoutResponse} message UserLogoutResponse
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                UserLogoutResponse.toObject = function toObject() {
+                    return {};
+                };
+
+                /**
+                 * Creates a plain object from this UserLogoutResponse message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                UserLogoutResponse.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this UserLogoutResponse to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                UserLogoutResponse.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return UserLogoutResponse;
+            })();
+
+            serverpb.SessionCookie = (function() {
+
+                /**
+                 * Properties of a SessionCookie.
+                 * @typedef cockroach.server.serverpb.SessionCookie$Properties
+                 * @type {Object}
+                 * @property {Long} [id] SessionCookie id.
+                 * @property {Uint8Array} [secret] SessionCookie secret.
+                 */
+
+                /**
+                 * Constructs a new SessionCookie.
+                 * @exports cockroach.server.serverpb.SessionCookie
+                 * @constructor
+                 * @param {cockroach.server.serverpb.SessionCookie$Properties=} [properties] Properties to set
+                 */
+                function SessionCookie(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * SessionCookie id.
+                 * @type {Long}
+                 */
+                SessionCookie.prototype.id = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                /**
+                 * SessionCookie secret.
+                 * @type {Uint8Array}
+                 */
+                SessionCookie.prototype.secret = $util.newBuffer([]);
+
+                /**
+                 * Creates a new SessionCookie instance using the specified properties.
+                 * @param {cockroach.server.serverpb.SessionCookie$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.SessionCookie} SessionCookie instance
+                 */
+                SessionCookie.create = function create(properties) {
+                    return new SessionCookie(properties);
+                };
+
+                /**
+                 * Encodes the specified SessionCookie message. Does not implicitly {@link cockroach.server.serverpb.SessionCookie.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.SessionCookie$Properties} message SessionCookie message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                SessionCookie.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.id != null && message.hasOwnProperty("id"))
+                        writer.uint32(/* id 1, wireType 0 =*/8).int64(message.id);
+                    if (message.secret != null && message.hasOwnProperty("secret"))
+                        writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.secret);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified SessionCookie message, length delimited. Does not implicitly {@link cockroach.server.serverpb.SessionCookie.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.SessionCookie$Properties} message SessionCookie message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                SessionCookie.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a SessionCookie message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.SessionCookie} SessionCookie
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                SessionCookie.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.SessionCookie();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.id = reader.int64();
+                            break;
+                        case 2:
+                            message.secret = reader.bytes();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a SessionCookie message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.SessionCookie} SessionCookie
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                SessionCookie.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a SessionCookie message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                SessionCookie.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.id != null && message.hasOwnProperty("id"))
+                        if (!$util.isInteger(message.id) && !(message.id && $util.isInteger(message.id.low) && $util.isInteger(message.id.high)))
+                            return "id: integer|Long expected";
+                    if (message.secret != null && message.hasOwnProperty("secret"))
+                        if (!(message.secret && typeof message.secret.length === "number" || $util.isString(message.secret)))
+                            return "secret: buffer expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a SessionCookie message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.SessionCookie} SessionCookie
+                 */
+                SessionCookie.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.SessionCookie)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.SessionCookie();
+                    if (object.id != null)
+                        if ($util.Long)
+                            (message.id = $util.Long.fromValue(object.id)).unsigned = false;
+                        else if (typeof object.id === "string")
+                            message.id = parseInt(object.id, 10);
+                        else if (typeof object.id === "number")
+                            message.id = object.id;
+                        else if (typeof object.id === "object")
+                            message.id = new $util.LongBits(object.id.low >>> 0, object.id.high >>> 0).toNumber();
+                    if (object.secret != null)
+                        if (typeof object.secret === "string")
+                            $util.base64.decode(object.secret, message.secret = $util.newBuffer($util.base64.length(object.secret)), 0);
+                        else if (object.secret.length)
+                            message.secret = object.secret;
+                    return message;
+                };
+
+                /**
+                 * Creates a SessionCookie message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.SessionCookie.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.SessionCookie} SessionCookie
+                 */
+                SessionCookie.from = SessionCookie.fromObject;
+
+                /**
+                 * Creates a plain object from a SessionCookie message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.SessionCookie} message SessionCookie
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                SessionCookie.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults) {
+                        if ($util.Long) {
+                            let long = new $util.Long(0, 0, false);
+                            object.id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                        } else
+                            object.id = options.longs === String ? "0" : 0;
+                        object.secret = options.bytes === String ? "" : [];
+                    }
+                    if (message.id != null && message.hasOwnProperty("id"))
+                        if (typeof message.id === "number")
+                            object.id = options.longs === String ? String(message.id) : message.id;
+                        else
+                            object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber() : message.id;
+                    if (message.secret != null && message.hasOwnProperty("secret"))
+                        object.secret = options.bytes === String ? $util.base64.encode(message.secret, 0, message.secret.length) : options.bytes === Array ? Array.prototype.slice.call(message.secret) : message.secret;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this SessionCookie message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                SessionCookie.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this SessionCookie to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                SessionCookie.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return SessionCookie;
+            })();
+
+            serverpb.Authentication = (function() {
+
+                /**
+                 * Constructs a new Authentication service.
+                 * @exports cockroach.server.serverpb.Authentication
+                 * @extends $protobuf.rpc.Service
+                 * @constructor
+                 * @param {$protobuf.RPCImpl} rpcImpl RPC implementation
+                 * @param {boolean} [requestDelimited=false] Whether requests are length-delimited
+                 * @param {boolean} [responseDelimited=false] Whether responses are length-delimited
+                 */
+                function Authentication(rpcImpl, requestDelimited, responseDelimited) {
+                    $protobuf.rpc.Service.call(this, rpcImpl, requestDelimited, responseDelimited);
+                }
+
+                (Authentication.prototype = Object.create($protobuf.rpc.Service.prototype)).constructor = Authentication;
+
+                /**
+                 * Creates new Authentication service using the specified rpc implementation.
+                 * @param {$protobuf.RPCImpl} rpcImpl RPC implementation
+                 * @param {boolean} [requestDelimited=false] Whether requests are length-delimited
+                 * @param {boolean} [responseDelimited=false] Whether responses are length-delimited
+                 * @returns {Authentication} RPC service. Useful where requests and/or responses are streamed.
+                 */
+                Authentication.create = function create(rpcImpl, requestDelimited, responseDelimited) {
+                    return new this(rpcImpl, requestDelimited, responseDelimited);
+                };
+
+                /**
+                 * Callback as used by {@link Authentication#userLogin}.
+                 * @typedef Authentication_userLogin_Callback
+                 * @type {function}
+                 * @param {?Error} error Error, if any
+                 * @param {cockroach.server.serverpb.UserLoginResponse} [response] UserLoginResponse
+                 */
+
+                /**
+                 * Calls UserLogin.
+                 * @param {cockroach.server.serverpb.UserLoginRequest|Object.<string,*>} request UserLoginRequest message or plain object
+                 * @param {Authentication_userLogin_Callback} callback Node-style callback called with the error, if any, and UserLoginResponse
+                 * @returns {undefined}
+                 */
+                Authentication.prototype.userLogin = function userLogin(request, callback) {
+                    return this.rpcCall(userLogin, $root.cockroach.server.serverpb.UserLoginRequest, $root.cockroach.server.serverpb.UserLoginResponse, request, callback);
+                };
+
+                /**
+                 * Calls UserLogin.
+                 * @name Authentication#userLogin
+                 * @function
+                 * @param {cockroach.server.serverpb.UserLoginRequest|Object.<string,*>} request UserLoginRequest message or plain object
+                 * @returns {Promise<cockroach.server.serverpb.UserLoginResponse>} Promise
+                 * @variation 2
+                 */
+
+                /**
+                 * Callback as used by {@link Authentication#userLogout}.
+                 * @typedef Authentication_userLogout_Callback
+                 * @type {function}
+                 * @param {?Error} error Error, if any
+                 * @param {cockroach.server.serverpb.UserLogoutResponse} [response] UserLogoutResponse
+                 */
+
+                /**
+                 * Calls UserLogout.
+                 * @param {cockroach.server.serverpb.UserLogoutRequest|Object.<string,*>} request UserLogoutRequest message or plain object
+                 * @param {Authentication_userLogout_Callback} callback Node-style callback called with the error, if any, and UserLogoutResponse
+                 * @returns {undefined}
+                 */
+                Authentication.prototype.userLogout = function userLogout(request, callback) {
+                    return this.rpcCall(userLogout, $root.cockroach.server.serverpb.UserLogoutRequest, $root.cockroach.server.serverpb.UserLogoutResponse, request, callback);
+                };
+
+                /**
+                 * Calls UserLogout.
+                 * @name Authentication#userLogout
+                 * @function
+                 * @param {cockroach.server.serverpb.UserLogoutRequest|Object.<string,*>} request UserLogoutRequest message or plain object
+                 * @returns {Promise<cockroach.server.serverpb.UserLogoutResponse>} Promise
+                 * @variation 2
+                 */
+
+                return Authentication;
+            })();
+
             return serverpb;
         })();
 

@@ -18,6 +18,7 @@ import (
 	"bufio"
 	"crypto/tls"
 	"fmt"
+	"math"
 	"net"
 	"strconv"
 	"time"
@@ -36,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"math"
 )
 
 //go:generate stringer -type=clientMessageType
@@ -277,11 +277,14 @@ func (c *v3Conn) handleAuthentication(ctx context.Context, insecure bool) error 
 
 		// Check that the requested user exists and retrieve the hashed
 		// password in case password authentication is needed.
-		hashedPassword, err := sql.GetUserHashedPassword(
+		exists, hashedPassword, err := sql.GetUserHashedPassword(
 			ctx, c.executor, c.metrics.internalMemMetrics, c.sessionArgs.User,
 		)
 		if err != nil {
 			return c.sendError(err)
+		}
+		if !exists {
+			return c.sendError(errors.Errorf("user %s does not exist", c.sessionArgs.User))
 		}
 
 		tlsState := tlsConn.ConnectionState()
