@@ -17,7 +17,14 @@ package sql
 import (
 	"testing"
 
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -38,5 +45,32 @@ func TestMakeDatabaseDesc(t *testing.T) {
 	}
 	if len(desc.GetPrivileges().Users) != 1 {
 		t.Fatalf("wrong number of privilege users, expected 1, got: %d", len(desc.GetPrivileges().Users))
+	}
+}
+
+func TestDatabaseAccessors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+	defer leaktest.AfterTest(t)()
+
+	if err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		if _, err := getDatabaseDescByID(ctx, txn, sqlbase.SystemDB.ID); err != nil {
+			return err
+		}
+		if _, err := MustGetDatabaseDescByID(ctx, txn, sqlbase.SystemDB.ID); err != nil {
+			return err
+		}
+
+		p := makeInternalPlanner("plan", txn, security.RootUser, &MemoryMetrics{})
+		defer finishInternalPlanner(p)
+		p.session.tables.leaseMgr = s.LeaseManager().(*LeaseManager)
+		p.session.Database = "test"
+
+		_, err := p.session.tables.databaseCache.getDatabaseDescByID(ctx, txn, sqlbase.SystemDB.ID)
+		return err
+	}); err != nil {
+		t.Fatal(err)
 	}
 }
