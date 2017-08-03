@@ -88,6 +88,12 @@ const (
 	StatusSucceeded Status = "succeeded"
 )
 
+// Terminal returns whether this status represents a "terminal" state: a state
+// after which the job should never be updated again.
+func (s Status) Terminal() bool {
+	return s == StatusFailed || s == StatusSucceeded
+}
+
 // ID returns the ID of the job that this Job is currently tracking. This will
 // be nil if Created has not yet been called.
 func (j *Job) ID() *int64 {
@@ -128,11 +134,12 @@ func (j *Job) Created(ctx context.Context, cancelFn func()) error {
 
 // Started marks the tracked job as started.
 func (j *Job) Started(ctx context.Context) error {
-	return j.update(ctx, StatusRunning, func(payload *Payload) (bool, error) {
-		if payload.StartedMicros != 0 {
+	return j.update(ctx, func(status *Status, payload *Payload) (bool, error) {
+		if *status != StatusPending {
 			// Already started - do nothing.
 			return false, nil
 		}
+		*status = StatusRunning
 		payload.StartedMicros = timeutil.ToUnixMicros(timeutil.Now())
 		return true, nil
 	})
@@ -160,12 +167,10 @@ func (j *Job) Progressed(
 			fractionCompleted, j.id,
 		)
 	}
-	return j.update(ctx, StatusRunning, func(payload *Payload) (bool, error) {
-		if payload.StartedMicros == 0 {
-			return false, errors.Errorf("Job: job %d not started", j.id)
-		}
-		if payload.FinishedMicros != 0 {
-			return false, errors.Errorf("Job: job %d already finished", j.id)
+	return j.update(ctx, func(status *Status, payload *Payload) (bool, error) {
+		if *status != StatusRunning {
+			return false, errors.Errorf(
+				"Job: updating progress: expected running job, but job has status '%s'", *status)
 		}
 		if fractionCompleted > payload.FractionCompleted {
 			payload.FractionCompleted = fractionCompleted
@@ -187,11 +192,12 @@ func (j *Job) Failed(ctx context.Context, err error) {
 	if j.id == nil {
 		return
 	}
-	internalErr := j.update(ctx, StatusFailed, func(payload *Payload) (bool, error) {
-		if payload.FinishedMicros != 0 {
-			// Already finished - do nothing.
+	internalErr := j.update(ctx, func(status *Status, payload *Payload) (bool, error) {
+		if status.Terminal() {
+			// Already done - do nothing.
 			return false, nil
 		}
+		*status = StatusFailed
 		payload.Error = err.Error()
 		payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
 		return true, nil
@@ -207,11 +213,12 @@ func (j *Job) Failed(ctx context.Context, err error) {
 // completed to 1.0.
 func (j *Job) Succeeded(ctx context.Context) error {
 	defer j.registry.unregister(*j.id)
-	return j.update(ctx, StatusSucceeded, func(payload *Payload) (bool, error) {
-		if payload.FinishedMicros != 0 {
-			// Already finished - do nothing.
+	return j.update(ctx, func(status *Status, payload *Payload) (bool, error) {
+		if status.Terminal() {
+			// Already done - do nothing.
 			return false, nil
 		}
+		*status = StatusSucceeded
 		payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
 		payload.FractionCompleted = 1.0
 		return true, nil
@@ -260,7 +267,7 @@ func (j *Job) FinishedWith(ctx context.Context, err error) error {
 
 // SetDetails sets the details field of the currently running tracked job.
 func (j *Job) SetDetails(ctx context.Context, details interface{}) error {
-	return j.update(ctx, "", func(payload *Payload) (bool, error) {
+	return j.update(ctx, func(_ *Status, payload *Payload) (bool, error) {
 		payload.Details = WrapPayloadDetails(details)
 		return true, nil
 	})
@@ -331,23 +338,17 @@ func (j *Job) initialize(payload *Payload) (err error) {
 func (j *Job) load(ctx context.Context) error {
 	var payload *Payload
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		var err error
-		payload, err = j.loadPayload(ctx, txn)
+		const stmt = "SELECT payload FROM system.jobs WHERE id = $1"
+		row, err := j.registry.ex.QueryRowInTransaction(ctx, "log-job", txn, stmt, *j.id)
+		if err != nil {
+			return err
+		}
+		payload, err = UnmarshalPayload(row[0])
 		return err
 	}); err != nil {
 		return err
 	}
 	return j.initialize(payload)
-}
-
-func (j *Job) loadPayload(ctx context.Context, txn *client.Txn) (*Payload, error) {
-	const selectStmt = "SELECT payload FROM system.jobs WHERE id = $1"
-	row, err := j.registry.ex.QueryRowInTransaction(ctx, "log-job", txn, selectStmt, *j.id)
-	if err != nil {
-		return nil, err
-	}
-
-	return UnmarshalPayload(row[0])
 }
 
 func (j *Job) insert(ctx context.Context, payload *Payload) error {
@@ -377,7 +378,7 @@ func (j *Job) insert(ctx context.Context, payload *Payload) error {
 }
 
 func (j *Job) update(
-	ctx context.Context, newStatus Status, updateFn func(*Payload) (doUpdate bool, err error),
+	ctx context.Context, updateFn func(*Status, *Payload) (doUpdate bool, err error),
 ) error {
 	if j.id == nil {
 		return errors.New("Job: cannot update: job not created")
@@ -385,34 +386,37 @@ func (j *Job) update(
 
 	var payload *Payload
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		var err error
-		payload, err = j.loadPayload(ctx, txn)
+		const selectStmt = "SELECT status, payload FROM system.jobs WHERE id = $1"
+		row, err := j.registry.ex.QueryRowInTransaction(ctx, "log-job", txn, selectStmt, *j.id)
 		if err != nil {
 			return err
 		}
-		doUpdate, err := updateFn(payload)
+		statusString, ok := row[0].(*parser.DString)
+		if !ok {
+			return errors.Errorf("Job: expected string status on job %d, but got %T", *j.id, statusString)
+		}
+		status := Status(*statusString)
+		payload, err = UnmarshalPayload(row[1])
+		if err != nil {
+			return err
+		}
+
+		doUpdate, err := updateFn(&status, payload)
 		if err != nil {
 			return err
 		}
 		if !doUpdate {
 			return nil
 		}
+
 		payload.ModifiedMicros = timeutil.ToUnixMicros(timeutil.Now())
 		payloadBytes, err := protoutil.Marshal(payload)
 		if err != nil {
 			return err
 		}
 
-		var updateStmt string
-		var updateArgs []interface{}
-		if newStatus == "" {
-			updateStmt = "UPDATE system.jobs SET payload = $1 WHERE id = $2"
-			updateArgs = []interface{}{payloadBytes, *j.id}
-		} else {
-			updateStmt = "UPDATE system.jobs SET status = $1, payload = $2 WHERE id = $3"
-			updateArgs = []interface{}{newStatus, payloadBytes, *j.id}
-		}
-
+		const updateStmt = "UPDATE system.jobs SET status = $1, payload = $2 WHERE id = $3"
+		updateArgs := []interface{}{status, payloadBytes, *j.id}
 		n, err := j.registry.ex.ExecuteStatementInTransaction(
 			ctx, "job-update", txn, updateStmt, updateArgs...)
 		if err != nil {
@@ -434,7 +438,10 @@ func (j *Job) update(
 }
 
 func (j *Job) adopt(ctx context.Context, oldLease *Lease) error {
-	return j.update(ctx, StatusRunning, func(payload *Payload) (bool, error) {
+	return j.update(ctx, func(status *Status, payload *Payload) (bool, error) {
+		if *status != StatusRunning {
+			return false, errors.Errorf("job %d no longer running", *j.id)
+		}
 		if !payload.Lease.Equal(oldLease) {
 			return false, errors.Errorf("current lease %v did not match expected lease %v",
 				payload.Lease, oldLease)
