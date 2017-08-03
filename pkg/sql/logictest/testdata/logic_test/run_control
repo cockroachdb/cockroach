@@ -1,31 +1,31 @@
 # LogicTest: default parallel-stmts distsql
 
-query error unimplemented
+query error job with ID 1 does not exist
 PAUSE JOB 1
 
-query error unimplemented
+query error argument of PAUSE JOB must be type int, not type string
 PAUSE JOB 'foo'
 
-query error unimplemented
-PAUSE JOB (SELECT id FROM system.jobs)
+query error NULL is not a valid job ID
+PAUSE JOB (SELECT id FROM system.jobs LIMIT 1)
 
-query error unimplemented
+query error job with ID 1 does not exist
 RESUME JOB 1
 
-query error unimplemented
+query error argument of RESUME JOB must be type int, not type string
 RESUME JOB 'foo'
 
-query error unimplemented
-RESUME JOB (SELECT id FROM system.jobs)
+query error NULL is not a valid job ID
+RESUME JOB (SELECT id FROM system.jobs LIMIT 1)
 
-query error unimplemented
+query error job with ID 1 does not exist
 CANCEL JOB 1
 
-query error unimplemented
+query error argument of CANCEL JOB must be type int, not type string
 CANCEL JOB 'foo'
 
-query error unimplemented
-CANCEL JOB (SELECT id FROM system.jobs)
+query error NULL is not a valid job ID
+CANCEL JOB (SELECT id FROM system.jobs LIMIT 1)
 
 query error argument of CANCEL QUERY must be type string, not type int
 CANCEL QUERY 1
@@ -35,6 +35,3 @@ CANCEL QUERY 'f54'
 
 query error not found
 CANCEL QUERY '14d2355b9cccbca50000000000000001'
-
-query error unimplemented
-CANCEL JOB (SELECT * FROM VALUES ((1),(2)))
