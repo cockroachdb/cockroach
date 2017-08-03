@@ -121,6 +121,7 @@ message ProcessorCoreUnion {
   optional ValuesCoreSpec values = 10;
   optional BackfillerSpec backfiller = 11;
   optional AlgebraicSetOpSpec setOp = 12;
+  optional RegisteredProcessorSpec registered = 13;
 }
 
 // NoopCoreSpec indicates a "no-op" processor core. This is used when we just
@@ -430,4 +431,9 @@ message AlgebraicSetOpSpec {
   // that ordering can be used to optimize resource usage in the processor.
   optional Ordering ordering = 1 [(gogoproto.nullable) = false];
   optional SetOpType op_type = 2 [(gogoproto.nullable) = false];
+}
+
+message RegisteredProcessorSpec {
+  optional string name = 1 [(gogoproto.nullable) = false];
+  optional bytes args = 2 [(gogoproto.nullable) = false];
 }

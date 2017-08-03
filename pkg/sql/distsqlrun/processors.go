@@ -420,6 +420,9 @@ func newProcessor(
 		}
 		return newAlgebraicSetOp(flowCtx, core.SetOp, inputs[0], inputs[1], post, outputs[0])
 	}
+	if core.Registered != nil {
+		return newRegisteredProcessor(flowCtx, core.Registered, inputs, outputs)
+	}
 	return nil, errors.Errorf("unsupported processor core %s", core)
 }
 

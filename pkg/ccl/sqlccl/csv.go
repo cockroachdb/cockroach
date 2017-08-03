@@ -620,6 +620,36 @@ func loadPlanHook(
 	return fn, header, nil
 }
 
+func newCSVProcessor(flowCtx *distsqlrun.FlowCtx, inputs []distsqlrun.RowSource, outputs []distsqlrun.RowReceiver, args []byte) (distsqlrun.Processor, error) {
+	if err := distsqlrun.CheckNumInOut(inputs, outputs, 0, 1); err != nil {
+		return nil, err
+	}
+	cp := &CSVProcessor{}
+	types := []sqlbase.ColumnType{
+		{SemanticType: sqlbase.ColumnType_BYTES},
+		{SemanticType: sqlbase.ColumnType_BYTES},
+	}
+	if err := cp.out.Init(&distsqlrun.PostProcessSpec{}, types, &flowCtx.EvalCtx, outputs[0]); err != nil {
+		return nil, err
+	}
+	return cp, nil
+}
+
+type CSVProcessor struct {
+	out distsqlrun.ProcOutputHelper
+}
+
+var _ distsqlrun.Processor = &CSVProcessor{}
+
+func (cp *CSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
+	if wg != nil {
+		defer wg.Done()
+	}
+	// TODO(mjibson): produce rows
+	cp.out.Close()
+}
+
 func init() {
 	sql.AddPlanHook(loadPlanHook)
+	distsqlrun.RegisterProcessor("csv", newCSVProcessor)
 }
