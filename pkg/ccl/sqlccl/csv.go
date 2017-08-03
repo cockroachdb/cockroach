@@ -9,12 +9,12 @@
 package sqlccl
 
 import (
+	"bytes"
 	"encoding/csv"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
-	"path/filepath"
 	"runtime"
 	"sort"
 	"time"
@@ -62,47 +62,12 @@ func LoadCSV(
 	if err != nil {
 		return 0, 0, 0, err
 	}
-	stmt, err := parser.ParseOne(string(tableDefStr))
+
+	var parentID sqlbase.ID = defaultCSVParentID
+
+	tableDesc, err := parseCSVTableDescriptor(ctx, string(tableDefStr), parentID, defaultCSVTableID)
 	if err != nil {
 		return 0, 0, 0, err
-	}
-	create, ok := stmt.(*parser.CreateTable)
-	if !ok {
-		return 0, 0, 0, errors.New("expected CREATE TABLE statement in table file")
-	}
-	if create.IfNotExists {
-		return 0, 0, 0, errors.New("unsupported IF NOT EXISTS")
-	}
-	if create.Interleave != nil {
-		return 0, 0, 0, errors.New("interleaved not supported")
-	}
-	if create.AsSource != nil {
-		return 0, 0, 0, errors.New("CREATE AS not supported")
-	}
-	// TODO(mjibson): error on FKs
-
-	const (
-		// We need to choose arbitrary database and table IDs. These aren't important,
-		// but they do match what would happen when creating a new database and
-		// table on an empty cluster.
-		parentID = keys.MaxReservedDescID + 1
-		id       = parentID + 1
-	)
-	tableDesc, err := sql.MakeTableDesc(
-		ctx,
-		nil, /* txn */
-		sql.NilVirtualTabler,
-		nil, /* SearchPath */
-		create,
-		parentID,
-		id,
-		sqlbase.NewDefaultPrivilegeDescriptor(),
-		nil, /* affected */
-		"",  /* sessionDB */
-		nil, /* EvalContext */
-	)
-	if err != nil {
-		return 0, 0, 0, errors.Wrap(err, "creating table descriptor")
 	}
 
 	rocksdbDest, err := ioutil.TempDir("", "cockroach-csv-rocksdb")
@@ -114,6 +79,12 @@ func LoadCSV(
 			log.Infof(ctx, "could not remove temp directory %s: %s", rocksdbDest, err)
 		}
 	}()
+
+	for i, f := range dataFiles {
+		dataFiles[i] = fmt.Sprintf("nodelocal://%s", f)
+	}
+	// TODO(mjibson): allow users to optionally specify a full URI to an export store.
+	dest = fmt.Sprintf("nodelocal://%s", dest)
 
 	// Some channels are buffered because reads happen in bursts, so having lots
 	// of pre-computed data improves overall performance.
@@ -132,7 +103,7 @@ func LoadCSV(
 	group.Go(func() error {
 		defer close(kvCh)
 		return groupWorkers(gCtx, runtime.NumCPU(), func(ctx context.Context) error {
-			return convertRecord(ctx, recordCh, kvCh, nullif, &tableDesc)
+			return convertRecord(ctx, recordCh, kvCh, nullif, tableDesc)
 		})
 	})
 	group.Go(func() error {
@@ -143,10 +114,69 @@ func LoadCSV(
 	})
 	group.Go(func() error {
 		var err error
-		sstCount, err = makeBackup(gCtx, parentID, &tableDesc, dest, contentCh)
+		sstCount, err = makeBackup(gCtx, parentID, tableDesc, dest, contentCh)
 		return err
 	})
 	return csvCount, kvCount, sstCount, group.Wait()
+}
+
+const (
+	// We need to choose arbitrary database and table IDs. These aren't important,
+	// but they do match what would happen when creating a new database and
+	// table on an empty cluster.
+	defaultCSVParentID = keys.MaxReservedDescID + 1
+	defaultCSVTableID  = defaultCSVParentID + 1
+)
+
+// parseCSVTableDescriptor creates a table descriptor from a string and
+// checks it for features not supported during CSV loading.
+func parseCSVTableDescriptor(
+	ctx context.Context, tableDefStmt string, parentID, tableID sqlbase.ID,
+) (*sqlbase.TableDescriptor, error) {
+	stmt, err := parser.ParseOne(tableDefStmt)
+	if err != nil {
+		return nil, err
+	}
+	create, ok := stmt.(*parser.CreateTable)
+	if !ok {
+		return nil, errors.New("expected CREATE TABLE statement in table file")
+	}
+	if create.IfNotExists {
+		return nil, errors.New("unsupported IF NOT EXISTS")
+	}
+	if create.Interleave != nil {
+		return nil, errors.New("interleaved not supported")
+	}
+	if create.AsSource != nil {
+		return nil, errors.New("CREATE AS not supported")
+	}
+	// TODO(mjibson): error on FKs
+
+	tableDesc, err := sql.MakeTableDesc(
+		ctx,
+		nil, /* txn */
+		sql.NilVirtualTabler,
+		nil, /* SearchPath */
+		create,
+		parentID,
+		tableID,
+		sqlbase.NewDefaultPrivilegeDescriptor(),
+		nil, /* affected */
+		"",  /* sessionDB */
+		nil, /* EvalContext */
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	visibleCols := tableDesc.VisibleColumns()
+	for _, col := range visibleCols {
+		if col.DefaultExpr != nil {
+			return nil, errors.Errorf("column %q: DEFAULT expression unsupported", col.Name)
+		}
+	}
+
+	return &tableDesc, nil
 }
 
 // groupWorkers creates num worker go routines in an error group.
@@ -180,11 +210,19 @@ func readCSV(
 		default:
 		}
 		err := func() error {
-			f, err := os.Open(dataFile)
+			conf, err := storageccl.ExportStorageConfFromURI(dataFile)
 			if err != nil {
 				return err
 			}
-			defer f.Close()
+			es, err := storageccl.MakeExportStorage(ctx, conf)
+			if err != nil {
+				return err
+			}
+			defer es.Close()
+			f, err := es.ReadFile(ctx, "")
+			if err != nil {
+				return err
+			}
 			cr := csv.NewReader(f)
 			cr.Comma = comma
 			cr.FieldsPerRecord = -1
@@ -244,11 +282,6 @@ func convertRecord(
 	done := ctx.Done()
 
 	visibleCols := tableDesc.VisibleColumns()
-	for _, col := range visibleCols {
-		if col.DefaultExpr != nil {
-			return errors.Errorf("column %q: DEFAULT expression unsupported", col.Name)
-		}
-	}
 	keyDatums := make(sqlbase.EncDatumRow, len(tableDesc.PrimaryIndex.ColumnIDs))
 	// keyDatumIdx maps ColumnIDs to indexes in keyDatums.
 	keyDatumIdx := make(map[sqlbase.ColumnID]int)
@@ -465,6 +498,16 @@ func makeBackup(
 		FormatVersion: BackupFormatInitialVersion,
 	}
 
+	conf, err := storageccl.ExportStorageConfFromURI(destDir)
+	if err != nil {
+		return 0, err
+	}
+	es, err := storageccl.MakeExportStorage(ctx, conf)
+	if err != nil {
+		return 0, err
+	}
+	defer es.Close()
+
 	i := 0
 	for sst := range contentCh {
 		backupDesc.EntryCounts.DataSize += sst.size
@@ -474,8 +517,7 @@ func makeBackup(
 		}
 		i++
 		name := fmt.Sprintf("%d.sst", i)
-		path := filepath.Join(destDir, name)
-		if err := ioutil.WriteFile(path, sst.data, 0666); err != nil {
+		if err := es.WriteFile(ctx, name, bytes.NewReader(sst.data)); err != nil {
 			return 0, err
 		}
 
@@ -507,7 +549,7 @@ func makeBackup(
 	if err != nil {
 		return 0, err
 	}
-	err = ioutil.WriteFile(filepath.Join(destDir, BackupDescriptorName), descBuf, 0666)
+	err = es.WriteFile(ctx, BackupDescriptorName, bytes.NewReader(descBuf))
 	return int64(len(backupDesc.Files)), err
 }
 
