@@ -93,6 +93,23 @@ func (r *Registry) LoadJob(ctx context.Context, jobID int64) (*Job, error) {
 	return j, nil
 }
 
+// LoadJobWithTxn does the same as above, but using the transaction passed in
+// the txn argument.
+func (r *Registry) LoadJobWithTxn(ctx context.Context, jobID int64, txn *client.Txn) (*Job, error) {
+	if txn == nil {
+		return r.LoadJob(ctx, jobID)
+	}
+	j := &Job{
+		id:       &jobID,
+		registry: r,
+	}
+	j = j.WithTxn(txn)
+	if err := j.load(ctx); err != nil {
+		return nil, err
+	}
+	return j, nil
+}
+
 // DefaultCancelInterval is a reasonable interval at which to poll this node
 // for liveness failures and cancel running jobs.
 const DefaultCancelInterval = base.DefaultHeartbeatInterval
