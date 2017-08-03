@@ -333,7 +333,7 @@ func TestSampleRate(t *testing.T) {
 	}
 }
 
-func TestLoadStmt(t *testing.T) {
+func TestImportStmt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const nodes = 3
@@ -382,18 +382,39 @@ func TestLoadStmt(t *testing.T) {
 		files = append(files, fmt.Sprintf(`'nodelocal://%s'`, path))
 	}
 
-	var result int
-	backupPath := filepath.Join(dir, "backup")
-	sqlDB.QueryRow(
-		fmt.Sprintf(
-			`LOAD CSV TABLE $1 FROM %s TO $2`,
-			strings.Join(files, ", "),
-		),
-		fmt.Sprintf("nodelocal://%s", tablePath),
-		fmt.Sprintf("nodelocal://%s", backupPath),
-	).Scan(&result)
-
-	if expected := 1; result < expected {
-		t.Errorf("expected >= %d, got %d", expected, result)
+	for _, tc := range []struct {
+		name  string
+		query string        // must have one `%s` for the files list.
+		args  []interface{} // will have backupPath appended
+	}{
+		{
+			"schema-in-file",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) USING TEMP STORE $2`,
+			[]interface{}{fmt.Sprintf("nodelocal://%s", tablePath)},
+		},
+		{
+			"schema-in-query",
+			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) USING TEMP STORE $1`,
+			nil,
+		},
+		{
+			"schema-in-file-dist",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH OPTIONS ('distributed') USING TEMP STORE $2`,
+			[]interface{}{fmt.Sprintf("nodelocal://%s", tablePath)},
+		},
+		{
+			"schema-in-query-dist",
+			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) WITH OPTIONS ('distributed') USING TEMP STORE $1`,
+			nil,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var result int
+			tc.args = append(tc.args, fmt.Sprintf("nodelocal://%s", filepath.Join(dir, t.Name())))
+			sqlDB.QueryRow(fmt.Sprintf(tc.query, strings.Join(files, ", ")), tc.args...).Scan(&result)
+			if expected := 1; result < expected {
+				t.Errorf("expected >= %d, got %d", expected, result)
+			}
+		})
 	}
 }

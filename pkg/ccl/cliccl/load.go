@@ -9,13 +9,13 @@
 package cliccl
 
 import (
-	"unicode/utf8"
-
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -89,30 +89,16 @@ var (
 func runLoadCSV(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 
-	getRune := func(s string) (rune, error) {
-		if s == "" {
-			return 0, nil
-		}
-		r, sz := utf8.DecodeRuneInString(s)
-		if r == utf8.RuneError {
-			return r, errors.Errorf("invalid character: %s", s)
-		}
-		if sz != len(s) {
-			return r, errors.New("must be only one character")
-		}
-		return r, nil
-	}
-
 	// The Go CSV package by default uses a comma and doesn't allow comments. We
-	// use getRune to check if there is a valid and single Unicode rune
-	// specified. If not, getRune returns 0. If the 0 rune is passed to LoadCSV,
-	// it leaves the Go defaults for those options. Otherwise, it uses that rune
-	// as the delimiter or comment char.
-	comma, err := getRune(csvComma)
+	// use GetFirstRune to check if there is a valid and single Unicode rune
+	// specified. If not, GetFirstRune returns 0. If the 0 rune is passed to
+	// LoadCSV, it leaves the Go defaults for those options. Otherwise, it uses
+	// that rune as the delimiter or comment char.
+	comma, err := util.GetSingleRune(csvComma)
 	if err != nil {
 		return errors.Wrap(err, "delimiter flag")
 	}
-	comment, err := getRune(csvComment)
+	comment, err := util.GetSingleRune(csvComment)
 	if err != nil {
 		return errors.Wrap(err, "comment flag")
 	}

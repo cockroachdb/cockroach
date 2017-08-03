@@ -704,7 +704,9 @@ func TestParse(t *testing.T) {
 		{`RESTORE DATABASE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'`},
 		{`BACKUP foo TO 'bar' WITH OPTIONS ('key1', 'key2'='value')`},
 		{`RESTORE foo FROM 'bar' WITH OPTIONS ('key1', 'key2'='value')`},
-		{`LOAD CSV TABLE 'foo' FROM 'blergh', $1 TO 'baz'`},
+		{`IMPORT TABLE foo CREATE USING 'nodelocal:///some/file' CSV DATA ('path/to/some/file', $1) USING TEMP STORE 'path/to/temp'`},
+		{`IMPORT TABLE foo (id INT PRIMARY KEY, email STRING, age INT) CSV DATA ('path/to/some/file', $1) USING TEMP STORE 'path/to/temp'`},
+		{`IMPORT TABLE foo (id INT, email STRING, age INT) CSV DATA ('path/to/some/file', $1) WITH OPTIONS ('comma'=',') USING TEMP STORE $2`},
 		{`SET ROW (1, true, NULL)`},
 
 		// Regression for #15926

@@ -107,22 +107,3 @@ func (o KVOptions) Format(buf *bytes.Buffer, f FmtFlags) {
 		}
 	}
 }
-
-// Load represents a LOAD statement.
-type Load struct {
-	Table Expr
-	From  Exprs
-	To    Expr
-}
-
-var _ Statement = &Load{}
-
-// Format implements the NodeFormatter interface.
-func (node *Load) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("LOAD CSV TABLE ")
-	FormatNode(buf, f, node.Table)
-	buf.WriteString(" FROM ")
-	FormatNode(buf, f, node.From)
-	buf.WriteString(" TO ")
-	FormatNode(buf, f, node.To)
-}
