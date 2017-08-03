@@ -37,7 +37,7 @@ type distinct struct {
 	datumAlloc   sqlbase.DatumAlloc
 }
 
-var _ processor = &distinct{}
+var _ Processor = &distinct{}
 
 func newDistinct(
 	flowCtx *FlowCtx, spec *DistinctSpec, input RowSource, post *PostProcessSpec, output RowReceiver,
@@ -47,7 +47,7 @@ func newDistinct(
 		input:        input,
 		orderedCols:  make(map[uint32]struct{}),
 		distinctCols: make(map[uint32]struct{}),
-		memAcc:       flowCtx.evalCtx.Mon.MakeBoundAccount(),
+		memAcc:       flowCtx.EvalCtx.Mon.MakeBoundAccount(),
 	}
 	for _, col := range spec.OrderedColumns {
 		d.orderedCols[col] = struct{}{}
@@ -56,7 +56,7 @@ func newDistinct(
 		d.distinctCols[col] = struct{}{}
 	}
 
-	if err := d.out.init(post, input.Types(), &flowCtx.evalCtx, output); err != nil {
+	if err := d.out.Init(post, input.Types(), &flowCtx.EvalCtx, output); err != nil {
 		return nil, err
 	}
 
@@ -85,7 +85,7 @@ func (d *distinct) Run(ctx context.Context, wg *sync.WaitGroup) {
 	} else if !earlyExit {
 		sendTraceData(ctx, d.out.output)
 		d.input.ConsumerClosed()
-		d.out.close()
+		d.out.Close()
 	}
 }
 
@@ -151,7 +151,7 @@ func (d *distinct) matchLastGroupKey(row sqlbase.EncDatumRow) (bool, error) {
 		return false, nil
 	}
 	for colIdx := range d.orderedCols {
-		res, err := d.lastGroupKey[colIdx].Compare(&d.datumAlloc, &d.flowCtx.evalCtx, &row[colIdx])
+		res, err := d.lastGroupKey[colIdx].Compare(&d.datumAlloc, &d.flowCtx.EvalCtx, &row[colIdx])
 		if res != 0 || err != nil {
 			return false, err
 		}
