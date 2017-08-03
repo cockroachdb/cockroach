@@ -33,7 +33,7 @@ type valuesProcessor struct {
 	data    [][]byte
 }
 
-var _ processor = &valuesProcessor{}
+var _ Processor = &valuesProcessor{}
 
 func newValuesProcessor(
 	flowCtx *FlowCtx, spec *ValuesCoreSpec, post *PostProcessSpec, output RowReceiver,
@@ -47,7 +47,7 @@ func newValuesProcessor(
 	for i := range v.columns {
 		types[i] = v.columns[i].Type
 	}
-	if err := v.out.init(post, types, &flowCtx.evalCtx, output); err != nil {
+	if err := v.out.Init(post, types, &flowCtx.EvalCtx, output); err != nil {
 		return nil, err
 	}
 	return v, nil
@@ -104,5 +104,5 @@ func (v *valuesProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 		}
 	}
 	sendTraceData(ctx, v.out.output)
-	v.out.close()
+	v.out.Close()
 }

@@ -99,7 +99,7 @@ type aggregator struct {
 	buckets map[string]struct{} // The set of bucket keys.
 }
 
-var _ processor = &aggregator{}
+var _ Processor = &aggregator{}
 
 func newAggregator(
 	flowCtx *FlowCtx,
@@ -116,7 +116,7 @@ func newAggregator(
 		buckets:      make(map[string]struct{}),
 		funcs:        make([]*aggregateFuncHolder, len(spec.Aggregations)),
 		outputTypes:  make([]sqlbase.ColumnType, len(spec.Aggregations)),
-		bucketsAcc:   flowCtx.evalCtx.Mon.MakeBoundAccount(),
+		bucketsAcc:   flowCtx.EvalCtx.Mon.MakeBoundAccount(),
 	}
 
 	// Loop over the select expressions and extract any aggregate functions --
@@ -157,7 +157,7 @@ func newAggregator(
 
 		ag.outputTypes[i] = retType
 	}
-	if err := ag.out.init(post, ag.outputTypes, &flowCtx.evalCtx, output); err != nil {
+	if err := ag.out.Init(post, ag.outputTypes, &flowCtx.EvalCtx, output); err != nil {
 		return nil, err
 	}
 
@@ -227,7 +227,7 @@ func (ag *aggregator) Run(ctx context.Context, wg *sync.WaitGroup) {
 	// output.
 	if !consumerDone {
 		sendTraceData(ctx, ag.out.output)
-		ag.out.close()
+		ag.out.Close()
 	}
 }
 
@@ -260,7 +260,7 @@ func (ag *aggregator) accumulateRows(ctx context.Context) (err error) {
 				// any more. If the producer doesn't push any metadata, then there's no
 				// opportunity to find this out until the accumulation phase is done. We
 				// should have a way to periodically peek at the state of the
-				// RowReceiver that's hiding behind the procOutputHelper.
+				// RowReceiver that's hiding behind the ProcOutputHelper.
 				cleanupRequired = false
 				return errors.Errorf("consumer stopped before it received rows")
 			}
@@ -350,7 +350,7 @@ func (a *aggregateFuncHolder) add(ctx context.Context, bucket []byte, d parser.D
 	if !ok {
 		// TODO(radu): we should account for the size of impl (this needs to be done
 		// in each aggregate constructor).
-		impl = a.create(&a.group.flowCtx.evalCtx)
+		impl = a.create(&a.group.flowCtx.EvalCtx)
 		usage := int64(len(bucket))
 		usage += sizeOfAggregateFunc
 		// TODO(radu): this model of each func having a map of buckets (one per
@@ -368,7 +368,7 @@ func (a *aggregateFuncHolder) add(ctx context.Context, bucket []byte, d parser.D
 func (a *aggregateFuncHolder) get(bucket string) (parser.Datum, error) {
 	found, ok := a.buckets[bucket]
 	if !ok {
-		found = a.create(&a.group.flowCtx.evalCtx)
+		found = a.create(&a.group.flowCtx.EvalCtx)
 	}
 
 	return found.Result()

@@ -203,7 +203,7 @@ func TestSorter(t *testing.T) {
 				evalCtx := parser.MakeTestingEvalContext()
 				defer evalCtx.Stop(ctx)
 				flowCtx := FlowCtx{
-					evalCtx:     evalCtx,
+					EvalCtx:     evalCtx,
 					tempStorage: tempEngine,
 				}
 
@@ -249,7 +249,7 @@ func BenchmarkSortAll(b *testing.B) {
 	evalCtx := parser.MakeTestingEvalContext()
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
-		evalCtx: evalCtx,
+		EvalCtx: evalCtx,
 	}
 
 	// One column integer rows.
@@ -291,7 +291,7 @@ func BenchmarkSortLimit(b *testing.B) {
 	evalCtx := parser.MakeTestingEvalContext()
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
-		evalCtx: evalCtx,
+		EvalCtx: evalCtx,
 	}
 
 	// One column integer rows.
