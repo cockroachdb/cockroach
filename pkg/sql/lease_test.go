@@ -234,10 +234,22 @@ func TestLeaseManager(testingT *testing.T) {
 
 	// It is an error to acquire a lease for a specific version that doesn't
 	// exist yet.
+	//
+	// The process of acquiring a lease at a version that doesn't exist
+	// involves acquiring a new lease at the latest version, checking the
+	// latest version against the expected non-existent version, and
+	// asynchronously releasing the older lease for the latest version.
+	// expectLeases() called below is stable only when the older lease
+	// for the latest version has been released. Acquire a lease at the
+	// latest version and release it later with a removalTracker to
+	// guarantee removal of the older lease.
+	l2, _ = t.mustAcquire(1, descID)
 	expected = "version 2 for table lease does not exist yet"
 	if _, _, err := t.acquireMinVersion(1, descID, 2); !testutils.IsError(err, expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
 	}
+	t.mustRelease(1, l2, removalTracker)
+	t.expectLeases(descID, "/1/1")
 
 	// Publish a new version and explicitly acquire it.
 	l2, _ = t.mustAcquire(1, descID)
