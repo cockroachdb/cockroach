@@ -101,7 +101,7 @@ func TestJoinReader(t *testing.T) {
 			evalCtx := parser.MakeTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
-				evalCtx:  evalCtx,
+				EvalCtx:  evalCtx,
 				txnProto: &roachpb.Transaction{},
 				// Pass a DB without a TxnCoordSender.
 				remoteTxnDB: client.NewDB(s.DistSender(), s.Clock()),
@@ -173,7 +173,7 @@ func TestJoinReaderDrain(t *testing.T) {
 	evalCtx := parser.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
-		evalCtx:  evalCtx,
+		EvalCtx:  evalCtx,
 		txnProto: &roachpb.Transaction{},
 		// Pass a DB without a TxnCoordSender.
 		remoteTxnDB: client.NewDB(s.DistSender(), s.Clock()),

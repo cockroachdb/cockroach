@@ -28,9 +28,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-// processor is a common interface implemented by all processors, used by the
+// Processor is a common interface implemented by all processors, used by the
 // higher-level flow orchestration code.
-type processor interface {
+type Processor interface {
 	// OutputTypes returns the column types of the results (that are to be fed
 	// through an output router).
 	OutputTypes() []sqlbase.ColumnType
@@ -40,9 +40,9 @@ type processor interface {
 	Run(ctx context.Context, wg *sync.WaitGroup)
 }
 
-// procOutputHelper is a helper type that performs filtering and projection on
+// ProcOutputHelper is a helper type that performs filtering and projection on
 // the output of a processor.
-type procOutputHelper struct {
+type ProcOutputHelper struct {
 	numInternalCols int
 	output          RowReceiver
 	rowAlloc        sqlbase.EncDatumRowAlloc
@@ -74,12 +74,12 @@ type procOutputHelper struct {
 	rowIdx uint64
 }
 
-// init sets up a procOutputHelper. The types describe the internal schema of
+// Init sets up a ProcOutputHelper. The types describe the internal schema of
 // the processor (as described for each processor core spec); they can be
 // omitted if there is no filtering expression.
 // Note that the types slice may be stored directly; the caller should not
 // modify it.
-func (h *procOutputHelper) init(
+func (h *ProcOutputHelper) Init(
 	post *PostProcessSpec,
 	types []sqlbase.ColumnType,
 	evalCtx *parser.EvalContext,
@@ -139,7 +139,7 @@ func (h *procOutputHelper) init(
 
 // neededColumns calculates the set of internal processor columns that are
 // actually used by the post-processing stage.
-func (h *procOutputHelper) neededColumns() []bool {
+func (h *ProcOutputHelper) neededColumns() []bool {
 	needed := make([]bool, h.numInternalCols)
 	if h.outputCols == nil && h.renderExprs == nil {
 		// No projection or rendering; all columns are needed.
@@ -173,7 +173,7 @@ func (h *procOutputHelper) neededColumns() []bool {
 	return needed
 }
 
-// emitHelper is a utility wrapper on top of procOutputHelper.emitRow().
+// emitHelper is a utility wrapper on top of ProcOutputHelper.EmitRow().
 // It takes a row to emit and, if anything happens other than the normal
 // situation where the emitting succeeds and the consumer still needs rows, both
 // the (potentially many) inputs and the output are properly closed after
@@ -181,8 +181,8 @@ func (h *procOutputHelper) neededColumns() []bool {
 // which case nothing will be drained (this can happen when the caller has
 // already fully consumed the inputs).
 //
-// As opposed to emitRow(), this also supports metadata rows which bypass the
-// procOutputHelper and are routed directly to its output.
+// As opposed to EmitRow(), this also supports metadata rows which bypass the
+// ProcOutputHelper and are routed directly to its output.
 //
 // If the consumer signals the producer to drain, the message is relayed and all
 // the draining metadata is consumed and forwarded.
@@ -193,7 +193,7 @@ func (h *procOutputHelper) neededColumns() []bool {
 // both the inputs and the output have been properly closed.
 func emitHelper(
 	ctx context.Context,
-	output *procOutputHelper,
+	output *ProcOutputHelper,
 	row sqlbase.EncDatumRow,
 	meta ProducerMetadata,
 	inputs ...RowSource,
@@ -204,17 +204,17 @@ func emitHelper(
 			log.Fatalf(ctx, "both row data and metadata in the same emitHelper call. "+
 				"row: %s. meta: %+v", row, meta)
 		}
-		// Bypass emitRow() and send directly to output.output.
+		// Bypass EmitRow() and send directly to output.output.
 		consumerStatus = output.output.Push(nil /* row */, meta)
 	} else {
 		var err error
-		consumerStatus, err = output.emitRow(ctx, row)
+		consumerStatus, err = output.EmitRow(ctx, row)
 		if err != nil {
 			output.output.Push(nil /* row */, ProducerMetadata{Err: err})
 			for _, input := range inputs {
 				input.ConsumerClosed()
 			}
-			output.close()
+			output.Close()
 			return false
 		}
 	}
@@ -230,7 +230,7 @@ func emitHelper(
 		for _, input := range inputs {
 			input.ConsumerClosed()
 		}
-		output.close()
+		output.Close()
 		return false
 	default:
 		log.Fatalf(ctx, "unexpected consumerStatus: %d", consumerStatus)
@@ -238,15 +238,15 @@ func emitHelper(
 	}
 }
 
-// emitRow sends a row through the post-processing stage. The same row can be
+// EmitRow sends a row through the post-processing stage. The same row can be
 // reused.
 //
 // It returns the consumer's status that was observed when pushing this row. If
-// an error is returned, it's coming from the procOutputHelper's filtering or
+// an error is returned, it's coming from the ProcOutputHelper's filtering or
 // rendering processing; the output has not been closed.
 //
 // Note: check out emitHelper() for a useful wrapper.
-func (h *procOutputHelper) emitRow(
+func (h *ProcOutputHelper) EmitRow(
 	ctx context.Context, row sqlbase.EncDatumRow,
 ) (ConsumerStatus, error) {
 	if h.rowIdx >= h.maxRowIdx {
@@ -307,12 +307,13 @@ func (h *procOutputHelper) emitRow(
 	return NeedMoreRows, nil
 }
 
-func (h *procOutputHelper) close() {
+// Close signals to the output that there will be no more rows.
+func (h *ProcOutputHelper) Close() {
 	h.output.ProducerDone()
 }
 
 type processorBase struct {
-	out procOutputHelper
+	out ProcOutputHelper
 }
 
 // OutputTypes is part of the processor interface.
@@ -331,13 +332,13 @@ type noopProcessor struct {
 	input   RowSource
 }
 
-var _ processor = &noopProcessor{}
+var _ Processor = &noopProcessor{}
 
 func newNoopProcessor(
 	flowCtx *FlowCtx, input RowSource, post *PostProcessSpec, output RowReceiver,
 ) (*noopProcessor, error) {
 	n := &noopProcessor{flowCtx: flowCtx, input: input}
-	if err := n.out.init(post, input.Types(), &flowCtx.evalCtx, output); err != nil {
+	if err := n.out.Init(post, input.Types(), &flowCtx.EvalCtx, output); err != nil {
 		return nil, err
 	}
 	return n, nil
@@ -366,7 +367,7 @@ func (n *noopProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 		row, meta := n.input.Next()
 		if row == nil && meta.Empty() {
 			sendTraceData(ctx, n.out.output)
-			n.out.close()
+			n.out.Close()
 			return
 		}
 		if !emitHelper(ctx, &n.out, row, meta, n.input) {
@@ -381,7 +382,7 @@ func newProcessor(
 	post *PostProcessSpec,
 	inputs []RowSource,
 	outputs []RowReceiver,
-) (processor, error) {
+) (Processor, error) {
 	if core.Noop != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err

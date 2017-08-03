@@ -132,7 +132,7 @@ func (ss *sortAllStrategy) executeImpl(
 		if err != nil {
 			return nil, err
 		}
-		consumerStatus, err := s.out.emitRow(ctx, row)
+		consumerStatus, err := s.out.EmitRow(ctx, row)
 		if err != nil || consumerStatus != NeedMoreRows {
 			return nil, err
 		}
@@ -213,7 +213,7 @@ func (ss *sortTopKStrategy) Execute(ctx context.Context, s *sorter) error {
 
 	for ss.rows.Len() > 0 {
 		// Push the row to the output; stop if they don't need more rows.
-		consumerStatus, err := s.out.emitRow(ctx, ss.rows.EncRow(0))
+		consumerStatus, err := s.out.EmitRow(ctx, ss.rows.EncRow(0))
 		if err != nil || consumerStatus != NeedMoreRows {
 			return err
 		}
@@ -299,7 +299,7 @@ func (ss *sortChunksStrategy) Execute(ctx context.Context, s *sorter) error {
 
 		// Stream out sorted rows in order to row receiver.
 		for ss.rows.Len() > 0 {
-			consumerStatus, err := s.out.emitRow(ctx, ss.rows.EncRow(0))
+			consumerStatus, err := s.out.EmitRow(ctx, ss.rows.EncRow(0))
 			if err != nil || consumerStatus != NeedMoreRows {
 				// We don't need any more rows; clear out ss so to not hold on to that
 				// memory.

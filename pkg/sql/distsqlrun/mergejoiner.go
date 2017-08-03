@@ -34,7 +34,7 @@ type mergeJoiner struct {
 	streamMerger streamMerger
 }
 
-var _ processor = &mergeJoiner{}
+var _ Processor = &mergeJoiner{}
 
 func newMergeJoiner(
 	flowCtx *FlowCtx,

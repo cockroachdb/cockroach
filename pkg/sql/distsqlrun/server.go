@@ -253,7 +253,7 @@ func (ds *ServerImpl) setupFlow(
 		AmbientContext: ds.AmbientContext,
 		stopper:        ds.Stopper,
 		id:             req.Flow.FlowID,
-		evalCtx:        evalCtx,
+		EvalCtx:        evalCtx,
 		rpcCtx:         ds.RPCContext,
 		txnProto:       &req.Txn,
 		clientDB:       ds.DB,
