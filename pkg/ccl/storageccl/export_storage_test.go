@@ -18,6 +18,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -25,23 +26,48 @@ import (
 	"github.com/rlmcpherson/s3gof3r"
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func testExportToTarget(t *testing.T, args roachpb.ExportStorage) {
+func appendPath(t *testing.T, s, add string) string {
+	u, err := url.Parse(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u.Path = path.Join(u.Path, add)
+	return u.String()
+}
+
+func storeFromURI(ctx context.Context, t *testing.T, uri string) ExportStorage {
+	conf, err := ExportStorageConfFromURI(uri)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Setup a sink for the given args.
+	s, err := MakeExportStorage(ctx, conf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
+func testExportStore(t *testing.T, storeURI string, skipSingleFile bool) {
 	ctx := context.TODO()
 
+	conf, err := ExportStorageConfFromURI(storeURI)
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Setup a sink for the given args.
-	s, err := MakeExportStorage(ctx, args)
+	s, err := MakeExportStorage(ctx, conf)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer s.Close()
 
-	if conf := s.Conf(); conf != args {
-		t.Fatalf("got %+v expected %+v", conf, args)
+	if readConf := s.Conf(); readConf != conf {
+		t.Fatalf("conf does not roundtrip: started with %+v, got back %+v", conf, readConf)
 	}
 
 	t.Run("simple round trip", func(t *testing.T) {
@@ -107,6 +133,52 @@ func testExportToTarget(t *testing.T, args roachpb.ExportStorage) {
 			t.Fatal(err)
 		}
 	})
+	if skipSingleFile {
+		return
+	}
+	t.Run("read-single-file-by-uri", func(t *testing.T) {
+		if err := s.WriteFile(ctx, "A", bytes.NewReader([]byte("aaa"))); err != nil {
+			t.Fatal(err)
+		}
+		singleFile := storeFromURI(ctx, t, appendPath(t, storeURI, "A"))
+		defer singleFile.Close()
+
+		res, err := singleFile.ReadFile(ctx, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Close()
+		content, err := ioutil.ReadAll(res)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Verify the result contains what we wrote.
+		if !bytes.Equal(content, []byte("aaa")) {
+			t.Fatalf("wrong content")
+		}
+	})
+	t.Run("write-single-file-by-uri", func(t *testing.T) {
+		singleFile := storeFromURI(ctx, t, appendPath(t, storeURI, "B"))
+		defer singleFile.Close()
+
+		if err := singleFile.WriteFile(ctx, "", bytes.NewReader([]byte("bbb"))); err != nil {
+			t.Fatal(err)
+		}
+
+		res, err := s.ReadFile(ctx, "B")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Close()
+		content, err := ioutil.ReadAll(res)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Verify the result contains what we wrote.
+		if !bytes.Equal(content, []byte("bbb")) {
+			t.Fatalf("wrong content")
+		}
+	})
 }
 
 func TestPutLocal(t *testing.T) {
@@ -115,10 +187,7 @@ func TestPutLocal(t *testing.T) {
 	p, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
 
-	testExportToTarget(t, roachpb.ExportStorage{
-		Provider:  roachpb.ExportStorageProvider_LocalFile,
-		LocalFile: roachpb.ExportStorage_LocalFilePath{Path: p},
-	})
+	testExportStore(t, fmt.Sprintf("nodelocal://%s", p), false)
 }
 
 func TestPutHttp(t *testing.T) {
@@ -163,18 +232,16 @@ func TestPutHttp(t *testing.T) {
 			srv.Close()
 			t.Fatal(err)
 		}
+		uri.Path = path.Join(uri.Path, "testing")
 		return uri, func() int { return files }, srv.Close
 	}
 
 	t.Run("singleHost", func(t *testing.T) {
 		srv, files, cleanup := makeServer()
 		defer cleanup()
-		testExportToTarget(t, roachpb.ExportStorage{
-			Provider: roachpb.ExportStorageProvider_Http,
-			HttpPath: roachpb.ExportStorage_Http{BaseUri: srv.String() + "/"},
-		})
-		if wrote := files(); wrote != 11 {
-			t.Fatal("expected 11 files to be written to single http store")
+		testExportStore(t, srv.String(), false)
+		if expected, actual := 13, files(); expected != actual {
+			t.Fatalf("expected %d files to be written to single http store, got %d", expected, actual)
 		}
 	})
 
@@ -189,10 +256,7 @@ func TestPutHttp(t *testing.T) {
 		combined := *srv1
 		combined.Host = strings.Join([]string{srv1.Host, srv2.Host, srv3.Host}, ",")
 
-		testExportToTarget(t, roachpb.ExportStorage{
-			Provider: roachpb.ExportStorageProvider_Http,
-			HttpPath: roachpb.ExportStorage_Http{BaseUri: combined.String() + "/"},
-		})
+		testExportStore(t, combined.String(), true)
 		if expected, actual := 3, files1(); expected != actual {
 			t.Fatalf("expected %d files written to http host 1, got %d", expected, actual)
 		}
@@ -223,15 +287,15 @@ func TestPutS3(t *testing.T) {
 	// TODO(dt): this prevents leaking an http conn goroutine.
 	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
 
-	testExportToTarget(t, roachpb.ExportStorage{
-		Provider: roachpb.ExportStorageProvider_S3,
-		S3Config: &roachpb.ExportStorage_S3{
-			Bucket:    bucket,
-			Prefix:    "backup-test",
-			AccessKey: s3Keys.AccessKey,
-			Secret:    s3Keys.SecretKey,
-		},
-	})
+	testExportStore(t,
+		fmt.Sprintf(
+			"s3://%s/%s?%s=%s&%s=%s",
+			bucket, "backup-test",
+			S3AccessKeyParam, url.QueryEscape(s3Keys.AccessKey),
+			S3SecretParam, url.QueryEscape(s3Keys.SecretKey),
+		),
+		false,
+	)
 }
 
 func TestPutGoogleCloud(t *testing.T) {
@@ -245,12 +309,7 @@ func TestPutGoogleCloud(t *testing.T) {
 	// TODO(dt): this prevents leaking an http conn goroutine.
 	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
 
-	testExportToTarget(t, roachpb.ExportStorage{
-		Provider: roachpb.ExportStorageProvider_GoogleCloud,
-		GoogleCloudConfig: &roachpb.ExportStorage_GCS{
-			Bucket: bucket,
-			Prefix: "backup-test"},
-	})
+	testExportStore(t, fmt.Sprintf("gs://%s/%s", bucket, "backup-test"), false)
 }
 
 func TestPutAzure(t *testing.T) {
@@ -269,13 +328,12 @@ func TestPutAzure(t *testing.T) {
 	// TODO(dt): this prevents leaking an http conn goroutine.
 	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
 
-	testExportToTarget(t, roachpb.ExportStorage{
-		Provider: roachpb.ExportStorageProvider_Azure,
-		AzureConfig: &roachpb.ExportStorage_Azure{
-			Container:   bucket,
-			Prefix:      "backup-test",
-			AccountName: accountName,
-			AccountKey:  accountKey,
-		},
-	})
+	testExportStore(t,
+		fmt.Sprintf("azure://%s/%s?%s=%s&%s=%s",
+			bucket, "backup-test",
+			AzureAccountNameParam, url.QueryEscape(accountName),
+			AzureAccountKeyParam, url.QueryEscape(accountKey),
+		),
+		false,
+	)
 }
