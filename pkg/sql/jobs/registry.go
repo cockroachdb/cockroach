@@ -212,7 +212,11 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl nodeLiveness) error {
 		isLive bool
 		epoch  int64
 	}
-	nodeStatusMap := make(map[roachpb.NodeID]*nodeStatus)
+	nodeStatusMap := map[roachpb.NodeID]*nodeStatus{
+		// 0 is not a valid node ID, but we treat it as an always-dead node so that
+		// the empty lease (Lease{}) is always considered expired.
+		0: {isLive: false},
+	}
 	{
 		now, maxOffset := r.clock.Now(), r.clock.MaxOffset()
 		for _, liveness := range nl.GetLivenesses() {
@@ -289,7 +293,7 @@ func (r *Registry) cancelAll(ctx context.Context) {
 	log.Warningf(ctx, "canceling all jobs due to liveness failure")
 	r.mu.Lock()
 	jobs := make([]*Job, 0, len(r.mu.jobs))
-	for _, job := range jobs {
+	for _, job := range r.mu.jobs {
 		jobs = append(jobs, job)
 	}
 	r.mu.Unlock()

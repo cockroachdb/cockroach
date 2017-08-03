@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -86,12 +87,19 @@ const (
 	StatusFailed Status = "failed"
 	// StatusSucceeded is for jobs that have successfully completed.
 	StatusSucceeded Status = "succeeded"
+	// StatusPaused is for jobs that are not currently performing work, but have
+	// saved their state and can be resumed by the user later.
+	StatusPaused Status = "paused"
+	// StatusCanceled is for jobs that were explicitly canceled by the user and
+	// cannot be resumed.
+	StatusCanceled Status = "canceled"
 )
 
 // Terminal returns whether this status represents a "terminal" state: a state
-// after which the job should never be updated again.
+// after which the job should never be updated again unless it is explicitly
+// resumed by the user.
 func (s Status) Terminal() bool {
-	return s == StatusFailed || s == StatusSucceeded
+	return s != StatusPending && s != StatusRunning
 }
 
 // InvalidStatusError is the error returned when the desired operation is
@@ -197,6 +205,78 @@ func (j *Job) Progressed(
 	})
 }
 
+func isControllable(p *Payload, op string) error {
+	if p.Type() == TypeSchemaChange {
+		return pgerror.UnimplementedWithIssueErrorf(
+			16018, "schema change jobs do not support %s", op)
+	}
+	if p.Lease == nil {
+		return fmt.Errorf("job created by node without %s support", op)
+	}
+	return nil
+}
+
+// Paused sets the status of the tracked job to paused. It does not directly
+// pause the job; instead, it expects the job to call job.Progressed soon,
+// observe a "job is paused" error, and abort further work.
+func (j *Job) Paused(ctx context.Context) error {
+	return j.update(ctx, func(status *Status, payload *Payload) (bool, error) {
+		if err := isControllable(payload, "PAUSE"); err != nil {
+			return false, err
+		}
+		if *status == StatusPaused {
+			// Already paused - do nothing.
+			return false, nil
+		}
+		if status.Terminal() {
+			return false, &InvalidStatusError{*j.id, *status, "pause"}
+		}
+		*status = StatusPaused
+		return true, nil
+	})
+}
+
+// Resumed sets the status of the tracked job to running iff the job is
+// currently paused. It does not directly resume the job; rather, it expires the
+// job's lease so that a Registry adoption loop detects it and resumes it.
+func (j *Job) Resumed(ctx context.Context) error {
+	return j.update(ctx, func(status *Status, payload *Payload) (bool, error) {
+		if *status == StatusRunning {
+			// Already resumed - do nothing.
+			return false, nil
+		}
+		if *status != StatusPaused {
+			return false, fmt.Errorf("job with status %s cannot be resumed", *status)
+		}
+		*status = StatusRunning
+		// NB: A nil lease indicates the job is not resumable, whereas an empty
+		// lease is always considered expired.
+		payload.Lease = &Lease{}
+		return true, nil
+	})
+}
+
+// Canceled sets the status of the tracked job to canceled. It does not directly
+// cancel the job; like job.Paused, it expects the job to call job.Progressed
+// soon, observe a "job is canceled" error, and abort further work.
+func (j *Job) Canceled(ctx context.Context) error {
+	return j.update(ctx, func(status *Status, payload *Payload) (bool, error) {
+		if err := isControllable(payload, "CANCEL"); err != nil {
+			return false, err
+		}
+		if *status == StatusCanceled {
+			// Already canceled - do nothing.
+			return false, nil
+		}
+		if *status != StatusPaused && status.Terminal() {
+			return false, fmt.Errorf("job with status %s cannot be canceled", *status)
+		}
+		*status = StatusCanceled
+		payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
+		return true, nil
+	})
+}
+
 // Failed marks the tracked job as having failed with the given error. Any
 // errors encountered while updating the jobs table are logged but not returned,
 // under the assumption that the the caller is already handling a more important
@@ -273,6 +353,13 @@ func (j *Job) FinishedWith(ctx context.Context, err error) error {
 		// when using errors.Wrapf, and we'd much rather have false positives (too
 		// many ambiguous results) than false negatives (too few ambiguous results).
 		return roachpb.NewAmbiguousResultError("job lease expired")
+	}
+	if err, ok := errors.Cause(err).(*InvalidStatusError); ok &&
+		(err.status == StatusPaused || err.status == StatusCanceled) {
+		// If we couldn't operate on the job because it was paused or canceled, send
+		// the more understandable "job paused" or "job canceled" error message to
+		// the user.
+		return fmt.Errorf("job %s", err.status)
 	}
 	if err != nil {
 		j.Failed(ctx, err)
@@ -361,6 +448,9 @@ func (j *Job) load(ctx context.Context) error {
 		row, err := j.registry.ex.QueryRowInTransaction(ctx, "log-job", txn, stmt, *j.id)
 		if err != nil {
 			return err
+		}
+		if row == nil {
+			return fmt.Errorf("job with ID %d does not exist", *j.id)
 		}
 		payload, err = UnmarshalPayload(row[0])
 		return err
