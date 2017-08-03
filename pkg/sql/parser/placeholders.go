@@ -182,7 +182,7 @@ func (*placeholdersVisitor) VisitPost(expr Expr) Expr { return expr }
 // available value for a placeholder, it is left alone. A nil ctx makes
 // this a no-op and is supported for tests only.
 func replacePlaceholders(expr Expr, ctx *SemaContext) Expr {
-	if ctx == nil {
+	if ctx == nil || len(ctx.Placeholders.Values) == 0 {
 		return expr
 	}
 	v := &placeholdersVisitor{placeholders: ctx.Placeholders}
