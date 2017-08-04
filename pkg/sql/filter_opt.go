@@ -263,11 +263,6 @@ func (p *planner) propagateFilters(
 			}
 		}
 
-	case *createViewNode:
-		if n.sourcePlan, err = p.triggerFilterPropagation(ctx, n.sourcePlan); err != nil {
-			return plan, extraFilter, err
-		}
-
 	case *deleteNode:
 		if n.run.rows, err = p.triggerFilterPropagation(ctx, n.run.rows); err != nil {
 			return plan, extraFilter, err
@@ -323,6 +318,7 @@ func (p *planner) propagateFilters(
 	case *createDatabaseNode:
 	case *createIndexNode:
 	case *createUserNode:
+	case *createViewNode:
 	case *dropDatabaseNode:
 	case *dropIndexNode:
 	case *dropTableNode:
