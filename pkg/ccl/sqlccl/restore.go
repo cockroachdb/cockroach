@@ -779,7 +779,7 @@ func restore(
 		select {
 		case importsSem <- struct{}{}:
 		case <-gCtx.Done():
-			return failed, gCtx.Err()
+			return failed, errors.Wrapf(g.Wait(), "importing %d ranges", len(importSpans))
 		}
 		log.Event(importCtx, "acquired semaphore")
 
