@@ -233,9 +233,9 @@ func (n *valuesNode) ResetLen() {
 }
 
 // SortAll sorts all values in the valuesNode.rows slice.
-func (n *valuesNode) SortAll(cancelChecker CancelChecker) {
+func (n *valuesNode) SortAll(cancelChecker *sqlbase.CancelChecker) {
 	n.invertSorting = false
-	doSort(n, cancelChecker)
+	sqlbase.Sort(n, cancelChecker)
 }
 
 // InitMaxHeap initializes the valuesNode.rows slice as a max-heap.

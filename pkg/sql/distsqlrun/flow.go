@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -91,7 +92,7 @@ const (
 )
 
 type startable interface {
-	start(ctx context.Context, wg *sync.WaitGroup)
+	start(ctx context.Context, wg *sync.WaitGroup, ctxCancel context.CancelFunc)
 }
 
 // Flow represents a flow which consists of processors and streams.
@@ -123,6 +124,14 @@ type Flow struct {
 	doneFn func()
 
 	status flowStatus
+
+	// Context used for all execution within the flow.
+	// Created in Start(), cancelled in Cleanup().
+	ctx context.Context
+
+	// Cancel function for ctx. Call this to cancel the flow (safe to be called
+	// multiple times).
+	ctxCancel context.CancelFunc
 }
 
 func newFlow(flowCtx FlowCtx, flowReg *flowRegistry, syncFlowConsumer RowReceiver) *Flow {
@@ -345,25 +354,41 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) {
 	)
 	f.status = FlowRunning
 
+	f.ctx, f.ctxCancel = context.WithCancel(ctx)
+
 	// Once we call RegisterFlow, the inbound streams become accessible; we must
 	// set up the WaitGroup counter before.
 	f.waitGroup.Add(len(f.inboundStreams) + len(f.processors))
 
-	f.flowRegistry.RegisterFlow(ctx, f.id, f, f.inboundStreams, flowStreamDefaultTimeout)
+	f.flowRegistry.RegisterFlow(f.ctx, f.id, f, f.inboundStreams, flowStreamDefaultTimeout)
 	if log.V(1) {
-		log.Infof(ctx, "registered flow %s", f.id.Short())
+		log.Infof(f.ctx, "registered flow %s", f.id.Short())
 	}
 	for _, s := range f.startables {
-		s.start(ctx, &f.waitGroup)
+		s.start(f.ctx, &f.waitGroup, f.ctxCancel)
 	}
 	for _, p := range f.processors {
-		go p.Run(ctx, &f.waitGroup)
+		go p.Run(f.ctx, &f.waitGroup)
 	}
 }
 
-// Wait waits for all the goroutines for this flow to exit.
+// Wait waits for all the goroutines for this flow to exit. If the context gets
+// cancelled before all goroutines exit, it calls f.cancel().
 func (f *Flow) Wait() {
-	f.waitGroup.Wait()
+	waitChan := make(chan struct{})
+
+	go func() {
+		f.waitGroup.Wait()
+		close(waitChan)
+	}()
+
+	select {
+	case <-f.ctx.Done():
+		f.cancel()
+		<-waitChan
+	case <-waitChan:
+		// Exit normally
+	}
 }
 
 // Cleanup should be called when the flow completes (after all processors and
@@ -384,6 +409,7 @@ func (f *Flow) Cleanup(ctx context.Context) {
 		f.flowRegistry.UnregisterFlow(f.id)
 	}
 	f.status = FlowFinished
+	f.ctxCancel()
 	f.doneFn()
 	f.doneFn = nil
 }
@@ -395,6 +421,43 @@ func (f *Flow) RunSync(ctx context.Context) {
 		p.Run(ctx, nil)
 	}
 	f.Cleanup(ctx)
+}
+
+// cancel sends a drain signal on all streams under this flow, and marks all
+// outboxes as Done. This function is called in Wait() after the associated context
+// has been cancelled. In order to cancel a flow, call f.ctxCancel()
+// instead of this function.
+//
+// For a detailed description of the distsql query cancellation mechanism,
+// read docs/RFCS/query_cancellation.md.
+func (f *Flow) cancel() {
+	f.flowRegistry.Lock()
+	defer f.flowRegistry.Unlock()
+
+	entry := f.flowRegistry.flows[f.id]
+	for streamID, is := range entry.inboundStreams {
+		// Connected, non-finished inbound streams will get an error
+		// returned in ProcessInboundStream(). Non-connected streams
+		// are handled below.
+		if !is.connected && !is.finished {
+			is.cancelled = true
+			// Stream has yet to be started; send an error to its
+			// receiver and prevent it from being connected.
+			is.receiver.Push(
+				nil, /* row */
+				ProducerMetadata{Err: sqlbase.NewQueryCanceledError()})
+			is.receiver.ProducerDone()
+			f.flowRegistry.finishInboundStreamLocked(f.id, streamID)
+		}
+	}
+
+	if f.syncFlowConsumer != nil {
+		// Push an error to the sync flow consumer. If this is a distSQLReceiver,
+		// it will call ConsumerClosed when it sees a non-nil error.
+		f.syncFlowConsumer.Push(
+			nil, /* row */
+			ProducerMetadata{Err: sqlbase.NewQueryCanceledError()})
+	}
 }
 
 var _ = (*Flow).RunSync

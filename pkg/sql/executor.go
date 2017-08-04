@@ -1515,7 +1515,7 @@ func (e *Executor) execStmtInOpenTxn(
 	p.avoidCachedDescriptors = avoidCachedDescriptors
 	p.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 	p.stmt = &stmt
-	p.cancelChecker = makeCancelChecker(p.stmt)
+	p.cancelChecker = sqlbase.NewCancelChecker(p.stmt.queryMeta.ctx)
 
 	// constantMemAcc accounts for all constant folded values that are computed
 	// prior to any rows being computed.
