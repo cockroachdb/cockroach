@@ -13,7 +13,7 @@
 // permissions and limitations under the License.
 
 /*
-Package client and its KV API has been deprecated for external usage. Please use
+Package client and its KV API have been deprecated for external usage. Please use
 a postgres-compatible SQL driver (e.g. github.com/lib/pq). For more details, see
 http://www.cockroachlabs.com/blog/sql-in-cockroachdb-mapping-table-data-to-key-value-storage/.
 
