@@ -13,7 +13,6 @@
 // permissions and limitations under the License.
 
 /*
-
 Package server implements the Cockroach storage node. A node
 corresponds to a single instance of the cockroach binary, running on a
 single physical machine, which exports the "Node" Go RPC service. Each
