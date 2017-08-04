@@ -584,7 +584,7 @@ func backup(
 
 func backupPlanHook(
 	stmt parser.Statement, p sql.PlanHookState,
-) (func(context.Context) ([]parser.Datums, error), sqlbase.ResultColumns, error) {
+) (func(context.Context, chan<- parser.Datums) error, sqlbase.ResultColumns, error) {
 	backupStmt, ok := stmt.(*parser.Backup)
 	if !ok {
 		return nil, nil, nil
@@ -618,18 +618,18 @@ func backupPlanHook(
 		{Name: "system_records", Typ: parser.TypeInt},
 		{Name: "bytes", Typ: parser.TypeInt},
 	}
-	fn := func(ctx context.Context) ([]parser.Datums, error) {
+	fn := func(ctx context.Context, resultsCh chan<- parser.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
 		to, err := toFn()
 		if err != nil {
-			return nil, err
+			return err
 		}
 		incrementalFrom, err := incrementalFromFn()
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		var startTime hlc.Timestamp
@@ -637,20 +637,20 @@ func backupPlanHook(
 			var err error
 			startTime, err = ValidatePreviousBackups(ctx, incrementalFrom)
 			if err != nil {
-				return nil, err
+				return err
 			}
 		}
 		endTime := p.ExecCfg().Clock.Now()
 		if backupStmt.AsOf.Expr != nil {
 			var err error
 			if endTime, err = sql.EvalAsOfTimestamp(nil, backupStmt.AsOf, endTime); err != nil {
-				return nil, err
+				return err
 			}
 		}
 
 		exportStore, err := exportStorageFromURI(ctx, to)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		defer exportStore.Close()
 
@@ -661,19 +661,19 @@ func backupPlanHook(
 			// returns (and then wrap/tag them), we could narrow this check.
 			if err == nil {
 				r.Close()
-				return nil, errors.Errorf("a %s file already appears to exist in %s",
+				return errors.Errorf("a %s file already appears to exist in %s",
 					BackupDescriptorName, to)
 			}
 		}
 
 		backupDesc, err := makeBackupDescriptor(ctx, p, startTime, endTime, backupStmt.Targets)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		description, err := backupJobDescription(backupStmt, to, incrementalFrom)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		job := p.ExecCfg().JobRegistry.NewJob(jobs.Record{
 			Description: description,
@@ -700,14 +700,13 @@ func backupPlanHook(
 			checkpointDesc,
 		)
 		if err := job.FinishedWith(ctx, backupErr); err != nil {
-			return nil, err
+			return err
 		}
 		if backupErr != nil {
-			return nil, backupErr
+			return backupErr
 		}
-		// TODO(benesch): emit periodic progress updates once we have the
-		// infrastructure to stream responses.
-		ret := []parser.Datums{{
+		// TODO(benesch): emit periodic progress updates.
+		resultsCh <- parser.Datums{
 			parser.NewDInt(parser.DInt(*job.ID())),
 			parser.NewDString(string(jobs.StatusSucceeded)),
 			parser.NewDFloat(parser.DFloat(1.0)),
@@ -715,8 +714,8 @@ func backupPlanHook(
 			parser.NewDInt(parser.DInt(backupDesc.EntryCounts.IndexEntries)),
 			parser.NewDInt(parser.DInt(backupDesc.EntryCounts.SystemRecords)),
 			parser.NewDInt(parser.DInt(backupDesc.EntryCounts.DataSize)),
-		}}
-		return ret, nil
+		}
+		return nil
 	}
 	return fn, header, nil
 }
@@ -789,7 +788,7 @@ func backupResumeHook(typ jobs.Type) func(context.Context, *jobs.Job) error {
 
 func showBackupPlanHook(
 	stmt parser.Statement, p sql.PlanHookState,
-) (func(context.Context) ([]parser.Datums, error), sqlbase.ResultColumns, error) {
+) (func(context.Context, chan<- parser.Datums) error, sqlbase.ResultColumns, error) {
 	backup, ok := stmt.(*parser.ShowBackup)
 	if !ok {
 		return nil, nil, nil
@@ -816,20 +815,19 @@ func showBackupPlanHook(
 		{Name: "end_time", Typ: parser.TypeTimestamp},
 		{Name: "size_bytes", Typ: parser.TypeInt},
 	}
-	fn := func(ctx context.Context) ([]parser.Datums, error) {
+	fn := func(ctx context.Context, resultsCh chan<- parser.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
 		str, err := toFn()
 		if err != nil {
-			return nil, err
+			return err
 		}
 		desc, err := readBackupDescriptorFromURI(ctx, str)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		var ret []parser.Datums
 		descs := make(map[sqlbase.ID]string)
 		for _, descriptor := range desc.Descriptors {
 			if database := descriptor.GetDatabase(); database != nil {
@@ -854,17 +852,16 @@ func showBackupPlanHook(
 		for _, descriptor := range desc.Descriptors {
 			if table := descriptor.GetTable(); table != nil {
 				dbName := descs[table.ParentID]
-				temp := parser.Datums{
+				resultsCh <- parser.Datums{
 					parser.NewDString(dbName),
 					parser.NewDString(table.Name),
 					parser.MakeDTimestamp(time.Unix(0, desc.StartTime.WallTime), time.Nanosecond),
 					parser.MakeDTimestamp(time.Unix(0, desc.EndTime.WallTime), time.Nanosecond),
 					parser.NewDInt(parser.DInt(descSizes[table.ID])),
 				}
-				ret = append(ret, temp)
 			}
 		}
-		return ret, nil
+		return nil
 	}
 	return fn, header, nil
 }
