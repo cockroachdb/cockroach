@@ -132,7 +132,7 @@ func (ss *sortAllStrategy) executeImpl(
 			return row, err
 		}
 	}
-	r.Sort()
+	r.Sort(ctx)
 
 	i := r.NewIterator(ctx)
 	defer i.Close()
@@ -224,7 +224,7 @@ func (ss *sortTopKStrategy) Execute(ctx context.Context, s *sorter) error {
 		}
 	}
 
-	ss.rows.Sort()
+	ss.rows.Sort(ctx)
 
 	for ss.rows.Len() > 0 {
 		// Push the row to the output; stop if they don't need more rows.
@@ -310,7 +310,7 @@ func (ss *sortChunksStrategy) Execute(ctx context.Context, s *sorter) error {
 		}
 
 		// Sort the rows that have been pushed onto the buffer.
-		ss.rows.Sort()
+		ss.rows.Sort(ctx)
 
 		// Stream out sorted rows in order to row receiver.
 		for ss.rows.Len() > 0 {

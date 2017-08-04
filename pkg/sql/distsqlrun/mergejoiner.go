@@ -20,6 +20,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -82,8 +83,10 @@ func (m *mergeJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 	defer tracing.FinishSpan(span)
 	log.VEventf(ctx, 2, "starting merge joiner run")
 
+	cancelChecker := sqlbase.MakeCancelChecker(ctx)
+
 	for {
-		moreBatches, err := m.outputBatch(ctx)
+		moreBatches, err := m.outputBatch(ctx, cancelChecker)
 		if err != nil || !moreBatches {
 			DrainAndClose(
 				ctx, m.out.output, err, m.leftSource, m.rightSource)
@@ -100,7 +103,9 @@ func (m *mergeJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 // the caller should drain the inputs (as the termination condition might have
 // been dictated by the consumer saying that no more rows are needed) and close
 // the output.
-func (m *mergeJoiner) outputBatch(ctx context.Context) (bool, error) {
+func (m *mergeJoiner) outputBatch(
+	ctx context.Context, cancelChecker *sqlbase.CancelChecker,
+) (bool, error) {
 	leftRows, rightRows, err := m.streamMerger.NextBatch()
 	if err != nil {
 		return false, err
@@ -116,6 +121,9 @@ func (m *mergeJoiner) outputBatch(ctx context.Context) (bool, error) {
 	for _, lrow := range leftRows {
 		matched := false
 		for rIdx, rrow := range rightRows {
+			if err := cancelChecker.Check(); err != nil {
+				return false, err
+			}
 			renderedRow, err := m.render(lrow, rrow)
 			if err != nil {
 				return false, err

@@ -102,6 +102,9 @@ type hashJoiner struct {
 	// specified by testingKnobMemFailPoint. Note that it becomes less likely
 	// to hit a specific failure point as execution in the phase continues.
 	testingKnobFailProbability float64
+
+	// Context cancellation checker.
+	cancelChecker *sqlbase.CancelChecker
 }
 
 var _ Processor = &hashJoiner{}
@@ -149,6 +152,8 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 	ctx = log.WithLogTag(ctx, "HashJoiner", nil)
 	ctx, span := processorSpan(ctx, "hash joiner")
 	defer tracing.FinishSpan(span)
+
+	h.cancelChecker = sqlbase.MakeCancelChecker(ctx)
 
 	if log.V(2) {
 		log.Infof(ctx, "starting hash joiner run")
@@ -339,6 +344,9 @@ func (h *hashJoiner) bufferPhase(
 	i := h.rows[h.storedSide].NewIterator(ctx)
 	defer i.Close()
 	for i.Rewind(); ; i.Next() {
+		if err := h.cancelChecker.Check(); err != nil {
+			return false, err
+		}
 		if ok, err := i.Valid(); err != nil {
 			return false, err
 		} else if !ok {
@@ -361,6 +369,9 @@ func (h *hashJoiner) bufferPhase(
 		source = h.leftSource
 	}
 	for {
+		if err := h.cancelChecker.Check(); err != nil {
+			return false, err
+		}
 		row, earlyExit, err := h.receiveRow(ctx, source, h.storedSide)
 		if row == nil {
 			if err != nil {
@@ -393,6 +404,9 @@ func (h *hashJoiner) bufferPhaseImpl(
 ) (row sqlbase.EncDatumRow, earlyExit bool, _ error) {
 	srcs := [2]RowSource{h.leftSource, h.rightSource}
 	for {
+		if err := h.cancelChecker.Check(); err != nil {
+			return nil, false, err
+		}
 		leftUsage := h.rows[leftSide].MemUsage()
 		rightUsage := h.rows[rightSide].MemUsage()
 		if leftUsage >= h.initialBufferSize && rightUsage >= h.initialBufferSize {
@@ -445,6 +459,9 @@ func (h *hashJoiner) bufferPhaseImpl(
 	h.storedSide = rightSide
 
 	for {
+		if err := h.cancelChecker.Check(); err != nil {
+			return nil, false, err
+		}
 		row, earlyExit, err := h.receiveRow(ctx, h.rightSource, h.storedSide)
 		if row == nil {
 			if err != nil {
@@ -474,6 +491,9 @@ func (h *hashJoiner) probeRow(
 			return false, err
 		} else if !ok {
 			break
+		}
+		if err := h.cancelChecker.Check(); err != nil {
+			return false, err
 		}
 		otherRow, err := i.Row()
 		if err != nil {
@@ -573,6 +593,9 @@ func (h *hashJoiner) probePhase(
 				return false, err
 			} else if !ok {
 				break
+			}
+			if err := h.cancelChecker.Check(); err != nil {
+				return false, err
 			}
 			row, err := i.Row()
 			if err != nil {

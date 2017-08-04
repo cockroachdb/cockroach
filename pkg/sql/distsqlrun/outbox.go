@@ -162,7 +162,7 @@ func (m *outbox) flush(ctx context.Context) error {
 // Depending on the specific error, the stream might or might not need to be
 // closed. In case it doesn't, m.stream (and also m.syncFlowStream) have been
 // set to nil.
-func (m *outbox) mainLoop(ctx context.Context) error {
+func (m *outbox) mainLoop(ctx context.Context, ctxCancel context.CancelFunc) error {
 	if m.syncFlowStream == nil {
 		conn, err := m.flowCtx.rpcCtx.GRPCDial(m.addr)
 		if err != nil {
@@ -240,6 +240,15 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 				// the stream is not used any more.
 				m.stream = nil
 				m.syncFlowStream = nil
+				// Cancel the flow context, to stop work from proceeding in this
+				// flow. This also causes FlowStream RPCs that have this node as consumer to
+				// return errors. On sync flow outboxes, ctxCancel is set to nil in RunSyncFlow.
+				// For cancelling queries, this isn't an issue since the gateway node's
+				// txn context has already been cancelled in queryMeta.cancel(), and
+				// the flow context derives from that context.
+				if ctxCancel != nil {
+					ctxCancel()
+				}
 				return drainSignal.err
 			}
 			drainCh = nil
@@ -273,7 +282,7 @@ type receivable interface {
 }
 
 // listenForDrainSignalFromConsumer returns a channel that will be pinged once the
-// consumer has closed its send-side of the stream, or has sent a drain signal.
+// consumer has closed its send-side of the stream, or has sent a drain or cancel signal.
 func (m *outbox) listenForDrainSignalFromConsumer(ctx context.Context) (<-chan drainSignal, error) {
 	ch := make(chan drainSignal, 1)
 
@@ -301,8 +310,8 @@ func (m *outbox) listenForDrainSignalFromConsumer(ctx context.Context) (<-chan d
 	return ch, nil
 }
 
-func (m *outbox) run(ctx context.Context, wg *sync.WaitGroup) {
-	err := m.mainLoop(ctx)
+func (m *outbox) run(ctx context.Context, wg *sync.WaitGroup, ctxCancel context.CancelFunc) {
+	err := m.mainLoop(ctx, ctxCancel)
 	if m.stream != nil {
 		closeErr := m.stream.CloseSend()
 		if err == nil {
@@ -315,10 +324,14 @@ func (m *outbox) run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 }
 
-func (m *outbox) start(ctx context.Context, wg *sync.WaitGroup) {
+// Starts the outbox.
+//
+// ctxCancel is the cancellation function for this flow's context. Set to nil for sync flow stream
+// outboxes.
+func (m *outbox) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel context.CancelFunc) {
 	if wg != nil {
 		wg.Add(1)
 	}
 	m.RowChannel.Init(nil)
-	go m.run(ctx, wg)
+	go m.run(ctx, wg, ctxCancel)
 }

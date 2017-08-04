@@ -48,6 +48,12 @@ type inboundStreamInfo struct {
 	// finished is set if we have signaled that the stream is done transferring
 	// rows (to the flow's wait group).
 	finished bool
+	// cancelled is set if we don't want this stream to connect because the
+	// corresponding flow has been cancelled.
+	cancelled bool
+
+	// stream handle, useful for sending consumer signals to the producer.
+	stream DistSQL_FlowStreamServer
 
 	// waitGroup to signal on when finished.
 	waitGroup *sync.WaitGroup
@@ -256,7 +262,11 @@ func (fr *flowRegistry) waitForFlowLocked(
 // The cleanup function will decrement the flow's WaitGroup, so that Flow.Wait()
 // is not blocked on this stream any more.
 func (fr *flowRegistry) ConnectInboundStream(
-	ctx context.Context, flowID FlowID, streamID StreamID, timeout time.Duration,
+	ctx context.Context,
+	flowID FlowID,
+	streamID StreamID,
+	stream DistSQL_FlowStreamServer,
+	timeout time.Duration,
 ) (*Flow, RowReceiver, func(), error) {
 	fr.Lock()
 	defer fr.Unlock()
@@ -275,7 +285,11 @@ func (fr *flowRegistry) ConnectInboundStream(
 	if s.timedOut {
 		return nil, nil, nil, errors.Errorf("flow %s: inbound stream %d came too late", flowID, streamID)
 	}
+	if s.cancelled {
+		return nil, nil, nil, errors.Errorf("flow %s: inbound stream %d rejected due to flow cancellation", flowID, streamID)
+	}
 	s.connected = true
+	s.stream = stream
 	cleanup := func() {
 		fr.Lock()
 		fr.finishInboundStreamLocked(flowID, streamID)
