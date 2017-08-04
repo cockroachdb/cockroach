@@ -95,8 +95,7 @@ func createTestNode(
 	cfg.Transport = storage.NewDummyRaftTransport()
 	cfg.MetricsSampleInterval = metric.TestSampleInterval
 	cfg.HistogramWindowInterval = metric.TestSampleInterval
-	active, renewal := storage.NodeLivenessDurations(
-		storage.RaftElectionTimeout(cfg.RaftTickInterval, cfg.RaftElectionTimeoutTicks))
+	active, renewal := cfg.NodeLivenessDurations()
 	cfg.NodeLiveness = storage.NewNodeLiveness(
 		cfg.AmbientCtx,
 		cfg.Clock,
