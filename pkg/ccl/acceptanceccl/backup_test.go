@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"strconv"
 	"testing"
 	"time"
 
@@ -56,11 +55,7 @@ type benchmarkTest struct {
 	cockroachDiskSizeGB int
 	// storeURL is the Google Cloud Storage URL from which the test will
 	// download stores. Nothing is downloaded if storeURL is empty.
-	storeURL string
-	// skipClusterInit controls the --join flags for the nodes. If false (the
-	// default), then the first node will be empty and thus init the cluster,
-	// and each node will have the previous node as its join flag. If true,
-	// then all nodes will have all nodes in their join flags.
+	storeURL        string
 	skipClusterInit bool
 
 	f *terrafarm.Farmer
@@ -72,14 +67,7 @@ func (bt *benchmarkTest) Start(ctx context.Context) {
 		bt.b.Fatal("testing enterprise features requires setting COCKROACH_DEV_LICENSE")
 	}
 	bt.f = acceptance.MakeFarmer(bt.b, bt.prefix, acceptance.GetStopper())
-
-	bt.f.AddFlag("--max-offset=1s")
-
-	bt.f.AddVars["join_all"] = fmt.Sprint(bt.skipClusterInit)
-
-	if bt.cockroachDiskSizeGB != 0 {
-		bt.f.AddVars["cockroach_disk_size"] = strconv.Itoa(bt.cockroachDiskSizeGB)
-	}
+	bt.f.SkipClusterInit = bt.skipClusterInit
 
 	log.Infof(ctx, "creating cluster with %d node(s)", bt.nodes)
 	if err := bt.f.Resize(bt.nodes); err != nil {
@@ -117,7 +105,9 @@ func (bt *benchmarkTest) Start(ctx context.Context) {
 			}
 		}
 	}
-	acceptance.CheckGossip(ctx, bt.b, bt.f, longWaitTime, acceptance.HasPeers(bt.nodes))
+	if err := acceptance.CheckGossip(ctx, bt.f, longWaitTime, acceptance.HasPeers(bt.nodes)); err != nil {
+		bt.b.Fatal(err)
+	}
 	bt.f.Assert(ctx, bt.b)
 
 	sqlDB, err := gosql.Open("postgres", bt.f.PGUrl(ctx, 0))

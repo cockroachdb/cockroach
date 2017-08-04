@@ -18,7 +18,6 @@ import (
 	"flag"
 	"net/http"
 	"regexp"
-	"strconv"
 	"testing"
 	"time"
 
@@ -62,11 +61,6 @@ type continuousLoadTest struct {
 	// Process must be one of the processes (e.g. block_writer) that's
 	// downloaded by the Terraform configuration.
 	Process string
-	// CockroachDiskSizeGB is the size, in gigabytes, of the disks allocated
-	// for CockroachDB nodes. Leaving this as 0 accepts the default in the
-	// Terraform configs. This must be in GB, because Terraform only accepts
-	// disk size for GCE in GB.
-	CockroachDiskSizeGB int
 }
 
 // queryCount returns the total SQL queries executed by the cluster.
@@ -125,14 +119,14 @@ func (cl continuousLoadTest) Run(ctx context.Context, t testing.TB) {
 		}
 		f.MustDestroy(t)
 	}()
-	f.AddVars["benchmark_name"] = cl.BenchmarkPrefix + cl.shortTestTimeout()
-	if cl.CockroachDiskSizeGB != 0 {
-		f.AddVars["cockroach_disk_size"] = strconv.Itoa(cl.CockroachDiskSizeGB)
-	}
+	f.BenchmarkName = cl.BenchmarkPrefix + cl.shortTestTimeout()
+
 	if err := f.Resize(cl.NumNodes); err != nil {
 		t.Fatal(err)
 	}
-	CheckGossip(ctx, t, f, longWaitTime, HasPeers(cl.NumNodes))
+	if err := CheckGossip(ctx, f, longWaitTime, HasPeers(cl.NumNodes)); err != nil {
+		t.Fatal(err)
+	}
 	start := timeutil.Now()
 	if err := f.StartLoad(ctx, cl.Process, *flagCLTWriters); err != nil {
 		t.Fatal(err)
@@ -198,21 +192,19 @@ func (cl continuousLoadTest) shortTestTimeout() string {
 func TestContinuousLoad_BlockWriter(t *testing.T) {
 	ctx := context.Background()
 	continuousLoadTest{
-		Prefix:              "bwriter",
-		BenchmarkPrefix:     "BenchmarkBlockWriter",
-		NumNodes:            *flagNodes,
-		Process:             "block_writer",
-		CockroachDiskSizeGB: 200,
+		Prefix:          "bwriter",
+		BenchmarkPrefix: "BenchmarkBlockWriter",
+		NumNodes:        *flagNodes,
+		Process:         "block_writer",
 	}.Run(ctx, t)
 }
 
 func TestContinuousLoad_Photos(t *testing.T) {
 	ctx := context.Background()
 	continuousLoadTest{
-		Prefix:              "photos",
-		BenchmarkPrefix:     "BenchmarkPhotos",
-		NumNodes:            *flagNodes,
-		Process:             "photos",
-		CockroachDiskSizeGB: 200,
+		Prefix:          "photos",
+		BenchmarkPrefix: "BenchmarkPhotos",
+		NumNodes:        *flagNodes,
+		Process:         "photos",
 	}.Run(ctx, t)
 }

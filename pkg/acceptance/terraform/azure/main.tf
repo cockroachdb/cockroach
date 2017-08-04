@@ -169,27 +169,6 @@ resource "azurerm_virtual_machine" "cockroach" {
   }
 }
 
-# Supervisor config for CockroachDB nodes.
-data "template_file" "supervisor" {
-  count = "${var.num_instances}"
-  template = "${file("../common/supervisor.conf.tpl")}"
-  depends_on = [ "azurerm_virtual_machine.cockroach" ]
-
-  vars {
-    stores = "${var.stores}"
-    cockroach_port = "${var.sql_port}"
-    # The value of the --join flag must be empty for the first node,
-    # and a running node for all others. We build a list of addresses
-    # shifted by one (first element is empty), then take the value at index "instance.index".
-    # If join_all is true, --join is instead all nodes.
-    join_address = "${var.join_all == "true" ? join(",", azurerm_public_ip.cockroach.*.fqdn) : element(concat(split(",", ""), azurerm_public_ip.cockroach.*.fqdn), count.index == 0 ? 0 : 1)}"
-    cockroach_flags = "${var.cockroach_flags}"
-    # If the following changes, (*terrafarm.Farmer).Add() must change too.
-    cockroach_env = "${var.cockroach_env}"
-    benchmark_name = "${var.benchmark_name}"
-  }
-}
-
 # Set up CockroachDB nodes.
 resource "null_resource" "cockroach-runner" {
   count = "${var.num_instances}"
@@ -209,14 +188,6 @@ resource "null_resource" "cockroach-runner" {
   provisioner "file" {
     source = "../../../../build/disable-hyperv-timesync.sh"
     destination = "/home/ubuntu/disable-hyperv-timesync.sh"
-  }
-
-  # This writes the filled-in supervisor template. It would be nice if we could
-  # use rendered templates in the file provisioner.
-  provisioner "remote-exec" {
-    inline = <<FILE
-echo '${element(data.template_file.supervisor.*.rendered, count.index)}' > supervisor.conf
-FILE
   }
 
   provisioner "file" {
@@ -245,20 +216,16 @@ FILE
       "echo \"deb http://packages.cloud.google.com/apt $CLOUD_SDK_REPO main\" | sudo tee /etc/apt/sources.list.d/google-cloud-sdk.list",
       "curl -sS https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -",
       "sudo apt-get -qqy update >/dev/null",
-      "sudo apt-get -qqy install google-cloud-sdk supervisor >/dev/null",
+      "sudo apt-get -qqy install google-cloud-sdk >/dev/null",
       # Install CockroachDB.
       "mkdir /mnt/data0/logs",
       "ln -sf /mnt/data0/logs logs",
+      # Install CockroachDB.
       "[ $(stat --format=%s cockroach) -ne 0 ] || curl -sfSL https://edge-binaries.cockroachdb.com/cockroach/cockroach.linux-gnu-amd64.${var.cockroach_sha} -o cockroach",
       "chmod +x cockroach",
-      # Restart supervisord with the custom config.
-      "sudo service supervisor stop",
-      "if [ ! -e supervisor.pid ]; then supervisord -c supervisor.conf; fi",
       # Disable hypervisor clock sync, because it can cause an unrecoverable
       # amount of clock skew. This also forces an NTP sync.
       "./disable-hyperv-timesync.sh",
-      # Start CockroachDB.
-      "supervisorctl -c supervisor.conf start cockroach",
       # Install load generators.
       "curl -sfSL https://edge-binaries.cockroachdb.com/examples-go/block_writer.${var.block_writer_sha} -o block_writer",
       "chmod +x block_writer",
