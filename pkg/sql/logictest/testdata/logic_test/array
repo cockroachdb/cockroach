@@ -272,6 +272,20 @@ CREATE TABLE a (
 )
 
 statement ok
+CREATE TABLE a (b INT ARRAY)
+
+query TT
+SHOW CREATE TABLE a
+----
+a  CREATE TABLE a (
+     b INT[] NULL,
+     FAMILY "primary" (b, rowid)
+   )
+
+statement ok
+DROP TABLE a
+
+statement ok
 CREATE TABLE a (b INT[], c INT[])
 
 statement error column b is of type ARRAY and thus is not indexable
