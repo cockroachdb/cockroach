@@ -650,6 +650,22 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 	}
 }
 
+func waitForJob(db *gosql.DB, jobID int64) error {
+	return util.RetryForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
+		var status string
+		if err := db.QueryRow(
+			`SELECT status FROM system.jobs WHERE id = $1`, jobID,
+		).Scan(&status); err != nil {
+			return err
+		}
+		fmt.Printf("status = %s\n", status)
+		if e, a := jobs.StatusSucceeded, jobs.Status(status); e != a {
+			return errors.Errorf("expected backup status %s, but got %s", e, a)
+		}
+		return nil
+	})
+}
+
 func createAndWaitForJob(db *gosql.DB, descriptorIDs []sqlbase.ID, details jobs.Details) error {
 	now := timeutil.ToUnixMicros(timeutil.Now())
 	payload, err := protoutil.Marshal(&jobs.Payload{
@@ -670,18 +686,7 @@ func createAndWaitForJob(db *gosql.DB, descriptorIDs []sqlbase.ID, details jobs.
 	).Scan(&jobID); err != nil {
 		return err
 	}
-	return util.RetryForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
-		var status string
-		if err := db.QueryRow(
-			`SELECT status FROM system.jobs WHERE id = $1`, jobID,
-		).Scan(&status); err != nil {
-			return err
-		}
-		if e, a := jobs.StatusSucceeded, jobs.Status(status); e != a {
-			return errors.Errorf("expected backup status %s, but got %s", e, a)
-		}
-		return nil
-	})
+	return waitForJob(db, jobID)
 }
 
 // TestBackupRestoreResume tests whether backup and restore jobs are properly
@@ -798,6 +803,100 @@ func TestBackupRestoreResume(t *testing.T) {
 			`SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE restoredb.bank`,
 			sqlDB.QueryStr(`SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE data.bank`),
 		)
+	})
+}
+
+// TestBackupRestoreControlJob tests that PAUSE JOB, RESUME JOB, and CANCEL JOB
+// work as intended on backup and restore jobs.
+func TestBackupRestoreControlJob(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	defer func(oldInterval time.Duration) {
+		jobs.DefaultAdoptInterval = oldInterval
+	}(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+
+	// PAUSE JOB and CANCEL JOB are racy in that it's hard to guarantee that the
+	// job is still running when executing a PAUSE or CANCEL--or that the job has
+	// even started running. To synchronize, we install a store response filter
+	// which does a blocking receive whenever it encounters an export or import
+	// response. Below, when we want to guarantee the job is in progress, we do
+	// exactly one blocking send. When this send completes, we know the job is has
+	// started, as we've seen one export or import response, and we know the job
+	// has not finished, because we're blocking all future export and import
+	// responses until we close the channel, and our backup or restore is large
+	// enough that it will generate more than one export or import response.
+	var allowResponse chan struct{}
+	params := base.TestClusterArgs{}
+	params.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
+		TestingResponseFilter: func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+			for _, res := range br.Responses {
+				if res.Export != nil || res.Import != nil {
+					<-allowResponse
+				}
+			}
+			return nil
+		},
+	}
+
+	const numAccounts = 1000
+	_, dir, _, sqlDB, cleanup := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, params)
+	defer cleanup()
+
+	run := func(op, query string, args ...interface{}) (int64, error) {
+		allowResponse = make(chan struct{})
+		errCh := make(chan error)
+		go func() {
+			_, err := sqlDB.DB.Exec(query, args...)
+			errCh <- err
+		}()
+		allowResponse <- struct{}{}
+		var jobID int64
+		sqlDB.QueryRow(`SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID)
+		sqlDB.Exec(fmt.Sprintf("%s JOB %d", op, jobID))
+		close(allowResponse)
+		return jobID, <-errCh
+	}
+
+	t.Run("pause", func(t *testing.T) {
+		pauseDir := filepath.Join(dir, "pause")
+		sqlDB.Exec(`CREATE DATABASE pause`)
+
+		for i, query := range []string{
+			`BACKUP DATABASE data TO $1`,
+			`RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='pause')`,
+		} {
+			jobID, err := run("PAUSE", query, pauseDir)
+			if !testutils.IsError(err, "job paused") {
+				t.Fatalf("%d: expected 'job paused' error, but got %+v", i, err)
+			}
+			sqlDB.Exec(fmt.Sprintf(`RESUME JOB %d`, jobID))
+			if err := waitForJob(sqlDB.DB, jobID); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		sqlDB.CheckQueryResults(
+			`SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE pause.bank`,
+			sqlDB.QueryStr(`SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE data.bank`),
+		)
+	})
+
+	t.Run("cancel", func(t *testing.T) {
+		cancelDir := filepath.Join(dir, "cancel")
+		sqlDB.Exec(`CREATE DATABASE cancel`)
+
+		for i, query := range []string{
+			`BACKUP DATABASE data TO $1`,
+			`RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='cancel')`,
+		} {
+			if _, err := run("cancel", query, cancelDir); !testutils.IsError(err, "job canceled") {
+				t.Fatalf("%d: expected 'job canceled' error, but got %+v", i, err)
+			}
+			// Check that executing the same backup or restore succeeds. This won't
+			// work if the first backup or restore was not successfully canceled.
+			sqlDB.Exec(query, cancelDir)
+		}
 	})
 }
 
