@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -195,7 +196,7 @@ func makeCSVTableDescriptor(
 		return nil, errors.New("CREATE AS not supported")
 	}
 	// TODO(mjibson): error on FKs
-
+	// TODO(mjibson): pass in an appropriate creation time #17526
 	tableDesc, err := sql.MakeTableDesc(
 		ctx,
 		nil, /* txn */
@@ -204,6 +205,7 @@ func makeCSVTableDescriptor(
 		create,
 		parentID,
 		tableID,
+		hlc.Timestamp{},
 		sqlbase.NewDefaultPrivilegeDescriptor(),
 		nil, /* affected */
 		"",  /* sessionDB */

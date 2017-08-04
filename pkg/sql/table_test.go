@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -42,7 +43,7 @@ func CreateTestTableDescriptor(
 	}
 	p := planner{session: new(Session)}
 	p.evalCtx = parser.MakeTestingEvalContext()
-	return p.makeTableDesc(ctx, stmt.(*parser.CreateTable), parentID, id, privileges, nil)
+	return p.makeTableDesc(ctx, stmt.(*parser.CreateTable), parentID, id, hlc.Timestamp{}, privileges, nil)
 }
 
 func TestMakeTableDescColumns(t *testing.T) {
