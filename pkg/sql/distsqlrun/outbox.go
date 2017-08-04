@@ -54,6 +54,12 @@ type outbox struct {
 	// numRows is the number of rows that have been accumulated in the encoder.
 	numRows int
 
+	// flowCtxCancel is the cancellation function for this flow's ctx; context
+	// cancellation is used to stop processors on this flow. It is invoked
+	// whenever the consumer returns an error on the stream above. Set
+	// to a non-null value in start().
+	flowCtxCancel context.CancelFunc
+
 	err error
 }
 
@@ -233,6 +239,9 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 			}
 		case drainSignal := <-drainCh:
 			if drainSignal.err != nil {
+				// Stop work from proceeding in this flow. This also causes FlowStream
+				// RPCs that have this node as consumer to return errors.
+				m.flowCtxCancel()
 				// The consumer either doesn't care any more (it returned from the
 				// FlowStream RPC with an error if the outbox established the stream or
 				// it cancelled the client context if the consumer established the
@@ -356,10 +365,12 @@ func (m *outbox) run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 }
 
-func (m *outbox) start(ctx context.Context, wg *sync.WaitGroup) {
+// Starts the outbox.
+func (m *outbox) start(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel context.CancelFunc) {
 	if wg != nil {
 		wg.Add(1)
 	}
 	m.RowChannel.Init(nil)
+	m.flowCtxCancel = flowCtxCancel
 	go m.run(ctx, wg)
 }

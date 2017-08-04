@@ -153,7 +153,7 @@ func (d *diskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) 
 
 // Sort is a noop because the use of a SortedDiskMap as the underlying store
 // keeps the rows in sorted order.
-func (d *diskRowContainer) Sort() {}
+func (d *diskRowContainer) Sort(context.Context) {}
 
 func (d *diskRowContainer) Close(ctx context.Context) {
 	// We can ignore the error here because the flushed data is immediately cleared
