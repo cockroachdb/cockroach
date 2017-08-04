@@ -24,6 +24,8 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -212,6 +214,73 @@ func TestRouters(t *testing.T) {
 	}
 }
 
+// TestRangeRouter has its own tests because it requires a known column to
+// contain BYTES, and TestRouters generates random columns.
+func TestRangeRouter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	vals := make([]roachpb.Key, 10)
+	for i := range vals {
+		vals[i] = keys.MakeTablePrefix(uint32(i))
+	}
+	spans := roachpb.Spans{
+		{Key: vals[0], EndKey: vals[5]},
+		{Key: vals[5], EndKey: roachpb.KeyMax},
+	}
+
+	alloc := &sqlbase.DatumAlloc{}
+	evalCtx := parser.NewTestingEvalContext()
+	defer evalCtx.Stop(context.Background())
+
+	bufs := make([]*RowBuffer, len(spans))
+	recvs := make([]RowReceiver, len(spans))
+	for i := 0; i < len(spans); i++ {
+		bufs[i] = &RowBuffer{}
+		recvs[i] = bufs[i]
+	}
+
+	types := []sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_BYTES}}
+	spec := OutputRouterSpec{
+		Type: OutputRouterSpec_BY_RANGE,
+		RangeRouterSpec: OutputRouterSpec_RangeRouterSpec{
+			Spans: spans,
+		},
+	}
+	r, wg := setupRouter(t, evalCtx, spec, types, recvs)
+
+	for _, key := range vals {
+		row := sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(types[0], parser.NewDBytes(parser.DBytes(key)))}
+		if status := r.Push(row, ProducerMetadata{}); status != NeedMoreRows {
+			t.Fatalf("unexpected status: %d", status)
+		}
+	}
+	r.ProducerDone()
+	wg.Wait()
+
+	rows := make([]sqlbase.EncDatumRows, len(bufs))
+	for i, b := range bufs {
+		if !b.ProducerClosed {
+			t.Fatalf("bucket not closed: %d", i)
+		}
+		rows[i] = getRowsFromBuffer(t, b)
+	}
+
+	for bIdx := range rows {
+		for _, row := range rows[bIdx] {
+			// Verify that keys are in the correct bucket.
+			if err := row[0].EnsureDecoded(alloc); err != nil {
+				t.Fatal(err)
+			}
+			db := row[0].Datum.(*parser.DBytes)
+			key := roachpb.Key(*db)
+			span := spans[bIdx]
+			if span.Key.Compare(key) > 0 || span.EndKey.Compare(key) <= 0 {
+				t.Errorf("%s in wrong span: %s", key, span)
+			}
+		}
+	}
+}
+
 func getRowsFromBuffer(t *testing.T, buf *RowBuffer) sqlbase.EncDatumRows {
 	var res sqlbase.EncDatumRows
 	for {
@@ -226,6 +295,24 @@ func getRowsFromBuffer(t *testing.T, buf *RowBuffer) sqlbase.EncDatumRows {
 	}
 	return res
 }
+
+var (
+	// testRangeRouterOther's zero value of 0 is indeed the column we want.
+	testRangeRouterOther int32
+	testRangeRouterSpec  = OutputRouterSpec_RangeRouterSpec{
+		Spans: []roachpb.Span{
+			{
+				Key:    keys.MinKey,
+				EndKey: keys.TableDataMin,
+			},
+			{
+				Key:    keys.TableDataMin,
+				EndKey: keys.MaxKey,
+			},
+		},
+		DefaultDest: &testRangeRouterOther,
+	}
+)
 
 // Test that the correct status is returned to producers: NeedMoreRows should be
 // returned while there's at least one consumer that's not draining, then
@@ -249,6 +336,10 @@ func TestConsumerStatus(t *testing.T) {
 			name: "HashRouter",
 			spec: OutputRouterSpec{Type: OutputRouterSpec_BY_HASH, HashColumns: []uint32{0}},
 		},
+		{
+			name: "RangeRouter",
+			spec: OutputRouterSpec{Type: OutputRouterSpec_BY_RANGE, RangeRouterSpec: testRangeRouterSpec},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -260,23 +351,29 @@ func TestConsumerStatus(t *testing.T) {
 				recvs[i] = bufs[i]
 			}
 
-			colTypes := []sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_INT}}
+			colTypes := []sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_BYTES}}
 			router, wg := setupRouter(t, evalCtx, tc.spec, colTypes, recvs)
 
-			// row0 will be a row that the hash router sends to the first stream, row1
-			// to the 2nd stream.
+			// row0 will be a row that the router sends to the first stream, row1 to
+			// the 2nd stream.
 			var row0, row1 sqlbase.EncDatumRow
-			if hr, ok := router.(*hashRouter); ok {
+			switch r := router.(type) {
+			case *hashRouter:
 				var err error
-				row0, err = preimageAttack(colTypes, hr, 0, len(bufs))
+				row0, err = preimageAttack(colTypes, r, 0, len(bufs))
 				if err != nil {
 					t.Fatal(err)
 				}
-				row1, err = preimageAttack(colTypes, hr, 1, len(bufs))
+				row1, err = preimageAttack(colTypes, r, 1, len(bufs))
 				if err != nil {
 					t.Fatal(err)
 				}
-			} else {
+			case *rangeRouter:
+				d := parser.NewDBytes(parser.DBytes(testRangeRouterSpec.Spans[0].Key))
+				row0 = sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(colTypes[0], d)}
+				d = parser.NewDBytes(parser.DBytes(testRangeRouterSpec.Spans[1].Key))
+				row1 = sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(colTypes[0], d)}
+			default:
 				rng, _ := randutil.NewPseudoRand()
 				vals := sqlbase.RandEncDatumRowsOfTypes(rng, 1 /* numRows */, colTypes)
 				row0 = vals[0]
@@ -387,6 +484,10 @@ func TestMetadataIsForwarded(t *testing.T) {
 		{
 			name: "HashRouter",
 			spec: OutputRouterSpec{Type: OutputRouterSpec_BY_HASH, HashColumns: []uint32{0}},
+		},
+		{
+			name: "RangeRouter",
+			spec: OutputRouterSpec{Type: OutputRouterSpec_BY_RANGE, RangeRouterSpec: testRangeRouterSpec},
 		},
 	}
 
@@ -500,11 +601,18 @@ func TestRouterBlocks(t *testing.T) {
 			name: "HashRouter",
 			spec: OutputRouterSpec{Type: OutputRouterSpec_BY_HASH, HashColumns: []uint32{0}},
 		},
+		{
+			name: "RangeRouter",
+			spec: OutputRouterSpec{
+				Type:            OutputRouterSpec_BY_RANGE,
+				RangeRouterSpec: testRangeRouterSpec,
+			},
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			colTypes := []sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_INT}}
+			colTypes := []sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_BYTES}}
 			chans := make([]RowChannel, 2)
 			recvs := make([]RowReceiver, 2)
 			for i := 0; i < 2; i++ {

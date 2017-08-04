@@ -19,6 +19,7 @@ package distsqlrun
 
 import (
 	"hash/crc32"
+	"sort"
 	"sync"
 	"sync/atomic"
 
@@ -26,6 +27,8 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -53,6 +56,14 @@ func makeRouter(spec *OutputRouterSpec, streams []RowReceiver) (router, error) {
 
 	case OutputRouterSpec_MIRROR:
 		return makeMirrorRouter(streams)
+
+	case OutputRouterSpec_BY_RANGE:
+		var other *int
+		if spec.RangeRouterSpec.DefaultDest != nil {
+			tmp := int(*spec.RangeRouterSpec.DefaultDest)
+			other = &tmp
+		}
+		return makeRangeRouter(streams, spec.RangeRouterSpec.Spans, other, int(spec.RangeRouterSpec.KeyColumn))
 
 	default:
 		return nil, errors.Errorf("router type %s not supported", spec.Type)
@@ -331,8 +342,27 @@ type hashRouter struct {
 	alloc    sqlbase.DatumAlloc
 }
 
+// rangeRouter is a router that assumes the keyColumn'th column of incoming
+// rows is a roachpb.Key, and maps it to a stream based on a matching
+// span. That is, keys in the nth span will be mapped to the nth stream. The
+// keyColumn must be of type DBytes (or optionally DNull if defaultDest
+// is set).
+type rangeRouter struct {
+	routerBase
+
+	alloc sqlbase.DatumAlloc
+	// keyColumn is the index of the column containing the key in incoming rows.
+	keyColumn int
+	spans     roachpb.Spans
+	// defaultDest, if set, sends any row not matching a span, or any row that
+	// is DNull, to this stream. If other is not set and a non-matching row is
+	// encountered, an error is returned and the router is shut down.
+	defaultDest *int
+}
+
 var _ RowReceiver = &mirrorRouter{}
 var _ RowReceiver = &hashRouter{}
+var _ RowReceiver = &rangeRouter{}
 
 func makeMirrorRouter(streams []RowReceiver) (router, error) {
 	if len(streams) < 2 {
@@ -457,4 +487,95 @@ func (hr *hashRouter) computeDestination(row sqlbase.EncDatumRow) (int, error) {
 	// than most hashing algorithms (on recent x86 platforms where it is hardware
 	// accelerated).
 	return int(crc32.Update(0, crc32Table, hr.buffer) % uint32(len(hr.outputs))), nil
+}
+
+func makeRangeRouter(
+	streams []RowReceiver, spans roachpb.Spans, defaultDest *int, keyColumn int,
+) (*rangeRouter, error) {
+	if len(streams) != len(spans) {
+		return nil, errors.Errorf("number of streams (%d) must match spans (%d)", len(streams), len(spans))
+	}
+	sort.Sort(spans)
+	rr := rangeRouter{
+		spans:       spans,
+		defaultDest: defaultDest,
+		keyColumn:   keyColumn,
+	}
+	rr.routerBase.setupStreams(streams)
+	return &rr, nil
+}
+
+func (rr *rangeRouter) Push(row sqlbase.EncDatumRow, meta ProducerMetadata) ConsumerStatus {
+	aggStatus := rr.aggStatus()
+	if !meta.Empty() {
+		rr.fwdMetadata(meta)
+		// fwdMetadata can change the status, re-read it.
+		return rr.aggStatus()
+	}
+
+	useSema := rr.shouldUseSemaphore()
+	if useSema {
+		rr.semaphore <- struct{}{}
+	}
+
+	streamIdx, err := rr.computeDestination(row)
+	if err == nil {
+		ro := &rr.outputs[streamIdx]
+		ro.mu.Lock()
+		err = ro.addRowLocked(context.TODO(), row)
+		ro.mu.Unlock()
+		ro.mu.cond.Signal()
+	}
+	if useSema {
+		<-rr.semaphore
+	}
+	if err != nil {
+		rr.fwdMetadata(ProducerMetadata{Err: err})
+		atomic.StoreUint32(&rr.aggregatedStatus, uint32(ConsumerClosed))
+		return ConsumerClosed
+	}
+	return aggStatus
+}
+
+func (rr *rangeRouter) computeDestination(row sqlbase.EncDatumRow) (int, error) {
+	encdatum := row[rr.keyColumn]
+	if err := encdatum.EnsureDecoded(&rr.alloc); err != nil {
+		return 0, err
+	}
+
+	var i int
+	if d := encdatum.Datum; d == parser.DNull {
+		i = -1
+	} else if bytes, ok := d.(*parser.DBytes); !ok {
+		return 0, errors.Errorf("unexpected column type, got %T", d)
+	} else {
+		i = rr.spanForKey([]byte(*bytes))
+	}
+
+	if i == -1 {
+		if rr.defaultDest == nil {
+			return 0, errors.New("no span found for key")
+		}
+		return *rr.defaultDest, nil
+	}
+
+	return i, nil
+}
+
+// spanForKey returns the index of the span that key is within. A -1 is
+// returned of no such span is found.
+func (rr *rangeRouter) spanForKey(key []byte) int {
+	i := sort.Search(len(rr.spans), func(i int) bool {
+		return rr.spans[i].EndKey.Compare(key) > 0
+	})
+
+	// If we didn't find an i where key < end key, return an error.
+	if i == len(rr.spans) {
+		return -1
+	}
+	// Make sure the start key is <= key.
+	if rr.spans[i].Key.Compare(key) > 0 {
+		return -1
+	}
+	return i
 }

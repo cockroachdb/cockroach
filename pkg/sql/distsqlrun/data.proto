@@ -140,6 +140,21 @@ message OutputRouterSpec {
   // Only used for the BY_HASH type; these are the indexes of the columns we are
   // hashing.
   repeated uint32 hash_columns = 3;
+
+  message RangeRouterSpec {
+    // spans is a slice of roachpb.Span. A key matching the Nth span will be
+    // routed to the Nth stream (and thus the number of spans must match the
+    // number of streams).
+    repeated roachpb.Span spans = 4 [(gogoproto.nullable) = false];
+    // default_dest, if not nil, is the index of the stream to send both NULLs
+    // and keys that do not match any span. (Key columns of incorrect types
+    // always produce an error.)
+    optional int32 default_dest = 5;
+    // key_column is the index of the key column in incoming rows. It must be
+    // of type DBytes.
+    optional uint32 key_column = 6 [(gogoproto.nullable) = false];
+  }
+  optional RangeRouterSpec range_router_spec = 4 [(gogoproto.nullable) = false];
 }
 
 message DatumInfo {
