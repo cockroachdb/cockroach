@@ -164,14 +164,13 @@ func (r *Registry) maybeCancelJobs(ctx context.Context, nl nodeLiveness) {
 	if err != nil {
 		log.Warningf(ctx, "unable to get node liveness: %s", err)
 		// Conservatively assume our lease has expired. Abort all jobs.
-		r.mu.Lock()
-		defer r.mu.Unlock()
 		r.cancelAll(ctx)
 		return
 	}
 
 	r.mu.Lock()
-	defer r.mu.Unlock()
+	registryEpoch := r.mu.epoch
+	r.mu.Unlock()
 	// TODO(benesch): this logic is correct but too aggressive. Jobs created
 	// immediately after a liveness failure but before we've updated our cached
 	// epoch will be unnecessarily canceled.
@@ -182,7 +181,7 @@ func (r *Registry) maybeCancelJobs(ctx context.Context, nl nodeLiveness) {
 	// could instead wait to see if we managed a successful heartbeat at the
 	// current epoch. The additional complexity this requires is not clearly
 	// worthwhile.
-	sameEpoch := liveness.Epoch == r.mu.epoch
+	sameEpoch := liveness.Epoch == registryEpoch
 	if !sameEpoch || !liveness.IsLive(r.clock.Now(), r.clock.MaxOffset()) {
 		r.cancelAll(ctx)
 		r.mu.epoch = liveness.Epoch
@@ -288,14 +287,16 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl nodeLiveness) error {
 
 func (r *Registry) cancelAll(ctx context.Context) {
 	log.Warningf(ctx, "canceling all jobs due to liveness failure")
-	r.mu.AssertHeld()
-	for jobID, job := range r.mu.jobs {
-		if log.V(2) {
-			log.Warningf(ctx, "canceling job %d", jobID)
-		}
+	r.mu.Lock()
+	jobs := make([]*Job, 0, len(r.mu.jobs))
+	for _, job := range jobs {
+		jobs = append(jobs, job)
+	}
+	r.mu.Unlock()
+	for _, job := range jobs {
+		log.Warningf(ctx, "canceling job %d", *job.ID())
 		job.cancel()
 	}
-	r.mu.jobs = make(map[int64]*Job)
 }
 
 func (r *Registry) newLease() *Lease {

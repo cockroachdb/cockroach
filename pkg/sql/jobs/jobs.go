@@ -121,7 +121,11 @@ var WithoutCancel func()
 // remembers the assigned ID of the job in the Job. The job information is read
 // from the Record field at the time Created is called. If cancelFn is not nil,
 // the Registry will automatically acquire a lease for this job and invoke
-// cancelFn if the lease expires.
+// cancelFn if the lease expires. Jobs which provide cancelFn must not call
+// Succeeded or Failed directly, and must instead call FinishedWith.
+//
+// TODO(benesch): remove the cancelFn complexity by requiring that all jobs be
+// cancelable.
 func (j *Job) Created(ctx context.Context, cancelFn func()) error {
 	payload := &Payload{
 		Description:   j.Record.Description,
@@ -217,13 +221,11 @@ func (j *Job) Failed(ctx context.Context, err error) {
 		log.Errorf(ctx, "Job: ignoring error %v while logging failure for job %d: %+v",
 			err, *j.id, internalErr)
 	}
-	j.registry.unregister(*j.id)
 }
 
 // Succeeded marks the tracked job as having succeeded and sets its fraction
 // completed to 1.0.
 func (j *Job) Succeeded(ctx context.Context) error {
-	defer j.registry.unregister(*j.id)
 	return j.update(ctx, func(status *Status, payload *Payload) (bool, error) {
 		if status.Terminal() {
 			// Already done - do nothing.
@@ -248,6 +250,12 @@ func (j *Job) Succeeded(ctx context.Context) error {
 //
 // where RunJob handles writing to system.jobs automatically.
 func (j *Job) FinishedWith(ctx context.Context, err error) error {
+	if j.id == nil {
+		// The job hasn't been created yet, so nothing to do.
+		return nil
+	}
+
+	j.registry.unregister(*j.id)
 	j.mu.Lock()
 	canceled := j.mu.canceled
 	j.mu.Unlock()
