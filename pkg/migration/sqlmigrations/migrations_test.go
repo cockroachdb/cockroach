@@ -508,6 +508,8 @@ func TestCreateSystemTable(t *testing.T) {
 
 func TestUpdateViewDependenciesMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#17438")
+
 	ctx := context.Background()
 
 	// remove the view update migration so we can test its effects.
