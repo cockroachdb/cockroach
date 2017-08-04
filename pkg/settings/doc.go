@@ -14,11 +14,11 @@
 
 /*
 Package settings provides a central registry of runtime editable settings and
-accompanying helper functions for retreiving their current values.
+accompanying helper functions for retrieving their current values.
 
 Settings values are stored in the system.settings table (which is gossiped). A
 gossip-driven worker updates this package's cached value when the table changes
-(see the `RefreshSettings`` worker in the `sql` package).
+(see the `RefreshSettings` worker in the `sql` package).
 
 The package's cache is global -- while all the usual drawbacks of mutable global
 state obviously apply, it is needed to make the package's functionality
@@ -47,13 +47,13 @@ to read `true` unless a preference is expressed, but in the rare cases where you
 read a default, you don't risk ignoring an expressed opt-out.
 
 Ideally, when passing configuration into some structure or subsystem, e.g.
-a rate limit into a client or something, passing a `*FooSetting rather than a
+a rate limit into a client or something, passing a `*FooSetting` rather than a
 `Foo` and waiting to call `.Get()` until the value is actually used ensures
 observing the latest value.
 
 Existing/off-the-shelf systems generally will not be defined in terms of our
 settings, but if they can either be swapped at runtime or expose some `setFoo`
-method, that can be used in conjunction with an change callback registered via
+method, that can be used in conjunction with a change callback registered via
 OnChange.
 */
 package settings
