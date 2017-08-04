@@ -437,9 +437,9 @@ func TestJobLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 		if err := job.Progressed(ctx, 0.5, jobs.Noop); !testutils.IsError(
-			err, `expected running job, but job has status 'pending'`,
+			err, `cannot update progress on pending job`,
 		) {
-			t.Fatalf("expected 'expected running job' error, but got %v", err)
+			t.Fatalf("expected 'cannot update progress' error, but got %v", err)
 		}
 	})
 
@@ -457,9 +457,9 @@ func TestJobLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 		if err := job.Progressed(ctx, 0.5, jobs.Noop); !testutils.IsError(
-			err, `expected running job, but job has status 'succeeded'`,
+			err, `cannot update progress on succeeded job`,
 		) {
-			t.Fatalf("expected 'expected running job' error, but got %v", err)
+			t.Fatalf("expected 'cannot update progress' error, but got %v", err)
 		}
 	})
 
