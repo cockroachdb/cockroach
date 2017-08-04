@@ -139,7 +139,7 @@ func (f *Farmer) Resize(nodes int) error {
 		args = f.appendDefaults(append([]string{"apply"}, args...))
 	}
 	if stdout, stderr, err := f.run("terraform", args...); err != nil {
-		return fmt.Errorf("failed: %s\nstdout: %s\nstderr: %s", stdout, stderr, err)
+		return errors.Wrapf(err, "failed: %s %s\nstdout:\n%s\nstderr:\n%s", "terraform", args, stdout, stderr)
 	}
 	f.refresh()
 
@@ -286,7 +286,7 @@ func (f *Farmer) MustDestroy(t testing.TB) {
 func (f *Farmer) Exec(i int, cmd string) error {
 	stdout, stderr, err := f.ssh(f.Hostname(i), f.defaultKeyFile(), cmd)
 	if err != nil {
-		return fmt.Errorf("failed: %s: %s\nstdout:\n%s\nstderr:\n%s", cmd, err, stdout, stderr)
+		return errors.Wrapf(err, "failed: %s\nstdout:\n%s\nstderr:\n%s", cmd, stdout, stderr)
 	}
 	return nil
 }
@@ -337,7 +337,7 @@ func (f *Farmer) WaitReady(d time.Duration) error {
 	for r := retry.Start(rOpts); r.Next(); {
 		instance := f.Hostname(0)
 		if err != nil || instance == "" {
-			err = fmt.Errorf("no nodes found: %v", err)
+			err = errors.Wrap(err, "no nodes found")
 			continue
 		}
 		for i := 0; i < f.NumNodes(); i++ {
