@@ -65,9 +65,6 @@ func doExpandPlan(
 	case *deleteNode:
 		n.run.rows, err = doExpandPlan(ctx, p, noParams, n.run.rows)
 
-	case *createViewNode:
-		n.sourcePlan, err = doExpandPlan(ctx, p, noParams, n.sourcePlan)
-
 	case *explainDistSQLNode:
 		n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
 		if err != nil {
@@ -241,6 +238,7 @@ func doExpandPlan(
 	case *createDatabaseNode:
 	case *createIndexNode:
 	case *createUserNode:
+	case *createViewNode:
 	case *dropDatabaseNode:
 	case *dropIndexNode:
 	case *dropTableNode:
@@ -310,13 +308,8 @@ func expandRenderNode(
 	// Elide the render node if it renders its source as-is.
 
 	sourceCols := planColumns(r.source.plan)
-	if len(r.columns) == len(sourceCols) && r.source.info.viewDesc == nil {
-		// 1) we don't drop renderNodes which also interface to a view, because
-		// CREATE VIEW needs it.
-		// TODO(knz): make this optimization conditional on a flag, which can
-		// be set to false by CREATE VIEW.
-		//
-		// 2) we don't drop renderNodes which have a different number of
+	if len(r.columns) == len(sourceCols) {
+		// We don't drop renderNodes which have a different number of
 		// columns than their sources, because some nodes currently assume
 		// the number of source columns doesn't change between
 		// instantiation and Start() (e.g. groupNode).
@@ -424,9 +417,6 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 
 	case *deleteNode:
 		n.run.rows = simplifyOrderings(n.run.rows, nil)
-
-	case *createViewNode:
-		n.sourcePlan = simplifyOrderings(n.sourcePlan, nil)
 
 	case *explainDistSQLNode:
 		n.plan = simplifyOrderings(n.plan, nil)
@@ -567,6 +557,7 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 	case *createDatabaseNode:
 	case *createIndexNode:
 	case *createUserNode:
+	case *createViewNode:
 	case *dropDatabaseNode:
 	case *dropIndexNode:
 	case *dropTableNode:
