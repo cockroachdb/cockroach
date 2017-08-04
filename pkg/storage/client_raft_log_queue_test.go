@@ -48,7 +48,7 @@ func TestRaftLogQueue(t *testing.T) {
 	// us in this test.
 	sc := storage.TestStoreConfig(nil)
 	sc.RaftTickInterval = math.MaxInt32
-	setRaftElectionTimeoutTicks(&sc, 1000000)
+	sc.RaftElectionTimeoutTicks = 1000000
 	mtc.storeConfig = &sc
 
 	defer mtc.Stop()

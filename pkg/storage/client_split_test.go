@@ -1567,7 +1567,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 func TestLeaderAfterSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	storeConfig := storage.TestStoreConfig(nil)
-	setRaftElectionTimeoutTicks(&storeConfig, 1000000)
+	storeConfig.RaftElectionTimeoutTicks = 1000000
 	mtc := &multiTestContext{
 		storeConfig: &storeConfig,
 	}
