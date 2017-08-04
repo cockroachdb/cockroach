@@ -31,6 +31,8 @@ type TestServerArgs struct {
 	// Knobs for the test server.
 	Knobs TestingKnobs
 
+	RaftConfig
+
 	// PartOfCluster must be set if the TestServer is joining others in a cluster.
 	// If not set (and hence the server is the only one in the cluster), the
 	// default zone config will be overridden to disable all replication - so that
@@ -59,8 +61,6 @@ type TestServerArgs struct {
 	Insecure                 bool
 	RetryOptions             retry.Options
 	MetricsSampleInterval    time.Duration
-	RaftTickInterval         time.Duration
-	RaftElectionTimeoutTicks int
 	SocketFile               string
 	ScanInterval             time.Duration
 	ScanMaxIdleTime          time.Duration

@@ -730,9 +730,10 @@ func (m *multiTestContext) addStore(idx int) {
 	nodeID := roachpb.NodeID(idx + 1)
 	cfg := m.makeStoreConfig(idx)
 	m.populateDB(idx, stopper)
+	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 	m.nodeLivenesses[idx] = storage.NewNodeLiveness(
 		ambient, m.clocks[idx], m.dbs[idx], m.gossips[idx],
-		cfg.RangeLeaseActiveDuration, cfg.RangeLeaseRenewalDuration,
+		nlActive, nlRenewal,
 	)
 	m.populateStorePool(idx, m.nodeLivenesses[idx])
 	cfg.DB = m.dbs[idx]
@@ -878,9 +879,10 @@ func (m *multiTestContext) restartStore(i int) {
 	m.stoppers[i] = stopper
 	cfg := m.makeStoreConfig(i)
 	m.populateDB(i, stopper)
+	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 	m.nodeLivenesses[i] = storage.NewNodeLiveness(
 		log.AmbientContext{Tracer: tracing.NewTracer()}, m.clocks[i], m.dbs[i], m.gossips[i],
-		cfg.RangeLeaseActiveDuration, cfg.RangeLeaseRenewalDuration,
+		nlActive, nlRenewal,
 	)
 	m.populateStorePool(i, m.nodeLivenesses[i])
 	cfg.DB = m.dbs[i]

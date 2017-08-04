@@ -1380,8 +1380,7 @@ func TestCampaignOnLazyRaftGroupInitialization(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				mtc.manualClock.Increment(
-					storage.RaftElectionTimeout(sc.RaftTickInterval, sc.RaftElectionTimeoutTicks).Nanoseconds())
+				mtc.manualClock.Increment(sc.RaftElectionTimeout().Nanoseconds())
 			},
 			expCampaigns: map[roachpb.ReplicaID]bool{
 				1: true,
