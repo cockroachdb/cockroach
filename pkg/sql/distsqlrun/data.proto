@@ -130,8 +130,7 @@ message OutputRouterSpec {
     // the row (specified by the hash_columns field).
     BY_HASH = 2;
     // Each row is sent to one stream, chosen according to preset boundaries
-    // for the values of certain columns of the row. TODO(radu): an extra
-    // optional structure below for the range details.
+    // for the values of certain columns of the row.
     BY_RANGE = 3;
   }
   optional Type type = 1 [(gogoproto.nullable) = false];
@@ -140,6 +139,35 @@ message OutputRouterSpec {
   // Only used for the BY_HASH type; these are the indexes of the columns we are
   // hashing.
   repeated uint32 hash_columns = 3;
+
+  message RangeRouterSpec {
+    message ColumnEncoding {
+      // column is the index of a column to encode.
+      optional uint32 column = 1 [(gogoproto.nullable) = false];
+      // encoding specifies how a particular column is to be encoded for
+      // generating the sort key for a row. This needs to correspond to the way
+      // the Span.{start,end} keys have been generated.
+      optional sqlbase.DatumEncoding encoding = 2 [(gogoproto.nullable) = false];
+    }
+    // Span matches bytes in [start, end).
+    message Span {
+      optional bytes start = 1 [(gogoproto.nullable) = false];
+      optional bytes end = 2 [(gogoproto.nullable) = true];
+    }
+
+    // spans is a slice of Span. Input matching the Nth span will be routed to the
+    // Nth stream (and thus the number of spans must match the number of streams).
+    repeated Span spans = 1 [(gogoproto.nullable) = false];
+    // default_dest, if not nil, is the index of the stream to send rows that do
+    // not match any span. If nil, a row that does not match a span will produce
+    // an error in the router.
+    optional int32 default_dest = 2;
+    // encodings is a slice of columns and encodings. Each will be appended to a
+    // []byte, which is used as input to the spans. Columns from the input rows
+    // potentially need to be recoded to match the encoding used for the spans.
+    repeated ColumnEncoding encodings = 3 [(gogoproto.nullable) = false];
+  }
+  optional RangeRouterSpec range_router_spec = 4 [(gogoproto.nullable) = false];
 }
 
 message DatumInfo {
