@@ -3722,7 +3722,14 @@ typename:
   }
   // SQL standard syntax, currently only one-dimensional
 | simple_typename ARRAY '[' ICONST ']' { return unimplementedWithIssue(sqllex, 2115) }
-| simple_typename ARRAY { return unimplementedWithIssue(sqllex, 2115) }
+| simple_typename ARRAY {
+    var err error
+    $$.val, err = arrayOf($1.colType(), Exprs{NewDInt(DInt(-1))})
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+  }
 
 cast_target:
   typename
