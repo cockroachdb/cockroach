@@ -94,6 +94,18 @@ func (s Status) Terminal() bool {
 	return s == StatusFailed || s == StatusSucceeded
 }
 
+// InvalidStatusError is the error returned when the desired operation is
+// invalid given the job's current status.
+type InvalidStatusError struct {
+	id     int64
+	status Status
+	op     string
+}
+
+func (e *InvalidStatusError) Error() string {
+	return fmt.Sprintf("cannot %s %s job (id %d)", e.op, e.status, e.id)
+}
+
 // ID returns the ID of the job that this Job is currently tracking. This will
 // be nil if Created has not yet been called.
 func (j *Job) ID() *int64 {
@@ -169,8 +181,7 @@ func (j *Job) Progressed(
 	}
 	return j.update(ctx, func(status *Status, payload *Payload) (bool, error) {
 		if *status != StatusRunning {
-			return false, errors.Errorf(
-				"Job: updating progress: expected running job, but job has status '%s'", *status)
+			return false, &InvalidStatusError{*j.id, *status, "update progress on"}
 		}
 		if fractionCompleted > payload.FractionCompleted {
 			payload.FractionCompleted = fractionCompleted
