@@ -12,17 +12,19 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sql
+package sqlbase
 
 import (
 	"errors"
+
+	"golang.org/x/net/context"
 )
 
 // Interval of rows to wait between cancellation checks.
 const cancelCheckInterval int64 = 1000
 
 // CancelChecker is an interface for an abstract cancellation checker,
-// implemented by cancelChecker and nullCancelChecker.
+// implemented by contextCancelChecker and nullCancelChecker.
 type CancelChecker interface {
 	Check() error
 }
@@ -34,12 +36,13 @@ func (c *nullCancelChecker) Check() error {
 	return nil
 }
 
-// Helper object for repeatedly checking whether an associated query has been
+// Helper object for repeatedly checking whether the associated context has been
 // cancelled or not. Encapsulates all logic for waiting for cancelCheckInterval
-// rows before actually checking the cancellation flag.
-type cancelChecker struct {
-	// Reference to associated query's metadata object.
-	queryMeta *queryMeta
+// rows before actually checking for cancellation. The cancellation check
+// has a significant time overhead, so it's not checked in every iteration.
+type contextCancelChecker struct {
+	// Reference to associated context to check.
+	ctx context.Context
 
 	// Rows elapsed since the last time the cancellation check was made.
 	rowsSinceLastCheck int64
@@ -48,22 +51,26 @@ type cancelChecker struct {
 	isCancelled bool
 }
 
-// makeCancelChecker returns a new CancelChecker.
-func makeCancelChecker(stmt *Statement) CancelChecker {
-	// Return a nullCancelChecker for internal planners.
-	if stmt == nil || stmt.queryMeta == nil {
+// MakeCancelChecker returns a new CancelChecker.
+func MakeCancelChecker(ctx context.Context) CancelChecker {
+	if ctx == nil {
 		return &nullCancelChecker{}
 	}
 
-	return &cancelChecker{
-		queryMeta: stmt.queryMeta,
+	return &contextCancelChecker{
+		ctx: ctx,
 	}
 }
 
-// check returns an error if the associated query has been cancelled.
-func (c *cancelChecker) Check() error {
-	if !c.isCancelled {
-		c.isCancelled = c.queryMeta.isQueryCancelled(c.rowsSinceLastCheck%cancelCheckInterval == 0)
+// Check returns an error if the associated query has been cancelled.
+func (c *contextCancelChecker) Check() error {
+	if !c.isCancelled && c.rowsSinceLastCheck%cancelCheckInterval == 0 {
+		select {
+		case <-c.ctx.Done():
+			c.isCancelled = true
+		default:
+			c.isCancelled = false
+		}
 	}
 
 	c.rowsSinceLastCheck++
@@ -74,5 +81,5 @@ func (c *cancelChecker) Check() error {
 	return nil
 }
 
-var _ CancelChecker = &cancelChecker{}
+var _ CancelChecker = &contextCancelChecker{}
 var _ CancelChecker = &nullCancelChecker{}

@@ -104,28 +104,18 @@ root@:26257/> SELECT node_id, id, query FROM [SHOW CLUSTER QUERIES];
 We will reuse the transaction's context at the query level; all query cancellations will close the entire transaction's
 context. Forking a query-specific context would be technically challenging due to [context scoping assumptions made in
 the TxnCoordSender](https://github.com/cockroachdb/cockroach/blob/8ff5ff97df139fa5958e15a2fd5ffa65e09b49ff/pkg/kv/txn_coord_sender.go#L619). The
-`queryMeta` will store a reference to the txn context. There will also be an integer flag in `queryMeta`
-that, when set to 1 (using an `atomic.StoreInt32()`), will signal cancellation. PlanNodes that do in-memory
+`queryMeta` will store a reference to the txn context. PlanNodes that do in-memory
 processing such as insertNode's insert batching, and sortNode's sorting, will periodically check
-for this flag (such as once every some tens of thousands of rows).
+that context for cancellation (such as once every some tens of thousands of rows).
 
 Any `CANCEL QUERY` statements directed at that query will close the txn context's `Done` channel, which would
-error out any RPCs being made for that query. The cancellation flag would also be atomically set to 1,
-which would cause any planNodes that check it periodically to return a cancellation error. The error would
+error out any RPCs being made for that query. Any planNodes doing processing on the gateway node will check
+for that context closure and short-circuit execution at that point, returning an error. The error would
 propagate to the SQL executor which would then mark the SQL transaction as aborted. The client would
 be expected to issue a `ROLLBACK` upon seeing the errored-out query. The client's connection will _not_ be closed.
 
 The executor would re-throw a more user-friendly "Execution cancelled upon user request" error instead of
 the "Context cancelled" one.
-
-Both context cancellation and a shared flag is being used, because:
-
-- Context cancellation is already built into gRPC and works well for cleaning up work on other nodes.
-- Checking a shared integer atomically is significantly faster than checking a context's Done channel,
-especially when that context is the result of several derivations.
-
-For minimal impact on performance, the integer is better for frequent cancellation checks, and a select
-on `<- ctx.Done()` is better for parts of the code that already wait on it (or wait for other channels).
 
 ## New CANCEL QUERY statement
 
@@ -187,16 +177,18 @@ root%:26257/>
 
 ## DistSQL cancellation
 
-After some initial RPCs from the gateway node out to other node, RPCs in distSQL generally
-go in the reverse direction (i.e. from producers to consumers). We can't just rely on gRPC
-to propagate context cancellation down to all nodes. However distSQL does have drain signals
-that go from consumers to producers, and can prevent more rows from being sent back. These
-drain signals can potentially be levereged for cancelling distSQL queries.
+The DistSQL flow on the gateway node has a context that's directly derived from that of the transaction.
+DistSQL processors running on that node can just check that context for cancellation, and return
+an error if it is closed.
 
-The first implementation of this project will not involve adding any distSQL-specific mechanisms;
-so non-gateway nodes will continue to work on cancelled queries until completion.
-This RFC will be updated after the first implementation with a more detailed plan on distsql
-query cancellation.
+However, since RPCs in DistSQL flow from producers towards consumers, gRPC would not propagate the cancellation
+of the context on consumers down to producers. It will be the job of each flow (i.e. the portion of the distSQL
+execution graph on a given node) to watch for context cancellations and propagate them to child flows by sending
+a ConsumerSignal on all established InboundStreams - and also prevent any more inbound streams from connecting.
+Outboxes will have to watch for this ConsumerSignal and cancel the flow context on that node.
+
+Once the context cancellation on the gateway node is propagated throughout all flows that correspond to that
+query, distSQL processors can just pick up the context cancellation and error out.
 
 # Drawbacks
 

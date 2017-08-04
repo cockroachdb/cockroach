@@ -80,7 +80,7 @@ type planner struct {
 
 	// cancelChecker is used by planNodes to check for cancellation of the associated
 	// query.
-	cancelChecker CancelChecker
+	cancelChecker sqlbase.CancelChecker
 
 	// planDeps, if non-nil, collects the table/view dependencies for this query.
 	// Any planNode constructors that resolves a table name or reference in the query

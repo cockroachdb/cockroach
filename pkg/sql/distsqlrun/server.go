@@ -311,7 +311,7 @@ func (ds *ServerImpl) RunSyncFlow(stream DistSQL_RunSyncFlowServer) error {
 	mbox.setFlowCtx(&f.FlowCtx)
 
 	if err := ds.Stopper.RunTask(ctx, "distsqlrun.ServerImpl: sync flow", func(ctx context.Context) {
-		mbox.start(ctx, &f.waitGroup)
+		mbox.start(ctx, &f.waitGroup, nil)
 		f.Start(ctx, func() {})
 		f.Wait()
 		f.Cleanup(ctx)
@@ -361,7 +361,7 @@ func (ds *ServerImpl) flowStreamInt(ctx context.Context, stream DistSQL_FlowStre
 		log.Infof(ctx, "connecting inbound stream %s/%d", flowID.Short(), streamID)
 	}
 	f, receiver, cleanup, err := ds.flowRegistry.ConnectInboundStream(
-		ctx, flowID, streamID, flowStreamDefaultTimeout)
+		ctx, flowID, streamID, stream, flowStreamDefaultTimeout)
 	if err != nil {
 		return err
 	}

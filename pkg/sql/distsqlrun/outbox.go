@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	"errors"
 	"io"
 	"sync"
 	"time"
@@ -162,7 +163,7 @@ func (m *outbox) flush(ctx context.Context) error {
 // Depending on the specific error, the stream might or might not need to be
 // closed. In case it doesn't, m.stream (and also m.syncFlowStream) have been
 // set to nil.
-func (m *outbox) mainLoop(ctx context.Context) error {
+func (m *outbox) mainLoop(ctx context.Context, ctxCancel context.CancelFunc) error {
 	if m.syncFlowStream == nil {
 		conn, err := m.flowCtx.rpcCtx.GRPCDial(m.addr)
 		if err != nil {
@@ -247,6 +248,16 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 				// Enter draining mode.
 				draining = true
 				m.RowChannel.ConsumerDone()
+			} else if drainSignal.cancelRequested {
+				// Cancel the transaction context. If this is a sync flow, ctxCancel
+				// is set to nil in RunSyncFlow. For cancelling queries, this isn't an issue
+				// since the gateway node's txn context has already been cancelled in
+				// queryMeta.cancel(), and the flow context derives from that context.
+				if ctxCancel != nil {
+					ctxCancel()
+				}
+				// Send a cancellation error on the stream and stop the outbox.
+				return m.addRow(ctx, nil, ProducerMetadata{Err: errors.New("query execution cancelled")})
 			} else {
 				// No draining required. We're done; no need to consume any more.
 				// m.RowChannel.ConsumerClosed() is called in a defer above.
@@ -263,6 +274,10 @@ type drainSignal struct {
 	// trailing metadata that the producer might have. If not set, the producer
 	// should close immediately (the consumer is probably gone by now).
 	drainRequested bool
+	// cancelRequested, if set, means that the consumer wants this stream to
+	// be closed as soon as possible, after a cancellation error message has
+	// been sent along it.
+	cancelRequested bool
 	// err, if set, is either the error that the consumer returned when closing
 	// the FlowStream RPC or a communication error.
 	err error
@@ -273,7 +288,7 @@ type receivable interface {
 }
 
 // listenForDrainSignalFromConsumer returns a channel that will be pinged once the
-// consumer has closed its send-side of the stream, or has sent a drain signal.
+// consumer has closed its send-side of the stream, or has sent a drain or cancel signal.
 func (m *outbox) listenForDrainSignalFromConsumer(ctx context.Context) (<-chan drainSignal, error) {
 	ch := make(chan drainSignal, 1)
 
@@ -294,15 +309,19 @@ func (m *outbox) listenForDrainSignalFromConsumer(ctx context.Context) (<-chan d
 			ch <- drainSignal{drainRequested: false, err: err}
 			return
 		}
-		ch <- drainSignal{drainRequested: signal.DrainRequest != nil, err: nil}
+		ch <- drainSignal{
+			drainRequested:  signal.DrainRequest != nil,
+			cancelRequested: signal.CancelFlowRequest != nil,
+			err:             nil,
+		}
 	}); err != nil {
 		return nil, err
 	}
 	return ch, nil
 }
 
-func (m *outbox) run(ctx context.Context, wg *sync.WaitGroup) {
-	err := m.mainLoop(ctx)
+func (m *outbox) run(ctx context.Context, wg *sync.WaitGroup, ctxCancel context.CancelFunc) {
+	err := m.mainLoop(ctx, ctxCancel)
 	if m.stream != nil {
 		closeErr := m.stream.CloseSend()
 		if err == nil {
@@ -315,10 +334,10 @@ func (m *outbox) run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 }
 
-func (m *outbox) start(ctx context.Context, wg *sync.WaitGroup) {
+func (m *outbox) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel context.CancelFunc) {
 	if wg != nil {
 		wg.Add(1)
 	}
 	m.RowChannel.Init(nil)
-	go m.run(ctx, wg)
+	go m.run(ctx, wg, ctxCancel)
 }

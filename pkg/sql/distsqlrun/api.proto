@@ -65,9 +65,16 @@ message ConsumerSignal {
   // Used in the RunSyncFlow case; the first message on the client stream must
   // contain this message.
   optional SetupFlowRequest setup_flow_request = 2;
+
+  // Used in the flow.Cancel() case to signal context cancellation down from
+  // consumers to producers.
+  optional CancelFlowRequest cancel_flow_request = 3;
 }
 
 message DrainRequest {
+}
+
+message CancelFlowRequest {
 }
 
 service DistSQL {

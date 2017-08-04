@@ -190,7 +190,7 @@ func (rb *routerBase) init(flowCtx *FlowCtx, types []sqlbase.ColumnType) {
 }
 
 // start must be called after init.
-func (rb *routerBase) start(ctx context.Context, wg *sync.WaitGroup) {
+func (rb *routerBase) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel context.CancelFunc) {
 	wg.Add(len(rb.outputs))
 	for i := range rb.outputs {
 		go func(rb *routerBase, ro *routerOutput, wg *sync.WaitGroup) {

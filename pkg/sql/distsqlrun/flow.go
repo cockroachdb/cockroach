@@ -103,7 +103,7 @@ const (
 )
 
 type startable interface {
-	start(ctx context.Context, wg *sync.WaitGroup)
+	start(ctx context.Context, wg *sync.WaitGroup, ctxCancel context.CancelFunc)
 }
 
 // Flow represents a flow which consists of processors and streams.
@@ -135,6 +135,13 @@ type Flow struct {
 	doneFn func()
 
 	status flowStatus
+
+	// Context used for all execution within the flow.
+	// Created in Start(), cancelled in Cleanup().
+	ctx context.Context
+
+	// Cancel function for ctx.
+	ctxCancel context.CancelFunc
 }
 
 func newFlow(flowCtx FlowCtx, flowReg *flowRegistry, syncFlowConsumer RowReceiver) *Flow {
@@ -357,25 +364,41 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) {
 	)
 	f.status = FlowRunning
 
+	f.ctx, f.ctxCancel = context.WithCancel(ctx)
+
 	// Once we call RegisterFlow, the inbound streams become accessible; we must
 	// set up the WaitGroup counter before.
 	f.waitGroup.Add(len(f.inboundStreams) + len(f.processors))
 
-	f.flowRegistry.RegisterFlow(ctx, f.id, f, f.inboundStreams, flowStreamDefaultTimeout)
+	f.flowRegistry.RegisterFlow(f.ctx, f.id, f, f.inboundStreams, flowStreamDefaultTimeout)
 	if log.V(1) {
-		log.Infof(ctx, "registered flow %s", f.id.Short())
+		log.Infof(f.ctx, "registered flow %s", f.id.Short())
 	}
 	for _, s := range f.startables {
-		s.start(ctx, &f.waitGroup)
+		s.start(f.ctx, &f.waitGroup, f.ctxCancel)
 	}
 	for _, p := range f.processors {
-		go p.Run(ctx, &f.waitGroup)
+		go p.Run(f.ctx, &f.waitGroup)
 	}
 }
 
-// Wait waits for all the goroutines for this flow to exit.
+// Wait waits for all the goroutines for this flow to exit. If the context gets
+// cancelled before all goroutines exit, it calls f.cancel().
 func (f *Flow) Wait() {
-	f.waitGroup.Wait()
+	waitChan := make(chan struct{})
+
+	go func() {
+		defer close(waitChan)
+		f.waitGroup.Wait()
+	}()
+
+	select {
+	case <-f.ctx.Done():
+		f.cancel()
+		<-waitChan
+	case <-waitChan:
+		// Exit normally
+	}
 }
 
 // Cleanup should be called when the flow completes (after all processors and
@@ -396,6 +419,7 @@ func (f *Flow) Cleanup(ctx context.Context) {
 		f.flowRegistry.UnregisterFlow(f.id)
 	}
 	f.status = FlowFinished
+	f.ctxCancel()
 	f.doneFn()
 	f.doneFn = nil
 }
@@ -407,6 +431,42 @@ func (f *Flow) RunSync(ctx context.Context) {
 		p.Run(ctx, nil)
 	}
 	f.Cleanup(ctx)
+}
+
+// cancel sends a drain signal on all streams under this flow, and marks all
+// outboxes as Done.
+func (f *Flow) cancel() {
+	f.flowRegistry.Lock()
+	defer f.flowRegistry.Unlock()
+
+	entry, ok := f.flowRegistry.flows[f.id]
+	if ok {
+		for streamID, is := range entry.inboundStreams {
+			if is.connected && is.stream != nil {
+				err := is.stream.Send(&ConsumerSignal{
+					CancelFlowRequest: &CancelFlowRequest{},
+				})
+				if err != nil {
+					return
+				}
+			} else if !is.connected && !is.finished {
+				// Stream has yet to be started; send an error to its
+				// receiver and prevent it from being connected.
+				is.receiver.Push(
+					nil, /* row */
+					ProducerMetadata{Err: errors.New("query execution cancelled")})
+				is.receiver.ProducerDone()
+				f.flowRegistry.finishInboundStreamLocked(f.id, streamID)
+				is.cancelled = true
+			}
+		}
+	}
+	// Also mark outboxes as closed.
+	for _, startable := range f.startables {
+		if outbox, ok := startable.(*outbox); ok {
+			outbox.ConsumerDone()
+		}
+	}
 }
 
 var _ = (*Flow).RunSync

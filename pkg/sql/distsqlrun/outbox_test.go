@@ -63,9 +63,11 @@ func TestOutbox(t *testing.T) {
 	streamID := StreamID(42)
 	outbox := newOutbox(&flowCtx, addr.String(), flowID, streamID)
 	var outboxWG sync.WaitGroup
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
 	// Start the outbox. This should cause the stream to connect, even though
 	// we're not sending any rows.
-	outbox.start(context.TODO(), &outboxWG)
+	outbox.start(ctx, &outboxWG, cancel)
 
 	// Start a producer. It will send one row 0, then send rows -1 until a drain
 	// request is observed, then send row 2 and some metadata.
@@ -219,9 +221,11 @@ func TestOutboxInitializesStreamBeforeRecevingAnyRows(t *testing.T) {
 	outbox := newOutbox(&flowCtx, addr.String(), flowID, streamID)
 
 	var outboxWG sync.WaitGroup
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
 	// Start the outbox. This should cause the stream to connect, even though
 	// we're not sending any rows.
-	outbox.start(context.TODO(), &outboxWG)
+	outbox.start(ctx, &outboxWG, cancel)
 
 	streamNotification := <-mockServer.inboundStreams
 	serverStream := streamNotification.stream
@@ -285,9 +289,11 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			var wg sync.WaitGroup
 			var expectedErr error
 			consumerReceivedMsg := make(chan struct{})
+			ctx, cancel := context.WithCancel(context.TODO())
+			defer cancel()
 			if tc.outboxIsClient {
 				outbox = newOutbox(&flowCtx, addr.String(), flowID, streamID)
-				outbox.start(context.TODO(), &wg)
+				outbox.start(ctx, &wg, cancel)
 
 				// Wait for the outbox to connect the stream.
 				streamNotification := <-mockServer.inboundStreams
@@ -317,6 +323,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 				client := NewDistSQLClient(conn)
 				var outStream DistSQL_RunSyncFlowClient
 				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
 				expectedErr = errors.Errorf("context canceled")
 				go func() {
 					outStream, err = client.RunSyncFlow(ctx)
@@ -347,7 +354,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 				outbox = newOutboxSyncFlowStream(call.stream)
 				outbox.setFlowCtx(&FlowCtx{Settings: cluster.MakeClusterSettings(), stopper: stopper})
 				// In a RunSyncFlow call, the outbox runs under the call's context.
-				outbox.start(call.stream.Context(), &wg)
+				outbox.start(call.stream.Context(), &wg, cancel)
 				// Wait for the consumer to receive the header message that the outbox
 				// sends on start. If we don't wait, the context cancellation races with
 				// the outbox sending the header msg; if the cancellation makes it to
