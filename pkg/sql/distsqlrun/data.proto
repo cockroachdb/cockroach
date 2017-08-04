@@ -140,6 +140,9 @@ message OutputRouterSpec {
   // Only used for the BY_HASH type; these are the indexes of the columns we are
   // hashing.
   repeated uint32 hash_columns = 3;
+
+  // Only used for by the BY_RANGE type
+  repeated roachpb.Span spans = 4 [(gogoproto.nullable) = false];
 }
 
 message DatumInfo {

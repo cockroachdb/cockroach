@@ -24,6 +24,8 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -212,6 +214,66 @@ func TestRouters(t *testing.T) {
 	}
 }
 
+func TestRangeRouter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	vals := make([]roachpb.Key, 10)
+	for i := range vals {
+		vals[i] = keys.MakeTablePrefix(uint32(i))
+	}
+	spans := roachpb.Spans{
+		{Key: vals[0], EndKey: vals[5]},
+		{Key: vals[5], EndKey: roachpb.KeyMax},
+	}
+
+	alloc := &sqlbase.DatumAlloc{}
+	evalCtx := parser.NewTestingEvalContext()
+	defer evalCtx.Stop(context.Background())
+
+	bufs := make([]*RowBuffer, len(spans))
+	recvs := make([]RowReceiver, len(spans))
+	for i := 0; i < len(spans); i++ {
+		bufs[i] = &RowBuffer{}
+		recvs[i] = bufs[i]
+	}
+
+	types := []sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_BYTES}}
+	spec := OutputRouterSpec{Type: OutputRouterSpec_BY_RANGE, Spans: spans}
+	r, wg := setupRouter(t, evalCtx, spec, types, recvs)
+
+	for _, key := range vals {
+		row := sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(types[0], parser.NewDBytes(parser.DBytes(key)))}
+		if status := r.Push(row, ProducerMetadata{}); status != NeedMoreRows {
+			t.Fatalf("unexpected status: %d", status)
+		}
+	}
+	r.ProducerDone()
+	wg.Wait()
+
+	rows := make([]sqlbase.EncDatumRows, len(bufs))
+	for i, b := range bufs {
+		if !b.ProducerClosed {
+			t.Fatalf("bucket not closed: %d", i)
+		}
+		rows[i] = getRowsFromBuffer(t, b)
+	}
+
+	for bIdx := range rows {
+		for _, row := range rows[bIdx] {
+			// Verify that keys are in the correct bucket.
+			if err := row[0].EnsureDecoded(alloc); err != nil {
+				t.Fatal(err)
+			}
+			db := row[0].Datum.(*parser.DBytes)
+			key := roachpb.Key(*db)
+			span := spans[bIdx]
+			if span.Key.Compare(key) > 0 || span.EndKey.Compare(key) <= 0 {
+				t.Errorf("%s in wrong span: %s", key, span)
+			}
+		}
+	}
+}
+
 func getRowsFromBuffer(t *testing.T, buf *RowBuffer) sqlbase.EncDatumRows {
 	var res sqlbase.EncDatumRows
 	for {
@@ -248,6 +310,10 @@ func TestConsumerStatus(t *testing.T) {
 		{
 			name: "HashRouter",
 			spec: OutputRouterSpec{Type: OutputRouterSpec_BY_HASH, HashColumns: []uint32{0}},
+		},
+		{
+			name: "RangeRouter",
+			spec: OutputRouterSpec{Type: OutputRouterSpec_BY_RANGE, Spans: []roachpb.Span{{}}},
 		},
 	}
 
@@ -388,6 +454,10 @@ func TestMetadataIsForwarded(t *testing.T) {
 			name: "HashRouter",
 			spec: OutputRouterSpec{Type: OutputRouterSpec_BY_HASH, HashColumns: []uint32{0}},
 		},
+		{
+			name: "RangeRouter",
+			spec: OutputRouterSpec{Type: OutputRouterSpec_BY_RANGE, Spans: []roachpb.Span{{}}},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -499,6 +569,10 @@ func TestRouterBlocks(t *testing.T) {
 		{
 			name: "HashRouter",
 			spec: OutputRouterSpec{Type: OutputRouterSpec_BY_HASH, HashColumns: []uint32{0}},
+		},
+		{
+			name: "RangeRouter",
+			spec: OutputRouterSpec{Type: OutputRouterSpec_BY_RANGE, Spans: []roachpb.Span{{}, {}}},
 		},
 	}
 
