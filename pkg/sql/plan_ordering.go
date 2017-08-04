@@ -43,7 +43,31 @@ func planOrdering(plan planNode) orderingInfo {
 		// TODO: window partitions can be ordered if the source is ordered
 		// appropriately.
 	case *joinNode:
-		// TODO(knz): this can be ordered when not using hash join.
+
+		// First we compute the ordering that would be retained after a join.
+		// This ordering is an index into the equality indexes.
+		equalityColumnOrderingAfterMerge := computeMergeJoinOrdering(
+			planOrdering(n.left.plan),
+			planOrdering(n.right.plan),
+			n.pred.leftEqualityIndices,
+			n.pred.rightEqualityIndices,
+		)
+		if len(equalityColumnOrderingAfterMerge) == 0 {
+			return orderingInfo{}
+		}
+		info := orderingInfo{}
+		if n.joinType == joinTypeInner {
+			for _, col := range equalityColumnOrderingAfterMerge {
+				// We then add a group that contains both columns (from left and right)
+				// at index col.
+				group := orderingColumnGroup{}
+				group.cols.Add(uint32(n.pred.leftEqualityIndices[col.ColIdx]))
+				group.cols.Add(uint32(n.pred.rightEqualityIndices[col.ColIdx]))
+				group.dir = col.Direction
+				info.ordering = append(info.ordering, group)
+			}
+		}
+		return info
 	case *unionNode:
 		// TODO(knz): this can be ordered if the source is ordered already.
 	case *insertNode:
