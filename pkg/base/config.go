@@ -314,8 +314,8 @@ type RaftConfig struct {
 	RaftTickInterval time.Duration
 
 	// RaftElectionTimeoutTicks is the number of raft ticks before the
-	// previous election expires. This value is inherited by individual
-	// stores unless overridden.
+	// previous election expires. This value is inherited by individual stores
+	// unless overridden.
 	RaftElectionTimeoutTicks int
 }
 
@@ -329,16 +329,14 @@ func (cfg *RaftConfig) SetDefaults() {
 	}
 }
 
-// RaftElectionTimeout returns the raft election timeout, as computed
-// from the specified tick interval and number of election timeout
-// ticks. If raftElectionTimeoutTicks is 0, uses the value of
-// defaultRaftElectionTimeoutTicks.
+// RaftElectionTimeout returns the raft election timeout, as computed from the
+// tick interval and number of election timeout ticks.
 func (cfg RaftConfig) RaftElectionTimeout() time.Duration {
 	return time.Duration(cfg.RaftElectionTimeoutTicks) * cfg.RaftTickInterval
 }
 
-// RangeLeaseDurations computes durations for range lease expiration
-// and renewal based on a default multiple of Raft election timeout.
+// RangeLeaseDurations computes durations for range lease expiration and
+// renewal based on a default multiple of Raft election timeout.
 func (cfg RaftConfig) RangeLeaseDurations() (rangeLeaseActive, rangeLeaseRenewal time.Duration) {
 	rangeLeaseActive = time.Duration(rangeLeaseRaftElectionTimeoutMultiplier * float64(cfg.RaftElectionTimeout()))
 	rangeLeaseRenewal = time.Duration(float64(rangeLeaseActive) * rangeLeaseRenewalFraction)
@@ -361,8 +359,8 @@ func (cfg RaftConfig) RangeLeaseRenewalDuration() time.Duration {
 	return rangeLeaseRenewal
 }
 
-// NodeLivenessDurations computes durations for node liveness expiration
-// and renewal based on a default multiple of Raft election timeout.
+// NodeLivenessDurations computes durations for node liveness expiration and
+// renewal based on a default multiple of Raft election timeout.
 func (cfg RaftConfig) NodeLivenessDurations() (livenessActive, livenessRenewal time.Duration) {
 	livenessActive = cfg.RangeLeaseActiveDuration()
 	livenessRenewal = time.Duration(float64(livenessActive) * livenessRenewalFraction)
