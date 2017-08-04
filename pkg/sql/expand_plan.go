@@ -127,6 +127,7 @@ func doExpandPlan(
 			n.pred.leftEqualityIndices,
 			n.pred.rightEqualityIndices,
 		)
+		n.ordering = n.joinOrdering()
 
 	case *ordinalityNode:
 		// There may be too many columns in the required ordering. Filter them.
@@ -457,6 +458,9 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 				usefulRight[i].Direction = mergedCol.Direction
 			}
 		}
+
+		n.ordering.trim(usefulOrdering)
+
 		n.left.plan = simplifyOrderings(n.left.plan, usefulLeft)
 		n.right.plan = simplifyOrderings(n.right.plan, usefulRight)
 
