@@ -15,6 +15,7 @@
 package terrafarm
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net"
@@ -47,10 +48,18 @@ const (
 	KeepClusterNever = "never"
 )
 
+type process struct {
+	session *ssh.Session
+	name    string
+	done    chan error
+}
+
 type node struct {
-	hostname  string
-	processes []string
-	ssh       *ssh.Client
+	hostname     string
+	cockroachPID string
+	cockroachURL string
+	ssh          *ssh.Client
+	processes    map[string]process
 }
 
 // A Farmer sets up and manipulates a test cluster via terraform.
@@ -58,17 +67,29 @@ type Farmer struct {
 	Output      io.Writer
 	Cwd, LogDir string
 	KeyName     string
-	Stores      string
+	// SkipClusterInit controls the --join flags for the nodes. If false (the
+	// default), then the first node will be empty and thus init the cluster,
+	// and each node will have the previous node as its join flag. If true,
+	// then all nodes will have all nodes in their join flags.
+	//
+	// Allows tests to work around https://github.com/cockroachdb/cockroach/issues/13027.
+	SkipClusterInit bool
+	CockroachBinary string
+	CockroachFlags  string
+	// NB: CockroachEnv might look like it wants to be a map, but we never use
+	// the environment as key-value pairs in Go, we just pass this straight
+	// through to the shell when we start cockroach on the remote hosts. The
+	// reason for doing it this way rather than using
+	// `(*golang.org/x/crypto/ssh.Session).SetEnv` is that setting the
+	// session's environment requires server permission, and the default is to
+	// allow nothing.
+	CockroachEnv  string
+	BenchmarkName string
 	// Prefix will be prepended all names of resources created by Terraform.
 	Prefix string
 	// StateFile is the file (under `Cwd`) in which Terraform will stores its
 	// state.
-	StateFile string
-	// AddVars are additional Terraform variables to be set during calls to Add.
-	AddVars map[string]string
-	// AddFlags are additional command-line flags to be passed to the cockroachdb
-	// process.
-	AddFlags    []string
+	StateFile   string
 	KeepCluster string
 	nodes       []node
 	// RPCContext is used to open an ExternalClient which provides a KV connection
@@ -76,85 +97,69 @@ type Farmer struct {
 	RPCContext *rpc.Context
 }
 
-func (f *Farmer) refresh() {
-	hosts := f.output("instances")
-	f.nodes = make([]node, len(hosts))
-	for i, host := range hosts {
-		out, _, err := f.execSupervisor(host, "status | grep -F RUNNING | cut -f1 -d' '")
-		if err != nil {
-			panic(err)
-		}
-		f.nodes[i] = node{
-			hostname:  host,
-			processes: strings.Split(out, "\n"),
-		}
-	}
-}
-
 // Hostname implements the Cluster interface.
 func (f *Farmer) Hostname(i int) string {
-	if len(f.nodes) == 0 {
-		f.refresh()
-	}
 	return f.nodes[i].hostname
 }
 
 // NumNodes returns the number of nodes.
 func (f *Farmer) NumNodes() int {
-	if len(f.nodes) == 0 {
-		f.refresh()
-	}
 	return len(f.nodes)
 }
 
-// AddEnvVar adds an environment variable to supervisord.conf when starting cockroach.
-func (f *Farmer) AddEnvVar(key, value string) {
-	s := fmt.Sprintf("%s=%s", key, value)
-	// This is a Terraform variable defined in acceptance/terraform/variables.tf
-	// and passed through to the supervisor.conf file through
-	// acceptance/terraform/main.tf.
-	const envVar = "cockroach_env"
-	if env := f.AddVars[envVar]; env == "" {
-		f.AddVars[envVar] = s
-	} else {
-		f.AddVars[envVar] += "," + s
+// Resize resizes a cluster given the desired number of nodes.
+func (f *Farmer) Resize(nodes int) error {
+	if nodes < len(f.nodes) {
+		for _, node := range f.nodes[nodes:] {
+			if c := node.ssh; c != nil {
+				if err := c.Close(); err != nil {
+					return err
+				}
+			}
+		}
+		f.nodes = f.nodes[:nodes]
 	}
-}
 
-// AddFlag add a command-line flag to include when starting cockroach.
-func (f *Farmer) AddFlag(flagVal string) {
-	f.AddFlags = append(f.AddFlags, flagVal)
-}
-
-// Add provisions the given number of nodes.
-func (f *Farmer) Add(nodes int) error {
-	nodes += f.NumNodes()
 	args := []string{
 		fmt.Sprintf("-var=num_instances=\"%d\"", nodes),
-		fmt.Sprintf("-var=stores=%s", f.Stores),
-	}
-
-	// Disable update checks for test clusters by setting the required environment
-	// variable.
-	f.AddEnvVar("COCKROACH_SKIP_UPDATE_CHECK", "1")
-
-	for v, val := range f.AddVars {
-		args = append(args, fmt.Sprintf(`-var=%s="%s"`, v, val))
-	}
-	if len(f.AddFlags) > 0 {
-		args = append(args, fmt.Sprintf("-var=cockroach_flags=%q", strings.Join(f.AddFlags, " ")))
 	}
 
 	if nodes == 0 {
-		return f.runErr("terraform", f.appendDefaults(append([]string{"destroy", "--force"}, args...))...)
-	}
-	return f.apply(args...)
-}
+		args = f.appendDefaults(append([]string{"destroy", "--force"}, args...))
+	} else {
+		args = f.appendDefaults(append([]string{"apply"}, args...))
 
-// Resize is the counterpart to Add which resizes a cluster given
-// the desired number of nodes.
-func (f *Farmer) Resize(nodes int) error {
-	return f.Add(nodes - f.NumNodes())
+		if len(f.CockroachBinary) > 0 {
+			args = append(args, fmt.Sprintf(`-var=cockroach_binary="%s"`, f.CockroachBinary))
+		}
+	}
+	if stdout, stderr, err := f.run("terraform", args...); err != nil {
+		return errors.Wrapf(err, "failed: %s %s\nstdout:\n%s\nstderr:\n%s", "terraform", args, stdout, stderr)
+	}
+
+	if nodes > len(f.nodes) {
+		hosts := f.output("instances")
+
+		ch := make(chan error, nodes-len(f.nodes))
+		for i := len(f.nodes); i < nodes; i++ {
+			f.nodes = append(f.nodes, node{
+				hostname:  hosts[i],
+				processes: make(map[string]process),
+			})
+			go func(i int) { ch <- f.Restart(context.TODO(), i) }(i)
+		}
+		var errs []error
+		for i := 0; i < cap(ch); i++ {
+			if err := <-ch; err != nil {
+				errs = append(errs, err)
+			}
+		}
+		if len(errs) > 0 {
+			return errors.Errorf("errors restarting cluster: %s", errs)
+		}
+	}
+
+	return nil
 }
 
 // AbsLogDir returns the absolute log dir to which logs are written.
@@ -297,7 +302,7 @@ func (f *Farmer) MustDestroy(t testing.TB) {
 func (f *Farmer) Exec(i int, cmd string) error {
 	stdout, stderr, err := f.ssh(f.Hostname(i), f.defaultKeyFile(), cmd)
 	if err != nil {
-		return fmt.Errorf("failed: %s: %s\nstdout:\n%s\nstderr:\n%s", cmd, err, stdout, stderr)
+		return errors.Wrapf(err, "failed: %s\nstdout:\n%s\nstderr:\n%s", cmd, stdout, stderr)
 	}
 	return nil
 }
@@ -348,7 +353,7 @@ func (f *Farmer) WaitReady(d time.Duration) error {
 	for r := retry.Start(rOpts); r.Next(); {
 		instance := f.Hostname(0)
 		if err != nil || instance == "" {
-			err = fmt.Errorf("no nodes found: %v", err)
+			err = errors.Wrap(err, "no nodes found")
 			continue
 		}
 		for i := 0; i < f.NumNodes(); i++ {
@@ -368,22 +373,19 @@ func (f *Farmer) WaitReady(d time.Duration) error {
 // ascertain cluster health.
 // TODO(tschottdorf): unimplemented when nodes are expected down.
 func (f *Farmer) Assert(ctx context.Context, t testing.TB) {
-	for _, node := range f.nodes {
-		for _, process := range node.processes {
-			f.AssertState(ctx, t, node.hostname, process, "RUNNING")
-		}
-	}
-}
+	const cmd = "pidof cockroach"
 
-// AssertState verifies that on the specified host, the given process (managed
-// by supervisord) is in the expected state.
-func (f *Farmer) AssertState(ctx context.Context, t testing.TB, host, proc, expState string) {
-	out, _, err := f.execSupervisor(host, "status "+proc)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(out, expState) {
-		t.Fatalf("%q (%q) is not in expected state %q:\n%q", proc, host, expState, out)
+	for i, node := range f.nodes {
+		stdout, stderr, err := f.ssh(f.Hostname(i), f.defaultKeyFile(), cmd)
+		if err != nil {
+			t.Fatalf("failed: %s: %s\nstdout:\n%s\nstderr:\n%s", cmd, err, stdout, stderr)
+		}
+		for _, pid := range strings.Fields(strings.TrimSpace(stdout)) {
+			if pid == node.cockroachPID {
+				continue
+			}
+			t.Errorf("unexpected cockroach pid %s; expected %s", pid, node.cockroachPID)
+		}
 	}
 }
 
@@ -401,49 +403,158 @@ func (f *Farmer) ExecRoot(ctx context.Context, i int, cmd []string) error {
 	return f.Exec(i, "sudo "+strings.Join(cmd, " "))
 }
 
+const (
+	listeningURLFileName = "cockroachdb-url"
+	pidFileName          = "cockroachdb-pid"
+)
+
 // Kill terminates the cockroach process running on the given node number.
 // The given integer must be in the range [0,NumNodes()-1].
 func (f *Farmer) Kill(ctx context.Context, i int) error {
-	return f.Exec(i, "pkill -9 cockroach")
+	if pid := f.nodes[i].cockroachPID; len(pid) > 0 {
+		if err := f.Exec(i, fmt.Sprintf("kill -9 %s && rm -f %s %s", pid, listeningURLFileName, pidFileName)); err != nil {
+			return err
+		}
+		f.nodes[i].cockroachPID = ""
+	}
+	return nil
 }
 
 // Restart terminates the cockroach process running on the given node
 // number, unless it is already stopped, and restarts it.
 // The given integer must be in the range [0,NumNodes()-1].
 func (f *Farmer) Restart(ctx context.Context, i int) error {
-	_ = f.Kill(ctx, i)
-	// supervisorctl is horrible with exit codes (cockroachdb/cockroach-prod#59).
-	_, _, err := f.execSupervisor(f.Hostname(i), "start cockroach")
-	return err
+	if err := f.Kill(ctx, i); err != nil {
+		return err
+	}
+
+	cmd := fmt.Sprintf(
+		"%s ./cockroach start %s --insecure --background --listening-url-file %s --pid-file %s --cache=2GiB --log-dir logs/cockroach",
+		f.CockroachEnv,
+		f.CockroachFlags,
+		listeningURLFileName,
+		pidFileName,
+	)
+
+	if f.SkipClusterInit {
+		hosts := make([]string, len(f.nodes))
+		for i := range hosts {
+			hosts[i] = f.nodes[i].hostname
+		}
+		cmd += " --join=" + strings.Join(hosts, ",")
+	} else if i > 0 {
+		cmd += " --join=" + f.nodes[i-1].hostname
+	}
+
+	c, err := f.getSSH(f.nodes[i].hostname, f.defaultKeyFile())
+	if err != nil {
+		return err
+	}
+
+	{
+		s, err := c.NewSession()
+		if err != nil {
+			return err
+		}
+		defer s.Close()
+
+		if err := s.Start(cmd); err != nil {
+			return errors.Wrap(err, cmd)
+		}
+	}
+
+	if err := util.RetryForDuration(2*time.Minute, func() error {
+		s, err := c.NewSession()
+		if err != nil {
+			return err
+		}
+		defer s.Close()
+
+		const cmd = "cat " + listeningURLFileName
+		stdout, err := s.Output(cmd)
+		if err != nil {
+			return errors.Wrap(err, cmd)
+		}
+		f.nodes[i].cockroachURL = string(bytes.TrimSpace(stdout))
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	{
+		s, err := c.NewSession()
+		if err != nil {
+			return err
+		}
+		defer s.Close()
+
+		const cmd = "cat " + pidFileName
+		stdout, err := s.Output(cmd)
+		if err != nil {
+			return errors.Wrap(err, cmd)
+		}
+
+		f.nodes[i].cockroachPID = string(bytes.TrimSpace(stdout))
+	}
+	return nil
 }
 
 // Start starts the given process on the ith node.
-func (f *Farmer) Start(ctx context.Context, i int, process string) error {
-	for _, p := range f.nodes[i].processes {
-		if p == process {
-			return errors.Errorf("already started process '%s'", process)
-		}
+func (f *Farmer) Start(ctx context.Context, i int, name string) error {
+	if _, ok := f.nodes[i].processes[name]; ok {
+		return errors.Errorf("already started process %q", name)
 	}
-	if _, _, err := f.execSupervisor(f.Hostname(i), "start "+process); err != nil {
+	c, err := f.getSSH(f.nodes[i].hostname, f.defaultKeyFile())
+	if err != nil {
 		return err
 	}
-	f.nodes[i].processes = append(f.nodes[i].processes, process)
+	s, err := c.NewSession()
+	if err != nil {
+		return err
+	}
+	done := make(chan error, 1)
+	f.nodes[i].processes[name] = process{
+		session: s,
+		name:    name,
+		done:    done,
+	}
+	cmd := "./" + name
+	switch name {
+	// TODO(tamird,petermattis): replace this with "kv".
+	case "block_writer":
+		cmd += fmt.Sprintf("--tolerate-errors --min-block-bytes=8 --max-block-bytes=128 --benchmark-name %s %s", f.BenchmarkName, f.nodes[i].cockroachURL)
+	case "photos":
+		cmd += fmt.Sprintf("--users 1 --benchmark-name %s --db %s", f.BenchmarkName, f.nodes[i].cockroachURL)
+	}
+	cmd += fmt.Sprintf(" 1>logs/%[1]s.stdout 2>logs/%[1]s.stderr", name)
+	if err := s.Start(cmd); err != nil {
+		return err
+	}
+	go func() {
+		done <- s.Wait()
+	}()
+	return nil
+}
+
+// GetProcDone returns a channel which will receive the named process' exit
+// status.
+func (f *Farmer) GetProcDone(i int, name string) <-chan error {
+	for _, process := range f.nodes[i].processes {
+		if process.name == name {
+			return process.done
+		}
+	}
 	return nil
 }
 
 // Stop stops the given process on the ith node. This is useful for terminating
 // a load generator cleanly to get stats outputted upon process termination.
-func (f *Farmer) Stop(ctx context.Context, i int, process string) error {
-	for idx, p := range f.nodes[i].processes {
-		if p == process {
-			if _, _, err := f.execSupervisor(f.Hostname(i), "stop "+process); err != nil {
-				return err
-			}
-			f.nodes[i].processes = append(f.nodes[i].processes[:idx], f.nodes[i].processes[idx+1:]...)
-			return nil
-		}
+func (f *Farmer) Stop(ctx context.Context, i int, name string) error {
+	if process, ok := f.nodes[i].processes[name]; ok {
+		delete(f.nodes[i].processes, name)
+		return process.session.Close()
 	}
-	return errors.Errorf("unable to find process '%s'", process)
+	return errors.Errorf("unable to find process %q", name)
 }
 
 // URL returns the HTTP(s) endpoint.
@@ -468,12 +579,8 @@ func (f *Farmer) StartLoad(ctx context.Context, loadGenerator string, n int) err
 		return errors.Errorf("writers (%d) > nodes (%d)", n, f.NumNodes())
 	}
 
-	// We may have to retry restarting the load generators, because CockroachDB
-	// might have been started too recently to start accepting connections.
 	for i := 0; i < n; i++ {
-		if err := util.RetryForDuration(10*time.Second, func() error {
-			return f.Start(ctx, i, loadGenerator)
-		}); err != nil {
+		if err := f.Start(ctx, i, loadGenerator); err != nil {
 			return err
 		}
 	}

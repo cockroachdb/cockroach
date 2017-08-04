@@ -111,8 +111,6 @@ var flagTFCockroachFlags = flag.String("tf.cockroach-flags", "",
 	"command-line flags to pass to cockroach for allocator tests")
 var flagTFCockroachEnv = flag.String("tf.cockroach-env", "",
 	"supervisor-style environment variables to pass to cockroach")
-var flagTFDiskType = flag.String("tf.disk-type", "pd-standard",
-	"type of disk (either 'pd-standard' for spinny disk, or 'pd-ssd' for SSD)")
 
 // Allocator test flags.
 var flagATMaxStdDev = flag.Float64("at.std-dev", 10,
@@ -219,23 +217,10 @@ func MakeFarmer(t testing.TB, prefix string, stopper *stop.Stopper) *terrafarm.F
 		}
 		logDir = filepath.Join(pwd, logDir)
 	}
-	stores := "--store=/mnt/data0"
-	for j := 1; j < *flagStores; j++ {
+	var stores string
+	for j := 0; j < *flagStores; j++ {
 		stores += " --store=/mnt/data" + strconv.Itoa(j)
 	}
-
-	// Pass variables to be passed to the Terraform config.
-	terraformVars := make(map[string]string)
-	if *flagTFCockroachBinary != "" {
-		terraformVars["cockroach_binary"] = *flagTFCockroachBinary
-	}
-	if *flagTFCockroachFlags != "" {
-		terraformVars["cockroach_flags"] = *flagTFCockroachFlags
-	}
-	if *flagTFCockroachEnv != "" {
-		terraformVars["cockroach_env"] = *flagTFCockroachEnv
-	}
-	terraformVars["cockroach_disk_type"] = *flagTFDiskType
 
 	var name string
 	if *flagTFReuseCluster == "" {
@@ -290,21 +275,29 @@ func MakeFarmer(t testing.TB, prefix string, stopper *stop.Stopper) *terrafarm.F
 	}, clientClock, stopper)
 	rpcContext.HeartbeatCB = func() {
 		if err := rpcContext.RemoteClocks.VerifyClockOffset(context.Background()); err != nil {
-			log.Fatal(context.Background(), err)
+			t.Fatal(err)
 		}
 	}
 
+	// Disable update checks for test clusters by setting the required
+	// environment variable.
+	cockroachEnv := "COCKROACH_SKIP_UPDATE_CHECK=1"
+	if len(*flagTFCockroachEnv) > 0 {
+		cockroachEnv += " " + strings.Join(strings.Split(*flagTFCockroachEnv, ","), " ")
+	}
+
 	f := &terrafarm.Farmer{
-		Output:      os.Stderr,
-		Cwd:         *flagCwd,
-		LogDir:      logDir,
-		KeyName:     *flagKeyName,
-		Stores:      strconv.Quote(stores),
-		Prefix:      name,
-		StateFile:   name + ".tfstate",
-		AddVars:     terraformVars,
-		KeepCluster: flagTFKeepCluster.String(),
-		RPCContext:  rpcContext,
+		Output:          os.Stderr,
+		Cwd:             *flagCwd,
+		LogDir:          logDir,
+		KeyName:         *flagKeyName,
+		CockroachBinary: *flagTFCockroachBinary,
+		CockroachFlags:  stores + " " + *flagTFCockroachFlags,
+		CockroachEnv:    cockroachEnv,
+		Prefix:          name,
+		StateFile:       name + ".tfstate",
+		KeepCluster:     flagTFKeepCluster.String(),
+		RPCContext:      rpcContext,
 	}
 	log.Infof(context.Background(), "logging to %s", logDir)
 	return f
@@ -593,32 +586,20 @@ type CheckGossipFunc func(map[string]gossip.Info) error
 // CheckGossip fetches the gossip infoStore from each node and invokes the given
 // function. The test passes if the function returns 0 for every node,
 // retrying for up to the given duration.
-func CheckGossip(
-	ctx context.Context, t testing.TB, c cluster.Cluster, d time.Duration, f CheckGossipFunc,
-) {
-	err := util.RetryForDuration(d, func() error {
-		select {
-		case <-stopper.ShouldStop():
-			t.Fatalf("interrupted")
-			return nil
-		case <-time.After(1 * time.Second):
-		}
-
+func CheckGossip(ctx context.Context, c cluster.Cluster, d time.Duration, f CheckGossipFunc) error {
+	return errors.Wrapf(util.RetryForDuration(d, func() error {
 		var infoStatus gossip.InfoStatus
 		for i := 0; i < c.NumNodes(); i++ {
 			if err := httputil.GetJSON(cluster.HTTPClient, c.URL(ctx, i)+"/_status/gossip/local", &infoStatus); err != nil {
 				return errors.Wrapf(err, "failed to get gossip status from node %d", i)
 			}
 			if err := f(infoStatus.Infos); err != nil {
-				return errors.Errorf("node %d: %s", i, err)
+				return errors.Wrapf(err, "node %d", i)
 			}
 		}
 
 		return nil
-	})
-	if err != nil {
-		t.Fatal(errors.Errorf("condition failed to evaluate within %s: %s", d, err))
-	}
+	}), "condition failed to evaluate within %s", d)
 }
 
 // HasPeers returns a CheckGossipFunc that passes when the given

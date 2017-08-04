@@ -38,9 +38,6 @@ func (f *Farmer) defaultKeyFile() string {
 }
 
 func (f *Farmer) getSSH(host, keyfile string) (*ssh.Client, error) {
-	if len(f.nodes) == 0 {
-		f.refresh()
-	}
 	for i := range f.nodes {
 		node := &f.nodes[i]
 		if node.hostname == host {
@@ -101,13 +98,12 @@ func (f *Farmer) ssh(host, keyfile, cmd string) (string, string, error) {
 	}
 	defer s.Close()
 
-	var stdout, stderr bytes.Buffer
-
-	s.Stdout = &stdout
-	s.Stderr = &stderr
+	var outBuf, errBuf bytes.Buffer
+	s.Stdout = &outBuf
+	s.Stderr = &errBuf
 
 	{
 		err := s.Run(cmd)
-		return stdout.String(), stderr.String(), err
+		return outBuf.String(), errBuf.String(), err
 	}
 }

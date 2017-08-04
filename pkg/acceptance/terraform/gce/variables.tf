@@ -3,20 +3,6 @@ variable "num_instances" {
   default = "0"
 }
 
-# Port used for the load balancer and backends.
-variable "sql_port" {
-  default = "26257"
-}
-
-variable "http_port" {
-  default = "8080"
-}
-
-# List of stores each with its own --store flag. (--store flags from the cockroach binary).
-variable "stores" {
-  default = "--store=data"
-}
-
 # GCE region to use.
 variable "gce_region" {
   default = "us-east1"
@@ -75,11 +61,6 @@ variable "prefix" {
   default = "alloctest"
 }
 
-# Additional command-line flags to pass into `cockroach start`.
-variable "cockroach_flags" {
-  default  = ""
-}
-
 # Machine type for CockroachDB nodes.
 variable "cockroach_machine_type" {
   default = "n1-standard-4"
@@ -93,29 +74,4 @@ variable "cockroach_root_disk_size" {
 # Controls the disk type for the root partition of CockroachDB nodes.
 variable "cockroach_root_disk_type" {
   default = "pd-standard" # can set this to 'pd-ssd' for persistent SSD
-}
-
-# Environment variables to pass into CockroachDB through the supervisor config.
-# This must be of the following form:
-#
-#   VAR1=value1[,VAR2=value2,...]
-#
-# Relevant supervisor docs:
-#
-#   http://supervisord.org/subprocess.html#subprocess-environment
-#
-# If this changes, (*terrafarm.Farmer).Add() must change too.
-variable "cockroach_env" {
-  default = ""
-}
-
-# This is included in the benchmark results at the end of our load generators
-# to associate the results (for benchviz) with a specific test.
-variable "benchmark_name" {
-  default = "BenchmarkBlockWriter"
-}
-
-# join_all specifies the join behavior.
-variable "join_all" {
-  default = "false"
 }
