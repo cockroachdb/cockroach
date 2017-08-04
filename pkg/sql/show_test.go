@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/kr/pretty"
 	"github.com/lib/pq"
 )
@@ -276,6 +277,9 @@ func TestShowCreateTable(t *testing.T) {
 func TestShowCreateView(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	sc := log.Scope(t)
+	defer sc.Close(t)
+
 	params, _ := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
@@ -294,35 +298,31 @@ func TestShowCreateView(t *testing.T) {
 	}{
 		{
 			`CREATE VIEW %s AS SELECT i, s, v, t FROM t`,
-			`CREATE VIEW %s (i, s, v, t) AS SELECT i, s, v, t FROM d.t`,
+			`CREATE VIEW %s (i, s, v, t) AS SELECT i, s, v, t FROM t`,
 		},
 		{
 			`CREATE VIEW %s AS SELECT i, s, t FROM t`,
-			`CREATE VIEW %s (i, s, t) AS SELECT i, s, t FROM d.t`,
+			`CREATE VIEW %s (i, s, t) AS SELECT i, s, t FROM t`,
 		},
 		{
 			`CREATE VIEW %s AS SELECT t.i, t.s, t.t FROM t`,
-			`CREATE VIEW %s (i, s, t) AS SELECT t.i, t.s, t.t FROM d.t`,
+			`CREATE VIEW %s (i, s, t) AS SELECT t.i, t.s, t.t FROM t`,
 		},
 		{
 			`CREATE VIEW %s AS SELECT foo.i, foo.s, foo.t FROM t AS foo WHERE foo.i > 3`,
-			`CREATE VIEW %s (i, s, t) AS SELECT foo.i, foo.s, foo.t FROM d.t AS foo WHERE foo.i > 3`,
+			`CREATE VIEW %s (i, s, t) AS SELECT foo.i, foo.s, foo.t FROM t AS foo WHERE foo.i > 3`,
 		},
 		{
 			`CREATE VIEW %s AS SELECT count(*) FROM t`,
-			`CREATE VIEW %s ("count(*)") AS SELECT count(*) FROM d.t`,
+			`CREATE VIEW %s ("count(*)") AS SELECT count(*) FROM t`,
 		},
 		{
 			`CREATE VIEW %s AS SELECT s, count(*) FROM t GROUP BY s HAVING count(*) > 3:::INT`,
-			`CREATE VIEW %s (s, "count(*)") AS SELECT s, count(*) FROM d.t GROUP BY s HAVING count(*) > 3:::INT`,
+			`CREATE VIEW %s (s, "count(*)") AS SELECT s, count(*) FROM t GROUP BY s HAVING count(*) > 3:::INT`,
 		},
 		{
-			`CREATE VIEW %s (a, b, c, d) AS SELECT i, s, v, t FROM t`,
-			`CREATE VIEW %s (a, b, c, d) AS SELECT i, s, v, t FROM d.t`,
-		},
-		{
-			`CREATE VIEW %s (a, b) AS SELECT i, v FROM t`,
-			`CREATE VIEW %s (a, b) AS SELECT i, v FROM d.t`,
+			`CREATE VIEW %s (a, b, v, t) AS SELECT i, s, v, t FROM t`,
+			`CREATE VIEW %s (a, b, v, t) AS SELECT i AS a, s AS b, v, t FROM (SELECT i, s, v, t FROM t)`,
 		},
 	}
 	for i, test := range tests {

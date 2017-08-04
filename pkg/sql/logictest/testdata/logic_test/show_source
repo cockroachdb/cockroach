@@ -217,7 +217,6 @@ CREATE VIEW v AS SELECT id FROM system.descriptor; SELECT * FROM [SHOW CREATE VI
 View  CreateView
 v     CREATE VIEW v (id) AS SELECT id FROM system.descriptor
 
-
 query T colnames
 SELECT * FROM [SHOW USERS]
 ----

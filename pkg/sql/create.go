@@ -20,7 +20,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -32,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 )
 
 type createDatabaseNode struct {
@@ -133,7 +133,7 @@ func (p *planner) CreateIndex(ctx context.Context, n *parser.CreateIndex) (planN
 		return nil, err
 	}
 
-	tableDesc, err := mustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/)
+	tableDesc, err := MustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/)
 	if err != nil {
 		return nil, err
 	}
@@ -317,12 +317,16 @@ func (*createUserNode) Next(runParams) (bool, error) { return false, nil }
 func (*createUserNode) Close(context.Context)        {}
 func (*createUserNode) Values() parser.Datums        { return parser.Datums{} }
 
+// createViewNode represents a CREATE VIEW statement.
 type createViewNode struct {
-	p           *planner
-	n           *parser.CreateView
-	dbDesc      *sqlbase.DatabaseDescriptor
-	sourcePlan  planNode
-	sourceQuery string
+	p             *planner
+	n             *parser.CreateView
+	dbDesc        *sqlbase.DatabaseDescriptor
+	sourceColumns sqlbase.ResultColumns
+	// planDeps tracks which tables and views the view being created
+	// depends on. This is collected during the construction of
+	// the view query's logical plan.
+	planDeps planDependencies
 }
 
 // CreateView creates a view.
@@ -345,37 +349,11 @@ func (p *planner) CreateView(ctx context.Context, n *parser.CreateView) (planNod
 		return nil, err
 	}
 
-	// To avoid races with ongoing schema changes to tables that the view
-	// depends on, make sure we use the most recent versions of table
-	// descriptors rather than the copies in the lease cache.
-	defer func(prev bool) { p.avoidCachedDescriptors = prev }(p.avoidCachedDescriptors)
-	p.avoidCachedDescriptors = true
-
-	// Now generate the source plan.
-	sourcePlan, err := p.Select(ctx, n.AsSource, []parser.Type{})
-	if err != nil {
-		return nil, err
-	}
-
-	var result *createViewNode
-	defer func() {
-		// Ensure that we clean up after ourselves if an error occurs, because if
-		// construction of the planNode fails, Close() won't be called on it.
-		if result == nil {
-			sourcePlan.Close(ctx)
-			p.avoidCachedDescriptors = false
-		}
-	}()
-
-	numColNames := len(n.ColumnNames)
-	numColumns := len(planColumns(sourcePlan))
-	if numColNames != 0 && numColNames != numColumns {
-		return nil, sqlbase.NewSyntaxError(fmt.Sprintf(
-			"CREATE VIEW specifies %d column name%s, but data source has %d column%s",
-			numColNames, util.Pluralize(int64(numColNames)),
-			numColumns, util.Pluralize(int64(numColumns))))
-	}
-
+	// Ensure that all the table names are properly qualified.  The
+	// traversal will update the NormalizableTableNames in-place, so the
+	// changes are persisted in n.AsSource. We use parser.FormatNode
+	// merely as a traversal method; its output buffer is discarded
+	// immediately after the traversal because it is not needed further.
 	var queryBuf bytes.Buffer
 	var fmtErr error
 	parser.FormatNode(
@@ -385,11 +363,13 @@ func (p *planner) CreateView(ctx context.Context, n *parser.CreateView) (planNod
 			func(t *parser.NormalizableTableName, buf *bytes.Buffer, f parser.FmtFlags) {
 				tn, err := p.QualifyWithDatabase(ctx, t)
 				if err != nil {
-					log.Warningf(ctx, "failed to qualify table name %q with database name: %v", t, err)
+					log.Warningf(ctx, "failed to qualify table name %q with database name: %v",
+						parser.ErrString(t), err)
 					fmtErr = err
-					t.TableNameReference.Format(buf, f)
+					return
 				}
-				tn.Format(buf, f)
+				// Persist the database prefix expansion.
+				tn.DBNameOriginallyOmitted = false
 			},
 		),
 		n.AsSource,
@@ -398,21 +378,25 @@ func (p *planner) CreateView(ctx context.Context, n *parser.CreateView) (planNod
 		return nil, fmtErr
 	}
 
-	// TODO(a-robinson): Support star expressions as soon as we can (#10028).
-	if p.planContainsStar(ctx, sourcePlan) {
-		return nil, fmt.Errorf("views do not currently support * expressions")
+	planDeps, sourceColumns, err := p.analyzeViewQuery(ctx, n.AsSource)
+	if err != nil {
+		return nil, err
 	}
 
-	// Set result rather than just returnning to ensure the defer'ed cleanup
-	// doesn't trigger.
-	result = &createViewNode{
-		p:           p,
-		n:           n,
-		dbDesc:      dbDesc,
-		sourcePlan:  sourcePlan,
-		sourceQuery: queryBuf.String(),
+	n.AsSource, err = enforceViewResultColumnNames(n.AsSource, n.ColumnNames, sourceColumns)
+	if err != nil {
+		return nil, err
 	}
-	return result, nil
+
+	log.VEventf(ctx, 2, "collected view dependencies:\n%s", planDeps.String())
+
+	return &createViewNode{
+		p:             p,
+		n:             n,
+		dbDesc:        dbDesc,
+		sourceColumns: sourceColumns,
+		planDeps:      planDeps,
+	}, nil
 }
 
 func (n *createViewNode) Start(params runParams) error {
@@ -434,16 +418,21 @@ func (n *createViewNode) Start(params runParams) error {
 	// Inherit permissions from the database descriptor.
 	privs := n.dbDesc.GetPrivileges()
 
-	affected := make(map[sqlbase.ID]sqlbase.TableDescriptor)
+	// Update and format the AST of the view query to use numeric table references
+	// instead of names.
+	viewQuery, err := n.p.prepareViewQuery(params.ctx, n.n.AsSource, n.planDeps)
+	if err != nil {
+		return err
+	}
+
 	desc, err := n.makeViewTableDesc(
 		params.ctx,
 		viewName,
-		n.n.ColumnNames,
+		viewQuery,
 		n.dbDesc.ID,
 		id,
-		planColumns(n.sourcePlan),
+		n.sourceColumns,
 		privs,
-		affected,
 		&n.p.evalCtx,
 	)
 	if err != nil {
@@ -454,16 +443,30 @@ func (n *createViewNode) Start(params runParams) error {
 		return err
 	}
 
+	// Collect all the tables/views this view depends on.
+	for backrefID := range n.planDeps {
+		desc.DependsOn = append(desc.DependsOn, backrefID)
+	}
+
 	if err = n.p.createDescriptorWithID(params.ctx, key, id, &desc); err != nil {
 		return err
 	}
 
 	// Persist the back-references in all referenced table descriptors.
-	for _, updated := range affected {
-		if err := n.p.saveNonmutationAndNotify(params.ctx, &updated); err != nil {
+	for _, updated := range n.planDeps {
+		backrefDesc := *updated.desc
+		for _, dep := range updated.deps {
+			// The logical plan constructor merely registered the dependencies.
+			// It did not populate the "ID" field of TableDescriptor_Reference.
+			// We need to do it here.
+			dep.ID = desc.ID
+			backrefDesc.DependedOnBy = append(backrefDesc.DependedOnBy, dep)
+		}
+		if err := n.p.saveNonmutationAndNotify(params.ctx, &backrefDesc); err != nil {
 			return err
 		}
 	}
+
 	if desc.Adding() {
 		n.p.notifySchemaChange(&desc, sqlbase.InvalidMutationID)
 	}
@@ -491,10 +494,7 @@ func (n *createViewNode) Start(params runParams) error {
 	return nil
 }
 
-func (n *createViewNode) Close(ctx context.Context) {
-	n.sourcePlan.Close(ctx)
-	n.sourcePlan = nil
-}
+func (n *createViewNode) Close(ctx context.Context) {}
 
 func (*createViewNode) Next(runParams) (bool, error) { return false, nil }
 func (*createViewNode) Values() parser.Datums        { return parser.Datums{} }
@@ -1020,7 +1020,7 @@ func addInterleave(
 		return err
 	}
 
-	parentTable, err := mustGetTableDesc(ctx, txn, vt, tn, true /*allowAdding*/)
+	parentTable, err := MustGetTableDesc(ctx, txn, vt, tn, true /*allowAdding*/)
 	if err != nil {
 		return err
 	}
@@ -1118,12 +1118,11 @@ func (p *planner) finalizeInterleave(
 func (n *createViewNode) makeViewTableDesc(
 	ctx context.Context,
 	viewName string,
-	columnNames parser.NameList,
+	viewQuery string,
 	parentID sqlbase.ID,
 	id sqlbase.ID,
 	resultColumns []sqlbase.ResultColumn,
 	privileges *sqlbase.PrivilegeDescriptor,
-	affected map[sqlbase.ID]sqlbase.TableDescriptor,
 	evalCtx *parser.EvalContext,
 ) (sqlbase.TableDescriptor, error) {
 	desc := sqlbase.TableDescriptor{
@@ -1133,17 +1132,14 @@ func (n *createViewNode) makeViewTableDesc(
 		FormatVersion: sqlbase.FamilyFormatVersion,
 		Version:       1,
 		Privileges:    privileges,
-		ViewQuery:     n.sourceQuery,
+		ViewQuery:     viewQuery,
 	}
-	for i, colRes := range resultColumns {
+	for _, colRes := range resultColumns {
 		colType, err := parser.DatumTypeToColumnType(colRes.Typ)
 		if err != nil {
 			return desc, err
 		}
 		columnTableDef := parser.ColumnTableDef{Name: parser.Name(colRes.Name), Type: colType}
-		if len(columnNames) > i {
-			columnTableDef.Name = columnNames[i]
-		}
 		// We pass an empty search path here because there are no names to resolve.
 		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, nil, evalCtx)
 		if err != nil {
@@ -1151,8 +1147,6 @@ func (n *createViewNode) makeViewTableDesc(
 		}
 		desc.AddColumn(*col)
 	}
-
-	n.resolveViewDependencies(ctx, &desc, affected)
 
 	return desc, desc.AllocateIDs()
 }
@@ -1537,142 +1531,4 @@ func makeCheckConstraint(
 		}
 	}
 	return &sqlbase.TableDescriptor_CheckConstraint{Expr: parser.Serialize(d.Expr), Name: name}, nil
-}
-
-// resolveViewDependencies looks up the tables included in a view's query
-// and adds metadata representing those dependencies to both the new view's
-// descriptor and the dependend-upon tables' descriptors. The modified table
-// descriptors are put into the backrefs map of other tables so that they can
-// be updated when this view is created.
-func (n *createViewNode) resolveViewDependencies(
-	ctx context.Context,
-	tbl *sqlbase.TableDescriptor,
-	backrefs map[sqlbase.ID]sqlbase.TableDescriptor,
-) {
-	n.p.populateViewBackrefs(ctx, n.sourcePlan, tbl, backrefs)
-
-	// Also create the forward references in the new view's descriptor.
-	tbl.DependsOn = make([]sqlbase.ID, 0, len(backrefs))
-	for id := range backrefs {
-		tbl.DependsOn = append(tbl.DependsOn, id)
-	}
-}
-
-// populateViewBackrefs adds back-references to the descriptor for each referenced
-// table / view in the plan.
-func (p *planner) populateViewBackrefs(
-	ctx context.Context,
-	plan planNode,
-	tbl *sqlbase.TableDescriptor,
-	backrefs map[sqlbase.ID]sqlbase.TableDescriptor,
-) {
-	b := &backrefCollector{p: p, tbl: tbl, backrefs: backrefs}
-	_ = walkPlan(ctx, plan, planObserver{enterNode: b.enterNode})
-}
-
-type backrefCollector struct {
-	p   *planner
-	tbl *sqlbase.TableDescriptor
-	// backrefs contains the descriptor back-references. We store copies
-	// instead of pointers so as to not modify the descriptors in-place
-	// when updating dependencies.
-	backrefs map[sqlbase.ID]sqlbase.TableDescriptor
-}
-
-// enterNode is used by a planObserver.
-func (b *backrefCollector) enterNode(ctx context.Context, _ string, plan planNode) bool {
-	// I was initially concerned about doing type assertions on every node in
-	// the tree, but it's actually faster than a string comparison on the name
-	// returned by ExplainPlan, judging by a mini-benchmark run on my laptop
-	// with go 1.7.1.
-	if sel, ok := plan.(*renderNode); ok {
-		// If this is a view, we don't want to resolve the underlying scan(s).
-		// We instead prefer to track the dependency on the view itself rather
-		// than on its indirect dependencies.
-		if sel.source.info.viewDesc != nil {
-			populateViewBackrefFromViewDesc(sel.source.info.viewDesc, b.tbl, b.backrefs)
-			// Return early to avoid processing the view's underlying query.
-			return false
-		}
-	} else if join, ok := plan.(*joinNode); ok {
-		if join.left.info.viewDesc != nil {
-			populateViewBackrefFromViewDesc(join.left.info.viewDesc, b.tbl, b.backrefs)
-		} else {
-			b.p.populateViewBackrefs(ctx, join.left.plan, b.tbl, b.backrefs)
-		}
-		if join.right.info.viewDesc != nil {
-			populateViewBackrefFromViewDesc(join.right.info.viewDesc, b.tbl, b.backrefs)
-		} else {
-			b.p.populateViewBackrefs(ctx, join.right.plan, b.tbl, b.backrefs)
-		}
-		// Return early to avoid re-processing the children.
-		return false
-	} else if scan, ok := plan.(*scanNode); ok {
-		desc, ok := b.backrefs[scan.desc.ID]
-		if !ok {
-			desc = *scan.desc
-		}
-		ref := sqlbase.TableDescriptor_Reference{
-			ID:        b.tbl.ID,
-			ColumnIDs: make([]sqlbase.ColumnID, 0, len(scan.cols)),
-		}
-		if scan.index != nil && scan.isSecondaryIndex {
-			ref.IndexID = scan.index.ID
-		}
-		for i := range scan.cols {
-			// TODO(knz): We would like to only include the columns that are
-			// actually needed.
-			// Unfortunately, this breaks views defined like this:
-			//     CREATE VIEW xx AS SELECT k FROM (SELECT k, v FROM kv)
-			// See #17269.
-			//
-			// if scan.valNeededForCol[i] {
-			ref.ColumnIDs = append(ref.ColumnIDs, scan.cols[i].ID)
-			// }
-		}
-		desc.DependedOnBy = append(desc.DependedOnBy, ref)
-		b.backrefs[scan.desc.ID] = desc
-	}
-	return true
-}
-
-func populateViewBackrefFromViewDesc(
-	dependency *sqlbase.TableDescriptor,
-	tbl *sqlbase.TableDescriptor,
-	backrefs map[sqlbase.ID]sqlbase.TableDescriptor,
-) {
-	desc, ok := backrefs[dependency.ID]
-	if !ok {
-		desc = *dependency
-	}
-	ref := sqlbase.TableDescriptor_Reference{ID: tbl.ID}
-	desc.DependedOnBy = append(desc.DependedOnBy, ref)
-	backrefs[desc.ID] = desc
-}
-
-// planContainsStar returns true if one of the render nodes in the
-// plan contains a star expansion.
-func (p *planner) planContainsStar(ctx context.Context, plan planNode) bool {
-	s := &starDetector{}
-	_ = walkPlan(ctx, plan, planObserver{enterNode: s.enterNode})
-	return s.foundStar
-}
-
-// starDetector supports planContainsStar().
-type starDetector struct {
-	foundStar bool
-}
-
-// enterNode implements the planObserver interface.
-func (s *starDetector) enterNode(_ context.Context, _ string, plan planNode) bool {
-	if s.foundStar {
-		return false
-	}
-	if sel, ok := plan.(*renderNode); ok {
-		if sel.isStar {
-			s.foundStar = true
-			return false
-		}
-	}
-	return true
 }

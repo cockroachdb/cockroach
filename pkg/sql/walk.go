@@ -359,9 +359,8 @@ func (v *planVisitor) visit(plan planNode) {
 
 	case *createViewNode:
 		if v.observer.attr != nil {
-			v.observer.attr(name, "query", n.sourceQuery)
+			v.observer.attr(name, "query", n.n.AsSource.String())
 		}
-		v.visit(n.sourcePlan)
 
 	case *delayedNode:
 		if v.observer.attr != nil {

@@ -40,7 +40,7 @@ func checkDBExists(ctx context.Context, p *planner, db string) error {
 
 // checkTableExists checks if the table exists by using the security.RootUser.
 func checkTableExists(ctx context.Context, p *planner, tn *parser.TableName) error {
-	if _, err := mustGetTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/); err != nil {
+	if _, err := MustGetTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/); err != nil {
 		return sqlbase.NewUndefinedRelationError(tn)
 	}
 	return nil
@@ -207,7 +207,7 @@ func (p *planner) showTableDetails(
 		if err := checkDBExists(ctx, p, db); err != nil {
 			return err
 		}
-		desc, err := mustGetTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /* allowAdding */)
+		desc, err := MustGetTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /* allowAdding */)
 		if err != nil {
 			return err
 		}
@@ -515,7 +515,7 @@ func (p *planner) ShowConstraints(
 		return nil, err
 	}
 
-	desc, err := mustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/)
+	desc, err := MustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/)
 	if err != nil {
 		return nil, sqlbase.NewUndefinedRelationError(tn)
 	}

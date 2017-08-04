@@ -124,10 +124,6 @@ type dataSourceInfo struct {
 	// column but might be different if the statement renames
 	// them using AS.
 	sourceAliases sourceAliases
-
-	// viewDesc is nothing more than an annotation used to indicate that the
-	// columns are defined as part of a view.
-	viewDesc *sqlbase.TableDescriptor
 }
 
 // planDataSource contains the data source information for data
@@ -358,7 +354,7 @@ func (p *planner) getDataSource(
 		return p.getGeneratorPlan(ctx, t)
 
 	case *parser.Subquery:
-		return p.getSubqueryPlan(ctx, anonymousTable, t.Select, nil)
+		return p.getSubqueryPlan(ctx, anonymousTable, t.Select)
 
 	case *parser.JoinTableExpr:
 		// Joins: two sources.
@@ -546,7 +542,7 @@ func (p *planner) getTableDesc(
 		// specified time, and never lease anything. The proto transaction already
 		// has its timestamps set correctly so getTableOrViewDesc will fetch with
 		// the correct timestamp.
-		return mustGetTableOrViewDesc(
+		return MustGetTableOrViewDesc(
 			ctx, p.txn, p.getVirtualTabler(), tn, false /*allowAdding*/)
 	}
 	return p.session.tables.getTableVersion(ctx, p.txn, p.getVirtualTabler(), tn)
@@ -561,11 +557,7 @@ func (p *planner) getPlanForDesc(
 	wantedColumns []parser.ColumnID,
 ) (planDataSource, error) {
 	if desc.IsView() {
-		if wantedColumns != nil {
-			return planDataSource{},
-				errors.Errorf("cannot specify an explicit column list when accessing a view by reference")
-		}
-		return p.getViewPlan(ctx, tn, desc)
+		return p.getViewPlan(ctx, tn, desc, wantedColumns)
 	} else if !desc.IsTable() {
 		return planDataSource{}, errors.Errorf(
 			"unexpected table descriptor of type %s for %q", desc.TypeName(), parser.ErrString(tn))
@@ -586,7 +578,10 @@ func (p *planner) getPlanForDesc(
 // getViewPlan builds a planDataSource for the view specified by the
 // table name and descriptor, expanding out its subquery plan.
 func (p *planner) getViewPlan(
-	ctx context.Context, tn *parser.TableName, desc *sqlbase.TableDescriptor,
+	ctx context.Context,
+	tn *parser.TableName,
+	desc *sqlbase.TableDescriptor,
+	wantedColumns []parser.ColumnID,
 ) (planDataSource, error) {
 	stmt, err := parser.ParseOne(desc.ViewQuery)
 	if err != nil {
@@ -611,31 +606,62 @@ func (p *planner) getViewPlan(
 		defer func() { p.skipSelectPrivilegeChecks = false }()
 	}
 
+	if wantedColumns != nil {
+		wantedExprs := make(parser.SelectExprs, len(wantedColumns))
+		for i, id := range wantedColumns {
+			// Search the view descriptor for the wanted ID.
+			found := false
+			for j, col := range desc.Columns {
+				if col.ID == sqlbase.ColumnID(id) {
+					wantedExprs[i] = parser.SelectExpr{Expr: &parser.IndexedVar{Idx: j}, As: parser.Name(col.Name)}
+					found = true
+					break
+				}
+			}
+			if !found {
+				return planDataSource{},
+					errors.Errorf("column ID %d not found in view descriptor for %s", id, tn.String())
+			}
+		}
+
+		from := &parser.From{Tables: parser.TableExprs{&parser.Subquery{Select: sel.Select}}}
+		sel.Select = &parser.SelectClause{Exprs: wantedExprs, From: from}
+	}
+
+	// Register the dependency to the planner, if requested.
+	if p.planDeps != nil {
+		usedColumns := make([]sqlbase.ColumnID, len(desc.Columns))
+		for i := range desc.Columns {
+			usedColumns[i] = desc.Columns[i].ID
+		}
+		deps := p.planDeps[desc.ID]
+		deps.desc = desc
+		deps.deps = append(deps.deps, sqlbase.TableDescriptor_Reference{ColumnIDs: usedColumns})
+		p.planDeps[desc.ID] = deps
+
+		// We are only interested in the dependency to this view descriptor. Any
+		// further dependency by the view's query should not be tracked in this planner.
+		defer func(prev planDependencies) { p.planDeps = prev }(p.planDeps)
+		p.planDeps = nil
+	}
+
 	// TODO(a-robinson): Support ORDER BY and LIMIT in views. Is it as simple as
 	// just passing the entire select here or will inserting an ORDER BY in the
 	// middle of a query plan break things?
-	plan, err := p.getSubqueryPlan(ctx, *tn, sel.Select, sqlbase.ResultColumnsFromColDescs(desc.Columns))
-	if err != nil {
-		return plan, err
-	}
-	plan.info.viewDesc = desc
-	return plan, nil
+	return p.getSubqueryPlan(ctx, *tn, sel.Select)
 }
 
 // getSubqueryPlan builds a planDataSource for a select statement, including
 // for simple VALUES statements.
 func (p *planner) getSubqueryPlan(
-	ctx context.Context, tn parser.TableName, sel parser.SelectStatement, cols sqlbase.ResultColumns,
+	ctx context.Context, tn parser.TableName, sel parser.SelectStatement,
 ) (planDataSource, error) {
 	plan, err := p.newPlan(ctx, sel, nil)
 	if err != nil {
 		return planDataSource{}, err
 	}
-	if len(cols) == 0 {
-		cols = planColumns(plan)
-	}
 	return planDataSource{
-		info: newSourceInfoForSingleTable(tn, cols),
+		info: newSourceInfoForSingleTable(tn, planColumns(plan)),
 		plan: plan,
 	}, nil
 }

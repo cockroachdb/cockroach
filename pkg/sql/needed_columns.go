@@ -30,9 +30,6 @@ func setNeededColumns(plan planNode, needed []bool) {
 			setNeededColumns(n.sourcePlan, allColumns(n.sourcePlan))
 		}
 
-	case *createViewNode:
-		setNeededColumns(n.sourcePlan, allColumns(n.sourcePlan))
-
 	case *explainDistSQLNode:
 		setNeededColumns(n.plan, allColumns(n.plan))
 
@@ -192,6 +189,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *createDatabaseNode:
 	case *createIndexNode:
 	case *createUserNode:
+	case *createViewNode:
 	case *dropDatabaseNode:
 	case *dropIndexNode:
 	case *dropTableNode:

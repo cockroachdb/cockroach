@@ -23,12 +23,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // showCreateView returns a valid SQL representation of the CREATE
 // VIEW statement used to create the given view.
 func (p *planner) showCreateView(
-	ctx context.Context, tn parser.Name, desc *sqlbase.TableDescriptor,
+	ctx context.Context, tn parser.Name, dbPrefix string, desc *sqlbase.TableDescriptor,
 ) (string, error) {
 	var buf bytes.Buffer
 	buf.WriteString("CREATE VIEW ")
@@ -40,8 +41,80 @@ func (p *planner) showCreateView(
 		}
 		parser.Name(col.Name).Format(&buf, parser.FmtSimple)
 	}
-	fmt.Fprintf(&buf, ") AS %s", desc.ViewQuery)
+
+	viewQuery, err := p.simplifyViewQuery(ctx, dbPrefix, desc.Name, desc.ViewQuery)
+	if err != nil {
+		return "", err
+	}
+	fmt.Fprintf(&buf, ") AS %s", viewQuery)
 	return buf.String(), nil
+}
+
+// simplifyViewQuery shortens the view query for display: for each
+// referenced table, if the table still has the same name, and the
+// same set of columns in the same order, elide the table reference
+// and replace it by a simple table name.
+func (p *planner) simplifyViewQuery(
+	ctx context.Context, dbPrefix, viewName, viewQuery string,
+) (string, error) {
+	// First extract the query AST.
+	stmt, err := parser.ParseOne(viewQuery)
+	if err != nil {
+		log.Warningf(ctx, "unable to parse view query for %q: %q: %v",
+			parser.ErrString(parser.Name(viewName)), viewQuery, err)
+		return viewQuery, nil
+	}
+
+	logFunc := func(err error) {
+		log.Warningf(ctx, "error simplifying table references in view %q: %q: %v",
+			parser.ErrString(parser.Name(viewName)), viewQuery, err)
+	}
+
+	// Now perform the replacement. For this we hijack (*TableRef).Format().
+	var queryBuf bytes.Buffer
+	stmt.Format(&queryBuf, parser.FmtReformatTableRefs(parser.FmtParsable,
+		func(n *parser.TableRef, buf *bytes.Buffer, f parser.FmtFlags) bool {
+			// Get the Table descriptor.
+			desc, err := p.getTableDescByID(ctx, sqlbase.ID(n.TableID))
+			if err != nil {
+				logFunc(err)
+				return false
+			}
+			// Same name?
+			if desc.Name != string(n.As.Alias) {
+				return false
+			}
+			// Same column set?
+			if len(desc.Columns) != len(n.As.Cols) {
+				return false
+			}
+			for i := range desc.Columns {
+				if desc.Columns[i].Name != string(n.As.Cols[i]) {
+					return false
+				}
+			}
+			// Yes: we may need the parent database name, so get the
+			// descriptor first.
+			parentDB, err := p.session.tables.databaseCache.getDatabaseDescByID(
+				ctx, p.txn, desc.ParentID,
+			)
+			if err != nil {
+				logFunc(err)
+				return false
+			}
+			// Make a table name: the database name is omitted if and only
+			// if the parent database is the same as the current database
+			// prefix.
+			tn := parser.TableName{TableName: parser.Name(desc.Name)}
+			if parentDB.Name != dbPrefix {
+				tn.DatabaseName = parser.Name(parentDB.Name)
+			} else {
+				tn.DBNameOriginallyOmitted = true
+			}
+			tn.Format(buf, f)
+			return true
+		}))
+	return queryBuf.String(), nil
 }
 
 // showCreateTable returns a valid SQL representation of the CREATE

@@ -43,6 +43,12 @@ type TableRef struct {
 
 // Format implements the NodeFormatter interface.
 func (n *TableRef) Format(buf *bytes.Buffer, f FmtFlags) {
+	if f.tableRefFormatter != nil {
+		if f.tableRefFormatter(n, buf, f) {
+			return
+		}
+	}
+
 	fmt.Fprintf(buf, "[%d", n.TableID)
 	if n.Columns != nil {
 		buf.WriteByte('(')

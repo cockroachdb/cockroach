@@ -801,7 +801,7 @@ CREATE TABLE crdb_internal.create_statements (
 				deps := make(map[parser.TableName]struct{})
 				if table.IsView() {
 					descType = &typeView
-					stmt, err = p.showCreateView(ctx, parser.Name(table.Name), table)
+					stmt, err = p.showCreateView(ctx, parser.Name(table.Name), prefix, table)
 					for _, id := range table.DependsOn {
 						depTable, err := p.getTableDescByID(ctx, id)
 						if err != nil {

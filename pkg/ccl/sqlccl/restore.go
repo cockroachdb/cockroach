@@ -243,7 +243,9 @@ func allocateTableRewrites(
 // rewriteTableDescs mutates tables to match the ID and privilege specified in
 // tableRewrites, as well as adjusting cross-table references to use the new
 // IDs.
-func rewriteTableDescs(tables []*sqlbase.TableDescriptor, tableRewrites tableRewriteMap) error {
+func rewriteTableDescs(
+	ctx context.Context, tables []*sqlbase.TableDescriptor, tableRewrites tableRewriteMap,
+) error {
 	for _, table := range tables {
 		tableRewrite, ok := tableRewrites[table.ID]
 		if !ok {
@@ -304,8 +306,13 @@ func rewriteTableDescs(tables []*sqlbase.TableDescriptor, tableRewrites tableRew
 			return err
 		}
 
+		log.VEventf(ctx, 2,
+			"checking dependencies of [%d] (%q): %v",
+			table.ID, parser.ErrString(parser.Name(table.Name)), table.DependsOn)
+		hasRestoredDep := false
 		for i, dest := range table.DependsOn {
 			if depRewrite, ok := tableRewrites[dest]; ok {
+				hasRestoredDep = true
 				table.DependsOn[i] = depRewrite.TableID
 			} else {
 				return errors.Errorf(
@@ -313,6 +320,20 @@ func rewriteTableDescs(tables []*sqlbase.TableDescriptor, tableRewrites tableRew
 					table.Name, dest)
 			}
 		}
+		if hasRestoredDep {
+			idMap := make(map[sqlbase.ID]sqlbase.ID)
+			for id, r := range tableRewrites {
+				idMap[id] = r.TableID
+			}
+			log.VEventf(ctx, 2,
+				"renaming table dependencies in view query for [%d] (%q): %q: %v",
+				table.ID, parser.ErrString(parser.Name(table.Name)), table.ViewQuery, idMap)
+			if err := table.RewriteViewQueryForTableSubstitution(idMap); err != nil {
+				return err
+			}
+			log.VEventf(ctx, 2, "rewrote view query: %q", table.ViewQuery)
+		}
+
 		origRefs := table.DependedOnBy
 		table.DependedOnBy = nil
 		for _, ref := range origRefs {
@@ -611,7 +632,7 @@ func restore(
 
 	// Assign new IDs and privileges to the tables, and update all references to
 	// use the new IDs.
-	if err := rewriteTableDescs(tables, tableRewrites); err != nil {
+	if err := rewriteTableDescs(restoreCtx, tables, tableRewrites); err != nil {
 		return failed, err
 	}
 
