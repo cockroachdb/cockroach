@@ -43,7 +43,7 @@ func planOrdering(plan planNode) orderingInfo {
 		// TODO: window partitions can be ordered if the source is ordered
 		// appropriately.
 	case *joinNode:
-		// TODO(knz): this can be ordered when not using hash join.
+		return n.ordering
 	case *unionNode:
 		// TODO(knz): this can be ordered if the source is ordered already.
 	case *insertNode:
