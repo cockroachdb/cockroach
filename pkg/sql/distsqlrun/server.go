@@ -312,7 +312,7 @@ func (ds *ServerImpl) RunSyncFlow(stream DistSQL_RunSyncFlowServer) error {
 	mbox.setFlowCtx(&f.FlowCtx)
 
 	if err := ds.Stopper.RunTask(ctx, "distsqlrun.ServerImpl: sync flow", func(ctx context.Context) {
-		mbox.start(ctx, &f.waitGroup)
+		mbox.start(ctx, &f.waitGroup, nil /* ctxCancel */)
 		f.Start(ctx, func() {})
 		f.Wait()
 		f.Cleanup(ctx)
@@ -368,7 +368,7 @@ func (ds *ServerImpl) flowStreamInt(ctx context.Context, stream DistSQL_FlowStre
 	}
 	defer cleanup()
 	log.VEventf(ctx, 1, "connected inbound stream %s/%d", flowID.Short(), streamID)
-	return ProcessInboundStream(f.AnnotateCtx(ctx), stream, msg, receiver)
+	return ProcessInboundStream(f.AnnotateCtx(ctx), stream, msg, receiver, f)
 }
 
 // FlowStream is part of the DistSQLServer interface.

@@ -157,10 +157,7 @@ func (fr *flowRegistry) RegisterFlow(
 			defer fr.Unlock()
 			numTimedOut := 0
 			for streamID, is := range entry.inboundStreams {
-				if is.timedOut {
-					panic("stream already marked as timed out")
-				}
-				if !is.connected {
+				if !is.connected && !is.timedOut {
 					is.timedOut = true
 					numTimedOut++
 					// We're giving up waiting for this inbound stream. Send an error to
