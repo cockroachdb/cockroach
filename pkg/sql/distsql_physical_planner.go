@@ -390,7 +390,8 @@ type physicalPlan struct {
 	planToStreamColMap []int
 }
 
-// orderingTerminated is used when
+// orderingTerminated is used when streams can be joined without needing to be
+// merged with respect to a particular ordering.
 var orderingTerminated = distsqlrun.Ordering{}
 
 // makePlanToStreamColMap initializes a new physicalPlan.planToStreamColMap. The
@@ -1430,7 +1431,7 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 	var joinType distsqlrun.JoinType
 	var onExpr distsqlrun.Expression
 	var leftEqCols, rightEqCols []uint32
-	var leftMergeOrd, rightMergeOrd distsqlrun.Ordering
+	var leftMergeOrd, rightMergeOrd, outputMergeOrd distsqlrun.Ordering
 	var mergedColumns bool
 
 	switch n.joinType {
@@ -1609,6 +1610,7 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 			Type:           joinType,
 			MergedColumns:  mergedColumns,
 		}
+		outputMergeOrd = orderingTerminated
 	} else {
 		if mergedColumns {
 			panic("merged columns not supported by merge join")
@@ -1619,6 +1621,11 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 			OnExpr:        onExpr,
 			Type:          joinType,
 		}
+
+		// A MergeJoiner guarantees an ordering to its outputs, so we ensure
+		// that ordering is propagated through the output synchronizer.
+		// TODO(arjun): Not done yet.
+
 	}
 
 	pIdxStart := distsqlplan.ProcessorIdx(len(p.Processors))
@@ -1694,7 +1701,7 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 
 	p.planToStreamColMap = joinToStreamColMap
 	p.ResultTypes = getTypesForPlanResult(n, joinToStreamColMap)
-	p.SetMergeOrdering(orderingTerminated)
+	p.SetMergeOrdering(outputMergeOrd)
 	return p, nil
 }
 

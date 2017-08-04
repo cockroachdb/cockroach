@@ -285,6 +285,16 @@ Outer:
 // needed to to match a desired ordering (or a prefix of it); constant
 // columns are left untouched.
 //
+// TODO(arjun): this is my proposal below for how to trim column groups. It
+// is not yet done, does this make sense?
+//
+// The column groups themselves are internally trimmed to only contain the
+// single column that is actually desired.
+//
+// E.g. if ord = (1/2)+,(3,4)-,(5,6)+, and desired = 1+,4-, after
+// calling ord.trim(desired),
+// ord = (1)+,(4)-
+//
 // A trimmed ordering is guaranteed to still match the desired ordering to the
 // same extent, i.e. before and after are equal in:
 //   before := ord.computeMatch(desired)
@@ -306,7 +316,7 @@ Outer:
 		// Check if the next column group matches this column, or if any of the
 		// previous column groups does - for example, if we have an ordering
 		// (1/2)+,3+ and the desired ordering is 1+,3+,2+ the 2+ is redundant with
-		// 1+ and can be ignored.
+		// 1+ and can be removed.
 		for j := 0; j <= pos; j++ {
 			if ord.ordering[j].dir == col.Direction &&
 				ord.ordering[j].cols.Contains(uint32(col.ColIdx)) {
