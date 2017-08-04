@@ -65,6 +65,23 @@ func testDecommissionInner(
 		t.Skip("need at least four nodes")
 	}
 
+	withDB := func(n int, stmt string) {
+		db, err := gosql.Open("postgres", c.PGUrl(ctx, n))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			if err := db.Close(); err != nil {
+				t.Error(err)
+			}
+		}()
+		if _, err := db.ExecContext(ctx, stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	withDB(1, "SET CLUSTER SETTING server.remote_debugging.mode = 'any'")
+
 	// Get the ids for each node.
 	idMap := make(map[int]roachpb.NodeID)
 	for i := 0; i < c.NumNodes(); i++ {
@@ -73,27 +90,6 @@ func testDecommissionInner(
 			t.Fatal(err)
 		}
 		idMap[i] = details.NodeID
-	}
-
-	// Make sure we don't waste too much time waiting for the node to be
-	// recognized as dead. Note that we don't want to set this number too low or
-	// everything will seem dead to the allocator at all times, so nothing will
-	// ever happen.
-	//
-	// We really only need this for the last part in which we kill a node, but
-	// opening the debug endpoint early is good.
-	{
-		db, err := gosql.Open("postgres", c.PGUrl(ctx, 1))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING server.remote_debugging.mode = 'any'"); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING server.time_until_store_dead = '15s'"); err != nil {
-			t.Fatal(err)
-		}
-		_ = db.Close()
 	}
 
 	log.Info(ctx, "decommissioning first node from the second, polling the status manually")
@@ -133,7 +129,7 @@ func testDecommissionInner(
 		}
 		log.Infof(ctx, o)
 		if ok, err := regexp.MatchString(strconv.Itoa(int(target))+`\s+true\s+0\s+true\s+true`, o); !ok || err != nil {
-			t.Fatalf("node did not decommission: ok=%t, err=%s, output:\n%s", ok, err, o)
+			t.Fatalf("node did not decommission: ok=%t, err=%v, output:\n%s", ok, err, o)
 		}
 	}
 
@@ -215,12 +211,14 @@ func testDecommissionInner(
 			t.Fatal(err)
 		}
 		// Run a second time to wait until the replicas have all been GC'ed.
-		o, err = decommission(ctx, c, 2, target, "decommission", "--wait", "live")
+		// Note that we specify "all" because even though the first node is
+		// now running, it may not be live by the time the command runs.
+		o, err = decommission(ctx, c, 2, target, "decommission", "--wait", "all")
 		if err != nil {
 			t.Fatal(err)
 		}
 		if ok, err := regexp.MatchString(strconv.Itoa(int(target))+`\s+true\s+0\s+true\s+true`, o); !ok || err != nil {
-			t.Fatalf("node did not decommission: ok=%t, err=%s, output:\n%s", ok, err, o)
+			t.Fatalf("node did not decommission: ok=%t, err=%v, output:\n%s", ok, err, o)
 		}
 	}
 
@@ -228,16 +226,8 @@ func testDecommissionInner(
 	// waste too much time waiting for the node to be recognized as dead. Note that
 	// we don't want to set this number too low or everything will seem dead to the
 	// allocator at all times, so nothing will ever happen.
-	{
-		db, err := gosql.Open("postgres", c.PGUrl(ctx, 1))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING server.time_until_store_dead = '15s'"); err != nil {
-			t.Fatal(err)
-		}
-		_ = db.Close()
-	}
+	withDB(1, "SET CLUSTER SETTING server.time_until_store_dead = '15s'")
+
 	log.Info(ctx, "intentionally killing first node")
 	if err := c.Kill(ctx, 0); err != nil {
 		t.Fatal(err)
@@ -258,8 +248,11 @@ func testDecommissionInner(
 		// (which the node would write itself, but it's dead). We do check that
 		// the node isn't live, though, which is essentially what `--wait=live`
 		// waits for.
-		if ok, err := regexp.MatchString(strconv.Itoa(int(target))+`\s+false\s+\d+\s+true\s+.*`, o); !ok || err != nil {
-			t.Fatalf("node did not decommission: ok=%t, err=%s, output:\n%s", ok, err, o)
+		// Note that the target node may still be "live" when it's marked as
+		// decommissioned, as its replica count may drop to zero faster than
+		// liveness times out.
+		if ok, err := regexp.MatchString(strconv.Itoa(int(target))+`\s+true|false\s+\d+\s+true\s+.*`, o); !ok || err != nil {
+			t.Fatalf("node did not decommission: ok=%t, err=%v, output:\n%s", ok, err, o)
 		}
 	}
 }
