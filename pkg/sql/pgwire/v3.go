@@ -526,7 +526,7 @@ func (c *v3Conn) handleSimpleQuery(buf *readBuffer) error {
 // documented by Postgres, but is a consequence of the fact that a 16-bit
 // integer in the wire format is used to indicate the number of values to bind
 // during prepared statement execution.
-const maxPreparedStatementArgs int = math.MaxUint16
+const maxPreparedStatementArgs = math.MaxUint16
 
 func (c *v3Conn) handleParse(buf *readBuffer) error {
 	name, err := buf.getString()
@@ -580,7 +580,7 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 	inTypes := make([]oid.Oid, 0, len(stmt.SQLTypes))
 	if len(stmt.SQLTypes) > maxPreparedStatementArgs {
 		return c.sendError(pgerror.NewErrorf(pgerror.CodeProtocolViolationError,
-			"more than 65535 arguments to prepared statement: %d", len(stmt.SQLTypes)))
+			"more than %d arguments to prepared statement: %d", maxPreparedStatementArgs, len(stmt.SQLTypes)))
 	}
 	for k, t := range stmt.SQLTypes {
 		i, err := strconv.Atoi(k)
