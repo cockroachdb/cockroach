@@ -28,10 +28,14 @@ import (
 // already received (because the first message contains the flow and stream IDs,
 // it needs to be received before we can get here).
 func ProcessInboundStream(
-	ctx context.Context, stream DistSQL_FlowStreamServer, firstMsg *ProducerMessage, dst RowReceiver,
+	ctx context.Context,
+	stream DistSQL_FlowStreamServer,
+	firstMsg *ProducerMessage,
+	dst RowReceiver,
+	f *Flow,
 ) error {
 
-	err := processInboundStreamHelper(ctx, stream, firstMsg, dst)
+	err := processInboundStreamHelper(ctx, stream, firstMsg, dst, f)
 
 	// err, if set, will also be propagated to the producer
 	// as the last record that the producer gets.
@@ -49,7 +53,11 @@ func ProcessInboundStream(
 }
 
 func processInboundStreamHelper(
-	ctx context.Context, stream DistSQL_FlowStreamServer, firstMsg *ProducerMessage, dst RowReceiver,
+	ctx context.Context,
+	stream DistSQL_FlowStreamServer,
+	firstMsg *ProducerMessage,
+	dst RowReceiver,
+	f *Flow,
 ) error {
 	var finalErr error
 	draining := false
@@ -60,6 +68,14 @@ func processInboundStreamHelper(
 			msg = firstMsg
 			firstMsg = nil
 		} else {
+			// Check for context cancellation before recv()ing the next message.
+			select {
+			case <-f.ctx.Done():
+				// This will error out the FlowStream(), and also cancel
+				// the flow context on the producer.
+				return errors.New("query execution cancelled")
+			default:
+			}
 			var err error
 			msg, err = stream.Recv()
 			if err != nil {

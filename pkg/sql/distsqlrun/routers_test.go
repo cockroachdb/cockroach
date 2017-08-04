@@ -52,7 +52,7 @@ func setupRouter(
 	flowCtx := FlowCtx{Settings: cluster.MakeTestingClusterSettings(), EvalCtx: *evalCtx}
 	r.init(&flowCtx, inputTypes)
 	wg := &sync.WaitGroup{}
-	r.start(context.TODO(), wg)
+	r.start(context.TODO(), wg, nil /* ctxCancel */)
 	return r, wg
 }
 
@@ -588,7 +588,7 @@ func TestRouterBlocks(t *testing.T) {
 			flowCtx := FlowCtx{Settings: cluster.MakeTestingClusterSettings(), EvalCtx: parser.MakeTestingEvalContext()}
 			router.init(&flowCtx, colTypes)
 			var wg sync.WaitGroup
-			router.start(context.TODO(), &wg)
+			router.start(context.TODO(), &wg, nil /* ctxCancel */)
 
 			// Set up a goroutine that tries to send rows until the stop channel
 			// is closed.

@@ -93,44 +93,14 @@ type queryMeta struct {
 	// Set to session.txnState.cancel in executor.
 	ctxCancel context.CancelFunc
 
-	// Flag that denotes if this query has been cancelled yet. Set and checked
-	// using sync.atomic.{Load,Store}Int32.
-	isCancelled int32
-
 	// Reference to the Session that contains this query.
 	session *Session
 }
 
-// cancel cancels the query associated with this queryMeta, by atomically
-// setting the cancelled flag and closing the associated txn context.
+// cancel cancels the query associated with this queryMeta, by closing the associated
+// txn context.
 func (q *queryMeta) cancel() {
 	q.ctxCancel()
-
-	atomic.StoreInt32(&q.isCancelled, 1)
-}
-
-// isCancelled atomically checks the cancellation flag, as well as the txn
-// context (if checkTxn = true), for whether the query has been cancelled.
-// Checking the context is a slower operation but must still be done occasionally.
-// A CANCEL QUERY directed at this query will set the flag as well
-// as close the context, but if the CANCEL is directed at another query within
-// the same transaction (which could be running in parallel), then the shared
-// transaction context will be closed but isCancelled won't be set to true.
-func (q *queryMeta) isQueryCancelled(checkTxn bool) bool {
-	if atomic.LoadInt32(&q.isCancelled) == 1 {
-		return true
-	}
-
-	if !checkTxn {
-		return false
-	}
-
-	select {
-	case <-q.ctx.Done():
-		return true
-	default:
-		return false
-	}
 }
 
 // Session contains the state of a SQL client connection.
@@ -571,7 +541,7 @@ func (s *Session) resetPlanner(p *planner, e *Executor, txn *client.Txn) {
 	// phaseTimes is an array, not a slice, so this performs a copy-by-value.
 	p.phaseTimes = s.phaseTimes
 	p.stmt = nil
-	p.cancelChecker = &nullCancelChecker{}
+	p.cancelChecker = sqlbase.NewCancelChecker(context.TODO())
 
 	p.semaCtx = parser.MakeSemaContext(s.User == security.RootUser)
 	p.semaCtx.Location = &s.Location

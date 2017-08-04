@@ -16,6 +16,7 @@ package distsqlrun
 
 import (
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -53,6 +54,14 @@ type outbox struct {
 	encoder StreamEncoder
 	// numRows is the number of rows that have been accumulated in the encoder.
 	numRows int
+
+	// flowCtxCancel is the context cancellation function for this flow, used
+	// to stop work from proceeding on it when the related query is cancelled. Set
+	// to a non-null value in start(), except for syncFlowConsumer outboxes.
+	// This isn't an issue in query cancellation since the syncFlowConsumer
+	// is the last consumer and exists on the gateway node, where the txn context
+	// has already been cancelled (and the flow context derives from the txn context).
+	flowCtxCancel context.CancelFunc
 
 	err error
 }
@@ -240,6 +249,13 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 				// the stream is not used any more.
 				m.stream = nil
 				m.syncFlowStream = nil
+				// If query was cancelled, stop work from proceeding in this
+				// flow. This also causes FlowStream RPCs that have this node as consumer to
+				// return errors. On sync flow outboxes, ctxCancel is set to nil in RunSyncFlow.
+				queryCancelled := strings.Contains(drainSignal.err.Error(), "query execution cancelled")
+				if queryCancelled && m.flowCtxCancel != nil {
+					m.flowCtxCancel()
+				}
 				return drainSignal.err
 			}
 			drainCh = nil
@@ -315,10 +331,12 @@ func (m *outbox) run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 }
 
-func (m *outbox) start(ctx context.Context, wg *sync.WaitGroup) {
+// Starts the outbox.
+func (m *outbox) start(ctx context.Context, wg *sync.WaitGroup, ctxCancel context.CancelFunc) {
 	if wg != nil {
 		wg.Add(1)
 	}
 	m.RowChannel.Init(nil)
+	m.flowCtxCancel = ctxCancel
 	go m.run(ctx, wg)
 }
