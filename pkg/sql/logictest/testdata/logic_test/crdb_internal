@@ -69,9 +69,95 @@ Version
 
 # The validity of the rows in this table are tested elsewhere; we merely assert the columns.
 query ITTTTTTTTTRT colnames
-SELECT * FROM crdb_internal.jobs
+SELECT * FROM crdb_internal.jobs WHERE false
 ----
 id  type  description  username  descriptor_ids  status  created  started  finished  modified  fraction_completed  error
+
+query IITTITTT colnames
+SELECT * FROM crdb_internal.schema_changes WHERE table_id < 0
+----
+table_id  parent_id  name  type  target_id  target_name  state  direction
+
+query IITITB colnames
+SELECT * FROM crdb_internal.leases WHERE node_id < 0
+----
+node_id  table_id  name  parent_id  expiration  deleted
+
+query ITTTTIIITFFFFFFFFFFFF colnames
+SELECT * FROM crdb_internal.node_statement_statistics WHERE node_id < 0
+----
+node_id  application_name  flags  key  anonymized  count  first_attempt_count  max_retries  last_error  rows_avg  rows_var  parse_lat_avg  parse_lat_var  plan_lat_avg  plan_lat_var  run_lat_avg  run_lat_var  service_lat_avg  service_lat_var  overhead_lat_avg  overhead_lat_var
+
+query IIITTTT colnames
+SELECT * FROM crdb_internal.session_trace WHERE txn_idx < 0
+----
+txn_idx  span_idx  message_idx  timestamp  duration  operation  message
+
+query TTTT colnames
+SELECT * FROM crdb_internal.cluster_settings WHERE name = ''
+----
+name  current_value  type  description
+
+query TT colnames
+SELECT * FROM crdb_internal.session_variables WHERE variable = ''
+----
+variable                       value
+
+query TITTTTTBT colnames
+SELECT * FROM crdb_internal.node_queries WHERE node_id < 0
+----
+query_id  node_id  username  start  query  client_address  application_name  distributed  phase
+
+query TITTTTTBT colnames
+SELECT * FROM crdb_internal.cluster_queries WHERE node_id < 0
+----
+query_id  node_id  username  start  query  client_address  application_name  distributed  phase
+
+query ITTTTTTT colnames
+SELECT * FROM crdb_internal.node_sessions WHERE node_id < 0
+----
+node_id  username  client_address  application_name  active_queries  session_start  oldest_query_start  kv_txn
+
+query ITTTTTTT colnames
+SELECT * FROM crdb_internal.cluster_sessions WHERE node_id < 0
+----
+node_id  username  client_address  application_name  active_queries  session_start  oldest_query_start  kv_txn
+
+query TTTT colnames
+SELECT * FROM crdb_internal.builtin_functions WHERE function = ''
+----
+function  signature  category  details
+
+query ITITTTT colnames
+SELECT * FROM crdb_internal.create_statements WHERE database_name = ''
+----
+database_id  database_name  descriptor_id  descriptor_type  descriptor_name  create_statement  state
+
+query ITITTBTB colnames
+SELECT * FROM crdb_internal.table_columns WHERE descriptor_name = ''
+----
+descriptor_id  descriptor_name  column_id  column_name  column_type  nullable  default_expr  hidden
+
+query ITITTB colnames
+SELECT * FROM crdb_internal.table_indexes WHERE descriptor_name = ''
+----
+descriptor_id  descriptor_name  index_id  index_name  index_type  is_unique
+
+query ITITTITT colnames
+SELECT * FROM crdb_internal.index_columns WHERE descriptor_name = ''
+----
+descriptor_id  descriptor_name  index_id  index_name  column_type  column_id  column_name  column_direction
+
+query ITIITITT colnames
+SELECT * FROM crdb_internal.backward_dependencies WHERE descriptor_name = ''
+----
+descriptor_id  descriptor_name  index_id  dependson_id  dependson_type  dependson_index_id  dependson_name  dependson_details
+
+query ITIITITT colnames
+SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name = ''
+----
+descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
+
 
 query error pq: foo
 SELECT crdb_internal.force_error('', 'foo')

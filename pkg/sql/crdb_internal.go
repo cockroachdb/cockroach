@@ -55,6 +55,11 @@ var crdbInternal = virtualSchema{
 		crdbInternalClusterSessionsTable,
 		crdbInternalBuiltinFunctionsTable,
 		crdbInternalCreateStmtsTable,
+		crdbInternalTableColumnsTable,
+		crdbInternalTableIndexesTable,
+		crdbInternalIndexColumnsTable,
+		crdbInternalBackwardDependenciesTable,
+		crdbInternalForwardDependenciesTable,
 	},
 }
 
@@ -467,7 +472,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 // session (via SET TRACING={ON/OFF})
 var crdbInternalSessionTraceTable = virtualSchemaTable{
 	schema: `
-CREATE TABLE crdb_internal.session_trace(
+CREATE TABLE crdb_internal.session_trace (
   txn_idx     INT NOT NULL,        -- The transaction's 0-based index, among all
                                    -- transactions that have been traced.
                                    -- Only filled for the first log message in a
@@ -781,12 +786,12 @@ CREATE TABLE crdb_internal.builtin_functions (
 var crdbInternalCreateStmtsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.create_statements (
+  database_id      INT,
   database_name    STRING NOT NULL,
   descriptor_id    INT,
   descriptor_type  STRING NOT NULL,
   descriptor_name  STRING NOT NULL,
   create_statement STRING NOT NULL,
-  dependencies     STRING NOT NULL,
   state            STRING NOT NULL
 )
 `,
@@ -798,54 +803,424 @@ CREATE TABLE crdb_internal.create_statements (
 				var err error
 				var typeView = parser.DString("view")
 				var typeTable = parser.DString("table")
-				deps := make(map[parser.TableName]struct{})
 				if table.IsView() {
 					descType = &typeView
 					stmt, err = p.showCreateView(ctx, parser.Name(table.Name), table)
-					for _, id := range table.DependsOn {
-						depTable, err := p.getTableDescByID(ctx, id)
-						if err != nil {
-							return err
-						}
-						depDb, err := p.session.tables.databaseCache.getDatabaseDescByID(
-							ctx, p.txn, depTable.ParentID,
-						)
-						if err != nil {
-							return err
-						}
-						tn := parser.TableName{
-							DatabaseName:            parser.Name(depDb.Name),
-							TableName:               parser.Name(depTable.Name),
-							DBNameOriginallyOmitted: depDb.Name == prefix,
-						}
-						deps[tn] = struct{}{}
-					}
 				} else {
 					descType = &typeTable
-					stmt, err = p.showCreateTable(ctx, parser.Name(table.Name), prefix, table, deps)
+					stmt, err = p.showCreateTable(ctx, parser.Name(table.Name), prefix, table)
 				}
 				if err != nil {
 					return err
 				}
-				depNames := make([]string, 0, len(deps))
-				for depName := range deps {
-					depNames = append(depNames, depName.String())
-				}
-				sort.Strings(depNames)
 
 				descID := parser.DNull
 				if table.ID != keys.VirtualDescriptorID {
 					descID = parser.NewDInt(parser.DInt(table.ID))
 				}
+				dbDescID := parser.DNull
+				if db.ID != keys.VirtualDescriptorID {
+					dbDescID = parser.NewDInt(parser.DInt(db.ID))
+				}
 				return addRow(
+					dbDescID,
 					parser.NewDString(db.Name),
 					descID,
 					descType,
 					parser.NewDString(table.Name),
 					parser.NewDString(stmt),
-					parser.NewDString(strings.Join(depNames, ", ")),
 					parser.NewDString(table.State.String()),
 				)
+			})
+	},
+}
+
+// crdbInternalTableColumnsTable exposes the column descriptors.
+var crdbInternalTableColumnsTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.table_columns (
+  descriptor_id    INT,
+  descriptor_name  STRING NOT NULL,
+  column_id        INT NOT NULL,
+  column_name      STRING NOT NULL,
+  column_type      STRING NOT NULL,
+  nullable         BOOL NOT NULL,
+  default_expr     STRING,
+  hidden           BOOL NOT NULL
+)
+`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error {
+		return forEachTableDescAll(ctx, p, prefix,
+			func(_ *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+				tableID := parser.DNull
+				if table.ID != keys.VirtualDescriptorID {
+					tableID = parser.NewDInt(parser.DInt(table.ID))
+				}
+				tableName := parser.NewDString(table.Name)
+				for _, col := range table.Columns {
+					defStr := parser.DNull
+					if col.DefaultExpr != nil {
+						defStr = parser.NewDString(*col.DefaultExpr)
+					}
+					if err := addRow(
+						tableID,
+						tableName,
+						parser.NewDInt(parser.DInt(col.ID)),
+						parser.NewDString(col.Name),
+						parser.NewDString(col.Type.String()),
+						parser.MakeDBool(parser.DBool(col.Nullable)),
+						defStr,
+						parser.MakeDBool(parser.DBool(col.Hidden)),
+					); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+	},
+}
+
+// crdbInternalTableIndexesTable exposes the index descriptors.
+var crdbInternalTableIndexesTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.table_indexes (
+  descriptor_id    INT,
+  descriptor_name  STRING NOT NULL,
+  index_id         INT NOT NULL,
+  index_name       STRING NOT NULL,
+  index_type       STRING NOT NULL,
+  is_unique        BOOL NOT NULL
+)
+`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error {
+		primary := parser.NewDString("primary")
+		secondary := parser.NewDString("secondary")
+		return forEachTableDescAll(ctx, p, prefix,
+			func(_ *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+				tableID := parser.DNull
+				if table.ID != keys.VirtualDescriptorID {
+					tableID = parser.NewDInt(parser.DInt(table.ID))
+				}
+				tableName := parser.NewDString(table.Name)
+				if err := addRow(
+					tableID,
+					tableName,
+					parser.NewDInt(parser.DInt(table.PrimaryIndex.ID)),
+					parser.NewDString(table.PrimaryIndex.Name),
+					primary,
+					parser.MakeDBool(parser.DBool(table.PrimaryIndex.Unique)),
+				); err != nil {
+					return err
+				}
+				for _, idx := range table.Indexes {
+					if err := addRow(
+						tableID,
+						tableName,
+						parser.NewDInt(parser.DInt(idx.ID)),
+						parser.NewDString(idx.Name),
+						secondary,
+						parser.MakeDBool(parser.DBool(idx.Unique)),
+					); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+	},
+}
+
+// crdbInternalIndexColumnsTable exposes the index columns.
+var crdbInternalIndexColumnsTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.index_columns (
+  descriptor_id    INT,
+  descriptor_name  STRING NOT NULL,
+  index_id         INT NOT NULL,
+  index_name       STRING NOT NULL,
+  column_type      STRING NOT NULL,
+  column_id        INT NOT NULL,
+  column_name      STRING,
+  column_direction STRING
+)
+`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error {
+		key := parser.NewDString("key")
+		storing := parser.NewDString("storing")
+		extra := parser.NewDString("extra")
+		composite := parser.NewDString("composite")
+		idxDirMap := map[sqlbase.IndexDescriptor_Direction]parser.Datum{
+			sqlbase.IndexDescriptor_ASC:  parser.NewDString(sqlbase.IndexDescriptor_ASC.String()),
+			sqlbase.IndexDescriptor_DESC: parser.NewDString(sqlbase.IndexDescriptor_DESC.String()),
+		}
+		return forEachTableDescAll(ctx, p, prefix,
+			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+				tableID := parser.DNull
+				if table.ID != keys.VirtualDescriptorID {
+					tableID = parser.NewDInt(parser.DInt(table.ID))
+				}
+				tableName := parser.NewDString(table.Name)
+				reportIndex := func(idx *sqlbase.IndexDescriptor) error {
+					idxID := parser.NewDInt(parser.DInt(idx.ID))
+					idxName := parser.NewDString(idx.Name)
+
+					// Report the main (key) columns.
+					for i, c := range idx.ColumnIDs {
+						colName := parser.DNull
+						colDir := parser.DNull
+						if i >= len(idx.ColumnNames) {
+							// We log an error here, instead of reporting an error
+							// to the user, because we really want to see the
+							// erroneous data in the virtual table.
+							log.Errorf(ctx, "index descriptor for [%d@%d] (%s.%s@%s) has more key column IDs (%d) than names (%d) (corrupted schema?)",
+								table.ID, idx.ID, db.Name, table.Name, idx.Name,
+								len(idx.ColumnIDs), len(idx.ColumnNames))
+						} else {
+							colName = parser.NewDString(idx.ColumnNames[i])
+						}
+						if i >= len(idx.ColumnDirections) {
+							// See comment above.
+							log.Errorf(ctx, "index descriptor for [%d@%d] (%s.%s@%s) has more key column IDs (%d) than directions (%d) (corrupted schema?)",
+								table.ID, idx.ID, db.Name, table.Name, idx.Name,
+								len(idx.ColumnIDs), len(idx.ColumnDirections))
+						} else {
+							colDir = idxDirMap[idx.ColumnDirections[i]]
+						}
+
+						if err := addRow(
+							tableID, tableName, idxID, idxName,
+							key, parser.NewDInt(parser.DInt(c)), colName, colDir,
+						); err != nil {
+							return err
+						}
+					}
+
+					// Report the stored columns.
+					for _, c := range idx.StoreColumnIDs {
+						if err := addRow(
+							tableID, tableName, idxID, idxName,
+							storing, parser.NewDInt(parser.DInt(c)), parser.DNull, parser.DNull,
+						); err != nil {
+							return err
+						}
+					}
+
+					// Report the extra columns.
+					for _, c := range idx.ExtraColumnIDs {
+						if err := addRow(
+							tableID, tableName, idxID, idxName,
+							extra, parser.NewDInt(parser.DInt(c)), parser.DNull, parser.DNull,
+						); err != nil {
+							return err
+						}
+					}
+
+					// Report the composite columns
+					for _, c := range idx.CompositeColumnIDs {
+						if err := addRow(
+							tableID, tableName, idxID, idxName,
+							composite, parser.NewDInt(parser.DInt(c)), parser.DNull, parser.DNull,
+						); err != nil {
+							return err
+						}
+					}
+
+					return nil
+				}
+
+				if err := reportIndex(&table.PrimaryIndex); err != nil {
+					return err
+				}
+				for i := range table.Indexes {
+					if err := reportIndex(&table.Indexes[i]); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+	},
+}
+
+// crdbInternalBackwardDependenciesTable exposes the backward
+// inter-descriptor dependencies.
+var crdbInternalBackwardDependenciesTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.backward_dependencies (
+  descriptor_id      INT,
+  descriptor_name    STRING NOT NULL,
+  index_id           INT,
+  dependson_id       INT NOT NULL,
+  dependson_type     STRING NOT NULL,
+  dependson_index_id INT,
+  dependson_name     STRING,
+  dependson_details  STRING
+)
+`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error {
+		fkDep := parser.NewDString("fk")
+		viewDep := parser.NewDString("view")
+		interleaveDep := parser.NewDString("interleave")
+		return forEachTableDescAll(ctx, p, prefix,
+			func(_ *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+				tableID := parser.DNull
+				if table.ID != keys.VirtualDescriptorID {
+					tableID = parser.NewDInt(parser.DInt(table.ID))
+				}
+				tableName := parser.NewDString(table.Name)
+
+				reportIdxDeps := func(idx *sqlbase.IndexDescriptor) error {
+					idxID := parser.NewDInt(parser.DInt(idx.ID))
+					if idx.ForeignKey.Table != 0 {
+						fkRef := &idx.ForeignKey
+						if err := addRow(
+							tableID, tableName,
+							idxID,
+							parser.NewDInt(parser.DInt(fkRef.Table)),
+							fkDep,
+							parser.NewDInt(parser.DInt(fkRef.Index)),
+							parser.NewDString(fkRef.Name),
+							parser.NewDString(fmt.Sprintf("SharedPrefixLen: %d", fkRef.SharedPrefixLen)),
+						); err != nil {
+							return err
+						}
+					}
+
+					for _, interleaveParent := range idx.Interleave.Ancestors {
+						if err := addRow(
+							tableID, tableName,
+							idxID,
+							parser.NewDInt(parser.DInt(interleaveParent.TableID)),
+							interleaveDep,
+							parser.NewDInt(parser.DInt(interleaveParent.IndexID)),
+							parser.DNull,
+							parser.NewDString(fmt.Sprintf("SharedPrefixLen: %d",
+								interleaveParent.SharedPrefixLen)),
+						); err != nil {
+							return err
+						}
+					}
+					return nil
+				}
+
+				// Record the backward references of the primary index.
+				if err := reportIdxDeps(&table.PrimaryIndex); err != nil {
+					return err
+				}
+
+				// Record the backward references of secondary indexes.
+				for i := range table.Indexes {
+					if err := reportIdxDeps(&table.Indexes[i]); err != nil {
+						return err
+					}
+				}
+
+				// Record the view dependencies.
+				for _, tIdx := range table.DependsOn {
+					if err := addRow(
+						tableID, tableName,
+						parser.DNull,
+						parser.NewDInt(parser.DInt(tIdx)),
+						viewDep,
+						parser.DNull,
+						parser.DNull,
+						parser.DNull,
+					); err != nil {
+						return err
+					}
+				}
+
+				return nil
+			})
+	},
+}
+
+// crdbInternalForwardDependenciesTable exposes the forward
+// inter-descriptor dependencies.
+var crdbInternalForwardDependenciesTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.forward_dependencies (
+  descriptor_id         INT,
+  descriptor_name       STRING NOT NULL,
+  index_id              INT,
+  dependedonby_id       INT NOT NULL,
+  dependedonby_type     STRING NOT NULL,
+  dependedonby_index_id INT,
+  dependedonby_name     STRING,
+  dependedonby_details  STRING
+)
+`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error {
+		fkDep := parser.NewDString("fk")
+		viewDep := parser.NewDString("view")
+		interleaveDep := parser.NewDString("interleave")
+		return forEachTableDescAll(ctx, p, prefix,
+			func(_ *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+				tableID := parser.DNull
+				if table.ID != keys.VirtualDescriptorID {
+					tableID = parser.NewDInt(parser.DInt(table.ID))
+				}
+				tableName := parser.NewDString(table.Name)
+
+				reportIdxDeps := func(idx *sqlbase.IndexDescriptor) error {
+					idxID := parser.NewDInt(parser.DInt(idx.ID))
+					for _, fkRef := range idx.ReferencedBy {
+						if err := addRow(
+							tableID, tableName,
+							idxID,
+							parser.NewDInt(parser.DInt(fkRef.Table)),
+							fkDep,
+							parser.NewDInt(parser.DInt(fkRef.Index)),
+							parser.NewDString(fkRef.Name),
+							parser.NewDString(fmt.Sprintf("SharedPrefixLen: %d", fkRef.SharedPrefixLen)),
+						); err != nil {
+							return err
+						}
+					}
+
+					for _, interleaveRef := range idx.InterleavedBy {
+						if err := addRow(
+							tableID, tableName,
+							idxID,
+							parser.NewDInt(parser.DInt(interleaveRef.Table)),
+							interleaveDep,
+							parser.NewDInt(parser.DInt(interleaveRef.Index)),
+							parser.DNull,
+							parser.NewDString(fmt.Sprintf("SharedPrefixLen: %d",
+								interleaveRef.SharedPrefixLen)),
+						); err != nil {
+							return err
+						}
+					}
+					return nil
+				}
+
+				// Record the backward references of the primary index.
+				if err := reportIdxDeps(&table.PrimaryIndex); err != nil {
+					return err
+				}
+
+				// Record the backward references of secondary indexes.
+				for i := range table.Indexes {
+					if err := reportIdxDeps(&table.Indexes[i]); err != nil {
+						return err
+					}
+				}
+
+				// Record the view dependencies.
+				for _, dep := range table.DependedOnBy {
+					if err := addRow(
+						tableID, tableName,
+						parser.DNull,
+						parser.NewDInt(parser.DInt(dep.ID)),
+						viewDep,
+						parser.NewDInt(parser.DInt(dep.IndexID)),
+						parser.DNull,
+						parser.NewDString(fmt.Sprintf("Columns: %v", dep.ColumnIDs)),
+					); err != nil {
+						return err
+					}
+				}
+
+				return nil
 			})
 	},
 }

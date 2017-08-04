@@ -204,11 +204,14 @@ DROP DATABASE other_db
 query TT
 select table_schema, table_name FROM information_schema.tables ORDER BY 1, 2
 ----
+crdb_internal       backward_dependencies
 crdb_internal       builtin_functions
 crdb_internal       cluster_queries
 crdb_internal       cluster_sessions
 crdb_internal       cluster_settings
 crdb_internal       create_statements
+crdb_internal       forward_dependencies
+crdb_internal       index_columns
 crdb_internal       jobs
 crdb_internal       leases
 crdb_internal       node_build_info
@@ -218,6 +221,8 @@ crdb_internal       node_statement_statistics
 crdb_internal       schema_changes
 crdb_internal       session_trace
 crdb_internal       session_variables
+crdb_internal       table_columns
+crdb_internal       table_indexes
 crdb_internal       tables
 information_schema  columns
 information_schema  key_column_usage
@@ -339,18 +344,23 @@ ui
 tables
 tables
 table_privileges
+table_indexes
 table_constraints
+table_columns
 
 # Check that the metadata is reported properly.
 query TTTTI colnames
 SELECT * FROM information_schema.tables
 ----
 table_catalog  table_schema        table_name                 table_type   version
+def            crdb_internal       backward_dependencies      SYSTEM VIEW  1
 def            crdb_internal       builtin_functions          SYSTEM VIEW  1
 def            crdb_internal       cluster_queries            SYSTEM VIEW  1
 def            crdb_internal       cluster_sessions           SYSTEM VIEW  1
 def            crdb_internal       cluster_settings           SYSTEM VIEW  1
 def            crdb_internal       create_statements          SYSTEM VIEW  1
+def            crdb_internal       forward_dependencies       SYSTEM VIEW  1
+def            crdb_internal       index_columns              SYSTEM VIEW  1
 def            crdb_internal       jobs                       SYSTEM VIEW  1
 def            crdb_internal       leases                     SYSTEM VIEW  1
 def            crdb_internal       node_build_info            SYSTEM VIEW  1
@@ -360,6 +370,8 @@ def            crdb_internal       node_statement_statistics  SYSTEM VIEW  1
 def            crdb_internal       schema_changes             SYSTEM VIEW  1
 def            crdb_internal       session_trace              SYSTEM VIEW  1
 def            crdb_internal       session_variables          SYSTEM VIEW  1
+def            crdb_internal       table_columns              SYSTEM VIEW  1
+def            crdb_internal       table_indexes              SYSTEM VIEW  1
 def            crdb_internal       tables                     SYSTEM VIEW  1
 def            information_schema  columns                    SYSTEM VIEW  1
 def            information_schema  key_column_usage           SYSTEM VIEW  1
