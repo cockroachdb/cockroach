@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
@@ -612,8 +613,9 @@ func (n *createTableNode) Start(params runParams) error {
 
 	var desc sqlbase.TableDescriptor
 	var affected map[sqlbase.ID]*sqlbase.TableDescriptor
+	creationTime := params.p.txn.OrigTimestamp()
 	if n.n.As() {
-		desc, err = makeTableDescIfAs(n.n, n.dbDesc.ID, id, planColumns(n.sourcePlan), privs, &params.p.evalCtx)
+		desc, err = makeTableDescIfAs(n.n, n.dbDesc.ID, id, creationTime, planColumns(n.sourcePlan), privs, &params.p.evalCtx)
 	} else {
 		affected = make(map[sqlbase.ID]*sqlbase.TableDescriptor)
 		desc, err = params.p.makeTableDesc(params.ctx, n.n, n.dbDesc.ID, id, privs, affected)
@@ -621,6 +623,9 @@ func (n *createTableNode) Start(params runParams) error {
 	if err != nil {
 		return err
 	}
+
+	// Initialize ModificationTime to the creation time.
+	desc.ModificationTime = creationTime
 
 	// We need to validate again after adding the FKs.
 	// Only validate the table because backreferences aren't created yet.
@@ -1107,6 +1112,23 @@ func (p *planner) finalizeInterleave(
 	return nil
 }
 
+func initTableDescriptor(
+	id, parentID sqlbase.ID,
+	name string,
+	creationTime hlc.Timestamp,
+	privileges *sqlbase.PrivilegeDescriptor,
+) sqlbase.TableDescriptor {
+	return sqlbase.TableDescriptor{
+		ID:               id,
+		Name:             name,
+		ParentID:         parentID,
+		FormatVersion:    sqlbase.InterleavedFormatVersion,
+		Version:          1,
+		ModificationTime: creationTime,
+		Privileges:       privileges,
+	}
+}
+
 // makeViewTableDesc returns the table descriptor for a new view.
 //
 // It creates the descriptor directly in the PUBLIC state rather than
@@ -1124,15 +1146,8 @@ func (n *createViewNode) makeViewTableDesc(
 	privileges *sqlbase.PrivilegeDescriptor,
 	evalCtx *parser.EvalContext,
 ) (sqlbase.TableDescriptor, error) {
-	desc := sqlbase.TableDescriptor{
-		ID:            id,
-		Name:          viewName,
-		ParentID:      parentID,
-		FormatVersion: sqlbase.FamilyFormatVersion,
-		Version:       1,
-		Privileges:    privileges,
-		ViewQuery:     parser.AsStringWithFlags(n.n.AsSource, parser.FmtParsable),
-	}
+	desc := initTableDescriptor(id, parentID, viewName, n.p.txn.OrigTimestamp(), privileges)
+	desc.ViewQuery = parser.AsStringWithFlags(n.n.AsSource, parser.FmtParsable)
 	for i, colRes := range resultColumns {
 		colType, err := parser.DatumTypeToColumnType(colRes.Typ)
 		if err != nil {
@@ -1158,22 +1173,16 @@ func (n *createViewNode) makeViewTableDesc(
 func makeTableDescIfAs(
 	p *parser.CreateTable,
 	parentID, id sqlbase.ID,
+	creationTime hlc.Timestamp,
 	resultColumns []sqlbase.ResultColumn,
 	privileges *sqlbase.PrivilegeDescriptor,
 	evalCtx *parser.EvalContext,
 ) (desc sqlbase.TableDescriptor, err error) {
-	desc = sqlbase.TableDescriptor{
-		ID:            id,
-		ParentID:      parentID,
-		FormatVersion: sqlbase.InterleavedFormatVersion,
-		Version:       1,
-		Privileges:    privileges,
-	}
 	tableName, err := p.Table.Normalize()
 	if err != nil {
 		return desc, err
 	}
-	desc.Name = tableName.Table()
+	desc = initTableDescriptor(id, parentID, tableName.Table(), creationTime, privileges)
 	for i, colRes := range resultColumns {
 		colType, err := parser.DatumTypeToColumnType(colRes.Typ)
 		if err != nil {
@@ -1208,18 +1217,15 @@ func MakeTableDesc(
 	sessionDB string,
 	evalCtx *parser.EvalContext,
 ) (sqlbase.TableDescriptor, error) {
-	desc := sqlbase.TableDescriptor{
-		ID:            id,
-		ParentID:      parentID,
-		FormatVersion: sqlbase.InterleavedFormatVersion,
-		Version:       1,
-		Privileges:    privileges,
-	}
 	tableName, err := n.Table.Normalize()
 	if err != nil {
-		return desc, err
+		return sqlbase.TableDescriptor{}, err
 	}
-	desc.Name = tableName.Table()
+	var creationTime hlc.Timestamp
+	if txn != nil {
+		creationTime = txn.OrigTimestamp()
+	}
+	desc := initTableDescriptor(id, parentID, tableName.Table(), creationTime, privileges)
 
 	for _, def := range n.Defs {
 		if d, ok := def.(*parser.ColumnTableDef); ok {
