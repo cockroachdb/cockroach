@@ -610,6 +610,123 @@ func TestCommandQueueTimestampsEmpty(t *testing.T) {
 	}
 }
 
+// TestCommandQueueTransitiveDependencies verifies that if a dependency relation
+// between commands inserted into the CommandQueue should exist, it is always
+// transitively maintained even if other commands are inserted between them. This
+// is important because the transitive dependency relation is required for the
+// correctness of certain optimizations performed by the CommandQueue, as well as
+// by our approach to command cancellation and prerequisite migration.
+//
+// In effect, this means that as more commands are added to the dependency graph,
+// dependencies will always either be maintained directly or transitively through
+// other commands. This does not assert that we maintain the minimal set of
+// dependencies, but instead asserts that the addition of new commands never
+// results in a loss of dependency information that could allow for a loss of
+// serializability.
+func TestCommandQueueTransitiveDependencies(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	type cmdOps struct {
+		readOnly bool
+		ts       hlc.Timestamp
+		spans    []roachpb.Span
+	}
+	cmdOpsStr := func(ops cmdOps) string {
+		var b bytes.Buffer
+		if ops.readOnly {
+			b.WriteByte('R')
+		} else {
+			b.WriteByte('W')
+		}
+		fmt.Fprint(&b, ops.ts.WallTime)
+		fmt.Fprint(&b, ops.spans[0])
+		return b.String()
+	}
+
+	spansAB := []roachpb.Span{
+		mkSpan("a", "b"),
+	}
+	spansAC := []roachpb.Span{
+		mkSpan("a", "c"),
+	}
+	spansBC := []roachpb.Span{
+		mkSpan("b", "c"),
+	}
+
+	// forEachCmdOpsPerm calls the provided closure in a subtest for each permutation
+	// of different command options.
+	forEachCmdOpsPerm := func(t *testing.T, f func(*testing.T, cmdOps)) {
+		for _, readOnly := range []bool{false, true} {
+			for _, ts := range []hlc.Timestamp{zeroTS, makeTS(1, 0), makeTS(2, 0)} {
+				for _, spans := range [][]roachpb.Span{spansAB, spansAC, spansBC} {
+					ops := cmdOps{readOnly: readOnly, ts: ts, spans: spans}
+					t.Run(cmdOpsStr(ops), func(t *testing.T) {
+						f(t, ops)
+					})
+				}
+			}
+		}
+	}
+
+	// Permute over all possible options for three different commands.
+	forEachCmdOpsPerm(t, func(t *testing.T, ops1 cmdOps) {
+		forEachCmdOpsPerm(t, func(t *testing.T, ops2 cmdOps) {
+			forEachCmdOpsPerm(t, func(t *testing.T, ops3 cmdOps) {
+				// First we add only the first and third command and test
+				// whether the third depends on the first. This will
+				// tell us whether a transitive relation should be expected.
+				{
+					cq := NewCommandQueue(true)
+
+					cq.add(ops1.readOnly, ops1.ts, nil, ops1.spans)
+
+					pre3 := cq.getPrereqs(ops3.readOnly, ops3.ts, ops3.spans)
+					if expectDependency := len(pre3) > 0; !expectDependency {
+						// Adding a new command between two independent commands
+						// can result in all three becoming dependent. For instance,
+						// adding a write between two reads. This means that we can't
+						// assert that no dependency will later exist in the case
+						// where we see none before, so we have nothing to test here.
+						return
+					}
+				}
+
+				// Next we add all three commands to the command queue and
+				// verify that a dependency still exists between the first
+				// and third command.
+				{
+					cq := NewCommandQueue(true)
+
+					// Add command 1.
+					cmd1 := cq.add(ops1.readOnly, ops1.ts, nil, ops1.spans)
+
+					// Add command 2, taking note of whether it depends on command 1.
+					pre2 := cq.getPrereqs(ops2.readOnly, ops2.ts, ops2.spans)
+					dependency2to1 := len(pre2) > 0
+					cmd2 := cq.add(ops2.readOnly, ops2.ts, pre2, ops2.spans)
+
+					// Add command 3, taking note of whether it depends on command 1
+					// or on command 2.
+					pre3 := cq.getPrereqs(ops3.readOnly, ops3.ts, ops3.spans)
+					pre3Map := make(map[*cmd]bool, len(pre3))
+					for _, prereq := range pre3 {
+						pre3Map[prereq] = true
+					}
+					dependency3to1 := pre3Map[cmd1]
+					dependency3to2 := pre3Map[cmd2]
+
+					// Assert that a dependency still exists between command 3
+					// and command 1, either directly or through command 2.
+					if !(dependency3to1 || (dependency2to1 && dependency3to2)) {
+						t.Errorf("expected transitive dependency, found: 3->1=%t, 2->1=%t, 3->2=%t",
+							dependency3to1, dependency2to1, dependency3to2)
+					}
+				}
+			})
+		})
+	})
+}
+
 func BenchmarkCommandQueueGetPrereqsAllReadOnly(b *testing.B) {
 	// Test read-only getPrereqs performance for various number of command queue
 	// entries. See #13627 where a previous implementation of
