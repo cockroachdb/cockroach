@@ -238,8 +238,14 @@ SELECT k FROM t WHERE k = ANY ARRAY[2,4]
 2
 4
 
-# Creating multidimensional arrays should be disallowed.
+# Undocumented - bounds should be allowed, as in Postgres
+statement ok
+CREATE TABLE boundedtable (b INT[10], c INT ARRAY[10])
 
+statement ok
+DROP TABLE boundedtable
+
+# Creating multidimensional arrays should be disallowed.
 statement error syntax error
 CREATE TABLE badtable (b INT[][])
 
@@ -275,6 +281,20 @@ CREATE TABLE a (
   b INT[],
   INDEX c (b)
 )
+
+statement ok
+CREATE TABLE a (b INT ARRAY)
+
+query TT
+SHOW CREATE TABLE a
+----
+a  CREATE TABLE a (
+     b INT[] NULL,
+     FAMILY "primary" (b, rowid)
+   )
+
+statement ok
+DROP TABLE a
 
 statement ok
 CREATE TABLE a (b INT[], c INT[])

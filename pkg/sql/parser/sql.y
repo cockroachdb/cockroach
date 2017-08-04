@@ -4293,8 +4293,24 @@ typename:
     }
   }
   // SQL standard syntax, currently only one-dimensional
-| simple_typename ARRAY '[' ICONST ']' { return unimplementedWithIssue(sqllex, 2115) }
-| simple_typename ARRAY { return unimplementedWithIssue(sqllex, 2115) }
+  // Undocumented but support for potential Postgres compat
+| simple_typename ARRAY '[' ICONST ']' {
+    /* SKIP DOC */
+    var err error
+    $$.val, err = arrayOf($1.colType(), Exprs{NewDInt(DInt(-1))})
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+  }
+| simple_typename ARRAY {
+    var err error
+    $$.val, err = arrayOf($1.colType(), Exprs{NewDInt(DInt(-1))})
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+  }
 
 cast_target:
   typename
@@ -4310,7 +4326,11 @@ opt_array_bounds:
   // TODO(justin): reintroduce multiple array bounds
   // opt_array_bounds '[' ']' { $$.val = Exprs{NewDInt(DInt(-1))} }
   '[' ']' { $$.val = Exprs{NewDInt(DInt(-1))} }
-| '[' ICONST ']' { return unimplementedWithIssue(sqllex, 17156) }
+| '[' ICONST ']'
+  {
+    /* SKIP DOC */
+    $$.val = Exprs{NewDInt(DInt(-1))}
+  }
 | /* EMPTY */ { $$.val = Exprs(nil) }
 
 simple_typename:
