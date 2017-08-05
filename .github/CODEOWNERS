@@ -17,7 +17,8 @@
 /pkg/migration/sqlmigrations @cockroachdb/core @cockroachdb/sql-wiring
 
 /pkg/ccl/                    @cockroachdb/sql-ccl
-/pkg/cli/                    @cockroachdb/sql-ui
+/pkg/cli/                    @cockroachdb/cli
+/pkg/cli/sql*                @cockroachdb/sql-ui @cockroachdb/cli
 
 /pkg/sql/                    @cockroachdb/sql-rest
 
