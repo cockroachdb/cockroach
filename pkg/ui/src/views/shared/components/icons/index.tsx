@@ -1,5 +1,3 @@
-// Author: Max Lang (max@cockroachlabs.com)
-
 // Exports the following icons as SVG strings:
 //
 // clusterIcon, cockroachIcon, databaseIcon, gearIcon

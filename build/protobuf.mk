@@ -11,8 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 # implied. See the License for the specific language governing
 # permissions and limitations under the License.
-#
-# Author: Tamir Duberstein (tamird@gmail.com)
 
 # This file is evaluated in the repo's parent directory. See main.go's
 # go:generate invocation.

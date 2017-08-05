@@ -12,9 +12,6 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 //
-// Author: Radu Berinde (radu@cockroachlabs.com)
-// Author: Irfan Sharif (irfansharif@cockroachlabs.com)
-//
 // Processor definitions for distributed SQL APIs. See
 // docs/RFCS/distributed_sql.md.
 // All the concepts here are "physical plan" concepts.

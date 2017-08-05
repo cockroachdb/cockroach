@@ -497,7 +497,7 @@ func TestStyle(t *testing.T) {
 
 	t.Run("TestAuthorTags", func(t *testing.T) {
 		t.Parallel()
-		cmd, stderr, filter, err := dirCmd(pkg.Dir, "git", "grep", "-lE", `^// Author:`, "--", "*.go")
+		cmd, stderr, filter, err := dirCmd(pkg.Dir, "git", "grep", "-lE", "^// Author:")
 		if err != nil {
 			t.Fatal(err)
 		}
