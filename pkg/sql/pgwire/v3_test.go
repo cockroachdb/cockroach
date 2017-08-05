@@ -23,6 +23,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -39,6 +40,7 @@ func makeTestV3Conn(c net.Conn) v3Conn {
 	exec := sql.NewExecutor(
 		sql.ExecutorConfig{
 			AmbientCtx:              log.AmbientContext{Tracer: tracing.NewTracer()},
+			Settings:                cluster.MakeClusterSettings(),
 			HistogramWindowInterval: metric.TestSampleInterval,
 			TestingKnobs:            &sql.ExecutorTestingKnobs{},
 			SessionRegistry:         sql.MakeSessionRegistry(),

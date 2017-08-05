@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -52,9 +53,10 @@ func TestOutbox(t *testing.T) {
 	evalCtx := parser.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
-		stopper: stopper,
-		evalCtx: evalCtx,
-		rpcCtx:  newInsecureRPCContext(stopper),
+		Settings: cluster.MakeClusterSettings(),
+		stopper:  stopper,
+		evalCtx:  evalCtx,
+		rpcCtx:   newInsecureRPCContext(stopper),
 	}
 	flowID := FlowID{uuid.MakeV4()}
 	streamID := StreamID(42)
@@ -206,9 +208,10 @@ func TestOutboxInitializesStreamBeforeRecevingAnyRows(t *testing.T) {
 	evalCtx := parser.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
-		stopper: stopper,
-		evalCtx: evalCtx,
-		rpcCtx:  newInsecureRPCContext(stopper),
+		Settings: cluster.MakeClusterSettings(),
+		stopper:  stopper,
+		evalCtx:  evalCtx,
+		rpcCtx:   newInsecureRPCContext(stopper),
 	}
 	flowID := FlowID{uuid.MakeV4()}
 	streamID := StreamID(42)
@@ -270,9 +273,10 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			evalCtx := parser.MakeTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
-				stopper: stopper,
-				evalCtx: evalCtx,
-				rpcCtx:  newInsecureRPCContext(stopper),
+				Settings: cluster.MakeClusterSettings(),
+				stopper:  stopper,
+				evalCtx:  evalCtx,
+				rpcCtx:   newInsecureRPCContext(stopper),
 			}
 			flowID := FlowID{uuid.MakeV4()}
 			streamID := StreamID(42)
@@ -340,7 +344,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 				// Wait for the consumer to connect.
 				call := <-mockServer.runSyncFlowCalls
 				outbox = newOutboxSyncFlowStream(call.stream)
-				outbox.setFlowCtx(&FlowCtx{stopper: stopper})
+				outbox.setFlowCtx(&FlowCtx{Settings: cluster.MakeClusterSettings(), stopper: stopper})
 				// In a RunSyncFlow call, the outbox runs under the call's context.
 				outbox.start(call.stream.Context(), &wg)
 				// Wait for the consumer to receive the header message that the outbox

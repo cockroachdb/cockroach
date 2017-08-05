@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -7410,6 +7409,11 @@ func TestGCWithoutThreshold(t *testing.T) {
 	desc := roachpb.RangeDescriptor{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("z")}
 	ctx := context.Background()
 
+	tc := &testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.Start(t, stopper)
+
 	options := []hlc.Timestamp{{}, hlc.Timestamp{}.Add(1, 0)}
 
 	for i, keyThresh := range options {
@@ -7420,7 +7424,7 @@ func TestGCWithoutThreshold(t *testing.T) {
 
 				gc.Threshold = keyThresh
 				gc.TxnSpanGCThreshold = txnThresh
-				declareKeysGC(desc, roachpb.Header{}, &gc, &spans)
+				declareKeysGC(desc, roachpb.Header{RangeID: tc.repl.RangeID}, &gc, &spans)
 
 				if num, exp := spans.len(), i+j+1; num != exp {
 					t.Fatalf("(%s,%s): expected %d declared keys, found %d",
@@ -7439,7 +7443,7 @@ func TestGCWithoutThreshold(t *testing.T) {
 				if _, err := evalGC(ctx, rw, CommandArgs{
 					Args: &gc,
 					EvalCtx: ReplicaEvalContext{
-						repl: &Replica{},
+						repl: tc.repl,
 						ss:   &spans,
 					},
 				}, &resp); err != nil {
@@ -8015,12 +8019,13 @@ func TestMakeTimestampCacheRequest(t *testing.T) {
 func TestCommandTooLarge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	defer settings.TestingSetByteSize(&maxCommandSize, 1024)()
-
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
+
+	maxCommandSize := tc.store.cfg.MaxCommandSize
+	maxCommandSize.Override(1024)
 
 	args := putArgs(roachpb.Key("k"),
 		[]byte(strings.Repeat("a", int(maxCommandSize.Get()))))

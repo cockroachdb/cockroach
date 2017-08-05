@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
@@ -246,6 +247,7 @@ type NodeInfo struct {
 // All fields holding a pointer or an interface are required to create
 // a Executor; the rest will have sane defaults set if omitted.
 type ExecutorConfig struct {
+	cluster.Settings
 	NodeInfo
 	AmbientCtx      log.AmbientContext
 	DB              *client.DB
@@ -317,9 +319,6 @@ type ExecutorTestingKnobs struct {
 	// StatementFilter; otherwise, the statement commits immediately after
 	// execution so there'll be nothing left to abort by the time the filter runs.
 	DisableAutoCommit bool
-
-	// If OverrideDistSQLMode is set, it is used instead of the cluster setting.
-	OverrideDistSQLMode *settings.EnumSetting
 
 	// DistSQLPlannerKnobs are testing knobs for distSQLPlanner.
 	DistSQLPlannerKnobs DistSQLPlannerTestingKnobs
@@ -411,7 +410,7 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 		DdlCount:    metric.NewCounter(MetaDdl),
 		MiscCount:   metric.NewCounter(MetaMisc),
 		QueryCount:  metric.NewCounter(MetaQuery),
-		sqlStats:    sqlStats{apps: make(map[string]*appStats)},
+		sqlStats:    sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
 	}
 }
 
@@ -422,6 +421,7 @@ func (e *Executor) Start(
 	ctx = e.AnnotateCtx(ctx)
 	log.Infof(ctx, "creating distSQLPlanner with address %s", nodeDesc.Address)
 	e.distSQLPlanner = newDistSQLPlanner(
+		e.cfg.Settings,
 		nodeDesc,
 		e.cfg.RPCContext,
 		e.cfg.DistSQLSrv,
@@ -645,7 +645,7 @@ func (e *Executor) ExecutePreparedStatement(
 func (e *Executor) execPrepared(
 	session *Session, stmt *PreparedStatement, pinfo *parser.PlaceholderInfo,
 ) (StatementResults, error) {
-	if log.V(2) || logStatementsExecuteEnabled.Get() {
+	if log.V(2) || e.cfg.LogStatementsExecuteEnabled.Get() {
 		log.Infof(session.Ctx(), "execPrepared: %s", stmt.Str)
 	}
 
@@ -704,7 +704,7 @@ func (e *Executor) execRequest(
 	var err error
 	txnState := &session.TxnState
 
-	if log.V(2) || logStatementsExecuteEnabled.Get() {
+	if log.V(2) || e.cfg.LogStatementsExecuteEnabled.Get() {
 		log.Infof(session.Ctx(), "execRequest: %s", sql)
 	}
 
@@ -726,7 +726,7 @@ func (e *Executor) execRequest(
 				e.recordUnimplementedFeature(pgErr.InternalCommand)
 			}
 		}
-		if log.V(2) || logStatementsExecuteEnabled.Get() {
+		if log.V(2) || e.cfg.LogStatementsExecuteEnabled.Get() {
 			log.Infof(session.Ctx(), "execRequest: error: %v", err)
 		}
 		// A parse error occurred: we can't determine if there were multiple
@@ -870,7 +870,7 @@ func (e *Executor) execParsed(
 			lastRes.Err = convertToErrWithPGCode(err)
 		}
 
-		if err != nil && (log.V(2) || logStatementsExecuteEnabled.Get()) {
+		if err != nil && (log.V(2) || e.cfg.LogStatementsExecuteEnabled.Get()) {
 			log.Infof(session.Ctx(), "execRequest: error: %v", err)
 		}
 
@@ -1097,7 +1097,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 	}
 
 	for i, stmt := range stmts {
-		if log.V(2) || logStatementsExecuteEnabled.Get() ||
+		if log.V(2) || e.cfg.LogStatementsExecuteEnabled.Get() ||
 			log.HasSpanOrEvent(session.Ctx()) {
 			log.VEventf(session.Ctx(), 2, "executing %d/%d: %s", i+1, len(stmts), stmt)
 		}
@@ -1750,7 +1750,7 @@ func (e *Executor) execClassic(planner *planner, plan planNode, result *Result) 
 // on the session settings.
 func (e *Executor) shouldUseDistSQL(planner *planner, plan planNode) (bool, error) {
 	distSQLMode := planner.session.DistSQLMode
-	if distSQLMode == DistSQLOff {
+	if distSQLMode == cluster.DistSQLOff {
 		return false, nil
 	}
 	// Don't try to run empty nodes (e.g. SET commands) with distSQL.
@@ -1777,7 +1777,7 @@ func (e *Executor) shouldUseDistSQL(planner *planner, plan planNode) (bool, erro
 
 	if err != nil {
 		// If the distSQLMode is ALWAYS, any unsupported statement is an error.
-		if distSQLMode == DistSQLAlways {
+		if distSQLMode == cluster.DistSQLAlways {
 			return false, err
 		}
 		// Don't use distSQL for this request.
@@ -1785,7 +1785,7 @@ func (e *Executor) shouldUseDistSQL(planner *planner, plan planNode) (bool, erro
 		return false, nil
 	}
 
-	if distSQLMode == DistSQLAuto && !distribute {
+	if distSQLMode == cluster.DistSQLAuto && !distribute {
 		log.VEventf(planner.session.Ctx(), 1, "not distributing query")
 		return false, nil
 	}

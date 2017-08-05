@@ -28,9 +28,7 @@ import (
 	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
 
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
@@ -54,12 +52,6 @@ const (
 	fieldNameSpanID  = prefixTracerState + "spanid"
 	// fieldNameShadow is the name of the shadow tracer.
 	fieldNameShadowType = prefixTracerState + "shadowtype"
-)
-
-var enableNetTrace = settings.RegisterBoolSetting(
-	"trace.debug.enable",
-	"if set, traces for recent requests can be seen in the /debug page",
-	false,
 )
 
 // Tracer is our own custom implementation of opentracing.Tracer. It supports:
@@ -91,25 +83,59 @@ type Tracer struct {
 	// have the option of passing the Recordable option to their constructor.
 	forceRealSpans bool
 
+	// True if tracing to the debug/requests endpoint. Accessed via t.useNetTrace().
+	_useNetTrace int32 // updated atomically
+
 	// Pointer to shadowTracer, if using one.
 	shadowTracer unsafe.Pointer
 }
 
 var _ opentracing.Tracer = &Tracer{}
 
-// NewTracer creates a Tracer. The cluster settings control whether
-// we trace to net/trace and/or lightstep.
+// NewTracer creates a Tracer. It initially tries to run with minimal overhead
+// and collects essentially nothing; use Reconfigure() to enable various tracing
+// backends.
 func NewTracer() *Tracer {
 	t := &Tracer{}
 	t.noopSpan.tracer = t
-	updateShadowTracer(t)
-	tracerRegistry.Add(t)
 	return t
+}
+
+// ReconfigurationOptions is an interface that avoids a dependency on pkg/settings/cluster.
+// The underlying implementation is usually a cluster.ClusterSetting.TracingOptions.
+type ReconfigurationOptions interface {
+	EnableNetTrace() bool
+	LightstepToken() string
+	ZipkinAddr() string
+}
+
+// Reconfigure reconfigures the tracer with the given debug/requests switch,
+// lightstep token, and zipkin collector address. Empty values disable the
+// respective functionality.
+func (t *Tracer) Reconfigure(o ReconfigurationOptions) {
+	if lsToken := o.LightstepToken(); lsToken != "" {
+		t.setShadowTracer(createLightStepTracer(lsToken))
+	} else if zipkinAddr := o.ZipkinAddr(); zipkinAddr != "" {
+		t.setShadowTracer(createZipkinTracer(zipkinAddr))
+	} else {
+		t.setShadowTracer(nil, nil)
+	}
+	var nt int32
+	if o.EnableNetTrace() {
+		nt = 1
+	}
+	atomic.StoreInt32(&t._useNetTrace, nt)
+}
+
+// FIXME(tschottdorf): remove this once it's used.
+var _ = (*Tracer)(nil).Reconfigure
+
+func (t *Tracer) useNetTrace() bool {
+	return atomic.LoadInt32(&t._useNetTrace) != 0
 }
 
 // Close cleans up any resources associated with a Tracer.
 func (t *Tracer) Close() {
-	tracerRegistry.Remove(t)
 	// Clean up any shadow tracer.
 	t.setShadowTracer(nil, nil)
 }
@@ -165,10 +191,9 @@ func (t *Tracer) StartSpan(
 		}
 	}
 
-	netTrace := enableNetTrace.Get()
 	shadowTr := t.getShadowTracer()
 
-	if len(opts) == 0 && !netTrace && shadowTr == nil && !t.forceRealSpans {
+	if len(opts) == 0 && !t.useNetTrace() && shadowTr == nil && !t.forceRealSpans {
 		return &t.noopSpan
 	}
 
@@ -220,7 +245,7 @@ func (t *Tracer) StartSpan(
 	// If tracing is disabled, the Recordable option wasn't passed, and we're not
 	// part of a recording or snowball trace, avoid overhead and return a noop
 	// span.
-	if !recordable && recordingGroup == nil && shadowTr == nil && !netTrace && !t.forceRealSpans {
+	if !recordable && recordingGroup == nil && shadowTr == nil && !t.useNetTrace() && !t.forceRealSpans {
 		return &t.noopSpan
 	}
 
@@ -255,7 +280,7 @@ func (t *Tracer) StartSpan(
 		s.enableRecording(recordingGroup, recordingType)
 	}
 
-	if netTrace {
+	if t.useNetTrace() {
 		s.netTr = trace.New("tracing", operationName)
 		s.netTr.SetMaxEvents(maxLogsPerSpan)
 	}
@@ -662,41 +687,4 @@ func TestingCheckRecordedSpans(recSpans []RecordedSpan, expected string) error {
 func matchesWithoutFileLine(msg string, expected string) bool {
 	groups := regexp.MustCompile(`^(event: ).*:[0-9]* (.*)$`).FindStringSubmatch(msg)
 	return len(groups) == 3 && fmt.Sprintf("event: %s", groups[2]) == expected
-}
-
-// The tracer registry keeps track of active Tracer instances; it is used to
-// update the shadow tracer in those instances when the relevant settings
-// change. It is needed because the cluster settings are singleton globals.
-type tracerRegistryImpl struct {
-	syncutil.Mutex
-	tracers []*Tracer
-}
-
-var tracerRegistry tracerRegistryImpl
-
-func (tr *tracerRegistryImpl) Add(t *Tracer) {
-	tr.Lock()
-	tr.tracers = append(tr.tracers, t)
-	tr.Unlock()
-}
-
-func (tr *tracerRegistryImpl) Remove(t *Tracer) {
-	tr.Lock()
-	defer tr.Unlock()
-
-	for i := range tr.tracers {
-		if tr.tracers[i] == t {
-			tr.tracers = tr.tracers[:i+copy(tr.tracers[i:], tr.tracers[i+1:])]
-			return
-		}
-	}
-	panic("removing unknown tracer")
-}
-
-func (tr *tracerRegistryImpl) ForEach(fn func(t *Tracer)) {
-	tr.Lock()
-	defer tr.Unlock()
-	for _, t := range tr.tracers {
-		fn(t)
-	}
 }

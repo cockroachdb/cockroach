@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -203,6 +204,7 @@ func TestSorter(t *testing.T) {
 				evalCtx := parser.MakeTestingEvalContext()
 				defer evalCtx.Stop(ctx)
 				flowCtx := FlowCtx{
+					Settings:    cluster.MakeClusterSettings(),
 					evalCtx:     evalCtx,
 					tempStorage: tempEngine,
 				}
@@ -249,7 +251,8 @@ func BenchmarkSortAll(b *testing.B) {
 	evalCtx := parser.MakeTestingEvalContext()
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
-		evalCtx: evalCtx,
+		Settings: cluster.MakeClusterSettings(),
+		evalCtx:  evalCtx,
 	}
 
 	// One column integer rows.
@@ -291,7 +294,8 @@ func BenchmarkSortLimit(b *testing.B) {
 	evalCtx := parser.MakeTestingEvalContext()
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
-		evalCtx: evalCtx,
+		Settings: cluster.MakeClusterSettings(),
+		evalCtx:  evalCtx,
 	}
 
 	// One column integer rows.

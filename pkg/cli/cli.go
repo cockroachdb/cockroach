@@ -44,7 +44,8 @@ func Main() {
 		context.Background(),
 		os.Args[1],
 	)
-	defer log.RecoverAndReportPanic(context.Background())
+
+	defer log.RecoverAndReportPanic(context.Background(), serverCfg.ReportingSettings)
 
 	if err := Run(os.Args[1:]); err != nil {
 		fmt.Fprintf(stderr, "Failed running %q\n", os.Args[1])

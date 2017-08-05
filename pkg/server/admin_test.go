@@ -38,7 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -105,6 +105,10 @@ func TestAdminDebugExpVar(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
+
+	// This test accesses the debug pages, which currently use this singleton
+	// that needs to be populated manually.
+	ClusterSettings = cluster.MakeClusterSettings()
 
 	jI, err := getJSON(s, debugURL(s)+"vars")
 	if err != nil {
@@ -821,10 +825,6 @@ func TestAdminAPIEvents(t *testing.T) {
 	}
 }
 
-const settingKey = "testing.b"
-
-var _ = settings.RegisterBoolSetting(settingKey, "", true)
-
 func TestAdminAPISettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -834,10 +834,13 @@ func TestAdminAPISettings(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 
-	allKeys := settings.Keys()
+	// Any bool that defaults to true will work here.
+	const settingKey = "diagnostics.reporting.report_metrics"
+	st := s.ClusterSettings()
+	allKeys := st.Keys()
 
 	checkSetting := func(t *testing.T, k string, v serverpb.SettingsResponse_Value) {
-		ref, ok := settings.Lookup(k)
+		ref, ok := st.Lookup(k)
 		if !ok {
 			t.Fatalf("%s: not found after initial lookup", k)
 		}

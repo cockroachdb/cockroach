@@ -24,6 +24,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -45,7 +46,7 @@ func setupRouter(
 		t.Fatal(err)
 	}
 
-	flowCtx := FlowCtx{evalCtx: *evalCtx}
+	flowCtx := FlowCtx{Settings: cluster.MakeClusterSettings(), evalCtx: *evalCtx}
 	r.init(&flowCtx, inputTypes)
 	wg := &sync.WaitGroup{}
 	r.start(context.TODO(), wg)
@@ -514,7 +515,7 @@ func TestRouterBlocks(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			flowCtx := FlowCtx{evalCtx: parser.MakeTestingEvalContext()}
+			flowCtx := FlowCtx{Settings: cluster.MakeClusterSettings(), evalCtx: parser.MakeTestingEvalContext()}
 			router.init(&flowCtx, colTypes)
 			var wg sync.WaitGroup
 			router.start(context.TODO(), &wg)

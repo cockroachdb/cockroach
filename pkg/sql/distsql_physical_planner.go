@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -40,7 +40,6 @@ import (
 	"golang.org/x/net/context"
 )
 
-// distSQLPlanner implements distSQL physical planning and running logic.
 //
 // A rough overview of the process:
 //
@@ -61,6 +60,7 @@ import (
 //    and add processing stages (connected to the result routers of the children
 //    node).
 type distSQLPlanner struct {
+	st cluster.Settings
 	// The node descriptor for the gateway node that initiated this query.
 	nodeDesc     roachpb.NodeDescriptor
 	rpcContext   *rpc.Context
@@ -80,23 +80,8 @@ const resolverPolicy = distsqlplan.BinPackingLeaseHolderChoice
 // debugging).
 var logPlanDiagram = envutil.EnvOrDefaultBool("COCKROACH_DISTSQL_LOG_PLAN", false)
 
-// If true, for index joins  we instantiate a join reader on every node that
-// has a stream (usually from a table reader). If false, there is a single join
-// reader.
-var distributeIndexJoin = settings.RegisterBoolSetting(
-	"sql.distsql.distribute_index_joins",
-	"if set, for index joins we instantiate a join reader on every node that has a "+
-		"stream; if not set, we use a single join reader",
-	true,
-)
-
-var planMergeJoins = settings.RegisterBoolSetting(
-	"sql.distsql.merge_joins.enabled",
-	"if set, we plan merge joins when possible",
-	true,
-)
-
 func newDistSQLPlanner(
+	st cluster.Settings,
 	nodeDesc roachpb.NodeDescriptor,
 	rpcCtx *rpc.Context,
 	distSQLSrv *distsqlrun.ServerImpl,
@@ -106,6 +91,7 @@ func newDistSQLPlanner(
 	testingKnobs DistSQLPlannerTestingKnobs,
 ) *distSQLPlanner {
 	dsp := &distSQLPlanner{
+		st:           st,
 		nodeDesc:     nodeDesc,
 		rpcContext:   rpcCtx,
 		stopper:      stopper,
@@ -1313,7 +1299,7 @@ ColLoop:
 		plan.planToStreamColMap[col] = i
 	}
 
-	if distributeIndexJoin.Get() && len(plan.ResultRouters) > 1 {
+	if dsp.st.DistributeIndexJoin.Get() && len(plan.ResultRouters) > 1 {
 		// Instantiate one join reader for every stream.
 		plan.AddNoGroupingStage(
 			distsqlrun.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
@@ -1463,7 +1449,7 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 		for i, rightPlanCol := range n.pred.rightEqualityIndices {
 			rightEqCols[i] = uint32(rightPlan.planToStreamColMap[rightPlanCol])
 		}
-		if planMergeJoins.Get() && len(n.mergeJoinOrdering) > 0 &&
+		if dsp.st.PlanMergeJoins.Get() && len(n.mergeJoinOrdering) > 0 &&
 			joinType == distsqlrun.JoinType_INNER {
 			// TODO(radu): we currently only use merge joins when we have an ordering on
 			// all equality columns. We should relax this by either:

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -150,6 +151,7 @@ func (s raftTransportStatsSlice) Less(i, j int) bool { return s[i].nodeID < s[j]
 // which remote hung up.
 type RaftTransport struct {
 	log.AmbientContext
+	st cluster.Settings
 
 	resolver   NodeAddressResolver
 	rpcContext *rpc.Context
@@ -163,12 +165,13 @@ type RaftTransport struct {
 // NewDummyRaftTransport returns a dummy raft transport for use in tests which
 // need a non-nil raft transport that need not function.
 func NewDummyRaftTransport() *RaftTransport {
-	return NewRaftTransport(log.AmbientContext{}, nil, nil, nil)
+	return NewRaftTransport(log.AmbientContext{}, cluster.MakeClusterSettings(), nil, nil, nil)
 }
 
 // NewRaftTransport creates a new RaftTransport.
 func NewRaftTransport(
 	ambient log.AmbientContext,
+	st cluster.Settings,
 	resolver NodeAddressResolver,
 	grpcServer *grpc.Server,
 	rpcContext *rpc.Context,
@@ -177,6 +180,7 @@ func NewRaftTransport(
 		AmbientContext: ambient,
 		resolver:       resolver,
 		rpcContext:     rpcContext,
+		st:             st,
 	}
 
 	if grpcServer != nil {
@@ -641,5 +645,5 @@ func (t *RaftTransport) SendSnapshot(
 			log.Warningf(ctx, "failed to close snapshot stream: %s", err)
 		}
 	}()
-	return sendSnapshot(ctx, stream, storePool, header, snap, newBatch, sent)
+	return sendSnapshot(ctx, t.st, stream, storePool, header, snap, newBatch, sent)
 }

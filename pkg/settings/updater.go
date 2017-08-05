@@ -41,27 +41,50 @@ func EncodeFloat(f float64) string {
 	return strconv.FormatFloat(f, 'E', -1, 64)
 }
 
-// Updater is a helper for updating the in-memory settings.
+// DefaultsUpdater is a helper for updating the in-memory settings.
 //
 // RefreshSettings passes the serialized representations of all individual
 // settings -- e.g. the rows read from the system.settings table. We update the
 // wrapped atomic settings values as we go and note which settings were updated,
 // then set the rest to default in Done().
-type Updater map[string]struct{}
+type DefaultsUpdater struct {
+	r Registry
+	m map[string]struct{}
+}
 
-// MakeUpdater returns a new Updater, pre-alloced to the registry size.
-func MakeUpdater() Updater {
-	return make(Updater, len(registry))
+// An Updater is a helper interface used for updating the settings in a
+// Registry.
+type Updater interface {
+	Set(k, rawValue, valType string) error
+	Done()
+}
+
+// A NoopUpdater ignores all updates.
+type NoopUpdater struct{}
+
+// Set implements Updater. It is a no-op.
+func (u NoopUpdater) Set(_, _, _ string) error { return nil }
+
+// Done implements Updater. It is a no-op.
+func (u NoopUpdater) Done() {}
+
+// MakeDefaultsUpdater makes a DefaultsUpdater.
+func MakeDefaultsUpdater(r Registry) DefaultsUpdater {
+	return DefaultsUpdater{
+		m: make(map[string]struct{}, len(r)),
+		r: r,
+	}
 }
 
 // Set attempts to parse and update a setting and notes that it was updated.
-func (u Updater) Set(key, rawValue string, vt string) error {
-	d, ok := registry[key]
+func (u DefaultsUpdater) Set(key, rawValue string, vt string) error {
+	d, ok := u.r[key]
 	if !ok {
 		// Likely a new setting this old node doesn't know about.
 		return errors.Errorf("unknown setting '%s'", key)
 	}
-	u[key] = struct{}{}
+
+	u.m[key] = struct{}{}
 
 	if expected := d.Typ(); vt != expected {
 		return errors.Errorf("setting '%s' defined as type %s, not %s", key, expected, vt)
@@ -108,9 +131,9 @@ func (u Updater) Set(key, rawValue string, vt string) error {
 }
 
 // Done sets all settings not updated by the updater to their default values.
-func (u Updater) Done() {
-	for k, v := range registry {
-		if _, ok := u[k]; !ok {
+func (u DefaultsUpdater) Done() {
+	for k, v := range u.r {
+		if _, ok := u.m[k]; !ok {
 			v.setToDefault()
 		}
 	}

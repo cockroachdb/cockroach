@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -49,6 +50,7 @@ func (l *localTestClusterTransport) SendNext(ctx context.Context, done chan<- Ba
 // InitSenderForLocalTestCluster initializes a TxnCoordSender that can be used
 // with LocalTestCluster.
 func InitSenderForLocalTestCluster(
+	st cluster.Settings,
 	nodeDesc *roachpb.NodeDescriptor,
 	tracer opentracing.Tracer,
 	clock *hlc.Clock,
@@ -83,6 +85,7 @@ func InitSenderForLocalTestCluster(
 	ambient := log.AmbientContext{Tracer: tracer}
 	return NewTxnCoordSender(
 		ambient,
+		st,
 		distSender,
 		clock,
 		false, /* !linearizable */

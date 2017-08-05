@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -109,27 +109,41 @@ func clientKVsToEngineKVs(kvs []client.KeyValue) []engine.MVCCKeyValue {
 func TestImport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	t.Run("WriteBatch", func(t *testing.T) {
-		t.Run("batch=default", runTestImport)
+		disableSSTable := func(st cluster.Settings) {
+			st.AddSSTableEnabled.Override(false)
+		}
+		t.Run("batch=default", func(t *testing.T) {
+			runTestImport(t, disableSSTable)
+		})
 		t.Run("batch=1", func(t *testing.T) {
 			// The test normally doesn't trigger the batching behavior, so lower
 			// the threshold to force it.
-			defer settings.TestingSetByteSize(&importBatchSize, 1)()
-			runTestImport(t)
+			init := func(st cluster.Settings) {
+				st.ImportBatchSize.Override(1)
+			}
+			runTestImport(t, init)
 		})
 	})
 	t.Run("AddSSTable", func(t *testing.T) {
-		defer settings.TestingSetBool(&AddSSTableEnabled, true)()
-		t.Run("batch=default", runTestImport)
+		enableSSTable := func(st cluster.Settings) {
+			st.AddSSTableEnabled.Override(true)
+		}
+		t.Run("batch=default", func(t *testing.T) {
+			runTestImport(t, enableSSTable)
+		})
 		t.Run("batch=1", func(t *testing.T) {
 			// The test normally doesn't trigger the batching behavior, so lower
 			// the threshold to force it.
-			defer settings.TestingSetByteSize(&importBatchSize, 1)()
-			runTestImport(t)
+			init := func(st cluster.Settings) {
+				enableSSTable(st)
+				st.ImportBatchSize.Override(1)
+			}
+			runTestImport(t, init)
 		})
 	})
 }
 
-func runTestImport(t *testing.T) {
+func runTestImport(t *testing.T, init func(cluster.Settings)) {
 	defer leaktest.AfterTest(t)()
 
 	dir, dirCleanupFn := testutils.TempDir(t)
@@ -237,6 +251,8 @@ func runTestImport(t *testing.T) {
 	args.StoreSpecs = []base.StoreSpec{{InMemory: false, Path: filepath.Join(dir, "testserver")}}
 	s, _, kvDB := serverutils.StartServer(t, args)
 	defer s.Stopper().Stop(ctx)
+
+	init(s.ClusterSettings())
 
 	storage, err := ExportStorageConfFromURI("nodelocal://" + dir)
 	if err != nil {

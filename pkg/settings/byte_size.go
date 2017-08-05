@@ -39,13 +39,13 @@ func (b *ByteSizeSetting) String() string {
 }
 
 // RegisterByteSizeSetting defines a new setting with type bytesize.
-func RegisterByteSizeSetting(key, desc string, defaultValue int64) *ByteSizeSetting {
-	return RegisterValidatedByteSizeSetting(key, desc, defaultValue, nil)
+func (r *Registry) RegisterByteSizeSetting(key, desc string, defaultValue int64) *ByteSizeSetting {
+	return r.RegisterValidatedByteSizeSetting(key, desc, defaultValue, nil)
 }
 
 // RegisterValidatedByteSizeSetting defines a new setting with type bytesize
 // with a validation function.
-func RegisterValidatedByteSizeSetting(
+func (r *Registry) RegisterValidatedByteSizeSetting(
 	key, desc string, defaultValue int64, validateFn func(int64) error,
 ) *ByteSizeSetting {
 	if validateFn != nil {
@@ -57,7 +57,7 @@ func RegisterValidatedByteSizeSetting(
 		defaultValue: defaultValue,
 		validateFn:   validateFn,
 	}}
-	register(key, desc, setting)
+	r.register(key, desc, setting)
 	return setting
 }
 
