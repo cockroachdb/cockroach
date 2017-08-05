@@ -23,15 +23,12 @@ import (
 	"time"
 
 	"github.com/kr/text"
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -44,64 +41,6 @@ var sqlConnURL, sqlConnUser, sqlConnDBName string
 var serverConnHost, serverConnPort, serverAdvertiseHost, serverAdvertisePort string
 var serverHTTPHost, serverHTTPPort string
 var clientConnHost, clientConnPort string
-var zoneConfig string
-var zoneDisableReplication bool
-
-var serverCfg = server.MakeConfig()
-var baseCfg = serverCfg.Config
-var cliCtx = cliContext{Config: baseCfg}
-var sqlCtx = sqlContext{cliContext: &cliCtx}
-var dumpCtx = dumpContext{cliContext: &cliCtx, dumpMode: dumpBoth}
-var debugCtx = debugContext{
-	startKey:   engine.NilKey,
-	endKey:     engine.MVCCKeyMax,
-	replicated: false,
-}
-
-// server-specific values of some flags.
-var serverInsecure bool
-var serverSSLCertsDir string
-var serverDecommission bool
-
-type nodeDecommissionWaitType int
-
-const (
-	nodeDecommissionWaitAll nodeDecommissionWaitType = iota
-	nodeDecommissionWaitLive
-	nodeDecommissionWaitNone
-)
-
-func (s *nodeDecommissionWaitType) String() string {
-	switch *s {
-	case nodeDecommissionWaitAll:
-		return "all"
-	case nodeDecommissionWaitLive:
-		return "live"
-	case nodeDecommissionWaitNone:
-		return "none"
-	}
-	return "???"
-}
-
-func (s *nodeDecommissionWaitType) Type() string {
-	return "string"
-}
-
-func (s *nodeDecommissionWaitType) Set(value string) error {
-	switch value {
-	case "all":
-		*s = nodeDecommissionWaitAll
-	case "live":
-		*s = nodeDecommissionWaitLive
-	case "none":
-		*s = nodeDecommissionWaitNone
-	default:
-		return errors.New("invalid value, must be any of 'all', 'live', 'none'")
-	}
-	return nil
-}
-
-var nodeDecommissionWait nodeDecommissionWaitType
 
 // InitCLIDefaults is used for testing.
 func InitCLIDefaults() {
@@ -297,11 +236,11 @@ func init() {
 
 		// Use a separate variable to store the value of ServerInsecure.
 		// We share the default with the ClientInsecure flag.
-		boolFlag(f, &serverInsecure, cliflags.ServerInsecure, baseCfg.Insecure)
+		boolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure, baseCfg.Insecure)
 
 		// Certificates directory. Use a server-specific flag and value to ignore environment
 		// variables, but share the same default.
-		stringFlag(f, &serverSSLCertsDir, cliflags.ServerCertsDir, base.DefaultCertsDirectory)
+		stringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir, base.DefaultCertsDirectory)
 
 		// Cluster joining flags.
 		varFlag(f, &serverCfg.JoinList, cliflags.Join)
@@ -370,14 +309,14 @@ func init() {
 	}
 
 	// Decommission command.
-	varFlag(decommissionNodeCmd.Flags(), &nodeDecommissionWait, cliflags.Wait)
+	varFlag(decommissionNodeCmd.Flags(), &nodeCtx.nodeDecommissionWait, cliflags.Wait)
 
 	// Quit command.
-	boolFlag(quitCmd.Flags(), &serverDecommission, cliflags.Decommission, false)
+	boolFlag(quitCmd.Flags(), &quitCtx.serverDecommission, cliflags.Decommission, false)
 
 	zf := setZoneCmd.Flags()
-	stringFlag(zf, &zoneConfig, cliflags.ZoneConfig, "")
-	boolFlag(zf, &zoneDisableReplication, cliflags.ZoneDisableReplication, false)
+	stringFlag(zf, &zoneCtx.zoneConfig, cliflags.ZoneConfig, "")
+	boolFlag(zf, &zoneCtx.zoneDisableReplication, cliflags.ZoneDisableReplication, false)
 
 	varFlag(sqlShellCmd.Flags(), &sqlCtx.execStmts, cliflags.Execute)
 	varFlag(dumpCmd.Flags(), &dumpCtx.dumpMode, cliflags.DumpMode)
