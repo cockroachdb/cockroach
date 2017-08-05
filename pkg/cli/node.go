@@ -236,7 +236,7 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 		}
 		return printDecommissionStatus(*resp)
 	}
-	return runDecommissionNodeImpl(ctx, c, nodeDecommissionWait, args)
+	return runDecommissionNodeImpl(ctx, c, nodeCtx.nodeDecommissionWait, args)
 }
 
 func runDecommissionNodeImpl(
