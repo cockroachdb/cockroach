@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
 
 package analyzer
 
@@ -40,7 +39,7 @@ func TestAnalyze(t *testing.T) {
 		{`prim int; struct Blah{int X = 3}`, `(typedef :name int)
 (typedef
     :name Blah
-    :type 
+    :type
         (struct
             (field :name X :type int :isslice false :tag 3)
         ))
@@ -50,7 +49,7 @@ func TestAnalyze(t *testing.T) {
 		{`enum X{A=1;B=1}`, ``, `<input>:1:14: tag 1 appeared previously in this definition at <input>:1:10`},
 		{`enum X{A=1;B=2}`, `(typedef
     :name X
-    :type 
+    :type
         (enum
             (const :name A :tag 1)
             (const :name B :tag 2)
@@ -70,7 +69,7 @@ func TestAnalyze(t *testing.T) {
     :type (struct))
 (typedef
     :name X
-    :type 
+    :type
         (sum
             (alt :type A :tag 1)
             (alt :type B :tag 2)

@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
 
 package ir
 
@@ -37,7 +36,7 @@ func Format(buf *bytes.Buffer, ident int, ast interface{}) {
 		} else {
 			fmt.Fprintf(buf, "(typedef\n%*s:name %s", ident+4, "", n.Name)
 			if n.Type != nil {
-				fmt.Fprintf(buf, "\n%*s:type ", ident+4, "")
+				fmt.Fprintf(buf, "\n%*s:type", ident+4, "")
 				Format(buf, ident+8, n.Type)
 			}
 			buf.WriteByte(')')
@@ -46,7 +45,7 @@ func Format(buf *bytes.Buffer, ident int, ast interface{}) {
 		fmt.Fprintf(buf, "(const :name %s :tag %d)", n.Name, n.Tag)
 	case *EnumType:
 		if len(n.Items) == 0 {
-			buf.WriteString("(enum)")
+			buf.WriteString(" (enum)")
 		} else {
 			fmt.Fprintf(buf, "\n%*s(enum\n", ident, "")
 			for i := range n.Items {
@@ -61,7 +60,7 @@ func Format(buf *bytes.Buffer, ident int, ast interface{}) {
 			n.Name, n.Type.Name, n.IsSlice, n.Tag)
 	case *StructType:
 		if len(n.Items) == 0 {
-			buf.WriteString("(struct)")
+			buf.WriteString(" (struct)")
 		} else {
 			fmt.Fprintf(buf, "\n%*s(struct\n", ident, "")
 			for i := range n.Items {
