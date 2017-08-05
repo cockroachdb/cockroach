@@ -262,8 +262,8 @@ func captureOutput(f func()) (out string, err error) {
 
 func (c cliTest) RunWithArgs(origArgs []string) {
 	sqlCtx.execStmts = nil
-	zoneConfig = ""
-	zoneDisableReplication = false
+	zoneCtx.zoneConfig = ""
+	zoneCtx.zoneDisableReplication = false
 
 	if err := func() error {
 		args := append([]string(nil), origArgs[:1]...)
@@ -294,8 +294,8 @@ func (c cliTest) RunWithArgs(origArgs []string) {
 
 func (c cliTest) RunWithCAArgs(origArgs []string) {
 	sqlCtx.execStmts = nil
-	zoneConfig = ""
-	zoneDisableReplication = false
+	zoneCtx.zoneConfig = ""
+	zoneCtx.zoneDisableReplication = false
 
 	if err := func() error {
 		args := append([]string(nil), origArgs[:1]...)

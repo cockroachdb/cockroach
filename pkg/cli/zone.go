@@ -440,19 +440,19 @@ the database or table.
 }
 
 func readZoneConfig() (conf []byte, err error) {
-	if zoneDisableReplication {
-		if zoneConfig != "" {
+	if zoneCtx.zoneDisableReplication {
+		if zoneCtx.zoneConfig != "" {
 			return nil, fmt.Errorf("cannot specify --disable-replication and -f at the same time")
 		}
 		conf = []byte("num_replicas: 1")
 	} else {
-		switch zoneConfig {
+		switch zoneCtx.zoneConfig {
 		case "":
 			err = fmt.Errorf("no filename specified with -f")
 		case "-":
 			conf, err = ioutil.ReadAll(os.Stdin)
 		default:
-			conf, err = ioutil.ReadFile(zoneConfig)
+			conf, err = ioutil.ReadFile(zoneCtx.zoneConfig)
 		}
 	}
 	return conf, err
