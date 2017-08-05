@@ -145,13 +145,12 @@ func TestTrace(t *testing.T) {
 				// and will split the underlying BatchRequest/BatchResponse. Tracing
 				// in the presence of multi-part batches is what we want to test here.
 				return sqlDB.Query(
-					"SELECT operation op FROM [SHOW TRACE FOR DELETE FROM test.bar] " +
+					"SELECT DISTINCT(operation) op FROM [SHOW TRACE FOR DELETE FROM test.bar] " +
 						"WHERE message LIKE '%1 DelRng%' ORDER BY op")
 			},
 			expSpans: []string{
 				"kv.DistSender: sending partial batch",
 				"starting plan",
-				"/cockroach.roachpb.Internal/Batch",
 				"/cockroach.roachpb.Internal/Batch",
 			},
 		},
