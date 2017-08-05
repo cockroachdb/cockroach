@@ -62,13 +62,13 @@ func TestInitInsecure(t *testing.T) {
 	}
 	for i, c := range testCases {
 		// Reset the context and for every test case.
-		serverInsecure = false
+		startCtx.serverInsecure = false
 
 		if err := f.Parse(c.args); err != nil {
 			t.Fatal(err)
 		}
-		if c.insecure != serverInsecure {
-			t.Fatalf("%d: expected %v, but found %v", i, c.insecure, serverInsecure)
+		if c.insecure != startCtx.serverInsecure {
+			t.Fatalf("%d: expected %v, but found %v", i, c.insecure, startCtx.serverInsecure)
 		}
 	}
 }
