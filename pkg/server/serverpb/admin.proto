@@ -333,6 +333,37 @@ message DrainResponse {
   repeated int32 on = 1;
 }
 
+// DecommissionStatusRequest requests the decommissioning status for the
+// specified or, if none are specified, all nodes.
+message DecommissionStatusRequest {
+  repeated int32 node_ids = 1 [(gogoproto.customname) = "NodeIDs",
+                               (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+}
+
+// DecommissionRequest requests the server to set the Decommissioning flag on
+// all nodes specified by 'node_id' to the value of 'decommissioning'.
+//
+// If no 'node_id' is given, targets the recipient node.
+message DecommissionRequest {
+  repeated int32 node_ids = 1 [(gogoproto.customname) = "NodeIDs",
+                               (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  bool decommissioning = 2;
+}
+
+// DecommissionStatusResponse lists decommissioning statuses for a number of NodeIDs.
+message DecommissionStatusResponse {
+  message Status {
+    int32 node_id = 1 [ (gogoproto.customname) = "NodeID",
+                        (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+    bool is_live = 2;
+    int64 replica_count = 3;
+    bool decommissioning = 4;
+    bool draining = 5;
+  }
+  // Status of all affected nodes.
+  repeated Status status = 2 [(gogoproto.nullable) = false];
+}
+
 // SettingsRequest inquires what are the current settings in the cluster.
 message SettingsRequest {
   // The array of setting names to retrieve.
@@ -565,6 +596,14 @@ service Admin {
       post: "/_admin/v1/drain"
       body: "*"
     };
+  }
+
+  // Decommission puts the node(s) into the specified decommissioning state.
+  rpc Decommission(DecommissionRequest) returns (DecommissionStatusResponse) {
+  }
+
+  // DecommissionStatus retrieves the decommissioning status of the specified nodes.
+  rpc DecommissionStatus(DecommissionStatusRequest) returns (DecommissionStatusResponse) {
   }
 
   // URL: /_admin/v1/rangelog/1

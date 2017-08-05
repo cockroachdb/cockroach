@@ -3475,6 +3475,496 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
+            type DecommissionStatusRequest$Properties = {
+                node_ids?: number[];
+            };
+
+            /**
+             * Constructs a new DecommissionStatusRequest.
+             * @exports cockroach.server.serverpb.DecommissionStatusRequest
+             * @constructor
+             * @param {cockroach.server.serverpb.DecommissionStatusRequest$Properties=} [properties] Properties to set
+             */
+            class DecommissionStatusRequest {
+
+                /**
+                 * Constructs a new DecommissionStatusRequest.
+                 * @exports cockroach.server.serverpb.DecommissionStatusRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.DecommissionStatusRequest$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.DecommissionStatusRequest$Properties);
+
+                /**
+                 * DecommissionStatusRequest node_ids.
+                 * @type {Array.<number>}
+                 */
+                public node_ids: number[];
+
+                /**
+                 * Creates a new DecommissionStatusRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.DecommissionStatusRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.DecommissionStatusRequest} DecommissionStatusRequest instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.DecommissionStatusRequest$Properties): cockroach.server.serverpb.DecommissionStatusRequest;
+
+                /**
+                 * Encodes the specified DecommissionStatusRequest message. Does not implicitly {@link cockroach.server.serverpb.DecommissionStatusRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.DecommissionStatusRequest$Properties} message DecommissionStatusRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.DecommissionStatusRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified DecommissionStatusRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.DecommissionStatusRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.DecommissionStatusRequest$Properties} message DecommissionStatusRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.DecommissionStatusRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a DecommissionStatusRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.DecommissionStatusRequest} DecommissionStatusRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.DecommissionStatusRequest;
+
+                /**
+                 * Decodes a DecommissionStatusRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.DecommissionStatusRequest} DecommissionStatusRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.DecommissionStatusRequest;
+
+                /**
+                 * Verifies a DecommissionStatusRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a DecommissionStatusRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.DecommissionStatusRequest} DecommissionStatusRequest
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.DecommissionStatusRequest;
+
+                /**
+                 * Creates a DecommissionStatusRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.DecommissionStatusRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.DecommissionStatusRequest} DecommissionStatusRequest
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.DecommissionStatusRequest;
+
+                /**
+                 * Creates a plain object from a DecommissionStatusRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.DecommissionStatusRequest} message DecommissionStatusRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.DecommissionStatusRequest, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this DecommissionStatusRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this DecommissionStatusRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            type DecommissionRequest$Properties = {
+                node_ids?: number[];
+                decommissioning?: boolean;
+            };
+
+            /**
+             * Constructs a new DecommissionRequest.
+             * @exports cockroach.server.serverpb.DecommissionRequest
+             * @constructor
+             * @param {cockroach.server.serverpb.DecommissionRequest$Properties=} [properties] Properties to set
+             */
+            class DecommissionRequest {
+
+                /**
+                 * Constructs a new DecommissionRequest.
+                 * @exports cockroach.server.serverpb.DecommissionRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.DecommissionRequest$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.DecommissionRequest$Properties);
+
+                /**
+                 * DecommissionRequest node_ids.
+                 * @type {Array.<number>}
+                 */
+                public node_ids: number[];
+
+                /**
+                 * DecommissionRequest decommissioning.
+                 * @type {boolean}
+                 */
+                public decommissioning: boolean;
+
+                /**
+                 * Creates a new DecommissionRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.DecommissionRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.DecommissionRequest} DecommissionRequest instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.DecommissionRequest$Properties): cockroach.server.serverpb.DecommissionRequest;
+
+                /**
+                 * Encodes the specified DecommissionRequest message. Does not implicitly {@link cockroach.server.serverpb.DecommissionRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.DecommissionRequest$Properties} message DecommissionRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.DecommissionRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified DecommissionRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.DecommissionRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.DecommissionRequest$Properties} message DecommissionRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.DecommissionRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a DecommissionRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.DecommissionRequest} DecommissionRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.DecommissionRequest;
+
+                /**
+                 * Decodes a DecommissionRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.DecommissionRequest} DecommissionRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.DecommissionRequest;
+
+                /**
+                 * Verifies a DecommissionRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a DecommissionRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.DecommissionRequest} DecommissionRequest
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.DecommissionRequest;
+
+                /**
+                 * Creates a DecommissionRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.DecommissionRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.DecommissionRequest} DecommissionRequest
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.DecommissionRequest;
+
+                /**
+                 * Creates a plain object from a DecommissionRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.DecommissionRequest} message DecommissionRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.DecommissionRequest, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this DecommissionRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this DecommissionRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            type DecommissionStatusResponse$Properties = {
+                status?: cockroach.server.serverpb.DecommissionStatusResponse.Status$Properties[];
+            };
+
+            /**
+             * Constructs a new DecommissionStatusResponse.
+             * @exports cockroach.server.serverpb.DecommissionStatusResponse
+             * @constructor
+             * @param {cockroach.server.serverpb.DecommissionStatusResponse$Properties=} [properties] Properties to set
+             */
+            class DecommissionStatusResponse {
+
+                /**
+                 * Constructs a new DecommissionStatusResponse.
+                 * @exports cockroach.server.serverpb.DecommissionStatusResponse
+                 * @constructor
+                 * @param {cockroach.server.serverpb.DecommissionStatusResponse$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.DecommissionStatusResponse$Properties);
+
+                /**
+                 * DecommissionStatusResponse status.
+                 * @type {Array.<cockroach.server.serverpb.DecommissionStatusResponse.Status$Properties>}
+                 */
+                public status: cockroach.server.serverpb.DecommissionStatusResponse.Status$Properties[];
+
+                /**
+                 * Creates a new DecommissionStatusResponse instance using the specified properties.
+                 * @param {cockroach.server.serverpb.DecommissionStatusResponse$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.DecommissionStatusResponse} DecommissionStatusResponse instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.DecommissionStatusResponse$Properties): cockroach.server.serverpb.DecommissionStatusResponse;
+
+                /**
+                 * Encodes the specified DecommissionStatusResponse message. Does not implicitly {@link cockroach.server.serverpb.DecommissionStatusResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.DecommissionStatusResponse$Properties} message DecommissionStatusResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.DecommissionStatusResponse$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified DecommissionStatusResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.DecommissionStatusResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.DecommissionStatusResponse$Properties} message DecommissionStatusResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.DecommissionStatusResponse$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a DecommissionStatusResponse message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.DecommissionStatusResponse} DecommissionStatusResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.DecommissionStatusResponse;
+
+                /**
+                 * Decodes a DecommissionStatusResponse message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.DecommissionStatusResponse} DecommissionStatusResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.DecommissionStatusResponse;
+
+                /**
+                 * Verifies a DecommissionStatusResponse message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a DecommissionStatusResponse message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.DecommissionStatusResponse} DecommissionStatusResponse
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.DecommissionStatusResponse;
+
+                /**
+                 * Creates a DecommissionStatusResponse message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.DecommissionStatusResponse.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.DecommissionStatusResponse} DecommissionStatusResponse
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.DecommissionStatusResponse;
+
+                /**
+                 * Creates a plain object from a DecommissionStatusResponse message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.DecommissionStatusResponse} message DecommissionStatusResponse
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.DecommissionStatusResponse, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this DecommissionStatusResponse message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this DecommissionStatusResponse to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            namespace DecommissionStatusResponse {
+
+                type Status$Properties = {
+                    node_id?: number;
+                    is_live?: boolean;
+                    replica_count?: Long;
+                    decommissioning?: boolean;
+                    draining?: boolean;
+                };
+
+                /**
+                 * Constructs a new Status.
+                 * @exports cockroach.server.serverpb.DecommissionStatusResponse.Status
+                 * @constructor
+                 * @param {cockroach.server.serverpb.DecommissionStatusResponse.Status$Properties=} [properties] Properties to set
+                 */
+                class Status {
+
+                    /**
+                     * Constructs a new Status.
+                     * @exports cockroach.server.serverpb.DecommissionStatusResponse.Status
+                     * @constructor
+                     * @param {cockroach.server.serverpb.DecommissionStatusResponse.Status$Properties=} [properties] Properties to set
+                     */
+                    constructor(properties?: cockroach.server.serverpb.DecommissionStatusResponse.Status$Properties);
+
+                    /**
+                     * Status node_id.
+                     * @type {number}
+                     */
+                    public node_id: number;
+
+                    /**
+                     * Status is_live.
+                     * @type {boolean}
+                     */
+                    public is_live: boolean;
+
+                    /**
+                     * Status replica_count.
+                     * @type {Long}
+                     */
+                    public replica_count: Long;
+
+                    /**
+                     * Status decommissioning.
+                     * @type {boolean}
+                     */
+                    public decommissioning: boolean;
+
+                    /**
+                     * Status draining.
+                     * @type {boolean}
+                     */
+                    public draining: boolean;
+
+                    /**
+                     * Creates a new Status instance using the specified properties.
+                     * @param {cockroach.server.serverpb.DecommissionStatusResponse.Status$Properties=} [properties] Properties to set
+                     * @returns {cockroach.server.serverpb.DecommissionStatusResponse.Status} Status instance
+                     */
+                    public static create(properties?: cockroach.server.serverpb.DecommissionStatusResponse.Status$Properties): cockroach.server.serverpb.DecommissionStatusResponse.Status;
+
+                    /**
+                     * Encodes the specified Status message. Does not implicitly {@link cockroach.server.serverpb.DecommissionStatusResponse.Status.verify|verify} messages.
+                     * @param {cockroach.server.serverpb.DecommissionStatusResponse.Status$Properties} message Status message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encode(message: cockroach.server.serverpb.DecommissionStatusResponse.Status$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Encodes the specified Status message, length delimited. Does not implicitly {@link cockroach.server.serverpb.DecommissionStatusResponse.Status.verify|verify} messages.
+                     * @param {cockroach.server.serverpb.DecommissionStatusResponse.Status$Properties} message Status message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encodeDelimited(message: cockroach.server.serverpb.DecommissionStatusResponse.Status$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Decodes a Status message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.server.serverpb.DecommissionStatusResponse.Status} Status
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.DecommissionStatusResponse.Status;
+
+                    /**
+                     * Decodes a Status message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.server.serverpb.DecommissionStatusResponse.Status} Status
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.DecommissionStatusResponse.Status;
+
+                    /**
+                     * Verifies a Status message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    public static verify(message: { [k: string]: any }): string;
+
+                    /**
+                     * Creates a Status message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.server.serverpb.DecommissionStatusResponse.Status} Status
+                     */
+                    public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.DecommissionStatusResponse.Status;
+
+                    /**
+                     * Creates a Status message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.server.serverpb.DecommissionStatusResponse.Status.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.server.serverpb.DecommissionStatusResponse.Status} Status
+                     */
+                    public static from(object: { [k: string]: any }): cockroach.server.serverpb.DecommissionStatusResponse.Status;
+
+                    /**
+                     * Creates a plain object from a Status message. Also converts values to other types if specified.
+                     * @param {cockroach.server.serverpb.DecommissionStatusResponse.Status} message Status
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public static toObject(message: cockroach.server.serverpb.DecommissionStatusResponse.Status, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Creates a plain object from this Status message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Converts this Status to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    public toJSON(): { [k: string]: any };
+                }
+            }
+
             type SettingsRequest$Properties = {
                 keys?: string[];
             };
@@ -5301,6 +5791,22 @@ export namespace cockroach {
                  * @returns {undefined}
                  */
                 public drain(request: (cockroach.server.serverpb.DrainRequest|{ [k: string]: any }), callback: Admin_drain_Callback): void;
+
+                /**
+                 * Calls Decommission.
+                 * @param {cockroach.server.serverpb.DecommissionRequest|Object.<string,*>} request DecommissionRequest message or plain object
+                 * @param {Admin_decommission_Callback} callback Node-style callback called with the error, if any, and DecommissionStatusResponse
+                 * @returns {undefined}
+                 */
+                public decommission(request: (cockroach.server.serverpb.DecommissionRequest|{ [k: string]: any }), callback: Admin_decommission_Callback): void;
+
+                /**
+                 * Calls DecommissionStatus.
+                 * @param {cockroach.server.serverpb.DecommissionStatusRequest|Object.<string,*>} request DecommissionStatusRequest message or plain object
+                 * @param {Admin_decommissionStatus_Callback} callback Node-style callback called with the error, if any, and DecommissionStatusResponse
+                 * @returns {undefined}
+                 */
+                public decommissionStatus(request: (cockroach.server.serverpb.DecommissionStatusRequest|{ [k: string]: any }), callback: Admin_decommissionStatus_Callback): void;
 
                 /**
                  * Calls RangeLog.
@@ -21227,6 +21733,10 @@ type Admin_jobs_Callback = (error: Error, response?: cockroach.server.serverpb.J
 type Admin_queryPlan_Callback = (error: Error, response?: cockroach.server.serverpb.QueryPlanResponse) => void;
 
 type Admin_drain_Callback = (error: Error, response?: cockroach.server.serverpb.DrainResponse) => void;
+
+type Admin_decommission_Callback = (error: Error, response?: cockroach.server.serverpb.DecommissionStatusResponse) => void;
+
+type Admin_decommissionStatus_Callback = (error: Error, response?: cockroach.server.serverpb.DecommissionStatusResponse) => void;
 
 type Admin_rangeLog_Callback = (error: Error, response?: cockroach.server.serverpb.RangeLogResponse) => void;
 

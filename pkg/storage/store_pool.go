@@ -390,7 +390,8 @@ func (sp *StorePool) liveAndDeadReplicas(
 	for _, repl := range repls {
 		detail := sp.getStoreDetailLocked(repl.StoreID)
 		// Mark replica as dead if store is dead.
-		switch detail.status(now, sp.timeUntilStoreDead.Get(), rangeID, sp.nodeLivenessFn) {
+		status := detail.status(now, sp.timeUntilStoreDead.Get(), rangeID, sp.nodeLivenessFn)
+		switch status {
 		case storeStatusDead:
 			deadReplicas = append(deadReplicas, repl)
 		case storeStatusReplicaCorrupted:
@@ -415,6 +416,10 @@ func (sp *StorePool) liveAndDeadReplicas(
 			// We count decommissioning replicas to be alive because they are readable
 			// and should be used for up-replication if necessary.
 			liveReplicas = append(liveReplicas, repl)
+		case storeStatusUnknown:
+		// No-op.
+		default:
+			log.Fatalf(context.TODO(), "unknown store status %d", status)
 		}
 	}
 	return

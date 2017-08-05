@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/kr/text"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -60,6 +61,47 @@ var debugCtx = debugContext{
 // server-specific values of some flags.
 var serverInsecure bool
 var serverSSLCertsDir string
+var serverDecommission bool
+
+type nodeDecommissionWaitType int
+
+const (
+	nodeDecommissionWaitAll nodeDecommissionWaitType = iota
+	nodeDecommissionWaitLive
+	nodeDecommissionWaitNone
+)
+
+func (s *nodeDecommissionWaitType) String() string {
+	switch *s {
+	case nodeDecommissionWaitAll:
+		return "all"
+	case nodeDecommissionWaitLive:
+		return "live"
+	case nodeDecommissionWaitNone:
+		return "none"
+	}
+	return "???"
+}
+
+func (s *nodeDecommissionWaitType) Type() string {
+	return "string"
+}
+
+func (s *nodeDecommissionWaitType) Set(value string) error {
+	switch value {
+	case "all":
+		*s = nodeDecommissionWaitAll
+	case "live":
+		*s = nodeDecommissionWaitLive
+	case "none":
+		*s = nodeDecommissionWaitNone
+	default:
+		return errors.New("invalid value, must be any of 'all', 'live', 'none'")
+	}
+	return nil
+}
+
+var nodeDecommissionWait nodeDecommissionWaitType
 
 // InitCLIDefaults is used for testing.
 func InitCLIDefaults() {
@@ -326,6 +368,12 @@ func init() {
 		// Certificate flags.
 		stringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, base.DefaultCertsDirectory)
 	}
+
+	// Decommission command.
+	varFlag(decommissionNodeCmd.Flags(), &nodeDecommissionWait, cliflags.Wait)
+
+	// Quit command.
+	boolFlag(quitCmd.Flags(), &serverDecommission, cliflags.Decommission, false)
 
 	zf := setZoneCmd.Flags()
 	stringFlag(zf, &zoneConfig, cliflags.ZoneConfig, "")

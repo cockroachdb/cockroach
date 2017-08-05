@@ -348,6 +348,8 @@ func (r *Replica) leaseStatus(
 			// and liveness info isn't available for owner), we can neither
 			// use the lease nor do we want to attempt to acquire it.
 			if err != nil {
+				// TODO(tschottdorf): this can be super spammy during startup
+				// (err=node not in liveness table) Rate limit this error.
 				log.Warningf(context.TODO(), "can't determine lease status due to node liveness error: %s", err)
 			}
 			status.state = leaseError

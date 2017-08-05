@@ -748,7 +748,10 @@ func doShutdown(ctx context.Context, c serverpb.AdminClient, onModes []int32) er
 type errTryHardShutdown struct{ error }
 
 // runQuit accesses the quit shutdown path.
-func runQuit(_ *cobra.Command, _ []string) (err error) {
+func runQuit(cmd *cobra.Command, args []string) (err error) {
+	if len(args) != 0 {
+		return usageAndError(cmd)
+	}
 	defer func() {
 		if err == nil {
 			fmt.Println("ok")
@@ -766,6 +769,11 @@ func runQuit(_ *cobra.Command, _ []string) (err error) {
 	ctx := stopperContext(stopper)
 	defer stopper.Stop(ctx)
 
+	if serverDecommission {
+		if err := runDecommissionNodeImpl(ctx, c, nodeDecommissionWaitAll, nil); err != nil {
+			return err
+		}
+	}
 	errChan := make(chan error, 1)
 	go func() {
 		errChan <- doShutdown(ctx, c, onModes)
