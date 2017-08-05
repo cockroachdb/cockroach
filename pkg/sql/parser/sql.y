@@ -10,8 +10,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Author: Peter Mattis (peter@cockroachlabs.com)
 
 // Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
 // Portions Copyright (c) 1994, Regents of the University of California
