@@ -87,7 +87,7 @@ func restoreNetwork(ctx context.Context, t *testing.T, c cluster.Cluster) []erro
 	var errs []error
 	for i := 0; i < c.NumNodes(); i++ {
 		for _, cmd := range iptables.Reset() {
-			if err := c.ExecRoot(ctx, i, cmd); err != nil {
+			if _, _, err := c.ExecRoot(ctx, i, cmd); err != nil {
 				errs = append(errs, err)
 			}
 		}
@@ -115,7 +115,7 @@ func cutNetwork(
 	log.Warningf(ctx, "partitioning: %v (%v)", partitions, ipPartitions)
 	for host, cmds := range iptables.Rules(iptables.Bidirectional(ipPartitions...)) {
 		for _, cmd := range cmds {
-			if err := c.ExecRoot(ctx, addrsToNode[host], cmd); err != nil {
+			if _, _, err := c.ExecRoot(ctx, addrsToNode[host], cmd); err != nil {
 				t.Fatal(err)
 			}
 		}

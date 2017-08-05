@@ -17,7 +17,6 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"fmt"
 	"go/build"
 	"io"
@@ -29,6 +28,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"golang.org/x/net/context"
 
 	"github.com/pkg/errors"
 	"golang.org/x/oauth2/google"

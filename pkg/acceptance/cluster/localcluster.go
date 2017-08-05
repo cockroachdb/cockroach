@@ -891,8 +891,8 @@ func (l *LocalCluster) Hostname(i int) string {
 }
 
 // ExecRoot runs a command as root.
-func (l *LocalCluster) ExecRoot(ctx context.Context, i int, cmd []string) error {
-	execRoot := func(ctx context.Context) error {
+func (l *LocalCluster) ExecRoot(ctx context.Context, i int, cmd []string) (string, string, error) {
+	execRoot := func(ctx context.Context) (string, string, error) {
 		cfg := types.ExecConfig{
 			User:         "root",
 			Privileged:   true,
@@ -902,13 +902,13 @@ func (l *LocalCluster) ExecRoot(ctx context.Context, i int, cmd []string) error 
 		}
 		createResp, err := l.client.ContainerExecCreate(ctx, l.Nodes[i].Container.id, cfg)
 		if err != nil {
-			return err
+			return "", "", err
 		}
 		var outputStream, errorStream bytes.Buffer
 		{
 			resp, err := l.client.ContainerExecAttach(ctx, createResp.ID, cfg)
 			if err != nil {
-				return err
+				return "", "", err
 			}
 			defer resp.Close()
 			ch := make(chan error)
@@ -917,28 +917,36 @@ func (l *LocalCluster) ExecRoot(ctx context.Context, i int, cmd []string) error 
 				ch <- err
 			}()
 			if err := <-ch; err != nil {
-				return err
+				return "", "", err
 			}
 		}
 		{
 			resp, err := l.client.ContainerExecInspect(ctx, createResp.ID)
 			if err != nil {
-				return err
+				return "", "", err
 			}
 			if resp.Running {
-				return errors.Errorf("command still running")
+				return "", "", errors.Errorf("command still running")
 			}
 			if resp.ExitCode != 0 {
-				return fmt.Errorf("error executing %s:\n%s\n%s",
-					cmd, outputStream.String(),
-					errorStream.String())
+				o, e := outputStream.String(), errorStream.String()
+				return o, e, fmt.Errorf("error executing %s:\n%s\n%s",
+					cmd, o, e)
 			}
 		}
-		return nil
+		return outputStream.String(), errorStream.String(), nil
 	}
 
-	return retry(ctx, 3, 10*time.Second, "ExecRoot",
-		matchNone, execRoot)
+	var stdOut string
+	var stdErr string
+	var err error
+
+	finalErr := retry(ctx, 3, 10*time.Second, "ExecRoot",
+		matchNone, func(ctx context.Context) error {
+			stdOut, stdErr, err = execRoot(ctx)
+			return err
+		})
+	return stdOut, stdErr, finalErr
 }
 
 func ensureLogDirExists(logDir string) {
