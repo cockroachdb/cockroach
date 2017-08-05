@@ -208,6 +208,51 @@ all known nodes.
 	RunE: MaybeDecorateGRPCError(runDecommissionNode),
 }
 
+type nodeDecommissionWaitType int
+
+const (
+	nodeDecommissionWaitAll nodeDecommissionWaitType = iota
+	nodeDecommissionWaitLive
+	nodeDecommissionWaitNone
+)
+
+func (s *nodeDecommissionWaitType) String() string {
+	switch *s {
+	case nodeDecommissionWaitAll:
+		return "all"
+	case nodeDecommissionWaitLive:
+		return "live"
+	case nodeDecommissionWaitNone:
+		return "none"
+	}
+	return ""
+}
+
+func (s *nodeDecommissionWaitType) Type() string {
+	return "string"
+}
+
+func (s *nodeDecommissionWaitType) Set(value string) error {
+	switch value {
+	case "all":
+		*s = nodeDecommissionWaitAll
+	case "live":
+		*s = nodeDecommissionWaitLive
+	case "none":
+		*s = nodeDecommissionWaitNone
+	default:
+		return fmt.Errorf("invalid node decommission parameter: %s "+
+			"(possible values: all, live, none)", value)
+	}
+	return nil
+}
+
+type nodeContext struct {
+	*cliContext
+
+	nodeDecommissionWait nodeDecommissionWaitType
+}
+
 func parseNodeIDs(strNodeIDs []string) ([]roachpb.NodeID, error) {
 	nodeIDs := make([]roachpb.NodeID, 0, len(strNodeIDs))
 	for _, str := range strNodeIDs {
@@ -236,7 +281,7 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 		}
 		return printDecommissionStatus(*resp)
 	}
-	return runDecommissionNodeImpl(ctx, c, nodeDecommissionWait, args)
+	return runDecommissionNodeImpl(ctx, c, nodeCtx.nodeDecommissionWait, args)
 }
 
 func runDecommissionNodeImpl(

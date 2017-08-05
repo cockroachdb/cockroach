@@ -277,6 +277,15 @@ func initBlockProfile() {
 // can change this.
 var ErrorCode = 1
 
+// startContext captures the command-line arguments for the `start` command.
+type startContext struct {
+	*cliContext
+
+	// server-specific values of some flags.
+	serverInsecure    bool
+	serverSSLCertsDir string
+}
+
 // runStart starts the cockroach node using --store as the list of
 // storage devices ("stores") on this machine and --join as the list
 // of other active nodes used to join this node to the cockroach
@@ -291,8 +300,8 @@ func runStart(cmd *cobra.Command, args []string) error {
 	}
 
 	// Use the server-specific values for some flags and settings.
-	serverCfg.Insecure = serverInsecure
-	serverCfg.SSLCertsDir = serverSSLCertsDir
+	serverCfg.Insecure = startCtx.serverInsecure
+	serverCfg.SSLCertsDir = startCtx.serverSSLCertsDir
 	serverCfg.User = security.NodeUser
 
 	var err error
@@ -527,7 +536,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 // logging output directory and the verbosity level of stderr logging.
 // We only do this for the "start" command which is why this work
 // occurs here and not in an OnInitialize function.
-func setupAndInitializeLoggingAndProfiling(startCtx context.Context) (*stop.Stopper, error) {
+func setupAndInitializeLoggingAndProfiling(ctx context.Context) (*stop.Stopper, error) {
 	// Default the log directory to the "logs" subdirectory of the first
 	// non-memory store. If more than one non-memory stores is detected,
 	// print a warning.
@@ -572,7 +581,7 @@ func setupAndInitializeLoggingAndProfiling(startCtx context.Context) (*stop.Stop
 		if err := os.MkdirAll(logDir, 0755); err != nil {
 			return nil, err
 		}
-		log.Eventf(startCtx, "created log directory %s", logDir)
+		log.Eventf(ctx, "created log directory %s", logDir)
 
 		// Start the log file GC daemon to remove files that make the log
 		// directory too large.
@@ -582,11 +591,11 @@ func setupAndInitializeLoggingAndProfiling(startCtx context.Context) (*stop.Stop
 	if ambiguousLogDirs {
 		// Note that we can't report this message earlier, because the log directory
 		// may not have been ready before the call to MkdirAll() above.
-		log.Shout(startCtx, log.Severity_WARNING, "multiple stores configured"+
+		log.Shout(ctx, log.Severity_WARNING, "multiple stores configured"+
 			" and --log-dir not specified, you may want to specify --log-dir to disambiguate.")
 	}
 
-	if serverInsecure {
+	if startCtx.serverInsecure {
 		// Use a non-annotated context here since the annotation just looks funny,
 		// particularly to new users (made worse by it always printing as [n?]).
 		addr := serverConnHost
@@ -605,17 +614,17 @@ func setupAndInitializeLoggingAndProfiling(startCtx context.Context) (*stop.Stop
 	// We log build information to stdout (for the short summary), but also
 	// to stderr to coincide with the full logs.
 	info := build.GetInfo()
-	log.Infof(startCtx, info.Short())
+	log.Infof(ctx, info.Short())
 
-	initMemProfile(startCtx, outputDirectory)
-	initCPUProfile(startCtx, outputDirectory)
+	initMemProfile(ctx, outputDirectory)
+	initCPUProfile(ctx, outputDirectory)
 	initBlockProfile()
 
 	// Disable Stopper task tracking as performing that call site tracking is
 	// moderately expensive (certainly outweighing the infrequent benefit it
 	// provides).
 	stopper := initBacktrace(outputDirectory)
-	log.Event(startCtx, "initialized profiles")
+	log.Event(ctx, "initialized profiles")
 
 	return stopper, nil
 }
@@ -747,6 +756,12 @@ func doShutdown(ctx context.Context, c serverpb.AdminClient, onModes []int32) er
 
 type errTryHardShutdown struct{ error }
 
+type quitContext struct {
+	*cliContext
+
+	serverDecommission bool
+}
+
 // runQuit accesses the quit shutdown path.
 func runQuit(cmd *cobra.Command, args []string) (err error) {
 	if len(args) != 0 {
@@ -769,7 +784,7 @@ func runQuit(cmd *cobra.Command, args []string) (err error) {
 	ctx := stopperContext(stopper)
 	defer stopper.Stop(ctx)
 
-	if serverDecommission {
+	if quitCtx.serverDecommission {
 		if err := runDecommissionNodeImpl(ctx, c, nodeDecommissionWaitAll, nil); err != nil {
 			return err
 		}
