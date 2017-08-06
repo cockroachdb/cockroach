@@ -100,3 +100,75 @@ EXPLAIN (METADATA) SELECT * FROM foo WITH ORDINALITY WHERE x > 'a'
 2  scan        ·      ·            (x)                ·
 2  ·           table  foo@primary  ·                  ·
 2  ·           spans  ALL          ·                  ·
+
+# Verify that the ordinality node satisfies orderings as expected.
+statement ok
+CREATE TABLE abcd (a INT, b INT, c INT, d INT, PRIMARY KEY(a,b,c));
+
+query ITTTTT
+EXPLAIN (METADATA) SELECT * FROM abcd WITH ORDINALITY ORDER BY a
+----
+0  ordinality  ·      ·             (a, b, c, d, "ordinality")  +(a/"ordinality")
+1  scan        ·      ·             (a, b, c, d)                +a
+1  ·           table  abcd@primary  ·                           ·
+1  ·           spans  ALL           ·                           ·
+
+query ITTTTT
+EXPLAIN (METADATA) SELECT * FROM abcd WITH ORDINALITY ORDER BY a, b
+----
+0  ordinality  ·      ·             (a, b, c, d, "ordinality")  +(a/"ordinality"),+b
+1  scan        ·      ·             (a, b, c, d)                +a,+b
+1  ·           table  abcd@primary  ·                           ·
+1  ·           spans  ALL           ·                           ·
+
+
+query ITTTTT
+EXPLAIN (METADATA) SELECT * FROM abcd WITH ORDINALITY ORDER BY a, b, c
+----
+0  ordinality  ·      ·             (a, b, c, d, "ordinality")  +(a/"ordinality"),+b,+c,key
+1  scan        ·      ·             (a, b, c, d)                +a,+b,+c,key
+1  ·           table  abcd@primary  ·                           ·
+1  ·           spans  ALL           ·                           ·
+
+query ITTTTT
+EXPLAIN (METADATA) SELECT * FROM abcd WITH ORDINALITY ORDER BY @5
+----
+0  ordinality  ·      ·             (a, b, c, d, "ordinality")  +(a/"ordinality")
+1  scan        ·      ·             (a, b, c, d)                ·
+1  ·           table  abcd@primary  ·                           ·
+1  ·           spans  ALL           ·                           ·
+
+query ITTTTT
+EXPLAIN (METADATA) SELECT * FROM abcd WITH ORDINALITY ORDER BY @5, a
+----
+0  ordinality  ·      ·             (a, b, c, d, "ordinality")  +(a/"ordinality")
+1  scan        ·      ·             (a, b, c, d)                ·
+1  ·           table  abcd@primary  ·                           ·
+1  ·           spans  ALL           ·                           ·
+
+query ITTTTT
+EXPLAIN (METADATA) SELECT * FROM abcd WITH ORDINALITY ORDER BY a, @5
+----
+0  ordinality  ·      ·             (a, b, c, d, "ordinality")  +(a/"ordinality")
+1  scan        ·      ·             (a, b, c, d)                +a
+1  ·           table  abcd@primary  ·                           ·
+1  ·           spans  ALL           ·                           ·
+
+query ITTTTT
+EXPLAIN (METADATA) SELECT * FROM abcd WITH ORDINALITY ORDER BY a, b, c, @5
+----
+0  ordinality  ·      ·             (a, b, c, d, "ordinality")  +(a/"ordinality"),+b,+c,key
+1  scan        ·      ·             (a, b, c, d)                +a,+b,+c,key
+1  ·           table  abcd@primary  ·                           ·
+1  ·           spans  ALL           ·                           ·
+
+statement ok
+CREATE TABLE defg (d INT, e INT, f INT, g INT, PRIMARY KEY(d DESC, e DESC, f ASC))
+
+query ITTTTT
+EXPLAIN (METADATA) SELECT * FROM defg WITH ORDINALITY ORDER BY d DESC, e DESC, f ASC
+----
+0  ordinality  ·      ·             (d, e, f, g, "ordinality")  -d,-e,+(f/"ordinality"),key
+1  scan        ·      ·             (d, e, f, g)                -d,-e,+f,key
+1  ·           table  defg@primary  ·                           ·
+1  ·           spans  ALL           ·                           ·
