@@ -614,13 +614,20 @@ func (r *renderNode) computeOrdering(fromOrder orderingInfo) {
 	//
 	// The rows from the index are ordered by k then by v. We cannot make any use of this
 	// ordering as an ordering on v.
-	for _, colOrder := range fromOrder.ordering {
-		renderIdx, ok := r.findRenderIndexForCol(colOrder.ColIdx)
-		if !ok {
+	for _, group := range fromOrder.ordering {
+		var colsWithTargets util.FastIntSet
+		for col, ok := group.cols.Next(0); ok; col, ok = group.cols.Next(col + 1) {
+			if renderIdx, ok := r.findRenderIndexForCol(int(col)); ok {
+				colsWithTargets.Add(uint32(renderIdx))
+			}
+		}
+		if colsWithTargets.Empty() {
+			// This group has no output columns we can refer to in the ordering; we
+			// have to stop here.
 			return
 		}
-		r.ordering.addColumn(renderIdx, colOrder.Direction)
+		r.ordering.addColumnGroup(colsWithTargets, group.dir)
 	}
-	// We added all columns in fromOrder; we can copy the distinct flag.
+	// We added all columns in fromOrder; we can copy the unique flag.
 	r.ordering.unique = fromOrder.unique
 }

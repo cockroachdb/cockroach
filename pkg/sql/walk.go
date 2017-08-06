@@ -204,7 +204,10 @@ func (v *planVisitor) visit(plan planNode) {
 				for i := range eqCols {
 					eqCols[i].Name = fmt.Sprintf("(%s=%s)", n.pred.leftColNames[i], n.pred.rightColNames[i])
 				}
-				order := orderingInfo{ordering: n.mergeJoinOrdering}
+				var order orderingInfo
+				for _, o := range n.mergeJoinOrdering {
+					order.addColumn(o.ColIdx, o.Direction)
+				}
 				v.observer.attr(name, "mergeJoinOrder", order.AsString(eqCols))
 			}
 		}
@@ -244,7 +247,10 @@ func (v *planVisitor) visit(plan planNode) {
 			// We use n.ordering and not plan.Ordering() because
 			// plan.Ordering() does not include the added sort columns not
 			// present in the output.
-			order := orderingInfo{ordering: n.ordering}
+			var order orderingInfo
+			for _, o := range n.ordering {
+				order.addColumn(o.ColIdx, o.Direction)
+			}
 			v.observer.attr(name, "order", order.AsString(columns))
 			switch ss := n.sortStrategy.(type) {
 			case *iterativeSortStrategy:
