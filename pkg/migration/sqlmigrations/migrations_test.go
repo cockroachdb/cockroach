@@ -243,6 +243,9 @@ func TestEnsureMigrations(t *testing.T) {
 			0, 3, 0, 3,
 		},
 	}
+
+	defer func(prev []migrationDescriptor) { backwardCompatibleMigrations = prev }(backwardCompatibleMigrations)
+
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
 			db.kvs = make(map[string][]byte)
@@ -312,6 +315,7 @@ func TestDBErrors(t *testing.T) {
 	defer mgr.stopper.Stop(context.TODO())
 
 	migration := noopMigration1
+	defer func(prev []migrationDescriptor) { backwardCompatibleMigrations = prev }(backwardCompatibleMigrations)
 	backwardCompatibleMigrations = []migrationDescriptor{migration}
 	testCases := []struct {
 		scanErr     error
@@ -375,6 +379,7 @@ func TestLeaseErrors(t *testing.T) {
 	defer mgr.stopper.Stop(context.TODO())
 
 	migration := noopMigration1
+	defer func(prev []migrationDescriptor) { backwardCompatibleMigrations = prev }(backwardCompatibleMigrations)
 	backwardCompatibleMigrations = []migrationDescriptor{migration}
 	if err := mgr.EnsureMigrations(context.Background()); err != nil {
 		t.Error(err)
@@ -421,6 +426,7 @@ func TestLeaseExpiration(t *testing.T) {
 			}
 		},
 	}
+	defer func(prev []migrationDescriptor) { backwardCompatibleMigrations = prev }(backwardCompatibleMigrations)
 	backwardCompatibleMigrations = []migrationDescriptor{waitForExitMigration}
 	if err := mgr.EnsureMigrations(context.Background()); err != nil {
 		t.Error(err)
@@ -441,12 +447,17 @@ func TestCreateSystemTable(t *testing.T) {
 	settingsDescVal := sqlbase.WrapDescriptor(&settingsDesc)
 
 	// Start up a test server without running the system.jobs migration.
-	backwardCompatibleMigrations = []migrationDescriptor{
-		{
-			name:   "create system.settings table",
-			workFn: createSettingsTable,
-		},
+	// remove the view update migration so we can test its effects.
+	newMigrations := make([]migrationDescriptor, 0, len(backwardCompatibleMigrations))
+	for _, m := range backwardCompatibleMigrations {
+		if strings.HasPrefix(m.name, "create system.jobs") {
+			continue
+		}
+		newMigrations = append(newMigrations, m)
 	}
+	defer func(prev []migrationDescriptor) { backwardCompatibleMigrations = prev }(backwardCompatibleMigrations)
+	backwardCompatibleMigrations = newMigrations
+
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
@@ -498,8 +509,10 @@ func TestCreateSystemTable(t *testing.T) {
 	// migration will get rerun here.
 	mgr := NewManager(s.Stopper(), kvDB, nil, s.Clock(), nil, "clientID")
 	backwardCompatibleMigrations = append(backwardCompatibleMigrations, migrationDescriptor{
-		name:   "create system.jobs table",
-		workFn: createJobsTable,
+		name:           "create system.jobs table",
+		workFn:         createJobsTable,
+		newDescriptors: 1,
+		newRanges:      1,
 	})
 	if err := mgr.EnsureMigrations(ctx); err != nil {
 		t.Fatal(err)
@@ -508,8 +521,6 @@ func TestCreateSystemTable(t *testing.T) {
 
 func TestUpdateViewDependenciesMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#17438")
-
 	ctx := context.Background()
 
 	// remove the view update migration so we can test its effects.
@@ -532,6 +543,8 @@ func TestUpdateViewDependenciesMigration(t *testing.T) {
 				return nil
 			},
 		})
+
+	defer func(prev []migrationDescriptor) { backwardCompatibleMigrations = prev }(backwardCompatibleMigrations)
 	backwardCompatibleMigrations = newMigrations
 
 	t.Log("starting server")
