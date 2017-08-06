@@ -24,33 +24,78 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
-// orderingInfo describes the column ordering on a set of results.
+// orderingInfo describes the column ordering on a set of results. Typically the
+// ordering information is used to see to what extent it can satisfy a "desired"
+// ordering (which is just a list of columns and directions).
 //
-// If results are known to be restricted to a single value on some columns, we call these "exact
-// match" columns; these are inconsequential w.r.t ordering.
+// In its simplest form, an ordering is simply a list of columns and a direction
+// for each column, for example a+,b-,c+. This indicates that the rows are
+// ordered by the value on column a (ascending); rows that have the same value
+// on a are ordered by column b (descending); and rows that have the same values
+// on a and b are ordered by column c (ascending).
 //
-// For example, if an index was defined on columns (a, b, c, d) and the WHERE clause was
-// "(a, c) = (1, 2)" then a and c are exact-match columns and we have an ordering by b then d.
-// Such an ordering satisfies any of the following desired orderings (among many others):
-//    a, c
-//    c, a
-//    b, a, c
-//    b, c, a
-//    a, b, c
-//    c, b, a
-//    b, d, a
-//    a, b, c, d
-//    b, a, c, d
+// == Exact match columns ==
 //
+// If results are known to be restricted to a single value on some columns, we
+// call these "exact match" columns; these are inconsequential w.r.t ordering.
+//
+// For example, if an index was defined on columns (a, b, c, d) and the WHERE
+// clause was "(a, c) = (1, 2)" then a and c are exact-match columns and we have
+// an ordering by b+ then d+. Such an ordering satisfies any of the following
+// desired orderings (among many others):
+//   a+,c+
+//   a-,c+
+//   b+,a+,c+
+//   b+,c+,a-
+//   a+,b+,c+
+//   c-,b+,a+
+//   b+,d+,a-
+//   a+,b+,c+,d+
+//   b+,a+,c-,d+
+//
+// == Unique flag ==
+//
+// In some cases (like unique indexes), we have an ordering on a set of columns
+// and we know that each row has a unique set of values on these columns. For
+// example, if we have a unique index on columns (a, b), the results have the
+// ordering a+,b+ and the unique flag tells us that this satisfies any desired
+// ordering that has a+,b+ as a prefix (such as a+,b+,c-,d+).
+//
+// == Column groups ==
+//
+// In some cases we know that a set of columns are always equal (i.e. any row
+// has equal values for these columns); these columns can be used
+// interchangeably in orderings. One case is for inner joins that constrain
+// equality on two columns: every row has equal values on these two columns, so
+// using either is equivalent in an ordering. For example:
+//  - table U(a,b,c,d) with primary index (a,b)
+//  - table V(e,f,g) with primary index (e,g)
+//  - join ON a=e AND b=g
+//  - the results will be ordered by (a+/e+),(b+/g+); this satisfies any of the
+//    following desired orderings:
+//      a+,b+
+//      a+,g+
+//      e+,b+
+//      e+,g+
+//      a+,b+,g+
+//      a+,e+,b+,g+
 type orderingInfo struct {
 	// columns for which we know we have a single value.
 	exactMatchCols util.FastIntSet
 
 	// ordering of any other columns (the columns in exactMatchCols do not appear in this ordering).
-	ordering sqlbase.ColumnOrdering
+	ordering []orderingColumnGroup
 
 	// true if we know that all the value tuples for the columns in `ordering` are distinct.
 	unique bool
+}
+
+type orderingColumnGroup struct {
+	// All columns in the group have the same direction.
+	// We could be more general and allow mixed direction columns, but that
+	// complicates things with little benefit.
+	dir  encoding.Direction
+	cols util.FastIntSet
 }
 
 // Format pretty-prints the orderingInfo to a stream.
@@ -62,16 +107,20 @@ func (ord orderingInfo) Format(buf *bytes.Buffer, columns sqlbase.ResultColumns)
 	// a deterministic output order.
 	cols := ord.exactMatchCols.Ordered()
 
-	for _, i := range cols {
+	printCol := func(buf *bytes.Buffer, columns sqlbase.ResultColumns, colIdx int) {
+		if columns == nil || colIdx >= len(columns) {
+			fmt.Fprintf(buf, "@%d", colIdx+1)
+		} else {
+			parser.FormatNode(buf, parser.FmtSimple, parser.Name(columns[colIdx].Name))
+		}
+	}
+
+	for _, c := range cols {
 		buf.WriteString(sep)
 		sep = ","
 
 		buf.WriteByte('=')
-		if columns == nil || i >= len(columns) {
-			fmt.Fprintf(buf, "%d", i)
-		} else {
-			parser.FormatNode(buf, parser.FmtSimple, parser.Name(columns[i].Name))
-		}
+		printCol(buf, columns, c)
 	}
 
 	// Print the ordering columns and for each their sort order.
@@ -79,15 +128,30 @@ func (ord orderingInfo) Format(buf *bytes.Buffer, columns sqlbase.ResultColumns)
 		buf.WriteString(sep)
 		sep = ","
 
+		// If there is a single column in the group (the common case), we just print
+		// the column prefixed by + or -, e.g. "+a".
+		// If there are multiple columns in the group, we enclose the group in
+		// parens and separate the columns by slashes: "+(a/b)".
 		prefix := byte('+')
-		if o.Direction == encoding.Descending {
-			prefix = '-'
+		if o.dir == encoding.Descending {
+			prefix = byte('-')
 		}
 		buf.WriteByte(prefix)
-		if columns != nil && o.ColIdx < len(columns) {
-			parser.FormatNode(buf, parser.FmtSimple, parser.Name(columns[o.ColIdx].Name))
-		} else {
-			fmt.Fprintf(buf, "@%d", o.ColIdx+1)
+
+		cols := o.cols.Ordered()
+		if len(cols) > 1 {
+			buf.WriteByte('(')
+		}
+
+		for i, c := range cols {
+			if i > 0 {
+				buf.WriteByte('/')
+			}
+			printCol(buf, columns, c)
+		}
+
+		if len(cols) > 1 {
+			buf.WriteByte(')')
 		}
 	}
 
@@ -97,7 +161,8 @@ func (ord orderingInfo) Format(buf *bytes.Buffer, columns sqlbase.ResultColumns)
 	}
 }
 
-// AsString pretty-prints the orderingInfo to a string.
+// AsString pretty-prints the orderingInfo to a string. The result columns are
+// used for printing column names and are optional.
 func (ord orderingInfo) AsString(columns sqlbase.ResultColumns) string {
 	var buf bytes.Buffer
 	ord.Format(&buf, columns)
@@ -112,29 +177,49 @@ func (ord *orderingInfo) addExactMatchColumn(colIdx int) {
 	ord.exactMatchCols.Add(uint32(colIdx))
 }
 
-func (ord *orderingInfo) addColumn(colIdx int, dir encoding.Direction) {
+func (ord *orderingInfo) addColumnGroup(cols util.FastIntSet, dir encoding.Direction) {
 	if dir != encoding.Ascending && dir != encoding.Descending {
 		panic(fmt.Sprintf("Invalid direction %d", dir))
 	}
 	// If unique is true, there are no "ties" to break with adding more columns.
 	if !ord.unique {
-		ord.ordering = append(ord.ordering, sqlbase.ColumnOrderInfo{ColIdx: colIdx, Direction: dir})
+		ord.ordering = append(ord.ordering, orderingColumnGroup{dir: dir, cols: cols})
 	}
+}
+
+func (ord *orderingInfo) addColumn(colIdx int, dir encoding.Direction) {
+	var s util.FastIntSet
+	s.Add(uint32(colIdx))
+	ord.addColumnGroup(s, dir)
+}
+
+// copy returns a copy of ord which can be modified independently.
+func (ord orderingInfo) copy() orderingInfo {
+	result := orderingInfo{
+		unique:         ord.unique,
+		exactMatchCols: ord.exactMatchCols.Copy(),
+	}
+	if len(ord.ordering) > 0 {
+		result.ordering = make([]orderingColumnGroup, len(ord.ordering))
+		for i, o := range ord.ordering {
+			result.ordering[i].cols = o.cols.Copy()
+			result.ordering[i].dir = o.dir
+		}
+	}
+	return result
 }
 
 // reverse returns the reversed ordering.
 func (ord orderingInfo) reverse() orderingInfo {
-	result := orderingInfo{unique: ord.unique}
-	if !ord.exactMatchCols.Empty() {
-		ord.exactMatchCols.ForEach(func(c uint32) {
-			result.exactMatchCols.Add(c)
-		})
+	result := orderingInfo{
+		unique:         ord.unique,
+		exactMatchCols: ord.exactMatchCols.Copy(),
 	}
 	if len(ord.ordering) > 0 {
-		result.ordering = make(sqlbase.ColumnOrdering, len(ord.ordering))
+		result.ordering = make([]orderingColumnGroup, len(ord.ordering))
 		for i, o := range ord.ordering {
-			ord.ordering[i].ColIdx = o.ColIdx
-			ord.ordering[i].Direction = o.Direction.Reverse()
+			result.ordering[i].cols = o.cols.Copy()
+			result.ordering[i].dir = o.dir.Reverse()
 		}
 	}
 	return result
@@ -151,15 +236,16 @@ func (ord orderingInfo) computeMatch(desired sqlbase.ColumnOrdering) int {
 		if pos < len(ord.ordering) {
 			ci := ord.ordering[pos]
 
-			// Check that the next column matches.
-			if ci.ColIdx == col.ColIdx && ci.Direction == col.Direction {
+			// Check that the next column matches one of the columns in the group.
+			if ci.dir == col.Direction && ci.cols.Contains(uint32(col.ColIdx)) {
 				pos++
 				continue
 			}
 		} else if ord.unique {
-			// Everything matched up to the last column and we know there are no duplicate
-			// combinations of values for these columns. Any other columns we may want to "refine"
-			// the ordering by don't make a difference.
+			// Everything matched up to the last column and we know there are no
+			// duplicate combinations of values for these columns. Any other columns
+			// with which we may want to "refine" the ordering don't make a
+			// difference.
 			return len(desired)
 		}
 		// If the column did not match, check if it is one of the exact match columns.
@@ -172,9 +258,9 @@ func (ord orderingInfo) computeMatch(desired sqlbase.ColumnOrdering) int {
 	return len(desired)
 }
 
-// trim simplifies ord.ordering, retaining only the columns that are needed to
-// to match a desired ordering (or a prefix of it); exact match columns are left
-// untouched.
+// trim simplifies ord.ordering, retaining only the column groups that are
+// needed to to match a desired ordering (or a prefix of it); exact match
+// columns are left untouched.
 //
 // A trimmed ordering is guaranteed to still match the desired ordering to the
 // same extent, i.e. before and after are equal in:
@@ -191,7 +277,7 @@ func (ord *orderingInfo) trim(desired sqlbase.ColumnOrdering) {
 		}
 		ci := ord.ordering[pos]
 		// Check that the next column matches.
-		if ci.ColIdx == col.ColIdx && ci.Direction == col.Direction {
+		if ci.dir == col.Direction && ci.cols.Contains(uint32(col.ColIdx)) {
 			pos++
 		} else if !ord.exactMatchCols.Contains(uint32(col.ColIdx)) {
 			break
@@ -201,6 +287,26 @@ func (ord *orderingInfo) trim(desired sqlbase.ColumnOrdering) {
 		ord.ordering = ord.ordering[:pos]
 		ord.unique = false
 	}
+}
+
+// getColumnOrdering returns a ColumnOrdering that corresponds to ord.ordering
+// (excludes exact match columns). It is guaranteed that:
+//  - ord.ComputeMatch(ord.getColumnOrdering()) == len(ord.ordering)
+//  - ord.trim(ord.getColumnOrdering()) is a no-op.
+//
+// If column groups have more than one column, we return an arbitrary column for
+// each group. In that case, the result is one of multiple possible results.
+func (ord *orderingInfo) getColumnOrdering() sqlbase.ColumnOrdering {
+	result := make(sqlbase.ColumnOrdering, len(ord.ordering))
+	for i := range ord.ordering {
+		col, ok := ord.ordering[i].cols.Next(0)
+		if !ok {
+			panic("empty column group")
+		}
+		result[i].ColIdx = int(col)
+		result[i].Direction = ord.ordering[i].dir
+	}
+	return result
 }
 
 // computeMergeJoinOrdering determines if merge-join can be used to perform a join.
@@ -300,44 +406,55 @@ func computeMergeJoinOrdering(a, b orderingInfo, colA, colB []int) sqlbase.Colum
 	//
 	// Another complication is the "unique" flag: such an ordering remains correct
 	// when appending arbitrary columns to it.
+MainLoop:
 	for ordA, ordB := a.ordering, b.ordering; ; {
 		doneA, doneB := (len(ordA) == 0), (len(ordB) == 0)
-		// See if the first column in the orderings are both the same equality
+		// See if the first column group in each ordering contain the same equality
 		// column.
 		if !doneA && !doneB {
-			i, okA := eqMapA[ordA[0].ColIdx]
-			j, okB := eqMapB[ordB[0].ColIdx]
-			if okA && okB && i == j {
-				dir := ordA[0].Direction
-				if dir != ordB[0].Direction {
-					// Both orderings start with the same merged column, but the
-					// ordering is different. That's all, folks.
+			foundCol := -1
+			for i := range colA {
+				if ordA[0].cols.Contains(uint32(colA[i])) && ordB[0].cols.Contains(uint32(colB[i])) {
+					// Both ordering groups contain the i-th equality column.
+					foundCol = i
 					break
 				}
-				result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: dir})
+			}
+			if foundCol != -1 {
+				dir := ordA[0].dir
+				if dir != ordB[0].dir {
+					// Both orderings start with the same merged column, but the
+					// ordering is different. That's all, folks.
+					break MainLoop
+				}
+				result = append(result, sqlbase.ColumnOrderInfo{ColIdx: foundCol, Direction: dir})
 				ordA, ordB = ordA[1:], ordB[1:]
-				continue
+				continue MainLoop
 			}
 		}
-		// See if the first column in A is an exact match in B. Or, if we consumed B
-		// and it is "unique", then we are free to add any other columns in A.
+		// See if any column in the first group in A is an exact match in B. Or, if
+		// we consumed B and it is "unique", then we are free to add any other
+		// columns in A.
 		if !doneA {
-			if i, ok := eqMapA[ordA[0].ColIdx]; ok {
-				if (doneB && b.unique) || b.exactMatchCols.Contains(uint32(colB[i])) {
-					result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: ordA[0].Direction})
+			for i := range colA {
+				if ordA[0].cols.Contains(uint32(colA[i])) &&
+					((doneB && b.unique) || b.exactMatchCols.Contains(uint32(colB[i]))) {
+					result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: ordA[0].dir})
 					ordA = ordA[1:]
-					continue
+					continue MainLoop
 				}
 			}
 		}
-		// See if the first column in B is an exact match in A.  Or, if we consumed
-		// A and it is "unique", then we are free to add any other columns in B.
+		// See if any column in the first group in B is an exact match in A. Or, if
+		// we consumed A and it is "unique", then we are free to add any other
+		// columns in B.
 		if !doneB {
-			if i, ok := eqMapB[ordB[0].ColIdx]; ok {
-				if (doneA && a.unique) || a.exactMatchCols.Contains(uint32(colA[i])) {
-					result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: ordB[0].Direction})
+			for i := range colB {
+				if ordB[0].cols.Contains(uint32(colB[i])) &&
+					((doneA && a.unique) || a.exactMatchCols.Contains(uint32(colA[i]))) {
+					result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: ordB[0].dir})
 					ordB = ordB[1:]
-					continue
+					continue MainLoop
 				}
 			}
 		}
