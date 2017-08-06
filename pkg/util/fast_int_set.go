@@ -17,10 +17,11 @@ package util
 import (
 	"bytes"
 	"fmt"
+	"sort"
 )
 
-// FastIntSet keeps track of a set of integers. It is very fast when the values
-// are small. It is not thread-safe.
+// FastIntSet keeps track of a set of integers. It does not perform any
+// allocations when the values are small. It is not thread-safe.
 type FastIntSet struct {
 	smallVals uint64
 	largeVals map[uint32]struct{}
@@ -28,6 +29,15 @@ type FastIntSet struct {
 
 // We store bits for values smaller than this cutoff.
 const smallValCutoff = 64
+
+// MakeFastIntSet initializes a FastIntSet with the given elements.
+func MakeFastIntSet(elements ...uint32) FastIntSet {
+	var s FastIntSet
+	for _, v := range elements {
+		s.Add(v)
+	}
+	return s
+}
 
 // Add adds a value to the set. No-op if the value is already in the set.
 func (s *FastIntSet) Add(i uint32) {
@@ -71,7 +81,7 @@ func (s *FastIntSet) ForEach(f func(i uint32)) {
 			if (s.smallVals & (1 << uint64(i))) != 0 {
 				f(i)
 			} else {
-				// See if we can skip 8 bytes at a time
+				// See if we can skip 8 bits at a time
 				if (s.smallVals & (0xFF << uint64(i))) == 0 {
 					i += 7
 				}
@@ -81,6 +91,20 @@ func (s *FastIntSet) ForEach(f func(i uint32)) {
 	for v := range s.largeVals {
 		f(v)
 	}
+}
+
+// Ordered returns a slice with all the integers in the set, in sorted order.
+func (s *FastIntSet) Ordered() []int {
+	// TODO(radu): when we switch to go1.9, use the new math/bits.OnesCount64 to
+	// calculate the correct length.
+	result := make([]int, 0, len(s.largeVals))
+	s.ForEach(func(i uint32) {
+		result = append(result, int(i))
+	})
+	if len(s.largeVals) > 0 {
+		sort.Ints(result)
+	}
+	return result
 }
 
 func (s *FastIntSet) String() string {
