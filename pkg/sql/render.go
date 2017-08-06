@@ -586,22 +586,22 @@ func (r *renderNode) computeOrdering(fromOrder orderingInfo) {
 			continue
 		}
 		if !hasRowDependentValues && !r.columns[col].Omitted {
-			r.ordering.addExactMatchColumn(col)
+			r.ordering.addConstantColumn(col)
 		}
 	}
 
-	// See if any of the "exact match" columns have render targets. We can ignore any columns that
+	// See if any of the constant columns have render targets. We can ignore any columns that
 	// don't have render targets. For example, assume we are using an ascending index on (k, v) with
 	// the query:
 	//
 	//   SELECT v FROM t WHERE k = 1
 	//
-	// The rows from the index are ordered by k then by v, but since k is an exact match
-	// column the results are also ordered just by v.
-	if !fromOrder.exactMatchCols.Empty() {
-		fromOrder.exactMatchCols.ForEach(func(colIdx uint32) {
+	// The rows from the index are ordered by k then by v, but since k is a
+	// constant column the results are also ordered just by v.
+	if !fromOrder.constantCols.Empty() {
+		fromOrder.constantCols.ForEach(func(colIdx uint32) {
 			if renderIdx, ok := r.findRenderIndexForCol(int(colIdx)); ok {
-				r.ordering.addExactMatchColumn(renderIdx)
+				r.ordering.addConstantColumn(renderIdx)
 			}
 		})
 	}

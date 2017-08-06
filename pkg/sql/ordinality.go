@@ -137,7 +137,7 @@ func (o *ordinalityNode) optimizeOrdering() {
 		o.ordering = origOrdering.copy()
 	} else {
 		// No ordering defined in the source, so create a new one.
-		o.ordering.exactMatchCols = origOrdering.exactMatchCols.Copy()
+		o.ordering.constantCols = origOrdering.constantCols.Copy()
 		o.ordering.ordering = []orderingColumnGroup{{
 			cols: util.MakeFastIntSet(uint32(len(o.columns) - 1)),
 			dir:  encoding.Ascending,

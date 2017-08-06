@@ -34,13 +34,13 @@ import (
 // on a are ordered by column b (descending); and rows that have the same values
 // on a and b are ordered by column c (ascending).
 //
-// == Exact match columns ==
+// == Constant columns ==
 //
 // If results are known to be restricted to a single value on some columns, we
-// call these "exact match" columns; these are inconsequential w.r.t ordering.
+// call these "constant" columns; these are inconsequential w.r.t ordering.
 //
 // For example, if an index was defined on columns (a, b, c, d) and the WHERE
-// clause was "(a, c) = (1, 2)" then a and c are exact-match columns and we have
+// clause was "(a, c) = (1, 2)" then a and c are constant columns and we have
 // an ordering by b+ then d+. Such an ordering satisfies any of the following
 // desired orderings (among many others):
 //   a+,c+
@@ -52,6 +52,10 @@ import (
 //   b+,d+,a-
 //   a+,b+,c+,d+
 //   b+,a+,c-,d+
+//
+// Note that constant means all values for this column are equal, but in general
+// this doesn't mean that the values are identical/interchangeable (consider
+// collated strings).
 //
 // == Unique flag ==
 //
@@ -84,9 +88,9 @@ import (
 // are ordered by the table column and by the ordinality column at the same time.
 type orderingInfo struct {
 	// columns for which we know we have a single value.
-	exactMatchCols util.FastIntSet
+	constantCols util.FastIntSet
 
-	// ordering of any other columns (the columns in exactMatchCols do not appear in this ordering).
+	// ordering of any other columns (the columns in constantCols do not appear in this ordering).
 	ordering []orderingColumnGroup
 
 	// true if we know that all the value tuples for the columns in `ordering` are distinct.
@@ -106,9 +110,9 @@ type orderingColumnGroup struct {
 func (ord orderingInfo) Format(buf *bytes.Buffer, columns sqlbase.ResultColumns) {
 	sep := ""
 
-	// Print the exact match columns. We sort them to ensure
-	// a deterministic output order.
-	cols := ord.exactMatchCols.Ordered()
+	// Print the constant columns. We sort them to ensure
+	// deterministic output order.
+	cols := ord.constantCols.Ordered()
 
 	printCol := func(buf *bytes.Buffer, columns sqlbase.ResultColumns, colIdx int) {
 		if columns == nil || colIdx >= len(columns) {
@@ -173,11 +177,11 @@ func (ord orderingInfo) AsString(columns sqlbase.ResultColumns) string {
 }
 
 func (ord orderingInfo) isEmpty() bool {
-	return ord.exactMatchCols.Empty() && len(ord.ordering) == 0
+	return ord.constantCols.Empty() && len(ord.ordering) == 0
 }
 
-func (ord *orderingInfo) addExactMatchColumn(colIdx int) {
-	ord.exactMatchCols.Add(uint32(colIdx))
+func (ord *orderingInfo) addConstantColumn(colIdx int) {
+	ord.constantCols.Add(uint32(colIdx))
 }
 
 func (ord *orderingInfo) addColumnGroup(cols util.FastIntSet, dir encoding.Direction) {
@@ -199,8 +203,8 @@ func (ord *orderingInfo) addColumn(colIdx int, dir encoding.Direction) {
 // copy returns a copy of ord which can be modified independently.
 func (ord orderingInfo) copy() orderingInfo {
 	result := orderingInfo{
-		unique:         ord.unique,
-		exactMatchCols: ord.exactMatchCols.Copy(),
+		unique:       ord.unique,
+		constantCols: ord.constantCols.Copy(),
 	}
 	if len(ord.ordering) > 0 {
 		result.ordering = make([]orderingColumnGroup, len(ord.ordering))
@@ -215,8 +219,8 @@ func (ord orderingInfo) copy() orderingInfo {
 // reverse returns the reversed ordering.
 func (ord orderingInfo) reverse() orderingInfo {
 	result := orderingInfo{
-		unique:         ord.unique,
-		exactMatchCols: ord.exactMatchCols.Copy(),
+		unique:       ord.unique,
+		constantCols: ord.constantCols.Copy(),
 	}
 	if len(ord.ordering) > 0 {
 		result.ordering = make([]orderingColumnGroup, len(ord.ordering))
@@ -251,8 +255,8 @@ func (ord orderingInfo) computeMatch(desired sqlbase.ColumnOrdering) int {
 			// difference.
 			return len(desired)
 		}
-		// If the column did not match, check if it is one of the exact match columns.
-		if !ord.exactMatchCols.Contains(uint32(col.ColIdx)) {
+		// If the column did not match, check if it is one of the constant columns.
+		if !ord.constantCols.Contains(uint32(col.ColIdx)) {
 			// Everything matched up to this point.
 			return i
 		}
@@ -262,7 +266,7 @@ func (ord orderingInfo) computeMatch(desired sqlbase.ColumnOrdering) int {
 }
 
 // trim simplifies ord.ordering, retaining only the column groups that are
-// needed to to match a desired ordering (or a prefix of it); exact match
+// needed to to match a desired ordering (or a prefix of it); constant
 // columns are left untouched.
 //
 // A trimmed ordering is guaranteed to still match the desired ordering to the
@@ -282,7 +286,7 @@ func (ord *orderingInfo) trim(desired sqlbase.ColumnOrdering) {
 		// Check that the next column matches.
 		if ci.dir == col.Direction && ci.cols.Contains(uint32(col.ColIdx)) {
 			pos++
-		} else if !ord.exactMatchCols.Contains(uint32(col.ColIdx)) {
+		} else if !ord.constantCols.Contains(uint32(col.ColIdx)) {
 			break
 		}
 	}
@@ -293,7 +297,7 @@ func (ord *orderingInfo) trim(desired sqlbase.ColumnOrdering) {
 }
 
 // getColumnOrdering returns a ColumnOrdering that corresponds to ord.ordering
-// (excludes exact match columns). It is guaranteed that:
+// (excludes constant columns). It is guaranteed that:
 //  - ord.ComputeMatch(ord.getColumnOrdering()) == len(ord.ordering)
 //  - ord.trim(ord.getColumnOrdering()) is a no-op.
 //
@@ -371,13 +375,13 @@ func computeMergeJoinOrdering(a, b orderingInfo, colA, colB []int) sqlbase.Colum
 
 	var result sqlbase.ColumnOrdering
 
-	// First, find any merged columns that are exact matches in both sources. This
+	// First, find any merged columns that are constant in both sources. This
 	// means that in each source, this column only sees one value.
 	for i := range colA {
-		if a.exactMatchCols.Contains(uint32(colA[i])) && b.exactMatchCols.Contains(uint32(colB[i])) {
+		if a.constantCols.Contains(uint32(colA[i])) && b.constantCols.Contains(uint32(colB[i])) {
 			// The direction here is arbitrary - the orderings guarantee that either works.
 			// TODO(radu): perhaps the correct thing would be to return an
-			// orderingInfo with this as an exact-match column.
+			// orderingInfo with this as a constant column.
 			result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: encoding.Ascending})
 		}
 	}
@@ -401,9 +405,9 @@ func computeMergeJoinOrdering(a, b orderingInfo, colA, colB []int) sqlbase.Colum
 	//    If this is the case, we can check the same for the second column, and so
 	//    on. If not, we stop.
 	//
-	// This gets more complicated because of "exact match" columns. If the first
+	// This gets more complicated because of constant columns. If the first
 	// column in A's ordering is an equality column and the corresponding B column
-	// is an "exact match", this pairing also works. This means that we will not
+	// is a constant, this pairing also works. This means that we will not
 	// necessarily consume the orderings at the same rate. The remaining parts of
 	// the orderings are maintained in ordA/ordB.
 	//
@@ -435,26 +439,26 @@ MainLoop:
 				continue MainLoop
 			}
 		}
-		// See if any column in the first group in A is an exact match in B. Or, if
+		// See if any column in the first group in A is constant in B. Or, if
 		// we consumed B and it is "unique", then we are free to add any other
 		// columns in A.
 		if !doneA {
 			for i := range colA {
 				if ordA[0].cols.Contains(uint32(colA[i])) &&
-					((doneB && b.unique) || b.exactMatchCols.Contains(uint32(colB[i]))) {
+					((doneB && b.unique) || b.constantCols.Contains(uint32(colB[i]))) {
 					result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: ordA[0].dir})
 					ordA = ordA[1:]
 					continue MainLoop
 				}
 			}
 		}
-		// See if any column in the first group in B is an exact match in A. Or, if
+		// See if any column in the first group in B is constant in A. Or, if
 		// we consumed A and it is "unique", then we are free to add any other
 		// columns in B.
 		if !doneB {
 			for i := range colB {
 				if ordB[0].cols.Contains(uint32(colB[i])) &&
-					((doneA && a.unique) || a.exactMatchCols.Contains(uint32(colA[i]))) {
+					((doneA && a.unique) || a.constantCols.Contains(uint32(colA[i]))) {
 					result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: ordB[0].dir})
 					ordB = ordB[1:]
 					continue MainLoop

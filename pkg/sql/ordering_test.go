@@ -105,7 +105,7 @@ func TestComputeOrderingMatch(t *testing.T) {
 			},
 		},
 		{
-			// Ordering with no exact-match columns.
+			// Ordering with no constant columns.
 			existing: orderingInfo{
 				ordering: makeColumnGroups(1, desc, 2, asc),
 				unique:   false,
@@ -116,7 +116,7 @@ func TestComputeOrderingMatch(t *testing.T) {
 			},
 		},
 		{
-			// Ordering with no exact-match columns but with distinct.
+			// Ordering with no constant columns but with distinct.
 			existing: orderingInfo{
 				ordering: makeColumnGroups(1, desc, 2, asc),
 				unique:   true,
@@ -131,11 +131,11 @@ func TestComputeOrderingMatch(t *testing.T) {
 			},
 		},
 		{
-			// Ordering with only exact-match columns.
+			// Ordering with only constant columns.
 			existing: orderingInfo{
-				exactMatchCols: util.MakeFastIntSet(1, 2),
-				ordering:       nil,
-				unique:         false,
+				constantCols: util.MakeFastIntSet(1, 2),
+				ordering:     nil,
+				unique:       false,
 			},
 			cases: []desiredCase{
 				defTestCase(1, 1, makeColumnOrdering(2, desc, 5, asc, 1, asc)),
@@ -143,11 +143,11 @@ func TestComputeOrderingMatch(t *testing.T) {
 			},
 		},
 		{
-			// Ordering with exact-match columns.
+			// Ordering with constant columns.
 			existing: orderingInfo{
-				exactMatchCols: util.MakeFastIntSet(0, 5, 6),
-				ordering:       makeColumnGroups(1, desc, 2, asc),
-				unique:         false,
+				constantCols: util.MakeFastIntSet(0, 5, 6),
+				ordering:     makeColumnGroups(1, desc, 2, asc),
+				unique:       false,
 			},
 			cases: []desiredCase{
 				defTestCase(2, 0, makeColumnOrdering(1, desc, 5, asc)),
@@ -159,11 +159,11 @@ func TestComputeOrderingMatch(t *testing.T) {
 			},
 		},
 		{
-			// Ordering with exact-match columns and distinct.
+			// Ordering with constant columns and distinct.
 			existing: orderingInfo{
-				exactMatchCols: util.MakeFastIntSet(0, 5, 6),
-				ordering:       makeColumnGroups(1, desc, 2, asc),
-				unique:         true,
+				constantCols: util.MakeFastIntSet(0, 5, 6),
+				ordering:     makeColumnGroups(1, desc, 2, asc),
+				unique:       true,
 			},
 			cases: []desiredCase{
 				defTestCase(2, 0, makeColumnOrdering(1, desc, 5, asc)),
@@ -225,45 +225,45 @@ func TestTrimOrdering(t *testing.T) {
 			},
 		},
 		{
-			name: "exact-match-columns-1",
+			name: "const-columns-1",
 			ord: orderingInfo{
-				exactMatchCols: util.MakeFastIntSet(0, 5, 6),
-				ordering:       makeColumnGroups(1, desc, 2, desc),
-				unique:         true,
+				constantCols: util.MakeFastIntSet(0, 5, 6),
+				ordering:     makeColumnGroups(1, desc, 2, desc),
+				unique:       true,
 			},
 			desired: makeColumnOrdering(5, asc, 1, desc),
 			expected: orderingInfo{
-				exactMatchCols: util.MakeFastIntSet(0, 5, 6),
-				ordering:       makeColumnGroups(1, desc),
-				unique:         false,
+				constantCols: util.MakeFastIntSet(0, 5, 6),
+				ordering:     makeColumnGroups(1, desc),
+				unique:       false,
 			},
 		},
 		{
-			name: "exact-match-columns-2",
+			name: "const-columns-2",
 			ord: orderingInfo{
-				exactMatchCols: util.MakeFastIntSet(0, 5, 6),
-				ordering:       makeColumnGroups(1, desc, 2, desc, 3, asc),
-				unique:         true,
+				constantCols: util.MakeFastIntSet(0, 5, 6),
+				ordering:     makeColumnGroups(1, desc, 2, desc, 3, asc),
+				unique:       true,
 			},
 			desired: makeColumnOrdering(5, asc, 1, desc, 0, desc, 2, desc),
 			expected: orderingInfo{
-				exactMatchCols: util.MakeFastIntSet(0, 5, 6),
-				ordering:       makeColumnGroups(1, desc, 2, desc),
-				unique:         false,
+				constantCols: util.MakeFastIntSet(0, 5, 6),
+				ordering:     makeColumnGroups(1, desc, 2, desc),
+				unique:       false,
 			},
 		},
 		{
 			name: "no-match",
 			ord: orderingInfo{
-				exactMatchCols: util.MakeFastIntSet(0, 5, 6),
-				ordering:       makeColumnGroups(1, desc, 2, desc, 3, asc),
-				unique:         true,
+				constantCols: util.MakeFastIntSet(0, 5, 6),
+				ordering:     makeColumnGroups(1, desc, 2, desc, 3, asc),
+				unique:       true,
 			},
 			desired: makeColumnOrdering(5, asc, 4, asc),
 			expected: orderingInfo{
-				exactMatchCols: util.MakeFastIntSet(0, 5, 6),
-				ordering:       makeColumnGroups(),
-				unique:         false,
+				constantCols: util.MakeFastIntSet(0, 5, 6),
+				ordering:     makeColumnGroups(),
+				unique:       false,
 			},
 		},
 	}
@@ -271,7 +271,7 @@ func TestTrimOrdering(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.ord.trim(tc.desired)
-			if !tc.ord.exactMatchCols.Equals(tc.expected.exactMatchCols) ||
+			if !tc.ord.constantCols.Equals(tc.expected.constantCols) ||
 				tc.ord.unique != tc.expected.unique ||
 				len(tc.ord.ordering) != len(tc.expected.ordering) {
 				t.Errorf("expected %v, got %v", tc.expected, tc.ord)
@@ -309,9 +309,9 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 			expected: makeColumnOrdering(0, asc, 1, desc),
 		},
 		{
-			name: "exact-match-a",
+			name: "const-a",
 			a: orderingInfo{
-				exactMatchCols: util.MakeFastIntSet(1, 2),
+				constantCols: util.MakeFastIntSet(1, 2),
 			},
 			b: orderingInfo{
 				ordering: makeColumnGroups(3, asc, 4, desc),
@@ -321,26 +321,26 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 			expected: makeColumnOrdering(0, asc, 1, desc),
 		},
 		{
-			name: "exact-match-b",
+			name: "const-b",
 			a: orderingInfo{
 				ordering: makeColumnGroups(1, asc, 2, desc, 3, asc),
 			},
 			b: orderingInfo{
-				exactMatchCols: util.MakeFastIntSet(3, 4),
+				constantCols: util.MakeFastIntSet(3, 4),
 			},
 			colA:     []int{1, 2},
 			colB:     []int{3, 4},
 			expected: makeColumnOrdering(0, asc, 1, desc),
 		},
 		{
-			name: "exact-match-both",
+			name: "const-both",
 			a: orderingInfo{
-				ordering:       makeColumnGroups(2, desc),
-				exactMatchCols: util.MakeFastIntSet(1),
+				ordering:     makeColumnGroups(2, desc),
+				constantCols: util.MakeFastIntSet(1),
 			},
 			b: orderingInfo{
-				ordering:       makeColumnGroups(3, asc),
-				exactMatchCols: util.MakeFastIntSet(4),
+				ordering:     makeColumnGroups(3, asc),
+				constantCols: util.MakeFastIntSet(4),
 			},
 			colA:     []int{1, 2},
 			colB:     []int{3, 4},
