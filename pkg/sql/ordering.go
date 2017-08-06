@@ -17,10 +17,10 @@ package sql
 import (
 	"bytes"
 	"fmt"
-	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
@@ -44,7 +44,7 @@ import (
 //
 type orderingInfo struct {
 	// columns for which we know we have a single value.
-	exactMatchCols map[int]struct{}
+	exactMatchCols util.FastIntSet
 
 	// ordering of any other columns (the columns in exactMatchCols do not appear in this ordering).
 	ordering sqlbase.ColumnOrdering
@@ -60,11 +60,7 @@ func (ord orderingInfo) Format(buf *bytes.Buffer, columns sqlbase.ResultColumns)
 
 	// Print the exact match columns. We sort them to ensure
 	// a deterministic output order.
-	cols := make([]int, 0, len(ord.exactMatchCols))
-	for i := range ord.exactMatchCols {
-		cols = append(cols, i)
-	}
-	sort.Ints(cols)
+	cols := ord.exactMatchCols.Ordered()
 
 	for _, i := range cols {
 		buf.WriteString(sep)
@@ -109,14 +105,11 @@ func (ord orderingInfo) AsString(columns sqlbase.ResultColumns) string {
 }
 
 func (ord orderingInfo) isEmpty() bool {
-	return len(ord.exactMatchCols) == 0 && len(ord.ordering) == 0
+	return ord.exactMatchCols.Empty() && len(ord.ordering) == 0
 }
 
 func (ord *orderingInfo) addExactMatchColumn(colIdx int) {
-	if ord.exactMatchCols == nil {
-		ord.exactMatchCols = make(map[int]struct{})
-	}
-	ord.exactMatchCols[colIdx] = struct{}{}
+	ord.exactMatchCols.Add(uint32(colIdx))
 }
 
 func (ord *orderingInfo) addColumn(colIdx int, dir encoding.Direction) {
@@ -132,11 +125,10 @@ func (ord *orderingInfo) addColumn(colIdx int, dir encoding.Direction) {
 // reverse returns the reversed ordering.
 func (ord orderingInfo) reverse() orderingInfo {
 	result := orderingInfo{unique: ord.unique}
-	if len(ord.exactMatchCols) > 0 {
-		result.exactMatchCols = make(map[int]struct{}, len(ord.exactMatchCols))
-		for c := range ord.exactMatchCols {
-			result.exactMatchCols[c] = struct{}{}
-		}
+	if !ord.exactMatchCols.Empty() {
+		ord.exactMatchCols.ForEach(func(c uint32) {
+			result.exactMatchCols.Add(c)
+		})
 	}
 	if len(ord.ordering) > 0 {
 		result.ordering = make(sqlbase.ColumnOrdering, len(ord.ordering))
@@ -171,7 +163,7 @@ func (ord orderingInfo) computeMatch(desired sqlbase.ColumnOrdering) int {
 			return len(desired)
 		}
 		// If the column did not match, check if it is one of the exact match columns.
-		if _, ok := ord.exactMatchCols[col.ColIdx]; !ok {
+		if !ord.exactMatchCols.Contains(uint32(col.ColIdx)) {
 			// Everything matched up to this point.
 			return i
 		}
@@ -201,7 +193,7 @@ func (ord *orderingInfo) trim(desired sqlbase.ColumnOrdering) {
 		// Check that the next column matches.
 		if ci.ColIdx == col.ColIdx && ci.Direction == col.Direction {
 			pos++
-		} else if _, ok := ord.exactMatchCols[col.ColIdx]; !ok {
+		} else if !ord.exactMatchCols.Contains(uint32(col.ColIdx)) {
 			break
 		}
 	}
@@ -273,13 +265,11 @@ func computeMergeJoinOrdering(a, b orderingInfo, colA, colB []int) sqlbase.Colum
 	// First, find any merged columns that are exact matches in both sources. This
 	// means that in each source, this column only sees one value.
 	for i := range colA {
-		if _, ok := a.exactMatchCols[colA[i]]; ok {
-			if _, ok := b.exactMatchCols[colB[i]]; ok {
-				// The direction here is arbitrary - the orderings guarantee that either works.
-				// TODO(radu): perhaps the correct thing would be to return an
-				// orderingInfo with this as an exact-match column.
-				result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: encoding.Ascending})
-			}
+		if a.exactMatchCols.Contains(uint32(colA[i])) && b.exactMatchCols.Contains(uint32(colB[i])) {
+			// The direction here is arbitrary - the orderings guarantee that either works.
+			// TODO(radu): perhaps the correct thing would be to return an
+			// orderingInfo with this as an exact-match column.
+			result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: encoding.Ascending})
 		}
 	}
 
@@ -333,7 +323,7 @@ func computeMergeJoinOrdering(a, b orderingInfo, colA, colB []int) sqlbase.Colum
 		// and it is "unique", then we are free to add any other columns in A.
 		if !doneA {
 			if i, ok := eqMapA[ordA[0].ColIdx]; ok {
-				if _, ok := b.exactMatchCols[colB[i]]; ok || (doneB && b.unique) {
+				if (doneB && b.unique) || b.exactMatchCols.Contains(uint32(colB[i])) {
 					result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: ordA[0].Direction})
 					ordA = ordA[1:]
 					continue
@@ -344,7 +334,7 @@ func computeMergeJoinOrdering(a, b orderingInfo, colA, colB []int) sqlbase.Colum
 		// A and it is "unique", then we are free to add any other columns in B.
 		if !doneB {
 			if i, ok := eqMapB[ordB[0].ColIdx]; ok {
-				if _, ok := a.exactMatchCols[colA[i]]; ok || (doneA && a.unique) {
+				if (doneA && a.unique) || a.exactMatchCols.Contains(uint32(colA[i])) {
 					result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: ordB[0].Direction})
 					ordB = ordB[1:]
 					continue
