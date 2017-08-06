@@ -202,8 +202,10 @@ func doExpandPlan(
 			ordering.exactMatchCols.ForEach(func(colIdx uint32) {
 				n.columnsInOrder[colIdx] = true
 			})
-			for _, c := range ordering.ordering {
-				n.columnsInOrder[c.ColIdx] = true
+			for _, g := range ordering.ordering {
+				for col, ok := g.cols.Next(0); ok; col, ok = g.cols.Next(col + 1) {
+					n.columnsInOrder[col] = true
+				}
 			}
 		}
 
@@ -458,15 +460,8 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 		n.right.plan = simplifyOrderings(n.right.plan, usefulRight)
 
 	case *ordinalityNode:
-		// The ordinality node either passes through the source ordering, or if
-		// there is none it creates an ordering on the ordinality column (see the
-		// corresponding code in doExpandPlan).
-		// TODO(radu): better encapsulate this code in ordinalityNode (#13594).
-		if len(n.ordering.ordering) == 1 && n.ordering.ordering[0].ColIdx == len(n.columns)-1 {
-			n.source = simplifyOrderings(n.source, nil)
-		} else {
-			n.source = simplifyOrderings(n.source, n.ordering.ordering)
-		}
+		n.ordering.trim(usefulOrdering)
+		n.source = simplifyOrderings(n.source, n.restrictOrdering(usefulOrdering))
 
 	case *limitNode:
 		n.plan = simplifyOrderings(n.plan, usefulOrdering)
@@ -528,7 +523,8 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 	case *distinctNode:
 		// distinctNode uses whatever order the underlying node presents (regardless
 		// of any ordering requirement on distinctNode itself).
-		n.plan = simplifyOrderings(n.plan, planOrdering(n.plan).ordering)
+		sourceOrdering := planOrdering(n.plan)
+		n.plan = simplifyOrderings(n.plan, sourceOrdering.getColumnOrdering())
 
 	case *scanNode:
 		n.ordering.trim(usefulOrdering)
