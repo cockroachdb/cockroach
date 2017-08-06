@@ -99,7 +99,7 @@ func TestComputeOrderingMatch(t *testing.T) {
 			// No existing ordering.
 			existing: orderingInfo{
 				ordering: nil,
-				unique:   false,
+				isKey:    false,
 			},
 			cases: []desiredCase{
 				defTestCase(0, 0, makeColumnOrdering(1, desc, 5, asc)),
@@ -109,7 +109,7 @@ func TestComputeOrderingMatch(t *testing.T) {
 			// Ordering with no constant columns.
 			existing: orderingInfo{
 				ordering: makeColumnGroups(1, desc, 2, asc),
-				unique:   false,
+				isKey:    false,
 			},
 			cases: []desiredCase{
 				defTestCase(1, 0, makeColumnOrdering(1, desc, 5, asc)),
@@ -120,7 +120,7 @@ func TestComputeOrderingMatch(t *testing.T) {
 			// Ordering with column groups and no constant columns.
 			existing: orderingInfo{
 				ordering: makeColumnGroups(1, 2, desc, 3, 4, asc),
-				unique:   false,
+				isKey:    false,
 			},
 			cases: []desiredCase{
 				defTestCase(2, 0, makeColumnOrdering(1, desc, 3, asc)),
@@ -135,10 +135,10 @@ func TestComputeOrderingMatch(t *testing.T) {
 			},
 		},
 		{
-			// Ordering with no constant columns but with unique.
+			// Ordering with no constant columns but with isKey.
 			existing: orderingInfo{
 				ordering: makeColumnGroups(1, desc, 2, asc),
-				unique:   true,
+				isKey:    true,
 			},
 			cases: []desiredCase{
 				defTestCase(1, 0, makeColumnOrdering(1, desc, 5, asc)),
@@ -150,10 +150,10 @@ func TestComputeOrderingMatch(t *testing.T) {
 			},
 		},
 		{
-			// Ordering with column groups, no constant columns but with unique.
+			// Ordering with column groups, no constant columns but with isKey.
 			existing: orderingInfo{
 				ordering: makeColumnGroups(1, 2, 3, desc, 4, asc),
-				unique:   true,
+				isKey:    true,
 			},
 			cases: []desiredCase{
 				defTestCase(1, 0, makeColumnOrdering(1, desc, 5, asc)),
@@ -181,7 +181,7 @@ func TestComputeOrderingMatch(t *testing.T) {
 			existing: orderingInfo{
 				constantCols: util.MakeFastIntSet(1, 2),
 				ordering:     nil,
-				unique:       false,
+				isKey:        false,
 			},
 			cases: []desiredCase{
 				defTestCase(1, 1, makeColumnOrdering(2, desc, 5, asc, 1, asc)),
@@ -193,7 +193,7 @@ func TestComputeOrderingMatch(t *testing.T) {
 			existing: orderingInfo{
 				constantCols: util.MakeFastIntSet(0, 5, 6),
 				ordering:     makeColumnGroups(1, desc, 2, asc),
-				unique:       false,
+				isKey:        false,
 			},
 			cases: []desiredCase{
 				defTestCase(2, 0, makeColumnOrdering(1, desc, 5, asc)),
@@ -209,7 +209,7 @@ func TestComputeOrderingMatch(t *testing.T) {
 			existing: orderingInfo{
 				constantCols: util.MakeFastIntSet(0, 8, 9),
 				ordering:     makeColumnGroups(1, 2, 3, desc, 4, 5, asc),
-				unique:       false,
+				isKey:        false,
 			},
 			cases: []desiredCase{
 				defTestCase(2, 0, makeColumnOrdering(1, desc, 8, asc)),
@@ -223,11 +223,11 @@ func TestComputeOrderingMatch(t *testing.T) {
 			},
 		},
 		{
-			// Ordering with constant columns and unique.
+			// Ordering with constant columns and isKey.
 			existing: orderingInfo{
 				constantCols: util.MakeFastIntSet(0, 5, 6),
 				ordering:     makeColumnGroups(1, desc, 2, asc),
-				unique:       true,
+				isKey:        true,
 			},
 			cases: []desiredCase{
 				defTestCase(2, 0, makeColumnOrdering(1, desc, 5, asc)),
@@ -242,11 +242,11 @@ func TestComputeOrderingMatch(t *testing.T) {
 			},
 		},
 		{
-			// Ordering with column groups, constant columns and unique.
+			// Ordering with column groups, constant columns and isKey.
 			existing: orderingInfo{
 				constantCols: util.MakeFastIntSet(0, 5, 6),
 				ordering:     makeColumnGroups(1, 8, desc, 2, 9, asc),
-				unique:       true,
+				isKey:        true,
 			},
 			cases: []desiredCase{
 				defTestCase(2, 0, makeColumnOrdering(8, desc, 5, asc)),
@@ -313,9 +313,9 @@ func TestTrimOrderingGuarantee(t *testing.T) {
 	for _, numConstCols := range []int{0, 1, 2, 4} {
 		for _, numGroups := range []int{0, 1, 2, 4, 5} {
 			for _, maxGroupSize := range []int{1, 2, 4} {
-				for _, unique := range []bool{false, true} {
+				for _, isKey := range []bool{false, true} {
 					for tries := 0; tries < 20; tries++ {
-						o := orderingInfo{unique: unique}
+						o := orderingInfo{isKey: isKey}
 						for i := 0; i < numConstCols; i++ {
 							o.addConstantColumn(genColumn(o))
 						}
@@ -367,36 +367,36 @@ func TestTrimOrdering(t *testing.T) {
 			name: "basic-prefix-1",
 			ord: orderingInfo{
 				ordering: makeColumnGroups(1, asc, 2, desc),
-				unique:   true,
+				isKey:    true,
 			},
 			desired: makeColumnOrdering(1, asc),
 			expected: orderingInfo{
 				ordering: makeColumnGroups(1, asc),
-				unique:   false,
+				isKey:    false,
 			},
 		},
 		{
 			name: "basic-prefix-1-with-groups",
 			ord: orderingInfo{
 				ordering: makeColumnGroups(1, 5, asc, 2, desc),
-				unique:   true,
+				isKey:    true,
 			},
 			desired: makeColumnOrdering(1, asc, 5, asc),
 			expected: orderingInfo{
 				ordering: makeColumnGroups(1, 5, asc),
-				unique:   false,
+				isKey:    false,
 			},
 		},
 		{
 			name: "direction-mismatch",
 			ord: orderingInfo{
 				ordering: makeColumnGroups(1, asc, 2, desc),
-				unique:   true,
+				isKey:    true,
 			},
 			desired: makeColumnOrdering(1, desc),
 			expected: orderingInfo{
 				ordering: makeColumnGroups(),
-				unique:   false,
+				isKey:    false,
 			},
 		},
 		{
@@ -404,13 +404,13 @@ func TestTrimOrdering(t *testing.T) {
 			ord: orderingInfo{
 				constantCols: util.MakeFastIntSet(0, 5, 6),
 				ordering:     makeColumnGroups(1, desc, 2, desc),
-				unique:       true,
+				isKey:        true,
 			},
 			desired: makeColumnOrdering(5, asc, 1, desc),
 			expected: orderingInfo{
 				constantCols: util.MakeFastIntSet(0, 5, 6),
 				ordering:     makeColumnGroups(1, desc),
-				unique:       false,
+				isKey:        false,
 			},
 		},
 		{
@@ -418,13 +418,13 @@ func TestTrimOrdering(t *testing.T) {
 			ord: orderingInfo{
 				constantCols: util.MakeFastIntSet(0, 5, 6),
 				ordering:     makeColumnGroups(1, desc, 2, desc, 3, asc),
-				unique:       true,
+				isKey:        true,
 			},
 			desired: makeColumnOrdering(5, asc, 1, desc, 0, desc, 2, desc),
 			expected: orderingInfo{
 				constantCols: util.MakeFastIntSet(0, 5, 6),
 				ordering:     makeColumnGroups(1, desc, 2, desc),
-				unique:       false,
+				isKey:        false,
 			},
 		},
 		{
@@ -432,13 +432,13 @@ func TestTrimOrdering(t *testing.T) {
 			ord: orderingInfo{
 				constantCols: util.MakeFastIntSet(0, 5, 6),
 				ordering:     makeColumnGroups(1, 7, desc, 2, 9, desc),
-				unique:       true,
+				isKey:        true,
 			},
 			desired: makeColumnOrdering(5, asc, 1, desc, 6, desc, 7, asc),
 			expected: orderingInfo{
 				constantCols: util.MakeFastIntSet(0, 5, 6),
 				ordering:     makeColumnGroups(1, 7, desc),
-				unique:       false,
+				isKey:        false,
 			},
 		},
 		{
@@ -446,13 +446,13 @@ func TestTrimOrdering(t *testing.T) {
 			ord: orderingInfo{
 				constantCols: util.MakeFastIntSet(0, 5, 6),
 				ordering:     makeColumnGroups(1, desc, 2, desc, 3, asc),
-				unique:       true,
+				isKey:        true,
 			},
 			desired: makeColumnOrdering(5, asc, 4, asc),
 			expected: orderingInfo{
 				constantCols: util.MakeFastIntSet(0, 5, 6),
 				ordering:     makeColumnGroups(),
-				unique:       false,
+				isKey:        false,
 			},
 		},
 	}
@@ -461,7 +461,7 @@ func TestTrimOrdering(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.ord.trim(tc.desired)
 			if !tc.ord.constantCols.Equals(tc.expected.constantCols) ||
-				tc.ord.unique != tc.expected.unique ||
+				tc.ord.isKey != tc.expected.isKey ||
 				len(tc.ord.ordering) != len(tc.expected.ordering) {
 				t.Errorf("expected %v, got %v", tc.expected, tc.ord)
 			}
@@ -560,10 +560,10 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 			expected: makeColumnOrdering(1, desc, 0, asc),
 		},
 		{
-			name: "unique-a",
+			name: "key-a",
 			a: orderingInfo{
 				ordering: makeColumnGroups(1, asc),
-				unique:   true,
+				isKey:    true,
 			},
 			b: orderingInfo{
 				ordering: makeColumnGroups(3, asc, 4, desc),
@@ -573,13 +573,13 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 			expected: makeColumnOrdering(0, asc, 1, desc),
 		},
 		{
-			name: "unique-b",
+			name: "key-b",
 			a: orderingInfo{
 				ordering: makeColumnGroups(1, asc, 2, desc),
 			},
 			b: orderingInfo{
 				ordering: makeColumnGroups(3, asc),
-				unique:   true,
+				isKey:    true,
 			},
 			colA:     []int{1, 2},
 			colB:     []int{3, 4},

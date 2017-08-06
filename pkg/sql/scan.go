@@ -403,7 +403,7 @@ func (n *scanNode) computeOrdering(
 		}
 	}
 	// We included any implicit columns, so the results are unique.
-	ordering.unique = true
+	ordering.isKey = true
 	return ordering
 }
 

@@ -122,7 +122,7 @@ func sortOrdering(n *sortNode) orderingInfo {
 				// 1 | 2 | 1          1 | 1
 				// 1 | 2 | 3          1 | 3
 				ord.ordering = ord.ordering[:i]
-				ord.unique = false
+				ord.isKey = false
 				break
 			}
 		}

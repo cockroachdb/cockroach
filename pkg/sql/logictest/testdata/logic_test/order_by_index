@@ -6,8 +6,8 @@ EXPLAIN (METADATA) SELECT v FROM kv ORDER BY PRIMARY KEY kv
 ----
 0  nosort  ·      ·           (v)     ·
 0  ·       order  +k          ·       ·
-1  render  ·      ·           (v, k)  +k,unique
-2  scan    ·      ·           (k, v)  +k,unique
+1  render  ·      ·           (v, k)  +k,key
+2  scan    ·      ·           (k, v)  +k,key
 2  ·       table  kv@primary  ·       ·
 2  ·       spans  ALL         ·       ·
 
@@ -16,8 +16,8 @@ EXPLAIN (METADATA) SELECT v FROM kv ORDER BY PRIMARY KEY kv ASC
 ----
 0  nosort  ·      ·           (v)     ·
 0  ·       order  +k          ·       ·
-1  render  ·      ·           (v, k)  +k,unique
-2  scan    ·      ·           (k, v)  +k,unique
+1  render  ·      ·           (v, k)  +k,key
+2  scan    ·      ·           (k, v)  +k,key
 2  ·       table  kv@primary  ·       ·
 2  ·       spans  ALL         ·       ·
 
@@ -26,8 +26,8 @@ EXPLAIN (METADATA) SELECT v FROM kv ORDER BY PRIMARY KEY kv DESC
 ----
 0  nosort   ·      ·           (v)     ·
 0  ·        order  -k          ·       ·
-1  render   ·      ·           (v, k)  -k,unique
-2  revscan  ·      ·           (k, v)  -k,unique
+1  render   ·      ·           (v, k)  -k,key
+2  revscan  ·      ·           (k, v)  -k,key
 2  ·        table  kv@primary  ·       ·
 2  ·        spans  ALL         ·       ·
 
@@ -73,7 +73,7 @@ EXPLAIN (METADATA) SELECT k FROM kv ORDER BY INDEX kv@foo, k
 ----
 0  nosort  ·      ·       (k)     ·
 0  ·       order  -v,+k   ·       ·
-1  scan    ·      ·       (k, v)  -v,+k,unique
+1  scan    ·      ·       (k, v)  -v,+k,key
 1  ·       table  kv@foo  ·       ·
 1  ·       spans  ALL     ·       ·
 
@@ -108,10 +108,10 @@ EXPLAIN(METADATA) SELECT k FROM kv a NATURAL JOIN kv ORDER BY INDEX kv@foo
 2  ·       type            inner            ·                                                                                    ·
 2  ·       equality        (k, v) = (k, v)  ·                                                                                    ·
 2  ·       mergeJoinOrder  +"(k=k)"         ·                                                                                    ·
-3  scan    ·               ·                (k, v)                                                                               +k,unique
+3  scan    ·               ·                (k, v)                                                                               +k,key
 3  ·       table           kv@primary       ·                                                                                    ·
 3  ·       spans           ALL              ·                                                                                    ·
-3  scan    ·               ·                (k, v)                                                                               +k,unique
+3  scan    ·               ·                (k, v)                                                                               +k,key
 3  ·       table           kv@primary       ·                                                                                    ·
 3  ·       spans           ALL              ·                                                                                    ·
 
@@ -126,10 +126,10 @@ EXPLAIN(METADATA) SELECT k FROM kv@foo a NATURAL JOIN kv@foo ORDER BY INDEX kv@f
 2  ·       type            inner              ·                                                                                    ·
 2  ·       equality        (k, v) = (k, v)    ·                                                                                    ·
 2  ·       mergeJoinOrder  -"(v=v)",+"(k=k)"  ·                                                                                    ·
-3  scan    ·               ·                  (k, v)                                                                               -v,+k,unique
+3  scan    ·               ·                  (k, v)                                                                               -v,+k,key
 3  ·       table           kv@foo             ·                                                                                    ·
 3  ·       spans           ALL                ·                                                                                    ·
-3  scan    ·               ·                  (k, v)                                                                               -v,+k,unique
+3  scan    ·               ·                  (k, v)                                                                               -v,+k,key
 3  ·       table           kv@foo             ·                                                                                    ·
 3  ·       spans           ALL                ·                                                                                    ·
 

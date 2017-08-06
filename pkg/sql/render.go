@@ -629,5 +629,5 @@ func (r *renderNode) computeOrdering(fromOrder orderingInfo) {
 		r.ordering.addColumnGroup(colsWithTargets, group.dir)
 	}
 	// We added all columns in fromOrder; we can copy the unique flag.
-	r.ordering.unique = fromOrder.unique
+	r.ordering.isKey = fromOrder.isKey
 }

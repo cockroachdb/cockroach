@@ -1149,10 +1149,10 @@ EXPLAIN (VERBOSE) SELECT * FROM pkBA NATURAL JOIN pkBAD
 1  ·       type            inner                        ·                                                                                                                                                                     ·
 1  ·       equality        (a, b, c, d) = (a, b, c, d)  ·                                                                                                                                                                     ·
 1  ·       mergeJoinOrder  +"(b=b)",+"(a=a)",+"(d=d)"   ·                                                                                                                                                                     ·
-2  scan    ·               ·                            (a, b, c, d)                                                                                                                                                          +b,+a,unique
+2  scan    ·               ·                            (a, b, c, d)                                                                                                                                                          +b,+a,key
 2  ·       table           pkba@primary                 ·                                                                                                                                                                     ·
 2  ·       spans           ALL                          ·                                                                                                                                                                     ·
-2  scan    ·               ·                            (a, b, c, d)                                                                                                                                                          +b,+a,+d,unique
+2  scan    ·               ·                            (a, b, c, d)                                                                                                                                                          +b,+a,+d,key
 2  ·       table           pkbad@primary                ·                                                                                                                                                                     ·
 2  ·       spans           ALL                          ·                                                                                                                                                                     ·
 
@@ -1169,10 +1169,10 @@ EXPLAIN (VERBOSE) SELECT * FROM pkBAC AS l JOIN pkBAC AS r USING(a, b, c)
 1  ·       type            inner                       ·                                                                                                                                  ·
 1  ·       equality        (a, b, c) = (a, b, c)       ·                                                                                                                                  ·
 1  ·       mergeJoinOrder  +"(b=b)",+"(a=a)",+"(c=c)"  ·                                                                                                                                  ·
-2  scan    ·               ·                           (a, b, c, d)                                                                                                                       +b,+a,+c,unique
+2  scan    ·               ·                           (a, b, c, d)                                                                                                                       +b,+a,+c,key
 2  ·       table           pkbac@primary               ·                                                                                                                                  ·
 2  ·       spans           ALL                         ·                                                                                                                                  ·
-2  scan    ·               ·                           (a, b, c, d)                                                                                                                       +b,+a,+c,unique
+2  scan    ·               ·                           (a, b, c, d)                                                                                                                       +b,+a,+c,key
 2  ·       table           pkbac@primary               ·                                                                                                                                  ·
 2  ·       spans           ALL                         ·                                                                                                                                  ·
 
@@ -1183,9 +1183,9 @@ EXPLAIN (VERBOSE) SELECT * FROM pkBAC AS l JOIN pkBAD AS r ON l.c = r.d AND l.a 
 0  ·     type            inner                       ·                         ·
 0  ·     equality        (c, a, b) = (d, a, b)       ·                         ·
 0  ·     mergeJoinOrder  +"(b=b)",+"(a=a)",+"(c=d)"  ·                         ·
-1  scan  ·               ·                           (a, b, c, d)              +b,+a,+c,unique
+1  scan  ·               ·                           (a, b, c, d)              +b,+a,+c,key
 1  ·     table           pkbac@primary               ·                         ·
 1  ·     spans           ALL                         ·                         ·
-1  scan  ·               ·                           (a, b, c, d)              +b,+a,+d,unique
+1  scan  ·               ·                           (a, b, c, d)              +b,+a,+d,key
 1  ·     table           pkbad@primary               ·                         ·
 1  ·     spans           ALL                         ·                         ·
