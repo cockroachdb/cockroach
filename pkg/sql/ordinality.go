@@ -124,20 +124,17 @@ func (o *ordinalityNode) optimizeOrdering() {
 	// We are going to "optimize" the ordering. We had an ordering
 	// initially from the source, but expand() may have caused it to
 	// change. So here retrieve the ordering of the source again.
-	origOrdering := planOrdering(o.source)
-
-	if len(origOrdering.ordering) > 0 {
-		// TODO(knz/radu): we basically have two simultaneous orderings.
-		// What we really want is something that orderingInfo cannot
-		// currently express: that the rows are ordered by a set of
-		// columns AND at the same time they are also ordered by a
-		// different set of columns. However since ordinalityNode is
-		// currently the only case where this happens we consider it's not
-		// worth the hassle and just use the source ordering.
-		o.ordering = origOrdering.copy()
+	o.ordering = planOrdering(o.source).copy()
+	if len(o.ordering.ordering) > 0 {
+		if o.ordering.ordering[0].dir == encoding.Ascending {
+			// We can add the ordinality column to the first ordering group.
+			o.ordering.ordering[0].cols.Add(uint32(len(o.columns) - 1))
+		}
+		// If the first column group is descending, orderingInfo doesn't support
+		// columns with different directions in the same group; just expose the
+		// source ordering.
 	} else {
 		// No ordering defined in the source, so create a new one.
-		o.ordering.constantCols = origOrdering.constantCols.Copy()
 		o.ordering.ordering = []orderingColumnGroup{{
 			cols: util.MakeFastIntSet(uint32(len(o.columns) - 1)),
 			dir:  encoding.Ascending,
