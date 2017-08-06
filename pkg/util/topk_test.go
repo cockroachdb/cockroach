@@ -24,7 +24,7 @@ import (
 // result.
 func testMoveTopKToFront(t *testing.T, k int, data ...int) {
 	// Make a copy of the values.
-	vals = append([]int(nil), data...)
+	vals := append([]int(nil), data...)
 	MoveTopKToFront(sort.IntSlice(vals), k)
 	for l := 0; l < k; l++ {
 		for r := k; r < len(data); r++ {
