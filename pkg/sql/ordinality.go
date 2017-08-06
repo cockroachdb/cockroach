@@ -142,6 +142,6 @@ func (o *ordinalityNode) optimizeOrdering() {
 			cols: util.MakeFastIntSet(uint32(len(o.columns) - 1)),
 			dir:  encoding.Ascending,
 		}}
-		o.ordering.unique = true
+		o.ordering.isKey = true
 	}
 }
