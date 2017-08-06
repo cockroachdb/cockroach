@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -57,16 +58,14 @@ func TestComputeOrderingMatch(t *testing.T) {
 		return sqlbase.ColumnOrderInfo{ColIdx: colIdx, Direction: direction}
 	}
 
-	e := struct{}{}
 	asc := encoding.Ascending
 	desc := encoding.Descending
 	testSets := []computeOrderCase{
 		{
 			// No existing ordering.
 			existing: orderingInfo{
-				exactMatchCols: nil,
-				ordering:       nil,
-				unique:         false,
+				ordering: nil,
+				unique:   false,
 			},
 			cases: []desiredCase{
 				defTestCase(0, 0, o(1, desc), o(5, asc)),
@@ -75,9 +74,8 @@ func TestComputeOrderingMatch(t *testing.T) {
 		{
 			// Ordering with no exact-match columns.
 			existing: orderingInfo{
-				exactMatchCols: nil,
-				ordering:       sqlbase.ColumnOrdering{o(1, desc), o(2, asc)},
-				unique:         false,
+				ordering: sqlbase.ColumnOrdering{o(1, desc), o(2, asc)},
+				unique:   false,
 			},
 			cases: []desiredCase{
 				defTestCase(1, 0, o(1, desc), o(5, asc)),
@@ -87,9 +85,8 @@ func TestComputeOrderingMatch(t *testing.T) {
 		{
 			// Ordering with no exact-match columns but with distinct.
 			existing: orderingInfo{
-				exactMatchCols: nil,
-				ordering:       sqlbase.ColumnOrdering{o(1, desc), o(2, asc)},
-				unique:         true,
+				ordering: sqlbase.ColumnOrdering{o(1, desc), o(2, asc)},
+				unique:   true,
 			},
 			cases: []desiredCase{
 				defTestCase(1, 0, o(1, desc), o(5, asc)),
@@ -103,7 +100,7 @@ func TestComputeOrderingMatch(t *testing.T) {
 		{
 			// Ordering with only exact-match columns.
 			existing: orderingInfo{
-				exactMatchCols: map[int]struct{}{1: e, 2: e},
+				exactMatchCols: util.MakeFastIntSet(1, 2),
 				ordering:       nil,
 				unique:         false,
 			},
@@ -115,7 +112,7 @@ func TestComputeOrderingMatch(t *testing.T) {
 		{
 			// Ordering with exact-match columns.
 			existing: orderingInfo{
-				exactMatchCols: map[int]struct{}{0: e, 5: e, 6: e},
+				exactMatchCols: util.MakeFastIntSet(0, 5, 6),
 				ordering:       sqlbase.ColumnOrdering{o(1, desc), o(2, asc)},
 				unique:         false,
 			},
@@ -131,7 +128,7 @@ func TestComputeOrderingMatch(t *testing.T) {
 		{
 			// Ordering with exact-match columns and distinct.
 			existing: orderingInfo{
-				exactMatchCols: map[int]struct{}{0: e, 5: e, 6: e},
+				exactMatchCols: util.MakeFastIntSet(0, 5, 6),
 				ordering:       sqlbase.ColumnOrdering{o(1, desc), o(2, asc)},
 				unique:         true,
 			},
@@ -173,7 +170,6 @@ func TestTrimOrdering(t *testing.T) {
 		return sqlbase.ColumnOrderInfo{ColIdx: colIdx, Direction: direction}
 	}
 
-	e := struct{}{}
 	asc := encoding.Ascending
 	desc := encoding.Descending
 	testCases := []struct {
@@ -185,41 +181,37 @@ func TestTrimOrdering(t *testing.T) {
 		{
 			name: "basic-prefix-1",
 			ord: orderingInfo{
-				exactMatchCols: nil,
-				ordering:       sqlbase.ColumnOrdering{o(1, asc), o(2, desc)},
-				unique:         true,
+				ordering: sqlbase.ColumnOrdering{o(1, asc), o(2, desc)},
+				unique:   true,
 			},
 			desired: sqlbase.ColumnOrdering{o(1, asc)},
 			expected: orderingInfo{
-				exactMatchCols: nil,
-				ordering:       sqlbase.ColumnOrdering{o(1, asc)},
-				unique:         false,
+				ordering: sqlbase.ColumnOrdering{o(1, asc)},
+				unique:   false,
 			},
 		},
 		{
 			name: "direction-mismatch",
 			ord: orderingInfo{
-				exactMatchCols: nil,
-				ordering:       sqlbase.ColumnOrdering{o(1, asc), o(2, desc)},
-				unique:         true,
+				ordering: sqlbase.ColumnOrdering{o(1, asc), o(2, desc)},
+				unique:   true,
 			},
 			desired: sqlbase.ColumnOrdering{o(1, desc)},
 			expected: orderingInfo{
-				exactMatchCols: nil,
-				ordering:       sqlbase.ColumnOrdering{},
-				unique:         false,
+				ordering: sqlbase.ColumnOrdering{},
+				unique:   false,
 			},
 		},
 		{
 			name: "exact-match-columns-1",
 			ord: orderingInfo{
-				exactMatchCols: map[int]struct{}{0: e, 5: e, 6: e},
+				exactMatchCols: util.MakeFastIntSet(0, 5, 6),
 				ordering:       sqlbase.ColumnOrdering{o(1, desc), o(2, desc)},
 				unique:         true,
 			},
 			desired: sqlbase.ColumnOrdering{o(5, asc), o(1, desc)},
 			expected: orderingInfo{
-				exactMatchCols: map[int]struct{}{0: e, 5: e, 6: e},
+				exactMatchCols: util.MakeFastIntSet(0, 5, 6),
 				ordering:       sqlbase.ColumnOrdering{o(1, desc)},
 				unique:         false,
 			},
@@ -227,13 +219,13 @@ func TestTrimOrdering(t *testing.T) {
 		{
 			name: "exact-match-columns-2",
 			ord: orderingInfo{
-				exactMatchCols: map[int]struct{}{0: e, 5: e, 6: e},
+				exactMatchCols: util.MakeFastIntSet(0, 5, 6),
 				ordering:       sqlbase.ColumnOrdering{o(1, desc), o(2, desc), o(3, asc)},
 				unique:         true,
 			},
 			desired: sqlbase.ColumnOrdering{o(5, asc), o(1, desc), o(0, desc), o(2, desc)},
 			expected: orderingInfo{
-				exactMatchCols: map[int]struct{}{0: e, 5: e, 6: e},
+				exactMatchCols: util.MakeFastIntSet(0, 5, 6),
 				ordering:       sqlbase.ColumnOrdering{o(1, desc), o(2, desc)},
 				unique:         false,
 			},
@@ -241,13 +233,13 @@ func TestTrimOrdering(t *testing.T) {
 		{
 			name: "no-match",
 			ord: orderingInfo{
-				exactMatchCols: map[int]struct{}{0: e, 5: e, 6: e},
+				exactMatchCols: util.MakeFastIntSet(0, 5, 6),
 				ordering:       sqlbase.ColumnOrdering{o(1, desc), o(2, desc), o(3, asc)},
 				unique:         true,
 			},
 			desired: sqlbase.ColumnOrdering{o(5, asc), o(4, asc)},
 			expected: orderingInfo{
-				exactMatchCols: map[int]struct{}{0: e, 5: e, 6: e},
+				exactMatchCols: util.MakeFastIntSet(0, 5, 6),
 				ordering:       sqlbase.ColumnOrdering{},
 				unique:         false,
 			},
@@ -274,7 +266,6 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 		return sqlbase.ColumnOrderInfo{ColIdx: colIdx, Direction: direction}
 	}
 
-	e := struct{}{}
 	asc := encoding.Ascending
 	desc := encoding.Descending
 	testCases := []struct {
@@ -298,7 +289,7 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 		{
 			name: "exact-match-a",
 			a: orderingInfo{
-				exactMatchCols: map[int]struct{}{1: e, 2: e},
+				exactMatchCols: util.MakeFastIntSet(1, 2),
 			},
 			b: orderingInfo{
 				ordering: sqlbase.ColumnOrdering{o(3, asc), o(4, desc)},
@@ -313,7 +304,7 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 				ordering: sqlbase.ColumnOrdering{o(1, asc), o(2, desc), o(3, asc)},
 			},
 			b: orderingInfo{
-				exactMatchCols: map[int]struct{}{3: e, 4: e},
+				exactMatchCols: util.MakeFastIntSet(3, 4),
 			},
 			colA:     []int{1, 2},
 			colB:     []int{3, 4},
@@ -323,11 +314,11 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 			name: "exact-match-both",
 			a: orderingInfo{
 				ordering:       sqlbase.ColumnOrdering{o(2, desc)},
-				exactMatchCols: map[int]struct{}{1: e},
+				exactMatchCols: util.MakeFastIntSet(1),
 			},
 			b: orderingInfo{
 				ordering:       sqlbase.ColumnOrdering{o(3, asc)},
-				exactMatchCols: map[int]struct{}{4: e},
+				exactMatchCols: util.MakeFastIntSet(4),
 			},
 			colA:     []int{1, 2},
 			colB:     []int{3, 4},

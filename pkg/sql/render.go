@@ -598,10 +598,12 @@ func (r *renderNode) computeOrdering(fromOrder orderingInfo) {
 	//
 	// The rows from the index are ordered by k then by v, but since k is an exact match
 	// column the results are also ordered just by v.
-	for colIdx := range fromOrder.exactMatchCols {
-		if renderIdx, ok := r.findRenderIndexForCol(colIdx); ok {
-			r.ordering.addExactMatchColumn(renderIdx)
-		}
+	if !fromOrder.exactMatchCols.Empty() {
+		fromOrder.exactMatchCols.ForEach(func(colIdx uint32) {
+			if renderIdx, ok := r.findRenderIndexForCol(int(colIdx)); ok {
+				r.ordering.addExactMatchColumn(renderIdx)
+			}
+		})
 	}
 	// Find the longest prefix of columns that have render targets. Once we find a column that is
 	// not part of the output, the rest of the ordered columns aren't useful.
