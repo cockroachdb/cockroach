@@ -239,27 +239,35 @@ func (ord orderingInfo) reverse() orderingInfo {
 func (ord orderingInfo) computeMatch(desired sqlbase.ColumnOrdering) int {
 	// position in ord.ordering
 	pos := 0
+Outer:
 	for i, col := range desired {
-		if pos < len(ord.ordering) {
-			ci := ord.ordering[pos]
-
-			// Check that the next column matches one of the columns in the group.
-			if ci.dir == col.Direction && ci.cols.Contains(uint32(col.ColIdx)) {
-				pos++
-				continue
+		// Check if the column is one of the constant columns.
+		if ord.constantCols.Contains(uint32(col.ColIdx)) {
+			continue Outer
+		}
+		// Check if the next column group matches this column, or if any of the
+		// previous column groups does - for example, if we have an ordering
+		// (1/2)+,3+ and the desired ordering is 1+,3+,2+ the 2+ is redundant with
+		// 1+ and can be ignored.
+		for j := 0; j <= pos && j < len(ord.ordering); j++ {
+			if ord.ordering[j].dir == col.Direction &&
+				ord.ordering[j].cols.Contains(uint32(col.ColIdx)) {
+				if j == pos {
+					// The next column group matched.
+					pos++
+				}
+				continue Outer
 			}
-		} else if ord.unique {
+		}
+		if pos == len(ord.ordering) && ord.unique {
 			// Everything matched up to the last column and we know there are no
 			// duplicate combinations of values for these columns. Any other columns
 			// with which we may want to "refine" the ordering don't make a
 			// difference.
 			return len(desired)
 		}
-		// If the column did not match, check if it is one of the constant columns.
-		if !ord.constantCols.Contains(uint32(col.ColIdx)) {
-			// Everything matched up to this point.
-			return i
-		}
+		// Everything matched up to this point.
+		return i
 	}
 	// Everything matched!
 	return len(desired)
@@ -278,17 +286,31 @@ func (ord *orderingInfo) trim(desired sqlbase.ColumnOrdering) {
 	// position in ord.ordering
 	pos := 0
 	// The code in this loop follows the one in computeMatch.
+Outer:
 	for _, col := range desired {
 		if pos == len(ord.ordering) {
+			// We couldn't trim anything.
 			return
 		}
-		ci := ord.ordering[pos]
-		// Check that the next column matches.
-		if ci.dir == col.Direction && ci.cols.Contains(uint32(col.ColIdx)) {
-			pos++
-		} else if !ord.constantCols.Contains(uint32(col.ColIdx)) {
-			break
+		if ord.constantCols.Contains(uint32(col.ColIdx)) {
+			continue
 		}
+		// Check if the next column group matches this column, or if any of the
+		// previous column groups does - for example, if we have an ordering
+		// (1/2)+,3+ and the desired ordering is 1+,3+,2+ the 2+ is redundant with
+		// 1+ and can be ignored.
+		for j := 0; j <= pos; j++ {
+			if ord.ordering[j].dir == col.Direction &&
+				ord.ordering[j].cols.Contains(uint32(col.ColIdx)) {
+				if j == pos {
+					// The next column group matched.
+					pos++
+				}
+				continue Outer
+			}
+		}
+		// This column didn't "match".
+		break
 	}
 	if pos < len(ord.ordering) {
 		ord.ordering = ord.ordering[:pos]
