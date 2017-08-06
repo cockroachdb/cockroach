@@ -190,7 +190,7 @@ func doExpandPlan(
 
 	case *distinctNode:
 		// TODO(radu/knz): perhaps we can propagate the DISTINCT
-		// clause as desired ordering/exact match for the source node.
+		// clause as desired ordering for the source node.
 		n.plan, err = doExpandPlan(ctx, p, params, n.plan)
 		if err != nil {
 			return plan, err
@@ -199,7 +199,7 @@ func doExpandPlan(
 		ordering := planOrdering(n.plan)
 		if !ordering.isEmpty() {
 			n.columnsInOrder = make([]bool, len(planColumns(n.plan)))
-			ordering.exactMatchCols.ForEach(func(colIdx uint32) {
+			ordering.constantCols.ForEach(func(colIdx uint32) {
 				n.columnsInOrder[colIdx] = true
 			})
 			for _, g := range ordering.ordering {
@@ -483,18 +483,18 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 			// the sort (and save memory), at least for DistSQL.
 			n.plan = simplifyOrderings(n.plan, n.ordering)
 		} else {
-			exactMatchCols := planOrdering(n.plan).exactMatchCols
+			constantCols := planOrdering(n.plan).constantCols
 			// Normally we would pass n.ordering; but n.ordering could be a prefix of
-			// the useful ordering. Check for this, ignoring any exact match columns.
+			// the useful ordering. Check for this, ignoring any constant columns.
 			sortOrder := make(sqlbase.ColumnOrdering, 0, len(n.ordering))
 			for _, c := range n.ordering {
-				if !exactMatchCols.Contains(uint32(c.ColIdx)) {
+				if !constantCols.Contains(uint32(c.ColIdx)) {
 					sortOrder = append(sortOrder, c)
 				}
 			}
 			givenOrder := make(sqlbase.ColumnOrdering, 0, len(usefulOrdering))
 			for _, c := range usefulOrdering {
-				if !exactMatchCols.Contains(uint32(c.ColIdx)) {
+				if !constantCols.Contains(uint32(c.ColIdx)) {
 					givenOrder = append(givenOrder, c)
 				}
 			}

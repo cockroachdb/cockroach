@@ -378,7 +378,7 @@ func (n *scanNode) initOrdering(exactPrefix int) {
 
 // computeOrdering calculates ordering information for table columns assuming that:
 //    - we scan a given index (potentially in reverse order), and
-//    - the first `exactPrefix` columns of the index each have an exact (single value) match
+//    - the first `exactPrefix` columns of the index each have a constant value
 //      (see orderingInfo).
 func (n *scanNode) computeOrdering(
 	index *sqlbase.IndexDescriptor, exactPrefix int, reverse bool,
@@ -393,7 +393,7 @@ func (n *scanNode) computeOrdering(
 			panic(fmt.Sprintf("index refers to unknown column id %d", colID))
 		}
 		if i < exactPrefix {
-			ordering.addExactMatchColumn(idx)
+			ordering.addConstantColumn(idx)
 		} else {
 			dir := dirs[i]
 			if reverse {

@@ -76,13 +76,13 @@ func sortOrdering(n *sortNode) orderingInfo {
 		// We will sort and can guarantee the desired ordering.
 		ord.ordering = make([]orderingColumnGroup, 0, len(n.ordering))
 		for _, o := range n.ordering {
-			// Skip any exact match columns (we preserve them below).
-			if !underlying.exactMatchCols.Contains(uint32(o.ColIdx)) {
+			// Skip any constant columns (we preserve them below).
+			if !underlying.constantCols.Contains(uint32(o.ColIdx)) {
 				ord.addColumn(o.ColIdx, o.Direction)
 			}
 		}
-		// Preserve exact match columns.
-		ord.exactMatchCols = underlying.exactMatchCols.Copy()
+		// Preserve constant columns.
+		ord.constantCols = underlying.constantCols.Copy()
 	} else {
 		// If we aren't sorting, the underlying plan's ordering can be more specific
 		// than the sortNode's ordering, so we want to use that. E.g:
@@ -92,9 +92,9 @@ func sortOrdering(n *sortNode) orderingInfo {
 		ord = underlying.copy()
 	}
 
-	// Remove exact match columns not in the output.
-	for col, ok := ord.exactMatchCols.Next(uint32(len(n.columns))); ok; col, ok = ord.exactMatchCols.Next(col) {
-		ord.exactMatchCols.Remove(col)
+	// Remove constant columns not in the output.
+	for col, ok := ord.constantCols.Next(uint32(len(n.columns))); ok; col, ok = ord.constantCols.Next(col) {
+		ord.constantCols.Remove(col)
 	}
 
 	// The sortNode can project away columns, for queries like:
