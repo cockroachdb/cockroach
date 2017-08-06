@@ -20,8 +20,6 @@ import (
 	"sort"
 )
 
-var vals []int
-
 // moveTopKToFront swaps elements in the range [start, end) so that all elements
 // in the range [start, k) are <= than all elements in the range [k, end).
 func moveTopKToFront(data sort.Interface, start, end, k int, rng *rand.Rand) {
