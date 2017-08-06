@@ -11,8 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 # implied. See the License for the specific language governing
 # permissions and limitations under the License.
-#
-# Author: Nikhil Benesch (nikhil.benesch@gmail.com)
 
 # This file defines variables and targets that are used by all Makefiles in the
 # project. The including Makefile must define REPO_ROOT to the relative path to

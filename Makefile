@@ -11,10 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 # implied. See the License for the specific language governing
 # permissions and limitations under the License.
-#
-# Author: Andrew Bonventre (andybons@gmail.com)
-# Author: Shawn Morel (shawnmorel@gmail.com)
-# Author: Spencer Kimball (spencer.kimball@gmail.com)
 
 # Variables to be overridden on the command line only, e.g.
 #
