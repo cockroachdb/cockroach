@@ -57,13 +57,26 @@ import (
 // this doesn't mean that the values are identical/interchangeable (consider
 // collated strings).
 //
-// == Unique flag ==
+// == Key flag ==
 //
-// In some cases (like unique indexes), we have an ordering on a set of columns
-// and we know that each row has a unique set of values on these columns. For
-// example, if we have a unique index on columns (a, b), the results have the
-// ordering a+,b+ and the unique flag tells us that this satisfies any desired
+// A set of columns S forms a "key" if any two rows that are equal on S are
+// necessarily equal on all columns. A special case of this property is when
+// each row is "unique" when projected on S (i.e. no two rows have the same
+// tuple of values on columns in S); the most important case which provides a
+// uniqueness guarantee is if we have unique index on S. Note that uniqueness is
+// a stronger (more restrictive) property than the key property; the key
+// property in general allows multiple rows to have the same values on S as long
+// as those rows are equal on all columns).
+//
+// The key flag for an ordering is set if the set of columns in the ordering
+// form a key.
+//
+// For example, if we have a unique index on columns (a, b), the results have
+// the ordering a+,b+ and the key flag tells us that this satisfies any desired
 // ordering that has a+,b+ as a prefix (such as a+,b+,c-,d+).
+//
+// When we have multiple columns in a group, all possible combinations of
+// columns (one from each group) must form a key.
 //
 // == Column groups ==
 //
@@ -92,8 +105,8 @@ type orderingInfo struct {
 	// ordering of any other columns (the columns in constantCols do not appear in this ordering).
 	ordering []orderingColumnGroup
 
-	// true if we know that all the value tuples for the columns in `ordering` are distinct.
-	unique bool
+	// true if the columns in the ordering form a "key" (see above).
+	isKey bool
 }
 
 type orderingColumnGroup struct {
@@ -161,9 +174,9 @@ func (ord orderingInfo) Format(buf *bytes.Buffer, columns sqlbase.ResultColumns)
 		}
 	}
 
-	if ord.unique {
+	if ord.isKey {
 		buf.WriteString(sep)
-		buf.WriteString("unique")
+		buf.WriteString("key")
 	}
 }
 
@@ -187,8 +200,8 @@ func (ord *orderingInfo) addColumnGroup(cols util.FastIntSet, dir encoding.Direc
 	if dir != encoding.Ascending && dir != encoding.Descending {
 		panic(fmt.Sprintf("Invalid direction %d", dir))
 	}
-	// If unique is true, there are no "ties" to break with adding more columns.
-	if !ord.unique {
+	// If isKey is true, there are no "ties" to break with adding more columns.
+	if !ord.isKey {
 		ord.ordering = append(ord.ordering, orderingColumnGroup{dir: dir, cols: cols})
 	}
 }
@@ -202,7 +215,7 @@ func (ord *orderingInfo) addColumn(colIdx int, dir encoding.Direction) {
 // copy returns a copy of ord which can be modified independently.
 func (ord orderingInfo) copy() orderingInfo {
 	result := orderingInfo{
-		unique:       ord.unique,
+		isKey:        ord.isKey,
 		constantCols: ord.constantCols.Copy(),
 	}
 	if len(ord.ordering) > 0 {
@@ -218,7 +231,7 @@ func (ord orderingInfo) copy() orderingInfo {
 // reverse returns the reversed ordering.
 func (ord orderingInfo) reverse() orderingInfo {
 	result := orderingInfo{
-		unique:       ord.unique,
+		isKey:        ord.isKey,
 		constantCols: ord.constantCols.Copy(),
 	}
 	if len(ord.ordering) > 0 {
@@ -258,7 +271,7 @@ Outer:
 				continue Outer
 			}
 		}
-		if pos == len(ord.ordering) && ord.unique {
+		if pos == len(ord.ordering) && ord.isKey {
 			// Everything matched up to the last column and we know there are no
 			// duplicate combinations of values for these columns. Any other columns
 			// with which we may want to "refine" the ordering don't make a
@@ -313,7 +326,7 @@ Outer:
 	}
 	if pos < len(ord.ordering) {
 		ord.ordering = ord.ordering[:pos]
-		ord.unique = false
+		ord.isKey = false
 	}
 }
 
@@ -432,7 +445,7 @@ func computeMergeJoinOrdering(a, b orderingInfo, colA, colB []int) sqlbase.Colum
 	// necessarily consume the orderings at the same rate. The remaining parts of
 	// the orderings are maintained in ordA/ordB.
 	//
-	// Another complication is the "unique" flag: such an ordering remains correct
+	// Another complication is the "key" flag: such an ordering remains correct
 	// when appending arbitrary columns to it.
 MainLoop:
 	for ordA, ordB := a.ordering, b.ordering; ; {
@@ -466,7 +479,7 @@ MainLoop:
 		if !doneA {
 			for i := range colA {
 				if ordA[0].cols.Contains(uint32(colA[i])) &&
-					((doneB && b.unique) || b.constantCols.Contains(uint32(colB[i]))) {
+					((doneB && b.isKey) || b.constantCols.Contains(uint32(colB[i]))) {
 					result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: ordA[0].dir})
 					ordA = ordA[1:]
 					continue MainLoop
@@ -474,12 +487,12 @@ MainLoop:
 			}
 		}
 		// See if any column in the first group in B is constant in A. Or, if
-		// we consumed A and it is "unique", then we are free to add any other
+		// we consumed A and it is a "key", then we are free to add any other
 		// columns in B.
 		if !doneB {
 			for i := range colB {
 				if ordB[0].cols.Contains(uint32(colB[i])) &&
-					((doneA && a.unique) || a.constantCols.Contains(uint32(colA[i]))) {
+					((doneA && a.isKey) || a.constantCols.Contains(uint32(colA[i]))) {
 					result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: ordB[0].dir})
 					ordB = ordB[1:]
 					continue MainLoop
