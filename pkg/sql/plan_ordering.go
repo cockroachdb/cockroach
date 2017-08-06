@@ -79,7 +79,7 @@ func sortOrdering(n *sortNode) orderingInfo {
 		ord.ordering = make(sqlbase.ColumnOrdering, 0, len(n.ordering))
 		for _, o := range n.ordering {
 			// Skip any exact match columns.
-			if _, ok := underlying.exactMatchCols[o.ColIdx]; !ok {
+			if !underlying.exactMatchCols.Contains(uint32(o.ColIdx)) {
 				ord.ordering = append(ord.ordering, o)
 			}
 		}
@@ -93,14 +93,13 @@ func sortOrdering(n *sortNode) orderingInfo {
 	}
 
 	// Preserve exact match columns.
-	if len(underlying.exactMatchCols) != 0 {
-		ord.exactMatchCols = make(map[int]struct{})
-		for c := range underlying.exactMatchCols {
+	if !underlying.exactMatchCols.Empty() {
+		underlying.exactMatchCols.ForEach(func(c uint32) {
 			// Skip columns not in the output.
-			if c < len(n.columns) {
-				ord.exactMatchCols[c] = struct{}{}
+			if c < uint32(len(n.columns)) {
+				ord.exactMatchCols.Add(c)
 			}
-		}
+		})
 	}
 
 	// Remove all the columns after the first one that's not present in
