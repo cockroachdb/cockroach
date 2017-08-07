@@ -585,7 +585,7 @@ func TestHashJoiner(t *testing.T) {
 		for _, memLimit := range []int64{1, 256, 512, 1024, 2048} {
 			t.Run(fmt.Sprintf("MemLimit=%d", memLimit), func(t *testing.T) {
 				if err := testFunc(t, func(h *hashJoiner) {
-					h.testingKnobMemLimit = memLimit
+					h.flowCtx.testingKnobs.MemoryLimitBytes = memLimit
 				}); err != nil {
 					t.Fatal(err)
 				}
