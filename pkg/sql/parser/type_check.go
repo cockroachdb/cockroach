@@ -116,7 +116,7 @@ func (expr *AndExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error
 func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
 	ops := BinOps[expr.Operator]
 
-	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, desired, ops, expr.Left, expr.Right)
+	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, desired, ops, true, expr.Left, expr.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -125,10 +125,20 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, er
 	leftReturn := leftTyped.ResolvedType()
 	rightReturn := rightTyped.ResolvedType()
 
-	// Return NULL if at least one overload is possible and NULL is an argument.
-	if len(fns) > 0 {
-		if leftReturn == TypeNull || rightReturn == TypeNull {
-			return DNull, nil
+	// Return NULL if at least one overload is possible, NULL is an argument,
+	// and none of the overloads accept NULL.
+	if leftReturn == TypeNull || rightReturn == TypeNull {
+		if len(fns) > 0 {
+			noneAcceptNull := true
+			for _, e := range fns {
+				if e.(BinOp).nullableArgs {
+					noneAcceptNull = false
+					break
+				}
+			}
+			if noneAcceptNull {
+				return DNull, nil
+			}
 		}
 	}
 
@@ -397,7 +407,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 		return nil, err
 	}
 
-	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, desired, def.Definition, expr.Exprs...)
+	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, desired, def.Definition, false, expr.Exprs...)
 	if err != nil {
 		return nil, fmt.Errorf("%s(): %v", def.Name, err)
 	}
@@ -662,7 +672,7 @@ func (expr *Subquery) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error)
 func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
 	ops := UnaryOps[expr.Operator]
 
-	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, desired, ops, expr.Expr)
+	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, desired, ops, false, expr.Expr)
 	if err != nil {
 		return nil, err
 	}
@@ -1036,7 +1046,12 @@ func typeCheckComparisonOp(
 		return typedLeft, typedRight, fn, nil
 	}
 
-	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, TypeAny, ops, foldedLeft, foldedRight)
+	// For comparisons, we do not stimulate the typing of untyped NULL with the
+	// other side's type, because comparisons of NULL with anything else are
+	// defined to return NULL anyways. Should the SQL dialect ever be extended with
+	// comparisons that can return non-NULL on NULL input, the `inBinOp` parameter
+	// may need altering.
+	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, TypeAny, ops, false, foldedLeft, foldedRight)
 	if err != nil {
 		return nil, nil, CmpOp{}, err
 	}
