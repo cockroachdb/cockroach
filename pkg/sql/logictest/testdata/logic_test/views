@@ -132,17 +132,17 @@ v1  CREATE VIEW v1 (a, b) AS SELECT a, b FROM t
 query TT
 SHOW CREATE VIEW v2
 ----
-v2  CREATE VIEW v2 (x, y) AS SELECT a, b FROM t
+v2  CREATE VIEW v2 (x, y) AS SELECT @1 AS x, @2 AS y FROM (SELECT a, b FROM t)
 
 query TT
 SHOW CREATE VIEW v6
 ----
-v6  CREATE VIEW v6 (x, y) AS SELECT a, b FROM v1
+v6  CREATE VIEW v6 (x, y) AS SELECT @1 AS x, @2 AS y FROM (SELECT a, b FROM v1)
 
 query TT
 SHOW CREATE VIEW test2.v1
 ----
-test2.v1 CREATE VIEW v1 (x, y) AS SELECT x, y FROM test.v2
+test2.v1  CREATE VIEW v1 (x, y) AS SELECT x, y FROM test.v2
 
 statement ok
 GRANT SELECT ON t TO testuser

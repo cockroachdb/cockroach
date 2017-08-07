@@ -138,7 +138,8 @@ CREATE TABLE constraint_db.t3 (
 )
 
 statement ok
-CREATE VIEW constraint_db.v1 AS SELECT p,a,b,c FROM constraint_db.t1
+CREATE VIEW constraint_db.v1 AS SELECT p,a,b,c FROM constraint_db.t1;
+ CREATE VIEW constraint_db.v2(p,a,x,y) AS SELECT p,a,b,c FROM constraint_db.t1
 
 ## pg_catalog.pg_namespace
 
@@ -209,6 +210,7 @@ SELECT * FROM pg_catalog.pg_views
 ----
 schemaname     viewname  viewowner  definition
 constraint_db  v1        NULL       SELECT p, a, b, c FROM t1
+constraint_db  v2        NULL       SELECT @1 AS p, @2 AS a, @3 AS x, @4 AS y FROM (SELECT p, a, b, c FROM t1)
 
 ## pg_catalog.pg_class
 
@@ -230,6 +232,7 @@ oid         relname       relnamespace  reltype  relowner  relam  relfilenode  r
 624432002   primary       1708731312    0        NULL      NULL   0            0
 624432001   t3_a_b_idx    1708731312    0        NULL      NULL   0            0
 2875635133  v1            1708731312    0        NULL      NULL   0            0
+2909337467  v2            1708731312    0        NULL      NULL   0            0
 
 query TIRIOBB colnames
 SELECT relname, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared
@@ -249,6 +252,7 @@ t3            NULL      NULL       0              0              true         fa
 primary       NULL      NULL       0              0              false        false
 t3_a_b_idx    NULL      NULL       0              0              false        false
 v1            NULL      NULL       0              0              false        false
+v2            NULL      NULL       0              0              false        false
 
 query TBTIIBB colnames
 SELECT relname, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey
@@ -268,6 +272,7 @@ t3            false      r        4         1          false       true
 primary       false      i        1         0          false       false
 t3_a_b_idx    false      i        2         0          false       false
 v1            false      v        4         0          false       false
+v2            false      v        4         0          false       false
 
 query TBBBITT colnames
 SELECT relname, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions
@@ -287,6 +292,7 @@ t3            false        false           false           0             NULL   
 primary       false        false           false           0             NULL    NULL
 t3_a_b_idx    false        false           false           0             NULL    NULL
 v1            false        false           false           0             NULL    NULL
+v2            false        false           false           0             NULL    NULL
 
 ## pg_catalog.pg_attribute
 
@@ -317,6 +323,10 @@ attrelid    relname       attname  atttypid  attstattarget  attlen  attnum  attn
 2875635133  v1            a        20        0              8       2       0         -1
 2875635133  v1            b        20        0              8       3       0         -1
 2875635133  v1            c        20        0              8       4       0         -1
+2909337467  v2            p        701       0              8       1       0         -1
+2909337467  v2            a        20        0              8       2       0         -1
+2909337467  v2            x        20        0              8       3       0         -1
+2909337467  v2            y        20        0              8       4       0         -1
 
 query TTIBTTBB colnames
 SELECT c.relname, attname, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef
@@ -345,6 +355,10 @@ v1            p        -1         NULL      NULL        NULL      true        fa
 v1            a        -1         NULL      NULL        NULL      true        false
 v1            b        -1         NULL      NULL        NULL      true        false
 v1            c        -1         NULL      NULL        NULL      true        false
+v2            p        -1         NULL      NULL        NULL      true        false
+v2            a        -1         NULL      NULL        NULL      true        false
+v2            x        -1         NULL      NULL        NULL      true        false
+v2            y        -1         NULL      NULL        NULL      true        false
 
 query TTBBITTT colnames
 SELECT c.relname, attname, attisdropped, attislocal, attinhcount, attacl, attoptions, attfdwoptions
@@ -373,6 +387,10 @@ v1            p        false         true        0            NULL    NULL      
 v1            a        false         true        0            NULL    NULL        NULL
 v1            b        false         true        0            NULL    NULL        NULL
 v1            c        false         true        0            NULL    NULL        NULL
+v2            p        false         true        0            NULL    NULL        NULL
+v2            a        false         true        0            NULL    NULL        NULL
+v2            x        false         true        0            NULL    NULL        NULL
+v2            y        false         true        0            NULL    NULL        NULL
 
 
 # Select all columns with collations.
@@ -1105,14 +1123,14 @@ SELECT COUNT(*) FROM pg_catalog.pg_tables WHERE schemaname='constraint_db'
 query I
 SELECT COUNT(*) FROM pg_catalog.pg_views WHERE schemaname='constraint_db'
 ----
-1
+2
 
 query I
 SELECT COUNT(*) FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE nspname='constraint_db'
 ----
-11
+12
 
 query I
 SELECT COUNT(*) FROM pg_catalog.pg_constraint con

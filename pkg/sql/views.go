@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -70,7 +71,7 @@ func (d planDependencies) String() string {
 // that this view's query depends on), together with the more detailed
 // information about which indexes and columns are needed from each
 // dependency. The set of columns from the view query's results is
-// also returned.
+// also returned, in a mutable form.
 func (p *planner) analyzeViewQuery(
 	ctx context.Context, viewSelect *parser.Select,
 ) (planDependencies, sqlbase.ResultColumns, error) {
@@ -97,7 +98,96 @@ func (p *planner) analyzeViewQuery(
 		return nil, nil, fmt.Errorf("views do not currently support * expressions")
 	}
 
-	return p.planDeps, planColumns(sourcePlan), nil
+	return p.planDeps, planMutableColumns(sourcePlan), nil
+}
+
+// enforceViewResultColumnNames ensures that the view query, when it
+// will be compiled again each time the view is used, yields a plan
+// that renders columns as specified in the CREATE VIEW statement.
+//
+// In particular the two following properties are enforced:
+//
+// - the column names match those requested. For example:
+//
+//      CREATE VIEW v(a, b) AS TABLE kv
+//   -> CREATE VIEW v(a, b) AS SELECT k AS a, v AS b FROM kv
+//
+//   Otherwise, clients that query pg_catalog.pg_views may get
+//   confused.
+//
+// - all the columns must not be hidden. This is e.g. a concern with:
+//
+//     CREATE TABLE foo(x INT);
+//     CREATE VIEW v(x, rowid) AS SELECT x, rowid FROM foo;
+//
+//   for otherwise 'rowid' may become hidden when using view v in a
+//   query like SELECT * FROM v.
+func enforceViewResultColumnNames(
+	viewQuery *parser.Select, requestedNames parser.NameList, sourceColumns sqlbase.ResultColumns,
+) (*parser.Select, error) {
+	// Check the requested column interface and the source plan's columns
+	// have the same arity.
+	numColNames := len(requestedNames)
+	numColumns := len(sourceColumns)
+	if numColNames != 0 && numColNames != numColumns {
+		return nil, sqlbase.NewSyntaxError(fmt.Sprintf(
+			"CREATE VIEW specifies %d column name%s, but data source has %d column%s",
+			numColNames, util.Pluralize(int64(numColNames)),
+			numColumns, util.Pluralize(int64(numColumns))))
+	}
+
+	// If the final column names differ from the plan's column names, or
+	// if the plan's columns are hidden, we need to add explicit renders
+	// that render to the final (demanded) column names.
+	needExplicitRenders := false
+	for i, desired := range requestedNames {
+		if string(desired) != sourceColumns[i].Name {
+			needExplicitRenders = true
+			break
+		}
+	}
+	if !needExplicitRenders {
+		for i := range sourceColumns {
+			if sourceColumns[i].Hidden {
+				needExplicitRenders = true
+				break
+			}
+		}
+	}
+	if !needExplicitRenders {
+		return viewQuery, nil
+	}
+
+	// Transform:
+	// <viewquery> -> SELECT @1 AS a, @2 AS b, @3 AS c FROM (<viewquery>)
+	//
+	// Note: this cannot be changed to SELECT origName AS newName FROM ...
+	// (i.e. use origName instead of an ordinal reference) because of
+	// views like `CREATE v(a) AS ARRAY[3]`. Here the computed column
+	// name is "ARRAY[3]" during view creation, but "ARRAY[3:::INT]"
+	// during view execution. So creation would cause a view
+	// descriptor containing `SELECT "ARRAY[3]" AS a FROM (SELECT
+	// ARRAY[3:::INT])` which would be broken.
+	renamedRenders := make(parser.SelectExprs, len(requestedNames))
+	for i, desired := range requestedNames {
+		renamedRenders[i].Expr = parser.NewOrdinalReference(i)
+		renamedRenders[i].As = desired
+		sourceColumns[i].Name = string(desired)
+	}
+	return &parser.Select{
+		Select: &parser.SelectClause{
+			Exprs: renamedRenders,
+			From: &parser.From{
+				Tables: []parser.TableExpr{
+					&parser.AliasedTableExpr{
+						Expr: &parser.Subquery{
+							Select: &parser.ParenSelect{Select: viewQuery},
+						},
+					},
+				},
+			},
+		},
+	}, nil
 }
 
 // RecomputeViewDependencies does the work of CREATE VIEW w.r.t.
