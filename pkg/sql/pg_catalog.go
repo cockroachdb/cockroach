@@ -1566,11 +1566,15 @@ CREATE TABLE pg_catalog.pg_views (
 			// while postgres would more accurately print `SELECT b AS a FROM foo`.
 			// TODO(a-robinson): Insert column aliases into view query once we
 			// have a semantic query representation to work with (#10083).
+			viewQuery, err := p.simplifyViewQuery(ctx, prefix, desc.Name, desc.ViewQuery)
+			if err != nil {
+				return err
+			}
 			return addRow(
-				parser.NewDName(db.Name),          // schemaname
-				parser.NewDName(desc.Name),        // viewname
-				parser.DNull,                      // viewowner
-				parser.NewDString(desc.ViewQuery), // definition
+				parser.NewDName(db.Name),     // schemaname
+				parser.NewDName(desc.Name),   // viewname
+				parser.DNull,                 // viewowner
+				parser.NewDString(viewQuery), // definition
 			)
 		})
 	},

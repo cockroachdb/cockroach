@@ -208,7 +208,7 @@ query TTTT colnames
 SELECT * FROM pg_catalog.pg_views
 ----
 schemaname     viewname  viewowner  definition
-constraint_db  v1        NULL       SELECT p, a, b, c FROM constraint_db.t1
+constraint_db  v1        NULL       SELECT p, a, b, c FROM t1
 
 ## pg_catalog.pg_class
 

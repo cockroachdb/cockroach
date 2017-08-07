@@ -22,12 +22,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // showCreateView returns a valid SQL representation of the CREATE
 // VIEW statement used to create the given view.
 func (p *planner) showCreateView(
-	ctx context.Context, tn parser.Name, desc *sqlbase.TableDescriptor,
+	ctx context.Context, tn parser.Name, dbPrefix string, desc *sqlbase.TableDescriptor,
 ) (string, error) {
 	var buf bytes.Buffer
 	buf.WriteString("CREATE VIEW ")
@@ -39,8 +40,53 @@ func (p *planner) showCreateView(
 		}
 		parser.Name(col.Name).Format(&buf, parser.FmtSimple)
 	}
-	fmt.Fprintf(&buf, ") AS %s", desc.ViewQuery)
+
+	viewQuery, err := p.simplifyViewQuery(ctx, dbPrefix, desc.Name, desc.ViewQuery)
+	if err != nil {
+		return "", err
+	}
+	fmt.Fprintf(&buf, ") AS %s", viewQuery)
 	return buf.String(), nil
+}
+
+// simplifyViewQuery shortens the view query for display: for each
+// referenced table, remove the database prefix if it matches the show
+// prefix.
+func (p *planner) simplifyViewQuery(
+	ctx context.Context, dbPrefix, viewName, viewQuery string,
+) (string, error) {
+	// First extract the query AST.
+	stmt, err := parser.ParseOne(viewQuery)
+	if err != nil {
+		log.Errorf(ctx, "unable to parse view query for %q: %q: %v",
+			parser.ErrString(parser.Name(viewName)), viewQuery, err)
+		return viewQuery, nil
+	}
+
+	// Now perform the replacement. For this we hijack (*TableName).Format().
+	var queryBuf bytes.Buffer
+	var fmtErr error
+	stmt.Format(&queryBuf, parser.FmtReformatTableNames(parser.FmtParsable,
+		func(n *parser.NormalizableTableName, buf *bytes.Buffer, f parser.FmtFlags) {
+			if fmtErr != nil {
+				return
+			}
+			// The database name is omitted if and only if the parent
+			// database is the same as the current database prefix.
+			tn, err := n.Normalize()
+			if err != nil {
+				fmtErr = err
+				return
+			}
+			if tn.DatabaseName == parser.Name(dbPrefix) {
+				tn.DBNameOriginallyOmitted = true
+			}
+			tn.Format(buf, parser.FmtParsable)
+		}))
+	if fmtErr != nil {
+		return "", fmtErr
+	}
+	return queryBuf.String(), nil
 }
 
 // showCreateTable returns a valid SQL representation of the CREATE

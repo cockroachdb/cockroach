@@ -805,7 +805,7 @@ CREATE TABLE crdb_internal.create_statements (
 				var typeTable = parser.DString("table")
 				if table.IsView() {
 					descType = &typeView
-					stmt, err = p.showCreateView(ctx, parser.Name(table.Name), table)
+					stmt, err = p.showCreateView(ctx, parser.Name(table.Name), prefix, table)
 				} else {
 					descType = &typeTable
 					stmt, err = p.showCreateTable(ctx, parser.Name(table.Name), prefix, table)

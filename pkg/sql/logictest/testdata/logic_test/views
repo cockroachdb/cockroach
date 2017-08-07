@@ -127,17 +127,17 @@ x y
 query TT
 SHOW CREATE VIEW v1
 ----
-v1 CREATE VIEW v1 (a, b) AS SELECT a, b FROM test.t
+v1  CREATE VIEW v1 (a, b) AS SELECT a, b FROM t
 
 query TT
 SHOW CREATE VIEW v2
 ----
-v2 CREATE VIEW v2 (x, y) AS SELECT a, b FROM test.t
+v2  CREATE VIEW v2 (x, y) AS SELECT a, b FROM t
 
 query TT
 SHOW CREATE VIEW v6
 ----
-v6 CREATE VIEW v6 (x, y) AS SELECT a, b FROM test.v1
+v6  CREATE VIEW v6 (x, y) AS SELECT a, b FROM v1
 
 query TT
 SHOW CREATE VIEW test2.v1
@@ -191,7 +191,7 @@ SELECT * FROM v6
 query TT
 SHOW CREATE VIEW v1
 ----
-v1 CREATE VIEW v1 (a, b) AS SELECT a, b FROM test.t
+v1  CREATE VIEW v1 (a, b) AS SELECT a, b FROM t
 
 user root
 
