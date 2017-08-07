@@ -433,6 +433,24 @@ func walkExprSlice(v Visitor, slice []Expr) ([]Expr, bool) {
 	return slice, copied
 }
 
+func walkKVOptions(v Visitor, opts KVOptions) (KVOptions, bool) {
+	copied := false
+	for i := range opts {
+		if opts[i].Value == nil {
+			continue
+		}
+		e, changed := WalkExpr(v, opts[i].Value)
+		if changed {
+			if !copied {
+				opts = append(KVOptions(nil), opts...)
+				copied = true
+			}
+			opts[i].Value = e
+		}
+	}
+	return opts, copied
+}
+
 // Walk implements the Expr interface.
 func (expr *Tuple) Walk(v Visitor) Expr {
 	exprs, changed := walkExprSlice(v, expr.Exprs)
@@ -673,6 +691,47 @@ func (stmt *Insert) WalkStmt(v Visitor) Statement {
 	}
 	// TODO(dan): Walk OnConflict once the ON CONFLICT DO UPDATE form of upsert is
 	// implemented.
+	return ret
+}
+
+// CopyNode makes a copy of this Statement without recursing in any child Statements.
+func (stmt *Import) CopyNode() *Import {
+	stmtCopy := *stmt
+	stmtCopy.Files = append(Exprs(nil), stmt.Files...)
+	stmtCopy.Options = append(KVOptions(nil), stmt.Options...)
+	return &stmtCopy
+}
+
+// WalkStmt is part of the WalkableStmt interface.
+func (stmt *Import) WalkStmt(v Visitor) Statement {
+	ret := stmt
+	if stmt.CreateFile != nil {
+		e, changed := WalkExpr(v, stmt.CreateFile)
+		if changed {
+			if ret == stmt {
+				ret = stmt.CopyNode()
+			}
+			ret.CreateFile = e
+		}
+	}
+	for i, expr := range stmt.Files {
+		e, changed := WalkExpr(v, expr)
+		if changed {
+			if ret == stmt {
+				ret = stmt.CopyNode()
+			}
+			ret.Files[i] = e
+		}
+	}
+	{
+		opts, changed := walkKVOptions(v, stmt.Options)
+		if changed {
+			if ret == stmt {
+				ret = stmt.CopyNode()
+			}
+			ret.Options = opts
+		}
+	}
 	return ret
 }
 
@@ -942,6 +1001,7 @@ func (stmt *ValuesClause) WalkStmt(v Visitor) Statement {
 var _ WalkableStmt = &Delete{}
 var _ WalkableStmt = &Explain{}
 var _ WalkableStmt = &Insert{}
+var _ WalkableStmt = &Import{}
 var _ WalkableStmt = &ParenSelect{}
 var _ WalkableStmt = &Select{}
 var _ WalkableStmt = &SelectClause{}
