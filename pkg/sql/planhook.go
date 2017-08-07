@@ -49,6 +49,7 @@ type PlanHookState interface {
 	DistLoader() *DistLoader
 	TypeAsString(e parser.Expr, op string) (func() (string, error), error)
 	TypeAsStringArray(e parser.Exprs, op string) (func() ([]string, error), error)
+	TypeAsStringOpts(opts parser.KVOptions) (func() (map[string]string, error), error)
 	User() string
 	AuthorizationAccessor
 }

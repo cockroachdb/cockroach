@@ -50,6 +50,7 @@ const (
 	importOptionDistributed = "distributed"
 	importOptionNullIf      = "nullif"
 	importOptionSSTSize     = "sstsize"
+	importOptionTemp        = "temp"
 )
 
 // LoadCSV converts CSV files into enterprise backup format.
@@ -619,10 +620,6 @@ func importPlanHook(
 	if err != nil {
 		return nil, nil, err
 	}
-	tempFn, err := p.TypeAsString(importStmt.Temp, "IMPORT")
-	if err != nil {
-		return nil, nil, err
-	}
 
 	var createFileFn func() (string, error)
 	if importStmt.CreateDefs == nil {
@@ -637,6 +634,10 @@ func importPlanHook(
 		return nil, nil, errors.Errorf("unsupported import format: %q", importStmt.FileFormat)
 	}
 
+	optsFn, err := p.TypeAsStringOpts(importStmt.Options)
+	if err != nil {
+		return nil, nil, err
+	}
 	// TODO(dan): This entire method is a placeholder to get the distsql
 	// plumbing worked out while mjibson works on the new processors and router.
 	// Currently, it "uses" distsql to compute an int and this method returns
@@ -649,17 +650,18 @@ func importPlanHook(
 		ctx, span := tracing.ChildSpan(ctx, importStmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
-		files, err := filesFn()
+		opts, err := optsFn()
 		if err != nil {
 			return err
 		}
-		temp, err := tempFn()
+
+		files, err := filesFn()
 		if err != nil {
 			return err
 		}
 
 		comma := ','
-		if override, ok := importStmt.Options.Get(importOptionComma); ok {
+		if override, ok := opts[importOptionComma]; ok {
 			comma, err = util.GetSingleRune(override)
 			if err != nil {
 				return errors.Wrap(err, "invalid comma value")
@@ -667,7 +669,7 @@ func importPlanHook(
 		}
 
 		var comment rune
-		if override, ok := importStmt.Options.Get(importOptionComment); ok {
+		if override, ok := opts[importOptionComment]; ok {
 			comment, err = util.GetSingleRune(override)
 			if err != nil {
 				return errors.Wrap(err, "invalid comment value")
@@ -675,21 +677,28 @@ func importPlanHook(
 		}
 
 		var nullif *string
-		if override, ok := importStmt.Options.Get(importOptionNullIf); ok {
+		if override, ok := opts[importOptionNullIf]; ok {
 			nullif = &override
 		}
 
-		sstMaxSize := config.DefaultZoneConfig().RangeMaxBytes / 2
-		if override, ok := importStmt.Options.Get(importOptionSSTSize); ok {
+		var temp string
+		if override, ok := opts[importOptionTemp]; ok {
+			temp = override
+		} else {
+			return errors.Errorf("must provide a temporary storage location")
+		}
+
+		sstSize := config.DefaultZoneConfig().RangeMaxBytes / 2
+		if override, ok := opts[importOptionSSTSize]; ok {
 			sz, err := humanizeutil.ParseBytes(override)
 			if err != nil {
 				return err
 			}
-			sstMaxSize = sz
+			sstSize = sz
 		}
 
 		distributed := false
-		if override, ok := importStmt.Options.Get(importOptionDistributed); ok {
+		if override, ok := opts[importOptionDistributed]; ok {
 			if override != "" {
 				return errors.New("option 'distributed' does not take a value")
 			}
@@ -760,7 +769,7 @@ func importPlanHook(
 		} else {
 			_, _, total, err = doLocalCSVTransform(
 				ctx, parentID, tableDesc, temp, files,
-				comma, comment, nullif, sstMaxSize,
+				comma, comment, nullif, sstSize,
 			)
 			if err != nil {
 				return err
