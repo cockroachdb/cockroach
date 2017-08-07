@@ -124,7 +124,7 @@ func allocateTableRewrites(
 				to := index.ForeignKey.Table
 				if _, ok := tablesByID[to]; !ok {
 					if empty, ok := opts.Get(restoreOptSkipMissingFKs); ok {
-						if empty != "" {
+						if empty != nil {
 							return errors.Errorf("option %q does not take a value", restoreOptSkipMissingFKs)
 						}
 						index.ForeignKey = sqlbase.ForeignKeyReference{}
@@ -151,7 +151,14 @@ func allocateTableRewrites(
 			{
 				var targetDB string
 				if override, ok := opts.Get(restoreOptIntoDB); ok {
-					targetDB = override
+					fn, err := p.TypeAsString(override, "RESTORE")
+					if err != nil {
+						return err
+					}
+					targetDB, err = fn()
+					if err != nil {
+						return err
+					}
 				} else {
 					database, ok := databasesByID[table.ParentID]
 					if !ok {

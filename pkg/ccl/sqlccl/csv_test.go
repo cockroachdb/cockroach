@@ -389,29 +389,31 @@ func TestImportStmt(t *testing.T) {
 	}{
 		{
 			"schema-in-file",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) USING TEMP STORE $2`,
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2`,
 			[]interface{}{fmt.Sprintf("nodelocal://%s", tablePath)},
 		},
 		{
 			"schema-in-query",
-			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) USING TEMP STORE $1`,
+			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) WITH temp = $1`,
 			nil,
 		},
 		{
 			"schema-in-file-dist",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH OPTIONS ('distributed') USING TEMP STORE $2`,
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, distributed`,
 			[]interface{}{fmt.Sprintf("nodelocal://%s", tablePath)},
 		},
 		{
 			"schema-in-query-dist",
-			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) WITH OPTIONS ('distributed') USING TEMP STORE $1`,
+			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) WITH temp = $1, distributed`,
 			nil,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var result int
 			tc.args = append(tc.args, fmt.Sprintf("nodelocal://%s", filepath.Join(dir, t.Name())))
-			sqlDB.QueryRow(fmt.Sprintf(tc.query, strings.Join(files, ", ")), tc.args...).Scan(&result)
+			if err := sqlDB.DB.QueryRow(fmt.Sprintf(tc.query, strings.Join(files, ", ")), tc.args...).Scan(&result); err != nil {
+				t.Fatal(err)
+			}
 			if expected := 1; result < expected {
 				t.Errorf("expected >= %d, got %d", expected, result)
 			}

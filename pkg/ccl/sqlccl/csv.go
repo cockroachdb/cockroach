@@ -48,6 +48,7 @@ const (
 	importOptionDistributed = "distributed"
 	importOptionNullIf      = "nullif"
 	importOptionSSTSize     = "sstsize"
+	importOptionTemp        = "temp"
 )
 
 // LoadCSV converts CSV files into enterprise backup format.
@@ -599,6 +600,23 @@ func makeBackup(
 	return int64(len(backupDesc.Files)), err
 }
 
+func optAsString(
+	p sql.PlanHookState, options parser.KVOptions, opt string,
+) (func() (string, bool, error), error) {
+	expr, ok := options.Get(opt)
+	if !ok {
+		return func() (string, bool, error) { return "", false, nil }, nil
+	}
+	strFn, err := p.TypeAsString(expr, "IMPORT")
+	if err != nil {
+		return nil, err
+	}
+	return func() (string, bool, error) {
+		str, err := strFn()
+		return str, true, err
+	}, nil
+}
+
 func importPlanHook(
 	stmt parser.Statement, p sql.PlanHookState,
 ) (func(context.Context, chan<- parser.Datums) error, sqlbase.ResultColumns, error) {
@@ -615,10 +633,6 @@ func importPlanHook(
 	if err != nil {
 		return nil, nil, err
 	}
-	tempFn, err := p.TypeAsString(importStmt.Temp, "IMPORT")
-	if err != nil {
-		return nil, nil, err
-	}
 
 	var createFileFn func() (string, error)
 	if importStmt.CreateDefs == nil {
@@ -631,6 +645,27 @@ func importPlanHook(
 	if importStmt.FileFormat != "CSV" {
 		// not possible with current parser rules.
 		return nil, nil, errors.Errorf("unsupported import format: %q", importStmt.FileFormat)
+	}
+
+	commaFn, err := optAsString(p, importStmt.Options, importOptionComma)
+	if err != nil {
+		return nil, nil, err
+	}
+	commentFn, err := optAsString(p, importStmt.Options, importOptionComment)
+	if err != nil {
+		return nil, nil, err
+	}
+	nullifFn, err := optAsString(p, importStmt.Options, importOptionNullIf)
+	if err != nil {
+		return nil, nil, err
+	}
+	sizeFn, err := optAsString(p, importStmt.Options, importOptionSSTSize)
+	if err != nil {
+		return nil, nil, err
+	}
+	tempFn, err := optAsString(p, importStmt.Options, importOptionTemp)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	// TODO(dan): This entire method is a placeholder to get the distsql
@@ -649,13 +684,11 @@ func importPlanHook(
 		if err != nil {
 			return err
 		}
-		temp, err := tempFn()
-		if err != nil {
-			return err
-		}
 
 		comma := ','
-		if override, ok := importStmt.Options.Get(importOptionComma); ok {
+		if override, ok, err := commaFn(); err != nil {
+			return err
+		} else if ok {
 			comma, err = util.GetSingleRune(override)
 			if err != nil {
 				return errors.Wrap(err, "invalid comma value")
@@ -663,7 +696,9 @@ func importPlanHook(
 		}
 
 		var comment rune
-		if override, ok := importStmt.Options.Get(importOptionComment); ok {
+		if override, ok, err := commentFn(); err != nil {
+			return err
+		} else if ok {
 			comment, err = util.GetSingleRune(override)
 			if err != nil {
 				return errors.Wrap(err, "invalid comment value")
@@ -671,22 +706,35 @@ func importPlanHook(
 		}
 
 		var nullif *string
-		if override, ok := importStmt.Options.Get(importOptionNullIf); ok {
+		if override, ok, err := nullifFn(); err != nil {
+			return err
+		} else if ok {
 			nullif = &override
 		}
 
-		sstMaxSize := config.DefaultZoneConfig().RangeMaxBytes / 2
-		if override, ok := importStmt.Options.Get(importOptionSSTSize); ok {
+		var temp string
+		if override, ok, err := tempFn(); err != nil {
+			return err
+		} else if ok {
+			temp = override
+		} else {
+			return errors.Errorf("must provide a temporary storage location")
+		}
+
+		sstSize := config.DefaultZoneConfig().RangeMaxBytes / 2
+		if override, ok, err := sizeFn(); err != nil {
+			return err
+		} else if ok {
 			sz, err := humanizeutil.ParseBytes(override)
 			if err != nil {
 				return err
 			}
-			sstMaxSize = sz
+			sstSize = sz
 		}
 
 		distributed := false
 		if override, ok := importStmt.Options.Get(importOptionDistributed); ok {
-			if override != "" {
+			if override != nil {
 				return errors.New("option 'distributed' does not take a value")
 			}
 			distributed = true
@@ -756,7 +804,7 @@ func importPlanHook(
 		} else {
 			_, _, total, err = doLocalCSVTransform(
 				ctx, parentID, tableDesc, temp, files,
-				comma, comment, nullif, sstMaxSize,
+				comma, comment, nullif, sstSize,
 			)
 			if err != nil {
 				return err
