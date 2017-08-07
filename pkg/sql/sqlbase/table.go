@@ -1710,6 +1710,9 @@ func parserTypeToEncodingType(t parser.Type) (encoding.Type, error) {
 	case parser.TypeUUID:
 		return encoding.UUID, nil
 	default:
+		if t.FamilyEqual(parser.TypeCollatedString) {
+			return encoding.Bytes, nil
+		}
 		return 0, errors.Errorf("Don't know encoding type for %s", t)
 	}
 }
@@ -1744,6 +1747,8 @@ func encodeArrayElement(b []byte, d parser.Datum) ([]byte, error) {
 		return encoding.EncodeUntaggedUUIDValue(b, t.UUID), nil
 	case *parser.DOid:
 		return encoding.EncodeUntaggedIntValue(b, int64(t.DInt)), nil
+	case *parser.DCollatedString:
+		return encoding.EncodeUntaggedBytesValue(b, []byte(t.Contents)), nil
 	}
 	return nil, errors.Errorf("don't know how to encode %s", d)
 }

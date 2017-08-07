@@ -578,9 +578,20 @@ DROP TABLE a
 
 # Collated string array columns.
 
-# TODO(justin)
-statement error collated strings not allowed as array contents
+statement ok
 CREATE TABLE a (b STRING[] COLLATE en)
+
+statement ok
+INSERT INTO a VALUES (ARRAY['hello' COLLATE en]), (ARRAY['goodbye' COLLATE en])
+
+query T
+SELECT * FROM a
+----
+{"hello"}
+{"goodbye"}
+
+statement ok
+DROP TABLE a
 
 # Array operators
 
