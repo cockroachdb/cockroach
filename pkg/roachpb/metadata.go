@@ -319,6 +319,8 @@ func (Locality) Type() string {
 	return "Locality"
 }
 
+const MaxDiversityScore = 1.0
+
 // DiversityScore returns a score comparing the two localities which ranges from
 // 1, meaning completely diverse, to 0 which means not diverse at all (that
 // their localities match). This function ignores the locality tier key names
@@ -351,7 +353,7 @@ func (l Locality) DiversityScore(other Locality) float64 {
 		}
 	}
 	if len(l.Tiers) != len(other.Tiers) {
-		return 1.0 / float64(length+1)
+		return MaxDiversityScore / float64(length+1)
 	}
 	return 0
 }
