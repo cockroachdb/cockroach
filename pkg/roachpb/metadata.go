@@ -262,8 +262,8 @@ func (p Percentiles) String() string {
 
 // String returns a string representation of the StoreCapacity.
 func (sc StoreCapacity) String() string {
-	return fmt.Sprintf("diskAvailable=%s/%s (%.2f%%), "+
-		"ranges=%d, leases=%d, writes=%.2f,"+
+	return fmt.Sprintf("diskUsed=%s/%s (%.2f%%), "+
+		"ranges=%d, leases=%d, writes=%.2f, "+
 		"bytesPerReplica={%s}, writesPerReplica={%s}",
 		humanizeutil.IBytes(sc.Capacity-sc.Available), humanizeutil.IBytes(sc.Capacity),
 		sc.FractionUsed()*100, sc.RangeCount, sc.LeaseCount, sc.WritesPerSecond,
