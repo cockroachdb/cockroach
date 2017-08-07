@@ -1,0 +1,57 @@
+statement ok
+CREATE TABLE kv(k INT, v INT);
+  INSERT INTO kv VALUES (1,2), (3,4)
+
+statement ok
+CREATE VIEW v AS SELECT k, v FROM kv;
+
+# Sanity check to validate the queries below are sound.
+query I
+SELECT table_id FROM crdb_internal.tables WHERE name = 'vv'
+----
+
+query ITTTTT
+EXPLAIN(VERBOSE) SELECT * FROM [51(1) AS vx(k)]
+----
+0  render  ·         ·           (k)                                            ·
+0  ·       render 0  vx.k        ·                                              ·
+1  scan    ·         ·           (k, v[hidden,omitted], rowid[hidden,omitted])  ·
+1  ·       table     kv@primary  ·                                              ·
+1  ·       spans     ALL         ·                                              ·
+
+query I
+SELECT * FROM [51(1) AS vx(k)]
+----
+1
+3
+
+query ITTTTT
+EXPLAIN(VERBOSE) SELECT * FROM [51(2) AS vx(v)]
+----
+0  render  ·         ·           (v)                                            ·
+0  ·       render 0  vx.v        ·                                              ·
+1  scan    ·         ·           (v, k[hidden,omitted], rowid[hidden,omitted])  ·
+1  ·       table     kv@primary  ·                                              ·
+1  ·       spans     ALL         ·                                              ·
+
+query I
+SELECT * FROM [51(2) AS vx(v)]
+----
+2
+4
+
+query ITTTTT
+EXPLAIN(VERBOSE) SELECT * FROM [51(2,1) AS vx(v,k)]
+----
+0  render  ·         ·           (v, k)                         ·
+0  ·       render 0  vx.v        ·                              ·
+0  ·       render 1  vx.k        ·                              ·
+1  scan    ·         ·           (v, k, rowid[hidden,omitted])  ·
+1  ·       table     kv@primary  ·                              ·
+1  ·       spans     ALL         ·                              ·
+
+query II
+SELECT * FROM [51(2,1) AS vx(v,k)]
+----
+2  1
+4  3
