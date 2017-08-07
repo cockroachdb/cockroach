@@ -234,10 +234,10 @@ func TestPostProcess(t *testing.T) {
 			inBuf := NewRowBuffer(nil /* types */, input, RowBufferArgs{})
 			outBuf := &RowBuffer{}
 
-			var out procOutputHelper
+			var out ProcOutputHelper
 			evalCtx := parser.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			if err := out.init(&tc.post, inBuf.Types(), evalCtx, outBuf); err != nil {
+			if err := out.Init(&tc.post, inBuf.Types(), evalCtx, outBuf); err != nil {
 				t.Fatal(err)
 			}
 
@@ -257,12 +257,12 @@ func TestPostProcess(t *testing.T) {
 			}
 			// Run the rows through the helper.
 			for i := range input {
-				status, err := out.emitRow(context.TODO(), input[i])
+				status, err := out.EmitRow(context.TODO(), input[i])
 				if err != nil {
 					t.Fatal(err)
 				}
 				if status != NeedMoreRows {
-					out.close()
+					out.Close()
 					break
 				}
 			}

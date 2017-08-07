@@ -42,7 +42,7 @@ type sorter struct {
 	ordering sqlbase.ColumnOrdering
 	matchLen uint32
 	// count is the maximum number of rows that the sorter will push to the
-	// procOutputHelper. 0 if the sorter should sort and push all the rows from
+	// ProcOutputHelper. 0 if the sorter should sort and push all the rows from
 	// the input.
 	count int64
 	// testingKnobMemLimit is used in testing to set a limit on the memory that
@@ -53,14 +53,14 @@ type sorter struct {
 	tempStorage engine.Engine
 }
 
-var _ processor = &sorter{}
+var _ Processor = &sorter{}
 
 func newSorter(
 	flowCtx *FlowCtx, spec *SorterSpec, input RowSource, post *PostProcessSpec, output RowReceiver,
 ) (*sorter, error) {
 	count := int64(0)
 	if post.Limit != 0 {
-		// The sorter needs to produce Offset + Limit rows. The procOutputHelper
+		// The sorter needs to produce Offset + Limit rows. The ProcOutputHelper
 		// will discard the first Offset ones.
 		count = int64(post.Limit) + int64(post.Offset)
 	}
@@ -73,7 +73,7 @@ func newSorter(
 		count:       count,
 		tempStorage: flowCtx.tempStorage,
 	}
-	if err := s.out.init(post, input.Types(), &flowCtx.evalCtx, output); err != nil {
+	if err := s.out.Init(post, input.Types(), &flowCtx.EvalCtx, output); err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -110,16 +110,16 @@ func (s *sorter) Run(ctx context.Context, wg *sync.WaitGroup) {
 			limit = workMem
 		}
 		limitedMon := mon.MakeMonitorInheritWithLimit(
-			"sortall-limited", limit, s.flowCtx.evalCtx.Mon,
+			"sortall-limited", limit, s.flowCtx.EvalCtx.Mon,
 		)
-		limitedMon.Start(ctx, s.flowCtx.evalCtx.Mon, mon.BoundAccount{})
+		limitedMon.Start(ctx, s.flowCtx.EvalCtx.Mon, mon.BoundAccount{})
 		defer limitedMon.Stop(ctx)
 
-		evalCtx := s.flowCtx.evalCtx
+		evalCtx := s.flowCtx.EvalCtx
 		evalCtx.Mon = &limitedMon
 		sv.init(s.ordering, s.rawInput.Types(), &evalCtx)
 	} else {
-		sv.init(s.ordering, s.rawInput.Types(), &s.flowCtx.evalCtx)
+		sv.init(s.ordering, s.rawInput.Types(), &s.flowCtx.EvalCtx)
 	}
 	// Construct the optimal sorterStrategy.
 	var ss sorterStrategy

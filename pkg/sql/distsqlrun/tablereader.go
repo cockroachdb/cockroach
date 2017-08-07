@@ -44,7 +44,7 @@ type tableReader struct {
 	alloc   sqlbase.DatumAlloc
 }
 
-var _ processor = &tableReader{}
+var _ Processor = &tableReader{}
 
 // newTableReader creates a tableReader.
 func newTableReader(
@@ -62,7 +62,7 @@ func newTableReader(
 	// overflows.
 	const overflowProtection = 1000000000
 	if post.Limit != 0 && post.Limit <= overflowProtection {
-		// In this case the procOutputHelper will tell us to stop once we emit
+		// In this case the ProcOutputHelper will tell us to stop once we emit
 		// enough rows.
 		tr.limitHint = int64(post.Limit)
 	} else if spec.LimitHint != 0 && spec.LimitHint <= overflowProtection {
@@ -95,7 +95,7 @@ func newTableReader(
 	for i := range types {
 		types[i] = spec.Table.Columns[i].Type
 	}
-	if err := tr.out.init(post, types, &flowCtx.evalCtx, output); err != nil {
+	if err := tr.out.Init(post, types, &flowCtx.EvalCtx, output); err != nil {
 		return nil, err
 	}
 
@@ -194,7 +194,7 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
 		tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
-		tr.out.close()
+		tr.out.Close()
 		return
 	}
 
@@ -208,7 +208,7 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 			break
 		}
 		// Emit the row; stop if no more rows are needed.
-		consumerStatus, err := tr.out.emitRow(ctx, fetcherRow)
+		consumerStatus, err := tr.out.EmitRow(ctx, fetcherRow)
 		if err != nil || consumerStatus != NeedMoreRows {
 			if err != nil {
 				tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
@@ -218,5 +218,5 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 	tr.sendMisplannedRangesMetadata(ctx)
 	sendTraceData(ctx, tr.out.output)
-	tr.out.close()
+	tr.out.Close()
 }

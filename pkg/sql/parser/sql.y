@@ -378,7 +378,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %token <str>   CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMIT
 %token <str>   COMMITTED CONCAT CONFLICT CONSTRAINT CONSTRAINTS
 %token <str>   COPY COVERING CREATE
-%token <str>   CROSS CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
+%token <str>   CROSS CSV CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
 %token <str>   CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str>   CURRENT_USER CYCLE
 
@@ -1160,10 +1160,10 @@ restore_stmt:
   }
 
 load_stmt:
-  LOAD
+  LOAD CSV TABLE string_or_placeholder FROM string_or_placeholder_list TO string_or_placeholder
   {
     /* SKIP DOC */
-    $$.val = &Load{}
+    $$.val = &Load{Table: $4.expr(), From: $6.exprs(), To: $8.expr()}
   }
 
 string_or_placeholder:
@@ -5600,6 +5600,7 @@ unreserved_keyword:
 | COVERING
 | CUBE
 | CURRENT
+| CSV
 | CYCLE
 | DATA
 | DATABASE

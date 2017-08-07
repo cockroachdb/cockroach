@@ -91,10 +91,10 @@ func (jb *joinerBase) init(
 	types = append(types, leftTypes...)
 	types = append(types, rightTypes...)
 
-	if err := jb.onCond.init(onExpr, types, &flowCtx.evalCtx); err != nil {
+	if err := jb.onCond.init(onExpr, types, &flowCtx.EvalCtx); err != nil {
 		return err
 	}
-	return jb.out.init(post, types, &flowCtx.evalCtx, output)
+	return jb.out.Init(post, types, &flowCtx.EvalCtx, output)
 }
 
 type joinSide uint8
@@ -164,7 +164,7 @@ func (jb *joinerBase) maybeEmitUnmatchedRow(
 	}
 
 	renderedRow := jb.renderUnmatchedRow(row, side)
-	consumerStatus, err := jb.out.emitRow(ctx, renderedRow)
+	consumerStatus, err := jb.out.EmitRow(ctx, renderedRow)
 	if err != nil {
 		jb.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
 		return false

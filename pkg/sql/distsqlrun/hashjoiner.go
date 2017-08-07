@@ -87,7 +87,7 @@ type hashJoiner struct {
 	datumAlloc sqlbase.DatumAlloc
 }
 
-var _ processor = &hashJoiner{}
+var _ Processor = &hashJoiner{}
 
 func newHashJoiner(
 	flowCtx *FlowCtx,
@@ -100,10 +100,10 @@ func newHashJoiner(
 	h := &hashJoiner{
 		initialBufferSize: hashJoinerInitialBufferSize,
 		buckets:           make(map[string]bucket),
-		bucketsAcc:        flowCtx.evalCtx.Mon.MakeBoundAccount(),
+		bucketsAcc:        flowCtx.EvalCtx.Mon.MakeBoundAccount(),
 	}
-	h.rows[leftSide].init(nil /* ordering */, leftSource.Types(), &flowCtx.evalCtx)
-	h.rows[rightSide].init(nil /* ordering */, rightSource.Types(), &flowCtx.evalCtx)
+	h.rows[leftSide].init(nil /* ordering */, leftSource.Types(), &flowCtx.EvalCtx)
+	h.rows[rightSide].init(nil /* ordering */, rightSource.Types(), &flowCtx.EvalCtx)
 
 	numMergedColumns := 0
 	if spec.MergedColumns {
@@ -377,7 +377,7 @@ func (h *hashJoiner) probeRow(
 					// Mark the right row as matched (for right/full outer join).
 					b.seen[i] = true
 				}
-				consumerStatus, err := h.out.emitRow(ctx, renderedRow)
+				consumerStatus, err := h.out.EmitRow(ctx, renderedRow)
 				if err != nil || consumerStatus != NeedMoreRows {
 					return true, nil
 				}
@@ -444,7 +444,7 @@ func (h *hashJoiner) probePhase(ctx context.Context) (earlyExit bool, _ error) {
 	}
 
 	sendTraceData(ctx, h.out.output)
-	h.out.close()
+	h.out.Close()
 	return false, nil
 }
 
