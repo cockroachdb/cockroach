@@ -195,7 +195,7 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 
 	ds.AmbientContext = cfg.AmbientCtx
 	if ds.AmbientContext.Tracer == nil {
-		ds.AmbientContext.Tracer = tracing.NewTracer()
+		panic("no tracer set in AmbientCtx")
 	}
 
 	if cfg.nodeDescriptor != nil {

@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	opentracing "github.com/opentracing/opentracing-go"
 )
@@ -79,7 +78,7 @@ func TestClusterFlow(t *testing.T) {
 	// that doesn't matter for the purposes of this test.
 
 	// Start a span (useful to look at spans using Lightstep).
-	sp := tracing.NewTracer().StartSpan("cluster test")
+	sp := tc.Server(0).ClusterSettings().Tracer.StartSpan("cluster test")
 	ctx := opentracing.ContextWithSpan(context.Background(), sp)
 	defer sp.Finish()
 
