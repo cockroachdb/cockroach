@@ -83,6 +83,7 @@ const (
 	categoryIDGeneration  = "ID Generation"
 	categoryMath          = "Math and Numeric"
 	categoryString        = "String and Byte"
+	categoryArray         = "Array"
 	categorySystemInfo    = "System Info"
 )
 
@@ -1530,7 +1531,7 @@ var Builtins = map[string][]Builtin{
 		Builtin{
 			Types:      ArgTypes{{"input", TypeAnyArray}, {"array_dimension", TypeInt}},
 			ReturnType: fixedReturnType(TypeInt),
-			category:   categorySystemInfo,
+			category:   categoryArray,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				arr := MustBeDArray(args[0])
 				dimen := int64(MustBeDInt(args[1]))
@@ -1546,7 +1547,7 @@ var Builtins = map[string][]Builtin{
 		Builtin{
 			Types:      ArgTypes{{"input", TypeAnyArray}, {"array_dimension", TypeInt}},
 			ReturnType: fixedReturnType(TypeInt),
-			category:   categorySystemInfo,
+			category:   categoryArray,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				arr := MustBeDArray(args[0])
 				dimen := int64(MustBeDInt(args[1]))
@@ -1562,7 +1563,7 @@ var Builtins = map[string][]Builtin{
 		Builtin{
 			Types:      ArgTypes{{"input", TypeAnyArray}, {"array_dimension", TypeInt}},
 			ReturnType: fixedReturnType(TypeInt),
-			category:   categorySystemInfo,
+			category:   categoryArray,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				arr := MustBeDArray(args[0])
 				dimen := int64(MustBeDInt(args[1]))
@@ -1573,6 +1574,142 @@ var Builtins = map[string][]Builtin{
 				"supported `array_dimension` is **1**.",
 		},
 	},
+
+	"array_append": arrayBuiltin(func(typ Type) Builtin {
+		return Builtin{
+			Types:        ArgTypes{{"array", TArray{typ}}, {"elem", typ}},
+			ReturnType:   fixedReturnType(TArray{typ}),
+			category:     categoryArray,
+			nullableArgs: true,
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				return appendToMaybeNullArray(typ, args[0], args[1])
+			},
+			Info: "Appends `elem` to `array`, returning the result.",
+		}
+	}),
+
+	"array_prepend": arrayBuiltin(func(typ Type) Builtin {
+		return Builtin{
+			Types:        ArgTypes{{"elem", typ}, {"array", TArray{typ}}},
+			ReturnType:   fixedReturnType(TArray{typ}),
+			category:     categoryArray,
+			nullableArgs: true,
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				return prependToMaybeNullArray(typ, args[0], args[1])
+			},
+			Info: "Prepends `elem` to `array`, returning the result.",
+		}
+	}),
+
+	"array_cat": arrayBuiltin(func(typ Type) Builtin {
+		return Builtin{
+			Types:        ArgTypes{{"left", TArray{typ}}, {"right", TArray{typ}}},
+			ReturnType:   fixedReturnType(TArray{typ}),
+			category:     categoryArray,
+			nullableArgs: true,
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				return concatArrays(typ, args[0], args[1])
+			},
+			Info: "Appends two arrays.",
+		}
+	}),
+
+	"array_remove": arrayBuiltin(func(typ Type) Builtin {
+		return Builtin{
+			Types:        ArgTypes{{"array", TArray{typ}}, {"elem", typ}},
+			ReturnType:   fixedReturnType(TArray{typ}),
+			category:     categoryArray,
+			nullableArgs: true,
+			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+				if args[0] == DNull {
+					return DNull, nil
+				}
+				result := NewDArray(typ)
+				for _, e := range MustBeDArray(args[0]).Array {
+					if e.Compare(ctx, args[1]) != 0 {
+						if err := result.Append(e); err != nil {
+							return nil, err
+						}
+					}
+				}
+				return result, nil
+			},
+			Info: "Remove from `array` all elements equal to `elem`.",
+		}
+	}),
+
+	"array_replace": arrayBuiltin(func(typ Type) Builtin {
+		return Builtin{
+			Types:        ArgTypes{{"array", TArray{typ}}, {"toreplace", typ}, {"replacewith", typ}},
+			ReturnType:   fixedReturnType(TArray{typ}),
+			category:     categoryArray,
+			nullableArgs: true,
+			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+				if args[0] == DNull {
+					return DNull, nil
+				}
+				result := NewDArray(typ)
+				for _, e := range MustBeDArray(args[0]).Array {
+					if e.Compare(ctx, args[1]) == 0 {
+						if err := result.Append(args[2]); err != nil {
+							return nil, err
+						}
+					} else {
+						if err := result.Append(e); err != nil {
+							return nil, err
+						}
+					}
+				}
+				return result, nil
+			},
+			Info: "Replace all occurrences of `toreplace` in `array` with `replacewith`.",
+		}
+	}),
+
+	"array_position": arrayBuiltin(func(typ Type) Builtin {
+		return Builtin{
+			Types:        ArgTypes{{"array", TArray{typ}}, {"elem", typ}},
+			ReturnType:   fixedReturnType(TypeInt),
+			category:     categoryArray,
+			nullableArgs: true,
+			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+				if args[0] == DNull {
+					return DNull, nil
+				}
+				for i, e := range MustBeDArray(args[0]).Array {
+					if e.Compare(ctx, args[1]) == 0 {
+						return NewDInt(DInt(i + 1)), nil
+					}
+				}
+				return DNull, nil
+			},
+			Info: "Return the index of the first occurrence of `elem` in `array`.",
+		}
+	}),
+
+	"array_positions": arrayBuiltin(func(typ Type) Builtin {
+		return Builtin{
+			Types:        ArgTypes{{"array", TArray{typ}}, {"elem", typ}},
+			ReturnType:   fixedReturnType(TArray{typ}),
+			category:     categoryArray,
+			nullableArgs: true,
+			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+				if args[0] == DNull {
+					return DNull, nil
+				}
+				result := NewDArray(TypeInt)
+				for i, e := range MustBeDArray(args[0]).Array {
+					if e.Compare(ctx, args[1]) == 0 {
+						if err := result.Append(NewDInt(DInt(i + 1))); err != nil {
+							return nil, err
+						}
+					}
+				}
+				return result, nil
+			},
+			Info: "Returns and array of indexes of all occurrences of `elem` in `array`.",
+		}
+	}),
 
 	// Metadata functions.
 
@@ -1926,6 +2063,14 @@ var powImpls = []Builtin{
 		},
 		Info: "Calculates `x`^`y`.",
 	},
+}
+
+func arrayBuiltin(impl func(Type) Builtin) []Builtin {
+	result := make([]Builtin, len(TypesAnyNonArray))
+	for i, typ := range TypesAnyNonArray {
+		result[i] = impl(typ)
+	}
+	return result
 }
 
 func decimalLogFn(
