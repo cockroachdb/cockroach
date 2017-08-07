@@ -447,7 +447,6 @@ func TestCreateSystemTable(t *testing.T) {
 	settingsDescVal := sqlbase.WrapDescriptor(&settingsDesc)
 
 	// Start up a test server without running the system.jobs migration.
-	// remove the view update migration so we can test its effects.
 	newMigrations := append([]migrationDescriptor(nil), backwardCompatibleMigrations...)
 	for i := range newMigrations {
 		if strings.HasPrefix(newMigrations[i].name, "create system.jobs") {
