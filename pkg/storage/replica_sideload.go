@@ -15,15 +15,13 @@
 package storage
 
 import (
-	"math"
 	"runtime/debug"
 	"time"
 
 	"golang.org/x/net/context"
-	"golang.org/x/time/rate"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -31,29 +29,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
-	"kv.bulk_io_write.max_rate",
-	"the rate limit (bytes/sec) to use for writes to disk on behalf of bulk io ops",
-	math.MaxInt64,
-)
+const bulkIOWriteLimiterLongWait = 500 * time.Millisecond
 
-const (
-	bulkIOWriteLimiterBurst    = 2 * 1024 * 1024 // 2MB
-	bulkIOWriteLimiterLongWait = 500 * time.Millisecond
-)
-
-// TODO(dan): This limiting should be per-store and shared between any
-// operations that need lots of disk throughput.
-var bulkIOWriteLimiter = rate.NewLimiter(
-	rate.Limit(bulkIOWriteLimit.Get()),
-	bulkIOWriteLimiterBurst,
-)
-
-func limitBulkIOWrite(ctx context.Context, cost int) {
-	// TODO(dan): Investigate instead using bulkIOWriteLimit.OnChange to update
-	// the limiter.
-	bulkIOWriteLimiter.SetLimit(rate.Limit(bulkIOWriteLimit.Get()))
-
+func limitBulkIOWrite(ctx context.Context, st cluster.Settings, cost int) {
 	// The limiter disallows anything greater than its burst (set to
 	// bulkIOWriteLimiterBurst), so cap the batch size if it would overflow.
 	//
@@ -63,12 +41,12 @@ func limitBulkIOWrite(ctx context.Context, cost int) {
 	// on azure local disks), I think because the file is written all at once at
 	// the end. This could be fixed by writing the file in chunks, which also
 	// would likely help the overall smoothness, too.
-	if cost > bulkIOWriteLimiterBurst {
-		cost = bulkIOWriteLimiterBurst
+	if cost > cluster.BulkIOWriteLimiterBurst {
+		cost = cluster.BulkIOWriteLimiterBurst
 	}
 
 	begin := timeutil.Now()
-	if err := bulkIOWriteLimiter.WaitN(ctx, cost); err != nil {
+	if err := st.BulkIOWriteLimiter.WaitN(ctx, cost); err != nil {
 		log.Errorf(ctx, "error rate limiting bulk io write: %+v", err)
 	}
 

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -98,6 +99,7 @@ func createTestStorePool(
 	mnl := newMockNodeLiveness(defaultNodeStatus)
 	storePool := NewStorePool(
 		log.AmbientContext{},
+		cluster.MakeClusterSettings(),
 		g,
 		clock,
 		mnl.nodeLivenessFunc,
@@ -462,6 +464,9 @@ func TestStorePoolThrottle(t *testing.T) {
 	stopper, g, _, sp, _ := createTestStorePool(
 		TestTimeUntilStoreDead, false /* deterministic */, nodeStatusDead)
 	defer stopper.Stop(context.TODO())
+
+	declinedReservationsTimeout := sp.st.DeclinedReservationsTimeout
+	failedReservationsTimeout := sp.st.FailedReservationsTimeout
 
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(uniqueStore, t)

@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -137,16 +137,20 @@ func BenchmarkWriteBatch(b *testing.B) {
 
 func BenchmarkImport(b *testing.B) {
 	b.Run("AddSSTable", func(b *testing.B) {
-		defer settings.TestingSetBool(&storageccl.AddSSTableEnabled, true)()
-		runBenchmarkImport(b)
+		enableSSTable := func(st cluster.Settings) {
+			st.AddSSTableEnabled.Override(true)
+		}
+		runBenchmarkImport(b, enableSSTable)
 	})
 	b.Run("WriteBatch", func(b *testing.B) {
-		defer settings.TestingSetBool(&storageccl.AddSSTableEnabled, false)()
-		runBenchmarkImport(b)
+		disableSSTable := func(st cluster.Settings) {
+			st.AddSSTableEnabled.Override(false)
+		}
+		runBenchmarkImport(b, disableSSTable)
 	})
 }
 
-func runBenchmarkImport(b *testing.B) {
+func runBenchmarkImport(b *testing.B, init func(cluster.Settings)) {
 	tempDir, dirCleanupFn := testutils.TempDir(b)
 	defer dirCleanupFn()
 
@@ -167,6 +171,10 @@ func runBenchmarkImport(b *testing.B) {
 			tc := testcluster.StartTestCluster(b, 3, base.TestClusterArgs{})
 			defer tc.Stopper().Stop(ctx)
 			kvDB := tc.Server(0).KVClient().(*client.DB)
+
+			for _, server := range tc.Servers {
+				init(server.ClusterSettings())
+			}
 
 			id := sqlbase.ID(keys.MaxReservedDescID + 1)
 

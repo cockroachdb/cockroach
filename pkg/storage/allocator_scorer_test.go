@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -632,6 +633,8 @@ func TestDiversityRemovalScore(t *testing.T) {
 func TestBalanceScore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	st := cluster.MakeClusterSettings()
+
 	storeList := StoreList{
 		candidateRanges:          stat{mean: 1000},
 		candidateDiskUsage:       stat{mean: 0.50},
@@ -750,7 +753,7 @@ func TestBalanceScore(t *testing.T) {
 		{sRangesUnderfullBytesUnderfullWritesOverfull, rLowWrites, 3},
 	}
 	for i, tc := range testCases {
-		if a, e := balanceScore(storeList, tc.sc, tc.ri), tc.expected; a.totalScore() != e {
+		if a, e := balanceScore(st, storeList, tc.sc, tc.ri), tc.expected; a.totalScore() != e {
 			t.Errorf("%d: balanceScore(storeList, %+v, %+v) got %s; want %.2f", i, tc.sc, tc.ri, a, e)
 		}
 	}

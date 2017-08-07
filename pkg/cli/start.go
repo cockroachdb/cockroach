@@ -212,7 +212,7 @@ func initCPUProfile(ctx context.Context, dir string) {
 	}
 
 	go func() {
-		defer log.RecoverAndReportPanic(ctx)
+		defer log.RecoverAndReportPanic(ctx, serverCfg.Settings.ReportingSettings)
 
 		ctx := context.Background()
 
@@ -334,7 +334,11 @@ func runStart(cmd *cobra.Command, args []string) error {
 	go func() {
 		// Ensure that the log files see the startup messages immediately.
 		defer log.Flush()
-		defer log.RecoverAndReportPanic(startCtx)
+		defer func() {
+			if s != nil {
+				log.RecoverAndReportPanic(startCtx, s.ClusterSettings().ReportingSettings)
+			}
+		}()
 		defer sp.Finish()
 		if err := func() error {
 			if err := serverCfg.InitNode(); err != nil {

@@ -74,12 +74,12 @@ func (f *FloatSetting) setToDefault() {
 }
 
 // RegisterFloatSetting defines a new setting with type float.
-func RegisterFloatSetting(key, desc string, defaultValue float64) *FloatSetting {
-	return RegisterValidatedFloatSetting(key, desc, defaultValue, nil)
+func (r *Registry) RegisterFloatSetting(key, desc string, defaultValue float64) *FloatSetting {
+	return r.RegisterValidatedFloatSetting(key, desc, defaultValue, nil)
 }
 
 // RegisterValidatedFloatSetting defines a new setting with type float.
-func RegisterValidatedFloatSetting(
+func (r *Registry) RegisterValidatedFloatSetting(
 	key, desc string, defaultValue float64, validateFn func(float64) error,
 ) *FloatSetting {
 	if validateFn != nil {
@@ -91,13 +91,15 @@ func RegisterValidatedFloatSetting(
 		defaultValue: defaultValue,
 		validateFn:   validateFn,
 	}
-	register(key, desc, setting)
+	r.register(key, desc, setting)
 	return setting
 }
 
 // RegisterNonNegativeFloatSetting defines a new setting with type float.
-func RegisterNonNegativeFloatSetting(key, desc string, defaultValue float64) *FloatSetting {
-	return RegisterValidatedFloatSetting(key, desc, defaultValue, func(v float64) error {
+func (r *Registry) RegisterNonNegativeFloatSetting(
+	key, desc string, defaultValue float64,
+) *FloatSetting {
+	return r.RegisterValidatedFloatSetting(key, desc, defaultValue, func(v float64) error {
 		if v < 0 {
 			return errors.Errorf("cannot set %s to a negative value: %f", key, v)
 		}

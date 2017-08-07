@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -2409,6 +2410,7 @@ func TestReplicaGCRace(t *testing.T) {
 	// back along the same grpc stream as the request so it's ok that
 	// there are two (this one and the one actually used by the store).
 	fromTransport := storage.NewRaftTransport(log.AmbientContext{},
+		cluster.MakeClusterSettings(),
 		storage.GossipAddressResolver(fromStore.Gossip()),
 		nil, /* grpcServer */
 		mtc.rpcContext,
@@ -2804,6 +2806,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	// back along the same grpc stream as the request so it's ok that
 	// there are two (this one and the one actually used by the store).
 	transport0 := storage.NewRaftTransport(log.AmbientContext{},
+		cluster.MakeClusterSettings(),
 		storage.GossipAddressResolver(mtc.gossips[0]),
 		nil, /* grpcServer */
 		mtc.rpcContext,

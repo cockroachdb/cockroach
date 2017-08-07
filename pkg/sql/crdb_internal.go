@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -515,8 +514,9 @@ CREATE TABLE crdb_internal.cluster_settings (
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
-		for _, k := range settings.Keys() {
-			setting, _ := settings.Lookup(k)
+		r := p.session.execCfg.Registry
+		for _, k := range r.Keys() {
+			setting, _ := r.Lookup(k)
 			if err := addRow(
 				parser.NewDString(k),
 				parser.NewDString(setting.String()),

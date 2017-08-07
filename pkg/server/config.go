@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -66,11 +67,6 @@ const (
 
 	productionSettingsWebpage = "please see https://www.cockroachlabs.com/docs/stable/recommended-production-settings.html for more details"
 )
-
-var timeUntilStoreDead = settings.RegisterNonNegativeDurationSetting(
-	"server.time_until_store_dead",
-	"the time after which if there is no new gossiped information about a store, it is considered dead",
-	5*time.Minute)
 
 // MaxOffsetType stores the configured MaxOffset.
 type MaxOffsetType time.Duration
@@ -109,6 +105,8 @@ func (mo *MaxOffsetType) String() string {
 type Config struct {
 	// Embed the base context.
 	*base.Config
+
+	cluster.Settings
 
 	base.RaftConfig
 
@@ -348,7 +346,7 @@ func MakeTempStoreSpecFromStoreSpec(spec base.StoreSpec) (base.StoreSpec, error)
 }
 
 // MakeConfig returns a Context with default values.
-func MakeConfig() Config {
+func MakeConfig(st cluster.Settings) Config {
 	storeSpec, err := base.NewStoreSpec(defaultStorePath)
 	if err != nil {
 		panic(err)
@@ -361,13 +359,14 @@ func MakeConfig() Config {
 	cfg := Config{
 		Config:                   new(base.Config),
 		MaxOffset:                MaxOffsetType(base.DefaultMaxClockOffset),
+		Settings:                 st,
 		CacheSize:                defaultCacheSize,
 		SQLMemoryPoolSize:        defaultSQLMemoryPoolSize,
 		ScanInterval:             defaultScanInterval,
 		ScanMaxIdleTime:          defaultScanMaxIdleTime,
 		ConsistencyCheckInterval: defaultConsistencyCheckInterval,
 		MetricsSampleInterval:    defaultMetricsSampleInterval,
-		TimeUntilStoreDead:       timeUntilStoreDead,
+		TimeUntilStoreDead:       st.TimeUntilStoreDead,
 		EventLogEnabled:          defaultEventLogEnabled,
 		Stores: base.StoreSpecList{
 			Specs: []base.StoreSpec{storeSpec},
@@ -502,6 +501,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				MaxSizeBytes:            sizeInBytes,
 				MaxOpenFiles:            openFileLimitPerStore,
 				WarnLargeBatchThreshold: 500 * time.Millisecond,
+				RocksDBSettings:         cfg.Settings.RocksDBSettings,
 			}
 
 			eng, err := engine.NewRocksDB(rocksDBConfig, cache)

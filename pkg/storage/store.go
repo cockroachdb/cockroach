@@ -41,7 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -118,11 +118,12 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 		clock = hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	}
 	sc := StoreConfig{
-		ExposedClusterVersion: migration.NewExposedClusterVersion(func() base.ClusterVersion {
-			return base.ClusterVersion{
-				UseVersion: base.ServerVersion, // all features active
+		ExposedClusterVersion: migration.NewExposedClusterVersion(func() cluster.ClusterVersion {
+			return cluster.ClusterVersion{
+				UseVersion: cluster.ServerVersion, // all features active
 			}
 		}, nil),
+		Settings:   cluster.MakeClusterSettings(),
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
 		CoalescedHeartbeatsInterval:    50 * time.Millisecond,
@@ -541,6 +542,7 @@ var _ client.Sender = &Store{}
 type StoreConfig struct {
 	AmbientCtx log.AmbientContext
 	*migration.ExposedClusterVersion
+	cluster.Settings
 	base.RaftConfig
 
 	Clock        *hlc.Clock
@@ -907,6 +909,11 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 // String formats a store for debug output.
 func (s *Store) String() string {
 	return fmt.Sprintf("[n%d,s%d]", s.Ident.NodeID, s.Ident.StoreID)
+}
+
+// ClusterSettings returns the node's ClusterSettings.
+func (s *Store) ClusterSettings() cluster.Settings {
+	return s.cfg.Settings
 }
 
 // AnnotateCtx is a convenience wrapper; see AmbientContext.
@@ -3207,21 +3214,12 @@ type SnapshotStorePool interface {
 	throttle(reason throttleReason, toStoreID roachpb.StoreID)
 }
 
-var rebalanceSnapshotRate = settings.RegisterByteSizeSetting(
-	"kv.snapshot_rebalance.max_rate",
-	"the rate limit (bytes/sec) to use for rebalance snapshots",
-	envutil.EnvOrDefaultBytes("COCKROACH_PREEMPTIVE_SNAPSHOT_RATE", 2<<20))
-var recoverySnapshotRate = settings.RegisterByteSizeSetting(
-	"kv.snapshot_recovery.max_rate",
-	"the rate limit (bytes/sec) to use for recovery snapshots",
-	envutil.EnvOrDefaultBytes("COCKROACH_RAFT_SNAPSHOT_RATE", 8<<20))
-
-func snapshotRateLimit(priority SnapshotRequest_Priority) (rate.Limit, error) {
+func snapshotRateLimit(st cluster.Settings, priority SnapshotRequest_Priority) (rate.Limit, error) {
 	switch priority {
 	case SnapshotRequest_RECOVERY:
-		return rate.Limit(recoverySnapshotRate.Get()), nil
+		return rate.Limit(st.RecoverySnapshotRate.Get()), nil
 	case SnapshotRequest_REBALANCE:
-		return rate.Limit(rebalanceSnapshotRate.Get()), nil
+		return rate.Limit(st.RebalanceSnapshotRate.Get()), nil
 	default:
 		return 0, errors.Errorf("unknown snapshot priority: %s", priority)
 	}
@@ -3232,6 +3230,7 @@ var errMustRetrySnapshotDueToTruncation = errors.New("log truncation during snap
 // sendSnapshot sends an outgoing snapshot via a pre-opened GRPC stream.
 func sendSnapshot(
 	ctx context.Context,
+	st cluster.Settings,
 	stream OutgoingSnapshotStream,
 	storePool SnapshotStorePool,
 	header SnapshotRequest_Header,
@@ -3277,7 +3276,7 @@ func sendSnapshot(
 
 	// The size of batches to send. This is the granularity of rate limiting.
 	const batchSize = 256 << 10 // 256 KB
-	targetRate, err := snapshotRateLimit(header.Priority)
+	targetRate, err := snapshotRateLimit(st, header.Priority)
 	if err != nil {
 		return errors.Wrapf(err, "%s", to)
 	}

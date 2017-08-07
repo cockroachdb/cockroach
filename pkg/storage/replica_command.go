@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -57,15 +57,6 @@ const (
 	// operation.
 	collectChecksumTimeout = 5 * time.Second
 )
-
-// gcBatchSize controls the amount of work done in a single pass of
-// MVCC GC. Setting this too high may block the range for too long
-// (especially a risk in the system ranges), while setting it too low
-// may allow ranges to grow too large if we are unable to keep up with
-// the amount of garbage generated.
-var gcBatchSize = settings.RegisterIntSetting("kv.gc.batch_size",
-	"maximum number of keys in a batch for MVCC garbage collection",
-	100000)
 
 // CommandArgs contains all the arguments to a command.
 // TODO(bdarnell): consider merging with storagebase.FilterArgs (which
@@ -1444,7 +1435,7 @@ func evalGC(
 	}
 
 	// Garbage collect the specified keys by expiration timestamps.
-	err := engine.MVCCGarbageCollect(ctx, batch, cArgs.Stats, keys, h.Timestamp, gcBatchSize.Get())
+	err := engine.MVCCGarbageCollect(ctx, batch, cArgs.Stats, keys, h.Timestamp, cArgs.EvalCtx.ClusterSettings().GCBatchSize.Get())
 	if err != nil {
 		return EvalResult{}, err
 	}
@@ -1902,7 +1893,7 @@ func evalTruncateLog(
 	end := engine.MakeMVCCMetadataKey(keys.RaftLogKey(cArgs.EvalCtx.RangeID(), args.Index))
 
 	var ms enginepb.MVCCStats
-	if cArgs.EvalCtx.repl.store.cfg.IsActive(base.VersionRaftLogTruncationBelowRaft) {
+	if cArgs.EvalCtx.repl.store.cfg.IsActive(cluster.VersionRaftLogTruncationBelowRaft) {
 		// Compute the stats delta that were to occur should the log entries be
 		// purged. We do this as a side effect of seeing a new TruncatedState,
 		// downstream of Raft. A follower may not run the side effect in the event
@@ -3101,7 +3092,7 @@ func splitTrigger(
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to write initial Replica state")
 		}
 
-		if !rec.repl.store.cfg.IsActive(base.VersionSplitHardStateBelowRaft) {
+		if !rec.repl.store.cfg.IsActive(cluster.VersionSplitHardStateBelowRaft) {
 			// Write an initial state upstream of Raft even though it might
 			// clobber downstream simply because that's what 1.0 does and if we
 			// don't write it here, then a 1.0 version applying it as a follower
