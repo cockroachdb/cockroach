@@ -52,7 +52,7 @@ func (p *planner) showClusterSetting(ctx context.Context, name string) (planNode
 			"TABLE crdb_internal.cluster_settings", nil, nil)
 	}
 
-	val, ok := settings.Lookup(name)
+	val, ok := p.session.execCfg.Settings.Registry.Lookup(name)
 	if !ok {
 		return nil, errors.Errorf("unknown setting: %q", name)
 	}

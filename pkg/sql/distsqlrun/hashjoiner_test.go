@@ -22,6 +22,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -512,7 +513,7 @@ func TestHashJoiner(t *testing.T) {
 					out := &RowBuffer{}
 					evalCtx := parser.MakeTestingEvalContext()
 					defer evalCtx.Stop(context.Background())
-					flowCtx := FlowCtx{EvalCtx: evalCtx}
+					flowCtx := FlowCtx{Settings: cluster.MakeClusterSettings(), EvalCtx: evalCtx}
 
 					post := PostProcessSpec{Projection: true, OutputColumns: c.outCols}
 					h, err := newHashJoiner(&flowCtx, &hs, leftInput, rightInput, &post, out)
@@ -624,7 +625,7 @@ func TestHashJoinerDrain(t *testing.T) {
 		RowBufferArgs{AccumulateRowsWhileDraining: true})
 	evalCtx := parser.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
-	flowCtx := FlowCtx{EvalCtx: evalCtx}
+	flowCtx := FlowCtx{Settings: cluster.MakeClusterSettings(), EvalCtx: evalCtx}
 
 	post := PostProcessSpec{Projection: true, OutputColumns: outCols}
 	h, err := newHashJoiner(&flowCtx, &spec, leftInput, rightInput, &post, out)
@@ -735,7 +736,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 		RowBufferArgs{})
 	evalCtx := parser.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
-	flowCtx := FlowCtx{EvalCtx: evalCtx}
+	flowCtx := FlowCtx{Settings: cluster.MakeClusterSettings(), EvalCtx: evalCtx}
 
 	post := PostProcessSpec{Projection: true, OutputColumns: outCols}
 	h, err := newHashJoiner(&flowCtx, &spec, leftInput, rightInput, &post, out)
@@ -780,7 +781,8 @@ func BenchmarkHashJoiner(b *testing.B) {
 	evalCtx := parser.MakeTestingEvalContext()
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
-		EvalCtx: evalCtx,
+		Settings: cluster.MakeClusterSettings(),
+		EvalCtx:  evalCtx,
 	}
 
 	spec := HashJoinerSpec{

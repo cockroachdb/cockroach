@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -123,6 +124,10 @@ type TestServerInterface interface {
 	// GetStores returns the collection of stores from this TestServer's node.
 	// The return value is of type *storage.Stores.
 	GetStores() interface{}
+
+	// ClusterSettings returns the ClusterSettings shared by all components of
+	// this server.
+	ClusterSettings() *cluster.Settings
 
 	// SplitRange splits the range containing splitKey.
 	SplitRange(

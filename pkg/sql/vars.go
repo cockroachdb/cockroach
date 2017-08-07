@@ -22,6 +22,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -193,13 +194,13 @@ var varGen = map[string]sessionVar{
 			}
 			switch strings.ToLower(s) {
 			case "off":
-				session.DistSQLMode = DistSQLOff
+				session.DistSQLMode = cluster.DistSQLOff
 			case "on":
-				session.DistSQLMode = DistSQLOn
+				session.DistSQLMode = cluster.DistSQLOn
 			case "auto":
-				session.DistSQLMode = DistSQLAuto
+				session.DistSQLMode = cluster.DistSQLAuto
 			case "always":
-				session.DistSQLMode = DistSQLAlways
+				session.DistSQLMode = cluster.DistSQLAlways
 			default:
 				return fmt.Errorf("set distsql: \"%s\" not supported", s)
 			}
@@ -210,10 +211,7 @@ var varGen = map[string]sessionVar{
 			return session.DistSQLMode.String()
 		},
 		Reset: func(session *Session) error {
-			session.DistSQLMode = DistSQLExecModeFromInt(DistSQLClusterExecMode.Get())
-			if session.execCfg.TestingKnobs.OverrideDistSQLMode != nil {
-				session.DistSQLMode = DistSQLExecModeFromInt(session.execCfg.TestingKnobs.OverrideDistSQLMode.Get())
-			}
+			session.DistSQLMode = cluster.DistSQLExecMode(session.execCfg.Settings.DistSQLClusterExecMode.Get())
 			return nil
 		},
 	},

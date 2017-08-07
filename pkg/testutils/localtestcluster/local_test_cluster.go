@@ -27,13 +27,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // A LocalTestCluster encapsulates an in-memory instantiation of a
@@ -48,6 +48,7 @@ import (
 // Note that the LocalTestCluster is different from server.TestCluster
 // in that although it uses a distributed sender, there is no RPC traffic.
 type LocalTestCluster struct {
+	Cfg                      storage.StoreConfig
 	Manual                   *hlc.ManualClock
 	Clock                    *hlc.Clock
 	Gossip                   *gossip.Gossip
@@ -67,6 +68,7 @@ type LocalTestCluster struct {
 // InitSenderFn is a callback used to initiate the txn coordinator (we don't
 // do it directly from this package to avoid a dependency on kv).
 type InitSenderFn func(
+	st *cluster.Settings,
 	nodeDesc *roachpb.NodeDescriptor,
 	tracer opentracing.Tracer,
 	clock *hlc.Clock,
@@ -82,7 +84,11 @@ type InitSenderFn func(
 // TestServer.Addr after Start() for client connections. Use Stop()
 // to shutdown the server after the test completes.
 func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSender InitSenderFn) {
-	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+	ltc.Manual = hlc.NewManualClock(123)
+	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano, 50*time.Millisecond)
+	cfg := storage.TestStoreConfig(ltc.Clock)
+	ltc.Cfg = cfg
+	ambient := log.AmbientContext{Tracer: cfg.Settings.Tracer}
 	nc := &base.NodeIDContainer{}
 	ambient.AddLogTag("n", nc)
 
@@ -90,8 +96,6 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSende
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: nodeID}
 
 	ltc.tester = t
-	ltc.Manual = hlc.NewManualClock(123)
-	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano, 50*time.Millisecond)
 	ltc.Stopper = stop.NewStopper()
 	rpcContext := rpc.NewContext(ambient, baseCtx, ltc.Clock, ltc.Stopper)
 	server := rpc.NewServer(rpcContext) // never started
@@ -101,7 +105,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSende
 
 	ltc.Stores = storage.NewStores(ambient, ltc.Clock)
 
-	ltc.Sender = initSender(nodeDesc, ambient.Tracer, ltc.Clock, ltc.Latency, ltc.Stores, ltc.Stopper,
+	ltc.Sender = initSender(cfg.Settings, nodeDesc, ambient.Tracer, ltc.Clock, ltc.Latency, ltc.Stores, ltc.Stopper,
 		ltc.Gossip)
 	if ltc.DBContext == nil {
 		dbCtx := client.DefaultDBContext()
@@ -109,7 +113,6 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSende
 	}
 	ltc.DB = client.NewDBWithContext(ltc.Sender, ltc.Clock, *ltc.DBContext)
 	transport := storage.NewDummyRaftTransport()
-	cfg := storage.TestStoreConfig(ltc.Clock)
 	// By default, disable the replica scanner and split queue, which
 	// confuse tests using LocalTestCluster.
 	if ltc.StoreTestingKnobs == nil {
@@ -133,6 +136,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSende
 	)
 	cfg.StorePool = storage.NewStorePool(
 		cfg.AmbientCtx,
+		cfg.Settings,
 		cfg.Gossip,
 		cfg.Clock,
 		storage.MakeStorePoolNodeLivenessFunc(cfg.NodeLiveness),

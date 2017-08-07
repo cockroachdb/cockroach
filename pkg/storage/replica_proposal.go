@@ -26,9 +26,9 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -552,6 +552,7 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 
 func addSSTablePreApply(
 	ctx context.Context,
+	st *cluster.Settings,
 	eng engine.Engine,
 	sideloaded sideloadStorage,
 	term, index uint64,
@@ -578,7 +579,7 @@ func addSSTablePreApply(
 	}
 	path += ".ingested"
 
-	limitBulkIOWrite(ctx, len(sst.Data))
+	limitBulkIOWrite(ctx, st, len(sst.Data))
 
 	if inmem, ok := eng.(engine.InMem); ok {
 		path = fmt.Sprintf("%x", checksum)
@@ -782,7 +783,7 @@ func (r *Replica) handleReplicatedEvalResult(
 		// that all we need to synchronize is disk i/o, and there is no overlap
 		// between files *removed* during truncation and those active in Raft.
 
-		if r.store.cfg.IsActive(base.VersionRaftLogTruncationBelowRaft) {
+		if r.store.cfg.IsActive(cluster.VersionRaftLogTruncationBelowRaft) {
 			// Truncate the Raft log.
 			start := engine.MakeMVCCMetadataKey(keys.RaftLogKey(r.RangeID, 0))
 			end := engine.MakeMVCCMetadataKey(

@@ -52,7 +52,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // jemallocHeapDump is an optional function to be called at heap dump time.
@@ -212,7 +211,7 @@ func initCPUProfile(ctx context.Context, dir string) {
 	}
 
 	go func() {
-		defer log.RecoverAndReportPanic(ctx)
+		defer log.RecoverAndReportPanic(ctx, serverCfg.Settings.ReportingSettings)
 
 		ctx := context.Background()
 
@@ -304,7 +303,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
-	tracer := tracing.NewTracer()
+	tracer := serverCfg.Settings.Tracer
 	sp := tracer.StartSpan("server start")
 	startCtx := opentracing.ContextWithSpan(context.Background(), sp)
 
@@ -334,7 +333,11 @@ func runStart(cmd *cobra.Command, args []string) error {
 	go func() {
 		// Ensure that the log files see the startup messages immediately.
 		defer log.Flush()
-		defer log.RecoverAndReportPanic(startCtx)
+		defer func() {
+			if s != nil {
+				log.RecoverAndReportPanic(startCtx, s.ClusterSettings().ReportingSettings)
+			}
+		}()
 		defer sp.Finish()
 		if err := func() error {
 			if err := serverCfg.InitNode(); err != nil {
@@ -638,7 +641,7 @@ func getClientGRPCConn() (*grpc.ClientConn, *hlc.Clock, *stop.Stopper, error) {
 	clock := hlc.NewClock(hlc.UnixNano, 0)
 	stopper := stop.NewStopper()
 	rpcContext := rpc.NewContext(
-		log.AmbientContext{},
+		log.AmbientContext{Tracer: serverCfg.Settings.Tracer},
 		serverCfg.Config,
 		clock,
 		stopper,

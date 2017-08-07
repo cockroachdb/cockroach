@@ -20,6 +20,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -71,7 +72,7 @@ func TestValues(t *testing.T) {
 					}
 
 					out := &RowBuffer{}
-					flowCtx := FlowCtx{}
+					flowCtx := FlowCtx{Settings: cluster.MakeClusterSettings()}
 
 					v, err := newValuesProcessor(&flowCtx, &spec, &PostProcessSpec{}, out)
 					if err != nil {

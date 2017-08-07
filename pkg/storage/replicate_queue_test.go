@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -43,8 +42,6 @@ func TestReplicateQueueRebalance(t *testing.T) {
 		t.Skip("short flag")
 	}
 
-	defer settings.TestingSetBool(&storage.EnableStatsBasedRebalancing, false)()
-
 	// Set the gossip stores interval lower to speed up rebalancing. With the
 	// default of 5s we have to wait ~5s for the rebalancing to start.
 	defer func(v time.Duration) {
@@ -57,6 +54,10 @@ func TestReplicateQueueRebalance(t *testing.T) {
 		base.TestClusterArgs{ReplicationMode: base.ReplicationAuto},
 	)
 	defer tc.Stopper().Stop(context.TODO())
+
+	for _, server := range tc.Servers {
+		server.ClusterSettings().EnableStatsBasedRebalancing.Override(false)
+	}
 
 	const newRanges = 5
 	for i := 0; i < newRanges; i++ {

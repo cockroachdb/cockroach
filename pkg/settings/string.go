@@ -79,13 +79,13 @@ func (s *StringSetting) setToDefault() {
 }
 
 // RegisterStringSetting defines a new setting with type string.
-func RegisterStringSetting(key, desc string, defaultValue string) *StringSetting {
-	return RegisterValidatedStringSetting(key, desc, defaultValue, nil)
+func (r *Registry) RegisterStringSetting(key, desc string, defaultValue string) *StringSetting {
+	return r.RegisterValidatedStringSetting(key, desc, defaultValue, nil)
 }
 
 // RegisterValidatedStringSetting defines a new setting with type string with a
 // validation function.
-func RegisterValidatedStringSetting(
+func (r *Registry) RegisterValidatedStringSetting(
 	key, desc string, defaultValue string, validateFn func(string) error,
 ) *StringSetting {
 	if validateFn != nil {
@@ -97,7 +97,7 @@ func RegisterValidatedStringSetting(
 		defaultValue: defaultValue,
 		validateFn:   validateFn,
 	}
-	register(key, desc, setting)
+	r.register(key, desc, setting)
 	return setting
 }
 

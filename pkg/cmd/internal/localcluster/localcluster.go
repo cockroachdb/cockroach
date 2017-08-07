@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 const basePort = 26257
@@ -112,7 +113,7 @@ func (c *Cluster) Start(
 		User:     security.NodeUser,
 		Insecure: true,
 	}
-	c.rpcCtx = rpc.NewContext(log.AmbientContext{}, baseCtx,
+	c.rpcCtx = rpc.NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, baseCtx,
 		hlc.NewClock(hlc.UnixNano, 0), c.stopper)
 
 	if perNodeArgs != nil && len(perNodeArgs) != len(c.Nodes) {

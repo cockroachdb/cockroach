@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -591,7 +592,6 @@ func TestAllocatorRelaxConstraints(t *testing.T) {
 // randomly from amongst stores over the minAvailCapacityThreshold.
 func TestAllocatorRebalance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer settings.TestingSetBool(&EnableStatsBasedRebalancing, false)()
 
 	stores := []*roachpb.StoreDescriptor{
 		{
@@ -639,6 +639,9 @@ func TestAllocatorRebalance(t *testing.T) {
 	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
 	defer stopper.Stop(context.Background())
 
+	st := a.storePool.st
+	st.EnableStatsBasedRebalancing.Override(false)
+
 	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
 	ctx := context.Background()
 
@@ -668,7 +671,7 @@ func TestAllocatorRebalance(t *testing.T) {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
 		sl, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)
-		result := shouldRebalance(ctx, desc, sl, firstRangeInfo)
+		result := shouldRebalance(ctx, st, desc, sl, firstRangeInfo)
 		if expResult := (i >= 2); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t; desc %+v; sl: %+v", i, expResult, result, desc, sl)
 		}
@@ -677,11 +680,12 @@ func TestAllocatorRebalance(t *testing.T) {
 
 func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer settings.TestingSetBool(&EnableStatsBasedRebalancing, false)()
 
 	stopper, _, sp, a, _ := createTestAllocator( /* deterministic */ false)
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
+
+	sp.st.EnableStatsBasedRebalancing.Override(false)
 
 	mockStorePool(sp,
 		[]roachpb.StoreID{1, 2, 3, 4, 5, 6},
@@ -761,7 +765,6 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 // stores.
 func TestAllocatorRebalanceThrashing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer settings.TestingSetBool(&EnableStatsBasedRebalancing, false)()
 
 	type testStore struct {
 		rangeCount          int32
@@ -771,54 +774,63 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 	// Returns a slice of stores with the specified mean. The first replica will
 	// have a range count that's above the target range count for the rebalancer,
 	// so it should be rebalanced from.
-	oneStoreAboveRebalanceTarget := func(mean int32, numStores int) []testStore {
-		stores := make([]testStore, numStores)
-		for i := range stores {
-			stores[i].rangeCount = mean
+	oneStoreAboveRebalanceTarget := func(mean int32, numStores int) func(*cluster.Settings) []testStore {
+		return func(st *cluster.Settings) []testStore {
+			stores := make([]testStore, numStores)
+			for i := range stores {
+				stores[i].rangeCount = mean
+			}
+			surplus := int32(math.Ceil(float64(mean)*st.RangeRebalanceThreshold.Get() + 1))
+			stores[0].rangeCount += surplus
+			stores[0].shouldRebalanceFrom = true
+			for i := 1; i < len(stores); i++ {
+				stores[i].rangeCount -= int32(math.Ceil(float64(surplus) / float64(len(stores)-1)))
+			}
+			return stores
 		}
-		surplus := int32(math.Ceil(float64(mean)*rangeRebalanceThreshold.Get() + 1))
-		stores[0].rangeCount += surplus
-		stores[0].shouldRebalanceFrom = true
-		for i := 1; i < len(stores); i++ {
-			stores[i].rangeCount -= int32(math.Ceil(float64(surplus) / float64(len(stores)-1)))
-		}
-		return stores
 	}
 
 	// Returns a slice of stores with the specified mean such that the first store
 	// has few enough replicas to make it a rebalance target.
-	oneUnderusedStore := func(mean int32, numStores int) []testStore {
-		stores := make([]testStore, numStores)
-		for i := range stores {
-			stores[i].rangeCount = mean
+	oneUnderusedStore := func(mean int32, numStores int) func(*cluster.Settings) []testStore {
+		return func(st *cluster.Settings) []testStore {
+			stores := make([]testStore, numStores)
+			for i := range stores {
+				stores[i].rangeCount = mean
+			}
+			// Subtract enough ranges from the first store to make it a suitable
+			// rebalance target. To maintain the specified mean, we then add that delta
+			// back to the rest of the replicas.
+			deficit := int32(math.Ceil(float64(mean)*st.RangeRebalanceThreshold.Get() + 1))
+			stores[0].rangeCount -= deficit
+			for i := 1; i < len(stores); i++ {
+				stores[i].rangeCount += int32(math.Ceil(float64(deficit) / float64(len(stores)-1)))
+				stores[i].shouldRebalanceFrom = true
+			}
+			return stores
 		}
-		// Subtract enough ranges from the first store to make it a suitable
-		// rebalance target. To maintain the specified mean, we then add that delta
-		// back to the rest of the replicas.
-		deficit := int32(math.Ceil(float64(mean)*rangeRebalanceThreshold.Get() + 1))
-		stores[0].rangeCount -= deficit
-		for i := 1; i < len(stores); i++ {
-			stores[i].rangeCount += int32(math.Ceil(float64(deficit) / float64(len(stores)-1)))
-			stores[i].shouldRebalanceFrom = true
-		}
-		return stores
 	}
 
 	// Each test case defines the range counts for the test stores and whether we
 	// should rebalance from the store.
 	testCases := []struct {
 		name    string
-		cluster []testStore
+		cluster func(*cluster.Settings) []testStore
 	}{
 		// An evenly balanced cluster should not rebalance.
-		{"balanced", []testStore{{5, false}, {5, false}, {5, false}, {5, false}}},
+		{"balanced", func(*cluster.Settings) []testStore {
+			return []testStore{{5, false}, {5, false}, {5, false}, {5, false}}
+		}},
 		// Adding an empty node to a 3-node cluster triggers rebalancing from
 		// existing nodes.
-		{"empty-node", []testStore{{100, true}, {100, true}, {100, true}, {0, false}}},
+		{"empty-node", func(*cluster.Settings) []testStore {
+			return []testStore{{100, true}, {100, true}, {100, true}, {0, false}}
+		}},
 		// A cluster where all range counts are within rangeRebalanceThreshold should
 		// not rebalance. This assumes rangeRebalanceThreshold > 2%.
-		{"within-threshold", []testStore{{98, false}, {99, false}, {101, false}, {102, false}}},
-
+		{"within-threshold", func(*cluster.Settings) []testStore {
+			return []testStore{{98, false}, {99, false}, {101, false}, {102, false}}
+		}},
 		{"5-stores-mean-100-one-above", oneStoreAboveRebalanceTarget(100, 5)},
 		{"5-stores-mean-1000-one-above", oneStoreAboveRebalanceTarget(1000, 5)},
 		{"5-stores-mean-10000-one-above", oneStoreAboveRebalanceTarget(10000, 5)},
@@ -828,23 +840,29 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// Deterministic is required when stressing as test case 8 may rebalance
+			// to different configurations.
+			stopper, g, _, a, _ := createTestAllocator( /* deterministic */ true)
+			defer stopper.Stop(context.Background())
+
+			st := a.storePool.st
+			st.EnableStatsBasedRebalancing.Override(false)
+
+			cluster := tc.cluster(st)
+
 			// It doesn't make sense to test sets of stores containing fewer than 4
 			// stores, because 4 stores is the minimum number of stores needed to
 			// trigger rebalancing with the default replication factor of 3. Also, the
 			// above local functions need a minimum number of stores to properly create
 			// the desired distribution of range counts.
 			const minStores = 4
-			if numStores := len(tc.cluster); numStores < minStores {
+			if numStores := len(cluster); numStores < minStores {
 				t.Fatalf("numStores %d < min %d", numStores, minStores)
 			}
-			// Deterministic is required when stressing as test case 8 may rebalance
-			// to different configurations.
-			stopper, g, _, a, _ := createTestAllocator( /* deterministic */ true)
-			defer stopper.Stop(context.Background())
 
 			// Create stores with the range counts from the test case and gossip them.
 			var stores []*roachpb.StoreDescriptor
-			for j, store := range tc.cluster {
+			for j, store := range cluster {
 				stores = append(stores, &roachpb.StoreDescriptor{
 					StoreID:  roachpb.StoreID(j + 1),
 					Node:     roachpb.NodeDescriptor{NodeID: roachpb.NodeID(j + 1)},
@@ -857,7 +875,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 			testutils.SucceedsSoon(t, func() error {
 				sl, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)
 				for j, s := range sl.stores {
-					if a, e := s.Capacity.RangeCount, tc.cluster[j].rangeCount; a != e {
+					if a, e := s.Capacity.RangeCount, cluster[j].rangeCount; a != e {
 						return errors.Errorf("range count for %d = %d != expected %d", j, a, e)
 					}
 				}
@@ -871,7 +889,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 				if !ok {
 					t.Fatalf("[store %d]: unable to get store %d descriptor", j, store.StoreID)
 				}
-				if a, e := shouldRebalance(context.Background(), desc, sl, firstRangeInfo), tc.cluster[j].shouldRebalanceFrom; a != e {
+				if a, e := shouldRebalance(context.Background(), st, desc, sl, firstRangeInfo), cluster[j].shouldRebalanceFrom; a != e {
 					t.Errorf("[store %d]: shouldRebalance %t != expected %t", store.StoreID, a, e)
 				}
 			}
@@ -884,7 +902,6 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 // exceed the maxAvailCapacityThreshold.
 func TestAllocatorRebalanceByCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer settings.TestingSetBool(&EnableStatsBasedRebalancing, false)()
 
 	// Setup the stores so that only one is below the standard deviation threshold.
 	stores := []*roachpb.StoreDescriptor{
@@ -913,6 +930,9 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
 	defer stopper.Stop(context.Background())
 
+	st := a.storePool.st
+	st.EnableStatsBasedRebalancing.Override(false)
+
 	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
 	ctx := context.Background()
 
@@ -936,7 +956,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
 		sl, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)
-		result := shouldRebalance(ctx, desc, sl, firstRangeInfo)
+		result := shouldRebalance(ctx, st, desc, sl, firstRangeInfo)
 		if expResult := (i < 3); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
 		}
@@ -1291,6 +1311,10 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 
 func TestLoadBasedLeaseRebalanceScore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	st := cluster.MakeClusterSettings()
+	st.EnableLoadBasedLeaseRebalancing.Override(true)
+
 	remoteStore := roachpb.StoreDescriptor{
 		Node: roachpb.NodeDescriptor{
 			NodeID: 2,
@@ -1379,6 +1403,7 @@ func TestLoadBasedLeaseRebalanceScore(t *testing.T) {
 		sourceStore.Capacity.LeaseCount = c.sourceLeases
 		score := loadBasedLeaseRebalanceScore(
 			context.Background(),
+			st,
 			c.remoteWeight,
 			c.remoteLatency,
 			remoteStore,
@@ -1396,7 +1421,6 @@ func TestLoadBasedLeaseRebalanceScore(t *testing.T) {
 // the one with the lowest capacity.
 func TestAllocatorRemoveTarget(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer settings.TestingSetBool(&EnableStatsBasedRebalancing, false)()
 
 	// List of replicas that will be passed to RemoveTarget
 	replicas := []roachpb.ReplicaDescriptor{
@@ -1462,6 +1486,9 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 	defer stopper.Stop(ctx)
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(stores, t)
+
+	st := a.storePool.st
+	st.EnableStatsBasedRebalancing.Override(false)
 
 	// Repeat this test 10 times, it should always be either store 2 or 3.
 	for i := 0; i < 10; i++ {
@@ -2533,14 +2560,16 @@ func (ts *testStore) rebalance(ots *testStore, bytes int64) {
 func Example_rebalancing() {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	defer settings.TestingSetBool(&EnableStatsBasedRebalancing, false)()
+
+	st := cluster.MakeClusterSettings()
+	st.EnableStatsBasedRebalancing.Override(false)
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 
 	// Model a set of stores in a cluster,
 	// randomly adding / removing stores and adding bytes.
 	rpcContext := rpc.NewContext(
-		log.AmbientContext{},
+		log.AmbientContext{Tracer: st.Tracer},
 		&base.Config{Insecure: true},
 		clock,
 		stopper,
@@ -2550,7 +2579,8 @@ func Example_rebalancing() {
 	// Deterministic must be set as this test is comparing the exact output
 	// after each rebalance.
 	sp := NewStorePool(
-		log.AmbientContext{},
+		log.AmbientContext{Tracer: st.Tracer},
+		st,
 		g,
 		clock,
 		newMockNodeLiveness(nodeStatusLive).nodeLivenessFunc,

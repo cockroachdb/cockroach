@@ -25,37 +25,22 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 )
 
-// DiagnosticsReportingEnabled wraps "diagnostics.reporting.enabled".
-//
-// "diagnostics.reporting.enabled" enables reporting of metrics related to a
-// node's storage (number, size and health of ranges) back to CockroachDB.
-// Collecting this data from production clusters helps us understand and improve
-// how our storage systems behave in real-world use cases.
-//
-// Note: while the setting itself is actually defined with a default value of
-// `false`, it is usually automatically set to `true` when a cluster is created
-// (or is migrated from a earlier beta version). This can be prevented with the
-// env var COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING.
-//
-// Doing this, rather than just using a default of `true`, means that a node
-// will not errantly send a report using a default before loading settings.
-var DiagnosticsReportingEnabled = settings.RegisterBoolSetting(
-	"diagnostics.reporting.enabled",
-	"enable reporting diagnostic metrics to cockroach labs",
-	false,
-)
+// ReportingSettings avoids a dependency on pkg/settings/cluster.
+type ReportingSettings interface {
+	HasDiagnosticsReportingEnabled() bool
+	HasCrashReportsEnabled() bool
+}
 
 // RecoverAndReportPanic can be invoked on goroutines that run with
 // stderr redirected to logs to ensure the user gets informed on the
 // real stderr a panic has occurred.
-func RecoverAndReportPanic(ctx context.Context) {
+func RecoverAndReportPanic(ctx context.Context, st ReportingSettings) {
 	if r := recover(); r != nil {
-		ReportPanic(ctx, r, 1)
+		ReportPanic(ctx, st, r, 1)
 		panic(r)
 	}
 }
@@ -78,7 +63,7 @@ func format(r interface{}) string {
 }
 
 // ReportPanic reports a panic has occurred on the real stderr.
-func ReportPanic(ctx context.Context, r interface{}, depth int) {
+func ReportPanic(ctx context.Context, st ReportingSettings, r interface{}, depth int) {
 	Shout(ctx, Severity_ERROR, "a panic has occurred!")
 
 	// TODO(dt,knz,sql-team): we need to audit all sprintf'ing of values into the
@@ -98,7 +83,7 @@ func ReportPanic(ctx context.Context, r interface{}, depth int) {
 		file, line, _ := caller.Lookup(depth + 3)
 		reportable = fmt.Sprintf("%s %s:%d", format(r), filepath.Base(file), line)
 	}
-	sendCrashReport(ctx, reportable, depth+3)
+	sendCrashReport(ctx, st, reportable, depth+3)
 
 	// Ensure that the logs are flushed before letting a panic
 	// terminate the server.
@@ -115,12 +100,6 @@ func ReportPanic(ctx context.Context, r interface{}, depth int) {
 		fmt.Fprintf(OrigStderr, "%v\n\n%s\n", r, debug.Stack())
 	}
 }
-
-var crashReports = settings.RegisterBoolSetting(
-	"diagnostics.reporting.send_crash_reports",
-	"send crash and panic reports",
-	true,
-)
 
 var crashReportURL = func() string {
 	var defaultURL string
@@ -153,10 +132,15 @@ func SetupCrashReporter(ctx context.Context, cmd string) {
 
 var crdbPaths = []string{"github.com/cockroachdb/cockroach"}
 
-func sendCrashReport(ctx context.Context, r interface{}, depth int) {
-	if !DiagnosticsReportingEnabled.Get() || !crashReports.Get() {
+func sendCrashReport(ctx context.Context, st ReportingSettings, r interface{}, depth int) {
+	if st == nil || !st.HasDiagnosticsReportingEnabled() || !st.HasCrashReportsEnabled() {
 		return // disabled via settings.
 	}
+	// FIXME(tschottdorf): this particular method would benefit from globals
+	// mirroring the server settings. Callers coming through log.Fatal will
+	// pass a nil ReportingSettings above, which is pretty bad. OTOH, perhaps
+	// they should just pass ReportingSettings directly through log.Fatal.
+
 	if raven.DefaultClient == nil {
 		return // disabled via empty URL env var.
 	}
