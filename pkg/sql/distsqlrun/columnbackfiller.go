@@ -36,7 +36,7 @@ type columnBackfiller struct {
 	updateExprs []parser.TypedExpr
 }
 
-var _ processor = &columnBackfiller{}
+var _ Processor = &columnBackfiller{}
 var _ chunkBackfiller = &columnBackfiller{}
 
 // ColumnMutationFilter is a filter that allows mutations that add or drop
@@ -94,7 +94,7 @@ func (cb *columnBackfiller) init() error {
 			}
 		}
 	}
-	defaultExprs, err := sqlbase.MakeDefaultExprs(cb.added, &parser.Parser{}, &cb.flowCtx.evalCtx)
+	defaultExprs, err := sqlbase.MakeDefaultExprs(cb.added, &parser.Parser{}, &cb.flowCtx.EvalCtx)
 	if err != nil {
 		return err
 	}
@@ -216,7 +216,7 @@ func (cb *columnBackfiller) runChunk(
 			// Evaluate the new values. This must be done separately for
 			// each row so as to handle impure functions correctly.
 			for j, e := range cb.updateExprs {
-				val, err := e.Eval(&cb.flowCtx.evalCtx)
+				val, err := e.Eval(&cb.flowCtx.EvalCtx)
 				if err != nil {
 					return sqlbase.NewInvalidSchemaDefinitionError(err)
 				}

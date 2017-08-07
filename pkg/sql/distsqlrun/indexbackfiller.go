@@ -38,7 +38,7 @@ type indexBackfiller struct {
 	da      sqlbase.DatumAlloc
 }
 
-var _ processor = &indexBackfiller{}
+var _ Processor = &indexBackfiller{}
 var _ chunkBackfiller = &indexBackfiller{}
 
 // IndexMutationFilter is a filter that allows mutations that add indexes.

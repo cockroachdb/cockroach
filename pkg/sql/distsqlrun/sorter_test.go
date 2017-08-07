@@ -198,7 +198,7 @@ func TestSorter(t *testing.T) {
 	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
 	flowCtx := FlowCtx{
-		evalCtx:     evalCtx,
+		EvalCtx:     evalCtx,
 		tempStorage: tempEngine,
 		diskMonitor: &diskMonitor,
 	}
@@ -263,7 +263,7 @@ func BenchmarkSortAll(b *testing.B) {
 	evalCtx := parser.MakeTestingEvalContext()
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
-		evalCtx: evalCtx,
+		EvalCtx: evalCtx,
 	}
 
 	// One column integer rows.
@@ -305,7 +305,7 @@ func BenchmarkSortLimit(b *testing.B) {
 	evalCtx := parser.MakeTestingEvalContext()
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
-		evalCtx: evalCtx,
+		EvalCtx: evalCtx,
 	}
 
 	// One column integer rows.
