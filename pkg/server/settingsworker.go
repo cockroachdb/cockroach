@@ -108,12 +108,11 @@ func (s *Server) refreshSettings() {
 	s.stopper.RunWorker(ctx, func(ctx context.Context) {
 		gossipUpdateC := s.gossip.RegisterSystemConfigChannel()
 		// No new settings can be defined beyond this point.
-		settings.Freeze()
 		for {
 			select {
 			case <-gossipUpdateC:
 				cfg, _ := s.gossip.GetSystemConfig()
-				u := settings.MakeUpdater()
+				u := s.st.MakeUpdater()
 				ok := true
 				for _, kv := range cfg.Values {
 					if err := processKV(ctx, kv, u); err != nil {

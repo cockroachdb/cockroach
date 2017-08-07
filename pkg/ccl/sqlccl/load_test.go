@@ -28,7 +28,7 @@ func TestImportChunking(t *testing.T) {
 	const chunkSize = 1024 * 500
 	numAccounts := int(chunkSize / backupRestoreRowPayloadSize * 2)
 
-	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, 0)
+	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, initNone)
 	defer cleanupFn()
 
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
@@ -44,7 +44,7 @@ func TestImportChunking(t *testing.T) {
 func TestImportOutOfOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, 0)
+	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, initNone)
 	defer cleanupFn()
 
 	bankData := sampledataccl.Bank(2, 0, 0)
@@ -74,7 +74,7 @@ func BenchmarkImport(b *testing.B) {
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
-	ctx, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0)
+	ctx, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0, initNone)
 	defer cleanup()
 
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}

@@ -18,6 +18,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -51,7 +52,10 @@ func loadTestData(
 	}
 
 	eng, err := engine.NewRocksDB(
-		engine.RocksDBConfig{Dir: dir},
+		engine.RocksDBConfig{
+			RocksDBSettings: cluster.MakeClusterSettings().RocksDBSettings,
+			Dir:             dir,
+		},
 		engine.RocksDBCache{},
 	)
 	if err != nil {

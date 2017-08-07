@@ -98,24 +98,26 @@ var changes = struct {
 	mA       int
 }{}
 
-var boolTA = settings.RegisterBoolSetting("bool.t", "", true).OnChange(func() { changes.boolTA++ })
-var boolFA = settings.RegisterBoolSetting("bool.f", "", false)
-var strFooA = settings.RegisterStringSetting("str.foo", "", "").OnChange(func() { changes.strFooA++ })
-var strBarA = settings.RegisterStringSetting("str.bar", "", "bar")
-var i1A = settings.RegisterIntSetting("i.1", "", 0).OnChange(func() { changes.i1A++ })
-var i2A = settings.RegisterIntSetting("i.2", "", 5)
-var fA = settings.RegisterFloatSetting("f", "", 5.4).OnChange(func() { changes.fA++ })
-var dA = settings.RegisterDurationSetting("d", "", time.Second).OnChange(func() { changes.dA++ })
-var eA = settings.RegisterEnumSetting("e", "", "foo", map[int64]string{1: "foo", 2: "bar", 3: "baz"}).
+var r = settings.NewRegistry()
+
+var boolTA = r.RegisterBoolSetting("bool.t", "", true).OnChange(func() { changes.boolTA++ })
+var boolFA = r.RegisterBoolSetting("bool.f", "", false)
+var strFooA = r.RegisterStringSetting("str.foo", "", "").OnChange(func() { changes.strFooA++ })
+var strBarA = r.RegisterStringSetting("str.bar", "", "bar")
+var i1A = r.RegisterIntSetting("i.1", "", 0).OnChange(func() { changes.i1A++ })
+var i2A = r.RegisterIntSetting("i.2", "", 5)
+var fA = r.RegisterFloatSetting("f", "", 5.4).OnChange(func() { changes.fA++ })
+var dA = r.RegisterDurationSetting("d", "", time.Second).OnChange(func() { changes.dA++ })
+var eA = r.RegisterEnumSetting("e", "", "foo", map[int64]string{1: "foo", 2: "bar", 3: "baz"}).
 	OnChange(func() { changes.eA++ })
-var byteSize = settings.RegisterByteSizeSetting("zzz", "", mb).OnChange(func() { changes.byteSize++ })
-var mA = settings.RegisterStateMachineSetting("statemachine", "foo", dummyTransformer).OnChange(func() { changes.mA++ })
+var byteSize = r.RegisterByteSizeSetting("zzz", "", mb).OnChange(func() { changes.byteSize++ })
+var mA = r.RegisterStateMachineSetting("statemachine", "foo", dummyTransformer).OnChange(func() { changes.mA++ })
 
 func init() {
-	settings.RegisterBoolSetting("sekretz", "", false).Hide()
+	r.RegisterBoolSetting("sekretz", "", false).Hide()
 }
 
-var strVal = settings.RegisterValidatedStringSetting(
+var strVal = r.RegisterValidatedStringSetting(
 	"str.val", "", "", func(v string) error {
 		for _, c := range v {
 			if !unicode.IsLetter(c) {
@@ -124,16 +126,16 @@ var strVal = settings.RegisterValidatedStringSetting(
 		}
 		return nil
 	})
-var dVal = settings.RegisterNonNegativeDurationSetting("dVal", "", time.Second)
-var fVal = settings.RegisterNonNegativeFloatSetting("fVal", "", 5.4)
-var byteSizeVal = settings.RegisterValidatedByteSizeSetting(
+var dVal = r.RegisterNonNegativeDurationSetting("dVal", "", time.Second)
+var fVal = r.RegisterNonNegativeFloatSetting("fVal", "", 5.4)
+var byteSizeVal = r.RegisterValidatedByteSizeSetting(
 	"byteSize.Val", "", mb, func(v int64) error {
 		if v < 0 {
 			return errors.Errorf("bytesize cannot be negative")
 		}
 		return nil
 	})
-var iVal = settings.RegisterValidatedIntSetting(
+var iVal = r.RegisterValidatedIntSetting(
 	"i.Val", "", 0, func(v int64) error {
 		if v < 0 {
 			return errors.Errorf("int cannot be negative")
@@ -143,7 +145,7 @@ var iVal = settings.RegisterValidatedIntSetting(
 
 func TestCache(t *testing.T) {
 	t.Run("StateMachineSetting", func(t *testing.T) {
-		mB := settings.RegisterStateMachineSetting("local.m", "foo", dummyTransformer)
+		mB := r.RegisterStateMachineSetting("local.m", "foo", dummyTransformer)
 		if exp, act := "&{default -}", mB.String(); exp != act {
 			t.Fatalf("wanted %q, got %q", exp, act)
 		}
@@ -166,7 +168,7 @@ func TestCache(t *testing.T) {
 		if _, _, err := mB.Validate([]byte("takes.precedence"), &precedenceX); err != nil {
 			t.Fatal(err)
 		}
-		u := settings.MakeUpdater()
+		u := settings.MakeDefaultsUpdater(r)
 		if err := u.Set("local.m", "default.XX", "m"); err != nil {
 			t.Fatal(err)
 		}
@@ -228,37 +230,37 @@ func TestCache(t *testing.T) {
 	})
 
 	t.Run("lookup", func(t *testing.T) {
-		if actual, ok := settings.Lookup("i.1"); !ok || i1A != actual {
+		if actual, ok := r.Lookup("i.1"); !ok || i1A != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", i1A, actual, ok)
 		}
-		if actual, ok := settings.Lookup("i.Val"); !ok || iVal != actual {
+		if actual, ok := r.Lookup("i.Val"); !ok || iVal != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", iVal, actual, ok)
 		}
-		if actual, ok := settings.Lookup("f"); !ok || fA != actual {
+		if actual, ok := r.Lookup("f"); !ok || fA != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", fA, actual, ok)
 		}
-		if actual, ok := settings.Lookup("fVal"); !ok || fVal != actual {
+		if actual, ok := r.Lookup("fVal"); !ok || fVal != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", fVal, actual, ok)
 		}
-		if actual, ok := settings.Lookup("d"); !ok || dA != actual {
+		if actual, ok := r.Lookup("d"); !ok || dA != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", dA, actual, ok)
 		}
-		if actual, ok := settings.Lookup("dVal"); !ok || dVal != actual {
+		if actual, ok := r.Lookup("dVal"); !ok || dVal != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", dVal, actual, ok)
 		}
-		if actual, ok := settings.Lookup("e"); !ok || eA != actual {
+		if actual, ok := r.Lookup("e"); !ok || eA != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", eA, actual, ok)
 		}
-		if actual, ok := settings.Lookup("statemachine"); !ok || mA != actual {
+		if actual, ok := r.Lookup("statemachine"); !ok || mA != actual {
 			t.Fatalf("expected %v, got %v (exists: %v)", mA, actual, ok)
 		}
-		if actual, ok := settings.Lookup("dne"); ok {
+		if actual, ok := r.Lookup("dne"); ok {
 			t.Fatalf("expected nothing, got %v", actual)
 		}
 	})
 
 	t.Run("read and write each type", func(t *testing.T) {
-		u := settings.MakeUpdater()
+		u := settings.MakeDefaultsUpdater(r)
 		if expected, actual := 0, changes.boolTA; expected != actual {
 			t.Fatalf("expected %d, got %d", expected, actual)
 		}
@@ -394,7 +396,7 @@ func TestCache(t *testing.T) {
 
 	t.Run("any setting not included in an Updater reverts to default", func(t *testing.T) {
 		{
-			u := settings.MakeUpdater()
+			u := settings.MakeDefaultsUpdater(r)
 			if err := u.Set("bool.f", settings.EncodeBool(true), "b"); err != nil {
 				t.Fatal(err)
 			}
@@ -421,7 +423,7 @@ func TestCache(t *testing.T) {
 		}
 		// If the updater doesn't have a key, e.g. if the setting has been deleted,
 		// Doneing it from the cache.
-		settings.MakeUpdater().Done()
+		settings.MakeDefaultsUpdater(r).Done()
 
 		if expected, actual := 2, changes.boolTA; expected != actual {
 			t.Fatalf("expected %d, got %d", expected, actual)
@@ -442,7 +444,7 @@ func TestCache(t *testing.T) {
 
 	t.Run("an invalid update to a given setting preserves its previously set value", func(t *testing.T) {
 		{
-			u := settings.MakeUpdater()
+			u := settings.MakeDefaultsUpdater(r)
 			if err := u.Set("i.2", settings.EncodeInt(9), "i"); err != nil {
 				t.Fatal(err)
 			}
@@ -453,7 +455,7 @@ func TestCache(t *testing.T) {
 		// Doneing after attempting to set with wrong type preserves the current
 		// value.
 		{
-			u := settings.MakeUpdater()
+			u := settings.MakeDefaultsUpdater(r)
 			if err := u.Set("i.2", settings.EncodeBool(false), "b"); !testutils.IsError(err,
 				"setting 'i.2' defined as type i, not b",
 			) {
@@ -469,7 +471,7 @@ func TestCache(t *testing.T) {
 		// Doneing after attempting to set with the wrong type preserves the
 		// current value.
 		{
-			u := settings.MakeUpdater()
+			u := settings.MakeDefaultsUpdater(r)
 			if err := u.Set("i.2", settings.EncodeBool(false), "i"); !testutils.IsError(err,
 				"strconv.Atoi: parsing \"false\": invalid syntax",
 			) {
@@ -486,7 +488,7 @@ func TestCache(t *testing.T) {
 		// current value.
 		beforestrVal := strVal.Get()
 		{
-			u := settings.MakeUpdater()
+			u := settings.MakeDefaultsUpdater(r)
 			if err := u.Set("str.val", "abc2def", "s"); !testutils.IsError(err,
 				"not all runes of abc2def are letters: 2",
 			) {
@@ -500,7 +502,7 @@ func TestCache(t *testing.T) {
 
 		beforeDVal := dVal.Get()
 		{
-			u := settings.MakeUpdater()
+			u := settings.MakeDefaultsUpdater(r)
 			if err := u.Set("dVal", settings.EncodeDuration(-time.Hour), "d"); !testutils.IsError(err,
 				"cannot set dVal to a negative duration: -1h0m0s",
 			) {
@@ -514,7 +516,7 @@ func TestCache(t *testing.T) {
 
 		beforeByteSizeVal := byteSizeVal.Get()
 		{
-			u := settings.MakeUpdater()
+			u := settings.MakeDefaultsUpdater(r)
 			if err := u.Set("byteSize.Val", settings.EncodeInt(-mb), "z"); !testutils.IsError(err,
 				"bytesize cannot be negative",
 			) {
@@ -528,7 +530,7 @@ func TestCache(t *testing.T) {
 
 		beforeFVal := fVal.Get()
 		{
-			u := settings.MakeUpdater()
+			u := settings.MakeDefaultsUpdater(r)
 			if err := u.Set("fVal", settings.EncodeFloat(-1.1), "f"); !testutils.IsError(err,
 				"cannot set fVal to a negative value: -1.1",
 			) {
@@ -542,7 +544,7 @@ func TestCache(t *testing.T) {
 
 		beforeIVal := iVal.Get()
 		{
-			u := settings.MakeUpdater()
+			u := settings.MakeDefaultsUpdater(r)
 			if err := u.Set("i.Val", settings.EncodeInt(-1), "i"); !testutils.IsError(err,
 				"int cannot be negative",
 			) {
@@ -556,7 +558,7 @@ func TestCache(t *testing.T) {
 
 		beforeMarsh := mA.Get()
 		{
-			u := settings.MakeUpdater()
+			u := settings.MakeDefaultsUpdater(r)
 			if err := u.Set("statemachine", "too.many.dots", "m"); !testutils.IsError(err,
 				"expected two parts",
 			) {
@@ -666,7 +668,7 @@ func TestCache(t *testing.T) {
 
 func TestHide(t *testing.T) {
 	keys := make(map[string]struct{})
-	for _, k := range settings.Keys() {
+	for _, k := range r.Keys() {
 		keys[k] = struct{}{}
 	}
 	if _, ok := keys["bool.t"]; !ok {

@@ -17,6 +17,7 @@ package distsqlrun
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -84,7 +85,7 @@ func runProcessors(tc testCase) (sqlbase.EncDatumRows, error) {
 	inR := NewRowBuffer(nil, tc.inputRight, RowBufferArgs{})
 	out := &RowBuffer{}
 
-	flowCtx := FlowCtx{}
+	flowCtx := FlowCtx{Settings: cluster.MakeClusterSettings()}
 
 	s, err := newAlgebraicSetOp(&flowCtx, &tc.spec, inL, inR, &PostProcessSpec{}, out)
 	if err != nil {

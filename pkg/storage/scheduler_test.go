@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 func TestRangeIDChunk(t *testing.T) {
@@ -195,7 +196,7 @@ func TestSchedulerLoop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	p := newTestProcessor()
-	s := newRaftScheduler(log.AmbientContext{}, nil, p, 1)
+	s := newRaftScheduler(log.AmbientContext{Tracer: tracing.NewTracer()}, nil, p, 1)
 	stopper := stop.NewStopper()
 	ctx := context.TODO()
 	defer stopper.Stop(ctx)
@@ -217,7 +218,7 @@ func TestSchedulerBuffering(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	p := newTestProcessor()
-	s := newRaftScheduler(log.AmbientContext{}, nil, p, 1)
+	s := newRaftScheduler(log.AmbientContext{Tracer: tracing.NewTracer()}, nil, p, 1)
 	stopper := stop.NewStopper()
 	ctx := context.TODO()
 	defer stopper.Stop(ctx)

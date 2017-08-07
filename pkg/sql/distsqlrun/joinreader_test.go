@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -101,6 +102,7 @@ func TestJoinReader(t *testing.T) {
 			evalCtx := parser.MakeTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
+				Settings: cluster.MakeClusterSettings(),
 				EvalCtx:  evalCtx,
 				txnProto: &roachpb.Transaction{},
 				// Pass a DB without a TxnCoordSender.
@@ -173,6 +175,7 @@ func TestJoinReaderDrain(t *testing.T) {
 	evalCtx := parser.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
+		Settings: s.ClusterSettings(),
 		EvalCtx:  evalCtx,
 		txnProto: &roachpb.Transaction{},
 		// Pass a DB without a TxnCoordSender.

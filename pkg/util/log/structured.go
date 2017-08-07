@@ -148,7 +148,7 @@ func addStructured(ctx context.Context, s Severity, depth int, format string, ar
 			reportable = fmt.Sprintf("%T", args[0])
 		}
 		reportable = fmt.Sprintf("%s:%d %s", filepath.Base(file), line, reportable)
-		sendCrashReport(ctx, reportable, depth+1)
+		sendCrashReport(ctx, nil /* no ReportingSettings available */, reportable, depth+1)
 	}
 	// MakeMessage already added the tags when forming msg, we don't want
 	// eventInternal to prepend them again.

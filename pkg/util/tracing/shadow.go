@@ -24,8 +24,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	lightstep "github.com/lightstep/lightstep-tracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 	zipkin "github.com/openzipkin/zipkin-go-opentracing"
@@ -108,12 +106,6 @@ func linkShadowSpan(
 	s.shadowSpan = shadowTr.StartSpan(s.operation, opts...)
 }
 
-var lightStepToken = settings.RegisterStringSetting(
-	"trace.lightstep.token",
-	"if set, traces go to Lightstep using this token",
-	envutil.EnvOrDefaultString("COCKROACH_TEST_LIGHTSTEP_TOKEN", ""),
-)
-
 func createLightStepTracer(token string) (shadowTracerManager, opentracing.Tracer) {
 	return lightStepManager{}, lightstep.NewTracer(lightstep.Options{
 		AccessToken:      token,
@@ -122,12 +114,6 @@ func createLightStepTracer(token string) (shadowTracerManager, opentracing.Trace
 		UseGRPC:          true,
 	})
 }
-
-var zipkinCollector = settings.RegisterStringSetting(
-	"trace.zipkin.collector",
-	"if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'); ignored if trace.lightstep.token is set.",
-	envutil.EnvOrDefaultString("COCKROACH_TEST_ZIPKIN_COLLECTOR", ""),
-)
 
 func createZipkinTracer(collectorAddr string) (shadowTracerManager, opentracing.Tracer) {
 	// Create our HTTP collector.
@@ -154,23 +140,4 @@ func createZipkinTracer(collectorAddr string) (shadowTracerManager, opentracing.
 		panic(err)
 	}
 	return &zipkinManager{collector: collector}, zipkinTr
-}
-
-// We don't call OnChange inline above because it causes an "initialization
-// loop" compile error.
-var _ = lightStepToken.OnChange(updateShadowTracers)
-var _ = zipkinCollector.OnChange(updateShadowTracers)
-
-func updateShadowTracer(t *Tracer) {
-	if lsToken := lightStepToken.Get(); lsToken != "" {
-		t.setShadowTracer(createLightStepTracer(lsToken))
-	} else if zipkinAddr := zipkinCollector.Get(); zipkinAddr != "" {
-		t.setShadowTracer(createZipkinTracer(zipkinAddr))
-	} else {
-		t.setShadowTracer(nil, nil)
-	}
-}
-
-func updateShadowTracers() {
-	tracerRegistry.ForEach(updateShadowTracer)
 }

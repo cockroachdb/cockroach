@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"golang.org/x/net/context"
 )
@@ -40,11 +41,15 @@ func NewTempEngine(ctx context.Context, storeCfg base.StoreSpec) (Engine, error)
 		return nil, err
 	}
 
+	// FIXME(tschottdorf): should be passed in.
+	st := cluster.MakeClusterSettings()
+
 	rocksDBCfg := RocksDBConfig{
-		Attrs:        roachpb.Attributes{},
-		Dir:          storeCfg.Path,
-		MaxSizeBytes: 0,   // TODO(arjun): Revisit this.
-		MaxOpenFiles: 128, // TODO(arjun): Revisit this.
+		RocksDBSettings: st.RocksDBSettings,
+		Attrs:           roachpb.Attributes{},
+		Dir:             storeCfg.Path,
+		MaxSizeBytes:    0,   // TODO(arjun): Revisit this.
+		MaxOpenFiles:    128, // TODO(arjun): Revisit this.
 	}
 	rocksDBCache := NewRocksDBCache(0)
 	return NewRocksDB(rocksDBCfg, rocksDBCache)

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
@@ -40,20 +41,6 @@ const (
 	// TestTimeUntilStoreDeadOff is the test value for TimeUntilStoreDead that
 	// prevents the store pool from marking stores as dead.
 	TestTimeUntilStoreDeadOff = 24 * time.Hour
-)
-
-// declinedReservationsTimeout needs to be non-zero to prevent useless retries
-// in the replicateQueue.process() retry loop.
-var declinedReservationsTimeout = settings.RegisterNonNegativeDurationSetting(
-	"server.declined_reservation_timeout",
-	"the amount of time to consider the store throttled for up-replication after a reservation was declined",
-	1*time.Second,
-)
-
-var failedReservationsTimeout = settings.RegisterNonNegativeDurationSetting(
-	"server.failed_reservation_timeout",
-	"the amount of time to consider the store throttled for up-replication after a failed reservation call",
-	5*time.Second,
 )
 
 type nodeStatus int
@@ -196,6 +183,7 @@ type localityWithString struct {
 // information on their health.
 type StorePool struct {
 	log.AmbientContext
+	st *cluster.Settings
 
 	clock              *hlc.Clock
 	gossip             *gossip.Gossip
@@ -221,6 +209,7 @@ type StorePool struct {
 // with gossip.
 func NewStorePool(
 	ambient log.AmbientContext,
+	st *cluster.Settings,
 	g *gossip.Gossip,
 	clock *hlc.Clock,
 	nodeLivenessFn NodeLivenessFunc,
@@ -229,6 +218,7 @@ func NewStorePool(
 ) *StorePool {
 	sp := &StorePool{
 		AmbientContext:     ambient,
+		st:                 st,
 		clock:              clock,
 		gossip:             g,
 		nodeLivenessFn:     nodeLivenessFn,
@@ -625,7 +615,7 @@ func (sp *StorePool) throttle(reason throttleReason, storeID roachpb.StoreID) {
 	// timeout period has passed.
 	switch reason {
 	case throttleDeclined:
-		timeout := declinedReservationsTimeout.Get()
+		timeout := sp.st.DeclinedReservationsTimeout.Get()
 		detail.throttledUntil = sp.clock.PhysicalTime().Add(timeout)
 		if log.V(2) {
 			ctx := sp.AnnotateCtx(context.TODO())
@@ -633,7 +623,7 @@ func (sp *StorePool) throttle(reason throttleReason, storeID roachpb.StoreID) {
 				storeID, timeout, detail.throttledUntil)
 		}
 	case throttleFailed:
-		timeout := failedReservationsTimeout.Get()
+		timeout := sp.st.FailedReservationsTimeout.Get()
 		detail.throttledUntil = sp.clock.PhysicalTime().Add(timeout)
 		if log.V(2) {
 			ctx := sp.AnnotateCtx(context.TODO())

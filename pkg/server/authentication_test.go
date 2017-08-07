@@ -292,7 +292,7 @@ WHERE id = $1`
 	if err := verifyTimestamp(sessLastUsed, timeBoundBefore, timeBoundAfter); err != nil {
 		t.Fatalf("bad lastUsedAt timestamp: %s", err)
 	}
-	timeout := webSessionTimeout.Get()
+	timeout := s.ClusterSettings().WebSessionTimeout.Get()
 	if err := verifyTimestamp(
 		sessExpires, timeBoundBefore.Add(timeout), timeBoundAfter.Add(timeout),
 	); err != nil {

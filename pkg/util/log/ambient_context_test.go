@@ -47,7 +47,7 @@ func TestAnnotateCtxSpan(t *testing.T) {
 	tracer := tracing.NewTracer()
 	tracer.SetForceRealSpans(true)
 
-	ac := AmbientContext{}
+	ac := AmbientContext{Tracer: tracer}
 	ac.AddLogTag("ambient", nil)
 
 	// Annotate a context that has an open span.

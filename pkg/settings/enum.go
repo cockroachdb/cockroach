@@ -81,7 +81,7 @@ func enumValuesToDesc(enumValues map[int64]string) string {
 }
 
 // RegisterEnumSetting defines a new setting with type int.
-func RegisterEnumSetting(
+func (r *Registry) RegisterEnumSetting(
 	key, desc string, defaultValue string, enumValues map[int64]string,
 ) *EnumSetting {
 	enumValuesLower := make(map[int64]string)
@@ -103,7 +103,8 @@ func RegisterEnumSetting(
 		IntSetting: IntSetting{defaultValue: i},
 		enumValues: enumValuesLower,
 	}
-	register(key, fmt.Sprintf("%s %s", desc, enumValuesToDesc(enumValues)), setting)
+
+	r.register(key, fmt.Sprintf("%s %s", desc, enumValuesToDesc(enumValues)), setting)
 	return setting
 }
 

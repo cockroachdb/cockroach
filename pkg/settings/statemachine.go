@@ -126,11 +126,13 @@ func (s *StateMachineSetting) setToDefault() {
 
 // RegisterStateMachineSetting registers a StateMachineSetting. See the comment
 // for StateMachineSetting for details.
-func RegisterStateMachineSetting(key, desc string, transformer TransformerFn) *StateMachineSetting {
+func (r *Registry) RegisterStateMachineSetting(
+	key, desc string, transformer TransformerFn,
+) *StateMachineSetting {
 	setting := &StateMachineSetting{
 		transformer: transformer,
 	}
-	register(key, desc, setting)
+	r.register(key, desc, setting)
 	return setting
 }
 

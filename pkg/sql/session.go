@@ -17,7 +17,6 @@ package sql
 import (
 	"fmt"
 	"net"
-	"strings"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
@@ -33,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -50,100 +49,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-// traceTxnThreshold can be used to log SQL transactions that take
-// longer than duration to complete. For example, traceTxnThreshold=1s
-// will log the trace for any transaction that takes 1s or longer. To
-// log traces for all transactions use traceTxnThreshold=1ns. Note
-// that any positive duration will enable tracing and will slow down
-// all execution because traces are gathered for all transactions even
-// if they are not output.
-var traceTxnThreshold = settings.RegisterDurationSetting(
-	"sql.trace.txn.enable_threshold",
-	"duration beyond which all transactions are traced (set to 0 to disable)", 0)
-
-// traceSessionEventLogEnabled can be used to enable the event log
-// that is normally kept for every SQL connection. The event log has a
-// non-trivial performance impact and also reveals SQL statements
-// which may be a privacy concern.
-var traceSessionEventLogEnabled = settings.RegisterBoolSetting(
-	"sql.trace.session_eventlog.enabled",
-	"set to true to enable session tracing", false)
-
 // debugTrace7881Enabled causes all SQL transactions to be traced, in the hope
 // that we'll catch #7881 and dump the current trace for debugging.
 var debugTrace7881Enabled = envutil.EnvOrDefaultBool("COCKROACH_TRACE_7881", false)
 
-// logStatementsExecuteEnabled causes the Executor to log executed
-// statements and, if any, resulting errors.
-var logStatementsExecuteEnabled = settings.RegisterBoolSetting(
-	"sql.trace.log_statement_execute",
-	"set to true to enable logging of executed statements", false)
-
 // span baggage key used for marking a span
 const keyFor7881Sample = "found#7881"
-
-// DistSQLExecMode controls if and when the Executor uses DistSQL.
-type DistSQLExecMode int64
-
-const (
-	// DistSQLOff means that we never use distSQL.
-	DistSQLOff DistSQLExecMode = iota
-	// DistSQLAuto means that we automatically decide on a case-by-case basis if
-	// we use distSQL.
-	DistSQLAuto
-	// DistSQLOn means that we use distSQL for queries that are supported.
-	DistSQLOn
-	// DistSQLAlways means that we only use distSQL; unsupported queries fail.
-	DistSQLAlways
-)
-
-func (m DistSQLExecMode) String() string {
-	switch m {
-	case DistSQLOff:
-		return "off"
-	case DistSQLAuto:
-		return "auto"
-	case DistSQLOn:
-		return "on"
-	case DistSQLAlways:
-		return "always"
-	default:
-		return fmt.Sprintf("invalid (%d)", m)
-	}
-}
-
-// DistSQLExecModeFromInt converts an int64 into a DistSQLExecMode
-func DistSQLExecModeFromInt(val int64) DistSQLExecMode {
-	return DistSQLExecMode(val)
-}
-
-// DistSQLExecModeFromString converts a string into a DistSQLExecMode
-func DistSQLExecModeFromString(val string) DistSQLExecMode {
-	switch strings.ToUpper(val) {
-	case "OFF":
-		return DistSQLOff
-	case "AUTO":
-		return DistSQLAuto
-	case "ON":
-		return DistSQLOn
-	case "ALWAYS":
-		return DistSQLAlways
-	default:
-		panic(fmt.Sprintf("unknown DistSQL mode %s", val))
-	}
-}
-
-// DistSQLClusterExecMode controls the cluster default for when DistSQL is used.
-var DistSQLClusterExecMode = settings.RegisterEnumSetting(
-	"sql.defaults.distsql",
-	"Default distributed SQL execution mode",
-	"Auto",
-	map[int64]string{
-		int64(DistSQLOff):  "Off",
-		int64(DistSQLAuto): "Auto",
-		int64(DistSQLOn):   "On",
-	},
-)
 
 // queryPhase represents a phase during a query's execution.
 type queryPhase int
@@ -237,7 +148,7 @@ type Session struct {
 	DefaultIsolationLevel enginepb.IsolationType
 	// DistSQLMode indicates whether to run queries using the distributed
 	// execution engine.
-	DistSQLMode DistSQLExecMode
+	DistSQLMode cluster.DistSQLExecMode
 	// Location indicates the current time zone.
 	Location *time.Location
 	// SearchPath is a list of databases that will be searched for a table name
@@ -445,10 +356,8 @@ func NewSession(
 	ctx context.Context, args SessionArgs, e *Executor, remote net.Addr, memMetrics *MemoryMetrics,
 ) *Session {
 	ctx = e.AnnotateCtx(ctx)
-	distSQLMode := DistSQLExecModeFromInt(DistSQLClusterExecMode.Get())
-	if e.cfg.TestingKnobs.OverrideDistSQLMode != nil {
-		distSQLMode = DistSQLExecModeFromInt(e.cfg.TestingKnobs.OverrideDistSQLMode.Get())
-	}
+	distSQLMode := cluster.DistSQLExecMode(e.cfg.Settings.DistSQLClusterExecMode.Get())
+
 	s := &Session{
 		Database:         args.Database,
 		DistSQLMode:      distSQLMode,
@@ -483,7 +392,7 @@ func NewSession(
 	}
 	s.ClientAddr = remoteStr
 
-	if traceSessionEventLogEnabled.Get() {
+	if e.cfg.Settings.TraceSessionEventLogEnabled.Get() {
 		s.eventLog = trace.NewEventLog(fmt.Sprintf("sql [%s]", args.User), remoteStr)
 	}
 	s.context, s.cancel = context.WithCancel(ctx)
@@ -963,9 +872,9 @@ func (ts *txnState) resetForNewSQLTxn(
 	// and the two calls trample each other. We should figure out how to get
 	// traceTxnThreshold and debugTrace7881Enabled to integrate more nicely with
 	// session tracing.
-	if !s.Tracing.Enabled() && (traceTxnThreshold.Get() > 0 || debugTrace7881Enabled) {
+	if !s.Tracing.Enabled() && (s.execCfg.Settings.TraceTxnThreshold.Get() > 0 || debugTrace7881Enabled) {
 		mode := tracing.SingleNodeRecording
-		if traceTxnThreshold.Get() > 0 {
+		if s.execCfg.Settings.TraceTxnThreshold.Get() > 0 {
 			mode = tracing.SnowballRecording
 		}
 		tracing.StartRecording(sp, mode)
@@ -1045,7 +954,7 @@ func (ts *txnState) finishSQLTxn(s *Session) {
 	}
 	// TODO(andrei): we should find a cheap way to get a trace's duration without
 	// calling the expensive GetRecording().
-	durThreshold := traceTxnThreshold.Get()
+	durThreshold := s.execCfg.Settings.TraceTxnThreshold.Get()
 	if sampledFor7881 || durThreshold > 0 {
 		if r := tracing.GetRecording(ts.sp); r != nil {
 			if sampledFor7881 || (durThreshold > 0 && timeutil.Since(ts.sqlTimestamp) >= durThreshold) {

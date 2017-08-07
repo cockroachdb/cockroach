@@ -174,7 +174,9 @@ func (s *Stopper) Recover(ctx context.Context) {
 			s.onPanic(r)
 			return
 		}
-		log.ReportPanic(ctx, r, 1)
+		// FIXME(tschottdorf): should find a way to plumb ReportingSettings here.
+		// Certainly the Stopper could hold them.
+		log.ReportPanic(ctx, nil, r, 1)
 		panic(r)
 	}
 }

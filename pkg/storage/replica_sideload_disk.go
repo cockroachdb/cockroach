@@ -25,20 +25,23 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/pkg/errors"
 )
 
 var _ sideloadStorage = &diskSideloadStorage{}
 
 type diskSideloadStorage struct {
+	st  *cluster.Settings
 	dir string
 }
 
 func newDiskSideloadStorage(
-	rangeID roachpb.RangeID, replicaID roachpb.ReplicaID, baseDir string,
+	st *cluster.Settings, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID, baseDir string,
 ) (sideloadStorage, error) {
 	ss := &diskSideloadStorage{
 		dir: filepath.Join(baseDir, fmt.Sprintf("%d.%d", rangeID, replicaID)),
+		st:  st,
 	}
 	if err := ss.createDir(); err != nil {
 		return nil, err
@@ -53,7 +56,7 @@ func (ss *diskSideloadStorage) createDir() error {
 func (ss *diskSideloadStorage) PutIfNotExists(
 	ctx context.Context, index, term uint64, contents []byte,
 ) error {
-	limitBulkIOWrite(ctx, len(contents))
+	limitBulkIOWrite(ctx, ss.st, len(contents))
 
 	filename := ss.filename(ctx, index, term)
 	if _, err := os.Stat(filename); err == nil {

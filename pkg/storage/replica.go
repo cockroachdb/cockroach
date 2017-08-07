@@ -39,7 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -98,16 +98,6 @@ var defaultProposalQuota = raftLogMaxSize / 4
 var txnAutoGC = true
 
 var tickQuiesced = envutil.EnvOrDefaultBool("COCKROACH_TICK_QUIESCED", true)
-
-var syncRaftLog = settings.RegisterBoolSetting(
-	"kv.raft_log.synchronize",
-	"set to true to synchronize on Raft log writes to persistent storage",
-	true)
-
-var maxCommandSize = settings.RegisterByteSizeSetting(
-	"kv.raft.command.max_size",
-	"maximum size of a raft command",
-	64<<20)
 
 // raftInitialLog{Index,Term} are the starting points for the raft log. We
 // bootstrap the raft membership by synthesizing a snapshot as if there were
@@ -811,7 +801,7 @@ func (r *Replica) setReplicaIDRaftMuLockedMuLocked(replicaID roachpb.ReplicaID) 
 	if r.raftMu.sideloaded == nil || r.mu.replicaID != replicaID {
 		var err error
 		if r.raftMu.sideloaded, err = newDiskSideloadStorage(
-			r.mu.state.Desc.RangeID, replicaID, r.store.Engine().GetAuxiliaryDir(),
+			r.store.cfg.Settings, r.mu.state.Desc.RangeID, replicaID, r.store.Engine().GetAuxiliaryDir(),
 		); err != nil {
 			return errors.Wrap(err, "while initializing sideloaded storage")
 		}
@@ -2873,12 +2863,12 @@ func (r *Replica) propose(
 	// TODO(irfansharif): This int cast indicates that if someone configures a
 	// very large max proposal size, there is weird overflow behavior and it
 	// will not work the way it should.
-	if proposal.command.Size() > int(maxCommandSize.Get()) {
+	if proposal.command.Size() > int(r.store.cfg.Settings.MaxCommandSize.Get()) {
 		// Once a command is written to the raft log, it must be loaded
 		// into memory and replayed on all replicas. If a command is
 		// too big, stop it here.
 		return nil, nil, noop, roachpb.NewError(errors.Errorf("command is too large: %d bytes (max: %d)",
-			proposal.command.Size(), maxCommandSize.Get()))
+			proposal.command.Size(), r.store.cfg.Settings.MaxCommandSize.Get()))
 	}
 
 	if err := r.maybeAcquireProposalQuota(ctx, int64(proposal.command.Size())); err != nil {
@@ -3286,7 +3276,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// were not persisted to disk, it wouldn't be a problem because raft does not
 	// infer the that entries are persisted on the node that sends a snapshot.
 	start := timeutil.Now()
-	if err := batch.Commit(syncRaftLog.Get() && rd.MustSync); err != nil {
+	if err := batch.Commit(r.store.cfg.Settings.SyncRaftLog.Get() && rd.MustSync); err != nil {
 		return stats, err
 	}
 	elapsed := timeutil.Since(start)
@@ -4226,6 +4216,7 @@ func (r *Replica) processRaftCommand(
 		if raftCmd.ReplicatedEvalResult.AddSSTable != nil {
 			addSSTablePreApply(
 				ctx,
+				r.store.cfg.Settings,
 				r.store.engine,
 				r.raftMu.sideloaded,
 				term,
@@ -4451,7 +4442,7 @@ func (r *Replica) applyRaftCommand(
 	start := timeutil.Now()
 
 	var assertHS *raftpb.HardState
-	if util.RaceEnabled && rResult.Split != nil && r.store.cfg.IsActive(base.VersionSplitHardStateBelowRaft) {
+	if util.RaceEnabled && rResult.Split != nil && r.store.cfg.IsActive(cluster.VersionSplitHardStateBelowRaft) {
 		oldHS, err := loadHardState(ctx, r.store.Engine(), rResult.Split.RightDesc.RangeID)
 		if err != nil {
 			log.Fatalf(ctx, "unable to load HardState: %s", err)

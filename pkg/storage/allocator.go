@@ -26,7 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -57,36 +57,12 @@ const (
 	removeExtraReplicaPriority            float64 = 100
 )
 
-var (
-	// MinLeaseTransferStatsDuration configures the minimum amount of time a
-	// replica must wait for stats about request counts to accumulate before
-	// making decisions based on them. The higher this is, the less likely
-	// thrashing is (up to a point).
-	// Made configurable for the sake of testing.
-	MinLeaseTransferStatsDuration = 30 * time.Second
-
-	// EnableLoadBasedLeaseRebalancing controls whether lease rebalancing is done
-	// via the new heuristic based on request load and latency or via the simpler
-	// approach that purely seeks to balance the number of leases per node evenly.
-	EnableLoadBasedLeaseRebalancing = settings.RegisterBoolSetting(
-		"kv.allocator.load_based_lease_rebalancing.enabled",
-		"set to enable rebalancing of range leases based on load and latency",
-		true)
-
-	// LeaseRebalancingAggressiveness enables users to tweak how aggressive their
-	// cluster is at moving leases towards the localities where the most requests
-	// are coming from. Settings lower than 1.0 will make the system less
-	// aggressive about moving leases toward requests than the default, while
-	// settings greater than 1.0 will cause more aggressive placement.
-	//
-	// Setting this to 0 effectively disables load-based lease rebalancing, and
-	// settings less than 0 are disallowed.
-	LeaseRebalancingAggressiveness = settings.RegisterNonNegativeFloatSetting(
-		"kv.allocator.lease_rebalancing_aggressiveness",
-		"set greater than 1.0 to rebalance leases toward load more aggressively, "+
-			"or between 0 and 1.0 to be more conservative about rebalancing leases",
-		1.0)
-)
+// MinLeaseTransferStatsDuration configures the minimum amount of time a
+// replica must wait for stats about request counts to accumulate before
+// making decisions based on them. The higher this is, the less likely
+// thrashing is (up to a point).
+// Made configurable for the sake of testing.
+var MinLeaseTransferStatsDuration = 30 * time.Second
 
 // AllocatorAction enumerates the various replication adjustments that may be
 // recommended by the allocator.
@@ -338,6 +314,7 @@ func (a *Allocator) AllocateTarget(
 	sl, _, throttledStoreCount := a.storePool.getStoreList(rangeInfo.Desc.RangeID, storeFilterThrottled)
 
 	candidates := allocateCandidates(
+		a.storePool.st,
 		sl,
 		constraints,
 		existing,
@@ -388,6 +365,7 @@ func (a Allocator) RemoveTarget(
 	sl, _, _ := a.storePool.getStoreListFromIDs(existingStoreIDs, roachpb.RangeID(0), storeFilterNone)
 
 	rankedCandidates := removeCandidates(
+		a.storePool.st,
 		sl,
 		constraints,
 		rangeInfo,
@@ -436,6 +414,7 @@ func (a Allocator) RebalanceTarget(
 
 	existingCandidates, candidates := rebalanceCandidates(
 		ctx,
+		a.storePool.st,
 		sl,
 		constraints,
 		rangeInfo.Desc.Replicas,
@@ -622,7 +601,7 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 ) (transferDecision, roachpb.ReplicaDescriptor) {
 	// Only use load-based rebalancing if it's enabled and we have both
 	// stats and locality information to base our decision on.
-	if stats == nil || !EnableLoadBasedLeaseRebalancing.Get() {
+	if stats == nil || !a.storePool.st.EnableLoadBasedLeaseRebalancing.Get() {
 		return decideWithoutStats, roachpb.ReplicaDescriptor{}
 	}
 	replicaLocalities := a.storePool.getLocalities(existing)
@@ -697,7 +676,7 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 
 		remoteWeight := math.Max(minReplicaWeight, replicaWeights[repl.NodeID])
 		score := loadBasedLeaseRebalanceScore(
-			ctx, remoteWeight, remoteLatency, storeDesc, sourceWeight, source, sl.candidateLeases.mean)
+			ctx, a.storePool.st, remoteWeight, remoteLatency, storeDesc, sourceWeight, source, sl.candidateLeases.mean)
 		if score > bestReplScore {
 			bestReplScore = score
 			bestRepl = repl
@@ -749,6 +728,7 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 //   from the ideal state on each node to compute a final score.
 func loadBasedLeaseRebalanceScore(
 	ctx context.Context,
+	st *cluster.Settings,
 	remoteWeight float64,
 	remoteLatency time.Duration,
 	remoteStore roachpb.StoreDescriptor,
@@ -758,7 +738,7 @@ func loadBasedLeaseRebalanceScore(
 ) int32 {
 	remoteLatencyMillis := float64(remoteLatency) / float64(time.Millisecond)
 	rebalanceAdjustment :=
-		LeaseRebalancingAggressiveness.Get() * 0.1 * math.Log10(remoteWeight/sourceWeight) * math.Log1p(remoteLatencyMillis)
+		st.LeaseRebalancingAggressiveness.Get() * 0.1 * math.Log10(remoteWeight/sourceWeight) * math.Log1p(remoteLatencyMillis)
 	// Start with twice the base rebalance threshold in order to fight more
 	// strongly against thrashing caused by small variances in the distribution
 	// of request weights.

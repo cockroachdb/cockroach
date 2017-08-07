@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -117,7 +118,7 @@ func createTestStoreWithoutStart(t testing.TB, stopper *stop.Stopper, cfg *Store
 	// Setup fake zone config handler.
 	config.TestingSetupZoneConfigHook(stopper)
 
-	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, cfg.Clock, stopper)
+	rpcContext := rpc.NewContext(log.AmbientContext{Tracer: cfg.Settings.Tracer}, &base.Config{Insecure: true}, cfg.Clock, stopper)
 	server := rpc.NewServer(rpcContext) // never started
 	cfg.Gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry())
 	cfg.StorePool = NewTestStorePool(*cfg)
@@ -2509,6 +2510,8 @@ func TestSendSnapshotThrottling(t *testing.T) {
 	defer e.Close()
 
 	ctx := context.Background()
+	st := cluster.MakeClusterSettings()
+
 	header := SnapshotRequest_Header{
 		CanDecline: true,
 		State: storagebase.ReplicaState{
@@ -2522,7 +2525,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 		sp := &fakeStorePool{}
 		expectedErr := errors.New("")
 		c := fakeSnapshotStream{nil, expectedErr}
-		err := sendSnapshot(ctx, c, sp, header, nil, newBatch, nil)
+		err := sendSnapshot(ctx, st, c, sp, header, nil, newBatch, nil)
 		if sp.failedThrottles != 1 {
 			t.Fatalf("expected 1 failed throttle, but found %d", sp.failedThrottles)
 		}
@@ -2538,7 +2541,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 			Status: SnapshotResponse_DECLINED,
 		}
 		c := fakeSnapshotStream{resp, nil}
-		err := sendSnapshot(ctx, c, sp, header, nil, newBatch, nil)
+		err := sendSnapshot(ctx, st, c, sp, header, nil, newBatch, nil)
 		if sp.declinedThrottles != 1 {
 			t.Fatalf("expected 1 declined throttle, but found %d", sp.declinedThrottles)
 		}
@@ -2555,7 +2558,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 			Status: SnapshotResponse_DECLINED,
 		}
 		c := fakeSnapshotStream{resp, nil}
-		err := sendSnapshot(ctx, c, sp, header, nil, newBatch, nil)
+		err := sendSnapshot(ctx, st, c, sp, header, nil, newBatch, nil)
 		if sp.failedThrottles != 1 {
 			t.Fatalf("expected 1 failed throttle, but found %d", sp.failedThrottles)
 		}
@@ -2571,7 +2574,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 			Status: SnapshotResponse_ERROR,
 		}
 		c := fakeSnapshotStream{resp, nil}
-		err := sendSnapshot(ctx, c, sp, header, nil, newBatch, nil)
+		err := sendSnapshot(ctx, st, c, sp, header, nil, newBatch, nil)
 		if sp.failedThrottles != 1 {
 			t.Fatalf("expected 1 failed throttle, but found %d", sp.failedThrottles)
 		}
@@ -2653,7 +2656,7 @@ func TestSnapshotRateLimit(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run(c.priority.String(), func(t *testing.T) {
-			limit, err := snapshotRateLimit(c.priority)
+			limit, err := snapshotRateLimit(cluster.MakeClusterSettings(), c.priority)
 			if !testutils.IsError(err, c.expectedErr) {
 				t.Fatalf("expected \"%s\", but found %v", c.expectedErr, err)
 			}

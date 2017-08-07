@@ -50,7 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
-	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
@@ -72,7 +72,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/sdnotify"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -83,8 +82,6 @@ var (
 	// GracefulDrainModes is the standard succession of drain modes entered
 	// for a graceful shutdown.
 	GracefulDrainModes = []serverpb.DrainMode{serverpb.DrainMode_CLIENT, serverpb.DrainMode_LEASES}
-
-	clusterOrganization = settings.RegisterStringSetting("cluster.organization", "organization name", "")
 )
 
 // Server is the cockroach server node.
@@ -92,6 +89,7 @@ type Server struct {
 	nodeIDContainer base.NodeIDContainer
 
 	cfg                Config
+	st                 *cluster.Settings
 	mux                *http.ServeMux
 	clock              *hlc.Clock
 	rpcContext         *rpc.Context
@@ -132,11 +130,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		return nil, errors.Errorf("unable to resolve RPC address %q: %v", cfg.AdvertiseAddr, err)
 	}
 
+	st := cfg.Settings
+
 	if cfg.AmbientCtx.Tracer == nil {
-		cfg.AmbientCtx.Tracer = tracing.NewTracer()
+		panic(errors.New("no tracer set in AmbientCtx"))
 	}
 
 	s := &Server{
+		st:       st,
 		mux:      http.NewServeMux(),
 		clock:    hlc.NewClock(hlc.UnixNano, time.Duration(cfg.MaxOffset)),
 		stopper:  stopper,
@@ -222,6 +223,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.registry.AddMetricStruct(txnMetrics)
 	s.txnCoordSender = kv.NewTxnCoordSender(
 		s.cfg.AmbientCtx,
+		st,
 		s.distSender,
 		s.clock,
 		s.cfg.Linearizable,
@@ -239,6 +241,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	s.storePool = storage.NewStorePool(
 		s.cfg.AmbientCtx,
+		s.st,
 		s.gossip,
 		s.clock,
 		storage.MakeStorePoolNodeLivenessFunc(s.nodeLiveness),
@@ -247,7 +250,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 
 	s.raftTransport = storage.NewRaftTransport(
-		s.cfg.AmbientCtx, storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext,
+		s.cfg.AmbientCtx, cluster.MakeClusterSettings(), storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext,
 	)
 
 	s.kvDB = kv.NewDBServer(s.cfg.Config, s.txnCoordSender, s.stopper)
@@ -319,6 +322,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	// TODO(bdarnell): make StoreConfig configurable.
 	storeCfg := storage.StoreConfig{
+		Settings:                       st,
 		AmbientCtx:                     s.cfg.AmbientCtx,
 		RaftConfig:                     s.cfg.RaftConfig,
 		Clock:                          s.clock,
@@ -365,6 +369,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// Set up the DistSQL server.
 	distSQLCfg := distsqlrun.ServerConfig{
 		AmbientContext: s.cfg.AmbientCtx,
+		Settings:       st,
 		DB:             s.db,
 		// DistSQL also uses a DB that bypasses the TxnCoordSender.
 		FlowDB:     client.NewDB(s.distSender, s.clock),
@@ -410,11 +415,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	nodeInfo := sql.NodeInfo{
 		ClusterID:    s.ClusterID,
 		NodeID:       &s.nodeIDContainer,
-		Organization: clusterOrganization,
+		Organization: s.st.ClusterOrganization,
 	}
 
 	// Set up Executor
 	execCfg := sql.ExecutorConfig{
+		Settings:                s.st,
 		NodeInfo:                nodeInfo,
 		AmbientCtx:              s.cfg.AmbientCtx,
 		DB:                      s.db,
@@ -456,6 +462,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.registry.AddMetricStruct(s.pgServer.Metrics())
 
 	return s, nil
+}
+
+// ClusterSettings returns the cluster settings.
+func (s *Server) ClusterSettings() *cluster.Settings {
+	return s.st
 }
 
 // AnnotateCtx is a convenience wrapper; see AmbientContext.
@@ -526,6 +537,9 @@ func (s *Server) isAnyStoreBootstrapped(ctx context.Context) (bool, error) {
 // The passed context can be used to trace the server startup. The context
 // should represent the general startup operation.
 func (s *Server) Start(ctx context.Context) error {
+	if s.st.Registry == nil {
+		return errors.New("must pass initialized ClusterSettings")
+	}
 	ctx = s.AnnotateCtx(ctx)
 
 	startTime := timeutil.Now()
@@ -842,6 +856,7 @@ func (s *Server) Start(ctx context.Context) error {
 		testingKnobs = new(sql.SchemaChangerTestingKnobs)
 	}
 	sql.NewSchemaChangeManager(
+		s.st,
 		testingKnobs,
 		*s.db,
 		s.node.Descriptor,

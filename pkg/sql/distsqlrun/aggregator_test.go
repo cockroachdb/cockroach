@@ -21,6 +21,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -319,7 +320,8 @@ func TestAggregator(t *testing.T) {
 			evalCtx := parser.MakeTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
-				EvalCtx: evalCtx,
+				Settings: cluster.MakeClusterSettings(),
+				EvalCtx:  evalCtx,
 			}
 
 			ag, err := newAggregator(&flowCtx, &ags, in, &PostProcessSpec{}, out)

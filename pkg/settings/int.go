@@ -56,13 +56,19 @@ func (i *IntSetting) Validate(v int64) error {
 	return nil
 }
 
+// Override changes the setting without validation.
+// For testing usage only.
+func (i *IntSetting) Override(v int64) {
+	if atomic.SwapInt64(&i.v, v) != v {
+		i.changed()
+	}
+}
+
 func (i *IntSetting) set(v int64) error {
 	if err := i.Validate(v); err != nil {
 		return err
 	}
-	if atomic.SwapInt64(&i.v, v) != v {
-		i.changed()
-	}
+	i.Override(v)
 	return nil
 }
 
@@ -73,13 +79,13 @@ func (i *IntSetting) setToDefault() {
 }
 
 // RegisterIntSetting defines a new setting with type int.
-func RegisterIntSetting(key, desc string, defaultValue int64) *IntSetting {
-	return RegisterValidatedIntSetting(key, desc, defaultValue, nil)
+func (r *Registry) RegisterIntSetting(key, desc string, defaultValue int64) *IntSetting {
+	return r.RegisterValidatedIntSetting(key, desc, defaultValue, nil)
 }
 
 // RegisterValidatedIntSetting defines a new setting with type int with a
 // validation function.
-func RegisterValidatedIntSetting(
+func (r *Registry) RegisterValidatedIntSetting(
 	key, desc string, defaultValue int64, validateFn func(int64) error,
 ) *IntSetting {
 	if validateFn != nil {
@@ -91,7 +97,7 @@ func RegisterValidatedIntSetting(
 		defaultValue: defaultValue,
 		validateFn:   validateFn,
 	}
-	register(key, desc, setting)
+	r.register(key, desc, setting)
 	return setting
 }
 

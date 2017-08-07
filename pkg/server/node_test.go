@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -50,7 +51,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -62,9 +62,10 @@ func createTestNode(
 	addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T,
 ) (*grpc.Server, net.Addr, *hlc.Clock, *Node, *stop.Stopper) {
 	cfg := storage.TestStoreConfig(nil)
+	st := cfg.Settings
 
 	stopper := stop.NewStopper()
-	nodeRPCContext := rpc.NewContext(log.AmbientContext{}, nodeTestBaseContext, cfg.Clock, stopper)
+	nodeRPCContext := rpc.NewContext(log.AmbientContext{Tracer: cfg.Settings.Tracer}, nodeTestBaseContext, cfg.Clock, stopper)
 	cfg.ScanInterval = 10 * time.Hour
 	cfg.ConsistencyCheckInterval = 10 * time.Hour
 	grpcServer := rpc.NewServer(nodeRPCContext)
@@ -77,14 +78,16 @@ func createTestNode(
 	)
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
+	cfg.AmbientCtx.Tracer = st.Tracer
 	distSender := kv.NewDistSender(kv.DistSenderConfig{
+		AmbientCtx:      cfg.AmbientCtx,
 		Clock:           cfg.Clock,
 		RPCContext:      nodeRPCContext,
 		RPCRetryOptions: &retryOpts,
 	}, cfg.Gossip)
-	cfg.AmbientCtx.Tracer = tracing.NewTracer()
 	sender := kv.NewTxnCoordSender(
 		cfg.AmbientCtx,
+		st,
 		distSender,
 		cfg.Clock,
 		false,
@@ -106,6 +109,7 @@ func createTestNode(
 	)
 	cfg.StorePool = storage.NewStorePool(
 		cfg.AmbientCtx,
+		st,
 		cfg.Gossip,
 		cfg.Clock,
 		storage.MakeStorePoolNodeLivenessFunc(cfg.NodeLiveness),
@@ -130,7 +134,7 @@ func createTestNode(
 		if err != nil {
 			t.Fatal(err)
 		}
-		serverCfg := MakeConfig()
+		serverCfg := MakeConfig(st)
 		serverCfg.GossipBootstrapResolvers = []resolver.Resolver{r}
 		filtered := serverCfg.FilterGossipBootstrapResolvers(
 			context.Background(), ln.Addr(), ln.Addr(),
@@ -180,7 +184,9 @@ func TestBootstrapCluster(t *testing.T) {
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
 	if _, err := bootstrapCluster(
-		context.TODO(), storage.StoreConfig{}, []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
+		context.TODO(), storage.StoreConfig{
+			Settings: cluster.MakeClusterSettings(),
+		}, []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +227,7 @@ func TestBootstrapNewStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	if _, err := bootstrapCluster(
-		context.TODO(), storage.StoreConfig{}, []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
+		context.TODO(), bootstrapNodeConfig(), []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -264,6 +270,20 @@ func TestBootstrapNewStore(t *testing.T) {
 	}
 }
 
+// TODO(tschottdorf): tests calling this previously used an empty store config
+// for bootstrapCluster. When changing it to use TestStoreConfig(nil), the
+// following adjustments were necessary to prevent the test from failing to
+// observe its initial splits in time under stressrace, or timing out (never
+// receiving a response from Replica). Investigate why.
+func bootstrapNodeConfig() storage.StoreConfig {
+	cfg := storage.TestStoreConfig(nil)
+	cfg.CoalescedHeartbeatsInterval = 0
+	cfg.RaftHeartbeatIntervalTicks = 0
+	cfg.RaftTickInterval = 0
+	cfg.RaftElectionTimeoutTicks = 0
+	return cfg
+}
+
 // TestNodeJoin verifies a new node is able to join a bootstrapped
 // cluster consisting of one node.
 func TestNodeJoin(t *testing.T) {
@@ -272,8 +292,10 @@ func TestNodeJoin(t *testing.T) {
 	defer engineStopper.Stop(context.TODO())
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	engineStopper.AddCloser(e)
+
+	cfg := bootstrapNodeConfig()
 	if _, err := bootstrapCluster(
-		context.TODO(), storage.StoreConfig{}, []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
+		context.TODO(), cfg, []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -340,7 +362,7 @@ func TestCorruptedClusterID(t *testing.T) {
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
 	if _, err := bootstrapCluster(
-		context.TODO(), storage.StoreConfig{}, []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
+		context.TODO(), bootstrapNodeConfig(), []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -670,7 +692,7 @@ func TestStartNodeWithLocality(t *testing.T) {
 		e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 		defer e.Close()
 		if _, err := bootstrapCluster(
-			context.TODO(), storage.StoreConfig{}, []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
+			context.TODO(), bootstrapNodeConfig(), []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
 		); err != nil {
 			t.Fatal(err)
 		}
