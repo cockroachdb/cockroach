@@ -831,9 +831,13 @@ func (*DCollatedString) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
 func (d *DCollatedString) Format(buf *bytes.Buffer, f FmtFlags) {
-	encodeSQLString(buf, d.Contents)
-	buf.WriteString(" COLLATE ")
-	encodeSQLIdent(buf, d.Locale, FmtSimple)
+	if f.withinArray {
+		encodeSQLStringInsideArray(buf, d.Contents)
+	} else {
+		encodeSQLString(buf, d.Contents)
+		buf.WriteString(" COLLATE ")
+		encodeSQLIdent(buf, d.Locale, FmtSimple)
+	}
 }
 
 // ResolvedType implements the TypedExpr interface.

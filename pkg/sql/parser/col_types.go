@@ -374,6 +374,10 @@ type ArrayColType struct {
 // Format implements the NodeFormatter interface.
 func (node *ArrayColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(node.Name)
+	if collation, ok := node.ParamType.(*CollatedStringColType); ok {
+		buf.WriteString(" COLLATE ")
+		encodeSQLIdent(buf, collation.Locale, f)
+	}
 }
 
 func arrayOf(colType ColumnType, boundsExprs Exprs) (ColumnType, error) {
