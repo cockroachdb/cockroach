@@ -908,6 +908,25 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 		return
 	}
 
+	// We need to check if the replica is being destroyed and if so, unblock
+	// all ongoing and subsequent quota acquisition goroutines (if any).
+	//
+	// TODO(irfansharif): There is still a potential problem here that leaves
+	// clients hanging if the replica gets destroyed but this code path is
+	// never taken. Moving quota pool draining to every point where a
+	// replica can get destroyed is an option, alternatively we can clear
+	// our leader status and close the proposalQuota whenever the replica is
+	// destroyed.
+	if r.mu.destroyed != nil {
+		if r.mu.proposalQuota != nil {
+			r.mu.proposalQuota.close()
+		}
+		r.mu.proposalQuota = nil
+		r.mu.quotaReleaseQueue = nil
+		r.mu.commandSizes = nil
+		return
+	}
+
 	if r.mu.leaderID != lastLeaderID {
 		if r.mu.replicaID == r.mu.leaderID {
 			// We're becoming the leader.
@@ -950,23 +969,6 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	}
 
 	// We're still the leader.
-
-	// We need to check if the replica is being destroyed and if so, unblock
-	// all ongoing and subsequent quota acquisition goroutines (if any).
-	//
-	// TODO(irfansharif): There is still a potential problem here that leaves
-	// clients hanging if the replica gets destroyed but this code path is
-	// never taken. Moving quota pool draining to every point where a
-	// replica can get destroyed is an option, alternatively we can clear
-	// our leader status and close the proposalQuota whenever the replica is
-	// destroyed.
-	if r.mu.destroyed != nil {
-		r.mu.proposalQuota.close()
-		r.mu.proposalQuota = nil
-		r.mu.quotaReleaseQueue = nil
-		r.mu.commandSizes = nil
-		return
-	}
 
 	// TODO(peter): Can we avoid retrieving the Raft status on every invocation
 	// in order to avoid the associated allocation? Tracking the progress
