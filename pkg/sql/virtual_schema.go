@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -196,7 +198,7 @@ func initVirtualTableDesc(
 		return sqlbase.TableDescriptor{}, err
 	}
 	create := stmt.(*parser.CreateTable)
-	return p.makeTableDesc(ctx, create, 0, keys.VirtualDescriptorID, emptyPrivileges, nil)
+	return p.makeTableDesc(ctx, create, 0, keys.VirtualDescriptorID, hlc.Timestamp{}, emptyPrivileges, nil)
 }
 
 // getVirtualSchemaEntry retrieves a virtual schema entry given a database name.

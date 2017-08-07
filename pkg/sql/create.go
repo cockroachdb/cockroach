@@ -618,14 +618,11 @@ func (n *createTableNode) Start(params runParams) error {
 		desc, err = makeTableDescIfAs(n.n, n.dbDesc.ID, id, creationTime, planColumns(n.sourcePlan), privs, &params.p.evalCtx)
 	} else {
 		affected = make(map[sqlbase.ID]*sqlbase.TableDescriptor)
-		desc, err = params.p.makeTableDesc(params.ctx, n.n, n.dbDesc.ID, id, privs, affected)
+		desc, err = params.p.makeTableDesc(params.ctx, n.n, n.dbDesc.ID, id, creationTime, privs, affected)
 	}
 	if err != nil {
 		return err
 	}
-
-	// Initialize ModificationTime to the creation time.
-	desc.ModificationTime = creationTime
 
 	// We need to validate again after adding the FKs.
 	// Only validate the table because backreferences aren't created yet.
@@ -1212,6 +1209,7 @@ func MakeTableDesc(
 	searchPath parser.SearchPath,
 	n *parser.CreateTable,
 	parentID, id sqlbase.ID,
+	creationTime hlc.Timestamp,
 	privileges *sqlbase.PrivilegeDescriptor,
 	affected map[sqlbase.ID]*sqlbase.TableDescriptor,
 	sessionDB string,
@@ -1220,10 +1218,6 @@ func MakeTableDesc(
 	tableName, err := n.Table.Normalize()
 	if err != nil {
 		return sqlbase.TableDescriptor{}, err
-	}
-	var creationTime hlc.Timestamp
-	if txn != nil {
-		creationTime = txn.OrigTimestamp()
 	}
 	desc := initTableDescriptor(id, parentID, tableName.Table(), creationTime, privileges)
 
@@ -1397,6 +1391,7 @@ func (p *planner) makeTableDesc(
 	ctx context.Context,
 	n *parser.CreateTable,
 	parentID, id sqlbase.ID,
+	creationTime hlc.Timestamp,
 	privileges *sqlbase.PrivilegeDescriptor,
 	affected map[sqlbase.ID]*sqlbase.TableDescriptor,
 ) (sqlbase.TableDescriptor, error) {
@@ -1408,6 +1403,7 @@ func (p *planner) makeTableDesc(
 		n,
 		parentID,
 		id,
+		creationTime,
 		privileges,
 		affected,
 		p.session.Database,

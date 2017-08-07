@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -160,6 +161,7 @@ func parseCSVTableDescriptor(
 		create,
 		parentID,
 		tableID,
+		hlc.Timestamp{},
 		sqlbase.NewDefaultPrivilegeDescriptor(),
 		nil, /* affected */
 		"",  /* sessionDB */
