@@ -465,7 +465,7 @@ func rebalanceCandidates(
 				// Only consider this candidate if we must rebalance due to a
 				// constraint check requirements.
 				if log.V(3) {
-					log.Infof(ctx, "not considering %+v as a candidate for range %+v: score=%s scoreList=%+v", s, rangeInfo, balanceScore, sl)
+					log.Infof(ctx, "not considering %+v as a candidate for range %+v: score=%s storeList=%+v", s, rangeInfo, balanceScore, sl)
 				}
 				continue
 			}
@@ -504,7 +504,7 @@ func shouldRebalance(
 ) bool {
 	if store.Capacity.FractionUsed() >= maxFractionUsedThreshold {
 		if log.V(2) {
-			log.Infof(ctx, "s%d: should-rebalance(disk-full): fraction-used=%.2f, capacity=%+v",
+			log.Infof(ctx, "s%d: should-rebalance(disk-full): fraction-used=%.2f, capacity=(%v)",
 				store.StoreID, store.Capacity.FractionUsed(), store.Capacity)
 		}
 		return true
@@ -519,7 +519,7 @@ func shouldRebalance(
 	if rangeIsBadFit(score) {
 		if log.V(2) {
 			log.Infof(ctx,
-				"s%d: should-rebalance(bad-fit): - balanceScore=%s, capacity=%+v, rangeInfo=%+v, "+
+				"s%d: should-rebalance(bad-fit): - balanceScore=%s, capacity=(%v), rangeInfo=%+v, "+
 					"(meanRangeCount=%.1f, meanDiskUsage=%.2f, meanWritesPerSecond=%.2f), ",
 				store.StoreID, score, store.Capacity, rangeInfo,
 				sl.candidateRanges.mean, sl.candidateDiskUsage.mean, sl.candidateWritesPerSecond.mean)
@@ -533,6 +533,13 @@ func shouldRebalance(
 		for _, desc := range sl.stores {
 			otherScore := balanceScore(st, sl, desc.Capacity, rangeInfo)
 			if !rangeIsGoodFit(otherScore) {
+				if log.V(5) {
+					log.Infof(ctx,
+						"s%d is not a good enough fit to replace s%d: balanceScore=%s, capacity=(%v), rangeInfo=%+v, "+
+							"(meanRangeCount=%.1f, meanDiskUsage=%.2f, meanWritesPerSecond=%.2f), ",
+						desc.StoreID, store.StoreID, otherScore, desc.Capacity, rangeInfo,
+						sl.candidateRanges.mean, sl.candidateDiskUsage.mean, sl.candidateWritesPerSecond.mean)
+				}
 				continue
 			}
 			if !preexistingReplicaCheck(desc.Node.NodeID, rangeInfo.Desc.Replicas) {
@@ -540,8 +547,8 @@ func shouldRebalance(
 			}
 			if log.V(2) {
 				log.Infof(ctx,
-					"s%d: should-rebalance(better-fit=s%d): balanceScore=%s, capacity=%+v, rangeInfo=%+v, "+
-						"otherScore=%s, otherCapacity=%+v, "+
+					"s%d: should-rebalance(better-fit=s%d): balanceScore=%s, capacity=(%v), rangeInfo=%+v, "+
+						"otherScore=%s, otherCapacity=(%v), "+
 						"(meanRangeCount=%.1f, meanDiskUsage=%.2f, meanWritesPerSecond=%.2f), ",
 					store.StoreID, desc.StoreID, score, store.Capacity, rangeInfo,
 					otherScore, desc.Capacity,
@@ -554,7 +561,7 @@ func shouldRebalance(
 	// If we reached this point, we're happy with the range where it is.
 	if log.V(3) {
 		log.Infof(ctx,
-			"s%d: should-not-rebalance: - balanceScore=%s, capacity=%+v, rangeInfo=%+v, "+
+			"s%d: should-not-rebalance: - balanceScore=%s, capacity=(%v), rangeInfo=%+v, "+
 				"(meanRangeCount=%.1f, meanDiskUsage=%.2f, meanWritesPerSecond=%.2f), ",
 			store.StoreID, score, store.Capacity, rangeInfo,
 			sl.candidateRanges.mean, sl.candidateDiskUsage.mean, sl.candidateWritesPerSecond.mean)
