@@ -346,6 +346,43 @@ func (p *planner) TypeAsString(e parser.Expr, op string) (func() (string, error)
 	return fn, nil
 }
 
+// TypeAsString enforces (not hints) that the given expression typechecks as a
+// string and returns a function that can be called to get the string value
+// during (planNode).Start.
+func (p *planner) TypeAsStringOpts(
+	opts parser.KVOptions,
+) (func() (map[string]string, error), error) {
+	typed := make(map[string]parser.TypedExpr, len(opts))
+	for _, opt := range opts {
+		k := string(opt.Key)
+		if opt.Value == nil {
+			typed[k] = nil
+			continue
+		}
+		r, err := parser.TypeCheckAndRequire(opt.Value, &p.semaCtx, parser.TypeString, k)
+		if err != nil {
+			return nil, err
+		}
+		typed[k] = r
+	}
+	fn := func() (map[string]string, error) {
+		res := make(map[string]string, len(typed))
+		for name, e := range typed {
+			if e == nil {
+				res[name] = ""
+				continue
+			}
+			d, err := e.Eval(&p.evalCtx)
+			if err != nil {
+				return nil, err
+			}
+			res[name] = parser.AsStringWithFlags(d, parser.FmtBareStrings)
+		}
+		return res, nil
+	}
+	return fn, nil
+}
+
 // TypeAsStringArray enforces (not hints) that the given expressions all typecheck as
 // strings and returns a function that can be called to get the string values
 // during (planNode).Start.

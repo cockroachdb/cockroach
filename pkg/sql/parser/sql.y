@@ -584,7 +584,6 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <[]string> opt_incremental
 %type <KVOption> kv_option
 %type <[]KVOption> kv_option_list opt_with_options
-%type <str> opt_equal_value
 %type <str> import_data_format
 
 %type <*Select> select_no_parens
@@ -1167,15 +1166,15 @@ import_data_format:
   }
 
 import_stmt:
-  IMPORT TABLE any_name CREATE USING string_or_placeholder import_data_format DATA '(' string_or_placeholder_list ')' opt_with_options USING TEMP STORE string_or_placeholder
+  IMPORT TABLE any_name CREATE USING string_or_placeholder import_data_format DATA '(' string_or_placeholder_list ')' opt_with_options
   {
     /* SKIP DOC */
-    $$.val = &Import{Table: $3.unresolvedName(), CreateFile: $6.expr(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions(), Temp: $16.expr()}
+    $$.val = &Import{Table: $3.unresolvedName(), CreateFile: $6.expr(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions()}
   }
-| IMPORT TABLE any_name '(' table_elem_list ')' import_data_format DATA '(' string_or_placeholder_list ')' opt_with_options USING TEMP STORE string_or_placeholder
+| IMPORT TABLE any_name '(' table_elem_list ')' import_data_format DATA '(' string_or_placeholder_list ')' opt_with_options
   {
     /* SKIP DOC */
-    $$.val = &Import{Table: $3.unresolvedName(), CreateDefs: $5.tblDefs(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions(), Temp: $16.expr()}
+    $$.val = &Import{Table: $3.unresolvedName(), CreateDefs: $5.tblDefs(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions()}
   }
 
 string_or_placeholder:
@@ -1208,20 +1207,22 @@ opt_incremental:
     $$.val = Exprs(nil)
   }
 
-opt_equal_value:
-  '=' SCONST
-  {
-    $$ = $2
-  }
-| /* EMPTY */
-  {
-    $$ = ""
-  }
-
 kv_option:
-  SCONST opt_equal_value
+  name '=' string_or_placeholder
   {
-    $$.val = KVOption{Key: $1, Value: $2}
+    $$.val = KVOption{Key: Name($1), Value: $3.expr()}
+  }
+|  name
+  {
+    $$.val = KVOption{Key: Name($1)}
+  }
+|  SCONST '=' string_or_placeholder
+  {
+    $$.val = KVOption{Key: Name($1), Value: $3.expr()}
+  }
+|  SCONST
+  {
+    $$.val = KVOption{Key: Name($1)}
   }
 
 kv_option_list:
@@ -1235,7 +1236,11 @@ kv_option_list:
   }
 
 opt_with_options:
-  WITH OPTIONS '(' kv_option_list ')'
+  WITH kv_option_list
+  {
+    $$.val = $2.kvOptions()
+  }
+| WITH OPTIONS '(' kv_option_list ')'
   {
     $$.val = $4.kvOptions()
   }
