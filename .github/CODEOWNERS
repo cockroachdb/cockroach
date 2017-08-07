@@ -6,6 +6,8 @@
 #
 # Remember, *the last rule to match wins.*
 
+/docs/RFCS/                  @cockroachdb/rfcs
+
 /pkg/gossip/                 @cockroachdb/core
 /pkg/internal/               @cockroachdb/core
 /pkg/kv/                     @cockroachdb/core
