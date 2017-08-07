@@ -32,7 +32,8 @@ func staticSize(size int64) func() int64 {
 func TestLeaseHolderCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.TODO()
-	lc := NewLeaseHolderCache(staticSize(3))
+	cacheSize := 1 << 5
+	lc := NewLeaseHolderCache(staticSize(int64(cacheSize)))
 	if repDesc, ok := lc.Lookup(ctx, 12); ok {
 		t.Errorf("lookup of missing key returned: %+v", repDesc)
 	}
@@ -56,12 +57,35 @@ func TestLeaseHolderCache(t *testing.T) {
 		t.Errorf("lookup of evicted key returned: %+v", repDesc)
 	}
 
-	for i := 10; i < 20; i++ {
+	for i := 10; i < 10+cacheSize+2; i++ {
 		lc.Update(ctx, roachpb.RangeID(i), replica)
 	}
-	_, ok16 := lc.Lookup(ctx, 16)
-	_, ok17 := lc.Lookup(ctx, 17)
-	if ok16 || !ok17 {
-		t.Fatalf("unexpected policy used in cache")
+	_, ok11 := lc.Lookup(ctx, 11)
+	_, ok12 := lc.Lookup(ctx, 12)
+	if ok11 || !ok12 {
+		t.Fatalf("unexpected policy used in cache : %v, %v", ok11, ok12)
 	}
+}
+
+func BenchmarkLeaseHolderCacheParallel(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	ctx := context.TODO()
+	cacheSize := 1 << 6
+	lc := NewLeaseHolderCache(staticSize(int64(cacheSize)))
+	numRanges := 2 * len(lc.shards)
+	for i := 1; i <= numRanges; i++ {
+		rangeID := roachpb.RangeID(i)
+		replica := roachpb.ReplicaDescriptor{StoreID: roachpb.StoreID(i)}
+		lc.Update(ctx, rangeID, replica)
+	}
+	b.RunParallel(func(pb *testing.PB) {
+		var n int
+		for pb.Next() {
+			rangeID := roachpb.RangeID(n%numRanges + 1)
+			n++
+			if _, ok := lc.Lookup(ctx, rangeID); !ok {
+				b.Fatalf("r%d: should be found in the cache", rangeID)
+			}
+		}
+	})
 }

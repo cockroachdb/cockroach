@@ -15,6 +15,8 @@
 package kv
 
 import (
+	"runtime"
+
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -23,8 +25,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
+var (
+	defaultShards = 2 * runtime.NumCPU()
+)
+
 // A LeaseHolderCache is a cache of replica descriptors keyed by range ID.
 type LeaseHolderCache struct {
+	shards []LeaseHolderCacheShard
+}
+
+// A LeaseHolderCacheShard is a cache of replica descriptors keyed by range ID.
+type LeaseHolderCacheShard struct {
 	// NB: This can't be a RWMutex for lookup because UnorderedCache.Get
 	// manipulates an internal LRU list.
 	mu    syncutil.Mutex
@@ -35,23 +46,28 @@ type LeaseHolderCache struct {
 // The underlying cache internally uses a hash map, so lookups
 // are cheap.
 func NewLeaseHolderCache(size func() int64) *LeaseHolderCache {
-	return &LeaseHolderCache{
-		cache: cache.NewUnorderedCache(cache.Config{
+	leaseholderCache := &LeaseHolderCache{}
+	leaseholderCache.shards = make([]LeaseHolderCacheShard, defaultShards)
+	for i := range leaseholderCache.shards {
+		val := &leaseholderCache.shards[i]
+		val.cache = cache.NewUnorderedCache(cache.Config{
 			Policy: cache.CacheLRU,
 			ShouldEvict: func(s int, key, value interface{}) bool {
-				return int64(s) > size()
+				return int64(s) > size()/int64(defaultShards)
 			},
-		}),
+		})
 	}
+	return leaseholderCache
 }
 
 // Lookup returns the cached leader of the given range ID.
 func (lc *LeaseHolderCache) Lookup(
 	ctx context.Context, rangeID roachpb.RangeID,
 ) (roachpb.ReplicaDescriptor, bool) {
-	lc.mu.Lock()
-	defer lc.mu.Unlock()
-	if v, ok := lc.cache.Get(rangeID); ok {
+	ld := &lc.shards[int(rangeID)%len(lc.shards)]
+	ld.mu.Lock()
+	defer ld.mu.Unlock()
+	if v, ok := ld.cache.Get(rangeID); ok {
 		if log.V(2) {
 			log.Infof(ctx, "r%d: lookup leaseholder: %s", rangeID, v)
 		}
@@ -69,17 +85,18 @@ func (lc *LeaseHolderCache) Lookup(
 func (lc *LeaseHolderCache) Update(
 	ctx context.Context, rangeID roachpb.RangeID, repDesc roachpb.ReplicaDescriptor,
 ) {
-	lc.mu.Lock()
-	defer lc.mu.Unlock()
+	ld := &lc.shards[int(rangeID)%len(lc.shards)]
+	ld.mu.Lock()
+	defer ld.mu.Unlock()
 	if (repDesc == roachpb.ReplicaDescriptor{}) {
 		if log.V(2) {
 			log.Infof(ctx, "r%d: evicting leaseholder", rangeID)
 		}
-		lc.cache.Del(rangeID)
+		ld.cache.Del(rangeID)
 	} else {
 		if log.V(2) {
 			log.Infof(ctx, "r%d: updating leaseholder: %s", rangeID, repDesc)
 		}
-		lc.cache.Add(rangeID, repDesc)
+		ld.cache.Add(rangeID, repDesc)
 	}
 }
