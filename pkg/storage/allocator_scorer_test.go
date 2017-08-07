@@ -336,10 +336,11 @@ func testStoreCapacitySetup(available int64, rangeCount int32) roachpb.StoreCapa
 
 // This is a collection of test stores used by a suite of tests.
 var (
-	testStoreUSa15  = roachpb.StoreID(1) // us-a-1-5
-	testStoreUSa1   = roachpb.StoreID(2) // us-a-1
-	testStoreUSb    = roachpb.StoreID(3) // us-b
-	testStoreEurope = roachpb.StoreID(4) // eur-a-1-5
+	testStoreUSa15     = roachpb.StoreID(1) // us-a-1-5
+	testStoreUSa15Dupe = roachpb.StoreID(2) // us-a-1-5
+	testStoreUSa1      = roachpb.StoreID(3) // us-a-1
+	testStoreUSb       = roachpb.StoreID(4) // us-b
+	testStoreEurope    = roachpb.StoreID(5) // eur-a-1-5
 
 	testStores = []roachpb.StoreDescriptor{
 		{
@@ -349,6 +350,19 @@ var (
 			},
 			Node: roachpb.NodeDescriptor{
 				NodeID: roachpb.NodeID(testStoreUSa15),
+				Locality: roachpb.Locality{
+					Tiers: testStoreTierSetup("us", "a", "1", "5"),
+				},
+			},
+			Capacity: testStoreCapacitySetup(1, 99),
+		},
+		{
+			StoreID: testStoreUSa15Dupe,
+			Attrs: roachpb.Attributes{
+				Attrs: []string{"a"},
+			},
+			Node: roachpb.NodeDescriptor{
+				NodeID: roachpb.NodeID(testStoreUSa15Dupe),
 				Locality: roachpb.Locality{
 					Tiers: testStoreTierSetup("us", "a", "1", "5"),
 				},
@@ -418,9 +432,10 @@ func TestConstraintCheck(t *testing.T) {
 				{Key: "datacenter", Value: "us", Type: config.Constraint_REQUIRED},
 			},
 			expected: map[roachpb.StoreID]int{
-				testStoreUSa15: 0,
-				testStoreUSa1:  0,
-				testStoreUSb:   0,
+				testStoreUSa15:     0,
+				testStoreUSa15Dupe: 0,
+				testStoreUSa1:      0,
+				testStoreUSb:       0,
 			},
 		},
 		{
@@ -429,8 +444,9 @@ func TestConstraintCheck(t *testing.T) {
 				{Value: "b", Type: config.Constraint_PROHIBITED},
 			},
 			expected: map[roachpb.StoreID]int{
-				testStoreUSa15:  0,
-				testStoreEurope: 0,
+				testStoreUSa15:     0,
+				testStoreUSa15Dupe: 0,
+				testStoreEurope:    0,
 			},
 		},
 		{
@@ -450,10 +466,11 @@ func TestConstraintCheck(t *testing.T) {
 				{Value: "c"},
 			},
 			expected: map[roachpb.StoreID]int{
-				testStoreUSa15:  1,
-				testStoreUSa1:   2,
-				testStoreUSb:    3,
-				testStoreEurope: 0,
+				testStoreUSa15:     1,
+				testStoreUSa15Dupe: 1,
+				testStoreUSa1:      2,
+				testStoreUSb:       3,
+				testStoreEurope:    0,
 			},
 		},
 		{
@@ -462,10 +479,11 @@ func TestConstraintCheck(t *testing.T) {
 				{Key: "datacenter", Value: "eur"},
 			},
 			expected: map[roachpb.StoreID]int{
-				testStoreUSa15:  0,
-				testStoreUSa1:   0,
-				testStoreUSb:    0,
-				testStoreEurope: 1,
+				testStoreUSa15:     0,
+				testStoreUSa15Dupe: 0,
+				testStoreUSa1:      0,
+				testStoreUSb:       0,
+				testStoreEurope:    1,
 			},
 		},
 	}
@@ -498,22 +516,24 @@ func TestDiversityScore(t *testing.T) {
 		{
 			name: "no existing replicas",
 			expected: map[roachpb.StoreID]float64{
-				testStoreUSa15:  1,
-				testStoreUSa1:   1,
-				testStoreUSb:    1,
-				testStoreEurope: 1,
+				testStoreUSa15:     1,
+				testStoreUSa15Dupe: 1,
+				testStoreUSa1:      1,
+				testStoreUSb:       1,
+				testStoreEurope:    1,
 			},
 		},
 		{
-			name: "one existing replicas",
+			name: "one existing replica",
 			existing: []roachpb.NodeID{
 				roachpb.NodeID(testStoreUSa15),
 			},
 			expected: map[roachpb.StoreID]float64{
-				testStoreUSa15:  0,
-				testStoreUSa1:   1.0 / 4.0,
-				testStoreUSb:    1.0 / 2.0,
-				testStoreEurope: 1,
+				testStoreUSa15:     0,
+				testStoreUSa15Dupe: 0,
+				testStoreUSa1:      1.0 / 4.0,
+				testStoreUSb:       1.0 / 2.0,
+				testStoreEurope:    1,
 			},
 		},
 		{
@@ -523,10 +543,11 @@ func TestDiversityScore(t *testing.T) {
 				roachpb.NodeID(testStoreEurope),
 			},
 			expected: map[roachpb.StoreID]float64{
-				testStoreUSa15:  0,
-				testStoreUSa1:   1.0 / 4.0,
-				testStoreUSb:    1.0 / 2.0,
-				testStoreEurope: 0,
+				testStoreUSa15:     0,
+				testStoreUSa15Dupe: 0,
+				testStoreUSa1:      1.0 / 4.0,
+				testStoreUSb:       1.0 / 2.0,
+				testStoreEurope:    0,
 			},
 		},
 	}
@@ -555,6 +576,139 @@ func TestDiversityScore(t *testing.T) {
 	}
 }
 
+func TestRebalanceToDiversityScore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name     string
+		existing []roachpb.NodeID
+		expected map[roachpb.StoreID]float64
+	}{
+		{
+			name: "no existing replicas",
+			expected: map[roachpb.StoreID]float64{
+				testStoreUSa15:     1,
+				testStoreUSa15Dupe: 1,
+				testStoreUSa1:      1,
+				testStoreUSb:       1,
+				testStoreEurope:    1,
+			},
+		},
+		{
+			name: "one existing replica",
+			existing: []roachpb.NodeID{
+				roachpb.NodeID(testStoreUSa15),
+			},
+			expected: map[roachpb.StoreID]float64{
+				testStoreUSa15:     1,
+				testStoreUSa15Dupe: 1,
+				testStoreUSa1:      1,
+				testStoreUSb:       1,
+				testStoreEurope:    1,
+			},
+		},
+		{
+			name: "two existing replicas",
+			existing: []roachpb.NodeID{
+				roachpb.NodeID(testStoreUSa15),
+				roachpb.NodeID(testStoreUSa1),
+			},
+			expected: map[roachpb.StoreID]float64{
+				testStoreUSa15:     1.0 / 4.0,
+				testStoreUSa15Dupe: 1.0 / 4.0,
+				testStoreUSa1:      1.0 / 4.0,
+				testStoreUSb:       1.0 / 2.0,
+				testStoreEurope:    1,
+			},
+		},
+		{
+			name: "three existing replicas",
+			existing: []roachpb.NodeID{
+				roachpb.NodeID(testStoreUSa15),
+				roachpb.NodeID(testStoreUSa1),
+				roachpb.NodeID(testStoreEurope),
+			},
+			expected: map[roachpb.StoreID]float64{
+				testStoreUSa15:     1.0 / 4.0,
+				testStoreUSa15Dupe: 1.0 / 4.0,
+				testStoreUSa1:      1.0 / 4.0,
+				testStoreUSb:       1.0 / 2.0,
+				testStoreEurope:    1.0,
+			},
+		},
+		{
+			name: "three existing replicas with duplicate",
+			existing: []roachpb.NodeID{
+				roachpb.NodeID(testStoreUSa15),
+				roachpb.NodeID(testStoreUSa15Dupe),
+				roachpb.NodeID(testStoreUSa1),
+			},
+			expected: map[roachpb.StoreID]float64{
+				testStoreUSa15:     0,
+				testStoreUSa15Dupe: 0,
+				testStoreUSa1:      1.0 / 4.0,
+				testStoreUSb:       1.0 / 2.0,
+				testStoreEurope:    1.0,
+			},
+		},
+		{
+			name: "four existing replicas",
+			existing: []roachpb.NodeID{
+				roachpb.NodeID(testStoreUSa15),
+				roachpb.NodeID(testStoreUSa1),
+				roachpb.NodeID(testStoreUSb),
+				roachpb.NodeID(testStoreEurope),
+			},
+			expected: map[roachpb.StoreID]float64{
+				testStoreUSa15:     1.0 / 4.0,
+				testStoreUSa15Dupe: 1.0 / 4.0,
+				testStoreUSa1:      1.0 / 4.0,
+				testStoreUSb:       1.0 / 2.0,
+				testStoreEurope:    1.0,
+			},
+		},
+		{
+			name: "four existing replicas with duplicate",
+			existing: []roachpb.NodeID{
+				roachpb.NodeID(testStoreUSa15),
+				roachpb.NodeID(testStoreUSa15Dupe),
+				roachpb.NodeID(testStoreUSa1),
+				roachpb.NodeID(testStoreUSb),
+			},
+			expected: map[roachpb.StoreID]float64{
+				testStoreUSa15:     0,
+				testStoreUSa15Dupe: 0,
+				testStoreUSa1:      1.0 / 4.0,
+				testStoreUSb:       1.0 / 2.0,
+				testStoreEurope:    1.0,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			existingNodeLocalities := make(map[roachpb.NodeID]roachpb.Locality)
+			for _, nodeID := range tc.existing {
+				for _, s := range testStores {
+					if s.Node.NodeID == nodeID {
+						existingNodeLocalities[roachpb.NodeID(s.Node.NodeID)] = s.Node.Locality
+					}
+				}
+			}
+			for _, s := range testStores {
+				actualScore := rebalanceToDiversityScore(s, existingNodeLocalities)
+				expectedScore, ok := tc.expected[s.StoreID]
+				if !ok {
+					t.Fatalf("no expected score found for storeID %d", s.StoreID)
+				}
+				if actualScore != expectedScore {
+					t.Errorf("store %d expected diversity score: %.2f, actual %.2f", s.StoreID, expectedScore, actualScore)
+				}
+			}
+		})
+	}
+}
+
 func TestDiversityRemovalScore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -565,42 +719,51 @@ func TestDiversityRemovalScore(t *testing.T) {
 		{
 			name: "four existing replicas",
 			expected: map[roachpb.StoreID]float64{
-				testStoreUSa15:  1,
-				testStoreUSa1:   1,
-				testStoreUSb:    1,
-				testStoreEurope: 1.0 / 2.0,
+				testStoreUSa15:  1.0 / 4.0,
+				testStoreUSa1:   1.0 / 4.0,
+				testStoreUSb:    1.0 / 2.0,
+				testStoreEurope: 1,
 			},
 		},
 		{
-			name: "three existing replicas - testStoreUSa15",
+			name: "four existing replicas with duplicate",
 			expected: map[roachpb.StoreID]float64{
-				testStoreUSa1:   1,
-				testStoreUSb:    1,
-				testStoreEurope: 1.0 / 2.0,
+				testStoreUSa15:     0,
+				testStoreUSa15Dupe: 0,
+				testStoreUSb:       1.0 / 2.0,
+				testStoreEurope:    1,
 			},
 		},
 		{
-			name: "three existing replicas - testStoreUSa1",
+			name: "three existing replicas - excluding testStoreUSa15",
 			expected: map[roachpb.StoreID]float64{
-				testStoreUSa15:  1,
-				testStoreUSb:    1,
-				testStoreEurope: 1.0 / 2.0,
+				testStoreUSa1:   1.0 / 2.0,
+				testStoreUSb:    1.0 / 2.0,
+				testStoreEurope: 1,
 			},
 		},
 		{
-			name: "three existing replicas - testStoreUSb",
+			name: "three existing replicas - excluding testStoreUSa1",
 			expected: map[roachpb.StoreID]float64{
-				testStoreUSa15:  1,
-				testStoreUSa1:   1,
-				testStoreEurope: 1.0 / 4.0,
+				testStoreUSa15:  1.0 / 2.0,
+				testStoreUSb:    1.0 / 2.0,
+				testStoreEurope: 1,
 			},
 		},
 		{
-			name: "three existing replicas - testStoreEurope",
+			name: "three existing replicas - excluding testStoreUSb",
 			expected: map[roachpb.StoreID]float64{
-				testStoreUSa15: 1.0 / 2.0,
-				testStoreUSa1:  1.0 / 2.0,
-				testStoreUSb:   1.0 / 4.0,
+				testStoreUSa15:  1.0 / 4.0,
+				testStoreUSa1:   1.0 / 4.0,
+				testStoreEurope: 1.0,
+			},
+		},
+		{
+			name: "three existing replicas - excluding testStoreEurope",
+			expected: map[roachpb.StoreID]float64{
+				testStoreUSa15: 1.0 / 4.0,
+				testStoreUSa1:  1.0 / 4.0,
+				testStoreUSb:   1.0 / 2.0,
 			},
 		},
 	}
