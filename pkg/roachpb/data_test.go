@@ -318,25 +318,6 @@ func TestSetGetChecked(t *testing.T) {
 	}
 }
 
-func TestTxnIDEqual(t *testing.T) {
-	txn1, txn2 := uuid.MakeV4(), uuid.MakeV4()
-	txn1Copy := txn1
-
-	testCases := []struct {
-		a, b     *uuid.UUID
-		expEqual bool
-	}{
-		{&txn1, &txn1, true},
-		{&txn1, &txn2, false},
-		{&txn1, &txn1Copy, true},
-	}
-	for i, test := range testCases {
-		if eq := TxnIDEqual(test.a, test.b); eq != test.expEqual {
-			t.Errorf("%d: expected %q == %q: %t; got %t", i, test.a, test.b, test.expEqual, eq)
-		}
-	}
-}
-
 // TestTransactionObservedTimestamp verifies that txn.{Get,Update}ObservedTimestamp work as
 // advertised.
 func TestTransactionObservedTimestamp(t *testing.T) {
