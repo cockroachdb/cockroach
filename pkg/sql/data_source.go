@@ -557,11 +557,7 @@ func (p *planner) getPlanForDesc(
 	wantedColumns []parser.ColumnID,
 ) (planDataSource, error) {
 	if desc.IsView() {
-		if wantedColumns != nil {
-			return planDataSource{},
-				errors.Errorf("cannot specify an explicit column list when accessing a view by reference")
-		}
-		return p.getViewPlan(ctx, tn, desc)
+		return p.getViewPlan(ctx, tn, desc, wantedColumns)
 	} else if !desc.IsTable() {
 		return planDataSource{}, errors.Errorf(
 			"unexpected table descriptor of type %s for %q", desc.TypeName(), parser.ErrString(tn))
@@ -582,7 +578,10 @@ func (p *planner) getPlanForDesc(
 // getViewPlan builds a planDataSource for the view specified by the
 // table name and descriptor, expanding out its subquery plan.
 func (p *planner) getViewPlan(
-	ctx context.Context, tn *parser.TableName, desc *sqlbase.TableDescriptor,
+	ctx context.Context,
+	tn *parser.TableName,
+	desc *sqlbase.TableDescriptor,
+	wantedColumns []parser.ColumnID,
 ) (planDataSource, error) {
 	stmt, err := parser.ParseOne(desc.ViewQuery)
 	if err != nil {
@@ -607,11 +606,36 @@ func (p *planner) getViewPlan(
 		defer func() { p.skipSelectPrivilegeChecks = false }()
 	}
 
+	selColumns := desc.Columns
+	if wantedColumns != nil {
+		wantedExprs := make(parser.SelectExprs, len(wantedColumns))
+		selColumns = make([]sqlbase.ColumnDescriptor, len(wantedColumns))
+		for i, id := range wantedColumns {
+			// Search the view descriptor for the wanted ID.
+			found := false
+			for j, col := range desc.Columns {
+				if col.ID == sqlbase.ColumnID(id) {
+					wantedExprs[i] = parser.SelectExpr{Expr: &parser.IndexedVar{Idx: j}, As: parser.Name(col.Name)}
+					selColumns[i] = col
+					found = true
+					break
+				}
+			}
+			if !found {
+				return planDataSource{},
+					errors.Errorf("column ID %d not found in view descriptor for %s", id, tn.String())
+			}
+		}
+
+		from := &parser.From{Tables: parser.TableExprs{&parser.Subquery{Select: sel.Select}}}
+		sel.Select = &parser.SelectClause{Exprs: wantedExprs, From: from}
+	}
+
 	// Register the dependency to the planner, if requested.
 	if p.planDeps != nil {
-		usedColumns := make([]sqlbase.ColumnID, len(desc.Columns))
-		for i := range desc.Columns {
-			usedColumns[i] = desc.Columns[i].ID
+		usedColumns := make([]sqlbase.ColumnID, len(selColumns))
+		for i := range selColumns {
+			usedColumns[i] = selColumns[i].ID
 		}
 		deps := p.planDeps[desc.ID]
 		deps.desc = desc
@@ -627,7 +651,7 @@ func (p *planner) getViewPlan(
 	// TODO(a-robinson): Support ORDER BY and LIMIT in views. Is it as simple as
 	// just passing the entire select here or will inserting an ORDER BY in the
 	// middle of a query plan break things?
-	return p.getSubqueryPlan(ctx, *tn, sel.Select, sqlbase.ResultColumnsFromColDescs(desc.Columns))
+	return p.getSubqueryPlan(ctx, *tn, sel.Select, sqlbase.ResultColumnsFromColDescs(selColumns))
 }
 
 // getSubqueryPlan builds a planDataSource for a select statement, including
