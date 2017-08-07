@@ -94,9 +94,6 @@ type hashJoiner struct {
 	// stream we store fully and build the hashRowContainer from.
 	storedSide joinSide
 
-	// testingKnobMemLimit is used in testing to set a limit on the memory that
-	// should be used by the hashJoiner. Minimum value to enable is 1.
-	testingKnobMemLimit int64
 	// testingKnobMemFailPoint specifies a phase in which the hashJoiner will
 	// fail at a random point during this phase.
 	testingKnobMemFailPoint hashJoinPhase
@@ -160,13 +157,13 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 	useTempStorage := (h.flowCtx.Settings.DistSQLUseTempStorage.Get() &&
 		h.flowCtx.Settings.DistSQLUseTempStorageJoins.Get()) ||
-		h.testingKnobMemLimit > 0 ||
+		h.flowCtx.testingKnobs.MemoryLimitBytes > 0 ||
 		h.testingKnobMemFailPoint != unset
 	evalCtx := h.flowCtx.EvalCtx
 	if useTempStorage {
 		// Limit the memory use by creating a child monitor with a hard limit.
 		// The hashJoiner will overflow to disk if this limit is not enough.
-		limit := h.testingKnobMemLimit
+		limit := h.flowCtx.testingKnobs.MemoryLimitBytes
 		if limit <= 0 {
 			limit = workMemBytes
 		}

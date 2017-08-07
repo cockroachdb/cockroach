@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
@@ -242,6 +243,9 @@ type testClusterConfig struct {
 	useFakeSpanResolver bool
 	// if non-empty, overrides the default distsql mode.
 	overrideDistSQLMode string
+	// if set, queries using distSQL processors that can fall back to disk do
+	// so immediately, using only their disk-based implementation.
+	distSQLUseDisk bool
 	// if set, any logic statement expected to succeed and parallelizable
 	// using RETURNING NOTHING syntax will be parallelized transparently.
 	// See logicStatement.parallelizeStmts.
@@ -258,6 +262,7 @@ var logicTestConfigs = []testClusterConfig{
 	{name: "default", numNodes: 1, overrideDistSQLMode: "Off"},
 	{name: "parallel-stmts", numNodes: 1, parallelStmts: true, overrideDistSQLMode: "Off"},
 	{name: "distsql", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On"},
+	{name: "distsql-disk", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", distSQLUseDisk: true},
 	{name: "5node", numNodes: 5, overrideDistSQLMode: "Off"},
 }
 
@@ -637,7 +642,7 @@ func (t *logicTest) setUser(user string) func() {
 	return cleanupFunc
 }
 
-func (t *logicTest) setup(numNodes int, useFakeSpanResolver bool, overrideDistSQLMode string) {
+func (t *logicTest) setup(cfg testClusterConfig) {
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
 	// MySQL or Postgres instance.
 	// TODO(andrei): if createTestServerParams() is used here, the command filter
@@ -660,8 +665,13 @@ func (t *logicTest) setup(numNodes int, useFakeSpanResolver bool, overrideDistSQ
 		// matter where the data really is.
 		ReplicationMode: base.ReplicationManual,
 	}
-	t.cluster = serverutils.StartTestCluster(t.t, numNodes, params)
-	if useFakeSpanResolver {
+	if cfg.distSQLUseDisk {
+		params.ServerArgs.Knobs.DistSQL = &distsqlrun.TestingKnobs{
+			MemoryLimitBytes: 1,
+		}
+	}
+	t.cluster = serverutils.StartTestCluster(t.t, cfg.numNodes, params)
+	if cfg.useFakeSpanResolver {
 		fakeResolver := distsqlutils.FakeResolverForTestCluster(t.cluster)
 		t.cluster.Server(t.nodeIdx).SetDistSQLSpanResolver(fakeResolver)
 	}
@@ -676,8 +686,8 @@ func (t *logicTest) setup(numNodes int, useFakeSpanResolver bool, overrideDistSQ
 		// locking in the DistSQL setting for that session. If we change it
 		// after, we might still see the old value in tests since they use the
 		// existing Session.
-		if overrideDistSQLMode != "" {
-			mode := cluster.DistSQLExecModeFromString(overrideDistSQLMode)
+		if cfg.overrideDistSQLMode != "" {
+			mode := cluster.DistSQLExecModeFromString(cfg.overrideDistSQLMode)
 			server.ClusterSettings().DistSQLClusterExecMode.Override(int64(mode))
 		}
 	}
@@ -1562,8 +1572,7 @@ func TestLogic(t *testing.T) {
 					if *printErrorSummary {
 						defer lt.printErrorSummary()
 					}
-					lt.setup(cfg.numNodes, cfg.useFakeSpanResolver, cfg.overrideDistSQLMode)
-
+					lt.setup(cfg)
 					lt.runFile(path, cfg)
 
 					progress.Lock()
