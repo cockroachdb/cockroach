@@ -469,7 +469,7 @@ func rebalanceCandidates(
 				}
 				continue
 			}
-			diversityScore := diversityScore(s, existingNodeLocalities)
+			diversityScore := rebalanceToDiversityScore(s, existingNodeLocalities)
 			candidates = append(candidates, candidate{
 				store:           s,
 				valid:           true,
@@ -660,7 +660,7 @@ func constraintCheck(store roachpb.StoreDescriptor, constraints config.Constrain
 func diversityScore(
 	store roachpb.StoreDescriptor, existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
 ) float64 {
-	minScore := 1.0
+	minScore := roachpb.MaxDiversityScore
 	for _, locality := range existingNodeLocalities {
 		if newScore := store.Node.Locality.DiversityScore(locality); newScore < minScore {
 			minScore = newScore
@@ -669,27 +669,49 @@ func diversityScore(
 	return minScore
 }
 
-// diversityRemovalScore is similar to diversityScore but instead of calculating
-// the score if a new node is added, it calculates the remaining diversity if a
-// node is removed.
+// diversityRemovalScore is the same as diversityScore, but for a node that's
+// already present in existingNodeLocalities. It works by calculating the
+// diversityScore for nodeID as if nodeID didn't already have a replica.
+// As with diversityScore, a higher score indicates that the node is a better
+// fit for the range (i.e. keeping it around is good for diversity).
 func diversityRemovalScore(
 	nodeID roachpb.NodeID, existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
 ) float64 {
-	var maxScore float64
-	for nodeIDx, localityX := range existingNodeLocalities {
-		if nodeIDx == nodeID {
+	minScore := roachpb.MaxDiversityScore
+	locality := existingNodeLocalities[nodeID]
+	for otherNodeID, otherLocality := range existingNodeLocalities {
+		if otherNodeID == nodeID {
 			continue
 		}
-		for nodeIDy, localityY := range existingNodeLocalities {
-			if nodeIDy == nodeID || nodeIDx >= nodeIDy {
-				continue
-			}
-			if newScore := localityX.DiversityScore(localityY); newScore > maxScore {
-				maxScore = newScore
-			}
+		if newScore := otherLocality.DiversityScore(locality); newScore < minScore {
+			minScore = newScore
 		}
 	}
-	return maxScore
+	return minScore
+}
+
+// rebalanceToDiversityScore is like diversityScore, but it returns what
+// the diversity score would be if the given store was added and one of the
+// existing stores was removed. This is equivalent to the second lowest score.
+//
+// This is useful for considering rebalancing a range that already has enough
+// replicas - it's perfectly fine to add a replica in the same locality as an
+// existing replica in such cases.
+func rebalanceToDiversityScore(
+	store roachpb.StoreDescriptor, existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
+) float64 {
+	minScore := roachpb.MaxDiversityScore
+	nextMinScore := roachpb.MaxDiversityScore
+	for _, locality := range existingNodeLocalities {
+		newScore := store.Node.Locality.DiversityScore(locality)
+		if newScore < minScore {
+			nextMinScore = minScore
+			minScore = newScore
+		} else if newScore < nextMinScore {
+			nextMinScore = newScore
+		}
+	}
+	return nextMinScore
 }
 
 type rangeCountStatus int
