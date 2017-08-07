@@ -6110,6 +6110,32 @@ func TestReplicaDestroy(t *testing.T) {
 	}
 }
 
+// TestQuotaPoolAccessOnDestroyedReplica tests the occurrence of #17303.
+func TestQuotaPoolAccessOnDestroyedReplica(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc.Start(t, stopper)
+
+	repl, err := tc.store.GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tc.store.removeReplicaImpl(context.TODO(), repl, *repl.Desc(), true); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := repl.handleRaftReady(IncomingSnapshot{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := repl.handleRaftReady(IncomingSnapshot{}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestEntries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
