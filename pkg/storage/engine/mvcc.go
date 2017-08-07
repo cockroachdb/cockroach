@@ -77,7 +77,7 @@ func MakeValue(meta enginepb.MVCCMetadata) roachpb.Value {
 // IsIntentOf returns true if the meta record is an intent of the supplied
 // transaction.
 func IsIntentOf(meta enginepb.MVCCMetadata, txn *roachpb.Transaction) bool {
-	return meta.Txn != nil && txn != nil && roachpb.TxnIDEqual(meta.Txn.ID, txn.ID)
+	return meta.Txn != nil && txn != nil && *meta.Txn.ID == *txn.ID
 }
 
 // MVCCKey is a versioned key, distinguished from roachpb.Key with the addition
@@ -1066,7 +1066,7 @@ func mvccPutInternal(
 
 		if meta.Txn != nil {
 			// There is an uncommitted write intent.
-			if txn == nil || !roachpb.TxnIDEqual(meta.Txn.ID, txn.ID) {
+			if txn == nil || *meta.Txn.ID != *txn.ID {
 				// The current Put operation does not come from the same
 				// transaction.
 				return &roachpb.WriteIntentError{Intents: []roachpb.Intent{{Span: roachpb.Span{Key: key}, Status: roachpb.PENDING, Txn: *meta.Txn}}}
@@ -1851,7 +1851,7 @@ func mvccResolveWriteIntent(
 	}
 	// For cases where there's no write intent to resolve, or one exists
 	// which we can't resolve, this is a noop.
-	if !ok || meta.Txn == nil || !roachpb.TxnIDEqual(intent.Txn.ID, meta.Txn.ID) {
+	if !ok || meta.Txn == nil || *intent.Txn.ID != *meta.Txn.ID {
 		return nil
 	}
 
