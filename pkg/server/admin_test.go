@@ -49,7 +49,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 func getAdminJSONProto(
@@ -232,7 +231,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 	ts := s.(*TestServer)
 
-	ac := log.AmbientContext{Tracer: tracing.NewTracer()}
+	ac := log.AmbientContext{Tracer: s.ClusterSettings().Tracer}
 	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 	defer span.Finish()
 
@@ -419,7 +418,7 @@ func TestAdminAPITableDetails(t *testing.T) {
 			escDBName := parser.Name(tc.dbName).String()
 			escTblName := parser.Name(tc.tblName).String()
 
-			ac := log.AmbientContext{Tracer: tracing.NewTracer()}
+			ac := log.AmbientContext{Tracer: s.ClusterSettings().Tracer}
 			ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 			defer span.Finish()
 
@@ -561,7 +560,7 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 	ts := s.(*TestServer)
 
 	// Create database and table.
-	ac := log.AmbientContext{Tracer: tracing.NewTracer()}
+	ac := log.AmbientContext{Tracer: s.ClusterSettings().Tracer}
 	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 	defer span.Finish()
 	session := sql.NewSession(
@@ -671,7 +670,7 @@ func TestAdminAPIUsers(t *testing.T) {
 	ts := s.(*TestServer)
 
 	// Create sample users.
-	ac := log.AmbientContext{Tracer: tracing.NewTracer()}
+	ac := log.AmbientContext{Tracer: s.ClusterSettings().Tracer}
 	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 	defer span.Finish()
 	session := sql.NewSession(
@@ -716,7 +715,7 @@ func TestAdminAPIEvents(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 	ts := s.(*TestServer)
 
-	ac := log.AmbientContext{Tracer: tracing.NewTracer()}
+	ac := log.AmbientContext{Tracer: s.ClusterSettings().Tracer}
 	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 	defer span.Finish()
 	session := sql.NewSession(

@@ -321,7 +321,7 @@ func TestAggregator(t *testing.T) {
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
 				Settings: cluster.MakeClusterSettings(),
-				EvalCtx: evalCtx,
+				EvalCtx:  evalCtx,
 			}
 
 			ag, err := newAggregator(&flowCtx, &ags, in, &PostProcessSpec{}, out)

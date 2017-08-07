@@ -51,7 +51,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -84,7 +83,7 @@ func createTestNode(
 		RPCContext:      nodeRPCContext,
 		RPCRetryOptions: &retryOpts,
 	}, cfg.Gossip)
-	cfg.AmbientCtx.Tracer = tracing.NewTracer()
+	cfg.AmbientCtx.Tracer = st.Tracer
 	sender := kv.NewTxnCoordSender(
 		cfg.AmbientCtx,
 		st,

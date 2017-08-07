@@ -112,7 +112,7 @@ func createTestStoreWithEngine(
 	storeCfg storage.StoreConfig,
 	stopper *stop.Stopper,
 ) *storage.Store {
-	tracer := tracing.NewTracer()
+	tracer := storeCfg.Settings.Tracer
 	ac := log.AmbientContext{Tracer: tracer}
 	storeCfg.AmbientCtx = ac
 

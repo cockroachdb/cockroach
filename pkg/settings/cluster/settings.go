@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -107,6 +108,26 @@ type TracingSettings struct {
 	EnableNetTrace  *settings.BoolSetting
 	LightstepToken  *settings.StringSetting
 	ZipkinCollector *settings.StringSetting
+
+	Tracer *tracing.Tracer
+}
+
+type tracingReconfigurationOptions struct {
+	ts TracingSettings
+}
+
+var _ tracing.ReconfigurationOptions = tracingReconfigurationOptions{}
+
+func (t tracingReconfigurationOptions) EnableNetTrace() bool {
+	return t.ts.EnableNetTrace.Get()
+}
+
+func (t tracingReconfigurationOptions) LightstepToken() string {
+	return t.ts.LightstepToken.Get()
+}
+
+func (t tracingReconfigurationOptions) ZipkinAddr() string {
+	return t.ts.ZipkinCollector.Get()
 }
 
 // ReportingSettings is the subset of ClusterSettings affecting crash reporting.
@@ -244,29 +265,29 @@ func MakeClusterSettings() Settings {
 			UseVersion:     ServerVersion,
 		}))
 
+	s.Tracer = tracing.NewTracer()
+
+	tracingOnChange := func() {
+		s.Tracer.Reconfigure(tracingReconfigurationOptions{s.TracingSettings})
+	}
+
 	s.EnableNetTrace = r.RegisterBoolSetting(
 		"trace.debug.enable",
 		"if set, traces for recent requests can be seen in the /debug page",
 		false,
-	).OnChange(func() {
-		// FIXME(tschottdorf): need to be close to the tracer here, and call tracer.Reconfigure(...).
-	})
+	).OnChange(tracingOnChange)
 
 	s.LightstepToken = r.RegisterStringSetting(
 		"trace.lightstep.token",
 		"if set, traces go to Lightstep using this token",
 		envutil.EnvOrDefaultString("COCKROACH_TEST_LIGHTSTEP_TOKEN", ""),
-	).OnChange(func() {
-		// FIXME(tschottdorf): need to be close to the tracer here, and call tracer.Reconfigure(...).
-	})
+	).OnChange(tracingOnChange)
 
 	s.ZipkinCollector = r.RegisterStringSetting(
 		"trace.zipkin.collector",
 		"if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'); ignored if trace.lightstep.token is set.",
 		envutil.EnvOrDefaultString("COCKROACH_TEST_ZIPKIN_COLLECTOR", ""),
-	).OnChange(func() {
-		// FIXME(tschottdorf): need to be close to the tracer here, and call tracer.Reconfigure(...).
-	})
+	).OnChange(tracingOnChange)
 
 	// DiagnosticsReportingEnabled wraps "diagnostics.reporting.enabled".
 	//

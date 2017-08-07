@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // A LocalTestCluster encapsulates an in-memory instantiation of a
@@ -84,7 +83,8 @@ type InitSenderFn func(
 // TestServer.Addr after Start() for client connections. Use Stop()
 // to shutdown the server after the test completes.
 func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSender InitSenderFn) {
-	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
+	cfg := storage.TestStoreConfig(ltc.Clock)
+	ambient := log.AmbientContext{Tracer: cfg.Settings.Tracer}
 	nc := &base.NodeIDContainer{}
 	ambient.AddLogTag("n", nc)
 
@@ -102,8 +102,6 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSende
 	ltc.Stopper.AddCloser(ltc.Eng)
 
 	ltc.Stores = storage.NewStores(ambient, ltc.Clock)
-
-	cfg := storage.TestStoreConfig(ltc.Clock)
 
 	ltc.Sender = initSender(cfg.Settings, nodeDesc, ambient.Tracer, ltc.Clock, ltc.Latency, ltc.Stores, ltc.Stopper,
 		ltc.Gossip)

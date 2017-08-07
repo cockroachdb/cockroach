@@ -72,7 +72,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/sdnotify"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -134,7 +133,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	st := cfg.Settings
 
 	if cfg.AmbientCtx.Tracer == nil {
-		cfg.AmbientCtx.Tracer = tracing.NewTracer()
+		return nil, errors.New("no tracer set in AmbientCtx")
 	}
 
 	s := &Server{

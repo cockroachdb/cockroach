@@ -52,7 +52,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // jemallocHeapDump is an optional function to be called at heap dump time.
@@ -304,7 +303,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
-	tracer := tracing.NewTracer()
+	tracer := serverCfg.Settings.Tracer
 	sp := tracer.StartSpan("server start")
 	startCtx := opentracing.ContextWithSpan(context.Background(), sp)
 
