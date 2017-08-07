@@ -320,8 +320,8 @@ type Session struct {
 	// is typically caused by transactions, not sessions. The reason why
 	// sessionMon and mon are split is to enable separate reporting of
 	// statistics for result sets (which escape transactions).
-	mon        mon.MemoryMonitor
-	sessionMon mon.MemoryMonitor
+	mon        mon.BytesMonitor
+	sessionMon mon.BytesMonitor
 	// emergencyShutdown is set to true by EmergencyClose() to
 	// indicate to Finish() that the session is already closed.
 	emergencyShutdown bool
@@ -506,7 +506,7 @@ func (s *Session) Finish(e *Executor) {
 		return
 	}
 
-	if s.mon == (mon.MemoryMonitor{}) {
+	if s.mon == (mon.BytesMonitor{}) {
 		// This check won't catch the cases where Finish is never called, but it's
 		// proven to be easier to remember to call Finish than it is to call
 		// StartMonitor.
@@ -878,7 +878,7 @@ type txnState struct {
 	// planNode in the midst of performing a computation. We
 	// host this here instead of TxnState because TxnState is
 	// fully reset upon each call to resetForNewSQLTxn().
-	mon mon.MemoryMonitor
+	mon mon.BytesMonitor
 }
 
 // State returns the current state of the session.

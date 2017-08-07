@@ -186,11 +186,11 @@ type v3Conn struct {
 
 	metrics *ServerMetrics
 
-	sqlMemoryPool *mon.MemoryMonitor
+	sqlMemoryPool *mon.BytesMonitor
 }
 
 func makeV3Conn(
-	conn net.Conn, metrics *ServerMetrics, sqlMemoryPool *mon.MemoryMonitor, executor *sql.Executor,
+	conn net.Conn, metrics *ServerMetrics, sqlMemoryPool *mon.BytesMonitor, executor *sql.Executor,
 ) v3Conn {
 	return v3Conn{
 		conn:          conn,
