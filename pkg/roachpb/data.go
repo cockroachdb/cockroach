@@ -833,15 +833,6 @@ func MakePriority(userPriority UserPriority) int32 {
 	return int32(val)
 }
 
-// TxnIDEqual returns whether the transaction IDs are equal.
-// The IDs are passed by reference for efficiency, but they can't be nil.
-func TxnIDEqual(a, b *uuid.UUID) bool {
-	if a == nil || b == nil {
-		log.Fatalf(context.TODO(), "comparing nil txn ID: a: %v, b: %v", a, b)
-	}
-	return *a == *b
-}
-
 // Restart reconfigures a transaction for restart. The epoch is
 // incremented for an in-place restart. The timestamp of the
 // transaction on restart is set to the maximum of the transaction's

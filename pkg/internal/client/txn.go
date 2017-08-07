@@ -793,7 +793,7 @@ func (txn *Txn) isRetryableErrMeantForTxnLocked(retryErr roachpb.HandledRetryabl
 		return true
 	}
 	// If not, make sure it was meant for this transaction.
-	return roachpb.TxnIDEqual(&errTxnID, txn.mu.Proto.ID)
+	return errTxnID == *txn.mu.Proto.ID
 }
 
 // Send runs the specified calls synchronously in a single batch and
@@ -1085,7 +1085,7 @@ func (txn *Txn) updateStateOnRetryableErrLocked(
 	requestTxnID uuid.UUID,
 	requestEpoch uint32,
 ) {
-	if !roachpb.TxnIDEqual(&requestTxnID, &retryErr.TxnID) {
+	if requestTxnID != retryErr.TxnID {
 		// KV should not return errors for transactions other than the one that sent
 		// the request.
 		log.Fatalf(ctx, "retryable error for the wrong txn. "+
@@ -1101,7 +1101,7 @@ func (txn *Txn) updateStateOnRetryableErrLocked(
 		// Reset the statement count as this is a retryable txn error.
 		txn.mu.commandCount = 0
 
-		if !roachpb.TxnIDEqual(newTxn.ID, txn.mu.Proto.ID) {
+		if *newTxn.ID != *txn.mu.Proto.ID {
 			// This means that the cause was a TransactionAbortedError;
 			// we've created a new Transaction that we're about to start using, so we
 			// save the old transaction ID so that concurrent requests or delayed

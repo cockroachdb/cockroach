@@ -897,7 +897,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			if test.name != "nil" && err == nil {
 				t.Fatalf("expected an error")
 			}
-			txnReset := !roachpb.TxnIDEqual(origTxnProto.ID, txn.Proto().ID)
+			txnReset := *origTxnProto.ID != *txn.Proto().ID
 			if txnReset != test.expNewTransaction {
 				t.Fatalf("expected txn reset: %t and got: %t", test.expNewTransaction, txnReset)
 			}
