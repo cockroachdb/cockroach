@@ -409,6 +409,12 @@ type TestingKnobs struct {
 	// executing the chunk. It is always called even when the backfill
 	// function returns an error, or if the table has already been dropped.
 	RunAfterBackfillChunk func()
+
+	// MemoryLimitBytes specifies a maximum amount of working memory that a
+	// processor that supports falling back to disk can use. Must be >= 1 to
+	// enable. Once this limit is hit, processors employ their on-disk
+	// implementation regardless of applicable cluster settings.
+	MemoryLimitBytes int64
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

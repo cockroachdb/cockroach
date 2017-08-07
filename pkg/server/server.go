@@ -294,8 +294,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	var tempEngine engine.Engine
 
-	if allInMemory {
-		log.Warning(ctx, "all stores are configured as in-memory stores, so not setting up a temporary store. Queries with working set larger than memory will fail")
+	if allInMemory && !s.cfg.TempStore.InMemory {
+		log.Warning(ctx, "all stores are configured as in-memory stores, so not setting up a disk-backed temporary store. Queries with working set larger than memory will fail")
 	} else {
 		var err error
 		// Set up TempEngine for DistSQL. Note that it could be nil, which we support,
