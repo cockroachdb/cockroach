@@ -65,6 +65,12 @@ type flowEntry struct {
 	refCount int
 
 	flow *Flow
+	// poisoned indicates that the entry corresponds to a flow that will never be
+	// registered. This is only used on gateways when some remote flows have been
+	// scheduled, but others failed and the query as a whole has been abandoned.
+	// Remote flows that have been scheduled already will notice this poison and
+	// fail quickly, instead of waiting for the connection timeout.
+	poisoned bool
 
 	// inboundStreams are streams that receive data from other hosts, through the
 	// FlowStream API. All fields in the inboundStreamInfos are protected by the
@@ -190,6 +196,39 @@ func (fr *flowRegistry) RegisterFlow(
 	}
 }
 
+// PoisonFlow registers a flow that will never run, such that inbound streams
+// attempting to connect to it find out quickly that they need to error out and
+// don't wait for the connection timeout.
+// The poisoned entry will leave in the FlowRegistry for timeout. Afterwards,
+// late streams attempting to connect will wait for the regular connection
+// timeout before timing out.
+func (fr *flowRegistry) PoisonFlow(id FlowID, timeout time.Duration) {
+	fr.Lock()
+	defer fr.Unlock()
+
+	entry, ok := fr.flows[id]
+	if entry.flow != nil {
+		panic("flow already registered")
+	}
+	if !ok {
+		entry = &flowEntry{}
+		fr.flows[id] = entry
+	}
+	entry.poisoned = true
+	// If there are any waiters, wake them up by closing waitCh.
+	if entry.waitCh != nil {
+		close(entry.waitCh)
+	}
+	// Take a reference that will be removed by UnregisterFlow, in the timer below.
+	entry.refCount++
+
+	// Set up a function to time out inbound streams after a while.
+	entry.streamTimer = time.AfterFunc(timeout, func() {
+		fr.UnregisterFlow(id)
+	})
+
+}
+
 // UnregisterFlow removes a flow from the registry. Any subsequent
 // ConnectInboundStream calls for the flow will fail to find it and time out.
 func (fr *flowRegistry) UnregisterFlow(id FlowID) {
@@ -238,6 +277,9 @@ func (fr *flowRegistry) waitForFlowLocked(
 	fr.Lock()
 
 	fr.releaseEntryLocked(id)
+	if entry.poisoned {
+		return entry
+	}
 	if entry.flow == nil {
 		return nil
 	}
@@ -263,6 +305,9 @@ func (fr *flowRegistry) ConnectInboundStream(
 	entry := fr.waitForFlowLocked(ctx, flowID, timeout)
 	if entry == nil {
 		return nil, nil, nil, errors.Errorf("flow %s not found", flowID)
+	}
+	if entry.poisoned {
+		return nil, nil, nil, errors.Errorf("flow %s: poisoned", flowID)
 	}
 
 	s, ok := entry.inboundStreams[streamID]

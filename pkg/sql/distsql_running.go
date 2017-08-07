@@ -16,6 +16,7 @@ package sql
 
 import (
 	"strings"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -34,6 +35,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
+
+// poisonedFlowDefaultTimeout is the amount of time that a poisoned flow (a
+// flow that will not actually be scheduled) lives in the FlowRegistry.
+const poisonedFlowDefaultTimeout time.Duration = time.Second
 
 // To allow queries to send out flow RPCs in parallel, we use a pool of workers
 // that can issue the RPCs on behalf of the running code. The pool is shared by
@@ -184,6 +189,7 @@ func (dsp *distSQLPlanner) Run(
 
 	var firstErr error
 	var flowsToRunLocally []roachpb.NodeID
+	anyScheduled := false
 	// Now wait for all the flows to be scheduled on remote nodes. Note that we
 	// are not waiting for the flows themselves to complete.
 	for i := 0; i < len(flows)-1; i++ {
@@ -207,18 +213,21 @@ func (dsp *distSQLPlanner) Run(
 			if firstErr == nil {
 				firstErr = res.err
 			}
+			continue
 		}
+		anyScheduled = true
 	}
+	localFlow := flows[thisNodeID]
 	if firstErr != nil {
-		// TODO(andrei): we should "poison" the local flow registry's entry for this
-		// flow, such that remote flows that have been successfully schedule don't
-		// block waiting for the gateway flow to start (until the connection timeout
-		// expires).
+		if anyScheduled {
+			// If any flows were scheduled, poison the local FlowRegistry so those
+			// remote flows are likely to catch an error soon.
+			dsp.distSQLSrv.PoisonFlow(localFlow.FlowID, poisonedFlowDefaultTimeout)
+		}
 		return firstErr
 	}
 
 	// Merge the flowsToRunLocally (if any) into the local flow.
-	localFlow := flows[thisNodeID]
 	if len(flowsToRunLocally) > 0 {
 		addressesToRewrite := make(map[string]struct{})
 		for _, failedNodeID := range flowsToRunLocally {

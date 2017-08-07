@@ -379,6 +379,16 @@ func (ds *ServerImpl) FlowStream(stream DistSQL_FlowStreamServer) error {
 	return err
 }
 
+// PoisonFlow registers a flow that will never run, such that inbound streams
+// attempting to connect to it find out quickly that they need to error out and
+// don't wait for the connection timeout.
+// The poisoned entry will leave in the FlowRegistry for timeout. Afterwards,
+// late streams attempting to connect will wait for the regular connection
+// timeout before timing out.
+func (ds *ServerImpl) PoisonFlow(id FlowID, timeout time.Duration) {
+	ds.flowRegistry.PoisonFlow(id, timeout)
+}
+
 // TestingKnobs are the testing knobs.
 type TestingKnobs struct {
 	// RunBeforeBackfillChunk is called before executing each chunk of a
