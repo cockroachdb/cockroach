@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/kr/pretty"
 	"github.com/lib/pq"
 )
@@ -276,6 +277,9 @@ func TestShowCreateTable(t *testing.T) {
 func TestShowCreateView(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	sc := log.Scope(t)
+	defer sc.Close(t)
+
 	params, _ := createTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
@@ -318,11 +322,11 @@ func TestShowCreateView(t *testing.T) {
 		},
 		{
 			`CREATE VIEW %s (a, b, c, d) AS SELECT i, s, v, t FROM t`,
-			`CREATE VIEW %s (a, b, c, d) AS SELECT i, s, v, t FROM t`,
+			`CREATE VIEW %s (a, b, c, d) AS SELECT @1 AS a, @2 AS b, @3 AS c, @4 AS d FROM (SELECT i, s, v, t FROM t)`,
 		},
 		{
 			`CREATE VIEW %s (a, b) AS SELECT i, v FROM t`,
-			`CREATE VIEW %s (a, b) AS SELECT i, v FROM t`,
+			`CREATE VIEW %s (a, b) AS SELECT @1 AS a, @2 AS b FROM (SELECT i, v FROM t)`,
 		},
 	}
 	for i, test := range tests {

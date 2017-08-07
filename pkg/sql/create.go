@@ -384,13 +384,9 @@ func (p *planner) CreateView(ctx context.Context, n *parser.CreateView) (planNod
 		return nil, err
 	}
 
-	numColNames := len(n.ColumnNames)
-	numColumns := len(sourceColumns)
-	if numColNames != 0 && numColNames != numColumns {
-		return nil, sqlbase.NewSyntaxError(fmt.Sprintf(
-			"CREATE VIEW specifies %d column name%s, but data source has %d column%s",
-			numColNames, util.Pluralize(int64(numColNames)),
-			numColumns, util.Pluralize(int64(numColumns))))
+	n.AsSource, err = enforceViewResultColumnNames(n.AsSource, n.ColumnNames, sourceColumns)
+	if err != nil {
+		return nil, err
 	}
 
 	log.VEventf(ctx, 2, "collected view dependencies:\n%s", planDeps.String())
@@ -426,7 +422,6 @@ func (n *createViewNode) Start(params runParams) error {
 	desc, err := n.makeViewTableDesc(
 		params.ctx,
 		viewName,
-		n.n.ColumnNames,
 		n.dbDesc.ID,
 		id,
 		n.sourceColumns,
@@ -1141,7 +1136,6 @@ func initTableDescriptor(
 func (n *createViewNode) makeViewTableDesc(
 	ctx context.Context,
 	viewName string,
-	columnNames parser.NameList,
 	parentID sqlbase.ID,
 	id sqlbase.ID,
 	resultColumns []sqlbase.ResultColumn,
@@ -1150,15 +1144,12 @@ func (n *createViewNode) makeViewTableDesc(
 ) (sqlbase.TableDescriptor, error) {
 	desc := initTableDescriptor(id, parentID, viewName, n.p.txn.OrigTimestamp(), privileges)
 	desc.ViewQuery = parser.AsStringWithFlags(n.n.AsSource, parser.FmtParsable)
-	for i, colRes := range resultColumns {
+	for _, colRes := range resultColumns {
 		colType, err := parser.DatumTypeToColumnType(colRes.Typ)
 		if err != nil {
 			return desc, err
 		}
 		columnTableDef := parser.ColumnTableDef{Name: parser.Name(colRes.Name), Type: colType}
-		if len(columnNames) > i {
-			columnTableDef.Name = columnNames[i]
-		}
 		// We pass an empty search path here because there are no names to resolve.
 		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, nil, evalCtx)
 		if err != nil {
