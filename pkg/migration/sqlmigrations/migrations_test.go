@@ -568,9 +568,10 @@ func TestUpdateViewDependenciesMigration(t *testing.T) {
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	t.Log("create test tables")
 
-	const createStmts = `
+	createSchema := func() {
+		t.Log("create test tables")
+		const createStmts = `
 CREATE DATABASE test;
 CREATE DATABASE test2;
 SET DATABASE=test;
@@ -591,9 +592,11 @@ CREATE TABLE x(x INT);
 CREATE INDEX y ON x(x);
 CREATE VIEW v6 AS SELECT x FROM x@y;
 `
-	if _, err := sqlDB.Exec(createStmts); err != nil {
-		t.Fatal(err)
+		if _, err := sqlDB.Exec(createStmts); err != nil {
+			t.Fatal(err)
+		}
 	}
+	createSchema()
 
 	testDesc := []struct {
 		dbName parser.Name
@@ -608,47 +611,49 @@ CREATE VIEW v6 AS SELECT x FROM x@y;
 		{"system", "descriptor", nil},
 	}
 
-	t.Log("fetch descriptors")
-
 	e := s.Executor().(*sql.Executor)
 	vt := e.GetVirtualTabler()
 
-	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		for i := range testDesc {
-			desc, err := sql.MustGetTableOrViewDesc(ctx, txn, vt,
-				&parser.TableName{DatabaseName: testDesc[i].dbName, TableName: testDesc[i].tname}, true)
-			if err != nil {
+	getDescsAndBreakViews := func() {
+		t.Log("fetch descriptors")
+		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			for i := range testDesc {
+				desc, err := sql.MustGetTableOrViewDesc(ctx, txn, vt,
+					&parser.TableName{DatabaseName: testDesc[i].dbName, TableName: testDesc[i].tname}, true)
+				if err != nil {
+					return err
+				}
+				testDesc[i].desc = desc
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Now, corrupt the descriptors by breaking their dependency information.
+		t.Log("break descriptors")
+		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			if err := txn.SetSystemConfigTrigger(); err != nil {
 				return err
 			}
-			testDesc[i].desc = desc
-		}
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
+			for _, t := range testDesc {
+				t.desc.UpVersion = true
+				t.desc.DependedOnBy = nil
+				t.desc.DependedOnBy = nil
 
-	// Now, corrupt the descriptors by breaking their dependency information.
-	t.Log("break descriptors")
-	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		if err := txn.SetSystemConfigTrigger(); err != nil {
-			return err
-		}
-		for _, t := range testDesc {
-			t.desc.UpVersion = true
-			t.desc.DependedOnBy = nil
-			t.desc.DependedOnBy = nil
-
-			descKey := sqlbase.MakeDescMetadataKey(t.desc.GetID())
-			descVal := sqlbase.WrapDescriptor(t.desc)
-			if err := txn.Put(ctx, descKey, descVal); err != nil {
-				return err
+				descKey := sqlbase.MakeDescMetadataKey(t.desc.GetID())
+				descVal := sqlbase.WrapDescriptor(t.desc)
+				if err := txn.Put(ctx, descKey, descVal); err != nil {
+					return err
+				}
 			}
-		}
 
-		return nil
-	}); err != nil {
-		t.Fatal(err)
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
 	}
+	getDescsAndBreakViews()
 
 	// Break further by deleting the referenced tables. This has become possible
 	// because the dependency links have been broken above.
@@ -676,17 +681,14 @@ DROP INDEX test.x@y;
 	}
 
 	// Restore missing dependencies for the rest of the test.
-	t.Log("restore dependencies")
-
-	if _, err := sqlDB.Exec(`
-CREATE TABLE test.t(x INT, y INT);
-CREATE TABLE test.u(x INT, y INT);
-CREATE TABLE test.w(x INT);
-CREATE VIEW test.v1 AS SELECT x FROM test.t WHERE false;
-CREATE INDEX y ON test.x(x);
-`); err != nil {
+	t.Log("clear the schema")
+	if _, err := sqlDB.Exec(`DROP DATABASE test; DROP DATABASE test2;`); err != nil {
 		t.Fatal(err)
 	}
+	createSchema()
+
+	// Break the descriptors again, but do not delete the tables.
+	getDescsAndBreakViews()
 
 	// Run the migration outside the context of a migration manager
 	// such that its work gets done but the key indicating it's been completed

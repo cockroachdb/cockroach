@@ -2075,3 +2075,76 @@ func (desc *ColumnDescriptor) SQLString() string {
 	}
 	return buf.String()
 }
+
+// InfoString reports the contents of the SchemaDependency in a form
+// suitable for inclusion in the output of SHOW CREATE VIEW.
+// For example:
+//    t.kv(k,v) = [51(1,2)], indexes ("primary",foo) = (1,2)
+func (dep *TableDescriptor_SchemaDependency) InfoString() string {
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "%s.%s(",
+		parser.Name(dep.DatabaseName),
+		parser.Name(dep.TableName))
+	for i, c := range dep.ColumnNames {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		fmt.Fprintf(&buf, "%s", parser.Name(c))
+	}
+	fmt.Fprintf(&buf, ") = [%d(", dep.ID)
+	for i, c := range dep.ColumnIDs {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		fmt.Fprintf(&buf, "%d", c)
+	}
+	buf.WriteString(")]")
+
+	if len(dep.IndexNames) > 0 || len(dep.IndexIDs) > 0 {
+		buf.WriteString(", indexes (")
+		for i, idx := range dep.IndexNames {
+			if i > 0 {
+				buf.WriteByte(',')
+			}
+			fmt.Fprintf(&buf, "%s", parser.Name(idx))
+		}
+		buf.WriteString(") = (")
+		for i, idx := range dep.IndexIDs {
+			if i > 0 {
+				buf.WriteByte(',')
+			}
+			fmt.Fprintf(&buf, "%d", idx)
+		}
+		buf.WriteString(")")
+	}
+	return buf.String()
+}
+
+// RewriteViewQueryForTableSubstitution renames all occurrences of oldID
+// by newID in the table's ViewQuery.
+func (desc *TableDescriptor) RewriteViewQueryForTableSubstitution(idMapping map[ID]ID) error {
+	if !desc.IsView() {
+		return nil
+	}
+
+	// First extract the query AST.
+	stmt, err := parser.ParseOne(desc.ViewQuery)
+	if err != nil {
+		return errors.Wrapf(err,
+			"parsing view [%d] (%q)", desc.ID, parser.ErrString(parser.Name(desc.Name)))
+	}
+
+	// Now perform the replacement. For this we hijack (*TableRef).Format().
+	var queryBuf bytes.Buffer
+	stmt.Format(&queryBuf, parser.FmtReformatTableRefs(parser.FmtParsable,
+		func(n *parser.TableRef, _ *bytes.Buffer, _ parser.FmtFlags) bool {
+			// Are we referencing the old ID?
+			if newID, ok := idMapping[ID(n.TableID)]; ok {
+				n.TableID = int64(newID)
+			}
+			// Let the formatter do its job with the result.
+			return false
+		}))
+	desc.ViewQuery = queryBuf.String()
+	return nil
+}

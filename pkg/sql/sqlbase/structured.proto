@@ -513,6 +513,13 @@ message TableDescriptor {
 
   // The IDs of all relations that this depends on.
   // Only ever populated if this descriptor is for a view.
+  // This is used when dropping the view, to quickly access
+  // the depended-on table descriptors where the DependedOn field
+  // needs to be updated to reflect the drop.
+  // This information is technically redundant with apparentSchema defined
+  // below but needs to be preserved/maintained/populated to ensure
+  // compatibility of newly created view descriptors with nodes running
+  // previous versions.
   repeated uint32 dependsOn = 25 [(gogoproto.customname) = "DependsOn",
            (gogoproto.casttype) = "ID"];
 
@@ -550,6 +557,33 @@ message TableDescriptor {
   // Mutation jobs queued for execution in a FIFO order. Remains synchronized
   // with the mutations list.
   repeated MutationJob mutationJobs = 27 [(gogoproto.nullable) = false];
+
+  // The visible schema from the perspective of this view when it was
+  // created. Only populated for views.
+  message SchemaDependency {
+    // The name of the relation being depended on,
+    // from the perspective of this view at the time it was created.
+    optional string database_name = 1         [(gogoproto.nullable) = false,
+             (gogoproto.customname) = "DatabaseName"];
+    optional string table_name = 2            [(gogoproto.nullable) = false,
+             (gogoproto.customname) = "TableName"];
+
+    // The ID of the relation being depended on.
+    optional uint32 id = 3 [(gogoproto.nullable) = false,
+             (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
+    // The indexes visible to the view at the time of view creation are listed
+    // here.
+    repeated string index_names = 4  [(gogoproto.customname) = "IndexNames"];
+    repeated uint32 index_ids = 5  [(gogoproto.customname) = "IndexIDs",
+             (gogoproto.casttype) = "IndexID"];
+    // The columns visible to the view at the time of view creation are listed
+    // here.
+    repeated string column_names = 6  [(gogoproto.customname) = "ColumnNames"];
+    repeated uint32 column_ids = 7  [(gogoproto.customname) = "ColumnIDs",
+             (gogoproto.casttype) = "ColumnID"];
+  }
+  repeated SchemaDependency apparentSchema = 28 [(gogoproto.nullable) = false,
+           (gogoproto.customname) = "ApparentSchema"];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored

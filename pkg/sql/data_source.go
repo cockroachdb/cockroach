@@ -348,7 +348,21 @@ func (p *planner) getDataSource(
 		if foundVirtual {
 			return ds, nil
 		}
-		return p.getTableScanOrViewPlan(ctx, tn, hints, scanVisibility)
+		if tn.PrefixOriginallySpecified {
+			// Prefixes are currently only supported for virtual tables.
+			return planDataSource{}, parser.NewInvalidNameErrorf(
+				"invalid table name: %q", parser.ErrString(tn))
+		}
+
+		tref, desc, err := p.lookupDescOrRefByName(ctx, p.lookupEnv, tn)
+		if err != nil {
+			return planDataSource{}, err
+		}
+		if tref != nil {
+			// The name environment has overridden the mapping.
+			return p.getTableScanByRef(ctx, tref, hints, scanVisibility)
+		}
+		return p.getPlanForDesc(ctx, desc, tn, hints, scanVisibility, nil)
 
 	case *parser.FuncExpr:
 		return p.getGeneratorPlan(ctx, t)
@@ -511,29 +525,8 @@ func renameSource(
 	return src, nil
 }
 
-// getTableScanOrViewPlan builds a planDataSource from a single data source
-// clause (either a table or a view) in a SelectClause, expanding views out
-// into subqueries.
-func (p *planner) getTableScanOrViewPlan(
-	ctx context.Context,
-	tn *parser.TableName,
-	hints *parser.IndexHints,
-	scanVisibility scanVisibility,
-) (planDataSource, error) {
-	if tn.PrefixOriginallySpecified {
-		// Prefixes are currently only supported for virtual tables.
-		return planDataSource{}, parser.NewInvalidNameErrorf(
-			"invalid table name: %q", parser.ErrString(tn))
-	}
-
-	desc, err := p.getTableDesc(ctx, tn)
-	if err != nil {
-		return planDataSource{}, err
-	}
-
-	return p.getPlanForDesc(ctx, desc, tn, hints, scanVisibility, nil)
-}
-
+// getTableDescFromDatabase obtains a table or view descriptor from
+// the database. Consider using lookupDescOrRefByName instead.
 func (p *planner) getTableDesc(
 	ctx context.Context, tn *parser.TableName,
 ) (*sqlbase.TableDescriptor, error) {
@@ -565,7 +558,7 @@ func (p *planner) getPlanForDesc(
 
 	// This name designates a real table.
 	scan := p.Scan()
-	if err := scan.initTable(p, desc, hints, scanVisibility, wantedColumns); err != nil {
+	if err := scan.initTable(ctx, desc, hints, scanVisibility, wantedColumns); err != nil {
 		return planDataSource{}, err
 	}
 
@@ -651,6 +644,17 @@ func (p *planner) getViewPlan(
 		// further dependency by the view's query should not be tracked in this planner.
 		defer func(prev planDependencies) { p.planDeps = prev }(p.planDeps)
 		p.planDeps = nil
+	}
+
+	// The view may have a different perspective on the schema. Load its perspective
+	// into the current lookup environment.
+	var newEnv lookupEnvironment
+	if desc.ApparentSchema != nil {
+		// When the function returns, we pop the new scope from the stack of environments.
+		defer func(prev *lookupEnvironment) { p.lookupEnv = prev }(p.lookupEnv)
+		// Push the new environment onto the stack.
+		newEnv = p.lookupEnv.openScope(desc.ApparentSchema)
+		p.lookupEnv = &newEnv
 	}
 
 	// TODO(a-robinson): Support ORDER BY and LIMIT in views. Is it as simple as

@@ -63,6 +63,10 @@ type planner struct {
 	// if it is SNAPSHOT.
 	avoidCachedDescriptors bool
 
+	// lookupEnv is used to look up table descriptors from table names,
+	// and visible column names to ID and index names to ID mappings.
+	lookupEnv *lookupEnvironment
+
 	// If set, the planner should skip checking for the SELECT privilege when
 	// initializing plans to read from a table. This should be used with care.
 	skipSelectPrivilegeChecks bool

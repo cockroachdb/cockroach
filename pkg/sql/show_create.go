@@ -31,6 +31,11 @@ func (p *planner) showCreateView(
 	ctx context.Context, tn parser.Name, dbPrefix string, desc *sqlbase.TableDescriptor,
 ) (string, error) {
 	var buf bytes.Buffer
+	for i := range desc.ApparentSchema {
+		buf.WriteString("-- ")
+		buf.WriteString(desc.ApparentSchema[i].InfoString())
+		buf.WriteByte('\n')
+	}
 	buf.WriteString("CREATE VIEW ")
 	tn.Format(&buf, parser.FmtSimple)
 	buf.WriteString(" (")
@@ -50,8 +55,9 @@ func (p *planner) showCreateView(
 }
 
 // simplifyViewQuery shortens the view query for display: for each
-// referenced table, remove the database prefix if it matches the show
-// prefix.
+// referenced table, if the table still has the same name, and the
+// same set of columns in the same order, elide the table reference
+// and replace it by a simple table name.
 func (p *planner) simplifyViewQuery(
 	ctx context.Context, dbPrefix, viewName, viewQuery string,
 ) (string, error) {
@@ -63,26 +69,83 @@ func (p *planner) simplifyViewQuery(
 		return viewQuery, nil
 	}
 
-	// Now perform the replacement. For this we hijack (*TableName).Format().
-	var queryBuf bytes.Buffer
+	logFunc := func(err error) {
+		log.Warningf(ctx, "error simplifying table references in view %q: %q: %v",
+			parser.ErrString(parser.Name(viewName)), viewQuery, err)
+	}
+
+	// Now perform the replacement. For this we hijack (*TableName).Format() and
+	// (*TableRef).Format().
 	var fmtErr error
-	stmt.Format(&queryBuf, parser.FmtReformatTableNames(parser.FmtParsable,
-		func(n *parser.NormalizableTableName, buf *bytes.Buffer, f parser.FmtFlags) {
-			if fmtErr != nil {
-				return
+
+	reformatTableNames := func(n *parser.NormalizableTableName, buf *bytes.Buffer, f parser.FmtFlags) {
+		if fmtErr != nil {
+			return
+		}
+		// The database name is omitted if and only if the parent
+		// database is the same as the current database prefix.
+		tn, err := n.Normalize()
+		if err != nil {
+			fmtErr = err
+			return
+		}
+		if tn.DatabaseName == parser.Name(dbPrefix) {
+			tn.DBNameOriginallyOmitted = true
+		}
+		tn.Format(buf, parser.FmtParsable)
+	}
+
+	reformatTableRefs := func(n *parser.TableRef, buf *bytes.Buffer, f parser.FmtFlags) bool {
+		// Get the Table descriptor.
+		desc, err := p.getTableDescByID(ctx, sqlbase.ID(n.TableID))
+		if err != nil {
+			logFunc(err)
+			return false
+		}
+		// Same name?
+		if desc.Name != string(n.As.Alias) {
+			return false
+		}
+		// Same column set?
+		if len(desc.Columns) != len(n.As.Cols) {
+			return false
+		}
+		for i := range desc.Columns {
+			if desc.Columns[i].Name != string(n.As.Cols[i]) {
+				return false
 			}
-			// The database name is omitted if and only if the parent
-			// database is the same as the current database prefix.
-			tn, err := n.Normalize()
-			if err != nil {
-				fmtErr = err
-				return
-			}
-			if tn.DatabaseName == parser.Name(dbPrefix) {
-				tn.DBNameOriginallyOmitted = true
-			}
-			tn.Format(buf, parser.FmtParsable)
-		}))
+		}
+		// Yes: we may need the parent database name, so get the
+		// descriptor first.
+		parentDB, err := p.session.tables.databaseCache.getDatabaseDescByID(
+			ctx, p.txn, desc.ParentID,
+		)
+		if err != nil {
+			logFunc(err)
+			return false
+		}
+		// Make a table name: the database name is omitted if and only
+		// if the parent database is the same as the current database
+		// prefix.
+		tn := parser.TableName{TableName: parser.Name(desc.Name)}
+		if parentDB.Name != dbPrefix {
+			tn.DatabaseName = parser.Name(parentDB.Name)
+		} else {
+			tn.DBNameOriginallyOmitted = true
+		}
+		tn.Format(buf, parser.FmtParsable)
+		return true
+	}
+
+	var queryBuf bytes.Buffer
+	stmt.Format(&queryBuf,
+		parser.FmtReformatTableNames(
+			parser.FmtReformatTableRefs(
+				parser.FmtParsable,
+				reformatTableRefs,
+			),
+			reformatTableNames,
+		))
 	if fmtErr != nil {
 		return "", fmtErr
 	}

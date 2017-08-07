@@ -418,14 +418,27 @@ func (n *createViewNode) Start(params runParams) error {
 	// Inherit permissions from the database descriptor.
 	privs := n.dbDesc.GetPrivileges()
 
+	// Update and format the AST of the view query to fix numeric table references.
+	viewQuery, err := n.p.prepareViewQuery(params.ctx, n.n.AsSource, n.planDeps)
+	if err != nil {
+		return err
+	}
+
+	apparentSchema, err := n.p.prepareApparentSchema(params.ctx, n.planDeps)
+	if err != nil {
+		return err
+	}
+
 	desc, err := n.makeViewTableDesc(
 		params.ctx,
 		viewName,
+		viewQuery,
 		n.dbDesc.ID,
 		id,
 		n.sourceColumns,
 		privs,
 		&n.p.evalCtx,
+		apparentSchema,
 	)
 	if err != nil {
 		return err
@@ -1112,20 +1125,23 @@ func (p *planner) finalizeInterleave(
 func (n *createViewNode) makeViewTableDesc(
 	ctx context.Context,
 	viewName string,
+	viewQuery string,
 	parentID sqlbase.ID,
 	id sqlbase.ID,
 	resultColumns []sqlbase.ResultColumn,
 	privileges *sqlbase.PrivilegeDescriptor,
 	evalCtx *parser.EvalContext,
+	apparentSchema []sqlbase.TableDescriptor_SchemaDependency,
 ) (sqlbase.TableDescriptor, error) {
 	desc := sqlbase.TableDescriptor{
-		ID:            id,
-		Name:          viewName,
-		ParentID:      parentID,
-		FormatVersion: sqlbase.FamilyFormatVersion,
-		Version:       1,
-		Privileges:    privileges,
-		ViewQuery:     parser.AsStringWithFlags(n.n.AsSource, parser.FmtParsable),
+		ID:             id,
+		Name:           viewName,
+		ParentID:       parentID,
+		FormatVersion:  sqlbase.FamilyFormatVersion,
+		Version:        1,
+		Privileges:     privileges,
+		ViewQuery:      viewQuery,
+		ApparentSchema: apparentSchema,
 	}
 	for _, colRes := range resultColumns {
 		colType, err := parser.DatumTypeToColumnType(colRes.Typ)

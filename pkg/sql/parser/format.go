@@ -27,6 +27,9 @@ type fmtFlags struct {
 	// tableNameFormatter will be called on all NormalizableTableNames if it is
 	// non-nil.
 	tableNameFormatter func(*NormalizableTableName, *bytes.Buffer, FmtFlags)
+	// tableRefFormatter will be called on all TableRefs if it is non-nil.
+	// If it returns false, the regular table reference formatter is used instead.
+	tableRefFormatter func(*TableRef, *bytes.Buffer, FmtFlags) bool
 	// indexedVarFormat is an optional interceptor for
 	// IndexedVarContainer.IndexedVarFormat calls; it can be used to
 	// customize the formatting of IndexedVars.
@@ -109,6 +112,16 @@ func FmtReformatTableNames(
 ) FmtFlags {
 	f := *base
 	f.tableNameFormatter = fn
+	return &f
+}
+
+// FmtReformatTableRefs returns FmtFlags that instructs the pretty-printer
+// to substitute the printing of table references using the provided function.
+func FmtReformatTableRefs(
+	base FmtFlags, fn func(*TableRef, *bytes.Buffer, FmtFlags) bool,
+) FmtFlags {
+	f := *base
+	f.tableRefFormatter = fn
 	return &f
 }
 

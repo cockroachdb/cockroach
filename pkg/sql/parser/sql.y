@@ -206,7 +206,10 @@ func (u *sqlSymUnion) castTargetType() CastTargetType {
     return u.val.(CastTargetType)
 }
 func (u *sqlSymUnion) colTypes() []ColumnType {
-    return u.val.([]ColumnType)
+    if cols, ok := u.val.([]ColumnType); ok {
+        return cols
+    }
+    return nil
 }
 func (u *sqlSymUnion) expr() Expr {
     if expr, ok := u.val.(Expr); ok {

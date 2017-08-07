@@ -481,25 +481,20 @@ func (p *planner) rewriteIndexOrderings(
 			if err != nil {
 				return nil, err
 			}
-			desc, err := p.getTableDesc(ctx, tn)
+			desc, err := p.lookupDescByName(ctx, tn)
 			if err != nil {
 				return nil, err
 			}
 			var idxDesc *sqlbase.IndexDescriptor
-			if o.Index == "" || string(o.Index) == desc.PrimaryIndex.Name {
-				// ORDER BY PRIMARY KEY / ORDER BY INDEX t@primary
+			if o.Index == "" {
+				// ORDER BY PRIMARY KEY
 				idxDesc = &desc.PrimaryIndex
 			} else {
 				// ORDER BY INDEX t@somename
 				// We need to search for the index with that name.
-				for i := range desc.Indexes {
-					if string(o.Index) == desc.Indexes[i].Name {
-						idxDesc = &desc.Indexes[i]
-						break
-					}
-				}
-				if idxDesc == nil {
-					return nil, errors.Errorf("index %q not found", parser.ErrString(o.Index))
+				idxDesc, err = p.lookupIndexByName(ctx, p.lookupEnv, desc, string(o.Index))
+				if err != nil {
+					return nil, err
 				}
 			}
 

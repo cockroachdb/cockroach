@@ -1059,6 +1059,7 @@ CREATE TABLE crdb_internal.backward_dependencies (
 		fkDep := parser.NewDString("fk")
 		viewDep := parser.NewDString("view")
 		interleaveDep := parser.NewDString("interleave")
+		schemaDep := parser.NewDString("schema")
 		return forEachTableDescAll(ctx, p, prefix,
 			func(_ *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 				tableID := parser.DNull
@@ -1125,6 +1126,30 @@ CREATE TABLE crdb_internal.backward_dependencies (
 						parser.DNull,
 					); err != nil {
 						return err
+					}
+				}
+
+				// Record the apparent schema dependencies.
+				for _, dep := range table.ApparentSchema {
+					if err := addRow(
+						tableID, tableName, parser.DNull,
+						parser.NewDInt(parser.DInt(dep.ID)),
+						schemaDep, parser.DNull, parser.DNull,
+						parser.NewDString(dep.InfoString()),
+					); err != nil {
+						return err
+					}
+					for _, indexID := range dep.IndexIDs {
+						if err := addRow(
+							tableID, tableName, parser.DNull,
+							parser.NewDInt(parser.DInt(dep.ID)),
+							schemaDep,
+							parser.NewDInt(parser.DInt(indexID)),
+							parser.DNull,
+							parser.DNull,
+						); err != nil {
+							return err
+						}
 					}
 				}
 

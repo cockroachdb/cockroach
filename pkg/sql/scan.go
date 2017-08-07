@@ -189,7 +189,7 @@ func (n *scanNode) Next(params runParams) (bool, error) {
 
 // Initializes a scanNode with a table descriptor.
 func (n *scanNode) initTable(
-	p *planner,
+	ctx context.Context,
 	desc *sqlbase.TableDescriptor,
 	indexHints *parser.IndexHints,
 	scanVisibility scanVisibility,
@@ -197,14 +197,14 @@ func (n *scanNode) initTable(
 ) error {
 	n.desc = desc
 
-	if !p.skipSelectPrivilegeChecks {
-		if err := p.CheckPrivilege(n.desc, privilege.SELECT); err != nil {
+	if !n.p.skipSelectPrivilegeChecks {
+		if err := n.p.CheckPrivilege(n.desc, privilege.SELECT); err != nil {
 			return err
 		}
 	}
 
 	if indexHints != nil {
-		if err := n.lookupSpecifiedIndex(indexHints); err != nil {
+		if err := n.lookupSpecifiedIndex(ctx, indexHints); err != nil {
 			return err
 		}
 	}
@@ -213,23 +213,14 @@ func (n *scanNode) initTable(
 	return n.initDescDefaults(scanVisibility, wantedColumns)
 }
 
-func (n *scanNode) lookupSpecifiedIndex(indexHints *parser.IndexHints) error {
+func (n *scanNode) lookupSpecifiedIndex(ctx context.Context, indexHints *parser.IndexHints) error {
 	if indexHints.Index != "" {
 		// Search index by name.
-		indexName := string(indexHints.Index)
-		if indexName == n.desc.PrimaryIndex.Name {
-			n.specifiedIndex = &n.desc.PrimaryIndex
-		} else {
-			for i := range n.desc.Indexes {
-				if indexName == n.desc.Indexes[i].Name {
-					n.specifiedIndex = &n.desc.Indexes[i]
-					break
-				}
-			}
+		idxDesc, err := n.p.lookupIndexByName(ctx, n.p.lookupEnv, n.desc, string(indexHints.Index))
+		if err != nil {
+			return err
 		}
-		if n.specifiedIndex == nil {
-			return errors.Errorf("index %q not found", parser.ErrString(indexHints.Index))
-		}
+		n.specifiedIndex = idxDesc
 	} else if indexHints.IndexID != 0 {
 		// Search index by ID.
 		if n.desc.PrimaryIndex.ID == sqlbase.IndexID(indexHints.IndexID) {

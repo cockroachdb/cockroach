@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 )
 
 // planDependencyInfo collects the dependencies related to a single
@@ -188,6 +189,178 @@ func enforceViewResultColumnNames(
 			},
 		},
 	}, nil
+}
+
+// prepareApparentSchema constructs the name-to-ID mapping as
+// perceived by this view at time of creation, which will be used
+// whenever the view query is expanded in the future.
+func (p *planner) prepareApparentSchema(
+	ctx context.Context, planDeps planDependencies,
+) (result []sqlbase.TableDescriptor_SchemaDependency, err error) {
+	for _, dep := range planDeps {
+		tableDesc := dep.desc
+
+		dbDesc, err := getDatabaseDescByID(ctx, p.txn, tableDesc.ParentID)
+		if err != nil {
+			return nil, err
+		}
+
+		// What are the column and index IDs actually needed?
+		neededColumns := make(map[sqlbase.ColumnID]struct{})
+		neededIndexes := make(map[sqlbase.IndexID]struct{})
+		for _, backref := range dep.deps {
+			if backref.IndexID != 0 {
+				neededIndexes[backref.IndexID] = struct{}{}
+			}
+			for _, c := range backref.ColumnIDs {
+				neededColumns[c] = struct{}{}
+			}
+		}
+
+		sDep := sqlbase.TableDescriptor_SchemaDependency{
+			ID:           tableDesc.ID,
+			DatabaseName: dbDesc.Name,
+			TableName:    tableDesc.Name,
+			ColumnIDs:    make([]sqlbase.ColumnID, 0, len(neededColumns)),
+			ColumnNames:  make([]string, 0, len(neededColumns)),
+			IndexIDs:     make([]sqlbase.IndexID, 0, len(neededIndexes)),
+			IndexNames:   make([]string, 0, len(neededIndexes)),
+		}
+		for _, col := range tableDesc.Columns {
+			if _, ok := neededColumns[col.ID]; ok {
+				sDep.ColumnNames = append(sDep.ColumnNames, col.Name)
+				sDep.ColumnIDs = append(sDep.ColumnIDs, col.ID)
+			}
+		}
+		if _, ok := neededIndexes[tableDesc.PrimaryIndex.ID]; ok {
+			sDep.IndexNames = append(sDep.IndexNames, tableDesc.PrimaryIndex.Name)
+			sDep.IndexIDs = append(sDep.IndexIDs, tableDesc.PrimaryIndex.ID)
+		}
+		for _, idx := range tableDesc.Indexes {
+			if _, ok := neededIndexes[idx.ID]; ok {
+				sDep.IndexNames = append(sDep.IndexNames, idx.Name)
+				sDep.IndexIDs = append(sDep.IndexIDs, idx.ID)
+			}
+		}
+
+		result = append(result, sDep)
+	}
+	return result, nil
+}
+
+// prepareViewQuery ensures that any table referenced by the view's source query
+// becomes referenced by a numeric table reference.
+func (p *planner) prepareViewQuery(
+	ctx context.Context,
+	viewSelect *parser.Select,
+	planDeps planDependencies,
+) (string, error) {
+	var queryBuf bytes.Buffer
+	var fmtErr error
+
+	processAndFormatTableRef := func(tref *parser.TableRef, buf *bytes.Buffer, f parser.FmtFlags) bool {
+		if fmtErr != nil {
+			return false
+		}
+		deps, ok := planDeps[sqlbase.ID(tref.TableID)]
+		if !ok {
+			fmtErr = errors.Errorf("table [%d] was not found during dependency analysis", tref.TableID)
+			return false
+		}
+		desc := deps.desc
+
+		// What are the columns that may be named by expressions
+		// in the view query, even if they are not subsequently used?
+		// For example:
+		//   SELECT k FROM (SELECT k, v FROM kv)
+		// column "v" is named but not needed.
+		var namedColIDs []parser.ColumnID
+		var namedColNames parser.NameList
+		if tref.As.Cols != nil {
+			// The user has specified the columns they want already,
+			// so we can use that, no questions asked.
+			namedColNames = tref.As.Cols
+			if tref.Columns != nil {
+				// The user also has specified in which order they want their
+				// columns, so use that.
+				// Example: [123(2,1) as kv(v,k)]
+				namedColIDs = tref.Columns
+			} else {
+				// The user has specified names, but no column IDs. They
+				// want all the columns in the table.
+				// Example: [123 as kv(k,v)] -> [123(1,2) as kv(k,v)]
+				namedColIDs = make([]parser.ColumnID, len(desc.Columns))
+				for i := range desc.Columns {
+					namedColIDs[i] = parser.ColumnID(desc.Columns[i].ID)
+				}
+			}
+			// Unfortunately, we're not done yet. The name list can be
+			// smaller than the ID list, in which case the "natural" names
+			// from the columns listed in the ID list are implicitly
+			// assumed. Make them explicit.
+			// Examples:
+			// [123 as kv(a)]      -> [123(1,2) as kv(a,v)]
+			// [123(2,1) as kv(v)] -> [123(2,1) as kv(v,k)]
+			// [123(2,1) as kv]    -> [123(2,1) as kv(v,k)]
+			for i := len(namedColNames); i < len(namedColIDs); i++ {
+				for _, col := range desc.Columns {
+					if col.ID == sqlbase.ColumnID(namedColIDs[i]) {
+						namedColNames = append(namedColNames, parser.Name(col.Name))
+						break
+					}
+				}
+			}
+		} else if tref.Columns != nil {
+			// The user hasn't specified column names, but
+			// they did specify a column list. Trust them.
+			// Example: [123(2,1)] -> [123(2,1) as kv(v,k)]
+			namedColIDs = tref.Columns
+			namedColNames = make(parser.NameList, len(tref.Columns))
+			for i, c := range tref.Columns {
+				for _, col := range desc.Columns {
+					if col.ID == sqlbase.ColumnID(c) {
+						namedColNames[i] = parser.Name(col.Name)
+						break
+					}
+				}
+			}
+		} else {
+			// The user has specified neither a column list
+			// nor a column name list, so they really want all the table.
+			// Example: [123] -> [123(1,2) as kv(k,v)]
+			namedColIDs = make([]parser.ColumnID, len(desc.Columns))
+			namedColNames = make(parser.NameList, len(desc.Columns))
+			for i := range desc.Columns {
+				namedColIDs[i] = parser.ColumnID(desc.Columns[i].ID)
+				namedColNames[i] = parser.Name(desc.Columns[i].Name)
+			}
+		}
+
+		// At this point, we have a full table reference with both a list
+		// of column IDs and a list of names, and both match in length.
+		// If some of the columns are not actually needed by the query, we
+
+		// Reconnect the dependency list in the table reference.
+		tref.Columns = namedColIDs
+		tref.As.Cols = namedColNames
+		if tref.As.Alias == "" {
+			// If there was no explicit table alias in the table reference,
+			// populate it so there is no surprise if the table gets renamed.
+			tref.As.Alias = parser.Name(desc.Name)
+		}
+
+		return false
+	}
+
+	viewSelect.Format(
+		&queryBuf,
+		parser.FmtReformatTableRefs(
+			parser.FmtParsable,
+			processAndFormatTableRef))
+	if fmtErr != nil {
+		return "", fmtErr
+	}
+	return queryBuf.String(), nil
 }
 
 // RecomputeViewDependencies does the work of CREATE VIEW w.r.t.
