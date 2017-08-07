@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -145,6 +146,7 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 	grpcServer := rpc.NewServer(rttc.nodeRPCContext)
 	transport := storage.NewRaftTransport(
 		log.AmbientContext{},
+		cluster.MakeClusterSettings(),
 		storage.GossipAddressResolver(rttc.gossip),
 		grpcServer,
 		rttc.nodeRPCContext,

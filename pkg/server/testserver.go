@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -57,7 +58,7 @@ const (
 // Certs with the test certs directory.
 // We need to override the certs loader.
 func makeTestConfig() Config {
-	cfg := MakeConfig()
+	cfg := MakeConfig(cluster.MakeClusterSettings())
 
 	// Test servers start in secure mode by default.
 	cfg.Insecure = false
@@ -374,6 +375,11 @@ func (ts *TestServer) Stores() *storage.Stores {
 // GetStores is part of TestServerInterface.
 func (ts *TestServer) GetStores() interface{} {
 	return ts.node.stores
+}
+
+// ClusterSettings returns the ClusterSettings.
+func (ts *TestServer) ClusterSettings() cluster.Settings {
+	return ts.Cfg.Settings
 }
 
 // Engines returns the TestServer's engines.

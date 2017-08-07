@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/pkg/errors"
 )
@@ -55,7 +56,25 @@ type cliContext struct {
 	showTimes bool
 }
 
-var serverCfg = server.MakeConfig()
+// ClusterSettings are the settings used by a running (non-testing) CockroachDB
+// instance or cli command.
+//
+// NB: This is effectively a singleton. Do not use this in tests or when a
+// "closer" ClusterSettings object (which case it better be equal) is available.
+var ClusterSettings = func() cluster.Settings {
+	st := cluster.MakeClusterSettings()
+	// This is the real cluster settings object that is used by a running server,
+	// and which should receive updates from associated Updaters.
+	st.Manual.Store(false)
+
+	// The server package has its own copy of the singleton for use in the
+	// /debug/requests handler.
+	server.ClusterSettings = st
+	return st
+}()
+
+var serverCfg = server.MakeConfig(ClusterSettings)
+
 var baseCfg = serverCfg.Config
 var cliCtx = cliContext{Config: baseCfg}
 

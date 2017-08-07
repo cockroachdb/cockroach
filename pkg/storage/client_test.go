@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -140,6 +141,7 @@ func createTestStoreWithEngine(
 
 	sender := kv.NewTxnCoordSender(
 		ac,
+		storeCfg.Settings,
 		distSender,
 		storeCfg.Clock,
 		false,
@@ -287,7 +289,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		}
 	}
 	m.transport = storage.NewRaftTransport(
-		log.AmbientContext{}, m.getNodeIDAddress, nil, m.rpcContext,
+		log.AmbientContext{}, cluster.MakeClusterSettings(), m.getNodeIDAddress, nil, m.rpcContext,
 	)
 
 	for idx := 0; idx < numStores; idx++ {
@@ -651,6 +653,7 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	sender := kv.NewTxnCoordSender(
 		ambient,
+		m.storeConfig.Settings,
 		m.distSenders[idx],
 		m.clock,
 		false,
@@ -663,6 +666,7 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 func (m *multiTestContext) populateStorePool(idx int, nodeLiveness *storage.NodeLiveness) {
 	m.storePools[idx] = storage.NewStorePool(
 		log.AmbientContext{},
+		m.storeConfig.Settings,
 		m.gossips[idx],
 		m.clock,
 		storage.MakeStorePoolNodeLivenessFunc(nodeLiveness),

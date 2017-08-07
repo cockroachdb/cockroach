@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -605,6 +606,11 @@ func writeInitialState(
 type ReplicaEvalContext struct {
 	repl *Replica
 	ss   *SpanSet
+}
+
+// ClusterSettings returns the node's ClusterSettings.
+func (rec ReplicaEvalContext) ClusterSettings() cluster.Settings {
+	return rec.repl.store.cfg.Settings
 }
 
 // In-memory state, immutable fields, and debugging methods are accessed directly.

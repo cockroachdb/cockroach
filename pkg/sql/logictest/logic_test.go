@@ -43,7 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -637,9 +637,7 @@ func (t *logicTest) setUser(user string) func() {
 	return cleanupFunc
 }
 
-func (t *logicTest) setup(
-	numNodes int, useFakeSpanResolver bool, distSQLOverride *settings.EnumSetting,
-) {
+func (t *logicTest) setup(numNodes int, useFakeSpanResolver bool, overrideDistSQLMode string) {
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
 	// MySQL or Postgres instance.
 	// TODO(andrei): if createTestServerParams() is used here, the command filter
@@ -655,7 +653,6 @@ func (t *logicTest) setup(
 				SQLExecutor: &sql.ExecutorTestingKnobs{
 					WaitForGossipUpdate:   true,
 					CheckStmtStringChange: true,
-					OverrideDistSQLMode:   distSQLOverride,
 				},
 			},
 		},
@@ -667,6 +664,22 @@ func (t *logicTest) setup(
 	if useFakeSpanResolver {
 		fakeResolver := distsqlutils.FakeResolverForTestCluster(t.cluster)
 		t.cluster.Server(t.nodeIdx).SetDistSQLSpanResolver(fakeResolver)
+	}
+
+	for i := 0; i < t.cluster.NumServers(); i++ {
+		server := t.cluster.Server(i)
+		// We want to collect SQL per-statement statistics in tests,
+		// regardless of what the environment / config says.
+		server.ClusterSettings().StmtStatsEnable.Override(true)
+
+		// NB: We must set this before the Exec() below as that opens a session,
+		// locking in the DistSQL setting for that session. If we change it
+		// after, we might still see the old value in tests since they use the
+		// existing Session.
+		if overrideDistSQLMode != "" {
+			mode := cluster.DistSQLExecModeFromString(overrideDistSQLMode)
+			server.ClusterSettings().DistSQLClusterExecMode.Override(int64(mode))
+		}
 	}
 
 	// db may change over the lifetime of this function, with intermediate
@@ -1493,10 +1506,6 @@ func TestLogic(t *testing.T) {
 		t.Fatalf("No testfiles found (globs: %v)", globs)
 	}
 
-	// We want to collect SQL per-statement statistics in tests,
-	// regardless of what the environment / config says.
-	defer settings.TestingSetBool(&sql.StmtStatsEnable, true)()
-
 	// mu protects the following vars, which all get updated from within the
 	// possibly parallel subtests.
 	var progress = struct {
@@ -1553,12 +1562,8 @@ func TestLogic(t *testing.T) {
 					if *printErrorSummary {
 						defer lt.printErrorSummary()
 					}
-					var distSQLOverrideEnum *settings.EnumSetting
-					if cfg.overrideDistSQLMode != "" {
-						distSQLOverrideEnum = &settings.EnumSetting{}
-						settings.TestingSetEnum(&distSQLOverrideEnum, int64(sql.DistSQLExecModeFromString(cfg.overrideDistSQLMode)))
-					}
-					lt.setup(cfg.numNodes, cfg.useFakeSpanResolver, distSQLOverrideEnum)
+					lt.setup(cfg.numNodes, cfg.useFakeSpanResolver, cfg.overrideDistSQLMode)
+
 					lt.runFile(path, cfg)
 
 					progress.Lock()

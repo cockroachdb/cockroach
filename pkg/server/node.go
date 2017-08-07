@@ -188,7 +188,7 @@ func bootstrapCluster(
 	cfg.AmbientCtx.Tracer = tr
 	// Create a KV DB with a local sender.
 	stores := storage.NewStores(cfg.AmbientCtx, cfg.Clock)
-	sender := kv.NewTxnCoordSender(cfg.AmbientCtx, stores, cfg.Clock, false, stopper, txnMetrics)
+	sender := kv.NewTxnCoordSender(cfg.AmbientCtx, cfg.Settings, stores, cfg.Clock, false, stopper, txnMetrics)
 	cfg.DB = client.NewDB(sender, cfg.Clock)
 	cfg.Transport = storage.NewDummyRaftTransport()
 	for i, eng := range engines {
