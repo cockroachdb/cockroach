@@ -1874,6 +1874,9 @@ func DatumTypeToColumnSemanticType(ptyp parser.Type) ColumnType_SemanticType {
 	case parser.TypeIntVector:
 		return ColumnType_INT2VECTOR
 	default:
+		if ptyp.FamilyEqual(parser.TypeCollatedString) {
+			return ColumnType_COLLATEDSTRING
+		}
 		panic(fmt.Sprintf("unsupported result type: %s", ptyp))
 	}
 }
@@ -1889,6 +1892,10 @@ func DatumTypeToColumnType(ptyp parser.Type) ColumnType {
 		ctyp.SemanticType = ColumnType_ARRAY
 		contents := DatumTypeToColumnSemanticType(t.Typ)
 		ctyp.ArrayContents = &contents
+		if t.Typ.FamilyEqual(parser.TypeCollatedString) {
+			cs := t.Typ.(parser.TCollatedString)
+			ctyp.Locale = &cs.Locale
+		}
 	default:
 		ctyp.SemanticType = DatumTypeToColumnSemanticType(ptyp)
 	}

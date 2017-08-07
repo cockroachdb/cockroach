@@ -333,7 +333,7 @@ a  CREATE TABLE a (
      FAMILY "primary" (b, rowid)
    )
 
-statement error type of array contents STRING doesn't match column type INT
+statement error type of array contents string doesn't match column type INT
 INSERT INTO a VALUES (ARRAY['foo'])
 
 statement error expected 'foo' to be of type int, found type string
@@ -578,9 +578,54 @@ DROP TABLE a
 
 # Collated string array columns.
 
-# TODO(justin)
-statement error collated strings not allowed as array contents
+statement ok
 CREATE TABLE a (b STRING[] COLLATE en)
+
+statement ok
+INSERT INTO a VALUES (ARRAY['hello' COLLATE en]), (ARRAY['goodbye' COLLATE en])
+
+query T
+SELECT * FROM a
+----
+{"hello"}
+{"goodbye"}
+
+statement error locale of collated string array being inserted \(fr\) doesn't match locale of column type \(en\)
+INSERT INTO a VALUES (ARRAY['hello' COLLATE fr])
+
+statement ok
+DROP TABLE a
+
+query T
+SELECT * FROM UNNEST(ARRAY['a', 'B']) ORDER BY UNNEST;
+----
+B
+a
+
+query T
+SELECT * FROM UNNEST(ARRAY['a' COLLATE en, 'B' COLLATE en]) ORDER BY UNNEST;
+----
+a
+B
+
+# TODO(justin): type system limitation
+statement error unsupported binary operator
+SELECT ARRAY['foo' COLLATE en] || ARRAY['bar' COLLATE en]
+
+statement error unsupported binary operator
+SELECT ARRAY['foo' COLLATE en] || 'bar' COLLATE en
+
+statement ok
+CREATE TABLE a (b STRING[])
+
+statement ok
+INSERT INTO a VALUES (ARRAY['foo'])
+
+statement error type of array contents collatedstring{en} doesn't match column type STRING
+INSERT INTO a VALUES (ARRAY['foo' COLLATE en])
+
+statement ok
+DROP TABLE a
 
 # Array operators
 
