@@ -76,6 +76,10 @@ var distSQLUseTempStorage = settings.RegisterBoolSetting(
 
 var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_DISTSQL_MEMORY_USAGE", 10*1024)
 
+// All queries that spill over to disk will be limited to use
+// total space / diskBudgetTotalSizeDivisor.
+const diskBudgetTotalSizeDivisor = 4
+
 // ServerConfig encompasses the configuration required to create a
 // DistSQLServer.
 type ServerConfig struct {
@@ -92,7 +96,7 @@ type ServerConfig struct {
 	Stopper      *stop.Stopper
 	TestingKnobs TestingKnobs
 
-	ParentMemoryMonitor *mon.MemoryMonitor
+	ParentMemoryMonitor *mon.BytesMonitor
 
 	// TempStorage is used by some DistSQL processors to store rows when the
 	// working set is larger than can be stored in memory. It can be nil, if this
@@ -114,12 +118,16 @@ type ServerImpl struct {
 	ServerConfig
 	flowRegistry  *flowRegistry
 	flowScheduler *flowScheduler
-	memMonitor    mon.MemoryMonitor
+	memMonitor    mon.BytesMonitor
 	regexpCache   *parser.RegexpCache
 	// tempStorage is used by some DistSQL processors to store working sets
 	// larger than memory. It can be nil, in which case processors should still
 	// gracefully OOM if the working set gets too large.
 	tempStorage engine.Engine
+	// diskMonitor is used to monitor temporary storage disk usage. Actual disk
+	// space used will be a small multiple (~1.1) of this because of RocksDB
+	// space amplification.
+	diskMonitor mon.BytesMonitor
 }
 
 var _ DistSQLServer = &ServerImpl{}
@@ -131,11 +139,38 @@ func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
 		regexpCache:   parser.NewRegexpCache(512),
 		flowRegistry:  makeFlowRegistry(),
 		flowScheduler: newFlowScheduler(cfg.AmbientContext, cfg.Stopper, cfg.Metrics),
-		memMonitor: mon.MakeMonitor("distsql",
-			cfg.Metrics.CurBytesCount, cfg.Metrics.MaxBytesHist, -1 /* increment: use default block size */, noteworthyMemoryUsageBytes),
+		memMonitor: mon.MakeMonitor(
+			"distsql",
+			mon.MemoryResource,
+			cfg.Metrics.CurBytesCount,
+			cfg.Metrics.MaxBytesHist,
+			-1, /* increment: use default block size */
+			noteworthyMemoryUsageBytes,
+		),
 		tempStorage: cfg.TempStorage,
 	}
 	ds.memMonitor.Start(ctx, cfg.ParentMemoryMonitor, mon.BoundAccount{})
+	if ds.tempStorage == nil {
+		return ds
+	}
+
+	capacity, err := ds.tempStorage.Capacity()
+	if err != nil {
+		log.Fatal(
+			ctx,
+			errors.Wrap(err, "could not get temporary storage capacity"),
+		)
+	}
+	diskMonitorBudget := capacity.Capacity / diskBudgetTotalSizeDivisor
+	ds.diskMonitor = mon.MakeMonitor(
+		"distsql-tempstorage",
+		mon.DiskResource,
+		nil,                 /* curCount */
+		nil,                 /* maxHist */
+		workMem,             /* increment: same size as processor's memory budget */
+		diskMonitorBudget/2, /* noteworthy */
+	)
+	ds.diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(diskMonitorBudget))
 	return ds
 }
 
@@ -177,8 +212,14 @@ func (ds *ServerImpl) setupFlow(
 	ctx = opentracing.ContextWithSpan(ctx, sp)
 
 	// The monitor and account opened here are closed in Flow.Cleanup().
-	monitor := mon.MakeMonitor("flow",
-		ds.Metrics.CurBytesCount, ds.Metrics.MaxBytesHist, -1 /* use default block size */, noteworthyMemoryUsageBytes)
+	monitor := mon.MakeMonitor(
+		"flow",
+		mon.MemoryResource,
+		ds.Metrics.CurBytesCount,
+		ds.Metrics.MaxBytesHist,
+		-1, /* use default block size */
+		noteworthyMemoryUsageBytes,
+	)
 	monitor.Start(ctx, &ds.memMonitor, mon.BoundAccount{})
 	acc := monitor.MakeBoundAccount()
 
@@ -220,6 +261,7 @@ func (ds *ServerImpl) setupFlow(
 		testingKnobs:   ds.TestingKnobs,
 		nodeID:         nodeID,
 		tempStorage:    ds.tempStorage,
+		diskMonitor:    &ds.diskMonitor,
 		JobRegistry:    ds.ServerConfig.JobRegistry,
 	}
 
