@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -82,11 +83,35 @@ const (
 	StatusPending Status = "pending"
 	// StatusRunning is for jobs that are currently in progress.
 	StatusRunning Status = "running"
+	// StatusPaused is for jobs that are not currently performing work, but have
+	// saved their state and can be resumed by the user later.
+	StatusPaused Status = "paused"
 	// StatusFailed is for jobs that failed.
 	StatusFailed Status = "failed"
 	// StatusSucceeded is for jobs that have successfully completed.
 	StatusSucceeded Status = "succeeded"
+	// StatusCanceled is for jobs that were explicitly canceled by the user and
+	// cannot be resumed.
+	StatusCanceled Status = "canceled"
 )
+
+// Terminal returns whether this status represents a "terminal" state: a state
+// after which the job should never be updated again.
+func (s Status) Terminal() bool {
+	return s == StatusFailed || s == StatusSucceeded || s == StatusCanceled
+}
+
+// InvalidStatusError is the error returned when the desired operation is
+// invalid given the job's current status.
+type InvalidStatusError struct {
+	id     int64
+	status Status
+	op     string
+}
+
+func (e *InvalidStatusError) Error() string {
+	return fmt.Sprintf("cannot %s %s job (id %d)", e.op, e.status, e.id)
+}
 
 // ID returns the ID of the job that this Job is currently tracking. This will
 // be nil if Created has not yet been called.
@@ -128,11 +153,12 @@ func (j *Job) Created(ctx context.Context, cancelFn func()) error {
 
 // Started marks the tracked job as started.
 func (j *Job) Started(ctx context.Context) error {
-	return j.update(ctx, StatusRunning, func(payload *Payload) (bool, error) {
-		if payload.StartedMicros != 0 {
+	return j.update(ctx, func(status *Status, payload *Payload) (bool, error) {
+		if *status != StatusPending {
 			// Already started - do nothing.
 			return false, nil
 		}
+		*status = StatusRunning
 		payload.StartedMicros = timeutil.ToUnixMicros(timeutil.Now())
 		return true, nil
 	})
@@ -160,12 +186,9 @@ func (j *Job) Progressed(
 			fractionCompleted, j.id,
 		)
 	}
-	return j.update(ctx, StatusRunning, func(payload *Payload) (bool, error) {
-		if payload.StartedMicros == 0 {
-			return false, errors.Errorf("Job: job %d not started", j.id)
-		}
-		if payload.FinishedMicros != 0 {
-			return false, errors.Errorf("Job: job %d already finished", j.id)
+	return j.update(ctx, func(status *Status, payload *Payload) (bool, error) {
+		if *status != StatusRunning {
+			return false, &InvalidStatusError{*j.id, *status, "update progress on"}
 		}
 		if fractionCompleted > payload.FractionCompleted {
 			payload.FractionCompleted = fractionCompleted
@@ -173,6 +196,78 @@ func (j *Job) Progressed(
 		if progressedFn != nil {
 			progressedFn(ctx, payload.Details)
 		}
+		return true, nil
+	})
+}
+
+func isControllable(p *Payload, op string) error {
+	if p.Type() == TypeSchemaChange {
+		return pgerror.UnimplementedWithIssueErrorf(
+			16018, "schema change jobs do not support %s", op)
+	}
+	if p.Lease == nil {
+		return fmt.Errorf("job created by node without %s support", op)
+	}
+	return nil
+}
+
+// Paused sets the status of the tracked job to paused. It does not directly
+// pause the job; instead, it expects the job to call job.Progressed soon,
+// observe a "job is paused" error, and abort further work.
+func (j *Job) Paused(ctx context.Context) error {
+	return j.update(ctx, func(status *Status, payload *Payload) (bool, error) {
+		if err := isControllable(payload, "PAUSE"); err != nil {
+			return false, err
+		}
+		if *status == StatusPaused {
+			// Already paused - do nothing.
+			return false, nil
+		}
+		if status.Terminal() {
+			return false, &InvalidStatusError{*j.id, *status, "pause"}
+		}
+		*status = StatusPaused
+		return true, nil
+	})
+}
+
+// Resumed sets the status of the tracked job to running iff the job is
+// currently paused. It does not directly resume the job; rather, it expires the
+// job's lease so that a Registry adoption loop detects it and resumes it.
+func (j *Job) Resumed(ctx context.Context) error {
+	return j.update(ctx, func(status *Status, payload *Payload) (bool, error) {
+		if *status == StatusRunning {
+			// Already resumed - do nothing.
+			return false, nil
+		}
+		if *status != StatusPaused {
+			return false, fmt.Errorf("job with status %s cannot be resumed", *status)
+		}
+		*status = StatusRunning
+		// NB: A nil lease indicates the job is not resumable, whereas an empty
+		// lease is always considered expired.
+		payload.Lease = &Lease{}
+		return true, nil
+	})
+}
+
+// Canceled sets the status of the tracked job to canceled. It does not directly
+// cancel the job; like job.Paused, it expects the job to call job.Progressed
+// soon, observe a "job is canceled" error, and abort further work.
+func (j *Job) Canceled(ctx context.Context) error {
+	return j.update(ctx, func(status *Status, payload *Payload) (bool, error) {
+		if err := isControllable(payload, "CANCEL"); err != nil {
+			return false, err
+		}
+		if *status == StatusCanceled {
+			// Already canceled - do nothing.
+			return false, nil
+		}
+		if *status != StatusPaused && status.Terminal() {
+			return false, fmt.Errorf("job with status %s cannot be canceled", *status)
+		}
+		*status = StatusCanceled
+		payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
 		return true, nil
 	})
 }
@@ -187,11 +282,12 @@ func (j *Job) Failed(ctx context.Context, err error) {
 	if j.id == nil {
 		return
 	}
-	internalErr := j.update(ctx, StatusFailed, func(payload *Payload) (bool, error) {
-		if payload.FinishedMicros != 0 {
-			// Already finished - do nothing.
+	internalErr := j.update(ctx, func(status *Status, payload *Payload) (bool, error) {
+		if status.Terminal() {
+			// Already done - do nothing.
 			return false, nil
 		}
+		*status = StatusFailed
 		payload.Error = err.Error()
 		payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
 		return true, nil
@@ -207,11 +303,12 @@ func (j *Job) Failed(ctx context.Context, err error) {
 // completed to 1.0.
 func (j *Job) Succeeded(ctx context.Context) error {
 	defer j.registry.unregister(*j.id)
-	return j.update(ctx, StatusSucceeded, func(payload *Payload) (bool, error) {
-		if payload.FinishedMicros != 0 {
-			// Already finished - do nothing.
+	return j.update(ctx, func(status *Status, payload *Payload) (bool, error) {
+		if status.Terminal() {
+			// Already done - do nothing.
 			return false, nil
 		}
+		*status = StatusSucceeded
 		payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
 		payload.FractionCompleted = 1.0
 		return true, nil
@@ -238,6 +335,9 @@ func (j *Job) FinishedWith(ctx context.Context, err error) error {
 		// retried, potentially on another node, so we must report an ambiguous
 		// result to the client because we don't know its fate.
 		//
+		// NB: Canceled jobs are automatically unregistered, so no need to call
+		// j.registry.unregistered.
+		//
 		// TODO(benesch): In rare cases, this can return an ambiguous result error
 		// when the result was not, in fact, ambigious. Specifically, if the job
 		// succeeds or fails with a non-lease-related error immediately before it
@@ -247,6 +347,17 @@ func (j *Job) FinishedWith(ctx context.Context, err error) error {
 		// when using errors.Wrapf, and we'd much rather have false positives (too
 		// many ambiguous results) than false negatives (too few ambiguous results).
 		return roachpb.NewAmbiguousResultError("job lease expired")
+	}
+	if err, ok := errors.Cause(err).(*InvalidStatusError); ok &&
+		(err.status == StatusPaused || err.status == StatusCanceled) {
+		// If we couldn't operate on the job because it was paused or canceled, send
+		// the more understandable "job paused" or "job canceled" error message to
+		// the user.
+		//
+		// NB: Since we're not calling Succeeded or Failed, we need to manually
+		// unregister the job.
+		j.registry.unregister(*j.id)
+		return fmt.Errorf("job %s", err.status)
 	}
 	if err != nil {
 		j.Failed(ctx, err)
@@ -260,7 +371,7 @@ func (j *Job) FinishedWith(ctx context.Context, err error) error {
 
 // SetDetails sets the details field of the currently running tracked job.
 func (j *Job) SetDetails(ctx context.Context, details interface{}) error {
-	return j.update(ctx, "", func(payload *Payload) (bool, error) {
+	return j.update(ctx, func(_ *Status, payload *Payload) (bool, error) {
 		payload.Details = WrapPayloadDetails(details)
 		return true, nil
 	})
@@ -331,23 +442,20 @@ func (j *Job) initialize(payload *Payload) (err error) {
 func (j *Job) load(ctx context.Context) error {
 	var payload *Payload
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		var err error
-		payload, err = j.loadPayload(ctx, txn)
+		const stmt = "SELECT payload FROM system.jobs WHERE id = $1"
+		row, err := j.registry.ex.QueryRowInTransaction(ctx, "log-job", txn, stmt, *j.id)
+		if err != nil {
+			return err
+		}
+		if row == nil {
+			return fmt.Errorf("job with ID %d does not exist", *j.id)
+		}
+		payload, err = UnmarshalPayload(row[0])
 		return err
 	}); err != nil {
 		return err
 	}
 	return j.initialize(payload)
-}
-
-func (j *Job) loadPayload(ctx context.Context, txn *client.Txn) (*Payload, error) {
-	const selectStmt = "SELECT payload FROM system.jobs WHERE id = $1"
-	row, err := j.registry.ex.QueryRowInTransaction(ctx, "log-job", txn, selectStmt, *j.id)
-	if err != nil {
-		return nil, err
-	}
-
-	return UnmarshalPayload(row[0])
 }
 
 func (j *Job) insert(ctx context.Context, payload *Payload) error {
@@ -377,7 +485,7 @@ func (j *Job) insert(ctx context.Context, payload *Payload) error {
 }
 
 func (j *Job) update(
-	ctx context.Context, newStatus Status, updateFn func(*Payload) (doUpdate bool, err error),
+	ctx context.Context, updateFn func(*Status, *Payload) (doUpdate bool, err error),
 ) error {
 	if j.id == nil {
 		return errors.New("Job: cannot update: job not created")
@@ -385,34 +493,37 @@ func (j *Job) update(
 
 	var payload *Payload
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		var err error
-		payload, err = j.loadPayload(ctx, txn)
+		const selectStmt = "SELECT status, payload FROM system.jobs WHERE id = $1"
+		row, err := j.registry.ex.QueryRowInTransaction(ctx, "log-job", txn, selectStmt, *j.id)
 		if err != nil {
 			return err
 		}
-		doUpdate, err := updateFn(payload)
+		statusString, ok := row[0].(*parser.DString)
+		if !ok {
+			return errors.Errorf("Job: expected string status on job %d, but got %T", *j.id, statusString)
+		}
+		status := Status(*statusString)
+		payload, err = UnmarshalPayload(row[1])
+		if err != nil {
+			return err
+		}
+
+		doUpdate, err := updateFn(&status, payload)
 		if err != nil {
 			return err
 		}
 		if !doUpdate {
 			return nil
 		}
+
 		payload.ModifiedMicros = timeutil.ToUnixMicros(timeutil.Now())
 		payloadBytes, err := protoutil.Marshal(payload)
 		if err != nil {
 			return err
 		}
 
-		var updateStmt string
-		var updateArgs []interface{}
-		if newStatus == "" {
-			updateStmt = "UPDATE system.jobs SET payload = $1 WHERE id = $2"
-			updateArgs = []interface{}{payloadBytes, *j.id}
-		} else {
-			updateStmt = "UPDATE system.jobs SET status = $1, payload = $2 WHERE id = $3"
-			updateArgs = []interface{}{newStatus, payloadBytes, *j.id}
-		}
-
+		const updateStmt = "UPDATE system.jobs SET status = $1, payload = $2 WHERE id = $3"
+		updateArgs := []interface{}{status, payloadBytes, *j.id}
 		n, err := j.registry.ex.ExecuteStatementInTransaction(
 			ctx, "job-update", txn, updateStmt, updateArgs...)
 		if err != nil {
@@ -434,7 +545,10 @@ func (j *Job) update(
 }
 
 func (j *Job) adopt(ctx context.Context, oldLease *Lease) error {
-	return j.update(ctx, StatusRunning, func(payload *Payload) (bool, error) {
+	return j.update(ctx, func(status *Status, payload *Payload) (bool, error) {
+		if *status != StatusRunning {
+			return false, errors.Errorf("job %d no longer running", *j.id)
+		}
 		if !payload.Lease.Equal(oldLease) {
 			return false, errors.Errorf("current lease %v did not match expected lease %v",
 				payload.Lease, oldLease)
