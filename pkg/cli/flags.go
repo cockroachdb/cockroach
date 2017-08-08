@@ -376,6 +376,14 @@ func init() {
 		stringFlag(f, &debugCtx.inputFile, cliflags.GossipInputFile, "")
 		boolFlag(f, &debugCtx.printSystemConfig, cliflags.PrintSystemConfig, false)
 	}
+	{
+		f := statusNodeCmd.Flags()
+		boolFlag(f, &nodeCtx.statusShowRanges, cliflags.NodeRanges, false)
+		boolFlag(f, &nodeCtx.statusShowStats, cliflags.NodeStats, false)
+		boolFlag(f, &nodeCtx.statusShowAll, cliflags.NodeAll, false)
+		boolFlag(f, &nodeCtx.statusShowDecommision, cliflags.NodeDecommission, false)
+
+	}
 }
 
 func extraServerFlagInit() {
