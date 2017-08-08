@@ -177,12 +177,6 @@ func CreateLocal(
 	cli, err := client.NewEnvClient()
 	maybePanic(err)
 
-	retryingClient := retryingDockerClient{
-		resilientDockerClient: resilientDockerClient{APIClient: cli},
-		attempts:              10,
-		timeout:               10 * time.Second,
-	}
-
 	clusterID := uuid.MakeV4()
 	clusterIDS := clusterID.Short()
 	// Only pass a nonzero logDir down to LocalCluster when instructed to keep
@@ -203,7 +197,7 @@ func CreateLocal(
 	}
 	return &LocalCluster{
 		clusterID: clusterIDS,
-		client:    retryingClient,
+		client:    resilientDockerClient{APIClient: cli},
 		config:    cfg,
 		stopper:   stopper,
 		// TODO(tschottdorf): deadlocks will occur if these channels fill up.
@@ -893,61 +887,48 @@ func (l *LocalCluster) Hostname(i int) string {
 
 // ExecRoot runs a command as root.
 func (l *LocalCluster) ExecRoot(ctx context.Context, i int, cmd []string) (string, string, error) {
-	execRoot := func(ctx context.Context) (string, string, error) {
-		cfg := types.ExecConfig{
-			User:         "root",
-			Privileged:   true,
-			Cmd:          cmd,
-			AttachStderr: true,
-			AttachStdout: true,
-		}
-		createResp, err := l.client.ContainerExecCreate(ctx, l.Nodes[i].Container.id, cfg)
+	cfg := types.ExecConfig{
+		User:         "root",
+		Privileged:   true,
+		Cmd:          cmd,
+		AttachStderr: true,
+		AttachStdout: true,
+	}
+	createResp, err := l.client.ContainerExecCreate(ctx, l.Nodes[i].Container.id, cfg)
+	if err != nil {
+		return "", "", err
+	}
+	var outputStream, errorStream bytes.Buffer
+	{
+		resp, err := l.client.ContainerExecAttach(ctx, createResp.ID, cfg)
 		if err != nil {
 			return "", "", err
 		}
-		var outputStream, errorStream bytes.Buffer
-		{
-			resp, err := l.client.ContainerExecAttach(ctx, createResp.ID, cfg)
-			if err != nil {
-				return "", "", err
-			}
-			defer resp.Close()
-			ch := make(chan error)
-			go func() {
-				_, err := stdcopy.StdCopy(&outputStream, &errorStream, resp.Reader)
-				ch <- err
-			}()
-			if err := <-ch; err != nil {
-				return "", "", err
-			}
+		defer resp.Close()
+		ch := make(chan error)
+		go func() {
+			_, err := stdcopy.StdCopy(&outputStream, &errorStream, resp.Reader)
+			ch <- err
+		}()
+		if err := <-ch; err != nil {
+			return "", "", err
 		}
-		{
-			resp, err := l.client.ContainerExecInspect(ctx, createResp.ID)
-			if err != nil {
-				return "", "", err
-			}
-			if resp.Running {
-				return "", "", errors.Errorf("command still running")
-			}
-			if resp.ExitCode != 0 {
-				o, e := outputStream.String(), errorStream.String()
-				return o, e, fmt.Errorf("error executing %s:\n%s\n%s",
-					cmd, o, e)
-			}
-		}
-		return outputStream.String(), errorStream.String(), nil
 	}
-
-	var stdOut string
-	var stdErr string
-	var err error
-
-	finalErr := retry(ctx, 3, 10*time.Second, "ExecRoot",
-		matchNone, func(ctx context.Context) error {
-			stdOut, stdErr, err = execRoot(ctx)
-			return err
-		})
-	return stdOut, stdErr, finalErr
+	{
+		resp, err := l.client.ContainerExecInspect(ctx, createResp.ID)
+		if err != nil {
+			return "", "", err
+		}
+		if resp.Running {
+			return "", "", errors.Errorf("command still running")
+		}
+		if resp.ExitCode != 0 {
+			o, e := outputStream.String(), errorStream.String()
+			return o, e, fmt.Errorf("error executing %s:\n%s\n%s",
+				cmd, o, e)
+		}
+	}
+	return outputStream.String(), errorStream.String(), nil
 }
 
 func ensureLogDirExists(logDir string) {
