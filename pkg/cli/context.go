@@ -57,15 +57,9 @@ type cliContext struct {
 	showTimes bool
 }
 
-// clusterSettingsSingleton are the settings used by a running (non-testing) CockroachDB
-// instance or cli command.
-//
-// NB: This is effectively a singleton. Do not use this in tests or when a
-// "closer" clusterSettingsSingleton object (in which case it better be equal) is
-// available.
-var clusterSettingsSingleton = func() *cluster.Settings {
+var serverCfg = func() server.Config {
 	st := cluster.MakeClusterSettings()
-	// This is the real cluster settings object that is used by a running server,
+	// This is the real cluster settings object that is used by users' servers,
 	// and which should receive updates from associated Updaters.
 	st.Manual.Store(false)
 
@@ -76,10 +70,8 @@ var clusterSettingsSingleton = func() *cluster.Settings {
 	f := log.ReportingSettings(st.ReportingSettings)
 	log.ReportingSettingsSingleton.Store(&f)
 
-	return st
+	return server.MakeConfig(st)
 }()
-
-var serverCfg = server.MakeConfig(clusterSettingsSingleton)
 
 var baseCfg = serverCfg.Config
 var cliCtx = cliContext{Config: baseCfg}
