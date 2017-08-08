@@ -396,7 +396,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 
 %token <str>   HAVING HELP HIGH HOUR
 
-%token <str>   INCREMENTAL IF IFNULL ILIKE IN INTERLEAVE
+%token <str>   IMPORT INCREMENTAL IF IFNULL ILIKE IN INTERLEAVE
 %token <str>   INDEX INDEXES INITIALLY
 %token <str>   INNER INSERT INT INT2VECTOR INT2 INT4 INT8 INT64 INTEGER
 %token <str>   INTERSECT INTERVAL INTO IS ISOLATION
@@ -406,7 +406,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %token <str>   KEY KEYS KV
 
 %token <str>   LATERAL LC_CTYPE LC_COLLATE
-%token <str>   LEADING LEAST LEFT LEVEL LIKE LIMIT LOAD LOCAL
+%token <str>   LEADING LEAST LEFT LEVEL LIKE LIMIT LOCAL
 %token <str>   LOCALTIME LOCALTIMESTAMP LOW LSHIFT
 
 %token <str>   MATCH MINUTE MONTH
@@ -432,7 +432,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %token <str>   SAVEPOINT SCATTER SEARCH SECOND SELECT SEQUENCES
 %token <str>   SERIAL SERIALIZABLE SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
 %token <str>   SHOW SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
-%token <str>   START STATUS STDIN STRICT STRING STORING SUBSTRING
+%token <str>   START STATUS STDIN STRICT STRING STORE STORING SUBSTRING
 %token <str>   SYMMETRIC SYSTEM
 
 %token <str>   TABLE TABLES TEMP TEMPLATE TEMPORARY TESTING_RANGES TESTING_RELOCATE TEXT THEN
@@ -533,7 +533,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <Statement> deallocate_stmt
 %type <Statement> grant_stmt
 %type <Statement> insert_stmt
-%type <Statement> load_stmt
+%type <Statement> import_stmt
 %type <Statement> pause_stmt
 %type <Statement> release_stmt
 %type <Statement> reset_stmt
@@ -585,6 +585,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <KVOption> kv_option
 %type <[]KVOption> kv_option_list opt_with_options
 %type <str> opt_equal_value
+%type <str> import_data_format
 
 %type <*Select> select_no_parens
 %type <SelectStatement> select_clause select_with_parens simple_select values_clause table_clause
@@ -892,7 +893,7 @@ stmt:
 | grant_stmt
 | help_stmt
 | insert_stmt
-| load_stmt
+| import_stmt
 | pause_stmt
 | prepare_stmt
 | restore_stmt
@@ -1159,11 +1160,22 @@ restore_stmt:
     $$.val = &Restore{Targets: $2.targetList(), From: $4.exprs(), AsOf: $5.asOfClause(), Options: $6.kvOptions()}
   }
 
-load_stmt:
-  LOAD CSV TABLE string_or_placeholder FROM string_or_placeholder_list TO string_or_placeholder
+import_data_format:
+  CSV
+  {
+    $$ = "CSV"
+  }
+
+import_stmt:
+  IMPORT TABLE any_name CREATE USING string_or_placeholder import_data_format DATA '(' string_or_placeholder_list ')' opt_with_options USING TEMP STORE string_or_placeholder
   {
     /* SKIP DOC */
-    $$.val = &Load{Table: $4.expr(), From: $6.exprs(), To: $8.expr()}
+    $$.val = &Import{Table: $3.unresolvedName(), CreateFile: $6.expr(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions(), Temp: $16.expr()}
+  }
+| IMPORT TABLE any_name '(' table_elem_list ')' import_data_format DATA '(' string_or_placeholder_list ')' opt_with_options USING TEMP STORE string_or_placeholder
+  {
+    /* SKIP DOC */
+    $$.val = &Import{Table: $3.unresolvedName(), CreateDefs: $5.tblDefs(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions(), Temp: $16.expr()}
   }
 
 string_or_placeholder:
@@ -5598,9 +5610,9 @@ unreserved_keyword:
 | CONSTRAINTS
 | COPY
 | COVERING
+| CSV
 | CUBE
 | CURRENT
-| CSV
 | CYCLE
 | DATA
 | DATABASE
@@ -5623,6 +5635,7 @@ unreserved_keyword:
 | HELP
 | HIGH
 | HOUR
+| IMPORT
 | INCREMENTAL
 | INDEXES
 | INSERT
@@ -5637,7 +5650,6 @@ unreserved_keyword:
 | LC_COLLATE
 | LC_CTYPE
 | LEVEL
-| LOAD
 | LOCAL
 | LOW
 | MATCH
@@ -5705,6 +5717,7 @@ unreserved_keyword:
 | SQL
 | START
 | STDIN
+| STORE
 | STORING
 | STRICT
 | SPLIT
