@@ -209,6 +209,25 @@ type ColumnTableDefCheckExpr struct {
 	ConstraintName Name
 }
 
+func processCollationOnType(name Name, typ ColumnType, c ColumnCollation) (ColumnType, error) {
+	locale := string(c)
+	switch s := typ.(type) {
+	case *StringColType:
+		return &CollatedStringColType{s.Name, s.N, locale}, nil
+	case *CollatedStringColType:
+		return nil, errors.Errorf("multiple COLLATE declarations for column %q", name)
+	case *ArrayColType:
+		var err error
+		s.ParamType, err = processCollationOnType(name, s.ParamType, c)
+		if err != nil {
+			return nil, err
+		}
+		return s, nil
+	default:
+		return nil, errors.Errorf("COLLATE declaration for non-string-typed column %q", name)
+	}
+}
+
 func newColumnTableDef(
 	name Name, typ ColumnType, qualifications []NamedColumnQualification,
 ) (*ColumnTableDef, error) {
@@ -225,15 +244,9 @@ func newColumnTableDef(
 			if err != nil {
 				return nil, errors.Wrapf(err, "invalid locale %s", locale)
 			}
-			switch s := d.Type.(type) {
-			case *StringColType:
-				d.Type = &CollatedStringColType{s.Name, s.N, locale}
-			case *CollatedStringColType:
-				return nil, errors.Errorf("multiple COLLATE declarations for column %q", name)
-			case *ArrayColType:
-				return nil, errors.Errorf("collated strings not allowed as array contents for column %q", name)
-			default:
-				return nil, errors.Errorf("COLLATE declaration for non-string-typed column %q", name)
+			d.Type, err = processCollationOnType(name, d.Type, t)
+			if err != nil {
+				return nil, err
 			}
 		case *ColumnDefault:
 			if d.HasDefaultExpr() {
