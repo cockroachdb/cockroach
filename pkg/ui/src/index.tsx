@@ -28,6 +28,8 @@ import Layout from "src/views/app/containers/layout";
 import { DatabaseTablesList, DatabaseGrantsList } from "src/views/databases/containers/databases";
 import TableDetails from "src/views/databases/containers/tableDetails";
 
+import JobsPage from "src/views/jobs";
+
 import NodesOverview from "src/views/cluster/containers/nodesOverview";
 import NodeOverview from "src/views/cluster/containers/nodeOverview";
 import NodeGraphs from "src/views/cluster/containers/nodeGraphs";
@@ -70,6 +72,7 @@ ReactDOM.render(
           <Route path="grants" component={ DatabaseGrantsList } />
           <Route path={ `database/:${databaseNameAttr}/table/:${tableNameAttr}` } component={ TableDetails } />
         </Route>
+        <Route path="jobs" component={ JobsPage } />
         <Route path="raft" component={ Raft }>
           <IndexRedirect to="ranges" />
           <Route path="ranges" component={ RaftRanges } />
