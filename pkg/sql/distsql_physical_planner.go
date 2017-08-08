@@ -1393,7 +1393,12 @@ func getTypesForPlanResult(node planNode, planToStreamColMap []int) []sqlbase.Co
 		// No remapping.
 		types := make([]sqlbase.ColumnType, len(nodeColumns))
 		for i := range nodeColumns {
-			types[i] = sqlbase.DatumTypeToColumnType(nodeColumns[i].Typ)
+			colTyp, err := sqlbase.DatumTypeToColumnType(nodeColumns[i].Typ)
+			if err != nil {
+				// TODO(radu): propagate this instead of panicking
+				panic(err)
+			}
+			types[i] = colTyp
 		}
 		return types
 	}
@@ -1406,7 +1411,12 @@ func getTypesForPlanResult(node planNode, planToStreamColMap []int) []sqlbase.Co
 	types := make([]sqlbase.ColumnType, numCols)
 	for nodeCol, streamCol := range planToStreamColMap {
 		if streamCol != -1 {
-			types[streamCol] = sqlbase.DatumTypeToColumnType(nodeColumns[nodeCol].Typ)
+			colTyp, err := sqlbase.DatumTypeToColumnType(nodeColumns[nodeCol].Typ)
+			if err != nil {
+				// TODO(radu): propagate this instead of panicking
+				panic(err)
+			}
+			types[streamCol] = colTyp
 		}
 	}
 	return types
@@ -1816,7 +1826,11 @@ func (dsp *distSQLPlanner) createPlanForValues(
 	types := make([]sqlbase.ColumnType, columns)
 
 	for i, t := range n.columns {
-		types[i] = sqlbase.DatumTypeToColumnType(t.Typ)
+		colTyp, err := sqlbase.DatumTypeToColumnType(t.Typ)
+		if err != nil {
+			return physicalPlan{}, err
+		}
+		types[i] = colTyp
 		s.Columns[i].Encoding = sqlbase.DatumEncoding_VALUE
 		s.Columns[i].Type = types[i]
 	}

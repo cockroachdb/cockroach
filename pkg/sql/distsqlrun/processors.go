@@ -121,7 +121,11 @@ func (h *ProcOutputHelper) Init(
 			if err := h.renderExprs[i].init(expr, types, evalCtx); err != nil {
 				return err
 			}
-			h.outputTypes[i] = sqlbase.DatumTypeToColumnType(h.renderExprs[i].expr.ResolvedType())
+			colTyp, err := sqlbase.DatumTypeToColumnType(h.renderExprs[i].expr.ResolvedType())
+			if err != nil {
+				return err
+			}
+			h.outputTypes[i] = colTyp
 		}
 	} else {
 		h.outputTypes = types
