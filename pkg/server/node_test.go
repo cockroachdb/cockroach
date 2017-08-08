@@ -274,7 +274,7 @@ func TestBootstrapNewStore(t *testing.T) {
 // for bootstrapCluster. When changing it to use TestStoreConfig(nil), the
 // following adjustments were necessary to prevent the test from failing to
 // observe its initial splits in time under stressrace, or timing out (never
-// receiving a response from Replica).
+// receiving a response from Replica). Investigate why.
 func bootstrapNodeConfig() storage.StoreConfig {
 	cfg := storage.TestStoreConfig(nil)
 	cfg.CoalescedHeartbeatsInterval = 0
