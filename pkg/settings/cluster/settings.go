@@ -605,7 +605,7 @@ func (st Settings) MakeUpdater() settings.Updater {
 	if isManual, ok := st.Manual.Load().(bool); ok && isManual {
 		return settings.NoopUpdater{}
 	}
-	return settings.MakeDefaultsUpdater(st.Registry)
+	return settings.MakeResettingUpdater(st.Registry)
 }
 
 type stringedVersion ClusterVersion
