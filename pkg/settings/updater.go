@@ -41,13 +41,13 @@ func EncodeFloat(f float64) string {
 	return strconv.FormatFloat(f, 'E', -1, 64)
 }
 
-// DefaultsUpdater is a helper for updating the in-memory settings.
+// ResettingUpdater is a helper for updating the in-memory settings.
 //
 // RefreshSettings passes the serialized representations of all individual
 // settings -- e.g. the rows read from the system.settings table. We update the
 // wrapped atomic settings values as we go and note which settings were updated,
 // then set the rest to default in Done().
-type DefaultsUpdater struct {
+type ResettingUpdater struct {
 	r Registry
 	m map[string]struct{}
 }
@@ -68,16 +68,16 @@ func (u NoopUpdater) Set(_, _, _ string) error { return nil }
 // Done implements Updater. It is a no-op.
 func (u NoopUpdater) Done() {}
 
-// MakeDefaultsUpdater makes a DefaultsUpdater.
-func MakeDefaultsUpdater(r Registry) DefaultsUpdater {
-	return DefaultsUpdater{
+// MakeResettingUpdater makes a ResettingUpdater.
+func MakeResettingUpdater(r Registry) ResettingUpdater {
+	return ResettingUpdater{
 		m: make(map[string]struct{}, len(r)),
 		r: r,
 	}
 }
 
 // Set attempts to parse and update a setting and notes that it was updated.
-func (u DefaultsUpdater) Set(key, rawValue string, vt string) error {
+func (u ResettingUpdater) Set(key, rawValue string, vt string) error {
 	d, ok := u.r[key]
 	if !ok {
 		// Likely a new setting this old node doesn't know about.
@@ -131,7 +131,7 @@ func (u DefaultsUpdater) Set(key, rawValue string, vt string) error {
 }
 
 // Done sets all settings not updated by the updater to their default values.
-func (u DefaultsUpdater) Done() {
+func (u ResettingUpdater) Done() {
 	for k, v := range u.r {
 		if _, ok := u.m[k]; !ok {
 			v.setToDefault()
