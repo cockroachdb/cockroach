@@ -43,7 +43,7 @@ var ValidateEnterpriseLicense = func(s string) error {
 // BulkIOWriteLimiterBurst is the burst for the BulkIOWriteLimiter cluster setting.
 const BulkIOWriteLimiterBurst = 2 * 1024 * 1024 // 2MB
 
-// DistSQLExecMode controls who can access /debug/requests.
+// DebugRemoteMode controls who can access /debug/requests.
 type DebugRemoteMode string
 
 const (

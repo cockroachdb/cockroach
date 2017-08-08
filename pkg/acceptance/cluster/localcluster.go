@@ -816,7 +816,7 @@ func (l *LocalCluster) stop(ctx context.Context) {
 // NewClient implements the Cluster interface.
 func (l *LocalCluster) NewClient(ctx context.Context, i int) (*roachClient.DB, error) {
 	clock := hlc.NewClock(hlc.UnixNano, 0)
-	rpcContext := rpc.NewContext(log.AmbientContext{Tracer:tracing.NewTracer()}, &base.Config{
+	rpcContext := rpc.NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, &base.Config{
 		User:        security.NodeUser,
 		SSLCertsDir: l.CertsDir,
 	}, clock, l.stopper)

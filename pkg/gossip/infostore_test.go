@@ -43,7 +43,7 @@ func newTestInfoStore() (*infoStore, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	nc := &base.NodeIDContainer{}
 	nc.Set(context.TODO(), 1)
-	is := newInfoStore(log.AmbientContext{Tracer:tracing.NewTracer()}, nc, emptyAddr, stopper)
+	is := newInfoStore(log.AmbientContext{Tracer: tracing.NewTracer()}, nc, emptyAddr, stopper)
 	return is, stopper
 }
 
