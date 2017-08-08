@@ -312,13 +312,13 @@ func (h *hashJoiner) bufferPhase(
 	if !useTempStorage {
 		return false, errors.Wrap(err, "external storage for large queries disabled")
 	}
-	if h.flowCtx.tempStorage == nil {
+	if h.flowCtx.TempStorage == nil {
 		return false, errors.Wrap(err, "external storage not provided on this cockroach node")
 	}
 
 	log.VEventf(ctx, 2, "buffer phase falling back to disk")
 
-	storedDiskRows := makeHashDiskRowContainer(h.flowCtx.diskMonitor, h.flowCtx.tempStorage)
+	storedDiskRows := makeHashDiskRowContainer(h.flowCtx.diskMonitor, h.flowCtx.TempStorage)
 	if err := storedDiskRows.Init(
 		ctx,
 		shouldEmitUnmatchedRow(h.storedSide, h.joinType),
