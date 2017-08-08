@@ -1364,6 +1364,42 @@ func TestNodeStatus(t *testing.T) {
 	}
 	checkNodeStatus(t, c, out, start)
 
+	out, err = c.RunWithCapture("node status --ranges --format=pretty")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkNodeStatus(t, c, out, start)
+
+	out, err = c.RunWithCapture("node status --stats --format=pretty")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkNodeStatus(t, c, out, start)
+
+	out, err = c.RunWithCapture("node status --ranges --stats --format=pretty")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkNodeStatus(t, c, out, start)
+
+	out, err = c.RunWithCapture("node status --decommission --format=pretty")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkNodeStatus(t, c, out, start)
+
+	out, err = c.RunWithCapture("node status --ranges --stats --decommission --format=pretty")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkNodeStatus(t, c, out, start)
+
+	out, err = c.RunWithCapture("node status --all --format=pretty")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkNodeStatus(t, c, out, start)
+
 	out, err = c.RunWithCapture("node status --format=pretty")
 	if err != nil {
 		t.Fatal(err)
@@ -1374,6 +1410,12 @@ func TestNodeStatus(t *testing.T) {
 func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
 	buf := bytes.NewBufferString(output)
 	s := bufio.NewScanner(buf)
+
+	type testCase struct {
+		name   string
+		idx    int
+		maxval int64
+	}
 
 	// Skip command line.
 	if !s.Scan() {
@@ -1390,8 +1432,8 @@ func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
-	if !reflect.DeepEqual(cols, statusNodesColumnHeaders) {
-		t.Fatalf("columns (%s) don't match expected (%s)", cols, statusNodesColumnHeaders)
+	if !reflect.DeepEqual(cols, getStatusNodeHeaders()) {
+		t.Fatalf("columns (%s) don't match expected (%s)", cols, getStatusNodeHeaders())
 	}
 
 	checkSeparatorLine(t, s)
@@ -1429,21 +1471,35 @@ func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
 	checkTimeElapsed(t, fields[3], 15*time.Second, start)
 	checkTimeElapsed(t, fields[4], 15*time.Second, start)
 
-	// Verify all byte/range metrics.
-	testcases := []struct {
-		name   string
-		idx    int
-		maxval int64
-	}{
-		{"live_bytes", 5, 100000},
-		{"key_bytes", 6, 30000},
-		{"value_bytes", 7, 100000},
-		{"intent_bytes", 8, 30000},
-		{"system_bytes", 9, 30000},
-		{"leader_ranges", 10, 3},
-		{"repl_ranges", 11, 3},
-		{"avail_ranges", 12, 3},
+	testcases := []testCase{}
+
+	// We're skipping over the first 5 default fields such as node id and
+	// address. They don't need closer checks.
+	baseIdx := 5
+
+	// Adding fields that need verification for --range flag.
+	if nodeCtx.statusShowRanges || nodeCtx.statusShowAll {
+		testcases = append(testcases, []testCase{
+			{"leader_ranges", baseIdx, 3},
+			{"repl_ranges", baseIdx + 1, 3},
+			{"avail_ranges", baseIdx + 2, 3},
+		}...)
+
+		baseIdx += 5
 	}
+
+	// Adding fields that need verification for --stats flag.
+	if nodeCtx.statusShowStats || nodeCtx.statusShowAll {
+		testcases = append(testcases, []testCase{
+			{"live_bytes", baseIdx, 100000},
+			{"key_bytes", baseIdx + 1, 30000},
+			{"value_bytes", baseIdx + 2, 100000},
+			{"intent_bytes", baseIdx + 3, 30000},
+			{"system_bytes", baseIdx + 4, 30000},
+		}...)
+		baseIdx += 5
+	}
+
 	for _, tc := range testcases {
 		val, err := strconv.ParseInt(fields[tc.idx], 10, 64)
 		if err != nil {
@@ -1497,7 +1553,7 @@ func extractFields(line string) ([]string, error) {
 	// fields has two extra entries, one for the empty token to the left of the first
 	// |, and another empty one to the right of the final |. So, we need to take those
 	// out.
-	if a, e := len(fields), len(statusNodesColumnHeaders)+2; a != e {
+	if a, e := len(fields), len(getStatusNodeHeaders())+2; a != e {
 		return nil, errors.Errorf("can't extract fields: # of fields (%d) != expected (%d)", a, e)
 	}
 	fields = fields[1 : len(fields)-1]

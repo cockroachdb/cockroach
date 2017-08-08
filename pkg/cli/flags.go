@@ -308,6 +308,16 @@ func init() {
 		stringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, base.DefaultCertsDirectory)
 	}
 
+	// Node Status command.
+	{
+		f := statusNodeCmd.Flags()
+		boolFlag(f, &nodeCtx.statusShowRanges, cliflags.NodeRanges, false)
+		boolFlag(f, &nodeCtx.statusShowStats, cliflags.NodeStats, false)
+		boolFlag(f, &nodeCtx.statusShowAll, cliflags.NodeAll, false)
+		boolFlag(f, &nodeCtx.statusShowDecommission, cliflags.NodeDecommission, false)
+
+	}
+
 	// Decommission command.
 	varFlag(decommissionNodeCmd.Flags(), &nodeCtx.nodeDecommissionWait, cliflags.Wait)
 
