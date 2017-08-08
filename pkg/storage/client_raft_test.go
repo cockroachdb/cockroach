@@ -1958,7 +1958,7 @@ outer:
 				t.Fatal("could not find raft replica")
 			}
 		}
-		t.Fatal("could not find raft leader")
+		i-- // try again
 	}
 }
 
