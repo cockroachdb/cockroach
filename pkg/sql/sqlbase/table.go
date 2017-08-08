@@ -1517,6 +1517,20 @@ func CheckColumnType(col ColumnDescriptor, typ parser.Type, pmap *parser.Placeho
 	return nil
 }
 
+func checkElementType(paramType parser.Type, columnType ColumnType) error {
+	if DatumTypeToColumnSemanticType(paramType) != *columnType.ArrayContents {
+		return errors.Errorf("type of array contents %s doesn't match column type %s",
+			paramType, columnType.ArrayContents)
+	}
+	if cs, ok := paramType.(parser.TCollatedString); ok {
+		if cs.Locale != *columnType.Locale {
+			return errors.Errorf("locale of collated string array being inserted (%s) doesn't match locale of column type (%s)",
+				cs.Locale, *columnType.Locale)
+		}
+	}
+	return nil
+}
+
 // MarshalColumnValue returns a Go primitive value equivalent of val, of the
 // type expected by col. If val's type is incompatible with col, or if
 // col's type is not yet implemented, an error is returned.
@@ -1585,9 +1599,8 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 		}
 	case ColumnType_ARRAY:
 		if v, ok := val.(*parser.DArray); ok {
-			if DatumTypeToColumnSemanticType(v.ParamTyp) != *col.Type.ArrayContents {
-				return r, errors.Errorf("type of array contents %s doesn't match column type %s",
-					DatumTypeToColumnSemanticType(v.ParamTyp), col.Type.ArrayContents)
+			if err := checkElementType(v.ParamTyp, col.Type); err != nil {
+				return r, err
 			}
 			b, err := encodeArray(v, nil)
 			if err != nil {
@@ -1710,6 +1723,9 @@ func parserTypeToEncodingType(t parser.Type) (encoding.Type, error) {
 	case parser.TypeUUID:
 		return encoding.UUID, nil
 	default:
+		if t.FamilyEqual(parser.TypeCollatedString) {
+			return encoding.Bytes, nil
+		}
 		return 0, errors.Errorf("Don't know encoding type for %s", t)
 	}
 }
@@ -1744,6 +1760,8 @@ func encodeArrayElement(b []byte, d parser.Datum) ([]byte, error) {
 		return encoding.EncodeUntaggedUUIDValue(b, t.UUID), nil
 	case *parser.DOid:
 		return encoding.EncodeUntaggedIntValue(b, int64(t.DInt)), nil
+	case *parser.DCollatedString:
+		return encoding.EncodeUntaggedBytesValue(b, []byte(t.Contents)), nil
 	}
 	return nil, errors.Errorf("don't know how to encode %s", d)
 }
