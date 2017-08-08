@@ -128,10 +128,13 @@ func (t tracingReconfigurationOptions) ZipkinAddr() string {
 	return t.ts.ZipkinCollector.Get()
 }
 
-// ReportingSettings is the subset of ClusterSettings affecting crash reporting.
+// ReportingSettings is the subset of ClusterSettings affecting crash and
+// diagnostics reporting.
 type ReportingSettings struct {
 	DiagnosticsReportingEnabled *settings.BoolSetting
 	CrashReports                *settings.BoolSetting
+	DiagnosticsMetricsEnabled   *settings.BoolSetting
+	DiagnosticReportFrequency   *settings.DurationSetting
 }
 
 // HasDiagnosticsReportingEnabled returns true when the underlying cluster setting is true.
@@ -183,6 +186,8 @@ type RebalancingSettings struct {
 	EnableStatsBasedRebalancing     *settings.BoolSetting
 	StatRebalanceThreshold          *settings.FloatSetting
 	RangeRebalanceThreshold         *settings.FloatSetting
+
+	TimeUntilStoreDead *settings.DurationSetting
 }
 
 // StorageSettings is the subset of ClusterSettings affecting the storage
@@ -201,6 +206,7 @@ type StorageSettings struct {
 	FailedReservationsTimeout   *settings.DurationSetting
 	ImportBatchSize             *settings.ByteSizeSetting
 	AddSSTableEnabled           *settings.BoolSetting
+	MaxIntents                  *settings.IntSetting
 }
 
 // UISettings is the subset of ClusterSettings affecting the UI.
@@ -212,7 +218,8 @@ type UISettings struct {
 // CCLSettings is the subset of ClusterSettings affecting
 // enterprise-related functionality.
 type CCLSettings struct {
-	EnterpriseLicense *settings.StringSetting
+	EnterpriseLicense   *settings.StringSetting
+	ClusterOrganization *settings.StringSetting
 }
 
 // Settings is the collection of cluster settings. For a running CockroachDB
@@ -225,6 +232,7 @@ type Settings struct {
 	Manual *atomic.Value // bool
 	// A Registry populated with all of the individual cluster settings.
 	settings.Registry
+
 	TracingSettings
 	ReportingSettings
 	RocksDBSettings
@@ -235,12 +243,8 @@ type Settings struct {
 	DistSQLSettings
 	UISettings
 	CCLSettings
-	ClusterOrganization       *settings.StringSetting
-	DiagnosticsMetricsEnabled *settings.BoolSetting
-	DiagnosticReportFrequency *settings.DurationSetting
-	TimeUntilStoreDead        *settings.DurationSetting
-	MaxIntents                *settings.IntSetting
-	Version                   *settings.StateMachineSetting
+
+	Version *settings.StateMachineSetting
 }
 
 // MakeClusterSettings makes a new ClusterSettings object. Note that by default,
