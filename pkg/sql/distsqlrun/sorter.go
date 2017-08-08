@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -79,8 +78,6 @@ func newSorter(
 	return s, nil
 }
 
-var workMem = envutil.EnvOrDefaultInt64("COCKROACH_WORK_MEM", 64*1024*1024 /* 64MB */)
-
 // Run is part of the processor interface.
 func (s *sorter) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if wg != nil {
@@ -99,7 +96,9 @@ func (s *sorter) Run(ctx context.Context, wg *sync.WaitGroup) {
 	var sv memRowContainer
 	// Enable fall back to disk if the cluster setting is set or a memory limit
 	// has been set through testing.
-	useTempStorage := s.flowCtx.Settings.DistSQLUseTempStorage.Get() || s.testingKnobMemLimit > 0
+	useTempStorage := (s.flowCtx.Settings.DistSQLUseTempStorage.Get() &&
+		s.flowCtx.Settings.DistSQLUseTempStorageSorts.Get()) ||
+		s.testingKnobMemLimit > 0
 	if s.matchLen == 0 && s.count == 0 && useTempStorage {
 		// We will use the sortAllStrategy in this case and potentially fall
 		// back to disk.
@@ -107,7 +106,7 @@ func (s *sorter) Run(ctx context.Context, wg *sync.WaitGroup) {
 		// The strategy will overflow to disk if this limit is not enough.
 		limit := s.testingKnobMemLimit
 		if limit <= 0 {
-			limit = workMem
+			limit = workMemBytes
 		}
 		limitedMon := mon.MakeMonitorInheritWithLimit(
 			"sortall-limited", limit, s.flowCtx.EvalCtx.Mon,

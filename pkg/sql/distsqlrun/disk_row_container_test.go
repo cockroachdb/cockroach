@@ -122,12 +122,7 @@ func TestDiskRowContainer(t *testing.T) {
 				}
 				row := sqlbase.RandEncDatumRowOfTypes(rng, types)
 				func() {
-					d, err := makeDiskRowContainer(
-						ctx, &diskMonitor, types, ordering, &memRowContainer{}, tempEngine,
-					)
-					if err != nil {
-						t.Fatal(err)
-					}
+					d := makeDiskRowContainer(ctx, &diskMonitor, types, ordering, tempEngine)
 					defer d.Close(ctx)
 					if err := d.AddRow(ctx, row); err != nil {
 						t.Fatal(err)
@@ -180,31 +175,9 @@ func TestDiskRowContainer(t *testing.T) {
 				types[i] = rows[0][i].Type
 			}
 			func() {
-				// Make the diskRowContainer with half of these rows and insert
-				// the other half normally.
-				var memoryContainer memRowContainer
-				memoryContainer.init(ordering, types, &evalCtx)
-				defer memoryContainer.Close(ctx)
-				midIdx := len(rows) / 2
-				for i := 0; i < midIdx; i++ {
-					if err := memoryContainer.AddRow(ctx, rows[i]); err != nil {
-						t.Fatal(err)
-					}
-				}
-
-				d, err := makeDiskRowContainer(
-					ctx,
-					&diskMonitor,
-					types,
-					ordering,
-					&memoryContainer,
-					tempEngine,
-				)
-				if err != nil {
-					t.Fatal(err)
-				}
+				d := makeDiskRowContainer(ctx, &diskMonitor, types, ordering, tempEngine)
 				defer d.Close(ctx)
-				for i := midIdx; i < len(rows); i++ {
+				for i := 0; i < len(rows); i++ {
 					if err := d.AddRow(ctx, rows[i]); err != nil {
 						t.Fatal(err)
 					}
@@ -289,17 +262,13 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 	monitor.Start(ctx, nil, mon.MakeStandaloneBudget(0 /* capacity */))
 
 	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
-	d, err := makeDiskRowContainer(
+	d := makeDiskRowContainer(
 		ctx,
 		&monitor,
 		[]sqlbase.ColumnType{columnTypeInt},
 		sqlbase.ColumnOrdering{sqlbase.ColumnOrderInfo{ColIdx: 0, Direction: encoding.Ascending}},
-		&memRowContainer{},
 		tempEngine,
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
 	defer d.Close(ctx)
 
 	row := sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(1)))}
