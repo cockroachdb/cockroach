@@ -70,7 +70,7 @@ func newSorter(
 		ordering:    convertToColumnOrdering(spec.OutputOrdering),
 		matchLen:    spec.OrderingMatchLen,
 		count:       count,
-		tempStorage: flowCtx.tempStorage,
+		tempStorage: flowCtx.TempStorage,
 	}
 	if err := s.out.Init(post, input.Types(), &flowCtx.EvalCtx, output); err != nil {
 		return nil, err
