@@ -853,7 +853,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 	}
 
 	const numAccounts = 1000
-	_, dir, _, sqlDB, cleanup := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, params)
+	_, dir, _, sqlDB, cleanup := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, initNone, params)
 	defer cleanup()
 
 	run := func(op, query string, args ...interface{}) (int64, error) {
