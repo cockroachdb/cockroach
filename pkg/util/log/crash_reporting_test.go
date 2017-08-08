@@ -14,7 +14,9 @@
 
 package log
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestCrashReportingFormatSave(t *testing.T) {
 	r1 := "i am hidden"
