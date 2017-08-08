@@ -6,64 +6,64 @@
 #
 # Remember, *the last rule to match wins.*
 
-/docs/RFCS/                  @cockroachdb/rfcs
+/docs/RFCS/                  @cockroachdb/rfc-prs
 
-/pkg/gossip/                 @cockroachdb/core
-/pkg/internal/               @cockroachdb/core
-/pkg/kv/                     @cockroachdb/core
-/pkg/roachpb/                @cockroachdb/core
-/pkg/rpc/                    @cockroachdb/core
-/pkg/server/                 @cockroachdb/core
-/pkg/storage/                @cockroachdb/core
-/pkg/migration/              @cockroachdb/core
-/pkg/migration/sqlmigrations @cockroachdb/core @cockroachdb/sql-wiring
+/pkg/gossip/                 @cockroachdb/core-prs
+/pkg/internal/               @cockroachdb/core-prs
+/pkg/kv/                     @cockroachdb/core-prs
+/pkg/roachpb/                @cockroachdb/core-prs
+/pkg/rpc/                    @cockroachdb/core-prs
+/pkg/server/                 @cockroachdb/core-prs
+/pkg/storage/                @cockroachdb/core-prs
+/pkg/migration/              @cockroachdb/core-prs
+/pkg/migration/sqlmigrations @cockroachdb/core-prs @cockroachdb/sql-wiring-prs
 
-/pkg/ccl/                    @cockroachdb/sql-ccl
-/pkg/cli/                    @cockroachdb/cli
-/pkg/cli/sql*.go             @cockroachdb/sql-ui @cockroachdb/cli
+/pkg/ccl/                    @cockroachdb/sql-ccl-prs
+/pkg/cli/                    @cockroachdb/cli-prs
+/pkg/cli/sql*.go             @cockroachdb/sql-ui-prs @cockroachdb/cli-prs
 
-/pkg/sql/                    @cockroachdb/sql-rest
+/pkg/sql/                    @cockroachdb/sql-rest-prs
 
-/pkg/sql/parser/             @cockroachdb/sql-language
-/pkg/sql/ir/                 @cockroachdb/sql-language
+/pkg/sql/parser/             @cockroachdb/sql-language-prs
+/pkg/sql/ir/                 @cockroachdb/sql-language-prs
 
-/pkg/sql/pgwire/             @cockroachdb/sql-wiring
-/pkg/sql/privilege/          @cockroachdb/sql-wiring @cockroachdb/sql-language @cockroachdb/sql-execution
+/pkg/sql/pgwire/             @cockroachdb/sql-wiring-prs
+/pkg/sql/privilege/          @cockroachdb/sql-wiring-prs @cockroachdb/sql-language-prs @cockroachdb/sql-execution-prs
 
-/pkg/sql/sqlbase/            @cockroachdb/sql-planning @cockroachdb/sql-execution @cockroachdb/sql-async
+/pkg/sql/sqlbase/            @cockroachdb/sql-planning-prs @cockroachdb/sql-execution-prs @cockroachdb/sql-async-prs
 
-/pkg/sql/*.go                @cockroachdb/sql-planning @cockroachdb/sql-execution
+/pkg/sql/*.go                @cockroachdb/sql-planning-prs @cockroachdb/sql-execution-prs
 
-/pkg/sql/executor*           @cockroachdb/sql-execution
-/pkg/sql/mon/                @cockroachdb/sql-execution
-/pkg/sql/sqlutil/*executor* @cockroachdb/sql-execution
+/pkg/sql/executor*           @cockroachdb/sql-execution-prs
+/pkg/sql/mon/                @cockroachdb/sql-execution-prs
+/pkg/sql/sqlutil/*executor* @cockroachdb/sql-execution-prs
 
-/pkg/sql/schema*             @cockroachdb/sql-async
-/pkg/sql/lease*              @cockroachdb/sql-async
-/pkg/sql/jobs/               @cockroachdb/sql-async
+/pkg/sql/schema*             @cockroachdb/sql-async-prs
+/pkg/sql/lease*              @cockroachdb/sql-async-prs
+/pkg/sql/jobs/               @cockroachdb/sql-async-prs
 
-/pkg/sql/distsql*.go         @cockroachdb/distsql @cockroachdb/sql-planning
-/pkg/sql/distsqlplan/        @cockroachdb/distsql @cockroachdb/sql-planning
-/pkg/sql/distsqlrun/         @cockroachdb/distsql @cockroachdb/sql-execution
+/pkg/sql/distsql*.go         @cockroachdb/distsql-prs @cockroachdb/sql-planning-prs
+/pkg/sql/distsqlplan/        @cockroachdb/distsql-prs @cockroachdb/sql-planning-prs
+/pkg/sql/distsqlrun/         @cockroachdb/distsql-prs @cockroachdb/sql-execution-prs
 
 # We purposefully disable testlogic notifications to disable notifications
 # otherwise caught by the @sql-rest team. Typically, testlogic changes are part
 # of a bigger change that will trigger notifications to the correct sub-team.
 /pkg/sql/testlogic/
 
-/pkg/ui/                     @cockroachdb/admin-ui
+/pkg/ui/                     @cockroachdb/admin-ui-prs
 /pkg/ui/embedded.go
 /pkg/ui/src/js/protos.d.ts
 /pkg/ui/src/js/protos.js
 
-/build/                      @cockroachdb/build
-/c-deps/                     @cockroachdb/build
-/githooks/                   @cockroachdb/build
-/scripts/                    @cockroachdb/build
-**/Makefile                  @cockroachdb/build
-/Gopkg.*                     @cockroachdb/build
-/.*                          @cockroachdb/build
-/.github/                    @cockroachdb/build
+/build/                      @cockroachdb/build-prs
+/c-deps/                     @cockroachdb/build-prs
+/githooks/                   @cockroachdb/build-prs
+/scripts/                    @cockroachdb/build-prs
+**/Makefile                  @cockroachdb/build-prs
+/Gopkg.*                     @cockroachdb/build-prs
+/.*                          @cockroachdb/build-prs
+/.github/                    @cockroachdb/build-prs
 
-/c-deps/libroach/            @cockroachdb/core
-/c-deps/libroach/ccl/        @cockroachdb/core @cockroachdb/sql-ccl
+/c-deps/libroach/            @cockroachdb/core-prs
+/c-deps/libroach/ccl/        @cockroachdb/core-prs @cockroachdb/sql-ccl-prs
