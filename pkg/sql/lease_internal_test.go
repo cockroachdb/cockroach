@@ -405,7 +405,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	// Pretend the table has been dropped, so that when we release leases on it,
 	// they are removed from the tableNameCache too.
 	tableState := leaseManager.findTableState(tableDesc.ID, true)
+	tableState.Lock()
 	tableState.dropped = true
+	tableState.Unlock()
 
 	// Try to trigger the race repeatedly: race an AcquireByName against a
 	// Release.
