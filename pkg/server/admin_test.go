@@ -38,7 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -49,7 +49,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 func getAdminJSONProto(
@@ -105,6 +104,10 @@ func TestAdminDebugExpVar(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
+
+	// This test accesses the debug pages, which currently use this singleton
+	// that needs to be populated manually.
+	ClusterSettings = cluster.MakeClusterSettings()
 
 	jI, err := getJSON(s, debugURL(s)+"vars")
 	if err != nil {
@@ -228,7 +231,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 	ts := s.(*TestServer)
 
-	ac := log.AmbientContext{Tracer: tracing.NewTracer()}
+	ac := log.AmbientContext{Tracer: s.ClusterSettings().Tracer}
 	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 	defer span.Finish()
 
@@ -415,7 +418,7 @@ func TestAdminAPITableDetails(t *testing.T) {
 			escDBName := parser.Name(tc.dbName).String()
 			escTblName := parser.Name(tc.tblName).String()
 
-			ac := log.AmbientContext{Tracer: tracing.NewTracer()}
+			ac := log.AmbientContext{Tracer: s.ClusterSettings().Tracer}
 			ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 			defer span.Finish()
 
@@ -557,7 +560,7 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 	ts := s.(*TestServer)
 
 	// Create database and table.
-	ac := log.AmbientContext{Tracer: tracing.NewTracer()}
+	ac := log.AmbientContext{Tracer: s.ClusterSettings().Tracer}
 	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 	defer span.Finish()
 	session := sql.NewSession(
@@ -667,7 +670,7 @@ func TestAdminAPIUsers(t *testing.T) {
 	ts := s.(*TestServer)
 
 	// Create sample users.
-	ac := log.AmbientContext{Tracer: tracing.NewTracer()}
+	ac := log.AmbientContext{Tracer: s.ClusterSettings().Tracer}
 	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 	defer span.Finish()
 	session := sql.NewSession(
@@ -712,7 +715,7 @@ func TestAdminAPIEvents(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 	ts := s.(*TestServer)
 
-	ac := log.AmbientContext{Tracer: tracing.NewTracer()}
+	ac := log.AmbientContext{Tracer: s.ClusterSettings().Tracer}
 	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 	defer span.Finish()
 	session := sql.NewSession(
@@ -821,10 +824,6 @@ func TestAdminAPIEvents(t *testing.T) {
 	}
 }
 
-const settingKey = "testing.b"
-
-var _ = settings.RegisterBoolSetting(settingKey, "", true)
-
 func TestAdminAPISettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -834,10 +833,13 @@ func TestAdminAPISettings(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 
-	allKeys := settings.Keys()
+	// Any bool that defaults to true will work here.
+	const settingKey = "diagnostics.reporting.report_metrics"
+	st := s.ClusterSettings()
+	allKeys := st.Keys()
 
 	checkSetting := func(t *testing.T, k string, v serverpb.SettingsResponse_Value) {
-		ref, ok := settings.Lookup(k)
+		ref, ok := st.Lookup(k)
 		if !ok {
 			t.Fatalf("%s: not found after initial lookup", k)
 		}

@@ -33,43 +33,59 @@ import (
 )
 
 const strKey = "testing.str"
-const intKey = `testing.int`
+const intKey = "testing.int"
 const durationKey = "testing.duration"
 const byteSizeKey = "testing.bytesize"
 const enumKey = "testing.enum"
 
-var strA = settings.RegisterValidatedStringSetting(strKey, "", "<default>", func(v string) error {
-	if len(v) > 15 {
-		return errors.Errorf("can't set %s to string longer than 15: %s", strKey, v)
-	}
-	return nil
-})
-var intA = settings.RegisterValidatedIntSetting(intKey, "", 1, func(v int64) error {
-	if v < 0 {
-		return errors.Errorf("can't set %s to a negative value: %d", intKey, v)
-	}
-	return nil
+func register(
+	r settings.Registry,
+) (
+	*settings.StringSetting,
+	*settings.IntSetting,
+	*settings.DurationSetting,
+	*settings.ByteSizeSetting,
+	*settings.EnumSetting,
+) {
+	var strA = r.RegisterValidatedStringSetting(strKey, "", "<default>", func(v string) error {
+		if len(v) > 15 {
+			return errors.Errorf("can't set %s to string longer than 15: %s", strKey, v)
+		}
+		return nil
+	})
+	var intA = r.RegisterValidatedIntSetting(intKey, "", 1, func(v int64) error {
+		if v < 0 {
+			return errors.Errorf("can't set %s to a negative value: %d", intKey, v)
+		}
+		return nil
 
-})
-var durationA = settings.RegisterValidatedDurationSetting(durationKey, "", time.Minute, func(v time.Duration) error {
-	if v < 0 {
-		return errors.Errorf("can't set %s to a negative duration: %s", durationKey, v)
-	}
-	return nil
-})
-var byteSizeA = settings.RegisterValidatedByteSizeSetting(byteSizeKey, "", 1024*1024, func(v int64) error {
-	if v < 0 {
-		return errors.Errorf("can't set %s to a negative value: %d", byteSizeKey, v)
-	}
-	return nil
-})
-var enumA = settings.RegisterEnumSetting(enumKey, "", "foo", map[int64]string{1: "foo", 2: "bar"})
+	})
+	var durationA = r.RegisterValidatedDurationSetting(durationKey, "", time.Minute, func(v time.Duration) error {
+		if v < 0 {
+			return errors.Errorf("can't set %s to a negative duration: %s", durationKey, v)
+		}
+		return nil
+	})
+	var byteSizeA = r.RegisterValidatedByteSizeSetting(byteSizeKey, "", 1024*1024, func(v int64) error {
+		if v < 0 {
+			return errors.Errorf("can't set %s to a negative value: %d", byteSizeKey, v)
+		}
+		return nil
+	})
+	var enumA = r.RegisterEnumSetting(enumKey, "", "foo", map[int64]string{1: "foo", 2: "bar"})
+
+	return strA, intA, durationA, byteSizeA, enumA
+}
 
 func TestSettingsRefresh(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
+
+	s.ClusterSettings().Manual.Store(false)
+	r := s.ClusterSettings().Registry
+	strA, intA, durationA, byteSizeA, _ := register(r)
 
 	db := sqlutils.MakeSQLRunner(t, rawDB)
 
@@ -193,6 +209,9 @@ func TestSettingsSetAndShow(t *testing.T) {
 	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 
+	s.ClusterSettings().Manual.Store(false)
+	_, _, durationA, byteSizeA, enumA := register(s.ClusterSettings().Registry)
+
 	db := sqlutils.MakeSQLRunner(t, rawDB)
 
 	// TODO(dt): add placeholder support to SET and SHOW.
@@ -306,6 +325,9 @@ func TestSettingsShowAll(t *testing.T) {
 
 	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
+
+	// Make sure strKey and intKey are defined as they are checked below.
+	register(s.ClusterSettings().Registry)
 
 	db := sqlutils.MakeSQLRunner(t, rawDB)
 

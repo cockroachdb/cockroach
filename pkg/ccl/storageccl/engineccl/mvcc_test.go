@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -87,7 +88,10 @@ func TestMVCCIterateIncremental(t *testing.T) {
 
 	ctx := context.Background()
 	e, err := engine.NewRocksDB(
-		engine.RocksDBConfig{Dir: dir},
+		engine.RocksDBConfig{
+			RocksDBSettings: cluster.MakeClusterSettings().RocksDBSettings,
+			Dir:             dir,
+		},
 		engine.RocksDBCache{},
 	)
 	if err != nil {

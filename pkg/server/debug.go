@@ -22,8 +22,7 @@ import (
 	// Register the net/trace endpoint with http.DefaultServeMux.
 	"golang.org/x/net/trace"
 
-	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/rcrowley/go-metrics"
 	"github.com/rcrowley/go-metrics/exp"
 
@@ -39,26 +38,6 @@ const debugEndpoint = "/debug/"
 // We use the default http mux for the debug endpoint (as pprof and net/trace
 // register to that via import, and go-metrics registers to that via exp.Exp())
 var debugServeMux = http.DefaultServeMux
-
-const (
-	debugRemoteOff   = "off"
-	debugRemoteLocal = "local"
-	debugRemoteAny   = "any"
-)
-
-var debugRemote = settings.RegisterValidatedStringSetting(
-	"server.remote_debugging.mode",
-	"set to enable remote debugging, localhost-only or disable (any, local, off)",
-	"local",
-	func(s string) error {
-		switch strings.ToLower(s) {
-		case debugRemoteOff, debugRemoteLocal, debugRemoteAny:
-			return nil
-		default:
-			return errors.Errorf("invalid mode: '%s'", s)
-		}
-	},
-)
 
 // authorizedHandler is a middleware http handler that checks that the caller
 // is authorized to access the handler.
@@ -84,13 +63,19 @@ func handleDebug(w http.ResponseWriter, r *http.Request) {
 // traceAuthRequest is the original trace.AuthRequest, populated in init().
 var traceAuthRequest func(*http.Request) (bool, bool)
 
+// ClusterSettings is populated by pkg/cli at init time. It's only used as a
+// crutch for the auth handler for /debug/requests. Don't use this.
+//
+// FIXME(tschottdorf): remove this.
+var ClusterSettings *cluster.Settings
+
 // authRequest restricts access to /debug/*.
 func authRequest(r *http.Request) (allow, sensitive bool) {
 	allow, sensitive = traceAuthRequest(r)
-	switch strings.ToLower(debugRemote.Get()) {
-	case debugRemoteAny:
+	switch cluster.DebugRemoteMode(strings.ToLower(ClusterSettings.DebugRemote.Get())) {
+	case cluster.DebugRemoteAny:
 		allow = true
-	case debugRemoteLocal:
+	case cluster.DebugRemoteLocal:
 		break
 	default:
 		allow = false

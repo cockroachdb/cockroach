@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -815,7 +816,7 @@ func (l *LocalCluster) stop(ctx context.Context) {
 // NewClient implements the Cluster interface.
 func (l *LocalCluster) NewClient(ctx context.Context, i int) (*roachClient.DB, error) {
 	clock := hlc.NewClock(hlc.UnixNano, 0)
-	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{
+	rpcContext := rpc.NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, &base.Config{
 		User:        security.NodeUser,
 		SSLCertsDir: l.CertsDir,
 	}, clock, l.stopper)

@@ -43,7 +43,9 @@ func (*BoolSetting) Typ() string {
 	return "b"
 }
 
-func (b *BoolSetting) set(v bool) {
+// Override changes the setting without validation.
+// For testing usage only.
+func (b *BoolSetting) Override(v bool) {
 	vInt := int32(0)
 	if v {
 		vInt = 1
@@ -53,14 +55,18 @@ func (b *BoolSetting) set(v bool) {
 	}
 }
 
+func (b *BoolSetting) set(v bool) {
+	b.Override(v)
+}
+
 func (b *BoolSetting) setToDefault() {
 	b.set(b.defaultValue)
 }
 
 // RegisterBoolSetting defines a new setting with type bool.
-func RegisterBoolSetting(key, desc string, defaultValue bool) *BoolSetting {
+func (r *Registry) RegisterBoolSetting(key, desc string, defaultValue bool) *BoolSetting {
 	setting := &BoolSetting{defaultValue: defaultValue}
-	register(key, desc, setting)
+	r.register(key, desc, setting)
 	return setting
 }
 

@@ -19,13 +19,17 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 func setupMVCCRocksDB(b testing.TB, dir string) Engine {
 	rocksdb, err := NewRocksDB(
-		RocksDBConfig{Dir: dir},
+		RocksDBConfig{
+			RocksDBSettings: cluster.MakeClusterSettings().RocksDBSettings,
+			Dir:             dir,
+		},
 		RocksDBCache{},
 	)
 	if err != nil {

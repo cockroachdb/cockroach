@@ -22,8 +22,11 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/kr/pretty"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -31,7 +34,7 @@ import (
 
 func TestParseInitNodeAttributes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cfg := MakeConfig()
+	cfg := MakeConfig(cluster.MakeClusterSettings())
 	cfg.Attrs = "attr1=val1::attr2=val2"
 	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, SizeInBytes: base.MinimumStoreSize * 100}}}
 	engines, err := cfg.CreateEngines(context.TODO())
@@ -52,7 +55,7 @@ func TestParseInitNodeAttributes(t *testing.T) {
 // correctly.
 func TestParseJoinUsingAddrs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cfg := MakeConfig()
+	cfg := MakeConfig(cluster.MakeClusterSettings())
 	cfg.JoinList = []string{"localhost:12345,,localhost:23456", "localhost:34567"}
 	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, SizeInBytes: base.MinimumStoreSize * 100}}}
 	engines, err := cfg.CreateEngines(context.TODO())
@@ -113,14 +116,15 @@ func TestReadEnvironmentVariables(t *testing.T) {
 	}
 	defer resetEnvVar()
 
+	st := cluster.MakeClusterSettings()
 	// Makes sure no values are set when no environment variables are set.
-	cfg := MakeConfig()
-	cfgExpected := MakeConfig()
+	cfg := MakeConfig(st)
+	cfgExpected := MakeConfig(st)
 
 	resetEnvVar()
 	cfg.readEnvironmentVariables()
 	if !reflect.DeepEqual(cfg, cfgExpected) {
-		t.Fatalf("actual context does not match expected:\nactual:%+v\nexpected:%+v", cfg, cfgExpected)
+		t.Fatalf("actual context does not match expected: diff(actual, expected) = %s\nactual:\n%+v\nexpected:\n%+v", pretty.Diff(cfg, cfgExpected), cfg, cfgExpected)
 	}
 
 	// Set all the environment variables to valid values and ensure they are set
@@ -153,7 +157,7 @@ func TestReadEnvironmentVariables(t *testing.T) {
 	envutil.ClearEnvCache()
 	cfg.readEnvironmentVariables()
 	if !reflect.DeepEqual(cfg, cfgExpected) {
-		t.Fatalf("actual context does not match expected:\nactual:%+v\nexpected:%+v", cfg, cfgExpected)
+		t.Fatalf("actual context does not match expected: diff(actual,expected) = %s", pretty.Diff(cfgExpected, cfg))
 	}
 
 	for _, envVar := range []string{
@@ -198,7 +202,7 @@ func TestFilterGossipBootstrapResolvers(t *testing.T) {
 			resolvers = append(resolvers, resolver)
 		}
 	}
-	cfg := MakeConfig()
+	cfg := MakeConfig(cluster.MakeClusterSettings())
 	cfg.GossipBootstrapResolvers = resolvers
 
 	listenAddr := util.MakeUnresolvedAddr("tcp", resolverSpecs[0])

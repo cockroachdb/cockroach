@@ -24,7 +24,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -39,8 +39,9 @@ type stmtKey struct {
 
 // appStats holds per-application statistics.
 type appStats struct {
-	syncutil.Mutex
+	st *cluster.Settings
 
+	syncutil.Mutex
 	stmts map[stmtKey]*stmtStats
 }
 
@@ -50,20 +51,6 @@ type stmtStats struct {
 
 	data roachpb.StatementStatistics
 }
-
-// StmtStatsEnable determines whether to collect per-statement
-// statistics.
-var StmtStatsEnable = settings.RegisterBoolSetting(
-	"sql.metrics.statement_details.enabled", "collect per-statement query statistics", true,
-)
-
-// SQLStatsCollectionLatencyThreshold specifies the minimum amount of time
-// consumed by a SQL statement before it is collected for statistics reporting.
-var SQLStatsCollectionLatencyThreshold = settings.RegisterDurationSetting(
-	"sql.metrics.statement_details.threshold",
-	"minimum execution time to cause statistics to be collected",
-	0,
-)
 
 func (s stmtKey) String() string {
 	return s.flags() + s.stmt
@@ -88,11 +75,11 @@ func (a *appStats) recordStatement(
 	err error,
 	parseLat, planLat, runLat, svcLat, ovhLat float64,
 ) {
-	if a == nil || !StmtStatsEnable.Get() {
+	if a == nil || !a.st.StmtStatsEnable.Get() {
 		return
 	}
 
-	if t := SQLStatsCollectionLatencyThreshold.Get(); t > 0 && t.Seconds() >= svcLat {
+	if t := a.st.SQLStatsCollectionLatencyThreshold.Get(); t > 0 && t.Seconds() >= svcLat {
 		return
 	}
 
@@ -149,6 +136,7 @@ func (a *appStats) getStatsForStmt(key stmtKey) *stmtStats {
 // sqlStats carries per-application statistics for all applications on
 // each node. It hangs off Executor.
 type sqlStats struct {
+	st *cluster.Settings
 	syncutil.Mutex
 
 	// apps is the container for all the per-application statistics
@@ -174,16 +162,10 @@ func (s *sqlStats) getStatsForApplication(appName string) *appStats {
 	if a, ok := s.apps[appName]; ok {
 		return a
 	}
-	a := &appStats{stmts: make(map[stmtKey]*stmtStats)}
+	a := &appStats{st: s.st, stmts: make(map[stmtKey]*stmtStats)}
 	s.apps[appName] = a
 	return a
 }
-
-var dumpStmtStatsToLogBeforeReset = settings.RegisterBoolSetting(
-	"sql.metrics.statement_details.dump_to_logs",
-	"dump collected statement statistics to node logs when periodically cleared",
-	false,
-)
 
 // resetStats clears all the stored per-app and per-statement
 // statistics.
@@ -212,7 +194,7 @@ func (s *sqlStats) resetStats(ctx context.Context) {
 		// TODO(knz/dt): instead of dumping the stats to the log, save
 		// them in a SQL table so they can be inspected by the DBA and/or
 		// the UI.
-		if dumpStmtStatsToLogBeforeReset.Get() {
+		if a.st.DumpStmtStatsToLogBeforeReset.Get() {
 			dumpStmtStats(ctx, appName, a.stmts)
 		}
 

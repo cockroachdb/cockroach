@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -259,7 +260,10 @@ func openRocksDBWithVersion(t *testing.T, hasVersionFile bool, ver Version) erro
 	}
 
 	rocksdb, err := NewRocksDB(
-		RocksDBConfig{Dir: dir},
+		RocksDBConfig{
+			RocksDBSettings: cluster.MakeClusterSettings().RocksDBSettings,
+			Dir:             dir,
+		},
 		RocksDBCache{},
 	)
 	if err == nil {
@@ -383,7 +387,10 @@ func TestConcurrentBatch(t *testing.T) {
 	}()
 
 	db, err := NewRocksDB(
-		RocksDBConfig{Dir: dir},
+		RocksDBConfig{
+			RocksDBSettings: cluster.MakeClusterSettings().RocksDBSettings,
+			Dir:             dir,
+		},
 		RocksDBCache{},
 	)
 	if err != nil {
@@ -569,7 +576,10 @@ func TestRocksDBTimeBound(t *testing.T) {
 	defer dirCleanup()
 
 	rocksdb, err := NewRocksDB(
-		RocksDBConfig{Dir: dir},
+		RocksDBConfig{
+			RocksDBSettings: cluster.MakeClusterSettings().RocksDBSettings,
+			Dir:             dir,
+		},
 		RocksDBCache{},
 	)
 	if err != nil {

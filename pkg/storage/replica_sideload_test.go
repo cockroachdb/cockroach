@@ -29,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -87,14 +88,16 @@ func TestSideloadingSideloadedStorage(t *testing.T) {
 }
 
 func testSideloadingSideloadedStorage(
-	t *testing.T, maker func(roachpb.RangeID, roachpb.ReplicaID, string) (sideloadStorage, error),
+	t *testing.T,
+	maker func(*cluster.Settings, roachpb.RangeID, roachpb.ReplicaID, string) (sideloadStorage, error),
 ) {
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 
 	ctx := context.Background()
+	st := cluster.MakeClusterSettings()
 
-	ss, err := maker(1, 2, dir)
+	ss, err := maker(st, 1, 2, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,7 +196,7 @@ func testSideloadingSideloadedStorage(
 	}
 
 	// Verify a sideloaded storage for another ReplicaID doesn't see the files.
-	if otherSS, err := maker(1, 999 /* ReplicaID */, dir); err != nil {
+	if otherSS, err := maker(st, 1, 999 /* ReplicaID */, dir); err != nil {
 		t.Fatal(err)
 	} else if _, err = otherSS.Get(ctx, payloads[0], highTerm); err != errSideloadedFileNotFound {
 		t.Fatal("expected not found")
@@ -203,7 +206,7 @@ func testSideloadingSideloadedStorage(
 	// one), which shouldn't change anything about its state.
 	if !isInMem {
 		var err error
-		ss, err = maker(1, 2, dir)
+		ss, err = maker(st, 1, 2, dir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -615,6 +618,7 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 		mockSender := &mockSender{}
 		if err := sendSnapshot(
 			ctx,
+			tc.store.cfg.Settings,
 			mockSender,
 			&fakeStorePool{},
 			SnapshotRequest_Header{State: os.State, Priority: SnapshotRequest_RECOVERY},
@@ -733,6 +737,7 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 		mockSender := &mockSender{}
 		if err := sendSnapshot(
 			ctx,
+			tc.store.cfg.Settings,
 			mockSender,
 			&fakeStorePool{},
 			SnapshotRequest_Header{State: failingOS.State, Priority: SnapshotRequest_RECOVERY},

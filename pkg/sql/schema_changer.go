@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -904,6 +905,7 @@ type SchemaChangeManager struct {
 
 // NewSchemaChangeManager returns a new SchemaChangeManager.
 func NewSchemaChangeManager(
+	st *cluster.Settings,
 	testingKnobs *SchemaChangerTestingKnobs,
 	db client.DB,
 	nodeDesc roachpb.NodeDescriptor,
@@ -923,6 +925,7 @@ func NewSchemaChangeManager(
 		schemaChangers: make(map[sqlbase.ID]SchemaChanger),
 		// TODO(radu): investigate using the same distSQLPlanner from the executor.
 		distSQLPlanner: newDistSQLPlanner(
+			st,
 			nodeDesc,
 			rpcContext,
 			distSQLServ,
