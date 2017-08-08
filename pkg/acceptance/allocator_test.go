@@ -567,12 +567,11 @@ func TestSteady_6Medium(t *testing.T) {
 func TestSteady_3Small(t *testing.T) {
 	ctx := context.Background()
 	at := allocatorTest{
-		StartNodes:          3,
-		EndNodes:            3,
-		StoreURL:            urlStore3s,
-		Prefix:              "steady-3s",
-		CockroachDiskSizeGB: 250, // GB
-		RunSchemaChanges:    true,
+		StartNodes:       3,
+		EndNodes:         3,
+		StoreURL:         urlStore3s,
+		Prefix:           "steady-3s",
+		RunSchemaChanges: true,
 	}
 	at.RunAndCleanup(ctx, t)
 }
