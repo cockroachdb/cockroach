@@ -43,7 +43,8 @@ func init() {
 	storage.SetImportCmd(evalImport)
 }
 
-var importBatchSize = func() *settings.ByteSizeSetting {
+// ImportBatchSize is exposed for testing.
+var ImportBatchSize = func() *settings.ByteSizeSetting {
 	s := settings.RegisterByteSizeSetting("kv.import.batch_size", "", 2<<20)
 	s.Hide()
 	return s
@@ -331,7 +332,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 			return nil, errors.Wrapf(err, "adding to batch: %s -> %s", key, value.PrettyPrint())
 		}
 
-		if size := batcher.Size(); size > importBatchSize.Get() {
+		if size := batcher.Size(); size > ImportBatchSize.Get() {
 			finishBatcher := batcher
 			batcher = nil
 			log.Eventf(gCtx, "triggering finish of batch of size %s", humanizeutil.IBytes(size))

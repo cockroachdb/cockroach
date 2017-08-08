@@ -187,3 +187,24 @@ func BenchmarkClusterEmptyIncrementalBackup(b *testing.B) {
 	// *skip*--i.e., the number of bytes in the full backup.
 	b.SetBytes(int64(b.N) * dataSize)
 }
+
+func BenchmarkScanInsertVsRestore(b *testing.B) {
+	// Ensure there's lots of sstables in the RESTORE subtest to stress if this
+	// has any impact.
+	defer settings.TestingSetByteSize(&storageccl.ImportBatchSize, 1<<12)()
+
+	const numAccounts = 100000
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(b, multiNode, numAccounts)
+	defer cleanupFn()
+	sqlDB.Exec(`BACKUP data.* TO $1`, dir)
+	sqlDB.Exec(`CREATE DATABASE restored`)
+	sqlDB.Exec(`RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='restored')`, dir)
+
+	var x int64
+	b.Run("INSERT", func(b *testing.B) {
+		sqlDB.QueryRow(`SELECT SUM(LENGTH(payload)) FROM data.bank`).Scan(&x)
+	})
+	b.Run("RESTORE", func(b *testing.B) {
+		sqlDB.QueryRow(`SELECT SUM(LENGTH(payload)) FROM restored.bank`).Scan(&x)
+	})
+}
