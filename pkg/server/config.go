@@ -106,7 +106,7 @@ type Config struct {
 	// Embed the base context.
 	*base.Config
 
-	*cluster.Settings
+	Settings *cluster.Settings
 
 	base.RaftConfig
 

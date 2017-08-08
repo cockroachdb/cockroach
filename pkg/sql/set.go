@@ -94,7 +94,7 @@ func (p *planner) setClusterSetting(
 	if err := p.RequireSuperUser("SET CLUSTER SETTING"); err != nil {
 		return nil, err
 	}
-	r := p.session.execCfg.Registry
+	r := p.session.execCfg.Settings.Registry
 	typ, ok := r.Lookup(name)
 	if !ok {
 		return nil, errors.Errorf("unknown cluster setting '%s'", name)

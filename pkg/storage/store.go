@@ -542,9 +542,9 @@ var _ client.Sender = &Store{}
 type StoreConfig struct {
 	AmbientCtx log.AmbientContext
 	*migration.ExposedClusterVersion
-	*cluster.Settings
 	base.RaftConfig
 
+	Settings     *cluster.Settings
 	Clock        *hlc.Clock
 	DB           *client.DB
 	Gossip       *gossip.Gossip

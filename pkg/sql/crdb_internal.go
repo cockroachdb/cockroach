@@ -514,7 +514,7 @@ CREATE TABLE crdb_internal.cluster_settings (
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
-		r := p.session.execCfg.Registry
+		r := p.session.execCfg.Settings.Registry
 		for _, k := range r.Keys() {
 			setting, _ := r.Lookup(k)
 			if err := addRow(

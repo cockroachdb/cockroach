@@ -8053,7 +8053,7 @@ func TestCommandTooLarge(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
-	maxCommandSize := tc.store.cfg.MaxCommandSize
+	maxCommandSize := tc.store.cfg.Settings.MaxCommandSize
 	maxCommandSize.Override(1024)
 
 	args := putArgs(roachpb.Key("k"),

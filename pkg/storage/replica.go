@@ -2863,12 +2863,12 @@ func (r *Replica) propose(
 	// TODO(irfansharif): This int cast indicates that if someone configures a
 	// very large max proposal size, there is weird overflow behavior and it
 	// will not work the way it should.
-	if proposal.command.Size() > int(r.store.cfg.MaxCommandSize.Get()) {
+	if proposal.command.Size() > int(r.store.cfg.Settings.MaxCommandSize.Get()) {
 		// Once a command is written to the raft log, it must be loaded
 		// into memory and replayed on all replicas. If a command is
 		// too big, stop it here.
 		return nil, nil, noop, roachpb.NewError(errors.Errorf("command is too large: %d bytes (max: %d)",
-			proposal.command.Size(), r.store.cfg.MaxCommandSize.Get()))
+			proposal.command.Size(), r.store.cfg.Settings.MaxCommandSize.Get()))
 	}
 
 	if err := r.maybeAcquireProposalQuota(ctx, int64(proposal.command.Size())); err != nil {
@@ -3276,7 +3276,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// were not persisted to disk, it wouldn't be a problem because raft does not
 	// infer the that entries are persisted on the node that sends a snapshot.
 	start := timeutil.Now()
-	if err := batch.Commit(r.store.cfg.SyncRaftLog.Get() && rd.MustSync); err != nil {
+	if err := batch.Commit(r.store.cfg.Settings.SyncRaftLog.Get() && rd.MustSync); err != nil {
 		return stats, err
 	}
 	elapsed := timeutil.Since(start)

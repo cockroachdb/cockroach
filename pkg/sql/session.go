@@ -356,7 +356,7 @@ func NewSession(
 	ctx context.Context, args SessionArgs, e *Executor, remote net.Addr, memMetrics *MemoryMetrics,
 ) *Session {
 	ctx = e.AnnotateCtx(ctx)
-	distSQLMode := cluster.DistSQLExecMode(e.cfg.DistSQLClusterExecMode.Get())
+	distSQLMode := cluster.DistSQLExecMode(e.cfg.Settings.DistSQLClusterExecMode.Get())
 
 	s := &Session{
 		Database:         args.Database,
@@ -392,7 +392,7 @@ func NewSession(
 	}
 	s.ClientAddr = remoteStr
 
-	if e.cfg.TraceSessionEventLogEnabled.Get() {
+	if e.cfg.Settings.TraceSessionEventLogEnabled.Get() {
 		s.eventLog = trace.NewEventLog(fmt.Sprintf("sql [%s]", args.User), remoteStr)
 	}
 	s.context, s.cancel = context.WithCancel(ctx)
@@ -872,9 +872,9 @@ func (ts *txnState) resetForNewSQLTxn(
 	// and the two calls trample each other. We should figure out how to get
 	// traceTxnThreshold and debugTrace7881Enabled to integrate more nicely with
 	// session tracing.
-	if !s.Tracing.Enabled() && (s.execCfg.TraceTxnThreshold.Get() > 0 || debugTrace7881Enabled) {
+	if !s.Tracing.Enabled() && (s.execCfg.Settings.TraceTxnThreshold.Get() > 0 || debugTrace7881Enabled) {
 		mode := tracing.SingleNodeRecording
-		if s.execCfg.TraceTxnThreshold.Get() > 0 {
+		if s.execCfg.Settings.TraceTxnThreshold.Get() > 0 {
 			mode = tracing.SnowballRecording
 		}
 		tracing.StartRecording(sp, mode)
@@ -954,7 +954,7 @@ func (ts *txnState) finishSQLTxn(s *Session) {
 	}
 	// TODO(andrei): we should find a cheap way to get a trace's duration without
 	// calling the expensive GetRecording().
-	durThreshold := s.execCfg.TraceTxnThreshold.Get()
+	durThreshold := s.execCfg.Settings.TraceTxnThreshold.Get()
 	if sampledFor7881 || durThreshold > 0 {
 		if r := tracing.GetRecording(ts.sp); r != nil {
 			if sampledFor7881 || (durThreshold > 0 && timeutil.Since(ts.sqlTimestamp) >= durThreshold) {

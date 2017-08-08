@@ -247,7 +247,7 @@ type NodeInfo struct {
 // All fields holding a pointer or an interface are required to create
 // a Executor; the rest will have sane defaults set if omitted.
 type ExecutorConfig struct {
-	*cluster.Settings
+	Settings *cluster.Settings
 	NodeInfo
 	AmbientCtx      log.AmbientContext
 	DB              *client.DB
@@ -645,7 +645,7 @@ func (e *Executor) ExecutePreparedStatement(
 func (e *Executor) execPrepared(
 	session *Session, stmt *PreparedStatement, pinfo *parser.PlaceholderInfo,
 ) (StatementResults, error) {
-	if log.V(2) || e.cfg.LogStatementsExecuteEnabled.Get() {
+	if log.V(2) || e.cfg.Settings.LogStatementsExecuteEnabled.Get() {
 		log.Infof(session.Ctx(), "execPrepared: %s", stmt.Str)
 	}
 
@@ -704,7 +704,7 @@ func (e *Executor) execRequest(
 	var err error
 	txnState := &session.TxnState
 
-	if log.V(2) || e.cfg.LogStatementsExecuteEnabled.Get() {
+	if log.V(2) || e.cfg.Settings.LogStatementsExecuteEnabled.Get() {
 		log.Infof(session.Ctx(), "execRequest: %s", sql)
 	}
 
@@ -726,7 +726,7 @@ func (e *Executor) execRequest(
 				e.recordUnimplementedFeature(pgErr.InternalCommand)
 			}
 		}
-		if log.V(2) || e.cfg.LogStatementsExecuteEnabled.Get() {
+		if log.V(2) || e.cfg.Settings.LogStatementsExecuteEnabled.Get() {
 			log.Infof(session.Ctx(), "execRequest: error: %v", err)
 		}
 		// A parse error occurred: we can't determine if there were multiple
@@ -870,7 +870,7 @@ func (e *Executor) execParsed(
 			lastRes.Err = convertToErrWithPGCode(err)
 		}
 
-		if err != nil && (log.V(2) || e.cfg.LogStatementsExecuteEnabled.Get()) {
+		if err != nil && (log.V(2) || e.cfg.Settings.LogStatementsExecuteEnabled.Get()) {
 			log.Infof(session.Ctx(), "execRequest: error: %v", err)
 		}
 
@@ -1097,7 +1097,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 	}
 
 	for i, stmt := range stmts {
-		if log.V(2) || e.cfg.LogStatementsExecuteEnabled.Get() ||
+		if log.V(2) || e.cfg.Settings.LogStatementsExecuteEnabled.Get() ||
 			log.HasSpanOrEvent(session.Ctx()) {
 			log.VEventf(session.Ctx(), 2, "executing %d/%d: %s", i+1, len(stmts), stmt)
 		}
