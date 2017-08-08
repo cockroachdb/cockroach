@@ -598,9 +598,9 @@ func MakeClusterSettings() *Settings {
 	return &s
 }
 
-// MakeUpdater returns a new Updater, pre-alloced to the registry size.
-// Note that if the ClusterSetting has the Manual flag set, this Updater
-// simply ignores all updates.
+// MakeUpdater returns a new Updater, pre-alloced to the registry size. Note
+// that if the Setting has the Manual flag set, this Updater simply ignores all
+// updates.
 func (st Settings) MakeUpdater() settings.Updater {
 	if isManual, ok := st.Manual.Load().(bool); ok && isManual {
 		return settings.NoopUpdater{}
