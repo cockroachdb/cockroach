@@ -201,7 +201,7 @@ func TestSorter(t *testing.T) {
 	flowCtx := FlowCtx{
 		EvalCtx:     evalCtx,
 		Settings:    cluster.MakeClusterSettings(),
-		tempStorage: tempEngine,
+		TempStorage: tempEngine,
 		diskMonitor: &diskMonitor,
 	}
 

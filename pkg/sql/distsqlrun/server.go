@@ -262,7 +262,7 @@ func (ds *ServerImpl) setupFlow(
 		remoteTxnDB:    ds.FlowDB,
 		testingKnobs:   ds.TestingKnobs,
 		nodeID:         nodeID,
-		tempStorage:    ds.tempStorage,
+		TempStorage:    ds.tempStorage,
 		diskMonitor:    &ds.diskMonitor,
 		JobRegistry:    ds.ServerConfig.JobRegistry,
 	}
