@@ -74,15 +74,17 @@ func (d *DurationSetting) setToDefault() {
 }
 
 // RegisterDurationSetting defines a new setting with type duration.
-func RegisterDurationSetting(key, desc string, defaultValue time.Duration) *DurationSetting {
-	return RegisterValidatedDurationSetting(key, desc, defaultValue, nil)
+func (r *Registry) RegisterDurationSetting(
+	key, desc string, defaultValue time.Duration,
+) *DurationSetting {
+	return r.RegisterValidatedDurationSetting(key, desc, defaultValue, nil)
 }
 
 // RegisterNonNegativeDurationSetting defines a new setting with type duration.
-func RegisterNonNegativeDurationSetting(
+func (r *Registry) RegisterNonNegativeDurationSetting(
 	key, desc string, defaultValue time.Duration,
 ) *DurationSetting {
-	return RegisterValidatedDurationSetting(key, desc, defaultValue, func(v time.Duration) error {
+	return r.RegisterValidatedDurationSetting(key, desc, defaultValue, func(v time.Duration) error {
 		if v < 0 {
 			return errors.Errorf("cannot set %s to a negative duration: %s", key, v)
 		}
@@ -91,7 +93,7 @@ func RegisterNonNegativeDurationSetting(
 }
 
 // RegisterValidatedDurationSetting defines a new setting with type duration.
-func RegisterValidatedDurationSetting(
+func (r *Registry) RegisterValidatedDurationSetting(
 	key, desc string, defaultValue time.Duration, validateFn func(time.Duration) error,
 ) *DurationSetting {
 	if validateFn != nil {
@@ -103,7 +105,7 @@ func RegisterValidatedDurationSetting(
 		defaultValue: defaultValue,
 		validateFn:   validateFn,
 	}
-	register(key, desc, setting)
+	r.register(key, desc, setting)
 	return setting
 }
 

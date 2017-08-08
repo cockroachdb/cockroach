@@ -23,13 +23,13 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -38,9 +38,11 @@ func makeTestV3Conn(c net.Conn) v3Conn {
 	mon := mon.MakeUnlimitedMonitor(
 		context.Background(), "test", mon.MemoryResource, nil, nil, 1000,
 	)
+	st := cluster.MakeClusterSettings()
 	exec := sql.NewExecutor(
 		sql.ExecutorConfig{
-			AmbientCtx:              log.AmbientContext{Tracer: tracing.NewTracer()},
+			AmbientCtx:              log.AmbientContext{Tracer: st.Tracer},
+			Settings:                st,
 			HistogramWindowInterval: metric.TestSampleInterval,
 			TestingKnobs:            &sql.ExecutorTestingKnobs{},
 			SessionRegistry:         sql.MakeSessionRegistry(),

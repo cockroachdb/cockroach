@@ -216,6 +216,7 @@ func (s *Store) ReservationCount() int {
 func NewTestStorePool(cfg StoreConfig) *StorePool {
 	return NewStorePool(
 		cfg.AmbientCtx,
+		cfg.Settings,
 		cfg.Gossip,
 		cfg.Clock,
 		func(roachpb.NodeID, time.Time, time.Duration) nodeStatus {

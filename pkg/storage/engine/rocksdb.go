@@ -35,7 +35,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -59,11 +59,6 @@ import (
 // #include <stdlib.h>
 // #include <libroach.h>
 import "C"
-
-var minWALSyncInterval = settings.RegisterDurationSetting(
-	"rocksdb.min_wal_sync_interval",
-	"minimum duration between syncs of the RocksDB WAL",
-	1*time.Millisecond)
 
 //export rocksDBLog
 func rocksDBLog(s *C.char, n C.int) {
@@ -293,6 +288,7 @@ func (c RocksDBCache) Release() {
 // RocksDBConfig holds all configuration parameters and knobs used in setting
 // up a new RocksDB instance.
 type RocksDBConfig struct {
+	cluster.RocksDBSettings
 	Attrs roachpb.Attributes
 	// Dir is the data directory for this store.
 	Dir string
@@ -341,7 +337,10 @@ var _ Engine = &RocksDB{}
 // needed.
 func NewRocksDB(cfg RocksDBConfig, cache RocksDBCache) (*RocksDB, error) {
 	if cfg.Dir == "" {
-		panic("dir must be non-empty")
+		return nil, errors.New("dir must be non-empty")
+	}
+	if cfg.MinWALSyncInterval == nil {
+		panic("MinWALSyncInterval must be set")
 	}
 
 	r := &RocksDB{
@@ -362,10 +361,13 @@ func NewRocksDB(cfg RocksDBConfig, cache RocksDBCache) (*RocksDB, error) {
 func newMemRocksDB(
 	attrs roachpb.Attributes, cache RocksDBCache, MaxSizeBytes int64,
 ) (*RocksDB, error) {
+	// FIXME(tschottdorf): should be passed in.
+	st := cluster.MakeClusterSettings()
 	r := &RocksDB{
 		cfg: RocksDBConfig{
-			Attrs:        attrs,
-			MaxSizeBytes: MaxSizeBytes,
+			RocksDBSettings: st.RocksDBSettings,
+			Attrs:           attrs,
+			MaxSizeBytes:    MaxSizeBytes,
 		},
 		// dir: empty dir == "mem" RocksDB instance.
 		cache: cache.ref(),
@@ -475,7 +477,7 @@ func (r *RocksDB) syncLoop() {
 			return
 		}
 
-		min := minWALSyncInterval.Get()
+		min := r.cfg.MinWALSyncInterval.Get()
 		if delta := timeutil.Since(lastSync); delta < min {
 			s.Unlock()
 			time.Sleep(min - delta)

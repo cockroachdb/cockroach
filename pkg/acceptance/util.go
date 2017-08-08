@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 type keepClusterVar string
@@ -266,7 +267,7 @@ func MakeFarmer(t testing.TB, prefix string, stopper *stop.Stopper) *terrafarm.F
 	// may control a different acceptable offset for the nodes in the cluster. We
 	// should stop creating transaction outside of the cluster.
 	clientClock := hlc.NewClock(hlc.UnixNano, base.DefaultMaxClockOffset)
-	rpcContext := rpc.NewContext(log.AmbientContext{}, &base.Config{
+	rpcContext := rpc.NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, &base.Config{
 		Insecure: true,
 		User:     security.NodeUser,
 		// Set a bogus address, to be used by the clock skew checks as the ID of

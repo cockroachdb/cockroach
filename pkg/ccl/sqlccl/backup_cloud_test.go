@@ -18,10 +18,13 @@ import (
 	"github.com/rlmcpherson/s3gof3r"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
+
+func initNone(_ *cluster.Settings) {}
 
 // The tests in this file talk to remote APIs which require credentials.
 // To run these tests, you need to supply credentials via env vars (the tests
@@ -47,7 +50,7 @@ func TestCloudBackupRestoreS3(t *testing.T) {
 	defer sql.TestDisableTableLeases()()
 	const numAccounts = 1000
 
-	ctx, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts)
+	ctx, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, initNone)
 	defer cleanupFn()
 	prefix := fmt.Sprintf("TestBackupRestoreS3-%d", timeutil.Now().UnixNano())
 	uri := url.URL{Scheme: "s3", Host: bucket, Path: prefix}
@@ -80,7 +83,7 @@ func TestCloudBackupRestoreGoogleCloudStorage(t *testing.T) {
 	}(http.DefaultTransport.(*http.Transport).DisableKeepAlives)
 	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
 
-	ctx, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts)
+	ctx, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, initNone)
 	defer cleanupFn()
 	prefix := fmt.Sprintf("TestBackupRestoreGoogleCloudStorage-%d", timeutil.Now().UnixNano())
 	uri := url.URL{Scheme: "gs", Host: bucket, Path: prefix}
@@ -112,7 +115,7 @@ func TestCloudBackupRestoreAzure(t *testing.T) {
 	}(http.DefaultTransport.(*http.Transport).DisableKeepAlives)
 	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
 
-	ctx, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts)
+	ctx, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, initNone)
 	defer cleanupFn()
 	prefix := fmt.Sprintf("TestBackupRestoreAzure-%d", timeutil.Now().UnixNano())
 	uri := url.URL{Scheme: "azure", Host: bucket, Path: prefix}

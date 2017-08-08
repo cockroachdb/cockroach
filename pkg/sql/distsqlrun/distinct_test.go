@@ -17,6 +17,7 @@ package distsqlrun
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -139,7 +140,10 @@ func TestDistinct(t *testing.T) {
 
 			evalCtx := parser.MakeTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			flowCtx := FlowCtx{EvalCtx: evalCtx}
+			flowCtx := FlowCtx{
+				Settings: cluster.MakeClusterSettings(),
+				EvalCtx:  evalCtx,
+			}
 
 			d, err := newDistinct(&flowCtx, &ds, in, &PostProcessSpec{}, out)
 			if err != nil {

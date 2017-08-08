@@ -21,6 +21,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 )
 
 type slKey struct {
@@ -35,7 +36,7 @@ type inMemSideloadStorage struct {
 func mustNewInMemSideloadStorage(
 	rangeID roachpb.RangeID, replicaID roachpb.ReplicaID, baseDir string,
 ) sideloadStorage {
-	ss, err := newInMemSideloadStorage(rangeID, replicaID, baseDir)
+	ss, err := newInMemSideloadStorage(cluster.MakeClusterSettings(), rangeID, replicaID, baseDir)
 	if err != nil {
 		panic(err)
 	}
@@ -43,7 +44,7 @@ func mustNewInMemSideloadStorage(
 }
 
 func newInMemSideloadStorage(
-	rangeID roachpb.RangeID, replicaID roachpb.ReplicaID, baseDir string,
+	_ *cluster.Settings, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID, baseDir string,
 ) (sideloadStorage, error) {
 	return &inMemSideloadStorage{
 		prefix: filepath.Join(baseDir, fmt.Sprintf("%d.%d", rangeID, replicaID)),

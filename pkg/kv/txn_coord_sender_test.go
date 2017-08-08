@@ -28,7 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -893,6 +893,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 			ts := NewTxnCoordSender(
 				ambient,
+				cluster.MakeClusterSettings(),
 				senderFn,
 				clock,
 				false,
@@ -1065,7 +1066,8 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 	}
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	ts := NewTxnCoordSender(
-		ambient, senderFn, clock, false, stopper, MakeTxnMetrics(metric.TestSampleInterval),
+		ambient, cluster.MakeClusterSettings(),
+		senderFn, clock, false, stopper, MakeTxnMetrics(metric.TestSampleInterval),
 	)
 
 	// Stop the stopper manually, prior to trying the transaction. This has the
@@ -1122,6 +1124,7 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 			ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 			ts := NewTxnCoordSender(
 				ambient,
+				cluster.MakeClusterSettings(),
 				senderFn,
 				clock,
 				false,
@@ -1200,6 +1203,7 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	ts := NewTxnCoordSender(
 		ambient,
+		cluster.MakeClusterSettings(),
 		senderFn,
 		clock,
 		false,
@@ -1303,9 +1307,11 @@ func checkTxnMetrics(
 // test.
 func setupMetricsTest(t *testing.T) (*localtestcluster.LocalTestCluster, *TxnCoordSender, func()) {
 	s, testSender := createTestDB(t)
+	st := s.Cfg.Settings
 	txnMetrics := MakeTxnMetrics(metric.TestSampleInterval)
-	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
-	sender := NewTxnCoordSender(ambient, testSender.wrapped, s.Clock, false, s.Stopper, txnMetrics)
+	ambient := log.AmbientContext{Tracer: st.Tracer}
+	sender := NewTxnCoordSender(ambient, st,
+		testSender.wrapped, s.Clock, false, s.Stopper, txnMetrics)
 
 	return s, sender, func() {
 		teardownHeartbeats(sender)
@@ -1676,6 +1682,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 			ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 			ts := NewTxnCoordSender(
 				ambient,
+				cluster.MakeClusterSettings(),
 				senderFn,
 				clock,
 				false,
@@ -1706,11 +1713,13 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 
 func TestTooManyIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer settings.TestingSetInt(&maxIntents, 3)()
 
 	ctx := context.Background()
 	s, _ := createTestDB(t)
 	defer s.Stop()
+
+	maxIntents := s.Store.ClusterSettings().MaxIntents
+	maxIntents.Override(3)
 
 	txn := client.NewTxn(s.DB)
 	for i := 0; i < int(maxIntents.Get()); i++ {
@@ -1731,11 +1740,12 @@ func TestTooManyIntents(t *testing.T) {
 
 func TestTooManyIntentsAtCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer settings.TestingSetInt(&maxIntents, 3)()
 
 	ctx := context.Background()
 	s, _ := createTestDB(t)
 	defer s.Stop()
+	maxIntents := s.Store.ClusterSettings().MaxIntents
+	maxIntents.Override(3)
 
 	txn := client.NewTxn(s.DB)
 	b := txn.NewBatch()

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -372,9 +373,10 @@ func writeRocksDB(
 	cache := engine.NewRocksDBCache(0)
 	defer cache.Release()
 	r, err := engine.NewRocksDB(engine.RocksDBConfig{
-		Dir:          rocksdbDir,
-		MaxSizeBytes: 0,
-		MaxOpenFiles: 1024,
+		RocksDBSettings: cluster.MakeClusterSettings().RocksDBSettings,
+		Dir:             rocksdbDir,
+		MaxSizeBytes:    0,
+		MaxOpenFiles:    1024,
 	}, cache)
 	if err != nil {
 		return 0, errors.Wrap(err, "create rocksdb instance")

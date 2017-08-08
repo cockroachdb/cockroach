@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 type Node time.Duration
@@ -68,7 +69,7 @@ func TestSendToOneClient(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	rpcContext := rpc.NewContext(
-		log.AmbientContext{},
+		log.AmbientContext{Tracer: tracing.NewTracer()},
 		testutils.NewNodeTestBaseContext(),
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
 		stopper,
@@ -132,7 +133,7 @@ func TestComplexScenarios(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	nodeContext := rpc.NewContext(
-		log.AmbientContext{},
+		log.AmbientContext{Tracer: tracing.NewTracer()},
 		testutils.NewNodeTestBaseContext(),
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
 		stopper,
@@ -275,6 +276,7 @@ func sendBatch(
 	ctx context.Context, transportFactory TransportFactory, addrs []net.Addr, rpcContext *rpc.Context,
 ) (*roachpb.BatchResponse, error) {
 	ds := NewDistSender(DistSenderConfig{
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		TestingKnobs: DistSenderTestingKnobs{
 			TransportFactory: transportFactory,
 		},

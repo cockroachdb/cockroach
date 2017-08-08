@@ -761,7 +761,10 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 		manual := hlc.NewManualClock(ts[0].WallTime + 1)
 		clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 		ds := kv.NewDistSender(
-			kv.DistSenderConfig{Clock: clock, RPCContext: s.RPCContext()},
+			kv.DistSenderConfig{
+				AmbientCtx: log.AmbientContext{Tracer: s.ClusterSettings().Tracer},
+				Clock:      clock, RPCContext: s.RPCContext(),
+			},
 			s.(*server.TestServer).Gossip(),
 		)
 
@@ -960,7 +963,10 @@ func TestBatchPutWithConcurrentSplit(t *testing.T) {
 	// Now, split further at the given keys, but use a new dist sender so
 	// we don't update the caches on the default dist sender-backed client.
 	ds := kv.NewDistSender(
-		kv.DistSenderConfig{Clock: s.Clock(), RPCContext: s.RPCContext()}, s.(*server.TestServer).Gossip(),
+		kv.DistSenderConfig{
+			AmbientCtx: log.AmbientContext{Tracer: s.ClusterSettings().Tracer},
+			Clock:      s.Clock(), RPCContext: s.RPCContext(),
+		}, s.(*server.TestServer).Gossip(),
 	)
 	for _, key := range []string{"c"} {
 		req := &roachpb.AdminSplitRequest{

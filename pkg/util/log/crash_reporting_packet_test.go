@@ -21,7 +21,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -47,8 +47,10 @@ func TestCrashReportingPacket(t *testing.T) {
 	ctx := context.Background()
 	var packets []*raven.Packet
 
-	// Temporarily enable all crash-reporting settings.
-	defer settings.TestingSetBool(&log.DiagnosticsReportingEnabled, true)()
+	st := cluster.MakeClusterSettings()
+	// Enable all crash-reporting settings.
+	st.DiagnosticsReportingEnabled.Override(true)
+
 	defer log.TestingSetCrashReportingURL("https://ignored:ignored@ignored/ignored")()
 
 	// Install a Transport that locally records packets rather than sending them
@@ -72,13 +74,13 @@ func TestCrashReportingPacket(t *testing.T) {
 
 	func() {
 		defer expectPanic("before server start")
-		defer log.RecoverAndReportPanic(ctx)
+		defer log.RecoverAndReportPanic(ctx, st)
 		panic("oh te noes!")
 	}()
 
 	func() {
 		defer expectPanic("after server start")
-		defer log.RecoverAndReportPanic(ctx)
+		defer log.RecoverAndReportPanic(ctx, st)
 		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 		s.Stopper().Stop(ctx)
 		panic("oh te noes!")

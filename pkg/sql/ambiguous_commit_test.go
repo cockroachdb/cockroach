@@ -29,8 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -134,23 +133,21 @@ func TestAmbiguousCommit(t *testing.T) {
 				}
 			}
 
-			// Avoid distSQL so we can reliably hydrate the intended dist
-			// sender's cache below.
-			{
-				distSQLOverride := &settings.EnumSetting{}
-				settings.TestingSetEnum(&distSQLOverride, int64(sql.DistSQLOff))
-				params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
-					OverrideDistSQLMode: distSQLOverride,
-				}
-			}
-
 			testClusterArgs := base.TestClusterArgs{
 				ReplicationMode: base.ReplicationAuto,
 				ServerArgs:      params,
 			}
+
 			const numReplicas = 3
 			tc := testcluster.StartTestCluster(t, numReplicas, testClusterArgs)
 			defer tc.Stopper().Stop(context.TODO())
+
+			// Avoid distSQL so we can reliably hydrate the intended dist
+			// sender's cache below.
+			for _, server := range tc.Servers {
+				st := server.ClusterSettings()
+				st.DistSQLClusterExecMode.Override(int64(cluster.DistSQLOff))
+			}
 
 			sqlDB := tc.Conns[0]
 

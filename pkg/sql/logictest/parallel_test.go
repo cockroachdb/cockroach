@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -195,6 +196,13 @@ func (t *parallelTest) setup(spec *parTestSpec) {
 		},
 	}
 	t.cluster = serverutils.StartTestCluster(t, spec.ClusterSize, args)
+
+	for i := 0; i < t.cluster.NumServers(); i++ {
+		server := t.cluster.Server(i)
+		mode := cluster.DistSQLOff
+		server.ClusterSettings().DistSQLClusterExecMode.Override(int64(mode))
+	}
+
 	t.clients = make([][]*gosql.DB, spec.ClusterSize)
 	for i := range t.clients {
 		t.clients[i] = append(t.clients[i], t.cluster.ServerConn(i))

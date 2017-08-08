@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package base
+package cluster
 
 import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
@@ -44,3 +44,7 @@ var (
 	// about the mechanism in which this version is used.
 	VersionBase = roachpb.Version{Major: 1}
 )
+
+// FIXME(tschottdorf): remove these with the version migration PR.
+var _ = MinimumSupportedVersion
+var _ = VersionBase
