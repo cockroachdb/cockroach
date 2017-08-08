@@ -128,13 +128,24 @@ func testGossipRestartInner(
 		}
 
 		log.Infof(ctx, "restarting all nodes")
-		ch := make(chan error)
-		for i := 0; i < num; i++ {
-			go func(i int) { ch <- c.Restart(ctx, i) }(i)
-		}
-		for i := 0; i < num; i++ {
-			if err := <-ch; err != nil {
-				t.Errorf("error restarting node %d: %s", i, err)
+		if _, ok := c.(*cluster.LocalCluster); ok {
+			// It is not safe to call Restart in parallel when using
+			// cluster.LocalCluster because expected container shutdown events
+			// may be reordered.
+			for i := 0; i < num; i++ {
+				if err := c.Restart(ctx, i); err != nil {
+					t.Errorf("error restarting node %d: %s", i, err)
+				}
+			}
+		} else {
+			ch := make(chan error)
+			for i := 0; i < num; i++ {
+				go func(i int) { ch <- c.Restart(ctx, i) }(i)
+			}
+			for i := 0; i < num; i++ {
+				if err := <-ch; err != nil {
+					t.Errorf("error restarting node %d: %s", i, err)
+				}
 			}
 		}
 		if t.Failed() {
