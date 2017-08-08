@@ -255,3 +255,48 @@ $reports-table
   list-style-type none
   margin 0
   padding 0
+
+.debug-table
+  margin 0 0 40px
+  display table
+  border 0
+  color $body-color
+
+  &__row
+    display table-row
+
+  &__cell
+    padding 6px 12px
+    display table-cell
+    text-align left
+    vertical-align top
+    width fit-content
+
+    &--header
+      font-weight 900
+      color $headings-color
+      text-align right
+      width 18rem
+      padding-top 7px
+
+.debug-inner-table
+  margin 0
+  display table
+  border 0
+  color $body-color
+
+  &__row
+    display table-row
+
+  &__cell
+    display table-cell
+    text-align left
+    vertical-align top
+    width 25rem
+
+    &--notes
+      width fit-content
+
+.debug-link
+  color $link-color
+  text-decoration none
