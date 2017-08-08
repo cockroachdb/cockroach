@@ -70,9 +70,6 @@ func (ss *sortAllStrategy) Execute(ctx context.Context, s *sorter) error {
 	if !ss.useTempStorage {
 		return errors.Wrap(err, "external storage for large queries disabled")
 	}
-	if s.tempStorage == nil {
-		return errors.Wrap(err, "external storage not provided on this cockroach node")
-	}
 	log.VEventf(ctx, 2, "falling back to disk")
 	diskContainer := makeDiskRowContainer(
 		ctx, s.flowCtx.diskMonitor, ss.rows.types, ss.rows.ordering, s.tempStorage,
