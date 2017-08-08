@@ -135,18 +135,13 @@ executable will be in your current directory and can be run as shown in the
   GitHub's UI](https://help.github.com/articles/assigning-issues-and-pull-requests-to-other-github-users/).
   This will help focus and expedite the code review process.
 
-+ If you get a test failure in CircleCI, check the Test Failure tab to see why
-  the test failed. When the failure is logged in `excerpt.txt`, you can find
-  the file from the Artifacts tab and see log messages. (You need to sign in to
-  see the Artifacts tab.)
-
-+ Address feedback by amending your commits. If your change contains multiple
-  commits, address each piece of feedback by amending that commit to which the
-  particular feedback is aimed. Wait (or ask) for new feedback on those
-  commits if they are not straightforward. An `LGTM` ("looks good to me") by
-  someone qualified is usually posted when you're free to go ahead and merge.
-  Most new contributors aren't allowed to merge themselves; in that case, we'll
-  do it for you.
++ Address test failures and feedback by amending your commits. If your change
+  contains multiple commits, address each piece of feedback by amending that
+  commit to which the particular feedback is aimed. Wait (or ask) for new
+  feedback on those commits if they are not straightforward. An `LGTM` ("looks
+  good to me") by someone qualified is usually posted when you're free to go
+  ahead and merge. Most new contributors aren't allowed to merge themselves;
+  in that case, we'll do it for you.
 
 ## Debugging
 
