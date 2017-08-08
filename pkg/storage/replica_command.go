@@ -4061,5 +4061,12 @@ func (r *Replica) adminScatter(
 		return roachpb.AdminScatterResponse{}, ctx.Err()
 	}
 
-	return roachpb.AdminScatterResponse{}, nil
+	return roachpb.AdminScatterResponse{
+		Ranges: []roachpb.AdminScatterResponse_Range{{
+			Span: roachpb.Span{
+				Key:    desc.StartKey.AsRawKey(),
+				EndKey: desc.EndKey.AsRawKey(),
+			},
+		}},
+	}, nil
 }
