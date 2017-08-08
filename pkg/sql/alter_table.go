@@ -83,6 +83,17 @@ func (n *alterTableNode) Start(params runParams) error {
 			if err != nil {
 				return err
 			}
+			// We're checking to see if a user is trying add a non-nullable column without a default to a
+			// non empty table.
+			if !col.Nullable && col.DefaultExpr == nil {
+				kvs, err := params.p.txn.Scan(params.ctx, n.tableDesc.PrimaryIndexSpan().Key, n.tableDesc.PrimaryIndexSpan().EndKey, 1)
+				if err != nil {
+					return err
+				}
+				if len(kvs) > 0 {
+					return sqlbase.NewNonNullViolationError(col.Name)
+				}
+			}
 			_, dropped, err := n.tableDesc.FindColumnByName(d.Name)
 			if err == nil {
 				if dropped {
