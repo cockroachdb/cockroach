@@ -77,22 +77,35 @@ func runLsNodes(cmd *cobra.Command, args []string) error {
 	return printQueryOutput(os.Stdout, lsNodesColumnHeaders, newRowSliceIter(rows), "")
 }
 
-var statusNodesColumnHeaders = []string{
+var baseNodeColumnHeaders = []string{
 	"id",
 	"address",
 	"build",
 	"updated_at",
 	"started_at",
-	"live_bytes",
-	"key_bytes",
-	"value_bytes",
-	"intent_bytes",
-	"system_bytes",
+}
+
+var statusNodesColumnHeadersForRanges = []string{
 	"replicas_leaders",
 	"replicas_leaseholders",
 	"ranges",
 	"ranges_unavailable",
 	"ranges_underreplicated",
+}
+
+var statusNodesColumnHeadersForStats = []string{
+	"live_bytes",
+	"key_bytes",
+	"value_bytes",
+	"intent_bytes",
+	"system_bytes",
+}
+
+var statusNodesColumnHeadersForDecommission = []string{
+	"is_live",
+	"gossiped_replicas",
+	"is_decommissioning",
+	"is_draining",
 }
 
 var statusNodeCmd = &cobra.Command{
@@ -115,6 +128,9 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 	ctx := stopperContext(stopper)
 	defer stopper.Stop(ctx)
 
+	var decommissionStatusResp *serverpb.DecommissionStatusResponse
+	var decommissionStatusRequest *serverpb.DecommissionStatusRequest
+
 	switch len(args) {
 	case 0:
 		// Show status for all nodes.
@@ -123,12 +139,22 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		nodeStatuses = nodes.Nodes
+		decommissionStatusRequest = &serverpb.DecommissionStatusRequest{
+			NodeIDs: []roachpb.NodeID{},
+		}
 
 	case 1:
 		nodeID := args[0]
 		nodeStatus, err := c.Node(ctx, &serverpb.NodeRequest{NodeId: nodeID})
 		if err != nil {
 			return err
+		}
+		nodeIDs, err := parseNodeIDs(args)
+		if err != nil {
+			return err
+		}
+		decommissionStatusRequest = &serverpb.DecommissionStatusRequest{
+			NodeIDs: nodeIDs,
 		}
 		if nodeStatus.Desc.NodeID == 0 {
 			// I'm not sure why the status call doesn't return an error when the given NodeID doesn't
@@ -143,12 +169,43 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 		return errors.Errorf("expected no arguments or a single node ID")
 	}
 
-	return printQueryOutput(os.Stdout, statusNodesColumnHeaders, newRowSliceIter(nodeStatusesToRows(nodeStatuses)), "")
+	if nodeCtx.statusShowDecommission || nodeCtx.statusShowAll {
+		cAdmin, stopperAdmin, err := getAdminClient()
+		if err != nil {
+			return err
+		}
+		ctxAdmin := stopperContext(stopperAdmin)
+		defer stopperAdmin.Stop(ctxAdmin)
+
+		decommissionStatusResp, err = cAdmin.DecommissionStatus(ctxAdmin, decommissionStatusRequest)
+		if err != nil {
+			return err
+		}
+	}
+
+	return printQueryOutput(os.Stdout, getStatusNodeHeaders(), newRowSliceIter(nodeStatusesToRows(nodeStatuses, decommissionStatusResp)), "")
+}
+
+func getStatusNodeHeaders() []string {
+	headers := baseNodeColumnHeaders
+
+	if nodeCtx.statusShowAll || nodeCtx.statusShowRanges {
+		headers = append(headers, statusNodesColumnHeadersForRanges...)
+	}
+	if nodeCtx.statusShowAll || nodeCtx.statusShowStats {
+		headers = append(headers, statusNodesColumnHeadersForStats...)
+	}
+	if nodeCtx.statusShowAll || nodeCtx.statusShowDecommission {
+		headers = append(headers, statusNodesColumnHeadersForDecommission...)
+	}
+	return headers
 }
 
 // nodeStatusesToRows converts NodeStatuses to SQL-like result rows, so that we can pretty-print
-// them.
-func nodeStatusesToRows(statuses []status.NodeStatus) [][]string {
+// them. We also pass a decommission status object if status was called with the --decommission flag.
+func nodeStatusesToRows(
+	statuses []status.NodeStatus, decomStatus *serverpb.DecommissionStatusResponse,
+) [][]string {
 	// Create results that are like the results for SQL results, so that we can pretty-print them.
 	var rows [][]string
 	for _, nodeStatus := range statuses {
@@ -166,23 +223,36 @@ func nodeStatusesToRows(statuses []status.NodeStatus) [][]string {
 			}
 		}
 
-		rows = append(rows, []string{
-			strconv.FormatInt(int64(nodeStatus.Desc.NodeID), 10),
+		row := []string{strconv.FormatInt(int64(nodeStatus.Desc.NodeID), 10),
 			hostPort,
 			build,
 			updatedAtStr,
-			startedAtStr,
-			strconv.FormatInt(int64(metricVals["livebytes"]), 10),
-			strconv.FormatInt(int64(metricVals["keybytes"]), 10),
-			strconv.FormatInt(int64(metricVals["valbytes"]), 10),
-			strconv.FormatInt(int64(metricVals["intentbytes"]), 10),
-			strconv.FormatInt(int64(metricVals["sysbytes"]), 10),
-			strconv.FormatInt(int64(metricVals["replicas.leaders"]), 10),
-			strconv.FormatInt(int64(metricVals["replicas.leaseholders"]), 10),
-			strconv.FormatInt(int64(metricVals["ranges"]), 10),
-			strconv.FormatInt(int64(metricVals["ranges.unavailable"]), 10),
-			strconv.FormatInt(int64(metricVals["ranges.underreplicated"]), 10),
-		})
+			startedAtStr}
+
+		if nodeCtx.statusShowAll || nodeCtx.statusShowRanges {
+			row = append(row,
+				strconv.FormatInt(int64(metricVals["replicas.leaders"]), 10),
+				strconv.FormatInt(int64(metricVals["replicas.leaseholders"]), 10),
+				strconv.FormatInt(int64(metricVals["ranges"]), 10),
+				strconv.FormatInt(int64(metricVals["ranges.unavailable"]), 10),
+				strconv.FormatInt(int64(metricVals["ranges.underreplicated"]), 10),
+			)
+		}
+		if nodeCtx.statusShowAll || nodeCtx.statusShowStats {
+			row = append(row,
+				strconv.FormatInt(int64(metricVals["livebytes"]), 10),
+				strconv.FormatInt(int64(metricVals["keybytes"]), 10),
+				strconv.FormatInt(int64(metricVals["valbytes"]), 10),
+				strconv.FormatInt(int64(metricVals["intentbytes"]), 10),
+				strconv.FormatInt(int64(metricVals["sysbytes"]), 10),
+			)
+		}
+		if nodeCtx.statusShowAll || nodeCtx.statusShowDecommission {
+			if decomStatus != nil {
+				row = append(row, decommissionResponseValueToRows(decomStatus.Status)[0][1:]...)
+			}
+		}
+		rows = append(rows, row)
 	}
 	return rows
 }
@@ -190,7 +260,7 @@ func nodeStatusesToRows(statuses []status.NodeStatus) [][]string {
 var decommissionNodesColumnHeaders = []string{
 	"id",
 	"is_live",
-	"replicas",
+	"gossiped_replicas",
 	"is_decommissioning",
 	"is_draining",
 }
@@ -221,6 +291,9 @@ func parseNodeIDs(strNodeIDs []string) ([]roachpb.NodeID, error) {
 }
 
 func runDecommissionNode(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return usageAndError(cmd)
+	}
 	c, stopper, err := getAdminClient()
 	if err != nil {
 		return err
@@ -228,14 +301,6 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 	ctx := stopperContext(stopper)
 	defer stopper.Stop(ctx)
 
-	if len(args) == 0 {
-		req := &serverpb.DecommissionStatusRequest{}
-		resp, err := c.DecommissionStatus(ctx, req)
-		if err != nil {
-			return err
-		}
-		return printDecommissionStatus(*resp)
-	}
 	return runDecommissionNodeImpl(ctx, c, nodeCtx.nodeDecommissionWait, args)
 }
 
