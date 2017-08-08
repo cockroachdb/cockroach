@@ -248,9 +248,9 @@ CREATE TABLE crdb_internal.leases (
 				ts.mu.Lock()
 				defer ts.mu.Unlock()
 
-				dropped := parser.MakeDBool(parser.DBool(ts.dropped))
+				dropped := parser.MakeDBool(parser.DBool(ts.mu.dropped))
 
-				for _, state := range ts.active.data {
+				for _, state := range ts.mu.active.data {
 					if !userCanSeeDescriptor(&state.TableDescriptor, p.session.User) {
 						continue
 					}

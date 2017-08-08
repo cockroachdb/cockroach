@@ -114,7 +114,7 @@ func TestTableSet(t *testing.T) {
 func getNumVersions(ts *tableState) int {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
-	return len(ts.active.data)
+	return len(ts.mu.active.data)
 }
 
 func TestPurgeOldVersions(t *testing.T) {
@@ -192,9 +192,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("found %d versions instead of 1", numLeases)
 	}
 	ts.mu.Lock()
-	correctLease := ts.active.data[0].TableDescriptor.ID == tables[5].ID &&
-		ts.active.data[0].TableDescriptor.Version == tables[5].Version
-	correctExpiration := ts.active.data[0].expiration == expiration
+	correctLease := ts.mu.active.data[0].TableDescriptor.ID == tables[5].ID &&
+		ts.mu.active.data[0].TableDescriptor.Version == tables[5].Version
+	correctExpiration := ts.mu.active.data[0].expiration == expiration
 	ts.mu.Unlock()
 	if !correctLease {
 		t.Fatalf("wrong lease survived purge")
@@ -210,7 +210,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		TableDescriptor: tables[0],
 		expiration:      tables[5].ModificationTime,
 	}
-	ts.active.insert(tableVersion)
+	ts.mu.active.insert(tableVersion)
 	ts.mu.Unlock()
 	if numLeases := getNumVersions(ts); numLeases != 2 {
 		t.Fatalf("found %d versions instead of 2", numLeases)
@@ -405,7 +405,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	// Pretend the table has been dropped, so that when we release leases on it,
 	// they are removed from the tableNameCache too.
 	tableState := leaseManager.findTableState(tableDesc.ID, true)
-	tableState.dropped = true
+	tableState.mu.Lock()
+	tableState.mu.dropped = true
+	tableState.mu.Unlock()
 
 	// Try to trigger the race repeatedly: race an AcquireByName against a
 	// Release.
