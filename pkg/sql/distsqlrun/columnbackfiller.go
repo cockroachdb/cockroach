@@ -72,12 +72,6 @@ func (cb *columnBackfiller) init() error {
 	// colIdxMap maps ColumnIDs to indices into desc.Columns and desc.Mutations.
 	var colIdxMap map[sqlbase.ColumnID]int
 
-	// Note if there is a new non nullable column with no default value.
-	// If that's the case, and we end up reading a non-zero amount of data,
-	// we need a throw an error since the old columns will already violate the
-	// not null constraint.
-	// TODO(jordan): detect this earlier. #14455
-	addingNonNullableColumn := false
 	if len(desc.Mutations) > 0 {
 		for _, m := range desc.Mutations {
 			if ColumnMutationFilter(m) {
@@ -86,7 +80,6 @@ func (cb *columnBackfiller) init() error {
 					desc := *m.GetColumn()
 					cb.added = append(cb.added, desc)
 					if desc.DefaultExpr == nil && !desc.Nullable {
-						addingNonNullableColumn = true
 					}
 				case sqlbase.DescriptorMutation_DROP:
 					cb.dropped = append(cb.dropped, *m.GetColumn())
@@ -100,7 +93,7 @@ func (cb *columnBackfiller) init() error {
 	}
 
 	cb.updateCols = append(cb.added, cb.dropped...)
-	if len(cb.dropped) > 0 || addingNonNullableColumn || len(defaultExprs) > 0 {
+	if len(cb.dropped) > 0 || len(defaultExprs) > 0 {
 		// Populate default values.
 		cb.updateExprs = make([]parser.TypedExpr, len(cb.updateCols))
 		for j := range cb.added {
