@@ -641,7 +641,7 @@ func getClientGRPCConn() (*grpc.ClientConn, *hlc.Clock, *stop.Stopper, error) {
 	clock := hlc.NewClock(hlc.UnixNano, 0)
 	stopper := stop.NewStopper()
 	rpcContext := rpc.NewContext(
-		log.AmbientContext{},
+		log.AmbientContext{Tracer: serverCfg.Settings.Tracer},
 		serverCfg.Config,
 		clock,
 		stopper,

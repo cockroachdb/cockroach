@@ -48,6 +48,7 @@ import (
 // Note that the LocalTestCluster is different from server.TestCluster
 // in that although it uses a distributed sender, there is no RPC traffic.
 type LocalTestCluster struct {
+	Cfg                      storage.StoreConfig
 	Manual                   *hlc.ManualClock
 	Clock                    *hlc.Clock
 	Gossip                   *gossip.Gossip
@@ -83,7 +84,10 @@ type InitSenderFn func(
 // TestServer.Addr after Start() for client connections. Use Stop()
 // to shutdown the server after the test completes.
 func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSender InitSenderFn) {
+	ltc.Manual = hlc.NewManualClock(123)
+	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano, 50*time.Millisecond)
 	cfg := storage.TestStoreConfig(ltc.Clock)
+	ltc.Cfg = cfg
 	ambient := log.AmbientContext{Tracer: cfg.Settings.Tracer}
 	nc := &base.NodeIDContainer{}
 	ambient.AddLogTag("n", nc)
@@ -92,8 +96,6 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSende
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: nodeID}
 
 	ltc.tester = t
-	ltc.Manual = hlc.NewManualClock(123)
-	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano, 50*time.Millisecond)
 	ltc.Stopper = stop.NewStopper()
 	rpcContext := rpc.NewContext(ambient, baseCtx, ltc.Clock, ltc.Stopper)
 	server := rpc.NewServer(rpcContext) // never started

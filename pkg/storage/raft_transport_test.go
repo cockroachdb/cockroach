@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 const channelServerBrokenRangeMessage = "channelServer broken range"
@@ -111,7 +112,7 @@ func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
 		transports: map[roachpb.NodeID]*storage.RaftTransport{},
 	}
 	rttc.nodeRPCContext = rpc.NewContext(
-		log.AmbientContext{},
+		log.AmbientContext{Tracer: tracing.NewTracer()},
 		testutils.NewNodeTestBaseContext(),
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
 		rttc.stopper,
@@ -145,7 +146,7 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 ) (*storage.RaftTransport, net.Addr) {
 	grpcServer := rpc.NewServer(rttc.nodeRPCContext)
 	transport := storage.NewRaftTransport(
-		log.AmbientContext{},
+		log.AmbientContext{Tracer: tracing.NewTracer()},
 		cluster.MakeClusterSettings(),
 		storage.GossipAddressResolver(rttc.gossip),
 		grpcServer,

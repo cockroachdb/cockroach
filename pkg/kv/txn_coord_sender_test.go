@@ -1307,9 +1307,10 @@ func checkTxnMetrics(
 // test.
 func setupMetricsTest(t *testing.T) (*localtestcluster.LocalTestCluster, *TxnCoordSender, func()) {
 	s, testSender := createTestDB(t)
+	st := s.Cfg.Settings
 	txnMetrics := MakeTxnMetrics(metric.TestSampleInterval)
-	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
-	sender := NewTxnCoordSender(ambient, cluster.MakeClusterSettings(),
+	ambient := log.AmbientContext{Tracer: st.Tracer}
+	sender := NewTxnCoordSender(ambient, st,
 		testSender.wrapped, s.Clock, false, s.Stopper, txnMetrics)
 
 	return s, sender, func() {
@@ -1327,6 +1328,8 @@ func TestTxnCommit(t *testing.T) {
 	defer cleanupFn()
 	value := []byte("value")
 	db := client.NewDB(sender, s.Clock)
+
+	log.Warningf(context.TODO(), "CLOCK IS NOW %s", s.Clock.Now())
 
 	// Test normal commit.
 	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {

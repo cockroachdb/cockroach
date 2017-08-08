@@ -373,6 +373,8 @@ func MakeConfig(st cluster.Settings) Config {
 		},
 		TempStore: TempStore,
 	}
+	cfg.AmbientCtx.Tracer = st.Tracer
+
 	cfg.Config.InitDefaults()
 	cfg.RaftConfig.SetDefaults()
 	return cfg
