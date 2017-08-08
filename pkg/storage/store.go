@@ -57,7 +57,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -117,14 +116,15 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	if clock == nil {
 		clock = hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	}
+	st := cluster.MakeClusterSettings()
 	sc := StoreConfig{
 		ExposedClusterVersion: migration.NewExposedClusterVersion(func() cluster.ClusterVersion {
 			return cluster.ClusterVersion{
 				UseVersion: cluster.ServerVersion, // all features active
 			}
 		}, nil),
-		Settings:   cluster.MakeClusterSettings(),
-		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Settings:   st,
+		AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
 		Clock:      clock,
 		CoalescedHeartbeatsInterval:    50 * time.Millisecond,
 		RaftHeartbeatIntervalTicks:     1,

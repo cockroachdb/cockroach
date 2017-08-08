@@ -46,10 +46,6 @@ func (*BoolSetting) Typ() string {
 // Override changes the setting without validation.
 // For testing usage only.
 func (b *BoolSetting) Override(v bool) {
-	b.set(v)
-}
-
-func (b *BoolSetting) set(v bool) {
 	vInt := int32(0)
 	if v {
 		vInt = 1
@@ -57,6 +53,10 @@ func (b *BoolSetting) set(v bool) {
 	if atomic.SwapInt32(&b.v, vInt) != vInt {
 		b.changed()
 	}
+}
+
+func (b *BoolSetting) set(v bool) {
+	b.Override(v)
 }
 
 func (b *BoolSetting) setToDefault() {

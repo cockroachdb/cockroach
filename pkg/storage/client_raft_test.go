@@ -2409,7 +2409,7 @@ func TestReplicaGCRace(t *testing.T) {
 	// Create a new transport for store 0. Error responses are passed
 	// back along the same grpc stream as the request so it's ok that
 	// there are two (this one and the one actually used by the store).
-	fromTransport := storage.NewRaftTransport(log.AmbientContext{},
+	fromTransport := storage.NewRaftTransport(log.AmbientContext{Tracer: mtc.storeConfig.Settings.Tracer},
 		cluster.MakeClusterSettings(),
 		storage.GossipAddressResolver(fromStore.Gossip()),
 		nil, /* grpcServer */
@@ -2805,7 +2805,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	// Create a new transport for store 0. Error responses are passed
 	// back along the same grpc stream as the request so it's ok that
 	// there are two (this one and the one actually used by the store).
-	transport0 := storage.NewRaftTransport(log.AmbientContext{},
+	transport0 := storage.NewRaftTransport(log.AmbientContext{Tracer: mtc.storeConfig.Settings.Tracer},
 		cluster.MakeClusterSettings(),
 		storage.GossipAddressResolver(mtc.gossips[0]),
 		nil, /* grpcServer */

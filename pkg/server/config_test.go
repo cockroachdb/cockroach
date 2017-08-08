@@ -22,13 +22,14 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/kr/pretty"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/kr/pretty"
 )
 
 func TestParseInitNodeAttributes(t *testing.T) {

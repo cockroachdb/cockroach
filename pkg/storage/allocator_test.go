@@ -2569,7 +2569,7 @@ func Example_rebalancing() {
 	// Model a set of stores in a cluster,
 	// randomly adding / removing stores and adding bytes.
 	rpcContext := rpc.NewContext(
-		log.AmbientContext{},
+		log.AmbientContext{Tracer: st.Tracer},
 		&base.Config{Insecure: true},
 		clock,
 		stopper,
@@ -2579,7 +2579,7 @@ func Example_rebalancing() {
 	// Deterministic must be set as this test is comparing the exact output
 	// after each rebalance.
 	sp := NewStorePool(
-		log.AmbientContext{},
+		log.AmbientContext{Tracer: st.Tracer},
 		st,
 		g,
 		clock,

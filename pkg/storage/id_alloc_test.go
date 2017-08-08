@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // TestIDAllocator creates an ID allocator which allocates from
@@ -46,7 +47,7 @@ func TestIDAllocator(t *testing.T) {
 	allocd := make(chan uint32, maxI*maxJ)
 	errChan := make(chan error, maxI*maxJ)
 	idAlloc, err := newIDAllocator(
-		log.AmbientContext{}, keys.RangeIDGenerator, store.cfg.DB, 2, 10, stopper,
+		log.AmbientContext{Tracer: store.ClusterSettings().Tracer}, keys.RangeIDGenerator, store.cfg.DB, 2, 10, stopper,
 	)
 	if err != nil {
 		t.Errorf("failed to create idAllocator: %v", err)
@@ -105,7 +106,7 @@ func TestIDAllocatorNegativeValue(t *testing.T) {
 		t.Errorf("expected new value to be -1024; got %d", newValue)
 	}
 	idAlloc, err := newIDAllocator(
-		log.AmbientContext{}, keys.RangeIDGenerator, store.cfg.DB, 2, 10, stopper,
+		log.AmbientContext{Tracer: store.ClusterSettings().Tracer}, keys.RangeIDGenerator, store.cfg.DB, 2, 10, stopper,
 	)
 	if err != nil {
 		t.Errorf("failed to create IDAllocator: %v", err)
@@ -128,7 +129,7 @@ func TestNewIDAllocatorInvalidArgs(t *testing.T) {
 	}
 	for i := range args {
 		if _, err := newIDAllocator(
-			log.AmbientContext{}, nil, nil, args[i][0], args[i][1], nil,
+			log.AmbientContext{Tracer: tracing.NewTracer()}, nil, nil, args[i][0], args[i][1], nil,
 		); err == nil {
 			t.Errorf("expect to have error return, but got nil")
 		}
@@ -151,7 +152,7 @@ func TestAllocateErrorAndRecovery(t *testing.T) {
 
 	// Firstly create a valid IDAllocator to get some ID.
 	idAlloc, err := newIDAllocator(
-		log.AmbientContext{}, keys.RangeIDGenerator, store.cfg.DB, 2, 10, stopper,
+		log.AmbientContext{Tracer: store.ClusterSettings().Tracer}, keys.RangeIDGenerator, store.cfg.DB, 2, 10, stopper,
 	)
 	if err != nil {
 		t.Errorf("failed to create IDAllocator: %v", err)
@@ -245,7 +246,7 @@ func TestAllocateWithStopper(t *testing.T) {
 		defer stopper.Stop(context.TODO())
 		store, _ := createTestStore(t, stopper)
 		idAlloc, err := newIDAllocator(
-			log.AmbientContext{}, keys.RangeIDGenerator, store.cfg.DB, 2, 10, stopper,
+			log.AmbientContext{Tracer: store.ClusterSettings().Tracer}, keys.RangeIDGenerator, store.cfg.DB, 2, 10, stopper,
 		)
 		if err != nil {
 			t.Fatal(err)

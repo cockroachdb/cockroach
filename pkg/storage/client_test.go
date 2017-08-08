@@ -63,7 +63,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // rg1 returns a wrapping sender that changes all requests to range 0 to
@@ -132,7 +131,8 @@ func createTestStoreWithEngine(
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
 	distSender := kv.NewDistSender(kv.DistSenderConfig{
-		Clock: storeCfg.Clock,
+		AmbientCtx: ac,
+		Clock:      storeCfg.Clock,
 		TestingKnobs: kv.DistSenderTestingKnobs{
 			TransportFactory: kv.SenderTransportFactory(tracer, stores),
 		},
@@ -277,8 +277,9 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	if m.transportStopper == nil {
 		m.transportStopper = stop.NewStopper()
 	}
+	st := cluster.MakeClusterSettings()
 	if m.rpcContext == nil {
-		m.rpcContext = rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, m.clock,
+		m.rpcContext = rpc.NewContext(log.AmbientContext{Tracer: st.Tracer}, &base.Config{Insecure: true}, m.clock,
 			m.transportStopper)
 		// Create a breaker which never trips and never backs off to avoid
 		// introducing timing-based flakes.
@@ -289,7 +290,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		}
 	}
 	m.transport = storage.NewRaftTransport(
-		log.AmbientContext{}, cluster.MakeClusterSettings(), m.getNodeIDAddress, nil, m.rpcContext,
+		log.AmbientContext{Tracer: st.Tracer}, st, m.getNodeIDAddress, nil, m.rpcContext,
 	)
 
 	for idx := 0; idx < numStores; idx++ {
@@ -639,8 +640,10 @@ func (mrdb mtcRangeDescriptorDB) RangeLookup(
 func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
+	ambient := log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer}
 	m.distSenders[idx] = kv.NewDistSender(kv.DistSenderConfig{
-		Clock: m.clock,
+		AmbientCtx: ambient,
+		Clock:      m.clock,
 		RangeDescriptorDB: mtcRangeDescriptorDB{
 			multiTestContext: m,
 			ds:               &m.distSenders[idx],
@@ -650,7 +653,6 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 		},
 		RPCRetryOptions: &retryOpts,
 	}, m.gossips[idx])
-	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	sender := kv.NewTxnCoordSender(
 		ambient,
 		m.storeConfig.Settings,
@@ -665,7 +667,7 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 
 func (m *multiTestContext) populateStorePool(idx int, nodeLiveness *storage.NodeLiveness) {
 	m.storePools[idx] = storage.NewStorePool(
-		log.AmbientContext{},
+		log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer},
 		m.storeConfig.Settings,
 		m.gossips[idx],
 		m.clock,
@@ -700,8 +702,6 @@ func (m *multiTestContext) addStore(idx int) {
 	m.grpcServers[idx] = grpcServer
 	storage.RegisterMultiRaftServer(grpcServer, m.transport)
 
-	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
-
 	stopper := stop.NewStopper()
 
 	// Give this store the first store as a resolver. We don't provide all of the
@@ -733,6 +733,7 @@ func (m *multiTestContext) addStore(idx int) {
 
 	nodeID := roachpb.NodeID(idx + 1)
 	cfg := m.makeStoreConfig(idx)
+	ambient := log.AmbientContext{Tracer: cfg.Settings.Tracer}
 	m.populateDB(idx, stopper)
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 	m.nodeLivenesses[idx] = storage.NewNodeLiveness(
@@ -885,7 +886,7 @@ func (m *multiTestContext) restartStore(i int) {
 	m.populateDB(i, stopper)
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 	m.nodeLivenesses[i] = storage.NewNodeLiveness(
-		log.AmbientContext{Tracer: tracing.NewTracer()}, m.clocks[i], m.dbs[i], m.gossips[i],
+		log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer}, m.clocks[i], m.dbs[i], m.gossips[i],
 		nlActive, nlRenewal,
 	)
 	m.populateStorePool(i, m.nodeLivenesses[i])

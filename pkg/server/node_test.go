@@ -65,7 +65,7 @@ func createTestNode(
 	st := cfg.Settings
 
 	stopper := stop.NewStopper()
-	nodeRPCContext := rpc.NewContext(log.AmbientContext{}, nodeTestBaseContext, cfg.Clock, stopper)
+	nodeRPCContext := rpc.NewContext(log.AmbientContext{Tracer: cfg.Settings.Tracer}, nodeTestBaseContext, cfg.Clock, stopper)
 	cfg.ScanInterval = 10 * time.Hour
 	cfg.ConsistencyCheckInterval = 10 * time.Hour
 	grpcServer := rpc.NewServer(nodeRPCContext)
@@ -78,12 +78,13 @@ func createTestNode(
 	)
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
+	cfg.AmbientCtx.Tracer = st.Tracer
 	distSender := kv.NewDistSender(kv.DistSenderConfig{
+		AmbientCtx:      cfg.AmbientCtx,
 		Clock:           cfg.Clock,
 		RPCContext:      nodeRPCContext,
 		RPCRetryOptions: &retryOpts,
 	}, cfg.Gossip)
-	cfg.AmbientCtx.Tracer = st.Tracer
 	sender := kv.NewTxnCoordSender(
 		cfg.AmbientCtx,
 		st,

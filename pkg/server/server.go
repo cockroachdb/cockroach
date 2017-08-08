@@ -133,7 +133,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	st := cfg.Settings
 
 	if cfg.AmbientCtx.Tracer == nil {
-		return nil, errors.New("no tracer set in AmbientCtx")
+		panic(errors.New("no tracer set in AmbientCtx"))
 	}
 
 	s := &Server{
