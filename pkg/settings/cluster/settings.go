@@ -43,13 +43,16 @@ var ValidateEnterpriseLicense = func(s string) error {
 // BulkIOWriteLimiterBurst is the burst for the BulkIOWriteLimiter cluster setting.
 const BulkIOWriteLimiterBurst = 2 * 1024 * 1024 // 2MB
 
+// DistSQLExecMode controls who can access /debug/requests.
+type DebugRemoteMode string
+
 const (
 	// DebugRemoteOff disallows access to /debug/requests.
-	DebugRemoteOff = "off"
+	DebugRemoteOff DebugRemoteMode = "off"
 	// DebugRemoteLocal allows only host-local access to /debug/requests.
-	DebugRemoteLocal = "local"
+	DebugRemoteLocal DebugRemoteMode = "local"
 	// DebugRemoteAny allows all access to /debug/requests.
-	DebugRemoteAny = "any"
+	DebugRemoteAny DebugRemoteMode = "any"
 )
 
 // DistSQLExecMode controls if and when the Executor uses DistSQL.
@@ -80,11 +83,6 @@ func (m DistSQLExecMode) String() string {
 	default:
 		return fmt.Sprintf("invalid (%d)", m)
 	}
-}
-
-// DistSQLExecModeFromInt converts an int64 into a DistSQLExecMode
-func DistSQLExecModeFromInt(val int64) DistSQLExecMode {
-	return DistSQLExecMode(val)
 }
 
 // DistSQLExecModeFromString converts a string into a DistSQLExecMode
@@ -154,8 +152,9 @@ type DistSQLSettings struct {
 	PlanMergeJoins        *settings.BoolSetting
 }
 
-// SQLSettings is the subset of ClusterSettings affecting SQL.
-type SQLSettings struct {
+// SQLStatsSettings is the subset of ClusterSettings affecting SQL statistics
+// collection.
+type SQLStatsSettings struct {
 	StmtStatsEnable                    *settings.BoolSetting
 	SQLStatsCollectionLatencyThreshold *settings.DurationSetting
 	DumpStmtStatsToLogBeforeReset      *settings.BoolSetting
@@ -231,7 +230,7 @@ type Settings struct {
 	RocksDBSettings
 	RebalancingSettings
 	StorageSettings
-	SQLSettings
+	SQLStatsSettings
 	SQLSessionSettings
 	DistSQLSettings
 	UISettings
@@ -534,7 +533,7 @@ func MakeClusterSettings() Settings {
 		"set to enable remote debugging, localhost-only or disable (any, local, off)",
 		"local",
 		func(s string) error {
-			switch strings.ToLower(s) {
+			switch DebugRemoteMode(strings.ToLower(s)) {
 			case DebugRemoteOff, DebugRemoteLocal, DebugRemoteAny:
 				return nil
 			default:

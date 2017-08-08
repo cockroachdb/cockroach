@@ -356,7 +356,7 @@ func NewSession(
 	ctx context.Context, args SessionArgs, e *Executor, remote net.Addr, memMetrics *MemoryMetrics,
 ) *Session {
 	ctx = e.AnnotateCtx(ctx)
-	distSQLMode := cluster.DistSQLExecModeFromInt(e.cfg.DistSQLClusterExecMode.Get())
+	distSQLMode := cluster.DistSQLExecMode(e.cfg.DistSQLClusterExecMode.Get())
 
 	s := &Session{
 		Database:         args.Database,

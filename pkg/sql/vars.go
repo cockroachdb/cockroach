@@ -211,7 +211,7 @@ var varGen = map[string]sessionVar{
 			return session.DistSQLMode.String()
 		},
 		Reset: func(session *Session) error {
-			session.DistSQLMode = cluster.DistSQLExecModeFromInt(session.execCfg.DistSQLClusterExecMode.Get())
+			session.DistSQLMode = cluster.DistSQLExecMode(session.execCfg.DistSQLClusterExecMode.Get())
 			return nil
 		},
 	},

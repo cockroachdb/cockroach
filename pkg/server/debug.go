@@ -72,7 +72,7 @@ var ClusterSettings cluster.Settings
 // authRequest restricts access to /debug/*.
 func authRequest(r *http.Request) (allow, sensitive bool) {
 	allow, sensitive = traceAuthRequest(r)
-	switch strings.ToLower(ClusterSettings.DebugRemote.Get()) {
+	switch cluster.DebugRemoteMode(strings.ToLower(ClusterSettings.DebugRemote.Get())) {
 	case cluster.DebugRemoteAny:
 		allow = true
 	case cluster.DebugRemoteLocal:
