@@ -1329,8 +1329,6 @@ func TestTxnCommit(t *testing.T) {
 	value := []byte("value")
 	db := client.NewDB(sender, s.Clock)
 
-	log.Warningf(context.TODO(), "CLOCK IS NOW %s", s.Clock.Now())
-
 	// Test normal commit.
 	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		key := []byte("key-commit")
