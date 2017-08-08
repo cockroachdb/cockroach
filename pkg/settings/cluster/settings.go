@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
@@ -301,6 +302,11 @@ func MakeClusterSettings() *Settings {
 		envutil.EnvOrDefaultString("COCKROACH_TEST_ZIPKIN_COLLECTOR", ""),
 	).OnChange(tracingOnChange)
 
+	crashReportsOnChange := func() {
+		f := log.ReportingSettings(s.ReportingSettings)
+		log.ReportingSettingsSingleton.Store(&f)
+	}
+
 	// DiagnosticsReportingEnabled wraps "diagnostics.reporting.enabled".
 	//
 	// "diagnostics.reporting.enabled" enables reporting of metrics related to a
@@ -319,13 +325,13 @@ func MakeClusterSettings() *Settings {
 		"diagnostics.reporting.enabled",
 		"enable reporting diagnostic metrics to cockroach labs",
 		false,
-	)
+	).OnChange(crashReportsOnChange)
 
 	s.CrashReports = r.RegisterBoolSetting(
 		"diagnostics.reporting.send_crash_reports",
 		"send crash and panic reports",
 		true,
-	)
+	).OnChange(crashReportsOnChange)
 
 	// maxIntents is the limit for the number of intents that can be
 	// written in a single transaction. All intents used by a transaction
