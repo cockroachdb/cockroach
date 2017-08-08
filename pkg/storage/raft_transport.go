@@ -151,7 +151,7 @@ func (s raftTransportStatsSlice) Less(i, j int) bool { return s[i].nodeID < s[j]
 // which remote hung up.
 type RaftTransport struct {
 	log.AmbientContext
-	st*cluster.Settings
+	st *cluster.Settings
 
 	resolver   NodeAddressResolver
 	rpcContext *rpc.Context
@@ -172,7 +172,7 @@ func NewDummyRaftTransport() *RaftTransport {
 // NewRaftTransport creates a new RaftTransport.
 func NewRaftTransport(
 	ambient log.AmbientContext,
-	st*cluster.Settings,
+	st *cluster.Settings,
 	resolver NodeAddressResolver,
 	grpcServer *grpc.Server,
 	rpcContext *rpc.Context,

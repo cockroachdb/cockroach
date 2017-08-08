@@ -60,7 +60,7 @@ import (
 //    and add processing stages (connected to the result routers of the children
 //    node).
 type distSQLPlanner struct {
-	st*cluster.Settings
+	st *cluster.Settings
 	// The node descriptor for the gateway node that initiated this query.
 	nodeDesc     roachpb.NodeDescriptor
 	rpcContext   *rpc.Context
@@ -81,7 +81,7 @@ const resolverPolicy = distsqlplan.BinPackingLeaseHolderChoice
 var logPlanDiagram = envutil.EnvOrDefaultBool("COCKROACH_DISTSQL_LOG_PLAN", false)
 
 func newDistSQLPlanner(
-	st*cluster.Settings,
+	st *cluster.Settings,
 	nodeDesc roachpb.NodeDescriptor,
 	rpcCtx *rpc.Context,
 	distSQLSrv *distsqlrun.ServerImpl,

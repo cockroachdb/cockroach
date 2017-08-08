@@ -143,7 +143,7 @@ func BenchmarkImport(b *testing.B) {
 		runBenchmarkImport(b, enableSSTable)
 	})
 	b.Run("WriteBatch", func(b *testing.B) {
-		disableSSTable := func(st*cluster.Settings) {
+		disableSSTable := func(st *cluster.Settings) {
 			st.AddSSTableEnabled.Override(false)
 		}
 		runBenchmarkImport(b, disableSSTable)

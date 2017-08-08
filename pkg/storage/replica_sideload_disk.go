@@ -32,12 +32,12 @@ import (
 var _ sideloadStorage = &diskSideloadStorage{}
 
 type diskSideloadStorage struct {
-	st *cluster.Settings
+	st  *cluster.Settings
 	dir string
 }
 
 func newDiskSideloadStorage(
-	st*cluster.Settings, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID, baseDir string,
+	st *cluster.Settings, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID, baseDir string,
 ) (sideloadStorage, error) {
 	ss := &diskSideloadStorage{
 		dir: filepath.Join(baseDir, fmt.Sprintf("%d.%d", rangeID, replicaID)),

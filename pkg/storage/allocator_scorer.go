@@ -246,7 +246,7 @@ func (cl candidateList) selectBad(randGen allocatorRand) *roachpb.StoreDescripto
 // for allocating a new replica ordered from the best to the worst. Only
 // stores that meet the criteria are included in the list.
 func allocateCandidates(
-	st*cluster.Settings,
+	st *cluster.Settings,
 	sl StoreList,
 	constraints config.Constraints,
 	existing []roachpb.ReplicaDescriptor,
@@ -289,7 +289,7 @@ func allocateCandidates(
 // ordered from least qualified for removal to most qualified. Stores that are
 // marked as not valid, are in violation of a required criteria.
 func removeCandidates(
-	st*cluster.Settings,
+	st *cluster.Settings,
 	sl StoreList,
 	constraints config.Constraints,
 	rangeInfo RangeInfo,
@@ -350,7 +350,7 @@ func removeCandidates(
 // used as rebalancing receivers, ordered from best to worst.
 func rebalanceCandidates(
 	ctx context.Context,
-	st*cluster.Settings,
+	st *cluster.Settings,
 	sl StoreList,
 	constraints config.Constraints,
 	existing []roachpb.ReplicaDescriptor,
@@ -497,7 +497,7 @@ func rebalanceCandidates(
 // having a replica removed from it given the candidate store list.
 func shouldRebalance(
 	ctx context.Context,
-	st*cluster.Settings,
+	st *cluster.Settings,
 	store roachpb.StoreDescriptor,
 	sl StoreList,
 	rangeInfo RangeInfo,
@@ -566,7 +566,7 @@ func shouldRebalance(
 // when EnableStatsBasedRebalancing is disabled and decisions should thus be
 // made based only on range counts.
 func shouldRebalanceNoStats(
-	ctx context.Context, st*cluster.Settings, store roachpb.StoreDescriptor, sl StoreList,
+	ctx context.Context, st *cluster.Settings, store roachpb.StoreDescriptor, sl StoreList,
 ) bool {
 	overfullThreshold := int32(math.Ceil(overfullRangeThreshold(st, sl.candidateRanges.mean)))
 	if store.Capacity.RangeCount > overfullThreshold {
@@ -701,7 +701,7 @@ func oppositeStatus(rcs rangeCountStatus) rangeCountStatus {
 // stores where the range is a better fit based on various balance factors
 // like range count, disk usage, and QPS.
 func balanceScore(
-	st*cluster.Settings, sl StoreList, sc roachpb.StoreCapacity, rangeInfo RangeInfo,
+	st *cluster.Settings, sl StoreList, sc roachpb.StoreCapacity, rangeInfo RangeInfo,
 ) balanceDimensions {
 	var dimensions balanceDimensions
 	if float64(sc.RangeCount) > overfullRangeThreshold(st, sl.candidateRanges.mean) {
@@ -734,7 +734,7 @@ func balanceScore(
 // balanceScore, where larger values mean a store is a better fit for a given
 // range.
 func balanceContribution(
-	st*cluster.Settings,
+	st *cluster.Settings,
 	rcs rangeCountStatus,
 	mean float64,
 	storeVal float64,
@@ -834,30 +834,30 @@ func rangeIsPoorFit(bd balanceDimensions) bool {
 	return bd.totalScore() < -0.5
 }
 
-func overfullRangeThreshold(st*cluster.Settings, mean float64) float64 {
+func overfullRangeThreshold(st *cluster.Settings, mean float64) float64 {
 	if !st.EnableStatsBasedRebalancing.Get() {
 		return mean * (1 + st.RangeRebalanceThreshold.Get())
 	}
 	return math.Max(mean*(1+st.RangeRebalanceThreshold.Get()), mean+5)
 }
 
-func underfullRangeThreshold(st*cluster.Settings, mean float64) float64 {
+func underfullRangeThreshold(st *cluster.Settings, mean float64) float64 {
 	if !st.EnableStatsBasedRebalancing.Get() {
 		return mean * (1 - st.RangeRebalanceThreshold.Get())
 	}
 	return math.Min(mean*(1-st.RangeRebalanceThreshold.Get()), mean-5)
 }
 
-func overfullStatThreshold(st*cluster.Settings, mean float64) float64 {
+func overfullStatThreshold(st *cluster.Settings, mean float64) float64 {
 	return mean * (1 + st.StatRebalanceThreshold.Get())
 }
 
-func underfullStatThreshold(st*cluster.Settings, mean float64) float64 {
+func underfullStatThreshold(st *cluster.Settings, mean float64) float64 {
 	return mean * (1 - st.StatRebalanceThreshold.Get())
 }
 
 func rebalanceFromConvergesOnMean(
-	st*cluster.Settings, sl StoreList, sc roachpb.StoreCapacity, rangeInfo RangeInfo,
+	st *cluster.Settings, sl StoreList, sc roachpb.StoreCapacity, rangeInfo RangeInfo,
 ) bool {
 	return rebalanceConvergesOnMean(
 		st,
@@ -870,7 +870,7 @@ func rebalanceFromConvergesOnMean(
 }
 
 func rebalanceToConvergesOnMean(
-	st*cluster.Settings, sl StoreList, sc roachpb.StoreCapacity, rangeInfo RangeInfo,
+	st *cluster.Settings, sl StoreList, sc roachpb.StoreCapacity, rangeInfo RangeInfo,
 ) bool {
 	return rebalanceConvergesOnMean(
 		st,
@@ -883,7 +883,7 @@ func rebalanceToConvergesOnMean(
 }
 
 func rebalanceConvergesOnMean(
-	st*cluster.Settings,
+	st *cluster.Settings,
 	sl StoreList,
 	sc roachpb.StoreCapacity,
 	rangeInfo RangeInfo,

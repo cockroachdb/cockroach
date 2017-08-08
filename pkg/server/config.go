@@ -106,7 +106,7 @@ type Config struct {
 	// Embed the base context.
 	*base.Config
 
-*cluster.Settings
+	*cluster.Settings
 
 	base.RaftConfig
 
@@ -346,7 +346,7 @@ func MakeTempStoreSpecFromStoreSpec(spec base.StoreSpec) (base.StoreSpec, error)
 }
 
 // MakeConfig returns a Context with default values.
-func MakeConfig(st*cluster.Settings) Config {
+func MakeConfig(st *cluster.Settings) Config {
 	storeSpec, err := base.NewStoreSpec(defaultStorePath)
 	if err != nil {
 		panic(err)

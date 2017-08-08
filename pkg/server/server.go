@@ -89,7 +89,7 @@ type Server struct {
 	nodeIDContainer base.NodeIDContainer
 
 	cfg                Config
-	st                *cluster.Settings
+	st                 *cluster.Settings
 	mux                *http.ServeMux
 	clock              *hlc.Clock
 	rpcContext         *rpc.Context

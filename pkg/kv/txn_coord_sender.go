@@ -177,7 +177,7 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 type TxnCoordSender struct {
 	log.AmbientContext
 
-	st               *cluster.Settings
+	st                *cluster.Settings
 	wrapped           client.Sender
 	clock             *hlc.Clock
 	heartbeatInterval time.Duration
@@ -201,7 +201,7 @@ const defaultClientTimeout = 10 * time.Second
 // more specific context available; it must have a Tracer set.
 func NewTxnCoordSender(
 	ambient log.AmbientContext,
-	st*cluster.Settings,
+	st *cluster.Settings,
 	wrapped client.Sender,
 	clock *hlc.Clock,
 	linearizable bool,

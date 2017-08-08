@@ -31,7 +31,7 @@ import (
 
 const bulkIOWriteLimiterLongWait = 500 * time.Millisecond
 
-func limitBulkIOWrite(ctx context.Context, st*cluster.Settings, cost int) {
+func limitBulkIOWrite(ctx context.Context, st *cluster.Settings, cost int) {
 	// The limiter disallows anything greater than its burst (set to
 	// bulkIOWriteLimiterBurst), so cap the batch size if it would overflow.
 	//

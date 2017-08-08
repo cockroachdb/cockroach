@@ -728,7 +728,7 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 //   from the ideal state on each node to compute a final score.
 func loadBasedLeaseRebalanceScore(
 	ctx context.Context,
-	st*cluster.Settings,
+	st *cluster.Settings,
 	remoteWeight float64,
 	remoteLatency time.Duration,
 	remoteStore roachpb.StoreDescriptor,

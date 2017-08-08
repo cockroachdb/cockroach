@@ -775,7 +775,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 	// have a range count that's above the target range count for the rebalancer,
 	// so it should be rebalanced from.
 	oneStoreAboveRebalanceTarget := func(mean int32, numStores int) func(*cluster.Settings) []testStore {
-		return func(st*cluster.Settings) []testStore {
+		return func(st *cluster.Settings) []testStore {
 			stores := make([]testStore, numStores)
 			for i := range stores {
 				stores[i].rangeCount = mean
@@ -793,7 +793,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 	// Returns a slice of stores with the specified mean such that the first store
 	// has few enough replicas to make it a rebalance target.
 	oneUnderusedStore := func(mean int32, numStores int) func(*cluster.Settings) []testStore {
-		return func(st*cluster.Settings) []testStore {
+		return func(st *cluster.Settings) []testStore {
 			stores := make([]testStore, numStores)
 			for i := range stores {
 				stores[i].rangeCount = mean

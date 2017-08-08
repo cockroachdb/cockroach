@@ -48,7 +48,7 @@ type FlowID struct {
 // FlowCtx encompasses the contexts needed for various flow components.
 type FlowCtx struct {
 	log.AmbientContext
-*cluster.Settings
+	*cluster.Settings
 
 	stopper *stop.Stopper
 
