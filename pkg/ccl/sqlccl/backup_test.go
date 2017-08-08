@@ -67,7 +67,7 @@ func backupRestoreTestSetupWithParams(
 	t testing.TB,
 	clusterSize int,
 	numAccounts int,
-	init func(cluster.Settings),
+	init func(*cluster.Settings),
 	params base.TestClusterArgs,
 ) (
 	ctx context.Context,
@@ -130,7 +130,7 @@ func backupRestoreTestSetupWithParams(
 }
 
 func backupRestoreTestSetup(
-	t testing.TB, clusterSize int, numAccounts int, init func(cluster.Settings),
+	t testing.TB, clusterSize int, numAccounts int, init func(*cluster.Settings),
 ) (
 	ctx context.Context,
 	tempDir string,
@@ -224,11 +224,11 @@ func TestBackupRestoreLocal(t *testing.T) {
 	backupAndRestore(ctx, t, sqlDB, dir, numAccounts)
 }
 
-func enableAddSSTable(st cluster.Settings) {
+func enableAddSSTable(st *cluster.Settings) {
 	st.AddSSTableEnabled.Override(true)
 }
 
-func disableAddSSTable(st cluster.Settings) {
+func disableAddSSTable(st *cluster.Settings) {
 	st.AddSSTableEnabled.Override(false)
 }
 

@@ -89,7 +89,7 @@ type Server struct {
 	nodeIDContainer base.NodeIDContainer
 
 	cfg                Config
-	st                 cluster.Settings
+	st                *cluster.Settings
 	mux                *http.ServeMux
 	clock              *hlc.Clock
 	rpcContext         *rpc.Context
@@ -465,7 +465,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 }
 
 // ClusterSettings returns the cluster settings.
-func (s *Server) ClusterSettings() cluster.Settings {
+func (s *Server) ClusterSettings() *cluster.Settings {
 	return s.st
 }
 

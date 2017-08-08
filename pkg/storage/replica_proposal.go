@@ -552,7 +552,7 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 
 func addSSTablePreApply(
 	ctx context.Context,
-	st cluster.Settings,
+	st*cluster.Settings,
 	eng engine.Engine,
 	sideloaded sideloadStorage,
 	term, index uint64,

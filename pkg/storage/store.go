@@ -542,7 +542,7 @@ var _ client.Sender = &Store{}
 type StoreConfig struct {
 	AmbientCtx log.AmbientContext
 	*migration.ExposedClusterVersion
-	cluster.Settings
+	*cluster.Settings
 	base.RaftConfig
 
 	Clock        *hlc.Clock
@@ -912,7 +912,7 @@ func (s *Store) String() string {
 }
 
 // ClusterSettings returns the node's ClusterSettings.
-func (s *Store) ClusterSettings() cluster.Settings {
+func (s *Store) ClusterSettings() *cluster.Settings {
 	return s.cfg.Settings
 }
 
@@ -3214,7 +3214,7 @@ type SnapshotStorePool interface {
 	throttle(reason throttleReason, toStoreID roachpb.StoreID)
 }
 
-func snapshotRateLimit(st cluster.Settings, priority SnapshotRequest_Priority) (rate.Limit, error) {
+func snapshotRateLimit(st*cluster.Settings, priority SnapshotRequest_Priority) (rate.Limit, error) {
 	switch priority {
 	case SnapshotRequest_RECOVERY:
 		return rate.Limit(st.RecoverySnapshotRate.Get()), nil
@@ -3230,7 +3230,7 @@ var errMustRetrySnapshotDueToTruncation = errors.New("log truncation during snap
 // sendSnapshot sends an outgoing snapshot via a pre-opened GRPC stream.
 func sendSnapshot(
 	ctx context.Context,
-	st cluster.Settings,
+	st*cluster.Settings,
 	stream OutgoingSnapshotStream,
 	storePool SnapshotStorePool,
 	header SnapshotRequest_Header,

@@ -61,7 +61,7 @@ type cliContext struct {
 //
 // NB: This is effectively a singleton. Do not use this in tests or when a
 // "closer" ClusterSettings object (which case it better be equal) is available.
-var ClusterSettings = func() cluster.Settings {
+var ClusterSettings = func()*cluster.Settings {
 	st := cluster.MakeClusterSettings()
 	// This is the real cluster settings object that is used by a running server,
 	// and which should receive updates from associated Updaters.

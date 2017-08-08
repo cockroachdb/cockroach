@@ -78,7 +78,7 @@ const diskBudgetTotalSizeDivisor = 4
 // DistSQLServer.
 type ServerConfig struct {
 	log.AmbientContext
-	cluster.Settings
+*cluster.Settings
 
 	// DB is a handle to the cluster.
 	DB *client.DB

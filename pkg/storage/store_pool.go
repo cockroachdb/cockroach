@@ -183,7 +183,7 @@ type localityWithString struct {
 // information on their health.
 type StorePool struct {
 	log.AmbientContext
-	st cluster.Settings
+	st*cluster.Settings
 
 	clock              *hlc.Clock
 	gossip             *gossip.Gossip
@@ -209,7 +209,7 @@ type StorePool struct {
 // with gossip.
 func NewStorePool(
 	ambient log.AmbientContext,
-	st cluster.Settings,
+	st*cluster.Settings,
 	g *gossip.Gossip,
 	clock *hlc.Clock,
 	nodeLivenessFn NodeLivenessFunc,

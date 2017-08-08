@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func initNone(_ cluster.Settings) {}
+func initNone(_ *cluster.Settings) {}
 
 // The tests in this file talk to remote APIs which require credentials.
 // To run these tests, you need to supply credentials via env vars (the tests

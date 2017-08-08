@@ -137,20 +137,20 @@ func BenchmarkWriteBatch(b *testing.B) {
 
 func BenchmarkImport(b *testing.B) {
 	b.Run("AddSSTable", func(b *testing.B) {
-		enableSSTable := func(st cluster.Settings) {
+		enableSSTable := func(st *cluster.Settings) {
 			st.AddSSTableEnabled.Override(true)
 		}
 		runBenchmarkImport(b, enableSSTable)
 	})
 	b.Run("WriteBatch", func(b *testing.B) {
-		disableSSTable := func(st cluster.Settings) {
+		disableSSTable := func(st*cluster.Settings) {
 			st.AddSSTableEnabled.Override(false)
 		}
 		runBenchmarkImport(b, disableSSTable)
 	})
 }
 
-func runBenchmarkImport(b *testing.B, init func(cluster.Settings)) {
+func runBenchmarkImport(b *testing.B, init func(*cluster.Settings)) {
 	tempDir, dirCleanupFn := testutils.TempDir(b)
 	defer dirCleanupFn()
 

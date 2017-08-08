@@ -50,7 +50,7 @@ func (l *localTestClusterTransport) SendNext(ctx context.Context, done chan<- Ba
 // InitSenderForLocalTestCluster initializes a TxnCoordSender that can be used
 // with LocalTestCluster.
 func InitSenderForLocalTestCluster(
-	st cluster.Settings,
+	st*cluster.Settings,
 	nodeDesc *roachpb.NodeDescriptor,
 	tracer opentracing.Tracer,
 	clock *hlc.Clock,

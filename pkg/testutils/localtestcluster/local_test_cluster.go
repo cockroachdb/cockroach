@@ -68,7 +68,7 @@ type LocalTestCluster struct {
 // InitSenderFn is a callback used to initiate the txn coordinator (we don't
 // do it directly from this package to avoid a dependency on kv).
 type InitSenderFn func(
-	st cluster.Settings,
+	st*cluster.Settings,
 	nodeDesc *roachpb.NodeDescriptor,
 	tracer opentracing.Tracer,
 	clock *hlc.Clock,

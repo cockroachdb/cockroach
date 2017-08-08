@@ -89,7 +89,7 @@ func TestSideloadingSideloadedStorage(t *testing.T) {
 
 func testSideloadingSideloadedStorage(
 	t *testing.T,
-	maker func(cluster.Settings, roachpb.RangeID, roachpb.ReplicaID, string) (sideloadStorage, error),
+	maker func(*cluster.Settings, roachpb.RangeID, roachpb.ReplicaID, string) (sideloadStorage, error),
 ) {
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()

@@ -39,7 +39,7 @@ type stmtKey struct {
 
 // appStats holds per-application statistics.
 type appStats struct {
-	st cluster.Settings
+	st*cluster.Settings
 
 	syncutil.Mutex
 	stmts map[stmtKey]*stmtStats
@@ -136,7 +136,7 @@ func (a *appStats) getStatsForStmt(key stmtKey) *stmtStats {
 // sqlStats carries per-application statistics for all applications on
 // each node. It hangs off Executor.
 type sqlStats struct {
-	st cluster.Settings
+	st*cluster.Settings
 	syncutil.Mutex
 
 	// apps is the container for all the per-application statistics

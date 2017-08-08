@@ -44,7 +44,7 @@ func mustNewInMemSideloadStorage(
 }
 
 func newInMemSideloadStorage(
-	_ cluster.Settings, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID, baseDir string,
+	_*cluster.Settings, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID, baseDir string,
 ) (sideloadStorage, error) {
 	return &inMemSideloadStorage{
 		prefix: filepath.Join(baseDir, fmt.Sprintf("%d.%d", rangeID, replicaID)),

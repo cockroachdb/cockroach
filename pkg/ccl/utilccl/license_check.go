@@ -31,7 +31,7 @@ func TestingEnableEnterprise() func() {
 // CheckEnterpriseEnabled returns a non-nil error if the requested enterprise
 // feature is not enabled, including information or a link explaining how to
 // enable it.
-func CheckEnterpriseEnabled(st cluster.Settings, cluster uuid.UUID, org, feature string) error {
+func CheckEnterpriseEnabled(st*cluster.Settings, cluster uuid.UUID, org, feature string) error {
 	if testingEnterpriseEnabled {
 		return nil
 	}
@@ -39,7 +39,7 @@ func CheckEnterpriseEnabled(st cluster.Settings, cluster uuid.UUID, org, feature
 }
 
 func checkEnterpriseEnabledAt(
-	st cluster.Settings, at time.Time, cluster uuid.UUID, org, feature string,
+	st*cluster.Settings, at time.Time, cluster uuid.UUID, org, feature string,
 ) error {
 	var lic *licenseccl.License
 	// FIXME(tschottdorf): see whether it makes sense to cache the decoded

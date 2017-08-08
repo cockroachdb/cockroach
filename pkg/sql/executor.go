@@ -247,7 +247,7 @@ type NodeInfo struct {
 // All fields holding a pointer or an interface are required to create
 // a Executor; the rest will have sane defaults set if omitted.
 type ExecutorConfig struct {
-	cluster.Settings
+*cluster.Settings
 	NodeInfo
 	AmbientCtx      log.AmbientContext
 	DB              *client.DB

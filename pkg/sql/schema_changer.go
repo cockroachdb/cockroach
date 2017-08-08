@@ -905,7 +905,7 @@ type SchemaChangeManager struct {
 
 // NewSchemaChangeManager returns a new SchemaChangeManager.
 func NewSchemaChangeManager(
-	st cluster.Settings,
+	st*cluster.Settings,
 	testingKnobs *SchemaChangerTestingKnobs,
 	db client.DB,
 	nodeDesc roachpb.NodeDescriptor,

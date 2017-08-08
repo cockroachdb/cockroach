@@ -78,7 +78,7 @@ func BenchmarkClusterRestore(b *testing.B) {
 	})
 }
 
-func runBenchmarkClusterRestore(b *testing.B, init func(cluster.Settings)) {
+func runBenchmarkClusterRestore(b *testing.B, init func(*cluster.Settings)) {
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.

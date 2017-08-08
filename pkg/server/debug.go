@@ -67,7 +67,7 @@ var traceAuthRequest func(*http.Request) (bool, bool)
 // crutch for the auth handler for /debug/requests. Don't use this.
 //
 // FIXME(tschottdorf): remove this.
-var ClusterSettings cluster.Settings
+var ClusterSettings*cluster.Settings
 
 // authRequest restricts access to /debug/*.
 func authRequest(r *http.Request) (allow, sensitive bool) {

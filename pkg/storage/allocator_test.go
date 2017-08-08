@@ -774,8 +774,8 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 	// Returns a slice of stores with the specified mean. The first replica will
 	// have a range count that's above the target range count for the rebalancer,
 	// so it should be rebalanced from.
-	oneStoreAboveRebalanceTarget := func(mean int32, numStores int) func(cluster.Settings) []testStore {
-		return func(st cluster.Settings) []testStore {
+	oneStoreAboveRebalanceTarget := func(mean int32, numStores int) func(*cluster.Settings) []testStore {
+		return func(st*cluster.Settings) []testStore {
 			stores := make([]testStore, numStores)
 			for i := range stores {
 				stores[i].rangeCount = mean
@@ -792,8 +792,8 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 
 	// Returns a slice of stores with the specified mean such that the first store
 	// has few enough replicas to make it a rebalance target.
-	oneUnderusedStore := func(mean int32, numStores int) func(cluster.Settings) []testStore {
-		return func(st cluster.Settings) []testStore {
+	oneUnderusedStore := func(mean int32, numStores int) func(*cluster.Settings) []testStore {
+		return func(st*cluster.Settings) []testStore {
 			stores := make([]testStore, numStores)
 			for i := range stores {
 				stores[i].rangeCount = mean
@@ -815,20 +815,20 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 	// should rebalance from the store.
 	testCases := []struct {
 		name    string
-		cluster func(cluster.Settings) []testStore
+		cluster func(*cluster.Settings) []testStore
 	}{
 		// An evenly balanced cluster should not rebalance.
-		{"balanced", func(cluster.Settings) []testStore {
+		{"balanced", func(*cluster.Settings) []testStore {
 			return []testStore{{5, false}, {5, false}, {5, false}, {5, false}}
 		}},
 		// Adding an empty node to a 3-node cluster triggers rebalancing from
 		// existing nodes.
-		{"empty-node", func(cluster.Settings) []testStore {
+		{"empty-node", func(*cluster.Settings) []testStore {
 			return []testStore{{100, true}, {100, true}, {100, true}, {0, false}}
 		}},
 		// A cluster where all range counts are within rangeRebalanceThreshold should
 		// not rebalance. This assumes rangeRebalanceThreshold > 2%.
-		{"within-threshold", func(cluster.Settings) []testStore {
+		{"within-threshold", func(*cluster.Settings) []testStore {
 			return []testStore{{98, false}, {99, false}, {101, false}, {102, false}}
 		}},
 		{"5-stores-mean-100-one-above", oneStoreAboveRebalanceTarget(100, 5)},

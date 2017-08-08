@@ -378,7 +378,7 @@ func (ts *TestServer) GetStores() interface{} {
 }
 
 // ClusterSettings returns the ClusterSettings.
-func (ts *TestServer) ClusterSettings() cluster.Settings {
+func (ts *TestServer) ClusterSettings() *cluster.Settings {
 	return ts.Cfg.Settings
 }
 

@@ -252,7 +252,7 @@ type Settings struct {
 // is a NoopUpdater. For a "real" non-testing server, this field must be set to
 // true or the settings won't be updated when the persisted settings table is
 // updated.
-func MakeClusterSettings() Settings {
+func MakeClusterSettings() *Settings {
 	var s Settings
 	r := settings.NewRegistry()
 	s.Registry = r
@@ -574,7 +574,7 @@ func MakeClusterSettings() Settings {
 		"enterprise.license", "the encoded cluster license", "",
 		ValidateEnterpriseLicense)
 	s.EnterpriseLicense.Hide()
-	return s
+	return &s
 }
 
 // MakeUpdater returns a new Updater, pre-alloced to the registry size.

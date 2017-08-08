@@ -609,7 +609,7 @@ type ReplicaEvalContext struct {
 }
 
 // ClusterSettings returns the node's ClusterSettings.
-func (rec ReplicaEvalContext) ClusterSettings() cluster.Settings {
+func (rec ReplicaEvalContext) ClusterSettings() *cluster.Settings {
 	return rec.repl.store.cfg.Settings
 }
 

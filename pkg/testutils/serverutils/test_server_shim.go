@@ -127,7 +127,7 @@ type TestServerInterface interface {
 
 	// ClusterSettings returns the ClusterSettings shared by all components of
 	// this server.
-	ClusterSettings() cluster.Settings
+	ClusterSettings() *cluster.Settings
 
 	// SplitRange splits the range containing splitKey.
 	SplitRange(
