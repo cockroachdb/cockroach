@@ -9,7 +9,7 @@ progress Preparing files
 # Copy the terraform config locally. We keep it in artifacts as well
 # as the terraform state file so that if when troubleshooting a
 # failing test we can reuse exactly the same settings.
-cp -a "${COCKROACH_PATH}/cloud/gce/jepsen"/* .
+cp -a "${COCKROACH_PATH}/build/jepsen/terraform/*" .
 
 progress Generating controller SSH keys
 rm -f controller.id_rsa controller.id_rsa.pub

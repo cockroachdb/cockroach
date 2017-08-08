@@ -66,9 +66,8 @@ Here's what's in each top-level directory in this repository:
     of writing, "non-Go dependencies" means C or C++ dependencies. The most
     important of these is [RocksDB], our underlying persistent key-value store.
 
-  + **`cloud/`**
-    Terraform and Kubernetes configuration to auto-launch CockroachDB clusters
-    on several popular cloud IaaS providers.
+  + **`cloud/kubernetes/`**
+    Kubernetes configuration to auto-launch CockroachDB clusters.
 
   + **`docs/`**
     Documentation for CockroachDB developers. See ["Internal
