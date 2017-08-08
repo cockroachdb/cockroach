@@ -65,24 +65,12 @@ func LoadServerTLSConfig(sslCA, sslCert, sslCertKey string) (*tls.Config, error)
 // - the private key of this node.
 // - the certificate of the cluster CA,
 func newServerTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
-	cert, err := tls.X509KeyPair(certPEM, keyPEM)
+	cfg, err := newBaseTLSConfig(certPEM, keyPEM, caPEM)
 	if err != nil {
 		return nil, err
 	}
-
-	certPool := x509.NewCertPool()
-
-	if ok := certPool.AppendCertsFromPEM(caPEM); !ok {
-		err = errors.Errorf("failed to parse PEM data to pool")
-		return nil, err
-	}
-
-	cfg := newBaseTLSConfig()
-	cfg.Certificates = []tls.Certificate{cert}
-	// Verify client certs if passed.
 	cfg.ClientAuth = tls.VerifyClientCertIfGiven
-	cfg.RootCAs = certPool
-	cfg.ClientCAs = certPool
+	cfg.ClientCAs = cfg.RootCAs
 	// Use the default cipher suite from golang (RC4 is going away in 1.5).
 	// Prefer the server-specified suite.
 	cfg.PreferServerCipherSuites = true
@@ -119,6 +107,12 @@ func LoadClientTLSConfig(sslCA, sslCert, sslCertKey string) (*tls.Config, error)
 // - the private key of this client.
 // - the certificate of the cluster CA,
 func newClientTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
+	return newBaseTLSConfig(certPEM, keyPEM, caPEM)
+}
+
+// newBaseTLSConfig returns a tls.Config initialized with the
+// parameters that are common to clients and servers.
+func newBaseTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
 	cert, err := tls.X509KeyPair(certPEM, keyPEM)
 	if err != nil {
 		return nil, err
@@ -126,21 +120,13 @@ func newClientTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
 
 	certPool := x509.NewCertPool()
 
-	if ok := certPool.AppendCertsFromPEM(caPEM); !ok {
+	if !certPool.AppendCertsFromPEM(caPEM) {
 		return nil, errors.Errorf("failed to parse PEM data to pool")
 	}
 
-	cfg := newBaseTLSConfig()
-	cfg.Certificates = []tls.Certificate{cert}
-	cfg.RootCAs = certPool
-	return cfg, nil
-}
-
-// newBaseTLSConfig returns a tls.Config initialized with the
-// parameters that are common to clients and servers.
-func newBaseTLSConfig() *tls.Config {
 	return &tls.Config{
-		MinVersion: tls.VersionTLS12,
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      certPool,
 
 		// This is Go's default list of cipher suites (as of go 1.8.3),
 		// with the following differences:
@@ -181,5 +167,7 @@ func newBaseTLSConfig() *tls.Config {
 			tls.TLS_RSA_WITH_AES_128_CBC_SHA,
 			tls.TLS_RSA_WITH_AES_256_CBC_SHA,
 		},
-	}
+
+		MinVersion: tls.VersionTLS12,
+	}, nil
 }
