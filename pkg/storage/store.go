@@ -3214,7 +3214,9 @@ type SnapshotStorePool interface {
 	throttle(reason throttleReason, toStoreID roachpb.StoreID)
 }
 
-func snapshotRateLimit(st *cluster.Settings, priority SnapshotRequest_Priority) (rate.Limit, error) {
+func snapshotRateLimit(
+	st *cluster.Settings, priority SnapshotRequest_Priority,
+) (rate.Limit, error) {
 	switch priority {
 	case SnapshotRequest_RECOVERY:
 		return rate.Limit(st.RecoverySnapshotRate.Get()), nil
