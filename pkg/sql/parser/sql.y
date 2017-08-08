@@ -587,7 +587,8 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <str> opt_equal_value
 
 %type <*Select> select_no_parens
-%type <SelectStatement> select_clause select_with_parens simple_select values_clause table_clause
+%type <SelectStatement> select_clause select_with_parens simple_select values_clause table_clause simple_select_clause
+%type <SelectStatement> set_operation
 
 %type <empty> alter_using
 %type <Expr> alter_column_default
@@ -852,6 +853,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 // They wouldn't be given a precedence at all, were it not that we need
 // left-associativity among the JOIN rules themselves.
 %left      JOIN CROSS LEFT FULL RIGHT INNER NATURAL
+%right     HELPTOKEN
 
 %%
 
@@ -878,68 +880,131 @@ stmt_list:
   }
 
 stmt:
-  alter_stmt
-| backup_stmt
-| cancel_stmt
+  alter_stmt      // help texts in sub-rule
+| backup_stmt     // EXTEND WITH HELP: BACKUP
+| cancel_stmt     // help texts in sub-rule
 | copy_from_stmt
-| create_stmt
-| deallocate_stmt
-| delete_stmt
-| discard_stmt
-| drop_stmt
-| execute_stmt
-| explain_stmt
-| grant_stmt
+| create_stmt     // help texts in sub-rule
+| deallocate_stmt // EXTEND WITH HELP: DEALLOCATE
+| delete_stmt     // EXTEND WITH HELP: DELETE
+| discard_stmt    // EXTEND WITH HELP: DISCARD
+| drop_stmt       // help texts in sub-rule
+| execute_stmt    // EXTEND WITH HELP: EXECUTE
+| explain_stmt    // EXTEND WITH HELP: EXPLAIN
+| grant_stmt      // EXTEND WITH HELP: GRANT
 | help_stmt
-| insert_stmt
+| insert_stmt     // EXTEND WITH HELP: INSERT
 | load_stmt
-| pause_stmt
-| prepare_stmt
-| restore_stmt
-| resume_stmt
-| revoke_stmt
-| savepoint_stmt
-| select_stmt
+| pause_stmt      // EXTEND WITH HELP: PAUSE JOB
+| prepare_stmt    // EXTEND WITH HELP: PREPARE
+| restore_stmt    // EXTEND WITH HELP: RESTORE
+| resume_stmt     // EXTEND WITH HELP: RESUME JOB
+| revoke_stmt     // EXTEND WITH HELP: REVOKE
+| savepoint_stmt  // EXTEND WITH HELP: SAVEPOINT
+| select_stmt     // help texts in sub-rule
   {
     $$.val = $1.slct()
   }
-| release_stmt
-| reset_stmt
-| set_stmt
-| show_stmt
-| transaction_stmt
-| truncate_stmt
-| update_stmt
-| upsert_stmt
+| release_stmt     // EXTEND WITH HELP: RELEASE
+| reset_stmt       // EXTEND WITH HELP: RESET
+| set_stmt         // help texts in sub-rule
+| show_stmt        // help texts in sub-rule
+| transaction_stmt // help texts in sub-rule
+| truncate_stmt    // EXTEND WITH HELP: TRUNCATE
+| update_stmt      // EXTEND WITH HELP: UPDATE
+| upsert_stmt      // EXTEND WITH HELP: UPSERT
 | /* EMPTY */
   {
     $$.val = Statement(nil)
   }
 
+// %Help: ALTER
+// %Category: Group
+// %Text: ALTER TABLE, ALTER INDEX, ALTER VIEW, ALTER DATABASE
 alter_stmt:
-  alter_table_stmt
-| alter_index_stmt
-| alter_view_stmt
-| alter_database_stmt
+  alter_table_stmt    // EXTEND WITH HELP: ALTER TABLE
+| alter_index_stmt    // EXTEND WITH HELP: ALTER INDEX
+| alter_view_stmt     // EXTEND WITH HELP: ALTER VIEW
+| alter_database_stmt // EXTEND WITH HELP: ALTER DATABASE
+| ALTER error         // SHOW HELP: ALTER
 
+// %Help: ALTER TABLE - change the definition of a table
+// %Category: DDL
+// %Text:
+// ALTER TABLE [IF EXISTS] <tablename> <command> [, ...]
+//
+// Commands:
+//   ALTER TABLE ... ADD [COLUMN] [IF NOT EXISTS] <colname> <type> [<qualifiers...>]
+//   ALTER TABLE ... ADD <constraint>
+//   ALTER TABLE ... DROP [COLUMN] [IF EXISTS] <colname> [RESTRICT | CASCADE]
+//   ALTER TABLE ... DROP CONSTRAINT [IF EXISTS] <constraintname> [RESTRICT | CASCADE]
+//   ALTER TABLE ... ALTER [COLUMN] <colname> {SET DEFAULT <expr> | DROP DEFAULT}
+//   ALTER TABLE ... ALTER [COLUMN] <colname> DROP NOT NULL
+//   ALTER TABLE ... RENAME TO <newname>
+//   ALTER TABLE ... RENAME [COLUMN] <colname> TO <newname>
+//   ALTER TABLE ... VALIDATE CONSTRAINT <constraintname>
+//   ALTER TABLE ... SPLIT AT <selectclause>
+//   ALTER TABLE ... TESTING_RELOCATE <selectclause>
+//   ALTER TABLE ... SCATTER [ FROM ( <exprs...> ) TO ( <exprs...> ) ]
+//
+// Column qualifiers:
+//   [CONSTRAINT <constraintname>] {NULL | NOT NULL | UNIQUE | PRIMARY KEY | CHECK (<expr>) | DEFAULT <expr>}
+//   FAMILY <familyname>, CREATE [IF NOT EXISTS] FAMILY [<familyname>]
+//   REFERENCES <tablename> [( <colnames...> )]
+//   COLLATE <collationname>
+//
+// %SeeAlso: https://www.cockroachlabs.com/docs/alter-table.html
 alter_table_stmt:
   alter_onetable_stmt
 | alter_split_stmt
 | alter_testing_relocate_stmt
 | alter_scatter_stmt
 | alter_rename_table_stmt
+// ALTER TABLE has its error help token here because the ALTER TABLE
+// prefix is spread over multiple non-terminals.
+| ALTER TABLE error // SHOW HELP: ALTER TABLE
 
+// %Help: ALTER VIEW - change the definition of a view
+// %Category: DDL
+// %Text:
+// ALTER VIEW [IF EXISTS] <name> RENAME TO <newname>
+// %SeeAlso: https://www.cockroachlabs.com/docs/alter-view.html
 alter_view_stmt:
   alter_rename_view_stmt
+// ALTER VIEW has its error help token here because the ALTER VIEW
+// prefix is spread over multiple non-terminals.
+| ALTER VIEW error // SHOW HELP: ALTER VIEW
 
+// %Help: ALTER DATABASE - change the definition of a database
+// %Category: DDL
+// %Text:
+// ALTER DATABASE <name> RENAME TO <newname>
+// %SeeAlso: https://www.cockroachlabs.com/docs/alter-database.html
 alter_database_stmt:
   alter_rename_database_stmt
+// ALTER DATABASE has its error help token here because the ALTER DATABASE
+// prefix is spread over multiple non-terminals.
+| ALTER DATABASE error // SHOW HELP: ALTER DATABASE
 
+// %Help: ALTER INDEX - change the definition of an index
+// %Category: DDL
+// %Text:
+// ALTER INDEX [IF EXISTS] <idxname> <command>
+//
+// Commands:
+//   ALTER INDEX ... RENAME TO <newname>
+//   ALTER INDEX ... SPLIT AT <selectclause>
+//   ALTER INDEX ... SCATTER [ FROM ( <exprs...> ) TO ( <exprs...> ) ]
+//
+// %SeeAlso: https://www.cockroachlabs.com/docs/alter-index.html
 alter_index_stmt:
   alter_split_index_stmt
 | alter_testing_relocate_index_stmt
 | alter_scatter_index_stmt
 | alter_rename_index_stmt
+// ALTER INDEX has its error help token here because the ALTER INDEX
+// prefix is spread over multiple non-terminals.
+| ALTER INDEX error // SHOW HELP: ALTER INDEX
 
 alter_onetable_stmt:
   ALTER TABLE relation_expr alter_table_cmds
@@ -1147,18 +1212,60 @@ alter_using:
   USING a_expr { return unimplemented(sqllex, "alter using") }
 | /* EMPTY */ {}
 
+// %Help: BACKUP - back up data to external storage
+// %Category: CCL
+// %Text:
+// BACKUP <targets...> TO <location...>
+//        [ AS OF SYSTEM TIME <expr> ]
+//        [ INCREMENTAL FROM <location...> ]
+//        [ WITH OPTIONS ( <options...> ) ]
+//
+// Targets:
+//    TABLE <pattern> [, ...]
+//    DATABASE <databasename> [, ...]
+//
+// Location:
+//    "[scheme]://[host]/[path to backup]?[parameters]"
+//
+// Options:
+//    INTO_DB
+//    SKIP_MISSING_FOREIGN_KEYS
+//
+// %SeeAlso: RESTORE, https://www.cockroachlabs.com/docs/backup.html
 backup_stmt:
   BACKUP targets TO string_or_placeholder opt_as_of_clause opt_incremental opt_with_options
   {
     $$.val = &Backup{Targets: $2.targetList(), To: $4.expr(), IncrementalFrom: $6.exprs(), AsOf: $5.asOfClause(), Options: $7.kvOptions()}
   }
+| BACKUP error // SHOW HELP: BACKUP
 
+// %Help: RESTORE - restore data from external storage
+// %Category: CCL
+// %Text:
+// RESTORE <targets...> FROM <location...>
+//         [ AS OF SYSTEM TIME <expr> ]
+//         [ WITH OPTIONS ( <options...> ) ]
+//
+// Targets:
+//    TABLE <pattern> [, ...]
+//    DATABASE <databasename> [, ...]
+//
+// Locations:
+//    "[scheme]://[host]/[path to backup]?[parameters]"
+//
+// Options:
+//    INTO_DB
+//    SKIP_MISSING_FOREIGN_KEYS
+//
+// %SeeAlso: BACKUP, https://www.cockroachlabs.com/docs/restore.html
 restore_stmt:
   RESTORE targets FROM string_or_placeholder_list opt_as_of_clause opt_with_options
   {
     $$.val = &Restore{Targets: $2.targetList(), From: $4.exprs(), AsOf: $5.asOfClause(), Options: $6.kvOptions()}
   }
+| RESTORE error // SHOW HELP: RESTORE
 
+// TODO(dan): document this.
 load_stmt:
   LOAD CSV TABLE string_or_placeholder FROM string_or_placeholder_list TO string_or_placeholder
   {
@@ -1243,42 +1350,68 @@ copy_from_stmt:
     $$.val = &CopyFrom{Table: $2.normalizableTableName(), Columns: $4.unresolvedNames(), Stdin: true}
   }
 
-// CANCEL [JOB|QUERY] id
+// %Help: CANCEL
+// %Category: Group
+// %Text: CANCEL JOB, CANCEL QUERY
 cancel_stmt:
-  cancel_job_stmt
-| cancel_query_stmt
+  cancel_job_stmt   // EXTEND WITH HELP: CANCEL JOB
+| cancel_query_stmt // EXTEND WITH HELP: CANCEL QUERY
+| CANCEL error      // SHOW HELP: CANCEL
 
+// %Help: CANCEL JOB - cancel a background job
+// %Category: Misc
+// %Text: CANCEL JOB <jobid>
+// %SeeAlso: SHOW JOBS, PAUSE JOBS, RESUME JOB
 cancel_job_stmt:
   CANCEL JOB a_expr
   {
     /* SKIP DOC */
     $$.val = &CancelJob{ID: $3.expr()}
   }
+| CANCEL JOB error // SHOW HELP: CANCEL JOB
 
+// %Help: CANCEL QUERY - cancel a running query
+// %Category: Misc
+// %Text: CANCEL QUERY <queryid>
+// %SeeAlso: SHOW QUERIES
 cancel_query_stmt:
   CANCEL QUERY a_expr
   {
     /* SKIP DOC */
     $$.val = &CancelQuery{ID: $3.expr()}
   }
+| CANCEL QUERY error // SHOW HELP: CANCEL QUERY
 
-// CREATE [DATABASE|INDEX|TABLE|TABLE AS|VIEW]
+// %Help: CREATE
+// %Category: Group
+// %Text:
+// CREATE DATABASE, CREATE TABLE, CREATE INDEX, CREATE TABLE AS,
+// CREATE USER, CREATE VIEW
 create_stmt:
-  create_database_stmt
-| create_index_stmt
-| create_table_stmt
-| create_table_as_stmt
-| create_user_stmt
-| create_view_stmt
+  create_database_stmt // EXTEND WITH HELP: CREATE DATABASE
+| create_index_stmt    // EXTEND WITH HELP: CREATE INDEX
+| create_table_stmt    // EXTEND WITH HELP: CREATE TABLE
+| create_table_as_stmt // EXTEND WITH HELP: CREATE TABLE
+// Error case for both CREATE TABLE and CREATE TABLE ... AS in one
+| CREATE TABLE error   // SHOW HELP: CREATE TABLE
+| create_user_stmt     // EXTEND WITH HELP: CREATE USER
+| create_view_stmt     // EXTEND WITH HELP: CREATE VIEW
+| CREATE error         // SHOW HELP: CREATE
 
-// DELETE FROM query
+// %Help: DELETE - delete rows from a table
+// %Category: DML
+// %Text: DELETE FROM <tablename> [WHERE <expr>] [RETURNING <exprs...>]
+// %SeeAlso: https://www.cockroachlabs.com/docs/delete.html
 delete_stmt:
   opt_with_clause DELETE FROM relation_expr_opt_alias where_clause returning_clause
   {
     $$.val = &Delete{Table: $4.tblExpr(), Where: newWhere(astWhere, $5.expr()), Returning: $6.retClause()}
   }
+| opt_with_clause DELETE error // SHOW HELP: DELETE
 
-// DISCARD [ ALL | PLANS | SEQUENCES | TEMP | TEMPORARY ]
+// %Help: DISCARD - reset the session to its initial state
+// %Category: Cfg
+// %Text: DISCARD ALL
 discard_stmt:
   DISCARD ALL
   {
@@ -1288,15 +1421,23 @@ discard_stmt:
 | DISCARD SEQUENCES { return unimplemented(sqllex, "discard sequences") }
 | DISCARD TEMP { return unimplemented(sqllex, "discard temp") }
 | DISCARD TEMPORARY { return unimplemented(sqllex, "discard temporary") }
+| DISCARD error // SHOW HELP: DISCARD
 
-// DROP itemtype [ IF EXISTS ] itemname [, itemname ...] [ RESTRICT | CASCADE ]
+// %Help: DROP
+// %Category: Group
+// %Text: DROP DATABASE, DROP INDEX, DROP TABLE, DROP VIEW, DROP USER
 drop_stmt:
-  drop_database_stmt
-| drop_index_stmt
-| drop_table_stmt
-| drop_view_stmt
-| drop_user_stmt
+  drop_database_stmt // EXTEND WITH HELP: DROP DATABASE
+| drop_index_stmt    // EXTEND WITH HELP: DROP INDEX
+| drop_table_stmt    // EXTEND WITH HELP: DROP TABLE
+| drop_view_stmt     // EXTEND WITH HELP: DROP VIEW
+| drop_user_stmt     // EXTEND WITH HELP: DROP USER
+| DROP error         // SHOW HELP: DROP
 
+// %Help: DROP VIEW - remove a view
+// %Category: DDL
+// %Text: DROP VIEW [IF EXISTS] <tablename> [, ...] [CASCADE | RESTRICT]
+// %SeeAlso: https://www.cockroachlabs.com/docs/drop-index.html
 drop_view_stmt:
   DROP VIEW table_name_list opt_drop_behavior
   {
@@ -1306,7 +1447,12 @@ drop_view_stmt:
   {
     $$.val = &DropView{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
   }
+| DROP VIEW error // SHOW HELP: DROP VIEW
 
+// %Help: DROP TABLE - remove a table
+// %Category: DDL
+// %Text: DROP TABLE [IF EXISTS] <tablename> [, ...] [CASCADE | RESTRICT]
+// %SeeAlso: https://www.cockroachlabs.com/docs/drop-table.html
 drop_table_stmt:
   DROP TABLE table_name_list opt_drop_behavior
   {
@@ -1316,7 +1462,12 @@ drop_table_stmt:
   {
     $$.val = &DropTable{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
   }
+| DROP TABLE error // SHOW HELP: DROP TABLE
 
+// %Help: DROP INDEX - remove an index
+// %Category: DDL
+// %Text: DROP INDEX [IF EXISTS] <idxname> [, ...] [CASCADE | RESTRICT]
+// %SeeAlso: https://www.cockroachlabs.com/docs/drop-index.html
 drop_index_stmt:
   DROP INDEX table_name_with_index_list opt_drop_behavior
   {
@@ -1334,7 +1485,12 @@ drop_index_stmt:
       DropBehavior: $6.dropBehavior(),
     }
   }
+| DROP INDEX error // SHOW HELP: DROP INDEX
 
+// %Help: DROP DATABASE - remove a database
+// %Category: DDL
+// %Text: DROP DATABASE [IF EXISTS] <databasename>
+// %SeeAlso: https://www.cockroachlabs.com/docs/drop-database.html
 drop_database_stmt:
   DROP DATABASE name
   {
@@ -1344,7 +1500,12 @@ drop_database_stmt:
   {
     $$.val = &DropDatabase{Name: Name($5), IfExists: true}
   }
+| DROP DATABASE error // SHOW HELP: DROP DATABASE
 
+// %Help: DROP USER - remove a user
+// %Category: Priv
+// %Text: DROP USER [IF EXISTS] <user> [, ...]
+// %SeeAlso: CREATE USER, SHOW USERS
 drop_user_stmt:
   DROP USER name_list
   {
@@ -1354,6 +1515,7 @@ drop_user_stmt:
   {
     $$.val = &DropUser{Names: $5.nameList(), IfExists: true}
   }
+| DROP USER error // SHOW HELP: DROP USER
 
 table_name_list:
   any_name
@@ -1385,36 +1547,55 @@ attrs:
     $$.val = append($1.unresolvedName(), Name($3))
   }
 
-// EXPLAIN (options) query
+// %Help: EXPLAIN - show the logical plan of a query
+// %Category: Misc
+// %Text:
+// EXPLAIN <statement>
+// EXPLAIN [( [PLAN ,] <planoptions...> )] <statement>
+//
+// Explainable statements:
+//     SELECT, CREATE, DROP, ALTER, INSERT, UPSERT, UPDATE, DELETE,
+//     SHOW, HELP, EXPLAIN, EXECUTE
+//
+// Plan options:
+//     TYPES, EXPRS, METADATA, QUALIFY, INDENT, VERBOSE, DIST_SQL
+//
+// %SeeAlso: https://www.cockroachlabs.com/docs/explain.html
 explain_stmt:
   EXPLAIN explainable_stmt
   {
     $$.val = &Explain{Statement: $2.stmt()}
   }
+| EXPLAIN error // SHOW HELP: EXPLAIN
 | EXPLAIN '(' explain_option_list ')' explainable_stmt
   {
     $$.val = &Explain{Options: $3.strs(), Statement: $5.stmt()}
   }
+// This second error rule is necessary, because otherwise
+// explainable_stmt also provides "selectclause := '(' error ..."  and
+// cause a help text for the select clause, which will be confusing in
+// the context of EXPLAIN.
+| EXPLAIN '(' error // SHOW HELP: EXPLAIN
 
 preparable_stmt:
-  select_stmt
+  select_stmt // help texts in sub-rule
   {
     $$.val = $1.slct()
   }
-| delete_stmt
-| insert_stmt
-| update_stmt
-| upsert_stmt
+| show_stmt   // help texts in sub-rule
+| delete_stmt // EXTEND WITH HELP: DELETE
+| insert_stmt // EXTEND WITH HELP: INSERT
+| update_stmt // EXTEND WITH HELP: UPDATE
+| upsert_stmt // EXTEND WITH HELP: UPSERT
 
 explainable_stmt:
   preparable_stmt
-| alter_stmt
-| create_stmt
-| drop_stmt
-| execute_stmt
+| alter_stmt   // help texts in sub-rule
+| create_stmt  // help texts in sub-rule
+| drop_stmt    // help texts in sub-rule
+| execute_stmt // EXTEND WITH HELP: EXECUTE
 | explain_stmt { /* SKIP DOC */ }
 | help_stmt
-| show_stmt
 
 explain_option_list:
   explain_option_name
@@ -1429,7 +1610,10 @@ explain_option_list:
 explain_option_name:
   non_reserved_word
 
-// PREPARE <plan_name> [(args, ...)] AS <query>
+// %Help: PREPARE - prepare a statement for later execution
+// %Category: Misc
+// %Text: PREPARE <name> [ ( <types...> ) ] AS <query>
+// %SeeAlso: EXECUTE, DEALLOCATE, DISCARD
 prepare_stmt:
   PREPARE name prep_type_clause AS preparable_stmt
   {
@@ -1439,6 +1623,7 @@ prepare_stmt:
       Statement: $5.stmt(),
     }
   }
+| PREPARE error // SHOW HELP: PREPARE
 
 prep_type_clause:
   '(' type_list ')'
@@ -1450,8 +1635,11 @@ prep_type_clause:
     $$.val = []ColumnType(nil)
   }
 
+// %Help: EXECUTE - execute a statement prepared previously
+// %Category: Misc
+// %Text: EXECUTE <name> [ ( <exprs...> ) ]
+// %SeeAlso: PREPARE, DEALLOCATE, DISCARD
 execute_stmt:
-  // EXECUTE <plan_name> [(params, ...)]
   EXECUTE name execute_param_clause
   {
     $$.val = &Execute{
@@ -1459,7 +1647,8 @@ execute_stmt:
       Params: $3.exprs(),
     }
   }
-  // CREATE TABLE <name> AS EXECUTE <plan_name> [(params, ...)]
+| EXECUTE error // SHOW HELP: EXECUTE
+//   CREATE TABLE <name> AS EXECUTE <plan_name> [(params, ...)]
 // | CREATE opt_temp TABLE create_as_target AS EXECUTE name execute_param_clause opt_with_data { return unimplemented(sqllex) }
 
 execute_param_clause:
@@ -1472,19 +1661,18 @@ execute_param_clause:
     $$.val = Exprs(nil)
   }
 
-// DEALLOCATE [PREPARE] <plan_name>
+// %Help: DEALLOCATE - remove a prepared statement
+// %Category: Misc
+// %Text: DEALLOCATE [PREPARE] { <name> | ALL }
+// %SeeAlso: PREPARE, EXECUTE, DISCARD
 deallocate_stmt:
   DEALLOCATE name
   {
-    $$.val = &Deallocate{
-      Name: Name($2),
-    }
+    $$.val = &Deallocate{Name: Name($2)}
   }
 | DEALLOCATE PREPARE name
   {
-    $$.val = &Deallocate{
-      Name: Name($3),
-    }
+    $$.val = &Deallocate{Name: Name($3)}
   }
 | DEALLOCATE ALL
   {
@@ -1494,21 +1682,47 @@ deallocate_stmt:
   {
     $$.val = &Deallocate{}
   }
+| DEALLOCATE error // SHOW HELP: DEALLOCATE
 
-// GRANT privileges ON targets TO grantee_list
+// %Help: GRANT - define access privileges
+// %Category: Priv
+// %Text:
+// GRANT {ALL | <privileges...> } ON <targets...> TO <grantees...>
+//
+// Privileges:
+//   CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE
+//
+// Targets:
+//   DATABASE <databasename> [, ...]
+//   [TABLE] [<databasename> .] { <tablename> | * } [, ...]
+//
+// %SeeAlso: REVOKE, https://www.cockroachlabs.com/docs/grant.html
 grant_stmt:
   GRANT privileges ON targets TO grantee_list
   {
     $$.val = &Grant{Privileges: $2.privilegeList(), Grantees: $6.nameList(), Targets: $4.targetList()}
   }
+| GRANT error // SHOW HELP: GRANT
 
-// REVOKE privileges ON targets FROM grantee_list
+// %Help: REVOKE - remove access privileges
+// %Category: Priv
+// %Text:
+// REVOKE {ALL | <privileges...> } ON <targets...> FROM <grantees...>
+//
+// Privileges:
+//   CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE
+//
+// Targets:
+//   DATABASE <databasename> [, <databasename>]...
+//   [TABLE] [<databasename> .] { <tablename> | * } [, ...]
+//
+// %SeeAlso: GRANT, https://www.cockroachlabs.com/docs/revoke.html
 revoke_stmt:
   REVOKE privileges ON targets FROM grantee_list
   {
     $$.val = &Revoke{Privileges: $2.privilegeList(), Grantees: $6.nameList(), Targets: $4.targetList()}
   }
-
+| REVOKE error // SHOW HELP: REVOKE
 
 targets:
   table_pattern_list
@@ -1585,7 +1799,10 @@ grantee_list:
     $$.val = append($1.nameList(), Name($3))
   }
 
-// RESET name
+// %Help: RESET - reset a session variable to its default value
+// %Category: Cfg
+// %Text: RESET [SESSION] <var>
+// %SeeAlso: https://www.cockroachlabs.com/docs/set-vars.html
 reset_stmt:
   RESET session_var
   {
@@ -1595,6 +1812,7 @@ reset_stmt:
   {
     $$.val = &Set{Name: UnresolvedName{Name($3)}, SetMode: SetModeReset}
   }
+| RESET error { return helpWith(sqllex, "RESET" ) }
 
 // USE is the MSSQL/MySQL equivalent of SET DATABASE. Alias it for convenience.
 use_stmt:
@@ -1603,24 +1821,29 @@ use_stmt:
     /* SKIP DOC */
     $$.val = &Set{Name: UnresolvedName{Name("database")}, Values: Exprs{$2.expr()}}
   }
+| USE error // SHOW HELP: SET SESSION
 
-
-// SET name TO 'var_value'
-// SET TIME ZONE 'var_value'
+// SET SESSION / SET CLUSTER SETTING / SET TRANSACTION
 set_stmt:
-  set_session_stmt
-| set_csetting_stmt
-| set_transaction_stmt
-| set_exprs_internal { /* SKIP DOC */ }
-| use_stmt { /* SKIP DOC */ }
+  set_session_stmt     // EXTEND WITH HELP: SET SESSION
+| set_csetting_stmt    // EXTEND WITH HELP: SET CLUSTER SETTING
+| set_transaction_stmt // EXTEND WITH HELP: SET TRANSACTION
+| set_exprs_internal   { /* SKIP DOC */ }
+| use_stmt             { /* SKIP DOC */ }
 | SET LOCAL error { return unimplemented(sqllex, "set local") }
 
+// %Help: SET CLUSTER SETTING - change a cluster setting
+// %Category: Cfg
+// %Text: SET CLUSTER SETTING <var> { TO | = } <value>
+// %SeeAlso: SHOW CLUSTER SETTING, SET SESSION,
+// https://www.cockroachlabs.com/docs/cluster-settings.html
 set_csetting_stmt:
   SET CLUSTER SETTING generic_set
   {
     $$.val = $4.stmt()
     $$.val.(*Set).SetMode = SetModeClusterSetting
   }
+| SET CLUSTER error // SHOW HELP: SET CLUSTER SETTING
 
 set_exprs_internal:
   /* SET ROW serves to accelerate parser.parseExprs().
@@ -1630,6 +1853,15 @@ set_exprs_internal:
     $$.val = &Set{Values: $4.exprs()}
   }
 
+// %Help: SET SESSION - change a session variable
+// %Category: Cfg
+// %Text:
+// SET [SESSION] <var> { TO | = } <values...>
+// SET [SESSION] TIME ZONE <tz>
+// SET [SESSION] CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL { SNAPSHOT | SERIALIZABLE }
+//
+// %SeeAlso: SHOW SESSION, RESET, DISCARD, SHOW, SET CLUSTER SETTING, SET TRANSACTION,
+// https://www.cockroachlabs.com/docs/set-vars.html
 set_session_stmt:
   SET SESSION set_rest_more
   {
@@ -1645,15 +1877,28 @@ set_session_stmt:
     $$.val = &SetDefaultIsolation{Isolation: $6.isoLevel()}
   }
 
+// %Help: SET TRANSACTION - configure the transaction settings
+// %Category: Txn
+// %Text:
+// SET [SESSION] TRANSACTION <txnparameters...>
+//
+// Transaction parameters:
+//    ISOLATION LEVEL { SNAPSHOT | SERIALIZABLE }
+//    PRIORITY { LOW | NORMAL | HIGH }
+//
+// %SeeAlso: SHOW TRANSACTION, SET SESSION,
+// https://www.cockroachlabs.com/docs/set-transaction.html
 set_transaction_stmt:
   SET TRANSACTION transaction_mode_list
   {
     $$.val = &SetTransaction{Modes: $3.transactionModes()}
   }
+| SET TRANSACTION error // SHOW HELP: SET TRANSACTION
 | SET SESSION TRANSACTION transaction_mode_list
   {
     $$.val = &SetTransaction{Modes: $4.transactionModes()}
   }
+| SET SESSION TRANSACTION error // SHOW HELP: SET TRANSACTION
 
 generic_set:
   var_name TO var_list
@@ -1684,6 +1929,7 @@ set_rest_more:
   }
 | var_name FROM CURRENT { return unimplemented(sqllex, "set from current") }
 | set_names
+| error // SHOW HELP: SET SESSION
 
 // SET NAMES is the SQL standard syntax for SET client_encoding.
 // See https://www.postgresql.org/docs/9.6/static/multibyte.html#AEN39236
@@ -1815,29 +2061,41 @@ non_reserved_word_or_sconst:
   non_reserved_word
 | SCONST
 
+// %Help: SHOW
+// %Category: Group
+// %Text:
+// SHOW SESSION, SHOW CLUSTER SETTING, SHOW DATABASES, SHOW TABLES, SHOW COLUMNS, SHOW INDEXES,
+// SHOW CONSTRAINTS, SHOW CREATE TABLE, SHOW CREATE VIEW, SHOW USERS, SHOW TRANSACTION, SHOW BACKUP,
+// SHOW JOBS, SHOW QUERIES, SHOW SESSIONS, SHOW TRACE
 show_stmt:
-  show_backup_stmt
-| show_columns_stmt
-| show_constraints_stmt
-| show_create_table_stmt
-| show_create_view_stmt
-| show_csettings_stmt
-| show_databases_stmt
-| show_grants_stmt
-| show_indexes_stmt
-| show_jobs_stmt
-| show_queries_stmt
-| show_session_stmt
-| show_sessions_stmt
-| show_tables_stmt
+  show_backup_stmt       // EXTEND WITH HELP: SHOW BACKUP
+| show_columns_stmt      // EXTEND WITH HELP: SHOW COLUMNS
+| show_constraints_stmt  // EXTEND WITH HELP: SHOW CONSTRAINTS
+| show_create_table_stmt // EXTEND WITH HELP: SHOW CREATE TABLE
+| show_create_view_stmt  // EXTEND WITH HELP: SHOW CREATE VIEW
+| show_csettings_stmt    // EXTEND WITH HELP: SHOW CLUSTER SETTING
+| show_databases_stmt    // EXTEND WITH HELP: SHOW DATABASES
+| show_grants_stmt       // EXTEND WITH HELP: SHOW GRANTS
+| show_indexes_stmt      // EXTEND WITH HELP: SHOW INDEXES
+| show_jobs_stmt         // EXTEND WITH HELP: SHOW JOBS
+| show_queries_stmt      // EXTEND WITH HELP: SHOW QUERIES
+| show_session_stmt      // EXTEND WITH HELP: SHOW SESSION
+| show_sessions_stmt     // EXTEND WITH HELP: SHOW SESSIONS
+| show_tables_stmt       // EXTEND WITH HELP: SHOW TABLES
 | show_testing_stmt
-| show_trace_stmt
-| show_transaction_stmt
-| show_users_stmt
+| show_trace_stmt        // EXTEND WITH HELP: SHOW TRACE
+| show_transaction_stmt  // EXTEND WITH HELP: SHOW TRANSACTION
+| show_users_stmt        // EXTEND WITH HELP: SHOW USERS
+| SHOW error             // SHOW HELP: SHOW
 
+// %Help: SHOW SESSION - display session variables
+// %Category: Cfg
+// %Text: SHOW [SESSION] { <var> | ALL }
+// %SeeAlso: https://www.cockroachlabs.com/docs/show-vars.html
 show_session_stmt:
   SHOW session_var         { $$.val = &Show{Name: $2} }
 | SHOW SESSION session_var { $$.val = &Show{Name: $3} }
+| SHOW SESSION error // SHOW HELP: SHOW SESSION
 
 session_var:
   IDENT
@@ -1852,13 +2110,25 @@ session_var:
 | SESSION_USER
 // TIME ZONE is special: it is two tokens, but is really the identifier "TIME ZONE".
 | TIME ZONE { $$ = "TIME ZONE" }
+| TIME error // SHOW HELP: SHOW SESSION
 
+// %Help: SHOW BACKUP - list backup contents
+// %Category: CCL
+// %Text: SHOW BACKUP <location>
+// %SeeAlso: https://www.cockroachlabs.com/docs/show-backup.html
 show_backup_stmt:
   SHOW BACKUP string_or_placeholder
   {
     $$.val = &ShowBackup{Path: $3.expr()}
   }
+| SHOW BACKUP error // SHOW HELP: SHOW BACKUP
 
+// %Help: SHOW CLUSTER SETTING - display cluster settings
+// %Category: Cfg
+// %Text:
+// SHOW CLUSTER SETTING <var>
+// SHOW ALL CLUSTER SETTINGS
+// %SeeAlso: https://www.cockroachlabs.com/docs/cluster-settings.html
 show_csettings_stmt:
   SHOW CLUSTER SETTING any_name
   {
@@ -1868,58 +2138,93 @@ show_csettings_stmt:
   {
     $$.val = &Show{Name: "all", ClusterSetting: true}
   }
+| SHOW CLUSTER error // SHOW HELP: SHOW CLUSTER SETTING
 | SHOW ALL CLUSTER SETTINGS
   {
     $$.val = &Show{Name: "all", ClusterSetting: true}
   }
+| SHOW ALL CLUSTER error // SHOW HELP: SHOW CLUSTER SETTING
 
+// %Help: SHOW COLUMNS - list columns in relation
+// %Category: DDL
+// %Text: SHOW COLUMNS FROM <tablename>
+// %SeeAlso: https://www.cockroachlabs.com/docs/show-columns.html
 show_columns_stmt:
   SHOW COLUMNS FROM var_name
   {
     $$.val = &ShowColumns{Table: $4.normalizableTableName()}
   }
+| SHOW COLUMNS error // SHOW HELP: SHOW COLUMNS
 
+// %Help: SHOW DATABASES - list databases
+// %Category: DDL
+// %Text: SHOW DATABASES
+// %SeeAlso: https://www.cockroachlabs.com/docs/show-databases.html
 show_databases_stmt:
   SHOW DATABASES
   {
     $$.val = &ShowDatabases{}
   }
+| SHOW DATABASES error // SHOW HELP: SHOW DATABASES
 
+// %Help: SHOW GRANTS - list grants
+// %Category: Priv
+// %Text: SHOW GRANTS [ON <targets...>] [FOR <users...>]
+// %SeeAlso: https://www.cockroachlabs.com/docs/show-grants.html
 show_grants_stmt:
   SHOW GRANTS on_privilege_target_clause for_grantee_clause
   {
     $$.val = &ShowGrants{Targets: $3.targetListPtr(), Grantees: $4.nameList()}
   }
+| SHOW GRANTS error // SHOW HELP: SHOW GRANTS
 
+// %Help: SHOW INDEXES - list indexes
+// %Category: DDL
+// %Text: SHOW INDEXES FROM <tablename>
+// %SeeAlso: https://www.cockroachlabs.com/docs/show-indexes.html
 show_indexes_stmt:
   SHOW INDEX FROM var_name
   {
     $$.val = &ShowIndex{Table: $4.normalizableTableName()}
   }
+| SHOW INDEX error // SHOW HELP: SHOW INDEXES
 | SHOW INDEXES FROM var_name
   {
     $$.val = &ShowIndex{Table: $4.normalizableTableName()}
   }
+| SHOW INDEXES error // SHOW HELP: SHOW INDEXES
 | SHOW KEYS FROM var_name
   {
     $$.val = &ShowIndex{Table: $4.normalizableTableName()}
   }
+| SHOW KEYS error // SHOW HELP: SHOW INDEXES
 
+// %Help: SHOW CONSTRAINTS - list constraints
+// %Category: DDL
+// %Text: SHOW CONSTRAINTS FROM <tablename>
+// %SeeAlso: https://www.cockroachlabs.com/docs/show-constraints.html
 show_constraints_stmt:
   SHOW CONSTRAINT FROM var_name
   {
     $$.val = &ShowConstraints{Table: $4.normalizableTableName()}
   }
+| SHOW CONSTRAINT error // SHOW HELP: SHOW CONSTRAINTS
 | SHOW CONSTRAINTS FROM var_name
   {
     $$.val = &ShowConstraints{Table: $4.normalizableTableName()}
   }
+| SHOW CONSTRAINTS error // SHOW HELP: SHOW CONSTRAINTS
 
+// %Help: SHOW QUERIES - list running queries
+// %Category: Misc
+// %Text: SHOW [CLUSTER | LOCAL] QUERIES
+// %SeeAlso: CANCEL QUERY
 show_queries_stmt:
   SHOW QUERIES
   {
     $$.val = &ShowQueries{Cluster: true}
   }
+| SHOW QUERIES error // SHOW HELP: SHOW QUERIES
 | SHOW CLUSTER QUERIES
   {
     $$.val = &ShowQueries{Cluster: true}
@@ -1929,21 +2234,34 @@ show_queries_stmt:
     $$.val = &ShowQueries{Cluster: false}
   }
 
+// %Help: SHOW JOBS - list background jobs
+// %Category: Misc
+// %Text: SHOW JOBS
+// %SeeAlso: CANCEL JOB, PAUSE JOB, RESUME JOB
 show_jobs_stmt:
   SHOW JOBS
   {
     $$.val = &ShowJobs{}
   }
+| SHOW JOBS error // SHOW HELP: SHOW JOBS
 
+// %Help: SHOW TRACE - display an execution trace
+// %Category: Misc
+// %Text:
+// SHOW [KV] TRACE FOR SESSION
+// SHOW [KV] TRACE FOR <statement>
+// %SeeAlso: EXPLAIN
 show_trace_stmt:
   SHOW TRACE FOR SESSION
   {
     $$.val = &ShowTrace{Statement: nil}
   }
+| SHOW TRACE error // SHOW HELP: SHOW TRACE
 | SHOW KV TRACE FOR SESSION
   {
     $$.val = &ShowTrace{Statement: nil, OnlyKVTrace: true}
   }
+| SHOW KV error // SHOW HELP: SHOW TRACE
 | SHOW TRACE FOR explainable_stmt
   {
     $$.val = &ShowTrace{Statement: $4.stmt()}
@@ -1953,11 +2271,15 @@ show_trace_stmt:
     $$.val = &ShowTrace{Statement: $5.stmt(), OnlyKVTrace: true }
   }
 
+// %Help: SHOW SESSIONS - list open client sessions
+// %Category: Misc
+// %Text: SHOW [CLUSTER | LOCAL] SESSIONS
 show_sessions_stmt:
   SHOW SESSIONS
   {
     $$.val = &ShowSessions{Cluster: true}
   }
+| SHOW SESSIONS error // SHOW HELP: SHOW SESSIONS
 | SHOW CLUSTER SESSIONS
   {
     $$.val = &ShowSessions{Cluster: true}
@@ -1967,6 +2289,10 @@ show_sessions_stmt:
     $$.val = &ShowSessions{Cluster: false}
   }
 
+// %Help: SHOW TABLES - list tables
+// %Category: DDL
+// %Text: SHOW TABLES [FROM <databasename>]
+// %SeeAlso: https://www.cockroachlabs.com/docs/show-tables.html
 show_tables_stmt:
   SHOW TABLES FROM name
   {
@@ -1976,7 +2302,12 @@ show_tables_stmt:
   {
     $$.val = &ShowTables{}
   }
+| SHOW TABLES error // SHOW HELP: SHOW TABLES
 
+// %Help: SHOW TRANSACTION - display current transaction properties
+// %Category: Cfg
+// %Text: SHOW TRANSACTION {ISOLATION LEVEL | PRIORITY | STATUS}
+// %SeeAlso: https://www.cockroachlabs.com/docs/show-transaction.html
 show_transaction_stmt:
   SHOW TRANSACTION ISOLATION LEVEL
   {
@@ -1993,24 +2324,40 @@ show_transaction_stmt:
     /* SKIP DOC */
     $$.val = &ShowTransactionStatus{}
   }
+| SHOW TRANSACTION error // SHOW HELP: SHOW TRANSACTION
 
+// %Help: SHOW CREATE TABLE - display the CREATE TABLE statement for a table
+// %Category: DDL
+// %Text: SHOW CREATE TABLE <tablename>
+// %SeeAlso: https://www.cockroachlabs.com/docs/show-create-table.html
 show_create_table_stmt:
   SHOW CREATE TABLE var_name
   {
     $$.val = &ShowCreateTable{Table: $4.normalizableTableName()}
   }
+| SHOW CREATE TABLE error // SHOW HELP: SHOW CREATE TABLE
 
+// %Help: SHOW CREATE VIEW - display the CREATE VIEW statement for a view
+// %Category: DDL
+// %Text: SHOW CREATE VIEW <viewname>
+// %SeeAlso: https://www.cockroachlabs.com/docs/show-create-view.html
 show_create_view_stmt:
   SHOW CREATE VIEW var_name
   {
     $$.val = &ShowCreateView{View: $4.normalizableTableName()}
   }
+| SHOW CREATE VIEW error // SHOW HELP: SHOW CREATE VIEW
 
+// %Help: SHOW USERS - list defined users
+// %Category: Priv
+// %Text: SHOW USERS
+// %SeeAlso: CREATE USER, DROP USER, https://www.cockroachlabs.com/docs/show-users.html
 show_users_stmt:
   SHOW USERS
   {
     $$.val = &ShowUsers{}
   }
+| SHOW USERS error // SHOW HELP: SHOW USERS
 
 show_testing_stmt:
   SHOW TESTING_RANGES FROM TABLE qualified_name
@@ -2056,15 +2403,49 @@ for_grantee_clause:
     $$.val = NameList(nil)
   }
 
-// PAUSE JOB id
+// %Help: PAUSE JOB - pause a background job
+// %Category: Misc
+// %Text: PAUSE JOB <jobid>
+// %SeeAlso: SHOW JOBS, CANCEL JOB, RESUME JOB
 pause_stmt:
   PAUSE JOB a_expr
   {
     /* SKIP DOC */
     $$.val = &PauseJob{ID: $3.expr()}
   }
+| PAUSE error // SHOW HELP: PAUSE JOB
 
-// CREATE TABLE relname
+// %Help: CREATE TABLE - create a new table
+// %Category: DDL
+// %Text:
+// CREATE TABLE [IF NOT EXISTS] <tablename> ( <elements...> ) [<interleave>]
+// CREATE TABLE [IF NOT EXISTS] <tablename> [( <colnames...> )] AS <source>
+//
+// Table elements:
+//    <name> <type> [<qualifiers...>]
+//    [UNIQUE] INDEX [<name>] ( <colname> [ASC | DESC] [, ...] )
+//                            [STORING ( <colnames...> )] [<interleave>]
+//    FAMILY [<name>] ( <colnames...> )
+//    [CONSTRAINT <name>] <constraint>
+//
+// Table constraints:
+//    PRIMARY KEY ( <colnames...> )
+//    FOREIGN KEY ( <colnames...> ) REFERENCES <tablename> [( <colnames...> )]
+//    UNIQUE ( <colnames... ) [STORING ( <colnames...> )] [<interleave>]
+//    CHECK ( <expr> )
+//
+// Column qualifiers:
+//   [CONSTRAINT <constraintname>] {NULL | NOT NULL | UNIQUE | PRIMARY KEY | CHECK (<expr>) | DEFAULT <expr>}
+//   FAMILY <familyname>, CREATE [IF NOT EXISTS] FAMILY [<familyname>]
+//   REFERENCES <tablename> [( <colnames...> )]
+//   COLLATE <collationname>
+//
+// Interleave clause:
+//    INTERLEAVE IN PARENT <tablename> ( <colnames...> ) [CASCADE | RESTRICT]
+//
+// %SeeAlso: SHOW TABLES, CREATE VIEW, SHOW CREATE TABLE,
+// https://www.cockroachlabs.com/docs/create-table.html
+// https://www.cockroachlabs.com/docs/create-table-as.html
 create_table_stmt:
   CREATE TABLE any_name '(' opt_table_elem_list ')' opt_interleave
   {
@@ -2396,19 +2777,27 @@ numeric_only:
     $$.val = $1.numVal()
   }
 
-// TRUNCATE table relname1, relname2, ...
+// %Help: TRUNCATE - empty one or more tables
+// %Category: DML
+// %Text: TRUNCATE [TABLE] <tablename> [, ...] [CASCADE | RESTRICT]
+// %SeeAlso: https://www.cockroachlabs.com/docs/truncate.html
 truncate_stmt:
   TRUNCATE opt_table relation_expr_list opt_drop_behavior
   {
     $$.val = &Truncate{Tables: $3.tableNameReferences(), DropBehavior: $4.dropBehavior()}
   }
+| TRUNCATE error // SHOW HELP: TRUNCATE
 
-// CREATE USER
+// %Help: CREATE USER - define a new user
+// %Category: Priv
+// %Text: CREATE USER <name> [ [WITH] PASSWORD <passwd> ]
+// %SeeAlso: DROP USER, SHOW USERS, https://www.cockroachlabs.com/docs/create-user.html
 create_user_stmt:
   CREATE USER name opt_password
   {
     $$.val = &CreateUser{Name: Name($3), Password: $4.strPtr()}
   }
+| CREATE USER error // SHOW HELP: CREATE USER
 
 opt_password:
   opt_with PASSWORD SCONST
@@ -2420,7 +2809,10 @@ opt_password:
     $$.val = (*string)(nil)
   }
 
-// CREATE VIEW relname
+// %Help: CREATE VIEW - create a new view
+// %Category: DDL
+// %Text: CREATE VIEW <viewname> [( <colnames...> )] AS <source>
+// %SeeAlso: CREATE TABLE, SHOW CREATE VIEW, https://www.cockroachlabs.com/docs/create-view.html
 create_view_stmt:
   CREATE VIEW any_name opt_column_list AS select_stmt
   {
@@ -2430,10 +2822,22 @@ create_view_stmt:
       AsSource: $6.slct(),
     }
   }
+| CREATE VIEW error // SHOW HELP: CREATE VIEW
 
 // TODO(a-robinson): CREATE OR REPLACE VIEW support (#2971).
 
-// CREATE INDEX
+// %Help: CREATE INDEX - create a new index
+// %Category: DDL
+// %Text:
+// CREATE [UNIQUE] INDEX [IF NOT EXISTS] [<idxname>]
+//        ON <tablename> ( <colname> [ASC | DESC] [, ...] )
+//        [STORING ( <colnames...> )] [<interleave>]
+//
+// Interleave clause:
+//    INTERLEAVE IN PARENT <tablename> ( <colnames...> ) [CASCADE | RESTRICT]
+//
+// %SeeAlso: CREATE TABLE, SHOW INDEXES, SHOW CREATE INDEX,
+// https://www.cockroachlabs.com/docs/create-index.html
 create_index_stmt:
   CREATE opt_unique INDEX opt_name ON qualified_name '(' index_params ')' opt_storing opt_interleave
   {
@@ -2458,6 +2862,7 @@ create_index_stmt:
       Interleave: $14.interleave(),
     }
   }
+| CREATE opt_unique INDEX error // SHOW HELP: CREATE INDEX
 
 opt_unique:
   UNIQUE
@@ -2570,52 +2975,91 @@ opt_set_data:
   SET DATA {}
 | /* EMPTY */ {}
 
+// %Help: RELEASE - complete a retryable block
+// %Category: Txn
+// %Text: RELEASE [SAVEPOINT] cockroach_restart
+// %SeeAlso: SAVEPOINT, https://www.cockroachlabs.com/docs/savepoint.html
 release_stmt:
- RELEASE savepoint_name
- {
-  $$.val = &ReleaseSavepoint{Savepoint: $2}
- }
+  RELEASE savepoint_name
+  {
+    $$.val = &ReleaseSavepoint{Savepoint: $2}
+  }
+| RELEASE error // SHOW HELP: RELEASE
 
-// RESUME JOB id
+// %Help: RESUME JOB - resume a background job
+// %Category: Misc
+// %Text: RESUME JOB <jobid>
+// %SeeAlso: SHOW JOBS, CANCEL JOB, PAUSE JOB
 resume_stmt:
   RESUME JOB a_expr
   {
     /* SKIP DOC */
     $$.val = &ResumeJob{ID: $3.expr()}
   }
+| RESUME error // SHOW HELP: RESUME JOB
 
+// %Help: SAVEPOINT - start a retryable block
+// %Category: Txn
+// %Text: SAVEPOINT cockroach_restart
+// %SeeAlso: RELEASE, https://www.cockroachlabs.com/docs/savepoint.html
 savepoint_stmt:
- SAVEPOINT savepoint_name
- {
-  $$.val = &Savepoint{Name: $2}
- }
+  SAVEPOINT name
+  {
+    $$.val = &Savepoint{Name: $2}
+  }
+| SAVEPOINT error // SHOW HELP: SAVEPOINT
 
 // BEGIN / START / COMMIT / END / ROLLBACK / ...
 transaction_stmt:
-  begin_stmt
-| commit_stmt
-| rollback_stmt
+  begin_stmt    // EXTEND WITH HELP: BEGIN
+| commit_stmt   // EXTEND WITH HELP: COMMIT
+| rollback_stmt // EXTEND WITH HELP: ROLLBACK
 
+// %Help: BEGIN - start a transaction
+// %Category: Txn
+// %Text:
+// BEGIN [TRANSACTION] [ <txnparameter> [, ...] ]
+// START TRANSACTION [ <txnparameter> [, ...] ]
+//
+// Transaction parameters:
+//    ISOLATION LEVEL { SNAPSHOT | SERIALIZABLE }
+//    PRIORITY { LOW | NORMAL | HIGH }
+//
+// %SeeAlso: COMMIT, ROLLBACK, https://www.cockroachlabs.com/docs/begin-transaction.html
 begin_stmt:
   BEGIN opt_transaction begin_transaction
   {
     $$.val = $3.stmt()
   }
+| BEGIN error // SHOW HELP: BEGIN
 | START TRANSACTION begin_transaction
   {
     $$.val = $3.stmt()
   }
+| START error // SHOW HELP: BEGIN
 
+// %Help: COMMIT - commit the current transaction
+// %Category: Txn
+// %Text:
+// COMMIT [TRANSACTION]
+// END [TRANSACTION]
+// %SeeAlso: BEGIN, ROLLBACK, https://www.cockroachlabs.com/docs/commit-transaction.html
 commit_stmt:
   COMMIT opt_transaction
   {
     $$.val = &CommitTransaction{}
   }
+| COMMIT error // SHOW HELP: COMMIT
 | END opt_transaction
   {
     $$.val = &CommitTransaction{}
   }
+| END error // SHOW HELP: COMMIT
 
+// %Help: ROLLBACK - abort the current transaction
+// %Category: Txn
+// %Text: ROLLBACK [TRANSACTION] [TO [SAVEPOINT] cockroach_restart]
+// %SeeAlso: BEGIN, COMMIT, SAVEPOINT, https://www.cockroachlabs.com/docs/rollback-transaction.html
 rollback_stmt:
   ROLLBACK opt_to_savepoint
   {
@@ -2625,6 +3069,7 @@ rollback_stmt:
       $$.val = &RollbackTransaction{}
     }
   }
+| ROLLBACK error // SHOW HELP: ROLLBACK
 
 opt_transaction:
   TRANSACTION {}
@@ -2718,6 +3163,10 @@ transaction_read_mode:
     $$.val = ReadWrite
   }
 
+// %Help: CREATE DATABASE - create a new database
+// %Category: DDL
+// %Text: CREATE DATABASE [IF NOT EXISTS] <name>
+// %SeeAlso: https://www.cockroachlabs.com/docs/create-database.html
 create_database_stmt:
   CREATE DATABASE name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
   {
@@ -2739,7 +3188,8 @@ create_database_stmt:
       Collate: $10,
       CType: $11,
     }
-  }
+   }
+| CREATE DATABASE error // SHOW HELP: CREATE DATABASE
 
 opt_template_clause:
   TEMPLATE opt_equal non_reserved_word_or_sconst
@@ -2785,6 +3235,14 @@ opt_equal:
   '=' {}
 | /* EMPTY */ {}
 
+// %Help: INSERT - create new rows in a table
+// %Category: DML
+// %Text:
+// INSERT INTO <tablename> [[AS] <name>] [( <colnames...> )]
+//        <selectclause>
+//        [ON CONFLICT [( <colnames...> )] {DO UPDATE SET ... [WHERE <expr>] | DO NOTHING}]
+//        [RETURNING <exprs...>]
+// %SeeAlso: UPSERT, UPDATE, DELETE, https://www.cockroachlabs.com/docs/insert.html
 insert_stmt:
   opt_with_clause INSERT INTO insert_target insert_rest returning_clause
   {
@@ -2799,7 +3257,15 @@ insert_stmt:
     $$.val.(*Insert).OnConflict = $6.onConflict()
     $$.val.(*Insert).Returning = $7.retClause()
   }
+| opt_with_clause INSERT error // SHOW HELP: INSERT
 
+// %Help: UPSERT - create or replace rows in a table
+// %Category: DML
+// %Text:
+// UPSERT INTO <tablename> [AS <name>] [( <colnames...> )]
+//        <selectclause>
+//        [RETURNING <exprs...>]
+// %SeeAlso: INSERT, UPDATE, DELETE, https://www.cockroachlabs.com/docs/upsert.html
 upsert_stmt:
   opt_with_clause UPSERT INTO insert_target insert_rest returning_clause
   {
@@ -2808,16 +3274,17 @@ upsert_stmt:
     $$.val.(*Insert).OnConflict = &OnConflict{}
     $$.val.(*Insert).Returning = $6.retClause()
   }
+| opt_with_clause UPSERT error // SHOW HELP: UPSERT
 
-// Can't easily make AS optional here, because VALUES in insert_rest would have
-// a shift/reduce conflict with VALUES as an optional alias. We could easily
-// allow unreserved_keywords as optional aliases, but that'd be an odd
-// divergence from other places. So just require AS for now.
 insert_target:
   qualified_name
   {
     $$.val = $1.newNormalizableTableName()
   }
+// Can't easily make AS optional here, because VALUES in insert_rest would have
+// a shift/reduce conflict with VALUES as an optional alias. We could easily
+// allow unreserved_keywords as optional aliases, but that'd be an odd
+// divergence from other places. So just require AS for now.
 | qualified_name AS name
   {
     $$.val = &AliasedTableExpr{Expr: $1.newNormalizableTableName(), As: AliasClause{Alias: Name($3)}}
@@ -2874,12 +3341,17 @@ returning_clause:
     $$.val = AbsentReturningClause
   }
 
+// %Help: UPDATE - update rows of a table
+// %Category: DML
+// %Text: UPDATE <tablename> [[AS] <name>] SET ... [WHERE <expr>] [RETURNING <exprs...>]
+// %SeeAlso: INSERT, UPSERT, DELETE, https://www.cockroachlabs.com/docs/update.html
 update_stmt:
   opt_with_clause UPDATE relation_expr_opt_alias
     SET set_clause_list update_from_clause where_clause returning_clause
   {
     $$.val = &Update{Table: $3.tblExpr(), Exprs: $5.updateExprs(), Where: newWhere(astWhere, $7.expr()), Returning: $8.retClause()}
   }
+| opt_with_clause UPDATE error // SHOW HELP: UPDATE
 
 // Mark this as unimplemented until the normal from_clause is supported here.
 update_from_clause:
@@ -2958,7 +3430,6 @@ multiple_set_clause:
 //
 // In non-expression contexts, we use select_stmt which can represent a SELECT
 // with or without outer parentheses.
-
 select_stmt:
   select_no_parens %prec UMINUS
 | select_with_parens %prec UMINUS
@@ -3012,7 +3483,10 @@ select_no_parens:
   }
 
 select_clause:
-  simple_select
+// We only provide help if an open parenthesis is provided, because
+// otherwise the rule is ambiguous with the top-level statement list.
+  '(' error // SHOW HELP: <SELECTCLAUSE>
+| simple_select
 | select_with_parens
 
 // This rule parses SELECT statements that can appear within set operations,
@@ -3037,7 +3511,36 @@ select_clause:
 //
 // NOTE: only the leftmost component select_stmt should have INTO. However,
 // this is not checked by the grammar; parse analysis must check it.
+//
+// %Help: <SELECTCLAUSE> - access tabular data
+// %Category: DML
+// %Text:
+// Select clause:
+//   TABLE <tablename>
+//   VALUES ( <exprs...> ) [ , ... ]
+//   SELECT ... [ { INTERSECT | UNION | EXCEPT } [ ALL | DISTINCT ] <selectclause> ]
 simple_select:
+  simple_select_clause // EXTEND WITH HELP: SELECT
+| values_clause        // EXTEND WITH HELP: VALUES
+| table_clause         // EXTEND WITH HELP: TABLE
+| set_operation
+
+// %Help: SELECT - retrieve rows from a data source and compute a result
+// %Category: DML
+// %Text:
+// SELECT [DISTINCT]
+//        { <expr> [[AS] <name>] | [ [<dbname>.] <tablename>. ] * } [, ...]
+//        [ FROM <source> ]
+//        [ WHERE <expr> ]
+//        [ GROUP BY <expr> [ , ... ] ]
+//        [ HAVING <expr> ]
+//        [ WINDOW <name> AS ( <definition> ) ]
+//        [ { UNION | INTERSECT | EXCEPT } [ ALL | DISTINCT ] <selectclause> ]
+//        [ ORDER BY <expr> [ ASC | DESC ] [, ...] ]
+//        [ LIMIT { <expr> | ALL } ]
+//        [ OFFSET <expr> [ ROW | ROWS ] ]
+// %SeeAlso: https://www.cockroachlabs.com/docs/select.html
+simple_select_clause:
   SELECT opt_all_clause target_list
     from_clause where_clause
     group_clause having_clause window_clause
@@ -3065,9 +3568,10 @@ simple_select:
       Window:   $8.window(),
     }
   }
-| values_clause
-| table_clause
-| select_clause UNION all_or_distinct select_clause
+| SELECT error // SHOW HELP: SELECT
+
+set_operation:
+  select_clause UNION all_or_distinct select_clause
   {
     $$.val = &UnionClause{
       Type:  UnionOp,
@@ -3095,6 +3599,10 @@ simple_select:
     }
   }
 
+// %Help: TABLE - select an entire table
+// %Category: DML
+// %Text: TABLE <tablename>
+// %SeeAlso: SELECT, VALUES, https://www.cockroachlabs.com/docs/table-expressions.html
 table_clause:
   TABLE table_ref
   {
@@ -3104,10 +3612,11 @@ table_clause:
       tableSelect: true,
     }
   }
+| TABLE error // SHOW HELP: TABLE
 
 // SQL standard WITH clause looks like:
 //
-// WITH [ RECURSIVE ] <query name> [ (<column>,...) ]
+// WITH [ RECURSIVE ] <query name> [ (<column> [, ...]) ]
 //        AS (query) [ SEARCH or CYCLE clause ]
 //
 // We don't currently support the SEARCH or CYCLE clause.
@@ -3331,11 +3840,17 @@ having_clause:
 // production a higher precedence than the VALUES token has, causing
 // the parser to prefer to reduce, in effect assuming that the VALUES
 // is not a function name.
+//
+// %Help: VALUES - select a given set of values
+// %Category: DML
+// %Text: VALUES ( <exprs...> ) [, ...]
+// %SeeAlso: SELECT, TABLE, https://www.cockroachlabs.com/docs/table-expressions.html
 values_clause:
   VALUES ctext_row %prec UMINUS
   {
     $$.val = &ValuesClause{[]*Tuple{{Exprs: $2.exprs()}}}
   }
+| VALUES error // SHOW HELP: VALUES
 | values_clause ',' ctext_row
   {
     valNode := $1.selectStmt().(*ValuesClause)
@@ -3352,6 +3867,7 @@ from_clause:
   {
     $$.val = &From{Tables: $2.tblExprs(), AsOf: $3.asOfClause()}
   }
+| FROM error // SHOW HELP: <SOURCE>
 | /* EMPTY */
   {
     $$.val = &From{}
@@ -3433,7 +3949,27 @@ opt_index_hints:
     $$.val = (*IndexHints)(nil)
   }
 
-// table_ref is where an alias clause can be attached.
+// %Help: <SOURCE> - define a data source for SELECT
+// %Category: DML
+// %Text:
+// Data sources:
+//   <tablename> [ @ { <idxname> | <indexhint> } ]
+//   <tablefunc> ( <exprs...> )
+//   ( { <selectclause> | <source> } )
+//   <source> [AS] <alias> [( <colnames...> )]
+//   <source> { [INNER] | { LEFT | RIGHT } [OUTER] } JOIN <source> ON <expr>
+//   <source> { [INNER] | { LEFT | RIGHT } [OUTER] } JOIN <source> USING ( <colnames...> )
+//   <source> NATURAL { [INNER] | { LEFT | RIGHT } [OUTER] } JOIN <source>
+//   <source> CROSS JOIN <source>
+//   <source> WITH ORDINALITY
+//   '[' EXPLAIN ... ']'
+//   '[' SHOW ... ']'
+//
+// Index hints:
+//   '{' FORCE_INDEX = <idxname> [, ...] '}'
+//   '{' NO_INDEX_JOIN [, ...] '}'
+//
+// %SeeAlso: https://www.cockroachlabs.com/docs/table-expressions.html
 table_ref:
   '[' ICONST opt_tableref_col_list alias_clause ']' opt_index_hints opt_ordinality opt_alias_clause
   {
@@ -3462,6 +3998,7 @@ table_ref:
   {
     $$.val = &AliasedTableExpr{Expr: &FuncExpr{Func: $1.resolvableFunctionReference(), Exprs: $3.exprs()}, Ordinality: $5.bool(), As: $6.aliasClause() }
   }
+| qualified_name '(' error { return helpWithFunction(sqllex, $1.resolvableFunctionReference()) }
 | select_with_parens opt_ordinality opt_alias_clause
   {
     $$.val = &AliasedTableExpr{Expr: &Subquery{Select: $1.selectStmt()}, Ordinality: $2.bool(), As: $3.aliasClause() }
@@ -3492,7 +4029,7 @@ table_ref:
 
 | '[' explainable_stmt ']' opt_ordinality opt_alias_clause
   {
-      $$.val = &AliasedTableExpr{Expr: &StatementSource{ Statement: $2.stmt() }, Ordinality: $4.bool(), As: $5.aliasClause() }
+    $$.val = &AliasedTableExpr{Expr: &StatementSource{ Statement: $2.stmt() }, Ordinality: $4.bool(), As: $5.aliasClause() }
   }
 
 opt_tableref_col_list:
@@ -4655,6 +5192,7 @@ func_application:
   {
     $$.val = &FuncExpr{Func: $1.resolvableFunctionReference(), Exprs: Exprs{StarExpr()}}
   }
+| func_name '(' error { return helpWithFunction(sqllex, $1.resolvableFunctionReference()) }
 
 // func_expr and its cousin func_expr_windowless are split out from c_expr just
 // so that we have classifications for "everything that is a function call or
@@ -4695,6 +5233,7 @@ func_expr_common_subexpr:
   {
     $$.val = &FuncExpr{Func: wrapFunction($1)}
   }
+| CURRENT_DATE '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
 | CURRENT_SCHEMA
   {
     $$.val = &FuncExpr{Func: wrapFunction($1)}
@@ -4703,6 +5242,7 @@ func_expr_common_subexpr:
   {
     $$.val = &FuncExpr{Func: wrapFunction($1)}
   }
+| CURRENT_SCHEMA '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
 | CURRENT_TIMESTAMP
   {
     $$.val = &FuncExpr{Func: wrapFunction($1)}
@@ -4711,6 +5251,7 @@ func_expr_common_subexpr:
   {
     $$.val = &FuncExpr{Func: wrapFunction($1)}
   }
+| CURRENT_TIMESTAMP '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
 | CURRENT_ROLE { return unimplemented(sqllex, "current role") }
 | CURRENT_USER { return unimplemented(sqllex, "current user") }
 | SESSION_USER { return unimplemented(sqllex, "session user") }
@@ -4727,14 +5268,17 @@ func_expr_common_subexpr:
   {
     $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
   }
+| EXTRACT '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
 | EXTRACT_DURATION '(' extract_list ')'
   {
     $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
   }
+| EXTRACT_DURATION '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
 | OVERLAY '(' overlay_list ')'
   {
     $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
   }
+| OVERLAY '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
 | POSITION '(' position_list ')'
   {
     $$.val = &FuncExpr{Func: wrapFunction("STRPOS"), Exprs: $3.exprs()}
@@ -4743,6 +5287,7 @@ func_expr_common_subexpr:
   {
     $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
   }
+| SUBSTRING '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
 | TREAT '(' a_expr AS typename ')' { return unimplemented(sqllex, "treat") }
 | TRIM '(' BOTH trim_list ')'
   {
@@ -4780,10 +5325,12 @@ func_expr_common_subexpr:
   {
     $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
   }
+| GREATEST '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
 | LEAST '(' expr_list ')'
   {
     $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
   }
+| LEAST '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
 
 // Aggregate decoration clauses
 within_group_clause:
