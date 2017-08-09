@@ -19,7 +19,7 @@ variable "azure_resource_group" {
 
 variable "azure_vhd_storage_account" {
   # Only lowercase letters and numbers are allowed by Azure. This account needs
-  # to belong to ${var.vhd_azure_resource_group}.
+  # to belong to ${var.azure_resource_group}.
   #
   # This must be created before applying this Terraform config, because creation
   # of storage accounts through the Azure API routinely timeout as of 1/4/2017.
@@ -27,6 +27,9 @@ variable "azure_vhd_storage_account" {
   # a storage account name, which seems to trigger this issue:
   #
   # https://github.com/hashicorp/terraform/issues/6699
+  #
+  # Using a static storage account name also has the benefit of making it easier
+  # to expunge leaked VHDs, which continue to occur as of 2017-08-09.
   default = "cockroachnightlyvhd"
 }
 
