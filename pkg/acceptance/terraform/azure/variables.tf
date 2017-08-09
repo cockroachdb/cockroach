@@ -1,5 +1,5 @@
-# Path to the cockroach binary. An empty value results in the latest official
-# binary being used.
+# Path to the cockroach binary. Must always be specified; a default is
+# provided to work around https://github.com/hashicorp/terraform/issues/5425.
 variable "cockroach_binary" {
   default = ""
 }
@@ -12,11 +12,6 @@ variable "cockroach_binary" {
 # support password-protected keys.
 variable "key_name" {
   default = "google_compute_engine"
-}
-
-# SHA of the cockroach binary to pull down. If default, the latest is fetched.
-variable "cockroach_sha" {
-  default = "LATEST"
 }
 
 # SHA of the block_writer binary to pull down. If default, the latest is fetched.

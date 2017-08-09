@@ -67,17 +67,14 @@ resource "null_resource" "cockroach-runner" {
   }
 
   provisioner "file" {
-    # If no binary is specified, we'll copy /dev/null (always 0 bytes) to the
-    # instance. The "remote-exec" block will then overwrite that. There's no
-    # such thing as conditional file copying in Terraform, so we fake it.
-    source = "${coalesce(var.cockroach_binary, "/dev/null")}"
+    source = "${var.cockroach_binary}"
     destination = "/home/ubuntu/cockroach"
   }
 
   # Launch CockroachDB.
   provisioner "remote-exec" {
       inline = [
-      "chmod +x nodectl",
+      "chmod +x cockroach nodectl",
       # Create file system on local SSD for the CockroachDB store and mount it.
       "sudo mkdir /mnt/data0",
       "sudo mkfs.ext4 -qF /dev/disk/by-id/google-local-ssd-0",
@@ -92,9 +89,6 @@ resource "null_resource" "cockroach-runner" {
       # Send logs to local SSD.
       "mkdir /mnt/data0/logs",
       "ln -sf /mnt/data0/logs logs",
-      # Install CockroachDB.
-      "[ $(stat --format=%s cockroach) -ne 0 ] || curl -sfSL https://edge-binaries.cockroachdb.com/cockroach/cockroach.linux-gnu-amd64.${var.cockroach_sha} -o cockroach",
-      "chmod +x cockroach",
       # Install load generators.
       "curl -sfSL https://edge-binaries.cockroachdb.com/examples-go/block_writer.${var.block_writer_sha} -o block_writer",
       "chmod +x block_writer",

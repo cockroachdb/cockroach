@@ -31,21 +31,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// Run tests in this file as follows:
+// Running these tests is best done using build/teamcity-nightly-
+// acceptance.sh. See instructions therein.
 //
-// make test \
-//   PKG=./pkg/acceptance \
-//   TESTTIMEOUT=6h \
-//   TESTS=ContinuousLoad_BlockWriter \
-//   TESTFLAGS='-v -remote -key-name azure -cwd terraform/azure -nodes 4 -tf.keep-cluster=failed'
-//
-// Load is generated for the duration specified by TESTTIMEOUT, minus some time
-// required for the orderly teardown of resources created by the test.  Because
-// of the time required to create and destroy a test cluster (presently up to
-// 10 minutes), you should use a TESTTIMEOUT that's at least a few hours.
-//
-// Refer to the file-level comments in acceptance/allocator_test.go for more
-// tips on running these tests.
+// These tests run for the duration specified by the testing package's timeout
+// flag, minus some time required for the orderly teardown of resources
+// created by the test. Because of the time required to create and destroy a
+// test cluster (presently up to 10 minutes), you should use a timeout of at
+// least a few hours.
 
 // continuousLoadTest generates continuous load against a remote test cluster
 // created specifically for the test.
