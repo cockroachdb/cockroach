@@ -119,6 +119,7 @@ message ProcessorCoreUnion {
   optional BackfillerSpec backfiller = 11;
   optional AlgebraicSetOpSpec setOp = 12;
   optional ReadCSVSpec readCSV = 13;
+  optional RowToSSTSpec rowToSST = 14;
 }
 
 // NoopCoreSpec indicates a "no-op" processor core. This is used when we just
@@ -437,4 +438,10 @@ message ReadCSVSpec {
   optional int32 sample_size = 4 [(gogoproto.nullable) = false];
   optional sqlbase.TableDescriptor table_desc = 5 [(gogoproto.nullable) = false];
   optional string uri = 6 [(gogoproto.nullable) = false];
+}
+
+message RowToSSTSpec {
+  optional string SST_destination = 1 [(gogoproto.nullable) = false];
+  optional string name = 2 [(gogoproto.nullable) = false];
+  optional int64 walltime = 3 [(gogoproto.nullable) = false];
 }

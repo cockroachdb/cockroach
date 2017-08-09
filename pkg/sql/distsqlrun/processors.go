@@ -465,11 +465,23 @@ func newProcessor(
 		}
 		return NewReadCSVProcessor(flowCtx, *core.ReadCSV, outputs[0])
 	}
+	if core.RowToSST != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		if NewRowToSSTProcessor == nil {
+			return nil, errors.New("RowToSST processor unimplemented")
+		}
+		return NewRowToSSTProcessor(flowCtx, *core.RowToSST, inputs[0], outputs[0])
+	}
 	return nil, errors.Errorf("unsupported processor core %s", core)
 }
 
 // NewReadCSVProcessor is externally implemented.
 var NewReadCSVProcessor func(*FlowCtx, ReadCSVSpec, RowReceiver) (Processor, error)
+
+// NewRowToSSTProcessor is externally implemented.
+var NewRowToSSTProcessor func(*FlowCtx, RowToSSTSpec, RowSource, RowReceiver) (Processor, error)
 
 // Equals returns true if two aggregation specifiers are identical (and thus
 // will always yield the same result).
