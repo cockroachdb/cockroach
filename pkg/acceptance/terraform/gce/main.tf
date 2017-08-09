@@ -89,7 +89,7 @@ resource "null_resource" "cockroach-runner" {
       "mkdir /mnt/data0/logs",
       "ln -sf /mnt/data0/logs logs",
       # Install CockroachDB.
-      "[ $(stat --format=%s cockroach) -ne 0 ] || curl -sfSL https://edge-binaries.cockroachdb.com/cockroach/cockroach.linux-gnu-amd64.${var.cockroach_sha} -o cockroach",
+      "[ -f cockroach ] || curl -sfSL https://edge-binaries.cockroachdb.com/cockroach/cockroach.linux-gnu-amd64.${var.cockroach_sha} -o cockroach",
       "chmod +x cockroach",
       # Install load generators.
       "curl -sfSL https://edge-binaries.cockroachdb.com/examples-go/block_writer.${var.block_writer_sha} -o block_writer",
