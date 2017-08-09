@@ -1,8 +1,5 @@
-# Path to the cockroach binary. An empty value results in the latest official
-# binary being used.
-variable "cockroach_binary" {
-  default = ""
-}
+# Path to the cockroach binary.
+variable "cockroach_binary" {}
 
 # Name of the ssh key pair to use.
 #
@@ -12,11 +9,6 @@ variable "cockroach_binary" {
 # support password-protected keys.
 variable "key_name" {
   default = "google_compute_engine"
-}
-
-# SHA of the cockroach binary to pull down. If default, the latest is fetched.
-variable "cockroach_sha" {
-  default = "LATEST"
 }
 
 # SHA of the block_writer binary to pull down. If default, the latest is fetched.

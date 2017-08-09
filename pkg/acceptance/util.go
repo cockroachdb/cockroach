@@ -102,8 +102,6 @@ var flagTFReuseCluster = flag.String("reuse", "",
 )
 
 var flagTFKeepCluster = keepClusterVar(terrafarm.KeepClusterNever) // see init()
-var flagTFCockroachBinary = flag.String("tf.cockroach-binary", "",
-	"path to custom CockroachDB binary to use for allocator tests")
 var flagTFCockroachFlags = flag.String("tf.cockroach-flags", "",
 	"command-line flags to pass to cockroach for allocator tests")
 var flagTFCockroachEnv = flag.String("tf.cockroach-env", "",
@@ -284,7 +282,7 @@ func MakeFarmer(t testing.TB, prefix string, stopper *stop.Stopper) *terrafarm.F
 		Cwd:             *flagCwd,
 		LogDir:          logDir,
 		KeyName:         *flagKeyName,
-		CockroachBinary: *flagTFCockroachBinary,
+		CockroachBinary: *cluster.CockroachBinary,
 		CockroachFlags:  stores + " " + *flagTFCockroachFlags,
 		CockroachEnv:    cockroachEnv,
 		Prefix:          name,
