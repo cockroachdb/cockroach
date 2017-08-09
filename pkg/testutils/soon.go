@@ -15,6 +15,7 @@
 package testutils
 
 import (
+	"runtime/debug"
 	"testing"
 	"time"
 
@@ -40,6 +41,7 @@ func SucceedsSoon(t testing.TB, fn func() error) {
 func SucceedsSoonDepth(depth int, t testing.TB, fn func() error) {
 	if err := util.RetryForDuration(DefaultSucceedsSoonDuration, fn); err != nil {
 		file, line, _ := caller.Lookup(depth + 1)
-		t.Fatalf("%s:%d, condition failed to evaluate within %s: %s", file, line, DefaultSucceedsSoonDuration, err)
+		t.Fatalf("%s:%d, condition failed to evaluate within %s: %s\n%s",
+			file, line, DefaultSucceedsSoonDuration, err, string(debug.Stack()))
 	}
 }
