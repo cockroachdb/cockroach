@@ -1984,7 +1984,7 @@ func TestDistributedTxnCleanup(t *testing.T) {
 					if err := txn.Run(ctx, b); err != nil {
 						return err
 					}
-					txnKey = keys.TransactionKey(txn.Proto().Key, *txn.Proto().ID)
+					txnKey = keys.TransactionKey(txn.Proto().Key, txn.Proto().ID)
 					// If force=true, we're force-aborting the txn out from underneath.
 					// This simulates txn deadlock or a max priority txn aborting a
 					// normal or min priority txn.

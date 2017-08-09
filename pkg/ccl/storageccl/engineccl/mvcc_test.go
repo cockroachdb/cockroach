@@ -165,7 +165,7 @@ func TestMVCCIterateIncremental(t *testing.T) {
 	txn1ID := uuid.MakeV4()
 	txn1 := roachpb.Transaction{TxnMeta: enginepb.TxnMeta{
 		Key:       testKey1,
-		ID:        &txn1ID,
+		ID:        txn1ID,
 		Epoch:     1,
 		Timestamp: ts4,
 	}}
@@ -177,7 +177,7 @@ func TestMVCCIterateIncremental(t *testing.T) {
 	txn2ID := uuid.MakeV4()
 	txn2 := roachpb.Transaction{TxnMeta: enginepb.TxnMeta{
 		Key:       testKey2,
-		ID:        &txn2ID,
+		ID:        txn2ID,
 		Epoch:     1,
 		Timestamp: ts4,
 	}}

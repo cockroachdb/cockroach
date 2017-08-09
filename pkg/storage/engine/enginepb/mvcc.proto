@@ -37,7 +37,8 @@ message TxnMeta {
   // id is a unique UUID value which identifies the transaction.
   // This field is always filled in.
   optional bytes id = 1 [(gogoproto.customname) = "ID",
-      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+      (gogoproto.nullable) = false];
   optional IsolationType isolation = 2 [(gogoproto.nullable) = false];
   // key is the key which anchors the transaction. This is typically
   // the first key read or written during the transaction and determines which

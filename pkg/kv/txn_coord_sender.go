@@ -336,7 +336,7 @@ func (tc *TxnCoordSender) Send(
 			return nil, roachpb.NewError(err)
 		}
 
-		txnID := *ba.Txn.ID
+		txnID := ba.Txn.ID
 
 		// Associate the txnID with the trace. We need to do this after the
 		// maybeBeginTxn call. We set both a baggage item and a tag because only
@@ -500,7 +500,7 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 	if !txn.Writing {
 		return nil
 	}
-	txnMeta, ok := tc.txnMu.txns[*txn.ID]
+	txnMeta, ok := tc.txnMu.txns[txn.ID]
 	// Check whether the transaction is still tracked and has a chance of
 	// completing. It's possible that the coordinator learns about the
 	// transaction having terminated from a heartbeat, and GC queue correctness
@@ -524,7 +524,7 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 			roachpb.NormalUserPriority,
 			tc.clock)
 		return roachpb.NewError(roachpb.NewHandledRetryableTxnError(
-			abortedErr.Message, *txn.ID, newTxn))
+			abortedErr.Message, txn.ID, newTxn))
 	case txnMeta.txn.Status == roachpb.COMMITTED:
 		tc.cleanupTxnLocked(ctx, txnMeta.txn)
 		return roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError(
@@ -569,7 +569,7 @@ func (tc *TxnCoordSender) validateTxnForBatch(ctx context.Context, ba *roachpb.B
 // gracefully.
 func (tc *TxnCoordSender) cleanupTxnLocked(ctx context.Context, txn roachpb.Transaction) {
 	log.Event(ctx, "coordinator stops")
-	txnMeta, ok := tc.txnMu.txns[*txn.ID]
+	txnMeta, ok := tc.txnMu.txns[txn.ID]
 	// The heartbeat might've already removed the record. Or we may have already
 	// closed txnEnd but we are racing with the heartbeat cleanup.
 	if !ok || txnMeta.txnEnd == nil {
@@ -783,7 +783,7 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 		log.Warningf(ctx, "heartbeat to %s failed: %s", txn, pErr)
 		// We're not going to let the client carry out additional requests, so
 		// try to clean up.
-		tc.tryAsyncAbort(*txn.ID)
+		tc.tryAsyncAbort(txn.ID)
 		txn.Status = roachpb.ABORTED
 	} else {
 		txn.Update(br.Responses[0].GetInner().(*roachpb.HeartbeatTxnResponse).Txn)
@@ -825,14 +825,14 @@ func (tc *TxnCoordSender) updateState(
 		return pErr
 	}
 
-	txnID := *ba.Txn.ID
+	txnID := ba.Txn.ID
 	var newTxn roachpb.Transaction
 	if pErr == nil {
 		newTxn.Update(ba.Txn)
 		newTxn.Update(br.Txn)
 	} else {
 		if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
-			errTxnID := *pErr.GetTxn().ID // The ID of the txn that needs to be restarted.
+			errTxnID := pErr.GetTxn().ID // The ID of the txn that needs to be restarted.
 			if errTxnID != txnID {
 				// KV should not return errors for transactions other than the one in
 				// the BatchRequest.
@@ -857,7 +857,7 @@ func (tc *TxnCoordSender) updateState(
 			}
 			newTxn = roachpb.PrepareTransactionForRetry(ctx, pErr, ba.UserPriority, tc.clock)
 
-			if errTxnID != *newTxn.ID {
+			if errTxnID != newTxn.ID {
 				// If the ID changed, it means we had to start a new transaction and the
 				// old one is toast. Clean up the freshly aborted transaction in
 				// defer(), avoiding a race with the state update below.

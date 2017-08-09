@@ -295,7 +295,7 @@ func (r *distSQLReceiver) Push(
 					// non-retryable errors; we also should.
 					r.updateClock(retryErr.PErr.Now)
 					meta.Err = roachpb.NewHandledRetryableTxnError(
-						meta.Err.Error(), *r.txn.Proto().ID, *r.txn.Proto())
+						meta.Err.Error(), r.txn.Proto().ID, *r.txn.Proto())
 				}
 			}
 			r.err = meta.Err
