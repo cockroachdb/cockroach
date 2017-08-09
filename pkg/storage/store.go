@@ -1049,8 +1049,6 @@ func ReadStoreIdent(ctx context.Context, eng engine.Engine) (roachpb.StoreIdent,
 
 // Start the engine, set the GC and read the StoreIdent.
 func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
-	ctx = s.AnnotateCtx(ctx)
-
 	s.stopper = stopper
 
 	// Read the store ident if not already initialized. "NodeID != 0" implies
@@ -1063,6 +1061,10 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		}
 		s.Ident = ident
 	}
+
+	// Set the store ID for logging.
+	s.cfg.AmbientCtx.AddLogTagInt("s", int(s.StoreID()))
+	ctx = s.AnnotateCtx(ctx)
 	log.Event(ctx, "read store identity")
 
 	// If the nodeID is 0, it has not be assigned yet.
@@ -1073,9 +1075,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	if s.cfg.Gossip != nil {
 		s.cfg.Gossip.NodeID.Set(ctx, s.Ident.NodeID)
 	}
-
-	// Set the store ID for logging.
-	s.cfg.AmbientCtx.AddLogTagInt("s", int(s.StoreID()))
 
 	// Create ID allocators.
 	idAlloc, err := newIDAllocator(
