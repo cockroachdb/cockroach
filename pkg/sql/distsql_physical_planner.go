@@ -768,31 +768,32 @@ type DistLoader struct {
 	distSQLPlanner *distSQLPlanner
 }
 
-// bufferedRowWriter is a thin wrapper around a RowContainer.
-type bufferedRowWriter struct {
+// RowResultWriter is a thin wrapper around a RowContainer.
+type RowResultWriter struct {
 	statementType parser.StatementType
 	rowContainer  *sqlbase.RowContainer
 	rowsAffected  int
 }
 
-func newBufferedRowWriter(
+// NewRowResultWriter creates a new RowResultWriter.
+func NewRowResultWriter(
 	statementType parser.StatementType, rowContainer *sqlbase.RowContainer,
-) *bufferedRowWriter {
-	return &bufferedRowWriter{statementType: statementType, rowContainer: rowContainer}
+) *RowResultWriter {
+	return &RowResultWriter{statementType: statementType, rowContainer: rowContainer}
 }
 
 // StatementType implements the rowResultWriter interface.
-func (b *bufferedRowWriter) StatementType() parser.StatementType {
+func (b *RowResultWriter) StatementType() parser.StatementType {
 	return b.statementType
 }
 
 // IncrementRowsAffected implements the rowResultWriter interface.
-func (b *bufferedRowWriter) IncrementRowsAffected(n int) {
+func (b *RowResultWriter) IncrementRowsAffected(n int) {
 	b.rowsAffected += n
 }
 
 // AddRow implements the rowResultWriter interface.
-func (b *bufferedRowWriter) AddRow(ctx context.Context, row parser.Datums) error {
+func (b *RowResultWriter) AddRow(ctx context.Context, row parser.Datums) error {
 	_, err := b.rowContainer.AddRow(ctx, row)
 	return err
 }
@@ -811,10 +812,11 @@ func (l *DistLoader) LoadCSV(
 	evalCtx parser.EvalContext,
 	thisNode roachpb.NodeID,
 	nodes []roachpb.NodeDescriptor,
-	resultRows *sqlbase.RowContainer,
+	resultRows *RowResultWriter,
 	tableDesc *sqlbase.TableDescriptor,
 	from []string,
 	to string,
+	walltime int64,
 ) error {
 	const (
 		splitSize  = 1024 * 1024 * 32 // 32MB
@@ -870,7 +872,7 @@ func (l *DistLoader) LoadCSV(
 
 	ci := sqlbase.ColTypeInfoFromColTypes([]sqlbase.ColumnType{colTypeBytes})
 	rowContainer := sqlbase.NewRowContainer(*evalCtx.ActiveMemAcc, ci, 0)
-	rowResultWriter := newBufferedRowWriter(parser.Rows, rowContainer)
+	rowResultWriter := NewRowResultWriter(parser.Rows, rowContainer)
 
 	planCtx := l.distSQLPlanner.NewPlanningCtx(ctx, nil)
 	// Because we're not going through the normal pathways, we have to set up
@@ -928,8 +930,107 @@ func (l *DistLoader) LoadCSV(
 		EndKey: tableSpan.EndKey,
 	})
 
-	_, err = resultRows.AddRow(ctx, parser.Datums{parser.NewDInt(parser.DInt(len(spans)))})
-	return err
+	// We have the split ranges. Now re-read the CSV files and route them to SST writers.
+
+	p = physicalPlan{}
+	// This is a hardcoded two stage plan. The first stage is the mappers,
+	// the second stage is the reducers. We have to keep track of all the mappers
+	// we create because the reducers need to hook up a stream for each mapper.
+	var firstStageRouters []distsqlplan.ProcessorIdx
+	firstStageTypes := []sqlbase.ColumnType{colTypeBytes, colTypeBytes}
+
+	stageID = p.NewStageID()
+	for i, input := range from {
+		// TODO(mjibson): attempt to intelligently schedule http files to matching cockroach nodes
+		rcs := distsqlrun.ReadCSVSpec{
+			SampleSize: 0,
+			TableDesc:  *tableDesc,
+			Uri:        input,
+		}
+		node := nodes[i%len(nodes)]
+		proc := distsqlplan.Processor{
+			Node: node.NodeID,
+			Spec: distsqlrun.ProcessorSpec{
+				Core: distsqlrun.ProcessorCoreUnion{ReadCSV: &rcs},
+				Output: []distsqlrun.OutputRouterSpec{{
+					Type:  distsqlrun.OutputRouterSpec_BY_RANGE,
+					Spans: spans,
+				}},
+				StageID: stageID,
+			},
+		}
+		pIdx := p.AddProcessor(proc)
+		firstStageRouters = append(firstStageRouters, pIdx)
+	}
+
+	// The SST Writer returns 5 columns: name of the file, size of the file,
+	// checksum, start key, end key.
+	p.planToStreamColMap = []int{0, 1, 2, 3, 4}
+	p.ResultTypes = []sqlbase.ColumnType{
+		{SemanticType: sqlbase.ColumnType_STRING},
+		{SemanticType: sqlbase.ColumnType_INT},
+		colTypeBytes,
+		colTypeBytes,
+		colTypeBytes,
+	}
+
+	stageID = p.NewStageID()
+	for i := range spans {
+		node := nodes[i%len(nodes)]
+		swSpec := distsqlrun.SSTWriterSpec{
+			Destination: to,
+			Name:        fmt.Sprintf("%d.sst", i),
+			Walltime:    walltime,
+		}
+		proc := distsqlplan.Processor{
+			Node: node.NodeID,
+			Spec: distsqlrun.ProcessorSpec{
+				Input: []distsqlrun.InputSyncSpec{{
+					ColumnTypes: firstStageTypes,
+				}},
+				Core:    distsqlrun.ProcessorCoreUnion{SSTWriter: &swSpec},
+				Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
+				StageID: stageID,
+			},
+		}
+
+		pIdx := p.AddProcessor(proc)
+		for _, router := range firstStageRouters {
+			p.Streams = append(p.Streams, distsqlplan.Stream{
+				SourceProcessor:  router,
+				SourceRouterSlot: i,
+				DestProcessor:    pIdx,
+				DestInput:        0,
+			})
+		}
+		p.ResultRouters = append(p.ResultRouters, pIdx)
+	}
+
+	l.distSQLPlanner.FinalizePlan(&planCtx, &p)
+
+	recv, err = makeDistSQLReceiver(
+		ctx,
+		resultRows,
+		nil, /* rangeCache */
+		nil, /* leaseCache */
+		nil, /* txn - the flow does not read or write the database */
+		func(ts hlc.Timestamp) {},
+	)
+	if err != nil {
+		return err
+	}
+	// TODO(dan): We really don't need the txn for this flow, so remove it once
+	// Run works without one.
+	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		return l.distSQLPlanner.Run(&planCtx, txn, &p, &recv, evalCtx)
+	}); err != nil {
+		return err
+	}
+	if recv.err != nil {
+		return recv.err
+	}
+
+	return nil
 }
 
 // selectRenders takes a physicalPlan that produces the results corresponding to
