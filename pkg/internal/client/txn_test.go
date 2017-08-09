@@ -173,7 +173,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 		{hlc.Timestamp{WallTime: 10, Logical: 1}, hlc.Timestamp{WallTime: 10, Logical: 0}},
 		{hlc.Timestamp{WallTime: 10, Logical: 1}, hlc.Timestamp{WallTime: 20, Logical: 1}},
 		{hlc.Timestamp{WallTime: 20, Logical: 1}, hlc.Timestamp{WallTime: 20, Logical: 1}},
-		{hlc.Timestamp{WallTime: 20, Logical: 1}, hlc.Timestamp{WallTime: 0, Logical: 0}},
+		{hlc.Timestamp{WallTime: 20, Logical: 1}, hlc.Timestamp{WallTime: 19, Logical: 0}},
 		{hlc.Timestamp{WallTime: 20, Logical: 1}, hlc.Timestamp{WallTime: 20, Logical: 1}},
 	}
 
@@ -438,7 +438,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 				// HACK ALERT: to do without a TxnCoordSender, we jump through hoops to
 				// get the retryable error expected by db.Txn().
 				return roachpb.NewHandledRetryableTxnError(
-					"bogus retryable error", *txn.Proto().ID, *txn.Proto())
+					"bogus retryable error", txn.Proto().ID, *txn.Proto())
 			}
 			if !success {
 				return errors.New("aborting on purpose")
@@ -493,7 +493,7 @@ func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 			// get the retryable error expected by db.Txn().
 			return nil, roachpb.NewError(
 				roachpb.NewHandledRetryableTxnError(
-					"bogus retryable error", *ba.Txn.ID, *ba.Txn))
+					"bogus retryable error", ba.Txn.ID, *ba.Txn))
 		}
 		return ba.CreateReply(), nil
 	}), clock)
@@ -587,7 +587,7 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 								// HACK ALERT: to do without a TxnCoordSender, we jump through
 								// hoops to get the retryable error expected by db.Txn().
 								return nil, roachpb.NewError(roachpb.NewHandledRetryableTxnError(
-									pErr.Message, *ba.Txn.ID, *ba.Txn))
+									pErr.Message, ba.Txn.ID, *ba.Txn))
 							}
 							return nil, pErr
 						}
@@ -763,7 +763,7 @@ func TestWrongTxnRetry(t *testing.T) {
 			// HACK ALERT: to do without a TxnCoordSender, we jump through hoops to
 			// get the retryable error expected by txn.Exec().
 			return roachpb.NewHandledRetryableTxnError(
-				"test error", *innerTxn.Proto().ID, *innerTxn.Proto())
+				"test error", innerTxn.Proto().ID, *innerTxn.Proto())
 		}
 		innerTxn := NewTxn(db)
 		err := innerTxn.Exec(ctx, execOpt, innerClosure)

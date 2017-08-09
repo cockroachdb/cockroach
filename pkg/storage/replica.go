@@ -2224,7 +2224,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.
 			// Forward the timestamp if there's been a more recent read (by someone else).
 			rTS, rTxnID, _ := r.store.tsCacheMu.cache.GetMaxRead(header.Key, header.EndKey)
 			if ba.Txn != nil {
-				if rTxnID == nil || *ba.Txn.ID != *rTxnID {
+				if rTxnID == nil || ba.Txn.ID != *rTxnID {
 					nextTS := rTS.Next()
 					if ba.Txn.Timestamp.Less(nextTS) {
 						txn := ba.Txn.Clone()
@@ -2242,7 +2242,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.
 			// write timestamp cache.
 			wTS, wTxnID, _ := r.store.tsCacheMu.cache.GetMaxWrite(header.Key, header.EndKey)
 			if ba.Txn != nil {
-				if wTxnID == nil || *ba.Txn.ID != *wTxnID {
+				if wTxnID == nil || ba.Txn.ID != *wTxnID {
 					if !wTS.Less(ba.Txn.Timestamp) {
 						txn := ba.Txn.Clone()
 						bumped = txn.Timestamp.Forward(wTS.Next()) || bumped
@@ -4523,10 +4523,15 @@ func (r *Replica) evaluateProposalInner(
 			// proposal.
 			batch.Close()
 			batch = nil
-			// Restore the original txn's Writing bool if pd.Err specifies
-			// a transaction.
-			if txn := result.Local.Err.GetTxn(); txn != nil && *txn.ID == *ba.Txn.ID {
-				txn.Writing = wasWriting
+			// Restore the original txn's Writing bool if the error specifies a
+			// transaction.
+			if txn := result.Local.Err.GetTxn(); txn != nil {
+				if ba.Txn == nil {
+					log.Fatalf(ctx, "error had a txn but batch is non-transactional. Err txn: %s", txn)
+				}
+				if txn.ID == ba.Txn.ID {
+					txn.Writing = wasWriting
+				}
 			}
 			return result
 		}
@@ -4554,7 +4559,7 @@ func checkIfTxnAborted(
 	ctx context.Context, rec ReplicaEvalContext, b engine.Reader, txn roachpb.Transaction,
 ) *roachpb.Error {
 	var entry roachpb.AbortCacheEntry
-	aborted, err := rec.AbortCache().Get(ctx, b, *txn.ID, &entry)
+	aborted, err := rec.AbortCache().Get(ctx, b, txn.ID, &entry)
 	if err != nil {
 		return roachpb.NewError(NewReplicaCorruptionError(errors.Wrap(err, "could not read from abort cache")))
 	}

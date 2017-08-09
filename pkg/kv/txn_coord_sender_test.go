@@ -99,7 +99,7 @@ func TestTxnCoordSenderAddRequest(t *testing.T) {
 	if err := txn.Put(context.TODO(), roachpb.Key("a"), []byte("value")); err != nil {
 		t.Fatal(err)
 	}
-	txnID := *txn.Proto().ID
+	txnID := txn.Proto().ID
 	txnMeta, ok := sender.txnMu.txns[txnID]
 	if !ok {
 		t.Fatal("expected a transaction to be created on coordinator")
@@ -165,7 +165,7 @@ func TestTxnCoordSenderAddRequestConcurrently(t *testing.T) {
 	if err := sendRequests(); err != nil {
 		t.Fatal(err)
 	}
-	txnID := *txn.Proto().ID
+	txnID := txn.Proto().ID
 	txnMeta, ok := sender.txnMu.txns[txnID]
 	if !ok {
 		t.Fatal("expected a transaction to be created on coordinator")
@@ -286,7 +286,7 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 		}
 	}
 
-	txnID := *txn.Proto().ID
+	txnID := txn.Proto().ID
 
 	// Verify that the transaction metadata contains only two entries
 	// in its "keys" range group. "a" and range "aa"-"c".
@@ -376,7 +376,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		sender.txnMu.Lock()
 		defer sender.txnMu.Unlock()
-		if txnMeta, ok := sender.txnMu.txns[*initialTxn.Proto().ID]; !ok {
+		if txnMeta, ok := sender.txnMu.txns[initialTxn.Proto().ID]; !ok {
 			t.Fatal("transaction unregistered prematurely")
 		} else if txnMeta.txn.Status != roachpb.ABORTED {
 			return fmt.Errorf("transaction is not aborted")
@@ -537,7 +537,7 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 		t.Fatal(err)
 	}
 	sender.txnMu.Lock()
-	txnID := *txn.Proto().ID
+	txnID := txn.Proto().ID
 	intentSpans, _ := roachpb.MergeSpans(sender.txnMu.txns[txnID].keys)
 	expSpans := []roachpb.Span{{Key: key, EndKey: []byte("")}}
 	equal := !reflect.DeepEqual(intentSpans, expSpans)
@@ -667,7 +667,7 @@ func TestTxnCoordSenderGCTimeout(t *testing.T) {
 	s.Manual.Increment(defaultClientTimeout.Nanoseconds() + 1)
 	sender.txnMu.Unlock()
 
-	txnID := *txn.Proto().ID
+	txnID := txn.Proto().ID
 
 	testutils.SucceedsSoon(t, func() error {
 		// Locking the TxnCoordSender to prevent a data race.
@@ -706,7 +706,7 @@ func TestTxnCoordSenderGCWithCancel(t *testing.T) {
 	s.Manual.Increment(defaultClientTimeout.Nanoseconds() + 1)
 	sender.txnMu.Unlock()
 
-	txnID := *txn.Proto().ID
+	txnID := txn.Proto().ID
 
 	// Verify that the transaction is alive despite the timeout having been
 	// exceeded.
@@ -898,7 +898,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			if test.name != "nil" && err == nil {
 				t.Fatalf("expected an error")
 			}
-			txnReset := *origTxnProto.ID != *txn.Proto().ID
+			txnReset := origTxnProto.ID != txn.Proto().ID
 			if txnReset != test.expNewTransaction {
 				t.Fatalf("expected txn reset: %t and got: %t", test.expNewTransaction, txnReset)
 			}
@@ -1060,8 +1060,6 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, 20*time.Nanosecond)
 
-	u := uuid.MakeV4()
-
 	testCases := []struct {
 		roachpb.Error
 		errMsg string
@@ -1069,7 +1067,7 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 		{*roachpb.NewError(roachpb.NewTransactionRetryError(roachpb.RETRY_REASON_UNKNOWN)), "retry txn"},
 		{
 			*roachpb.NewError(roachpb.NewTransactionPushError(roachpb.Transaction{
-				TxnMeta: enginepb.TxnMeta{ID: &u}}),
+				TxnMeta: enginepb.TxnMeta{ID: uuid.MakeV4()}}),
 			), "failed to push",
 		},
 		{*roachpb.NewErrorf("testError"), "testError"},
@@ -1133,8 +1131,7 @@ func TestTxnCoordSenderReleaseTxnMeta(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	txnID := *txn.Proto().ID
-
+	txnID := txn.Proto().ID
 	if _, ok := sender.txnMu.txns[txnID]; ok {
 		t.Fatal("expected TxnCoordSender has released the txn")
 	}

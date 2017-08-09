@@ -713,7 +713,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 					t.Fatal("expected an error")
 				}
 				txn := pErr.GetTxn()
-				if txn == nil || txn.ID == nil {
+				if txn == nil || txn.ID == (uuid.UUID{}) {
 					t.Fatalf("expected nontrivial transaction in %s", pErr)
 				}
 				if ts, _ := txn.GetObservedTimestamp(desc.NodeID); ts.WallTime != wallNanos {
@@ -732,7 +732,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 					t.Fatal(pErr)
 				}
 				txn := pReply.Header().Txn
-				if txn == nil || txn.ID == nil {
+				if txn == nil || txn.ID == (uuid.UUID{}) {
 					t.Fatal("expected transactional response")
 				}
 				obs, _ := txn.GetObservedTimestamp(desc.NodeID)
@@ -1274,7 +1274,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 			if pErr := <-resultCh; pErr != nil {
 				t.Fatalf("expected intent resolved; got unexpected error: %s", pErr)
 			}
-			txnKey := keys.TransactionKey(pushee.Key, *pushee.ID)
+			txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
 			var txn roachpb.Transaction
 			ok, err := engine.MVCCGetProto(context.Background(), store.Engine(), txnKey, hlc.Timestamp{}, true, nil, &txn)
 			if !ok || err != nil {
@@ -1561,7 +1561,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	}
 
 	// Read pushee's txn.
-	txnKey := keys.TransactionKey(pushee.Key, *pushee.ID)
+	txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
 	var txn roachpb.Transaction
 	if ok, err := engine.MVCCGetProto(context.Background(), store.Engine(), txnKey, hlc.Timestamp{}, true, nil, &txn); !ok || err != nil {
 		t.Fatalf("not found or err: %s", err)

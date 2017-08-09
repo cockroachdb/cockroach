@@ -125,7 +125,7 @@ func NewTxnWithProto(db *DB, proto roachpb.Transaction) *Txn {
 func (txn *Txn) ID() uuid.UUID {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	return *txn.mu.Proto.ID
+	return txn.mu.Proto.ID
 }
 
 // AcceptUnhandledRetryableErrors is used by DistSQL to make the client.Txn not
@@ -793,7 +793,7 @@ func (txn *Txn) isRetryableErrMeantForTxnLocked(retryErr roachpb.HandledRetryabl
 		return true
 	}
 	// If not, make sure it was meant for this transaction.
-	return errTxnID == *txn.mu.Proto.ID
+	return errTxnID == txn.mu.Proto.ID
 }
 
 // Send runs the specified calls synchronously in a single batch and
@@ -904,7 +904,7 @@ func (txn *Txn) Send(
 	}
 
 	// Send call through the DB.
-	requestTxnID, requestEpoch := *ba.Txn.ID, ba.Txn.Epoch
+	requestTxnID, requestEpoch := ba.Txn.ID, ba.Txn.Epoch
 	br, pErr := txn.db.send(ctx, ba)
 
 	// Lock for the entire response postlude.
@@ -1052,14 +1052,14 @@ func (txn *Txn) UpdateStateOnRemoteRetryableErr(ctx context.Context, pErr roachp
 	// the TxnCoordSender were to have state, it'd be a bad thing that we're not
 	// updating it.
 	txnID := pErr.GetTxn().ID
-	if _, ok := txn.db.GetSender().(SenderWithDistSQLBackdoor).GetTxnState(*txnID); ok {
+	if _, ok := txn.db.GetSender().(SenderWithDistSQLBackdoor).GetTxnState(txnID); ok {
 		log.Fatalf(ctx, "unexpected state in TxnCoordSender for transaction in error: %s", pErr)
 	}
 
 	// Emulate the processing that the TxnCoordSender would have done on this
 	// error.
 	newTxn := roachpb.PrepareTransactionForRetry(ctx, &pErr, txn.mu.UserPriority, txn.db.clock)
-	newErr := roachpb.NewHandledRetryableTxnError(pErr.Message, *pErr.GetTxn().ID, newTxn)
+	newErr := roachpb.NewHandledRetryableTxnError(pErr.Message, pErr.GetTxn().ID, newTxn)
 
 	txn.updateStateOnRetryableErrLocked(
 		ctx, *newErr,
@@ -1067,7 +1067,7 @@ func (txn *Txn) UpdateStateOnRemoteRetryableErr(ctx context.Context, pErr roachp
 		// we're assuming that the Txn hasn't changed asynchronously since we
 		// started executing the query; we're relying on DistSQL queries not being
 		// executed concurrently with anything else using this txn.
-		*txn.mu.Proto.ID, txn.mu.Proto.Epoch)
+		txn.mu.Proto.ID, txn.mu.Proto.Epoch)
 }
 
 // updateStateOnRetryableErrLocked updates the Transaction proto inside txn.
@@ -1101,13 +1101,13 @@ func (txn *Txn) updateStateOnRetryableErrLocked(
 		// Reset the statement count as this is a retryable txn error.
 		txn.mu.commandCount = 0
 
-		if *newTxn.ID != *txn.mu.Proto.ID {
+		if newTxn.ID != txn.mu.Proto.ID {
 			// This means that the cause was a TransactionAbortedError;
 			// we've created a new Transaction that we're about to start using, so we
 			// save the old transaction ID so that concurrent requests or delayed
 			// responses that that throw errors know that these errors were sent to
 			// the correct transaction, even once the proto is reset.
-			txn.recordPreviousTxnIDLocked(*txn.mu.Proto.ID)
+			txn.recordPreviousTxnIDLocked(txn.mu.Proto.ID)
 		}
 
 		// Overwrite the transaction proto with the one to be used for the next
@@ -1121,7 +1121,7 @@ func (txn *Txn) recordPreviousTxnIDLocked(prevTxnID uuid.UUID) {
 	if txn.mu.previousIDs == nil {
 		txn.mu.previousIDs = make(map[uuid.UUID]struct{})
 	}
-	txn.mu.previousIDs[*txn.mu.Proto.ID] = struct{}{}
+	txn.mu.previousIDs[txn.mu.Proto.ID] = struct{}{}
 }
 
 // SetFixedTimestamp makes the transaction run in an unusual way, at a "fixed

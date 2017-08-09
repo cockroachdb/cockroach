@@ -703,7 +703,7 @@ func MakeTransaction(
 	return Transaction{
 		TxnMeta: enginepb.TxnMeta{
 			Key:       baseKey,
-			ID:        &u,
+			ID:        u,
 			Isolation: isolation,
 			Timestamp: now,
 			Priority:  MakePriority(userPriority),
@@ -743,7 +743,9 @@ func (t Transaction) Clone() Transaction {
 
 // AssertInitialized crashes if the transaction is not initialized.
 func (t *Transaction) AssertInitialized(ctx context.Context) {
-	if t.ID == nil || t.OrigTimestamp == (hlc.Timestamp{}) || t.Timestamp == (hlc.Timestamp{}) {
+	if t.ID == (uuid.UUID{}) ||
+		t.OrigTimestamp == (hlc.Timestamp{}) ||
+		t.Timestamp == (hlc.Timestamp{}) {
 		log.Fatalf(ctx, "uninitialized txn: %s", t)
 	}
 }
@@ -864,7 +866,8 @@ func (t *Transaction) Update(o *Transaction) {
 	if o == nil {
 		return
 	}
-	if t.ID == nil {
+	o.AssertInitialized(context.TODO())
+	if t.ID == (uuid.UUID{}) {
 		*t = o.Clone()
 		return
 	}

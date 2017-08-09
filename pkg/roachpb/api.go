@@ -85,12 +85,12 @@ const (
 )
 
 // GetTxnID returns the transaction ID if the header has a transaction
-// or else nil.
+// or nil otherwise.
 func (h Header) GetTxnID() *uuid.UUID {
 	if h.Txn == nil {
 		return nil
 	}
-	return h.Txn.ID
+	return &h.Txn.ID
 }
 
 // IsReadOnly returns true iff the request is read-only.
