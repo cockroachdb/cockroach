@@ -358,12 +358,9 @@ func TestTransactionObservedTimestamp(t *testing.T) {
 
 var nonZeroTxn = Transaction{
 	TxnMeta: enginepb.TxnMeta{
-		Isolation: enginepb.SNAPSHOT,
-		Key:       Key("foo"),
-		ID: func() *uuid.UUID {
-			u := uuid.MakeV4()
-			return &u
-		}(),
+		Isolation:  enginepb.SNAPSHOT,
+		Key:        Key("foo"),
+		ID:         uuid.MakeV4(),
 		Epoch:      2,
 		Timestamp:  makeTS(20, 21),
 		Priority:   957356782,
@@ -395,9 +392,8 @@ func TestTransactionUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	u := uuid.MakeV4()
 	var txn3 Transaction
-	txn3.ID = &u
+	txn3.ID = uuid.MakeV4()
 	txn3.Name = "carl"
 	txn3.Isolation = enginepb.SNAPSHOT
 	txn3.Update(&txn)
@@ -419,7 +415,6 @@ func TestTransactionClone(t *testing.T) {
 	expFields := []string{
 		"Intents.EndKey",
 		"Intents.Key",
-		"TxnMeta.ID",
 		"TxnMeta.Key",
 	}
 	if !reflect.DeepEqual(expFields, fields) {
