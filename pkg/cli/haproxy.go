@@ -90,7 +90,7 @@ global
 
 defaults
     mode                tcp
-    # Timout values should be configured for your specific use.
+    # Timeout values should be configured for your specific use.
     # See: https://cbonte.github.io/haproxy-dconv/1.8/configuration.html#4-timeout%20connect
     timeout connect     10s
     timeout client      1m
