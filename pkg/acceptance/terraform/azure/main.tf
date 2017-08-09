@@ -169,6 +169,10 @@ resource "azurerm_virtual_machine" "cockroach" {
   }
 }
 
+data "external" "git" {
+  program = ["go", "run", "../common/git.go"]
+}
+
 # Set up CockroachDB nodes.
 resource "null_resource" "cockroach-runner" {
   count = "${var.num_instances}"
@@ -224,7 +228,7 @@ resource "null_resource" "cockroach-runner" {
       "mkdir /mnt/data0/logs",
       "ln -sf /mnt/data0/logs logs",
       # Install CockroachDB.
-      "[ -f cockroach ] || curl -sfSL https://edge-binaries.cockroachdb.com/cockroach/cockroach.linux-gnu-amd64.${var.cockroach_sha} -o cockroach",
+      "[ -f cockroach ] || curl -sfSL https://edge-binaries.cockroachdb.com/cockroach/cockroach.linux-gnu-amd64.${data.external.git.result.SHA} -o cockroach",
       "chmod +x cockroach",
       # Install load generators.
       "curl -sfSL https://edge-binaries.cockroachdb.com/examples-go/block_writer.${var.block_writer_sha} -o block_writer",
