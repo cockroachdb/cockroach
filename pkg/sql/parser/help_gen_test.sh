@@ -19,7 +19,7 @@ package parser
 var expectedHelpStrings = []string{
 EOF
 
-grep 'helpWith(' | sed -e 's/^.*sqllex,//g;s/).*/,/g' | sort -u
+grep 'helpWith(' | sed -e 's/^.*sqllex,//g;s/).*/,/g' | grep -v '""' | sort -u
 
 cat <<EOF
 }

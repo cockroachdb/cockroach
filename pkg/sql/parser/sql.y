@@ -879,7 +879,8 @@ stmt_list:
   }
 
 stmt:
-  alter_stmt      // help texts in sub-rule
+  HELPTOKEN { return helpWith(sqllex, "") }
+| alter_stmt      // help texts in sub-rule
 | backup_stmt     // EXTEND WITH HELP: BACKUP
 | cancel_stmt     // help texts in sub-rule
 | copy_from_stmt

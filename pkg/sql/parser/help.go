@@ -69,8 +69,14 @@ func (h *HelpMessage) Format(w io.Writer) {
 // error", with the error set to a contextual help message about the
 // current statement.
 func helpWith(sqllex sqlLexer, helpText string) int {
+	scan := sqllex.(*Scanner)
+	if helpText == "" {
+		scan.lastError.unimplementedFeature = ""
+		scan.lastError.msg = "help: " + AllHelp
+		return 1
+	}
 	msg := HelpMessage{Command: helpText, HelpMessageBody: HelpMessages[helpText]}
-	sqllex.(*Scanner).SetHelp(msg)
+	scan.SetHelp(msg)
 	// We return non-zero to indicate to the caller of Parse() that the
 	// parse was unsuccessful.
 	return 1
