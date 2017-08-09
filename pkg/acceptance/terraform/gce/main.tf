@@ -29,7 +29,7 @@ resource "google_compute_instance" "cockroach" {
   network_interface {
     network = "default"
     access_config {
-        # Ephemeral
+      # Ephemeral
     }
   }
 
