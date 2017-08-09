@@ -347,7 +347,7 @@ func TestDebugName(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		txn.Proto().ID = &uuid
+		txn.Proto().ID = uuid
 
 		expected := fmt.Sprintf("unnamed (id: %s)", id)
 		if txn.DebugName() != expected {

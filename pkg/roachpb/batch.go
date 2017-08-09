@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -56,6 +57,7 @@ func (ba *BatchRequest) UpdateTxn(otherTxn *Transaction) {
 	if otherTxn == nil {
 		return
 	}
+	otherTxn.AssertInitialized(context.TODO())
 	if ba.Txn == nil {
 		ba.Txn = otherTxn
 		return

@@ -162,7 +162,7 @@ func (ir *intentResolver) maybePushTransactions(
 			// This shouldn't happen as all intents created are in
 			// the PENDING status.
 			nonPendingIntents = append(nonPendingIntents, intent)
-		} else if _, ok := ir.mu.inFlight[*intent.Txn.ID]; ok && skipIfInFlight {
+		} else if _, ok := ir.mu.inFlight[intent.Txn.ID]; ok && skipIfInFlight {
 			// Another goroutine is working on this transaction so we can
 			// skip it.
 			if log.V(1) {
@@ -170,9 +170,9 @@ func (ir *intentResolver) maybePushTransactions(
 			}
 			continue
 		} else {
-			pushTxns[*intent.Txn.ID] = intent.Txn
+			pushTxns[intent.Txn.ID] = intent.Txn
 			pushIntents = append(pushIntents, intent)
-			ir.mu.inFlight[*intent.Txn.ID]++
+			ir.mu.inFlight[intent.Txn.ID]++
 		}
 	}
 	ir.mu.Unlock()
@@ -211,9 +211,9 @@ func (ir *intentResolver) maybePushTransactions(
 	}
 	ir.mu.Lock()
 	for _, intent := range pushIntents {
-		ir.mu.inFlight[*intent.Txn.ID]--
-		if ir.mu.inFlight[*intent.Txn.ID] == 0 {
-			delete(ir.mu.inFlight, *intent.Txn.ID)
+		ir.mu.inFlight[intent.Txn.ID]--
+		if ir.mu.inFlight[intent.Txn.ID] == 0 {
+			delete(ir.mu.inFlight, intent.Txn.ID)
 		}
 	}
 	ir.mu.Unlock()
@@ -225,15 +225,15 @@ func (ir *intentResolver) maybePushTransactions(
 	pushedTxns := map[uuid.UUID]roachpb.Transaction{}
 	for _, resp := range br.Responses {
 		txn := resp.GetInner().(*roachpb.PushTxnResponse).PusheeTxn
-		if _, ok := pushedTxns[*txn.ID]; ok {
+		if _, ok := pushedTxns[txn.ID]; ok {
 			panic(fmt.Sprintf("have two PushTxn responses for %s", txn.ID))
 		}
-		pushedTxns[*txn.ID] = txn
+		pushedTxns[txn.ID] = txn
 	}
 
 	var resolveIntents []roachpb.Intent
 	for _, intent := range pushIntents {
-		pushee, ok := pushedTxns[*intent.Txn.ID]
+		pushee, ok := pushedTxns[intent.Txn.ID]
 		if !ok {
 			panic(fmt.Sprintf("no PushTxn response for intent %+v", intent))
 		}
@@ -340,7 +340,7 @@ func (ir *intentResolver) processIntents(
 		// the txn span directly.
 		b := &client.Batch{}
 		txn := item.intents[0].Txn
-		txnKey := keys.TransactionKey(txn.Key, *txn.ID)
+		txnKey := keys.TransactionKey(txn.Key, txn.ID)
 
 		// This is pretty tricky. Transaction keys are range-local and
 		// so they are encoded specially. The key range addressed by

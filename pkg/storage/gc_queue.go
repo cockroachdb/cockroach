@@ -384,7 +384,7 @@ func processLocalKeyRange(
 			return nil
 		}
 
-		txnID := *txn.ID
+		txnID := txn.ID
 
 		// The transaction record should be considered for removal.
 		switch txn.Status {
@@ -769,7 +769,7 @@ func RunGC(
 					// Keep track of intent to resolve if older than the intent
 					// expiration threshold.
 					if meta.Timestamp.Less(intentExp) {
-						txnID := *meta.Txn.ID
+						txnID := meta.Txn.ID
 						txn := &roachpb.Transaction{
 							TxnMeta: *meta.Txn,
 						}
