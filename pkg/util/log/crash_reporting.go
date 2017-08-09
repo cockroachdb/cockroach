@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"sync/atomic"
 
 	raven "github.com/getsentry/raven-go"
 	"github.com/pkg/errors"
@@ -34,6 +35,19 @@ type ReportingSettings interface {
 	HasDiagnosticsReportingEnabled() bool
 	HasCrashReportsEnabled() bool
 }
+
+// ReportingSettingsSingleton is a global that holds the ReportingSettings of an
+// active instance of cluster.Settings. In a regular running node, there is
+// exactly one such instance. In multi-node testing, there may be many, and so
+// it is not clear which one will win out, but that is acceptable.
+//
+// The global is a compromise to free callers of log.Fatal{,f} from having to
+// provide their cluster's settings on every call.
+//
+// NB: We have to store a pointer to the ReportSettings interface or we trigger
+// assertions inside of atomic.Value since we pass two types here (one from
+// cluster.Settings, one dummy one in tests).
+var ReportingSettingsSingleton atomic.Value // stores *ReportingSettings
 
 // RecoverAndReportPanic can be invoked on goroutines that run with
 // stderr redirected to logs to ensure the user gets informed on the
@@ -133,7 +147,7 @@ func SetupCrashReporter(ctx context.Context, cmd string) {
 var crdbPaths = []string{"github.com/cockroachdb/cockroach"}
 
 func sendCrashReport(ctx context.Context, st ReportingSettings, r interface{}, depth int) {
-	if st == nil || !st.HasDiagnosticsReportingEnabled() || !st.HasCrashReportsEnabled() {
+	if !st.HasDiagnosticsReportingEnabled() || !st.HasCrashReportsEnabled() {
 		return // disabled via settings.
 	}
 	// FIXME(tschottdorf): this particular method would benefit from globals
