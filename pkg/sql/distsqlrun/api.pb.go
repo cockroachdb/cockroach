@@ -44,6 +44,7 @@
 		FlowSpec
 		AlgebraicSetOpSpec
 		ReadCSVSpec
+		SSTWriterSpec
 */
 package distsqlrun
 

@@ -403,6 +403,8 @@ type sstContent struct {
 	span roachpb.Span
 }
 
+const errSSTCreationMaybeDuplicate = "SST creation error at %s; this can happen when a primary or unique index has duplicate keys"
+
 // writeRocksDB writes kvs to a RocksDB instance that is created at
 // rocksdbDir. After kvs is closed, sst files are created of size maxSize
 // and sent on contents. It returns the number of KV pairs created.
@@ -511,7 +513,7 @@ func writeRocksDB(
 		kv.Value = it.UnsafeValue()
 
 		if err := sst.Add(kv); err != nil {
-			return 0, errors.Wrapf(err, "SST creation error at %s; this can happen when a primary or unique index has duplicate keys", kv.Key.Key)
+			return 0, errors.Wrapf(err, errSSTCreationMaybeDuplicate, kv.Key.Key)
 		}
 		if sst.DataSize > sstMaxSize {
 			if err := writeSST(firstKey, kv.Key.Key.Next()); err != nil {
@@ -910,7 +912,184 @@ func sampleAll(kv roachpb.KeyValue) bool {
 	return true
 }
 
+var sstOutputTypes = []sqlbase.ColumnType{
+	{SemanticType: sqlbase.ColumnType_STRING},
+	{SemanticType: sqlbase.ColumnType_INT},
+	{SemanticType: sqlbase.ColumnType_BYTES},
+	{SemanticType: sqlbase.ColumnType_BYTES},
+	{SemanticType: sqlbase.ColumnType_BYTES},
+}
+
+func newSSTWriterProcessor(
+	flowCtx *distsqlrun.FlowCtx,
+	spec distsqlrun.SSTWriterSpec,
+	input distsqlrun.RowSource,
+	output distsqlrun.RowReceiver,
+) (distsqlrun.Processor, error) {
+	if flowCtx.TempStorage == nil {
+		return nil, errors.New("SST writer requires a temp storage")
+	}
+	sp := &sstWriter{
+		uri:         spec.Destination,
+		name:        spec.Name,
+		walltime:    spec.Walltime,
+		input:       input,
+		output:      output,
+		tempStorage: flowCtx.TempStorage,
+	}
+	if err := sp.out.Init(&distsqlrun.PostProcessSpec{}, sstOutputTypes, &flowCtx.EvalCtx, output); err != nil {
+		return nil, err
+	}
+	return sp, nil
+}
+
+type sstWriter struct {
+	uri         string
+	name        string
+	walltime    int64
+	input       distsqlrun.RowSource
+	out         distsqlrun.ProcOutputHelper
+	output      distsqlrun.RowReceiver
+	tempStorage engine.Engine
+}
+
+var _ distsqlrun.Processor = &sstWriter{}
+
+func (sp *sstWriter) OutputTypes() []sqlbase.ColumnType {
+	return sstOutputTypes
+}
+
+func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
+	if wg != nil {
+		defer wg.Done()
+	}
+
+	defer distsqlrun.DrainAndForwardMetadata(ctx, sp.input, sp.output)
+	err := func() error {
+		sst, err := engine.MakeRocksDBSstFileWriter()
+		if err != nil {
+			return err
+		}
+		defer sst.Close()
+		input := distsqlrun.MakeNoMetadataRowSource(sp.input, sp.output)
+		alloc := &sqlbase.DatumAlloc{}
+		store := engine.NewRocksDBMap(sp.tempStorage)
+		defer store.Close(ctx)
+		sorter := store.NewBatchWriter()
+		var key, val []byte
+		for {
+			row, err := input.NextRow()
+			if err != nil {
+				return err
+			}
+			if row == nil {
+				break
+			}
+			if len(row) != 2 {
+				return errors.Errorf("expected 2 datums, got %d", len(row))
+			}
+			for i, ed := range row {
+				if err := ed.EnsureDecoded(alloc); err != nil {
+					return err
+				}
+				datum := ed.Datum.(*parser.DBytes)
+				b := []byte(*datum)
+				switch i {
+				case 0:
+					key = b
+				case 1:
+					val = b
+				}
+			}
+			if err := sorter.Put(key, val); err != nil {
+				return err
+			}
+		}
+		if err := sorter.Close(ctx); err != nil {
+			return err
+		}
+		iter := store.NewIterator()
+		var kv engine.MVCCKeyValue
+		kv.Key.Timestamp.WallTime = sp.walltime
+		var firstKey roachpb.Key
+		for iter.Rewind(); ; iter.Next() {
+			if ok, err := iter.Valid(); err != nil {
+				return err
+			} else if !ok {
+				break
+			}
+			kv.Key.Key = iter.Key()
+			kv.Value = iter.Value()
+			if firstKey == nil {
+				firstKey = iter.Key()
+			}
+			if err := sst.Add(kv); err != nil {
+				return errors.Wrapf(err, errSSTCreationMaybeDuplicate, kv.Key.Key)
+			}
+		}
+		lastKey := kv.Key.Key.Next()
+		data, err := sst.Finish()
+		if err != nil {
+			return err
+		}
+		checksum, err := storageccl.SHA512ChecksumData(data)
+		if err != nil {
+			return err
+		}
+		conf, err := storageccl.ExportStorageConfFromURI(sp.uri)
+		if err != nil {
+			return err
+		}
+		es, err := storageccl.MakeExportStorage(ctx, conf)
+		if err != nil {
+			return err
+		}
+		defer es.Close()
+		if err := es.WriteFile(ctx, sp.name, bytes.NewReader(data)); err != nil {
+			return err
+		}
+
+		row := sqlbase.EncDatumRow{
+			sqlbase.DatumToEncDatum(
+				sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING},
+				parser.NewDString(sp.name),
+			),
+			sqlbase.DatumToEncDatum(
+				sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
+				parser.NewDInt(parser.DInt(len(data))),
+			),
+			sqlbase.DatumToEncDatum(
+				sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
+				parser.NewDBytes(parser.DBytes(checksum)),
+			),
+			sqlbase.DatumToEncDatum(
+				sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
+				parser.NewDBytes(parser.DBytes(firstKey)),
+			),
+			sqlbase.DatumToEncDatum(
+				sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
+				parser.NewDBytes(parser.DBytes(lastKey)),
+			),
+		}
+		cs, err := sp.out.EmitRow(ctx, row)
+		if err != nil {
+			return err
+		}
+		if cs != distsqlrun.NeedMoreRows {
+			return errors.New("unexpected closure of consumer")
+		}
+		return nil
+	}()
+	if err != nil {
+		distsqlrun.DrainAndClose(ctx, sp.output, err)
+		return
+	}
+
+	sp.out.Close()
+}
+
 func init() {
 	sql.AddPlanHook(importPlanHook)
 	distsqlrun.NewReadCSVProcessor = newReadCSVProcessor
+	distsqlrun.NewSSTWriterProcessor = newSSTWriterProcessor
 }
