@@ -84,8 +84,12 @@ class JobStatusCell extends React.Component<{job: Job}, {}> {
     if (this.is("pending", "paused")) {
       return _.capitalize(this.props.job.status);
     } else if (this.is("running")) {
-      const remainingMillis = modified.diff(started) / this.props.job.fraction_completed;
-      return formatDuration(moment.duration(remainingMillis)) + " remaining";
+      const fractionCompleted = this.props.job.fraction_completed;
+      if (fractionCompleted > 0) {
+        const duration = modified.diff(started);
+        const remaining = duration / fractionCompleted - duration;
+        return formatDuration(moment.duration(remaining)) + " remaining";
+      }
     } else if (this.is("succeeded")) {
       return "Duration: " + formatDuration(moment.duration(finished.diff(started)));
     }
@@ -94,7 +98,6 @@ class JobStatusCell extends React.Component<{job: Job}, {}> {
   render() {
       return <div>
         {this.renderProgress()}
-        <br />
         <span className="jobs-table__duration">{this.renderDuration()}</span>
       </div>;
   }
