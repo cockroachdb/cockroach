@@ -221,7 +221,7 @@ func TestParse(t *testing.T) {
 
 		{`SHOW barfoo`},
 		{`SHOW database`},
-		{`SHOW syntax`},
+		{`SHOW TIME ZONE`},
 
 		{`SHOW CLUSTER SETTING a`},
 		{`SHOW CLUSTER SETTING all`},
@@ -957,6 +957,9 @@ func TestParse2(t *testing.T) {
 			`SHOW CONSTRAINTS FROM t`},
 		{`SHOW KEYS FROM t`,
 			`SHOW INDEXES FROM t`},
+		{`SHOW SESSION barfoo`, `SHOW barfoo`},
+		{`SHOW SESSION database`, `SHOW database`},
+		{`SHOW SESSION TIME ZONE`, `SHOW TIME ZONE`},
 		{`BEGIN`,
 			`BEGIN TRANSACTION`},
 		{`START TRANSACTION`,
