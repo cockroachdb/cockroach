@@ -621,6 +621,30 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 			colB:     []int{3, 4},
 			expected: makeColumnOrdering(0, asc),
 		},
+		{
+			name: "grouped-cols",
+			a: orderingInfo{
+				ordering: makeColumnGroups(0, 2, asc, 1, 3, asc),
+			},
+			b: orderingInfo{
+				ordering: makeColumnGroups(0, asc, 1, asc, 2, asc, 3, asc),
+			},
+			colA:     []int{0, 1, 2, 3},
+			colB:     []int{0, 1, 2, 3},
+			expected: makeColumnOrdering(0, asc, 1, asc, 2, asc, 3, asc),
+		},
+		{
+			name: "grouped-cols-opposite-order",
+			a: orderingInfo{
+				ordering: makeColumnGroups(0, 2, asc, 1, 3, asc),
+			},
+			b: orderingInfo{
+				ordering: makeColumnGroups(0, asc, 1, asc, 2, desc, 3, desc),
+			},
+			colA:     []int{0, 1, 2, 3},
+			colB:     []int{0, 1, 2, 3},
+			expected: makeColumnOrdering(0, asc, 1, asc, 2, desc, 3, desc),
+		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {

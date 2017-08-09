@@ -432,8 +432,8 @@ func computeMergeJoinOrdering(a, b orderingInfo, colA, colB []int) sqlbase.Colum
 	}
 
 	// To understand what's going on, it's useful to first think of the easy
-	// case: there are no equality columns, we just have simple orderings. In this
-	// case we need to check that:
+	// case: there are no equality columns or column groups, we just have simple
+	// orderings. In this case we need to check that:
 	//  - the first column in A's ordering is an equality column, and
 	//  - the first column in B's ordering is the same equality column.
 	//    If this is the case, we can check the same for the second column, and so
@@ -447,6 +447,26 @@ func computeMergeJoinOrdering(a, b orderingInfo, colA, colB []int) sqlbase.Colum
 	//
 	// Another complication is the "key" flag: such an ordering remains correct
 	// when appending arbitrary columns to it.
+	//
+	// Column groups complicate things further, for example:
+	//   A: (1/3)+, (2/4)+
+	//   B: 1+, 2+, 3+, 4+
+	// Here we match (1/3)+ with 1+, then (2/4)+ with 2+, after which column 3+
+	// matches a column inside an earlier group and is thus inconsequential for
+	// A's ordering (like a constant column would be). Note that the direction of
+	// a redundant column can even differ, B: 1+, 2+, 3-, 4- would match with A
+	// just as well. This is because within each group of rows with the same
+	// values on columns 1 and 2 in A, there is a single value for columns 3 and
+	// 4.
+	//
+	// To help handle these cases in a unified manner, we keep a list of
+	// "optional" columns on each side that can be used arbitrarily to extend an
+	// ordering: these are the constant columns + all columns in the groups
+	// processed so far.
+
+	optionalColsA := a.constantCols.Copy()
+	optionalColsB := b.constantCols.Copy()
+
 MainLoop:
 	for ordA, ordB := a.ordering, b.ordering; ; {
 		doneA, doneB := (len(ordA) == 0), (len(ordB) == 0)
@@ -469,6 +489,12 @@ MainLoop:
 					break MainLoop
 				}
 				result = append(result, sqlbase.ColumnOrderInfo{ColIdx: foundCol, Direction: dir})
+				for col, ok := ordA[0].cols.Next(0); ok; col, ok = ordA[0].cols.Next(col + 1) {
+					optionalColsA.Add(col)
+				}
+				for col, ok := ordB[0].cols.Next(0); ok; col, ok = ordB[0].cols.Next(col + 1) {
+					optionalColsB.Add(col)
+				}
 				ordA, ordB = ordA[1:], ordB[1:]
 				continue MainLoop
 			}
@@ -479,8 +505,11 @@ MainLoop:
 		if !doneA {
 			for i := range colA {
 				if ordA[0].cols.Contains(uint32(colA[i])) &&
-					((doneB && b.isKey) || b.constantCols.Contains(uint32(colB[i]))) {
+					((doneB && b.isKey) || optionalColsB.Contains(uint32(colB[i]))) {
 					result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: ordA[0].dir})
+					for col, ok := ordA[0].cols.Next(0); ok; col, ok = ordA[0].cols.Next(col + 1) {
+						optionalColsA.Add(col)
+					}
 					ordA = ordA[1:]
 					continue MainLoop
 				}
@@ -492,8 +521,11 @@ MainLoop:
 		if !doneB {
 			for i := range colB {
 				if ordB[0].cols.Contains(uint32(colB[i])) &&
-					((doneA && a.isKey) || a.constantCols.Contains(uint32(colA[i]))) {
+					((doneA && a.isKey) || optionalColsA.Contains(uint32(colA[i]))) {
 					result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: ordB[0].dir})
+					for col, ok := ordB[0].cols.Next(0); ok; col, ok = ordB[0].cols.Next(col + 1) {
+						optionalColsB.Add(col)
+					}
 					ordB = ordB[1:]
 					continue MainLoop
 				}
