@@ -249,6 +249,14 @@ func (post *PostProcessSpec) summary() []string {
 	return res
 }
 
+func (c *ReadCSVSpec) summary() (string, []string) {
+	return "ReadCSV", []string{c.Uri}
+}
+
+func (s *SSTWriterSpec) summary() (string, []string) {
+	return "SSTWriter", []string{fmt.Sprintf("%s/%s", s.Destination, s.Name)}
+}
+
 type diagramCell struct {
 	Title   string   `json:"title"`
 	Details []string `json:"details"`

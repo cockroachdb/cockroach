@@ -579,8 +579,20 @@ func makeBackup(
 			Sha512: checksum,
 		})
 	}
+
+	err = finalizeCSVBackup(ctx, &backupDesc, parentID, tableDesc, es)
+	return int64(len(backupDesc.Files)), err
+}
+
+func finalizeCSVBackup(
+	ctx context.Context,
+	backupDesc *BackupDescriptor,
+	parentID sqlbase.ID,
+	tableDesc *sqlbase.TableDescriptor,
+	es storageccl.ExportStorage,
+) error {
 	if len(backupDesc.Files) == 0 {
-		return 0, errors.New("no files in backup")
+		return errors.New("no files in backup")
 	}
 
 	sort.Sort(backupFileDescriptors(backupDesc.Files))
@@ -599,10 +611,9 @@ func makeBackup(
 	}
 	descBuf, err := backupDesc.Marshal()
 	if err != nil {
-		return 0, err
+		return err
 	}
-	err = es.WriteFile(ctx, BackupDescriptorName, bytes.NewReader(descBuf))
-	return int64(len(backupDesc.Files)), err
+	return es.WriteFile(ctx, BackupDescriptorName, bytes.NewReader(descBuf))
 }
 
 func importPlanHook(
@@ -646,6 +657,7 @@ func importPlanHook(
 	header := sqlbase.ResultColumns{
 		{Name: "data_size", Typ: parser.TypeInt},
 	}
+	walltime := timeutil.Now().UnixNano()
 	fn := func(ctx context.Context, resultsCh chan<- parser.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, importStmt.StatementTag())
@@ -725,39 +737,9 @@ func importPlanHook(
 		var total int64
 
 		if distributed {
-
-			evalCtx := p.EvalContext()
-
-			// TODO(dan): Filter out unhealthy nodes.
-			resp, err := p.ExecCfg().StatusServer.Nodes(ctx, &serverpb.NodesRequest{})
+			total, err = doDistributedCSVTransform(ctx, files, p, tableDesc, temp, walltime)
 			if err != nil {
 				return err
-			}
-
-			var nodes []roachpb.NodeDescriptor
-			for _, node := range resp.Nodes {
-				nodes = append(nodes, node.Desc)
-			}
-
-			// TODO(dan/mjibson): Fill in the real planning code.
-			ci := sqlbase.ColTypeInfoFromColTypes([]sqlbase.ColumnType{
-				{SemanticType: sqlbase.ColumnType_INT},
-			})
-			rows := sqlbase.NewRowContainer(evalCtx.Mon.MakeBoundAccount(), ci, 0)
-			defer func() {
-				if rows != nil {
-					rows.Close(ctx)
-				}
-			}()
-
-			if err := p.DistLoader().LoadCSV(
-				ctx, p.ExecCfg().DB, evalCtx, p.ExecCfg().NodeID.Get(), nodes, rows, tableDesc, files, temp,
-			); err != nil {
-				return err
-			}
-			for i := 0; i < rows.Len(); i++ {
-				row := rows.At(i)
-				total += int64(*row[0].(*parser.DInt))
 			}
 		} else {
 			_, _, total, err = doLocalCSVTransform(
@@ -777,6 +759,83 @@ func importPlanHook(
 		return nil
 	}
 	return fn, header, nil
+}
+
+func doDistributedCSVTransform(
+	ctx context.Context,
+	files []string,
+	p sql.PlanHookState,
+	tableDesc *sqlbase.TableDescriptor,
+	temp string,
+	walltime int64,
+) (int64, error) {
+	evalCtx := p.EvalContext()
+
+	// TODO(dan): Filter out unhealthy nodes.
+	resp, err := p.ExecCfg().StatusServer.Nodes(ctx, &serverpb.NodesRequest{})
+	if err != nil {
+		return 0, err
+	}
+	var nodes []roachpb.NodeDescriptor
+	for _, node := range resp.Nodes {
+		nodes = append(nodes, node.Desc)
+	}
+
+	ci := sqlbase.ColTypeInfoFromColTypes([]sqlbase.ColumnType{
+		{SemanticType: sqlbase.ColumnType_STRING},
+		{SemanticType: sqlbase.ColumnType_INT},
+		{SemanticType: sqlbase.ColumnType_BYTES},
+		{SemanticType: sqlbase.ColumnType_BYTES},
+		{SemanticType: sqlbase.ColumnType_BYTES},
+	})
+	rows := sqlbase.NewRowContainer(evalCtx.Mon.MakeBoundAccount(), ci, 0)
+	defer func() {
+		if rows != nil {
+			rows.Close(ctx)
+		}
+	}()
+
+	if err := p.DistLoader().LoadCSV(ctx, p.ExecCfg().DB, evalCtx, p.ExecCfg().NodeID.Get(), nodes, rows, tableDesc, files, temp, walltime); err != nil {
+		return 0, err
+	}
+
+	backupDesc := BackupDescriptor{
+		FormatVersion: BackupFormatInitialVersion,
+	}
+	n := rows.Len()
+	for i := 0; i < n; i++ {
+		row := rows.At(i)
+		name := row[0].(*parser.DString)
+		size := row[1].(*parser.DInt)
+		checksum := row[2].(*parser.DBytes)
+		spanStart := row[3].(*parser.DBytes)
+		spanEnd := row[4].(*parser.DBytes)
+		backupDesc.EntryCounts.DataSize += int64(*size)
+		backupDesc.Files = append(backupDesc.Files, BackupDescriptor_File{
+			Path: string(*name),
+			Span: roachpb.Span{
+				Key:    roachpb.Key(*spanStart),
+				EndKey: roachpb.Key(*spanEnd),
+			},
+			Sha512: []byte(*checksum),
+		})
+	}
+
+	dest, err := storageccl.ExportStorageConfFromURI(temp)
+	if err != nil {
+		return 0, err
+	}
+	es, err := storageccl.MakeExportStorage(ctx, dest)
+	if err != nil {
+		return 0, err
+	}
+	defer es.Close()
+
+	if err := finalizeCSVBackup(ctx, &backupDesc, defaultCSVParentID, tableDesc, es); err != nil {
+		return 0, err
+	}
+	total := int64(len(backupDesc.Files))
+	return total, nil
 }
 
 var csvOutputTypes = []sqlbase.ColumnType{
