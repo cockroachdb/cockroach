@@ -44,7 +44,7 @@ const (
 	// lookup.
 	defaultRangeLookupMaxRanges = 8
 	// The default size of the range lease holder cache.
-	defaultLeaseHolderCacheSize = 1 << 16
+	defaultLeaseHolderCacheSize = 1 << 20
 	// The default size of the range descriptor cache.
 	defaultRangeDescriptorCacheSize = 1 << 20
 	// The default limit for asynchronous senders.
