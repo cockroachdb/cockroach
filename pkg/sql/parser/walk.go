@@ -620,6 +620,56 @@ func walkReturningClause(v Visitor, clause ReturningClause) (ReturningClause, bo
 }
 
 // CopyNode makes a copy of this Statement without recursing in any child Statements.
+func (stmt *Backup) CopyNode() *Backup {
+	stmtCopy := *stmt
+	stmtCopy.IncrementalFrom = append(Exprs(nil), stmt.IncrementalFrom...)
+	stmtCopy.Options = append(KVOptions(nil), stmt.Options...)
+	return &stmtCopy
+}
+
+// WalkStmt is part of the WalkableStmt interface.
+func (stmt *Backup) WalkStmt(v Visitor) Statement {
+	ret := stmt
+	if stmt.AsOf.Expr != nil {
+		e, changed := WalkExpr(v, stmt.AsOf.Expr)
+		if changed {
+			if ret == stmt {
+				ret = stmt.CopyNode()
+			}
+			ret.AsOf.Expr = e
+		}
+	}
+	{
+		e, changed := WalkExpr(v, stmt.To)
+		if changed {
+			if ret == stmt {
+				ret = stmt.CopyNode()
+			}
+			ret.To = e
+		}
+	}
+	for i, expr := range stmt.IncrementalFrom {
+		e, changed := WalkExpr(v, expr)
+		if changed {
+			if ret == stmt {
+				ret = stmt.CopyNode()
+			}
+			ret.IncrementalFrom[i] = e
+		}
+	}
+	{
+		opts, changed := walkKVOptions(v, stmt.Options)
+		if changed {
+			if ret == stmt {
+				ret = stmt.CopyNode()
+			}
+			ret.Options = opts
+		}
+	}
+	return ret
+}
+
+// CopyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Delete) CopyNode() *Delete {
 	stmtCopy := *stmt
 	if stmt.Where != nil {
@@ -742,6 +792,47 @@ func (stmt *ParenSelect) WalkStmt(v Visitor) Statement {
 		return &ParenSelect{sel.(*Select)}
 	}
 	return stmt
+}
+
+// CopyNode makes a copy of this Statement without recursing in any child Statements.
+func (stmt *Restore) CopyNode() *Restore {
+	stmtCopy := *stmt
+	stmtCopy.From = append(Exprs(nil), stmt.From...)
+	stmtCopy.Options = append(KVOptions(nil), stmt.Options...)
+	return &stmtCopy
+}
+
+// WalkStmt is part of the WalkableStmt interface.
+func (stmt *Restore) WalkStmt(v Visitor) Statement {
+	ret := stmt
+	if stmt.AsOf.Expr != nil {
+		e, changed := WalkExpr(v, stmt.AsOf.Expr)
+		if changed {
+			if ret == stmt {
+				ret = stmt.CopyNode()
+			}
+			ret.AsOf.Expr = e
+		}
+	}
+	for i, expr := range stmt.From {
+		e, changed := WalkExpr(v, expr)
+		if changed {
+			if ret == stmt {
+				ret = stmt.CopyNode()
+			}
+			ret.From[i] = e
+		}
+	}
+	{
+		opts, changed := walkKVOptions(v, stmt.Options)
+		if changed {
+			if ret == stmt {
+				ret = stmt.CopyNode()
+			}
+			ret.Options = opts
+		}
+	}
+	return ret
 }
 
 // CopyNode makes a copy of this Statement without recursing in any child Statements.
@@ -998,11 +1089,13 @@ func (stmt *ValuesClause) WalkStmt(v Visitor) Statement {
 	return ret
 }
 
+var _ WalkableStmt = &Backup{}
 var _ WalkableStmt = &Delete{}
 var _ WalkableStmt = &Explain{}
 var _ WalkableStmt = &Insert{}
 var _ WalkableStmt = &Import{}
 var _ WalkableStmt = &ParenSelect{}
+var _ WalkableStmt = &Restore{}
 var _ WalkableStmt = &Select{}
 var _ WalkableStmt = &SelectClause{}
 var _ WalkableStmt = &Set{}
