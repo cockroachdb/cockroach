@@ -15,6 +15,7 @@
 package timeutil
 
 import (
+	"fmt"
 	"testing"
 	"time"
 )
@@ -41,17 +42,33 @@ func TestTimerTimeout(t *testing.T) {
 }
 
 func TestTimerStop(t *testing.T) {
-	var timer Timer
-	timer.Reset(timeStep)
-	if stopped := timer.Stop(); !stopped {
-		t.Errorf("expected Stop to return true, got false")
+	for _, sleepDur := range []time.Duration{0, timeStep, 2 * timeStep} {
+		t.Run(fmt.Sprintf("Sleep%s", sleepDur), func(t *testing.T) {
+			var timer Timer
+			timer.Reset(timeStep)
+			time.Sleep(sleepDur)
+
+			// Get a handle to the timer channel before calling Stop, because Stop
+			// clears the struct.
+			c := timer.C
+
+			// Even though we sleep for a certain duration which we know to be more
+			// or less than the timer's duration, we can't assert whether the timer
+			// fires before calling timer.Stop because we have no control over the
+			// scheduler. Instead, we handle both cases to avoid flakiness and assert
+			// that Stop returns the correct status.
+			if timer.Stop() {
+				select {
+				case <-c:
+					t.Errorf("expected timer to stop after call to Stop; got timer that was not stopped")
+				case <-time.After(5 * timeStep):
+				}
+			} else {
+				<-c
+			}
+		})
 	}
 
-	select {
-	case <-timer.C:
-		t.Errorf("expected timer to stop after call to Stop; got timer that was not stopped")
-	case <-time.After(5 * timeStep):
-	}
 }
 
 func TestTimerUninitializedStopNoop(t *testing.T) {
