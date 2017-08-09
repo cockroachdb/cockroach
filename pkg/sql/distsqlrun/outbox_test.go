@@ -377,3 +377,53 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 		})
 	}
 }
+
+// Test Outbox cancels flow context when FlowStream returns a non-nil error.
+func TestOutboxCancelsFlowOnError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	mockServer, addr, err := startMockDistSQLServer(stopper)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	evalCtx := parser.MakeTestingEvalContext()
+	defer evalCtx.Stop(context.Background())
+	flowCtx := FlowCtx{
+		Settings: cluster.MakeTestingClusterSettings(),
+		stopper:  stopper,
+		EvalCtx:  evalCtx,
+		rpcCtx:   newInsecureRPCContext(stopper),
+	}
+	flowID := FlowID{uuid.MakeV4()}
+	streamID := StreamID(42)
+	var outbox *outbox
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+
+	// We could test this on ctx.cancel(), but this mock
+	// cancellation method is simpler.
+	ctxCancelled := false
+	mockCancel := func() {
+		ctxCancelled = true
+	}
+
+	outbox = newOutbox(&flowCtx, addr.String(), flowID, streamID)
+	outbox.start(ctx, &wg, mockCancel)
+
+	// Wait for the outbox to connect the stream.
+	streamNotification := <-mockServer.inboundStreams
+	if _, err := streamNotification.stream.Recv(); err != nil {
+		t.Fatal(err)
+	}
+
+	streamNotification.donec <- sqlbase.NewQueryCanceledError()
+
+	wg.Wait()
+	if !ctxCancelled {
+		t.Fatal("flow ctx was not cancelled")
+	}
+}

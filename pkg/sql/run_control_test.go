@@ -174,3 +174,52 @@ func TestCancelParallelQuery(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Cancel a distSQL query pre-execution (before any streams have been established)
+func TestCancelDistSQLQuery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const queryToCancel = "SELECT * FROM nums ORDER BY num DESC"
+
+	// conn1 is used for the query above. conn2 is solely for the CANCEL statement.
+	var conn1 *gosql.DB
+	var conn2 *gosql.DB
+
+	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				UseDatabase: "test",
+				Knobs: base.TestingKnobs{
+					SQLExecutor: &sql.ExecutorTestingKnobs{
+						BeforeExecute: func(ctx context.Context, stmt string, isDistributed bool) {
+							// if queryToCancel
+							if strings.Contains(stmt, "ORDER BY num") {
+								// Cancel it
+								const cancelQuery = "CANCEL QUERY (SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE node_id = 1)"
+								if _, err := conn2.Exec(cancelQuery); err != nil {
+									t.Fatal(err)
+								}
+							}
+						},
+					},
+				},
+			},
+		})
+	defer tc.Stopper().Stop(context.TODO())
+
+	conn1 = tc.ServerConn(0)
+	conn2 = tc.ServerConn(1)
+
+	sqlutils.CreateTable(t, conn1, "nums", "num INT", 0, nil)
+	_, err := conn1.Exec("INSERT INTO nums SELECT generate_series(1,10)")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = conn1.Exec(queryToCancel)
+	if err != nil && !sqlbase.IsQueryCanceledError(err) {
+		t.Fatal(err)
+	} else if err == nil {
+		t.Fatal("didn't get an error from query that should have been cancelled")
+	}
+}
