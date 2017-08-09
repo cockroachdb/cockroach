@@ -559,15 +559,6 @@ func (*ShowFingerprints) StatementTag() string { return "SHOW EXPERIMENTAL_FINGE
 func (*ShowFingerprints) independentFromParallelizedPriors() {}
 
 // StatementType implements the Statement interface.
-func (*Help) StatementType() StatementType { return Rows }
-
-// StatementTag returns a short string identifying the type of statement.
-func (*Help) StatementTag() string { return "HELP" }
-
-func (*Help) hiddenFromStats()                   {}
-func (*Help) independentFromParallelizedPriors() {}
-
-// StatementType implements the Statement interface.
 func (*ShowConstraints) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -644,7 +635,6 @@ func (n *DropUser) String() string                 { return AsString(n) }
 func (n *Execute) String() string                  { return AsString(n) }
 func (n *Explain) String() string                  { return AsString(n) }
 func (n *Grant) String() string                    { return AsString(n) }
-func (n *Help) String() string                     { return AsString(n) }
 func (n *Insert) String() string                   { return AsString(n) }
 func (n *Import) String() string                   { return AsString(n) }
 func (n *ParenSelect) String() string              { return AsString(n) }

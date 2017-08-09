@@ -650,11 +650,3 @@ func (p *planner) ShowUsers(ctx context.Context, n *parser.ShowUsers) (planNode,
 	return p.delegateQuery(ctx, "SHOW USERS",
 		`SELECT username FROM system.users ORDER BY 1`, nil, nil)
 }
-
-// Help returns usage information for the given builtin function.
-// Privileges: None
-func (p *planner) Help(ctx context.Context, n *parser.Help) (planNode, error) {
-	return p.delegateQuery(ctx, "HELP", fmt.Sprintf(
-		`SELECT * FROM crdb_internal.builtin_functions WHERE function ILIKE %s`,
-		parser.EscapeSQLString(string(n.Name))), nil, nil)
-}

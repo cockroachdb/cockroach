@@ -229,17 +229,6 @@ func (node *ShowUsers) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("SHOW USERS")
 }
 
-// Help represents a HELP statement.
-type Help struct {
-	Name Name
-}
-
-// Format implements the NodeFormatter interface.
-func (node *Help) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("HELP ")
-	FormatNode(buf, f, node.Name)
-}
-
 // ShowRanges represents a SHOW TESTING_RANGES statement.
 // Only one of Table and Index can be set.
 type ShowRanges struct {
