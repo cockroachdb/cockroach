@@ -336,7 +336,11 @@ func TestSampleRate(t *testing.T) {
 func TestImportStmt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const nodes = 3
+	const (
+		nodes       = 3
+		numFiles    = nodes + 2
+		rowsPerFile = 1000
+	)
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
@@ -360,10 +364,6 @@ func TestImportStmt(t *testing.T) {
 		t.Fatal(err)
 	}
 	var files []string
-	const (
-		numFiles    = 5
-		rowsPerFile = 100000
-	)
 	for fn := 0; fn < numFiles; fn++ {
 		path := filepath.Join(csvPath, fmt.Sprintf("data-%d", fn))
 		f, err := os.Create(path)
@@ -410,10 +410,23 @@ func TestImportStmt(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var result int
-			tc.args = append(tc.args, fmt.Sprintf("nodelocal://%s", filepath.Join(dir, t.Name())))
+			backupPath := fmt.Sprintf("nodelocal://%s", filepath.Join(dir, t.Name()))
+			tc.args = append(tc.args, backupPath)
 			sqlDB.QueryRow(fmt.Sprintf(tc.query, strings.Join(files, ", ")), tc.args...).Scan(&result)
 			if expected := 1; result < expected {
 				t.Errorf("expected >= %d, got %d", expected, result)
+			}
+
+			// Verify correct number of rows with RESTORE.
+			sqlDB.Exec(`DROP DATABASE IF EXISTS CSV`)
+			sqlDB.Exec(`CREATE DATABASE CSV`)
+			sqlDB.Exec(
+				`RESTORE csv.* FROM $1`,
+				fmt.Sprintf("nodelocal://%s", backupPath),
+			)
+			sqlDB.QueryRow(`SELECT count(*) FROM csv.t`).Scan(&result)
+			if expect := numFiles * rowsPerFile; result != expect {
+				t.Fatalf("expected %d rows, got %d", expect, result)
 			}
 		})
 	}
