@@ -1308,7 +1308,7 @@ func evalRangeLookup(
 		// never happen with the above logic.
 		var buf bytes.Buffer
 		buf.WriteString("range lookup of meta key '")
-		buf.Write(args.Key)
+		buf.WriteString(args.Key.String())
 		buf.WriteString("' found only non-matching ranges:")
 		for _, desc := range reply.PrefetchedRanges {
 			buf.WriteByte('\n')
