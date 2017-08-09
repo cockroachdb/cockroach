@@ -469,11 +469,24 @@ func newProcessor(
 		}
 		return NewReadCSVProcessor(flowCtx, *core.ReadCSV, outputs[0])
 	}
+	if core.SSTWriter != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		if NewSSTWriterProcessor == nil {
+			return nil, errors.New("SSTWriter processor unimplemented")
+		}
+		return NewSSTWriterProcessor(flowCtx, *core.SSTWriter, inputs[0], outputs[0])
+	}
 	return nil, errors.Errorf("unsupported processor core %s", core)
 }
 
 // NewReadCSVProcessor is externally implemented.
 var NewReadCSVProcessor func(*FlowCtx, ReadCSVSpec, RowReceiver) (Processor, error)
+
+// NewSSTWriterProcessor is externally implemented and registered by
+// ccl/sqlccl/csv.go.
+var NewSSTWriterProcessor func(*FlowCtx, SSTWriterSpec, RowSource, RowReceiver) (Processor, error)
 
 // Equals returns true if two aggregation specifiers are identical (and thus
 // will always yield the same result).
