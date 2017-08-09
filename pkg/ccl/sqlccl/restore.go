@@ -95,7 +95,7 @@ func selectTargets(
 // into their original database (or the database specified in opst) to avoid
 // leaking table IDs if we can be sure the restore would fail.
 func allocateTableRewrites(
-	ctx context.Context, p sql.PlanHookState, sqlDescs []sqlbase.Descriptor, opts parser.KVOptions,
+	ctx context.Context, p sql.PlanHookState, sqlDescs []sqlbase.Descriptor, opts map[string]string,
 ) (tableRewriteMap, error) {
 	tableRewrites := make(tableRewriteMap)
 
@@ -115,7 +115,7 @@ func allocateTableRewrites(
 	// Fail fast if the tables to restore are incompatible with the specified
 	// options.
 	for _, table := range tablesByID {
-		if _, renaming := opts.Get(restoreOptIntoDB); renaming && table.IsView() {
+		if _, renaming := opts[restoreOptIntoDB]; renaming && table.IsView() {
 			return nil, errors.Errorf("cannot restore view when using %q option", restoreOptIntoDB)
 		}
 
@@ -123,7 +123,7 @@ func allocateTableRewrites(
 			if index.ForeignKey.IsSet() {
 				to := index.ForeignKey.Table
 				if _, ok := tablesByID[to]; !ok {
-					if empty, ok := opts.Get(restoreOptSkipMissingFKs); ok {
+					if empty, ok := opts[restoreOptSkipMissingFKs]; ok {
 						if empty != "" {
 							return errors.Errorf("option %q does not take a value", restoreOptSkipMissingFKs)
 						}
@@ -150,7 +150,7 @@ func allocateTableRewrites(
 			var parentID sqlbase.ID
 			{
 				var targetDB string
-				if override, ok := opts.Get(restoreOptIntoDB); ok {
+				if override, ok := opts[restoreOptIntoDB]; ok {
 					targetDB = override
 				} else {
 					database, ok := databasesByID[table.ParentID]
@@ -855,6 +855,11 @@ func restorePlanHook(
 		return nil, nil, err
 	}
 
+	optsFn, err := p.TypeAsStringOpts(restoreStmt.Options)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	header := sqlbase.ResultColumns{
 		{Name: "job_id", Typ: parser.TypeInt},
 		{Name: "status", Typ: parser.TypeString},
@@ -873,6 +878,10 @@ func restorePlanHook(
 		if err != nil {
 			return err
 		}
+		opts, err := optsFn()
+		if err != nil {
+			return err
+		}
 		backupDescs, err := loadBackupDescs(ctx, from)
 		if err != nil {
 			return err
@@ -881,7 +890,7 @@ func restorePlanHook(
 		if err != nil {
 			return err
 		}
-		tableRewrites, err := allocateTableRewrites(ctx, p, sqlDescs, restoreStmt.Options)
+		tableRewrites, err := allocateTableRewrites(ctx, p, sqlDescs, opts)
 		if err != nil {
 			return err
 		}

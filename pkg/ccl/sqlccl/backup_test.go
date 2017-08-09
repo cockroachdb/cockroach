@@ -465,7 +465,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	if err := verifySystemJob(sqlDB, 2, jobs.TypeRestore, jobs.Record{
 		Username: security.RootUser,
 		Description: fmt.Sprintf(
-			`RESTORE data.* FROM '%s', '%s' WITH OPTIONS ('into_db'='restoredb')`,
+			`RESTORE data.* FROM '%s', '%s' WITH into_db = 'restoredb'`,
 			sanitizedFullDir, sanitizedIncDir,
 		),
 		DescriptorIDs: sqlbase.IDs{
