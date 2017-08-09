@@ -1852,6 +1852,23 @@ func mvccResolveWriteIntent(
 	// For cases where there's no write intent to resolve, or one exists
 	// which we can't resolve, this is a noop.
 	if !ok || meta.Txn == nil || !roachpb.TxnIDEqual(intent.Txn.ID, meta.Txn.ID) {
+		if intent.Status == roachpb.COMMITTED {
+			// The intent is being committed. Verify that it was already committed by
+			// looking for a value at the transaction timestamp. Note that this check
+			// has false positives, but such false positives should be very rare. See
+			// #9399 for details.
+			v, _, err := mvccGetUsingIter(ctx, iter, intent.Key, intent.Txn.Timestamp, false, nil)
+			if err != nil {
+				log.Warningf(ctx, "unable to find value for %s @ %s: %v ",
+					intent.Key, intent.Txn.Timestamp, err)
+			} else if v == nil {
+				log.Warningf(ctx, "unable to find value for %s @ %s",
+					intent.Key, intent.Txn.Timestamp)
+			} else if v.Timestamp != intent.Txn.Timestamp {
+				log.Warningf(ctx, "unable to find value for %s @ %s: %s",
+					intent.Key, intent.Txn.Timestamp, v.Timestamp)
+			}
+		}
 		return nil
 	}
 
