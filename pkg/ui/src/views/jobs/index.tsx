@@ -1,3 +1,4 @@
+import _ from "lodash";
 import moment from "moment";
 import { Line } from "rc-progress";
 import React from "react";
@@ -24,6 +25,8 @@ const statusOptions = [
   { value: "", label: "All" },
   { value: "pending", label: "Pending" },
   { value: "running", label: "Running" },
+  { value: "paused", label: "Paused" },
+  { value: "canceled", label: "Canceled" },
   { value: "succeeded", label: "Succeeded" },
   { value: "failed", label: "Failed" },
 ];
@@ -64,8 +67,8 @@ class JobStatusCell extends React.Component<{job: Job}, {}> {
   }
 
   renderProgress() {
-    if (this.is("succeeded", "failed")) {
-      return <span className="jobs-table__status">{this.props.job.status}</span>;
+    if (this.is("succeeded", "failed", "canceled")) {
+      return <div className="jobs-table__status">{this.props.job.status}</div>;
     }
     const percent = this.props.job.fraction_completed * 100;
     return <div>
@@ -78,8 +81,8 @@ class JobStatusCell extends React.Component<{job: Job}, {}> {
     const started = TimestampToMoment(this.props.job.started);
     const finished = TimestampToMoment(this.props.job.finished);
     const modified = TimestampToMoment(this.props.job.modified);
-    if (this.is("pending")) {
-      return "Pending";
+    if (this.is("pending", "paused")) {
+      return _.capitalize(this.props.job.status);
     } else if (this.is("running")) {
       const remainingMillis = modified.diff(started) / this.props.job.fraction_completed;
       return formatDuration(moment.duration(remainingMillis)) + " remaining";
