@@ -152,6 +152,14 @@ func (s *Scanner) SetHelp(msg HelpMessage) {
 	if s.lastTok.id == HELPTOKEN {
 		s.lastError.unimplementedFeature = ""
 		s.lastError.msg = msg.String()
+	} else {
+		var suggestion string
+		if msg.Command != "" {
+			suggestion = `Suggestion: try \h ` + msg.Command
+		} else {
+			suggestion = `Suggestion: try \hf ` + msg.Function
+		}
+		s.lastError.msg += suggestion
 	}
 }
 

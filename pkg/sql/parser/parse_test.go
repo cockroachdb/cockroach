@@ -1056,7 +1056,7 @@ SELECT2 1
 		{`SELECT 1 FROM (t)`, `syntax error at or near ")"
 SELECT 1 FROM (t)
                 ^
-`},
+Suggestion: try \h <SOURCE>`},
 		{`SET a = 1, b = 2`, `syntax error at or near "="
 SET a = 1, b = 2
              ^
@@ -1082,12 +1082,12 @@ SELECT 1 /* hello
 		{`SELECT '1`, `unterminated string
 SELECT '1
        ^
-`},
+Suggestion: try \h SELECT`},
 		{`SELECT * FROM t WHERE k=`,
 			`syntax error at or near "EOF"
 SELECT * FROM t WHERE k=
                         ^
-`,
+Suggestion: try \h SELECT`,
 		},
 		{`CREATE TABLE test (
   CONSTRAINT foo INDEX (bar)
@@ -1095,7 +1095,7 @@ SELECT * FROM t WHERE k=
 CREATE TABLE test (
   CONSTRAINT foo INDEX (bar)
                  ^
-`},
+Suggestion: try \h CREATE TABLE`},
 		{`CREATE TABLE test (
   foo BIT(0)
 )`, `length for type bit must be at least 1 at or near ")"
@@ -1157,28 +1157,28 @@ CREATE DATABASE a b c
 			`syntax error at or near ")"
 CREATE INDEX ON a (b) STORING ()
                                ^
-`},
+Suggestion: try \h CREATE INDEX`},
 		{`CREATE VIEW a`,
 			`syntax error at or near "EOF"
 CREATE VIEW a
              ^
-`},
+Suggestion: try \h CREATE VIEW`},
 		{`CREATE VIEW a () AS select * FROM b`,
 			`syntax error at or near ")"
 CREATE VIEW a () AS select * FROM b
                ^
-`},
+Suggestion: try \h CREATE VIEW`},
 		{`SELECT FROM t`,
 			`syntax error at or near "from"
 SELECT FROM t
        ^
-`},
+Suggestion: try \h SELECT`},
 
 		{"SELECT 1e-\n-1",
 			`invalid floating point literal
 SELECT 1e-
        ^
-`},
+Suggestion: try \h SELECT`},
 		{"SELECT foo''",
 			`syntax error at or near ""
 SELECT foo''
@@ -1189,42 +1189,42 @@ SELECT foo''
 			`invalid hexadecimal numeric literal
 SELECT 0x FROM t
        ^
-`,
+Suggestion: try \h SELECT`,
 		},
 		{
 			`SELECT x'fail' FROM t`,
 			`invalid hexadecimal bytes literal
 SELECT x'fail' FROM t
        ^
-`,
+Suggestion: try \h SELECT`,
 		},
 		{
 			`SELECT x'AAB' FROM t`,
 			`invalid hexadecimal bytes literal
 SELECT x'AAB' FROM t
        ^
-`,
+Suggestion: try \h SELECT`,
 		},
 		{
 			`SELECT POSITION('high', 'a')`,
 			`syntax error at or near ","
 SELECT POSITION('high', 'a')
                       ^
-`,
+Suggestion: try \h SELECT`,
 		},
 		{
 			`SELECT a FROM foo@{FORCE_INDEX}`,
 			`syntax error at or near "}"
 SELECT a FROM foo@{FORCE_INDEX}
                               ^
-`,
+Suggestion: try \h <SOURCE>`,
 		},
 		{
 			`SELECT a FROM foo@{FORCE_INDEX=}`,
 			`syntax error at or near "}"
 SELECT a FROM foo@{FORCE_INDEX=}
                                ^
-`,
+Suggestion: try \h <SOURCE>`,
 		},
 		{
 			`SELECT a FROM foo@{FORCE_INDEX=bar,FORCE_INDEX=baz}`,
@@ -1259,35 +1259,35 @@ SELECT a FROM foo@{NO_INDEX_JOIN,FORCE_INDEX=baz,NO_INDEX_JOIN}
 			`syntax error at or near "@"
 INSERT INTO a@b VALUES (1, 2)
              ^
-`,
+Suggestion: try \h INSERT`,
 		},
 		{
 			`ALTER TABLE t RENAME COLUMN x TO family`,
 			`syntax error at or near "family"
 ALTER TABLE t RENAME COLUMN x TO family
                                  ^
-`,
+Suggestion: try \h ALTER TABLE`,
 		},
 		{
 			`SELECT CAST(1.2+2.3 AS notatype)`,
 			`syntax error at or near "notatype"
 SELECT CAST(1.2+2.3 AS notatype)
                        ^
-`,
+Suggestion: try \h SELECT`,
 		},
 		{
 			`SELECT ANNOTATE_TYPE(1.2+2.3, notatype)`,
 			`syntax error at or near "notatype"
 SELECT ANNOTATE_TYPE(1.2+2.3, notatype)
                               ^
-`,
+Suggestion: try \h SELECT`,
 		},
 		{
 			`CREATE USER foo WITH PASSWORD`,
 			`syntax error at or near "EOF"
 CREATE USER foo WITH PASSWORD
                              ^
-`,
+Suggestion: try \h CREATE USER`,
 		},
 		{
 			`ALTER TABLE t RENAME TO t[TRUE]`,
@@ -1315,7 +1315,7 @@ TABLE abc[TRUE]
 			`syntax error at or near "["
 UPDATE kv SET k[0] = 9
                ^
-`,
+Suggestion: try \h UPDATE`,
 		},
 		{
 			`SELECT (ARRAY['a', 'b', 'c']).name`,
@@ -1336,7 +1336,7 @@ SELECT (0) FROM y[array[]]
 			`syntax error at or near "["
 INSERT INTO kv (k[0]) VALUES ('hello')
                  ^
-`,
+Suggestion: try \h <SELECTCLAUSE>`,
 		},
 		{
 			`SELECT CASE 1 = 1 WHEN true THEN ARRAY[1, 2] ELSE ARRAY[2, 3] END[1]`,
