@@ -24,7 +24,6 @@ type Import struct {
 	FileFormat string
 	Files      Exprs
 	Options    KVOptions
-	Temp       Expr
 }
 
 var _ Statement = &Import{}
@@ -50,11 +49,7 @@ func (node *Import) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(") ")
 
 	if node.Options != nil {
-		buf.WriteString("WITH OPTIONS (")
+		buf.WriteString("WITH ")
 		FormatNode(buf, f, node.Options)
-		buf.WriteString(") ")
 	}
-
-	buf.WriteString("USING TEMP STORE ")
-	FormatNode(buf, f, node.Temp)
 }

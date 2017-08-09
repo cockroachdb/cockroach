@@ -386,34 +386,57 @@ func TestImportStmt(t *testing.T) {
 		name  string
 		query string        // must have one `%s` for the files list.
 		args  []interface{} // will have backupPath appended
+		err   string
 	}{
 		{
 			"schema-in-file",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) USING TEMP STORE $2`,
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2`,
 			[]interface{}{fmt.Sprintf("nodelocal://%s", tablePath)},
+			"",
 		},
 		{
 			"schema-in-query",
-			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) USING TEMP STORE $1`,
+			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) WITH temp = $1`,
 			nil,
+			"",
 		},
 		{
 			"schema-in-file-dist",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH OPTIONS ('distributed') USING TEMP STORE $2`,
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, distributed`,
 			[]interface{}{fmt.Sprintf("nodelocal://%s", tablePath)},
+			"",
 		},
 		{
 			"schema-in-query-dist",
-			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) WITH OPTIONS ('distributed') USING TEMP STORE $1`,
+			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) WITH temp = $1, distributed`,
 			nil,
+			"",
+		},
+		{
+			"missing-temp",
+			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s)`,
+			nil,
+			"must provide a temporary storage location",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			if strings.Contains(tc.query, "temp = $") {
+				tc.args = append(tc.args, fmt.Sprintf("nodelocal://%s", filepath.Join(dir, t.Name())))
+			}
+
 			var result int
-			tc.args = append(tc.args, fmt.Sprintf("nodelocal://%s", filepath.Join(dir, t.Name())))
-			sqlDB.QueryRow(fmt.Sprintf(tc.query, strings.Join(files, ", ")), tc.args...).Scan(&result)
-			if expected := 1; result < expected {
-				t.Errorf("expected >= %d, got %d", expected, result)
+			err := sqlDB.DB.QueryRow(
+				fmt.Sprintf(tc.query, strings.Join(files, ", ")), tc.args...,
+			).Scan(&result)
+
+			if err != nil {
+				if !testutils.IsError(err, tc.err) {
+					t.Fatal(err)
+				}
+			} else {
+				if expected := 1; result < expected {
+					t.Errorf("expected >= %d, got %d", expected, result)
+				}
 			}
 		})
 	}
