@@ -610,6 +610,25 @@ func TestCommandQueueTimestampsEmpty(t *testing.T) {
 	}
 }
 
+// cmdOps holds options for commands inserted into the CommandQueue.
+type cmdOps struct {
+	readOnly bool
+	ts       hlc.Timestamp
+	spans    []roachpb.Span
+}
+
+func (ops cmdOps) String() string {
+	var b bytes.Buffer
+	if ops.readOnly {
+		b.WriteByte('R')
+	} else {
+		b.WriteByte('W')
+	}
+	fmt.Fprint(&b, ops.ts.WallTime)
+	fmt.Fprint(&b, ops.spans)
+	return b.String()
+}
+
 // TestCommandQueueTransitiveDependencies verifies that if a dependency relation
 // between commands inserted into the CommandQueue should exist, it is always
 // transitively maintained even if other commands are inserted between them. This
@@ -625,23 +644,6 @@ func TestCommandQueueTimestampsEmpty(t *testing.T) {
 // serializability.
 func TestCommandQueueTransitiveDependencies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	type cmdOps struct {
-		readOnly bool
-		ts       hlc.Timestamp
-		spans    []roachpb.Span
-	}
-	cmdOpsStr := func(ops cmdOps) string {
-		var b bytes.Buffer
-		if ops.readOnly {
-			b.WriteByte('R')
-		} else {
-			b.WriteByte('W')
-		}
-		fmt.Fprint(&b, ops.ts.WallTime)
-		fmt.Fprint(&b, ops.spans)
-		return b.String()
-	}
 
 	spansAB := []roachpb.Span{
 		mkSpan("a", "b"),
@@ -659,10 +661,7 @@ func TestCommandQueueTransitiveDependencies(t *testing.T) {
 		for _, readOnly := range []bool{false, true} {
 			for _, ts := range []hlc.Timestamp{zeroTS, makeTS(1, 0), makeTS(2, 0)} {
 				for _, spans := range [][]roachpb.Span{spansAB, spansAC, spansBC} {
-					ops := cmdOps{readOnly: readOnly, ts: ts, spans: spans}
-					t.Run(cmdOpsStr(ops), func(t *testing.T) {
-						f(t, ops)
-					})
+					f(t, cmdOps{readOnly: readOnly, ts: ts, spans: spans})
 				}
 			}
 		}
@@ -718,7 +717,8 @@ func TestCommandQueueTransitiveDependencies(t *testing.T) {
 					// Assert that a dependency still exists between command 3
 					// and command 1, either directly or through command 2.
 					if !(dependency3to1 || (dependency3to2 && dependency2to1)) {
-						t.Errorf("expected transitive dependency, found: 3->1=%t, 2->1=%t, 3->2=%t",
+						t.Errorf("1=%s, 2=%s, 3=%s: expected transitive dependency, found: "+
+							"3->1=%t, 2->1=%t, 3->2=%t", ops1, ops2, ops2,
 							dependency3to1, dependency2to1, dependency3to2)
 					}
 				}
