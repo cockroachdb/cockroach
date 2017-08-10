@@ -1136,10 +1136,12 @@ func (e *Executor) execStmtsInCurrentTxn(
 		queryMeta.ctx = txnState.Ctx
 		queryMeta.ctxCancel = txnState.cancel
 
+		// For parallel/async queries, we deregister queryMeta from these registries
+		// after execution finishes in the parallelizeQueue. For all other (synchronous) queries,
+		// we deregister these in session.FinishPlan when all results have been sent. We cannot
+		// deregister asynchronous queries in session.FinishPlan because they may still be
+		// executing at that instant.
 		session.addActiveQuery(queryID, queryMeta)
-		defer session.removeActiveQuery(queryID)
-		e.cfg.QueryRegistry.register(queryID, queryMeta)
-		defer e.cfg.QueryRegistry.deregister(queryID)
 
 		var stmtStrBefore string
 		// TODO(nvanbenschoten): Constant literals can change their representation (1.0000 -> 1) when type checking,
@@ -1858,7 +1860,7 @@ func (e *Executor) execStmt(
 	}
 
 	planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
-	session.setQueryExecutionMode(stmt.queryID, useDistSQL)
+	session.setQueryExecutionMode(stmt.queryID, useDistSQL, false /* isParallel */)
 	if useDistSQL {
 		err = e.execDistSQL(planner, plan, statementResultWriter)
 	} else {
@@ -1902,6 +1904,10 @@ func (e *Executor) execStmtInParallel(
 		return err
 	}
 
+	// This ensures we don't unintentionally clean up the queryMeta object when we
+	// send the mock result back to the client.
+	session.setQueryExecutionMode(stmt.queryID, false /* isDistributed */, true /* isParallel */)
+
 	session.parallelizeQueue.Add(ctx, plan, func(plan planNode) error {
 		// TODO(andrei): this should really be a result writer implementation that
 		// does nothing.
@@ -1924,6 +1930,8 @@ func (e *Executor) execStmtInParallel(
 		}
 		results := bufferedWriter.results()
 		results.Close(ctx)
+		// Deregister query from registry.
+		session.removeActiveQuery(stmt.queryID)
 		return err
 	})
 	return statementResultWriter.EndResult()
