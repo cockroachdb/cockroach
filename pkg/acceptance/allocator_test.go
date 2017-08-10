@@ -184,10 +184,10 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 	at.f.Assert(ctx, t)
 
 	log.Infof(ctx, "starting load on cluster")
-	if err := at.f.StartLoad(ctx, "block_writer", *flagCLTWriters); err != nil {
+	if err := at.f.StartLoad(ctx, "block_writer"); err != nil {
 		t.Fatal(err)
 	}
-	if err := at.f.StartLoad(ctx, "photos", *flagCLTWriters); err != nil {
+	if err := at.f.StartLoad(ctx, "photos"); err != nil {
 		t.Fatal(err)
 	}
 
