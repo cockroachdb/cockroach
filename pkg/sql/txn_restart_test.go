@@ -319,7 +319,9 @@ func (ta *TxnAborter) GetExecCount(stmt string) (int, bool) {
 	return 0, false
 }
 
-func (ta *TxnAborter) statementFilter(ctx context.Context, stmt string, res *sql.Result) {
+func (ta *TxnAborter) statementFilter(
+	ctx context.Context, stmt string, r sql.ResultWriter, err error,
+) error {
 	ta.mu.Lock()
 	ri, ok := ta.mu.stmtsToAbort[stmt]
 	shouldAbort := false
@@ -329,7 +331,7 @@ func (ta *TxnAborter) statementFilter(ctx context.Context, stmt string, res *sql
 			log.VEventf(ctx, 1, "TxnAborter sees satisfied statement %q", stmt)
 			ri.satisfied = true
 		}
-		if ri.abortCount > 0 && res.Err == nil {
+		if ri.abortCount > 0 && err == nil {
 			log.Infof(ctx, "TxnAborter aborting txn for statement %q", stmt)
 			ri.abortCount--
 			shouldAbort = true
@@ -338,9 +340,10 @@ func (ta *TxnAborter) statementFilter(ctx context.Context, stmt string, res *sql
 	ta.mu.Unlock()
 	if shouldAbort {
 		if err := ta.abortTxn(ri.key); err != nil {
-			res.Err = errors.Wrap(err, "TxnAborter failed to abort")
+			return errors.Wrap(err, "TxnAborter failed to abort")
 		}
 	}
+	return nil
 }
 
 // executorKnobs are the bridge between the TxnAborter and the sql.Executor.
@@ -1512,9 +1515,9 @@ func TestPushedTxnDetectionInFirstBatch(t *testing.T) {
 	var s serverutils.TestServerInterface
 	params, _ := createTestServerParams()
 	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
-		StatementFilter: func(ctx context.Context, stmt string, r *sql.Result) {
+		StatementFilter: func(ctx context.Context, stmt string, r sql.ResultWriter, err error) error {
 			if atomic.LoadInt64(&injectRead) == 0 {
-				return
+				return nil
 			}
 			if strings.Contains(stmt, marker) {
 				// Outside of the transaction, do a read. This will conflict with the
@@ -1525,6 +1528,7 @@ func TestPushedTxnDetectionInFirstBatch(t *testing.T) {
 				// Only do the filter once, to allow retries to succeed.
 				atomic.StoreInt64(&injectRead, 0)
 			}
+			return nil
 		},
 	}
 	s, sqlDB, _ = serverutils.StartServer(t, params)

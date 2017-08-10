@@ -53,8 +53,14 @@ func TestCancelSelectQuery(t *testing.T) {
 
 	go func() {
 		sem <- struct{}{}
-		_, err := conn2.Query(queryToCancel)
+		rows, err := conn2.Query(queryToCancel)
 		if err != nil {
+			errChan <- err
+			return
+		}
+		for rows.Next() {
+		}
+		if err = rows.Err(); err != nil {
 			errChan <- err
 		}
 	}()
@@ -109,7 +115,7 @@ func TestCancelParallelQuery(t *testing.T) {
 								<-sem
 							}
 						},
-						AfterExecute: func(ctx context.Context, stmt string, res *sql.Result, err error) {
+						AfterExecute: func(ctx context.Context, stmt string, resultWriter sql.StatementResultWriter, err error) {
 							// if queryToBlock
 							if strings.Contains(stmt, "(1)") {
 								// Ensure queryToBlock errored out with the cancellation error.

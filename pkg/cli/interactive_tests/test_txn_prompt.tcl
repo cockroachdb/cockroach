@@ -46,7 +46,7 @@ eexpect "\nROLLBACK\r\n"
 eexpect root@
 
 send "BEGIN; SAVEPOINT cockroach_restart;\r\r"
-eexpect OK
+eexpect SAVEPOINT
 eexpect root@
 send "SELECT 1;\r"
 eexpect "1 row"
@@ -62,7 +62,7 @@ send "COMMIT;\r"
 eexpect root@
 
 send "BEGIN; SAVEPOINT cockroach_restart;\r\r"
-eexpect OK
+eexpect SAVEPOINT
 eexpect root@
 send "SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL);\r"
 eexpect "pq: restart transaction"
@@ -72,7 +72,7 @@ end_test
 
 start_test "Test that prompt reverts to OPEN at beginning of new attempt."
 send "ROLLBACK TO SAVEPOINT cockroach_restart;\r"
-eexpect OK
+eexpect ROLLBACK
 eexpect root@
 eexpect "OPEN>"
 end_test
