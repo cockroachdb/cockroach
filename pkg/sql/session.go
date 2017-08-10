@@ -237,6 +237,12 @@ type Session struct {
 	// indicate to Finish() that the session is already closed.
 	emergencyShutdown bool
 
+	// ResultWriter is where the results of query/statement should be written
+	// to, including errors when they happen. This corresponds to a network
+	// connection (pgwire.v3conn) for client connections and a
+	// bufferedResultWriter for internal uses.
+	ResultWriter ResultWriter
+
 	Tracing SessionTracing
 
 	tables TableCollection
@@ -1039,15 +1045,10 @@ type schemaChangerCollection struct {
 	// from, so we can map failures back to the statement that produced them.
 	curGroupNum int
 
-	// The index of the current statement, relative to its group. For statements
-	// that have been received from the client in the same batch, the
-	// group consists of all statements in the same transaction.
-	curStatementIdx int
 	// schema change callbacks together with the index of the statement
 	// that enqueued it (within its group of statements).
 	schemaChangers []struct {
 		epoch int
-		idx   int
 		sc    SchemaChanger
 	}
 }
@@ -1057,9 +1058,8 @@ func (scc *schemaChangerCollection) queueSchemaChanger(schemaChanger SchemaChang
 		scc.schemaChangers,
 		struct {
 			epoch int
-			idx   int
 			sc    SchemaChanger
-		}{scc.curGroupNum, scc.curStatementIdx, schemaChanger})
+		}{scc.curGroupNum, schemaChanger})
 }
 
 // execSchemaChanges releases schema leases and runs the queued
@@ -1067,14 +1067,9 @@ func (scc *schemaChangerCollection) queueSchemaChanger(schemaChanger SchemaChang
 // scheduling the schema change has finished.
 //
 // The list of closures is cleared after (attempting) execution.
-//
-// Args:
-//  results: The results from all statements in the group that scheduled the
-//    schema changes we're about to execute. Results corresponding to the
-//    schema change statements will be changed in case an error occurs.
 func (scc *schemaChangerCollection) execSchemaChanges(
-	ctx context.Context, e *Executor, session *Session, results ResultList,
-) {
+	ctx context.Context, e *Executor, session *Session,
+) error {
 	// Release the leases once a transaction is complete.
 	session.tables.releaseTables(ctx)
 	if e.cfg.SchemaChangerTestingKnobs.SyncFilter != nil {
@@ -1082,6 +1077,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 	}
 	// Execute any schema changes that were scheduled, in the order of the
 	// statements that scheduled them.
+	var firstError error
 	for _, scEntry := range scc.schemaChangers {
 		sc := &scEntry.sc
 		sc.db = *e.cfg.DB
@@ -1103,8 +1099,8 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 					// There's also another subtlety: we can only report results for
 					// statements in the current batch; we can't modify the results of older
 					// statements.
-					if scEntry.epoch == scc.curGroupNum {
-						results[scEntry.idx] = Result{Err: err}
+					if scEntry.epoch == scc.curGroupNum && firstError == nil {
+						firstError = err
 					}
 				} else {
 					// retryable error.
@@ -1115,6 +1111,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		}
 	}
 	scc.schemaChangers = scc.schemaChangers[:0]
+	return firstError
 }
 
 // maybeRecover catches SQL panics and does some log reporting before

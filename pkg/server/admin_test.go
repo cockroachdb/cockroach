@@ -242,12 +242,11 @@ func TestAdminAPIDatabases(t *testing.T) {
 	session.StartUnlimitedMonitor()
 	defer session.Finish(ts.sqlExecutor)
 	query := "CREATE DATABASE " + testdb
-	createRes := ts.sqlExecutor.ExecuteStatements(session, query, nil)
-	defer createRes.Close(ctx)
-
-	if createRes.ResultList[0].Err != nil {
-		t.Fatal(createRes.ResultList[0].Err)
+	createRes, err := ts.sqlExecutor.ExecuteStatementsBuffered(session, query, nil, 1)
+	if err != nil {
+		t.Fatal(err)
 	}
+	defer createRes.Close(ctx)
 
 	var resp serverpb.DatabasesResponse
 	if err := getAdminJSONProto(s, "databases", &resp); err != nil {
@@ -270,11 +269,11 @@ func TestAdminAPIDatabases(t *testing.T) {
 	privileges := []string{"SELECT", "UPDATE"}
 	testuser := "testuser"
 	grantQuery := "GRANT " + strings.Join(privileges, ", ") + " ON DATABASE " + testdb + " TO " + testuser
-	grantRes := s.(*TestServer).sqlExecutor.ExecuteStatements(session, grantQuery, nil)
-	defer grantRes.Close(ctx)
-	if grantRes.ResultList[0].Err != nil {
-		t.Fatal(grantRes.ResultList[0].Err)
+	grantRes, err := s.(*TestServer).sqlExecutor.ExecuteStatementsBuffered(session, grantQuery, nil, 1)
+	if err != nil {
+		t.Fatal(err)
 	}
+	defer grantRes.Close(ctx)
 
 	var details serverpb.DatabaseDetailsResponse
 	if err := getAdminJSONProto(s, "databases/"+testdb, &details); err != nil {
@@ -440,11 +439,11 @@ func TestAdminAPITableDetails(t *testing.T) {
 			}
 
 			for _, q := range setupQueries {
-				res := ts.sqlExecutor.ExecuteStatements(session, q, nil)
-				defer res.Close(ctx)
-				if res.ResultList[0].Err != nil {
-					t.Fatalf("error executing '%s': %s", q, res.ResultList[0].Err)
+				res, err := ts.sqlExecutor.ExecuteStatementsBuffered(session, q, nil, 1)
+				if err != nil {
+					t.Fatalf("error executing '%s': %s", q, err)
 				}
+				res.Close(ctx)
 			}
 
 			// Perform API call.
@@ -521,13 +520,13 @@ func TestAdminAPITableDetails(t *testing.T) {
 				const createTableCol = "CreateTable"
 				showCreateTableQuery := fmt.Sprintf("SHOW CREATE TABLE %s.%s", escDBName, escTblName)
 
-				resSet := ts.sqlExecutor.ExecuteStatements(session, showCreateTableQuery, nil)
-				defer resSet.Close(ctx)
-				res := resSet.ResultList[0]
-				if res.Err != nil {
-					t.Fatalf("error executing '%s': %s", showCreateTableQuery, res.Err)
+				resSet, err := ts.sqlExecutor.ExecuteStatementsBuffered(session, showCreateTableQuery, nil, 1)
+				if err != nil {
+					t.Fatalf("error executing '%s': %s", showCreateTableQuery, err)
 				}
+				defer resSet.Close(ctx)
 
+				res := resSet.ResultList[0]
 				scanner := makeResultScanner(res.Columns)
 				var createStmt string
 				if err := scanner.Scan(res.Rows.At(0), createTableCol, &createStmt); err != nil {
@@ -571,11 +570,11 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 		"CREATE TABLE test.tbl (val STRING)",
 	}
 	for _, q := range setupQueries {
-		res := ts.sqlExecutor.ExecuteStatements(session, q, nil)
-		defer res.Close(ctx)
-		if res.ResultList[0].Err != nil {
-			t.Fatalf("error executing '%s': %s", q, res.ResultList[0].Err)
+		res, err := ts.sqlExecutor.ExecuteStatementsBuffered(session, q, nil, 1)
+		if err != nil {
+			t.Fatalf("error executing '%s': %s", q, err)
 		}
+		res.Close(ctx)
 	}
 
 	// Function to verify the zone for table "test.tbl" as returned by the Admin
@@ -628,11 +627,11 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 		params := parser.MakePlaceholderInfo()
 		params.SetValue(`1`, parser.NewDInt(parser.DInt(id)))
 		params.SetValue(`2`, parser.NewDBytes(parser.DBytes(zoneBytes)))
-		res := ts.sqlExecutor.ExecuteStatements(session, query, &params)
-		defer res.Close(ctx)
-		if res.ResultList[0].Err != nil {
-			t.Fatalf("error executing '%s': %s", query, res.ResultList[0].Err)
+		res, err := ts.sqlExecutor.ExecuteStatementsBuffered(session, query, &params, 1)
+		if err != nil {
+			t.Fatalf("error executing '%s': %s", query, err)
 		}
+		res.Close(ctx)
 	}
 
 	// Verify zone matches cluster default.
@@ -680,13 +679,11 @@ func TestAdminAPIUsers(t *testing.T) {
 	query := `
 INSERT INTO system.users (username, "hashedPassword")
 VALUES ('admin', 'abc'), ('bob', 'xyz')`
-	res := ts.sqlExecutor.ExecuteStatements(session, query, nil)
-	defer res.Close(ctx)
-	if a, e := len(res.ResultList), 1; a != e {
-		t.Fatalf("len(results) %d != %d", a, e)
-	} else if res.ResultList[0].Err != nil {
-		t.Fatal(res.ResultList[0].Err)
+	res, err := ts.sqlExecutor.ExecuteStatementsBuffered(session, query, nil, 1)
+	if err != nil {
+		t.Fatal(err)
 	}
+	defer res.Close(ctx)
 
 	// Query the API for users.
 	var resp serverpb.UsersResponse
@@ -731,11 +728,11 @@ func TestAdminAPIEvents(t *testing.T) {
 		"DROP TABLE api_test.tbl2",
 	}
 	for _, q := range setupQueries {
-		res := ts.sqlExecutor.ExecuteStatements(session, q, nil)
-		defer res.Close(ctx)
-		if res.ResultList[0].Err != nil {
-			t.Fatalf("error executing '%s': %s", q, res.ResultList[0].Err)
+		res, err := ts.sqlExecutor.ExecuteStatementsBuffered(session, q, nil, 1)
+		if err != nil {
+			t.Fatalf("error executing '%s': %s", q, err)
 		}
+		res.Close(ctx)
 	}
 
 	const allEvents = ""

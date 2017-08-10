@@ -137,34 +137,11 @@ func (s *adminServer) serverErrors(errors []error) error {
 	return errAdminAPIError
 }
 
-// checkQueryResults performs basic tests on the provided query results and returns
-// the first error that was found.
-func (s *adminServer) checkQueryResults(results []sql.Result, numResults int) error {
-	if a, e := len(results), numResults; a != e {
-		return errors.Errorf("# of results %d != expected %d", a, e)
-	}
-
-	for _, result := range results {
-		if result.Err != nil {
-			return errors.Errorf("%s", result.Err)
-		}
-	}
-
-	return nil
-}
-
-// firstNotFoundError returns the first table/database not found error in the
-// provided results.
-func (s *adminServer) firstNotFoundError(results []sql.Result) error {
-	for _, res := range results {
-		// TODO(cdo): Replace this crude suffix-matching with something more structured once we have
-		// more structured errors.
-		if res.Err != nil && strings.HasSuffix(res.Err.Error(), "does not exist") {
-			return res.Err
-		}
-	}
-
-	return nil
+// isNotFoundError returns true if err is a table/database not found error.
+func (s *adminServer) isNotFoundError(err error) bool {
+	// TODO(cdo): Replace this crude suffix-matching with something more structured once we have
+	// more structured errors.
+	return err != nil && strings.HasSuffix(err.Error(), "does not exist")
 }
 
 // NewContextAndSessionForRPC creates a context and SQL session to be used for
@@ -186,11 +163,11 @@ func (s *adminServer) Databases(
 	args := sql.SessionArgs{User: s.getUser(req)}
 	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
 	defer session.Finish(s.server.sqlExecutor)
-	r := s.server.sqlExecutor.ExecuteStatements(session, "SHOW DATABASES;", nil)
-	defer r.Close(ctx)
-	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
+	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, "SHOW DATABASES;", nil, 1)
+	if err != nil {
 		return nil, s.serverError(err)
 	}
+	defer r.Close(ctx)
 
 	var resp serverpb.DatabasesResponse
 	for i, nRows := 0, r.ResultList[0].Rows.Len(); i < nRows; i++ {
@@ -227,14 +204,14 @@ func (s *adminServer) DatabaseDetails(
 	//
 	// TODO(cdo): Use placeholders when they're supported by SHOW.
 	query := fmt.Sprintf("SHOW GRANTS ON DATABASE %s; SHOW TABLES FROM %s;", escDBName, escDBName)
-	r := s.server.sqlExecutor.ExecuteStatements(session, query, nil)
-	defer r.Close(ctx)
-	if err := s.firstNotFoundError(r.ResultList); err != nil {
+	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, query, nil, 2)
+	if s.isNotFoundError(err) {
 		return nil, grpc.Errorf(codes.NotFound, "%s", err)
 	}
-	if err := s.checkQueryResults(r.ResultList, 2); err != nil {
+	if err != nil {
 		return nil, s.serverError(err)
 	}
+	defer r.Close(ctx)
 
 	// Marshal grants.
 	var resp serverpb.DatabaseDetailsResponse
@@ -327,14 +304,14 @@ func (s *adminServer) TableDetails(
 	escQualTable := fmt.Sprintf("%s.%s", escDBName, escTableName)
 	query := fmt.Sprintf("SHOW COLUMNS FROM %[1]s; SHOW INDEX FROM %[1]s; SHOW GRANTS ON TABLE %[1]s; SHOW CREATE TABLE %[1]s;",
 		escQualTable)
-	r := s.server.sqlExecutor.ExecuteStatements(session, query, nil)
-	defer r.Close(ctx)
-	if err := s.firstNotFoundError(r.ResultList); err != nil {
+	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, query, nil, 4)
+	if s.isNotFoundError(err) {
 		return nil, grpc.Errorf(codes.NotFound, "%s", err)
 	}
-	if err := s.checkQueryResults(r.ResultList, 4); err != nil {
-		return nil, err
+	if err != nil {
+		return nil, s.serverError(err)
 	}
+	defer r.Close(ctx)
 
 	var resp serverpb.TableDetailsResponse
 
@@ -663,11 +640,11 @@ func (s *adminServer) Users(
 	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
 	defer session.Finish(s.server.sqlExecutor)
 	query := "SELECT username FROM system.users"
-	r := s.server.sqlExecutor.ExecuteStatements(session, query, nil)
-	defer r.Close(ctx)
-	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
+	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, query, nil, 1)
+	if err != nil {
 		return nil, s.serverError(err)
 	}
+	defer r.Close(ctx)
 
 	var resp serverpb.UsersResponse
 	for i, nRows := 0, r.ResultList[0].Rows.Len(); i < nRows; i++ {
@@ -712,11 +689,11 @@ func (s *adminServer) Events(
 	if len(q.Errors()) > 0 {
 		return nil, s.serverErrors(q.Errors())
 	}
-	r := s.server.sqlExecutor.ExecuteStatements(session, q.String(), q.QueryArguments())
-	defer r.Close(ctx)
-	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
+	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, q.String(), q.QueryArguments(), 1)
+	if err != nil {
 		return nil, s.serverError(err)
 	}
+	defer r.Close(ctx)
 
 	// Marshal response.
 	var resp serverpb.EventsResponse
@@ -776,11 +753,11 @@ func (s *adminServer) RangeLog(
 	if len(q.Errors()) > 0 {
 		return nil, s.serverErrors(q.Errors())
 	}
-	r := s.server.sqlExecutor.ExecuteStatements(session, q.String(), q.QueryArguments())
-	defer r.Close(ctx)
-	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
+	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, q.String(), q.QueryArguments(), 1)
+	if err != nil {
 		return nil, s.serverError(err)
 	}
+	defer r.Close(ctx)
 
 	// Marshal response.
 	var resp serverpb.RangeLogResponse
@@ -860,11 +837,11 @@ func (s *adminServer) getUIData(
 	if err := query.Errors(); err != nil {
 		return nil, s.serverErrorf("error constructing query: %v", err)
 	}
-	r := s.server.sqlExecutor.ExecuteStatements(session, query.String(), query.QueryArguments())
-	defer r.Close(ctx)
-	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
+	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, query.String(), query.QueryArguments(), 1)
+	if err != nil {
 		return nil, s.serverError(err)
 	}
+	defer r.Close(ctx)
 
 	// Marshal results.
 	resp := serverpb.GetUIDataResponse{KeyValues: make(map[string]serverpb.GetUIDataResponse_Value)}
@@ -911,11 +888,11 @@ func (s *adminServer) SetUIData(
 		qargs := parser.MakePlaceholderInfo()
 		qargs.SetValue(`1`, parser.NewDString(key))
 		qargs.SetValue(`2`, parser.NewDBytes(parser.DBytes(val)))
-		r := s.server.sqlExecutor.ExecuteStatements(session, query, &qargs)
-		defer r.Close(ctx)
-		if err := s.checkQueryResults(r.ResultList, 1); err != nil {
+		r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, query, &qargs, 1)
+		if err != nil {
 			return nil, s.serverError(err)
 		}
+		defer r.Close(ctx)
 		if a, e := r.ResultList[0].RowsAffected, 1; a != e {
 			return nil, s.serverErrorf("rows affected %d != expected %d", a, e)
 		}
@@ -1033,11 +1010,11 @@ func (s *adminServer) Jobs(
 	if req.Limit > 0 {
 		q.Append(" LIMIT $", parser.NewDInt(parser.DInt(req.Limit)))
 	}
-	r := s.server.sqlExecutor.ExecuteStatements(session, q.String(), q.QueryArguments())
-	defer r.Close(ctx)
-	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
+	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, q.String(), q.QueryArguments(), 1)
+	if err != nil {
 		return nil, s.serverError(err)
 	}
+	defer r.Close(ctx)
 
 	scanner := makeResultScanner(r.ResultList[0].Columns)
 	resp := serverpb.JobsResponse{
@@ -1089,11 +1066,11 @@ func (s *adminServer) QueryPlan(
 	explain := fmt.Sprintf(
 		"SELECT JSON FROM [EXPLAIN (distsql) %s]",
 		strings.Trim(req.Query, ";"))
-	r := s.server.sqlExecutor.ExecuteStatements(session, explain, nil)
-	defer r.Close(ctx)
-	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
+	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, explain, nil, 1)
+	if err != nil {
 		return nil, s.serverError(err)
 	}
+	defer r.Close(ctx)
 
 	row := r.ResultList[0].Rows.At(0)
 	dbDatum, ok := parser.AsDString(row[0])
@@ -1462,11 +1439,11 @@ func (s *adminServer) queryZone(
 	const query = `SELECT config FROM system.zones WHERE id = $1`
 	params := parser.MakePlaceholderInfo()
 	params.SetValue(`1`, parser.NewDInt(parser.DInt(id)))
-	r := s.server.sqlExecutor.ExecuteStatements(session, query, &params)
-	defer r.Close(ctx)
-	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
+	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, query, &params, 1)
+	if err != nil {
 		return config.ZoneConfig{}, false, err
 	}
+	defer r.Close(ctx)
 
 	result := r.ResultList[0]
 	if result.Rows.Len() == 0 {
@@ -1475,7 +1452,7 @@ func (s *adminServer) queryZone(
 
 	var zoneBytes []byte
 	scanner := resultScanner{}
-	err := scanner.ScanIndex(result.Rows.At(0), 0, &zoneBytes)
+	err = scanner.ScanIndex(result.Rows.At(0), 0, &zoneBytes)
 	if err != nil {
 		return config.ZoneConfig{}, false, err
 	}
@@ -1511,11 +1488,11 @@ func (s *adminServer) queryNamespaceID(
 	params := parser.MakePlaceholderInfo()
 	params.SetValue(`1`, parser.NewDInt(parser.DInt(parentID)))
 	params.SetValue(`2`, parser.NewDString(name))
-	r := s.server.sqlExecutor.ExecuteStatements(session, query, &params)
-	defer r.Close(ctx)
-	if err := s.checkQueryResults(r.ResultList, 1); err != nil {
+	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, query, &params, 1)
+	if err != nil {
 		return 0, err
 	}
+	defer r.Close(ctx)
 
 	result := r.ResultList[0]
 	if result.Rows.Len() == 0 {
@@ -1524,7 +1501,7 @@ func (s *adminServer) queryNamespaceID(
 
 	var id int64
 	scanner := resultScanner{}
-	err := scanner.ScanIndex(result.Rows.At(0), 0, &id)
+	err = scanner.ScanIndex(result.Rows.At(0), 0, &id)
 	if err != nil {
 		return 0, err
 	}
