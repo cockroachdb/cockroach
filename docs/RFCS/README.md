@@ -9,7 +9,7 @@ Before making major changes, consider sending an RFC for discussion.
 This is a lightweight design-document process that is inspired by the
 [process used by the rust project](https://github.com/rust-lang/rfcs).
 
-1. Copy `template.md` to a new file and fill in the details. Commit
+1. Copy `00000000_template.md` to a new file and fill in the details. Commit
    this version in your own fork of the repository or a branch.
 
 2. Submit a pull request to add your new file to the main repository.
@@ -23,12 +23,19 @@ This is a lightweight design-document process that is inspired by the
    channel du jour (https://forum.cockroachlabs.com/ at the time of
    this writing).
    The FCP should last a minimum of two working days to allow
-   collaborators to voice any last-minute concerns. If there is still
-   consensus to proceed after the FCP, change the `Status` field of the
-   document to `in-progress`, update the `RFC PR` field, and merge the
-   PR. If the project is rejected, either abandon the PR or merge it
+   collaborators to voice any last-minute concerns.
+
+4. If there is still consensus to proceed after the FCP:
+
+   - change the `Status` field of the document to `in-progress`;
+   - rename the RFC document to prefix it with the current date (`YYYYMMDD_`);
+   - update the `RFC PR` field;
+   - and merge the PR.
+
+   If the project is rejected, either abandon the PR or merge it
    with a status of `rejected` (depending on whether the document and
    discussion are worth preserving for posterity).
+
    Note that it is possible for an RFC to receive discussion after it
    has been approved and its PR merged, e.g. during implementation.
    While this is undesirable and should generally be avoided, such
