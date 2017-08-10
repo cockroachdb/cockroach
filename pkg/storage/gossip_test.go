@@ -142,15 +142,15 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 	// the replaced node's leases to time out, but has still shown itself to be
 	// long enough to avoid flakes.
 	serverArgs := base.TestServerArgs{
-		Addr:     util.IsolatedTestAddr.String(),
-		Insecure: true, // because our certs are only valid for 127.0.0.1
+		Addr:                     util.IsolatedTestAddr.String(),
+		Insecure:                 true, // because our certs are only valid for 127.0.0.1
+		RaftTickInterval:         50 * time.Millisecond,
+		RaftElectionTimeoutTicks: 10,
 		RetryOptions: retry.Options{
 			InitialBackoff: 10 * time.Millisecond,
 			MaxBackoff:     50 * time.Millisecond,
 		},
 	}
-	serverArgs.RaftTickInterval = 50 * time.Millisecond
-	serverArgs.RaftElectionTimeoutTicks = 10
 
 	tc := testcluster.StartTestCluster(t, 3,
 		base.TestClusterArgs{

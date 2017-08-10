@@ -63,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // rg1 returns a wrapping sender that changes all requests to range 0 to
@@ -735,10 +736,9 @@ func (m *multiTestContext) addStore(idx int) {
 	cfg := m.makeStoreConfig(idx)
 	ambient := log.AmbientContext{Tracer: cfg.Settings.Tracer}
 	m.populateDB(idx, stopper)
-	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 	m.nodeLivenesses[idx] = storage.NewNodeLiveness(
 		ambient, m.clocks[idx], m.dbs[idx], m.gossips[idx],
-		nlActive, nlRenewal,
+		cfg.RangeLeaseActiveDuration, cfg.RangeLeaseRenewalDuration,
 	)
 	m.populateStorePool(idx, m.nodeLivenesses[idx])
 	cfg.DB = m.dbs[idx]
@@ -884,10 +884,9 @@ func (m *multiTestContext) restartStore(i int) {
 	m.stoppers[i] = stopper
 	cfg := m.makeStoreConfig(i)
 	m.populateDB(i, stopper)
-	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 	m.nodeLivenesses[i] = storage.NewNodeLiveness(
-		log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer}, m.clocks[i], m.dbs[i], m.gossips[i],
-		nlActive, nlRenewal,
+		log.AmbientContext{Tracer: tracing.NewTracer()}, m.clocks[i], m.dbs[i], m.gossips[i],
+		cfg.RangeLeaseActiveDuration, cfg.RangeLeaseRenewalDuration,
 	)
 	m.populateStorePool(i, m.nodeLivenesses[i])
 	cfg.DB = m.dbs[i]

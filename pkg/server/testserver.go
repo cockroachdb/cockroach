@@ -91,8 +91,6 @@ func makeTestConfig() Config {
 func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg := makeTestConfig()
 	cfg.TestingKnobs = params.Knobs
-	cfg.RaftConfig = params.RaftConfig
-	cfg.RaftConfig.SetDefaults()
 	if params.JoinAddr != "" {
 		cfg.JoinList = []string{params.JoinAddr}
 	}
@@ -101,6 +99,12 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg.RetryOptions = params.RetryOptions
 	if params.MetricsSampleInterval != 0 {
 		cfg.MetricsSampleInterval = params.MetricsSampleInterval
+	}
+	if params.RaftTickInterval != 0 {
+		cfg.RaftTickInterval = params.RaftTickInterval
+	}
+	if params.RaftElectionTimeoutTicks != 0 {
+		cfg.RaftElectionTimeoutTicks = params.RaftElectionTimeoutTicks
 	}
 	if knobs := params.Knobs.Store; knobs != nil {
 		if mo := knobs.(*storage.StoreTestingKnobs).MaxOffset; mo != 0 {

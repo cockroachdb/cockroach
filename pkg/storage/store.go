@@ -75,6 +75,22 @@ const (
 	// store's Raft log entry cache.
 	defaultRaftEntryCacheSize = 1 << 24 // 16M
 
+	// rangeLeaseRaftElectionTimeoutMultiplier specifies what multiple the leader
+	// lease active duration should be of the raft election timeout.
+	rangeLeaseRaftElectionTimeoutMultiplier = 3
+
+	// rangeLeaseRenewalFraction specifies what fraction the range lease renewal
+	// duration should be of the range lease active time. For example, with a
+	// value of 0.2 and a lease duration of 10 seconds, leases would be eagerly
+	// renewed 2 seconds into each lease.
+	rangeLeaseRenewalFraction = 0.5
+
+	// livenessRenewalFraction specifies what fraction the node liveness renewal
+	// duration should be of the node liveness duration. For example, with a
+	// value of 0.2 and a liveness duration of 10 seconds, each node's liveness
+	// record would be eagerly renewed after 2 seconds.
+	livenessRenewalFraction = 0.5
+
 	// replicaRequestQueueSize specifies the maximum number of requests to queue
 	// for a replica.
 	replicaRequestQueueSize = 100
@@ -105,11 +121,50 @@ var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeTy
 	roachpb.REMOVE_REPLICA: raftpb.ConfChangeRemoveNode,
 }
 
+var defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt(
+	"COCKROACH_RAFT_ELECTION_TIMEOUT_TICKS", 15)
+
 var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
 	"COCKROACH_SCHEDULER_CONCURRENCY", 8*runtime.NumCPU())
 
 var enablePreVote = envutil.EnvOrDefaultBool(
 	"COCKROACH_ENABLE_PREVOTE", false)
+
+// RaftElectionTimeout returns the raft election timeout, as computed
+// from the specified tick interval and number of election timeout
+// ticks. If raftElectionTimeoutTicks is 0, uses the value of
+// defaultRaftElectionTimeoutTicks.
+func RaftElectionTimeout(
+	raftTickInterval time.Duration, raftElectionTimeoutTicks int,
+) time.Duration {
+	if raftTickInterval == 0 {
+		raftTickInterval = base.DefaultRaftTickInterval
+	}
+	if raftElectionTimeoutTicks == 0 {
+		raftElectionTimeoutTicks = defaultRaftElectionTimeoutTicks
+	}
+	return time.Duration(raftElectionTimeoutTicks) * raftTickInterval
+}
+
+// RangeLeaseDurations computes durations for range lease expiration
+// and renewal based on a default multiple of Raft election timeout.
+func RangeLeaseDurations(
+	raftElectionTimeout time.Duration,
+) (rangeLeaseActive time.Duration, rangeLeaseRenewal time.Duration) {
+	rangeLeaseActive = time.Duration(rangeLeaseRaftElectionTimeoutMultiplier * float64(raftElectionTimeout))
+	rangeLeaseRenewal = time.Duration(float64(rangeLeaseActive) * rangeLeaseRenewalFraction)
+	return
+}
+
+// NodeLivenessDurations computes durations for node liveness expiration
+// and renewal based on a default multiple of Raft election timeout.
+func NodeLivenessDurations(
+	raftElectionTimeout time.Duration,
+) (livenessActive time.Duration, livenessRenewal time.Duration) {
+	livenessActive, _ = RangeLeaseDurations(raftElectionTimeout)
+	livenessRenewal = time.Duration(float64(livenessActive) * livenessRenewalFraction)
+	return
+}
 
 // TestStoreConfig has some fields initialized with values relevant in tests.
 func TestStoreConfig(clock *hlc.Clock) StoreConfig {
@@ -123,11 +178,13 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 				UseVersion: cluster.ServerVersion, // all features active
 			}
 		}, nil),
-		Settings:   st,
-		AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
-		Clock:      clock,
+		Settings:                       st,
+		AmbientCtx:                     log.AmbientContext{Tracer: st.Tracer},
+		Clock:                          clock,
+		RaftTickInterval:               100 * time.Millisecond,
 		CoalescedHeartbeatsInterval:    50 * time.Millisecond,
 		RaftHeartbeatIntervalTicks:     1,
+		RaftElectionTimeoutTicks:       3,
 		ScanInterval:                   10 * time.Minute,
 		ConsistencyCheckInterval:       10 * time.Minute,
 		ConsistencyCheckPanicOnFailure: true,
@@ -135,8 +192,6 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 		HistogramWindowInterval:        metric.TestSampleInterval,
 		EnableEpochRangeLeases:         true,
 	}
-	sc.RaftElectionTimeoutTicks = 3
-	sc.RaftTickInterval = 100 * time.Millisecond
 	sc.SetDefaults()
 	return sc
 }
@@ -542,7 +597,6 @@ var _ client.Sender = &Store{}
 type StoreConfig struct {
 	AmbientCtx log.AmbientContext
 	*migration.ExposedClusterVersion
-	base.RaftConfig
 
 	Settings     *cluster.Settings
 	Clock        *hlc.Clock
@@ -566,6 +620,10 @@ type StoreConfig struct {
 	// finish or be pushed by a higher priority contender.
 	DontRetryPushTxnFailures bool
 
+	// RaftTickInterval is the resolution of the Raft timer; other raft timeouts
+	// are defined in terms of multiples of this value.
+	RaftTickInterval time.Duration
+
 	// CoalescedHeartbeatsInterval is the interval for which heartbeat messages
 	// are queued and then sent as a single coalesced heartbeat; it is a
 	// fraction of the RaftTickInterval so that heartbeats don't get delayed by
@@ -588,6 +646,12 @@ type StoreConfig struct {
 
 	// RaftHeartbeatIntervalTicks is the number of ticks that pass between heartbeats.
 	RaftHeartbeatIntervalTicks int
+
+	// RaftElectionTimeoutTicks is the number of ticks that must pass before a follower
+	// considers a leader to have failed and calls a new election. Should be significantly
+	// higher than RaftHeartbeatIntervalTicks. The raft paper recommends a value of 150ms
+	// for local networks.
+	RaftElectionTimeoutTicks int
 
 	// ScanInterval is the default value for the scan interval
 	ScanInterval time.Duration
@@ -619,6 +683,16 @@ type StoreConfig struct {
 	// snapshots and the maximum number of non-empty snapshots that are permitted
 	// to be applied concurrently.
 	concurrentSnapshotApplyLimit int
+
+	// RangeLeaseActiveDuration is the duration of the active period of leader
+	// leases requested.
+	RangeLeaseActiveDuration time.Duration
+
+	// RangeLeaseRenewalDuration specifies a time interval at the end of the
+	// active lease interval (i.e. bounded to the right by the start of the stasis
+	// period) during which operations will trigger an asynchronous renewal of the
+	// lease.
+	RangeLeaseRenewalDuration time.Duration
 
 	// MetricsSampleInterval is (server.Context).MetricsSampleInterval
 	MetricsSampleInterval time.Duration
@@ -782,13 +856,17 @@ func (sc *StoreConfig) Valid() bool {
 // suitable for use on a local network.
 // TODO(tschottdorf): see if this ought to be configurable via flags.
 func (sc *StoreConfig) SetDefaults() {
-	sc.RaftConfig.SetDefaults()
-
+	if sc.RaftTickInterval == 0 {
+		sc.RaftTickInterval = base.DefaultRaftTickInterval
+	}
 	if sc.CoalescedHeartbeatsInterval == 0 {
 		sc.CoalescedHeartbeatsInterval = sc.RaftTickInterval / 2
 	}
 	if sc.RaftHeartbeatIntervalTicks == 0 {
 		sc.RaftHeartbeatIntervalTicks = defaultHeartbeatIntervalTicks
+	}
+	if sc.RaftElectionTimeoutTicks == 0 {
+		sc.RaftElectionTimeoutTicks = defaultRaftElectionTimeoutTicks
 	}
 	if sc.RaftEntryCacheSize == 0 {
 		sc.RaftEntryCacheSize = defaultRaftEntryCacheSize
@@ -798,6 +876,15 @@ func (sc *StoreConfig) SetDefaults() {
 		// throughput.
 		sc.concurrentSnapshotApplyLimit =
 			envutil.EnvOrDefaultInt("COCKROACH_CONCURRENT_SNAPSHOT_APPLY_LIMIT", 1)
+	}
+
+	rangeLeaseActiveDuration, rangeLeaseRenewalDuration :=
+		RangeLeaseDurations(RaftElectionTimeout(sc.RaftTickInterval, sc.RaftElectionTimeoutTicks))
+	if sc.RangeLeaseActiveDuration == 0 {
+		sc.RangeLeaseActiveDuration = rangeLeaseActiveDuration
+	}
+	if sc.RangeLeaseRenewalDuration == 0 {
+		sc.RangeLeaseRenewalDuration = rangeLeaseRenewalDuration
 	}
 
 	if sc.GossipWhenCapacityDeltaExceedsFraction == 0 {
@@ -816,7 +903,7 @@ func (sc *StoreConfig) LeaseExpiration() int64 {
 		// Don't do shady math on clockless reads.
 		maxOffset = 0
 	}
-	return 2 * (sc.RangeLeaseActiveDuration() + maxOffset).Nanoseconds()
+	return 2 * int64(sc.RangeLeaseActiveDuration+maxOffset)
 }
 
 // NewStore returns a new instance of a store.
