@@ -183,6 +183,15 @@ func (rq *replicateQueue) shouldQueue(
 		return true, priority
 	}
 
+	if !rq.store.TestingKnobs().DisableReplicaRebalancing {
+		target, _ := rq.allocator.RebalanceTarget(ctx, zone.Constraints, rangeInfo, storeFilterThrottled)
+		if target != nil {
+			log.VEventf(ctx, 2, "rebalance target found, enqueuing")
+			return true, 0
+		}
+		log.VEventf(ctx, 2, "no rebalance target found, not enqueuing")
+	}
+
 	// If the lease is valid, check to see if we should transfer it.
 	if lease, _ := repl.getLease(); repl.IsLeaseValid(lease, now) {
 		if rq.canTransferLease() &&
@@ -193,17 +202,7 @@ func (rq *replicateQueue) shouldQueue(
 		}
 	}
 
-	if rq.store.TestingKnobs().DisableReplicaRebalancing {
-		return false, 0
-	}
-
-	target, _ := rq.allocator.RebalanceTarget(ctx, zone.Constraints, rangeInfo, storeFilterThrottled)
-	if target != nil {
-		log.VEventf(ctx, 2, "rebalance target found, enqueuing")
-	} else {
-		log.VEventf(ctx, 2, "no rebalance target found, not enqueuing")
-	}
-	return target != nil, 0
+	return false, 0
 }
 
 func (rq *replicateQueue) process(
@@ -458,30 +457,7 @@ func (rq *replicateQueue) processOneChange(
 	case AllocatorConsiderRebalance:
 		// The Noop case will result if this replica was queued in order to
 		// rebalance. Attempt to find a rebalancing target.
-		log.VEventf(ctx, 1, "considering a rebalance")
-
-		if canTransferLease() {
-			// We require the lease in order to process replicas, so
-			// repl.store.StoreID() corresponds to the lease-holder's store ID.
-			transferred, err := rq.transferLease(
-				ctx,
-				repl,
-				desc,
-				zone,
-				transferLeaseOptions{
-					checkTransferLeaseSource: true,
-					checkCandidateFullness:   true,
-					dryRun:                   dryRun,
-				},
-			)
-			if err != nil {
-				return false, err
-			}
-			// Do not requeue as we transferred our lease away.
-			if transferred {
-				return false, nil
-			}
-		}
+		log.VEventf(ctx, 1, "allocator noop - considering a rebalance or lease transfer")
 
 		if !rq.store.TestingKnobs().DisableReplicaRebalancing {
 			rebalanceStore, details := rq.allocator.RebalanceTarget(
@@ -509,6 +485,29 @@ func (rq *replicateQueue) processOneChange(
 					return false, err
 				}
 				return true, nil
+			}
+		}
+
+		if canTransferLease() {
+			// We require the lease in order to process replicas, so
+			// repl.store.StoreID() corresponds to the lease-holder's store ID.
+			transferred, err := rq.transferLease(
+				ctx,
+				repl,
+				desc,
+				zone,
+				transferLeaseOptions{
+					checkTransferLeaseSource: true,
+					checkCandidateFullness:   true,
+					dryRun:                   dryRun,
+				},
+			)
+			if err != nil {
+				return false, err
+			}
+			// Do not requeue as we transferred our lease away.
+			if transferred {
+				return false, nil
 			}
 		}
 
