@@ -799,7 +799,7 @@ func percentileScore(
 		if rangeVal < percentiles.P10 || rangeVal > percentiles.P90 {
 			return 1
 		} else if rangeVal <= percentiles.P25 || rangeVal >= percentiles.P75 {
-			return 0
+			return -0.5
 		}
 		return -1
 	} else if rcs == underfull {
