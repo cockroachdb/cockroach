@@ -250,7 +250,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 
 	s.raftTransport = storage.NewRaftTransport(
-		s.cfg.AmbientCtx, cluster.MakeClusterSettings(), storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext,
+		s.cfg.AmbientCtx, st, storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext,
 	)
 
 	s.kvDB = kv.NewDBServer(s.cfg.Config, s.txnCoordSender, s.stopper)
@@ -268,8 +268,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.leaseMgr = sql.NewLeaseManager(&s.nodeIDContainer, *s.db, s.clock, lmKnobs,
 		s.stopper, &s.internalMemMetrics)
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
-
-	s.refreshSettings()
 
 	// We do not set memory monitors or a noteworthy limit because the children of
 	// this monitor will be setting their own noteworthy limits.
@@ -789,7 +787,13 @@ func (s *Server) Start(ctx context.Context) error {
 		// empty, then this node can bootstrap a new cluster. We disallow
 		// this if this node is being started with itself specified as a
 		// --join host, because that's too likely to be operator error.
-		if err = s.node.bootstrap(ctx, s.engines); err != nil {
+		bootstrapVersion := cluster.BootstrapVersion()
+		if s.cfg.TestingKnobs.Store != nil {
+			if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs); ok && storeKnobs.BootstrapVersion != nil {
+				bootstrapVersion = *storeKnobs.BootstrapVersion
+			}
+		}
+		if err = s.node.bootstrap(ctx, s.engines, bootstrapVersion); err != nil {
 			return err
 		}
 		log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
@@ -826,6 +830,8 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 	log.Event(ctx, "started node")
+
+	s.refreshSettings()
 
 	raven.SetTagsContext(map[string]string{
 		"cluster":   s.ClusterID().String(),

@@ -59,14 +59,10 @@ type cliContext struct {
 
 var serverCfg = func() server.Config {
 	st := cluster.MakeClusterSettings()
-	// This is the real cluster settings object that is used by users' servers,
-	// and which should receive updates from associated Updaters.
-	st.Manual.Store(false)
-
-	// The server package has its own copy of the singleton for use in the
+	// The server package has its own reference to the singleton for use in the
 	// /debug/requests handler.
 	server.ClusterSettings = st
-	// A similar singleton exists in the log package. See comment there.
+	// A similar singleton reference exists in the log package. See comment there.
 	f := log.ReportingSettings(st.ReportingSettings)
 	log.ReportingSettingsSingleton.Store(&f)
 

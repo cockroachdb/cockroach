@@ -27,7 +27,7 @@ import (
 func setupMVCCRocksDB(b testing.TB, dir string) Engine {
 	rocksdb, err := NewRocksDB(
 		RocksDBConfig{
-			RocksDBSettings: cluster.MakeClusterSettings().RocksDBSettings,
+			RocksDBSettings: cluster.MakeTestingClusterSettings().RocksDBSettings,
 			Dir:             dir,
 		},
 		RocksDBCache{},

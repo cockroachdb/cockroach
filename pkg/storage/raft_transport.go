@@ -164,8 +164,7 @@ type RaftTransport struct {
 
 // NewDummyRaftTransport returns a dummy raft transport for use in tests which
 // need a non-nil raft transport that need not function.
-func NewDummyRaftTransport() *RaftTransport {
-	st := cluster.MakeClusterSettings()
+func NewDummyRaftTransport(st *cluster.Settings) *RaftTransport {
 	return NewRaftTransport(log.AmbientContext{Tracer: st.Tracer}, st, nil, nil, nil)
 }
 

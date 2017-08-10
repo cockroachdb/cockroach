@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -116,13 +115,8 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	if clock == nil {
 		clock = hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	}
-	st := cluster.MakeClusterSettings()
+	st := cluster.MakeTestingClusterSettings()
 	sc := StoreConfig{
-		ExposedClusterVersion: migration.NewExposedClusterVersion(func() cluster.ClusterVersion {
-			return cluster.ClusterVersion{
-				UseVersion: cluster.ServerVersion, // all features active
-			}
-		}, nil),
 		Settings:   st,
 		AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
 		Clock:      clock,
@@ -541,7 +535,6 @@ var _ client.Sender = &Store{}
 // a store; the rest will have sane defaults set if omitted.
 type StoreConfig struct {
 	AmbientCtx log.AmbientContext
-	*migration.ExposedClusterVersion
 	base.RaftConfig
 
 	Settings     *cluster.Settings
@@ -760,6 +753,8 @@ type StoreTestingKnobs struct {
 	// only changes in the number of replicas can cause the store to gossip its
 	// capacity.
 	DisableLeaseCapacityGossip bool
+	// BootstrapVersion overrides the version the stores will be bootstrapped with.
+	BootstrapVersion *cluster.ClusterVersion
 }
 
 var _ base.ModuleTestingKnobs = &StoreTestingKnobs{}
@@ -1459,7 +1454,9 @@ func (s *Store) GossipDeadReplicas(ctx context.Context) error {
 // the engine contents before writing the new store ident. The engine
 // should be completely empty. It returns an error if called on a
 // non-empty engine.
-func (s *Store) Bootstrap(ctx context.Context, ident roachpb.StoreIdent) error {
+func (s *Store) Bootstrap(
+	ctx context.Context, ident roachpb.StoreIdent, cv cluster.ClusterVersion,
+) error {
 	if (s.Ident != roachpb.StoreIdent{}) {
 		return errors.Errorf("store %s is already bootstrapped", s)
 	}
@@ -1468,16 +1465,26 @@ func (s *Store) Bootstrap(ctx context.Context, ident roachpb.StoreIdent) error {
 		return errors.Wrap(err, "cannot verify empty engine for bootstrap")
 	}
 	s.Ident = ident
+
+	batch := s.engine.NewBatch()
 	if err := engine.MVCCPutProto(
 		ctx,
-		s.engine,
+		batch,
 		nil,
 		keys.StoreIdentKey(),
 		hlc.Timestamp{},
 		nil,
 		&s.Ident,
 	); err != nil {
+		batch.Close()
 		return err
+	}
+	if err := WriteClusterVersion(ctx, batch, cv); err != nil {
+		batch.Close()
+		return errors.Wrap(err, "cannot write cluster version")
+	}
+	if err := batch.Commit(true); err != nil {
+		return errors.Wrap(err, "persisting bootstrap data")
 	}
 
 	s.NotifyBootstrapped()
@@ -4131,6 +4138,20 @@ func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (enginepb.
 	})
 
 	return output, count
+}
+
+// WriteClusterVersion writes the given cluster version to the store-local cluster version key.
+func WriteClusterVersion(
+	ctx context.Context, writer engine.ReadWriter, cv cluster.ClusterVersion,
+) error {
+	return engine.MVCCPutProto(ctx, writer, nil, keys.StoreClusterVersionKey(), hlc.Timestamp{}, nil, &cv)
+}
+
+// ReadClusterVersion reads the the cluster version from the store-local version key.
+func ReadClusterVersion(ctx context.Context, reader engine.Reader) (cluster.ClusterVersion, error) {
+	var cv cluster.ClusterVersion
+	_, err := engine.MVCCGetProto(ctx, reader, keys.StoreClusterVersionKey(), hlc.Timestamp{}, true, nil, &cv)
+	return cv, err
 }
 
 // The methods below can be used to control a store's queues. Stopping a queue

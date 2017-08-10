@@ -419,7 +419,7 @@ func writeRocksDB(
 	cache := engine.NewRocksDBCache(0)
 	defer cache.Release()
 	r, err := engine.NewRocksDB(engine.RocksDBConfig{
-		RocksDBSettings: cluster.MakeClusterSettings().RocksDBSettings,
+		RocksDBSettings: cluster.MakeTestingClusterSettings().RocksDBSettings,
 		Dir:             rocksdbDir,
 		MaxSizeBytes:    0,
 		MaxOpenFiles:    1024,

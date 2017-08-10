@@ -1015,6 +1015,14 @@ class NodeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::cockroach::roachpb::Locality* release_locality();
   void set_allocated_locality(::cockroach::roachpb::Locality* locality);
 
+  bool has_serverversion() const;
+  void clear_serverversion();
+  static const int kServerVersionFieldNumber = 5;
+  const ::cockroach::roachpb::Version& serverversion() const;
+  ::cockroach::roachpb::Version* mutable_serverversion();
+  ::cockroach::roachpb::Version* release_serverversion();
+  void set_allocated_serverversion(::cockroach::roachpb::Version* serverversion);
+
   bool has_node_id() const;
   void clear_node_id();
   static const int kNodeIdFieldNumber = 1;
@@ -1031,6 +1039,8 @@ class NodeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_insert
   void clear_has_attrs();
   void set_has_locality();
   void clear_has_locality();
+  void set_has_serverversion();
+  void clear_has_serverversion();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::HasBits<1> _has_bits_;
@@ -1038,6 +1048,7 @@ class NodeDescriptor : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::cockroach::util::UnresolvedAddr* address_;
   ::cockroach::roachpb::Attributes* attrs_;
   ::cockroach::roachpb::Locality* locality_;
+  ::cockroach::roachpb::Version* serverversion_;
   ::google::protobuf::int32 node_id_;
   friend struct protobuf_cockroach_2fpkg_2froachpb_2fmetadata_2eproto::TableStruct;
 };
@@ -2390,13 +2401,13 @@ inline void StoreCapacity::set_allocated_writes_per_replica(::cockroach::roachpb
 // NodeDescriptor
 
 inline bool NodeDescriptor::has_node_id() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
+  return (_has_bits_[0] & 0x00000010u) != 0;
 }
 inline void NodeDescriptor::set_has_node_id() {
-  _has_bits_[0] |= 0x00000008u;
+  _has_bits_[0] |= 0x00000010u;
 }
 inline void NodeDescriptor::clear_has_node_id() {
-  _has_bits_[0] &= ~0x00000008u;
+  _has_bits_[0] &= ~0x00000010u;
 }
 inline void NodeDescriptor::clear_node_id() {
   node_id_ = 0;
@@ -2542,6 +2553,50 @@ inline void NodeDescriptor::set_allocated_locality(::cockroach::roachpb::Localit
     clear_has_locality();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.NodeDescriptor.locality)
+}
+
+inline bool NodeDescriptor::has_serverversion() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void NodeDescriptor::set_has_serverversion() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void NodeDescriptor::clear_has_serverversion() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void NodeDescriptor::clear_serverversion() {
+  if (serverversion_ != NULL) serverversion_->::cockroach::roachpb::Version::Clear();
+  clear_has_serverversion();
+}
+inline const ::cockroach::roachpb::Version& NodeDescriptor::serverversion() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.NodeDescriptor.ServerVersion)
+  return serverversion_ != NULL ? *serverversion_
+                         : *::cockroach::roachpb::Version::internal_default_instance();
+}
+inline ::cockroach::roachpb::Version* NodeDescriptor::mutable_serverversion() {
+  set_has_serverversion();
+  if (serverversion_ == NULL) {
+    serverversion_ = new ::cockroach::roachpb::Version;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.NodeDescriptor.ServerVersion)
+  return serverversion_;
+}
+inline ::cockroach::roachpb::Version* NodeDescriptor::release_serverversion() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.NodeDescriptor.ServerVersion)
+  clear_has_serverversion();
+  ::cockroach::roachpb::Version* temp = serverversion_;
+  serverversion_ = NULL;
+  return temp;
+}
+inline void NodeDescriptor::set_allocated_serverversion(::cockroach::roachpb::Version* serverversion) {
+  delete serverversion_;
+  serverversion_ = serverversion;
+  if (serverversion) {
+    set_has_serverversion();
+  } else {
+    clear_has_serverversion();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.NodeDescriptor.ServerVersion)
 }
 
 // -------------------------------------------------------------------
