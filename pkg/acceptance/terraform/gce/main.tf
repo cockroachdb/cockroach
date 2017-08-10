@@ -2,6 +2,10 @@ provider "google" {
   region = "${var.gce_region}"
 }
 
+provider "null" {
+  version = "~> 0.1"
+}
+
 resource "google_compute_instance" "cockroach" {
   count = "${var.num_instances}"
 
