@@ -141,7 +141,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 			}
 		}
 
-		st := cluster.MakeClusterSettings()
+		st := cluster.MakeTestingClusterSettings()
 
 		// This test constructs an overlapping batch (delete then put on the same
 		// key), which is only allowed in a transaction. The test wants to send the

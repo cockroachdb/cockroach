@@ -200,7 +200,9 @@ func (t *parallelTest) setup(spec *parTestSpec) {
 	for i := 0; i < t.cluster.NumServers(); i++ {
 		server := t.cluster.Server(i)
 		mode := cluster.DistSQLOff
-		server.ClusterSettings().DistSQLClusterExecMode.Override(int64(mode))
+		st := server.ClusterSettings()
+		st.Manual.Store(true)
+		st.DistSQLClusterExecMode.Override(int64(mode))
 	}
 
 	t.clients = make([][]*gosql.DB, spec.ClusterSize)

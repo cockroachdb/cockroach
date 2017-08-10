@@ -138,3 +138,17 @@ func (u ResettingUpdater) Done() {
 		}
 	}
 }
+
+// PreservingUpdater is an Updater that does not reset the settings not
+// explicitly set.
+type PreservingUpdater struct {
+	ResettingUpdater
+}
+
+// Done is a no-op.
+func (pu PreservingUpdater) Done() {}
+
+// MakePreservingUpdater makes a PreservingUpdater.
+func MakePreservingUpdater(r Registry) PreservingUpdater {
+	return PreservingUpdater{ResettingUpdater: MakeResettingUpdater(r)}
+}

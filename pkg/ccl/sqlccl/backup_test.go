@@ -225,10 +225,12 @@ func TestBackupRestoreLocal(t *testing.T) {
 }
 
 func enableAddSSTable(st *cluster.Settings) {
+	st.Manual.Store(true)
 	st.AddSSTableEnabled.Override(true)
 }
 
 func disableAddSSTable(st *cluster.Settings) {
+	st.Manual.Store(true)
 	st.AddSSTableEnabled.Override(false)
 }
 

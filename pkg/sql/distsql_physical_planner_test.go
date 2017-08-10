@@ -736,7 +736,7 @@ func TestPartitionSpans(t *testing.T) {
 			tsp.ranges = tc.ranges
 
 			dsp := distSQLPlanner{
-				st:           cluster.MakeClusterSettings(),
+				st:           cluster.MakeTestingClusterSettings(),
 				nodeDesc:     *tsp.nodes[tc.gatewayNode-1],
 				stopper:      stopper,
 				spanResolver: tsp,

@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -80,12 +81,13 @@ func register(
 func TestSettingsRefresh(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
-
-	s.ClusterSettings().Manual.Store(false)
-	r := s.ClusterSettings().Registry
+	// Set up some additional cluster settings to play around with. Note that we
+	// need to do this before starting the server, or there will be data races.
+	st := cluster.MakeTestingClusterSettings()
+	r := st.Registry
 	strA, intA, durationA, byteSizeA, _ := register(r)
+	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
+	defer s.Stopper().Stop(context.TODO())
 
 	db := sqlutils.MakeSQLRunner(t, rawDB)
 
@@ -205,12 +207,13 @@ func TestSettingsRefresh(t *testing.T) {
 
 func TestSettingsSetAndShow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	// Set up some additional cluster settings to play around with. Note that we
+	// need to do this before starting the server, or there will be data races.
+	st := cluster.MakeTestingClusterSettings()
+	r := st.Registry
+	_, _, durationA, byteSizeA, enumA := register(r)
+	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
 	defer s.Stopper().Stop(context.TODO())
-
-	s.ClusterSettings().Manual.Store(false)
-	_, _, durationA, byteSizeA, enumA := register(s.ClusterSettings().Registry)
 
 	db := sqlutils.MakeSQLRunner(t, rawDB)
 
@@ -323,11 +326,15 @@ func TestSettingsSetAndShow(t *testing.T) {
 func TestSettingsShowAll(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	// Set up some additional cluster settings to play around with. Note that we
+	// need to do this before starting the server, or there will be data races.
+	st := cluster.MakeTestingClusterSettings()
+	r := st.Registry
 
 	// Make sure strKey and intKey are defined as they are checked below.
-	register(s.ClusterSettings().Registry)
+	register(r)
+	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
+	defer s.Stopper().Stop(context.TODO())
 
 	db := sqlutils.MakeSQLRunner(t, rawDB)
 

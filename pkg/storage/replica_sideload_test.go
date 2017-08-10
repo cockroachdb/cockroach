@@ -95,7 +95,7 @@ func testSideloadingSideloadedStorage(
 	defer cleanup()
 
 	ctx := context.Background()
-	st := cluster.MakeClusterSettings()
+	st := cluster.MakeTestingClusterSettings()
 
 	ss, err := maker(st, 1, 2, dir)
 	if err != nil {
