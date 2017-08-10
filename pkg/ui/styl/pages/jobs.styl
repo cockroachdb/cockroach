@@ -1,6 +1,10 @@
 .jobs-table
   &__row
-    &--succeeded td
+    &--paused .rc-progress-line-path
+      stroke $tooltip-color
+
+    &--succeeded td,
+    &--canceled td
       color lighten($body-color, 25%)
 
     &--failed
