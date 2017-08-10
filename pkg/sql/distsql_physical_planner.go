@@ -376,7 +376,8 @@ type physicalPlan struct {
 	planToStreamColMap []int
 }
 
-// orderingTerminated is used when
+// orderingTerminated is used when streams can be joined without needing to be
+// merged with respect to a particular ordering.
 var orderingTerminated = distsqlrun.Ordering{}
 
 // makePlanToStreamColMap initializes a new physicalPlan.planToStreamColMap. The
@@ -580,6 +581,7 @@ func getOutputColumnsFromScanNode(n *scanNode) []uint32 {
 	return outputColumns
 }
 
+// convert ordering takes sql.orderingInfo
 func (dsp *distSQLPlanner) convertOrdering(
 	planOrdering []orderingColumnGroup, planToStreamColMap []int,
 ) distsqlrun.Ordering {
@@ -1740,7 +1742,11 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 
 	p.planToStreamColMap = joinToStreamColMap
 	p.ResultTypes = getTypesForPlanResult(n, joinToStreamColMap)
-	p.SetMergeOrdering(orderingTerminated)
+
+	// Joiners may guarantee an ordering to outputs, so we ensure that
+	// ordering is propagated through the input synchronizer of the next stage.
+	// We can propagate the ordering from either side, we use the left side here.
+	p.SetMergeOrdering(dsp.convertOrdering(n.ordering.ordering, p.planToStreamColMap))
 	return p, nil
 }
 
