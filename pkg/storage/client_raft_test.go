@@ -649,6 +649,11 @@ func TestRaftLogSizeAfterTruncation(t *testing.T) {
 func TestSnapshotAfterTruncation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// TODO(#17448): This is just a temporary fix for flakiness. It should be
+	// removed and replaced with a real fix as soon as possible.
+	defer func(prev int) { storage.StoreSchedulerConcurrency = prev }(storage.StoreSchedulerConcurrency)
+	storage.StoreSchedulerConcurrency = 1
+
 	for _, changeTerm := range []bool{false, true} {
 		name := "sameTerm"
 		if changeTerm {

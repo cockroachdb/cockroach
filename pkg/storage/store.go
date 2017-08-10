@@ -120,7 +120,9 @@ var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeTy
 var defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt(
 	"COCKROACH_RAFT_ELECTION_TIMEOUT_TICKS", 15)
 
-var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
+// StoreSchedulerConcurrency controls how many raft worker goroutines can be
+// run concurrently.
+var StoreSchedulerConcurrency = envutil.EnvOrDefaultInt(
 	"COCKROACH_SCHEDULER_CONCURRENCY", 8*runtime.NumCPU())
 
 var enablePreVote = envutil.EnvOrDefaultBool(
@@ -927,7 +929,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.intentResolver = newIntentResolver(s)
 	s.raftEntryCache = newRaftEntryCache(cfg.RaftEntryCacheSize)
 	s.draining.Store(false)
-	s.scheduler = newRaftScheduler(s.cfg.AmbientCtx, s.metrics, s, storeSchedulerConcurrency)
+	s.scheduler = newRaftScheduler(s.cfg.AmbientCtx, s.metrics, s, StoreSchedulerConcurrency)
 
 	s.coalescedMu.Lock()
 	s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]RaftHeartbeat{}
