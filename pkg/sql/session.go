@@ -250,6 +250,10 @@ type Session struct {
 	// If set, contains the in progress COPY FROM columns.
 	copyFrom *copyNode
 
+	// ActiveSyncQueries contains query IDs of all synchronous (i.e. non-parallel)
+	// queries in flight. All ActiveSyncQueries must also be in mu.ActiveQueries.
+	ActiveSyncQueries []uint128.Uint128
+
 	// mu contains of all elements of the struct that can be changed
 	// after initialization, and may be accessed from another thread.
 	mu struct {
@@ -391,6 +395,7 @@ func NewSession(
 	s.PreparedPortals = makePreparedPortals(s)
 	s.Tracing.session = s
 	s.mu.ActiveQueries = make(map[uint128.Uint128]*queryMeta)
+	s.ActiveSyncQueries = make([]uint128.Uint128, 0)
 
 	remoteStr := "<admin>"
 	if remote != nil {
@@ -553,8 +558,19 @@ func (s *Session) resetPlanner(p *planner, e *Executor, txn *client.Txn) {
 // FinishPlan releases the resources that were consumed by the currently active
 // default planner. It does not check to see whether any other resources are
 // still pointing to the planner, so it should only be called when a connection
-// is entirely finished executing a statement.
+// is entirely finished executing a statement and all results have been sent.
 func (s *Session) FinishPlan() {
+	// All results have been sent to the client; so deregister all synchronous
+	// active queries from this session. Cannot deregister asynchronous ones
+	// because those might still be executing in the parallelizeQueue.
+	s.mu.Lock()
+	for _, queryID := range s.ActiveSyncQueries {
+		delete(s.mu.ActiveQueries, queryID)
+		s.execCfg.QueryRegistry.deregister(queryID)
+	}
+	s.mu.Unlock()
+	s.ActiveSyncQueries = make([]uint128.Uint128, 0)
+
 	s.planner = emptyPlanner
 }
 
@@ -597,30 +613,51 @@ func (s *Session) setTestingVerifyMetadata(fn func(config.SystemConfig) error) {
 }
 
 // addActiveQuery adds a running query to the session's internal store of active
-// queries. Called from executor's execStmt and execStmtInParallel.
+// queries, as well as to the executor's query registry. Called from executor
+// before start of execution.
 func (s *Session) addActiveQuery(queryID uint128.Uint128, queryMeta *queryMeta) {
 	s.mu.Lock()
 	s.mu.ActiveQueries[queryID] = queryMeta
 	queryMeta.session = s
 	s.mu.Unlock()
+	s.execCfg.QueryRegistry.register(queryID, queryMeta)
+	// addActiveQuery is called from the main goroutine of the session;
+	// and at this stage, this query is a synchronous query for our purposes.
+	// setQueryExecutionMode will remove this element if this query enters the
+	// parallelizeQueue.
+	s.ActiveSyncQueries = append(s.ActiveSyncQueries, queryID)
 }
 
 // removeActiveQuery removes a query from a session's internal store of active
-// queries. Called when a query finishes execution.
+// queries, as well as from the executor's query registry.
+// Called when a query finishes execution.
 func (s *Session) removeActiveQuery(queryID uint128.Uint128) {
 	s.mu.Lock()
 	delete(s.mu.ActiveQueries, queryID)
 	s.mu.Unlock()
+	s.execCfg.QueryRegistry.deregister(queryID)
 }
 
 // setQueryExecutionMode is called upon start of execution of a query, and sets
 // the query's metadata to indicate whether it's distributed or not.
-func (s *Session) setQueryExecutionMode(queryID uint128.Uint128, isDistributed bool) {
+func (s *Session) setQueryExecutionMode(
+	queryID uint128.Uint128, isDistributed bool, isParallel bool,
+) {
 	s.mu.Lock()
 	queryMeta := s.mu.ActiveQueries[queryID]
 	queryMeta.phase = executing
 	queryMeta.isDistributed = isDistributed
 	s.mu.Unlock()
+
+	if isParallel {
+		// We default to putting queries in ActiveSyncQueries. Since
+		// this query is not synchronous anymore, remove it from
+		// ActiveSyncQueries. We expect the last element in
+		// ActiveSyncQueries to be this query; because all execution
+		// up to this call of setQueryExecutionMode is synchronous.
+		lenSyncQueries := len(s.ActiveSyncQueries)
+		s.ActiveSyncQueries = s.ActiveSyncQueries[:lenSyncQueries-1]
+	}
 }
 
 // MaxSQLBytes is the maximum length in bytes of SQL statements serialized
