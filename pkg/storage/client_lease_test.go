@@ -48,7 +48,7 @@ func TestStoreRangeLease(t *testing.T) {
 
 			splitKeys := []roachpb.Key{roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")}
 			for _, splitKey := range splitKeys {
-				splitArgs := adminSplitArgs(splitKey, splitKey)
+				splitArgs := adminSplitArgs(splitKey)
 				if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], splitArgs); pErr != nil {
 					t.Fatal(pErr)
 				}
@@ -108,7 +108,7 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 	mtc.Start(t, 1)
 
 	splitKey := roachpb.Key("a")
-	splitArgs := adminSplitArgs(splitKey, splitKey)
+	splitArgs := adminSplitArgs(splitKey)
 	if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], splitArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -173,7 +173,7 @@ func TestStoreGossipSystemData(t *testing.T) {
 	mtc.Start(t, 1)
 
 	splitKey := keys.SystemConfigSplitKey
-	splitArgs := adminSplitArgs(splitKey, splitKey)
+	splitArgs := adminSplitArgs(splitKey)
 	if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], splitArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
