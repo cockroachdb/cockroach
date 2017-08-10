@@ -118,7 +118,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 		if _, err := increment(rangeID, key2, 5); err != nil {
 			t.Fatal(err)
 		}
-		splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
+		splitArgs := adminSplitArgs(splitKey)
 		if _, err := client.SendWrapped(context.Background(), rg1(store), splitArgs); err != nil {
 			t.Fatal(err)
 		}
@@ -897,7 +897,7 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 
 	// Split the range.
 	splitKey := roachpb.Key("m")
-	splitArgs := adminSplitArgs(splitKey, splitKey)
+	splitArgs := adminSplitArgs(splitKey)
 	if _, err := rep1.AdminSplit(context.Background(), *splitArgs); err != nil {
 		t.Fatal(err)
 	}
@@ -1977,7 +1977,7 @@ func TestReplicateAfterSplit(t *testing.T) {
 
 	store0 := mtc.stores[0]
 	// Make the split
-	splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
+	splitArgs := adminSplitArgs(splitKey)
 	if _, err := client.SendWrapped(context.Background(), rg1(store0), splitArgs); err != nil {
 		t.Fatal(err)
 	}
@@ -2049,7 +2049,7 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 			store0 := mtc.stores[0]
 
 			// Make the split.
-			splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
+			splitArgs := adminSplitArgs(splitKey)
 			if _, err := client.SendWrapped(context.Background(), rg1(store0), splitArgs); err != nil {
 				t.Fatal(err)
 			}
@@ -2120,7 +2120,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 	mtc.Start(t, 3)
 
 	// Make the split.
-	splitArgs := adminSplitArgs(roachpb.KeyMin, []byte("b"))
+	splitArgs := adminSplitArgs(roachpb.Key("b"))
 	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), splitArgs); err != nil {
 		t.Fatal(err)
 	}
@@ -2929,7 +2929,7 @@ func TestReplicaLazyLoad(t *testing.T) {
 	// We use UserTableDataMin to avoid having the range activated to
 	// gossip system table data.
 	splitKey := keys.UserTableDataMin
-	splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
+	splitArgs := adminSplitArgs(splitKey)
 	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), splitArgs); err != nil {
 		t.Fatal(err)
 	}
@@ -3290,7 +3290,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 
 	{
 		// Split off a range to avoid interacting with the initial splits.
-		splitArgs := adminSplitArgs(key, key)
+		splitArgs := adminSplitArgs(key)
 		if _, err := client.SendWrapped(context.Background(), mtc.distSenders[0], splitArgs); err != nil {
 			t.Fatal(err)
 		}
@@ -3427,7 +3427,7 @@ func TestRaftBlockedReplica(t *testing.T) {
 	mtc.Start(t, 3)
 
 	// Create 2 ranges by splitting range 1.
-	splitArgs := adminSplitArgs(roachpb.KeyMin, []byte("b"))
+	splitArgs := adminSplitArgs(roachpb.Key("b"))
 	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), splitArgs); err != nil {
 		t.Fatal(err)
 	}
@@ -3553,7 +3553,7 @@ func TestInitRaftGroupOnRequest(t *testing.T) {
 	// We use UserTableDataMin to avoid having the range activated to
 	// gossip system table data.
 	splitKey := keys.UserTableDataMin
-	splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
+	splitArgs := adminSplitArgs(splitKey)
 	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), splitArgs); err != nil {
 		t.Fatal(err)
 	}

@@ -338,10 +338,10 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	// Init test ranges:
 	// ["","a"), ["a","c"), ["c","e"), ["e","g") and ["g","\xff\xff").
 	splits := []*roachpb.AdminSplitRequest{
-		adminSplitArgs(roachpb.Key("g"), roachpb.Key("g")),
-		adminSplitArgs(roachpb.Key("e"), roachpb.Key("e")),
-		adminSplitArgs(roachpb.Key("c"), roachpb.Key("c")),
-		adminSplitArgs(roachpb.Key("a"), roachpb.Key("a")),
+		adminSplitArgs(roachpb.Key("g")),
+		adminSplitArgs(roachpb.Key("e")),
+		adminSplitArgs(roachpb.Key("c")),
+		adminSplitArgs(roachpb.Key("a")),
 	}
 
 	for _, split := range splits {
@@ -798,7 +798,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 
 	// Split the key space at key "a".
 	splitKey := roachpb.RKey("a")
-	splitArgs := adminSplitArgs(splitKey.AsRawKey(), splitKey.AsRawKey())
+	splitArgs := adminSplitArgs(splitKey.AsRawKey())
 	if _, pErr := client.SendWrapped(
 		context.Background(), rg1(mtc.stores[0]), splitArgs,
 	); pErr != nil {
@@ -1170,7 +1170,7 @@ func TestRangeInfo(t *testing.T) {
 
 	// Split the key space at key "a".
 	splitKey := roachpb.RKey("a")
-	splitArgs := adminSplitArgs(splitKey.AsRawKey(), splitKey.AsRawKey())
+	splitArgs := adminSplitArgs(splitKey.AsRawKey())
 	if _, pErr := client.SendWrapped(
 		context.Background(), rg1(mtc.stores[0]), splitArgs,
 	); pErr != nil {
@@ -1350,7 +1350,7 @@ func TestCampaignOnLazyRaftGroupInitialization(t *testing.T) {
 	// Split so we can rely on RHS range being quiescent after a restart.
 	// We use UserTableDataMin to avoid having the range activated to
 	// gossip system table data.
-	splitArgs := adminSplitArgs(roachpb.KeyMin, splitKey)
+	splitArgs := adminSplitArgs(splitKey)
 	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), splitArgs); err != nil {
 		t.Fatal(err)
 	}
