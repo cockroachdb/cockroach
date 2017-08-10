@@ -111,8 +111,6 @@ type Config struct {
 
 	Settings *cluster.Settings
 
-	base.RaftConfig
-
 	// Unix socket: for postgres only.
 	SocketFile string
 
@@ -172,6 +170,14 @@ type Config struct {
 	// failures, and increase the frequency and impact of
 	// ReadWithinUncertaintyIntervalError.
 	MaxOffset MaxOffsetType
+
+	// RaftTickInterval is the resolution of the Raft timer.
+	RaftTickInterval time.Duration
+
+	// RaftElectionTimeoutTicks is the number of raft ticks before the
+	// previous election expires. This value is inherited by individual
+	// stores unless overridden.
+	RaftElectionTimeoutTicks int
 
 	// MetricsSamplePeriod determines the time between records of
 	// server internal metrics.
@@ -392,7 +398,6 @@ func MakeConfig(st *cluster.Settings) Config {
 	cfg.AmbientCtx.Tracer = st.Tracer
 
 	cfg.Config.InitDefaults()
-	cfg.RaftConfig.SetDefaults()
 	return cfg
 }
 

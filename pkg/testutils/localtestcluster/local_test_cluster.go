@@ -125,7 +125,8 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSende
 	cfg.AmbientCtx = ambient
 	cfg.DB = ltc.DB
 	cfg.Gossip = ltc.Gossip
-	active, renewal := cfg.NodeLivenessDurations()
+	active, renewal := storage.NodeLivenessDurations(
+		storage.RaftElectionTimeout(cfg.RaftTickInterval, cfg.RaftElectionTimeoutTicks))
 	cfg.NodeLiveness = storage.NewNodeLiveness(
 		cfg.AmbientCtx,
 		cfg.Clock,

@@ -46,6 +46,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
+func setRaftElectionTimeoutTicks(sc *storage.StoreConfig, newVal int) {
+	sc.RaftElectionTimeoutTicks = newVal
+	// Recompute settings that are derived from RaftElectionTimeoutTicks.
+	// Not doing this has caused flakiness in the past (#17376).
+	sc.RangeLeaseActiveDuration, sc.RangeLeaseRenewalDuration = storage.RangeLeaseDurations(
+		storage.RaftElectionTimeout(sc.RaftTickInterval, sc.RaftElectionTimeoutTicks))
+}
+
 // mustGetInt decodes an int64 value from the bytes field of the receiver
 // and panics if the bytes field is not 0 or 8 bytes in length.
 func mustGetInt(v *roachpb.Value) int64 {
@@ -1170,7 +1178,7 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 	}
 
 	// Don't timeout raft leader.
-	sc.RaftElectionTimeoutTicks = 1000000
+	setRaftElectionTimeoutTicks(&sc, 1000000)
 	mtc := &multiTestContext{
 		storeConfig: &sc,
 	}
@@ -1474,7 +1482,7 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 	// Don't timeout raft leaders or range leases (see the relation between
 	// RaftElectionTimeoutTicks and rangeLeaseActiveDuration). This test expects
 	// mtc.stores[0] to hold the range lease for range 1.
-	sc.RaftElectionTimeoutTicks = 1000000
+	setRaftElectionTimeoutTicks(&sc, 1000000)
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
@@ -1701,7 +1709,7 @@ func TestQuotaPool(t *testing.T) {
 	sc := storage.TestStoreConfig(nil)
 	// Suppress timeout-based elections to avoid leadership changes in ways
 	// this test doesn't expect.
-	sc.RaftElectionTimeoutTicks = 100000
+	setRaftElectionTimeoutTicks(&sc, 100000)
 	mtc := &multiTestContext{storeConfig: &sc}
 	mtc.Start(t, numReplicas)
 	defer mtc.Stop()
@@ -3274,7 +3282,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 	// heavily loaded CPU is enough to reach the raft election timeout
 	// and cause leadership to change hands in ways this test doesn't
 	// expect.
-	sc.RaftElectionTimeoutTicks = 100000
+	setRaftElectionTimeoutTicks(&sc, 100000)
 	// This test can rapidly advance the clock via mtc.advanceClock(),
 	// which could lead the replication queue to consider a store dead
 	// and remove a replica in the middle of the test. Disable the
