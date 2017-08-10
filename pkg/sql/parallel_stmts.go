@@ -41,7 +41,7 @@ import (
 // 2. If two dependent plans are added to the queue, the plan added first will be
 //    executed before the plan added second.
 // 3. No plans will begin execution once an error has been seen until Wait is
-//    called to drain the plans and reset the error state.
+//    called to drain the plans and reset the error set state.
 //
 type ParallelizeQueue struct {
 	// analyzer is a DependencyAnalyzer that computes when certain plans are dependent
@@ -52,9 +52,9 @@ type ParallelizeQueue struct {
 	// channels. These channels are closed when the plan has finished executing.
 	plans map[planNode]doneChan
 
-	// err is the first error seen since the last call to ParallelizeQueue.Wait.
-	// Referred to as the current "parallel batch's error".
-	err error
+	// errs is the set of error seen since the last call to ParallelizeQueue.Wait.
+	// Referred to as the current "parallel batch's error set".
+	errs []error
 
 	mu           syncutil.Mutex
 	runningGroup sync.WaitGroup
@@ -94,7 +94,7 @@ func (pq *ParallelizeQueue) Add(ctx context.Context, plan planNode, exec func(pl
 		if abort := func() bool {
 			pq.mu.Lock()
 			defer pq.mu.Unlock()
-			if pq.err != nil {
+			if len(pq.errs) > 0 {
 				finishLocked()
 				return true
 			}
@@ -105,16 +105,10 @@ func (pq *ParallelizeQueue) Add(ctx context.Context, plan planNode, exec func(pl
 
 		// Execute the plan.
 		err := exec(plan)
-		// TODO(andrei): we need some scheme here for determining what error to keep
-		// when we get multiple. If one of the statements gets a retryable error and
-		// aborts the txn, then the other statements are likely going to get other
-		// errors about their txn being toast. All these errors race to bubble up
-		// to here.
+
 		pq.mu.Lock()
-		if pq.err == nil {
-			// If we have not already seen an error since the last Wait, set the
-			// error state.
-			pq.err = err
+		if err != nil {
+			pq.errs = append(pq.errs, err)
 		}
 		finishLocked()
 		pq.mu.Unlock()
@@ -185,32 +179,32 @@ func (pq *ParallelizeQueue) Len() int {
 }
 
 // Wait blocks until the ParallelizeQueue finishes executing all plans. It then
-// returns the error of the last batch of parallelized execution before reseting
-// the error to allow for future use.
+// returns the error set of the last batch of parallelized execution before reseting
+// the error set to allow for future use.
 //
 // Wait can not be called concurrently with Add. If we need to lift this
 // restriction, consider replacing the sync.WaitGroup with a syncutil.RWMutex,
 // which will provide the desired starvation and ordering properties. Those
 // being that once Wait is called, future Adds will not be reordered ahead
 // of Waits attempts to drain all running and pending plans.
-func (pq *ParallelizeQueue) Wait() error {
+func (pq *ParallelizeQueue) Wait() []error {
 	pq.runningGroup.Wait()
 
 	// There is no race condition between waiting on the WaitGroup and locking
 	// the mutex because ParallelizeQueue.Wait cannot be called concurrently with
-	// Add. We lock only because Err may be called concurrently.
+	// Add. We lock only because Errs may be called concurrently.
 	pq.mu.Lock()
 	defer pq.mu.Unlock()
-	err := pq.err
-	pq.err = nil
-	return err
+	errs := pq.errs
+	pq.errs = nil
+	return errs
 }
 
-// Err returns the ParallelizeQueue's error.
-func (pq *ParallelizeQueue) Err() error {
+// Errs returns the ParallelizeQueue's error set.
+func (pq *ParallelizeQueue) Errs() []error {
 	pq.mu.Lock()
 	defer pq.mu.Unlock()
-	return pq.err
+	return pq.errs
 }
 
 // DependencyAnalyzer determines if plans are independent of one another, where
