@@ -317,7 +317,11 @@ var quitCtx struct {
 
 // nodeCtx captures the command-line parameters of the `node` command.
 var nodeCtx = struct {
-	nodeDecommissionWait nodeDecommissionWaitType
+	nodeDecommissionWait   nodeDecommissionWaitType
+	statusShowRanges       bool
+	statusShowStats        bool
+	statusShowDecommission bool
+	statusShowAll          bool
 }{
 	nodeDecommissionWait: nodeDecommissionWaitAll,
 }
