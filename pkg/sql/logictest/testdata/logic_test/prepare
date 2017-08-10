@@ -246,7 +246,19 @@ query I
 EXECUTE groupbyhaving(1)
 ----
 
-# Mismatch between expected and hinted types
+# Mismatch between expected and hinted types should prepare, but potentially
+# fail to execute if the cast is not possible.
+statement
+PREPARE wrongTypePossibleCast(float) AS INSERT INTO foo VALUES ($1)
 
-statement error expected \$1 to be of type int, found type float
-PREPARE wrongType(float) AS INSERT INTO foo VALUES ($1)
+statement
+EXECUTE wrongTypePossibleCast(2.3)
+
+statement
+PREPARE wrongTypeImpossibleCast(string) AS INSERT INTO foo VALUES ($1)
+
+statement
+EXECUTE wrongTypeImpossibleCast('3')
+
+statement error could not parse 'crabgas' as type int
+EXECUTE wrongTypeImpossibleCast('crabgas')

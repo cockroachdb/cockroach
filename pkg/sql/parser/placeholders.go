@@ -31,8 +31,9 @@ type QueryArguments map[string]TypedExpr
 
 // PlaceholderInfo defines the interface to SQL placeholders.
 type PlaceholderInfo struct {
-	Values QueryArguments
-	Types  PlaceholderTypes
+	Values    QueryArguments
+	TypeHints PlaceholderTypes
+	Types     PlaceholderTypes
 }
 
 // MakePlaceholderInfo constructs an empty PlaceholderInfo.
@@ -44,6 +45,7 @@ func MakePlaceholderInfo() PlaceholderInfo {
 
 // Clear resets the placeholder info map.
 func (p *PlaceholderInfo) Clear() {
+	p.TypeHints = PlaceholderTypes{}
 	p.Types = PlaceholderTypes{}
 	p.Values = QueryArguments{}
 }
@@ -92,6 +94,8 @@ func (p *PlaceholderInfo) AssertAllAssigned() error {
 func (p *PlaceholderInfo) Type(name string) (Type, bool) {
 	if t, ok := p.Types[name]; ok {
 		return t, true
+	} else if t, ok := p.TypeHints[name]; ok {
+		return t, true
 	}
 	return nil, false
 }
@@ -118,25 +122,31 @@ func (p *PlaceholderInfo) SetValue(name string, val Datum) {
 	}
 }
 
-// SetType assignes a known type to a placeholder.
+// SetType assigns a known type to a placeholder.
 // Reports an error if another type was previously assigned.
 func (p *PlaceholderInfo) SetType(name string, typ Type) error {
-	if t, ok := p.Types[name]; ok && !typ.Equivalent(t) {
-		return pgerror.NewErrorf(
-			pgerror.CodeInternalError, "placeholder %s already has type %s, cannot assign %s", name, t, typ)
+	t, ok := p.Types[name]
+	if ok && !typ.Equivalent(t) {
+		return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "placeholder %s already has type %s, cannot assign %s", name, t, typ)
 	}
 	p.Types[name] = typ
+	if _, ok := p.TypeHints[name]; !ok {
+		// If the client didn't give us a type hint, we must communicate our
+		// inferred type to pgwire so it can know how to parse incoming data.
+		p.TypeHints[name] = typ
+	}
 	return nil
 }
 
-// SetTypes resets the type and values in the map and replaces the
-// types map by an alias to src. If src is nil, the map is cleared.
-// The types map is aliased because the invoking code from
+// SetTypeHints resets the type and values in the map and replaces the
+// type hints map by an alias to src. If src is nil, the map is cleared.
+// The type hints map is aliased because the invoking code from
 // pgwire/v3.go for sql.Prepare needs to receive the updated type
 // assignments after Prepare completes.
-func (p *PlaceholderInfo) SetTypes(src PlaceholderTypes) {
+func (p *PlaceholderInfo) SetTypeHints(src PlaceholderTypes) {
 	if src != nil {
-		p.Types = src
+		p.TypeHints = src
+		p.Types = PlaceholderTypes{}
 		p.Values = QueryArguments{}
 	} else {
 		p.Clear()
@@ -149,7 +159,7 @@ func (p *PlaceholderInfo) SetTypes(src PlaceholderTypes) {
 // whether the placeholder's type remains unset in the PlaceholderInfo.
 func (p *PlaceholderInfo) IsUnresolvedPlaceholder(expr Expr) bool {
 	if t, ok := StripParens(expr).(*Placeholder); ok {
-		_, res := p.Types[t.Name]
+		_, res := p.TypeHints[t.Name]
 		return !res
 	}
 	return false
@@ -169,6 +179,24 @@ func (v *placeholdersVisitor) VisitPre(expr Expr) (recurse bool, newNode Expr) {
 		if e, ok := v.placeholders.Value(t.Name); ok {
 			// Placeholder expressions cannot contain other placeholders, so we do
 			// not need to recurse.
+			typ, typed := v.placeholders.Type(t.Name)
+			if !typed {
+				// All placeholders should be typed at this point. If they're not, we
+				// can just return their value, though.
+				return false, e
+			}
+			if !e.ResolvedType().Equivalent(typ) {
+				// This happens when we overrode the placeholder's type during type
+				// checking, since the placeholder's type hint didn't match the desired
+				// type for the placeholder. In this case, we cast the expression to
+				// the desired type.
+				// TODO(jordan): introduce a restriction on what casts are allowed here.
+				colType, err := DatumTypeToColumnType(typ)
+				if err != nil {
+					return false, e
+				}
+				return false, &CastExpr{Expr: e, Type: colType}
+			}
 			return false, e
 		}
 	}
