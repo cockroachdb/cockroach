@@ -118,6 +118,8 @@ void TableStruct::InitDefaultsImpl() {
       ::cockroach::roachpb::Attributes::internal_default_instance());
   _NodeDescriptor_default_instance_.get_mutable()->locality_ = const_cast< ::cockroach::roachpb::Locality*>(
       ::cockroach::roachpb::Locality::internal_default_instance());
+  _NodeDescriptor_default_instance_.get_mutable()->serverversion_ = const_cast< ::cockroach::roachpb::Version*>(
+      ::cockroach::roachpb::Version::internal_default_instance());
   _StoreDescriptor_default_instance_.get_mutable()->attrs_ = const_cast< ::cockroach::roachpb::Attributes*>(
       ::cockroach::roachpb::Attributes::internal_default_instance());
   _StoreDescriptor_default_instance_.get_mutable()->node_ = const_cast< ::cockroach::roachpb::NodeDescriptor*>(
@@ -2913,6 +2915,7 @@ const int NodeDescriptor::kNodeIdFieldNumber;
 const int NodeDescriptor::kAddressFieldNumber;
 const int NodeDescriptor::kAttrsFieldNumber;
 const int NodeDescriptor::kLocalityFieldNumber;
+const int NodeDescriptor::kServerVersionFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 NodeDescriptor::NodeDescriptor()
@@ -2944,6 +2947,11 @@ NodeDescriptor::NodeDescriptor(const NodeDescriptor& from)
   } else {
     locality_ = NULL;
   }
+  if (from.has_serverversion()) {
+    serverversion_ = new ::cockroach::roachpb::Version(*from.serverversion_);
+  } else {
+    serverversion_ = NULL;
+  }
   node_id_ = from.node_id_;
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.NodeDescriptor)
 }
@@ -2969,6 +2977,9 @@ void NodeDescriptor::SharedDtor() {
   if (this != internal_default_instance()) {
     delete locality_;
   }
+  if (this != internal_default_instance()) {
+    delete serverversion_;
+  }
 }
 
 void NodeDescriptor::SetCachedSize(int size) const {
@@ -2991,7 +3002,7 @@ NodeDescriptor* NodeDescriptor::New(::google::protobuf::Arena* arena) const {
 
 void NodeDescriptor::Clear() {
 // @@protoc_insertion_point(message_clear_start:cockroach.roachpb.NodeDescriptor)
-  if (_has_bits_[0 / 32] & 7u) {
+  if (_has_bits_[0 / 32] & 15u) {
     if (has_address()) {
       GOOGLE_DCHECK(address_ != NULL);
       address_->::cockroach::util::UnresolvedAddr::Clear();
@@ -3003,6 +3014,10 @@ void NodeDescriptor::Clear() {
     if (has_locality()) {
       GOOGLE_DCHECK(locality_ != NULL);
       locality_->::cockroach::roachpb::Locality::Clear();
+    }
+    if (has_serverversion()) {
+      GOOGLE_DCHECK(serverversion_ != NULL);
+      serverversion_->::cockroach::roachpb::Version::Clear();
     }
   }
   node_id_ = 0;
@@ -3072,6 +3087,17 @@ bool NodeDescriptor::MergePartialFromCodedStream(
         break;
       }
 
+      case 5: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(42u)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+               input, mutable_serverversion()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0 ||
@@ -3101,7 +3127,7 @@ void NodeDescriptor::SerializeWithCachedSizes(
   (void) cached_has_bits;
 
   cached_has_bits = _has_bits_[0];
-  if (cached_has_bits & 0x00000008u) {
+  if (cached_has_bits & 0x00000010u) {
     ::google::protobuf::internal::WireFormatLite::WriteInt32(1, this->node_id(), output);
   }
 
@@ -3120,6 +3146,11 @@ void NodeDescriptor::SerializeWithCachedSizes(
       4, *this->locality_, output);
   }
 
+  if (cached_has_bits & 0x00000008u) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      5, *this->serverversion_, output);
+  }
+
   output->WriteRaw(unknown_fields().data(),
                    static_cast<int>(unknown_fields().size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.NodeDescriptor)
@@ -3131,7 +3162,7 @@ size_t NodeDescriptor::ByteSizeLong() const {
 
   total_size += unknown_fields().size();
 
-  if (_has_bits_[0 / 32] & 15u) {
+  if (_has_bits_[0 / 32] & 31u) {
     if (has_address()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -3148,6 +3179,12 @@ size_t NodeDescriptor::ByteSizeLong() const {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
           *this->locality_);
+    }
+
+    if (has_serverversion()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
+          *this->serverversion_);
     }
 
     if (has_node_id()) {
@@ -3177,7 +3214,7 @@ void NodeDescriptor::MergeFrom(const NodeDescriptor& from) {
   (void) cached_has_bits;
 
   cached_has_bits = from._has_bits_[0];
-  if (cached_has_bits & 15u) {
+  if (cached_has_bits & 31u) {
     if (cached_has_bits & 0x00000001u) {
       mutable_address()->::cockroach::util::UnresolvedAddr::MergeFrom(from.address());
     }
@@ -3188,6 +3225,9 @@ void NodeDescriptor::MergeFrom(const NodeDescriptor& from) {
       mutable_locality()->::cockroach::roachpb::Locality::MergeFrom(from.locality());
     }
     if (cached_has_bits & 0x00000008u) {
+      mutable_serverversion()->::cockroach::roachpb::Version::MergeFrom(from.serverversion());
+    }
+    if (cached_has_bits & 0x00000010u) {
       node_id_ = from.node_id_;
     }
     _has_bits_[0] |= cached_has_bits;
@@ -3213,6 +3253,7 @@ void NodeDescriptor::InternalSwap(NodeDescriptor* other) {
   std::swap(address_, other->address_);
   std::swap(attrs_, other->attrs_);
   std::swap(locality_, other->locality_);
+  std::swap(serverversion_, other->serverversion_);
   std::swap(node_id_, other->node_id_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
@@ -3227,13 +3268,13 @@ void NodeDescriptor::InternalSwap(NodeDescriptor* other) {
 // NodeDescriptor
 
 bool NodeDescriptor::has_node_id() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
+  return (_has_bits_[0] & 0x00000010u) != 0;
 }
 void NodeDescriptor::set_has_node_id() {
-  _has_bits_[0] |= 0x00000008u;
+  _has_bits_[0] |= 0x00000010u;
 }
 void NodeDescriptor::clear_has_node_id() {
-  _has_bits_[0] &= ~0x00000008u;
+  _has_bits_[0] &= ~0x00000010u;
 }
 void NodeDescriptor::clear_node_id() {
   node_id_ = 0;
@@ -3379,6 +3420,50 @@ void NodeDescriptor::set_allocated_locality(::cockroach::roachpb::Locality* loca
     clear_has_locality();
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.NodeDescriptor.locality)
+}
+
+bool NodeDescriptor::has_serverversion() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+void NodeDescriptor::set_has_serverversion() {
+  _has_bits_[0] |= 0x00000008u;
+}
+void NodeDescriptor::clear_has_serverversion() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+void NodeDescriptor::clear_serverversion() {
+  if (serverversion_ != NULL) serverversion_->::cockroach::roachpb::Version::Clear();
+  clear_has_serverversion();
+}
+const ::cockroach::roachpb::Version& NodeDescriptor::serverversion() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.NodeDescriptor.ServerVersion)
+  return serverversion_ != NULL ? *serverversion_
+                         : *::cockroach::roachpb::Version::internal_default_instance();
+}
+::cockroach::roachpb::Version* NodeDescriptor::mutable_serverversion() {
+  set_has_serverversion();
+  if (serverversion_ == NULL) {
+    serverversion_ = new ::cockroach::roachpb::Version;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.NodeDescriptor.ServerVersion)
+  return serverversion_;
+}
+::cockroach::roachpb::Version* NodeDescriptor::release_serverversion() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.NodeDescriptor.ServerVersion)
+  clear_has_serverversion();
+  ::cockroach::roachpb::Version* temp = serverversion_;
+  serverversion_ = NULL;
+  return temp;
+}
+void NodeDescriptor::set_allocated_serverversion(::cockroach::roachpb::Version* serverversion) {
+  delete serverversion_;
+  serverversion_ = serverversion;
+  if (serverversion) {
+    set_has_serverversion();
+  } else {
+    clear_has_serverversion();
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.NodeDescriptor.ServerVersion)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

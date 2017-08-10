@@ -85,7 +85,7 @@ func runProcessors(tc testCase) (sqlbase.EncDatumRows, error) {
 	inR := NewRowBuffer(nil, tc.inputRight, RowBufferArgs{})
 	out := &RowBuffer{}
 
-	flowCtx := FlowCtx{Settings: cluster.MakeClusterSettings()}
+	flowCtx := FlowCtx{Settings: cluster.MakeTestingClusterSettings()}
 
 	s, err := newAlgebraicSetOp(&flowCtx, &tc.spec, inL, inR, &PostProcessSpec{}, out)
 	if err != nil {

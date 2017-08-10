@@ -61,8 +61,8 @@ const (
 // makeTestConfig returns a config for testing. It overrides the
 // Certs with the test certs directory.
 // We need to override the certs loader.
-func makeTestConfig() Config {
-	cfg := MakeConfig(cluster.MakeClusterSettings())
+func makeTestConfig(st *cluster.Settings) Config {
+	cfg := MakeConfig(st)
 
 	// Test servers start in secure mode by default.
 	cfg.Insecure = false
@@ -96,7 +96,11 @@ func makeTestConfig() Config {
 
 // makeTestConfigFromParams creates a Config from a TestServerParams.
 func makeTestConfigFromParams(params base.TestServerArgs) Config {
-	cfg := makeTestConfig()
+	st := params.Settings
+	if params.Settings == nil {
+		st = cluster.MakeClusterSettings()
+	}
+	cfg := makeTestConfig(st)
 	cfg.TestingKnobs = params.Knobs
 	cfg.RaftConfig = params.RaftConfig
 	cfg.RaftConfig.SetDefaults()

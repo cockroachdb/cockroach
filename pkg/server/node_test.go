@@ -95,7 +95,7 @@ func createTestNode(
 		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	)
 	cfg.DB = client.NewDB(sender, cfg.Clock)
-	cfg.Transport = storage.NewDummyRaftTransport()
+	cfg.Transport = storage.NewDummyRaftTransport(st)
 	cfg.MetricsSampleInterval = metric.TestSampleInterval
 	cfg.HistogramWindowInterval = metric.TestSampleInterval
 	active, renewal := cfg.NodeLivenessDurations()
@@ -185,8 +185,8 @@ func TestBootstrapCluster(t *testing.T) {
 	defer e.Close()
 	if _, err := bootstrapCluster(
 		context.TODO(), storage.StoreConfig{
-			Settings: cluster.MakeClusterSettings(),
-		}, []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
+			Settings: cluster.MakeTestingClusterSettings(),
+		}, []engine.Engine{e}, cluster.BootstrapVersion(), kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +227,8 @@ func TestBootstrapNewStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	if _, err := bootstrapCluster(
-		context.TODO(), bootstrapNodeConfig(), []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
+		context.TODO(), bootstrapNodeConfig(), []engine.Engine{e}, cluster.BootstrapVersion(),
+		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -295,7 +296,7 @@ func TestNodeJoin(t *testing.T) {
 
 	cfg := bootstrapNodeConfig()
 	if _, err := bootstrapCluster(
-		context.TODO(), cfg, []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
+		context.TODO(), cfg, []engine.Engine{e}, cluster.BootstrapVersion(), kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -362,7 +363,7 @@ func TestCorruptedClusterID(t *testing.T) {
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
 	if _, err := bootstrapCluster(
-		context.TODO(), bootstrapNodeConfig(), []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
+		context.TODO(), bootstrapNodeConfig(), []engine.Engine{e}, cluster.BootstrapVersion(), kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -692,7 +693,7 @@ func TestStartNodeWithLocality(t *testing.T) {
 		e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 		defer e.Close()
 		if _, err := bootstrapCluster(
-			context.TODO(), bootstrapNodeConfig(), []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
+			context.TODO(), bootstrapNodeConfig(), []engine.Engine{e}, cluster.BootstrapVersion(), kv.MakeTxnMetrics(metric.TestSampleInterval),
 		); err != nil {
 			t.Fatal(err)
 		}

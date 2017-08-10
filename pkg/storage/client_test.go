@@ -150,12 +150,12 @@ func createTestStoreWithEngine(
 	)
 	storeCfg.DB = client.NewDB(sender, storeCfg.Clock)
 	storeCfg.StorePool = storage.NewTestStorePool(storeCfg)
-	storeCfg.Transport = storage.NewDummyRaftTransport()
+	storeCfg.Transport = storage.NewDummyRaftTransport(storeCfg.Settings)
 	// TODO(bdarnell): arrange to have the transport closed.
 	store := storage.NewStore(storeCfg, eng, nodeDesc)
 	ctx := context.Background()
 	if bootstrap {
-		if err := store.Bootstrap(ctx, roachpb.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
+		if err := store.Bootstrap(ctx, roachpb.StoreIdent{NodeID: 1, StoreID: 1}, cluster.BootstrapVersion()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -277,7 +277,7 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 	if m.transportStopper == nil {
 		m.transportStopper = stop.NewStopper()
 	}
-	st := cluster.MakeClusterSettings()
+	st := cluster.MakeTestingClusterSettings()
 	if m.rpcContext == nil {
 		m.rpcContext = rpc.NewContext(log.AmbientContext{Tracer: st.Tracer}, &base.Config{Insecure: true}, m.clock,
 			m.transportStopper)
@@ -751,7 +751,7 @@ func (m *multiTestContext) addStore(idx int) {
 		if err := store.Bootstrap(ctx, roachpb.StoreIdent{
 			NodeID:  roachpb.NodeID(idx + 1),
 			StoreID: roachpb.StoreID(idx + 1),
-		}); err != nil {
+		}, cluster.BootstrapVersion()); err != nil {
 			m.t.Fatal(err)
 		}
 

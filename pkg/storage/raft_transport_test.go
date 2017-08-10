@@ -147,7 +147,7 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 	grpcServer := rpc.NewServer(rttc.nodeRPCContext)
 	transport := storage.NewRaftTransport(
 		log.AmbientContext{Tracer: tracing.NewTracer()},
-		cluster.MakeClusterSettings(),
+		cluster.MakeTestingClusterSettings(),
 		storage.GossipAddressResolver(rttc.gossip),
 		grpcServer,
 		rttc.nodeRPCContext,

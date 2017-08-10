@@ -107,7 +107,7 @@ func TestAdminDebugExpVar(t *testing.T) {
 
 	// This test accesses the debug pages, which currently use this singleton
 	// that needs to be populated manually.
-	ClusterSettings = cluster.MakeClusterSettings()
+	ClusterSettings = cluster.MakeTestingClusterSettings()
 
 	jI, err := getJSON(s, debugURL(s)+"vars")
 	if err != nil {

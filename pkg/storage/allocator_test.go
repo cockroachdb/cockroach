@@ -1312,7 +1312,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 func TestLoadBasedLeaseRebalanceScore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	st := cluster.MakeClusterSettings()
+	st := cluster.MakeTestingClusterSettings()
 	st.EnableLoadBasedLeaseRebalancing.Override(true)
 
 	remoteStore := roachpb.StoreDescriptor{
@@ -2562,7 +2562,7 @@ func Example_rebalancing() {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 
-	st := cluster.MakeClusterSettings()
+	st := cluster.MakeTestingClusterSettings()
 	st.EnableStatsBasedRebalancing.Override(false)
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)

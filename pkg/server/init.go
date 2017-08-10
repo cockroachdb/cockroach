@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -89,7 +90,7 @@ func (s *initServer) Bootstrap(
 		return nil, errors.New("bootstrap called after cluster already initialized")
 	}
 
-	if err := s.server.node.bootstrap(ctx, s.server.engines); err != nil {
+	if err := s.server.node.bootstrap(ctx, s.server.engines, cluster.BootstrapVersion()); err != nil {
 		log.Error(ctx, "node bootstrap failed: ", err)
 		return nil, err
 	}

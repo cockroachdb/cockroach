@@ -49,6 +49,11 @@ func StoreGossipKey() roachpb.Key {
 	return MakeStoreKey(localStoreGossipSuffix, nil)
 }
 
+// StoreClusterVersionKey returns a store-local key for the cluster version.
+func StoreClusterVersionKey() roachpb.Key {
+	return MakeStoreKey(localStoreClusterVersionSuffix, nil)
+}
+
 // StoreLastUpKey returns the key for the store's "last up" timestamp.
 func StoreLastUpKey() roachpb.Key {
 	return MakeStoreKey(localStoreLastUpSuffix, nil)

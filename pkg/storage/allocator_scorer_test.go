@@ -796,7 +796,7 @@ func TestDiversityRemovalScore(t *testing.T) {
 func TestBalanceScore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	st := cluster.MakeClusterSettings()
+	st := cluster.MakeTestingClusterSettings()
 
 	storeList := StoreList{
 		candidateRanges:          stat{mean: 1000},

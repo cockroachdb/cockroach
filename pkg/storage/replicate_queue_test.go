@@ -56,7 +56,9 @@ func TestReplicateQueueRebalance(t *testing.T) {
 	defer tc.Stopper().Stop(context.TODO())
 
 	for _, server := range tc.Servers {
-		server.ClusterSettings().EnableStatsBasedRebalancing.Override(false)
+		st := server.ClusterSettings()
+		st.Manual.Store(true)
+		st.EnableStatsBasedRebalancing.Override(false)
 	}
 
 	const newRanges = 5

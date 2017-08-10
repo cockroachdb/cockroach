@@ -105,7 +105,9 @@ func testMonotonicInserts(t *testing.T, distSQLMode cluster.DistSQLExecMode) {
 	ctx := context.Background()
 
 	for _, server := range tc.Servers {
-		server.ClusterSettings().DistSQLClusterExecMode.Override(int64(distSQLMode))
+		st := server.ClusterSettings()
+		st.Manual.Store(true)
+		st.DistSQLClusterExecMode.Override(int64(distSQLMode))
 	}
 
 	var clients []mtClient

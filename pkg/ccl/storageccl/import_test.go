@@ -110,6 +110,7 @@ func TestImport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	t.Run("WriteBatch", func(t *testing.T) {
 		disableSSTable := func(st *cluster.Settings) {
+			st.Manual.Store(true)
 			st.AddSSTableEnabled.Override(false)
 		}
 		t.Run("batch=default", func(t *testing.T) {
@@ -119,6 +120,7 @@ func TestImport(t *testing.T) {
 			// The test normally doesn't trigger the batching behavior, so lower
 			// the threshold to force it.
 			init := func(st *cluster.Settings) {
+				st.Manual.Store(true)
 				st.ImportBatchSize.Override(1)
 			}
 			runTestImport(t, init)
@@ -126,6 +128,7 @@ func TestImport(t *testing.T) {
 	})
 	t.Run("AddSSTable", func(t *testing.T) {
 		enableSSTable := func(st *cluster.Settings) {
+			st.Manual.Store(true)
 			st.AddSSTableEnabled.Override(true)
 		}
 		t.Run("batch=default", func(t *testing.T) {

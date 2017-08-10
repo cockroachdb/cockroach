@@ -134,12 +134,14 @@ func createTestStoreWithoutStart(t testing.TB, stopper *stop.Stopper, cfg *Store
 	cfg.TestingKnobs.DisableSplitQueue = true
 	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
 	stopper.AddCloser(eng)
-	cfg.Transport = NewDummyRaftTransport()
+	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
 	sender := &testSender{}
 	cfg.DB = client.NewDB(sender, cfg.Clock)
 	store := NewStore(*cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 	sender.store = store
-	if err := store.Bootstrap(context.TODO(), roachpb.StoreIdent{NodeID: 1, StoreID: 1}); err != nil {
+	if err := store.Bootstrap(
+		context.TODO(), roachpb.StoreIdent{NodeID: 1, StoreID: 1}, cluster.BootstrapVersion(),
+	); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.BootstrapRange(nil); err != nil {
@@ -183,7 +185,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	defer stopper.Stop(ctx)
 	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(eng)
-	cfg.Transport = NewDummyRaftTransport()
+	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
 
 	{
 		store := NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
@@ -193,7 +195,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		}
 
 		// Bootstrap with a fake ident.
-		if err := store.Bootstrap(ctx, testIdent); err != nil {
+		if err := store.Bootstrap(ctx, testIdent, cluster.BootstrapVersion()); err != nil {
 			t.Errorf("error bootstrapping store: %s", err)
 		}
 
@@ -254,7 +256,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 		t.Errorf("failure putting key foo into engine: %s", err)
 	}
 	cfg := TestStoreConfig(nil)
-	cfg.Transport = NewDummyRaftTransport()
+	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
 	store := NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 
 	// Can't init as haven't bootstrapped.
@@ -265,7 +267,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	}
 
 	// Bootstrap should fail on non-empty engine.
-	switch err := errors.Cause(store.Bootstrap(ctx, testIdent)); err.(type) {
+	switch err := errors.Cause(store.Bootstrap(ctx, testIdent, cluster.BootstrapVersion())); err.(type) {
 	case *NotBootstrappedError:
 	default:
 		t.Errorf("unexpected error bootstrapping non-empty store: %v", err)
@@ -2510,7 +2512,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 	defer e.Close()
 
 	ctx := context.Background()
-	st := cluster.MakeClusterSettings()
+	st := cluster.MakeTestingClusterSettings()
 
 	header := SnapshotRequest_Header{
 		CanDecline: true,
@@ -2656,7 +2658,7 @@ func TestSnapshotRateLimit(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run(c.priority.String(), func(t *testing.T) {
-			limit, err := snapshotRateLimit(cluster.MakeClusterSettings(), c.priority)
+			limit, err := snapshotRateLimit(cluster.MakeTestingClusterSettings(), c.priority)
 			if !testutils.IsError(err, c.expectedErr) {
 				t.Fatalf("expected \"%s\", but found %v", c.expectedErr, err)
 			}

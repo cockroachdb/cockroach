@@ -21,10 +21,10 @@ var (
 	// by this binary. If this binary is started using a store that has
 	// data marked with an earlier version than MinimumSupportedVersion,
 	// then the binary will exit with an error.
-	MinimumSupportedVersion = VersionBase
+	MinimumSupportedVersion = VersionMajorOneMinorZero
 
 	// ServerVersion is the version of this binary.
-	ServerVersion = VersionSplitHardStateBelowRaft
+	ServerVersion = VersionMajorOneMinorOne
 )
 
 // List all historical versions here in reverse chronological order, with
@@ -33,18 +33,27 @@ var (
 // NB: when adding a version, don't forget to bump ServerVersion above (and
 // perhaps MinimumSupportedVersion, if necessary).
 var (
+	// VersionMajorOneMinorOne is v1.1.
+	// Note that 1.1-alpha versions already self-identify as v1.1.
+	VersionMajorOneMinorOne = roachpb.Version{Major: 1, Minor: 1}
+
 	// VersionSplitHardStateBelowRaft is https://github.com/cockroachdb/cockroach/pull/17051.
 	VersionSplitHardStateBelowRaft = roachpb.Version{Major: 1, Minor: 0, Unstable: 2}
 
 	// VersionRaftLogTruncationBelowRaft is https://github.com/cockroachdb/cockroach/pull/16993.
 	VersionRaftLogTruncationBelowRaft = roachpb.Version{Major: 1, Minor: 0, Unstable: 1}
 
-	// VersionBase is the empty version and corresponds to any binary
-	// older than 1.0.1, though these binaries won't know anything
-	// about the mechanism in which this version is used.
-	VersionBase = roachpb.Version{Major: 1}
+	// VersionMajorOneMinorZero corresponds to any binary older than 1.0-1,
+	// though these binaries won't know anything about the mechanism in which
+	// this version is used.
+	VersionMajorOneMinorZero = roachpb.Version{Major: 1}
 )
 
-// FIXME(tschottdorf): remove these with the version migration PR.
-var _ = MinimumSupportedVersion
-var _ = VersionBase
+// BootstrapVersion is the version that a new cluster bootstrapped from this
+// binary should have.
+func BootstrapVersion() ClusterVersion {
+	return ClusterVersion{
+		UseVersion:     ServerVersion,
+		MinimumVersion: ServerVersion,
+	}
+}
