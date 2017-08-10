@@ -16,7 +16,7 @@
         #    ^^^^^^^^^^^^^^^^^^^ take this
         rulename = substr(rulename, index($0, "|")+1)
     }
-    printf "%s %prec VALUES | %s HELPTOKEN %%prec UMINUS { return helpWith(sqllex, \"%s\") }\n", prefix, rulename, helpkey
+    printf "%s %%prec VALUES | %s HELPTOKEN %%prec UMINUS { return helpWith(sqllex, \"%s\") }\n", prefix, rulename, helpkey
     next
 }
 /\/\/ SHOW HELP:/ {
