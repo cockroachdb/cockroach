@@ -76,10 +76,6 @@ func init() {
 		"keep the cluster after the test, either 'always', 'never', or 'failed'")
 
 	flag.Parse()
-
-	if *flagCLTWriters == -1 {
-		*flagCLTWriters = *flagNodes
-	}
 }
 
 var flagDuration = flag.Duration("d", cluster.DefaultDuration, "duration to run the test")
@@ -116,10 +112,6 @@ var flagTFCockroachEnv = flag.String("tf.cockroach-env", "",
 // Allocator test flags.
 var flagATMaxStdDev = flag.Float64("at.std-dev", 10,
 	"maximum standard deviation of replica counts")
-
-// continuousLoadTest (CLT) flags.
-var flagCLTWriters = flag.Int("clt.writers", -1,
-	"# of load generators to spawn (defaults to # of nodes)")
 var flagCLTMinQPS = flag.Float64("clt.min-qps", 5.0,
 	"fail load tests when queries per second drops below this during a health check interval")
 

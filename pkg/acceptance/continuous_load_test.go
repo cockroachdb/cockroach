@@ -128,7 +128,7 @@ func (cl continuousLoadTest) Run(ctx context.Context, t testing.TB) {
 		t.Fatal(err)
 	}
 	start := timeutil.Now()
-	if err := f.StartLoad(ctx, cl.Process, *flagCLTWriters); err != nil {
+	if err := f.StartLoad(ctx, cl.Process); err != nil {
 		t.Fatal(err)
 	}
 	f.Assert(ctx, t)
