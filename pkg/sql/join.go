@@ -138,6 +138,10 @@ type joinNode struct {
 	// See computeMergeJoinOrdering. This information is used by distsql planning.
 	mergeJoinOrdering sqlbase.ColumnOrdering
 
+	// ordering is set during expandPlan based on mergeJoinOrdering, but later
+	// trimmed.
+	ordering orderingInfo
+
 	// columns contains the metadata for the results of this node.
 	columns sqlbase.ResultColumns
 
@@ -542,4 +546,53 @@ func (n *joinNode) Close(ctx context.Context) {
 
 	n.right.plan.Close(ctx)
 	n.left.plan.Close(ctx)
+}
+
+// equalityColIdxInSchema takes a column index from joinPred.leftEqualityIndices
+// or joinPred.rightEqualityIndices, and maps it to the column index in n.Columns.
+func (n *joinNode) equalityColIdxInSchema(colIdx int, right bool) uint32 {
+	if right {
+		return uint32(n.pred.rightEqualityIndices[colIdx] +
+			n.pred.numMergedEqualityColumns +
+			n.pred.numLeftCols)
+	}
+	return uint32(n.pred.numMergedEqualityColumns +
+		n.pred.leftEqualityIndices[colIdx])
+}
+
+func (n *joinNode) joinOrdering() orderingInfo {
+	if len(n.mergeJoinOrdering) == 0 {
+		return orderingInfo{}
+	}
+	info := orderingInfo{}
+
+	// For now we only propagate orderings on INNER JOINs.
+	// TODO(arjun): Support order propagation for other JOIN types.
+	if n.joinType == joinTypeInner {
+		// TODO(arjun): copy over the constant columns as well from the left and right subplans.
+
+		for _, col := range n.mergeJoinOrdering {
+			group := orderingColumnGroup{}
+			// n.Columns has the following schema on equality JOINs:
+			// First, the merged columns.
+			// Second, the non-merged columns from the left input.
+			// Third, the non-merged columns from the right input.
+
+			// If col is an index into the equality columns, then its simple:
+			// we just add it.
+			if col.ColIdx < n.pred.numMergedEqualityColumns {
+				group.cols.Add(uint32(col.ColIdx))
+			}
+
+			// Otherwise, this is an index into non-equality columns, so we
+			// then add all the columns from the left and right inputs that
+			// have an ordering.
+			group.cols.Add(n.equalityColIdxInSchema(col.ColIdx, false /* !right */))
+			group.cols.Add(n.equalityColIdxInSchema(col.ColIdx, true /* right */))
+
+			group.dir = col.Direction
+			info.ordering = append(info.ordering, group)
+		}
+	}
+	return info
 }
