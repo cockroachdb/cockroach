@@ -190,7 +190,7 @@ func doExpandPlan(
 
 	case *distinctNode:
 		// TODO(radu/knz): perhaps we can propagate the DISTINCT
-		// clause as desired ordering/exact match for the source node.
+		// clause as desired ordering for the source node.
 		n.plan, err = doExpandPlan(ctx, p, params, n.plan)
 		if err != nil {
 			return plan, err
@@ -199,11 +199,13 @@ func doExpandPlan(
 		ordering := planOrdering(n.plan)
 		if !ordering.isEmpty() {
 			n.columnsInOrder = make([]bool, len(planColumns(n.plan)))
-			for colIdx := range ordering.exactMatchCols {
+			ordering.constantCols.ForEach(func(colIdx uint32) {
 				n.columnsInOrder[colIdx] = true
-			}
-			for _, c := range ordering.ordering {
-				n.columnsInOrder[c.ColIdx] = true
+			})
+			for _, g := range ordering.ordering {
+				for col, ok := g.cols.Next(0); ok; col, ok = g.cols.Next(col + 1) {
+					n.columnsInOrder[col] = true
+				}
 			}
 		}
 
@@ -459,15 +461,8 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 		n.right.plan = simplifyOrderings(n.right.plan, usefulRight)
 
 	case *ordinalityNode:
-		// The ordinality node either passes through the source ordering, or if
-		// there is none it creates an ordering on the ordinality column (see the
-		// corresponding code in doExpandPlan).
-		// TODO(radu): better encapsulate this code in ordinalityNode (#13594).
-		if len(n.ordering.ordering) == 1 && n.ordering.ordering[0].ColIdx == len(n.columns)-1 {
-			n.source = simplifyOrderings(n.source, nil)
-		} else {
-			n.source = simplifyOrderings(n.source, n.ordering.ordering)
-		}
+		n.ordering.trim(usefulOrdering)
+		n.source = simplifyOrderings(n.source, n.restrictOrdering(usefulOrdering))
 
 	case *limitNode:
 		n.plan = simplifyOrderings(n.plan, usefulOrdering)
@@ -488,18 +483,18 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 			// the sort (and save memory), at least for DistSQL.
 			n.plan = simplifyOrderings(n.plan, n.ordering)
 		} else {
-			exactMatchCols := planOrdering(n.plan).exactMatchCols
+			constantCols := planOrdering(n.plan).constantCols
 			// Normally we would pass n.ordering; but n.ordering could be a prefix of
-			// the useful ordering. Check for this, ignoring any exact match columns.
+			// the useful ordering. Check for this, ignoring any constant columns.
 			sortOrder := make(sqlbase.ColumnOrdering, 0, len(n.ordering))
 			for _, c := range n.ordering {
-				if _, ok := exactMatchCols[c.ColIdx]; !ok {
+				if !constantCols.Contains(uint32(c.ColIdx)) {
 					sortOrder = append(sortOrder, c)
 				}
 			}
 			givenOrder := make(sqlbase.ColumnOrdering, 0, len(usefulOrdering))
 			for _, c := range usefulOrdering {
-				if _, ok := exactMatchCols[c.ColIdx]; !ok {
+				if !constantCols.Contains(uint32(c.ColIdx)) {
 					givenOrder = append(givenOrder, c)
 				}
 			}
@@ -529,7 +524,8 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 	case *distinctNode:
 		// distinctNode uses whatever order the underlying node presents (regardless
 		// of any ordering requirement on distinctNode itself).
-		n.plan = simplifyOrderings(n.plan, planOrdering(n.plan).ordering)
+		sourceOrdering := planOrdering(n.plan)
+		n.plan = simplifyOrderings(n.plan, sourceOrdering.getColumnOrdering())
 
 	case *scanNode:
 		n.ordering.trim(usefulOrdering)
