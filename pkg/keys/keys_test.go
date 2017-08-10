@@ -254,14 +254,16 @@ func TestMetaScanBounds(t *testing.T) {
 		},
 	}
 	for i, test := range testCases {
-		resStart, resEnd, err := MetaScanBounds(test.key)
+		res, err := MetaScanBounds(test.key)
 
 		if !testutils.IsError(err, test.expError) {
 			t.Errorf("expected error: %s ; got %v", test.expError, err)
 		}
 
-		if !resStart.Equal(test.expStart) || !resEnd.Equal(test.expEnd) {
-			t.Errorf("%d: range bounds %q-%q don't match expected bounds %q-%q for key %q", i, resStart, resEnd, test.expStart, test.expEnd, test.key)
+		expected := roachpb.RSpan{Key: test.expStart, EndKey: test.expEnd}
+		if !res.Equal(expected) {
+			t.Errorf("%d: range bounds %s don't match expected bounds %s for key %s",
+				i, res, expected, roachpb.Key(test.key))
 		}
 	}
 }
@@ -322,14 +324,16 @@ func TestMetaReverseScanBounds(t *testing.T) {
 		},
 	}
 	for i, test := range testCases {
-		resStart, resEnd, err := MetaReverseScanBounds(roachpb.RKey(test.key))
+		res, err := MetaReverseScanBounds(roachpb.RKey(test.key))
 
 		if !testutils.IsError(err, test.expError) {
 			t.Errorf("expected error %q ; got %v", test.expError, err)
 		}
 
-		if !resStart.Equal(test.expStart) || !resEnd.Equal(test.expEnd) {
-			t.Errorf("%d: range bounds %q-%q don't match expected bounds %q-%q for key %q", i, resStart, resEnd, test.expStart, test.expEnd, test.key)
+		expected := roachpb.RSpan{Key: test.expStart, EndKey: test.expEnd}
+		if !res.Equal(expected) {
+			t.Errorf("%d: range bounds %s don't match expected bounds %s for key %s",
+				i, res, expected, roachpb.Key(test.key))
 		}
 	}
 }
