@@ -232,12 +232,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 	s.db = client.NewDB(s.txnCoordSender, s.clock)
 
-	raftElectionTimeout := storage.RaftElectionTimeout(s.cfg.RaftTickInterval, s.cfg.RaftElectionTimeoutTicks)
-	nlActive, nlRenewal := storage.NodeLivenessDurations(raftElectionTimeout)
-	rlActive, rlRenewal := storage.RangeLeaseDurations(raftElectionTimeout)
-
+	active, renewal := storage.NodeLivenessDurations(
+		storage.RaftElectionTimeout(s.cfg.RaftTickInterval, s.cfg.RaftElectionTimeoutTicks))
 	s.nodeLiveness = storage.NewNodeLiveness(
-		s.cfg.AmbientCtx, s.clock, s.db, s.gossip, nlActive, nlRenewal,
+		s.cfg.AmbientCtx, s.clock, s.db, s.gossip, active, renewal,
 	)
 	s.registry.AddMetricStruct(s.nodeLiveness.Metrics())
 
@@ -342,8 +340,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		StorePool:                      s.storePool,
 		SQLExecutor:                    sqlExecutor,
 		LogRangeEvents:                 s.cfg.EventLogEnabled,
-		RangeLeaseActiveDuration:       rlActive,
-		RangeLeaseRenewalDuration:      rlRenewal,
+		RangeLeaseActiveDuration:       active,
+		RangeLeaseRenewalDuration:      renewal,
 		TimeSeriesDataStore:            s.tsDB,
 
 		EnableEpochRangeLeases: true,
