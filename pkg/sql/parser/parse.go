@@ -81,9 +81,12 @@ func TypeCheck(expr Expr, ctx *SemaContext, desired Type) (TypedExpr, error) {
 		panic("the desired type for parser.TypeCheck cannot be nil, use TypeAny instead")
 	}
 
-	expr = replacePlaceholders(expr, ctx)
+	expr, err := replacePlaceholders(expr, ctx)
+	if err != nil {
+		return nil, err
+	}
 
-	expr, err := foldConstantLiterals(expr)
+	expr, err = foldConstantLiterals(expr)
 	if err != nil {
 		return nil, err
 	}

@@ -38,8 +38,15 @@ type PreparedStatement struct {
 	Str string
 	// Statement is the parsed, prepared SQL statement. It may be nil if the
 	// prepared statement is empty.
-	Statement   parser.Statement
-	SQLTypes    parser.PlaceholderTypes
+	Statement parser.Statement
+	// TypeHints contains the types of the placeholders set by the client. It
+	// dictates how input parameters for those placeholders will be parsed. If a
+	// placeholder has no type hint, it will be populated during type checking.
+	TypeHints parser.PlaceholderTypes
+	// Types contains the final types of the placeholders, after type checking.
+	// These may differ from the types in TypeHints, if a user provides an
+	// imprecise type hint like sending an int for an oid comparison.
+	Types       parser.PlaceholderTypes
 	Columns     sqlbase.ResultColumns
 	portalNames map[string]struct{}
 
@@ -305,7 +312,7 @@ func (pp PreparedPortals) Delete(ctx context.Context, name string) bool {
 func (e *Executor) PrepareStmt(session *Session, s *parser.Prepare) error {
 	name := s.Name.String()
 	if session.PreparedStatements.Exists(name) {
-		return pgerror.NewErrorf(pgerror.CodeDuplicateDatabaseError,
+		return pgerror.NewErrorf(pgerror.CodeDuplicatePreparedStatementError,
 			"prepared statement %q already exists", name)
 	}
 	typeHints := make(parser.PlaceholderTypes, len(s.Types))
@@ -332,26 +339,26 @@ func getPreparedStatementForExecute(
 			"prepared statement %q does not exist", name)
 	}
 
-	if len(prepared.SQLTypes) != len(s.Params) {
+	if len(prepared.TypeHints) != len(s.Params) {
 		return ps, pInfo, pgerror.NewErrorf(pgerror.CodeSyntaxError,
 			"wrong number of parameters for prepared statement %q: expected %d, got %d",
-			name, len(prepared.SQLTypes), len(s.Params))
+			name, len(prepared.TypeHints), len(s.Params))
 	}
 
 	qArgs := make(parser.QueryArguments, len(s.Params))
 	var p parser.Parser
 	for i, e := range s.Params {
 		idx := strconv.Itoa(i + 1)
-		typedExpr, err := sqlbase.SanitizeVarFreeExpr(e, prepared.SQLTypes[idx], "EXECUTE parameter", session.SearchPath)
+		typedExpr, err := sqlbase.SanitizeVarFreeExpr(e, prepared.TypeHints[idx], "EXECUTE parameter", session.SearchPath)
 		if err != nil {
-			return ps, pInfo, pgerror.NewError(pgerror.CodeFeatureNotSupportedError, err.Error())
+			return ps, pInfo, pgerror.NewError(pgerror.CodeWrongObjectTypeError, err.Error())
 		}
 		if err := p.AssertNoAggregationOrWindowing(typedExpr, "EXECUTE parameters", session.SearchPath); err != nil {
 			return ps, pInfo, err
 		}
 		qArgs[idx] = typedExpr
 	}
-	return prepared, &parser.PlaceholderInfo{Values: qArgs, Types: prepared.SQLTypes}, nil
+	return prepared, &parser.PlaceholderInfo{Values: qArgs, TypeHints: prepared.TypeHints, Types: prepared.Types}, nil
 }
 
 // Deallocate implements the DEALLOCATE statement.
