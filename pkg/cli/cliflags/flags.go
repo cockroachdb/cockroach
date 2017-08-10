@@ -504,4 +504,28 @@ Takes any of the following values:
 
 </PRE>`,
 	}
+
+	NodeRanges = FlagInfo{
+		Name: "ranges",
+		Description: `
+		 Show node details for ranges and replicas.`,
+	}
+
+	NodeStats = FlagInfo{
+		Name: "stats",
+		Description: `
+		 Show node disk usage details.`,
+	}
+
+	NodeAll = FlagInfo{
+		Name: "all",
+		Description: `
+		 Show all node details.`,
+	}
+
+	NodeDecommission = FlagInfo{
+		Name: "decommission",
+		Description: `
+		 Show node decomissioning details.`,
+	}
 )
