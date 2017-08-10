@@ -462,28 +462,30 @@ func (rq *replicateQueue) processOneChange(
 			}
 		}
 
-		rebalanceStore := rq.allocator.RebalanceTarget(
-			ctx, zone.Constraints, rangeInfo, storeFilterThrottled)
-		if rebalanceStore == nil {
-			if log.V(1) {
-				log.Infof(ctx, "no suitable rebalance target")
+		if !rq.store.TestingKnobs().DisableReplicaRebalancing {
+			rebalanceStore := rq.allocator.RebalanceTarget(
+				ctx, zone.Constraints, rangeInfo, storeFilterThrottled)
+			if rebalanceStore == nil {
+				if log.V(1) {
+					log.Infof(ctx, "no suitable rebalance target")
+				}
+				// No action was necessary and no rebalance target was found. Return
+				// without re-queuing this replica.
+				return false, nil
 			}
-			// No action was necessary and no rebalance target was found. Return
-			// without re-queuing this replica.
-			return false, nil
-		}
-		rebalanceReplica := roachpb.ReplicationTarget{
-			NodeID:  rebalanceStore.Node.NodeID,
-			StoreID: rebalanceStore.StoreID,
-		}
-		rq.metrics.RebalanceReplicaCount.Inc(1)
-		if log.V(1) {
-			log.Infof(ctx, "rebalancing to %+v: %s",
-				rebalanceReplica, rangeRaftProgress(repl.RaftStatus(), desc.Replicas))
-		}
-		if err := rq.addReplica(
-			ctx, repl, rebalanceReplica, desc, SnapshotRequest_REBALANCE); err != nil {
-			return false, err
+			rebalanceReplica := roachpb.ReplicationTarget{
+				NodeID:  rebalanceStore.Node.NodeID,
+				StoreID: rebalanceStore.StoreID,
+			}
+			rq.metrics.RebalanceReplicaCount.Inc(1)
+			if log.V(1) {
+				log.Infof(ctx, "rebalancing to %+v: %s",
+					rebalanceReplica, rangeRaftProgress(repl.RaftStatus(), desc.Replicas))
+			}
+			if err := rq.addReplica(
+				ctx, repl, rebalanceReplica, desc, SnapshotRequest_REBALANCE); err != nil {
+				return false, err
+			}
 		}
 	}
 
