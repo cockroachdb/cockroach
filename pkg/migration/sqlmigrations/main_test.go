@@ -32,7 +32,7 @@ func TestMain(m *testing.M) {
 
 	// TestLeaseExpiration needs log.ReportingSettingsSingleton populated as it
 	// calls log.Fatal.
-	st := cluster.MakeClusterSettings()
+	st := cluster.MakeTestingClusterSettings()
 	f := log.ReportingSettings(st.ReportingSettings)
 	log.ReportingSettingsSingleton.Store(&f)
 

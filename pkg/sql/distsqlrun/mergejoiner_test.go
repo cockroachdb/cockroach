@@ -355,7 +355,7 @@ func TestMergeJoiner(t *testing.T) {
 			out := &RowBuffer{}
 			evalCtx := parser.MakeTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			flowCtx := FlowCtx{Settings: cluster.MakeClusterSettings(), EvalCtx: evalCtx}
+			flowCtx := FlowCtx{Settings: cluster.MakeTestingClusterSettings(), EvalCtx: evalCtx}
 
 			post := PostProcessSpec{Projection: true, OutputColumns: c.outCols}
 			m, err := newMergeJoiner(&flowCtx, &ms, leftInput, rightInput, &post, out)

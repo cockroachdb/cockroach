@@ -36,7 +36,7 @@ type inMemSideloadStorage struct {
 func mustNewInMemSideloadStorage(
 	rangeID roachpb.RangeID, replicaID roachpb.ReplicaID, baseDir string,
 ) sideloadStorage {
-	ss, err := newInMemSideloadStorage(cluster.MakeClusterSettings(), rangeID, replicaID, baseDir)
+	ss, err := newInMemSideloadStorage(cluster.MakeTestingClusterSettings(), rangeID, replicaID, baseDir)
 	if err != nil {
 		panic(err)
 	}

@@ -46,7 +46,7 @@ func setupRouter(
 		t.Fatal(err)
 	}
 
-	flowCtx := FlowCtx{Settings: cluster.MakeClusterSettings(), EvalCtx: *evalCtx}
+	flowCtx := FlowCtx{Settings: cluster.MakeTestingClusterSettings(), EvalCtx: *evalCtx}
 	r.init(&flowCtx, inputTypes)
 	wg := &sync.WaitGroup{}
 	r.start(context.TODO(), wg)
@@ -515,7 +515,7 @@ func TestRouterBlocks(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			flowCtx := FlowCtx{Settings: cluster.MakeClusterSettings(), EvalCtx: parser.MakeTestingEvalContext()}
+			flowCtx := FlowCtx{Settings: cluster.MakeTestingClusterSettings(), EvalCtx: parser.MakeTestingEvalContext()}
 			router.init(&flowCtx, colTypes)
 			var wg sync.WaitGroup
 			router.start(context.TODO(), &wg)

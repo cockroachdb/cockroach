@@ -102,7 +102,7 @@ func TestJoinReader(t *testing.T) {
 			evalCtx := parser.MakeTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
-				Settings: cluster.MakeClusterSettings(),
+				Settings: cluster.MakeTestingClusterSettings(),
 				EvalCtx:  evalCtx,
 				txnProto: &roachpb.Transaction{},
 				// Pass a DB without a TxnCoordSender.

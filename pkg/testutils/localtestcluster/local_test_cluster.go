@@ -112,7 +112,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSende
 		ltc.DBContext = &dbCtx
 	}
 	ltc.DB = client.NewDBWithContext(ltc.Sender, ltc.Clock, *ltc.DBContext)
-	transport := storage.NewDummyRaftTransport()
+	transport := storage.NewDummyRaftTransport(cfg.Settings)
 	// By default, disable the replica scanner and split queue, which
 	// confuse tests using LocalTestCluster.
 	if ltc.StoreTestingKnobs == nil {
@@ -148,9 +148,15 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSende
 	cfg.HistogramWindowInterval = metric.TestSampleInterval
 	ltc.Store = storage.NewStore(cfg, ltc.Eng, nodeDesc)
 	ctx := context.TODO()
-	if err := ltc.Store.Bootstrap(ctx, roachpb.StoreIdent{NodeID: nodeID, StoreID: 1}); err != nil {
+
+	bootstrapVersion := cluster.BootstrapVersion()
+	if ltc.StoreTestingKnobs != nil && ltc.StoreTestingKnobs.BootstrapVersion != nil {
+		bootstrapVersion = *ltc.StoreTestingKnobs.BootstrapVersion
+	}
+	if err := ltc.Store.Bootstrap(ctx, roachpb.StoreIdent{NodeID: nodeID, StoreID: 1}, bootstrapVersion); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
+
 	ltc.Stores.AddStore(ltc.Store)
 	if err := ltc.Store.BootstrapRange(nil); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)

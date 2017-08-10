@@ -893,7 +893,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 			ts := NewTxnCoordSender(
 				ambient,
-				cluster.MakeClusterSettings(),
+				cluster.MakeTestingClusterSettings(),
 				senderFn,
 				clock,
 				false,
@@ -1066,7 +1066,7 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 	}
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	ts := NewTxnCoordSender(
-		ambient, cluster.MakeClusterSettings(),
+		ambient, cluster.MakeTestingClusterSettings(),
 		senderFn, clock, false, stopper, MakeTxnMetrics(metric.TestSampleInterval),
 	)
 
@@ -1124,7 +1124,7 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 			ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 			ts := NewTxnCoordSender(
 				ambient,
-				cluster.MakeClusterSettings(),
+				cluster.MakeTestingClusterSettings(),
 				senderFn,
 				clock,
 				false,
@@ -1203,7 +1203,7 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	ts := NewTxnCoordSender(
 		ambient,
-		cluster.MakeClusterSettings(),
+		cluster.MakeTestingClusterSettings(),
 		senderFn,
 		clock,
 		false,
@@ -1682,7 +1682,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 			ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 			ts := NewTxnCoordSender(
 				ambient,
-				cluster.MakeClusterSettings(),
+				cluster.MakeTestingClusterSettings(),
 				senderFn,
 				clock,
 				false,
@@ -1718,7 +1718,10 @@ func TestTooManyIntents(t *testing.T) {
 	s, _ := createTestDB(t)
 	defer s.Stop()
 
-	maxIntents := s.Store.ClusterSettings().MaxIntents
+	st := s.Store.ClusterSettings()
+	st.Manual.Store(true)
+	maxIntents := st.MaxIntents
+
 	maxIntents.Override(3)
 
 	txn := client.NewTxn(s.DB)
@@ -1744,7 +1747,10 @@ func TestTooManyIntentsAtCommit(t *testing.T) {
 	ctx := context.Background()
 	s, _ := createTestDB(t)
 	defer s.Stop()
-	maxIntents := s.Store.ClusterSettings().MaxIntents
+
+	st := s.Store.ClusterSettings()
+	st.Manual.Store(true)
+	maxIntents := st.MaxIntents
 	maxIntents.Override(3)
 
 	txn := client.NewTxn(s.DB)
