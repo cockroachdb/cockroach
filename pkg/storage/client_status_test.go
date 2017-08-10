@@ -35,9 +35,9 @@ func TestComputeStatsForKeySpan(t *testing.T) {
 	// Create a number of ranges using splits.
 	splitKeys := []string{"a", "c", "e", "g", "i"}
 	for _, k := range splitKeys {
-		key := []byte(k)
-		repl := mtc.stores[0].LookupReplica(key, roachpb.RKeyMin)
-		args := adminSplitArgs(key, key)
+		key := roachpb.Key(k)
+		repl := mtc.stores[0].LookupReplica(roachpb.RKey(key), roachpb.RKeyMin)
+		args := adminSplitArgs(key)
 		header := roachpb.Header{
 			RangeID: repl.RangeID,
 		}
