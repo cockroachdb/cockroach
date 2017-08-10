@@ -198,7 +198,11 @@ func (f *Flow) setupOutboundStream(spec StreamEndpointSpec) (RowReceiver, error)
 		return f.syncFlowConsumer, nil
 
 	case StreamEndpointSpec_REMOTE:
-		outbox := newOutbox(&f.FlowCtx, spec.TargetAddr, f.id, sid)
+		fallbackAddr := ""
+		if spec.FallbackAddr != nil {
+			fallbackAddr = *spec.FallbackAddr
+		}
+		outbox := newOutbox(&f.FlowCtx, spec.TargetAddr, fallbackAddr, f.id, sid)
 		f.startables = append(f.startables, outbox)
 		return outbox, nil
 

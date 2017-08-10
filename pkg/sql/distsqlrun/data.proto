@@ -36,9 +36,19 @@ message Error {
   oneof detail {
     pgerror.Error pg_error = 1 [(gogoproto.customname) = "PGError"];
     roachpb.UnhandledRetryableError retryableTxnError = 2;
+    // VersionMismatchError is only returned by SetupFlowRequests.
+    VersionMismatchError version_mismatch_error = 3;
     // TODO(andrei): Add AmbiguousResultError here once DistSQL starts executing
     // writes.
   }
+}
+
+// VersionMismatchError is returned by SetupFlowRequest when the requested
+// version is outside of [server_min_version..server_version].
+message VersionMismatchError {
+  optional uint32 requested_version = 1 [(gogoproto.nullable) = false];
+  optional uint32 server_version = 2 [(gogoproto.nullable) = false];
+  optional uint32 server_min_version = 3 [(gogoproto.nullable) = false];
 }
 
 message Expression {
@@ -95,6 +105,14 @@ message StreamEndpointSpec {
                                 (gogoproto.casttype) = "StreamID"];
   // Serving address for the target host, only used for outgoing REMOTE streams.
   optional string target_addr = 3 [(gogoproto.nullable) = false];
+  // Address to attempt if connecting to target_addr fails or is slow. Only used
+  // for outgoing remote streams.
+  // It's guaranteed that at most one of the attempts to connect to
+  // {target_addr, fallback_addr} will succeed (so it's safe to attempt them in
+  // parallel) - they will not both accept the incoming stream.
+  //
+  // If the field is left null, then no fallback will be used.
+  optional string fallback_addr = 4;
 }
 
 // InputSyncSpec is the specification for an input synchronizer; it decides how

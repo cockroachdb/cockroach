@@ -39,7 +39,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-// Version identifies the distsqlrun protocol version.
+// Version identifies the distsqlrun protocol version. Flows sent by this node
+// will be tagged with this version.
 //
 // This version is separate from the main CockroachDB version numbering; it is
 // only changed when the distsqlrun API changes.
@@ -62,6 +63,9 @@ import (
 //  - at some later point, we can choose to deprecate version 1 and have
 //    servers only accept versions >= 2 (by setting
 //    MinAcceptedVersion to 2).
+//
+// TODO(andrei): provide guidance on how to use this versus the August 2017
+// cluster-wide versioning mechanism.
 const Version = 4
 
 // MinAcceptedVersion is the oldest version that the server is
@@ -190,10 +194,7 @@ func (ds *ServerImpl) setupFlow(
 ) (context.Context, *Flow, error) {
 	if req.Version < MinAcceptedVersion ||
 		req.Version > Version {
-		err := errors.Errorf(
-			"version mismatch in flow request: %d; this node accepts %d through %d",
-			req.Version, MinAcceptedVersion, Version,
-		)
+		err := NewVersionMismatchError(req.Version, MinAcceptedVersion, Version)
 		log.Warning(ctx, err)
 		return ctx, nil, err
 	}
@@ -378,6 +379,16 @@ func (ds *ServerImpl) FlowStream(stream DistSQL_FlowStreamServer) error {
 		log.Error(ctx, err)
 	}
 	return err
+}
+
+// PoisonFlow registers a flow that will never run, such that inbound streams
+// attempting to connect to it find out quickly that they need to error out and
+// don't wait for the connection timeout.
+// The poisoned entry will leave in the FlowRegistry for timeout. Afterwards,
+// late streams attempting to connect will wait for the regular connection
+// timeout before timing out.
+func (ds *ServerImpl) PoisonFlow(id FlowID, timeout time.Duration) {
+	ds.flowRegistry.PoisonFlow(id, timeout)
 }
 
 // TestingKnobs are the testing knobs.

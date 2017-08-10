@@ -627,13 +627,17 @@ func NewError(err error) *Error {
 			Detail: &Error_RetryableTxnError{
 				RetryableTxnError: retryErr,
 			}}
-	} else {
-		// Anything unrecognized is an "internal error".
+	} else if versionMismatchError, ok := err.(*VersionMismatchError); ok {
 		return &Error{
-			Detail: &Error_PGError{
-				PGError: pgerror.NewError(
-					pgerror.CodeInternalError, err.Error())}}
+			Detail: &Error_VersionMismatchError{
+				VersionMismatchError: versionMismatchError,
+			}}
 	}
+	// Anything unrecognized is an "internal error".
+	return &Error{
+		Detail: &Error_PGError{
+			PGError: pgerror.NewError(
+				pgerror.CodeInternalError, err.Error())}}
 }
 
 // ErrorDetail returns the payload as a Go error.
@@ -646,6 +650,8 @@ func (e *Error) ErrorDetail() error {
 		return t.PGError
 	case *Error_RetryableTxnError:
 		return t.RetryableTxnError
+	case *Error_VersionMismatchError:
+		return t.VersionMismatchError
 	default:
 		panic(fmt.Sprintf("bad error detail: %+v", t))
 	}

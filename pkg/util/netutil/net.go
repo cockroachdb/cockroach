@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 
 	"golang.org/x/net/context"
 	"golang.org/x/net/http2"
@@ -158,4 +159,22 @@ func FatalIfUnexpected(err error) {
 	if err != nil && !IsClosedConnection(err) {
 		log.Fatal(context.TODO(), err)
 	}
+}
+
+// ErrIsGRPCUnavailable checks whether an error is the GRPC error for
+// "unavailable" nodes. This can be used to check if an RPC network error is
+// guaranteed to mean that the server did not receive the request.
+// All connection errors except for an unavailable node (this is GRPC's
+// fail-fast error), may mean that the request succeeded on the remote server,
+// but we were unable to receive the reply.
+//
+// The Unavailable code is used by GRPC to indicate that a request fails fast
+// and is not sent, so we can be sure there is no ambiguity on these errors.
+// Note that these are common if a node is down.
+// See https://github.com/grpc/grpc-go/blob/52f6504dc290bd928a8139ba94e3ab32ed9a6273/call.go#L182
+// See https://github.com/grpc/grpc-go/blob/52f6504dc290bd928a8139ba94e3ab32ed9a6273/stream.go#L158
+//
+// Returns false is err is nil.
+func ErrIsGRPCUnavailable(err error) bool {
+	return grpc.Code(err) == codes.Unavailable
 }

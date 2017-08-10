@@ -19,14 +19,17 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 const outboxBufRows = 16
 const outboxFlushPeriod = 100 * time.Microsecond
+const outboxAttemptFallbackTimeout = 10 * time.Millisecond
 
 // preferredEncoding is the encoding used for EncDatums that don't already have
 // an encoding available.
@@ -41,7 +44,21 @@ type outbox struct {
 	RowChannel
 
 	flowCtx *FlowCtx
-	addr    string
+
+	// addr and fallbackAddr are the host:port to which the outbox will connect.
+	// addr is tried first and, if that doesn't connect within
+	// outboxAttemptFallbackTimeout, the outbox also tries to connect to
+	// fallbackAddr in parallel (if fallbackAddr is not empty). From this moment
+	// on, the stream is established when either of the two succeed.
+	// This fallback mechanism is used so that we connect to the gateway when
+	// scheduling flows on the intended nodes fails: the gateway sometimes falls
+	// back to scheduling flows locally.
+	//
+	// It is guaranteed that at most one of the connection attempts will succeed -
+	// both targets will not accept the stream.
+	addr         string
+	fallbackAddr string
+
 	// The rows received from the RowChannel will be forwarded on this stream once
 	// it is established.
 	stream DistSQL_FlowStreamClient
@@ -60,8 +77,13 @@ type outbox struct {
 var _ RowReceiver = &outbox{}
 var _ startable = &outbox{}
 
-func newOutbox(flowCtx *FlowCtx, addr string, flowID FlowID, streamID StreamID) *outbox {
-	m := &outbox{flowCtx: flowCtx, addr: addr}
+// newOutbox creates an outbox.
+//
+// fallbackAddr can be empty, in which case no fallback is used.
+func newOutbox(
+	flowCtx *FlowCtx, addr string, fallbackAddr string, flowID FlowID, streamID StreamID,
+) *outbox {
+	m := &outbox{flowCtx: flowCtx, addr: addr, fallbackAddr: fallbackAddr}
 	m.encoder.setHeaderFields(flowID, streamID)
 	return m
 }
@@ -172,7 +194,7 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 		if log.V(2) {
 			log.Infof(ctx, "outbox: calling FlowStream")
 		}
-		m.stream, err = client.FlowStream(context.TODO())
+		m.stream, err = client.FlowStream(ctx)
 		if err != nil {
 			if log.V(1) {
 				log.Infof(ctx, "FlowStream error: %s", err)
@@ -254,6 +276,109 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+type connectResult struct {
+	addr   string
+	stream DistSQL_FlowStreamClient
+	err    error
+}
+
+// connectOutboundStream connects the stream by calling FlowStream. It also
+// handles fallback is m.fallbackAddr is configured. If this returns without
+// error, m.stream will be set.
+func (m *outbox) connectOutboundStream(ctx context.Context) error {
+	// We're starting the connection asynchronously, then setting up a timer to
+	// start the fallback connection (if any). We'll then wait until either of the
+	// two succeeds.
+	streamCh := make(chan connectResult, 2)
+	connectAttemptsRemaning := 1
+	primaryStreamCtx, primaryStreamCancel := context.WithCancel(ctx)
+	go func() {
+		stream, err := connectOutboundStream(primaryStreamCtx, m.flowCtx.rpcCtx, m.addr)
+		streamCh <- connectResult{
+			addr:   m.addr,
+			stream: stream,
+			err:    err,
+		}
+	}()
+
+	var fallbackStreamCtx context.Context
+	var fallbackStreamCancel context.CancelFunc
+	startFallbackConnection := func() {
+		if m.fallbackAddr == "" {
+			log.Fatal(ctx, "connecting to empty fallback")
+		}
+		stream, err := connectOutboundStream(fallbackStreamCtx, m.flowCtx.rpcCtx, m.fallbackAddr)
+		streamCh <- connectResult{
+			addr:   m.addr,
+			stream: stream,
+			err:    err,
+		}
+	}
+	var fallbackTimer *time.Timer
+	if m.fallbackAddr != "" {
+		connectAttemptsRemaning++
+		fallbackStreamCtx, fallbackStreamCancel = context.WithCancel(ctx)
+		fallbackTimer = time.AfterFunc(outboxAttemptFallbackTimeout, func() {
+			if m.fallbackAddr != "" {
+				startFallbackConnection()
+			}
+		})
+	}
+
+	fallbackStarted := false
+	errs := make(map[string]error)
+	for connectAttemptsRemaning > 0 {
+		s := <-streamCh
+		connectAttemptsRemaning--
+		if s.err != nil {
+			// Start the fallback unless we or the timer have already started it.
+			if m.fallbackAddr != "" && !fallbackStarted {
+				fallbackStarted = true
+				if fallbackTimer.Stop() {
+					startFallbackConnection()
+				}
+			}
+			errs[s.addr] = m.err
+			continue
+		}
+		// We succeeded in connecting to the primary addr or the fallback. Sayonara,
+		// no reason to wait for the result of the other attempt (if still pending)
+		// - it's guaranteed to fail.
+		m.stream = s.stream
+
+		// Cancel whatever connection attempt is still in progress, if any.
+		primaryStreamCancel()
+		fallbackStreamCancel()
+
+		return nil
+	}
+	if m.fallbackAddr != "" {
+		return errors.Errorf(
+			"failed to connect outbound stream. Primary: %s. Fallback: %s",
+			errs[m.addr], errs[m.fallbackAddr])
+	}
+	return errors.Errorf("failed to connect outbound stream: %s", errs[m.addr])
+}
+
+func connectOutboundStream(
+	ctx context.Context, rpcCtx *rpc.Context, addr string,
+) (DistSQL_FlowStreamClient, error) {
+	conn, err := rpcCtx.GRPCDial(addr)
+	if err != nil {
+		log.VEventf(ctx, 1, "outbox: dial to %s: error: %s", addr, err)
+		return nil, err
+	}
+	client := NewDistSQLClient(conn)
+	log.VEventf(ctx, 2, "outbox: calling FlowStream to %s", addr)
+	stream, err := client.FlowStream(ctx)
+	if err != nil {
+		log.VEventf(ctx, 1, "outbox: FlowStream to %s: error: %s", addr, err)
+		return nil, err
+	}
+	log.VEventf(ctx, 2, "outbox: FlowStream to %s succeeded", addr)
+	return stream, nil
 }
 
 // drainSignal is a signal received from the consumer telling the producer that
