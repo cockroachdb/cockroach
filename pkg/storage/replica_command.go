@@ -2634,10 +2634,9 @@ func (r *Replica) adminSplitWithDescriptor(
 		}
 	}
 
-	// First verify this condition so that it will not return
-	// roachpb.NewRangeKeyMismatchError if splitKey equals to desc.EndKey,
-	// otherwise it will cause infinite retry loop.
-	if desc.StartKey.Equal(splitKey) || desc.EndKey.Equal(splitKey) {
+	// If the range starts at the splitKey, we treat the AdminSplit
+	// as a no-op and return success instead of throwing an error.
+	if desc.StartKey.Equal(splitKey) {
 		log.Event(ctx, "range already split")
 		return reply, false, nil
 	}

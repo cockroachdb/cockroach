@@ -271,11 +271,12 @@ func TestStoreRangeSplitIntents(t *testing.T) {
 	}
 }
 
-// TestStoreRangeSplitAtRangeBounds verifies a range cannot be split
-// at its start or end keys (would create zero-length range!). This
-// sort of thing might happen in the wild if two split requests
-// arrived for same key. The first one succeeds and second would try
-// to split at the start of the newly split range.
+// TestStoreRangeSplitAtRangeBounds verifies that attempting to
+// split a range at its start key is a no-op and does not actually
+// perform a split (would create zero-length range!). This sort
+// of thing might happen in the wild if two split requests arrived for
+// same key. The first one succeeds and second would try to split
+// at the start of the newly split range.
 func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	storeCfg := storage.TestStoreConfig(nil)
@@ -284,18 +285,35 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	store := createTestStoreWithConfig(t, stopper, storeCfg)
 
-	args := adminSplitArgs(roachpb.Key("a"))
-	if _, err := client.SendWrapped(context.Background(), rg1(store), args); err != nil {
-		t.Fatal(err)
+	// Split range 1 at an arbitrary key.
+	key := roachpb.Key("a")
+	h := roachpb.Header{RangeID: 1}
+	args := adminSplitArgs(key)
+	if _, pErr := client.SendWrappedWith(context.Background(), store, h, args); pErr != nil {
+		t.Fatal(pErr)
 	}
-	// This second split will try to split at end of first split range.
-	if _, err := client.SendWrapped(context.Background(), rg1(store), args); err == nil {
-		t.Fatalf("split succeeded unexpectedly")
+	replCount := store.ReplicaCount()
+	t.Logf("found %d replica's after first successful split request", replCount)
+
+	// An AdminSplit request sent to the end of the old range
+	// should fail with a RangeKeyMismatchError.
+	_, pErr := client.SendWrappedWith(context.Background(), store, h, args)
+	if _, ok := pErr.GetDetail().(*roachpb.RangeKeyMismatchError); !ok {
+		t.Fatalf("expected RangeKeyMismatchError, found: %v", pErr)
 	}
-	// Now try to split at start of new range.
-	args = adminSplitArgs(roachpb.Key("a"))
-	if _, err := client.SendWrapped(context.Background(), rg1(store), args); err == nil {
-		t.Fatalf("split succeeded unexpectedly")
+
+	// An AdminSplit request sent to the start of the new range
+	// should succeed but no new ranges should be created.
+	newRng := store.LookupReplica(roachpb.RKey(key), nil)
+	h.RangeID = newRng.RangeID
+	if _, pErr := client.SendWrappedWith(context.Background(), store, h, args); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	newReplCount := store.ReplicaCount()
+	t.Logf("found %d replica's after second successful split request", newReplCount)
+	if replCount != newReplCount {
+		t.Fatalf("splitting the same key twice should not create a new range")
 	}
 }
 
