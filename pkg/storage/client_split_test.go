@@ -34,12 +34,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -2306,5 +2308,43 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 		if bpr.P10 == bpr.P90 {
 			t.Errorf("expected BytesPerReplica p10 and p90 to be different with 2 replicas, got %+v", bpr)
 		}
+	}
+}
+
+func TestRangeLookupAfterMeta2Split(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := srv.(*server.TestServer)
+	defer s.Stopper().Stop(context.TODO())
+
+	// Normal server initialization creates splits at /Table/11 (lease table) and
+	// /Table/12 (eventlog table). Create a split at /Meta2/Table/12. This
+	// creates meta ranges /Min-/Meta2/Table/12 and /Meta2/Table/12-/System.
+	const tableID = keys.EventLogTableID
+	leaseTableKey := keys.MakeTablePrefix(tableID)
+	metaKey := keys.RangeMetaKey(leaseTableKey)
+	splitReq := &roachpb.AdminSplitRequest{
+		Span: roachpb.Span{
+			Key: metaKey,
+		},
+		SplitKey: metaKey,
+	}
+	if _, pErr := client.SendWrapped(ctx, s.DistSender(), splitReq); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Lookup up /Table/11/0 by performing a range lookup for /Meta/Table/11. This
+	// request gets directed to /Min-/Meta2/Table/12, but that meta range does
+	// not contain the descriptor.
+	lookupReq := &roachpb.RangeLookupRequest{
+		Span: roachpb.Span{
+			Key: keys.RangeMetaKey(roachpb.RKey(keys.MakeFamilyKey(keys.MakeTablePrefix(tableID-1), 0))),
+		},
+		MaxRanges: 1,
+	}
+	if _, err := client.SendWrapped(ctx, s.DistSender(), lookupReq); err != nil {
+		t.Fatal(err)
 	}
 }

@@ -121,7 +121,7 @@ var commands = map[roachpb.Method]Command{
 	roachpb.ReverseScan:        {DeclareKeys: DefaultDeclareKeys, Eval: evalReverseScan},
 	roachpb.BeginTransaction:   {DeclareKeys: declareKeysBeginTransaction, Eval: evalBeginTransaction},
 	roachpb.EndTransaction:     {DeclareKeys: declareKeysEndTransaction, Eval: evalEndTransaction},
-	roachpb.RangeLookup:        {DeclareKeys: DefaultDeclareKeys, Eval: evalRangeLookup},
+	roachpb.RangeLookup:        {DeclareKeys: declareKeysRangeLookup, Eval: evalRangeLookup},
 	roachpb.HeartbeatTxn:       {DeclareKeys: declareKeysHeartbeatTransaction, Eval: evalHeartbeatTxn},
 	roachpb.GC:                 {DeclareKeys: declareKeysGC, Eval: evalGC},
 	roachpb.PushTxn:            {DeclareKeys: declareKeysPushTransaction, Eval: evalPushTxn},
@@ -1087,6 +1087,13 @@ func runCommitTrigger(
 	return EvalResult{}, nil
 }
 
+func declareKeysRangeLookup(
+	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
+) {
+	DefaultDeclareKeys(desc, header, req, spans)
+	spans.Add(SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
+}
+
 // evalRangeLookup is used to look up RangeDescriptors - a RangeDescriptor
 // is a metadata structure which describes the key range and replica locations
 // of a distinct range in the cluster.
@@ -1140,6 +1147,11 @@ func evalRangeLookup(
 		return EvalResult{}, errors.Errorf("range lookup specified invalid maximum range count %d: must be > 0", rangeCount)
 	}
 
+	desc, err := cArgs.EvalCtx.Desc()
+	if err != nil {
+		return EvalResult{}, err
+	}
+
 	var checkAndUnmarshal func(roachpb.Value) (*roachpb.RangeDescriptor, error)
 
 	var kvs []roachpb.KeyValue // kv descriptor pairs in scan order
@@ -1158,7 +1170,7 @@ func evalRangeLookup(
 		// We want to search for the metadata key greater than
 		// args.Key. Scan for both the requested key and the keys immediately
 		// afterwards, up to MaxRanges.
-		startKey, endKey, err := keys.MetaScanBounds(key)
+		startKey, endKey, err := keys.MetaScanBounds(key, desc.RSpan())
 		if err != nil {
 			return EvalResult{}, err
 		}
@@ -1212,7 +1224,7 @@ func evalRangeLookup(
 		}
 
 		if key.Less(roachpb.RKey(keys.Meta2KeyMax)) {
-			startKey, endKey, err := keys.MetaScanBounds(key)
+			startKey, endKey, err := keys.MetaScanBounds(key, desc.RSpan())
 			if err != nil {
 				return EvalResult{}, err
 			}
@@ -1227,10 +1239,11 @@ func evalRangeLookup(
 		// We want to search for the metadata key just less or equal to
 		// args.Key. Scan in reverse order for both the requested key and the
 		// keys immediately backwards, up to MaxRanges.
-		startKey, endKey, err := keys.MetaReverseScanBounds(key)
+		startKey, endKey, err := keys.MetaReverseScanBounds(key, desc.RSpan())
 		if err != nil {
 			return EvalResult{}, err
 		}
+
 		// Reverse scan for descriptors.
 		revKVs, _, revIntents, err := engine.MVCCReverseScan(
 			ctx, batch, startKey, endKey, rangeCount, ts, consistent, txn,
@@ -1252,6 +1265,12 @@ func evalRangeLookup(
 	}
 
 	for _, kv := range kvs {
+		if !desc.RSpan().ContainsKey(roachpb.RKey(kv.Key)) {
+			// Skip keys which lie outside of our range. This can happen when Reverse
+			// is true.
+			continue
+		}
+
 		// TODO(tschottdorf): Candidate for a ReplicaCorruptionError.
 		rd, err := checkAndUnmarshal(kv.Value)
 		if err != nil {
@@ -2589,23 +2608,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	log.Event(ctx, "split begins")
 	var splitKey roachpb.RKey
 	{
-		var foundSplitKey roachpb.Key
-		if len(args.SplitKey) == 0 {
-			// Find a key to split by size.
-			snap := r.store.engine.NewSnapshot()
-			defer snap.Close()
-			var err error
-			targetSize := r.GetMaxBytes() / 2
-			foundSplitKey, err = engine.MVCCFindSplitKey(
-				ctx, snap, desc.RangeID, desc.StartKey, desc.EndKey, targetSize)
-			if err != nil {
-				return reply, false, roachpb.NewErrorf("unable to determine split key: %s", err)
-			}
-			if foundSplitKey == nil {
-				// No suitable split key could be found.
-				return reply, false, nil
-			}
-		} else {
+		if len(args.SplitKey) > 0 {
 			// If the key that routed this request to this range is now out of this
 			// range's bounds, return an error for the client to try again on the
 			// correct range.
@@ -2613,6 +2616,81 @@ func (r *Replica) adminSplitWithDescriptor(
 				return reply, false,
 					roachpb.NewError(roachpb.NewRangeKeyMismatchError(args.Span.Key, args.Span.Key, desc))
 			}
+		}
+
+		metaSpan := roachpb.RSpan{Key: roachpb.RKeyMin, EndKey: roachpb.RKey(keys.SystemPrefix)}
+		isMetaRange := metaSpan.ContainsKeyRange(desc.StartKey, desc.EndKey)
+
+		var foundSplitKey roachpb.Key
+		if len(args.SplitKey) == 0 || isMetaRange {
+			targetSize := r.GetMaxBytes() / 2
+			startKey := desc.StartKey
+
+			if len(args.SplitKey) > 0 {
+				// We're splitting a meta range and the split key was specified. Meta
+				// ranges are special in that we want to split just after an actual
+				// key. We do this by specifying the start key and a target size of 0
+				// which will cause MVCCFindSplitKey to return the first key it finds.
+				startKey = roachpb.RKey(args.SplitKey)
+				targetSize = 0
+			}
+
+			snap := r.store.engine.NewSnapshot()
+			defer snap.Close()
+			var err error
+			foundSplitKey, err = engine.MVCCFindSplitKey(
+				ctx, snap, desc.RangeID, startKey, desc.EndKey, targetSize)
+			if err != nil {
+				return reply, false, roachpb.NewErrorf("unable to determine split key: %s", err)
+			}
+			if foundSplitKey == nil {
+				// No suitable split key could be found.
+				return reply, false, nil
+			}
+
+			if isMetaRange {
+				// For meta ranges, we split just after an actual key to ensure that
+				// the bounds of range descriptors in meta ranges are fully contained
+				// within the meta ranges. Consider the following scenario that could
+				// occur if we didn't do this:
+				//
+				//   range 1 [a, e):
+				//     b -> [a, b)
+				//     c -> [b, c)
+				//     d -> [c, d)
+				//   range 2 [e, g):
+				//     e -> [d, e)
+				//     f -> [e, f)
+				//     g -> [f, g)
+				//
+				// Now consider looking up the range containing key `d`. The DistSender
+				// routing logic would send the RangeLookup request to range 1 since `d`
+				// lies within the bounds of that range. But notice that the range
+				// descriptor containing `d` lies in range 2. Boom!
+				//
+				// The root problem here is that the split key chosen for meta ranges
+				// is an actual key in the range. What we want to do is ensure that the
+				// bounds of range descriptors within a meta range are entirely
+				// contained within the bounds of the meta range. We can accomplish
+				// this by splitting on metaKey.Next(). This would transform the above
+				// example into:
+				//
+				//   range 1 [a, d\0):
+				//     b -> [a, b)
+				//     c -> [b, c)
+				//     d -> [c, d\0)
+				//   range 2 [d\0, g\0):
+				//     e -> [d, e)
+				//     f -> [e, f)
+				//     g -> [f, g)
+				//
+				// Note that range merging can break the invariant we're trying to
+				// maintain here and we'll need to do something more sophisticated when
+				// range merging arrives, either by maintaining the invariant during
+				// merging or by adding additional logic to DistSender.
+				foundSplitKey = foundSplitKey.Next()
+			}
+		} else {
 			foundSplitKey = args.SplitKey
 		}
 

@@ -253,8 +253,9 @@ func TestMetaScanBounds(t *testing.T) {
 			expError: "body of meta key range lookup is",
 		},
 	}
+	allKeys := roachpb.RSpan{Key: roachpb.RKeyMin, EndKey: roachpb.RKeyMax}
 	for i, test := range testCases {
-		resStart, resEnd, err := MetaScanBounds(test.key)
+		resStart, resEnd, err := MetaScanBounds(test.key, allKeys)
 
 		if !testutils.IsError(err, test.expError) {
 			t.Errorf("expected error: %s ; got %v", test.expError, err)
@@ -321,8 +322,9 @@ func TestMetaReverseScanBounds(t *testing.T) {
 			expError: "",
 		},
 	}
+	allKeys := roachpb.RSpan{Key: roachpb.RKeyMin, EndKey: roachpb.RKeyMax}
 	for i, test := range testCases {
-		resStart, resEnd, err := MetaReverseScanBounds(roachpb.RKey(test.key))
+		resStart, resEnd, err := MetaReverseScanBounds(roachpb.RKey(test.key), allKeys)
 
 		if !testutils.IsError(err, test.expError) {
 			t.Errorf("expected error %q ; got %v", test.expError, err)
