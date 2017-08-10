@@ -127,6 +127,10 @@ func (f *Farmer) Resize(nodes int) error {
 	if nodes == 0 {
 		args = f.appendDefaults(append([]string{"destroy", "--force"}, args...))
 	} else {
+		if stdout, stderr, err := f.run("terraform", "init"); err != nil {
+			return errors.Wrapf(err, "failed: %s %s\nstdout:\n%s\nstderr:\n%s", "terraform", args, stdout, stderr)
+		}
+
 		args = f.appendDefaults(append([]string{"apply"}, args...))
 
 		if len(f.CockroachBinary) > 0 {

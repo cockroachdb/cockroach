@@ -17,6 +17,12 @@ provider "azurerm" {
   #
   # See https://www.terraform.io/docs/providers/azurerm to understand the Azure
   # permissions needed to run Terraform against it.
+
+  version = "~> 0.1"
+}
+
+provider "null" {
+  version = "~> 0.1"
 }
 
 #
