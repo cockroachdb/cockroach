@@ -315,7 +315,7 @@ func attemptTypeCheckSameTypedExprs(t *testing.T, idx int, test sameTypedExprsTe
 	}
 	forEachPerm(test.exprs, 0, func(exprs []copyableExpr) {
 		ctx := MakeSemaContext(false)
-		ctx.Placeholders.SetTypes(clonePlaceholderTypes(test.ptypes))
+		ctx.Placeholders.SetTypeHints(clonePlaceholderTypes(test.ptypes))
 		desired := TypeAny
 		if test.desired != nil {
 			desired = test.desired
@@ -444,9 +444,7 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 		// Single type mismatches.
 		{nil, nil, exprs(dint(1), decConst("1.1")), decimalIntMismatchErr},
 		{nil, nil, exprs(dint(1), ddecimal(1)), decimalIntMismatchErr},
-		{mapPTypesInt, nil, exprs(ddecimal(1.1), placeholder("a")), decimalIntMismatchErr},
 		{mapPTypesInt, nil, exprs(decConst("1.1"), placeholder("a")), decimalIntMismatchErr},
-		{mapPTypesIntAndDecimal, nil, exprs(placeholder("b"), placeholder("a")), decimalIntMismatchErr},
 		// Tuple type mismatches.
 		{nil, nil, exprs(tuple(dint(1)), tuple(ddecimal(1))), tupleFloatIntMismatchErr},
 		{nil, nil, exprs(tuple(dint(1)), dint(1), dint(1)), tupleIntMismatchErr},
@@ -456,7 +454,7 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 	}
 	for i, d := range testData {
 		ctx := MakeSemaContext(false)
-		ctx.Placeholders.SetTypes(d.ptypes)
+		ctx.Placeholders.SetTypeHints(d.ptypes)
 		desired := TypeAny
 		if d.desired != nil {
 			desired = d.desired
