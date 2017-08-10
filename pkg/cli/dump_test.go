@@ -126,7 +126,6 @@ INSERT INTO t (i, f, s, b, d, t, n, o, e, tz, e1, e2, s1) VALUES
 	if string(out) != expect {
 		t.Fatalf("expected: %s\ngot: %s", expect, out)
 	}
-
 }
 
 func TestDumpFlags(t *testing.T) {
@@ -562,5 +561,130 @@ INSERT INTO t (i, j) VALUES
 		t.Fatal(err)
 	} else if !strings.Contains(string(out), "relation d.t does not exist") {
 		t.Fatalf("unexpected output: %s", out)
+	}
+}
+
+// TestDumpIdentifiers tests dumping a table with a semicolon in the table,
+// index, and column names properly escapes.
+func TestDumpIdentifiers(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c := newCLITest(cliTestParams{t: t})
+	defer c.cleanup()
+
+	const create = `
+	CREATE DATABASE d;
+	CREATE TABLE d.";" (";" int, index (";"));
+	INSERT INTO d.";" VALUES (1);
+`
+
+	if out, err := c.RunWithCaptureArgs([]string{"sql", "-e", create}); err != nil {
+		t.Fatal(err)
+	} else {
+		t.Log(string(out))
+	}
+
+	out, err := c.RunWithCaptureArgs([]string{"dump", "d"})
+	if err != nil {
+		t.Fatal(err)
+	} else {
+		t.Log(string(out))
+	}
+
+	const expect = `dump d
+CREATE TABLE ";" (
+	";" INT NULL,
+	INDEX ";_;_idx" (";" ASC),
+	FAMILY "primary" (";", rowid)
+);
+
+INSERT INTO ";" (";") VALUES
+	(1);
+`
+
+	if string(out) != expect {
+		t.Fatalf("expected: %s\ngot: %s", expect, out)
+	}
+}
+
+// TestDumpReferenceOrder tests dumping a database with foreign keys does
+// so in correct order.
+func TestDumpReferenceOrder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c := newCLITest(cliTestParams{t: t})
+	defer c.cleanup()
+
+	// Create tables so they would be in incorrect order of sorted alphabetically.
+	const create = `
+	CREATE DATABASE d;
+	CREATE DATABASE e;
+	CREATE TABLE d.b (i int PRIMARY KEY);
+	CREATE TABLE d.a (i int REFERENCES d.b);
+	INSERT INTO d.b VALUES (1);
+	INSERT INTO d.a VALUES (1);
+`
+	if out, err := c.RunWithCaptureArgs([]string{"sql", "-e", create}); err != nil {
+		t.Fatal(err)
+	} else {
+		t.Log(string(out))
+	}
+
+	out, err := c.RunWithCapture("dump d")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Remove first line of output ("dump a").
+	dump := strings.SplitN(string(out), "\n", 2)[1]
+	c.RunWithArgs([]string{"sql", "-d", "e", "-e", dump})
+
+	// Verify import of dump was successful.
+	out, err = c.RunWithCaptureArgs([]string{"sql", "-d", "e", "-e", "SELECT * FROM d.a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const expect = `sql -d e -e SELECT * FROM d.a
+1 row
+i
+1
+`
+
+	if string(out) != expect {
+		t.Fatalf("expected: %s\ngot: %s", expect, out)
+	}
+}
+
+// TestDumpView verifies dump doesn't attempt to dump data of views.
+func TestDumpView(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c := newCLITest(cliTestParams{t: t})
+	defer c.cleanup()
+
+	const create = `
+	CREATE DATABASE d;
+	CREATE VIEW d.bar AS SELECT 1;
+`
+	if out, err := c.RunWithCaptureArgs([]string{"sql", "-e", create}); err != nil {
+		t.Fatal(err)
+	} else {
+		t.Log(string(out))
+	}
+
+	out, err := c.RunWithCaptureArgs([]string{"dump", "d"})
+	if err != nil {
+		t.Fatal(err)
+	} else {
+		t.Log(string(out))
+	}
+
+	const expect = `dump d
+CREATE VIEW bar ("1") AS SELECT 1;
+`
+
+	if string(out) != expect {
+		t.Fatalf("expected: %s\ngot: %s", expect, out)
 	}
 }
