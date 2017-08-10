@@ -110,16 +110,19 @@ func (bt *benchmarkTest) Start(ctx context.Context) {
 	}
 	bt.f.Assert(ctx, bt.b)
 
-	sqlDB, err := gosql.Open("postgres", bt.f.PGUrl(ctx, 0))
+	sqlDBRaw, err := gosql.Open("postgres", bt.f.PGUrl(ctx, 0))
 	if err != nil {
 		bt.b.Fatal(err)
 	}
-	defer sqlDB.Close()
-	sqlutils.MakeSQLRunner(bt.b, sqlDB).Exec(
-		`SET CLUSTER SETTING cluster.organization = "Cockroach Labs - Production Testing"`)
-	sqlutils.MakeSQLRunner(bt.b, sqlDB).Exec(
-		fmt.Sprintf(`SET CLUSTER SETTING enterprise.license = "%s"`, licenseKey))
-	sqlutils.MakeSQLRunner(bt.b, sqlDB).Exec("SET CLUSTER SETTING trace.debug.enable = 'true'")
+	defer sqlDBRaw.Close()
+	sqlDB := sqlutils.MakeSQLRunner(bt.b, sqlDBRaw)
+	sqlDB.Exec(`SET CLUSTER SETTING cluster.organization = "Cockroach Labs - Production Testing"`)
+	sqlDB.Exec(fmt.Sprintf(`SET CLUSTER SETTING enterprise.license = "%s"`, licenseKey))
+	sqlDB.Exec(`SET CLUSTER SETTING trace.debug.enable = 'true'`)
+	// On Azure, if we don't limit our disk throughput, we'll quickly cause node
+	// liveness failures. This limit was determined experimentally on
+	// Standard_D3_v2 instances.
+	sqlDB.Exec(`SET CLUSTER SETTING kv.bulk_io_write.max_rate = '30MB'`)
 
 	log.Info(ctx, "initial cluster is up")
 }
