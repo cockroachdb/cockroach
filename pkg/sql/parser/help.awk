@@ -122,7 +122,7 @@ BEGIN {
     next
 }
 
-(/^[^/]/ || /^\/\/ %End/) && inhelp == 1 {
+(/^[^\/]/ || /^\/\/ %End/) && inhelp == 1 {
     # If we were accumulating a string, close it.
     if (instring == 1) {
         print "`,"
