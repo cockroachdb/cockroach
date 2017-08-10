@@ -83,6 +83,10 @@ type queryMeta struct {
 	// to determine whether this query has entered execution yet.
 	isDistributed bool
 
+	// States whether this query is parallelized / running asynchronolously.
+	// Also not known until queryPhase is set to executing.
+	isParallel bool
+
 	// Current phase of execution of query.
 	phase queryPhase
 
@@ -547,8 +551,19 @@ func (s *Session) resetPlanner(p *planner, e *Executor, txn *client.Txn) {
 // FinishPlan releases the resources that were consumed by the currently active
 // default planner. It does not check to see whether any other resources are
 // still pointing to the planner, so it should only be called when a connection
-// is entirely finished executing a statement.
+// is entirely finished executing a statement and all results have been sent.
 func (s *Session) FinishPlan() {
+	// All results have been sent to the client; so deregister all synchronous
+	// active queries from this session.
+	s.mu.Lock()
+	for queryID, queryMeta := range s.mu.ActiveQueries {
+		if !queryMeta.isParallel {
+			delete(s.mu.ActiveQueries, queryID)
+			s.execCfg.QueryRegistry.deregister(queryID)
+		}
+	}
+	s.mu.Unlock()
+
 	s.planner = emptyPlanner
 }
 
@@ -609,11 +624,14 @@ func (s *Session) removeActiveQuery(queryID uint128.Uint128) {
 
 // setQueryExecutionMode is called upon start of execution of a query, and sets
 // the query's metadata to indicate whether it's distributed or not.
-func (s *Session) setQueryExecutionMode(queryID uint128.Uint128, isDistributed bool) {
+func (s *Session) setQueryExecutionMode(
+	queryID uint128.Uint128, isDistributed bool, isParallel bool,
+) {
 	s.mu.Lock()
 	queryMeta := s.mu.ActiveQueries[queryID]
 	queryMeta.phase = executing
 	queryMeta.isDistributed = isDistributed
+	queryMeta.isParallel = isParallel
 	s.mu.Unlock()
 }
 

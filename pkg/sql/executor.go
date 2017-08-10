@@ -1126,10 +1126,12 @@ func (e *Executor) execStmtsInCurrentTxn(
 		queryMeta.ctx = txnState.Ctx
 		queryMeta.ctxCancel = txnState.cancel
 
+		// For parallel/async queries, we deregister queryMeta from these registries
+		// after execution finishes in the parallelizeQueue. SHOW TRANSACTION STATUSes
+		// are deregistered in their own code path. For all other queries,
+		// we deregister these in session.FinishPlan.
 		session.addActiveQuery(queryID, queryMeta)
-		defer session.removeActiveQuery(queryID)
 		e.cfg.QueryRegistry.register(queryID, queryMeta)
-		defer e.cfg.QueryRegistry.deregister(queryID)
 
 		var stmtStrBefore string
 		// TODO(nvanbenschoten): Constant literals can change their representation (1.0000 -> 1) when type checking,
@@ -1148,6 +1150,9 @@ func (e *Executor) execStmtsInCurrentTxn(
 		// always guaranteed to execute regardless of the current transaction state.
 		if _, ok := stmt.AST.(*parser.ShowTransactionStatus); ok {
 			res, err = runShowTransactionState(session)
+
+			session.removeActiveQuery(queryID)
+			e.cfg.QueryRegistry.deregister(queryID)
 		} else {
 			switch txnState.State() {
 			case Open, FirstBatch:
@@ -1848,7 +1853,7 @@ func (e *Executor) execStmt(
 	}
 
 	planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
-	session.setQueryExecutionMode(stmt.queryID, useDistSQL)
+	session.setQueryExecutionMode(stmt.queryID, useDistSQL, false /* isParallel */)
 	if useDistSQL {
 		err = e.execDistSQL(planner, plan, &result)
 	} else {
@@ -1895,6 +1900,10 @@ func (e *Executor) execStmtInParallel(stmt Statement, planner *planner) (Result,
 		return Result{}, err
 	}
 
+	// This ensures we don't unintentionally clean up the queryMeta object when we
+	// send the mock result back to the client.
+	session.setQueryExecutionMode(stmt.queryID, false /* isDistributed */, true /* isParallel */)
+
 	session.parallelizeQueue.Add(ctx, plan, func(plan planNode) error {
 		result, err := makeRes(stmt, planner, plan)
 		if err != nil {
@@ -1913,6 +1922,9 @@ func (e *Executor) execStmtInParallel(stmt Statement, planner *planner) (Result,
 		if e.cfg.TestingKnobs.AfterExecute != nil {
 			e.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), &result, err)
 		}
+		// Deregister query from registry.
+		session.removeActiveQuery(stmt.queryID)
+		e.cfg.QueryRegistry.deregister(stmt.queryID)
 		return err
 	})
 	return mockResult, nil
