@@ -907,7 +907,8 @@ func (c *v3Conn) handleExecute(buf *readBuffer) error {
 	stmt := portal.Stmt
 	portalMeta := portal.ProtocolMeta.(preparedPortalMeta)
 	pinfo := &parser.PlaceholderInfo{
-		Types:  stmt.SQLTypes,
+		Types:           stmt.SQLTypes,
+		OverriddenTypes: stmt.OverriddenTypes,
 		Values: portal.Qargs,
 	}
 

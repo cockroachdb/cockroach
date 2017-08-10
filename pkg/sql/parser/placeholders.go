@@ -32,6 +32,9 @@ type QueryArguments map[string]TypedExpr
 type PlaceholderInfo struct {
 	Values QueryArguments
 	Types  PlaceholderTypes
+	// OverriddenTypes relates placeholder names to their overriden type, if any.
+	// See OverrideType.
+	OverriddenTypes PlaceholderTypes
 }
 
 // MakePlaceholderInfo constructs an empty PlaceholderInfo.
@@ -45,6 +48,7 @@ func MakePlaceholderInfo() PlaceholderInfo {
 func (p *PlaceholderInfo) Clear() {
 	p.Types = PlaceholderTypes{}
 	p.Values = QueryArguments{}
+	p.OverriddenTypes = make(map[string]Type)
 }
 
 // Assign resets the PlaceholderInfo to the contents of src.
@@ -89,6 +93,9 @@ func (p *PlaceholderInfo) AssertAllAssigned() error {
 // Returns false in the 2nd value if the placeholder is not typed.
 func (p *PlaceholderInfo) Type(name string) (Type, bool) {
 	if t, ok := p.Types[name]; ok {
+		if ot, ok := p.OverriddenTypes[name]; ok {
+			return ot, true
+		}
 		return t, true
 	}
 	return nil, false
@@ -116,13 +123,30 @@ func (p *PlaceholderInfo) SetValue(name string, val Datum) {
 	}
 }
 
-// SetType assignes a known type to a placeholder.
+// SetType assigns a known type to a placeholder.
 // Reports an error if another type was previously assigned.
 func (p *PlaceholderInfo) SetType(name string, typ Type) error {
 	if t, ok := p.Types[name]; ok && !typ.Equivalent(t) {
 		return fmt.Errorf("placeholder %s already has type %s, cannot assign %s", name, t, typ)
 	}
 	p.Types[name] = typ
+	return nil
+}
+
+// OverrideType overrides the type of a placeholder. This is to be used in the
+// case of a placeholder whose type hint does not match the desired type during
+// typechecking. It will return an error if the placeholder never received a
+// type or if the placeholder's type was already overriden.
+func (p *PlaceholderInfo) OverrideType(name string, typ Type) error {
+	if _, ok := p.Types[name]; !ok {
+		return fmt.Errorf("cannot override untyped placeholder %s", name)
+	}
+	if p.OverriddenTypes == nil {
+		p.OverriddenTypes = make(map[string]Type, 1)
+	} else if _, ok := p.OverriddenTypes[name]; ok {
+		return fmt.Errorf("placeholder %s already has type %s, cannot assign %s", name, p.OverriddenTypes[name], typ)
+	}
+	p.OverriddenTypes[name] = typ
 	return nil
 }
 
@@ -166,6 +190,24 @@ func (v *placeholdersVisitor) VisitPre(expr Expr) (recurse bool, newNode Expr) {
 		if e, ok := v.placeholders.Value(t.Name); ok {
 			// Placeholder expressions cannot contain other placeholders, so we do
 			// not need to recurse.
+			typ, typed := v.placeholders.Type(t.Name)
+			if !typed {
+				// All placeholders should be typed at this point. If they're not, we
+				// can just return their value, though.
+				return false, e
+			}
+			if !e.ResolvedType().Equivalent(typ) {
+				// This happens when we overrode the placeholder's type during type
+				// checking, since the placeholder's type hint didn't match the desired
+				// type for the placeholder. In this case, we cast the expression to
+				// the desired type.
+				// TODO(jordan): introduce a restriction on what casts are allowed here.
+				colType, err := DatumTypeToColumnType(typ)
+				if err != nil {
+					return false, e
+				}
+				return false, &CastExpr{Expr: e, Type: colType}
+			}
 			return false, e
 		}
 	}

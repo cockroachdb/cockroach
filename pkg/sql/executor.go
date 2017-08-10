@@ -539,6 +539,7 @@ func (e *Executor) Prepare(
 			return nil, err
 		}
 	}
+	prepared.OverriddenTypes = planner.semaCtx.Placeholders.OverriddenTypes
 	return prepared, nil
 }
 

@@ -802,7 +802,20 @@ func (expr *Placeholder) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, e
 			// the type for this position should be, and the actual type of the
 			// placeholder. This actual placeholder type could be either a type hint
 			// (from pgwire or from a SQL PREPARE), or the actual value type.
-			return nil, unexpectedTypeError{expr, desired, typ}
+			//
+			// To resolve this situation, we *override* the placeholder type with what
+			// the type system expects. Then, when the value is actually sent to us
+			// later, we cast the input value (whose type is the expected type) to the
+			// desired type here.
+			//
+			// Note that we can only override a type once - otherwise we'll permit
+			// non-well-typed queries like `SELECT NOT $1, $1 > 10` which tries to
+			// set the type of the placeholder to both bool and int at once.
+			// OverrideType takes care of this assertion.
+			if err := ctx.Placeholders.OverrideType(expr.Name, desired); err != nil {
+				return nil, err
+			}
+			typ = desired
 		}
 		expr.typ = typ
 		return expr, nil

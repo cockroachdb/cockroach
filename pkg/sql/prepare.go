@@ -38,10 +38,17 @@ type PreparedStatement struct {
 	Str string
 	// Statement is the parsed, prepared SQL statement. It may be nil if the
 	// prepared statement is empty.
-	Statement   parser.Statement
-	SQLTypes    parser.PlaceholderTypes
-	Columns     sqlbase.ResultColumns
-	portalNames map[string]struct{}
+	Statement      parser.Statement
+	// SQLTypes contains the types of the placeholders set by the client. It
+	// dictates how input parameters for those placeholders will be parsed.
+	SQLTypes       parser.PlaceholderTypes
+	// OverridenTypes contains the inferred types of the placeholders after
+	// type-checking, if they differ from SQLTypes. This information is necessary
+	// if a user provides an imprecise type hint, like sending an int when an oid
+	// is required.
+	OverriddenTypes parser.PlaceholderTypes
+	Columns         sqlbase.ResultColumns
+	portalNames     map[string]struct{}
 
 	ProtocolMeta interface{} // a field for protocol implementations to hang metadata off of.
 
@@ -344,14 +351,14 @@ func getPreparedStatementForExecute(
 		idx := strconv.Itoa(i + 1)
 		typedExpr, err := sqlbase.SanitizeVarFreeExpr(e, prepared.SQLTypes[idx], "EXECUTE parameter", session.SearchPath)
 		if err != nil {
-			return ps, pInfo, pgerror.NewError(pgerror.CodeFeatureNotSupportedError, err.Error())
+			return ps, pInfo, pgerror.NewError(pgerror.CodeWrongObjectTypeError, err.Error())
 		}
 		if err := p.AssertNoAggregationOrWindowing(typedExpr, "EXECUTE parameters", session.SearchPath); err != nil {
 			return ps, pInfo, err
 		}
 		qArgs[idx] = typedExpr
 	}
-	return prepared, &parser.PlaceholderInfo{Values: qArgs, Types: prepared.SQLTypes}, nil
+	return prepared, &parser.PlaceholderInfo{Values: qArgs, Types: prepared.SQLTypes, OverriddenTypes: prepared.OverriddenTypes}, nil
 }
 
 // Deallocate implements the DEALLOCATE statement.
