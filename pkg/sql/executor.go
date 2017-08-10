@@ -1395,7 +1395,7 @@ func (e *Executor) execStmtInOpenTxn(
 	parallelize := IsStmtParallelized(stmt)
 	_, independentFromParallelStmts := stmt.AST.(parser.IndependentFromParallelizedPriors)
 	if !(parallelize || independentFromParallelStmts) {
-		if err := session.parallelizeQueue.Wait(); err != nil {
+		if err := session.synchronizeParallelStmts(); err != nil {
 			return err
 		}
 	}
@@ -1534,7 +1534,7 @@ func (e *Executor) execStmtInOpenTxn(
 			// If the statement run was independent from parallelized execution, it
 			// might have been run concurrently with parallelized statements. Make
 			// sure all complete before returning the error.
-			_ = session.parallelizeQueue.Wait()
+			_ = session.synchronizeParallelStmts()
 		}
 
 		sessionEventf(session, "ERROR: %v", err)

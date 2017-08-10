@@ -479,7 +479,7 @@ func (s *Session) Finish(e *Executor) {
 	// statement execution by the infrastructure added to support CancelRequest,
 	// we should try to actively drain this queue instead of passively waiting
 	// for it to drain.
-	_ = s.parallelizeQueue.Wait()
+	_ = s.synchronizeParallelStmts()
 
 	// If we're inside a txn, roll it back.
 	if s.TxnState.State().kvTxnIsOpen() {
@@ -528,7 +528,7 @@ func (s *Session) Finish(e *Executor) {
 func (s *Session) EmergencyClose() {
 	// Ensure that all in-flight statements are done, so that monitor
 	// traffic is stopped.
-	_ = s.parallelizeQueue.Wait()
+	_ = s.synchronizeParallelStmts()
 
 	// Release the leases - to ensure other sessions don't get stuck.
 	s.tables.releaseTables(s.context)
@@ -697,6 +697,19 @@ func (s *Session) setQueryExecutionMode(
 		lenSyncQueries := len(s.ActiveSyncQueries)
 		s.ActiveSyncQueries = s.ActiveSyncQueries[:lenSyncQueries-1]
 	}
+}
+
+// synchronizeParallelStmts waits for all statements in the parallelizeQueue to
+// finish. If errors are seen in the parallel batch, we attempt to turn these
+// errors into a single error we can send to the client.
+//
+// TODO(nvanbenschoten) the error merging semantics need to be better defined.
+func (s *Session) synchronizeParallelStmts() error {
+	if errs := s.parallelizeQueue.Wait(); len(errs) > 0 {
+		// TODO(nvanbenschoten) if this is retryable, bump the txn epoch.
+		return errs[0]
+	}
+	return nil
 }
 
 // MaxSQLBytes is the maximum length in bytes of SQL statements serialized
