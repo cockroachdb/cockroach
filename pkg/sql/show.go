@@ -365,9 +365,9 @@ WHERE message LIKE 'fetched: %'
 
 	// We failed to substitute; this is an internal error.
 	err = pgerror.NewErrorf(pgerror.CodeInternalError,
-		"invalid logical plan structure:\n%s\nwhile inserting:\n%s",
-		planToString(ctx, plan),
-		planToString(ctx, tracePlan))
+		"invalid logical plan structure:\n%s", planToString(ctx, plan),
+	).SetDetailf(
+		"while inserting:\n%s", planToString(ctx, tracePlan))
 	plan.Close(ctx)
 	stmtPlan.Close(ctx)
 	tracePlan.Close(ctx)
