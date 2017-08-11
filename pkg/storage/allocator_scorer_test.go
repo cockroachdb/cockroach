@@ -779,6 +779,81 @@ func TestBalanceScore(t *testing.T) {
 	}
 }
 
+func TestRebalanceConvergesOnMean(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	st := cluster.MakeClusterSettings()
+
+	const diskCapacity = 2000
+	storeList := StoreList{
+		candidateRanges:          stat{mean: 1000},
+		candidateDiskUsage:       stat{mean: 1000.0 / float64(diskCapacity)},
+		candidateWritesPerSecond: stat{mean: 1000},
+	}
+	emptyRange := RangeInfo{}
+	normalRange := RangeInfo{
+		LiveBytes:       10,
+		WritesPerSecond: 10,
+	}
+	outlierRange := RangeInfo{
+		LiveBytes:       10,
+		WritesPerSecond: 10000,
+	}
+
+	testCases := []struct {
+		rangeCount      int32
+		liveBytes       int64
+		writesPerSecond float64
+		ri              RangeInfo
+		toConverges     bool
+		fromConverges   bool
+	}{
+		{0, 0, 0, emptyRange, true, false},
+		{900, 900, 900, emptyRange, true, false},
+		{900, 900, 2000, emptyRange, true, false},
+		{999, 1000, 1000, emptyRange, true, false},
+		{1000, 1000, 1000, emptyRange, false, false},
+		{1001, 1000, 1000, emptyRange, false, true},
+		{2000, 2000, 2000, emptyRange, false, true},
+		{900, 2000, 2000, emptyRange, true, false},
+		{0, 0, 0, normalRange, true, false},
+		{900, 900, 900, normalRange, true, false},
+		{900, 900, 2000, normalRange, true, false},
+		{999, 1000, 1000, normalRange, false, false},
+		{2000, 2000, 2000, normalRange, false, true},
+		{900, 2000, 2000, normalRange, false, true},
+		{1000, 990, 990, normalRange, true, false},
+		{1000, 994, 994, normalRange, true, false},
+		{1000, 990, 995, normalRange, false, false},
+		{1000, 1010, 1010, normalRange, false, true},
+		{1000, 1010, 1005, normalRange, false, false},
+		{0, 0, 0, outlierRange, true, false},
+		{900, 900, 900, outlierRange, true, false},
+		{900, 900, 2000, outlierRange, true, false},
+		{999, 1000, 1000, outlierRange, false, false},
+		{2000, 2000, 10000, outlierRange, false, true},
+		{900, 2000, 10000, outlierRange, false, true},
+		{1000, 990, 990, outlierRange, false, false},
+		{1000, 1000, 10000, outlierRange, false, false},
+		{1000, 1010, 10000, outlierRange, false, true},
+		{1001, 1010, 1005, outlierRange, false, true},
+	}
+	for i, tc := range testCases {
+		sc := roachpb.StoreCapacity{
+			Capacity:        diskCapacity,
+			Available:       diskCapacity - tc.liveBytes,
+			RangeCount:      tc.rangeCount,
+			WritesPerSecond: tc.writesPerSecond,
+		}
+		if a, e := rebalanceToConvergesOnMean(st, storeList, sc, tc.ri), tc.toConverges; a != e {
+			t.Errorf("%d: rebalanceToConvergesOnMean(storeList, %+v, %+v) got %t; want %t", i, sc, tc.ri, a, e)
+		}
+		if a, e := rebalanceFromConvergesOnMean(st, storeList, sc, tc.ri), tc.fromConverges; a != e {
+			t.Errorf("%d: rebalanceFromConvergesOnMean(storeList, %+v, %+v) got %t; want %t", i, sc, tc.ri, a, e)
+		}
+	}
+}
+
 func TestMaxCapacity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

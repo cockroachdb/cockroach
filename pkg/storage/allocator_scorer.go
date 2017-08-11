@@ -870,9 +870,8 @@ func rebalanceFromConvergesOnMean(
 		st,
 		sl,
 		sc,
-		rangeInfo,
 		sc.RangeCount-1,
-		float64(sc.Capacity-(sc.Available-rangeInfo.LiveBytes))/float64(sc.Capacity),
+		float64(sc.Capacity-(sc.Available+rangeInfo.LiveBytes))/float64(sc.Capacity),
 		sc.WritesPerSecond-rangeInfo.WritesPerSecond)
 }
 
@@ -883,9 +882,8 @@ func rebalanceToConvergesOnMean(
 		st,
 		sl,
 		sc,
-		rangeInfo,
 		sc.RangeCount+1,
-		float64(sc.Capacity-(sc.Available+rangeInfo.LiveBytes))/float64(sc.Capacity),
+		float64(sc.Capacity-(sc.Available-rangeInfo.LiveBytes))/float64(sc.Capacity),
 		sc.WritesPerSecond+rangeInfo.WritesPerSecond)
 }
 
@@ -893,7 +891,6 @@ func rebalanceConvergesOnMean(
 	st *cluster.Settings,
 	sl StoreList,
 	sc roachpb.StoreCapacity,
-	rangeInfo RangeInfo,
 	newRangeCount int32,
 	newFractionUsed float64,
 	newWritesPerSecond float64,
@@ -901,20 +898,24 @@ func rebalanceConvergesOnMean(
 	if !st.EnableStatsBasedRebalancing.Get() {
 		return convergesOnMean(float64(sc.RangeCount), float64(newRangeCount), sl.candidateRanges.mean)
 	}
+
+	// Note that we check both converges and diverges. If we always decremented
+	// convergeCount when something didn't converge, ranges with stats equal to 0
+	// would almost never converge (and thus almost never get rebalanced).
 	var convergeCount int
 	if convergesOnMean(float64(sc.RangeCount), float64(newRangeCount), sl.candidateRanges.mean) {
 		convergeCount++
-	} else {
+	} else if divergesFromMean(float64(sc.RangeCount), float64(newRangeCount), sl.candidateRanges.mean) {
 		convergeCount--
 	}
 	if convergesOnMean(sc.FractionUsed(), newFractionUsed, sl.candidateDiskUsage.mean) {
 		convergeCount++
-	} else {
+	} else if divergesFromMean(sc.FractionUsed(), newFractionUsed, sl.candidateDiskUsage.mean) {
 		convergeCount--
 	}
 	if convergesOnMean(sc.WritesPerSecond, newWritesPerSecond, sl.candidateWritesPerSecond.mean) {
 		convergeCount++
-	} else {
+	} else if divergesFromMean(sc.WritesPerSecond, newWritesPerSecond, sl.candidateWritesPerSecond.mean) {
 		convergeCount--
 	}
 	return convergeCount > 0
@@ -922,6 +923,10 @@ func rebalanceConvergesOnMean(
 
 func convergesOnMean(oldVal, newVal, mean float64) bool {
 	return math.Abs(newVal-mean) < math.Abs(oldVal-mean)
+}
+
+func divergesFromMean(oldVal, newVal, mean float64) bool {
+	return math.Abs(newVal-mean) > math.Abs(oldVal-mean)
 }
 
 // maxCapacityCheck returns true if the store has room for a new replica.
