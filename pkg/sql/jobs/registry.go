@@ -83,28 +83,18 @@ func (r *Registry) NewJob(record Record) *Job {
 // LoadJob loads an existing job with the given jobID from the system.jobs
 // table.
 func (r *Registry) LoadJob(ctx context.Context, jobID int64) (*Job, error) {
-	j := &Job{
-		id:       &jobID,
-		registry: r,
-	}
-	if err := j.load(ctx); err != nil {
-		return nil, err
-	}
-	return j, nil
+	return r.LoadJobWithTxn(ctx, jobID, nil)
 }
 
 // LoadJobWithTxn does the same as above, but using the transaction passed in
-// the txn argument.
+// the txn argument. Passing a nil transaction is equivalent to calling LoadJob
+// in that a transaction will be automatically created.
 func (r *Registry) LoadJobWithTxn(ctx context.Context, jobID int64, txn *client.Txn) (*Job, error) {
-	if txn == nil {
-		return r.LoadJob(ctx, jobID)
-	}
 	j := &Job{
 		id:       &jobID,
 		registry: r,
 	}
-	j = j.WithTxn(txn)
-	if err := j.load(ctx); err != nil {
+	if err := j.WithTxn(txn).load(ctx); err != nil {
 		return nil, err
 	}
 	return j, nil
