@@ -42,6 +42,18 @@ func NewErrorf(code string, format string, args ...interface{}) *Error {
 	}
 }
 
+// SetHintf annotates an Error object with a hint.
+func (pg *Error) SetHintf(f string, args ...interface{}) *Error {
+	pg.Hint = fmt.Sprintf(f, args...)
+	return pg
+}
+
+// SetDetailf annotates an Error object with details.
+func (pg *Error) SetDetailf(f string, args ...interface{}) *Error {
+	pg.Detail = fmt.Sprintf(f, args...)
+	return pg
+}
+
 // AnnotateError adds a prefix to the message of an error, maintaining its pg
 // error code and source if it is a pgerror.Error.
 func AnnotateError(prefix string, err error) error {
