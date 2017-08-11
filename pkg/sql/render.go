@@ -22,6 +22,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -420,6 +421,14 @@ func (r *renderNode) rewriteSRFs(
 	// didn't find any SRFs.
 	if v.srf == nil {
 		return target, nil
+	}
+
+	if r.planner.session.PedanticSQL {
+		err := pgerror.NewError(pgerror.CodeWarningDeprecatedFeatureError,
+			"set-returning functions should not be used as SELECT target expressions "+
+				"(pedantic_sql = true)").SetHint(
+			"Place set-returning function in the FROM clause instead.")
+		return target, err
 	}
 
 	// We rewrote exactly one SRF; cross-join it with our sources and return the

@@ -536,6 +536,10 @@ func (c *cliState) doStart(nextState cliStateEnum) cliStateEnum {
 			c.ins.SetConfig(cfg)
 		}
 
+		if err := c.conn.Exec("SET pedantic_sql = TRUE", nil); err != nil {
+			fmt.Fprintln(stderr, "#\n# warning: cannot set pedantic_sql:", err)
+		}
+
 		fmt.Println("#\n# Enter \\? for a brief introduction.\n#")
 
 		c.checkSyntax = true

@@ -34,6 +34,13 @@ eexpect "pq: column name"
 eexpect "root@"
 end_test
 
+start_test "Check that discouraged statements are properly reported by default in interactive mode."
+send "select generate_series(1,10);\r"
+eexpect "should not be used"
+eexpect "HINT:"
+eexpect "root@"
+end_test
+
 start_test "Check that the user can ask for errors to terminate the interactive client."
 send "\\set errexit\r"
 eexpect "root@"

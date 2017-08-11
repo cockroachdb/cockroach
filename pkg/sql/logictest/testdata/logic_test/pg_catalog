@@ -957,6 +957,7 @@ distsql                        off           NULL      NULL        NULL        s
 extra_float_digits             ·             NULL      NULL        NULL        string
 max_index_keys                 32            NULL      NULL        NULL        string
 node_id                        1             NULL      NULL        NULL        string
+pedantic_sql                   false         NULL      NULL        NULL        string
 search_path                    pg_catalog    NULL      NULL        NULL        string
 server_version                 9.5.0         NULL      NULL        NULL        string
 session_user                   root          NULL      NULL        NULL        string
@@ -981,6 +982,7 @@ distsql                        off           NULL  user     NULL      off       
 extra_float_digits             ·             NULL  user     NULL      ·             ·
 max_index_keys                 32            NULL  user     NULL      32            32
 node_id                        1             NULL  user     NULL      1             1
+pedantic_sql                   false         NULL  user     NULL      false         false
 search_path                    pg_catalog    NULL  user     NULL      pg_catalog    pg_catalog
 server_version                 9.5.0         NULL  user     NULL      9.5.0         9.5.0
 session_user                   root          NULL  user     NULL      root          root
@@ -1005,6 +1007,7 @@ distsql                        NULL    NULL     NULL     NULL        NULL
 extra_float_digits             NULL    NULL     NULL     NULL        NULL
 max_index_keys                 NULL    NULL     NULL     NULL        NULL
 node_id                        NULL    NULL     NULL     NULL        NULL
+pedantic_sql                   NULL    NULL     NULL     NULL        NULL
 search_path                    NULL    NULL     NULL     NULL        NULL
 server_version                 NULL    NULL     NULL     NULL        NULL
 session_user                   NULL    NULL     NULL     NULL        NULL

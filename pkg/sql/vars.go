@@ -17,6 +17,7 @@ package sql
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -227,6 +228,27 @@ var varGen = map[string]sessionVar{
 
 	`node_id`: {
 		Get: func(session *Session) string { return fmt.Sprintf("%d", session.tables.leaseMgr.nodeID.Get()) },
+	},
+
+	`pedantic_sql`: {
+		Get: func(session *Session) string { return strconv.FormatBool(session.PedanticSQL) },
+		Set: func(_ context.Context, session *Session, values []parser.TypedExpr) error {
+			if len(values) != 1 {
+				return fmt.Errorf("set pedantic_sql requires a single argument")
+			}
+			evalCtx := session.evalCtx()
+			val, err := values[0].Eval(&evalCtx)
+			if err != nil {
+				return err
+			}
+			b, ok := val.(*parser.DBool)
+			if !ok {
+				return fmt.Errorf("set pedantic_sql requires a boolean value: %s is a %s",
+					values[0], val.ResolvedType())
+			}
+			session.PedanticSQL = (b == parser.DBoolTrue)
+			return nil
+		},
 	},
 
 	`search_path`: {

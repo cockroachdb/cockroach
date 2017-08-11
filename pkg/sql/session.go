@@ -157,6 +157,10 @@ type Session struct {
 	SearchPath parser.SearchPath
 	// User is the name of the user logged into the session.
 	User string
+	// PedanticSQL causes errors when the client sends syntax that
+	// CockroachDB supports for compatibility but which we'd rather
+	// them not use. The error should suggest an alternative.
+	PedanticSQL bool
 
 	//
 	// Session parameters, non-user-configurable.

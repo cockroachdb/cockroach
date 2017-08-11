@@ -1,0 +1,5 @@
+statement ok
+SET pedantic_sql = true
+
+query error set-returning functions should not be used as SELECT target expressions
+SELECT generate_series(1,10)

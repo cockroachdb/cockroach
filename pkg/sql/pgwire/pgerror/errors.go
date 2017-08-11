@@ -42,6 +42,12 @@ func NewErrorf(code string, format string, args ...interface{}) *Error {
 	}
 }
 
+// SetHint annotates an Error object with a hint.
+func (pg *Error) SetHint(h string) *Error {
+	pg.Hint = h
+	return pg
+}
+
 // SetHintf annotates an Error object with a hint.
 func (pg *Error) SetHintf(f string, args ...interface{}) *Error {
 	pg.Hint = fmt.Sprintf(f, args...)
