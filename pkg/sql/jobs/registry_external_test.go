@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/kr/pretty"
@@ -62,7 +63,7 @@ func TestRoundtripJob(t *testing.T) {
 	}
 }
 
-func TestRegistryResume(t *testing.T) {
+func TestRegistryResumeExpiredLease(t *testing.T) {
 	ctx := context.Background()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
@@ -119,6 +120,7 @@ func TestRegistryResume(t *testing.T) {
 	resumeCounts := make(map[roachpb.NodeID]int)
 	resumeCalled := make(chan struct{})
 	var newJobs []*jobs.Job
+	defer jobs.ResetResumeHooks()()
 	jobs.AddResumeHook(func(_ jobs.Type) func(context.Context, *jobs.Job) error {
 		hookCallCount++
 		return func(_ context.Context, job *jobs.Job) error {
@@ -165,5 +167,42 @@ func TestRegistryResume(t *testing.T) {
 			t.Errorf("expected job %d to have been adopted by node %d, but was adopted by node %d",
 				*newJob.ID(), e, a)
 		}
+	}
+}
+
+func TestRegistryResumeActiveLease(t *testing.T) {
+	defer func(oldInterval time.Duration) {
+		jobs.DefaultAdoptInterval = oldInterval
+	}(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+
+	resumeCh := make(chan int64)
+	defer jobs.ResetResumeHooks()()
+	jobs.AddResumeHook(func(_ jobs.Type) func(context.Context, *jobs.Job) error {
+		return func(ctx context.Context, job *jobs.Job) error {
+			resumeCh <- *job.ID()
+			return nil
+		}
+	})
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	payload, err := (&jobs.Payload{
+		Lease:   &jobs.Lease{NodeID: 1, Epoch: 1},
+		Details: jobs.WrapPayloadDetails(jobs.BackupDetails{}),
+	}).Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var id int64
+	sqlutils.MakeSQLRunner(t, sqlDB).QueryRow(
+		`INSERT INTO system.jobs (status, payload) VALUES ($1, $2) RETURNING id`,
+		jobs.StatusRunning, payload).Scan(&id)
+
+	if e, a := id, <-resumeCh; e != a {
+		t.Fatalf("expected job %d to be resumed, but got %d", e, a)
 	}
 }

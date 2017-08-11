@@ -245,13 +245,31 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl nodeLiveness) error {
 			continue
 		}
 
-		nodeStatus, ok := nodeStatusMap[payload.Lease.NodeID]
-		if !ok {
-			log.Warningf(ctx, "no liveness record for node %d", payload.Lease.NodeID)
-			continue
+		var needsResume bool
+		if payload.Lease.NodeID == r.nodeID.Get() {
+			// If we hold the lease for a job, check to see if we're actually running
+			// that job, and resume it if we're not. Otherwise, the job will be stuck
+			// until this node is restarted, as the other nodes in the cluster see
+			// that we hold a valid lease and assume we're running the job.
+			//
+			// We end up in this state—a valid lease for a canceled job—when we
+			// overcautiously cancel all jobs due to e.g. a slow heartbeat response.
+			// If that heartbeat managed to successfully extend the liveness lease,
+			// we'll have stopped running jobs on which we still had valid leases.
+			r.mu.Lock()
+			_, running := r.mu.jobs[*id]
+			r.mu.Unlock()
+			needsResume = !running
+		} else {
+			nodeStatus, ok := nodeStatusMap[payload.Lease.NodeID]
+			if !ok {
+				log.Warningf(ctx, "no liveness record for node %d", payload.Lease.NodeID)
+				continue
+			}
+			needsResume = nodeStatus.epoch > payload.Lease.Epoch || !nodeStatus.isLive
 		}
 
-		if nodeStatus.epoch > payload.Lease.Epoch || !nodeStatus.isLive {
+		if needsResume {
 			var resumeFn func(context.Context, *Job) error
 			for _, hook := range resumeHooks {
 				if resumeFn = hook(payload.Type()); resumeFn != nil {
