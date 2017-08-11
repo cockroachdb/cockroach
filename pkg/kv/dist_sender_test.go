@@ -43,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 var testMetaRangeDescriptor = roachpb.RangeDescriptor{
@@ -488,22 +487,24 @@ func TestImmutableBatchArgs(t *testing.T) {
 
 	ds := NewDistSender(cfg, g)
 
-	u := uuid.MakeV4()
-	txn := &roachpb.Transaction{
-		TxnMeta: enginepb.TxnMeta{ID: &u},
-	}
+	txn := roachpb.MakeTransaction(
+		"test", nil /* baseKey */, roachpb.NormalUserPriority,
+		enginepb.SERIALIZABLE, clock.Now(), clock.MaxOffset().Nanoseconds(),
+	)
+	origTxnTs := txn.Timestamp
+
 	// An optimization does copy-on-write if we haven't observed anything,
 	// so make sure we're not in that case.
 	txn.UpdateObservedTimestamp(1, hlc.MaxTimestamp)
 
 	put := roachpb.NewPut(roachpb.Key("don't"), roachpb.Value{})
 	if _, pErr := client.SendWrappedWith(context.Background(), ds, roachpb.Header{
-		Txn: txn,
+		Txn: &txn,
 	}, put); pErr != nil {
 		t.Fatal(pErr)
 	}
 
-	if txn.Timestamp != (hlc.Timestamp{}) {
+	if txn.Timestamp != origTxnTs {
 		t.Fatal("Transaction was mutated by DistSender")
 	}
 }
@@ -1657,7 +1658,7 @@ func TestSequenceUpdate(t *testing.T) {
 
 	}
 
-	var expSequence int32
+	var expSequence int32 = 1 // sequence numbers are 1-based.
 	var testFn rpcSendFn = func(
 		_ context.Context,
 		_ SendOptions,
@@ -1685,16 +1686,21 @@ func TestSequenceUpdate(t *testing.T) {
 	ds := NewDistSender(cfg, g)
 
 	// Send 5 puts and verify sequence number increase.
-	txn := &roachpb.Transaction{Name: "test"}
+	txn := roachpb.MakeTransaction(
+		"test", nil /* baseKey */, roachpb.NormalUserPriority,
+		enginepb.SERIALIZABLE,
+		clock.Now(),
+		clock.MaxOffset().Nanoseconds(),
+	)
 	for i := 0; i < 5; i++ {
 		var ba roachpb.BatchRequest
-		ba.Txn = txn
+		ba.Txn = &txn
 		ba.Add(roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("foo")).(*roachpb.PutRequest))
 		br, pErr := ds.Send(context.Background(), ba)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
-		txn = br.Txn
+		txn = *br.Txn
 	}
 }
 

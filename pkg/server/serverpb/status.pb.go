@@ -505,7 +505,8 @@ type Session struct {
 	ActiveQueries []ActiveQuery `protobuf:"bytes,5,rep,name=active_queries,json=activeQueries" json:"active_queries"`
 	// Timestamp of session's start.
 	Start time.Time `protobuf:"bytes,6,opt,name=start,stdtime" json:"start"`
-	// ID of the current KV transaction for this session.
+	// ID of the current KV transaction for this session. Nil if the session
+	// doesn't currently have a transaction.
 	KvTxnID *github_com_cockroachdb_cockroach_pkg_util_uuid.UUID `protobuf:"bytes,7,opt,name=kv_txn_id,json=kvTxnId,proto3,customtype=github.com/cockroachdb/cockroach/pkg/util/uuid.UUID" json:"kv_txn_id,omitempty"`
 }
 

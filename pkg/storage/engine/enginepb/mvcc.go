@@ -16,10 +16,7 @@ package enginepb
 
 // Short returns a prefix of the transaction's ID.
 func (t TxnMeta) Short() string {
-	if id := t.ID; id != nil {
-		return id.Short()
-	}
-	return "<nil>"
+	return t.ID.Short()
 }
 
 // Total returns the range size as the sum of the key and value

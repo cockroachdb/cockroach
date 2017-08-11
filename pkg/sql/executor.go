@@ -786,9 +786,7 @@ func (e *Executor) execParsed(
 
 		groupResultWriter := resultWriter.NewGroupResultWriter()
 		inTxn := txnState.State() != NoTxn
-		execOpt := client.TxnExecOptions{
-			AssignTimestampImmediately: true,
-		}
+		execOpt := client.TxnExecOptions{}
 		// Figure out the statements out of which we're going to try to consume
 		// this iteration. If we need to create an implicit txn, only one statement
 		// can be consumed.

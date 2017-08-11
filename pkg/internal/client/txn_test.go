@@ -173,7 +173,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 		{hlc.Timestamp{WallTime: 10, Logical: 1}, hlc.Timestamp{WallTime: 10, Logical: 0}},
 		{hlc.Timestamp{WallTime: 10, Logical: 1}, hlc.Timestamp{WallTime: 20, Logical: 1}},
 		{hlc.Timestamp{WallTime: 20, Logical: 1}, hlc.Timestamp{WallTime: 20, Logical: 1}},
-		{hlc.Timestamp{WallTime: 20, Logical: 1}, hlc.Timestamp{WallTime: 0, Logical: 0}},
+		{hlc.Timestamp{WallTime: 20, Logical: 1}, hlc.Timestamp{WallTime: 19, Logical: 0}},
 		{hlc.Timestamp{WallTime: 20, Logical: 1}, hlc.Timestamp{WallTime: 20, Logical: 1}},
 	}
 
@@ -680,9 +680,6 @@ func TestTimestampSelectionInOptions(t *testing.T) {
 	db := NewDB(newTestSender(nil), clock)
 	txn := NewTxn(db)
 
-	execOpt := TxnExecOptions{
-		AssignTimestampImmediately: true,
-	}
 	refTimestamp := clock.Now()
 
 	txnClosure := func(ctx context.Context, txn *Txn, opt *TxnExecOptions) error {
@@ -690,7 +687,7 @@ func TestTimestampSelectionInOptions(t *testing.T) {
 		return txn.Put(ctx, "a", "b")
 	}
 
-	if err := txn.Exec(context.Background(), execOpt, txnClosure); err != nil {
+	if err := txn.Exec(context.Background(), TxnExecOptions{}, txnClosure); err != nil {
 		t.Fatal(err)
 	}
 

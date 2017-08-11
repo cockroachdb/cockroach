@@ -397,10 +397,10 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	// Increments are a good way of testing idempotency. Up here, we
 	// address them to the original range, then later to the one that
 	// contains the key.
-	txn := roachpb.NewTransaction("test", []byte("c"), 10, enginepb.SERIALIZABLE,
+	txn := roachpb.MakeTransaction("test", []byte("c"), 10, enginepb.SERIALIZABLE,
 		store.Clock().Now(), 0)
 	lIncArgs := incrementArgs([]byte("apoptosis"), 100)
-	lTxn := *txn
+	lTxn := txn
 	lTxn.Sequence++
 	if _, pErr := client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
 		Txn: &lTxn,
@@ -408,7 +408,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 		t.Fatal(pErr)
 	}
 	rIncArgs := incrementArgs([]byte("wobble"), 10)
-	rTxn := *txn
+	rTxn := txn
 	rTxn.Sequence++
 	if _, pErr := client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
 		Txn: &rTxn,
@@ -2002,7 +2002,7 @@ func TestDistributedTxnCleanup(t *testing.T) {
 					if err := txn.Run(ctx, b); err != nil {
 						return err
 					}
-					txnKey = keys.TransactionKey(txn.Proto().Key, *txn.Proto().ID)
+					txnKey = keys.TransactionKey(txn.Proto().Key, txn.Proto().ID)
 					// If force=true, we're force-aborting the txn out from underneath.
 					// This simulates txn deadlock or a max priority txn aborting a
 					// normal or min priority txn.

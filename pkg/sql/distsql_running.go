@@ -129,12 +129,6 @@ func (dsp *distSQLPlanner) Run(
 	recv.resultToStreamColMap = plan.planToStreamColMap
 	thisNodeID := dsp.nodeDesc.NodeID
 
-	// DistSQL needs to initialize the Transaction proto before we put it in the
-	// FlowRequest's below. This is because we might not have used the txn do to
-	// anything else (we might not have sent any requests through the client.Txn,
-	// which normally does this init).
-	txn.EnsureProto()
-
 	evalCtxProto := distsqlrun.MakeEvalContext(evalCtx)
 	for _, s := range evalCtx.SearchPath {
 		evalCtxProto.SearchPath = append(evalCtxProto.SearchPath, s)
