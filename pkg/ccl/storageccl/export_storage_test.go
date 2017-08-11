@@ -12,14 +12,12 @@ import (
 	"bytes"
 	"crypto/rand"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -204,33 +202,12 @@ func TestPutHttp(t *testing.T) {
 
 	makeServer := func() (*url.URL, func() int, func()) {
 		var files int
+		handler := MakeHTTPFileServer(context.TODO(), tmp)
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			defer r.Body.Close()
-			localfile := filepath.Join(tmp, filepath.Base(r.URL.Path))
-			switch r.Method {
-			case "PUT":
-				f, err := os.Create(localfile)
-				if err != nil {
-					http.Error(w, err.Error(), 500)
-					return
-				}
-				defer f.Close()
-				defer r.Body.Close()
-				if _, err := io.Copy(f, r.Body); err != nil {
-					http.Error(w, err.Error(), 500)
-					return
-				}
+			if r.Method == "PUT" {
 				files++
-			case "GET":
-				http.ServeFile(w, r, localfile)
-			case "DELETE":
-				if err := os.Remove(localfile); err != nil {
-					http.Error(w, err.Error(), 500)
-					return
-				}
-			default:
-				http.Error(w, "unsupported method "+r.Method, 400)
 			}
+			handler(w, r)
 		}))
 		t.Logf("Mock HTTP Storage %q", srv.URL)
 		uri, err := url.Parse(srv.URL)
