@@ -641,6 +641,10 @@ func TestBalanceScore(t *testing.T) {
 		candidateWritesPerSecond: stat{mean: 1000},
 	}
 
+	sEmpty := roachpb.StoreCapacity{
+		Capacity:  1024 * 1024 * 1024,
+		Available: 1024 * 1024 * 1024,
+	}
 	sMean := roachpb.StoreCapacity{
 		Capacity:        1024 * 1024 * 1024,
 		Available:       512 * 1024 * 1024,
@@ -682,6 +686,7 @@ func TestBalanceScore(t *testing.T) {
 	sRangesUnderfullBytesUnderfullWritesOverfull := sRangesUnderfullBytesUnderfull
 	sRangesUnderfullBytesUnderfullWritesOverfull.WritesPerSecond = 1500
 
+	rEmpty := RangeInfo{}
 	rMedian := RangeInfo{
 		LiveBytes:       500 * 1024,
 		WritesPerSecond: 5,
@@ -708,33 +713,47 @@ func TestBalanceScore(t *testing.T) {
 		ri       RangeInfo
 		expected float64
 	}{
+		{sEmpty, rEmpty, 3},
+		{sEmpty, rMedian, 2},
+		{sEmpty, rHighBytes, 2},
+		{sEmpty, rLowBytes, 2},
+		{sMean, rEmpty, 0},
 		{sMean, rMedian, 0},
 		{sMean, rHighBytes, 0},
 		{sMean, rLowBytes, 0},
+		{sRangesOverfull, rEmpty, -1},
 		{sRangesOverfull, rMedian, -1},
 		{sRangesOverfull, rHighBytes, -1},
 		{sRangesOverfull, rLowBytes, -1},
+		{sRangesUnderfull, rEmpty, 1},
 		{sRangesUnderfull, rMedian, 1},
 		{sRangesUnderfull, rHighBytes, 1},
 		{sRangesUnderfull, rLowBytes, 1},
+		{sBytesOverfull, rEmpty, 1},
 		{sBytesOverfull, rMedian, 0},
 		{sBytesOverfull, rHighBytes, -1},
 		{sBytesOverfull, rLowBytes, 1},
+		{sBytesUnderfull, rEmpty, -1},
 		{sBytesUnderfull, rMedian, 0},
 		{sBytesUnderfull, rHighBytes, 1},
 		{sBytesUnderfull, rLowBytes, -1},
+		{sRangesOverfullBytesOverfull, rEmpty, -.5},
 		{sRangesOverfullBytesOverfull, rMedian, -2},
-		{sRangesOverfullBytesOverfull, rHighBytes, 0},
-		{sRangesOverfullBytesOverfull, rLowBytes, 0},
+		{sRangesOverfullBytesOverfull, rHighBytes, -1.5},
+		{sRangesOverfullBytesOverfull, rLowBytes, -.5},
+		{sRangesUnderfullBytesUnderfull, rEmpty, .5},
 		{sRangesUnderfullBytesUnderfull, rMedian, 2},
-		{sRangesUnderfullBytesUnderfull, rHighBytes, 0},
-		{sRangesUnderfullBytesUnderfull, rLowBytes, 0},
+		{sRangesUnderfullBytesUnderfull, rHighBytes, 1.5},
+		{sRangesUnderfullBytesUnderfull, rLowBytes, .5},
+		{sRangesUnderfullBytesOverfull, rEmpty, 2},
 		{sRangesUnderfullBytesOverfull, rMedian, 1},
 		{sRangesUnderfullBytesOverfull, rHighBytes, 0},
 		{sRangesUnderfullBytesOverfull, rLowBytes, 2},
+		{sRangesOverfullBytesUnderfull, rEmpty, -2},
 		{sRangesOverfullBytesUnderfull, rMedian, -1},
 		{sRangesOverfullBytesUnderfull, rHighBytes, 0},
 		{sRangesOverfullBytesUnderfull, rLowBytes, -2},
+		{sRangesUnderfullBytesOverfullWritesOverfull, rEmpty, 3},
 		{sRangesUnderfullBytesOverfullWritesOverfull, rMedian, 1},
 		{sRangesUnderfullBytesOverfullWritesOverfull, rHighBytes, 0},
 		{sRangesUnderfullBytesOverfullWritesOverfull, rHighBytesHighWrites, -1},
@@ -742,13 +761,14 @@ func TestBalanceScore(t *testing.T) {
 		{sRangesUnderfullBytesOverfullWritesOverfull, rLowBytes, 2},
 		{sRangesUnderfullBytesOverfullWritesOverfull, rLowBytesHighWrites, 1},
 		{sRangesUnderfullBytesOverfullWritesOverfull, rLowBytesLowWrites, 3},
+		{sRangesUnderfullBytesUnderfullWritesOverfull, rEmpty, 1.5},
 		{sRangesUnderfullBytesUnderfullWritesOverfull, rMedian, 2},
-		{sRangesUnderfullBytesUnderfullWritesOverfull, rHighBytes, 0},
-		{sRangesUnderfullBytesUnderfullWritesOverfull, rHighBytesHighWrites, -1},
-		{sRangesUnderfullBytesUnderfullWritesOverfull, rHighBytesLowWrites, 1},
-		{sRangesUnderfullBytesUnderfullWritesOverfull, rLowBytes, 0},
-		{sRangesUnderfullBytesUnderfullWritesOverfull, rLowBytesHighWrites, -1},
-		{sRangesUnderfullBytesUnderfullWritesOverfull, rLowBytesLowWrites, 1},
+		{sRangesUnderfullBytesUnderfullWritesOverfull, rHighBytes, 1.5},
+		{sRangesUnderfullBytesUnderfullWritesOverfull, rHighBytesHighWrites, 0.5},
+		{sRangesUnderfullBytesUnderfullWritesOverfull, rHighBytesLowWrites, 2.5},
+		{sRangesUnderfullBytesUnderfullWritesOverfull, rLowBytes, 0.5},
+		{sRangesUnderfullBytesUnderfullWritesOverfull, rLowBytesHighWrites, -0.5},
+		{sRangesUnderfullBytesUnderfullWritesOverfull, rLowBytesLowWrites, 1.5},
 		{sRangesUnderfullBytesUnderfullWritesOverfull, rHighWrites, 1},
 		{sRangesUnderfullBytesUnderfullWritesOverfull, rLowWrites, 3},
 	}
