@@ -64,6 +64,8 @@ func TestRoundtripJob(t *testing.T) {
 }
 
 func TestRegistryResumeExpiredLease(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	ctx := context.Background()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
@@ -171,6 +173,8 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 }
 
 func TestRegistryResumeActiveLease(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	defer func(oldInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldInterval
 	}(jobs.DefaultAdoptInterval)
