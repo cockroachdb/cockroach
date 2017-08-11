@@ -207,6 +207,7 @@ func (cfg *Config) PGURL(user *url.Userinfo) (*url.URL, error) {
 			options.Add("sslkey", keyPath)
 		}
 	}
+	options.Add("application_name", "cockroach")
 
 	return &url.URL{
 		Scheme:   "postgresql",

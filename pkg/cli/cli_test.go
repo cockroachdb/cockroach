@@ -674,6 +674,7 @@ func Example_sql() {
 	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
+	c.RunWithArgs([]string{"sql", "-e", "show application_name"})
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.f (x int, y int); insert into t.f values (42, 69)"})
 	c.RunWithArgs([]string{"sql", "-e", "select 3", "-e", "select * from t.f"})
 	c.RunWithArgs([]string{"sql", "-e", "begin", "-e", "select 3", "-e", "commit"})
@@ -689,6 +690,10 @@ func Example_sql() {
 	c.RunWithArgs([]string{"sql", "-d", "nonexistent", "-e", "create database nonexistent; create table foo(x int); select * from foo"})
 
 	// Output:
+	// sql -e show application_name
+	// 1 row
+	// application_name
+	// cockroach
 	// sql -e create database t; create table t.f (x int, y int); insert into t.f values (42, 69)
 	// INSERT 1
 	// sql -e select 3 -e select * from t.f
