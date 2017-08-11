@@ -156,6 +156,9 @@ func testExportStore(t *testing.T, storeURI string, skipSingleFile bool) {
 		if !bytes.Equal(content, []byte("aaa")) {
 			t.Fatalf("wrong content")
 		}
+		if err := s.Delete(ctx, "A"); err != nil {
+			t.Fatal(err)
+		}
 	})
 	t.Run("write-single-file-by-uri", func(t *testing.T) {
 		singleFile := storeFromURI(ctx, t, appendPath(t, storeURI, "B"))
@@ -172,6 +175,9 @@ func testExportStore(t *testing.T, storeURI string, skipSingleFile bool) {
 		defer res.Close()
 		content, err := ioutil.ReadAll(res)
 		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Delete(ctx, "B"); err != nil {
 			t.Fatal(err)
 		}
 		// Verify the result contains what we wrote.
