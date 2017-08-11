@@ -49,6 +49,11 @@ func (p *planner) DropDatabase(ctx context.Context, n *parser.DropDatabase) (pla
 		return nil, errEmptyDatabaseName
 	}
 
+	if p.session.SafeUpdates {
+		return nil, pgerror.NewDangerousStatementErrorf(
+			"DROP DATABASE will delete all contents recursively")
+	}
+
 	// Check that the database exists.
 	dbDesc, err := getDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), string(n.Name))
 	if err != nil {
@@ -227,6 +232,11 @@ type fullIndexName struct {
 //   Notes: postgres allows only the index owner to DROP an index.
 //          mysql requires the INDEX privilege on the table.
 func (p *planner) DropIndex(ctx context.Context, n *parser.DropIndex) (planNode, error) {
+	if p.session.SafeUpdates {
+		return nil, pgerror.NewDangerousStatementErrorf(
+			"DROP INDEX will delete the entire index, which may be costly to rebuild")
+	}
+
 	idxNames := make([]fullIndexName, len(n.IndexList))
 	for i, index := range n.IndexList {
 		tn, err := p.expandIndexName(ctx, index)
@@ -517,6 +527,11 @@ type dropTableNode struct {
 //   Notes: postgres allows only the table owner to DROP a table.
 //          mysql requires the DROP privilege on the table.
 func (p *planner) DropTable(ctx context.Context, n *parser.DropTable) (planNode, error) {
+	if p.session.SafeUpdates {
+		return nil, pgerror.NewDangerousStatementErrorf(
+			"DROP TABLE will delete the entire table")
+	}
+
 	td := make([]*sqlbase.TableDescriptor, 0, len(n.Names))
 	for _, name := range n.Names {
 		tn, err := name.NormalizeTableName()

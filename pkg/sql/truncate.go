@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -36,6 +37,11 @@ const TableTruncateChunkSize = indexTruncateChunkSize
 //   Notes: postgres requires TRUNCATE.
 //          mysql requires DROP (for mysql >= 5.1.16, DELETE before that).
 func (p *planner) Truncate(ctx context.Context, n *parser.Truncate) (planNode, error) {
+	if p.session.SafeUpdates {
+		return nil, pgerror.NewDangerousStatementErrorf(
+			"TRUNCATE will delete all the rows")
+	}
+
 	// Since truncation may cascade to a given table any number of times, start by
 	// building the unique set (by ID) of tables to truncate.
 	toTruncate := make(map[sqlbase.ID]struct{}, len(n.Tables))

@@ -669,6 +669,7 @@ func Example_sql() {
 	c := newCLITest(cliTestParams{})
 	defer c.cleanup()
 
+	c.RunWithArgs([]string{"sql", "--safe-updates", "-e", "drop table foo"})
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.f (x int, y int); insert into t.f values (42, 69)"})
 	c.RunWithArgs([]string{"sql", "-e", "select 3", "-e", "select * from t.f"})
 	c.RunWithArgs([]string{"sql", "-e", "begin", "-e", "select 3", "-e", "commit"})
@@ -684,6 +685,8 @@ func Example_sql() {
 	c.RunWithArgs([]string{"sql", "-d", "nonexistent", "-e", "create database nonexistent; create table foo(x int); select * from foo"})
 
 	// Output:
+	// sql --safe-updates -e drop table foo
+	// pq: rejected: DROP TABLE will delete the entire table (reject_dangerous_statements = true)
 	// sql -e create database t; create table t.f (x int, y int); insert into t.f values (42, 69)
 	// INSERT 1
 	// sql -e select 3 -e select * from t.f

@@ -34,6 +34,7 @@ pedantic_sql                   false
 search_path                    pg_catalog
 server_version                 9.5.0
 session_user                   root
+sql_safe_updates               false
 standard_conforming_strings    on
 time zone                      UTC
 tracing                        off

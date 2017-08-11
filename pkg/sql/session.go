@@ -161,6 +161,9 @@ type Session struct {
 	// CockroachDB supports for compatibility but which we'd rather
 	// them not use. The error should suggest an alternative.
 	PedanticSQL bool
+	// SafeUpdates causes errors when the client
+	// sends syntax that may have unwanted side effects.
+	SafeUpdates bool
 
 	//
 	// Session parameters, non-user-configurable.

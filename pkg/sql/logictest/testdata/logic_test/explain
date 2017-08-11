@@ -144,7 +144,7 @@ EXPLAIN SHOW DATABASE
 0  render  ·     ·
 1  filter  ·     ·
 2  values  ·     ·
-2  ·       size  2 columns, 20 rows
+2  ·       size  2 columns, 21 rows
 
 query ITTT
 EXPLAIN SHOW TIME ZONE
@@ -152,7 +152,7 @@ EXPLAIN SHOW TIME ZONE
 0  render  ·     ·
 1  filter  ·     ·
 2  values  ·     ·
-2  ·       size  2 columns, 20 rows
+2  ·       size  2 columns, 21 rows
 
 query ITTT
 EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION
@@ -160,7 +160,7 @@ EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION
 0  render  ·     ·
 1  filter  ·     ·
 2  values  ·     ·
-2  ·       size  2 columns, 20 rows
+2  ·       size  2 columns, 21 rows
 
 query ITTT
 EXPLAIN SHOW TRANSACTION ISOLATION LEVEL
@@ -168,7 +168,7 @@ EXPLAIN SHOW TRANSACTION ISOLATION LEVEL
 0  render  ·     ·
 1  filter  ·     ·
 2  values  ·     ·
-2  ·       size  2 columns, 20 rows
+2  ·       size  2 columns, 21 rows
 
 query ITTT
 EXPLAIN SHOW TRANSACTION PRIORITY
@@ -176,7 +176,7 @@ EXPLAIN SHOW TRANSACTION PRIORITY
 0  render  ·     ·
 1  filter  ·     ·
 2  values  ·     ·
-2  ·       size  2 columns, 20 rows
+2  ·       size  2 columns, 21 rows
 
 query ITTT
 EXPLAIN SHOW COLUMNS FROM foo

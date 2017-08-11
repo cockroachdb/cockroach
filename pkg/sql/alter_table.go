@@ -170,6 +170,10 @@ func (n *alterTableNode) Start(params runParams) error {
 			}
 
 		case *parser.AlterTableDropColumn:
+			if params.p.session.SafeUpdates {
+				return pgerror.NewDangerousStatementErrorf("ALTER TABLE DROP COLUMN will remove all data in that column")
+			}
+
 			col, dropped, err := n.tableDesc.FindColumnByName(t.Column)
 			if err != nil {
 				if t.IfExists {

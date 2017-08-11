@@ -233,20 +233,23 @@ var varGen = map[string]sessionVar{
 	`pedantic_sql`: {
 		Get: func(session *Session) string { return strconv.FormatBool(session.PedanticSQL) },
 		Set: func(_ context.Context, session *Session, values []parser.TypedExpr) error {
-			if len(values) != 1 {
-				return fmt.Errorf("set pedantic_sql requires a single argument")
-			}
-			evalCtx := session.evalCtx()
-			val, err := values[0].Eval(&evalCtx)
+			b, err := getSingleBool("pedantic_sql", session, values)
 			if err != nil {
 				return err
 			}
-			b, ok := val.(*parser.DBool)
-			if !ok {
-				return fmt.Errorf("set pedantic_sql requires a boolean value: %s is a %s",
-					values[0], val.ResolvedType())
-			}
 			session.PedanticSQL = (b == parser.DBoolTrue)
+			return nil
+		},
+	},
+
+	`sql_safe_updates`: {
+		Get: func(session *Session) string { return strconv.FormatBool(session.SafeUpdates) },
+		Set: func(_ context.Context, session *Session, values []parser.TypedExpr) error {
+			b, err := getSingleBool("sql_safe_updates", session, values)
+			if err != nil {
+				return err
+			}
+			session.SafeUpdates = (b == parser.DBoolTrue)
 			return nil
 		},
 	},
@@ -424,3 +427,22 @@ var varNames = func() []string {
 	sort.Strings(res)
 	return res
 }()
+
+func getSingleBool(
+	name string, session *Session, values []parser.TypedExpr,
+) (*parser.DBool, error) {
+	if len(values) != 1 {
+		return nil, fmt.Errorf("set %s requires a single argument", name)
+	}
+	evalCtx := session.evalCtx()
+	val, err := values[0].Eval(&evalCtx)
+	if err != nil {
+		return nil, err
+	}
+	b, ok := val.(*parser.DBool)
+	if !ok {
+		return nil, fmt.Errorf("set %s requires a boolean value: %s is a %s",
+			name, values[0], val.ResolvedType())
+	}
+	return b, nil
+}
