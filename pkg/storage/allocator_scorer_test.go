@@ -804,6 +804,10 @@ func TestBalanceScore(t *testing.T) {
 		candidateWritesPerSecond: stat{mean: 1000},
 	}
 
+	sEmpty := roachpb.StoreCapacity{
+		Capacity:  1024 * 1024 * 1024,
+		Available: 1024 * 1024 * 1024,
+	}
 	sMean := roachpb.StoreCapacity{
 		Capacity:        1024 * 1024 * 1024,
 		Available:       512 * 1024 * 1024,
@@ -845,6 +849,7 @@ func TestBalanceScore(t *testing.T) {
 	sRangesUnderfullBytesUnderfullWritesOverfull := sRangesUnderfullBytesUnderfull
 	sRangesUnderfullBytesUnderfullWritesOverfull.WritesPerSecond = 1500
 
+	rEmpty := RangeInfo{}
 	rMedian := RangeInfo{
 		LiveBytes:       500 * 1024,
 		WritesPerSecond: 5,
@@ -871,33 +876,47 @@ func TestBalanceScore(t *testing.T) {
 		ri       RangeInfo
 		expected float64
 	}{
+		{sEmpty, rEmpty, 3},
+		{sEmpty, rMedian, 2},
+		{sEmpty, rHighBytes, 2},
+		{sEmpty, rLowBytes, 2},
+		{sMean, rEmpty, 0},
 		{sMean, rMedian, 0},
 		{sMean, rHighBytes, 0},
 		{sMean, rLowBytes, 0},
+		{sRangesOverfull, rEmpty, -1},
 		{sRangesOverfull, rMedian, -1},
 		{sRangesOverfull, rHighBytes, -1},
 		{sRangesOverfull, rLowBytes, -1},
+		{sRangesUnderfull, rEmpty, 1},
 		{sRangesUnderfull, rMedian, 1},
 		{sRangesUnderfull, rHighBytes, 1},
 		{sRangesUnderfull, rLowBytes, 1},
+		{sBytesOverfull, rEmpty, 1},
 		{sBytesOverfull, rMedian, 0},
 		{sBytesOverfull, rHighBytes, -1},
 		{sBytesOverfull, rLowBytes, 1},
+		{sBytesUnderfull, rEmpty, -1},
 		{sBytesUnderfull, rMedian, 0},
 		{sBytesUnderfull, rHighBytes, 1},
 		{sBytesUnderfull, rLowBytes, -1},
+		{sRangesOverfullBytesOverfull, rEmpty, -.5},
 		{sRangesOverfullBytesOverfull, rMedian, -2},
-		{sRangesOverfullBytesOverfull, rHighBytes, 0},
-		{sRangesOverfullBytesOverfull, rLowBytes, 0},
+		{sRangesOverfullBytesOverfull, rHighBytes, -1.5},
+		{sRangesOverfullBytesOverfull, rLowBytes, -.5},
+		{sRangesUnderfullBytesUnderfull, rEmpty, .5},
 		{sRangesUnderfullBytesUnderfull, rMedian, 2},
-		{sRangesUnderfullBytesUnderfull, rHighBytes, 0},
-		{sRangesUnderfullBytesUnderfull, rLowBytes, 0},
+		{sRangesUnderfullBytesUnderfull, rHighBytes, 1.5},
+		{sRangesUnderfullBytesUnderfull, rLowBytes, .5},
+		{sRangesUnderfullBytesOverfull, rEmpty, 2},
 		{sRangesUnderfullBytesOverfull, rMedian, 1},
 		{sRangesUnderfullBytesOverfull, rHighBytes, 0},
 		{sRangesUnderfullBytesOverfull, rLowBytes, 2},
+		{sRangesOverfullBytesUnderfull, rEmpty, -2},
 		{sRangesOverfullBytesUnderfull, rMedian, -1},
 		{sRangesOverfullBytesUnderfull, rHighBytes, 0},
 		{sRangesOverfullBytesUnderfull, rLowBytes, -2},
+		{sRangesUnderfullBytesOverfullWritesOverfull, rEmpty, 3},
 		{sRangesUnderfullBytesOverfullWritesOverfull, rMedian, 1},
 		{sRangesUnderfullBytesOverfullWritesOverfull, rHighBytes, 0},
 		{sRangesUnderfullBytesOverfullWritesOverfull, rHighBytesHighWrites, -1},
@@ -905,19 +924,95 @@ func TestBalanceScore(t *testing.T) {
 		{sRangesUnderfullBytesOverfullWritesOverfull, rLowBytes, 2},
 		{sRangesUnderfullBytesOverfullWritesOverfull, rLowBytesHighWrites, 1},
 		{sRangesUnderfullBytesOverfullWritesOverfull, rLowBytesLowWrites, 3},
+		{sRangesUnderfullBytesUnderfullWritesOverfull, rEmpty, 1.5},
 		{sRangesUnderfullBytesUnderfullWritesOverfull, rMedian, 2},
-		{sRangesUnderfullBytesUnderfullWritesOverfull, rHighBytes, 0},
-		{sRangesUnderfullBytesUnderfullWritesOverfull, rHighBytesHighWrites, -1},
-		{sRangesUnderfullBytesUnderfullWritesOverfull, rHighBytesLowWrites, 1},
-		{sRangesUnderfullBytesUnderfullWritesOverfull, rLowBytes, 0},
-		{sRangesUnderfullBytesUnderfullWritesOverfull, rLowBytesHighWrites, -1},
-		{sRangesUnderfullBytesUnderfullWritesOverfull, rLowBytesLowWrites, 1},
+		{sRangesUnderfullBytesUnderfullWritesOverfull, rHighBytes, 1.5},
+		{sRangesUnderfullBytesUnderfullWritesOverfull, rHighBytesHighWrites, 0.5},
+		{sRangesUnderfullBytesUnderfullWritesOverfull, rHighBytesLowWrites, 2.5},
+		{sRangesUnderfullBytesUnderfullWritesOverfull, rLowBytes, 0.5},
+		{sRangesUnderfullBytesUnderfullWritesOverfull, rLowBytesHighWrites, -0.5},
+		{sRangesUnderfullBytesUnderfullWritesOverfull, rLowBytesLowWrites, 1.5},
 		{sRangesUnderfullBytesUnderfullWritesOverfull, rHighWrites, 1},
 		{sRangesUnderfullBytesUnderfullWritesOverfull, rLowWrites, 3},
 	}
 	for i, tc := range testCases {
 		if a, e := balanceScore(st, storeList, tc.sc, tc.ri), tc.expected; a.totalScore() != e {
 			t.Errorf("%d: balanceScore(storeList, %+v, %+v) got %s; want %.2f", i, tc.sc, tc.ri, a, e)
+		}
+	}
+}
+
+func TestRebalanceConvergesOnMean(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	st := cluster.MakeClusterSettings()
+
+	const diskCapacity = 2000
+	storeList := StoreList{
+		candidateRanges:          stat{mean: 1000},
+		candidateDiskUsage:       stat{mean: 1000.0 / float64(diskCapacity)},
+		candidateWritesPerSecond: stat{mean: 1000},
+	}
+	emptyRange := RangeInfo{}
+	normalRange := RangeInfo{
+		LiveBytes:       10,
+		WritesPerSecond: 10,
+	}
+	outlierRange := RangeInfo{
+		LiveBytes:       10,
+		WritesPerSecond: 10000,
+	}
+
+	testCases := []struct {
+		rangeCount      int32
+		liveBytes       int64
+		writesPerSecond float64
+		ri              RangeInfo
+		toConverges     bool
+		fromConverges   bool
+	}{
+		{0, 0, 0, emptyRange, true, false},
+		{900, 900, 900, emptyRange, true, false},
+		{900, 900, 2000, emptyRange, true, false},
+		{999, 1000, 1000, emptyRange, true, false},
+		{1000, 1000, 1000, emptyRange, false, false},
+		{1001, 1000, 1000, emptyRange, false, true},
+		{2000, 2000, 2000, emptyRange, false, true},
+		{900, 2000, 2000, emptyRange, true, false},
+		{0, 0, 0, normalRange, true, false},
+		{900, 900, 900, normalRange, true, false},
+		{900, 900, 2000, normalRange, true, false},
+		{999, 1000, 1000, normalRange, false, false},
+		{2000, 2000, 2000, normalRange, false, true},
+		{900, 2000, 2000, normalRange, false, true},
+		{1000, 990, 990, normalRange, true, false},
+		{1000, 994, 994, normalRange, true, false},
+		{1000, 990, 995, normalRange, false, false},
+		{1000, 1010, 1010, normalRange, false, true},
+		{1000, 1010, 1005, normalRange, false, false},
+		{0, 0, 0, outlierRange, true, false},
+		{900, 900, 900, outlierRange, true, false},
+		{900, 900, 2000, outlierRange, true, false},
+		{999, 1000, 1000, outlierRange, false, false},
+		{2000, 2000, 10000, outlierRange, false, true},
+		{900, 2000, 10000, outlierRange, false, true},
+		{1000, 990, 990, outlierRange, false, false},
+		{1000, 1000, 10000, outlierRange, false, false},
+		{1000, 1010, 10000, outlierRange, false, true},
+		{1001, 1010, 1005, outlierRange, false, true},
+	}
+	for i, tc := range testCases {
+		sc := roachpb.StoreCapacity{
+			Capacity:        diskCapacity,
+			Available:       diskCapacity - tc.liveBytes,
+			RangeCount:      tc.rangeCount,
+			WritesPerSecond: tc.writesPerSecond,
+		}
+		if a, e := rebalanceToConvergesOnMean(st, storeList, sc, tc.ri), tc.toConverges; a != e {
+			t.Errorf("%d: rebalanceToConvergesOnMean(storeList, %+v, %+v) got %t; want %t", i, sc, tc.ri, a, e)
+		}
+		if a, e := rebalanceFromConvergesOnMean(st, storeList, sc, tc.ri), tc.fromConverges; a != e {
+			t.Errorf("%d: rebalanceFromConvergesOnMean(storeList, %+v, %+v) got %t; want %t", i, sc, tc.ri, a, e)
 		}
 	}
 }

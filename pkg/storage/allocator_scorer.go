@@ -810,27 +810,33 @@ func percentileScore(
 		} else if rangeVal > percentiles.P75 {
 			return -0.5
 		}
+		// else rangeVal >= percentiles.P25 && rangeVal <= percentiles.P75
 		// It may be better to return more than 0 here, since taking on an
 		// average range isn't necessarily bad, but for now let's see how this works.
 		return 0
 	} else if rcs == overfull {
 		// If this store has too many ranges, we're ok with moving any range that's
 		// at least somewhat sizable in this dimension, since we want to reduce both
-		// the range count and this metric. Moving extreme outliers may be
-		// undesirable, though.
-		if rangeVal < percentiles.P10 || rangeVal > percentiles.P90 {
-			return 1
-		} else if rangeVal <= percentiles.P25 || rangeVal >= percentiles.P75 {
+		// the range count and this metric. Moving extreme outliers may be less
+		// desirable, though, so favor very heavy ranges slightly less and disfavor
+		// very light ranges.
+		//
+		// Note that we can't truly disfavor large ranges, since that prevents us
+		// from rebalancing nonempty ranges to empty stores (since all nonempty
+		// ranges will be greater than an empty store's P90).
+		if rangeVal > percentiles.P90 {
+			return -0.5
+		} else if rangeVal >= percentiles.P25 {
+			return -1
+		} else if rangeVal >= percentiles.P10 {
 			return 0
 		}
-		return -1
+		// else rangeVal < percentiles.P10
+		return 0.5
 	} else if rcs == underfull {
 		// If this store has too few ranges but is overloaded on some other
 		// dimension, we need to prioritize moving away replicas that are
 		// high in that dimension and accepting replicas that are low in it.
-		//
-		// TODO(a-robinson): Will this cause thrashing if one range has
-		// significantly more QPS than all other ranges?
 		if rangeVal < percentiles.P10 {
 			return 1
 		} else if rangeVal < percentiles.P25 {
@@ -840,6 +846,7 @@ func percentileScore(
 		} else if rangeVal > percentiles.P75 {
 			return -0.5
 		}
+		// else rangeVal >= percentiles.P25 && rangeVal <= percentiles.P75
 		return 0
 	}
 	panic(fmt.Sprintf("reached unreachable code: %+v; %+v; %+v", rcs, percentiles, rangeVal))
@@ -892,9 +899,8 @@ func rebalanceFromConvergesOnMean(
 		st,
 		sl,
 		sc,
-		rangeInfo,
 		sc.RangeCount-1,
-		float64(sc.Capacity-(sc.Available-rangeInfo.LiveBytes))/float64(sc.Capacity),
+		float64(sc.Capacity-(sc.Available+rangeInfo.LiveBytes))/float64(sc.Capacity),
 		sc.WritesPerSecond-rangeInfo.WritesPerSecond)
 }
 
@@ -905,9 +911,8 @@ func rebalanceToConvergesOnMean(
 		st,
 		sl,
 		sc,
-		rangeInfo,
 		sc.RangeCount+1,
-		float64(sc.Capacity-(sc.Available+rangeInfo.LiveBytes))/float64(sc.Capacity),
+		float64(sc.Capacity-(sc.Available-rangeInfo.LiveBytes))/float64(sc.Capacity),
 		sc.WritesPerSecond+rangeInfo.WritesPerSecond)
 }
 
@@ -915,7 +920,6 @@ func rebalanceConvergesOnMean(
 	st *cluster.Settings,
 	sl StoreList,
 	sc roachpb.StoreCapacity,
-	rangeInfo RangeInfo,
 	newRangeCount int32,
 	newFractionUsed float64,
 	newWritesPerSecond float64,
@@ -923,20 +927,24 @@ func rebalanceConvergesOnMean(
 	if !st.EnableStatsBasedRebalancing.Get() {
 		return convergesOnMean(float64(sc.RangeCount), float64(newRangeCount), sl.candidateRanges.mean)
 	}
+
+	// Note that we check both converges and diverges. If we always decremented
+	// convergeCount when something didn't converge, ranges with stats equal to 0
+	// would almost never converge (and thus almost never get rebalanced).
 	var convergeCount int
 	if convergesOnMean(float64(sc.RangeCount), float64(newRangeCount), sl.candidateRanges.mean) {
 		convergeCount++
-	} else {
+	} else if divergesFromMean(float64(sc.RangeCount), float64(newRangeCount), sl.candidateRanges.mean) {
 		convergeCount--
 	}
 	if convergesOnMean(sc.FractionUsed(), newFractionUsed, sl.candidateDiskUsage.mean) {
 		convergeCount++
-	} else {
+	} else if divergesFromMean(sc.FractionUsed(), newFractionUsed, sl.candidateDiskUsage.mean) {
 		convergeCount--
 	}
 	if convergesOnMean(sc.WritesPerSecond, newWritesPerSecond, sl.candidateWritesPerSecond.mean) {
 		convergeCount++
-	} else {
+	} else if divergesFromMean(sc.WritesPerSecond, newWritesPerSecond, sl.candidateWritesPerSecond.mean) {
 		convergeCount--
 	}
 	return convergeCount > 0
@@ -944,6 +952,10 @@ func rebalanceConvergesOnMean(
 
 func convergesOnMean(oldVal, newVal, mean float64) bool {
 	return math.Abs(newVal-mean) < math.Abs(oldVal-mean)
+}
+
+func divergesFromMean(oldVal, newVal, mean float64) bool {
+	return math.Abs(newVal-mean) > math.Abs(oldVal-mean)
 }
 
 // maxCapacityCheck returns true if the store has room for a new replica.
