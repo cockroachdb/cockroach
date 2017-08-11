@@ -768,6 +768,13 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 	l.mu.Unlock()
 	// Flush and exit on fatal logging.
 	if s == Severity_FATAL {
+		// If the message was not printed to stderr, inform the user on stderr still
+		// so they know where to look at.
+		if stderrRedirected {
+			fmt.Fprintf(OrigStderr,
+				"*\n* A fatal error was encountered! Stopping the server. "+
+					"Check the log file(s) for details.\n*\n")
+		}
 		// If we got here via Exit rather than Fatal, print no stacks.
 		timeoutFlush(10 * time.Second)
 		exitFunc(255) // C++ uses -1, which is silly because it's anded with 255 anyway.
