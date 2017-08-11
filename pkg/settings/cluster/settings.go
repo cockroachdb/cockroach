@@ -346,7 +346,7 @@ func MakeClusterSettings() *Settings {
 	s.MinWALSyncInterval = r.RegisterDurationSetting(
 		"rocksdb.min_wal_sync_interval",
 		"minimum duration between syncs of the RocksDB WAL",
-		1*time.Millisecond)
+		0*time.Millisecond)
 
 	// EnableLoadBasedLeaseRebalancing controls whether lease rebalancing is done
 	// via the new heuristic based on request load and latency or via the simpler
