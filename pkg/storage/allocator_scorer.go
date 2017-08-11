@@ -465,11 +465,11 @@ func rebalanceCandidates(
 				// Only consider this candidate if we must rebalance due to a
 				// constraint check requirements.
 				if log.V(3) {
-					log.Infof(ctx, "not considering %+v as a candidate for range %+v: score=%s scoreList=%+v", s, rangeInfo, balanceScore, sl)
+					log.Infof(ctx, "not considering %+v as a candidate for range %+v: score=%s storeList=%+v", s, rangeInfo, balanceScore, sl)
 				}
 				continue
 			}
-			diversityScore := diversityScore(s, existingNodeLocalities)
+			diversityScore := rebalanceToDiversityScore(s, existingNodeLocalities)
 			candidates = append(candidates, candidate{
 				store:           s,
 				valid:           true,
@@ -504,7 +504,7 @@ func shouldRebalance(
 ) bool {
 	if store.Capacity.FractionUsed() >= maxFractionUsedThreshold {
 		if log.V(2) {
-			log.Infof(ctx, "s%d: should-rebalance(disk-full): fraction-used=%.2f, capacity=%+v",
+			log.Infof(ctx, "s%d: should-rebalance(disk-full): fraction-used=%.2f, capacity=(%v)",
 				store.StoreID, store.Capacity.FractionUsed(), store.Capacity)
 		}
 		return true
@@ -519,7 +519,7 @@ func shouldRebalance(
 	if rangeIsBadFit(score) {
 		if log.V(2) {
 			log.Infof(ctx,
-				"s%d: should-rebalance(bad-fit): - balanceScore=%s, capacity=%+v, rangeInfo=%+v, "+
+				"s%d: should-rebalance(bad-fit): - balanceScore=%s, capacity=(%v), rangeInfo=%+v, "+
 					"(meanRangeCount=%.1f, meanDiskUsage=%.2f, meanWritesPerSecond=%.2f), ",
 				store.StoreID, score, store.Capacity, rangeInfo,
 				sl.candidateRanges.mean, sl.candidateDiskUsage.mean, sl.candidateWritesPerSecond.mean)
@@ -533,6 +533,13 @@ func shouldRebalance(
 		for _, desc := range sl.stores {
 			otherScore := balanceScore(st, sl, desc.Capacity, rangeInfo)
 			if !rangeIsGoodFit(otherScore) {
+				if log.V(5) {
+					log.Infof(ctx,
+						"s%d is not a good enough fit to replace s%d: balanceScore=%s, capacity=(%v), rangeInfo=%+v, "+
+							"(meanRangeCount=%.1f, meanDiskUsage=%.2f, meanWritesPerSecond=%.2f), ",
+						desc.StoreID, store.StoreID, otherScore, desc.Capacity, rangeInfo,
+						sl.candidateRanges.mean, sl.candidateDiskUsage.mean, sl.candidateWritesPerSecond.mean)
+				}
 				continue
 			}
 			if !preexistingReplicaCheck(desc.Node.NodeID, rangeInfo.Desc.Replicas) {
@@ -540,8 +547,8 @@ func shouldRebalance(
 			}
 			if log.V(2) {
 				log.Infof(ctx,
-					"s%d: should-rebalance(better-fit=s%d): balanceScore=%s, capacity=%+v, rangeInfo=%+v, "+
-						"otherScore=%s, otherCapacity=%+v, "+
+					"s%d: should-rebalance(better-fit=s%d): balanceScore=%s, capacity=(%v), rangeInfo=%+v, "+
+						"otherScore=%s, otherCapacity=(%v), "+
 						"(meanRangeCount=%.1f, meanDiskUsage=%.2f, meanWritesPerSecond=%.2f), ",
 					store.StoreID, desc.StoreID, score, store.Capacity, rangeInfo,
 					otherScore, desc.Capacity,
@@ -554,7 +561,7 @@ func shouldRebalance(
 	// If we reached this point, we're happy with the range where it is.
 	if log.V(3) {
 		log.Infof(ctx,
-			"s%d: should-not-rebalance: - balanceScore=%s, capacity=%+v, rangeInfo=%+v, "+
+			"s%d: should-not-rebalance: - balanceScore=%s, capacity=(%v), rangeInfo=%+v, "+
 				"(meanRangeCount=%.1f, meanDiskUsage=%.2f, meanWritesPerSecond=%.2f), ",
 			store.StoreID, score, store.Capacity, rangeInfo,
 			sl.candidateRanges.mean, sl.candidateDiskUsage.mean, sl.candidateWritesPerSecond.mean)
@@ -653,7 +660,7 @@ func constraintCheck(store roachpb.StoreDescriptor, constraints config.Constrain
 func diversityScore(
 	store roachpb.StoreDescriptor, existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
 ) float64 {
-	minScore := 1.0
+	minScore := roachpb.MaxDiversityScore
 	for _, locality := range existingNodeLocalities {
 		if newScore := store.Node.Locality.DiversityScore(locality); newScore < minScore {
 			minScore = newScore
@@ -662,27 +669,49 @@ func diversityScore(
 	return minScore
 }
 
-// diversityRemovalScore is similar to diversityScore but instead of calculating
-// the score if a new node is added, it calculates the remaining diversity if a
-// node is removed.
+// diversityRemovalScore is the same as diversityScore, but for a node that's
+// already present in existingNodeLocalities. It works by calculating the
+// diversityScore for nodeID as if nodeID didn't already have a replica.
+// As with diversityScore, a higher score indicates that the node is a better
+// fit for the range (i.e. keeping it around is good for diversity).
 func diversityRemovalScore(
 	nodeID roachpb.NodeID, existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
 ) float64 {
-	var maxScore float64
-	for nodeIDx, localityX := range existingNodeLocalities {
-		if nodeIDx == nodeID {
+	minScore := roachpb.MaxDiversityScore
+	locality := existingNodeLocalities[nodeID]
+	for otherNodeID, otherLocality := range existingNodeLocalities {
+		if otherNodeID == nodeID {
 			continue
 		}
-		for nodeIDy, localityY := range existingNodeLocalities {
-			if nodeIDy == nodeID || nodeIDx >= nodeIDy {
-				continue
-			}
-			if newScore := localityX.DiversityScore(localityY); newScore > maxScore {
-				maxScore = newScore
-			}
+		if newScore := otherLocality.DiversityScore(locality); newScore < minScore {
+			minScore = newScore
 		}
 	}
-	return maxScore
+	return minScore
+}
+
+// rebalanceToDiversityScore is like diversityScore, but it returns what
+// the diversity score would be if the given store was added and one of the
+// existing stores was removed. This is equivalent to the second lowest score.
+//
+// This is useful for considering rebalancing a range that already has enough
+// replicas - it's perfectly fine to add a replica in the same locality as an
+// existing replica in such cases.
+func rebalanceToDiversityScore(
+	store roachpb.StoreDescriptor, existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
+) float64 {
+	minScore := roachpb.MaxDiversityScore
+	nextMinScore := roachpb.MaxDiversityScore
+	for _, locality := range existingNodeLocalities {
+		newScore := store.Node.Locality.DiversityScore(locality)
+		if newScore < minScore {
+			nextMinScore = minScore
+			minScore = newScore
+		} else if newScore < nextMinScore {
+			nextMinScore = newScore
+		}
+	}
+	return nextMinScore
 }
 
 type rangeCountStatus int

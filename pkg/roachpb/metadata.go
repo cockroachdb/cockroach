@@ -262,8 +262,8 @@ func (p Percentiles) String() string {
 
 // String returns a string representation of the StoreCapacity.
 func (sc StoreCapacity) String() string {
-	return fmt.Sprintf("diskAvailable=%s/%s (%.2f%%), "+
-		"ranges=%d, leases=%d, writes=%.2f,"+
+	return fmt.Sprintf("diskUsed=%s/%s (%.2f%%), "+
+		"ranges=%d, leases=%d, writes=%.2f, "+
 		"bytesPerReplica={%s}, writesPerReplica={%s}",
 		humanizeutil.IBytes(sc.Capacity-sc.Available), humanizeutil.IBytes(sc.Capacity),
 		sc.FractionUsed()*100, sc.RangeCount, sc.LeaseCount, sc.WritesPerSecond,
@@ -319,6 +319,10 @@ func (Locality) Type() string {
 	return "Locality"
 }
 
+// MaxDiversityScore is the largest possible diversity score, indicating that
+// two localities are as different from each other as possible.
+const MaxDiversityScore = 1.0
+
 // DiversityScore returns a score comparing the two localities which ranges from
 // 1, meaning completely diverse, to 0 which means not diverse at all (that
 // their localities match). This function ignores the locality tier key names
@@ -351,7 +355,7 @@ func (l Locality) DiversityScore(other Locality) float64 {
 		}
 	}
 	if len(l.Tiers) != len(other.Tiers) {
-		return 1.0 / float64(length+1)
+		return MaxDiversityScore / float64(length+1)
 	}
 	return 0
 }
