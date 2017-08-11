@@ -325,11 +325,11 @@ func (tc *TxnCoordSender) Send(
 
 	if ba.Txn != nil {
 		// If this request is part of a transaction...
-		if err := tc.validateTxnForBatch(&ba); err != nil {
+		if err := tc.validateTxnForBatch(ctx, &ba); err != nil {
 			return nil, roachpb.NewError(err)
 		}
 
-		txnID := *ba.Txn.ID
+		txnID := ba.Txn.ID
 
 		// Associate the txnID with the trace. We need to do this after the
 		// maybeBeginTxn call. We set both a baggage item and a tag because only
@@ -493,7 +493,7 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 	if !txn.Writing {
 		return nil
 	}
-	txnMeta, ok := tc.txnMu.txns[*txn.ID]
+	txnMeta, ok := tc.txnMu.txns[txn.ID]
 	// Check whether the transaction is still tracked and has a chance of
 	// completing. It's possible that the coordinator learns about the
 	// transaction having terminated from a heartbeat, and GC queue correctness
@@ -514,7 +514,8 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 		newTxn := roachpb.PrepareTransactionForRetry(
 			ctx, abortedErr,
 			// priority is not used for aborted errors
-			roachpb.NormalUserPriority)
+			roachpb.NormalUserPriority,
+			tc.clock)
 		return roachpb.NewError(roachpb.NewHandledRetryableTxnError(
 			abortedErr.Message, txn.ID, newTxn))
 	case txnMeta.txn.Status == roachpb.COMMITTED:
@@ -531,13 +532,11 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 // the TxnCoordSender. Furthermore, no transactional writes are allowed
 // unless preceded by a begin transaction request within the same batch.
 // The exception is if the transaction is already in state txn.Writing=true.
-func (tc *TxnCoordSender) validateTxnForBatch(ba *roachpb.BatchRequest) error {
+func (tc *TxnCoordSender) validateTxnForBatch(ctx context.Context, ba *roachpb.BatchRequest) error {
 	if len(ba.Requests) == 0 {
 		return errors.Errorf("empty batch with txn")
 	}
-	if !ba.Txn.IsInitialized() {
-		return errors.Errorf("uninitialized txn found on BatchRequest passed to TxnCoordSender: %v", ba)
-	}
+	ba.Txn.AssertInitialized(ctx)
 
 	// Check for a begin transaction to set txn key based on the key of
 	// the first transactional write. Also enforce that no transactional
@@ -563,7 +562,7 @@ func (tc *TxnCoordSender) validateTxnForBatch(ba *roachpb.BatchRequest) error {
 // gracefully.
 func (tc *TxnCoordSender) cleanupTxnLocked(ctx context.Context, txn roachpb.Transaction) {
 	log.Event(ctx, "coordinator stops")
-	txnMeta, ok := tc.txnMu.txns[*txn.ID]
+	txnMeta, ok := tc.txnMu.txns[txn.ID]
 	// The heartbeat might've already removed the record. Or we may have already
 	// closed txnEnd but we are racing with the heartbeat cleanup.
 	if !ok || txnMeta.txnEnd == nil {
@@ -777,7 +776,7 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context, txnID uuid.UUID) bool {
 		log.Warningf(ctx, "heartbeat to %s failed: %s", txn, pErr)
 		// We're not going to let the client carry out additional requests, so
 		// try to clean up.
-		tc.tryAsyncAbort(*txn.ID)
+		tc.tryAsyncAbort(txn.ID)
 		txn.Status = roachpb.ABORTED
 	} else {
 		txn.Update(br.Responses[0].GetInner().(*roachpb.HeartbeatTxnResponse).Txn)
@@ -819,14 +818,15 @@ func (tc *TxnCoordSender) updateState(
 		return pErr
 	}
 
-	txnID := *ba.Txn.ID
+	txnID := ba.Txn.ID
 	var newTxn roachpb.Transaction
 	if pErr == nil {
 		newTxn.Update(ba.Txn)
 		newTxn.Update(br.Txn)
 	} else {
 		if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
-			if !roachpb.TxnIDEqual(pErr.GetTxn().ID, &txnID) {
+			errTxnID := pErr.GetTxn().ID // The ID of the txn that needs to be restarted.
+			if errTxnID != txnID {
 				// KV should not return errors for transactions other than the one in
 				// the BatchRequest.
 				log.Fatalf(ctx, "retryable error for the wrong txn. ba.Txn: %s. pErr: %s",
@@ -848,10 +848,12 @@ func (tc *TxnCoordSender) updateState(
 					tc.metrics.RestartsPossibleReplay.Inc(1)
 				}
 			}
-			newTxn = roachpb.PrepareTransactionForRetry(ctx, pErr, ba.UserPriority)
-			if newTxn.ID == nil {
-				// Clean up the freshly aborted transaction in defer(), avoiding a
-				// race with the state update below.
+			newTxn = roachpb.PrepareTransactionForRetry(ctx, pErr, ba.UserPriority, tc.clock)
+
+			if errTxnID != newTxn.ID {
+				// If the ID changed, it means we had to start a new transaction and the
+				// old one is toast. Clean up the freshly aborted transaction in
+				// defer(), avoiding a race with the state update below.
 				//
 				// TODO(andrei): If the epoch that our map is aware of has already been
 				// incremented compared to ba.Txn, perhaps we shouldn't abort the txn
@@ -860,7 +862,10 @@ func (tc *TxnCoordSender) updateState(
 			}
 			// Pass a HandledRetryableTxnError up to the next layer.
 			pErr = roachpb.NewError(
-				roachpb.NewHandledRetryableTxnError(pErr.Message, pErr.GetTxn().ID, newTxn))
+				roachpb.NewHandledRetryableTxnError(
+					pErr.Message,
+					errTxnID, // the id of the transaction that encountered the error
+					newTxn))
 		} else {
 			// We got a non-retryable error.
 

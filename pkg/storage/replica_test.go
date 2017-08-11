@@ -324,7 +324,8 @@ func newTransaction(
 		offset = clock.MaxOffset().Nanoseconds()
 		now = clock.Now()
 	}
-	return roachpb.NewTransaction(name, baseKey, userPriority, isolation, now, offset)
+	txn := roachpb.MakeTransaction(name, baseKey, userPriority, isolation, now, offset)
+	return &txn
 }
 
 // createReplicaSets creates new roachpb.ReplicaDescriptor protos based on an array of
@@ -2915,7 +2916,7 @@ func TestReplicaAbortCacheReadError(t *testing.T) {
 	}
 
 	// Overwrite Abort cache entry with garbage for the last op.
-	key := keys.AbortCacheKey(tc.repl.RangeID, *txn.ID)
+	key := keys.AbortCacheKey(tc.repl.RangeID, txn.ID)
 	err := engine.MVCCPut(context.Background(), tc.engine, nil, key, hlc.Timestamp{}, roachpb.MakeValueFromString("never read in this test"), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -2948,7 +2949,7 @@ func TestReplicaAbortCacheStoredTxnRetryError(t *testing.T) {
 			Timestamp: txn.Timestamp,
 			Priority:  0,
 		}
-		if err := tc.repl.abortCache.Put(context.Background(), tc.engine, nil, *txn.ID, &entry); err != nil {
+		if err := tc.repl.abortCache.Put(context.Background(), tc.engine, nil, txn.ID, &entry); err != nil {
 			t.Fatal(err)
 		}
 
@@ -3059,7 +3060,7 @@ func TestReplicaAbortCacheOnlyWithIntent(t *testing.T) {
 		Timestamp: txn.Timestamp,
 		Priority:  0,
 	}
-	if err := tc.repl.abortCache.Put(context.Background(), tc.engine, nil, *txn.ID, &entry); err != nil {
+	if err := tc.repl.abortCache.Put(context.Background(), tc.engine, nil, txn.ID, &entry); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3191,7 +3192,7 @@ func TestEndTransactionTxnSpanGCThreshold(t *testing.T) {
 		gcReq := roachpb.GCRequest{
 			Span: gcSpan,
 			Keys: []roachpb.GCRequest_GCKey{
-				{Key: keys.TransactionKey(pushee.Key, *pushee.ID)},
+				{Key: keys.TransactionKey(pushee.Key, pushee.ID)},
 			},
 			TxnSpanGCThreshold: tc.Clock().Now(),
 		}
@@ -3618,7 +3619,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		existTxn.Status = test.existStatus
 		existTxn.Epoch = test.existEpoch
 		existTxn.Timestamp = test.existTS
-		txnKey := keys.TransactionKey(test.key, *txn.ID)
+		txnKey := keys.TransactionKey(test.key, txn.ID)
 
 		if test.existStatus != doesNotExist {
 			if err := engine.MVCCPutProto(context.Background(), tc.repl.store.Engine(), nil, txnKey, hlc.Timestamp{},
@@ -3634,7 +3635,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 
 		if _, pErr := tc.SendWrappedWith(h, &args); !testutils.IsPError(pErr, test.expErrRegexp) {
 			t.Errorf("%d: expected error:\n%s\not match:\n%s", i, pErr, test.expErrRegexp)
-		} else if txn := pErr.GetTxn(); txn != nil && txn.ID == nil {
+		} else if txn := pErr.GetTxn(); txn != nil && txn.ID == (uuid.UUID{}) {
 			// Prevent regression of #5591.
 			t.Fatalf("%d: received empty Transaction proto in error", i)
 		}
@@ -3857,7 +3858,7 @@ func TestRaftRetryCantCommitIntents(t *testing.T) {
 
 			// Verify txn record is cleaned.
 			var readTxn roachpb.Transaction
-			txnKey := keys.TransactionKey(txn.Key, *txn.ID)
+			txnKey := keys.TransactionKey(txn.Key, txn.ID)
 			ok, err := engine.MVCCGetProto(context.Background(), tc.repl.store.Engine(), txnKey, hlc.Timestamp{}, true /* consistent */, nil /* txn */, &readTxn)
 			if err != nil || ok {
 				t.Errorf("expected transaction record to be cleared (%t): %s", ok, err)
@@ -3979,7 +3980,7 @@ func TestEndTransactionLocalGC(t *testing.T) {
 			t.Fatal(pErr)
 		}
 		var readTxn roachpb.Transaction
-		txnKey := keys.TransactionKey(txn.Key, *txn.ID)
+		txnKey := keys.TransactionKey(txn.Key, txn.ID)
 		ok, err := engine.MVCCGetProto(context.Background(), tc.repl.store.Engine(), txnKey, hlc.Timestamp{},
 			true /* consistent */, nil /* txn */, &readTxn)
 		if err != nil {
@@ -4115,7 +4116,7 @@ func TestEndTransactionDirectGC(t *testing.T) {
 				if _, err := evalGet(
 					ctx, tc.engine, CommandArgs{
 						Args: &roachpb.GetRequest{Span: roachpb.Span{
-							Key: keys.TransactionKey(txn.Key, *txn.ID),
+							Key: keys.TransactionKey(txn.Key, txn.ID),
 						}},
 					},
 					&gr,
@@ -4126,12 +4127,12 @@ func TestEndTransactionDirectGC(t *testing.T) {
 				}
 
 				var entry roachpb.AbortCacheEntry
-				if aborted, err := tc.repl.abortCache.Get(ctx, tc.engine, *txn.ID, &entry); err != nil {
+				if aborted, err := tc.repl.abortCache.Get(ctx, tc.engine, txn.ID, &entry); err != nil {
 					t.Fatal(err)
 				} else if aborted {
 					return errors.Errorf("%d: abort cache still populated: %v", i, entry)
 				}
-				if aborted, err := rightRepl.abortCache.Get(ctx, tc.engine, *txn.ID, &entry); err != nil {
+				if aborted, err := rightRepl.abortCache.Get(ctx, tc.engine, txn.ID, &entry); err != nil {
 					t.Fatal(err)
 				} else if aborted {
 					t.Fatalf("%d: right-hand side abort cache still populated: %v", i, entry)
@@ -4216,7 +4217,7 @@ func TestEndTransactionDirectGC_1PC(t *testing.T) {
 			}
 
 			var entry roachpb.AbortCacheEntry
-			if aborted, err := tc.repl.abortCache.Get(context.Background(), tc.engine, *txn.ID, &entry); err != nil {
+			if aborted, err := tc.repl.abortCache.Get(context.Background(), tc.engine, txn.ID, &entry); err != nil {
 				t.Fatal(err)
 			} else if aborted {
 				t.Fatalf("commit=%t: abort cache still populated: %v", commit, entry)
@@ -4502,9 +4503,8 @@ func TestAbortCacheError(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
-	u := uuid.MakeV4()
 	txn := roachpb.Transaction{}
-	txn.ID = &u
+	txn.ID = uuid.MakeV4()
 	txn.Priority = 1
 	txn.Sequence = 1
 	txn.Timestamp = tc.Clock().Now().Add(1, 0)
@@ -4517,7 +4517,7 @@ func TestAbortCacheError(t *testing.T) {
 		Timestamp: ts,
 		Priority:  priority,
 	}
-	if err := tc.repl.abortCache.Put(context.Background(), tc.engine, nil, *txn.ID, &entry); err != nil {
+	if err := tc.repl.abortCache.Put(context.Background(), tc.engine, nil, txn.ID, &entry); err != nil {
 		t.Fatal(err)
 	}
 
@@ -5171,7 +5171,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	}
 	txn := newTransaction("test", pArgs.Key, 1, enginepb.SERIALIZABLE, tc.Clock())
 	txn.Priority = 123 // So we don't have random values messing with the byte counts on encoding
-	txn.ID = &uuid
+	txn.ID = uuid
 
 	if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
 		t.Fatal(pErr)

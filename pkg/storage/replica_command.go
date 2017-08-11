@@ -98,9 +98,10 @@ func DefaultDeclareKeys(
 	} else {
 		spans.Add(SpanReadWrite, req.Header())
 	}
-	if header.Txn != nil && header.Txn.ID != nil {
+	if header.Txn != nil {
+		header.Txn.AssertInitialized(context.TODO())
 		spans.Add(SpanReadOnly, roachpb.Span{
-			Key: keys.AbortCacheKey(header.RangeID, *header.Txn.ID),
+			Key: keys.AbortCacheKey(header.RangeID, header.Txn.ID),
 		})
 	}
 	if header.ReturnRangeInfo {
@@ -455,9 +456,10 @@ func verifyTransaction(h roachpb.Header, args roachpb.Request) error {
 func declareKeysWriteTransaction(
 	_ roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
 ) {
-	if header.Txn != nil && header.Txn.ID != nil {
+	if header.Txn != nil {
+		header.Txn.AssertInitialized(context.TODO())
 		spans.Add(SpanReadWrite, roachpb.Span{
-			Key: keys.TransactionKey(req.Header().Key, *header.Txn.ID),
+			Key: keys.TransactionKey(req.Header().Key, header.Txn.ID),
 		})
 	}
 }
@@ -485,7 +487,7 @@ func evalBeginTransaction(
 	if err := verifyTransaction(h, args); err != nil {
 		return EvalResult{}, err
 	}
-	key := keys.TransactionKey(h.Txn.Key, *h.Txn.ID)
+	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
 	clonedTxn := h.Txn.Clone()
 	reply.Txn = &clonedTxn
 
@@ -559,8 +561,9 @@ func declareKeysEndTransaction(
 	for _, span := range et.IntentSpans {
 		spans.Add(SpanReadWrite, span)
 	}
-	if header.Txn != nil && header.Txn.ID != nil {
-		spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortCacheKey(header.RangeID, *header.Txn.ID)})
+	if header.Txn != nil {
+		header.Txn.AssertInitialized(context.TODO())
+		spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortCacheKey(header.RangeID, header.Txn.ID)})
 	}
 
 	// All transactions depend on the range descriptor because they need
@@ -658,7 +661,7 @@ func evalEndTransaction(
 		return EvalResult{}, roachpb.NewTransactionStatusError("could not commit in one phase as requested")
 	}
 
-	key := keys.TransactionKey(h.Txn.Key, *h.Txn.ID)
+	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
 
 	// Fetch existing transaction.
 	var existingTxn roachpb.Transaction
@@ -948,7 +951,7 @@ func updateTxnWithExternalIntents(
 	txn *roachpb.Transaction,
 	externalIntents []roachpb.Intent,
 ) error {
-	key := keys.TransactionKey(txn.Key, *txn.ID)
+	key := keys.TransactionKey(txn.Key, txn.ID)
 	if txnAutoGC && len(externalIntents) == 0 {
 		if log.V(2) {
 			log.Infof(ctx, "auto-gc'ed %s (%d intents)", txn.Short(), len(args.IntentSpans))
@@ -1336,9 +1339,10 @@ func declareKeysHeartbeatTransaction(
 	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
 ) {
 	declareKeysWriteTransaction(desc, header, req, spans)
-	if header.Txn != nil && header.Txn.ID != nil {
+	if header.Txn != nil {
+		header.Txn.AssertInitialized(context.TODO())
 		spans.Add(SpanReadOnly, roachpb.Span{
-			Key: keys.AbortCacheKey(header.RangeID, *header.Txn.ID),
+			Key: keys.AbortCacheKey(header.RangeID, header.Txn.ID),
 		})
 	}
 }
@@ -1357,7 +1361,7 @@ func evalHeartbeatTxn(
 		return EvalResult{}, err
 	}
 
-	key := keys.TransactionKey(h.Txn.Key, *h.Txn.ID)
+	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
 
 	var txn roachpb.Transaction
 	if ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.Timestamp{}, true, nil, &txn); err != nil {
@@ -1491,8 +1495,8 @@ func declareKeysPushTransaction(
 	_ roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
 ) {
 	pr := req.(*roachpb.PushTxnRequest)
-	spans.Add(SpanReadWrite, roachpb.Span{Key: keys.TransactionKey(pr.PusheeTxn.Key, *pr.PusheeTxn.ID)})
-	spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortCacheKey(header.RangeID, *pr.PusheeTxn.ID)})
+	spans.Add(SpanReadWrite, roachpb.Span{Key: keys.TransactionKey(pr.PusheeTxn.Key, pr.PusheeTxn.ID)})
+	spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortCacheKey(header.RangeID, pr.PusheeTxn.ID)})
 }
 
 // evalPushTxn resolves conflicts between concurrent txns (or
@@ -1557,7 +1561,7 @@ func evalPushTxn(
 	if !bytes.Equal(args.Key, args.PusheeTxn.Key) {
 		return EvalResult{}, errors.Errorf("request key %s should match pushee's txn key %s", args.Key, args.PusheeTxn.Key)
 	}
-	key := keys.TransactionKey(args.PusheeTxn.Key, *args.PusheeTxn.ID)
+	key := keys.TransactionKey(args.PusheeTxn.Key, args.PusheeTxn.ID)
 
 	// Fetch existing transaction; if missing, we're allowed to abort.
 	existTxn := &roachpb.Transaction{}
@@ -1719,7 +1723,7 @@ func evalQueryTxn(
 	if !bytes.Equal(args.Key, args.Txn.Key) {
 		return EvalResult{}, errors.Errorf("request key %s does not match txn key %s", args.Key, args.Txn.Key)
 	}
-	key := keys.TransactionKey(args.Txn.Key, *args.Txn.ID)
+	key := keys.TransactionKey(args.Txn.Key, args.Txn.ID)
 
 	// Fetch transaction record; if missing, return empty txn.
 	ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.Timestamp{},
@@ -1728,7 +1732,7 @@ func evalQueryTxn(
 		return EvalResult{}, err
 	}
 	// Get the list of txns waiting on this txn.
-	reply.WaitingTxns = cArgs.EvalCtx.pushTxnQueue().GetDependents(*args.Txn.ID)
+	reply.WaitingTxns = cArgs.EvalCtx.pushTxnQueue().GetDependents(args.Txn.ID)
 	return EvalResult{}, nil
 }
 
@@ -1745,14 +1749,14 @@ func setAbortCache(
 	poison bool,
 ) error {
 	if !poison {
-		return rec.AbortCache().Del(ctx, batch, ms, *txn.ID)
+		return rec.AbortCache().Del(ctx, batch, ms, txn.ID)
 	}
 	entry := roachpb.AbortCacheEntry{
 		Key:       txn.Key,
 		Timestamp: txn.Timestamp,
 		Priority:  txn.Priority,
 	}
-	return rec.AbortCache().Put(ctx, batch, ms, *txn.ID, &entry)
+	return rec.AbortCache().Put(ctx, batch, ms, txn.ID, &entry)
 }
 
 func declareKeysResolveIntent(
@@ -1760,7 +1764,7 @@ func declareKeysResolveIntent(
 ) {
 	DefaultDeclareKeys(desc, header, req, spans)
 	ri := req.(*roachpb.ResolveIntentRequest)
-	spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortCacheKey(header.RangeID, *ri.IntentTxn.ID)})
+	spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortCacheKey(header.RangeID, ri.IntentTxn.ID)})
 }
 
 // evalResolveIntent resolves a write intent from the specified key
@@ -1795,7 +1799,7 @@ func declareKeysResolveIntentRange(
 ) {
 	DefaultDeclareKeys(desc, header, req, spans)
 	ri := req.(*roachpb.ResolveIntentRangeRequest)
-	spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortCacheKey(header.RangeID, *ri.IntentTxn.ID)})
+	spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortCacheKey(header.RangeID, ri.IntentTxn.ID)})
 }
 
 // evalResolveIntentRange resolves write intents in the specified

@@ -87,13 +87,13 @@ func checkCorrectTxn(value string, magicVals *filterVals, txn *roachpb.Transacti
 	case *roachpb.TransactionAbortedError:
 		// The previous txn should have been aborted, so check that we're running
 		// in a new one.
-		if roachpb.TxnIDEqual(failureRec.txn.ID, txn.ID) {
+		if failureRec.txn.ID == txn.ID {
 			return errors.Errorf(`new transaction for value "%s" is the same as the old one`, value)
 		}
 	default:
 		// The previous txn should have been restarted, so we should be running in
 		// the same one.
-		if !roachpb.TxnIDEqual(failureRec.txn.ID, txn.ID) {
+		if failureRec.txn.ID != txn.ID {
 			return errors.Errorf(`new transaction for value "%s" (%s) is not the same as the old one (%s)`, value, txn, failureRec.txn)
 		}
 	}
@@ -1293,15 +1293,7 @@ INSERT INTO t.test (k, v) VALUES ('test_key', 'test_val');
 	}
 
 	// We're going to use FORCE_RETRY() to generate an error for a different
-	// transaction than the one we initiate. We need call that function in a
-	// transaction that already has an id (so, it can't be the first query in the
-	// transaction), because the "wrong txn id" detection mechanism doesn't work
-	// when the txn doesn't have an id yet (see TODO in
-	// IsRetryableErrMeantForTxn).
-	_, err = tx.Exec(`SELECT * FROM t.test`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// transaction than the one we initiate.
 	_, err = tx.Exec(`SELECT CRDB_INTERNAL.FORCE_RETRY('500ms':::INTERVAL, $1)`, bogusTxnID)
 	if isRetryableErr(err) {
 		t.Fatalf("expected non-retryable error, got: %s", err)
