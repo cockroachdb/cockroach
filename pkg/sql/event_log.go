@@ -65,6 +65,9 @@ const (
 	// EventLogNodeRestart is recorded when an existing node rejoins the cluster
 	// after being offline.
 	EventLogNodeRestart EventLogType = "node_restart"
+
+	// EventLogSetClusterSetting is recorded when a cluster setting is changed.
+	EventLogSetClusterSetting EventLogType = "set_cluster_setting"
 )
 
 // An EventLogger exposes methods used to record events to the event table.
