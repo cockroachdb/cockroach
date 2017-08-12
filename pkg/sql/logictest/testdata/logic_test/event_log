@@ -307,3 +307,27 @@ WHERE "eventType" = 'drop_database'
   AND info LIKE '%anothertesttable%'
 ----
 53 1
+
+##################
+# Cluster Settings
+##################
+
+# Set and unset a cluster setting
+##################
+
+statement ok
+SET CLUSTER SETTING kv.allocator.load_based_lease_rebalancing.enabled = false
+
+statement ok
+SET CLUSTER SETTING kv.allocator.load_based_lease_rebalancing.enabled = DEFAULT
+
+# verify setting changes are logged
+##################
+query IIT
+SELECT "targetID", "reportingID", "info"
+FROM system.eventlog
+WHERE "eventType" = 'set_cluster_setting'
+----
+0 1 {"SettingName":"diagnostics.reporting.enabled","Value":"true","User":"node"}
+0 1 {"SettingName":"kv.allocator.load_based_lease_rebalancing.enabled","Value":"false","User":"root"}
+0 1 {"SettingName":"kv.allocator.load_based_lease_rebalancing.enabled","Value":"DEFAULT","User":"root"}
