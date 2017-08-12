@@ -56,6 +56,8 @@ export function getEventInfo(e: Event$Properties): SimplifiedEvent {
     TableName: string,
     User: string,
     ViewName: string,
+    SettingName: string,
+    Value: string,
   } = protobuf.util.isset(e, "info") ? JSON.parse(e.info) : {};
   const targetId: number = e.target_id ? e.target_id.toNumber() : null;
   let content: React.ReactNode;
@@ -106,6 +108,9 @@ export function getEventInfo(e: Event$Properties): SimplifiedEvent {
       break;
     case eventTypes.NODE_RESTART:
       content = <span>Node Rejoined: Node {targetId} rejoined the cluster</span>;
+      break;
+    case eventTypes.SET_CLUSTER_SETTING:
+      content = <span>Cluster Setting Changed: User {info.User} set {info.SettingName} to {info.Value}</span>;
       break;
     default:
       content = <span>Unknown Event Type: {e.event_type}, content: {s(info)}</span>;

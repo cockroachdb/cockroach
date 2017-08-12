@@ -103,8 +103,10 @@ func (p *planner) setClusterSetting(
 	name = strings.ToLower(name)
 	ie := InternalExecutor{LeaseManager: p.LeaseMgr()}
 
+	var value string
 	switch len(v) {
 	case 0:
+		value = "DEFAULT"
 		if _, err := ie.ExecuteStatementInTransaction(
 			ctx, "update-setting", p.txn, "DELETE FROM system.settings WHERE name = $1", name,
 		); err != nil {
@@ -116,6 +118,7 @@ func (p *planner) setClusterSetting(
 		if err != nil {
 			return nil, err
 		}
+		value = encoded
 		upsertQ := `UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, NOW(), $3)`
 		if _, err := ie.ExecuteStatementInTransaction(
 			ctx, "update-setting", p.txn, upsertQ, name, encoded, typ.Typ(),
@@ -125,6 +128,22 @@ func (p *planner) setClusterSetting(
 	default:
 		return nil, errors.Errorf("SET %q requires a single value", name)
 	}
+
+	if err := MakeEventLogger(p.LeaseMgr()).InsertEventRecord(
+		ctx,
+		p.txn,
+		EventLogSetClusterSetting,
+		0, /* no target */
+		int32(p.evalCtx.NodeID),
+		struct {
+			SettingName string
+			Value       string
+			User        string
+		}{name, value, p.session.User},
+	); err != nil {
+		return nil, err
+	}
+
 	return &emptyNode{}, nil
 }
 
