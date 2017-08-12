@@ -54,7 +54,7 @@ const (
 	DefaultCertsDirectory = "${HOME}/.cockroach-certs"
 
 	// defaultRaftTickInterval is the default resolution of the Raft timer.
-	defaultRaftTickInterval = 200 * time.Millisecond
+	defaultRaftTickInterval = 1000 * time.Millisecond
 
 	// rangeLeaseRaftElectionTimeoutMultiplier specifies what multiple the
 	// leader lease active duration should be of the raft election timeout.
@@ -74,7 +74,7 @@ const (
 )
 
 var defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt(
-	"COCKROACH_RAFT_ELECTION_TIMEOUT_TICKS", 15)
+	"COCKROACH_RAFT_ELECTION_TIMEOUT_TICKS", 3)
 
 type lazyHTTPClient struct {
 	once       sync.Once

@@ -63,7 +63,7 @@ import (
 const (
 	// rangeIDAllocCount is the number of Range IDs to allocate per allocation.
 	rangeIDAllocCount             = 10
-	defaultHeartbeatIntervalTicks = 5
+	defaultHeartbeatIntervalTicks = 1
 	// ttlStoreGossip is time-to-live for store-related info.
 	ttlStoreGossip = 2 * time.Minute
 
@@ -785,7 +785,7 @@ func (sc *StoreConfig) SetDefaults() {
 	sc.RaftConfig.SetDefaults()
 
 	if sc.CoalescedHeartbeatsInterval == 0 {
-		sc.CoalescedHeartbeatsInterval = sc.RaftTickInterval / 2
+		sc.CoalescedHeartbeatsInterval = sc.RaftTickInterval / 10
 	}
 	if sc.RaftHeartbeatIntervalTicks == 0 {
 		sc.RaftHeartbeatIntervalTicks = defaultHeartbeatIntervalTicks
