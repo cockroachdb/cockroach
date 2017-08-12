@@ -848,18 +848,22 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 			return err
 		}
 
-		// Update replication gauges on store 1 and verify we have 1 each of
-		// expiration and epoch leases. These values are counted from store 1
-		// because it will have the higher replica IDs. Expire leases to make
-		// sure that epoch-based leases are used for the split range.
-		if err := mtc.stores[1].ComputeMetrics(context.Background(), 0); err != nil {
-			return err
+		// Update replication gauges for all stores and verify we have 1 each of
+		// expiration and epoch leases.
+		var expirationLeases int64
+		var epochLeases int64
+		for i := range mtc.stores {
+			if err := mtc.stores[i].ComputeMetrics(context.Background(), 0); err != nil {
+				return err
+			}
+			metrics = mtc.stores[i].Metrics()
+			expirationLeases += metrics.LeaseExpirationCount.Value()
+			epochLeases += metrics.LeaseEpochCount.Value()
 		}
-		metrics = mtc.stores[1].Metrics()
-		if a, e := metrics.LeaseExpirationCount.Value(), int64(1); a != e {
+		if a, e := expirationLeases, int64(1); a != e {
 			return errors.Errorf("expected %d expiration lease count; got %d", e, a)
 		}
-		if a, e := metrics.LeaseEpochCount.Value(), int64(1); a != e {
+		if a, e := epochLeases, int64(1); a != e {
 			return errors.Errorf("expected %d epoch lease count; got %d", e, a)
 		}
 		return nil
