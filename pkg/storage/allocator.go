@@ -76,6 +76,7 @@ const (
 	AllocatorAdd
 	AllocatorRemoveDead
 	AllocatorRemoveDecommissioning
+	AllocatorConsiderRebalance
 )
 
 var allocatorActionNames = map[AllocatorAction]string{
@@ -84,6 +85,7 @@ var allocatorActionNames = map[AllocatorAction]string{
 	AllocatorAdd:                   "add",
 	AllocatorRemoveDead:            "remove dead",
 	AllocatorRemoveDecommissioning: "remove decommissioning",
+	AllocatorConsiderRebalance:     "consider rebalance",
 }
 
 func (a AllocatorAction) String() string {
@@ -234,6 +236,8 @@ func (a *Allocator) ComputeAction(
 	if len(liveReplicas) < quorum {
 		// Do not take any removal action if we do not have a quorum of live
 		// replicas.
+		log.VEventf(ctx, 1, "unable to take action - live replicas %v don't meet quorum of %d",
+			liveReplicas, quorum)
 		return AllocatorNoop, 0
 	}
 	// Removal actions follow.
@@ -293,8 +297,8 @@ func (a *Allocator) ComputeAction(
 		return AllocatorRemove, priority
 	}
 
-	// Nothing to do.
-	return AllocatorNoop, 0
+	// Nothing needs to be done, but we may want to rebalance.
+	return AllocatorConsiderRebalance, 0
 }
 
 // AllocateTarget returns a suitable store for a new allocation with the

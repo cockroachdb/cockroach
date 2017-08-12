@@ -167,7 +167,12 @@ func (rq *replicateQueue) shouldQueue(
 
 	rangeInfo := rangeInfoForRepl(repl, desc)
 	action, priority := rq.allocator.ComputeAction(ctx, zone, rangeInfo)
-	if action != AllocatorNoop {
+	if action == AllocatorNoop {
+		if log.V(2) {
+			log.Infof(ctx, "no action to take")
+		}
+		return false, 0
+	} else if action != AllocatorConsiderRebalance {
 		if log.V(2) {
 			log.Infof(ctx, "repair needed (%s), enqueuing", action)
 		}
@@ -259,6 +264,8 @@ func (rq *replicateQueue) processOneChange(
 
 	rangeInfo := rangeInfoForRepl(repl, desc)
 	switch action, _ := rq.allocator.ComputeAction(ctx, zone, rangeInfo); action {
+	case AllocatorNoop:
+		break
 	case AllocatorAdd:
 		if log.V(1) {
 			log.Infof(ctx, "adding a new replica")
@@ -334,7 +341,7 @@ func (rq *replicateQueue) processOneChange(
 			// is the leaseholder, so transfer the lease instead. We don't check that
 			// the current store has too many leases in this case under the
 			// assumption that replica balance is a greater concern. Also note that
-			// AllocatorRemove action takes preference over AllocatorNoop
+			// AllocatorRemove action takes preference over AllocatorConsiderRebalance
 			// (rebalancing) which is where lease transfer would otherwise occur. We
 			// need to be able to transfer leases in AllocatorRemove in order to get
 			// out of situations where this store is overfull and yet holds all the
@@ -435,7 +442,7 @@ func (rq *replicateQueue) processOneChange(
 		if err := rq.removeReplica(ctx, repl, target, desc); err != nil {
 			return false, err
 		}
-	case AllocatorNoop:
+	case AllocatorConsiderRebalance:
 		// The Noop case will result if this replica was queued in order to
 		// rebalance. Attempt to find a rebalancing target.
 		if log.V(1) {
