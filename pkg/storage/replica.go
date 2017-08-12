@@ -3476,20 +3476,15 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 // tick the Raft group, returning any error and true if the raft group exists
 // and false otherwise.
 func (r *Replica) tick() (bool, error) {
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
-	return r.tickRaftMuLocked()
-}
-
-// tickRaftMuLocked requires that raftMu is held, but not replicaMu.
-func (r *Replica) tickRaftMuLocked() (bool, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	r.unreachablesMu.Lock()
 	remotes := r.unreachablesMu.remotes
 	r.unreachablesMu.remotes = nil
 	r.unreachablesMu.Unlock()
+
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	// If the raft group is uninitialized, do not initialize raft groups on
 	// tick.
@@ -3546,6 +3541,27 @@ func (r *Replica) tickRaftMuLocked() (bool, error) {
 		)
 	}
 	return true, nil
+}
+
+// maybeTickQuiesced attempts to tick a quiesced or dormant replica, returning
+// true on success and false if the regular tick path must be taken
+// (i.e. Replica.tick).
+func (r *Replica) maybeTickQuiesced() bool {
+	var done bool
+	r.mu.Lock()
+	if r.mu.internalRaftGroup == nil {
+		done = true
+	} else if r.mu.quiescent {
+		done = true
+		if tickQuiesced {
+			// NB: It is safe to call TickQuiesced without holding Replica.raftMu
+			// because that method simply increments a counter without performing any
+			// other logic.
+			r.mu.internalRaftGroup.TickQuiesced()
+		}
+	}
+	r.mu.Unlock()
+	return done
 }
 
 // maybeQuiesceLocked checks to see if the replica is quiescable and initiates
