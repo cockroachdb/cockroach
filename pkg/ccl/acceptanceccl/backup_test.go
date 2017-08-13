@@ -48,11 +48,6 @@ type benchmarkTest struct {
 	// prefix is the prefix that will be prepended to all resources created by
 	// Terraform.
 	prefix string
-	// cockroachDiskSizeGB is the size, in gigabytes, of the disks allocated
-	// for CockroachDB nodes. Leaving this as 0 accepts the default in the
-	// Terraform configs. This must be in GB, because Terraform only accepts
-	// disk size for GCE in GB.
-	cockroachDiskSizeGB int
 	// storeFixture is the name of the Azure Storage fixture to download and use
 	// as the store. Nothing is downloaded if storeFixture is empty.
 	storeFixture    string
@@ -183,10 +178,9 @@ func BenchmarkRestoreBig(b *testing.B) {
 	restoreBaseURI := getAzureURI(b)
 
 	bt := benchmarkTest{
-		b:                   b,
-		nodes:               3,
-		cockroachDiskSizeGB: 250,
-		prefix:              "restore",
+		b:      b,
+		nodes:  3,
+		prefix: "restore",
 	}
 
 	defer bt.Close(ctx)
@@ -288,9 +282,8 @@ func BenchmarkRestore2TB(b *testing.B) {
 		// to change as little as possible while getting this working. Azure has
 		// large storage machines available, but has other issues we're working
 		// through (#15381).
-		nodes:               15,
-		cockroachDiskSizeGB: 250,
-		prefix:              "restore2tb",
+		nodes:  15,
+		prefix: "restore2tb",
 	}
 
 	ctx := context.Background()
@@ -320,12 +313,11 @@ func BenchmarkBackup2TB(b *testing.B) {
 	backupBaseURI := getAzureURI(b)
 
 	bt := benchmarkTest{
-		b:                   b,
-		nodes:               10,
-		storeFixture:        acceptance.FixtureURL(bulkArchiveStoreFixture),
-		cockroachDiskSizeGB: 250,
-		prefix:              "backup2tb",
-		skipClusterInit:     true,
+		b:               b,
+		nodes:           10,
+		storeFixture:    acceptance.FixtureURL(bulkArchiveStoreFixture),
+		prefix:          "backup2tb",
+		skipClusterInit: true,
 	}
 
 	ctx := context.Background()
