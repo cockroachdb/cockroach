@@ -86,6 +86,8 @@ type Farmer struct {
 	// allow nothing.
 	CockroachEnv  string
 	BenchmarkName string
+	// TerraformArgs are appended to every Terraform command invocation.
+	TerraformArgs []string
 	// Prefix will be prepended all names of resources created by Terraform.
 	Prefix string
 	// StateFile is the file (under `Cwd`) in which Terraform will store its
@@ -145,6 +147,7 @@ func (f *Farmer) Resize(nodes int) error {
 		fmt.Sprintf("-var=num_instances=%d", nodes),
 		fmt.Sprintf("-var=prefix=%s", f.Prefix),
 	)
+	args = append(args, f.TerraformArgs...)
 
 	if stdout, stderr, err := f.run("terraform", args...); err != nil {
 		return errors.Wrapf(err, "failed: %s %s\nstdout:\n%s\nstderr:\n%s", "terraform", args, stdout, stderr)

@@ -68,6 +68,27 @@ func (bt *benchmarkTest) Start(ctx context.Context) {
 	}
 	bt.f = acceptance.MakeFarmer(bt.b, bt.prefix, acceptance.GetStopper())
 	bt.f.SkipClusterInit = bt.skipClusterInit
+	bt.f.TerraformArgs = []string{
+		// Ls-series VMs are "storage optimized," which means they have large local
+		// SSDs (678GB on the L4s) and no disk throttling beyond the physical limit
+		// of the disk. All other VM series on Azure are subject to VM-level I/O
+		// throttling, where sync latencies jump to upwards of a 1s when the rate
+		// limit is exceeded. Since we expect syncs to take a few milliseconds at
+		// most, this causes cascading liveness failures which tank a restore.
+		//
+		// To determine the temporary SSD I/O rate limit for a particular VM size,
+		// look for the "max cached [and temp storage] throughput" column on the
+		// Azure VM size chart [0].
+		//
+		// TODO(benesch): build a rate-limiter that rate limits all write traffic
+		// (not just bulk I/O write traffic like kv.bulk_io_write.max_rate), and
+		// additionally run these tests on D-series VMs with a suitable rate limit.
+		//
+		// [0]: https://docs.microsoft.com/en-us/azure/virtual-machines/linux/sizes
+		"-var", "azure_vm_size=Standard_L4s",
+		"-var", "azure_location=westus",
+		"-var", "azure_vhd_storage_account=cockroachnightlywestvhds",
+	}
 
 	log.Infof(ctx, "creating cluster with %d node(s)", bt.nodes)
 	if err := bt.f.Resize(bt.nodes); err != nil {
@@ -119,10 +140,6 @@ func (bt *benchmarkTest) Start(ctx context.Context) {
 	sqlDB.Exec(`SET CLUSTER SETTING cluster.organization = "Cockroach Labs - Production Testing"`)
 	sqlDB.Exec(fmt.Sprintf(`SET CLUSTER SETTING enterprise.license = "%s"`, licenseKey))
 	sqlDB.Exec(`SET CLUSTER SETTING trace.debug.enable = 'true'`)
-	// On Azure, if we don't limit our disk throughput, we'll quickly cause node
-	// liveness failures. This limit was determined experimentally on
-	// Standard_D3_v2 instances.
-	sqlDB.Exec(`SET CLUSTER SETTING kv.bulk_io_write.max_rate = '30MB'`)
 
 	log.Info(ctx, "initial cluster is up")
 }
