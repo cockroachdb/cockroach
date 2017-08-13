@@ -27,14 +27,21 @@ type Sender interface {
 	Send(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 }
 
-// SenderWithDistSQLBackdoor is implemented by the TxnCoordSender to give
-// DistSQL some hacky powers when handling errors that happened on remote nodes.
-type SenderWithDistSQLBackdoor interface {
+// SenderWithTxnCoordBackdoor is implemented by the TxnCoordSender to give
+// the Txn client and DistSQL hacky powers when handling errors that
+// happened on remote nodes or with concurrent requests.
+type SenderWithTxnCoordBackdoor interface {
 	Sender
 
 	// GetTxnState returns the state that the TxnCoordSender has for a
 	// transaction. The bool is false is no state is found.
 	GetTxnState(txnID uuid.UUID) (roachpb.Transaction, bool)
+
+	// AbandonTxnIfExists assures that the transaction is no longer being
+	// tracked by the TxnCoordSender. Aborting the transaction and stopping
+	// its heartbeat loop if it is. Implementations should be idempotent,
+	// and should be a no-op if the transaction is not being tracked.
+	AbandonTxnIfExists(ctx context.Context, txn *roachpb.Transaction)
 }
 
 // SenderFunc is an adapter to allow the use of ordinary functions

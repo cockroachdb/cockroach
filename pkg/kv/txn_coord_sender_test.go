@@ -942,8 +942,8 @@ func TestTxnCoordIdempotentCleanup(t *testing.T) {
 
 	sender.txnMu.Lock()
 	// Clean up twice successively.
-	sender.cleanupTxnLocked(context.Background(), *txn.Proto())
-	sender.cleanupTxnLocked(context.Background(), *txn.Proto())
+	sender.cleanupTxnLocked(context.Background(), txn.Proto())
+	sender.cleanupTxnLocked(context.Background(), txn.Proto())
 	sender.txnMu.Unlock()
 
 	// For good measure, try to commit (which cleans up once more if it
@@ -952,7 +952,7 @@ func TestTxnCoordIdempotentCleanup(t *testing.T) {
 	ba = txn.NewBatch()
 	ba.AddRawRequest(&roachpb.EndTransactionRequest{})
 	err := txn.Run(context.TODO(), ba)
-	if err != nil && !testutils.IsError(err, errNoState.Error()) {
+	if _, ok := err.(*roachpb.UntrackedTxnError); err != nil && !ok {
 		t.Fatal(err)
 	}
 }
