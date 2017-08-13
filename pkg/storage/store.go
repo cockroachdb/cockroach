@@ -23,6 +23,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
@@ -30,7 +31,6 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
-	"golang.org/x/sync/syncmap"
 	"golang.org/x/time/rate"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -284,8 +284,8 @@ func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
 	// stale) view of all Replicas without holding the Store lock. In particular,
 	// no locks are acquired during the copy process.
 	rs.repls = nil
-	rs.store.mu.replicas.Range(func(k, v interface{}) bool {
-		rs.repls = append(rs.repls, v.(*Replica))
+	rs.store.mu.replicas.Range(func(k int64, v unsafe.Pointer) bool {
+		rs.repls = append(rs.repls, (*Replica)(v))
 		return true
 	})
 
@@ -495,7 +495,7 @@ type Store struct {
 		syncutil.RWMutex
 		// Map of replicas by Range ID (map[roachpb.RangeID]*Replica). This
 		// includes `uninitReplicas`. May be read without holding Store.mu.
-		replicas syncmap.Map
+		replicas syncutil.IntMap
 		// A btree key containing objects of type *Replica or
 		// *ReplicaPlaceholder (both of which have an associated key range, on
 		// the EndKey of which the btree is keyed)
@@ -511,7 +511,7 @@ type Store struct {
 	// avoid reworking the locking in getOrCreateReplica which requires
 	// Replica.raftMu to be held while a replica is being inserted into
 	// Store.mu.replicas.
-	replicaQueues syncmap.Map // map[roachpb.RangeID]*raftRequestQueue
+	replicaQueues syncutil.IntMap // map[roachpb.RangeID]*raftRequestQueue
 
 	tsCacheMu struct {
 		// Protects all fields in the tsCacheMu struct.
@@ -1553,8 +1553,8 @@ func (s *Store) NotifyBootstrapped() {
 
 // GetReplica fetches a replica by Range ID. Returns an error if no replica is found.
 func (s *Store) GetReplica(rangeID roachpb.RangeID) (*Replica, error) {
-	if value, ok := s.mu.replicas.Load(rangeID); ok {
-		return value.(*Replica), nil
+	if value, ok := s.mu.replicas.Load(int64(rangeID)); ok {
+		return (*Replica)(value), nil
 	}
 	return nil, roachpb.NewRangeNotFoundError(rangeID)
 }
@@ -1631,8 +1631,8 @@ func (s *Store) visitReplicasLocked(startKey, endKey roachpb.RKey, iterator func
 // RaftStatus returns the current raft status of the local replica of
 // the given range.
 func (s *Store) RaftStatus(rangeID roachpb.RangeID) *raft.Status {
-	if value, ok := s.mu.replicas.Load(rangeID); ok {
-		return value.(*Replica).RaftStatus()
+	if value, ok := s.mu.replicas.Load(int64(rangeID)); ok {
+		return (*Replica)(value).RaftStatus()
 	}
 	return nil
 }
@@ -1879,8 +1879,8 @@ func (s *Store) SplitRange(ctx context.Context, origRng, newRng *Replica) error 
 			log.Fatalf(ctx, "found unexpected uninitialized replica: %s vs %s", exRng, newRng)
 		}
 		delete(s.mu.uninitReplicas, newDesc.RangeID)
-		s.mu.replicas.Delete(newDesc.RangeID)
-		s.replicaQueues.Delete(newDesc.RangeID)
+		s.mu.replicas.Delete(int64(newDesc.RangeID))
+		s.replicaQueues.Delete(int64(newDesc.RangeID))
 	}
 
 	// Replace the end key of the original range with the start key of
@@ -2085,7 +2085,7 @@ func (s *Store) removePlaceholderLocked(ctx context.Context, rngID roachpb.Range
 // addReplicaToRangeMapLocked adds the replica to the replicas map.
 // addReplicaToRangeMapLocked requires that the store lock is held.
 func (s *Store) addReplicaToRangeMapLocked(repl *Replica) error {
-	if _, loaded := s.mu.replicas.LoadOrStore(repl.RangeID, repl); loaded {
+	if _, loaded := s.mu.replicas.LoadOrStore(int64(repl.RangeID), unsafe.Pointer(repl)); loaded {
 		return errors.Errorf("%s: replica already exists", repl)
 	}
 	return nil
@@ -2186,9 +2186,9 @@ func (s *Store) removeReplicaImpl(
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.mu.replicas.Delete(rep.RangeID)
+	s.mu.replicas.Delete(int64(rep.RangeID))
 	delete(s.mu.uninitReplicas, rep.RangeID)
-	s.replicaQueues.Delete(rep.RangeID)
+	s.replicaQueues.Delete(int64(rep.RangeID))
 	if placeholder := s.mu.replicasByKey.Delete(rep); placeholder != rep {
 		// We already checked that our replica was present in replicasByKey
 		// above. Nothing should have been able to change that.
@@ -2292,7 +2292,7 @@ func (s *Store) Capacity() (roachpb.StoreCapacity, error) {
 // performance critical code.
 func (s *Store) ReplicaCount() int {
 	var count int
-	s.mu.replicas.Range(func(k, v interface{}) bool {
+	s.mu.replicas.Range(func(_ int64, _ unsafe.Pointer) bool {
 		count++
 		return true
 	})
@@ -2342,8 +2342,8 @@ func (s *Store) deadReplicas() roachpb.StoreDeadReplicas {
 	// TODO(bram): does this need to visit all the replicas? Could we just use the
 	// store pool to locate any dead replicas on this store directly?
 	var deadReplicas []roachpb.ReplicaIdent
-	s.mu.replicas.Range(func(k, v interface{}) bool {
-		r := v.(*Replica)
+	s.mu.replicas.Range(func(k int64, v unsafe.Pointer) bool {
+		r := (*Replica)(v)
 		r.mu.RLock()
 		corrupted := r.mu.corrupted
 		desc := r.mu.state.Desc
@@ -2867,11 +2867,11 @@ func (s *Store) HandleRaftUncoalescedRequest(
 		return s.processRaftRequest(ctx, req, IncomingSnapshot{})
 	}
 
-	value, ok := s.replicaQueues.Load(req.RangeID)
+	value, ok := s.replicaQueues.Load(int64(req.RangeID))
 	if !ok {
-		value, _ = s.replicaQueues.LoadOrStore(req.RangeID, &raftRequestQueue{})
+		value, _ = s.replicaQueues.LoadOrStore(int64(req.RangeID), unsafe.Pointer(&raftRequestQueue{}))
 	}
-	q := value.(*raftRequestQueue)
+	q := (*raftRequestQueue)(value)
 	q.Lock()
 	if len(q.infos) >= replicaRequestQueueSize {
 		q.Unlock()
@@ -3465,11 +3465,11 @@ func (s *Store) enqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 }
 
 func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID) {
-	value, ok := s.replicaQueues.Load(rangeID)
+	value, ok := s.replicaQueues.Load(int64(rangeID))
 	if !ok {
 		return
 	}
-	q := value.(*raftRequestQueue)
+	q := (*raftRequestQueue)(value)
 	q.Lock()
 	infos := q.infos
 	q.infos = nil
@@ -3482,7 +3482,7 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 			// targeted to a removed range.
 			q.Lock()
 			if len(q.infos) == 0 {
-				s.replicaQueues.Delete(rangeID)
+				s.replicaQueues.Delete(int64(rangeID))
 			}
 			q.Unlock()
 			if err := info.respStream.Send(newRaftMessageResponse(info.req, pErr)); err != nil {
@@ -3495,13 +3495,13 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 }
 
 func (s *Store) processReady(ctx context.Context, rangeID roachpb.RangeID) {
-	value, ok := s.mu.replicas.Load(rangeID)
+	value, ok := s.mu.replicas.Load(int64(rangeID))
 	if !ok {
 		return
 	}
 
 	start := timeutil.Now()
-	r := value.(*Replica)
+	r := (*Replica)(value)
 	stats, err := r.handleRaftReady(IncomingSnapshot{})
 	if err != nil {
 		log.Fatal(ctx, err) // TODO(bdarnell)
@@ -3534,13 +3534,13 @@ func (s *Store) processReady(ctx context.Context, rangeID roachpb.RangeID) {
 }
 
 func (s *Store) processTick(ctx context.Context, rangeID roachpb.RangeID) bool {
-	value, ok := s.mu.replicas.Load(rangeID)
+	value, ok := s.mu.replicas.Load(int64(rangeID))
 	if !ok {
 		return false
 	}
 
 	start := timeutil.Now()
-	r := value.(*Replica)
+	r := (*Replica)(value)
 	exists, err := r.tick()
 	if err != nil {
 		log.Error(ctx, err)
@@ -3575,8 +3575,8 @@ func (s *Store) raftTickLoop(context.Context) {
 		case <-ticker.C:
 			rangeIDs = rangeIDs[:0]
 
-			s.mu.replicas.Range(func(k, v interface{}) bool {
-				rangeIDs = append(rangeIDs, k.(roachpb.RangeID))
+			s.mu.replicas.Range(func(k int64, v unsafe.Pointer) bool {
+				rangeIDs = append(rangeIDs, roachpb.RangeID(k))
 				return true
 			})
 
@@ -3647,13 +3647,13 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 
 	if !s.cfg.Transport.SendAsync(chReq) {
 		for _, beat := range beats {
-			if value, ok := s.mu.replicas.Load(beat.RangeID); ok {
-				value.(*Replica).addUnreachableRemoteReplica(beat.ToReplicaID)
+			if value, ok := s.mu.replicas.Load(int64(beat.RangeID)); ok {
+				(*Replica)(value).addUnreachableRemoteReplica(beat.ToReplicaID)
 			}
 		}
 		for _, resp := range resps {
-			if value, ok := s.mu.replicas.Load(resp.RangeID); ok {
-				value.(*Replica).addUnreachableRemoteReplica(resp.ToReplicaID)
+			if value, ok := s.mu.replicas.Load(int64(resp.RangeID)); ok {
+				(*Replica)(value).addUnreachableRemoteReplica(resp.ToReplicaID)
 			}
 		}
 		return 0
@@ -3722,8 +3722,8 @@ func (s *Store) tryGetOrCreateReplica(
 	creatingReplica *roachpb.ReplicaDescriptor,
 ) (_ *Replica, created bool, _ error) {
 	// The common case: look up an existing (initialized) replica.
-	if value, ok := s.mu.replicas.Load(rangeID); ok {
-		repl := value.(*Replica)
+	if value, ok := s.mu.replicas.Load(int64(rangeID)); ok {
+		repl := (*Replica)(value)
 		if creatingReplica != nil {
 			// Drop messages that come from a node that we believe was once a member of
 			// the group but has been removed.
@@ -3809,9 +3809,9 @@ func (s *Store) tryGetOrCreateReplica(
 		repl.mu.destroyed = errors.Wrapf(err, "%s: failed to initialize", repl)
 		repl.mu.Unlock()
 		s.mu.Lock()
-		s.mu.replicas.Delete(rangeID)
+		s.mu.replicas.Delete(int64(rangeID))
 		delete(s.mu.uninitReplicas, rangeID)
-		s.replicaQueues.Delete(rangeID)
+		s.replicaQueues.Delete(int64(rangeID))
 		s.mu.Unlock()
 		repl.raftMu.Unlock()
 		return nil, false, err
@@ -3835,7 +3835,8 @@ func (s *Store) canApplySnapshot(
 func (s *Store) canApplySnapshotLocked(
 	ctx context.Context, rangeDescriptor *roachpb.RangeDescriptor,
 ) (*ReplicaPlaceholder, error) {
-	if v, ok := s.mu.replicas.Load(rangeDescriptor.RangeID); ok && v.(*Replica).IsInitialized() {
+	if v, ok := s.mu.replicas.Load(int64(rangeDescriptor.RangeID)); ok &&
+		(*Replica)(v).IsInitialized() {
 		// We have the range and it's initialized, so let the snapshot through.
 		return nil, nil
 	}
