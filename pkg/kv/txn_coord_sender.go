@@ -43,8 +43,6 @@ const (
 	opHeartbeatLoop   = "heartbeat"
 )
 
-var errNoState = errors.New("writing transaction timed out or ran on multiple coordinators")
-
 // txnMetadata holds information about an ongoing transaction, as
 // seen from the perspective of this coordinator. It records all
 // keys (and key ranges) mutated as part of the transaction for
@@ -506,7 +504,7 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 		// transaction session so that we can definitively return the right
 		// error between these possible errors. Or update the code to make an
 		// educated guess based on the incoming transaction timestamp.
-		return roachpb.NewError(errNoState)
+		return roachpb.NewError(&roachpb.UntrackedTxnError{})
 	case txnMeta.txn.Status == roachpb.ABORTED:
 		tc.cleanupTxnLocked(ctx, txnMeta.txn)
 		abortedErr := roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), &txnMeta.txn)
@@ -555,6 +553,15 @@ func (tc *TxnCoordSender) validateTxnForBatch(ctx context.Context, ba *roachpb.B
 		}
 	}
 	return nil
+}
+
+// ForgetTxn is part of the SenderWithTxnCoordBackdoor interface.
+func (tc *TxnCoordSender) ForgetTxn(ctx context.Context, txn roachpb.Transaction) {
+	tc.tryAsyncAbort(txn.ID)
+
+	tc.txnMu.Lock()
+	defer tc.txnMu.Unlock()
+	tc.cleanupTxnLocked(ctx, txn)
 }
 
 // cleanupTxnLocked is called when a transaction ends. The transaction record is
@@ -672,7 +679,11 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context, txnID uuid.UUID) {
 // transaction.
 func (tc *TxnCoordSender) tryAsyncAbort(txnID uuid.UUID) {
 	tc.txnMu.Lock()
-	txnMeta := tc.txnMu.txns[txnID]
+	txnMeta, ok := tc.txnMu.txns[txnID]
+	if !ok {
+		tc.txnMu.Unlock()
+		return
+	}
 	// Clone the intents and the txn to avoid data races.
 	intentSpans, _ := roachpb.MergeSpans(append([]roachpb.Span(nil), txnMeta.keys...))
 	txnMeta.keys = nil
@@ -854,10 +865,6 @@ func (tc *TxnCoordSender) updateState(
 				// If the ID changed, it means we had to start a new transaction and the
 				// old one is toast. Clean up the freshly aborted transaction in
 				// defer(), avoiding a race with the state update below.
-				//
-				// TODO(andrei): If the epoch that our map is aware of has already been
-				// incremented compared to ba.Txn, perhaps we shouldn't abort the txn
-				// here. This would match client.Txn, who will ignore this error.
 				defer tc.cleanupTxnLocked(ctx, *ba.Txn)
 			}
 			// Pass a HandledRetryableTxnError up to the next layer.
@@ -971,7 +978,7 @@ func (tc *TxnCoordSender) updateState(
 	return pErr
 }
 
-// GetTxnState is part of the SenderWithDistSQLBackdoor interface.
+// GetTxnState is part of the SenderWithTxnCoordBackdoor interface.
 func (tc *TxnCoordSender) GetTxnState(txnID uuid.UUID) (roachpb.Transaction, bool) {
 	tc.txnMu.Lock()
 	defer tc.txnMu.Unlock()

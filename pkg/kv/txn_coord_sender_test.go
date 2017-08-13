@@ -952,7 +952,7 @@ func TestTxnCoordIdempotentCleanup(t *testing.T) {
 	ba = txn.NewBatch()
 	ba.AddRawRequest(&roachpb.EndTransactionRequest{})
 	err := txn.Run(context.TODO(), ba)
-	if err != nil && !testutils.IsError(err, errNoState.Error()) {
+	if _, ok := err.(*roachpb.UntrackedTxnError); err != nil && !ok {
 		t.Fatal(err)
 	}
 }

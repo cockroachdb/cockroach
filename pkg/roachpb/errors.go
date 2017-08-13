@@ -598,3 +598,23 @@ func (e *StoreNotFoundError) message(_ *Error) string {
 }
 
 var _ ErrorDetailInterface = &StoreNotFoundError{}
+
+func (e *UntrackedTxnError) Error() string {
+	return e.message(nil)
+}
+
+func (*UntrackedTxnError) message(_ *Error) string {
+	return "writing transaction timed out or ran on multiple coordinators"
+}
+
+var _ ErrorDetailInterface = &UntrackedTxnError{}
+
+func (e *RespForPrevTxnIDError) Error() string {
+	return e.message(nil)
+}
+
+func (*RespForPrevTxnIDError) message(_ *Error) string {
+	return "response meant for previous incarnation of transaction"
+}
+
+var _ ErrorDetailInterface = &RespForPrevTxnIDError{}

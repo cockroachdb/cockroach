@@ -1417,6 +1417,9 @@ func (e *Executor) execStmtInOpenTxn(
 			// been restarted (see #17197).
 			// TODO(andrei): Remove the parallelizeQueue restriction after #17197 is
 			// fixed.
+			//
+			// TODO DURING REVIEW: Should we remove the restriction but synchronize
+			// the parallelizeQueue here before restarting the Txn?
 			txnState.mu.txn.Proto().Restart(
 				0 /* userPriority */, 0 /* upgradePriority */, e.cfg.Clock.Now())
 			// Force an auto-retry by returning a retryable error to the higher
@@ -1444,7 +1447,7 @@ func (e *Executor) execStmtInOpenTxn(
 	parallelize := IsStmtParallelized(stmt)
 	_, independentFromParallelStmts := stmt.AST.(parser.IndependentFromParallelizedPriors)
 	if !(parallelize || independentFromParallelStmts) {
-		if err := session.synchronizeParallelStmts(); err != nil {
+		if err := session.synchronizeParallelStmts(session.context); err != nil {
 			return err
 		}
 	}
@@ -1583,7 +1586,7 @@ func (e *Executor) execStmtInOpenTxn(
 			// If the statement run was independent from parallelized execution, it
 			// might have been run concurrently with parallelized statements. Make
 			// sure all complete before returning the error.
-			_ = session.synchronizeParallelStmts()
+			_ = session.synchronizeParallelStmts(session.context)
 		}
 
 		sessionEventf(session, "ERROR: %v", err)
