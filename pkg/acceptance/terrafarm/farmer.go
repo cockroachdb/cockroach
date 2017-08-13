@@ -89,7 +89,7 @@ type Farmer struct {
 	BenchmarkName string
 	// Prefix will be prepended all names of resources created by Terraform.
 	Prefix string
-	// StateFile is the file (under `Cwd`) in which Terraform will stores its
+	// StateFile is the file (under `Cwd`) in which Terraform will store its
 	// state.
 	StateFile   string
 	KeepCluster string
