@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"sync/atomic"
 	"testing"
+	"unsafe"
 )
 
 type bench struct {
@@ -17,7 +18,7 @@ type bench struct {
 }
 
 func benchMap(b *testing.B, bench bench) {
-	for _, m := range [...]mapInterface{&DeepCopyMap{}, &RWMutexMap{}, &Map{}} {
+	for _, m := range [...]mapInterface{&DeepCopyMap{}, &RWMutexMap{}, &IntMap{}} {
 		b.Run(fmt.Sprintf("%T", m), func(b *testing.B) {
 			m = reflect.New(reflect.TypeOf(m).Elem()).Interface().(mapInterface)
 			if bench.setup != nil {
@@ -37,21 +38,22 @@ func benchMap(b *testing.B, bench bench) {
 
 func BenchmarkLoadMostlyHits(b *testing.B) {
 	const hits, misses = 1023, 1
+	v := unsafe.Pointer(new(int))
 
 	benchMap(b, bench{
 		setup: func(_ *testing.B, m mapInterface) {
 			for i := 0; i < hits; i++ {
-				m.LoadOrStore(i, i)
+				m.LoadOrStore(int64(i), v)
 			}
 			// Prime the map to get it into a steady state.
 			for i := 0; i < hits*2; i++ {
-				m.Load(i % hits)
+				m.Load(int64(i % hits))
 			}
 		},
 
 		perG: func(b *testing.B, pb *testing.PB, i int, m mapInterface) {
 			for ; pb.Next(); i++ {
-				m.Load(i % (hits + misses))
+				m.Load(int64(i % (hits + misses)))
 			}
 		},
 	})
@@ -59,21 +61,22 @@ func BenchmarkLoadMostlyHits(b *testing.B) {
 
 func BenchmarkLoadMostlyMisses(b *testing.B) {
 	const hits, misses = 1, 1023
+	v := unsafe.Pointer(new(int))
 
 	benchMap(b, bench{
 		setup: func(_ *testing.B, m mapInterface) {
 			for i := 0; i < hits; i++ {
-				m.LoadOrStore(i, i)
+				m.LoadOrStore(int64(i), v)
 			}
 			// Prime the map to get it into a steady state.
 			for i := 0; i < hits*2; i++ {
-				m.Load(i % hits)
+				m.Load(int64(i % hits))
 			}
 		},
 
 		perG: func(b *testing.B, pb *testing.PB, i int, m mapInterface) {
 			for ; pb.Next(); i++ {
-				m.Load(i % (hits + misses))
+				m.Load(int64(i % (hits + misses)))
 			}
 		},
 	})
@@ -81,6 +84,7 @@ func BenchmarkLoadMostlyMisses(b *testing.B) {
 
 func BenchmarkLoadOrStoreBalanced(b *testing.B) {
 	const hits, misses = 128, 128
+	v := unsafe.Pointer(new(int))
 
 	benchMap(b, bench{
 		setup: func(b *testing.B, m mapInterface) {
@@ -88,11 +92,11 @@ func BenchmarkLoadOrStoreBalanced(b *testing.B) {
 				b.Skip("DeepCopyMap has quadratic running time.")
 			}
 			for i := 0; i < hits; i++ {
-				m.LoadOrStore(i, i)
+				m.LoadOrStore(int64(i), v)
 			}
 			// Prime the map to get it into a steady state.
 			for i := 0; i < hits*2; i++ {
-				m.Load(i % hits)
+				m.Load(int64(i % hits))
 			}
 		},
 
@@ -100,12 +104,12 @@ func BenchmarkLoadOrStoreBalanced(b *testing.B) {
 			for ; pb.Next(); i++ {
 				j := i % (hits + misses)
 				if j < hits {
-					if _, ok := m.LoadOrStore(j, i); !ok {
+					if _, ok := m.LoadOrStore(int64(j), v); !ok {
 						b.Fatalf("unexpected miss for %v", j)
 					}
 				} else {
-					if v, loaded := m.LoadOrStore(i, i); loaded {
-						b.Fatalf("failed to store %v: existing value %v", i, v)
+					if e, loaded := m.LoadOrStore(int64(i), v); loaded {
+						b.Fatalf("failed to store %v: existing value %v", i, e)
 					}
 				}
 			}
@@ -114,6 +118,8 @@ func BenchmarkLoadOrStoreBalanced(b *testing.B) {
 }
 
 func BenchmarkLoadOrStoreUnique(b *testing.B) {
+	v := unsafe.Pointer(new(int))
+
 	benchMap(b, bench{
 		setup: func(b *testing.B, m mapInterface) {
 			if _, ok := m.(*DeepCopyMap); ok {
@@ -123,21 +129,23 @@ func BenchmarkLoadOrStoreUnique(b *testing.B) {
 
 		perG: func(b *testing.B, pb *testing.PB, i int, m mapInterface) {
 			for ; pb.Next(); i++ {
-				m.LoadOrStore(i, i)
+				m.LoadOrStore(int64(i), v)
 			}
 		},
 	})
 }
 
 func BenchmarkLoadOrStoreCollision(b *testing.B) {
+	v := unsafe.Pointer(new(int))
+
 	benchMap(b, bench{
 		setup: func(_ *testing.B, m mapInterface) {
-			m.LoadOrStore(0, 0)
+			m.LoadOrStore(int64(0), v)
 		},
 
 		perG: func(b *testing.B, pb *testing.PB, i int, m mapInterface) {
 			for ; pb.Next(); i++ {
-				m.LoadOrStore(0, 0)
+				m.LoadOrStore(int64(0), v)
 			}
 		},
 	})
@@ -145,17 +153,18 @@ func BenchmarkLoadOrStoreCollision(b *testing.B) {
 
 func BenchmarkRange(b *testing.B) {
 	const mapSize = 1 << 10
+	v := unsafe.Pointer(new(int))
 
 	benchMap(b, bench{
 		setup: func(_ *testing.B, m mapInterface) {
 			for i := 0; i < mapSize; i++ {
-				m.Store(i, i)
+				m.Store(int64(i), v)
 			}
 		},
 
 		perG: func(b *testing.B, pb *testing.PB, i int, m mapInterface) {
 			for ; pb.Next(); i++ {
-				m.Range(func(_, _ interface{}) bool { return true })
+				m.Range(func(_ int64, _ unsafe.Pointer) bool { return true })
 			}
 		},
 	})
@@ -167,13 +176,15 @@ func BenchmarkRange(b *testing.B) {
 //
 // This forces the Load calls to always acquire the map's mutex.
 func BenchmarkAdversarialAlloc(b *testing.B) {
+	v := unsafe.Pointer(new(int))
+
 	benchMap(b, bench{
 		perG: func(b *testing.B, pb *testing.PB, i int, m mapInterface) {
 			var stores, loadsSinceStore int64
 			for ; pb.Next(); i++ {
-				m.Load(i)
+				m.Load(int64(i))
 				if loadsSinceStore++; loadsSinceStore > stores {
-					m.LoadOrStore(i, stores)
+					m.LoadOrStore(int64(i), v)
 					loadsSinceStore = 0
 					stores++
 				}
@@ -189,24 +200,25 @@ func BenchmarkAdversarialAlloc(b *testing.B) {
 // makes a full copy of the map despite changing only one entry.
 func BenchmarkAdversarialDelete(b *testing.B) {
 	const mapSize = 1 << 10
+	v := unsafe.Pointer(new(int))
 
 	benchMap(b, bench{
 		setup: func(_ *testing.B, m mapInterface) {
 			for i := 0; i < mapSize; i++ {
-				m.Store(i, i)
+				m.Store(int64(i), v)
 			}
 		},
 
 		perG: func(b *testing.B, pb *testing.PB, i int, m mapInterface) {
 			for ; pb.Next(); i++ {
-				m.Load(i)
+				m.Load(int64(i))
 
 				if i%mapSize == 0 {
-					m.Range(func(k, _ interface{}) bool {
-						m.Delete(k)
+					m.Range(func(k int64, _ unsafe.Pointer) bool {
+						m.Delete(int64(k))
 						return false
 					})
-					m.Store(i, i)
+					m.Store(int64(i), v)
 				}
 			}
 		},

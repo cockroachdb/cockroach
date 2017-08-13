@@ -5,50 +5,52 @@
 package syncutil
 
 import (
-	"sync"
 	"sync/atomic"
+	"unsafe"
 )
 
 // This file contains reference map implementations for unit-tests.
 
 // mapInterface is the interface Map implements.
 type mapInterface interface {
-	Load(interface{}) (interface{}, bool)
-	Store(key, value interface{})
-	LoadOrStore(key, value interface{}) (actual interface{}, loaded bool)
-	Delete(interface{})
-	Range(func(key, value interface{}) (shouldContinue bool))
+	Load(int64) (unsafe.Pointer, bool)
+	Store(key int64, value unsafe.Pointer)
+	LoadOrStore(key int64, value unsafe.Pointer) (actual unsafe.Pointer, loaded bool)
+	Delete(int64)
+	Range(func(key int64, value unsafe.Pointer) (shouldContinue bool))
 }
 
-// RWMutexMap is an implementation of mapInterface using a sync.RWMutex.
+// RWMutexMap is an implementation of mapInterface using a RWMutex.
 type RWMutexMap struct {
-	mu    sync.RWMutex
-	dirty map[interface{}]interface{}
+	mu    RWMutex
+	dirty map[int64]unsafe.Pointer
 }
 
-func (m *RWMutexMap) Load(key interface{}) (value interface{}, ok bool) {
+func (m *RWMutexMap) Load(key int64) (value unsafe.Pointer, ok bool) {
 	m.mu.RLock()
 	value, ok = m.dirty[key]
 	m.mu.RUnlock()
 	return
 }
 
-func (m *RWMutexMap) Store(key, value interface{}) {
+func (m *RWMutexMap) Store(key int64, value unsafe.Pointer) {
 	m.mu.Lock()
 	if m.dirty == nil {
-		m.dirty = make(map[interface{}]interface{})
+		m.dirty = make(map[int64]unsafe.Pointer)
 	}
 	m.dirty[key] = value
 	m.mu.Unlock()
 }
 
-func (m *RWMutexMap) LoadOrStore(key, value interface{}) (actual interface{}, loaded bool) {
+func (m *RWMutexMap) LoadOrStore(
+	key int64, value unsafe.Pointer,
+) (actual unsafe.Pointer, loaded bool) {
 	m.mu.Lock()
 	actual, loaded = m.dirty[key]
 	if !loaded {
 		actual = value
 		if m.dirty == nil {
-			m.dirty = make(map[interface{}]interface{})
+			m.dirty = make(map[int64]unsafe.Pointer)
 		}
 		m.dirty[key] = value
 	}
@@ -56,15 +58,15 @@ func (m *RWMutexMap) LoadOrStore(key, value interface{}) (actual interface{}, lo
 	return actual, loaded
 }
 
-func (m *RWMutexMap) Delete(key interface{}) {
+func (m *RWMutexMap) Delete(key int64) {
 	m.mu.Lock()
 	delete(m.dirty, key)
 	m.mu.Unlock()
 }
 
-func (m *RWMutexMap) Range(f func(key, value interface{}) (shouldContinue bool)) {
+func (m *RWMutexMap) Range(f func(key int64, value unsafe.Pointer) (shouldContinue bool)) {
 	m.mu.RLock()
-	keys := make([]interface{}, 0, len(m.dirty))
+	keys := make([]int64, 0, len(m.dirty))
 	for k := range m.dirty {
 		keys = append(keys, k)
 	}
@@ -85,17 +87,17 @@ func (m *RWMutexMap) Range(f func(key, value interface{}) (shouldContinue bool))
 // atomic.Value.  It makes deep copies of the map on every write to avoid
 // acquiring the Mutex in Load.
 type DeepCopyMap struct {
-	mu    sync.Mutex
+	mu    Mutex
 	clean atomic.Value
 }
 
-func (m *DeepCopyMap) Load(key interface{}) (value interface{}, ok bool) {
-	clean, _ := m.clean.Load().(map[interface{}]interface{})
+func (m *DeepCopyMap) Load(key int64) (value unsafe.Pointer, ok bool) {
+	clean, _ := m.clean.Load().(map[int64]unsafe.Pointer)
 	value, ok = clean[key]
 	return value, ok
 }
 
-func (m *DeepCopyMap) Store(key, value interface{}) {
+func (m *DeepCopyMap) Store(key int64, value unsafe.Pointer) {
 	m.mu.Lock()
 	dirty := m.dirty()
 	dirty[key] = value
@@ -103,8 +105,10 @@ func (m *DeepCopyMap) Store(key, value interface{}) {
 	m.mu.Unlock()
 }
 
-func (m *DeepCopyMap) LoadOrStore(key, value interface{}) (actual interface{}, loaded bool) {
-	clean, _ := m.clean.Load().(map[interface{}]interface{})
+func (m *DeepCopyMap) LoadOrStore(
+	key int64, value unsafe.Pointer,
+) (actual unsafe.Pointer, loaded bool) {
+	clean, _ := m.clean.Load().(map[int64]unsafe.Pointer)
 	actual, loaded = clean[key]
 	if loaded {
 		return actual, loaded
@@ -112,7 +116,7 @@ func (m *DeepCopyMap) LoadOrStore(key, value interface{}) (actual interface{}, l
 
 	m.mu.Lock()
 	// Reload clean in case it changed while we were waiting on m.mu.
-	clean, _ = m.clean.Load().(map[interface{}]interface{})
+	clean, _ = m.clean.Load().(map[int64]unsafe.Pointer)
 	actual, loaded = clean[key]
 	if !loaded {
 		dirty := m.dirty()
@@ -124,7 +128,7 @@ func (m *DeepCopyMap) LoadOrStore(key, value interface{}) (actual interface{}, l
 	return actual, loaded
 }
 
-func (m *DeepCopyMap) Delete(key interface{}) {
+func (m *DeepCopyMap) Delete(key int64) {
 	m.mu.Lock()
 	dirty := m.dirty()
 	delete(dirty, key)
@@ -132,8 +136,8 @@ func (m *DeepCopyMap) Delete(key interface{}) {
 	m.mu.Unlock()
 }
 
-func (m *DeepCopyMap) Range(f func(key, value interface{}) (shouldContinue bool)) {
-	clean, _ := m.clean.Load().(map[interface{}]interface{})
+func (m *DeepCopyMap) Range(f func(key int64, value unsafe.Pointer) (shouldContinue bool)) {
+	clean, _ := m.clean.Load().(map[int64]unsafe.Pointer)
 	for k, v := range clean {
 		if !f(k, v) {
 			break
@@ -141,9 +145,9 @@ func (m *DeepCopyMap) Range(f func(key, value interface{}) (shouldContinue bool)
 	}
 }
 
-func (m *DeepCopyMap) dirty() map[interface{}]interface{} {
-	clean, _ := m.clean.Load().(map[interface{}]interface{})
-	dirty := make(map[interface{}]interface{}, len(clean)+1)
+func (m *DeepCopyMap) dirty() map[int64]unsafe.Pointer {
+	clean, _ := m.clean.Load().(map[int64]unsafe.Pointer)
+	dirty := make(map[int64]unsafe.Pointer, len(clean)+1)
 	for k, v := range clean {
 		dirty[k] = v
 	}
