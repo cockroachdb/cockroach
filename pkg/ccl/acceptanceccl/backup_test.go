@@ -63,6 +63,27 @@ func (bt *benchmarkTest) Start(ctx context.Context) {
 	}
 	bt.f = acceptance.MakeFarmer(bt.b, bt.prefix, acceptance.GetStopper())
 	bt.f.SkipClusterInit = bt.skipClusterInit
+	bt.f.TerraformArgs = []string{
+		// Ls-series VMs are "storage optimized," which means they have large local
+		// SSDs (678GB on the L4s) and no disk throttling beyond the physical limit
+		// of the disk. All other VM series on Azure are subject to VM-level I/O
+		// throttling, where sync latencies jump to upwards of a 1s when the rate
+		// limit is exceeded. Since we expect syncs to take a few milliseconds at
+		// most, this causes cascading liveness failures which tank a restore.
+		//
+		// To determine the temporary SSD I/O rate limit for a particular VM size,
+		// look for the "max cached [and temp storage] throughput" column on the
+		// Azure VM size chart [0].
+		//
+		// TODO(benesch): build a rate-limiter that rate limits all write traffic
+		// (not just bulk I/O write traffic like kv.bulk_io_write.max_rate), and
+		// additionally run these tests on D-series VMs with a suitable rate limit.
+		//
+		// [0]: https://docs.microsoft.com/en-us/azure/virtual-machines/linux/sizes
+		"-var", "azure_vm_size=Standard_L4s",
+		"-var", "azure_location=westus",
+		"-var", "azure_vhd_storage_account=cockroachnightlywestvhds",
+	}
 
 	log.Infof(ctx, "creating cluster with %d node(s)", bt.nodes)
 	if err := bt.f.Resize(bt.nodes); err != nil {
@@ -281,15 +302,8 @@ func BenchmarkRestore2TB(b *testing.B) {
 	const backupBaseURI = "gs://cockroach-test/2t-backup"
 
 	bt := benchmarkTest{
-		b: b,
-		// TODO(dan): This is intended to be a 10 node test, but gce local ssds
-		// are only available as 375GB, which doesn't fit a 2TB restore (at
-		// least until #15210 is fixed). We could have more than one ssd per
-		// machine and raid them together but in the lead up to 1.0, I'm trying
-		// to change as little as possible while getting this working. Azure has
-		// large storage machines available, but has other issues we're working
-		// through (#15381).
-		nodes:  15,
+		b:      b,
+		nodes:  10,
 		prefix: "restore2tb",
 	}
 
