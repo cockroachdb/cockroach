@@ -48,11 +48,6 @@ type benchmarkTest struct {
 	// prefix is the prefix that will be prepended to all resources created by
 	// Terraform.
 	prefix string
-	// cockroachDiskSizeGB is the size, in gigabytes, of the disks allocated
-	// for CockroachDB nodes. Leaving this as 0 accepts the default in the
-	// Terraform configs. This must be in GB, because Terraform only accepts
-	// disk size for GCE in GB.
-	cockroachDiskSizeGB int
 	// storeURL is the Google Cloud Storage URL from which the test will
 	// download stores. Nothing is downloaded if storeURL is empty.
 	storeURL        string
@@ -196,10 +191,9 @@ func BenchmarkRestoreBig(b *testing.B) {
 	restoreBaseURI := getAzureURI(b)
 
 	bt := benchmarkTest{
-		b:                   b,
-		nodes:               3,
-		cockroachDiskSizeGB: 250,
-		prefix:              "restore",
+		b:      b,
+		nodes:  3,
+		prefix: "restore",
 	}
 
 	defer bt.Close(ctx)
@@ -293,10 +287,9 @@ func BenchmarkRestore2TB(b *testing.B) {
 	const backupBaseURI = "gs://cockroach-test/2t-backup"
 
 	bt := benchmarkTest{
-		b:                   b,
-		nodes:               10,
-		cockroachDiskSizeGB: 250,
-		prefix:              "restore2tb",
+		b:      b,
+		nodes:  10,
+		prefix: "restore2tb",
 	}
 
 	ctx := context.Background()
@@ -331,12 +324,11 @@ func BenchmarkBackup2TB(b *testing.B) {
 	}
 
 	bt := benchmarkTest{
-		b:                   b,
-		nodes:               10,
-		storeURL:            bulkArchiveStoreURL,
-		cockroachDiskSizeGB: 250,
-		prefix:              "backup2tb",
-		skipClusterInit:     true,
+		b:               b,
+		nodes:           10,
+		storeURL:        bulkArchiveStoreURL,
+		prefix:          "backup2tb",
+		skipClusterInit: true,
 	}
 
 	ctx := context.Background()
