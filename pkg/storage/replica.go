@@ -4341,9 +4341,9 @@ func (r *Replica) acquireSplitLock(
 			rightRng.mu.destroyed = errors.Errorf("%s: failed to initialize", rightRng)
 			rightRng.mu.Unlock()
 			r.store.mu.Lock()
-			r.store.mu.replicas.Delete(rightRng.RangeID)
+			r.store.mu.replicas.Delete(int64(rightRng.RangeID))
 			delete(r.store.mu.uninitReplicas, rightRng.RangeID)
-			r.store.replicaQueues.Delete(rightRng.RangeID)
+			r.store.replicaQueues.Delete(int64(rightRng.RangeID))
 			r.store.mu.Unlock()
 		}
 		rightRng.raftMu.Unlock()
