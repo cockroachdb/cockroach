@@ -53,12 +53,13 @@ func (f *Farmer) run(cmd string, args ...string) (string, string, error) {
 }
 
 func (f *Farmer) appendDefaults(args []string) []string {
-	return append(
+	args = append(
 		args,
 		"-no-color",
 		"-var=key_name="+f.KeyName,
 		"-state="+f.StateFile,
 		`-var=prefix="`+f.Prefix+`"`)
+	return append(args, f.TerraformArgs...)
 }
 
 func (f *Farmer) output(key string) []string {
