@@ -2994,9 +2994,9 @@ func TestValidSplitKeys(t *testing.T) {
 		{roachpb.Key("\x02"), false},
 		{roachpb.Key("\x02\x00"), false},
 		{roachpb.Key("\x02\xff"), false},
-		{roachpb.Key("\x03"), true},
-		{roachpb.Key("\x03\x00"), true},
-		{roachpb.Key("\x03\xff"), true},
+		{roachpb.Key("\x03"), false},
+		{roachpb.Key("\x03\x00"), false},
+		{roachpb.Key("\x03\xff"), false},
 		{roachpb.Key("\x03\xff\xff"), false},
 		{roachpb.Key("\x04"), true},
 		{roachpb.Key("\x05"), true},
@@ -3108,7 +3108,9 @@ func TestFindValidSplitKeys(t *testing.T) {
 				roachpb.Key("\x03\x00"),
 				roachpb.Key("\x03\xff"),
 			},
-			expSplit: roachpb.Key("\x03"),
+			// TODO(peter): revert when we allow meta2 splitting. See #16266.
+			// expSplit: roachpb.Key("\x03"),
+			expSplit: nil,
 			expError: false,
 		},
 		// Even lopsided, always split at meta2.
@@ -3119,7 +3121,9 @@ func TestFindValidSplitKeys(t *testing.T) {
 				roachpb.Key("\x02\xff"),
 				roachpb.Key("\x03"),
 			},
-			expSplit: roachpb.Key("\x03"),
+			// TODO(peter): revert when we allow meta2 splitting. See #16266.
+			// expSplit: roachpb.Key("\x03"),
+			expSplit: nil,
 			expError: false,
 		},
 		// Lopsided, truncate non-zone prefix.
