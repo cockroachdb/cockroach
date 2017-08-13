@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 	"testing/quick"
+	"unsafe"
 )
 
 type mapOp string
@@ -26,11 +27,12 @@ var mapOps = [...]mapOp{opLoad, opStore, opLoadOrStore, opDelete}
 
 // mapCall is a quick.Generator for calls on mapInterface.
 type mapCall struct {
-	op   mapOp
-	k, v interface{}
+	op mapOp
+	k  int64
+	v  unsafe.Pointer
 }
 
-func (c mapCall) apply(m mapInterface) (interface{}, bool) {
+func (c mapCall) apply(m mapInterface) (unsafe.Pointer, bool) {
 	switch c.op {
 	case opLoad:
 		return m.Load(c.k)
@@ -52,16 +54,14 @@ type mapResult struct {
 	ok    bool
 }
 
-func randValue(r *rand.Rand) interface{} {
-	b := make([]byte, r.Intn(4))
-	for i := range b {
-		b[i] = 'a' + byte(rand.Intn(26))
-	}
-	return string(b)
+func randValue(r *rand.Rand) unsafe.Pointer {
+	i := new(int)
+	*i = r.Int()
+	return unsafe.Pointer(i)
 }
 
 func (mapCall) Generate(r *rand.Rand, size int) reflect.Value {
-	c := mapCall{op: mapOps[rand.Intn(len(mapOps))], k: randValue(r)}
+	c := mapCall{op: mapOps[rand.Intn(len(mapOps))], k: r.Int63()}
 	switch c.op {
 	case opStore, opLoadOrStore:
 		c.v = randValue(r)
@@ -69,14 +69,16 @@ func (mapCall) Generate(r *rand.Rand, size int) reflect.Value {
 	return reflect.ValueOf(c)
 }
 
-func applyCalls(m mapInterface, calls []mapCall) (results []mapResult, final map[interface{}]interface{}) {
+func applyCalls(
+	m mapInterface, calls []mapCall,
+) (results []mapResult, final map[interface{}]interface{}) {
 	for _, c := range calls {
 		v, ok := c.apply(m)
 		results = append(results, mapResult{v, ok})
 	}
 
 	final = make(map[interface{}]interface{})
-	m.Range(func(k, v interface{}) bool {
+	m.Range(func(k int64, v unsafe.Pointer) bool {
 		final[k] = v
 		return true
 	})
@@ -85,7 +87,7 @@ func applyCalls(m mapInterface, calls []mapCall) (results []mapResult, final map
 }
 
 func applyMap(calls []mapCall) ([]mapResult, map[interface{}]interface{}) {
-	return applyCalls(new(Map), calls)
+	return applyCalls(new(IntMap), calls)
 }
 
 func applyRWMutexMap(calls []mapCall) ([]mapResult, map[interface{}]interface{}) {
@@ -111,9 +113,11 @@ func TestMapMatchesDeepCopy(t *testing.T) {
 func TestConcurrentRange(t *testing.T) {
 	const mapSize = 1 << 10
 
-	m := new(Map)
+	m := new(IntMap)
 	for n := int64(1); n <= mapSize; n++ {
-		m.Store(n, int64(n))
+		v := new(int64)
+		*v = n
+		m.Store(n, unsafe.Pointer(v))
 	}
 
 	done := make(chan struct{})
@@ -135,7 +139,9 @@ func TestConcurrentRange(t *testing.T) {
 				}
 				for n := int64(1); n < mapSize; n++ {
 					if r.Int63n(mapSize) == 0 {
-						m.Store(n, n*i*g)
+						v := new(int64)
+						*v = n * i * g
+						m.Store(n, unsafe.Pointer(v))
 					} else {
 						m.Load(n)
 					}
@@ -151,8 +157,8 @@ func TestConcurrentRange(t *testing.T) {
 	for n := iters; n > 0; n-- {
 		seen := make(map[int64]bool, mapSize)
 
-		m.Range(func(ki, vi interface{}) bool {
-			k, v := ki.(int64), vi.(int64)
+		m.Range(func(ki int64, vi unsafe.Pointer) bool {
+			k, v := ki, *(*int64)(vi)
 			if v%k != 0 {
 				t.Fatalf("while Storing multiples of %v, Range saw value %v", k, v)
 			}
