@@ -501,44 +501,59 @@ func validateRangeMetaKey(key roachpb.RKey) error {
 // record can be found by means of an engine scan. The given key must be a
 // valid RangeMetaKey as defined by validateRangeMetaKey.
 // TODO(tschottdorf): a lot of casting going on inside.
-func MetaScanBounds(key roachpb.RKey) (roachpb.Key, roachpb.Key, error) {
+func MetaScanBounds(key roachpb.RKey) (roachpb.RSpan, error) {
 	if err := validateRangeMetaKey(key); err != nil {
-		return nil, nil, err
+		return roachpb.RSpan{}, err
 	}
 
 	if key.Equal(Meta2KeyMax) {
-		return nil, nil, NewInvalidRangeMetaKeyError("Meta2KeyMax can't be used as the key of scan", key)
+		return roachpb.RSpan{},
+			NewInvalidRangeMetaKeyError("Meta2KeyMax can't be used as the key of scan", key)
 	}
 
 	if key.Equal(roachpb.RKeyMin) {
 		// Special case KeyMin: find the first entry in meta1.
-		return Meta1Prefix, Meta1Prefix.PrefixEnd(), nil
+		return roachpb.RSpan{
+			Key:    roachpb.RKey(Meta1Prefix),
+			EndKey: roachpb.RKey(Meta1Prefix.PrefixEnd()),
+		}, nil
 	}
 	if key.Equal(Meta1KeyMax) {
 		// Special case Meta1KeyMax: this is the last key in Meta1, we don't want
 		// to start at Next().
-		return Meta1KeyMax, Meta1Prefix.PrefixEnd(), nil
+		return roachpb.RSpan{
+			Key:    roachpb.RKey(Meta1KeyMax),
+			EndKey: roachpb.RKey(Meta1Prefix.PrefixEnd()),
+		}, nil
 	}
+
 	// Otherwise find the first entry greater than the given key in the same meta prefix.
-	return key.Next().AsRawKey(), key[:len(Meta1Prefix)].PrefixEnd().AsRawKey(), nil
+	start := key.Next()
+	end := key[:len(Meta1Prefix)].PrefixEnd()
+	return roachpb.RSpan{Key: start, EndKey: end}, nil
 }
 
 // MetaReverseScanBounds returns the range [start,end) within which the desired
 // meta record can be found by means of a reverse engine scan. The given key
 // must be a valid RangeMetaKey as defined by validateRangeMetaKey.
-func MetaReverseScanBounds(key roachpb.RKey) (roachpb.Key, roachpb.Key, error) {
+func MetaReverseScanBounds(key roachpb.RKey) (roachpb.RSpan, error) {
 	if err := validateRangeMetaKey(key); err != nil {
-		return nil, nil, err
+		return roachpb.RSpan{}, err
 	}
 
 	if key.Equal(roachpb.RKeyMin) || key.Equal(Meta1Prefix) {
-		return nil, nil, NewInvalidRangeMetaKeyError("KeyMin and Meta1Prefix can't be used as the key of reverse scan", key)
+		return roachpb.RSpan{},
+			NewInvalidRangeMetaKeyError("KeyMin and Meta1Prefix can't be used as the key of reverse scan", key)
 	}
 	if key.Equal(Meta2Prefix) {
 		// Special case Meta2Prefix: this is the first key in Meta2, and the scan
 		// interval covers all of Meta1.
-		return Meta1Prefix, key.Next().AsRawKey(), nil
+		return roachpb.RSpan{
+			Key:    roachpb.RKey(Meta1Prefix),
+			EndKey: roachpb.RKey(key.Next().AsRawKey()),
+		}, nil
 	}
+
 	// Otherwise find the first entry greater than the given key and find the last entry
 	// in the same prefix. For MVCCReverseScan the endKey is exclusive, if we want to find
 	// the range descriptor the given key specified,we need to set the key.Next() as the
@@ -546,7 +561,9 @@ func MetaReverseScanBounds(key roachpb.RKey) (roachpb.Key, roachpb.Key, error) {
 	// If we have ranges [a,f) and [f,z), then we'll have corresponding meta records
 	// at f and z. If you're looking for the meta record for key f, then you want the
 	// second record (exclusive in MVCCReverseScan), hence key.Next() below.
-	return key[:len(Meta1Prefix)].AsRawKey(), key.Next().AsRawKey(), nil
+	start := key[:len(Meta1Prefix)]
+	end := key.Next()
+	return roachpb.RSpan{Key: start, EndKey: end}, nil
 }
 
 // MakeTablePrefix returns the key prefix used for the table's data.

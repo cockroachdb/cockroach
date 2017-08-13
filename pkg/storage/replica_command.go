@@ -122,7 +122,7 @@ var commands = map[roachpb.Method]Command{
 	roachpb.ReverseScan:        {DeclareKeys: DefaultDeclareKeys, Eval: evalReverseScan},
 	roachpb.BeginTransaction:   {DeclareKeys: declareKeysBeginTransaction, Eval: evalBeginTransaction},
 	roachpb.EndTransaction:     {DeclareKeys: declareKeysEndTransaction, Eval: evalEndTransaction},
-	roachpb.RangeLookup:        {DeclareKeys: DefaultDeclareKeys, Eval: evalRangeLookup},
+	roachpb.RangeLookup:        {DeclareKeys: declareKeysRangeLookup, Eval: evalRangeLookup},
 	roachpb.HeartbeatTxn:       {DeclareKeys: declareKeysHeartbeatTransaction, Eval: evalHeartbeatTxn},
 	roachpb.GC:                 {DeclareKeys: declareKeysGC, Eval: evalGC},
 	roachpb.PushTxn:            {DeclareKeys: declareKeysPushTransaction, Eval: evalPushTxn},
@@ -1090,6 +1090,13 @@ func runCommitTrigger(
 	return EvalResult{}, nil
 }
 
+func declareKeysRangeLookup(
+	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
+) {
+	DefaultDeclareKeys(desc, header, req, spans)
+	spans.Add(SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
+}
+
 // evalRangeLookup is used to look up RangeDescriptors - a RangeDescriptor
 // is a metadata structure which describes the key range and replica locations
 // of a distinct range in the cluster.
@@ -1143,6 +1150,11 @@ func evalRangeLookup(
 		return EvalResult{}, errors.Errorf("range lookup specified invalid maximum range count %d: must be > 0", rangeCount)
 	}
 
+	desc, err := cArgs.EvalCtx.Desc()
+	if err != nil {
+		return EvalResult{}, err
+	}
+
 	var checkAndUnmarshal func(roachpb.Value) (*roachpb.RangeDescriptor, error)
 
 	var kvs []roachpb.KeyValue // kv descriptor pairs in scan order
@@ -1161,14 +1173,18 @@ func evalRangeLookup(
 		// We want to search for the metadata key greater than
 		// args.Key. Scan for both the requested key and the keys immediately
 		// afterwards, up to MaxRanges.
-		startKey, endKey, err := keys.MetaScanBounds(key)
+		span, err := keys.MetaScanBounds(key)
+		if err != nil {
+			return EvalResult{}, err
+		}
+		span, err = span.Intersect(desc)
 		if err != nil {
 			return EvalResult{}, err
 		}
 
 		// Scan for descriptors.
 		kvs, _, intents, err = engine.MVCCScan(
-			ctx, batch, startKey, endKey, rangeCount, ts, consistent, txn,
+			ctx, batch, span.Key.AsRawKey(), span.EndKey.AsRawKey(), rangeCount, ts, consistent, txn,
 		)
 		if err != nil {
 			// An error here is likely a WriteIntentError when reading consistently.
@@ -1215,13 +1231,17 @@ func evalRangeLookup(
 		}
 
 		if key.Less(roachpb.RKey(keys.Meta2KeyMax)) {
-			startKey, endKey, err := keys.MetaScanBounds(key)
+			span, err := keys.MetaScanBounds(key)
+			if err != nil {
+				return EvalResult{}, err
+			}
+			span, err = span.Intersect(desc)
 			if err != nil {
 				return EvalResult{}, err
 			}
 
 			kvs, _, intents, err = engine.MVCCScan(
-				ctx, batch, startKey, endKey, 1, ts, consistent, txn,
+				ctx, batch, span.Key.AsRawKey(), span.EndKey.AsRawKey(), 1, ts, consistent, txn,
 			)
 			if err != nil {
 				return EvalResult{}, err
@@ -1230,13 +1250,18 @@ func evalRangeLookup(
 		// We want to search for the metadata key just less or equal to
 		// args.Key. Scan in reverse order for both the requested key and the
 		// keys immediately backwards, up to MaxRanges.
-		startKey, endKey, err := keys.MetaReverseScanBounds(key)
+		span, err := keys.MetaReverseScanBounds(key)
 		if err != nil {
 			return EvalResult{}, err
 		}
+		span, err = span.Intersect(desc)
+		if err != nil {
+			return EvalResult{}, err
+		}
+
 		// Reverse scan for descriptors.
 		revKVs, _, revIntents, err := engine.MVCCReverseScan(
-			ctx, batch, startKey, endKey, rangeCount, ts, consistent, txn,
+			ctx, batch, span.Key.AsRawKey(), span.EndKey.AsRawKey(), rangeCount, ts, consistent, txn,
 		)
 		if err != nil {
 			// An error here is likely a WriteIntentError when reading consistently.
@@ -1307,12 +1332,30 @@ func evalRangeLookup(
 	}
 
 	if len(reply.Ranges) == 0 {
-		// No matching results were returned from the scan. This should
-		// never happen with the above logic.
+		// No matching results were returned from the scan. This can happen when
+		// meta2 ranges split (so for now such splitting is disabled). Remember
+		// that the range addressing keys are generated from the end key of a range
+		// descriptor, not the start key. Consider the scenario:
+		//
+		//   range 1 [a, e):
+		//     b -> [a, b)
+		//     c -> [b, c)
+		//     d -> [c, d)
+		//   range 2 [e, g):
+		//     e -> [d, e)
+		//     f -> [e, f)
+		//     g -> [f, g)
+		//
+		// Now consider looking up the range containing key `d`. The DistSender
+		// routing logic would send the RangeLookup request to range 1 since `d`
+		// lies within the bounds of that range. But notice that the range
+		// descriptor containing `d` lies in range 2. Boom! A real fix will involve
+		// additional logic in the RangeDescriptorCache range lookup state machine.
+		//
+		// See #16266.
 		var buf bytes.Buffer
-		buf.WriteString("range lookup of meta key '")
-		buf.Write(args.Key)
-		buf.WriteString("' found only non-matching ranges:")
+		fmt.Fprintf(&buf, "range lookup of meta key '%[1]s' [%[1]x] found only non-matching ranges:",
+			args.Key)
 		for _, desc := range reply.PrefetchedRanges {
 			buf.WriteByte('\n')
 			buf.WriteString(desc.String())
