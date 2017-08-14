@@ -514,6 +514,32 @@ type ListenError struct {
 	Addr string
 }
 
+func inspectEngines(
+	ctx context.Context, engines []engine.Engine,
+) (
+	bootstrappedEngines []engine.Engine,
+	emptyEngines []engine.Engine,
+	_ cluster.ClusterVersion,
+	_ error,
+) {
+	for _, engine := range engines {
+		_, err := storage.ReadStoreIdent(ctx, engine)
+		if _, notBootstrapped := err.(*storage.NotBootstrappedError); notBootstrapped {
+			emptyEngines = append(emptyEngines, engine)
+			continue
+		} else if err != nil {
+			return nil, nil, cluster.ClusterVersion{}, err
+		}
+		bootstrappedEngines = append(bootstrappedEngines, engine)
+	}
+
+	cv, err := storage.SynthesizeClusterVersionFromEngines(ctx, bootstrappedEngines, cluster.MinimumSupportedVersion, cluster.ServerVersion)
+	if err != nil {
+		return nil, nil, cluster.ClusterVersion{}, err
+	}
+	return bootstrappedEngines, emptyEngines, cv, nil
+}
+
 func (s *Server) isAnyStoreBootstrapped(ctx context.Context) (bool, error) {
 	for _, e := range s.engines {
 		if _, err := storage.ReadStoreIdent(ctx, e); err != nil {
@@ -756,9 +782,9 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.stopper.AddCloser(&s.engines)
 
-	if anyStoreBootstrapped, err := s.isAnyStoreBootstrapped(ctx); err != nil {
-		return err
-	} else if anyStoreBootstrapped {
+	if bootstrappedEngines, _, _, err := inspectEngines(ctx, s.engines); err != nil {
+		return errors.Wrap(err, "inspecting engines")
+	} else if len(bootstrappedEngines) > 0 {
 		// We might have to sleep a bit to protect against this node producing non-
 		// monotonic timestamps. Before restarting, its clock might have been driven
 		// by other nodes' fast clocks, but when we restarted, we lost all this
@@ -817,14 +843,24 @@ func (s *Server) Start(ctx context.Context) error {
 		atomic.StoreInt32(&initLActive, 0)
 	}
 
+	// We ran this before, but might've bootstrapped in the meantime. This time
+	// we'll get the actual list of bootstrapped and empty engines.
+	bootstrappedEngines, emptyEngines, cv, err := inspectEngines(ctx, s.engines)
+	if err != nil {
+		return errors.Wrap(err, "inspecting engines")
+	}
+
 	// Now that we have a monotonic HLC wrt previous incarnations of the process,
-	// init all the replicas.  At this point *some* store has been bootstrapped.
+	// init all the replicas. At this point *some* store has been bootstrapped or
+	// we're joining an existing cluster for the first time.
 	err = s.node.start(
 		ctx,
 		unresolvedAdvertAddr,
-		s.engines,
+		bootstrappedEngines, emptyEngines,
 		s.cfg.NodeAttributes,
-		s.cfg.Locality)
+		s.cfg.Locality,
+		cv,
+	)
 
 	if err != nil {
 		return err
