@@ -69,7 +69,6 @@ const defaultHTTP nat.Port = base.DefaultHTTPPort + "/tcp"
 const CockroachBinaryInContainer = "/cockroach/cockroach"
 
 var cockroachImage = flag.String("i", defaultImage, "the docker image to run")
-var cockroachBinary = flag.String("b", defaultBinary(), "the host-side binary to run (if image == "+defaultImage+")")
 var cockroachEntry = flag.String("e", "", "the entry point for the image")
 var waitOnStop = flag.Bool("w", false, "wait for the user to interrupt before tearing down the cluster")
 var maxRangeBytes = config.DefaultZoneConfig().RangeMaxBytes
@@ -77,10 +76,11 @@ var maxRangeBytes = config.DefaultZoneConfig().RangeMaxBytes
 // keyLen is the length (in bits) of the generated CA and node certs.
 const keyLen = 1024
 
-func defaultBinary() string {
+// CockroachBinary is the path to the host-side binary to use.
+var CockroachBinary = flag.String("b", func() string {
 	dir, err := os.Getwd()
 	if err != nil {
-		return ""
+		panic(err)
 	}
 	// The repository root, as seen by the caller.
 	for i := 0; i < 2; i++ {
@@ -89,7 +89,7 @@ func defaultBinary() string {
 	// NB: This is the binary produced by our linux-gnu build target. Changes
 	// to the Makefile must be reflected here.
 	return filepath.Join(dir, "cockroach-linux-2.6.32-gnu-amd64")
-}
+}(), "the host-side binary to run")
 
 func exists(path string) bool {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
@@ -170,8 +170,8 @@ func CreateLocal(
 	default:
 	}
 
-	if *cockroachImage == defaultImage && !exists(*cockroachBinary) {
-		log.Fatalf(ctx, "\"%s\": does not exist", *cockroachBinary)
+	if *cockroachImage == defaultImage && !exists(*CockroachBinary) {
+		log.Fatalf(ctx, "\"%s\": does not exist", *CockroachBinary)
 	}
 
 	cli, err := client.NewEnvClient()
@@ -353,7 +353,7 @@ func (l *LocalCluster) initCluster(ctx context.Context) {
 		binds = append(binds, l.logDir+":/logs")
 	}
 	if *cockroachImage == defaultImage {
-		path, err := filepath.Abs(*cockroachBinary)
+		path, err := filepath.Abs(*CockroachBinary)
 		maybePanic(err)
 		binds = append(binds, path+":"+CockroachBinaryInContainer)
 	}
