@@ -540,21 +540,6 @@ func inspectEngines(
 	return bootstrappedEngines, emptyEngines, cv, nil
 }
 
-func (s *Server) isAnyStoreBootstrapped(ctx context.Context) (bool, error) {
-	for _, e := range s.engines {
-		if _, err := storage.ReadStoreIdent(ctx, e); err != nil {
-			// NotBootstrappedError is expected.
-			if _, ok := err.(*storage.NotBootstrappedError); !ok {
-				return false, err
-			}
-		} else {
-			return true, nil
-		}
-	}
-
-	return false, nil
-}
-
 // Start starts the server on the specified port, starts gossip and initializes
 // the node using the engines from the server's context.
 //
