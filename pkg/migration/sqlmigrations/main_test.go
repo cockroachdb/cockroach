@@ -21,20 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestMain(m *testing.M) {
 	security.SetAssetLoader(securitytest.EmbeddedAssets)
 	serverutils.InitTestServerFactory(server.TestServerFactory)
-
-	// TestLeaseExpiration needs log.ReportingSettingsSingleton populated as it
-	// calls log.Fatal.
-	st := cluster.MakeClusterSettings()
-	f := log.ReportingSettings(st.ReportingSettings)
-	log.ReportingSettingsSingleton.Store(&f)
 
 	os.Exit(m.Run())
 }
