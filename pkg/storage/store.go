@@ -3560,11 +3560,12 @@ func (s *Store) processRaft(ctx context.Context) {
 
 	s.stopper.RunWorker(ctx, s.raftTickLoop)
 	s.stopper.RunWorker(ctx, s.coalescedHeartbeatsLoop)
+	s.stopper.AddCloser(stop.CloserFn(func() {
+		s.cfg.Transport.Stop(s.StoreID())
+	}))
 }
 
-func (s *Store) raftTickLoop(context.Context) {
-	defer s.cfg.Transport.Stop(s.StoreID())
-
+func (s *Store) raftTickLoop(ctx context.Context) {
 	ticker := time.NewTicker(s.cfg.RaftTickInterval)
 	defer ticker.Stop()
 
@@ -3576,7 +3577,22 @@ func (s *Store) raftTickLoop(context.Context) {
 			rangeIDs = rangeIDs[:0]
 
 			s.mu.replicas.Range(func(k int64, v unsafe.Pointer) bool {
-				rangeIDs = append(rangeIDs, roachpb.RangeID(k))
+				// Fast-path handling of quiesced replicas. This avoids the overhead of
+				// queueing the replica on the Raft scheduler. This overhead is
+				// significant and there is overhead to filling the Raft scheduler with
+				// replicas to tick. A node with 3TB of disk might contain 50k+
+				// replicas. Filling the Raft scheduler with all of those replicas
+				// every tick interval can starve other Raft processing of cycles.
+				//
+				// Why do we bother to ever queue a Replica on the Raft scheduler for
+				// tick processing? Couldn't we just call Replica.tick() here? Yes, but
+				// then a single bad/slow Replica can disrupt tick processing for every
+				// Replica on the store which cascades into Raft elections and more
+				// disruption. Replica.maybeTickQuiesced only grabs short-duration
+				// locks and not locks that are held during disk I/O.
+				if !(*Replica)(v).maybeTickQuiesced() {
+					rangeIDs = append(rangeIDs, roachpb.RangeID(k))
+				}
 				return true
 			})
 
