@@ -245,46 +245,66 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl nodeLiveness) error {
 			continue
 		}
 
-		nodeStatus, ok := nodeStatusMap[payload.Lease.NodeID]
-		if !ok {
-			log.Warningf(ctx, "no liveness record for node %d", payload.Lease.NodeID)
+		var needsResume bool
+		if payload.Lease.NodeID == r.nodeID.Get() {
+			// If we hold the lease for a job, check to see if we're actually running
+			// that job, and resume it if we're not. Otherwise, the job will be stuck
+			// until this node is restarted, as the other nodes in the cluster see
+			// that we hold a valid lease and assume we're running the job.
+			//
+			// We end up in this state—a valid lease for a canceled job—when we
+			// overcautiously cancel all jobs due to e.g. a slow heartbeat response.
+			// If that heartbeat managed to successfully extend the liveness lease,
+			// we'll have stopped running jobs on which we still had valid leases.
+			r.mu.Lock()
+			_, running := r.mu.jobs[*id]
+			r.mu.Unlock()
+			needsResume = !running
+		} else {
+			nodeStatus, ok := nodeStatusMap[payload.Lease.NodeID]
+			if !ok {
+				log.Warningf(ctx, "no liveness record for node %d", payload.Lease.NodeID)
+				continue
+			}
+			needsResume = nodeStatus.epoch > payload.Lease.Epoch || !nodeStatus.isLive
+		}
+
+		if !needsResume {
 			continue
 		}
 
-		if nodeStatus.epoch > payload.Lease.Epoch || !nodeStatus.isLive {
-			var resumeFn func(context.Context, *Job) error
-			for _, hook := range resumeHooks {
-				if resumeFn = hook(payload.Type()); resumeFn != nil {
-					break
-				}
+		var resumeFn func(context.Context, *Job) error
+		for _, hook := range resumeHooks {
+			if resumeFn = hook(payload.Type()); resumeFn != nil {
+				break
 			}
-			if resumeFn == nil {
-				if log.V(2) {
-					log.Infof(ctx, "skipping job %d as no resume functions are available", *id)
-				}
-				continue
-			}
-
-			job := Job{id: id, registry: r}
-			if err := job.adopt(ctx, payload.Lease); err != nil {
-				if log.V(2) {
-					log.Infof(ctx, "unable to acquire lease on %d: %s", id, err)
-				}
-				continue
-			}
-
-			go func() {
-				log.Infof(ctx, "resuming job %d", *job.ID())
-				err := resumeFn(ctx, &job)
-				if err := job.FinishedWith(ctx, err); err != nil {
-					// Nowhere to report this error but the log.
-					log.Errorf(ctx, "ignoring error while marking job %d finished with: %+v", *job.ID(), err)
-				}
-			}()
-
-			// Only adopt one job per turn to allow other nodes their fair share.
-			break
 		}
+		if resumeFn == nil {
+			if log.V(2) {
+				log.Infof(ctx, "skipping job %d as no resume functions are available", *id)
+			}
+			continue
+		}
+
+		job := Job{id: id, registry: r}
+		if err := job.adopt(ctx, payload.Lease); err != nil {
+			if log.V(2) {
+				log.Infof(ctx, "unable to acquire lease on %d: %s", id, err)
+			}
+			continue
+		}
+
+		go func() {
+			log.Infof(ctx, "resuming job %d", *job.ID())
+			err := resumeFn(ctx, &job)
+			if err := job.FinishedWith(ctx, err); err != nil {
+				// Nowhere to report this error but the log.
+				log.Errorf(ctx, "ignoring error while marking job %d finished with: %+v", *job.ID(), err)
+			}
+		}()
+
+		// Only adopt one job per turn to allow other nodes their fair share.
+		break
 	}
 
 	return nil

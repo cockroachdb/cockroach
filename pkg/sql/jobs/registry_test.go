@@ -27,10 +27,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 func TestRegistryCancelation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	ctx, stopper := context.Background(), stop.NewStopper()
 	defer stopper.Stop(ctx)
 
@@ -119,6 +122,8 @@ func TestRegistryCancelation(t *testing.T) {
 }
 
 func TestRegistryRegister(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	var db *client.DB
 	var ex sqlutil.InternalExecutor
 	var gossip *gossip.Gossip
