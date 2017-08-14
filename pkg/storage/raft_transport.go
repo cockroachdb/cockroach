@@ -22,11 +22,11 @@ import (
 	"sort"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/rubyist/circuitbreaker"
 	"golang.org/x/net/context"
-	"golang.org/x/sync/syncmap"
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -156,10 +156,10 @@ type RaftTransport struct {
 	resolver   NodeAddressResolver
 	rpcContext *rpc.Context
 
-	queues   syncmap.Map // map[roachpb.NodeID]chan *RaftMessageRequest
-	stats    syncmap.Map // map[roachpb.NodeID]*raftTransportStats
-	breakers syncmap.Map // map[roachpb.NodeID]*circuit.Breaker
-	handlers syncmap.Map // map[roachpb.StoreID]RaftMessageHandler
+	queues   syncutil.IntMap // map[roachpb.NodeID]*chan *RaftMessageRequest
+	stats    syncutil.IntMap // map[roachpb.NodeID]*raftTransportStats
+	breakers syncutil.IntMap // map[roachpb.NodeID]*circuit.Breaker
+	handlers syncutil.IntMap // map[roachpb.StoreID]*RaftMessageHandler
 }
 
 // NewDummyRaftTransport returns a dummy raft transport for use in tests which
@@ -200,8 +200,8 @@ func NewRaftTransport(
 				select {
 				case <-ticker.C:
 					stats = stats[:0]
-					t.stats.Range(func(k, v interface{}) bool {
-						s := v.(*raftTransportStats)
+					t.stats.Range(func(k int64, v unsafe.Pointer) bool {
+						s := (*raftTransportStats)(v)
 						// Clear the queue length stat. Note that this field is only
 						// mutated by this goroutine.
 						s.queue = 0
@@ -209,9 +209,9 @@ func NewRaftTransport(
 						return true
 					})
 
-					t.queues.Range(func(k, v interface{}) bool {
-						ch := v.(chan *RaftMessageRequest)
-						t.getStats(k.(roachpb.NodeID)).queue += len(ch)
+					t.queues.Range(func(k int64, v unsafe.Pointer) bool {
+						ch := *(*chan *RaftMessageRequest)(v)
+						t.getStats((roachpb.NodeID)(k)).queue += len(ch)
 						return true
 					})
 
@@ -258,8 +258,8 @@ func NewRaftTransport(
 
 func (t *RaftTransport) queuedMessageCount() int64 {
 	var n int64
-	t.queues.Range(func(k, v interface{}) bool {
-		ch := v.(chan *RaftMessageRequest)
+	t.queues.Range(func(k int64, v unsafe.Pointer) bool {
+		ch := *(*chan *RaftMessageRequest)(v)
 		n += int64(len(ch))
 		return true
 	})
@@ -267,8 +267,8 @@ func (t *RaftTransport) queuedMessageCount() int64 {
 }
 
 func (t *RaftTransport) getHandler(storeID roachpb.StoreID) (RaftMessageHandler, bool) {
-	if value, ok := t.handlers.Load(storeID); ok {
-		return value.(RaftMessageHandler), true
+	if value, ok := t.handlers.Load(int64(storeID)); ok {
+		return *(*RaftMessageHandler)(value), true
 	}
 	return nil, false
 }
@@ -303,12 +303,12 @@ func newRaftMessageResponse(req *RaftMessageRequest, pErr *roachpb.Error) *RaftM
 }
 
 func (t *RaftTransport) getStats(nodeID roachpb.NodeID) *raftTransportStats {
-	value, ok := t.stats.Load(nodeID)
+	value, ok := t.stats.Load(int64(nodeID))
 	if !ok {
 		stats := &raftTransportStats{nodeID: nodeID}
-		value, _ = t.stats.LoadOrStore(nodeID, stats)
+		value, _ = t.stats.LoadOrStore(int64(nodeID), unsafe.Pointer(stats))
 	}
-	return value.(*raftTransportStats)
+	return (*raftTransportStats)(value)
 }
 
 // RaftMessageBatch proxies the incoming requests to the listening server interface.
@@ -399,23 +399,23 @@ func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error 
 
 // Listen registers a raftMessageHandler to receive proxied messages.
 func (t *RaftTransport) Listen(storeID roachpb.StoreID, handler RaftMessageHandler) {
-	t.handlers.Store(storeID, handler)
+	t.handlers.Store(int64(storeID), unsafe.Pointer(&handler))
 }
 
 // Stop unregisters a raftMessageHandler.
 func (t *RaftTransport) Stop(storeID roachpb.StoreID) {
-	t.handlers.Delete(storeID)
+	t.handlers.Delete(int64(storeID))
 }
 
 // GetCircuitBreaker returns the circuit breaker controlling
 // connection attempts to the specified node.
 func (t *RaftTransport) GetCircuitBreaker(nodeID roachpb.NodeID) *circuit.Breaker {
-	value, ok := t.breakers.Load(nodeID)
+	value, ok := t.breakers.Load(int64(nodeID))
 	if !ok {
 		breaker := t.rpcContext.NewBreaker()
-		value, _ = t.breakers.LoadOrStore(nodeID, breaker)
+		value, _ = t.breakers.LoadOrStore(int64(nodeID), unsafe.Pointer(breaker))
 	}
-	return value.(*circuit.Breaker)
+	return (*circuit.Breaker)(value)
 }
 
 // connectAndProcess connects to the node and then processes the
@@ -548,12 +548,12 @@ func (t *RaftTransport) processQueue(
 // getQueue returns the queue for the specified node ID and a boolean
 // indicating whether the queue already exists (true) or was created (false).
 func (t *RaftTransport) getQueue(nodeID roachpb.NodeID) (chan *RaftMessageRequest, bool) {
-	value, ok := t.queues.Load(nodeID)
+	value, ok := t.queues.Load(int64(nodeID))
 	if !ok {
 		ch := make(chan *RaftMessageRequest, raftSendBufferSize)
-		value, ok = t.queues.LoadOrStore(nodeID, ch)
+		value, ok = t.queues.LoadOrStore(int64(nodeID), unsafe.Pointer(&ch))
 	}
-	return value.(chan *RaftMessageRequest), ok
+	return *(*chan *RaftMessageRequest)(value), ok
 }
 
 // SendAsync sends a message to the recipient specified in the request. It
@@ -586,10 +586,10 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 			func(ctx context.Context) {
 				t.rpcContext.Stopper.RunWorker(ctx, func(ctx context.Context) {
 					t.connectAndProcess(ctx, toNodeID, ch, stats)
-					t.queues.Delete(toNodeID)
+					t.queues.Delete(int64(toNodeID))
 				})
 			}); err != nil {
-			t.queues.Delete(toNodeID)
+			t.queues.Delete(int64(toNodeID))
 			return false
 		}
 	}
