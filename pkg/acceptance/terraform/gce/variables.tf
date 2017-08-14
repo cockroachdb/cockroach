@@ -46,7 +46,7 @@ variable "gce_zone" {
 }
 
 variable "gce_image" {
-  default = "ubuntu-os-cloud/ubuntu-1604-xenial-v20160815"
+  default = "ubuntu-os-cloud/ubuntu-1604-lts"
 }
 
 variable "gce_machine_type" {

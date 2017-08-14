@@ -24,7 +24,7 @@ variable "gce_zone" {
 
 # GCE image name.
 variable "gce_image" {
-  default = "ubuntu-os-cloud/ubuntu-1604-xenial-v20160815"
+  default = "ubuntu-os-cloud/ubuntu-1604-lts"
 }
 
 # Name of the ssh key pair to use for GCE instances.
