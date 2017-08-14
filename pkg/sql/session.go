@@ -274,6 +274,10 @@ type Session struct {
 
 		// ActiveQueries contains all queries in flight.
 		ActiveQueries map[uint128.Uint128]*queryMeta
+
+		// LastActiveQuery contains a reference to the AST of the last
+		// query that ran on this session.
+		LastActiveQuery parser.Statement
 	}
 
 	//
@@ -560,16 +564,21 @@ func (s *Session) resetPlanner(p *planner, e *Executor, txn *client.Txn) {
 // still pointing to the planner, so it should only be called when a connection
 // is entirely finished executing a statement and all results have been sent.
 func (s *Session) FinishPlan() {
-	// All results have been sent to the client; so deregister all synchronous
-	// active queries from this session. Cannot deregister asynchronous ones
-	// because those might still be executing in the parallelizeQueue.
-	s.mu.Lock()
-	for _, queryID := range s.ActiveSyncQueries {
-		delete(s.mu.ActiveQueries, queryID)
-		s.execCfg.QueryRegistry.deregister(queryID)
+	if len(s.ActiveSyncQueries) > 0 {
+		s.mu.Lock()
+		// Store the last sync query as the last active query.
+		lastQueryID := s.ActiveSyncQueries[len(s.ActiveSyncQueries)-1]
+		s.mu.LastActiveQuery = s.mu.ActiveQueries[lastQueryID].stmt
+		// All results have been sent to the client; so deregister all synchronous
+		// active queries from this session. Cannot deregister asynchronous ones
+		// because those might still be executing in the parallelizeQueue.
+		for _, queryID := range s.ActiveSyncQueries {
+			delete(s.mu.ActiveQueries, queryID)
+			s.execCfg.QueryRegistry.deregister(queryID)
+		}
+		s.mu.Unlock()
+		s.ActiveSyncQueries = make([]uint128.Uint128, 0)
 	}
-	s.mu.Unlock()
-	s.ActiveSyncQueries = make([]uint128.Uint128, 0)
 
 	s.planner = emptyPlanner
 }
@@ -633,7 +642,11 @@ func (s *Session) addActiveQuery(queryID uint128.Uint128, queryMeta *queryMeta) 
 // Called when a query finishes execution.
 func (s *Session) removeActiveQuery(queryID uint128.Uint128) {
 	s.mu.Lock()
-	delete(s.mu.ActiveQueries, queryID)
+	queryMeta, ok := s.mu.ActiveQueries[queryID]
+	if ok {
+		delete(s.mu.ActiveQueries, queryID)
+		s.mu.LastActiveQuery = queryMeta.stmt
+	}
 	s.mu.Unlock()
 	s.execCfg.QueryRegistry.deregister(queryID)
 }
@@ -680,9 +693,7 @@ func (s *Session) serialize() serverpb.Session {
 	}
 
 	activeQueries := make([]serverpb.ActiveQuery, 0, len(s.mu.ActiveQueries))
-
-	for id, query := range s.mu.ActiveQueries {
-		sql := query.stmt.String()
+	truncateSQL := func(sql string) string {
 		if len(sql) > MaxSQLBytes {
 			sql = sql[:MaxSQLBytes-utf8.RuneLen('…')]
 			// Ensure the resulting string is valid utf8.
@@ -694,6 +705,11 @@ func (s *Session) serialize() serverpb.Session {
 			}
 			sql += "…"
 		}
+		return sql
+	}
+
+	for id, query := range s.mu.ActiveQueries {
+		sql := truncateSQL(query.stmt.String())
 		activeQueries = append(activeQueries, serverpb.ActiveQuery{
 			ID:            id.String(),
 			Start:         query.start.UTC(),
@@ -701,6 +717,10 @@ func (s *Session) serialize() serverpb.Session {
 			IsDistributed: query.isDistributed,
 			Phase:         (serverpb.ActiveQuery_Phase)(query.phase),
 		})
+	}
+	lastActiveQuery := ""
+	if s.mu.LastActiveQuery != nil {
+		lastActiveQuery = truncateSQL(s.mu.LastActiveQuery.String())
 	}
 
 	return serverpb.Session{
@@ -710,6 +730,7 @@ func (s *Session) serialize() serverpb.Session {
 		Start:           s.phaseTimes[sessionInit].UTC(),
 		ActiveQueries:   activeQueries,
 		KvTxnID:         kvTxnID,
+		LastActiveQuery: lastActiveQuery,
 	}
 }
 

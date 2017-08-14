@@ -653,6 +653,7 @@ CREATE TABLE crdb_internal.%s (
   client_address     STRING,         -- the address of the client that issued the query
   application_name   STRING,         -- the name of the application as per SET application_name
   active_queries     STRING,         -- the currently running queries as SQL
+  last_active_query  STRING,         -- the query that finished last on this session as SQL
   session_start      TIMESTAMP,      -- the time when the session was opened
   oldest_query_start TIMESTAMP,      -- the time when the oldest query in the session was started
   kv_txn             STRING          -- the ID of the current KV transaction
@@ -722,6 +723,7 @@ func populateSessionsTable(
 			parser.NewDString(session.ClientAddress),
 			parser.NewDString(session.ApplicationName),
 			parser.NewDString(activeQueries.String()),
+			parser.NewDString(session.LastActiveQuery),
 			parser.MakeDTimestamp(session.Start, time.Microsecond),
 			oldestStartDatum,
 			kvTxnIDDatum,
