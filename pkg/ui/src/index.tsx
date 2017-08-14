@@ -46,6 +46,7 @@ import Network from "src/views/reports/containers/network";
 import Nodes from "src/views/reports/containers/nodes";
 import Certificates from "src/views/reports/containers/certificates";
 import Range from "src/views/reports/containers/range";
+import Debug from "src/views/reports/containers/debug";
 
 import { alertDataSync } from "src/redux/alerts";
 
@@ -82,6 +83,7 @@ ReactDOM.render(
         </Route>
         <Route path="queryplan" component={ QueryPlan } />
         <Route path="clusterviz" component={ ClusterViz } />
+        <Route path="debug" component={ Debug } />
         <Route path="reports">
           <Route path="problemranges" component={ ProblemRanges } />
           <Route path="network" component={ Network } />
