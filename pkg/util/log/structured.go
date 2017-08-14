@@ -151,8 +151,9 @@ func addStructured(ctx context.Context, s Severity, depth int, format string, ar
 
 		// We load the ReportingSettings from the a global singleton in this
 		// call path. See the singleton's comment for a rationale.
-		reportingSettings := (ReportingSettingsSingleton.Load()).(*ReportingSettings)
-		sendCrashReport(ctx, *reportingSettings, reportable, depth+1)
+		if reportingSettings, ok := (ReportingSettingsSingleton.Load()).(*ReportingSettings); ok {
+			sendCrashReport(ctx, *reportingSettings, reportable, depth+1)
+		}
 	}
 	// MakeMessage already added the tags when forming msg, we don't want
 	// eventInternal to prepend them again.
