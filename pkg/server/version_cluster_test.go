@@ -84,7 +84,9 @@ func (th *testClusterWithHelpers) mustSetVersion(i int, version string) {
 // len(versions) servers that each run at MinSupportedVersion=v[0] and
 // ServerVersion=v[1] (i.e. they identify as a binary that can run with
 // at least a v[0] mixed cluster and is itself v[1]).
-func setupMixedCluster(t *testing.T, bootstrapVersion cluster.ClusterVersion, versions [][2]string) testClusterWithHelpers {
+func setupMixedCluster(
+	t *testing.T, bootstrapVersion cluster.ClusterVersion, versions [][2]string,
+) testClusterWithHelpers {
 	serverArgsPerNode := map[int]base.TestServerArgs{}
 	for i, v := range versions {
 		st := cluster.MakeClusterSettings(roachpb.MustParseVersion(v[0]), roachpb.MustParseVersion(v[1]))
@@ -205,8 +207,8 @@ func TestClusterVersionBootstrapStrict(t *testing.T) {
 
 	// Four nodes that are all strictly version X without accepting anything else.
 	for _, versions := range [][][2]string{
-		[][2]string{{"1.1", "1.1"}, {"1.1", "1.1"}, {"1.1", "1.1"}, {"1.1", "1.1"}},
-		[][2]string{{"4.7", "4.7"}, {"4.7", "4.7"}, {"4.7", "4.7"}, {"4.7", "4.7"}},
+		{{"1.1", "1.1"}, {"1.1", "1.1"}, {"1.1", "1.1"}, {"1.1", "1.1"}},
+		{{"4.7", "4.7"}, {"4.7", "4.7"}, {"4.7", "4.7"}, {"4.7", "4.7"}},
 	} {
 		func() {
 			bootstrapVersion := cluster.ClusterVersion{

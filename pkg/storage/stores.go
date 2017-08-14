@@ -61,7 +61,9 @@ var _ gossip.Storage = &Stores{} // Stores implements the gossip.Storage interfa
 
 // NewStores returns a local-only sender which directly accesses
 // a collection of stores.
-func NewStores(ambient log.AmbientContext, clock *hlc.Clock, minVersion, serverVersion roachpb.Version) *Stores {
+func NewStores(
+	ambient log.AmbientContext, clock *hlc.Clock, minVersion, serverVersion roachpb.Version,
+) *Stores {
 	return &Stores{
 		AmbientContext:      ambient,
 		clock:               clock,

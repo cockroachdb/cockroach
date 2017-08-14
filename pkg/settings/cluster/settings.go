@@ -745,7 +745,9 @@ func (sv *stringedVersion) String() string {
 	return sv.MinimumVersion.String()
 }
 
-func versionTransformer(minSupportedVersion, serverVersion roachpb.Version, defaultVersion func() ClusterVersion) settings.TransformerFn {
+func versionTransformer(
+	minSupportedVersion, serverVersion roachpb.Version, defaultVersion func() ClusterVersion,
+) settings.TransformerFn {
 	return func(curRawProto []byte, versionBump *string) (newRawProto []byte, versionStringer interface{}, _ error) {
 		defer func() {
 			if versionStringer != nil {
