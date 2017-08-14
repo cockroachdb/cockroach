@@ -32,8 +32,8 @@ type AuthorizationAccessor interface {
 	// anyPrivilege verifies that the user has any privilege on `descriptor`.
 	anyPrivilege(descriptor sqlbase.DescriptorProto) error
 
-	// SuperUser errors if the session user is the super-user (i.e. root).
-	// Includes the named action in thhe error message.
+	// RequiresSuperUser errors if the session user isn't a super-user (i.e. root
+	// or node). Includes the named action in the error message.
 	RequireSuperUser(action string) error
 }
 
