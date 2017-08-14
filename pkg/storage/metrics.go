@@ -99,10 +99,10 @@ var (
 		Help: "Number of failed lease transfers"}
 	metaLeaseExpirationCount = metric.Metadata{
 		Name: "leases.expiration",
-		Help: "Number of replicas using expiration-based leases"}
+		Help: "Number of replica leaseholders using expiration-based leases"}
 	metaLeaseEpochCount = metric.Metadata{
 		Name: "leases.epoch",
-		Help: "Number of replicas using epoch-based leases"}
+		Help: "Number of replica leaseholders using epoch-based leases"}
 
 	// Storage metrics.
 	metaLiveBytes = metric.Metadata{

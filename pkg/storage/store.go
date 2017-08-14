@@ -3940,13 +3940,13 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		}
 		if metrics.Leaseholder {
 			leaseHolderCount++
-		}
-		switch metrics.LeaseType {
-		case roachpb.LeaseNone:
-		case roachpb.LeaseExpiration:
-			leaseExpirationCount++
-		case roachpb.LeaseEpoch:
-			leaseEpochCount++
+			switch metrics.LeaseType {
+			case roachpb.LeaseNone:
+			case roachpb.LeaseExpiration:
+				leaseExpirationCount++
+			case roachpb.LeaseEpoch:
+				leaseEpochCount++
+			}
 		}
 		if metrics.Quiescent {
 			quiescentCount++
