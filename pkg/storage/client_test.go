@@ -122,7 +122,7 @@ func createTestStoreWithEngine(
 		nodeDesc.NodeID, rpcContext, server, stopper, metric.NewRegistry(),
 	)
 	storeCfg.ScanMaxIdleTime = 1 * time.Second
-	stores := storage.NewStores(ac, storeCfg.Clock)
+	stores := storage.NewStores(ac, storeCfg.Clock, storeCfg.Settings.Version.MinSupportedVersion, storeCfg.Settings.Version.ServerVersion)
 
 	if err := storeCfg.Gossip.SetNodeDescriptor(nodeDesc); err != nil {
 		t.Fatal(err)
@@ -155,7 +155,7 @@ func createTestStoreWithEngine(
 	store := storage.NewStore(storeCfg, eng, nodeDesc)
 	ctx := context.Background()
 	if bootstrap {
-		if err := store.Bootstrap(ctx, roachpb.StoreIdent{NodeID: 1, StoreID: 1}, cluster.BootstrapVersion()); err != nil {
+		if err := store.Bootstrap(ctx, roachpb.StoreIdent{NodeID: 1, StoreID: 1}, storeCfg.Settings.Version.BootstrapVersion()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -751,7 +751,7 @@ func (m *multiTestContext) addStore(idx int) {
 		if err := store.Bootstrap(ctx, roachpb.StoreIdent{
 			NodeID:  roachpb.NodeID(idx + 1),
 			StoreID: roachpb.StoreID(idx + 1),
-		}, cluster.BootstrapVersion()); err != nil {
+		}, cfg.Settings.Version.BootstrapVersion()); err != nil {
 			m.t.Fatal(err)
 		}
 
@@ -764,7 +764,7 @@ func (m *multiTestContext) addStore(idx int) {
 		}
 	}
 
-	sender := storage.NewStores(ambient, clock)
+	sender := storage.NewStores(ambient, clock, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion)
 	sender.AddStore(store)
 	storesServer := storage.MakeServer(&roachpb.NodeDescriptor{NodeID: nodeID}, sender)
 	storage.RegisterConsistencyServer(grpcServer, storesServer)

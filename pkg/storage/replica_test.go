@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -169,7 +168,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 			ClusterID: uuid.MakeV4(),
 			NodeID:    1,
 			StoreID:   1,
-		}, cluster.BootstrapVersion()); err != nil {
+		}, cfg.Settings.Version.BootstrapVersion()); err != nil {
 			t.Fatal(err)
 		}
 		// Now that we have our actual store, monkey patch the sender used in cfg.DB.

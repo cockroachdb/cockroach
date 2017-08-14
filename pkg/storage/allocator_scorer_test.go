@@ -945,7 +945,7 @@ func TestBalanceScore(t *testing.T) {
 func TestRebalanceConvergesOnMean(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	st := cluster.MakeClusterSettings()
+	st := cluster.MakeTestingClusterSettings()
 
 	const diskCapacity = 2000
 	storeList := StoreList{

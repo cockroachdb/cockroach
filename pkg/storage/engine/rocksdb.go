@@ -362,7 +362,7 @@ func newMemRocksDB(
 	attrs roachpb.Attributes, cache RocksDBCache, MaxSizeBytes int64,
 ) (*RocksDB, error) {
 	// FIXME(tschottdorf): should be passed in.
-	st := cluster.MakeClusterSettings()
+	st := cluster.MakeClusterSettings(cluster.BinaryServerVersion, cluster.BinaryServerVersion)
 	r := &RocksDB{
 		cfg: RocksDBConfig{
 			RocksDBSettings: st.RocksDBSettings,

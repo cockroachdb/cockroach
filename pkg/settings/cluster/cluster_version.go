@@ -17,14 +17,14 @@ package cluster
 import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
 var (
-	// MinimumSupportedVersion is the earliest version of data supported
-	// by this binary. If this binary is started using a store that has
-	// data marked with an earlier version than MinimumSupportedVersion,
-	// then the binary will exit with an error.
-	MinimumSupportedVersion = Version1_0
+	// BinaryMinimumSupportedVersion is the earliest version of data supported
+	// by this binary. If this binary is started using a store that has data
+	// marked with an earlier version than BinaryMinimumSupportedVersion, then
+	// the binary will exit with an error.
+	BinaryMinimumSupportedVersion = Version1_0
 
-	// ServerVersion is the version of this binary.
-	ServerVersion = Version1_1
+	// BinaryServerVersion is the version of this binary.
+	BinaryServerVersion = Version1_1
 )
 
 // List all historical versions here in reverse chronological order, with
@@ -48,12 +48,3 @@ var (
 	// this version is used.
 	Version1_0 = roachpb.Version{Major: 1}
 )
-
-// BootstrapVersion is the version that a new cluster bootstrapped from this
-// binary should have.
-func BootstrapVersion() ClusterVersion {
-	return ClusterVersion{
-		UseVersion:     ServerVersion,
-		MinimumVersion: ServerVersion,
-	}
-}

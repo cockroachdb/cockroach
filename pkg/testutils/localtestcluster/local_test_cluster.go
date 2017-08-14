@@ -103,7 +103,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSende
 	ltc.Eng = engine.NewInMem(roachpb.Attributes{}, 50<<20)
 	ltc.Stopper.AddCloser(ltc.Eng)
 
-	ltc.Stores = storage.NewStores(ambient, ltc.Clock)
+	ltc.Stores = storage.NewStores(ambient, ltc.Clock, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion)
 
 	ltc.Sender = initSender(cfg.Settings, nodeDesc, ambient.Tracer, ltc.Clock, ltc.Latency, ltc.Stores, ltc.Stopper,
 		ltc.Gossip)
@@ -149,11 +149,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSende
 	ltc.Store = storage.NewStore(cfg, ltc.Eng, nodeDesc)
 	ctx := context.TODO()
 
-	bootstrapVersion := cluster.BootstrapVersion()
-	if ltc.StoreTestingKnobs != nil && ltc.StoreTestingKnobs.BootstrapVersion != nil {
-		bootstrapVersion = *ltc.StoreTestingKnobs.BootstrapVersion
-	}
-	if err := ltc.Store.Bootstrap(ctx, roachpb.StoreIdent{NodeID: nodeID, StoreID: 1}, bootstrapVersion); err != nil {
+	if err := ltc.Store.Bootstrap(ctx, roachpb.StoreIdent{NodeID: nodeID, StoreID: 1}, cfg.Settings.Version.BootstrapVersion()); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
 

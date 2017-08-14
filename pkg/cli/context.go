@@ -58,7 +58,7 @@ type cliContext struct {
 }
 
 var serverCfg = func() server.Config {
-	st := cluster.MakeClusterSettings()
+	st := cluster.MakeClusterSettings(cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion)
 	// The server package has its own reference to the singleton for use in the
 	// /debug/requests handler.
 	server.ClusterSettings = st
