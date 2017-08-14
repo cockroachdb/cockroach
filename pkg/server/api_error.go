@@ -26,10 +26,11 @@ var errAPIInternalError = grpc.Errorf(
 	"An internal server error has occurred. Please check your CockroachDB logs for more details.",
 )
 
-// apiError logs the provided error and returns an error that should be returned
-// by the RPC endpoint method. This should be used to prevent internal server
-// errors from returning messages to the browser.
-func apiError(ctx context.Context, err error) error {
+// apiInternalError should be used to wrap server-side errors during API
+// requests. This method records the contents of the error to the server log,
+// and returns a standard GRPC error which is appropriate to return to the
+// client.
+func apiInternalError(ctx context.Context, err error) error {
 	log.ErrorfDepth(ctx, 1, "%s", err)
 	return errAPIInternalError
 }
