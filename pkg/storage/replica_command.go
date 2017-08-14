@@ -31,7 +31,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -3974,139 +3973,46 @@ func TestingRelocateRange(
 func (r *Replica) adminScatter(
 	ctx context.Context, args roachpb.AdminScatterRequest,
 ) (roachpb.AdminScatterResponse, error) {
-	var desc *roachpb.RangeDescriptor
-	var zone config.ZoneConfig
-	var err error
-
-	refreshDescAndZone := func() error {
-		desc = r.Desc()
-
-		sysCfg, ok := r.store.cfg.Gossip.GetSystemConfig()
-		if !ok {
-			return errors.New("system config not yet available")
-		}
-		if zone, err = sysCfg.GetZoneConfigForKey(desc.StartKey); err != nil {
-			return err
-		}
-
-		return nil
+	sysCfg, ok := r.store.cfg.Gossip.GetSystemConfig()
+	if !ok {
+		log.Infof(ctx, "scatter failed (system config not yet available)")
+		return roachpb.AdminScatterResponse{}, errors.New("system config not yet available")
 	}
 
-	if err := refreshDescAndZone(); err != nil {
-		return roachpb.AdminScatterResponse{}, err
-	}
-
-	// Step 1. Rebalance by adding replicas of this range to the stores the
-	// allocator recommends, if any. It's unlikely that the allocator would
-	// suggest more than zone.NumReplicas rebalance targets--that would indicate
-	// the allocator had previously given us suggestions that did not balance the
-	// cluster--but we cap the number of replicas we'll try to add at
-	// zone.NumReplicas just in case.
-	//
-	// TODO(benesch): This causes overreplication. Ideally, we'd wait for the
-	// replicate queue to downreplicate after each ADD_REPLICA command, but this
-	// practically guarantees that, for at least some ranges, we'll remove our own
-	// replica first, after which we can no longer issue ADD_REPLICA commands.
-	for i := int32(0); i < zone.NumReplicas; i++ {
-		if err = refreshDescAndZone(); err != nil {
-			break
-		}
-
-		rangeInfo := rangeInfoForRepl(r, desc)
-		targetStore := r.store.allocator.RebalanceTarget(
-			ctx, zone.Constraints, rangeInfo, storeFilterNone)
-		if targetStore == nil {
-			if log.V(2) {
-				log.Infof(ctx, "scatter: no rebalance targets found on try %d, moving on", i)
-			}
-			break
-		} else if log.V(2) {
-			log.Infof(ctx, "scatter: found rebalance target %d: %v", i, targetStore)
-		}
-		replicationTarget := roachpb.ReplicationTarget{
-			NodeID:  targetStore.Node.NodeID,
-			StoreID: targetStore.StoreID,
-		}
-
-		retryOpts := retry.Options{
-			InitialBackoff:      50 * time.Millisecond,
-			MaxRetries:          5,
-			RandomizationFactor: .3,
-		}
-		for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
-			if err = r.changeReplicas(
-				ctx, roachpb.ADD_REPLICA, replicationTarget, desc, SnapshotRequest_REBALANCE,
-			); err == nil {
-				break
-			} else if log.V(2) {
-				log.Infof(ctx, "scatter: unable to replicate to %v: %s", replicationTarget, err)
-			}
-		}
-		if err != nil {
-			switch errors.Cause(err).(type) {
-			case *roachpb.ConditionFailedError:
-			default:
-				return roachpb.AdminScatterResponse{}, err
-			}
-		}
-		if ctx.Err() != nil {
-			return roachpb.AdminScatterResponse{}, ctx.Err()
-		}
-	}
-
-	// Step 2. Transfer our lease away, if the allocator wants us to.
+	rq := r.store.replicateQueue
 	retryOpts := retry.Options{
-		InitialBackoff:      50 * time.Millisecond,
-		MaxBackoff:          time.Second,
-		MaxRetries:          5,
-		RandomizationFactor: .3,
+		InitialBackoff: 50 * time.Millisecond,
+		MaxBackoff:     1 * time.Second,
+		Multiplier:     2,
+		MaxRetries:     5,
 	}
+
+	// Loop until the replicate queue decides there is nothing left to do for the
+	// range. Note that we disable lease transfers until the final step as
+	// transferring the lease prevents any further action on this node.
+	var allowLeaseTransfer bool
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
-		lease, _ := r.getLease()
-		if !r.IsLeaseValid(lease, r.store.Clock().Now()) {
-			// We assume that, if we no longer have the lease, the replicate queue has
-			// already transferred it away to balance the cluster, so we move on.
-			break
+		canTransferLease := func() bool { return false }
+		if allowLeaseTransfer {
+			canTransferLease = func() bool { return true }
 		}
-
-		if err = refreshDescAndZone(); err != nil {
-			continue
-		}
-
-		candidates := filterBehindReplicas(r.RaftStatus(), desc.Replicas)
-		target := r.store.allocator.TransferLeaseTarget(
-			ctx,
-			zone.Constraints,
-			candidates,
-			r.store.StoreID(),
-			desc.RangeID,
-			r.leaseholderStats,
-			true, /* checkTransferLeaseSource */
-			true, /* checkCandidateFullness */
-			true, /* alwaysAllowDecisionWithoutStats */
-		)
-
-		if target == (roachpb.ReplicaDescriptor{}) {
-			if log.V(2) {
-				log.Infof(ctx, "scatter: no lease transfer targets found, moving on")
+		requeue, err := rq.processOneChange(ctx, r, sysCfg, canTransferLease)
+		if err != nil {
+			if IsSnapshotError(err) {
+				continue
 			}
-			r.store.replicateQueue.MaybeAdd(r, r.store.Clock().Now())
 			break
-		} else if log.V(2) {
-			log.Infof(ctx, "scatter: attempting to transfer lease to s%d", target.StoreID)
 		}
-
-		if err = r.AdminTransferLease(ctx, target.StoreID); err != nil && log.V(2) {
-			log.Infof(ctx, "scatter: unable to transfer lease to s%d: %s", target.StoreID, err)
+		if !requeue {
+			if allowLeaseTransfer {
+				break
+			}
+			allowLeaseTransfer = true
 		}
-	}
-	if err != nil {
-		return roachpb.AdminScatterResponse{}, err
-	}
-	if ctx.Err() != nil {
-		return roachpb.AdminScatterResponse{}, ctx.Err()
+		re.Reset()
 	}
 
+	desc := r.Desc()
 	return roachpb.AdminScatterResponse{
 		Ranges: []roachpb.AdminScatterResponse_Range{{
 			Span: roachpb.Span{
