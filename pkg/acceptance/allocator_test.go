@@ -14,49 +14,8 @@
 
 package acceptance
 
-// All tests in this file are remote tests that use Terrafarm to manage
-// and run tests against dedicated test clusters.
-//
-// Required setup:
-// 1. Have an Azure account.
-// 2. Passphrase-less SSH key in ~/.ssh/{azure,azure.pub}.
-// 3. Set the ARM_SUBSCRIPTION_ID, ARM_CLIENT_ID, ARM_CLIENT_SECRET, and
-//    ARM_TENANT_ID variables as documented here:
-//    https://www.terraform.io/docs/providers/azurerm/#argument-reference
-//
-// Example use:
-//
-// make test \
-//	 TESTTIMEOUT=48h \
-//	 PKG=./pkg/acceptance \
-//	 TESTS='^TestRebalance_3To5Small$$' \
-//	 TESTFLAGS='-v -remote -key-name azure -cwd terraform/azure -tf.keep-cluster=failed'
-//
-// Things to note:
-// - You must use an SSH key without a passphrase. This is a Terraform
-//   requirement.
-// - If you want to manually fiddle with a test cluster, start the test with
-//   `-tf.keep-cluster=failed". After the cluster has been created, press
-//   Control-C and the cluster will remain up.
-// - These tests rely on a specific Terraform config that's specified using the
-//   -cwd test flag.
-// - You *must* set the TESTTIMEOUT high enough for any of these tests to
-//   finish. To be really safe, specify a timeout of at least 24 hours.
-// - There are various flags that start with `tf.` that control the
-//   of Terrafarm and allocator tests, respectively. For example, you can add
-//   "-tf.cockroach-binary" to TESTFLAGS to specify a custom Linux CockroachDB
-//   binary. If omitted, your test will use the latest CircleCI Linux build.
-//   Note that the location has to be specified relative to the terraform
-//   working directory, so typically `-tf.cockroach-binary=../../cockroach`.
-//   This must be a linux binary; on a mac you must build with
-//   `build/builder.sh make build`.
-//
-// Troubleshooting:
-// - The minimum recommended version of Terraform is 0.7.2. If you see strange
-//   Terraform errors, upgrade your install of Terraform. Terraform 0.8.x or
-//   later might not work because of breaking changes to Terraform.
-// - Adding `-tf.keep-cluster=always` to your TESTFLAGS allows the cluster to
-//   stay around after the test completes.
+// Running these tests is best done using build/teamcity-nightly-
+// acceptance.sh. See instructions therein.
 
 import (
 	gosql "database/sql"
@@ -184,10 +143,10 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 	at.f.Assert(ctx, t)
 
 	log.Infof(ctx, "starting load on cluster")
-	if err := at.f.StartLoad(ctx, "block_writer", *flagCLTWriters); err != nil {
+	if err := at.f.StartLoad(ctx, "block_writer"); err != nil {
 		t.Fatal(err)
 	}
-	if err := at.f.StartLoad(ctx, "photos", *flagCLTWriters); err != nil {
+	if err := at.f.StartLoad(ctx, "photos"); err != nil {
 		t.Fatal(err)
 	}
 

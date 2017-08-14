@@ -17,6 +17,12 @@ provider "azurerm" {
   #
   # See https://www.terraform.io/docs/providers/azurerm to understand the Azure
   # permissions needed to run Terraform against it.
+
+  version = "~> 0.1"
+}
+
+provider "null" {
+  version = "~> 0.1"
 }
 
 #
@@ -191,17 +197,14 @@ resource "null_resource" "cockroach-runner" {
   }
 
   provisioner "file" {
-    # If no binary is specified, we'll copy /dev/null (always 0 bytes) to the
-    # instance. The "remote-exec" block will then overwrite that. There's no
-    # such thing as conditional file copying in Terraform, so we fake it.
-    source = "${coalesce(var.cockroach_binary, "/dev/null")}"
+    source = "${var.cockroach_binary}"
     destination = "/home/ubuntu/cockroach"
   }
 
   # Launch CockroachDB.
   provisioner "remote-exec" {
     inline = [
-      "chmod 755 cockroach nodectl disable-hyperv-timesync.sh",
+      "chmod +x cockroach nodectl disable-hyperv-timesync.sh",
       # For consistency with other Terraform configs, we create the store in
       # /mnt/data0.
       "sudo mkdir /mnt/data0",
@@ -217,15 +220,12 @@ resource "null_resource" "cockroach-runner" {
       "curl -sS https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -",
       "sudo apt-get -qqy update >/dev/null",
       "sudo apt-get -qqy install google-cloud-sdk >/dev/null",
-      # Install CockroachDB.
-      "mkdir /mnt/data0/logs",
-      "ln -sf /mnt/data0/logs logs",
-      # Install CockroachDB.
-      "[ $(stat --format=%s cockroach) -ne 0 ] || curl -sfSL https://edge-binaries.cockroachdb.com/cockroach/cockroach.linux-gnu-amd64.${var.cockroach_sha} -o cockroach",
-      "chmod +x cockroach",
       # Disable hypervisor clock sync, because it can cause an unrecoverable
       # amount of clock skew. This also forces an NTP sync.
       "./disable-hyperv-timesync.sh",
+      # Send logs to local SSD.
+      "mkdir /mnt/data0/logs",
+      "ln -sf /mnt/data0/logs logs",
       # Install load generators.
       "curl -sfSL https://edge-binaries.cockroachdb.com/examples-go/block_writer.${var.block_writer_sha} -o block_writer",
       "chmod +x block_writer",

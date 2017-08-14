@@ -16,6 +16,7 @@ package terrafarm
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"io"
 	"net"
@@ -120,19 +121,31 @@ func (f *Farmer) Resize(nodes int) error {
 		f.nodes = f.nodes[:nodes]
 	}
 
-	args := []string{
-		fmt.Sprintf("-var=num_instances=\"%d\"", nodes),
+	if stdout, stderr, err := f.run("terraform", "init"); err != nil {
+		return errors.Wrapf(err, "failed: %s\nstdout:\n%s\nstderr:\n%s", "terraform init", stdout, stderr)
 	}
 
-	if nodes == 0 {
-		args = f.appendDefaults(append([]string{"destroy", "--force"}, args...))
-	} else {
-		args = f.appendDefaults(append([]string{"apply"}, args...))
-
-		if len(f.CockroachBinary) > 0 {
-			args = append(args, fmt.Sprintf(`-var=cockroach_binary="%s"`, f.CockroachBinary))
+	args := []string{"destroy", "--force"}
+	if nodes > 0 {
+		if _, err := os.Stat(f.CockroachBinary); err != nil {
+			return err
+		}
+		args = []string{
+			"apply",
+			"-input=false",
+			fmt.Sprintf("-var=cockroach_binary=%s", f.CockroachBinary),
 		}
 	}
+
+	args = append(
+		args,
+		"-no-color",
+		fmt.Sprintf("-state=%s", f.StateFile),
+		fmt.Sprintf("-var=key_name=%s", f.KeyName),
+		fmt.Sprintf("-var=num_instances=%d", nodes),
+		fmt.Sprintf("-var=prefix=%s", f.Prefix),
+	)
+
 	if stdout, stderr, err := f.run("terraform", args...); err != nil {
 		return errors.Wrapf(err, "failed: %s %s\nstdout:\n%s\nstderr:\n%s", "terraform", args, stdout, stderr)
 	}
@@ -384,7 +397,7 @@ func (f *Farmer) Assert(ctx context.Context, t testing.TB) {
 			if pid == node.cockroachPID {
 				continue
 			}
-			t.Errorf("unexpected cockroach pid %s; expected %s", pid, node.cockroachPID)
+			t.Errorf("unexpected cockroach pid %s on node %d; expected %s", pid, i, node.cockroachPID)
 		}
 	}
 }
@@ -575,9 +588,14 @@ func (f *Farmer) logf(format string, args ...interface{}) {
 	}
 }
 
+var flagCLTWriters = flag.Int("clt.writers", -1, "# of load generators to spawn (defaults to # of nodes)")
+
 // StartLoad starts n loadGenerator processes.
-func (f *Farmer) StartLoad(ctx context.Context, loadGenerator string, n int) error {
-	if n > f.NumNodes() {
+func (f *Farmer) StartLoad(ctx context.Context, loadGenerator string) error {
+	n := *flagCLTWriters
+	if n == -1 {
+		n = f.NumNodes()
+	} else if n > f.NumNodes() {
 		return errors.Errorf("writers (%d) > nodes (%d)", n, f.NumNodes())
 	}
 

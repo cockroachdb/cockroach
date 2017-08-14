@@ -76,10 +76,6 @@ func init() {
 		"keep the cluster after the test, either 'always', 'never', or 'failed'")
 
 	flag.Parse()
-
-	if *flagCLTWriters == -1 {
-		*flagCLTWriters = *flagNodes
-	}
 }
 
 var flagDuration = flag.Duration("d", cluster.DefaultDuration, "duration to run the test")
@@ -106,8 +102,6 @@ var flagTFReuseCluster = flag.String("reuse", "",
 )
 
 var flagTFKeepCluster = keepClusterVar(terrafarm.KeepClusterNever) // see init()
-var flagTFCockroachBinary = flag.String("tf.cockroach-binary", "",
-	"path to custom CockroachDB binary to use for allocator tests")
 var flagTFCockroachFlags = flag.String("tf.cockroach-flags", "",
 	"command-line flags to pass to cockroach for allocator tests")
 var flagTFCockroachEnv = flag.String("tf.cockroach-env", "",
@@ -116,10 +110,6 @@ var flagTFCockroachEnv = flag.String("tf.cockroach-env", "",
 // Allocator test flags.
 var flagATMaxStdDev = flag.Float64("at.std-dev", 10,
 	"maximum standard deviation of replica counts")
-
-// continuousLoadTest (CLT) flags.
-var flagCLTWriters = flag.Int("clt.writers", -1,
-	"# of load generators to spawn (defaults to # of nodes)")
 var flagCLTMinQPS = flag.Float64("clt.min-qps", 5.0,
 	"fail load tests when queries per second drops below this during a health check interval")
 
@@ -292,7 +282,7 @@ func MakeFarmer(t testing.TB, prefix string, stopper *stop.Stopper) *terrafarm.F
 		Cwd:             *flagCwd,
 		LogDir:          logDir,
 		KeyName:         *flagKeyName,
-		CockroachBinary: *flagTFCockroachBinary,
+		CockroachBinary: *cluster.CockroachBinary,
 		CockroachFlags:  stores + " " + *flagTFCockroachFlags,
 		CockroachEnv:    cockroachEnv,
 		Prefix:          name,
