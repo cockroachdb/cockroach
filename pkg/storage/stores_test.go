@@ -351,7 +351,7 @@ func TestStoresGossipStorageReadLatest(t *testing.T) {
 	}
 }
 
-// TestStoresClusterVersionReadWrite verifies that the cluster version is
+// TestStoresClusterVersionWriteSynthesize verifies that the cluster version is
 // written to all stores and that missing versions are filled in appropriately.
 func TestStoresClusterVersionWriteSynthesize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -491,7 +491,7 @@ func TestStoresClusterVersionWriteSynthesize(t *testing.T) {
 	}
 }
 
-// TestStoresPersistedClusterVersionMismatch verifies an error occurs when
+// TestStoresClusterVersionIncompatible verifies an error occurs when
 // setting up the cluster version from stores that are incompatible with the
 // running binary.
 func TestStoresClusterVersionIncompatible(t *testing.T) {
