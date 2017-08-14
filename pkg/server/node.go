@@ -191,7 +191,7 @@ func bootstrapCluster(
 	defer tr.Close()
 	cfg.AmbientCtx.Tracer = tr
 	// Create a KV DB with a local sender.
-	stores := storage.NewStores(cfg.AmbientCtx, cfg.Clock)
+	stores := storage.NewStores(cfg.AmbientCtx, cfg.Clock, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion)
 	sender := kv.NewTxnCoordSender(cfg.AmbientCtx, cfg.Settings, stores, cfg.Clock, false, stopper, txnMetrics)
 	cfg.DB = client.NewDB(sender, cfg.Clock)
 	cfg.Transport = storage.NewDummyRaftTransport(cfg.Settings)
@@ -254,7 +254,7 @@ func NewNode(
 		stopper:     stopper,
 		recorder:    recorder,
 		metrics:     makeNodeMetrics(reg, cfg.HistogramWindowInterval),
-		stores:      storage.NewStores(cfg.AmbientCtx, cfg.Clock),
+		stores:      storage.NewStores(cfg.AmbientCtx, cfg.Clock, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion),
 		txnMetrics:  txnMetrics,
 		eventLogger: eventLogger,
 	}
@@ -285,7 +285,7 @@ func (n *Node) initDescriptor(addr net.Addr, attrs roachpb.Attributes, locality 
 	n.Descriptor.Address = util.MakeUnresolvedAddr(addr.Network(), addr.String())
 	n.Descriptor.Attrs = attrs
 	n.Descriptor.Locality = locality
-	n.Descriptor.ServerVersion = cluster.ServerVersion
+	n.Descriptor.ServerVersion = n.storeCfg.Settings.Version.ServerVersion
 }
 
 // initNodeID updates the internal NodeDescriptor with the given ID. If zero is

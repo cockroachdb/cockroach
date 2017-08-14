@@ -515,7 +515,7 @@ type ListenError struct {
 }
 
 func inspectEngines(
-	ctx context.Context, engines []engine.Engine,
+	ctx context.Context, engines []engine.Engine, minVersion, serverVersion roachpb.Version,
 ) (
 	bootstrappedEngines []engine.Engine,
 	emptyEngines []engine.Engine,
@@ -533,7 +533,7 @@ func inspectEngines(
 		bootstrappedEngines = append(bootstrappedEngines, engine)
 	}
 
-	cv, err := storage.SynthesizeClusterVersionFromEngines(ctx, bootstrappedEngines, cluster.MinimumSupportedVersion, cluster.ServerVersion)
+	cv, err := storage.SynthesizeClusterVersionFromEngines(ctx, bootstrappedEngines, minVersion, serverVersion)
 	if err != nil {
 		return nil, nil, cluster.ClusterVersion{}, err
 	}
@@ -767,7 +767,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.stopper.AddCloser(&s.engines)
 
-	if bootstrappedEngines, _, _, err := inspectEngines(ctx, s.engines); err != nil {
+	if bootstrappedEngines, _, _, err := inspectEngines(ctx, s.engines, s.cfg.Settings.Version.MinSupportedVersion, s.cfg.Settings.Version.ServerVersion); err != nil {
 		return errors.Wrap(err, "inspecting engines")
 	} else if len(bootstrappedEngines) > 0 {
 		// We might have to sleep a bit to protect against this node producing non-
@@ -798,7 +798,7 @@ func (s *Server) Start(ctx context.Context) error {
 		// empty, then this node can bootstrap a new cluster. We disallow
 		// this if this node is being started with itself specified as a
 		// --join host, because that's too likely to be operator error.
-		bootstrapVersion := cluster.BootstrapVersion()
+		bootstrapVersion := s.cfg.Settings.Version.BootstrapVersion()
 		if s.cfg.TestingKnobs.Store != nil {
 			if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs); ok && storeKnobs.BootstrapVersion != nil {
 				bootstrapVersion = *storeKnobs.BootstrapVersion
@@ -830,7 +830,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// We ran this before, but might've bootstrapped in the meantime. This time
 	// we'll get the actual list of bootstrapped and empty engines.
-	bootstrappedEngines, emptyEngines, cv, err := inspectEngines(ctx, s.engines)
+	bootstrappedEngines, emptyEngines, cv, err := inspectEngines(ctx, s.engines, s.cfg.Settings.Version.MinSupportedVersion, s.cfg.Settings.Version.ServerVersion)
 	if err != nil {
 		return errors.Wrap(err, "inspecting engines")
 	}

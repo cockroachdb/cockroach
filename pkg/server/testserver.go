@@ -98,7 +98,7 @@ func makeTestConfig(st *cluster.Settings) Config {
 func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	st := params.Settings
 	if params.Settings == nil {
-		st = cluster.MakeClusterSettings()
+		st = cluster.MakeClusterSettings(cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion)
 	}
 	cfg := makeTestConfig(st)
 	cfg.TestingKnobs = params.Knobs

@@ -60,7 +60,7 @@ import (
 // not nil, the gossip bootstrap address is set to gossipBS.
 func createTestNode(
 	addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T,
-) (*grpc.Server, net.Addr, *hlc.Clock, *Node, *stop.Stopper) {
+) (*grpc.Server, net.Addr, storage.StoreConfig, *Node, *stop.Stopper) {
 	cfg := storage.TestStoreConfig(nil)
 	st := cfg.Settings
 
@@ -141,7 +141,7 @@ func createTestNode(
 		)
 		cfg.Gossip.Start(ln.Addr(), filtered)
 	}
-	return grpcServer, ln.Addr(), cfg.Clock, node, stopper
+	return grpcServer, ln.Addr(), cfg, node, stopper
 }
 
 // createAndStartTestNode creates a new test node and starts it. The server and node are returned.
@@ -152,8 +152,8 @@ func createAndStartTestNode(
 	locality roachpb.Locality,
 	t *testing.T,
 ) (*grpc.Server, net.Addr, *Node, *stop.Stopper) {
-	grpcServer, addr, _, node, stopper := createTestNode(addr, engines, gossipBS, t)
-	bootstrappedEngines, newEngines, cv, err := inspectEngines(context.TODO(), engines)
+	grpcServer, addr, cfg, node, stopper := createTestNode(addr, engines, gossipBS, t)
+	bootstrappedEngines, newEngines, cv, err := inspectEngines(context.TODO(), engines, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,10 +187,11 @@ func TestBootstrapCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
+	st := cluster.MakeTestingClusterSettings()
 	if _, err := bootstrapCluster(
 		context.TODO(), storage.StoreConfig{
-			Settings: cluster.MakeTestingClusterSettings(),
-		}, []engine.Engine{e}, cluster.BootstrapVersion(), kv.MakeTxnMetrics(metric.TestSampleInterval),
+			Settings: st,
+		}, []engine.Engine{e}, st.Version.BootstrapVersion(), kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -230,8 +231,9 @@ func TestBootstrapCluster(t *testing.T) {
 func TestBootstrapNewStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	cfg := bootstrapNodeConfig()
 	if _, err := bootstrapCluster(
-		context.TODO(), bootstrapNodeConfig(), []engine.Engine{e}, cluster.BootstrapVersion(),
+		context.TODO(), cfg, []engine.Engine{e}, cfg.Settings.Version.BootstrapVersion(),
 		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
@@ -300,7 +302,7 @@ func TestNodeJoin(t *testing.T) {
 
 	cfg := bootstrapNodeConfig()
 	if _, err := bootstrapCluster(
-		context.TODO(), cfg, []engine.Engine{e}, cluster.BootstrapVersion(), kv.MakeTxnMetrics(metric.TestSampleInterval),
+		context.TODO(), cfg, []engine.Engine{e}, cfg.Settings.Version.BootstrapVersion(), kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -366,8 +368,10 @@ func TestCorruptedClusterID(t *testing.T) {
 
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
+
+	cfg := bootstrapNodeConfig()
 	if _, err := bootstrapCluster(
-		context.TODO(), bootstrapNodeConfig(), []engine.Engine{e}, cluster.BootstrapVersion(), kv.MakeTxnMetrics(metric.TestSampleInterval),
+		context.TODO(), cfg, []engine.Engine{e}, cfg.Settings.Version.BootstrapVersion(), kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -383,9 +387,9 @@ func TestCorruptedClusterID(t *testing.T) {
 	}
 
 	engines := []engine.Engine{e}
-	_, serverAddr, _, node, stopper := createTestNode(util.TestAddr, engines, nil, t)
+	_, serverAddr, cfg, node, stopper := createTestNode(util.TestAddr, engines, nil, t)
 	stopper.Stop(context.TODO())
-	bootstrappedEngines, newEngines, cv, err := inspectEngines(context.TODO(), engines)
+	bootstrappedEngines, newEngines, cv, err := inspectEngines(context.TODO(), engines, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -700,8 +704,9 @@ func TestStartNodeWithLocality(t *testing.T) {
 	testLocalityWithNewNode := func(locality roachpb.Locality) {
 		e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 		defer e.Close()
+		cfg := bootstrapNodeConfig()
 		if _, err := bootstrapCluster(
-			context.TODO(), bootstrapNodeConfig(), []engine.Engine{e}, cluster.BootstrapVersion(), kv.MakeTxnMetrics(metric.TestSampleInterval),
+			context.TODO(), cfg, []engine.Engine{e}, cfg.Settings.Version.BootstrapVersion(), kv.MakeTxnMetrics(metric.TestSampleInterval),
 		); err != nil {
 			t.Fatal(err)
 		}

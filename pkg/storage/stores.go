@@ -44,8 +44,9 @@ type Stores struct {
 	log.AmbientContext
 	clock    *hlc.Clock
 	storeMap syncutil.IntMap // map[roachpb.StoreID]*Store
-	// These two versions are usually cluster.MinimumSupportedVersion and
-	// cluster.ServerVersion, respectively. They are changed in some tests.
+	// These two versions are usually cluster.BinaryMinimumSupportedVersion and
+	// cluster.BinaryServerVersion, respectively. They are changed in some
+	// tests.
 	minSupportedVersion roachpb.Version
 	serverVersion       roachpb.Version
 	mu                  struct {
@@ -60,12 +61,12 @@ var _ gossip.Storage = &Stores{} // Stores implements the gossip.Storage interfa
 
 // NewStores returns a local-only sender which directly accesses
 // a collection of stores.
-func NewStores(ambient log.AmbientContext, clock *hlc.Clock) *Stores {
+func NewStores(ambient log.AmbientContext, clock *hlc.Clock, minVersion, serverVersion roachpb.Version) *Stores {
 	return &Stores{
 		AmbientContext:      ambient,
 		clock:               clock,
-		minSupportedVersion: cluster.MinimumSupportedVersion,
-		serverVersion:       cluster.ServerVersion,
+		minSupportedVersion: minVersion,
+		serverVersion:       serverVersion,
 	}
 }
 
