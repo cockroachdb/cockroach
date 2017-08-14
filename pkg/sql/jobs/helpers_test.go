@@ -24,6 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
+func ResetResumeHooks() func() {
+	oldResumeHooks := resumeHooks
+	return func() { resumeHooks = oldResumeHooks }
+}
+
 // FakeNodeID is a dummy node ID for use in tests. It always stores 1.
 var FakeNodeID = func() *base.NodeIDContainer {
 	nodeID := base.NodeIDContainer{}
