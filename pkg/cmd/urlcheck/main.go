@@ -210,7 +210,7 @@ func main() {
 			// This test doesn't care that https certificates are invalid.
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		},
-		Timeout: 5 * time.Second,
+		Timeout: time.Minute,
 	}
 
 	for url, locs := range uniqueURLs {
@@ -220,7 +220,7 @@ func main() {
 			log.Printf("Checking %s...", url)
 			if err := checkURLWithRetries(client, url); err != nil {
 				var buf bytes.Buffer
-				fmt.Fprintf(&buf, "%s: %s\n", url, err)
+				fmt.Fprintf(&buf, "%s : %s\n", url, err)
 				for _, loc := range locs {
 					fmt.Fprintln(&buf, "    ", loc)
 				}
