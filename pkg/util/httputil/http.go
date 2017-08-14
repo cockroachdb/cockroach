@@ -48,8 +48,6 @@ const (
 	GzipEncoding = "gzip"
 )
 
-type httpHeaderFn func(header http.Header)
-
 // GetJSON uses the supplied client to GET the URL specified by the parameters
 // and unmarshals the result into response.
 func GetJSON(httpClient http.Client, path string, response proto.Message) error {
@@ -57,7 +55,7 @@ func GetJSON(httpClient http.Client, path string, response proto.Message) error 
 	if err != nil {
 		return err
 	}
-	_, err = doJSONRequest(httpClient, nil, req, response)
+	_, err = doJSONRequest(httpClient, req, response)
 	return err
 }
 
@@ -75,19 +73,18 @@ func PostJSON(httpClient http.Client, path string, request, response proto.Messa
 	if err != nil {
 		return err
 	}
-	_, err = doJSONRequest(httpClient, nil, req, response)
+	_, err = doJSONRequest(httpClient, req, response)
 	return err
 }
 
-// PostJSONWithHeaders uses the supplied client to POST request to the URL
+// PostJSONWithRequest uses the supplied client to POST request to the URL
 // specified by the parameters and unmarshals the result into response.
 //
-// The caller can provide an optional callback function that can modify outgoing
-// HTTP headers before the request is sent. Headers returned with the response
-// are returned to the caller.
-func PostJSONWithHeaders(
-	httpClient http.Client, path string, headerFn httpHeaderFn, request, response proto.Message,
-) (http.Header, error) {
+// The response is returned to the caller, though its body will have been
+// closed.
+func PostJSONWithRequest(
+	httpClient http.Client, path string, request, response proto.Message,
+) (*http.Response, error) {
 	// Hack to avoid upsetting TestProtoMarshal().
 	marshalFn := (&jsonpb.Marshaler{}).Marshal
 
@@ -100,19 +97,16 @@ func PostJSONWithHeaders(
 		return nil, err
 	}
 
-	return doJSONRequest(httpClient, headerFn, req, response)
+	return doJSONRequest(httpClient, req, response)
 }
 
 func doJSONRequest(
-	httpClient http.Client, headerFn httpHeaderFn, req *http.Request, response proto.Message,
-) (http.Header, error) {
+	httpClient http.Client, req *http.Request, response proto.Message,
+) (*http.Response, error) {
 	if timeout := httpClient.Timeout; timeout > 0 {
 		req.Header.Set("Grpc-Timeout", strconv.FormatInt(timeout.Nanoseconds(), 10)+"n")
 	}
 	req.Header.Set(AcceptHeader, JSONContentType)
-	if headerFn != nil {
-		headerFn(req.Header)
-	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -120,9 +114,9 @@ func doJSONRequest(
 	defer resp.Body.Close()
 	if contentType := resp.Header.Get(ContentTypeHeader); !(resp.StatusCode == http.StatusOK && contentType == JSONContentType) {
 		b, err := ioutil.ReadAll(resp.Body)
-		return resp.Header, errors.Errorf(
+		return resp, errors.Errorf(
 			"status: %s, content-type: %s, body: %s, error: %v", resp.Status, contentType, b, err,
 		)
 	}
-	return resp.Header, jsonpb.Unmarshal(resp.Body, response)
+	return resp, jsonpb.Unmarshal(resp.Body, response)
 }
