@@ -349,17 +349,12 @@ func (n *Node) bootstrap(
 func (n *Node) start(
 	ctx context.Context,
 	addr net.Addr,
-	engines []engine.Engine,
+	bootstrappedEngines, emptyEngines []engine.Engine,
 	attrs roachpb.Attributes,
 	locality roachpb.Locality,
+	cv cluster.ClusterVersion,
 ) error {
-
 	n.initDescriptor(addr, attrs, locality)
-
-	initEngines, bootstrapEngines, cv, err := n.inspectEngines(ctx, engines)
-	if err != nil {
-		return err
-	}
 
 	n.storeCfg.Settings.Version.OnChange(func(cv cluster.ClusterVersion) {
 		if err := n.stores.WriteClusterVersion(ctx, cv); err != nil {
@@ -372,13 +367,13 @@ func (n *Node) start(
 	}
 
 	// Initialize the stores we're going to start.
-	stores, err := n.initStores(ctx, initEngines, n.stopper)
+	stores, err := n.initStores(ctx, bootstrappedEngines, n.stopper)
 	if err != nil {
 		return err
 	}
 
 	// Initialize the stores we need to bootstrap first.
-	bootstraps, err := n.initStores(ctx, bootstrapEngines, n.stopper)
+	bootstraps, err := n.initStores(ctx, emptyEngines, n.stopper)
 	if err != nil {
 		return err
 	}
@@ -389,6 +384,8 @@ func (n *Node) start(
 
 	// Bootstrap any uninitialized stores asynchronously.
 	if len(bootstraps) > 0 {
+		log.Infof(ctx, "%s: asynchronously bootstrapping engine(s) %v", n, emptyEngines)
+
 		if err := n.stopper.RunAsyncTask(ctx, "node.Node: bootstrapping stores", func(ctx context.Context) {
 			n.bootstrapStores(ctx, bootstraps, n.stopper)
 		}); err != nil {
@@ -401,7 +398,7 @@ func (n *Node) start(
 	n.startComputePeriodicMetrics(n.stopper, n.storeCfg.MetricsSampleInterval)
 	n.startGossip(ctx, n.stopper)
 
-	log.Infof(ctx, "%s: started with %v engine(s) and attributes %v", n, engines, attrs.Attrs)
+	log.Infof(ctx, "%s: started with %v engine(s) and attributes %v", n, bootstrappedEngines, attrs.Attrs)
 	return nil
 }
 
@@ -424,32 +421,6 @@ func (n *Node) SetDraining(drain bool) error {
 		s.SetDraining(drain)
 		return nil
 	})
-}
-
-func (n *Node) inspectEngines(
-	ctx context.Context, engines []engine.Engine,
-) (
-	initEngines []engine.Engine,
-	bootstrapEngines []engine.Engine,
-	_ cluster.ClusterVersion,
-	_ error,
-) {
-	for _, engine := range engines {
-		_, err := storage.ReadStoreIdent(ctx, engine)
-		if _, notBootstrapped := err.(*storage.NotBootstrappedError); notBootstrapped {
-			bootstrapEngines = append(bootstrapEngines, engine)
-			continue
-		} else if err != nil {
-			return nil, nil, cluster.ClusterVersion{}, err
-		}
-		initEngines = append(initEngines, engine)
-	}
-
-	cv, err := storage.SynthesizeClusterVersionFromEngines(ctx, initEngines, cluster.MinimumSupportedVersion, cluster.ServerVersion)
-	if err != nil {
-		return nil, nil, cluster.ClusterVersion{}, err
-	}
-	return initEngines, bootstrapEngines, cv, nil
 }
 
 // initStores initializes the Stores map from ID to Store. Stores are

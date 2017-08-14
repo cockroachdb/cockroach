@@ -153,7 +153,11 @@ func createAndStartTestNode(
 	t *testing.T,
 ) (*grpc.Server, net.Addr, *Node, *stop.Stopper) {
 	grpcServer, addr, _, node, stopper := createTestNode(addr, engines, gossipBS, t)
-	if err := node.start(context.Background(), addr, engines, roachpb.Attributes{}, locality); err != nil {
+	bootstrappedEngines, newEngines, cv, err := inspectEngines(context.TODO(), engines)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := node.start(context.Background(), addr, bootstrappedEngines, newEngines, roachpb.Attributes{}, locality, cv); err != nil {
 		t.Fatal(err)
 	}
 	if err := WaitForInitialSplits(node.storeCfg.DB); err != nil {
@@ -381,8 +385,12 @@ func TestCorruptedClusterID(t *testing.T) {
 	engines := []engine.Engine{e}
 	_, serverAddr, _, node, stopper := createTestNode(util.TestAddr, engines, nil, t)
 	stopper.Stop(context.TODO())
+	bootstrappedEngines, newEngines, cv, err := inspectEngines(context.TODO(), engines)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := node.start(
-		context.Background(), serverAddr, engines, roachpb.Attributes{}, roachpb.Locality{},
+		context.Background(), serverAddr, bootstrappedEngines, newEngines, roachpb.Attributes{}, roachpb.Locality{}, cv,
 	); !testutils.IsError(err, "unidentified store") {
 		t.Errorf("unexpected error %v", err)
 	}
