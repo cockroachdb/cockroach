@@ -510,13 +510,16 @@ statement error pgcode 23503 foreign key violation: value \[100 'two'\] not foun
 INSERT INTO refpairs VALUES (100, 'two'), (200, 'two')
 
 statement ok
-INSERT INTO refpairs VALUES (100, 'one'), (200, 'two')
+INSERT INTO refpairs VALUES (100, 'one', 3), (200, 'two', null)
 
 statement error pgcode 23503 foreign key violation: values \[200 'two'\] in columns \[src dest\] referenced in table "refpairs"
 UPDATE pairs SET dest = 'too' WHERE id = 2
 
 statement error pgcode 23503 foreign key violation: values \[200 'two'\] in columns \[src dest\] referenced in table "refpairs"
 DELETE FROM pairs WHERE id = 2
+
+statement error pgcode 23503 foreign key violation: values \[100 'one'\] in columns \[src dest\] referenced in table "refpairs"
+DELETE FROM pairs WHERE id = 1
 
 # since PKs are handled differently than other indexes, check pk<->pk ref with no other indexes in play.
 statement ok
