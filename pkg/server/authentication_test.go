@@ -412,7 +412,7 @@ func TestAuthenticationAPIUserLogin(t *testing.T) {
 		t.Fatalf("failed to create user: %s", err)
 	}
 
-	tryLogin := func(username, password string) (http.Header, error) {
+	tryLogin := func(username, password string) (*http.Response, error) {
 		// We need to instantiate our own HTTP Request, because we must inspect
 		// the returned headers.
 		httpClient, err := ts.GetHTTPClient()
@@ -424,47 +424,33 @@ func TestAuthenticationAPIUserLogin(t *testing.T) {
 			Password: password,
 		}
 		var resp serverpb.UserLoginResponse
-		return httputil.PostJSONWithHeaders(
-			httpClient, ts.AdminURL()+authPrefix+"login", nil, &req, &resp,
+		return httputil.PostJSONWithRequest(
+			httpClient, ts.AdminURL()+authPrefix+"login", &req, &resp,
 		)
 	}
 
 	// Unsuccessful attempt. Should come back with a 401 and no "Set-Cookie"
-	headers, err := tryLogin(validUsername, "wrongpassword")
-	if !testutils.IsError(err, "status: 401") {
-		t.Fatalf("login got error %s, wanted error with 401 status", err)
-	}
-	if e := headers.Get("Set-Cookie"); e != "" {
-		t.Fatalf("bad login got Set-Cookie %s, wanted empty", e)
-	}
-
-	// Successful attempt. Should succeed and return a Set-Cookie header.
-	headers, err = tryLogin(validUsername, validPassword)
-	if err != nil {
-		t.Fatalf("good login got error %s, wanted no error", err)
-	}
-	rawCookie := headers.Get("set-cookie")
-	if rawCookie == "" {
-		t.Logf("%v", headers)
-		t.Fatalf("good login got no Set-Cookie header")
-	}
-
-	// Validate the returned cookie.
-	// Go's http package doesn't export "readCookies", so we construct a request
-	// and use the Cookies() method of that object.
-	var cookie *http.Cookie
 	{
-		header := http.Header{}
-		header.Set("cookie", rawCookie)
-		request := http.Request{Header: header}
-		var err error
-		cookie, err = request.Cookie(sessionCookieName)
-		if err != nil {
-			t.Fatalf("could not retrieve session cookie: %s", err)
+		response, err := tryLogin(validUsername, "wrongpassword")
+		if !testutils.IsError(err, "status: 401") {
+			t.Fatalf("login got error %s, wanted error with 401 status", err)
+		}
+		if cookies := response.Cookies(); len(cookies) > 0 {
+			t.Fatalf("bad login got cookies %v, wanted empty", cookies)
 		}
 	}
 
-	sessionCookie, err := decodeSessionCookie(cookie)
+	// Successful attempt. Should succeed and return a Set-Cookie header.
+	response, err := tryLogin(validUsername, validPassword)
+	if err != nil {
+		t.Fatalf("good login got error %s, wanted no error", err)
+	}
+	cookies := response.Cookies()
+	if len(cookies) == 0 {
+		t.Fatalf("good login got no cookies: %v", response)
+	}
+
+	sessionCookie, err := decodeSessionCookie(cookies[0])
 	if err != nil {
 		t.Fatalf("failed to decode session cookie: %s", err)
 	}
