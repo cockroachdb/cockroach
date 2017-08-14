@@ -42,7 +42,7 @@ Column qualifiers:
 
 `,
 		//line sql.y: 955
-		SeeAlso: `https://www.cockroachlabs.com/docs/alter-table.html
+		SeeAlso: `https://www.cockroachlabs.com/docs/stable/alter-table.html
 `,
 	},
 	//line sql.y: 966
@@ -55,7 +55,7 @@ Column qualifiers:
 ALTER VIEW [IF EXISTS] <name> RENAME TO <newname>
 `,
 		//line sql.y: 970
-		SeeAlso: `https://www.cockroachlabs.com/docs/alter-view.html
+		SeeAlso: `https://www.cockroachlabs.com/docs/stable/alter-view.html
 `,
 	},
 	//line sql.y: 977
@@ -68,7 +68,7 @@ ALTER VIEW [IF EXISTS] <name> RENAME TO <newname>
 ALTER DATABASE <name> RENAME TO <newname>
 `,
 		//line sql.y: 981
-		SeeAlso: `https://www.cockroachlabs.com/docs/alter-database.html
+		SeeAlso: `https://www.cockroachlabs.com/docs/stable/alter-database.html
 `,
 	},
 	//line sql.y: 988
@@ -87,7 +87,7 @@ Commands:
 
 `,
 		//line sql.y: 998
-		SeeAlso: `https://www.cockroachlabs.com/docs/alter-index.html
+		SeeAlso: `https://www.cockroachlabs.com/docs/stable/alter-index.html
 `,
 	},
 	//line sql.y: 1214

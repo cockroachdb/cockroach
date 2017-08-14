@@ -952,7 +952,7 @@ alter_stmt:
 //   REFERENCES <tablename> [( <colnames...> )]
 //   COLLATE <collationname>
 //
-// %SeeAlso: https://www.cockroachlabs.com/docs/alter-table.html
+// %SeeAlso: https://www.cockroachlabs.com/docs/stable/alter-table.html
 alter_table_stmt:
   alter_onetable_stmt
 | alter_split_stmt
@@ -967,7 +967,7 @@ alter_table_stmt:
 // %Category: DDL
 // %Text:
 // ALTER VIEW [IF EXISTS] <name> RENAME TO <newname>
-// %SeeAlso: https://www.cockroachlabs.com/docs/alter-view.html
+// %SeeAlso: https://www.cockroachlabs.com/docs/stable/alter-view.html
 alter_view_stmt:
   alter_rename_view_stmt
 // ALTER VIEW has its error help token here because the ALTER VIEW
@@ -978,7 +978,7 @@ alter_view_stmt:
 // %Category: DDL
 // %Text:
 // ALTER DATABASE <name> RENAME TO <newname>
-// %SeeAlso: https://www.cockroachlabs.com/docs/alter-database.html
+// %SeeAlso: https://www.cockroachlabs.com/docs/stable/alter-database.html
 alter_database_stmt:
   alter_rename_database_stmt
 // ALTER DATABASE has its error help token here because the ALTER DATABASE
@@ -995,7 +995,7 @@ alter_database_stmt:
 //   ALTER INDEX ... SPLIT AT <selectclause>
 //   ALTER INDEX ... SCATTER [ FROM ( <exprs...> ) TO ( <exprs...> ) ]
 //
-// %SeeAlso: https://www.cockroachlabs.com/docs/alter-index.html
+// %SeeAlso: https://www.cockroachlabs.com/docs/stable/alter-index.html
 alter_index_stmt:
   alter_split_index_stmt
 | alter_testing_relocate_index_stmt
