@@ -35,8 +35,8 @@ func TestMixedVersionCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const nodeCount = 4
 	bootstrapVersion := cluster.ClusterVersion{
-		UseVersion:     cluster.VersionMajorOneMinorZero,
-		MinimumVersion: cluster.VersionMajorOneMinorZero,
+		UseVersion:     cluster.Version1_0,
+		MinimumVersion: cluster.Version1_0,
 	}
 
 	serverArgs := base.TestServerArgs{
