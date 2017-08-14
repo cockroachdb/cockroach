@@ -134,7 +134,7 @@ func TestRegistryRegister(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := registry.register(42, &Job{}); !testutils.IsError(err, "already tracking job ID") {
+	if err := registry.register(42, &Job{}); !testutils.IsError(err, "job 42 is already registered") {
 		t.Fatalf("expected 'already tracking job ID', but got '%s'", err)
 	}
 
