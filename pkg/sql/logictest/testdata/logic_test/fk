@@ -506,6 +506,18 @@ refpairs  refpairs_a_b_c_idx  false   2    b       ASC        false    false
 refpairs  refpairs_a_b_c_idx  false   3    c       ASC        false    false
 refpairs  refpairs_a_b_c_idx  false   4    rowid   ASC        false    true
 
+query TT
+SHOW CREATE TABLE refpairs
+----
+refpairs  CREATE TABLE refpairs (
+    a INT NULL,
+    b STRING NULL,
+    c INT NULL,
+    CONSTRAINT fk_a_ref_pairs FOREIGN KEY (a, b) REFERENCES pairs (src, dest),
+    INDEX refpairs_a_b_c_idx (a ASC, b ASC, c ASC),
+    FAMILY "primary" (a, b, c, rowid)
+)
+
 statement error pgcode 23503 foreign key violation: value \[100 'two'\] not found in pairs@pairs_src_dest_key \[src dest\]
 INSERT INTO refpairs VALUES (100, 'two'), (200, 'two')
 
