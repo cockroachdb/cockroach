@@ -295,7 +295,8 @@ func (s *Settings) InitializeVersion(cv ClusterVersion) error {
 	if err != nil {
 		return err
 	}
-	updater := settings.MakePreservingUpdater(s.Registry)
+	// Note that we don't call `updater.ResetRemaining()`.
+	updater := settings.NewUpdater(s.Registry)
 	if err := updater.Set(keyVersionSetting, string(b), s.Version.version.Typ()); err != nil {
 		return err
 	}
@@ -723,9 +724,9 @@ func MakeClusterSettings() *Settings {
 // updates.
 func (s *Settings) MakeUpdater() settings.Updater {
 	if isManual, ok := s.Manual.Load().(bool); ok && isManual {
-		return settings.NoopUpdater{}
+		return &settings.NoopUpdater{}
 	}
-	return settings.MakeResettingUpdater(s.Registry)
+	return settings.NewUpdater(s.Registry)
 }
 
 type stringedVersion ClusterVersion

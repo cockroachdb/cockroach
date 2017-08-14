@@ -168,11 +168,11 @@ func TestCache(t *testing.T) {
 		if _, _, err := mB.Validate([]byte("takes.precedence"), &precedenceX); err != nil {
 			t.Fatal(err)
 		}
-		u := settings.MakeResettingUpdater(r)
+		u := settings.NewUpdater(r)
 		if err := u.Set("local.m", "default.XX", "m"); err != nil {
 			t.Fatal(err)
 		}
-		u.Done()
+		u.ResetRemaining()
 		if exp, act := "&{default XX}", mB.String(); exp != act {
 			t.Fatalf("wanted %q, got %q", exp, act)
 		}
@@ -260,7 +260,7 @@ func TestCache(t *testing.T) {
 	})
 
 	t.Run("read and write each type", func(t *testing.T) {
-		u := settings.MakeResettingUpdater(r)
+		u := settings.NewUpdater(r)
 		if expected, actual := 0, changes.boolTA; expected != actual {
 			t.Fatalf("expected %d, got %d", expected, actual)
 		}
@@ -346,7 +346,7 @@ func TestCache(t *testing.T) {
 			u.Set("e", "notAValidValue", "e"); !testutils.IsError(err, expected) {
 			t.Fatalf("expected '%s' != actual error '%s'", expected, err)
 		}
-		u.Done()
+		u.ResetRemaining()
 
 		if expected, actual := false, boolTA.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
@@ -396,7 +396,7 @@ func TestCache(t *testing.T) {
 
 	t.Run("any setting not included in an Updater reverts to default", func(t *testing.T) {
 		{
-			u := settings.MakeResettingUpdater(r)
+			u := settings.NewUpdater(r)
 			if err := u.Set("bool.f", settings.EncodeBool(true), "b"); err != nil {
 				t.Fatal(err)
 			}
@@ -415,7 +415,7 @@ func TestCache(t *testing.T) {
 			if err := u.Set("i.Val", settings.EncodeInt(1), "i"); err != nil {
 				t.Fatal(err)
 			}
-			u.Done()
+			u.ResetRemaining()
 		}
 
 		if expected, actual := true, boolFA.Get(); expected != actual {
@@ -423,7 +423,7 @@ func TestCache(t *testing.T) {
 		}
 		// If the updater doesn't have a key, e.g. if the setting has been deleted,
 		// Doneing it from the cache.
-		settings.MakeResettingUpdater(r).Done()
+		settings.NewUpdater(r).ResetRemaining()
 
 		if expected, actual := 2, changes.boolTA; expected != actual {
 			t.Fatalf("expected %d, got %d", expected, actual)
@@ -444,24 +444,24 @@ func TestCache(t *testing.T) {
 
 	t.Run("an invalid update to a given setting preserves its previously set value", func(t *testing.T) {
 		{
-			u := settings.MakeResettingUpdater(r)
+			u := settings.NewUpdater(r)
 			if err := u.Set("i.2", settings.EncodeInt(9), "i"); err != nil {
 				t.Fatal(err)
 			}
-			u.Done()
+			u.ResetRemaining()
 		}
 		before := i2A.Get()
 
 		// Doneing after attempting to set with wrong type preserves the current
 		// value.
 		{
-			u := settings.MakeResettingUpdater(r)
+			u := settings.NewUpdater(r)
 			if err := u.Set("i.2", settings.EncodeBool(false), "b"); !testutils.IsError(err,
 				"setting 'i.2' defined as type i, not b",
 			) {
 				t.Fatal(err)
 			}
-			u.Done()
+			u.ResetRemaining()
 		}
 
 		if expected, actual := before, i2A.Get(); expected != actual {
@@ -471,13 +471,13 @@ func TestCache(t *testing.T) {
 		// Doneing after attempting to set with the wrong type preserves the
 		// current value.
 		{
-			u := settings.MakeResettingUpdater(r)
+			u := settings.NewUpdater(r)
 			if err := u.Set("i.2", settings.EncodeBool(false), "i"); !testutils.IsError(err,
 				"strconv.Atoi: parsing \"false\": invalid syntax",
 			) {
 				t.Fatal(err)
 			}
-			u.Done()
+			u.ResetRemaining()
 		}
 
 		if expected, actual := before, i2A.Get(); expected != actual {
@@ -488,13 +488,13 @@ func TestCache(t *testing.T) {
 		// current value.
 		beforestrVal := strVal.Get()
 		{
-			u := settings.MakeResettingUpdater(r)
+			u := settings.NewUpdater(r)
 			if err := u.Set("str.val", "abc2def", "s"); !testutils.IsError(err,
 				"not all runes of abc2def are letters: 2",
 			) {
 				t.Fatal(err)
 			}
-			u.Done()
+			u.ResetRemaining()
 		}
 		if expected, actual := beforestrVal, strVal.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
@@ -502,13 +502,13 @@ func TestCache(t *testing.T) {
 
 		beforeDVal := dVal.Get()
 		{
-			u := settings.MakeResettingUpdater(r)
+			u := settings.NewUpdater(r)
 			if err := u.Set("dVal", settings.EncodeDuration(-time.Hour), "d"); !testutils.IsError(err,
 				"cannot set dVal to a negative duration: -1h0m0s",
 			) {
 				t.Fatal(err)
 			}
-			u.Done()
+			u.ResetRemaining()
 		}
 		if expected, actual := beforeDVal, dVal.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
@@ -516,13 +516,13 @@ func TestCache(t *testing.T) {
 
 		beforeByteSizeVal := byteSizeVal.Get()
 		{
-			u := settings.MakeResettingUpdater(r)
+			u := settings.NewUpdater(r)
 			if err := u.Set("byteSize.Val", settings.EncodeInt(-mb), "z"); !testutils.IsError(err,
 				"bytesize cannot be negative",
 			) {
 				t.Fatal(err)
 			}
-			u.Done()
+			u.ResetRemaining()
 		}
 		if expected, actual := beforeByteSizeVal, byteSizeVal.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
@@ -530,13 +530,13 @@ func TestCache(t *testing.T) {
 
 		beforeFVal := fVal.Get()
 		{
-			u := settings.MakeResettingUpdater(r)
+			u := settings.NewUpdater(r)
 			if err := u.Set("fVal", settings.EncodeFloat(-1.1), "f"); !testutils.IsError(err,
 				"cannot set fVal to a negative value: -1.1",
 			) {
 				t.Fatal(err)
 			}
-			u.Done()
+			u.ResetRemaining()
 		}
 		if expected, actual := beforeFVal, fVal.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
@@ -544,13 +544,13 @@ func TestCache(t *testing.T) {
 
 		beforeIVal := iVal.Get()
 		{
-			u := settings.MakeResettingUpdater(r)
+			u := settings.NewUpdater(r)
 			if err := u.Set("i.Val", settings.EncodeInt(-1), "i"); !testutils.IsError(err,
 				"int cannot be negative",
 			) {
 				t.Fatal(err)
 			}
-			u.Done()
+			u.ResetRemaining()
 		}
 		if expected, actual := beforeIVal, iVal.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
@@ -558,13 +558,13 @@ func TestCache(t *testing.T) {
 
 		beforeMarsh := mA.Get()
 		{
-			u := settings.MakeResettingUpdater(r)
+			u := settings.NewUpdater(r)
 			if err := u.Set("statemachine", "too.many.dots", "m"); !testutils.IsError(err,
 				"expected two parts",
 			) {
 				t.Fatal(err)
 			}
-			u.Done()
+			u.ResetRemaining()
 		}
 		if expected, actual := beforeMarsh, mA.Get(); expected != actual {
 			t.Fatalf("expected %v, got %v", expected, actual)
