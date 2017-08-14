@@ -236,12 +236,15 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl nodeLiveness) error {
 		}
 
 		if log.V(2) {
-			log.Infof(ctx, "evaluating job %d", *id)
+			log.Infof(ctx, "evaluating job %d with lease %#v", *id, payload.Lease)
 		}
 
 		if payload.Lease == nil {
 			// If the lease is missing, it simply means the job does not yet support
 			// resumability.
+			if log.V(2) {
+				log.Infof(ctx, "job %d: skipping: nil lease", *id)
+			}
 			continue
 		}
 
@@ -263,7 +266,8 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl nodeLiveness) error {
 		} else {
 			nodeStatus, ok := nodeStatusMap[payload.Lease.NodeID]
 			if !ok {
-				log.Warningf(ctx, "no liveness record for node %d", payload.Lease.NodeID)
+				log.Warningf(ctx, "job %d: skipping: no liveness record for node %d",
+					*id, payload.Lease.NodeID)
 				continue
 			}
 			needsResume = nodeStatus.epoch > payload.Lease.Epoch || !nodeStatus.isLive
@@ -281,7 +285,7 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl nodeLiveness) error {
 		}
 		if resumeFn == nil {
 			if log.V(2) {
-				log.Infof(ctx, "skipping job %d as no resume functions are available", *id)
+				log.Infof(ctx, "job %d: skipping: no resume functions are available", *id)
 			}
 			continue
 		}
@@ -289,17 +293,17 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl nodeLiveness) error {
 		job := Job{id: id, registry: r}
 		if err := job.adopt(ctx, payload.Lease); err != nil {
 			if log.V(2) {
-				log.Infof(ctx, "unable to acquire lease on %d: %s", id, err)
+				log.Infof(ctx, "skipping job %d: unable to acquire lease: %s", *id, err)
 			}
 			continue
 		}
 
 		go func() {
-			log.Infof(ctx, "resuming job %d", *job.ID())
+			log.Infof(ctx, "job %d: resuming", *id)
 			err := resumeFn(ctx, &job)
 			if err := job.FinishedWith(ctx, err); err != nil {
 				// Nowhere to report this error but the log.
-				log.Errorf(ctx, "ignoring error while marking job %d finished with: %+v", *job.ID(), err)
+				log.Errorf(ctx, "job %d: ignoring FinishedWith error: %+v", *id, err)
 			}
 		}()
 
@@ -311,12 +315,9 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl nodeLiveness) error {
 }
 
 func (r *Registry) cancelAll(ctx context.Context) {
-	log.Warningf(ctx, "canceling all jobs due to liveness failure")
 	r.mu.AssertHeld()
 	for jobID, job := range r.mu.jobs {
-		if log.V(2) {
-			log.Warningf(ctx, "canceling job %d", jobID)
-		}
+		log.Warningf(ctx, "job %d: canceling due to liveness failure", jobID)
 		job.cancel()
 	}
 	r.mu.jobs = make(map[int64]*Job)
