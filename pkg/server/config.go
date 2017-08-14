@@ -51,16 +51,17 @@ import (
 
 // Context defaults.
 const (
-	defaultCGroupMemPath            = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
-	defaultCacheSize                = 512 << 20 // 512 MB
-	defaultSQLMemoryPoolSize        = 512 << 20 // 512 MB
-	defaultScanInterval             = 10 * time.Minute
-	defaultConsistencyCheckInterval = 24 * time.Hour
-	defaultScanMaxIdleTime          = 200 * time.Millisecond
-	defaultMetricsSampleInterval    = 10 * time.Second
-	defaultStorePath                = "cockroach-data"
-	defaultTempStoreRelativePath    = "local"
-	defaultEventLogEnabled          = true
+	defaultCGroupMemPath                  = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
+	defaultCacheSize                      = 512 << 20 // 512 MB
+	defaultSQLMemoryPoolSize              = 512 << 20 // 512 MB
+	defaultScanInterval                   = 10 * time.Minute
+	defaultConsistencyCheckInterval       = 24 * time.Hour
+	defaultScanMaxIdleTime                = 200 * time.Millisecond
+	defaultMetricsSampleInterval          = 10 * time.Second
+	defaultStorePath                      = "cockroach-data"
+	defaultTempStoreRelativePath          = "local"
+	defaultEventLogEnabled                = true
+	defaultEnableWebSessionAuthentication = false
 
 	minimumNetworkFileDescriptors     = 256
 	recommendedNetworkFileDescriptors = 5000
@@ -223,6 +224,10 @@ type Config struct {
 	// it is ready.
 	PIDFile string
 
+	// EnableWebSessionAuthentication enables session-based authentication for
+	// the Admin API's HTTP endpoints.
+	EnableWebSessionAuthentication bool
+
 	enginesCreated bool
 }
 
@@ -357,17 +362,18 @@ func MakeConfig(st *cluster.Settings) Config {
 	}
 
 	cfg := Config{
-		Config:                   new(base.Config),
-		MaxOffset:                MaxOffsetType(base.DefaultMaxClockOffset),
-		Settings:                 st,
-		CacheSize:                defaultCacheSize,
-		SQLMemoryPoolSize:        defaultSQLMemoryPoolSize,
-		ScanInterval:             defaultScanInterval,
-		ScanMaxIdleTime:          defaultScanMaxIdleTime,
-		ConsistencyCheckInterval: defaultConsistencyCheckInterval,
-		MetricsSampleInterval:    defaultMetricsSampleInterval,
-		TimeUntilStoreDead:       st.TimeUntilStoreDead,
-		EventLogEnabled:          defaultEventLogEnabled,
+		Config:                         new(base.Config),
+		MaxOffset:                      MaxOffsetType(base.DefaultMaxClockOffset),
+		Settings:                       st,
+		CacheSize:                      defaultCacheSize,
+		SQLMemoryPoolSize:              defaultSQLMemoryPoolSize,
+		ScanInterval:                   defaultScanInterval,
+		ScanMaxIdleTime:                defaultScanMaxIdleTime,
+		ConsistencyCheckInterval:       defaultConsistencyCheckInterval,
+		MetricsSampleInterval:          defaultMetricsSampleInterval,
+		TimeUntilStoreDead:             st.TimeUntilStoreDead,
+		EventLogEnabled:                defaultEventLogEnabled,
+		EnableWebSessionAuthentication: defaultEnableWebSessionAuthentication,
 		Stores: base.StoreSpecList{
 			Specs: []base.StoreSpec{storeSpec},
 		},
@@ -569,6 +575,12 @@ func (cfg *Config) FilterGossipBootstrapResolvers(
 		log.Infof(ctx, "initial resolvers: %v", addrs)
 	}
 	return filtered
+}
+
+// RequireWebSession indicates whether the server should require authentication
+// sessions when serving admin API requests.
+func (cfg *Config) RequireWebSession() bool {
+	return !cfg.Insecure && cfg.EnableWebSessionAuthentication
 }
 
 // readEnvironmentVariables populates all context values that are environment
