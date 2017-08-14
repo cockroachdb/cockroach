@@ -21,6 +21,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -42,6 +43,10 @@ import (
 var (
 	leaseDuration        = time.Minute
 	leaseRefreshInterval = leaseDuration / 5
+)
+
+const (
+	addDefaultMetaAndLivenessZoneConfigsName = "add default .meta and .liveness zone configs"
 )
 
 // backwardCompatibleMigrations is a hard-coded list of migrations to be run on
@@ -98,6 +103,10 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	{
 		name:   "add root user",
 		workFn: addRootUser,
+	},
+	{
+		name:   addDefaultMetaAndLivenessZoneConfigsName,
+		workFn: addDefaultMetaAndLivenessZoneConfigs,
 	},
 }
 
@@ -511,4 +520,123 @@ func addRootUser(ctx context.Context, r runner) error {
 		res.Close(ctx)
 	}
 	return err
+}
+
+func addDefaultMetaAndLivenessZoneConfigs(ctx context.Context, r runner) error {
+	defaultTTLSeconds := config.DefaultZoneConfig().GC.TTLSeconds
+
+	{
+		// Retrieve the existing .meta zone config.
+		metaZone, id, err := getZoneConfig(ctx, r, keys.MetaRangesID)
+		if err != nil {
+			return err
+		}
+		if id == keys.RootNamespaceID {
+			// There is no explicit .meta zone config.
+			if metaZone.GC.TTLSeconds == defaultTTLSeconds {
+				metaZone.GC.TTLSeconds = 60 * 60 // 1h
+			}
+			if err := addZoneConfigIfNotPresent(ctx, r, keys.MetaRangesID, metaZone); err != nil {
+				return err
+			}
+		}
+	}
+
+	{
+		// The liveness range was previously covered by the ".system" zone. Grab the
+		// existing ".system" zone (if any) for modification.
+		livenessZone, _, err := getZoneConfig(ctx, r, keys.SystemRangesID)
+		if err != nil {
+			return err
+		}
+		// We set the .liveness zone config regardless, but only update the TTL
+		// seconds if it is still at the default setting.
+		if livenessZone.GC.TTLSeconds == defaultTTLSeconds {
+			livenessZone.GC.TTLSeconds = 10 * 60 // 10m
+		}
+		return addZoneConfigIfNotPresent(ctx, r, keys.LivenessRangesID, livenessZone)
+	}
+}
+
+func addZoneConfigIfNotPresent(
+	ctx context.Context, r runner, id uint32, zone config.ZoneConfig,
+) error {
+	buf, err := protoutil.Marshal(&zone)
+	if err != nil {
+		return err
+	}
+
+	const stmt = `INSERT INTO system.zones (id, config) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING`
+	pl := tree.MakePlaceholderInfo()
+	pl.SetValue("1", tree.NewDInt(tree.DInt(id)))
+	pl.SetValue("2", tree.NewDString(string(buf)))
+
+	// System tables can only be modified by a privileged internal user.
+	session := r.newRootSession(ctx)
+	defer session.Finish(r.sqlExecutor)
+
+	// Retry a limited number of times because returning an error and letting
+	// the node kill itself is better than holding the migration lease for an
+	// arbitrarily long time.
+	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
+		var res sql.StatementResults
+		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, stmt, &pl, 1)
+		if err == nil {
+			res.Close(ctx)
+			break
+		}
+		log.Warningf(ctx, "failed attempt to add .%s zone config: %s",
+			config.NamedZonesByID[id], err)
+	}
+	return err
+}
+
+func getZoneConfig(ctx context.Context, r runner, id uint32) (config.ZoneConfig, uint32, error) {
+	stmt := fmt.Sprintf(
+		`SELECT id, config_proto FROM [EXPERIMENTAL SHOW ZONE CONFIGURATION FOR RANGE %s]`,
+		config.NamedZonesByID[id])
+
+	session := r.newRootSession(ctx)
+	defer session.Finish(r.sqlExecutor)
+
+	// Retry a limited number of times because returning an error and letting the
+	// node kill itself is better than holding the migration lease for an
+	// arbitrarily long time.
+	var err error
+	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
+		var res sql.StatementResults
+		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, stmt, nil, 1)
+		if err != nil {
+			log.Warningf(ctx, "failed attempt to retrieve .%s zone config: %s",
+				config.NamedZonesByID[id], err)
+			continue
+		}
+		defer res.Close(ctx)
+
+		// TODO(peter): This is very manual. Is there a better way?
+		if len(res.ResultList) == 0 || res.ResultList[0].Rows.Len() == 0 {
+			break
+		}
+		row := res.ResultList[0].Rows.At(0)
+		if len(row) != 2 {
+			break
+		}
+		id, ok := row[0].(*tree.DInt)
+		if !ok {
+			break
+		}
+		data, ok := row[1].(*tree.DBytes)
+		if !ok {
+			break
+		}
+		var zone config.ZoneConfig
+		if err = protoutil.Unmarshal([]byte(*data), &zone); err != nil {
+			break
+		}
+		return zone, uint32(*id), nil
+	}
+
+	err = fmt.Errorf("failed attempt to retrieve .%s zone config: %v",
+		config.NamedZonesByID[id], err)
+	return config.ZoneConfig{}, 0, err
 }

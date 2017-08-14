@@ -315,4 +315,5 @@ const (
 	TimeseriesRangesID     = 18
 	WebSessionsTableID     = 19
 	TableStatisticsTableID = 20
+	LivenessRangesID       = 21
 )
