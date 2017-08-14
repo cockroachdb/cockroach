@@ -220,7 +220,7 @@ func main() {
 			log.Printf("Checking %s...", url)
 			if err := checkURLWithRetries(client, url); err != nil {
 				var buf bytes.Buffer
-				fmt.Fprintf(&buf, "%s: %s\n", url, err)
+				fmt.Fprintf(&buf, "%s : %s\n", url, err)
 				for _, loc := range locs {
 					fmt.Fprintln(&buf, "    ", loc)
 				}
