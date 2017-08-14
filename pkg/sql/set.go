@@ -196,8 +196,8 @@ func (p *planner) toSettingString(
 					// https://github.com/cockroachdb/cockroach/issues/17389
 					var err error
 					prevRawVal, err = (&cluster.ClusterVersion{
-						MinimumVersion: cluster.Version1_0,
-						UseVersion:     cluster.Version1_0,
+						MinimumVersion: cluster.VersionBase,
+						UseVersion:     cluster.VersionBase,
 					}).Marshal()
 					if err != nil {
 						return "", err

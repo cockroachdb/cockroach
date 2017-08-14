@@ -263,8 +263,8 @@ type testClusterConfig struct {
 var logicTestConfigs = []testClusterConfig{
 	{name: "default", numNodes: 1, overrideDistSQLMode: "Off"},
 	{name: "default-v1", numNodes: 1, overrideDistSQLMode: "Off", bootstrapVersion: &cluster.ClusterVersion{
-		UseVersion:     cluster.Version1_0,
-		MinimumVersion: cluster.Version1_0,
+		UseVersion:     cluster.VersionBase,
+		MinimumVersion: cluster.VersionBase,
 	}},
 	{name: "parallel-stmts", numNodes: 1, parallelStmts: true, overrideDistSQLMode: "Off"},
 	{name: "distsql", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On"},

@@ -51,7 +51,7 @@ type updater struct {
 // RefreshSettings passes the serialized representations of all individual
 // settings -- e.g. the rows read from the system.settings table. We update the
 // wrapped atomic settings values as we go and note which settings were updated,
-// then set the rest to default in Done().
+// then set the rest to default in ResetRemaining().
 type Updater interface {
 	Set(k, rawValue, valType string) error
 	ResetRemaining()
