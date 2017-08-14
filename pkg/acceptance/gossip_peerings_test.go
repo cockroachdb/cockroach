@@ -231,8 +231,10 @@ func testGossipRestartFirstNodeNeedsIncomingInner(
 		t.Fatal(err)
 	}
 
-	if _, _, err := c.ExecCLI(ctx, 0, []string{"zone", "set", ".default", "-f", zoneFile}); err != nil {
-		t.Fatal(err)
+	for _, zone := range []string{".default", ".meta", ".liveness"} {
+		if _, _, err := c.ExecCLI(ctx, 0, []string{"zone", "set", zone, "-f", zoneFile}); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	db := makePGClient(t, c.PGUrl(ctx, 0))
