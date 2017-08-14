@@ -41,22 +41,20 @@ func EncodeFloat(f float64) string {
 	return strconv.FormatFloat(f, 'E', -1, 64)
 }
 
-// ResettingUpdater is a helper for updating the in-memory settings.
+type updater struct {
+	r Registry
+	m map[string]struct{}
+}
+
+// Updater is a helper for updating the in-memory settings.
 //
 // RefreshSettings passes the serialized representations of all individual
 // settings -- e.g. the rows read from the system.settings table. We update the
 // wrapped atomic settings values as we go and note which settings were updated,
 // then set the rest to default in Done().
-type ResettingUpdater struct {
-	r Registry
-	m map[string]struct{}
-}
-
-// An Updater is a helper interface used for updating the settings in a
-// Registry.
 type Updater interface {
 	Set(k, rawValue, valType string) error
-	Done()
+	ResetRemaining()
 }
 
 // A NoopUpdater ignores all updates.
@@ -65,19 +63,19 @@ type NoopUpdater struct{}
 // Set implements Updater. It is a no-op.
 func (u NoopUpdater) Set(_, _, _ string) error { return nil }
 
-// Done implements Updater. It is a no-op.
-func (u NoopUpdater) Done() {}
+// ResetRemaining implements Updater. It is a no-op.
+func (u NoopUpdater) ResetRemaining() {}
 
-// MakeResettingUpdater makes a ResettingUpdater.
-func MakeResettingUpdater(r Registry) ResettingUpdater {
-	return ResettingUpdater{
+// NewUpdater makes an Updater.
+func NewUpdater(r Registry) Updater {
+	return updater{
 		m: make(map[string]struct{}, len(r)),
 		r: r,
 	}
 }
 
 // Set attempts to parse and update a setting and notes that it was updated.
-func (u ResettingUpdater) Set(key, rawValue string, vt string) error {
+func (u updater) Set(key, rawValue string, vt string) error {
 	d, ok := u.r[key]
 	if !ok {
 		// Likely a new setting this old node doesn't know about.
@@ -130,25 +128,11 @@ func (u ResettingUpdater) Set(key, rawValue string, vt string) error {
 	return nil
 }
 
-// Done sets all settings not updated by the updater to their default values.
-func (u ResettingUpdater) Done() {
+// ResetRemaining sets all settings not updated by the updater to their default values.
+func (u updater) ResetRemaining() {
 	for k, v := range u.r {
 		if _, ok := u.m[k]; !ok {
 			v.setToDefault()
 		}
 	}
-}
-
-// PreservingUpdater is an Updater that does not reset the settings not
-// explicitly set.
-type PreservingUpdater struct {
-	ResettingUpdater
-}
-
-// Done is a no-op.
-func (pu PreservingUpdater) Done() {}
-
-// MakePreservingUpdater makes a PreservingUpdater.
-func MakePreservingUpdater(r Registry) PreservingUpdater {
-	return PreservingUpdater{ResettingUpdater: MakeResettingUpdater(r)}
 }
