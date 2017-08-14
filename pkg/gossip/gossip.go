@@ -576,9 +576,14 @@ func (g *Gossip) maybeCleanupBootstrapAddressesLocked() {
 // will seek to "tighten" by creating new connections to distant
 // nodes.
 func maxPeers(nodeCount int) int {
-	// This formula uses maxHops-1, instead of maxHops, to provide a
+	// This formula uses maxHops-2, instead of maxHops, to provide a
 	// "fudge" factor for max connected peers, to account for the
 	// arbitrary, decentralized way in which gossip networks are created.
+	// This will return the following maxPeers for the given number of nodes:
+	//	 <= 27 nodes -> 3 peers
+	//   <= 64 nodes -> 4 peers
+	//   <= 125 nodes -> 5 peers
+	//   <= n^3 nodes -> n peers
 	//
 	// Quick derivation of the formula for posterity (without the fudge factor):
 	// maxPeers^maxHops > nodeCount
@@ -586,7 +591,7 @@ func maxPeers(nodeCount int) int {
 	// log(maxPeers) > log(nodeCount) / maxHops
 	// maxPeers > e^(log(nodeCount) / maxHops)
 	// hence maxPeers = ceil(e^(log(nodeCount) / maxHops)) should work
-	maxPeers := int(math.Ceil(math.Exp(math.Log(float64(nodeCount)) / float64(maxHops-1))))
+	maxPeers := int(math.Ceil(math.Exp(math.Log(float64(nodeCount)) / float64(maxHops-2))))
 	if maxPeers < minPeers {
 		return minPeers
 	}
