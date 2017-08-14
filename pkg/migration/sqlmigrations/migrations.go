@@ -15,11 +15,13 @@
 package sqlmigrations
 
 import (
+	"fmt"
 	"time"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -29,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -76,6 +79,10 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// The table ID for the sessions table is greater than the previous
 		// table ID by 4 (3 IDs were reserved for non-table entities).
 		newRanges: 4,
+	},
+	{
+		name:   "add default .meta zone config",
+		workFn: addDefaultMetaZoneConfig,
 	},
 }
 
@@ -412,4 +419,42 @@ func repopulateViewDeps(ctx context.Context, r runner) error {
 	return r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		return sql.RecomputeViewDependencies(ctx, txn, r.sqlExecutor)
 	})
+}
+
+func addDefaultMetaZoneConfig(ctx context.Context, r runner) error {
+	defZone := config.DefaultZoneConfig()
+
+	metaZone := defZone
+	metaZone.NumReplicas = 5
+	metaZone.GC.TTLSeconds = 60 * 60 // 1h
+	return addZoneConfig(ctx, r, keys.MetaRangesID, metaZone)
+}
+
+func addZoneConfig(ctx context.Context, r runner, id int, zone config.ZoneConfig) error {
+	buf, err := protoutil.Marshal(&zone)
+	if err != nil {
+		return err
+	}
+
+	stmt := fmt.Sprintf(
+		`INSERT INTO system.zones (id, config) VALUES (%d, x'%x') ON CONFLICT (id) DO NOTHING`,
+		id, buf)
+
+	// System tables can only be modified by a privileged internal user.
+	session := r.newRootSession(ctx)
+	defer session.Finish(r.sqlExecutor)
+
+	// Retry a limited number of times because returning an error and letting
+	// the node kill itself is better than holding the migration lease for an
+	// arbitrarily long time.
+	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
+		var res sql.StatementResults
+		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, stmt, nil, 1)
+		if err == nil {
+			res.Close(ctx)
+			break
+		}
+		log.Warningf(ctx, "failed attempt to add .meta zone config: %s", err)
+	}
+	return err
 }
