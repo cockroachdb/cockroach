@@ -267,7 +267,7 @@ type Settings struct {
 	// Manual defaults to false. If set, lets this ClusterSetting's MakeUpdater
 	// method return a dummy updater that simply throws away all values. This is
 	// for use in tests for which manual control is desired.
-	Manual *atomic.Value // bool
+	Manual atomic.Value // bool
 	// A Registry populated with all of the individual cluster settings.
 	settings.Registry
 
@@ -361,9 +361,6 @@ func MakeClusterSettings() *Settings {
 	var s Settings
 	r := settings.NewRegistry()
 	s.Registry = r
-
-	var manual atomic.Value
-	s.Manual = &manual
 
 	// Initialize the setting. Note that it starts out with the zero cluster
 	// version, for which the transformer accepts any new version. After that,
