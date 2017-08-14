@@ -284,7 +284,9 @@ func BenchmarkRestore2TB(b *testing.B) {
 		b.Fatal("b.N must be 1")
 	}
 
-	const backupBaseURI = "gs://cockroach-test/2t-backup"
+	restoreBaseURI := getAzureURI(b)
+	restoreBaseURI.Path = `benchmarks/2tb`
+	restore2TBURI := restoreBaseURI.String()
 
 	bt := benchmarkTest{
 		b:      b,
@@ -306,7 +308,7 @@ func BenchmarkRestore2TB(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	if _, err := db.Exec(`RESTORE datablocks.* FROM $1`, backupBaseURI); err != nil {
+	if _, err := db.Exec(`RESTORE datablocks.* FROM $1`, restore2TBURI); err != nil {
 		b.Fatal(err)
 	}
 }
