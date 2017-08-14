@@ -1780,7 +1780,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 			},
 			expectedAction: AllocatorRemove,
 		},
-		// Needs three replicas, two are on dead stores. Should
+		// Need three replicas, two are on dead stores. Should
 		// be a noop because there aren't enough live replicas for
 		// a quorum.
 		{
@@ -1811,7 +1811,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 			},
 			expectedAction: AllocatorNoop,
 		},
-		// Three replicas have three, none of the replicas in the store pool.
+		// Need three replicas, have three, none of the replicas in the store pool.
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   3,
@@ -1840,7 +1840,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 			},
 			expectedAction: AllocatorNoop,
 		},
-		// Three replicas have three.
+		// Need three replicas, have three.
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   3,
@@ -1867,7 +1867,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 					},
 				},
 			},
-			expectedAction: AllocatorNoop,
+			expectedAction: AllocatorConsiderRebalance,
 		},
 	}
 
@@ -1894,7 +1894,8 @@ func TestAllocatorComputeAction(t *testing.T) {
 	for i, tcase := range testCases {
 		action, priority := a.ComputeAction(ctx, tcase.zone, RangeInfo{Desc: &tcase.desc})
 		if tcase.expectedAction != action {
-			t.Errorf("Test case %d expected action %d, got action %d", i, tcase.expectedAction, action)
+			t.Errorf("Test case %d expected action %q, got action %q",
+				i, allocatorActionNames[tcase.expectedAction], allocatorActionNames[action])
 			continue
 		}
 		if tcase.expectedAction != AllocatorNoop && priority > lastPriority {
@@ -1940,7 +1941,7 @@ func TestAllocatorComputeActionRemoveDead(t *testing.T) {
 					},
 				},
 			},
-			expectedAction: AllocatorNoop,
+			expectedAction: AllocatorConsiderRebalance,
 			live:           []roachpb.StoreID{1, 2},
 			dead:           []roachpb.StoreID{3},
 		},
