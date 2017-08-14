@@ -77,7 +77,7 @@ func TestQueryCounts(t *testing.T) {
 	// Initialize accum while accounting for system migrations that may have run
 	// DDL statements.
 	accum := queryCounter{
-		insertCount: 2, // version setting population migration and root user addition.
+		insertCount: 4, // version setting population migration and root user addition.
 		ddlCount:    s.MustGetSQLCounter(sql.MetaDdl.Name),
 		miscCount:   s.MustGetSQLCounter(sql.MetaMisc.Name),
 	}
@@ -188,7 +188,7 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 	if err := checkCounterEQ(s, sql.MetaTxnCommit, 0); err != nil {
 		t.Error(err)
 	}
-	if err := checkCounterEQ(s, sql.MetaInsert, 3); err != nil {
+	if err := checkCounterEQ(s, sql.MetaInsert, 5); err != nil {
 		t.Error(err)
 	}
 }

@@ -1600,6 +1600,6 @@ func TestSystemZoneConfigs(t *testing.T) {
 	zoneConfig = config.DefaultZoneConfig()
 	zoneConfig.NumReplicas += 2
 	config.TestingSetZoneConfig(keys.SystemRangesID, zoneConfig)
-	expectedReplicas += 8
+	expectedReplicas += 6
 	testutils.SucceedsSoon(t, waitForReplicas)
 }

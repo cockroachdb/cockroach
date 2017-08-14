@@ -494,6 +494,7 @@ func Example_zone() {
 	c.Run("zone ls")
 	c.Run("zone set system --file=./testdata/zone_attrs.yaml")
 	c.Run("zone ls")
+	c.Run("zone get .liveness")
 	c.Run("zone get .meta")
 	c.Run("zone get system.nonexistent")
 	c.Run("zone get system.descriptor")
@@ -505,6 +506,7 @@ func Example_zone() {
 	c.Run("zone rm system")
 	c.Run("zone ls")
 	c.Run("zone rm .default")
+	c.Run("zone set .liveness --file=./testdata/zone_range_max_bytes.yaml")
 	c.Run("zone set .meta --file=./testdata/zone_range_max_bytes.yaml")
 	c.Run("zone set .system --file=./testdata/zone_range_max_bytes.yaml")
 	c.Run("zone set .timeseries --file=./testdata/zone_range_max_bytes.yaml")
@@ -514,11 +516,13 @@ func Example_zone() {
 	c.Run("zone get system")
 	c.Run("zone set .default --disable-replication")
 	c.Run("zone get system")
+	c.Run("zone rm .liveness")
 	c.Run("zone rm .meta")
 	c.Run("zone rm .system")
 	c.Run("zone ls")
 	c.Run("zone rm .timeseries")
 	c.Run("zone ls")
+	c.Run("zone rm .liveness")
 	c.Run("zone rm .meta")
 	c.Run("zone rm .system")
 	c.Run("zone rm .timeseries")
@@ -527,6 +531,8 @@ func Example_zone() {
 	// Output:
 	// zone ls
 	// .default
+	// .liveness
+	// .meta
 	// zone set system --file=./testdata/zone_attrs.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 67108864
@@ -536,13 +542,23 @@ func Example_zone() {
 	// constraints: [us-east-1a, ssd]
 	// zone ls
 	// .default
+	// .liveness
+	// .meta
 	// system
-	// zone get .meta
-	// .default
+	// zone get .liveness
+	// .liveness
 	// range_min_bytes: 1048576
 	// range_max_bytes: 67108864
 	// gc:
-	//   ttlseconds: 90000
+	//   ttlseconds: 60
+	// num_replicas: 1
+	// constraints: []
+	// zone get .meta
+	// .meta
+	// range_min_bytes: 1048576
+	// range_max_bytes: 67108864
+	// gc:
+	//   ttlseconds: 3600
 	// num_replicas: 1
 	// constraints: []
 	// zone get system.nonexistent
@@ -580,13 +596,22 @@ func Example_zone() {
 	// CONFIGURE ZONE 1
 	// zone ls
 	// .default
+	// .liveness
+	// .meta
 	// zone rm .default
 	// pq: cannot remove default zone
+	// zone set .liveness --file=./testdata/zone_range_max_bytes.yaml
+	// range_min_bytes: 1048576
+	// range_max_bytes: 134217728
+	// gc:
+	//   ttlseconds: 60
+	// num_replicas: 3
+	// constraints: []
 	// zone set .meta --file=./testdata/zone_range_max_bytes.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
-	//   ttlseconds: 90000
+	//   ttlseconds: 3600
 	// num_replicas: 3
 	// constraints: []
 	// zone set .system --file=./testdata/zone_range_max_bytes.yaml
@@ -613,6 +638,7 @@ func Example_zone() {
 	// constraints: []
 	// zone ls
 	// .default
+	// .liveness
 	// .meta
 	// .system
 	// .timeseries
@@ -646,6 +672,8 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 1
 	// constraints: []
+	// zone rm .liveness
+	// CONFIGURE ZONE 1
 	// zone rm .meta
 	// CONFIGURE ZONE 1
 	// zone rm .system
@@ -657,6 +685,8 @@ func Example_zone() {
 	// CONFIGURE ZONE 1
 	// zone ls
 	// .default
+	// zone rm .liveness
+	// CONFIGURE ZONE 0
 	// zone rm .meta
 	// CONFIGURE ZONE 0
 	// zone rm .system

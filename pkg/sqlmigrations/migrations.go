@@ -21,6 +21,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -98,6 +99,10 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	{
 		name:   "add root user",
 		workFn: addRootUser,
+	},
+	{
+		name:   "add default .meta and .liveness zone configs",
+		workFn: addDefaultMetaAndLivenessZoneConfigs,
 	},
 }
 
@@ -509,6 +514,47 @@ func addRootUser(ctx context.Context, r runner) error {
 	res, err := r.sqlExecutor.ExecuteStatementsBuffered(session, upsertRootStmt, &pl, 1)
 	if err == nil {
 		res.Close(ctx)
+	}
+	return err
+}
+
+func addDefaultMetaAndLivenessZoneConfigs(ctx context.Context, r runner) error {
+	metaZone := config.DefaultZoneConfig()
+	metaZone.GC.TTLSeconds = 60 * 60 // 1h
+	if err := addZoneConfig(ctx, r, keys.MetaRangesID, metaZone); err != nil {
+		return err
+	}
+
+	livenessZone := config.DefaultZoneConfig()
+	livenessZone.GC.TTLSeconds = 60 // 1m
+	return addZoneConfig(ctx, r, keys.LivenessRangesID, livenessZone)
+}
+
+func addZoneConfig(ctx context.Context, r runner, id int, zone config.ZoneConfig) error {
+	buf, err := protoutil.Marshal(&zone)
+	if err != nil {
+		return err
+	}
+
+	stmt := fmt.Sprintf(
+		`INSERT INTO system.zones (id, config) VALUES (%d, x'%x') ON CONFLICT (id) DO NOTHING`,
+		id, buf)
+
+	// System tables can only be modified by a privileged internal user.
+	session := r.newRootSession(ctx)
+	defer session.Finish(r.sqlExecutor)
+
+	// Retry a limited number of times because returning an error and letting
+	// the node kill itself is better than holding the migration lease for an
+	// arbitrarily long time.
+	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
+		var res sql.StatementResults
+		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, stmt, nil, 1)
+		if err == nil {
+			res.Close(ctx)
+			break
+		}
+		log.Warningf(ctx, "failed attempt to add .meta zone config: %s", err)
 	}
 	return err
 }
