@@ -66,7 +66,7 @@ case $TESTNAME in
   BenchmarkRestoreTPCH10/numNodes=3)
     PKG=./pkg/ccl/acceptanceccl
     TESTTIMEOUT=2h
-    COCKROACH_EXTRA_FLAGS+=' -tf.cockroach-env=COCKROACH_PREEMPTIVE_SNAPSHOT_RATE=8388608'
+    COCKROACH_EXTRA_FLAGS+=' -tf.cockroach-env=COCKROACH_PREEMPTIVE_SNAPSHOT_RATE=8388608 -tf.storage-location=westus'
     ;;
   *)
     echo "unknown test name $TESTNAME"

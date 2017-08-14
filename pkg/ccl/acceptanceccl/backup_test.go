@@ -178,32 +178,40 @@ const (
 	bankInsert = `INSERT INTO data.bank VALUES (%d, %d, '%s')`
 )
 
-func getAzureURI(t testing.TB) url.URL {
-	container := os.Getenv("AZURE_CONTAINER")
-	accountName := os.Getenv("AZURE_ACCOUNT_NAME")
-	accountKey := os.Getenv("AZURE_ACCOUNT_KEY")
-	if container == "" || accountName == "" || accountKey == "" {
-		t.Fatal("env variables AZURE_CONTAINER, AZURE_ACCOUNT_NAME, AZURE_ACCOUNT_KEY must be set")
+func getAzureURI(t testing.TB, accountName, accountKeyVar, container, object string) string {
+	accountKey := os.Getenv(accountKeyVar)
+	if accountKey == "" {
+		t.Fatalf("env var %s must be set", accountKeyVar)
 	}
-
-	return url.URL{
+	return (&url.URL{
 		Scheme: "azure",
 		Host:   container,
+		Path:   object,
 		RawQuery: url.Values{
 			storageccl.AzureAccountNameParam: []string{accountName},
 			storageccl.AzureAccountKeyParam:  []string{accountKey},
 		}.Encode(),
-	}
+	}).String()
+}
+
+func getAzureBackupFixtureURI(t testing.TB, name string) string {
+	return getAzureURI(
+		t, acceptance.FixtureStorageAccount(), "AZURE_FIXTURE_ACCOUNT_KEY", "backups", name,
+	)
+}
+
+func getAzureEphemeralURI(b *testing.B) string {
+	name := fmt.Sprintf("%s/%s-%d", b.Name(), timeutil.Now().Format(time.RFC3339Nano), b.N)
+	return getAzureURI(
+		b, acceptance.EphemeralStorageAccount(), "AZURE_EPHEMERAL_ACCOUNT_KEY", "backups", name,
+	)
 }
 
 // BenchmarkRestoreBig creates a backup via Load with b.N rows then benchmarks
-// the time to restore it. Run with:
-// make bench TESTTIMEOUT=1h PKG=./pkg/ccl/acceptanceccl BENCHES=BenchmarkRestoreBig TESTFLAGS='-v -benchtime 1m -remote -key-name azure -cwd ../../acceptance/terraform/azure'
+// the time to restore it.
 func BenchmarkRestoreBig(b *testing.B) {
 	ctx := context.Background()
 	rng, _ := randutil.NewPseudoRand()
-
-	restoreBaseURI := getAzureURI(b)
 
 	bt := benchmarkTest{
 		b:      b,
@@ -226,8 +234,6 @@ func BenchmarkRestoreBig(b *testing.B) {
 
 	// (mis-)Use a sub benchmark to avoid running the setup code more than once.
 	b.Run("", func(b *testing.B) {
-		restoreBaseURI.Path = fmt.Sprintf("BenchmarkRestoreBig/%s-%d", timeutil.Now().Format(time.RFC3339Nano), b.N)
-
 		var buf bytes.Buffer
 		buf.WriteString(bankCreateTable)
 		buf.WriteString(";\n")
@@ -238,7 +244,7 @@ func BenchmarkRestoreBig(b *testing.B) {
 		}
 
 		ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
-		restoreURI := restoreBaseURI.String()
+		restoreURI := getAzureEphemeralURI(b)
 		desc, err := sqlccl.Load(ctx, sqlDB, &buf, "data", restoreURI, ts, 0, os.TempDir())
 		if err != nil {
 			b.Fatal(err)
@@ -257,10 +263,6 @@ func BenchmarkRestoreBig(b *testing.B) {
 }
 
 func BenchmarkRestoreTPCH10(b *testing.B) {
-	restoreBaseURI := getAzureURI(b)
-	restoreBaseURI.Path = `benchmarks/tpch/scalefactor-10`
-	restoreTPCH10URI := restoreBaseURI.String()
-
 	for _, numNodes := range []int{1, 3, 10} {
 		b.Run(fmt.Sprintf("numNodes=%d", numNodes), func(b *testing.B) {
 			if b.N != 1 {
@@ -287,7 +289,9 @@ func BenchmarkRestoreTPCH10(b *testing.B) {
 				b.Fatal(err)
 			}
 
-			if _, err := db.Exec(`RESTORE tpch.* FROM $1`, restoreTPCH10URI); err != nil {
+			if _, err := db.Exec(
+				`RESTORE tpch.* FROM $1`, getAzureBackupFixtureURI(b, "tpch10"),
+			); err != nil {
 				b.Fatal(err)
 			}
 		})
@@ -298,8 +302,6 @@ func BenchmarkRestore2TB(b *testing.B) {
 	if b.N != 1 {
 		b.Fatal("b.N must be 1")
 	}
-
-	const backupBaseURI = "gs://cockroach-test/2t-backup"
 
 	bt := benchmarkTest{
 		b:      b,
@@ -321,7 +323,9 @@ func BenchmarkRestore2TB(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	if _, err := db.Exec(`RESTORE datablocks.* FROM $1`, backupBaseURI); err != nil {
+	if _, err := db.Exec(
+		`RESTORE datablocks.* FROM $1`, getAzureBackupFixtureURI(b, "2tb"),
+	); err != nil {
 		b.Fatal(err)
 	}
 }
@@ -330,8 +334,6 @@ func BenchmarkBackup2TB(b *testing.B) {
 	if b.N != 1 {
 		b.Fatal("b.N must be 1")
 	}
-
-	backupBaseURI := getAzureURI(b)
 
 	bt := benchmarkTest{
 		b:               b,
@@ -351,10 +353,8 @@ func BenchmarkBackup2TB(b *testing.B) {
 	}
 	defer db.Close()
 
-	backupBaseURI.Path = fmt.Sprintf("BenchmarkBackup2TB/%s-%d", timeutil.Now().Format(time.RFC3339Nano), b.N)
-
 	log.Infof(ctx, "starting backup")
-	row := db.QueryRow(`BACKUP DATABASE datablocks TO $1`, backupBaseURI.String())
+	row := db.QueryRow(`BACKUP DATABASE datablocks TO $1`, getAzureEphemeralURI(b))
 	var unused string
 	var dataSize int64
 	if err := row.Scan(&unused, &unused, &unused, &unused, &unused, &unused, &dataSize); err != nil {

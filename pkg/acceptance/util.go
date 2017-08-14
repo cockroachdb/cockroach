@@ -104,8 +104,8 @@ var flagTFReuseCluster = flag.String("reuse", "",
 	  This flag can also be set to have a test create a cluster
 	  with predetermined name.`,
 )
-var flagTFFixtureLocation = flag.String("tf.fixture-location", "eastus",
-	"the azure location from which to download fixtures",
+var flagTFStorageLocation = flag.String("tf.storage-location", "eastus",
+	"the azure location from which to download fixtures and store ephemeral data",
 )
 var flagTFKeepCluster = keepClusterVar(terrafarm.KeepClusterNever) // see init()
 var flagTFCockroachFlags = flag.String("tf.cockroach-flags", "",
@@ -145,15 +145,31 @@ func RunTests(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// FixtureURL returns the URL at which the object with the given name should be
-// downloaded from Azure Cloud Storage. It uses a storage account located in the
-// region specified by the -tf.fixture-location flag to avoid bandwidth egress
+// EphemeralStorageAccount returns the name of the storage account to use to
+// store data that should be periodically purged. It returns a storage account
+// in the region specified by the -tf.storage-location flag to avoid bandwidth
+// egress charges.
+//
+// See /docs/CLOUD-RESOURCES.md for details.
+func EphemeralStorageAccount() string {
+	return "roachephemeral" + *flagTFStorageLocation
+}
+
+// FixtureStorageAccount returns the name of the storage account that contains
+// permanent test data ("test fixtures"). It returns a storage account in the
+// region specified by the -tf.storage-location flag to avoid bandwidth egress
 // charges.
+//
+// See /docs/CLOUD-RESOURCES.md for details.
+func FixtureStorageAccount() string {
+	return "roachfixtures" + *flagTFStorageLocation
+}
+
+// FixtureURL returns the public URL at which the fixture with the given name
+// can be downloaded from Azure Cloud Storage. Like FixtureStorageAccount(), it
+// takes the -tf.storage-location flag into account.
 func FixtureURL(name string) string {
-	return fmt.Sprintf(
-		"https://roachfixtures%s.blob.core.windows.net/%s",
-		*flagTFFixtureLocation, name,
-	)
+	return fmt.Sprintf("https://%s.blob.core.windows.net/%s", FixtureStorageAccount(), name)
 }
 
 // prefixRE is based on a Terraform error message regarding invalid resource
