@@ -165,7 +165,6 @@ id  cli_specifier  config_yaml  config_proto
 
 statement ok
 INSERT INTO system.zones (id, config) VALUES
-  (16, (SELECT config_proto FROM crdb_internal.zones WHERE id = 0)),
   (17, (SELECT config_proto FROM crdb_internal.zones WHERE id = 0)),
   (18, (SELECT config_proto FROM crdb_internal.zones WHERE id = 0)),
   (51, (SELECT config_proto FROM crdb_internal.zones WHERE id = 0)),

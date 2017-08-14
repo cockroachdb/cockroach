@@ -16,8 +16,10 @@ package sqlmigrations
 
 import (
 	"bytes"
+	gosql "database/sql"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -25,6 +27,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -35,8 +38,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/gogo/protobuf/proto"
+	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 )
 
@@ -726,4 +731,84 @@ CREATE INDEX y ON test.x(x);
 	if err := mgr.EnsureMigrations(ctx); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestAddDefaultMetaZoneConfigMigration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	// Remove the migration so we can test its effects.
+	newMigrations := make([]migrationDescriptor, 0, len(backwardCompatibleMigrations))
+	for _, m := range backwardCompatibleMigrations {
+		if m.name == "add default .meta zone config" {
+			continue
+		}
+		newMigrations = append(newMigrations, m)
+	}
+
+	defer func(prev []migrationDescriptor) {
+		backwardCompatibleMigrations = prev
+	}(backwardCompatibleMigrations)
+	backwardCompatibleMigrations = newMigrations
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	id := keys.MetaRangesID
+
+	{
+		var s string
+		err := sqlDB.QueryRow(`SELECT config FROM system.zones WHERE id = $1`, id).Scan(&s)
+		if err != gosql.ErrNoRows {
+			t.Fatalf("expected no rows, but found %v", err)
+		}
+	}
+
+	r := runner{
+		db:          kvDB,
+		sqlExecutor: s.Executor().(*sql.Executor),
+		memMetrics:  &sql.MemoryMetrics{},
+	}
+	// Run the migration and verify its effects.
+	if err := addDefaultMetaZoneConfig(ctx, r); err != nil {
+		t.Fatal(err)
+	}
+
+	checkZoneConfig := func(expected config.ZoneConfig) {
+		t.Helper()
+
+		var s string
+		err := sqlDB.QueryRow(`SELECT config FROM system.zones WHERE id = $1`, id).Scan(&s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var zone config.ZoneConfig
+		if err := protoutil.Unmarshal([]byte(s), &zone); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(expected, zone) {
+			t.Fatalf("unexpected .meta zone config: %s", pretty.Diff(expected, zone))
+		}
+	}
+	expected := config.DefaultZoneConfig()
+	expected.GC.TTLSeconds = 60 * 60
+	checkZoneConfig(expected)
+
+	{
+		// Modify the .meta and .system zone configs.
+		zone := config.DefaultZoneConfig()
+		buf, err := protoutil.Marshal(&zone)
+		if err != nil {
+			t.Fatal(err)
+		}
+		const stmt = `UPSERT INTO system.zones (id, config) VALUES ($1, $2)`
+		if _, err := sqlDB.Exec(stmt, id, buf); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Run the migration again and verify that it didn't overwrite our changes.
+	if err := addDefaultMetaZoneConfig(ctx, r); err != nil {
+		t.Fatal(err)
+	}
+	checkZoneConfig(config.DefaultZoneConfig())
 }

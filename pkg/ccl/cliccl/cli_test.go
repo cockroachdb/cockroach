@@ -167,6 +167,7 @@ func Example_cclzone() {
 	// constraints: [us-east-1a, ssd]
 	// zone ls
 	// .default
+	// .meta
 	// db.t.p1
 	// db.t@primary
 	// zone rm db.t@primary
@@ -189,6 +190,7 @@ func Example_cclzone() {
 	// constraints: [us-east-1a, ssd]
 	// zone ls
 	// .default
+	// .meta
 	// db.t.p1
 	// zone rm db.t.p0
 	// CONFIGURE ZONE 0
@@ -196,4 +198,5 @@ func Example_cclzone() {
 	// CONFIGURE ZONE 1
 	// zone ls
 	// .default
+	// .meta
 }

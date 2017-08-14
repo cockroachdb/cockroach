@@ -527,6 +527,7 @@ func Example_zone() {
 	// Output:
 	// zone ls
 	// .default
+	// .meta
 	// zone set system --file=./testdata/zone_attrs.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 67108864
@@ -536,13 +537,14 @@ func Example_zone() {
 	// constraints: [us-east-1a, ssd]
 	// zone ls
 	// .default
+	// .meta
 	// system
 	// zone get .meta
-	// .default
+	// .meta
 	// range_min_bytes: 1048576
 	// range_max_bytes: 67108864
 	// gc:
-	//   ttlseconds: 90000
+	//   ttlseconds: 3600
 	// num_replicas: 1
 	// constraints: []
 	// zone get system.nonexistent
@@ -580,13 +582,14 @@ func Example_zone() {
 	// CONFIGURE ZONE 1
 	// zone ls
 	// .default
+	// .meta
 	// zone rm .default
 	// pq: cannot remove default zone
 	// zone set .meta --file=./testdata/zone_range_max_bytes.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
 	// gc:
-	//   ttlseconds: 90000
+	//   ttlseconds: 3600
 	// num_replicas: 3
 	// constraints: []
 	// zone set .system --file=./testdata/zone_range_max_bytes.yaml
