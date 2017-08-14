@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -189,6 +190,18 @@ func (p *planner) toSettingString(
 						return "", errors.New("the existing value is not a string")
 					}
 					prevRawVal = []byte(string(*dStr))
+				} else {
+					// If no entry is present, treat like v1.0.
+					// This is subject to change. See
+					// https://github.com/cockroachdb/cockroach/issues/17389
+					var err error
+					prevRawVal, err = (&cluster.ClusterVersion{
+						MinimumVersion: cluster.Version1_0,
+						UseVersion:     cluster.Version1_0,
+					}).Marshal()
+					if err != nil {
+						return "", err
+					}
 				}
 				newBytes, _, err := setting.Validate(prevRawVal, (*string)(s))
 				if err != nil {

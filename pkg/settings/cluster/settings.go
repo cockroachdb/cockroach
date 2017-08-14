@@ -768,10 +768,15 @@ func versionTransformer(minSupportedVersion, serverVersion roachpb.Version, defa
 			return nil, nil, err
 		}
 		if versionBump == nil {
-			// Round-trip the existing value, but only if it passes sanity checks.
+			// Round-trip the existing value, but only if it passes sanity
+			// checks. This is also the path taken when the setting gets updated
+			// via the gossip callback.
 			b, err := oldV.Marshal()
 			if err != nil {
 				return nil, nil, err
+			}
+			if serverVersion.Less(oldV.MinimumVersion) {
+				log.Fatalf(context.TODO(), "node at %s cannot run at %s", serverVersion, oldV.MinimumVersion)
 			}
 			return b, &oldV, err
 		}
