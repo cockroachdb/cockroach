@@ -783,7 +783,7 @@ func (r *Replica) handleReplicatedEvalResult(
 		// that all we need to synchronize is disk i/o, and there is no overlap
 		// between files *removed* during truncation and those active in Raft.
 
-		if r.store.cfg.Settings.Version.IsActive(cluster.VersionRaftLogTruncationBelowRaft) {
+		if r.store.cfg.Settings.Version.IsActive(cluster.Version1_0_0_1RaftLogTruncationBelowRaft) {
 			// Truncate the Raft log.
 			start := engine.MakeMVCCMetadataKey(keys.RaftLogKey(r.RangeID, 0))
 			end := engine.MakeMVCCMetadataKey(

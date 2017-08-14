@@ -21,10 +21,10 @@ var (
 	// by this binary. If this binary is started using a store that has
 	// data marked with an earlier version than MinimumSupportedVersion,
 	// then the binary will exit with an error.
-	MinimumSupportedVersion = VersionMajorOneMinorZero
+	MinimumSupportedVersion = Version1_0
 
 	// ServerVersion is the version of this binary.
-	ServerVersion = VersionMajorOneMinorOne
+	ServerVersion = Version1_1
 )
 
 // List all historical versions here in reverse chronological order, with
@@ -33,20 +33,20 @@ var (
 // NB: when adding a version, don't forget to bump ServerVersion above (and
 // perhaps MinimumSupportedVersion, if necessary).
 var (
-	// VersionMajorOneMinorOne is v1.1.
+	// Version1_1 is v1.1.
 	// Note that 1.1-alpha versions already self-identify as v1.1.
-	VersionMajorOneMinorOne = roachpb.Version{Major: 1, Minor: 1}
+	Version1_1 = roachpb.Version{Major: 1, Minor: 1}
 
-	// VersionSplitHardStateBelowRaft is https://github.com/cockroachdb/cockroach/pull/17051.
-	VersionSplitHardStateBelowRaft = roachpb.Version{Major: 1, Minor: 0, Unstable: 2}
+	// Version1_0_0_2SplitHardStateBelowRaft is https://github.com/cockroachdb/cockroach/pull/17051.
+	Version1_0_0_2SplitHardStateBelowRaft = roachpb.Version{Major: 1, Minor: 0, Unstable: 2}
 
-	// VersionRaftLogTruncationBelowRaft is https://github.com/cockroachdb/cockroach/pull/16993.
-	VersionRaftLogTruncationBelowRaft = roachpb.Version{Major: 1, Minor: 0, Unstable: 1}
+	// Version1_0_0_1RaftLogTruncationBelowRaft is https://github.com/cockroachdb/cockroach/pull/16993.
+	Version1_0_0_1RaftLogTruncationBelowRaft = roachpb.Version{Major: 1, Minor: 0, Unstable: 1}
 
-	// VersionMajorOneMinorZero corresponds to any binary older than 1.0-1,
+	// Version1_0 corresponds to any binary older than 1.0-1,
 	// though these binaries won't know anything about the mechanism in which
 	// this version is used.
-	VersionMajorOneMinorZero = roachpb.Version{Major: 1}
+	Version1_0 = roachpb.Version{Major: 1}
 )
 
 // BootstrapVersion is the version that a new cluster bootstrapped from this
