@@ -63,7 +63,7 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
                   {
                     _.map(ids, (id) => (
                       <span key={id.toNumber()}>
-                        <a href={`/debug/range?id=${id}`}>{id.toNumber()}</a>
+                        <a href={`#/reports/range/${id}`}>{id.toNumber()}</a>
                         <span> </span>
                       </span>
                     ))

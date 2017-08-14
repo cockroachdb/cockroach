@@ -62,6 +62,7 @@ func (s *statusServer) ProblemRanges(
 	responses := make(chan nodeResponse)
 	nodeCtx, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
 	defer cancel()
+	// TODO(bram): consider abstracting out this repeated pattern.
 	for nodeID, alive := range isLiveMap {
 		if !alive {
 			response.Failures = append(response.Failures, serverpb.Failure{

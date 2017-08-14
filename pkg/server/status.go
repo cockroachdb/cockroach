@@ -69,9 +69,6 @@ const (
 	// statusVars exposes prometheus metrics for monitoring consumption.
 	statusVars = statusPrefix + "vars"
 
-	// rangeDebugEndpoint exposes an html page with information about a specific range.
-	rangeDebugEndpoint = "/debug/range"
-
 	// raftStateDormant is used when there is no known raft state.
 	raftStateDormant = "StateDormant"
 
@@ -842,6 +839,108 @@ func (s *statusServer) Ranges(
 		return nil, grpc.Errorf(codes.Internal, err.Error())
 	}
 	return &output, nil
+}
+
+// Range returns rangeInfos for all nodes in the cluster about a specific
+// range. It also returns the range history for that range as well.
+func (s *statusServer) Range(
+	ctx context.Context, req *serverpb.RangeRequest,
+) (*serverpb.RangeResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
+	response := &serverpb.RangeResponse{
+		RangeID:           roachpb.RangeID(req.RangeId),
+		NodeID:            s.gossip.NodeID.Get(),
+		ResponsesByNodeID: make(map[roachpb.NodeID]serverpb.RangeResponse_NodeResponse),
+	}
+
+	nodeCtx, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
+	defer cancel()
+
+	isLiveMap := s.nodeLiveness.GetIsLiveMap()
+	type nodeResponse struct {
+		nodeID roachpb.NodeID
+		resp   *serverpb.RangesResponse
+		err    error
+	}
+
+	responses := make(chan nodeResponse)
+	// TODO(bram): consider abstracting out this repeated pattern.
+	for nodeID := range isLiveMap {
+		nodeID := nodeID
+		if err := s.stopper.RunAsyncTask(
+			nodeCtx,
+			"server.statusServer: requesting remote ranges",
+			func(ctx context.Context) {
+				status, err := s.dialNode(nodeID)
+				var rangesResponse *serverpb.RangesResponse
+				if err == nil {
+					rangesRequest := &serverpb.RangesRequest{
+						RangeIDs: []roachpb.RangeID{roachpb.RangeID(req.RangeId)},
+					}
+					rangesResponse, err = status.Ranges(ctx, rangesRequest)
+				}
+				response := nodeResponse{
+					nodeID: nodeID,
+					resp:   rangesResponse,
+					err:    err,
+				}
+
+				select {
+				case responses <- response:
+					// Response processed.
+				case <-ctx.Done():
+					// Context completed, response no longer needed.
+				}
+			}); err != nil {
+			return nil, grpc.Errorf(codes.Internal, err.Error())
+		}
+	}
+	for remainingResponses := len(isLiveMap); remainingResponses > 0; remainingResponses-- {
+		select {
+		case resp := <-responses:
+			if resp.err != nil {
+				response.ResponsesByNodeID[resp.nodeID] = serverpb.RangeResponse_NodeResponse{
+					ErrorMessage: resp.err.Error(),
+				}
+				continue
+			}
+			response.ResponsesByNodeID[resp.nodeID] = serverpb.RangeResponse_NodeResponse{
+				Response: true,
+				Infos:    resp.resp.Ranges,
+			}
+		case <-ctx.Done():
+			return nil, grpc.Errorf(codes.DeadlineExceeded, "request timed out")
+		}
+	}
+
+	// Fetch the range history.
+	rangeLogReq := &serverpb.RangeLogRequest{RangeId: req.RangeId}
+	rangeLogResp, err := s.admin.RangeLog(nodeCtx, rangeLogReq)
+	if err != nil {
+		response.RangeLog.ErrorMessage = err.Error()
+	}
+	if rangeLogResp != nil {
+		response.RangeLog.Events = rangeLogResp.Events
+		for _, event := range rangeLogResp.Events {
+			var prettyInfo serverpb.RangeResponse_RangeLog_PrettyInfo
+			if event.Info.NewDesc != nil {
+				prettyInfo.NewDesc = event.Info.NewDesc.String()
+			}
+			if event.Info.UpdatedDesc != nil {
+				prettyInfo.UpdatedDesc = event.Info.UpdatedDesc.String()
+			}
+			if event.Info.AddedReplica != nil {
+				prettyInfo.AddedReplica = event.Info.AddedReplica.String()
+			}
+			if event.Info.RemovedReplica != nil {
+				prettyInfo.RemovedReplica = event.Info.RemovedReplica.String()
+			}
+			response.RangeLog.PrettyInfos = append(
+				response.RangeLog.PrettyInfos, prettyInfo)
+		}
+	}
+
+	return response, nil
 }
 
 // ListLocalSessions returns a list of SQL sessions on this node.
