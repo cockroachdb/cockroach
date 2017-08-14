@@ -366,7 +366,7 @@ func TestStoresClusterVersionWriteSynthesize(t *testing.T) {
 	makeStores := func() *Stores {
 		// Hard-code ServerVersion of 1.1 for this test.
 		// Hard-code MinSupportedVersion of 1.0 for this test.
-		ls := NewStores(log.AmbientContext{}, stores[0].Clock(), cluster.Version1_0, roachpb.Version{Major: 1, Minor: 1})
+		ls := NewStores(log.AmbientContext{}, stores[0].Clock(), cluster.VersionBase, roachpb.Version{Major: 1, Minor: 1})
 		return ls
 	}
 
@@ -389,8 +389,8 @@ func TestStoresClusterVersionWriteSynthesize(t *testing.T) {
 			t.Fatal(err)
 		} else {
 			expCV := cluster.ClusterVersion{
-				MinimumVersion: cluster.Version1_0,
-				UseVersion:     cluster.Version1_0,
+				MinimumVersion: cluster.VersionBase,
+				UseVersion:     cluster.VersionBase,
 			}
 			if !reflect.DeepEqual(initialCV, expCV) {
 				t.Fatalf("expected %+v; got %+v", expCV, initialCV)
@@ -429,7 +429,7 @@ func TestStoresClusterVersionWriteSynthesize(t *testing.T) {
 
 		expCV := cluster.ClusterVersion{
 			MinimumVersion: versionA,
-			UseVersion:     cluster.Version1_0,
+			UseVersion:     cluster.VersionBase,
 		}
 		if cv, err := ls01.SynthesizeClusterVersion(ctx); err != nil {
 			t.Fatal(err)

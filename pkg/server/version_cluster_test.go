@@ -119,8 +119,8 @@ func TestClusterVersionUpgrade1_0To1_1(t *testing.T) {
 
 	// Start by running 1.0.
 	bootstrapVersion := cluster.ClusterVersion{
-		UseVersion:     cluster.Version1_0,
-		MinimumVersion: cluster.Version1_0,
+		UseVersion:     cluster.VersionBase,
+		MinimumVersion: cluster.VersionBase,
 	}
 
 	tc := setupMixedCluster(t, bootstrapVersion, versions)
@@ -264,8 +264,8 @@ func TestClusterVersionMixedIllegal(t *testing.T) {
 
 	// Start by running 1.1.
 	bootstrapVersion := cluster.ClusterVersion{
-		UseVersion:     cluster.Version1_0,
-		MinimumVersion: cluster.Version1_0,
+		UseVersion:     cluster.VersionBase,
+		MinimumVersion: cluster.VersionBase,
 	}
 
 	tc := setupMixedCluster(t, bootstrapVersion, versions)

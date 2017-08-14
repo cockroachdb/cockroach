@@ -353,10 +353,10 @@ func ReadVersionFromEngineOrDefault(
 	// These values should always exist in 1.1-initialized clusters, but may
 	// not on 1.0.x; we synthesize the missing version.
 	if cv.UseVersion == (roachpb.Version{}) {
-		cv.UseVersion = cluster.Version1_0
+		cv.UseVersion = cluster.VersionBase
 	}
 	if cv.MinimumVersion == (roachpb.Version{}) {
-		cv.MinimumVersion = cluster.Version1_0
+		cv.MinimumVersion = cluster.VersionBase
 	}
 	return cv, nil
 }
