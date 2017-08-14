@@ -1002,7 +1002,6 @@ func (s *Server) Start(ctx context.Context) error {
 	s.mux.Handle(authPrefix, gwMux)
 	s.mux.Handle("/health", gwMux)
 	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
-	s.mux.Handle(rangeDebugEndpoint, authorizedHandler(http.HandlerFunc(s.status.handleDebugRange)))
 	log.Event(ctx, "added http endpoints")
 
 	// Before serving SQL requests, we have to make sure the database is
