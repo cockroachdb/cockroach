@@ -210,7 +210,7 @@ func main() {
 			// This test doesn't care that https certificates are invalid.
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		},
-		Timeout: 5 * time.Second,
+		Timeout: time.Minute,
 	}
 
 	for url, locs := range uniqueURLs {
