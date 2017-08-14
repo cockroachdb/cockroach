@@ -217,10 +217,14 @@ func (s SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (ZoneConfig, error) 
 	// Special-case known system ranges to their special zone configs.
 	if key.Equal(roachpb.RKeyMin) || bytes.HasPrefix(key, keys.Meta1Prefix) || bytes.HasPrefix(key, keys.Meta2Prefix) {
 		objectID = keys.MetaRangesID
-	} else if bytes.HasPrefix(key, keys.TimeseriesPrefix) {
-		objectID = keys.TimeseriesRangesID
 	} else if bytes.HasPrefix(key, keys.SystemPrefix) {
-		objectID = keys.SystemRangesID
+		if bytes.HasPrefix(key, keys.NodeLivenessPrefix) {
+			objectID = keys.LivenessRangesID
+		} else if bytes.HasPrefix(key, keys.TimeseriesPrefix) {
+			objectID = keys.TimeseriesRangesID
+		} else {
+			objectID = keys.SystemRangesID
+		}
 	}
 
 	return s.getZoneConfigForID(objectID, keySuffix)

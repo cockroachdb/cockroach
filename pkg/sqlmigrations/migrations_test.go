@@ -16,8 +16,10 @@ package sqlmigrations
 
 import (
 	"bytes"
+	gosql "database/sql"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -25,6 +27,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -35,8 +38,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/gogo/protobuf/proto"
+	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 )
 
@@ -726,4 +731,141 @@ CREATE INDEX y ON test.x(x);
 	if err := mgr.EnsureMigrations(ctx); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestAddDefaultMetaZoneConfigMigration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	// Remove the migration so we can test its effects.
+	newMigrations := make([]migrationDescriptor, 0, len(backwardCompatibleMigrations))
+	for _, m := range backwardCompatibleMigrations {
+		if m.name == addDefaultMetaAndLivenessZoneConfigsName {
+			continue
+		}
+		newMigrations = append(newMigrations, m)
+	}
+
+	defer func(prev []migrationDescriptor) {
+		backwardCompatibleMigrations = prev
+	}(backwardCompatibleMigrations)
+	backwardCompatibleMigrations = newMigrations
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	ids := []uint32{keys.MetaRangesID, keys.LivenessRangesID}
+
+	for _, id := range ids {
+		var s string
+		err := sqlDB.QueryRow(`SELECT config FROM system.zones WHERE id = $1`, id).Scan(&s)
+		if err != gosql.ErrNoRows {
+			t.Fatalf("expected no rows, but found %v", err)
+		}
+	}
+
+	r := runner{
+		db:          kvDB,
+		sqlExecutor: s.Executor().(*sql.Executor),
+		memMetrics:  &sql.MemoryMetrics{},
+	}
+	// Run the migration and verify its effects.
+	if err := addDefaultMetaAndLivenessZoneConfigs(ctx, r); err != nil {
+		t.Fatal(err)
+	}
+
+	checkZoneConfig := func(id int, expected config.ZoneConfig) {
+		t.Helper()
+
+		var s string
+		err := sqlDB.QueryRow(`SELECT config FROM system.zones WHERE id = $1`, id).Scan(&s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var zone config.ZoneConfig
+		if err := protoutil.Unmarshal([]byte(s), &zone); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(expected, zone) {
+			t.Fatalf("unexpected .meta zone config: %s", pretty.Diff(expected, zone))
+		}
+	}
+
+	expectedMeta := config.DefaultZoneConfig()
+	expectedMeta.GC.TTLSeconds = 60 * 60
+	checkZoneConfig(keys.MetaRangesID, expectedMeta)
+	expectedLiveness := config.DefaultZoneConfig()
+	expectedLiveness.GC.TTLSeconds = 10 * 60
+	checkZoneConfig(keys.LivenessRangesID, expectedLiveness)
+
+	deleteZoneConfig := func(id int) {
+		const stmt = `DELETE FROM system.zones WHERE id=$1`
+		if _, err := sqlDB.Exec(stmt, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	setZoneConfig := func(id int, zone config.ZoneConfig) {
+		buf, err := protoutil.Marshal(&zone)
+		if err != nil {
+			t.Fatal(err)
+		}
+		const stmt = `UPSERT INTO system.zones (id, config) VALUES ($1, $2)`
+		if _, err := sqlDB.Exec(stmt, id, buf); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Set configs for the .meta and .system zones and clear the zone config for
+	// .liveness.
+	testZone := config.DefaultZoneConfig()
+	testZone.GC.TTLSeconds = 819
+	setZoneConfig(keys.MetaRangesID, testZone)
+	setZoneConfig(keys.SystemRangesID, testZone)
+	deleteZoneConfig(keys.LivenessRangesID)
+	if err := addDefaultMetaAndLivenessZoneConfigs(ctx, r); err != nil {
+		t.Fatal(err)
+	}
+	checkZoneConfig(keys.MetaRangesID, testZone)
+	checkZoneConfig(keys.LivenessRangesID, testZone)
+	checkZoneConfig(keys.SystemRangesID, testZone)
+
+	// Set configs for the .meta and .liveness zones and clear the zone config
+	// for .system.
+	testZone.GC.TTLSeconds = 834
+	setZoneConfig(keys.MetaRangesID, testZone)
+	setZoneConfig(keys.SystemRangesID, testZone)
+	deleteZoneConfig(keys.LivenessRangesID)
+	if err := addDefaultMetaAndLivenessZoneConfigs(ctx, r); err != nil {
+		t.Fatal(err)
+	}
+	checkZoneConfig(keys.MetaRangesID, testZone)
+	checkZoneConfig(keys.LivenessRangesID, testZone)
+	// NB: The .system zone config still doesn't exist.
+
+	// Verify that we'll update the meta/liveness zone config TTLs by migrating
+	// from the default/system zone configs.
+	testZone.RangeMaxBytes *= 2
+	testZone.GC.TTLSeconds = config.DefaultZoneConfig().GC.TTLSeconds
+	setZoneConfig(keys.RootNamespaceID, testZone)
+	setZoneConfig(keys.SystemRangesID, testZone)
+	deleteZoneConfig(keys.MetaRangesID)
+	deleteZoneConfig(keys.LivenessRangesID)
+	if err := addDefaultMetaAndLivenessZoneConfigs(ctx, r); err != nil {
+		t.Fatal(err)
+	}
+	testZone.GC.TTLSeconds = 60 * 60
+	checkZoneConfig(keys.MetaRangesID, testZone)
+	testZone.GC.TTLSeconds = 10 * 60
+	checkZoneConfig(keys.LivenessRangesID, testZone)
+
+	// Verify that we'll update the meta zone config even if it already exists as
+	// long as it has the default TTL.
+	testZone.RangeMaxBytes = 863
+	testZone.GC.TTLSeconds = config.DefaultZoneConfig().GC.TTLSeconds
+	setZoneConfig(keys.MetaRangesID, testZone)
+	if err := addDefaultMetaAndLivenessZoneConfigs(ctx, r); err != nil {
+		t.Fatal(err)
+	}
+	testZone.GC.TTLSeconds = 60 * 60
+	checkZoneConfig(keys.MetaRangesID, testZone)
 }

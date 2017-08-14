@@ -377,7 +377,7 @@ func TestGetZoneConfigForKey(t *testing.T) {
 		{roachpb.RKey(keys.SystemPrefix), keys.SystemRangesID},
 		{roachpb.RKey(keys.SystemPrefix.Next()), keys.SystemRangesID},
 		{roachpb.RKey(keys.MigrationLease), keys.SystemRangesID},
-		{roachpb.RKey(keys.NodeLivenessPrefix), keys.SystemRangesID},
+		{roachpb.RKey(keys.NodeLivenessPrefix), keys.LivenessRangesID},
 		{roachpb.RKey(keys.DescIDGenerator), keys.SystemRangesID},
 		{roachpb.RKey(keys.NodeIDGenerator), keys.SystemRangesID},
 		{roachpb.RKey(keys.RangeIDGenerator), keys.SystemRangesID},

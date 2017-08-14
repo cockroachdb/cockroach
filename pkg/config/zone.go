@@ -31,6 +31,7 @@ import (
 // can be targeted by zone configs.
 const (
 	DefaultZoneName    = "default"
+	LivenessZoneName   = "liveness"
 	MetaZoneName       = "meta"
 	SystemZoneName     = "system"
 	TimeseriesZoneName = "timeseries"
@@ -40,6 +41,7 @@ const (
 // install an entry into the system.zones table.
 var NamedZones = map[string]uint32{
 	DefaultZoneName:    keys.RootNamespaceID,
+	LivenessZoneName:   keys.LivenessRangesID,
 	MetaZoneName:       keys.MetaRangesID,
 	SystemZoneName:     keys.SystemRangesID,
 	TimeseriesZoneName: keys.TimeseriesRangesID,
