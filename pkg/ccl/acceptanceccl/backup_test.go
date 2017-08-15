@@ -122,6 +122,13 @@ func (bt *benchmarkTest) Start(ctx context.Context) {
 	// liveness failures. This limit was determined experimentally on
 	// Standard_D3_v2 instances.
 	sqlDB.Exec(`SET CLUSTER SETTING kv.bulk_io_write.max_rate = '30MB'`)
+	// Stats-based replica and lease rebalancing interacts badly with restore's
+	// splits and scatters.
+	//
+	// TODO(benesch): Remove these settings when #17671 is fixed, or document the
+	// necessity of these settings as 1.1 known limitation.
+	sqlDB.Exec(`SET CLUSTER SETTING kv.allocator.stat_based_rebalancing.enabled = false`)
+	sqlDB.Exec(`SET CLUSTER SETTING kv.allocator.load_based_lease_rebalancing.enabled = false`)
 
 	log.Info(ctx, "initial cluster is up")
 }
