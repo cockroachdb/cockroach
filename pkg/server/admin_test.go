@@ -726,6 +726,7 @@ func TestAdminAPIEvents(t *testing.T) {
 		"CREATE TABLE api_test.tbl3 (a INT)",
 		"DROP TABLE api_test.tbl1",
 		"DROP TABLE api_test.tbl2",
+		"SET CLUSTER SETTING kv.allocator.load_based_lease_rebalancing.enabled = false;",
 	}
 	for _, q := range setupQueries {
 		res, err := ts.sqlExecutor.ExecuteStatementsBuffered(session, q, nil, 1)
@@ -749,6 +750,7 @@ func TestAdminAPIEvents(t *testing.T) {
 		{sql.EventLogCreateDatabase, false, 0, 1},
 		{sql.EventLogDropTable, false, 0, 2},
 		{sql.EventLogCreateTable, false, 0, 3},
+		{sql.EventLogSetClusterSetting, false, 0, 2},
 		{sql.EventLogCreateTable, true, 0, 3},
 		{sql.EventLogCreateTable, true, -1, 3},
 		{sql.EventLogCreateTable, true, 2, 2},
@@ -804,7 +806,7 @@ func TestAdminAPIEvents(t *testing.T) {
 					}
 				}
 
-				if e.TargetID == 0 {
+				if e.TargetID == 0 && e.EventType != string(sql.EventLogSetClusterSetting) {
 					t.Errorf("%d: missing/empty TargetID", i)
 				}
 				if e.ReportingID == 0 {
