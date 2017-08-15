@@ -43,16 +43,17 @@ import (
 )
 
 const (
-	archivedStoreURL = "gs://cockroach-test/allocatortest"
-	StableInterval   = 3 * time.Minute
-	adminPort        = base.DefaultHTTPPort
+	StableInterval = 3 * time.Minute
+	adminPort      = base.DefaultHTTPPort
 )
 
+// Paths to cloud storage blobs that contain stores with pre-generated data.
+// Please keep /docs/cloud-resources.md up-to-date if you change these.
 const (
-	urlStore1s = archivedStoreURL + "/1node-10g-262ranges"
-	urlStore1m = archivedStoreURL + "/1node-2065replicas-108G"
-	urlStore3s = archivedStoreURL + "/3nodes-10g-262ranges"
-	urlStore6m = archivedStoreURL + "/6nodes-1038replicas-56G"
+	fixtureStore1s = "store-dumps/1node-10gb-262ranges"
+	fixtureStore1m = "store-dumps/1node-108gb-2065ranges"
+	fixtureStore3s = "store-dumps/3nodes-10g-262ranges"
+	fixtureStore6m = "store-dumps/6nodes-56gb-1038ranges"
 )
 
 type allocatorTest struct {
@@ -60,9 +61,10 @@ type allocatorTest struct {
 	StartNodes int
 	// EndNodes is the final number of nodes this cluster will have.
 	EndNodes int
-	// StoreURL is the Google Cloud Storage URL from which the test will download
-	// stores.
-	StoreURL string
+	// StoreFixture is the prefix of the store dump blobs that the test will
+	// download from cloud storage. For example, "store-dumps/foo" indicates that
+	// stores are available at "store-dumps/foo/storeN.tgz".
+	StoreFixture string
 	// Prefix is the prefix that will be prepended to all resources created by
 	// Terraform.
 	Prefix string
@@ -94,9 +96,12 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 	at.f.Assert(ctx, t)
 	log.Info(ctx, "initial cluster is up")
 
-	// We must stop the cluster because a) `nodectl` pokes at the data directory
-	// and, more importantly, b) we don't want the cluster above and the cluster
-	// below to ever talk to each other (see #7224).
+	// We must stop the cluster because:
+	//
+	// We're about to overwrite data directories.
+	//
+	// We don't want the cluster above and the cluster below to ever talk to
+	// each other (see #7224).
 	log.Info(ctx, "stopping cluster")
 	for i := 0; i < at.f.NumNodes(); i++ {
 		if err := at.f.Kill(ctx, i); err != nil {
@@ -104,11 +109,16 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 		}
 	}
 
-	log.Info(ctx, "downloading archived stores from Google Cloud Storage in parallel")
+	storeURL := FixtureURL(at.StoreFixture)
+	log.Infof(ctx, "downloading archived stores from %s in parallel", storeURL)
 	errors := make(chan error, at.f.NumNodes())
 	for i := 0; i < at.f.NumNodes(); i++ {
 		go func(nodeNum int) {
-			errors <- at.f.Exec(nodeNum, "./nodectl download "+at.StoreURL)
+			errors <- at.f.Exec(nodeNum,
+				fmt.Sprintf("find %[1]s -type f -delete && curl -sfSL %s/store%d.tgz | tar -C %[1]s -zx",
+					"/mnt/data0", storeURL, nodeNum+1,
+				),
+			)
 		}(i)
 	}
 	for i := 0; i < at.f.NumNodes(); i++ {
@@ -444,10 +454,10 @@ func (at *allocatorTest) WaitForRebalance(ctx context.Context, t *testing.T) err
 func TestUpreplicate_1To3Small(t *testing.T) {
 	ctx := context.Background()
 	at := allocatorTest{
-		StartNodes: 1,
-		EndNodes:   3,
-		StoreURL:   urlStore1s,
-		Prefix:     "uprep-1to3s",
+		StartNodes:   1,
+		EndNodes:     3,
+		StoreFixture: fixtureStore1s,
+		Prefix:       "uprep-1to3s",
 	}
 	at.RunAndCleanup(ctx, t)
 }
@@ -460,7 +470,7 @@ func TestRebalance_3To5Small_WithSchemaChanges(t *testing.T) {
 	at := allocatorTest{
 		StartNodes:       3,
 		EndNodes:         5,
-		StoreURL:         urlStore3s,
+		StoreFixture:     fixtureStore3s,
 		Prefix:           "rebal-3to5s",
 		RunSchemaChanges: true,
 	}
@@ -472,10 +482,10 @@ func TestRebalance_3To5Small_WithSchemaChanges(t *testing.T) {
 func TestRebalance_3To5Small(t *testing.T) {
 	ctx := context.Background()
 	at := allocatorTest{
-		StartNodes: 3,
-		EndNodes:   5,
-		StoreURL:   urlStore3s,
-		Prefix:     "rebal-3to5s",
+		StartNodes:   3,
+		EndNodes:     5,
+		StoreFixture: fixtureStore3s,
+		Prefix:       "rebal-3to5s",
 	}
 	at.RunAndCleanup(ctx, t)
 }
@@ -485,10 +495,10 @@ func TestRebalance_3To5Small(t *testing.T) {
 func TestUpreplicate_1To3Medium(t *testing.T) {
 	ctx := context.Background()
 	at := allocatorTest{
-		StartNodes: 1,
-		EndNodes:   3,
-		StoreURL:   urlStore1m,
-		Prefix:     "uprep-1to3m",
+		StartNodes:   1,
+		EndNodes:     3,
+		StoreFixture: fixtureStore1m,
+		Prefix:       "uprep-1to3m",
 	}
 	at.RunAndCleanup(ctx, t)
 }
@@ -499,10 +509,10 @@ func TestUpreplicate_1To3Medium(t *testing.T) {
 func TestUpreplicate_1To6Medium(t *testing.T) {
 	ctx := context.Background()
 	at := allocatorTest{
-		StartNodes: 1,
-		EndNodes:   6,
-		StoreURL:   urlStore1m,
-		Prefix:     "uprep-1to6m",
+		StartNodes:   1,
+		EndNodes:     6,
+		StoreFixture: fixtureStore1m,
+		Prefix:       "uprep-1to6m",
 	}
 	at.RunAndCleanup(ctx, t)
 }
@@ -515,7 +525,7 @@ func TestSteady_6Medium(t *testing.T) {
 	at := allocatorTest{
 		StartNodes:       6,
 		EndNodes:         6,
-		StoreURL:         urlStore6m,
+		StoreFixture:     fixtureStore6m,
 		Prefix:           "steady-6m",
 		RunSchemaChanges: true,
 	}
@@ -528,7 +538,7 @@ func TestSteady_3Small(t *testing.T) {
 	at := allocatorTest{
 		StartNodes:       3,
 		EndNodes:         3,
-		StoreURL:         urlStore3s,
+		StoreFixture:     fixtureStore3s,
 		Prefix:           "steady-3s",
 		RunSchemaChanges: true,
 	}
