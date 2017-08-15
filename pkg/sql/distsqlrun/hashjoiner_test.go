@@ -534,7 +534,7 @@ func TestHashJoiner(t *testing.T) {
 			rightInput := NewRowBuffer(nil /* types */, c.inputs[1], RowBufferArgs{})
 			out := &RowBuffer{}
 			flowCtx := FlowCtx{
-				Settings:    cluster.MakeClusterSettings(),
+				Settings:    cluster.MakeTestingClusterSettings(),
 				EvalCtx:     evalCtx,
 				tempStorage: tempEngine,
 				diskMonitor: &diskMonitor,
@@ -681,7 +681,7 @@ func TestHashJoinerDrain(t *testing.T) {
 		RowBufferArgs{AccumulateRowsWhileDraining: true})
 	evalCtx := parser.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
-	flowCtx := FlowCtx{Settings: cluster.MakeClusterSettings(), EvalCtx: evalCtx}
+	flowCtx := FlowCtx{Settings: cluster.MakeTestingClusterSettings(), EvalCtx: evalCtx}
 
 	post := PostProcessSpec{Projection: true, OutputColumns: outCols}
 	h, err := newHashJoiner(&flowCtx, &spec, leftInput, rightInput, &post, out)
@@ -792,7 +792,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 		RowBufferArgs{})
 	evalCtx := parser.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
-	flowCtx := FlowCtx{Settings: cluster.MakeClusterSettings(), EvalCtx: evalCtx}
+	flowCtx := FlowCtx{Settings: cluster.MakeTestingClusterSettings(), EvalCtx: evalCtx}
 
 	post := PostProcessSpec{Projection: true, OutputColumns: outCols}
 	h, err := newHashJoiner(&flowCtx, &spec, leftInput, rightInput, &post, out)
@@ -837,7 +837,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 	evalCtx := parser.MakeTestingEvalContext()
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
-		Settings: cluster.MakeClusterSettings(),
+		Settings: cluster.MakeTestingClusterSettings(),
 		EvalCtx:  evalCtx,
 	}
 

@@ -47,7 +47,7 @@ func TestCrashReportingPacket(t *testing.T) {
 	ctx := context.Background()
 	var packets []*raven.Packet
 
-	st := cluster.MakeClusterSettings()
+	st := cluster.MakeTestingClusterSettings()
 	// Enable all crash-reporting settings.
 	st.DiagnosticsReportingEnabled.Override(true)
 

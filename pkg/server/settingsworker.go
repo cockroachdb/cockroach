@@ -124,7 +124,7 @@ func (s *Server) refreshSettings() {
 					}
 				}
 				if ok {
-					u.Done()
+					u.ResetRemaining()
 				}
 			case <-s.stopper.ShouldStop():
 				return

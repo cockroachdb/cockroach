@@ -211,11 +211,13 @@ func checkServerArgsForCluster(
 //
 // The new Server's copy of serverArgs might be changed according to the
 // cluster's ReplicationMode.
-func (tc *TestCluster) AddServer(t testing.TB, serverArgs base.TestServerArgs) error {
+func (tc *TestCluster) AddServer(t testing.TB, serverArgs base.TestServerArgs) {
 	if serverArgs.JoinAddr == "" && len(tc.Servers) > 0 {
 		serverArgs.JoinAddr = tc.Servers[0].ServingAddr()
 	}
-	return tc.doAddServer(t, serverArgs)
+	if err := tc.doAddServer(t, serverArgs); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func (tc *TestCluster) doAddServer(t testing.TB, serverArgs base.TestServerArgs) error {

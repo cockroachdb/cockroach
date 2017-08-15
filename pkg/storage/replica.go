@@ -4458,7 +4458,7 @@ func (r *Replica) applyRaftCommand(
 	start := timeutil.Now()
 
 	var assertHS *raftpb.HardState
-	if util.RaceEnabled && rResult.Split != nil && r.store.cfg.IsActive(cluster.VersionSplitHardStateBelowRaft) {
+	if util.RaceEnabled && rResult.Split != nil && r.store.cfg.Settings.Version.IsActive(cluster.VersionSplitHardStateBelowRaft) {
 		oldHS, err := loadHardState(ctx, r.store.Engine(), rResult.Split.RightDesc.RangeID)
 		if err != nil {
 			log.Fatalf(ctx, "unable to load HardState: %s", err)

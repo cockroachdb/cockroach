@@ -108,3 +108,12 @@ func ParseVersion(s string) (Version, error) {
 
 	return c, nil
 }
+
+// MustParseVersion calls ParseVersion and panics on error.
+func MustParseVersion(s string) Version {
+	v, err := ParseVersion(s)
+	if err != nil {
+		panic(err)
+	}
+	return v
+}

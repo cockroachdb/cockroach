@@ -200,7 +200,7 @@ func TestSorter(t *testing.T) {
 	defer diskMonitor.Stop(ctx)
 	flowCtx := FlowCtx{
 		EvalCtx:     evalCtx,
-		Settings:    cluster.MakeClusterSettings(),
+		Settings:    cluster.MakeTestingClusterSettings(),
 		tempStorage: tempEngine,
 		diskMonitor: &diskMonitor,
 	}
@@ -265,7 +265,7 @@ func BenchmarkSortAll(b *testing.B) {
 	evalCtx := parser.MakeTestingEvalContext()
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
-		Settings: cluster.MakeClusterSettings(),
+		Settings: cluster.MakeTestingClusterSettings(),
 		EvalCtx:  evalCtx,
 	}
 
@@ -308,7 +308,7 @@ func BenchmarkSortLimit(b *testing.B) {
 	evalCtx := parser.MakeTestingEvalContext()
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
-		Settings: cluster.MakeClusterSettings(),
+		Settings: cluster.MakeTestingClusterSettings(),
 		EvalCtx:  evalCtx,
 	}
 

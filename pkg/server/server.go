@@ -250,7 +250,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 
 	s.raftTransport = storage.NewRaftTransport(
-		s.cfg.AmbientCtx, cluster.MakeClusterSettings(), storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext,
+		s.cfg.AmbientCtx, st, storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext,
 	)
 
 	s.kvDB = kv.NewDBServer(s.cfg.Config, s.txnCoordSender, s.stopper)
@@ -268,8 +268,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.leaseMgr = sql.NewLeaseManager(&s.nodeIDContainer, *s.db, s.clock, lmKnobs,
 		s.stopper, &s.internalMemMetrics)
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
-
-	s.refreshSettings()
 
 	// We do not set memory monitors or a noteworthy limit because the children of
 	// this monitor will be setting their own noteworthy limits.
@@ -516,19 +514,30 @@ type ListenError struct {
 	Addr string
 }
 
-func (s *Server) isAnyStoreBootstrapped(ctx context.Context) (bool, error) {
-	for _, e := range s.engines {
-		if _, err := storage.ReadStoreIdent(ctx, e); err != nil {
-			// NotBootstrappedError is expected.
-			if _, ok := err.(*storage.NotBootstrappedError); !ok {
-				return false, err
-			}
-		} else {
-			return true, nil
+func inspectEngines(
+	ctx context.Context, engines []engine.Engine, minVersion, serverVersion roachpb.Version,
+) (
+	bootstrappedEngines []engine.Engine,
+	emptyEngines []engine.Engine,
+	_ cluster.ClusterVersion,
+	_ error,
+) {
+	for _, engine := range engines {
+		_, err := storage.ReadStoreIdent(ctx, engine)
+		if _, notBootstrapped := err.(*storage.NotBootstrappedError); notBootstrapped {
+			emptyEngines = append(emptyEngines, engine)
+			continue
+		} else if err != nil {
+			return nil, nil, cluster.ClusterVersion{}, err
 		}
+		bootstrappedEngines = append(bootstrappedEngines, engine)
 	}
 
-	return false, nil
+	cv, err := storage.SynthesizeClusterVersionFromEngines(ctx, bootstrappedEngines, minVersion, serverVersion)
+	if err != nil {
+		return nil, nil, cluster.ClusterVersion{}, err
+	}
+	return bootstrappedEngines, emptyEngines, cv, nil
 }
 
 // Start starts the server on the specified port, starts gossip and initializes
@@ -758,9 +767,9 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.stopper.AddCloser(&s.engines)
 
-	if anyStoreBootstrapped, err := s.isAnyStoreBootstrapped(ctx); err != nil {
-		return err
-	} else if anyStoreBootstrapped {
+	if bootstrappedEngines, _, _, err := inspectEngines(ctx, s.engines, s.cfg.Settings.Version.MinSupportedVersion, s.cfg.Settings.Version.ServerVersion); err != nil {
+		return errors.Wrap(err, "inspecting engines")
+	} else if len(bootstrappedEngines) > 0 {
 		// We might have to sleep a bit to protect against this node producing non-
 		// monotonic timestamps. Before restarting, its clock might have been driven
 		// by other nodes' fast clocks, but when we restarted, we lost all this
@@ -789,7 +798,13 @@ func (s *Server) Start(ctx context.Context) error {
 		// empty, then this node can bootstrap a new cluster. We disallow
 		// this if this node is being started with itself specified as a
 		// --join host, because that's too likely to be operator error.
-		if err = s.node.bootstrap(ctx, s.engines); err != nil {
+		bootstrapVersion := s.cfg.Settings.Version.BootstrapVersion()
+		if s.cfg.TestingKnobs.Store != nil {
+			if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs); ok && storeKnobs.BootstrapVersion != nil {
+				bootstrapVersion = *storeKnobs.BootstrapVersion
+			}
+		}
+		if err = s.node.bootstrap(ctx, s.engines, bootstrapVersion); err != nil {
 			return err
 		}
 		log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
@@ -813,19 +828,31 @@ func (s *Server) Start(ctx context.Context) error {
 		atomic.StoreInt32(&initLActive, 0)
 	}
 
+	// We ran this before, but might've bootstrapped in the meantime. This time
+	// we'll get the actual list of bootstrapped and empty engines.
+	bootstrappedEngines, emptyEngines, cv, err := inspectEngines(ctx, s.engines, s.cfg.Settings.Version.MinSupportedVersion, s.cfg.Settings.Version.ServerVersion)
+	if err != nil {
+		return errors.Wrap(err, "inspecting engines")
+	}
+
 	// Now that we have a monotonic HLC wrt previous incarnations of the process,
-	// init all the replicas.  At this point *some* store has been bootstrapped.
+	// init all the replicas. At this point *some* store has been bootstrapped or
+	// we're joining an existing cluster for the first time.
 	err = s.node.start(
 		ctx,
 		unresolvedAdvertAddr,
-		s.engines,
+		bootstrappedEngines, emptyEngines,
 		s.cfg.NodeAttributes,
-		s.cfg.Locality)
+		s.cfg.Locality,
+		cv,
+	)
 
 	if err != nil {
 		return err
 	}
 	log.Event(ctx, "started node")
+
+	s.refreshSettings()
 
 	raven.SetTagsContext(map[string]string{
 		"cluster":   s.ClusterID().String(),

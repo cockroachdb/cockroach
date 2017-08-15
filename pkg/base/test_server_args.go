@@ -17,6 +17,7 @@ package base
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
@@ -31,6 +32,7 @@ type TestServerArgs struct {
 	// Knobs for the test server.
 	Knobs TestingKnobs
 
+	*cluster.Settings
 	RaftConfig
 
 	// PartOfCluster must be set if the TestServer is joining others in a cluster.

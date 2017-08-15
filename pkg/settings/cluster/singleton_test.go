@@ -21,7 +21,7 @@ import (
 )
 
 func TestCrashReportingSingletonSetting(t *testing.T) {
-	st := MakeClusterSettings()
+	st := MakeTestingClusterSettings()
 
 	for _, hasDiagnosticsReportingEnabled := range []bool{false, true} {
 		for _, hasCrashReportsEnabled := range []bool{false, true} {

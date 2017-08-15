@@ -56,7 +56,9 @@ func TestReplicateQueueRebalance(t *testing.T) {
 	defer tc.Stopper().Stop(context.TODO())
 
 	for _, server := range tc.Servers {
-		server.ClusterSettings().EnableStatsBasedRebalancing.Override(false)
+		st := server.ClusterSettings()
+		st.Manual.Store(true)
+		st.EnableStatsBasedRebalancing.Override(false)
 	}
 
 	const newRanges = 5
@@ -127,9 +129,7 @@ func TestReplicateQueueUpReplicate(t *testing.T) {
 		t.Fatalf("replica count, want 1, current %d", len(desc.Replicas))
 	}
 
-	if err := tc.AddServer(t, base.TestServerArgs{}); err != nil {
-		t.Fatal(err)
-	}
+	tc.AddServer(t, base.TestServerArgs{})
 
 	testutils.SucceedsSoon(t, func() error {
 		// After the initial splits have been performed, all of the resulting ranges
@@ -152,9 +152,7 @@ func TestReplicateQueueUpReplicate(t *testing.T) {
 		return nil
 	})
 
-	if err := tc.AddServer(t, base.TestServerArgs{}); err != nil {
-		t.Fatal(err)
-	}
+	tc.AddServer(t, base.TestServerArgs{})
 
 	// Now wait until the replicas have been up-replicated to the
 	// desired number.

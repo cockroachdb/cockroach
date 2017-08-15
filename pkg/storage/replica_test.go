@@ -151,7 +151,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 		stopper.AddCloser(tc.engine)
 	}
 	if tc.transport == nil {
-		tc.transport = NewDummyRaftTransport()
+		tc.transport = NewDummyRaftTransport(cfg.Settings)
 	}
 	ctx := context.TODO()
 	if tc.store == nil {
@@ -168,7 +168,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 			ClusterID: uuid.MakeV4(),
 			NodeID:    1,
 			StoreID:   1,
-		}); err != nil {
+		}, cfg.Settings.Version.BootstrapVersion()); err != nil {
 			t.Fatal(err)
 		}
 		// Now that we have our actual store, monkey patch the sender used in cfg.DB.
@@ -8053,6 +8053,7 @@ func TestCommandTooLarge(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
+	tc.store.cfg.Settings.Manual.Store(true)
 	maxCommandSize := tc.store.cfg.Settings.MaxCommandSize
 	maxCommandSize.Override(1024)
 

@@ -146,6 +146,7 @@ func TestAmbiguousCommit(t *testing.T) {
 			// sender's cache below.
 			for _, server := range tc.Servers {
 				st := server.ClusterSettings()
+				st.Manual.Store(true)
 				st.DistSQLClusterExecMode.Override(int64(cluster.DistSQLOff))
 			}
 

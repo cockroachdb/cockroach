@@ -21,6 +21,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/net/context"
 	"golang.org/x/time/rate"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -235,11 +236,38 @@ type CCLSettings struct {
 // Settings is the collection of cluster settings. For a running CockroachDB
 // node, there is a single instance of ClusterSetting which is shared across all
 // of its components.
+//
+// The Version setting deserves an individual explanantion. During the node
+// startup sequence, an initial version (persisted to the engines) is read and
+// passed to InitializeVersion(). It is only after that that the Version field
+// of this struct is ready for use (i.e. Version() and IsActive() can be
+// called). In turn, the node usually registers itself as a callback to be
+// notified of any further updates to the setting, which are then persisted.
+//
+// This dance is necessary because we cannot determine a safe default value for
+// the version setting without looking at what's been persisted: The setting
+// specifies the minimum binary version we have to expect to be in a mixed
+// cluster with. We can't assume this binary's MinimumSupportedVersion as we
+// could've started up earlier and enabled features that are not actually
+// compatible with that version; we can't assume it's our binary's ServerVersion
+// as that would enable features that may trip up older versions running in the
+// same cluster. Hence, only once we get word of the "safe" version to use can
+// we allow moving parts that actually need to know what's going on.
+//
+// Additionally, whenever the version changes, we want to persist that update to
+// wherever the caller to InitializeVersion() got the initial version from
+// (typically a collection of `engine.Engine`s), which the caller will do by
+// registering itself via `(*Setting).Version.OnChange()`, which is invoked
+// *before* exposing the new version to callers of `IsActive()` and `Version()`.
+//
+// For testing or one-off situations in which a ClusterSetting is needed, but
+// cluster settings don't play a crucial role, MakeTestingClusterSetting() is
+// provided; it is pre-initialized to the binary's ServerVersion.
 type Settings struct {
-	// Manual, if set, lets this ClusterSetting's MakeUpdater method return a
-	// dummy updater that simply throws away all values. This is for use in
-	// tests for which manual control is desired.
-	Manual *atomic.Value // bool
+	// Manual defaults to false. If set, lets this ClusterSetting's MakeUpdater
+	// method return a dummy updater that simply throws away all values. This is
+	// for use in tests for which manual control is desired.
+	Manual atomic.Value // bool
 	// A Registry populated with all of the individual cluster settings.
 	settings.Registry
 
@@ -254,29 +282,123 @@ type Settings struct {
 	UISettings
 	CCLSettings
 
-	Version *settings.StateMachineSetting
+	Version ExposedClusterVersion
 }
 
-// MakeClusterSettings makes a new ClusterSettings object. Note that by default,
-// the Manual field is false, that is, an Updater made from the ClusterSetting
-// is a NoopUpdater. For a "real" non-testing server, this field must be set to
-// true or the settings won't be updated when the persisted settings table is
-// updated.
-func MakeClusterSettings() *Settings {
+const keyVersionSetting = "version"
+
+// InitializeVersion initializes the Version field of this setting. Before this
+// method has been called, usage of the Version field is illegal and leads to a
+// fatal error.
+func (s *Settings) InitializeVersion(cv ClusterVersion) error {
+	b, err := cv.Marshal()
+	if err != nil {
+		return err
+	}
+	// Note that we don't call `updater.ResetRemaining()`.
+	updater := settings.NewUpdater(s.Registry)
+	if err := updater.Set(keyVersionSetting, string(b), s.Version.version.Typ()); err != nil {
+		return err
+	}
+	s.Version.baseVersion.Store(&cv)
+	return nil
+}
+
+// An ExposedClusterVersion exposes a cluster-wide minimum version which is
+// assumed to be supported by all nodes. This in turn allows features which are
+// incompatible with older versions to be used safely.
+type ExposedClusterVersion struct {
+	MinSupportedVersion roachpb.Version
+	ServerVersion       roachpb.Version
+	baseVersion         atomic.Value // stores *ClusterVersion
+	version             *settings.StateMachineSetting
+	cb                  func(ClusterVersion)
+}
+
+// OnChange registers (a single) callback that will be invoked whenever the
+// cluster version changes. The new cluster version will only become "visible"
+// after the callback has returned.
+//
+// The callback can be set at most once.
+func (ecv *ExposedClusterVersion) OnChange(f func(cv ClusterVersion)) {
+	if ecv.cb != nil {
+		log.Fatal(context.TODO(), "cannot set callback twice")
+	}
+	ecv.cb = f
+}
+
+// Version returns the minimum cluster version the caller may assume is in
+// effect. It must not be called until the setting has been initialized.
+func (ecv *ExposedClusterVersion) Version() ClusterVersion {
+	v := *ecv.baseVersion.Load().(*ClusterVersion)
+	if (v == ClusterVersion{}) {
+		log.Fatal(context.Background(), "Version() was called before having been initialized")
+	}
+	return v
+}
+
+// BootstrapVersion returns the version a newly initialized cluster should have.
+func (ecv *ExposedClusterVersion) BootstrapVersion() ClusterVersion {
+	return ClusterVersion{
+		MinimumVersion: ecv.ServerVersion,
+		UseVersion:     ecv.ServerVersion,
+	}
+}
+
+// IsActive returns true if the features of the supplied version are active at
+// the running version.
+func (ecv *ExposedClusterVersion) IsActive(v roachpb.Version) bool {
+	return !ecv.Version().UseVersion.Less(v)
+}
+
+// MakeTestingClusterSettings returns a Settings object that has had its version
+// initialized to BootstrapVersion().
+func MakeTestingClusterSettings() *Settings {
+	st := MakeClusterSettings(BinaryServerVersion, BinaryServerVersion)
+	cv := st.Version.BootstrapVersion()
+	// Initialize with all features enabled.
+	if err := st.InitializeVersion(cv); err != nil {
+		log.Fatalf(context.TODO(), "unable to initialize version: %s", err)
+	}
+	return st
+}
+
+// MakeClusterSettings makes a new ClusterSettings object for the given minimum
+// supported and server version, respectively.
+func MakeClusterSettings(minVersion, serverVersion roachpb.Version) *Settings {
 	var s Settings
 	r := settings.NewRegistry()
 	s.Registry = r
-	var manual atomic.Value
-	s.Manual = &manual
 
-	s.Manual.Store(true)
-
-	s.Version = r.RegisterStateMachineSetting("version",
+	// Initialize the setting. Note that baseVersion starts out with the zero
+	// cluster version, for which the transformer accepts any new version. After
+	// that, it'll only accept "valid bumps". We use this to initialize the
+	// variable lazily, after we have read the current version from the engines.
+	// After that, updates come from Gossip and need to be compatible with the
+	// engine version.
+	s.Version.MinSupportedVersion = minVersion
+	s.Version.ServerVersion = serverVersion
+	s.Version.baseVersion.Store(&ClusterVersion{})
+	s.Version.version = r.RegisterStateMachineSetting(keyVersionSetting,
 		"set the active cluster version in the format '<major>.<minor>'.", // hide optional `-<unstable>`
-		versionTransformer(ClusterVersion{
-			MinimumVersion: ServerVersion,
-			UseVersion:     ServerVersion,
-		}))
+		versionTransformer(minVersion, serverVersion, func() ClusterVersion {
+			return *s.Version.baseVersion.Load().(*ClusterVersion)
+		}),
+	).OnChange(func() {
+		_, obj, err := s.Version.version.Transformer([]byte(s.Version.version.Get()), nil)
+		if err != nil {
+			log.Fatal(context.Background(), err)
+		}
+		newV := *((*ClusterVersion)(obj.(*stringedVersion)))
+
+		// Call callback before exposing the new version to callers of
+		// IsActive() and Version(). Don't do this if the new version is
+		// trivial, which is the case as the setting is initialized.
+		if (newV != ClusterVersion{}) && s.Version.cb != nil {
+			s.Version.cb(newV)
+		}
+		s.Version.baseVersion.Store(&newV)
+	})
 
 	s.Tracer = tracing.NewTracer()
 
@@ -607,11 +729,11 @@ func MakeClusterSettings() *Settings {
 // MakeUpdater returns a new Updater, pre-alloced to the registry size. Note
 // that if the Setting has the Manual flag set, this Updater simply ignores all
 // updates.
-func (st Settings) MakeUpdater() settings.Updater {
-	if isManual, ok := st.Manual.Load().(bool); ok && isManual {
-		return settings.NoopUpdater{}
+func (s *Settings) MakeUpdater() settings.Updater {
+	if isManual, ok := s.Manual.Load().(bool); ok && isManual {
+		return &settings.NoopUpdater{}
 	}
-	return settings.MakeResettingUpdater(st.Registry)
+	return settings.NewUpdater(s.Registry)
 }
 
 type stringedVersion ClusterVersion
@@ -623,7 +745,9 @@ func (sv *stringedVersion) String() string {
 	return sv.MinimumVersion.String()
 }
 
-func versionTransformer(defaultVersion ClusterVersion) settings.TransformerFn {
+func versionTransformer(
+	minSupportedVersion, serverVersion roachpb.Version, defaultVersion func() ClusterVersion,
+) settings.TransformerFn {
 	return func(curRawProto []byte, versionBump *string) (newRawProto []byte, versionStringer interface{}, _ error) {
 		defer func() {
 			if versionStringer != nil {
@@ -634,7 +758,7 @@ func versionTransformer(defaultVersion ClusterVersion) settings.TransformerFn {
 
 		// If no old value supplied, fill in the default.
 		if curRawProto == nil {
-			oldV = defaultVersion
+			oldV = defaultVersion()
 			var err error
 			curRawProto, err = oldV.Marshal()
 			if err != nil {
@@ -646,12 +770,16 @@ func versionTransformer(defaultVersion ClusterVersion) settings.TransformerFn {
 			return nil, nil, err
 		}
 		if versionBump == nil {
-			// Round-trip the existing value, but only if it passes sanity checks.
-			b, err := oldV.Marshal()
-			if err != nil {
-				return nil, nil, err
+			// Round-trip the existing value, but only if it passes sanity
+			// checks. This is also the path taken when the setting gets updated
+			// via the gossip callback.
+			if serverVersion.Less(oldV.MinimumVersion) {
+				log.Fatalf(context.TODO(), "node at %s cannot run at %s", serverVersion, oldV.MinimumVersion)
 			}
-			return b, &oldV, err
+			if (oldV.MinimumVersion != roachpb.Version{}) && oldV.MinimumVersion.Less(minSupportedVersion) {
+				log.Fatalf(context.TODO(), "node at %s cannot run at %s (minimum version is %s)", serverVersion, oldV.MinimumVersion, minSupportedVersion)
+			}
+			return curRawProto, &oldV, nil
 		}
 
 		// We have a new proposed update to the value, validate it.
@@ -667,14 +795,14 @@ func versionTransformer(defaultVersion ClusterVersion) settings.TransformerFn {
 			return nil, nil, errors.Errorf("cannot downgrade from %s to %s", oldV.MinimumVersion, minVersion)
 		}
 
-		if !oldV.MinimumVersion.CanBump(minVersion) {
+		if oldV != (ClusterVersion{}) && !oldV.MinimumVersion.CanBump(minVersion) {
 			return nil, nil, errors.Errorf("cannot upgrade directly from %s to %s", oldV.MinimumVersion, minVersion)
 		}
 
-		if ServerVersion.Less(minVersion) {
+		if serverVersion.Less(minVersion) {
 			// TODO(tschottdorf): also ask gossip about other nodes.
 			return nil, nil, errors.Errorf("cannot upgrade to %s: node running %s",
-				minVersion, ServerVersion)
+				minVersion, serverVersion)
 		}
 
 		b, err := newV.Marshal()

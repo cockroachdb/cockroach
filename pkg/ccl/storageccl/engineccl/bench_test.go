@@ -53,7 +53,7 @@ func loadTestData(
 
 	eng, err := engine.NewRocksDB(
 		engine.RocksDBConfig{
-			RocksDBSettings: cluster.MakeClusterSettings().RocksDBSettings,
+			RocksDBSettings: cluster.MakeTestingClusterSettings().RocksDBSettings,
 			Dir:             dir,
 		},
 		engine.RocksDBCache{},

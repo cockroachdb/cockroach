@@ -89,7 +89,7 @@ func (s *initServer) Bootstrap(
 		return nil, errors.New("bootstrap called after cluster already initialized")
 	}
 
-	if err := s.server.node.bootstrap(ctx, s.server.engines); err != nil {
+	if err := s.server.node.bootstrap(ctx, s.server.engines, s.server.cfg.Settings.Version.BootstrapVersion()); err != nil {
 		log.Error(ctx, "node bootstrap failed: ", err)
 		return nil, err
 	}
