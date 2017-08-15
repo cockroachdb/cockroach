@@ -52,12 +52,12 @@ export default class extends React.Component<VisualizationProps, {}> {
     return (
       <div className={vizClasses}>
         <div className="visualization__header">
-          <div className="visualization__title">
+          <span className="visualization__title">
             {title}
-          </div>
+          </span>
           {
             this.props.subtitle ?
-              <div className="visualization__subtitle">{this.props.subtitle}</div>
+              <span className="visualization__subtitle">{this.props.subtitle}</span>
               : null
           }
           {
