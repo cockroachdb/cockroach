@@ -178,9 +178,8 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 	newServerArgs.JoinAddr = tc.Servers[1].ServingAddr()
 	log.Infof(ctx, "stopping server %d", oldNodeIdx)
 	tc.StopServer(oldNodeIdx)
-	if err := tc.AddServer(t, newServerArgs); err != nil {
-		t.Fatal(err)
-	}
+	tc.AddServer(t, newServerArgs)
+
 	tc.WaitForStores(t, tc.Server(1).Gossip())
 
 	// Ensure that all servers still running are responsive. If the two remaining

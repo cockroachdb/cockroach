@@ -17,14 +17,14 @@ package cluster
 import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
 var (
-	// MinimumSupportedVersion is the earliest version of data supported
-	// by this binary. If this binary is started using a store that has
-	// data marked with an earlier version than MinimumSupportedVersion,
-	// then the binary will exit with an error.
-	MinimumSupportedVersion = VersionBase
+	// BinaryMinimumSupportedVersion is the earliest version of data supported
+	// by this binary. If this binary is started using a store that has data
+	// marked with an earlier version than BinaryMinimumSupportedVersion, then
+	// the binary will exit with an error.
+	BinaryMinimumSupportedVersion = VersionBase
 
-	// ServerVersion is the version of this binary.
-	ServerVersion = VersionSplitHardStateBelowRaft
+	// BinaryServerVersion is the version of this binary.
+	BinaryServerVersion = VersionSplitHardStateBelowRaft
 )
 
 // List all historical versions here in reverse chronological order, with
@@ -39,12 +39,8 @@ var (
 	// VersionRaftLogTruncationBelowRaft is https://github.com/cockroachdb/cockroach/pull/16993.
 	VersionRaftLogTruncationBelowRaft = roachpb.Version{Major: 1, Minor: 0, Unstable: 1}
 
-	// VersionBase is the empty version and corresponds to any binary
-	// older than 1.0.1, though these binaries won't know anything
-	// about the mechanism in which this version is used.
+	// VersionBase corresponds to any binary older than 1.0-1,
+	// though these binaries won't know anything about the mechanism in which
+	// this version is used.
 	VersionBase = roachpb.Version{Major: 1}
 )
-
-// FIXME(tschottdorf): remove these with the version migration PR.
-var _ = MinimumSupportedVersion
-var _ = VersionBase

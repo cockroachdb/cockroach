@@ -103,6 +103,12 @@ func (p *planner) showClusterSetting(ctx context.Context, name string) (planNode
 					}
 					prevRawVal = []byte(string(*dStr))
 				}
+				// Note that if no entry is found, we pretend that an entry
+				// exists which is the version used for the running binary.
+				// This is a bit awkward, but we have no good way of ensuring
+				// that this entry is written at cluster bootstrap time.
+				// Subject to change. See
+				// https://github.com/cockroachdb/cockroach/issues/17389
 				_, obj, err := s.Validate(prevRawVal, nil)
 				if err != nil {
 					return nil, errors.Errorf("unable to read existing value: %s", err)

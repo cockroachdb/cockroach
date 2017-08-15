@@ -72,7 +72,7 @@ func TestValues(t *testing.T) {
 					}
 
 					out := &RowBuffer{}
-					flowCtx := FlowCtx{Settings: cluster.MakeClusterSettings()}
+					flowCtx := FlowCtx{Settings: cluster.MakeTestingClusterSettings()}
 
 					v, err := newValuesProcessor(&flowCtx, &spec, &PostProcessSpec{}, out)
 					if err != nil {

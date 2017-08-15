@@ -38,7 +38,7 @@ func makeTestV3Conn(c net.Conn) v3Conn {
 	mon := mon.MakeUnlimitedMonitor(
 		context.Background(), "test", mon.MemoryResource, nil, nil, 1000,
 	)
-	st := cluster.MakeClusterSettings()
+	st := cluster.MakeTestingClusterSettings()
 	exec := sql.NewExecutor(
 		sql.ExecutorConfig{
 			AmbientCtx:              log.AmbientContext{Tracer: st.Tracer},

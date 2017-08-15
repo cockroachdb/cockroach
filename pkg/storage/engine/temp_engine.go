@@ -42,7 +42,7 @@ func NewTempEngine(ctx context.Context, storeCfg base.StoreSpec) (Engine, error)
 	}
 
 	// FIXME(tschottdorf): should be passed in.
-	st := cluster.MakeClusterSettings()
+	st := cluster.MakeClusterSettings(cluster.BinaryServerVersion, cluster.BinaryServerVersion)
 
 	rocksDBCfg := RocksDBConfig{
 		RocksDBSettings: st.RocksDBSettings,

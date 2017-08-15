@@ -60,7 +60,7 @@ import (
 // not nil, the gossip bootstrap address is set to gossipBS.
 func createTestNode(
 	addr net.Addr, engines []engine.Engine, gossipBS net.Addr, t *testing.T,
-) (*grpc.Server, net.Addr, *hlc.Clock, *Node, *stop.Stopper) {
+) (*grpc.Server, net.Addr, storage.StoreConfig, *Node, *stop.Stopper) {
 	cfg := storage.TestStoreConfig(nil)
 	st := cfg.Settings
 
@@ -95,7 +95,7 @@ func createTestNode(
 		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	)
 	cfg.DB = client.NewDB(sender, cfg.Clock)
-	cfg.Transport = storage.NewDummyRaftTransport()
+	cfg.Transport = storage.NewDummyRaftTransport(st)
 	cfg.MetricsSampleInterval = metric.TestSampleInterval
 	cfg.HistogramWindowInterval = metric.TestSampleInterval
 	active, renewal := cfg.NodeLivenessDurations()
@@ -141,7 +141,7 @@ func createTestNode(
 		)
 		cfg.Gossip.Start(ln.Addr(), filtered)
 	}
-	return grpcServer, ln.Addr(), cfg.Clock, node, stopper
+	return grpcServer, ln.Addr(), cfg, node, stopper
 }
 
 // createAndStartTestNode creates a new test node and starts it. The server and node are returned.
@@ -152,8 +152,12 @@ func createAndStartTestNode(
 	locality roachpb.Locality,
 	t *testing.T,
 ) (*grpc.Server, net.Addr, *Node, *stop.Stopper) {
-	grpcServer, addr, _, node, stopper := createTestNode(addr, engines, gossipBS, t)
-	if err := node.start(context.Background(), addr, engines, roachpb.Attributes{}, locality); err != nil {
+	grpcServer, addr, cfg, node, stopper := createTestNode(addr, engines, gossipBS, t)
+	bootstrappedEngines, newEngines, cv, err := inspectEngines(context.TODO(), engines, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := node.start(context.Background(), addr, bootstrappedEngines, newEngines, roachpb.Attributes{}, locality, cv); err != nil {
 		t.Fatal(err)
 	}
 	if err := WaitForInitialSplits(node.storeCfg.DB); err != nil {
@@ -183,10 +187,11 @@ func TestBootstrapCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
+	st := cluster.MakeTestingClusterSettings()
 	if _, err := bootstrapCluster(
 		context.TODO(), storage.StoreConfig{
-			Settings: cluster.MakeClusterSettings(),
-		}, []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
+			Settings: st,
+		}, []engine.Engine{e}, st.Version.BootstrapVersion(), kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -226,8 +231,10 @@ func TestBootstrapCluster(t *testing.T) {
 func TestBootstrapNewStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	cfg := bootstrapNodeConfig()
 	if _, err := bootstrapCluster(
-		context.TODO(), bootstrapNodeConfig(), []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
+		context.TODO(), cfg, []engine.Engine{e}, cfg.Settings.Version.BootstrapVersion(),
+		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -295,7 +302,7 @@ func TestNodeJoin(t *testing.T) {
 
 	cfg := bootstrapNodeConfig()
 	if _, err := bootstrapCluster(
-		context.TODO(), cfg, []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
+		context.TODO(), cfg, []engine.Engine{e}, cfg.Settings.Version.BootstrapVersion(), kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -361,8 +368,10 @@ func TestCorruptedClusterID(t *testing.T) {
 
 	e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	defer e.Close()
+
+	cfg := bootstrapNodeConfig()
 	if _, err := bootstrapCluster(
-		context.TODO(), bootstrapNodeConfig(), []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
+		context.TODO(), cfg, []engine.Engine{e}, cfg.Settings.Version.BootstrapVersion(), kv.MakeTxnMetrics(metric.TestSampleInterval),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -378,10 +387,14 @@ func TestCorruptedClusterID(t *testing.T) {
 	}
 
 	engines := []engine.Engine{e}
-	_, serverAddr, _, node, stopper := createTestNode(util.TestAddr, engines, nil, t)
+	_, serverAddr, cfg, node, stopper := createTestNode(util.TestAddr, engines, nil, t)
 	stopper.Stop(context.TODO())
+	bootstrappedEngines, newEngines, cv, err := inspectEngines(context.TODO(), engines, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := node.start(
-		context.Background(), serverAddr, engines, roachpb.Attributes{}, roachpb.Locality{},
+		context.Background(), serverAddr, bootstrappedEngines, newEngines, roachpb.Attributes{}, roachpb.Locality{}, cv,
 	); !testutils.IsError(err, "unidentified store") {
 		t.Errorf("unexpected error %v", err)
 	}
@@ -691,8 +704,9 @@ func TestStartNodeWithLocality(t *testing.T) {
 	testLocalityWithNewNode := func(locality roachpb.Locality) {
 		e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 		defer e.Close()
+		cfg := bootstrapNodeConfig()
 		if _, err := bootstrapCluster(
-			context.TODO(), bootstrapNodeConfig(), []engine.Engine{e}, kv.MakeTxnMetrics(metric.TestSampleInterval),
+			context.TODO(), cfg, []engine.Engine{e}, cfg.Settings.Version.BootstrapVersion(), kv.MakeTxnMetrics(metric.TestSampleInterval),
 		); err != nil {
 			t.Fatal(err)
 		}

@@ -41,12 +41,14 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -249,7 +251,9 @@ type testClusterConfig struct {
 	// if set, any logic statement expected to succeed and parallelizable
 	// using RETURNING NOTHING syntax will be parallelized transparently.
 	// See logicStatement.parallelizeStmts.
-	parallelStmts bool
+	parallelStmts    bool
+	bootstrapVersion *cluster.ClusterVersion
+	serverVersion    *roachpb.Version
 }
 
 // logicTestConfigs contains all possible cluster configs. A test file can
@@ -260,6 +264,13 @@ type testClusterConfig struct {
 // via -config).
 var logicTestConfigs = []testClusterConfig{
 	{name: "default", numNodes: 1, overrideDistSQLMode: "Off"},
+	{name: "default-v1.1@v1.0", numNodes: 1, overrideDistSQLMode: "Off",
+		bootstrapVersion: &cluster.ClusterVersion{
+			UseVersion:     cluster.VersionBase,
+			MinimumVersion: cluster.VersionBase,
+		},
+		serverVersion: &roachpb.Version{Major: 1, Minor: 1},
+	},
 	{name: "parallel-stmts", numNodes: 1, parallelStmts: true, overrideDistSQLMode: "Off"},
 	{name: "distsql", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On"},
 	{name: "distsql-disk", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", distSQLUseDisk: true},
@@ -659,6 +670,9 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 					WaitForGossipUpdate:   true,
 					CheckStmtStringChange: true,
 				},
+				Store: &storage.StoreTestingKnobs{
+					BootstrapVersion: cfg.bootstrapVersion,
+				},
 			},
 		},
 		// For distributed SQL tests, we use the fake span resolver; it doesn't
@@ -670,6 +684,23 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 			MemoryLimitBytes: 1,
 		}
 	}
+
+	if cfg.serverVersion != nil {
+		// If we want to run a specific server version, we assume that it
+		// supports at least the bootstrap version.
+		paramsPerNode := map[int]base.TestServerArgs{}
+		minVersion := *cfg.serverVersion
+		if cfg.bootstrapVersion != nil {
+			minVersion = cfg.bootstrapVersion.MinimumVersion
+		}
+		for i := 0; i < cfg.numNodes; i++ {
+			nodeParams := params.ServerArgs
+			nodeParams.Settings = cluster.MakeClusterSettings(minVersion, *cfg.serverVersion)
+			paramsPerNode[i] = nodeParams
+		}
+		params.ServerArgsPerNode = paramsPerNode
+	}
+
 	t.cluster = serverutils.StartTestCluster(t.t, cfg.numNodes, params)
 	if cfg.useFakeSpanResolver {
 		fakeResolver := distsqlutils.FakeResolverForTestCluster(t.cluster)
@@ -680,7 +711,9 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		server := t.cluster.Server(i)
 		// We want to collect SQL per-statement statistics in tests,
 		// regardless of what the environment / config says.
-		server.ClusterSettings().StmtStatsEnable.Override(true)
+		st := server.ClusterSettings()
+		st.Manual.Store(true)
+		st.StmtStatsEnable.Override(true)
 
 		// NB: We must set this before the Exec() below as that opens a session,
 		// locking in the DistSQL setting for that session. If we change it
@@ -688,7 +721,9 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		// existing Session.
 		if cfg.overrideDistSQLMode != "" {
 			mode := cluster.DistSQLExecModeFromString(cfg.overrideDistSQLMode)
-			server.ClusterSettings().DistSQLClusterExecMode.Override(int64(mode))
+			st := server.ClusterSettings()
+			st.Manual.Store(true)
+			st.DistSQLClusterExecMode.Override(int64(mode))
 		}
 	}
 

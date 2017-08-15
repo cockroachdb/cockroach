@@ -36,8 +36,7 @@ func TestSettingAndCheckingLicense(t *testing.T) {
 		ValidUntilUnixSec: t0.AddDate(0, 2, 0).Unix(),
 	}.Encode()
 
-	st := cluster.MakeClusterSettings()
-	st.Manual.Store(false)
+	st := cluster.MakeTestingClusterSettings()
 
 	for i, tc := range []struct {
 		lic          string
@@ -74,8 +73,7 @@ func TestSettingBadLicenseStrings(t *testing.T) {
 		{"blah", "invalid license string"},
 		{"cl-0-blah", "invalid license string"},
 	} {
-		st := cluster.MakeClusterSettings()
-		st.Manual.Store(false)
+		st := cluster.MakeTestingClusterSettings()
 		u := st.MakeUpdater()
 
 		if err := u.Set("enterprise.license", tc.lic, "s"); !testutils.IsError(
