@@ -220,7 +220,7 @@ func (rq *replicateQueue) process(
 	// snapshot errors, usually signalling that a rebalancing
 	// reservation could not be made with the selected target.
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		if requeue, err := rq.processOneChange(ctx, repl, sysCfg); err != nil {
+		if requeue, err := rq.processOneChange(ctx, repl, sysCfg, rq.canTransferLease); err != nil {
 			if IsSnapshotError(err) {
 				// If ChangeReplicas failed because the preemptive snapshot failed, we
 				// log the error but then return success indicating we should retry the
@@ -242,7 +242,7 @@ func (rq *replicateQueue) process(
 }
 
 func (rq *replicateQueue) processOneChange(
-	ctx context.Context, repl *Replica, sysCfg config.SystemConfig,
+	ctx context.Context, repl *Replica, sysCfg config.SystemConfig, canTransferLease func() bool,
 ) (requeue bool, _ error) {
 	desc := repl.Desc()
 
@@ -449,7 +449,7 @@ func (rq *replicateQueue) processOneChange(
 			log.Infof(ctx, "considering a rebalance")
 		}
 
-		if rq.canTransferLease() {
+		if canTransferLease() {
 			// We require the lease in order to process replicas, so
 			// repl.store.StoreID() corresponds to the lease-holder's store ID.
 			transferred, err := rq.transferLease(
@@ -490,6 +490,7 @@ func (rq *replicateQueue) processOneChange(
 					ctx, repl, rebalanceReplica, desc, SnapshotRequest_REBALANCE); err != nil {
 					return false, err
 				}
+				return true, nil
 			}
 		}
 
