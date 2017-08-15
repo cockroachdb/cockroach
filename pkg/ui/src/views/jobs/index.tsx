@@ -39,7 +39,7 @@ const typeOptions = [
   { value: jobType.UNSPECIFIED.toString(), label: "All" },
   { value: jobType.BACKUP.toString(), label: "Backups" },
   { value: jobType.RESTORE.toString(), label: "Restores" },
-  { value: jobType.SCHEMA_CHANGE.toString(), label: "Schema changes" },
+  { value: jobType.SCHEMA_CHANGE.toString(), label: "Schema Changes" },
 ];
 
 const typeSetting = new LocalSetting<AdminUIState, number>(
