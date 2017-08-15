@@ -115,7 +115,7 @@ class Range extends React.Component<RangeProps, {}> {
       .value();
 
     return (
-      <div>
+      <div className="section">
         <h1>Range r{responseRangeID.toString()} at {Print.Time(moment().utc())} UTC</h1>
         <RangeTable infos={infos} replicas={replicas} />
         <LeaseTable info={_.head(infos)} />
