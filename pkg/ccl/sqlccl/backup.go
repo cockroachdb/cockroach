@@ -141,6 +141,10 @@ func allSQLDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descript
 	endKey := startKey.PrefixEnd()
 	rows, err := txn.Scan(ctx, startKey, endKey, 0)
 	if err != nil {
+		// NB: Don't wrap this error, as wrapped HandledRetryableTxnErrors are not
+		// automatically retried by db.Txn.
+		//
+		// TODO(benesch): teach the KV layer to use errors.Cause.
 		return nil, err
 	}
 
@@ -156,7 +160,11 @@ func allSQLDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descript
 func allRangeDescriptors(ctx context.Context, txn *client.Txn) ([]roachpb.RangeDescriptor, error) {
 	rows, err := txn.Scan(ctx, keys.Meta2Prefix, keys.MetaMax, 0)
 	if err != nil {
-		return nil, errors.Wrap(err, "unable to scan range descriptors")
+		// NB: Don't wrap this error, as wrapped HandledRetryableTxnErrors are not
+		// automatically retried by db.Txn.
+		//
+		// TODO(benesch): teach the KV layer to use errors.Cause.
+		return nil, err
 	}
 
 	rangeDescs := make([]roachpb.RangeDescriptor, len(rows))
@@ -439,7 +447,7 @@ func backup(
 		ranges, err = allRangeDescriptors(ctx, txn)
 		return err
 	}); err != nil {
-		return err
+		return errors.Wrap(err, "fetching range descriptors")
 	}
 
 	var completedSpans []roachpb.Span
