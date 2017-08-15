@@ -1542,17 +1542,17 @@ class Version : public ::google::protobuf::MessageLite /* @@protoc_insertion_poi
 
   // accessors -------------------------------------------------------
 
-  bool has_major() const;
-  void clear_major();
-  static const int kMajorFieldNumber = 1;
-  ::google::protobuf::int32 major() const;
-  void set_major(::google::protobuf::int32 value);
+  bool has_major_val() const;
+  void clear_major_val();
+  static const int kMajorValFieldNumber = 1;
+  ::google::protobuf::int32 major_val() const;
+  void set_major_val(::google::protobuf::int32 value);
 
-  bool has_minor() const;
-  void clear_minor();
-  static const int kMinorFieldNumber = 2;
-  ::google::protobuf::int32 minor() const;
-  void set_minor(::google::protobuf::int32 value);
+  bool has_minor_val() const;
+  void clear_minor_val();
+  static const int kMinorValFieldNumber = 2;
+  ::google::protobuf::int32 minor_val() const;
+  void set_minor_val(::google::protobuf::int32 value);
 
   bool has_patch() const;
   void clear_patch();
@@ -1568,10 +1568,10 @@ class Version : public ::google::protobuf::MessageLite /* @@protoc_insertion_poi
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Version)
  private:
-  void set_has_major();
-  void clear_has_major();
-  void set_has_minor();
-  void clear_has_minor();
+  void set_has_major_val();
+  void clear_has_major_val();
+  void set_has_minor_val();
+  void clear_has_minor_val();
   void set_has_patch();
   void clear_has_patch();
   void set_has_unstable();
@@ -1580,8 +1580,8 @@ class Version : public ::google::protobuf::MessageLite /* @@protoc_insertion_poi
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::HasBits<1> _has_bits_;
   mutable int _cached_size_;
-  ::google::protobuf::int32 major_;
-  ::google::protobuf::int32 minor_;
+  ::google::protobuf::int32 major_val_;
+  ::google::protobuf::int32 minor_val_;
   ::google::protobuf::int32 patch_;
   ::google::protobuf::int32 unstable_;
   friend struct protobuf_cockroach_2fpkg_2froachpb_2fmetadata_2eproto::TableStruct;
@@ -2924,50 +2924,50 @@ inline void Tier::set_allocated_value(::std::string* value) {
 
 // Version
 
-inline bool Version::has_major() const {
+inline bool Version::has_major_val() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-inline void Version::set_has_major() {
+inline void Version::set_has_major_val() {
   _has_bits_[0] |= 0x00000001u;
 }
-inline void Version::clear_has_major() {
+inline void Version::clear_has_major_val() {
   _has_bits_[0] &= ~0x00000001u;
 }
-inline void Version::clear_major() {
-  major_ = 0;
-  clear_has_major();
+inline void Version::clear_major_val() {
+  major_val_ = 0;
+  clear_has_major_val();
 }
-inline ::google::protobuf::int32 Version::major() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Version.major)
-  return major_;
+inline ::google::protobuf::int32 Version::major_val() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Version.major_val)
+  return major_val_;
 }
-inline void Version::set_major(::google::protobuf::int32 value) {
-  set_has_major();
-  major_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.Version.major)
+inline void Version::set_major_val(::google::protobuf::int32 value) {
+  set_has_major_val();
+  major_val_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Version.major_val)
 }
 
-inline bool Version::has_minor() const {
+inline bool Version::has_minor_val() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-inline void Version::set_has_minor() {
+inline void Version::set_has_minor_val() {
   _has_bits_[0] |= 0x00000002u;
 }
-inline void Version::clear_has_minor() {
+inline void Version::clear_has_minor_val() {
   _has_bits_[0] &= ~0x00000002u;
 }
-inline void Version::clear_minor() {
-  minor_ = 0;
-  clear_has_minor();
+inline void Version::clear_minor_val() {
+  minor_val_ = 0;
+  clear_has_minor_val();
 }
-inline ::google::protobuf::int32 Version::minor() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Version.minor)
-  return minor_;
+inline ::google::protobuf::int32 Version::minor_val() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Version.minor_val)
+  return minor_val_;
 }
-inline void Version::set_minor(::google::protobuf::int32 value) {
-  set_has_minor();
-  minor_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.Version.minor)
+inline void Version::set_minor_val(::google::protobuf::int32 value) {
+  set_has_minor_val();
+  minor_val_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Version.minor_val)
 }
 
 inline bool Version::has_patch() const {

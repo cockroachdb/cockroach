@@ -4738,8 +4738,8 @@ void Tier::set_allocated_value(::std::string* value) {
 // ===================================================================
 
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
-const int Version::kMajorFieldNumber;
-const int Version::kMinorFieldNumber;
+const int Version::kMajorValFieldNumber;
+const int Version::kMinorValFieldNumber;
 const int Version::kPatchFieldNumber;
 const int Version::kUnstableFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
@@ -4758,16 +4758,16 @@ Version::Version(const Version& from)
       _has_bits_(from._has_bits_),
       _cached_size_(0) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
-  ::memcpy(&major_, &from.major_,
+  ::memcpy(&major_val_, &from.major_val_,
     reinterpret_cast<char*>(&unstable_) -
-    reinterpret_cast<char*>(&major_) + sizeof(unstable_));
+    reinterpret_cast<char*>(&major_val_) + sizeof(unstable_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.Version)
 }
 
 void Version::SharedCtor() {
   _cached_size_ = 0;
-  ::memset(&major_, 0, reinterpret_cast<char*>(&unstable_) -
-    reinterpret_cast<char*>(&major_) + sizeof(unstable_));
+  ::memset(&major_val_, 0, reinterpret_cast<char*>(&unstable_) -
+    reinterpret_cast<char*>(&major_val_) + sizeof(unstable_));
 }
 
 Version::~Version() {
@@ -4799,8 +4799,8 @@ Version* Version::New(::google::protobuf::Arena* arena) const {
 void Version::Clear() {
 // @@protoc_insertion_point(message_clear_start:cockroach.roachpb.Version)
   if (_has_bits_[0 / 32] & 15u) {
-    ::memset(&major_, 0, reinterpret_cast<char*>(&unstable_) -
-      reinterpret_cast<char*>(&major_) + sizeof(unstable_));
+    ::memset(&major_val_, 0, reinterpret_cast<char*>(&unstable_) -
+      reinterpret_cast<char*>(&major_val_) + sizeof(unstable_));
   }
   _has_bits_.Clear();
   _internal_metadata_.Clear();
@@ -4825,10 +4825,10 @@ bool Version::MergePartialFromCodedStream(
       case 1: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(8u)) {
-          set_has_major();
+          set_has_major_val();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
-                 input, &major_)));
+                 input, &major_val_)));
         } else {
           goto handle_unusual;
         }
@@ -4838,10 +4838,10 @@ bool Version::MergePartialFromCodedStream(
       case 2: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(16u)) {
-          set_has_minor();
+          set_has_minor_val();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
-                 input, &minor_)));
+                 input, &minor_val_)));
         } else {
           goto handle_unusual;
         }
@@ -4904,11 +4904,11 @@ void Version::SerializeWithCachedSizes(
 
   cached_has_bits = _has_bits_[0];
   if (cached_has_bits & 0x00000001u) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt32(1, this->major(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(1, this->major_val(), output);
   }
 
   if (cached_has_bits & 0x00000002u) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt32(2, this->minor(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(2, this->minor_val(), output);
   }
 
   if (cached_has_bits & 0x00000004u) {
@@ -4931,16 +4931,16 @@ size_t Version::ByteSizeLong() const {
   total_size += unknown_fields().size();
 
   if (_has_bits_[0 / 32] & 15u) {
-    if (has_major()) {
+    if (has_major_val()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::Int32Size(
-          this->major());
+          this->major_val());
     }
 
-    if (has_minor()) {
+    if (has_minor_val()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::Int32Size(
-          this->minor());
+          this->minor_val());
     }
 
     if (has_patch()) {
@@ -4978,10 +4978,10 @@ void Version::MergeFrom(const Version& from) {
   cached_has_bits = from._has_bits_[0];
   if (cached_has_bits & 15u) {
     if (cached_has_bits & 0x00000001u) {
-      major_ = from.major_;
+      major_val_ = from.major_val_;
     }
     if (cached_has_bits & 0x00000002u) {
-      minor_ = from.minor_;
+      minor_val_ = from.minor_val_;
     }
     if (cached_has_bits & 0x00000004u) {
       patch_ = from.patch_;
@@ -5009,8 +5009,8 @@ void Version::Swap(Version* other) {
   InternalSwap(other);
 }
 void Version::InternalSwap(Version* other) {
-  std::swap(major_, other->major_);
-  std::swap(minor_, other->minor_);
+  std::swap(major_val_, other->major_val_);
+  std::swap(minor_val_, other->minor_val_);
   std::swap(patch_, other->patch_);
   std::swap(unstable_, other->unstable_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
@@ -5025,50 +5025,50 @@ void Version::InternalSwap(Version* other) {
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
 // Version
 
-bool Version::has_major() const {
+bool Version::has_major_val() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-void Version::set_has_major() {
+void Version::set_has_major_val() {
   _has_bits_[0] |= 0x00000001u;
 }
-void Version::clear_has_major() {
+void Version::clear_has_major_val() {
   _has_bits_[0] &= ~0x00000001u;
 }
-void Version::clear_major() {
-  major_ = 0;
-  clear_has_major();
+void Version::clear_major_val() {
+  major_val_ = 0;
+  clear_has_major_val();
 }
-::google::protobuf::int32 Version::major() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Version.major)
-  return major_;
+::google::protobuf::int32 Version::major_val() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Version.major_val)
+  return major_val_;
 }
-void Version::set_major(::google::protobuf::int32 value) {
-  set_has_major();
-  major_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.Version.major)
+void Version::set_major_val(::google::protobuf::int32 value) {
+  set_has_major_val();
+  major_val_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Version.major_val)
 }
 
-bool Version::has_minor() const {
+bool Version::has_minor_val() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-void Version::set_has_minor() {
+void Version::set_has_minor_val() {
   _has_bits_[0] |= 0x00000002u;
 }
-void Version::clear_has_minor() {
+void Version::clear_has_minor_val() {
   _has_bits_[0] &= ~0x00000002u;
 }
-void Version::clear_minor() {
-  minor_ = 0;
-  clear_has_minor();
+void Version::clear_minor_val() {
+  minor_val_ = 0;
+  clear_has_minor_val();
 }
-::google::protobuf::int32 Version::minor() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Version.minor)
-  return minor_;
+::google::protobuf::int32 Version::minor_val() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Version.minor_val)
+  return minor_val_;
 }
-void Version::set_minor(::google::protobuf::int32 value) {
-  set_has_minor();
-  minor_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.Version.minor)
+void Version::set_minor_val(::google::protobuf::int32 value) {
+  set_has_minor_val();
+  minor_val_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Version.minor_val)
 }
 
 bool Version::has_patch() const {
