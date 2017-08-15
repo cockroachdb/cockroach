@@ -17,6 +17,7 @@ ssh-keygen -f controller.id_rsa -N ''
 
 progress Spinning up the cluster
 # A failure here is caught by the trap handler.
-terraform apply --var=key_name="${KEY_NAME}"
+terraform init
+terraform apply --input=false --var=key_name="${KEY_NAME}"
 
 tc Finished SetupCluster

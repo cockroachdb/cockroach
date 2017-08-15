@@ -1,4 +1,6 @@
 provider "google" {
+  version = "~> 0.1"
+
   region = "${var.gce_region}"
 }
 
