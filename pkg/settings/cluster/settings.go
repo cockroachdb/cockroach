@@ -583,7 +583,7 @@ func MakeClusterSettings(minVersion, serverVersion roachpb.Version) *Settings {
 	s.DistSQLUseTempStorage = r.RegisterBoolSetting(
 		"sql.defaults.distsql.tempstorage",
 		"set to true to enable use of disk for larger distributed sql queries",
-		false,
+		true,
 	)
 
 	s.DistSQLUseTempStorageSorts = r.RegisterBoolSetting(

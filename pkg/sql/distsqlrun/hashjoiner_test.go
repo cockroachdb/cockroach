@@ -658,10 +658,10 @@ func TestHashJoinerDrain(t *testing.T) {
 	}
 	leftInputDrainNotification := make(chan error, 1)
 	leftInputConsumerDone := func(rb *RowBuffer) {
-		// Check that draining occurs before the left input has been consumer, not
-		// at the end.
-		// The left input started with 2 rows and 1 was consumed to find out that we
-		// need to drain. So we expect 1 to be left.
+		// Check that draining occurs before the left input has been consumed,
+		// not at the end.
+		// The left input started with 2 rows and 1 was consumed to find out
+		// that we need to drain. So we expect 1 to be left.
 		rb.mu.Lock()
 		defer rb.mu.Unlock()
 		if len(rb.mu.records) != 1 {
@@ -680,8 +680,14 @@ func TestHashJoinerDrain(t *testing.T) {
 		nil /* types */, nil, /* rows */
 		RowBufferArgs{AccumulateRowsWhileDraining: true})
 	evalCtx := parser.MakeTestingEvalContext()
-	defer evalCtx.Stop(context.Background())
-	flowCtx := FlowCtx{Settings: cluster.MakeTestingClusterSettings(), EvalCtx: evalCtx}
+	ctx := context.Background()
+	defer evalCtx.Stop(ctx)
+
+	// Since the use of external storage overrides h.initialBufferSize, disable
+	// it for this test.
+	settings := cluster.MakeTestingClusterSettings()
+	settings.DistSQLSettings.DistSQLUseTempStorage.Override(false)
+	flowCtx := FlowCtx{Settings: settings, EvalCtx: evalCtx}
 
 	post := PostProcessSpec{Projection: true, OutputColumns: outCols}
 	h, err := newHashJoiner(&flowCtx, &spec, leftInput, rightInput, &post, out)
@@ -689,10 +695,12 @@ func TestHashJoinerDrain(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Disable initial buffering. We always store the right stream in this case.
+	// If not disabled, both streams will be fully consumed before outputting
+	// any rows.
 	h.initialBufferSize = 0
 
 	out.ConsumerDone()
-	h.Run(context.Background(), nil)
+	h.Run(ctx, nil)
 
 	if !out.ProducerClosed {
 		t.Fatalf("output RowReceiver not closed")
