@@ -79,22 +79,18 @@ func newServerTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
 		return nil, err
 	}
 
-	return &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		// Verify client certs if passed.
-		ClientAuth: tls.VerifyClientCertIfGiven,
-		RootCAs:    certPool,
-		ClientCAs:  certPool,
-
-		// Use the default cipher suite from golang (RC4 is going away in 1.5).
-		// Prefer the server-specified suite.
-		PreferServerCipherSuites: true,
-
-		MinVersion: tls.VersionTLS12,
-
-		// Should we disable session resumption? This may break forward secrecy.
-		// SessionTicketsDisabled: true,
-	}, nil
+	cfg := newBaseTLSConfig()
+	cfg.Certificates = []tls.Certificate{cert}
+	// Verify client certs if passed.
+	cfg.ClientAuth = tls.VerifyClientCertIfGiven
+	cfg.RootCAs = certPool
+	cfg.ClientCAs = certPool
+	// Use the default cipher suite from golang (RC4 is going away in 1.5).
+	// Prefer the server-specified suite.
+	cfg.PreferServerCipherSuites = true
+	// Should we disable session resumption? This may break forward secrecy.
+	// cfg.SessionTicketsDisabled = true
+	return cfg, nil
 }
 
 // LoadClientTLSConfig creates a client TLSConfig by loading the CA and client certs.
@@ -136,9 +132,56 @@ func newClientTLSConfig(certPEM, keyPEM, caPEM []byte) (*tls.Config, error) {
 		return nil, errors.Errorf("failed to parse PEM data to pool")
 	}
 
+	cfg := newBaseTLSConfig()
+	cfg.Certificates = []tls.Certificate{cert}
+	cfg.RootCAs = certPool
+	return cfg, nil
+}
+
+// newBaseTLSConfig returns a tls.Config initialized with the
+// parameters that are common to clients and servers.
+func newBaseTLSConfig() *tls.Config {
 	return &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		RootCAs:      certPool,
-		MinVersion:   tls.VersionTLS12,
-	}, nil
+		MinVersion: tls.VersionTLS12,
+
+		// This is Go's default list of cipher suites (as of go 1.8.3),
+		// with the following differences:
+		// - 3DES-based cipher suites have been removed. This cipher is
+		//   vulnerable to the Sweet32 attack and is sometimes reported by
+		//   security scanners. (This is arguably a false positive since
+		//   it will never be selected: Any TLS1.2 implementation MUST
+		//   include at least one cipher higher in the priority list, but
+		//   there's also no reason to keep it around)
+		// - AES is always prioritized over ChaCha20. Go makes this decision
+		//   by default based on the presence or absence of hardware AES
+		//   acceleration.
+		//   TODO(bdarnell): do the same detection here. See
+		//   https://github.com/golang/go/issues/21167
+		//
+		// Note that some TLS cipher suite guidance (such as Mozilla's[1])
+		// recommend replacing the CBC_SHA suites below with CBC_SHA384 or
+		// CBC_SHA256 variants. We do not do this because Go does not
+		// currerntly implement the CBC_SHA384 suites, and its CBC_SHA256
+		// implementation is vulnerable to the Lucky13 attack and is disabled
+		// by default.[2]
+		//
+		// [1]: https://wiki.mozilla.org/Security/Server_Side_TLS#Modern_compatibility
+		// [2]: https://github.com/golang/go/commit/48d8edb5b21db190f717e035b4d9ab61a077f9d7
+		CipherSuites: []uint16{
+			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
+			tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
+			tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+			tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
+			tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+			tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
+			tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_RSA_WITH_AES_128_CBC_SHA,
+			tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+		},
+	}
 }
