@@ -506,7 +506,7 @@ func MakeStandaloneBudget(capacity int64) BoundAccount {
 	return BoundAccount{BytesAccount: BytesAccount{curAllocated: capacity}}
 }
 
-// MakeBoundAccount greates a BoundAccount connected to the given monitor.
+// MakeBoundAccount creates a BoundAccount connected to the given monitor.
 func (mm *BytesMonitor) MakeBoundAccount() BoundAccount {
 	return BoundAccount{mon: mm}
 }
