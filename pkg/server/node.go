@@ -564,6 +564,10 @@ func (n *Node) bootstrapStores(
 		StoreID:   firstID,
 	}
 
+	// FIXME(tschottdorf): what is this version if we're joining a cluster?
+	// I think it's our `MinSupportedVersion`, which is the best we can do
+	// but isn't technically "correct". We should be able to wait for an
+	// authoritative version from gossip here.
 	cv, err := n.stores.SynthesizeClusterVersion(ctx)
 	if err != nil {
 		log.Fatalf(ctx, "error retrieving cluster version for bootstrap: %s", err)

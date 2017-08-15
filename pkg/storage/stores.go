@@ -386,11 +386,17 @@ func SynthesizeClusterVersionFromEngines(
 		origin string
 	}
 
+	// FIXME(tschottdorf): If we don't find anything, this should return v1.0, but
+	// we have to guarantee first that you always find something (should be OK).
 	maxMinVersion := originVersion{
 		Version: minSupportedVersion,
 		origin:  "(no store)",
 	}
 
+	// FIXME(tschottdorf): when we don't have anything on the stores, we need to
+	// set this to `minSupportedVersions`. It looks like currently it would be
+	// set to `v1.0` which may not even be supported.
+	// This is the case in which the node is joining an existing cluster.
 	minUseVersion := originVersion{
 		Version: serverVersion,
 		origin:  "(no store)",
