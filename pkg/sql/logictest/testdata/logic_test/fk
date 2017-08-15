@@ -773,3 +773,21 @@ ALTER TABLE employee
 
 statement ok
 SHOW CREATE TABLE employee;
+
+# Ensure that tables with an fk reference from their pk appear correctly in
+# SHOW CREATE TABLE (#17596).
+statement ok
+CREATE TABLE pkref_a (a INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE pkref_b (b INT PRIMARY KEY REFERENCES pkref_a)
+
+query TT
+SHOW CREATE TABLE pkref_b
+----
+pkref_b  CREATE TABLE pkref_b (
+        b INT NOT NULL,
+        CONSTRAINT "primary" PRIMARY KEY (b ASC),
+        CONSTRAINT fk_b_ref_pkref_a FOREIGN KEY (b) REFERENCES pkref_a (a),
+        FAMILY "primary" (b)
+)
