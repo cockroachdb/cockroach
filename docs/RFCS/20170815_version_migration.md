@@ -8,249 +8,615 @@
 
 # Summary
 
-This RFC describes a mechanism for upgrading a CockroachDB cluster
-between point releases (e.g. from 1.0 to 1.1). In particular, it
-introduces the means to enforce version coherence amongst live nodes,
-which is necessary to gate access to new features. It further provides
-for a transition period during which all nodes settle on a new version
-*before* any are able to use new, backwards-incompatible features.
-During transition periods, the cluster may either be rolled back to
-the prior version, or else the operator may confirm the new version as
-the minimum version, allowing new, backwards-incompatible features to
-run.
+This RFC proposes a mechanism which allows point release upgrades (i.e. 1.1 to
+1.2) of CockroachDB clusters using a rolling restart followed by an
+operator-issued cluster-wide version bump that represents a promise that the old
+version is no longer running on any of the nodes in the cluster, and that
+backwards-incompatible features can be enabled.
+
+This is achieved through a version which can be queried at server runtime, and
+which is populated from
+
+1. a new cluster setting `version`, and
+1. a persisted version on the Store's engines.
+
+The main concern in designing the mechanism here is operator friendlyness. We
+don't want to make the process more complicated; it should be scriptable; it
+should be hard to get wrong (and if you do, it shouldn't matter).
 
 # Motivation
 
-Introducing backwards-incompatible features is currently risky, as
-usage could prevent orderly downgrades, or worse, could result in
-inconsistencies if used during a rolling upgrade.
+We have committed to supporting rolling restarts for version upgrades, but we do
+not have a mechanism in place to safely enable those when backwards-incompatible
+features are introduced.
 
-One example is the use of different storage for Raft's write ahead
-log
-[#16809](https://github.com/cockroachdb/cockroach/pull/16809). Having
-nodes begin using this new functionality means they cannot be
-downgraded to an earlier version of the binary without potential loss
-of data. To address this, CockroachDB migration must provide a
-transition period where all nodes upgrade to the version which
-supports the new Raft WAL storage, but do not yet use it. At this
-point, the cluster can still be downgraded to the prior version,
-allowing the operator to safely test the new build. When satisfied
-with the new version's stability, the operator confirms that the new
-version should become the minimum version, at which point the nodes
-begin using the Raft WAL storage, and the window for downgrading is
-closed.
+The core problem is that incompatible features must not run in a mixed-version
+cluster, yet this is precisely what happens if a rolling restart is used to
+upgrade the versions. Yet, we expect a handful of backwards-incompatible
+changes in each release.
 
-Another example is the `Revert` command. Once executed, it requires
-that all nodes performing reads understand how to utilize new
-information to ignore reverted data during reads. If one replica out
-of three were not upgraded to understand the effects of a `Revert`,
-then that node could incorrectly read reverted data as if it were
-still live.
-
-Backwards-incompatible changes to *existing* functionality are even
-more problematic because you'd expect them to be in active use at the
-time of upgrade. In this case, there would be no way to do a rolling
-upgrade without having some nodes with the old version and some nodes
-with the new, backwards-incompatible version, leading to potential
-inconsistencies.
-
-We expect most point releases to contain features requiring the
-migration support described in this RFC.
-
+What's needed is thus a mechanism that allows a rolling restart into the new
+binary to be performed while holding back on using the new, incompatible,
+features, and this is what's introduced in this RFC.
 
 # Guide-level explanation
 
-TBD
+We'll identify the "moving parts" in this machinery first and then walk through
+an example migration from 1.0 to 1.1, which contains exactly one incompatible
+upgrade, namely:
 
-# Reference-level explanation
+On splits,
 
-TBD
+- v1.0 was creating a Raft `HardState` while *proposing* the split. By the time
+  it was applied, it was potentially stale, which could lead to anomalies.
+- v1.1 does not write a `HardState` during the split, but it writes a "correct"
+  `HardState` immediately before the right-hand side's Raft group is booted up.
 
-## Detailed design
+This is an incompatible change because in a mixed cluster in which v1.1 issues
+the split and v1.0 applies it, the node at v1.0 would end up without a
+`HardState`, and immediately crash. We need a proper migration -- `v1.1` must know
+when it is safe to use the new behavior; it must use the previous (incorrect) one
+until it knows that, and hopes that the anomaly doesn't strike in the meantime.
 
-Every node knows the version it's running, as the version is baked
-into the build. Nodes gossip a `NodeDescriptor`, which will be
-augmented to include the baked-in server version. Nodes also have a
-minimum-supported version baked-in, which is used to sanity check that
-a too-new server is not run with a too-old data directory (i.e. the
-`use_version` set in `ClusterVersion` cannot be less than the
-server's baked-in minimum-supported version).
+You can forget about the precise change now, but it's useful to see that this
+one is incompatible but absolutely necessary - we can't fix it in a way that
+works around the incompatibility, and we can't keep the status quo.
 
-In addition, there will be a cluster-wide minimum version, set by the
-operator. The minimum version will be stored and gossiped as a cluster
-setting. The value of the minimum version is stored in a
-`ClusterVersion` protobuf, which to start will include just the
-minimum version (this is a protobuf to allow the mechanism to be
-expanded as needs evolve).
+Now let's do the actual update. For that, the operator
+
+1. performs a rolling restart into the `v1.1` binary,
+1. checks that all nodes are *really* running `v1.1` (in particular, auto-scaling etc are disabled),
+1. in the meantime the nodes are running `v1.1`, but with 1.0-compatible features, until the operator
+1. runs `SET CLUSTER SETTING version = '1.1'`.
+1. The cluster now operates at `v1.1`.
+
+We run in detail through what the last one does under the hood.
+
+## Recap: how cluster settings work
+
+Each node has a number of "settings variables" which have hard-coded default
+values. To change a variable from that default value, one runs `SET CLUSTER
+SETTING settingname = 'settingval'`.
+
+Under the hood, this roughly translates to `INSERT INTO system.settings
+VALUES(settingname, settingval)`, and we have special triggers in place which
+gossip the contents of this table whenever they change.
+
+When such a gossip update is received by a node, it goes through the (hard-coded
+list of) setting variables, populates it with the values from the table, and
+resets all unmentioned variables to their default value.
+
+To show the values of the setting variables, one can run `SHOW ALL CLUSTER
+SETTINGS`. Note that the output of that can vary based on the node, i.e. if one
+hasn't gotten the most recent updates yet. The command to read from the actual
+table is `SELECT ... FROM system.settings`; this shows only those commands for
+which an explicit `SET CLUSTER SETTING` has been issued.
+
+Note that the `version` variable has additional logic to be detailed in the next
+section.
+
+## Running `SET CLUSTER SETTING version = '1.1'`
+
+What actually happens when the cluster version is bumped? There are a few things
+that we want.
+
+1. The operator should not be able to perform "illegal" version bumps. A legal
+   bump is from one version to the next: 1.0 to 1.1, 1.1 to 1.2, perhaps 1.6 to
+   2.0 (if 1.6 is the last release in the 1.x series), but *not* 1.0 to 1.3.
+
+   This immediately tells us that the `version` setting needs to take into
+   account its existing value before updating to the new one, and may need
+   to return an error when its validation logic fails.
+
+   This also suggests that it should use the existing value from the
+   `system.settings` table, and not from `SHOW` (which may not be
+   authoritative).
+2. Using the `system.settings` table is tricky -- as explained above, settings
+   don't persist their default value, and in particular, a new cluster (or one
+   started during 1.0) does not have a `version` setting persisted. It is hard
+   to persist a setting during bootstrap since the `settings` table is only
+   created later. It's tricky to correctly populate that table once the cluster
+   is running because all you know about is your current node, but what if
+   you're accidentally running 3.0 while the real cluster is at 1.0?
+
+We defer the problem of populating the settings table to the detailed design
+section and now assume that there *is* a `version` entry in the settings table.
+
+Then what happens on a version bump is clear: the existing version is read, it
+is checked whether the new version is a valid successor version, and if so, the
+entry is transactionally updated. On error, the operator running the `SET
+CLUSTER SETTING` command will receive a descriptive message such as:
 
 ```
-message Version {
-    int major = 1 [(gogoproto.nullable) = false];
-    int minor = 2 [(gogoproto.nullable) = false];
-    // Note that patch is a placeholder and will always be zero.
-    int patch = 3 [(gogoproto.nullable) = false];
-    // The unstable version is used to migrate during development.
-    // Users of stable, public releases will only use binaries
-    // with unstable set to 0.
-    int unstable = 4 [(gogoproto.nullable) = false];
-}
+cannot upgrade to 2.0: node running 1.1
+cannot upgrade directly from 1.0 to 1.3
+cannot downgrade from 1.0 to 0.9
+```
 
-message ClusterVersion {
-    // Nodes must be running a binary which supports at least this
-    // version. This value only increases monotonically.
-    Version minimum_version = 1 [(gogoproto.nullable) = false];
-    // The version of functionality in use in the cluster. Unlike
-    // minimum_version, use_version may be downgraded, which will
-    // disable functionality requiring a higher version. However,
-    // some functionality, once in use, can not be discontinued.
-    // Support for that functionality is guaranteed by the ratchet
-    // of minimum_version.
-    Version use_version = 2 [(gogoproto.nullable) = false];
+Assuming success, the settings machinery picks up the new version, and populates
+the in-memory version setting, from which it can be inspected by the running
+node.
+
+To probe the running version, essentially, all moving parts in the node hold on
+to a variable that implements the following interface (and in the background is
+hooked up to the version cluster setting appropriately):
+
+```go
+type Versioner interface {
+  IsActive(version roachpb.Version) bool
+  Version() cluster.ClusterVersion // ignored for now
 }
 ```
 
-To ensure that a properly-versioned binary is used for all nodes in a
-cluster, each store persists `ClusterVersion` to disk at a store-local
-key (similar to gossip bootstrap info). This value is treated as the
-operative `ClusterVersion` at startup until gossip is received, and is
-used to verify the binary's baked-in version and minimum-supported
-version. If the node's baked-in server version is less than
-`use_version` or the node's baked-in minimum-supported server version
-is greater than the `minimum_version`, the node will exit with an
-error.
+For instance, before having run `SET CLUSTER SETTING version = '1.1'`, we have
 
-Nodes will listen for changes to the gossiped `ClusterVersion` value.
-If a gossiped `ClusterVersion` is received where `minimum_version` is
-less than a node's last-persisted `minimum_version`, the node will
-fatal with a descriptive error message. The `use_version` may be
-downgraded to disable the use of functionality, but may not be set
-lower than a server's baked-in minimum-supported version without the
-node exiting with a fatal error.
+```go
+IsActive(roachpb.Version{Major: 1, Minor: 0}) == true
+IsActive(roachpb.Version{Major: 1, Minor: 1}) == false
+```
 
-## Upgrade process
+even though the binary is capable of running `v1.1`.
 
-- At the start, presumably all nodes have the same version (e.g. 1.0).
-- To provide a means to restore in the event of disaster recovery, run
-  an incremental backup of the database.
-- Start a rolling upgrade of nodes to next version (e.g. 1.1).
-- At this point, all nodes will be running version 1.1, although
-  without upping the cluster-wide minimum version, no
-  features requiring 1.1 can be run.
-- Verify 1.1 stability without using features requiring 1.1.
-- Successful burn-in? **NO**: perform a rolling downgrade to 1.0.
-- Otherwise, set the cluster-wide minimum version to 1.1,
-  which will allow usage of features requiring 1.1. Another incremental
-  backup at this stage is recommended.
-- In the event of a catastrophic failure or corruption due to usage of
-  new features requiring 1.1, the only option is to restore from
-  backup. This is a two step process: clear on-disk state and revert
-  nodes to run version 1.0, and then restore from the backup(s).
+After having bumped the cluster version, we instead get
 
-![Version migrations with rolling upgrades](images/version_migration.png?raw=true "Version migrations with rolling upgrades")
+```go
+IsActive(roachpb.Version{Major: 1, Minor: 0}) == true
+IsActive(roachpb.Version{Major: 1, Minor: 1}) == true
+```
 
-## Optional prelude to upgrade process
+but (still)
 
+```go
+IsActive(roachpb.Version{Major: 1, Minor: 2}) == false
+```
+
+To return back to our incompatible feature example, we
+would have code like this:
+
+```go
+func proposeSplitCommand() {
+  p := makeSplitProposal()
+  if !v.IsActive(roachpb.Version{Major: 1, Minor: 1}) {
+    // Preserve old behavior at v1.0.
+    p.hardState = makePotentiallyDangerousHardState()
+  }
+  propose(p)
+}
+
+func applySplit(p splitProposal) {
+  raftGroup := apply(p)
+  if v.IsActive(roachpb.Version{Major: 1, Minor: 1}) {
+    // Enable new behavior only if at v1.1 or later.
+    hardState := makeHardState()
+    writeHardState(hardState)
+  }
+  raftGroup.GoLive()
+}
+```
+
+Some features may require an explicit "ping" when the version gets bumped. Such
+a mechanism is easy to add once it's required; we won't talk about it any more
+here.
+
+Note that a server always accepts features that require the new version, even if
+it hasn't received note that they are safe to use, when their use is prompted by
+another node. For instance, if a new intra-node RPC is introduced, nodes should
+always respond to it if they can (i.e. know about the RPC). A bump in the
+cluster version propagates through the cluster asynchronously, so a node may
+start using a new feature before others realize it is safe.
+
+## Development versions
+
+During the development cycle, new backwards-incompatible migrations may need to
+be introduced. For this, we use "unstable" versions, which are written
+`<major>.<minor>-<unstable>`; while stable releases will always have `<unstable>
+== 0`, each unstable change gets a unique, strictly incrementing unstable
+version component. For instance, at the time of writing (`v1.1-alpha`), we have
+the following:
+
+```go
+var (
+	// VersionSplitHardStateBelowRaft is https://github.com/cockroachdb/cockroach/pull/17051.
+	VersionSplitHardStateBelowRaft = roachpb.Version{Major: 1, Minor: 0, Unstable: 2}
+
+	// VersionRaftLogTruncationBelowRaft is https://github.com/cockroachdb/cockroach/pull/16993.
+	VersionRaftLogTruncationBelowRaft = roachpb.Version{Major: 1, Minor: 0, Unstable: 1}
+
+	// VersionBase corresponds to any binary older than 1.0-1,
+	// though these binaries won't know anything about the mechanism in which
+	// this version is used.
+	VersionBase = roachpb.Version{Major: 1}
+)
+```
+
+Note that there is no `v1.1` yet. This version will only exist with the stable
+`v1.1.0` release.
+
+Tagging the unstable versions individually has the advantage that we can
+properly migrate our test clusters simply through a rolling restart, and then a
+version bump to `<major>.<minor>-<old_unstable+1>`.
+
+## Upgrade process (close to documentation)
+
+The upgrade process as we document it publicly will have to advise operators to
+create appropriate backups. They should roughly follow this checklist:
+
+### Optional prelude: staging dry run
 - Start a **staging** cluster with the new version (e.g. 1.1).
 - Restore data from most recent backup(s) to staging cluster.
 - Tee production traffic or run load generators to simulate live
   traffic and verify cluster stability.
 - Proceed to upgrade process described above.
 
-## SQL syntax
+### Steps in production
+- Disable auto-scaling or other systems that could add a node with a conflicting
+  version at an inopportune time.
+- Create a (full or incremental) backup of the cluster.
+- Rolling upgrade of nodes to next version.
+- At this point, all nodes will be running the new binary, albeit with
+  compatibility for the old one.
+- Verify no node running the old version remains in the cluster (and no new one
+  will accidentally be added).
+- Verify basic cluster stability. If problems occur, a rolling downgrade is
+  still an option.
+- Depending on how much time has passed, another incremental update could be
+  advisable.
+- `SET CLUSTER SETTING version = '<newversion>'`
+- In the event of a catastrophic failure or corruption due to usage of new
+  features requiring 1.1, the only option is to restore from backup. This is a
+  two step process: start a new cluster using the old binary, and then restore
+  from the backup(s).
+- restore any orchestration settings (auto-scaling, etc) back to their normal
+  production values.
 
-The operator can upgrade the cluster's version in order to use new
-features available at that version via the `SET CLUSTER SETTING
-version TO <major>.<minor>[.<unstable>]` SQL command (run as the root
-user). This returns an error if the specified version is
-invalid. Valid versions must be within the allowed minimum-supported
-and server versions advertised by every active node in the cluster. On
-success, this updates the cluster setting
-`ClusterVersion`. `minimum_version` and `use_version` are both set to
-the specified version if newer. If an older version is specified
-(i.e. a downgrade), then only `use_version` is decremented;
-`minimum_version` is strictly monotonically increasing.
+![Version migrations with rolling upgrades](images/version_migration.png?raw=true "Version migrations with rolling upgrades")
 
-The current cluster version can be inspected via the `SHOW CLUSTER
-SETTING version` SQL command.
+# Reference-level explanation
 
-## New features that require a version upgrade
+This section runs through the moving parts involved in the implementation. Note
+that at the time of writing and contrary to how the RFC process should work, it
+has *already been implemented* (mod some caveats). See the links in the header.
 
-New features which require a particular version are disallowed if that
-version is greater than the `use_version` set for the cluster. Each
-feature is responsible for validating that `use_version` allows it
-before being run, and returning an error if not supported.
+## Detailed design
 
-In some cases, this will be done at the SQL layer; in others, at the
-KV layer. Note that once some features are in use, downgrading will
-not disable their continued usage due to their first use not being
-reversible. This is the case with the `Revert` example mentioned in
-the Motivation section of this document.
+### Structures and nomenclature
 
-## Rollout
+The fundamental straightforward structure is `roachpb.Version`:
 
-When this mechanism first appears in a release, nodes running the
-previous version will not gossip their versions with the
-`NodeDescriptor`. The cluster setting for `ClusterVersion` will be
-bootstrapped to an empty value `Version{major: 0, minor: 0, unstable:
-0}`. The version-checking code will correctly match older nodes'
-missing version information in their gossiped `NodeDescriptors` to
-the empty `minimum_version` and `use_version` in `ClusterVersion`.
+```proto
+message Version {
+  optional int32 major = 1;   // the "2" in `v2.1`
+  optional int32 minor = 2;   // the "1" in `v2.1`
+  optional int32 patch = 3;   // placeholder; always zero
+  optional int32 unstable = 4 // dev version; all stable versions have zero
+}
+```
 
-Newly initialized clusters will always initialize the `ClusterVersion`
-so that `minimum_version` and `use_version` are set to the current
-server version.
+The situation gets complicated by the fact that our usage of the version as the `version` cluster setting is really a "cluster-wide minimum version", which informs the use of the name `MinimumVersion` in the following `ClusterVersion` proto:
+
+```
+message ClusterVersion {
+  // The minimum_version required for any node to support. This
+  // value must monotonically increase.
+  roachpb.Version minimum_version = 1 [(gogoproto.nullable) = false];
+}
+```
+
+This should make sense so far. However, discussion in this RFC has mandated that
+we include an ominous `UseVersion` as well. This emerged as a compromise after
+giving up on allowing "rollbacks" of upgrades. Briefly put, `UseVersion` can be
+smaller than `MinimumVersion` and advises the server to not use new features
+that it has the discretion to not use. For example, assume `v1.1` contains a
+performance optimization (that isn't supported in a cluster running nodes at
+`v1.0`). After bumping the cluster version to `v1.1`, it turns out that the
+optimization is a horrible pessimization for the cluster's workload, and things
+start to break. The operator can then set `UseVersion` back to `v1.0` to advise
+the cluster to not use that performance optimization (even if it could). On the
+other hand, some other migrations it has performed (perhaps it rewrote some of
+its on-disk state to a new format) may not support being "deactivated", so they
+would continue to be in effect.
+
+This feature has not been implemented in the initial version, though it has been
+"plumbed". It will be ignored in this design from this point on, though no
+effort will be made to scrub it from code samples.
+
+```
+message ClusterVersion {
+  [...]
+  // The version of functionality in use in the cluster. Unlike
+  // minimum_version, use_version may be downgraded, which will
+  // disable functionality requiring a higher version. However,
+  // some functionality, once in use, can not be discontinued.
+  // Support for that functionality is guaranteed by the ratchet
+  // of minimum_version.
+  roachpb.Version use_version = 2 [(gogoproto.nullable) = false];
+}
+```
+
+The `system.settings` table entry for `version` is in fact a marshalled
+`ClusterVersion` (for which `MinimumVersion == UseVersion`).
+
+### Server Configuration
+
+The "binary version" is `ServerVersion` (type `roachpb.Version`) and is part of
+the configuration of a `*Server`. For a running binary, it will always be equal
+to `cluster.BinaryServerVersion` but in tests it can in principle be configured
+freely.
+
+Similarly a `Server` is configured with `MinimumSupportedVersion`. If a server
+starts up with a store that has a persisted smaller than this or larger than its
+`ServerVersion`, it exits with an error. We'll talk about store persistence in
+the appropriate subsection.
+
+### Gossip
+
+The `NodeDescriptor` gossips the server's configured `ServerVersion`. This isn't
+used at the time of writing; see the unresolved section for discussion.
+
+### Storage (persistence)
+
+Once a node has received a cluster-wide minimum version from the settings table
+via Gossip, it is be used as the authoritative version to use (unless the binary
+can't support it, in which case it commits suicide).
+
+We need to close the gap between starting the server and receiving the above
+information, and we also want to prevent restarting into a too-recent version
+in the first place (for example restarting straight into `v1.3` from `v1.1`).
+
+To this end, whenever any `Node` receives a `version` from gossip, it writes it
+to a store local key (`keys.StoreClusterVersionKey()`) on *all* of its stores
+(as a `ClusterVersion`).
+
+Additionally, when a cluster is bootstrapped, the store is populated with
+the running server's version.
+
+When a node starts up with new stores to bootstrap, it takes precautions to
+propagate the cluster version to these stores as well. See the unresolved
+questions for some discussion of how an illegal version joining an existing
+cluster can be prevented.
+
+This seems simple enough, but the logic that reads from the stores has to deal
+with the case in which the various stores either have no (as could happen as we
+boot into them from 1.0) or conflicting information. Roughly speaking,
+bootstrapping stores can afford to wait for an authoritative version from gossip
+and uses that, and whenever we ask a store about its version and it has none
+persisted, it counts as a store at `v1.0`. We make sure to write the version
+atomically with the bootstrap information (to make sure we don't bootstrap a
+store, crash, and then have it count as `v1.0`). We also write all versions
+again after bootstrap to immunize against the case in which the cluster version
+was bumped mid-bootstrap (this could cause trouble if we add one store and then
+remove the original one between restarts).
+
+The cluster version we synthesize at node start is then the one with the largest
+`MinimumVersion` (and the smallest `UseVersion`).
+
+Examples:
+
+- one store at `<empty>`, another at `v1.1` results in `v1.1`.
+- two stores, both `<empty>` results in `v1.0`.
+- three stores at `v1.1`, `v1.2` and `v1.3` results in `v1.3` (but likely
+  catches an error anyway because it spans versions)
+
+### The implementer of `Versioner`: `ExposedClusterVersion`
+
+`ExposedClusterVersion` is the central object that manages the information
+bootstrapped from the stores at node start and the gossiped central version and
+flips between the two at the appropriate moment. It also encapsulates the logic
+that dictates which version upgrades are admissible, and for that reason
+integrates fairly tightly with the `settings` subsystem. This is fairly complex
+and so appropriate detail is supplied below.
+
+We start out with the struct itself.
+
+```go
+type ExposedClusterVersion struct {
+	MinSupportedVersion roachpb.Version // Server configuration, does not change
+	ServerVersion       roachpb.Version // Server configuration, does not change
+  // baseVersion stores a *ClusterVersion. It's very initially zero (at which
+  // point any calls to check the version are fatal) and is initialized with
+  // the version from the stores early in the boot sequence. Later, it gets
+  // updated with gossiped updates, but only *after* each update has been
+  // written back to the disks (so that we don't expose anything to callers
+  // that we may not see again if the node restarted).
+	baseVersion         atomic.Value
+  // The cluster setting administering the `version` setting. On change,
+  // invokes logic that calls `cb` and then bumps `baseVersion`.
+	version             *settings.StateMachineSetting
+  // Callback into the node to persist a new gossiped MinimumVersion (invoked
+  // before `baseVersion` is updated)
+	cb                  func(ClusterVersion)
+}
+
+// Version returns the minimum cluster version the caller may assume is in
+// effect. It must not be called until the setting has been initialized.
+func (ecv *ExposedClusterVersion) Version() ClusterVersion
+
+// BootstrapVersion returns the version a newly initialized cluster should have.
+func (ecv *ExposedClusterVersion) BootstrapVersion() ClusterVersion
+
+// IsActive returns true if the features of the supplied version are active at
+// the running version.
+func (ecv *ExposedClusterVersion) IsActive(v roachpb.Version) bool
+```
+
+The remaining complexity lies in how `version *settings.StateMachineSetting` is initialized:
+
+```go
+s.version = r.RegisterStateMachineSetting("version",
+		"set the active cluster version in the format '<major>.<minor>'.", // hide optional `-<unstable>`
+		versionTransformer(minVersion, serverVersion, func() ClusterVersion {
+			return *s.baseVersion.Load().(*ClusterVersion)
+		}),
+	)
+```
+
+where `versionTransformer` contains all of the update logic (mod reading from
+the table: we've updated the settings framework to use the table for all
+`StateMachineSettings`, of which this is the only instance at the time of
+writing):
+
+```go
+func versionTransformer(
+	minSupportedVersion, serverVersion roachpb.Version, defaultVersion func() ClusterVersion,
+) settings.TransformerFn {
+  // ...
+}
+```
+
+The returned `settings.TransformerFn` takes
+
+- the previous encoded value (i.e. a marshalled `ClusterVersion`)
+- the desired transition, if any (for example "1.2").
+
+and returns
+
+- the new encoded value (i.e. the new marshalled `ClusterVersion`)
+- an interface backed by a "user-friendly" representation of the new state
+  (i.e. something that can be printed)
+- an error if the input was illegal.
+
+The most complicated bits happen inside of this function for the following
+special cases:
+
+- when no previous encoded value is given, the transformer provides the "default
+  value". In this case, it's `baseVersion`. In particular, the default value
+  changes! This behaviour is required because when the initial gossip update
+  comes in, it needs to be validated, and we also validate what users do during
+  `SET CLUSTER SETTING version = ...`, which they could do through multiple
+  versions.
+- validate the new state and fail if either the node itself has `ServerVersion`
+  below the new `MinimumVersion` or its `MinSupportedVersion` is newer than the
+  `MinimumVersion`.
 
 ## Drawbacks
 
-This mechanism requires the operator to indicate that the all nodes
-have been safely upgraded. It's difficult to formulate an alternative
-that would not require operator action but would nevertheless preserve
-the option to downgrade. Although separate features could implement a
-rollback path in order to downgrade even after the minimum version is
-incremented, this would be a difficult effort for every backwards
-incompatible feature that modifies persistent state, and is not viable
-as a starting point.
-
-This design provides for a "whole-version" upgrade, which may not be
-sufficiently granular for some operators, who would prefer to enable
-new functionality feature by feature to isolate potential impact on
-performance and stability.
-
-Providing a guarantee of correctness in the face of "rogue" nodes is a
-non-goal. Due to gRPC's long-lived connections, and the fact that the
-`minimum_version` setting may change at any time, we would
-otherwise have to send information on a per-RPC basis to have
-iron-clad guarantees. This is further complicated by gossip not being
-allowed to perform checks with the same strictness we'd need for Raft,
-DistSQL, and KV RPCs because it's the medium by which we transmit the
-`minimum_version` cluster setting to all nodes.
-
-This design opts for a straightforward approach that is not foolproof
-in light of rogue nodes, defined here as nodes which may re-surface
-and send RPCs from an out-of-date server version. The underlying
-assumptions guiding this decision are:
-
-- rogue nodes are rare on upgrades
-- checks on gossip will happen quickly enough to ameliorate risks
-
+- relying on the operator to promise that no old version is around opens cluster
+  health up to user error.
+- we can't roll back upgrades, which will make many users nervous
+    - in particular, it discounts the OSS version of CockroachDB
 
 ## Rationale and Alternatives
 
-Have a separate setting/migration that the operator triggers for each
-new non-backward compatible feature. This allows us to deprecate old
-code independently and operators to control the introduction of new
-features somewhat more carefully, at the cost of being more
-complicated for less sophisticated users. A drawback of this approach
-is that the complexity of support increases. Each of these feature
-switches is a knob that controls (in many cases macro) behavior in the
-system.
+The main concern in designing the mechanism here is operator friendlyness. We
+don't want to make the process more complicated; it should be scriptable; it
+should be hard to get wrong (and if you do, it shouldn't matter).
 
-Automatically do upgrades when they're required for a node to boot up
-(i.e. once the old code has been removed) if we're sure that all
-running nodes are at a new enough version to support them. This might
-be too magical to be a good solution for most operators' tastes,
-though.
+The main concessions we make in this design are
+
+1. no support for downgrades. This was discussed early in the life of this RFC
+   but was discarded for its inherent complexity and large search space that
+   would have to be tested.
+
+   It will be difficult to retrofit this, though a change in the upgrade process
+   can itself be migrated through the upgrade process presented here (though it
+   would take one release to go through the transition).
+1. relying on the operator to guarantee that a cluster is not running mixed
+   versions when the explicit version bump is issued.
+   
+   There are ways in which this could be approximately inferred, but again it
+   was deemed to complex given the time frame. Besides, operators may prefer to
+   have some level of control over the migration process, and it is difficult to
+   make an autonomous upgrade workflow foolproof.
+
+   If desired in the future, this can be retrofitted.
+
+As a result, we get a design that's ergonomic but limited. The complexity
+inherent with it as written indicates that it is a good choice to not add
+additional complexity at this point. We are not locked into the process in the
+long term.
 
 ## Unresolved questions
 
-None encountered while writing the RFC. TBD.
+### Populating the settings table
+
+As outlined in the guide-level explanation, we'd like the settings table to hold
+the "current" cluster version for new clusters, but we have no good way of
+populating it at bootstrap time and don't have sufficient information to
+populate it in a foolproof manner later.
+
+The current state of affairs is that  when no `version` is persisted in the
+table, use the "suspected" local version during cluster version setting updates.
+
+- this is incorrect when, say, adding a v3.0 node to a v1.0 cluster and
+  running `SET CLUSTER SETTING version = '3.1'` on that node. All other
+  nodes in the cluster would die instantly.
+- it would "work" on all nodes running the "actual" version; the `v3.0` node
+  would die instead.
+- the classic case to worry about is that of an operator "skipping a version"
+  during the rolling restart. We would catch this as the new binary can't run
+  from the old storage directory (i.e. `v1.7` can't be started on a `v1.5` store).
+- it would equally be impossible to roll from `v1.5` into `v1.6` into `v1.7`
+  (the storage markers would remain at `v1.5`)
+- in effect, to realize the above problem in practice, an operator would
+  have to add a brand new node running a too new version to a preexisting
+  cluster and run the version bump on that node.
+- This might be an acceptable solution?
+
+An alternative (but apparently problematic) approach is adding a sql migration.
+The problem with those is that it's not clear which value the migration should
+insert into the table -- is it that of the running binary? That would do the
+wrong thing if a `v1.0` cluster is restarted into `v1.1` (which now has the
+migration); we need to insert `v1.0` in that case. On the other hand, after
+bootstrapping a `v1.x` cluster for `x > 0`, we want to insert `v1.x`.
+
+And of course there is the third approach, which is writing the settings table
+during actual bootstrapping. This seems to much work to be realistic at this
+point in the cycle, and it may come with its own migration concerns.
+
+Both of the previous approaches suggest a more workable combination:
+
+1. instead of populating the settings table at bootstrap, populate a new key
+   `BootstrapVersion` (similar to the `ClusterIdent`). In effect, for the
+   lifetime of this cluster, we can get an authoritative answer about the
+   version at which it was bootstrapped.
+1. change the semantics of `SET CLUSTER SETTING version = x` so that when it
+   doesn't find an entry in the `system.settings` table, it fails.
+1. add a sql migration that
+    - reads `BootstrapVersion`
+    - runs
+        ```sql
+        -- need this explicitly or the `SET` below would fail!
+        UPSERT INTO system.settings VALUES(
+          'version', marshal_appropriately('<bootstrap_version>')
+        );
+        -- Trigger proper gossip, etc, by doing "no-op upgrade".
+        SET CLUSTER SETTING version = '<bootstrap_version>';
+        ```
+    - the cluster version is now set and operators can use `SET CLUSTER
+      SETTING`.
+
+This obviously works if the migration runs when the cluster is still running
+the bootstrapped version, even if the operator set the version explicitly  (`SET
+CLUSTER SETTING version = x` is idempotent).
+
+Interestingly, this also solves the bootstrapping problem below - we can simply
+delay bootstrap until the `system.settings` table has a `version`, and then use
+that.
+
+### Bootstrapping new stores
+
+When an existing node restarts, it has on-disk markers that should reflect a
+reasonable version configuration to assume until gossip updates are in effect.
+
+The situation is different when a new node joins a cluster for the first time.
+In this case, it'll bootstrap its stores using its binary's
+`MinimumSupportedVersion`. There's no guarantee however that this version is
+compatible with the running cluster. We could run a sanity check: run through
+the visible `NodeDescriptor`s of our peers (we're connected to Gossip at this
+point), and if any of them are incompatible with `MinimumSupportedVersion`, exit
+with an error. Or, even better, check the settings table -- but then again, this
+may not yet have been populated.
+
+See also the last section for a seemingly good solution to this.
+
+### Naming
+
+`MinimumVersion` and `MinimumSupportedVersion` are similar but also different.
+Perhaps the latter should be renamed, though no better name comes to mind.
+
+### What to gossip
+
+We make no use of the gossiped `ServerVersion`. The node's git commit hash is
+already available, so this is only mildly interesting. Its `MinimumVersion`
+(plus its `UseVersion` if that should ever differ) are more relevant. Likely
+these should be added, even if the information isn't used today.
