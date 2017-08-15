@@ -756,10 +756,10 @@ func loadBasedLeaseRebalanceScore(
 
 	if log.V(1) {
 		log.Infof(ctx,
-			"node: %d, remoteWeight: %.2f, sourceWeight: %.2f, remoteLatency: %v, "+
-				"rebalanceThreshold: %.2f, meanLeases: %.2f, remoteLeaseCount: %d, overfullThreshold: %d, "+
-				"sourceLeaseCount: %d, underfullThreshold: %d, totalScore: %d",
-			remoteStore.Node.NodeID, remoteWeight, sourceWeight, remoteLatency,
+			"node: %d, sourceWeight: %.2f, remoteWeight: %.2f, remoteLatency: %v, "+
+				"rebalanceThreshold: %.2f, meanLeases: %.2f, sourceLeaseCount: %d, overfullThreshold: %d, "+
+				"remoteLeaseCount: %d, underfullThreshold: %d, totalScore: %d",
+			remoteStore.Node.NodeID, sourceWeight, remoteWeight, remoteLatency,
 			rebalanceThreshold, meanLeases, source.Capacity.LeaseCount, overfullLeaseThreshold,
 			remoteStore.Capacity.LeaseCount, underfullLeaseThreshold, totalScore,
 		)
