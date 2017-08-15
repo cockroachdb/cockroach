@@ -63,6 +63,8 @@ const (
 	defaultEventLogEnabled                = true
 	defaultEnableWebSessionAuthentication = false
 
+	maximumMaxClockOffset = 5 * time.Second
+
 	minimumNetworkFileDescriptors     = 256
 	recommendedNetworkFileDescriptors = 5000
 
@@ -87,7 +89,7 @@ func (mo *MaxOffsetType) Set(v string) error {
 	if err != nil {
 		return err
 	}
-	if nanos == timeutil.ClocklessMaxOffset {
+	if nanos > maximumMaxClockOffset {
 		return errors.Errorf("%s is not a valid MaxOffset", v)
 	}
 	*mo = MaxOffsetType(nanos)
