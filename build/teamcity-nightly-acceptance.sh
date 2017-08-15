@@ -18,6 +18,8 @@ export BUILDER_HIDE_GOPATH_SRC=1
 
 TESTNAME=$1
 
+PKG=./pkg/acceptance
+
 case $TESTNAME in
   TestUpreplicate_1To3Small)
     TESTTIMEOUT=2h
@@ -51,6 +53,11 @@ case $TESTNAME in
     TESTTIMEOUT=6h
     COCKROACH_EXTRA_FLAGS+=' -nodes 4'
     ;;
+  BenchmarkRestoreTPCH10/numNodes=3)
+    PKG=./pkg/ccl/acceptanceccl
+    TESTTIMEOUT=2h
+    COCKROACH_EXTRA_FLAGS+=' -tf.cockroach-env=COCKROACH_PREEMPTIVE_SNAPSHOT_RATE=8388608'
+    ;;
   *)
     echo "unknown test name $TESTNAME"
     exit 1
@@ -74,8 +81,21 @@ case $TYPE in
     ;;
 esac
 
-build/builder.sh make TYPE=$TYPE testbuild PKG=./pkg/acceptance
-cd pkg/acceptance
+case $TESTNAME in
+  Benchmark*)
+    COCKROACH_EXTRA_FLAGS+=" -test.bench \A$TESTNAME\z -test.run -"
+    ;;
+  Test*)
+    COCKROACH_EXTRA_FLAGS+=" -test.run   \A$TESTNAME\z"
+    ;;
+  *)
+    echo "unknown test name $TESTNAME"
+    exit 1
+    ;;
+esac
+
+build/builder.sh make TYPE=$TYPE testbuild PKG=$PKG
+cd $PKG
 # shellcheck disable=SC2086
-./acceptance.test -l "$TMPDIR" -test.v -test.timeout $TESTTIMEOUT -test.run "\A$TESTNAME\z" -show-logs -remote -key-name terraform \
+./${PKG##*/}.test -l "$TMPDIR" -test.v -test.timeout $TESTTIMEOUT -show-logs -remote -key-name terraform \
   $COCKROACH_EXTRA_FLAGS | go-test-teamcity
