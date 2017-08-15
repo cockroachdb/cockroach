@@ -91,7 +91,7 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
             {problemTable("No Raft Leader", problemRanges.no_raft_leader_range_ids)}
             {problemTable("No Lease", problemRanges.no_lease_range_ids)}
             {problemTable("Raft Leader but not Lease Holder", problemRanges.raft_leader_not_lease_holder_range_ids)}
-            {problemTable("Underreplicated", problemRanges.underreplicated_range_ids)}
+            {problemTable("Underreplicated (or slow)", problemRanges.underreplicated_range_ids)}
           </div>
         }
       </div>
