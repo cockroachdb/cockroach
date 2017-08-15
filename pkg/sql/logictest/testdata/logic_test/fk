@@ -506,17 +506,32 @@ refpairs  refpairs_a_b_c_idx  false   2    b       ASC        false    false
 refpairs  refpairs_a_b_c_idx  false   3    c       ASC        false    false
 refpairs  refpairs_a_b_c_idx  false   4    rowid   ASC        false    true
 
+query TT
+SHOW CREATE TABLE refpairs
+----
+refpairs  CREATE TABLE refpairs (
+    a INT NULL,
+    b STRING NULL,
+    c INT NULL,
+    CONSTRAINT fk_a_ref_pairs FOREIGN KEY (a, b) REFERENCES pairs (src, dest),
+    INDEX refpairs_a_b_c_idx (a ASC, b ASC, c ASC),
+    FAMILY "primary" (a, b, c, rowid)
+)
+
 statement error pgcode 23503 foreign key violation: value \[100 'two'\] not found in pairs@pairs_src_dest_key \[src dest\]
 INSERT INTO refpairs VALUES (100, 'two'), (200, 'two')
 
 statement ok
-INSERT INTO refpairs VALUES (100, 'one'), (200, 'two')
+INSERT INTO refpairs VALUES (100, 'one', 3), (200, 'two', null)
 
 statement error pgcode 23503 foreign key violation: values \[200 'two'\] in columns \[src dest\] referenced in table "refpairs"
 UPDATE pairs SET dest = 'too' WHERE id = 2
 
 statement error pgcode 23503 foreign key violation: values \[200 'two'\] in columns \[src dest\] referenced in table "refpairs"
 DELETE FROM pairs WHERE id = 2
+
+statement error pgcode 23503 foreign key violation: values \[100 'one'\] in columns \[src dest\] referenced in table "refpairs"
+DELETE FROM pairs WHERE id = 1
 
 # since PKs are handled differently than other indexes, check pk<->pk ref with no other indexes in play.
 statement ok

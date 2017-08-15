@@ -330,8 +330,8 @@ func makeBaseFKHelper(
 func (f baseFKHelper) check(ctx context.Context, values parser.Datums) (parser.Datums, error) {
 	var key roachpb.Key
 	if values != nil {
-		keyBytes, _, err := EncodeIndexKey(
-			f.searchTable, f.searchIdx, f.ids, values, f.searchPrefix)
+		keyBytes, _, err := EncodePartialIndexKey(
+			f.searchTable, f.searchIdx, f.prefixLen, f.ids, values, f.searchPrefix)
 		if err != nil {
 			return nil, err
 		}

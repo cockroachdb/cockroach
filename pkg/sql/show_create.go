@@ -93,7 +93,7 @@ func (p *planner) showCreateTable(
 			}
 			fmt.Fprintf(&buf, ",\n\tCONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s)",
 				parser.Name(fk.Name),
-				quoteNames(idx.ColumnNames...),
+				quoteNames(idx.ColumnNames[0:idx.ForeignKey.SharedPrefixLen]...),
 				&fkTableName,
 				quoteNames(fkIdx.ColumnNames...),
 			)
