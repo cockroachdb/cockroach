@@ -72,7 +72,7 @@ func (p *planner) showCreateTable(
 		}
 	}
 	buf.WriteString(primary)
-	for _, idx := range desc.Indexes {
+	for _, idx := range append(desc.Indexes, desc.PrimaryIndex) {
 		if fk := idx.ForeignKey; fk.IsSet() {
 			fkTable, err := p.session.tables.getTableVersionByID(ctx, p.txn, fk.Table)
 			if err != nil {
@@ -98,9 +98,13 @@ func (p *planner) showCreateTable(
 				quoteNames(fkIdx.ColumnNames...),
 			)
 		}
-		fmt.Fprintf(&buf, ",\n\t%s", idx.SQLString(""))
-		if err := p.showCreateInterleave(ctx, &idx, &buf, dbPrefix); err != nil {
-			return "", err
+		if idx.ID != desc.PrimaryIndex.ID {
+			// Showing the primary index is handled above.
+			fmt.Fprintf(&buf, ",\n\t%s", idx.SQLString(""))
+			// Showing the INTERLEAVE for the primary index is handled last.
+			if err := p.showCreateInterleave(ctx, &idx, &buf, dbPrefix); err != nil {
+				return "", err
+			}
 		}
 	}
 
