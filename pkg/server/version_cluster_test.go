@@ -252,7 +252,7 @@ func TestClusterVersionBootstrapStrict(t *testing.T) {
 	}
 }
 
-func TestClusterVersionMixedIllegal(t *testing.T) {
+func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
@@ -261,10 +261,10 @@ func TestClusterVersionMixedIllegal(t *testing.T) {
 	log.SetExitFunc(func(i int) { exits <- i })
 	defer log.SetExitFunc(os.Exit)
 
-	// Three nodes at minimum version 1.1 and a fourth one at 1.0.
+	// Three nodes at v1.1 and a fourth one at 1.0, but all operating at v1.0.
 	versions := [][2]string{{"1.0", "1.1"}, {"1.0", "1.1"}, {"1.0", "1.1"}, {"1.0", "1.0"}}
 
-	// Start by running 1.1.
+	// Start by running 1.0.
 	bootstrapVersion := cluster.ClusterVersion{
 		UseVersion:     cluster.VersionBase,
 		MinimumVersion: cluster.VersionBase,
@@ -296,5 +296,56 @@ func TestClusterVersionMixedIllegal(t *testing.T) {
 			}
 			return nil
 		})
+	}
+}
+
+func TestClusterVersionMixedVersionTooNew(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	exits := make(chan int, 100)
+
+	log.SetExitFunc(func(i int) { exits <- i })
+	defer log.SetExitFunc(os.Exit)
+
+	// Three nodes at v1.1 and a fourth one (started later) at 3.0 (and incompatible with anything earlier).
+	versions := [][2]string{{"1.1", "1.1"}, {"1.1", "1.1"}, {"1.1", "1.1"}}
+
+	// Try running 1.1.
+	bootstrapVersion := cluster.ClusterVersion{
+		UseVersion:     roachpb.Version{Major: 1, Minor: 1},
+		MinimumVersion: roachpb.Version{Major: 1, Minor: 1},
+	}
+
+	tc := setupMixedCluster(t, bootstrapVersion, versions)
+	defer tc.Stopper().Stop(ctx)
+
+	tc.AddServer(t, base.TestServerArgs{
+		Settings: cluster.MakeClusterSettings(roachpb.Version{Major: 3}, roachpb.Version{Major: 3}),
+	})
+
+	// TODO(tschottdorf): the cluster remains running even though we're running
+	// an illegal combination of versions. The root cause is that nothing
+	// populates the version setting table entry, and so each node implicitly
+	// assumes its own version.
+	exp := "1.1"
+
+	// Write the de facto cluster version (v1.1) into the table. Note that we
+	// can do this from the node running 3.0 (it could be prevented, but doesn't
+	// seem too interesting).
+	if err := tc.setVersion(3, exp); err != nil {
+		t.Fatal(err)
+	}
+
+	<-exits // wait for fourth node to die
+
+	// Check that we can still talk to the first three nodes.
+	for i := 0; i < tc.NumServers()-1; i++ {
+		if version := tc.getVersionFromSetting(i).Version().MinimumVersion.String(); version != exp {
+			t.Fatalf("%d: incorrect version %s (wanted %s)", i, version, exp)
+		}
+		if version := tc.getVersionFromShow(i); version != exp {
+			t.Fatalf("%d: incorrect version %s (wanted %s)", i, version, exp)
+		}
 	}
 }
