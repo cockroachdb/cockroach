@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"go/build"
 	"io"
 	"io/ioutil"
 	"net"
@@ -78,17 +79,13 @@ const keyLen = 1024
 
 // CockroachBinary is the path to the host-side binary to use.
 var CockroachBinary = flag.String("b", func() string {
-	dir, err := os.Getwd()
+	rootPkg, err := build.Import("github.com/cockroachdb/cockroach", "", 0)
 	if err != nil {
 		panic(err)
 	}
-	// The repository root, as seen by the caller.
-	for i := 0; i < 2; i++ {
-		dir = filepath.Dir(dir)
-	}
 	// NB: This is the binary produced by our linux-gnu build target. Changes
 	// to the Makefile must be reflected here.
-	return filepath.Join(dir, "cockroach-linux-2.6.32-gnu-amd64")
+	return filepath.Join(rootPkg.Dir, "cockroach-linux-2.6.32-gnu-amd64")
 }(), "the host-side binary to run")
 
 func exists(path string) bool {
