@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"go/build"
 	"io/ioutil"
 	"os"
 	"os/signal"
@@ -82,7 +83,13 @@ var flagDuration = flag.Duration("d", cluster.DefaultDuration, "duration to run 
 var flagNodes = flag.Int("nodes", 4, "number of nodes")
 var flagStores = flag.Int("stores", 1, "number of stores to use for each node")
 var flagRemote = flag.Bool("remote", false, "run the test using terrafarm instead of docker")
-var flagCwd = flag.String("cwd", "terraform/azure", "directory to run terraform from")
+var flagCwd = flag.String("cwd", func() string {
+	aceptancePkg, err := build.Import("github.com/cockroachdb/cockroach/pkg/acceptance", "", 0)
+	if err != nil {
+		panic(err)
+	}
+	return filepath.Join(aceptancePkg.Dir, "terraform", "azure")
+}(), "directory to run terraform from")
 var flagKeyName = flag.String("key-name", "", "name of key for remote cluster")
 var flagLogDir = flag.String("l", "", "the directory to store log files, relative to the test source")
 var flagTestConfigs = flag.Bool("test-configs", false, "instead of using the passed in configuration, use the default "+
