@@ -6,10 +6,21 @@ spawn /bin/bash
 send "PS1=':''/# '\r"
 eexpect ":/# "
 
+start_test "Check that a server encountering a fatal error when not logging to stderr shows the fatal error."
+send "$argv start -s=path=logs/db --insecure\r"
+eexpect "CockroachDB node starting"
+system "$argv sql --insecure -e \"select crdb_internal.force_log_fatal('helloworld')\" || true"
+eexpect "\r\nF"
+eexpect "helloworld"
+eexpect ":/# "
+send "echo \$?\r"
+eexpect "255"
+eexpect ":/# "
+end_test
+
 start_test "Check that a server started with only in-memory stores and no --log-dir automatically logs to stderr."
 send "$argv start --insecure --store=type=mem,size=1GiB\r"
-eexpect "CockroachDB"
-eexpect "starting cockroach node"
+eexpect "CockroachDB node starting"
 end_test
 
 # Stop it.
@@ -25,8 +36,7 @@ stop_server $argv
 
 start_test "Check that a server started with --logtostderr logs even info messages to stderr."
 send "$argv start -s=path=logs/db --insecure --logtostderr\r"
-eexpect "CockroachDB"
-eexpect "starting cockroach node"
+eexpect "CockroachDB node starting"
 end_test
 
 # Stop it.
