@@ -31,7 +31,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
-	"github.com/cockroachdb/cockroach/pkg/cmd/internal/localcluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/localcluster/localcluster"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"

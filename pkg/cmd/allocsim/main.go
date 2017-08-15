@@ -31,8 +31,8 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/cli"
-	"github.com/cockroachdb/cockroach/pkg/cmd/internal/localcluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/internal/tc"
+	"github.com/cockroachdb/cockroach/pkg/cmd/localcluster/localcluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/localcluster/tc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
