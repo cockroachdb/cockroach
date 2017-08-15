@@ -1,9 +1,10 @@
 - Feature Name: Version Migration
 - Status: in-progress
 - Start Date: 2017-07-10
-- Authors: Spencer Kimball
-- RFC PR: [#16977](https://github.com/cockroachdb/cockroach/pull/16977)
-- Cockroach Issue(s): N/A
+- Authors: Spencer Kimball, Tobias Schottdorf
+- RFC PR: [#16977](https://github.com/cockroachdb/cockroach/pull/16977), [#17216](https://github.com/cockroachdb/cockroach/pull/17216), [#17411](https://github.com/cockroachdb/cockroach/pull/17411)
+- Cockroach Issue(s): [#17389](https://github.com/cockroachdb/cockroach/issues/17389)
+
 
 # Summary
 
@@ -56,7 +57,16 @@ inconsistencies.
 We expect most point releases to contain features requiring the
 migration support described in this RFC.
 
-# Detailed design
+
+# Guide-level explanation
+
+TBD
+
+# Reference-level explanation
+
+TBD
+
+## Detailed design
 
 Every node knows the version it's running, as the version is baked
 into the build. Nodes gossip a `NodeDescriptor`, which will be
@@ -190,7 +200,7 @@ Newly initialized clusters will always initialize the `ClusterVersion`
 so that `minimum_version` and `use_version` are set to the current
 server version.
 
-# Drawbacks
+## Drawbacks
 
 This mechanism requires the operator to indicate that the all nodes
 have been safely upgraded. It's difficult to formulate an alternative
@@ -223,7 +233,8 @@ assumptions guiding this decision are:
 - rogue nodes are rare on upgrades
 - checks on gossip will happen quickly enough to ameliorate risks
 
-# Alternatives
+
+## Rationale and Alternatives
 
 Have a separate setting/migration that the operator triggers for each
 new non-backward compatible feature. This allows us to deprecate old
@@ -240,6 +251,6 @@ running nodes are at a new enough version to support them. This might
 be too magical to be a good solution for most operators' tastes,
 though.
 
-# Unresolved questions
+## Unresolved questions
 
 None encountered while writing the RFC. TBD.
