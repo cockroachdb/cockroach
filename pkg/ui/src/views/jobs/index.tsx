@@ -152,6 +152,7 @@ interface JobsTableProps {
   setType: (value: JobType) => void;
   refreshJobs: typeof refreshJobs;
   jobs: Job[];
+  jobsValid: boolean;
 }
 
 class JobsTable extends React.Component<JobsTableProps, {}> {
@@ -239,7 +240,9 @@ const mapStateToProps = (state: AdminUIState) => {
   const key = jobsKey(status, type, parseInt(show, 10));
   const jobs = state.cachedData.jobs[key];
   return {
-    sort, status, show, type, jobs: jobs && jobs.data && jobs.data.jobs,
+    sort, status, show, type,
+    jobs: jobs && jobs.data && jobs.data.jobs,
+    jobsValid: jobs && jobs.valid,
   };
 };
 
