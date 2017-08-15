@@ -135,6 +135,11 @@ func (bt *benchmarkTest) Start(ctx context.Context) {
 	sqlDB.Exec(`SET CLUSTER SETTING cluster.organization = "Cockroach Labs - Production Testing"`)
 	sqlDB.Exec(fmt.Sprintf(`SET CLUSTER SETTING enterprise.license = "%s"`, licenseKey))
 	sqlDB.Exec(`SET CLUSTER SETTING trace.debug.enable = 'true'`)
+	// Stats-based rebalancing interacts badly with restore's splits and scatters.
+	//
+	// TODO(benesch): Remove this setting when #17671 is fixed, or document the
+	// necessity of this setting as 1.1 known limitation.
+	sqlDB.Exec(`SET CLUSTER SETTING kv.allocator.stat_based_rebalancing.enabled = false`)
 
 	log.Info(ctx, "initial cluster is up")
 }
