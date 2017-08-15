@@ -16993,8 +16993,8 @@ export namespace cockroach {
         }
 
         type Version$Properties = {
-            major?: number;
-            minor?: number;
+            major_val?: number;
+            minor_val?: number;
             patch?: number;
             unstable?: number;
         };
@@ -17016,16 +17016,16 @@ export namespace cockroach {
             constructor(properties?: cockroach.roachpb.Version$Properties);
 
             /**
-             * Version major.
+             * Version major_val.
              * @type {number}
              */
-            public major: number;
+            public major_val: number;
 
             /**
-             * Version minor.
+             * Version minor_val.
              * @type {number}
              */
-            public minor: number;
+            public minor_val: number;
 
             /**
              * Version patch.
