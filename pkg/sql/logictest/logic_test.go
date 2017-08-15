@@ -41,6 +41,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -252,6 +253,7 @@ type testClusterConfig struct {
 	// See logicStatement.parallelizeStmts.
 	parallelStmts    bool
 	bootstrapVersion *cluster.ClusterVersion
+	serverVersion    *roachpb.Version
 }
 
 // logicTestConfigs contains all possible cluster configs. A test file can
@@ -262,10 +264,13 @@ type testClusterConfig struct {
 // via -config).
 var logicTestConfigs = []testClusterConfig{
 	{name: "default", numNodes: 1, overrideDistSQLMode: "Off"},
-	{name: "default-v1", numNodes: 1, overrideDistSQLMode: "Off", bootstrapVersion: &cluster.ClusterVersion{
-		UseVersion:     cluster.VersionBase,
-		MinimumVersion: cluster.VersionBase,
-	}},
+	{name: "default-v1.1@v1.0", numNodes: 1, overrideDistSQLMode: "Off",
+		bootstrapVersion: &cluster.ClusterVersion{
+			UseVersion:     cluster.VersionBase,
+			MinimumVersion: cluster.VersionBase,
+		},
+		serverVersion: &roachpb.Version{Major: 1, Minor: 1},
+	},
 	{name: "parallel-stmts", numNodes: 1, parallelStmts: true, overrideDistSQLMode: "Off"},
 	{name: "distsql", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On"},
 	{name: "distsql-disk", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", distSQLUseDisk: true},
@@ -679,6 +684,23 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 			MemoryLimitBytes: 1,
 		}
 	}
+
+	if cfg.serverVersion != nil {
+		// If we want to run a specific server version, we assume that it
+		// supports at least the bootstrap version.
+		paramsPerNode := map[int]base.TestServerArgs{}
+		minVersion := *cfg.serverVersion
+		if cfg.bootstrapVersion != nil {
+			minVersion = cfg.bootstrapVersion.MinimumVersion
+		}
+		for i := 0; i < cfg.numNodes; i++ {
+			nodeParams := params.ServerArgs
+			nodeParams.Settings = cluster.MakeClusterSettings(minVersion, *cfg.serverVersion)
+			paramsPerNode[i] = nodeParams
+		}
+		params.ServerArgsPerNode = paramsPerNode
+	}
+
 	t.cluster = serverutils.StartTestCluster(t.t, cfg.numNodes, params)
 	if cfg.useFakeSpanResolver {
 		fakeResolver := distsqlutils.FakeResolverForTestCluster(t.cluster)
