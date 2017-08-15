@@ -74,7 +74,7 @@ export const jobsKey = (status: string, type: protos.cockroach.sql.jobs.Type, li
 const jobsRequestKey = (req: api.JobsRequestMessage): string =>
   jobsKey(req.status, req.type, req.limit);
 
-const jobsReducerObj = new KeyedCachedDataReducer(api.getJobs, "jobs", jobsRequestKey);
+const jobsReducerObj = new KeyedCachedDataReducer(api.getJobs, "jobs", jobsRequestKey, moment.duration(10, "s"));
 export const refreshJobs = jobsReducerObj.refresh;
 
 export const queryToID = (req: api.QueryPlanRequestMessage): string => req.query;
