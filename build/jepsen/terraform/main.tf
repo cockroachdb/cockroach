@@ -4,7 +4,17 @@
 # provisioning the instances and running the tests.
 
 provider "google" {
+  version = "~> 0.1"
+
   region = "${var.gce_region}"
+}
+
+provider "null" {
+  version = "~> 0.1"
+}
+
+provider "template" {
+  version = "~> 0.1"
 }
 
 resource "google_compute_instance" "controller" {
@@ -24,7 +34,7 @@ resource "google_compute_instance" "controller" {
   network_interface {
     network = "default"
     access_config {
-        # Ephemeral
+      # Ephemeral
     }
   }
 
@@ -74,7 +84,7 @@ resource "google_compute_instance" "cockroach" {
   network_interface {
     network = "default"
     access_config {
-        # Ephemeral
+      # Ephemeral
     }
   }
 
