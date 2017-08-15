@@ -490,6 +490,7 @@ func (rq *replicateQueue) processOneChange(
 					ctx, repl, rebalanceReplica, desc, SnapshotRequest_REBALANCE); err != nil {
 					return false, err
 				}
+				return true, nil
 			}
 		}
 
