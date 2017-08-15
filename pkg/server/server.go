@@ -387,6 +387,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		gw.RegisterService(s.grpc)
 	}
 
+	// FINDME(tschottdorf)
 	nodeInfo := sql.NodeInfo{
 		AdminURL:     cfg.AdminURL,
 		PGURL:        cfg.PGURL,
@@ -1113,7 +1114,7 @@ func (s *Server) Undrain(off []serverpb.DrainMode) []serverpb.DrainMode {
 func (s *Server) Decommission(ctx context.Context, setTo bool, nodeIDs []roachpb.NodeID) error {
 	for _, nodeID := range nodeIDs {
 		if err := s.nodeLiveness.SetDecommissioning(ctx, nodeID, setTo); err != nil {
-			return err
+			return errors.Wrapf(err, "during liveness update %d -> %t", nodeID, setTo)
 		}
 	}
 	return nil

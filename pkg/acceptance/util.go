@@ -38,6 +38,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/acceptance/barecluster"
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/acceptance/terrafarm"
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -427,13 +428,33 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 			t.Fatalf("cluster not ready in time: %s", err)
 		}
 	} else {
-		logDir := *flagLogDir
-		if logDir != "" {
-			logDir = filepath.Join(logDir, filepath.Clean(t.Name()))
+		//logDir := *flagLogDir
+		//if logDir != "" {
+		//	logDir = filepath.Join(logDir, filepath.Clean(t.Name()))
+		//}
+		//l := cluster.CreateLocal(ctx, cfg, logDir, stopper)
+		//l.Start(ctx)
+		//c = l
+
+		pwd, err := os.Getwd()
+		if err != nil {
+			t.Fatal(err)
 		}
-		l := cluster.CreateLocal(ctx, cfg, logDir, stopper)
-		l.Start(ctx)
-		c = l
+		dataDir, err := ioutil.TempDir(pwd, ".barecluster")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		clusterCfg := barecluster.ClusterConfig{
+			Ephemeral: true,
+			Binary:    "../../cockroach",
+			DataDir:   dataDir,
+			NumNodes:  int(cfg.Nodes[0].Count),
+		}
+		l := barecluster.New(clusterCfg)
+
+		l.Start()
+		c = &barecluster.BareCluster{l}
 	}
 
 	if cfg.InitMode != cluster.INIT_NONE {

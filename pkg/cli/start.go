@@ -770,7 +770,8 @@ func runQuit(cmd *cobra.Command, args []string) (err error) {
 	defer stopper.Stop(ctx)
 
 	if quitCtx.serverDecommission {
-		if err := runDecommissionNodeImpl(ctx, c, nodeDecommissionWaitAll, nil); err != nil {
+		var myself []string // will remain empty, which means target yourself
+		if err := runDecommissionNodeImpl(ctx, c, nodeDecommissionWaitAll, myself); err != nil {
 			return err
 		}
 	}

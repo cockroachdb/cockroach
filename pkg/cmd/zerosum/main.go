@@ -31,7 +31,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
-	"github.com/cockroachdb/cockroach/pkg/cmd/internal/localcluster"
+	barecluster "github.com/cockroachdb/cockroach/pkg/acceptance/barecluster"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -63,7 +63,7 @@ func newRand() *rand.Rand {
 // a zipf distribution which tilts towards smaller IDs (and hence more
 // contention).
 type zeroSum struct {
-	*localcluster.Cluster
+	*barecluster.Cluster
 	numAccounts int
 	chaosType   string
 	accounts    struct {
@@ -83,7 +83,7 @@ type zeroSum struct {
 	}
 }
 
-func newZeroSum(c *localcluster.Cluster, numAccounts int, chaosType string) *zeroSum {
+func newZeroSum(c *barecluster.Cluster, numAccounts int, chaosType string) *zeroSum {
 	z := &zeroSum{
 		Cluster:     c,
 		numAccounts: numAccounts,
@@ -113,7 +113,7 @@ func (z *zeroSum) run(workers, monkeys int) {
 }
 
 func (z *zeroSum) setup() uint32 {
-	db := z.DB[0]
+	db := z.Nodes[0].DB()
 	if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS zerosum"); err != nil {
 		log.Fatal(context.Background(), err)
 	}
@@ -130,7 +130,7 @@ CREATE TABLE IF NOT EXISTS accounts (
 
 	tableIDQuery := `
 SELECT tables.id FROM system.namespace tables
-  JOIN system.namespace dbs ON dbs.id = tables.parentid
+  JOIN system.namespace dbs ON dbs.id = tables."parentID"
   WHERE dbs.name = $1 AND tables.name = $2
 `
 	var tableID uint32
@@ -152,7 +152,7 @@ func (z *zeroSum) accountsLen() int {
 }
 
 func (z *zeroSum) maybeLogError(err error) {
-	if localcluster.IsUnavailableError(err) || strings.Contains(err.Error(), "range is frozen") {
+	if barecluster.IsUnavailableError(err) || strings.Contains(err.Error(), "range is frozen") {
 		return
 	}
 	log.Error(context.Background(), err)
@@ -170,7 +170,7 @@ func (z *zeroSum) worker() {
 			continue
 		}
 
-		db := z.DB[z.RandNode(r.Intn)]
+		db := z.Nodes[z.RandNode(r.Intn)].DB()
 		err := crdb.ExecuteTx(db, func(tx *gosql.Tx) error {
 			rows, err := tx.Query(`SELECT id, balance FROM accounts WHERE id IN ($1, $2)`, from, to)
 			if err != nil {
@@ -310,7 +310,7 @@ func (z *zeroSum) verify(d time.Duration) {
 		q := `SELECT count(*), sum(balance) FROM accounts`
 		var accounts uint64
 		var total int64
-		db := z.DB[z.RandNode(rand.Intn)]
+		db := z.Nodes[z.RandNode(rand.Intn)].DB()
 		if err := db.QueryRow(q).Scan(&accounts, &total); err != nil {
 			z.maybeLogError(err)
 			continue
@@ -408,7 +408,29 @@ func (z *zeroSum) monitor(d time.Duration) {
 func main() {
 	flag.Parse()
 
-	c := localcluster.New(*numNodes, false /* separateAddrs */)
+	cockroachBin := func() string {
+		bin := "./cockroach"
+		if _, err := os.Stat(bin); os.IsNotExist(err) {
+			bin = "cockroach"
+		} else if err != nil {
+			panic(err)
+		}
+		return bin
+	}()
+
+	perNodeCfg := barecluster.MakePerNodeFixedPortsCfg(*numNodes)
+
+	cfg := barecluster.ClusterConfig{
+		DataDir:     "cockroach-data-zerosum",
+		Binary:      cockroachBin,
+		NumNodes:    *numNodes,
+		NumWorkers:  *workers,
+		AllNodeArgs: flag.Args(),
+		DB:          "zerosum",
+		PerNodeCfg:  perNodeCfg,
+	}
+
+	c := barecluster.New(cfg)
 	defer c.Close()
 
 	log.SetExitFunc(func(code int) {
@@ -426,7 +448,7 @@ func main() {
 		os.Exit(1)
 	}()
 
-	c.Start("zerosum", *workers, localcluster.CockroachBin, flag.Args(), nil, nil)
+	c.Start()
 
 	z := newZeroSum(c, *numAccounts, *chaosType)
 	z.run(*workers, *monkeys)

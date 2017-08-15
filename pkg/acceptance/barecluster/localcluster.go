@@ -12,17 +12,22 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package localcluster
+package barecluster
 
 import (
 	"bytes"
 	gosql "database/sql"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"math/rand"
+	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"text/tabwriter"
 	"time"
 
@@ -42,25 +47,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-const basePort = 26257
-const dataDir = "cockroach-data"
-
-// CockroachBin is the path to the cockroach binary.
-var CockroachBin = func() string {
-	bin := "./cockroach"
-	if _, err := os.Stat(bin); os.IsNotExist(err) {
-		bin = "cockroach"
-	} else if err != nil {
-		panic(err)
-	}
-	return bin
-}()
+const (
+	listeningURLFile = "cockroachdb-url"
+	pidFile          = "cockroachdb-pid"
+)
 
 // IsUnavailableError returns true iff the error corresponds to a GRPC
 // connection unavailable error.
@@ -68,30 +65,64 @@ func IsUnavailableError(err error) bool {
 	return strings.Contains(err.Error(), "grpc: the connection is unavailable")
 }
 
+type ClusterConfig struct {
+	Ephemeral   bool
+	Binary      string
+	AllNodeArgs []string
+	NumNodes    int
+	DataDir     string
+	PerNodeCfg  map[int]NodeCfg
+
+	DB         string
+	NumWorkers int
+}
+
+// NodeCfg . RENAME Config
+type NodeCfg struct {
+	DataDir             string
+	Addr                string
+	ExtraArgs, ExtraEnv []string
+	RPCPort, HTTPPort   int // zero for auto-assign
+	DB                  string
+	NumWorkers          int
+}
+
+// MakePerNodeFixedPortsCfg makes a PerNodeCfg map of the given number of nodes
+// with odd ports starting at 26257 for the RPC endpoint, and even points for
+// the ui.
+func MakePerNodeFixedPortsCfg(numNodes int) map[int]NodeCfg {
+	perNodeCfg := make(map[int]NodeCfg)
+
+	for i := 0; i < numNodes; i++ {
+		perNodeCfg[i] = NodeCfg{
+			RPCPort:  26257 + 2*i,
+			HTTPPort: 26258 + 2*i,
+		}
+	}
+
+	return perNodeCfg
+}
+
 // Cluster holds the state for a local cluster, providing methods for common
 // operations, access to the underlying nodes and per-node KV and SQL clients.
 type Cluster struct {
-	rpcCtx        *rpc.Context
-	Nodes         []*Node
-	Clients       []*client.DB
-	Status        []serverpb.StatusClient
-	DB            []*gosql.DB
-	separateAddrs bool
-	stopper       *stop.Stopper
-	started       time.Time
+	cfg     ClusterConfig
+	rpcCtx  *rpc.Context
+	Nodes   []*Node
+	Clients []*client.DB
+	Status  []serverpb.StatusClient
+	stopper *stop.Stopper
+	started time.Time
 }
 
-// New creates a cluster of size nodes.
-// separateAddrs controls whether all the nodes use the same localhost IP
-// address (127.0.0.1) or separate addresses (e.g. 127.1.1.1, 127.1.1.2, etc).
-func New(size int, separateAddrs bool) *Cluster {
+// New creates a Cluster with the given configuration.
+func New(cfg ClusterConfig) *Cluster {
 	return &Cluster{
-		Nodes:         make([]*Node, size),
-		Clients:       make([]*client.DB, size),
-		Status:        make([]serverpb.StatusClient, size),
-		DB:            make([]*gosql.DB, size),
-		separateAddrs: separateAddrs,
-		stopper:       stop.NewStopper(),
+		cfg:     cfg,
+		Nodes:   make([]*Node, cfg.NumNodes),
+		Clients: make([]*client.DB, cfg.NumNodes),
+		Status:  make([]serverpb.StatusClient, cfg.NumNodes),
+		stopper: stop.NewStopper(),
 	}
 }
 
@@ -100,13 +131,7 @@ func New(size int, separateAddrs bool) *Cluster {
 // can be used to pass extra arguments to every node. The perNodeArgs parameter
 // can be used to pass extra arguments to an individual node. If not nil, its
 // size must equal the number of nodes.
-func (c *Cluster) Start(
-	db string,
-	numWorkers int,
-	binary string,
-	allNodeArgs []string,
-	perNodeArgs, perNodeEnv map[int][]string,
-) {
+func (c *Cluster) Start() {
 	c.started = timeutil.Now()
 
 	baseCtx := &base.Config{
@@ -116,16 +141,39 @@ func (c *Cluster) Start(
 	c.rpcCtx = rpc.NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, baseCtx,
 		hlc.NewClock(hlc.UnixNano, 0), c.stopper)
 
-	if perNodeArgs != nil && len(perNodeArgs) != len(c.Nodes) {
-		panic(fmt.Sprintf("there are %d nodes, but perNodeArgs' length is %d",
-			len(c.Nodes), len(perNodeArgs)))
+	var wg sync.WaitGroup
+	for i := range c.Nodes {
+		cfg, _ := c.cfg.PerNodeCfg[i]
+		if cfg.DataDir == "" {
+			cfg.DataDir = filepath.Join(c.cfg.DataDir, fmt.Sprintf("%d", i+1))
+		}
+		if cfg.Addr == "" {
+			cfg.Addr = "127.0.0.1"
+		}
+		if cfg.DB == "" {
+			cfg.DB = c.cfg.DB
+		}
+		if cfg.NumWorkers == 0 {
+			cfg.NumWorkers = c.cfg.NumWorkers
+		}
+		cfg.ExtraArgs = append(append([]string(nil), c.cfg.AllNodeArgs...), cfg.ExtraArgs...)
+		c.Nodes[i] = c.makeNode(&wg, i, c.cfg.Binary, cfg)
+		if i == 0 && cfg.RPCPort == 0 {
+			// The first node must know its RPCPort or we can't possibly tell
+			// the other nodes the correct one to go to.
+			//
+			// TODO(tschottdorf): this limits being able to set up a cluster
+			// first and clone it for each test, because all ports change so the
+			// cluster won't come together. Luckily, it takes only ~2 seconds
+			// from zero to a replicated 4 node cluster.
+			wg.Wait()
+		}
 	}
+	wg.Wait()
 
 	for i := range c.Nodes {
-		c.Nodes[i] = c.makeNode(i, binary, append(append([]string(nil), allNodeArgs...), perNodeArgs[i]...), perNodeEnv[i])
 		c.Clients[i] = c.makeClient(i)
 		c.Status[i] = c.makeStatus(i)
-		c.DB[i] = c.makeDB(i, numWorkers, db)
 	}
 
 	log.Infof(context.Background(), "started %.3fs", timeutil.Since(c.started).Seconds())
@@ -138,61 +186,59 @@ func (c *Cluster) Close() {
 		n.Kill()
 	}
 	c.stopper.Stop(context.Background())
+	if c.cfg.Ephemeral {
+		_ = os.RemoveAll(c.cfg.DataDir)
+	}
 }
 
 // IPAddr returns the IP address of the specified node.
 func (c *Cluster) IPAddr(nodeIdx int) string {
-	if c.separateAddrs {
-		return fmt.Sprintf("127.1.1.%d", nodeIdx+1)
-	}
-	return "127.0.0.1"
+	return c.Nodes[nodeIdx].IPAddr()
 }
 
 // RPCAddr returns the RPC address of the specified node.
 func (c *Cluster) RPCAddr(nodeIdx int) string {
-	return fmt.Sprintf("%s:%d", c.IPAddr(nodeIdx), RPCPort(nodeIdx))
+	return net.JoinHostPort(c.IPAddr(nodeIdx), c.RPCPort(nodeIdx))
 }
 
-// RPCPort returns the RPC port of the specified node.
-func RPCPort(nodeIdx int) int {
-	return basePort + nodeIdx*2
+// RPCPort returns the RPC port of the specified node. Returns zero if unknown.
+func (c *Cluster) RPCPort(nodeIdx int) string {
+	return c.Nodes[nodeIdx].RPCPort()
 }
 
-// HTTPPort returns the HTTP port of the specified node.
-func HTTPPort(nodeIdx int) int {
-	return RPCPort(nodeIdx) + 1
+// HTTPPort returns the HTTP port of the specified node. Returns zero if unknown.
+func (c *Cluster) HTTPPort(nodeIdx int) string {
+	return c.Nodes[nodeIdx].HTTPPort()
 }
 
-func (c *Cluster) makeNode(nodeIdx int, binary string, extraArgs, extraEnv []string) *Node {
-	name := fmt.Sprintf("%d", nodeIdx+1)
-	dir := filepath.Join(dataDir, name)
-	logDir := filepath.Join(dir, "logs")
-	if err := os.MkdirAll(logDir, 0755); err != nil {
-		log.Fatal(context.Background(), err)
+func (c *Cluster) makeNode(wg *sync.WaitGroup, nodeIdx int, binary string, cfg NodeCfg) *Node {
+	node := &Node{
+		cfg: cfg,
 	}
 
 	args := []string{
 		binary,
 		"start",
 		"--insecure",
-		fmt.Sprintf("--host=%s", c.IPAddr(nodeIdx)),
-		fmt.Sprintf("--port=%d", RPCPort(nodeIdx)),
-		fmt.Sprintf("--http-port=%d", HTTPPort(nodeIdx)),
-		fmt.Sprintf("--store=%s", dir),
+		fmt.Sprintf("--host=%s", node.IPAddr()),
+		fmt.Sprintf("--port=%d", cfg.RPCPort),
+		fmt.Sprintf("--http-port=%d", cfg.HTTPPort),
+		fmt.Sprintf("--store=%s", cfg.DataDir),
+		fmt.Sprintf("--listening-url-file=%s", node.listeningURLFile()),
+		fmt.Sprintf("--pid-file=%s", node.pidFile()),
 		fmt.Sprintf("--cache=256MiB"),
-		fmt.Sprintf("--logtostderr"),
 	}
+
 	if nodeIdx > 0 {
 		args = append(args, fmt.Sprintf("--join=%s", c.RPCAddr(0)))
 	}
-	args = append(args, extraArgs...)
+	node.cfg.ExtraArgs = append(args, cfg.ExtraArgs...)
 
-	node := &Node{
-		logDir: logDir,
-		args:   args,
-		env:    extraEnv,
+	if err := os.MkdirAll(node.logDir(), 0755); err != nil {
+		log.Fatal(context.Background(), err)
 	}
-	node.Start()
+
+	node.StartAsync(wg)
 	return node
 }
 
@@ -210,21 +256,6 @@ func (c *Cluster) makeStatus(nodeIdx int) serverpb.StatusClient {
 		log.Fatalf(context.Background(), "failed to initialize status client: %s", err)
 	}
 	return serverpb.NewStatusClient(conn)
-}
-
-func (c *Cluster) makeDB(nodeIdx, numWorkers int, dbName string) *gosql.DB {
-	url := fmt.Sprintf("postgresql://root@%s/%s?sslmode=disable",
-		c.RPCAddr(nodeIdx), dbName)
-	conn, err := gosql.Open("postgres", url)
-	if err != nil {
-		log.Fatal(context.Background(), err)
-	}
-	if numWorkers == 0 {
-		numWorkers = 1
-	}
-	conn.SetMaxOpenConns(numWorkers)
-	conn.SetMaxIdleConns(numWorkers)
-	return conn
 }
 
 // waitForFullReplication waits for the cluster to be fully replicated.
@@ -270,7 +301,7 @@ func (c *Cluster) isReplicated() (bool, string) {
 		}
 		fmt.Fprintf(tw, "\t%s\t%s\t[%d]\t%d\n",
 			desc.StartKey, desc.EndKey, desc.RangeID, storeIDs)
-		if len(desc.Replicas) != 3 {
+		if len(desc.Replicas) < 3 { // allow overreplication
 			done = false
 		}
 	}
@@ -288,7 +319,7 @@ func (c *Cluster) UpdateZoneConfig(rangeMinBytes, rangeMaxBytes int64) {
 	if err != nil {
 		log.Fatal(context.Background(), err)
 	}
-	_, err = c.DB[0].Exec(`UPSERT INTO system.zones (id, config) VALUES (0, $1)`, buf)
+	_, err = c.Nodes[0].DB().Exec(`UPSERT INTO system.zones (id, config) VALUES (0, $1)`, buf)
 	if err != nil {
 		log.Fatal(context.Background(), err)
 	}
@@ -351,11 +382,30 @@ func (c *Cluster) RandNode(f func(int) int) int {
 // Node holds the state for a single node in a local cluster and provides
 // methods for starting, pausing, resuming and stopping the node.
 type Node struct {
+	cfg NodeCfg
+
 	syncutil.Mutex
-	logDir string
-	args   []string
-	env    []string
-	cmd    *exec.Cmd
+	cmd                      *exec.Cmd
+	rpcPort, httpPort, pgURL string
+	db                       *gosql.DB
+}
+
+func (n *Node) RPCPort() string {
+	n.Lock()
+	defer n.Unlock()
+	return n.rpcPort
+}
+
+func (n *Node) HTTPPort() string {
+	n.Lock()
+	defer n.Unlock()
+	return n.httpPort
+}
+
+func (n *Node) PGUrl() string {
+	n.Lock()
+	defer n.Unlock()
+	return n.pgURL
 }
 
 // Alive returns true if the node is alive (i.e. not stopped). Note that a
@@ -366,8 +416,27 @@ func (n *Node) Alive() bool {
 	return n.cmd != nil
 }
 
+func (n *Node) logDir() string {
+	return filepath.Join(n.cfg.DataDir, "logs")
+}
+
+func (n *Node) listeningURLFile() string {
+	return filepath.Join(n.cfg.DataDir, listeningURLFile)
+}
+
+func (n *Node) pidFile() string {
+	return filepath.Join(n.cfg.DataDir, pidFile)
+}
+
 // Start starts a node.
 func (n *Node) Start() {
+	var wg sync.WaitGroup
+	n.StartAsync(&wg)
+	wg.Wait()
+}
+
+// StartAsync .
+func (n *Node) StartAsync(wg *sync.WaitGroup) {
 	n.Lock()
 	defer n.Unlock()
 
@@ -375,28 +444,41 @@ func (n *Node) Start() {
 		return
 	}
 
-	n.cmd = exec.Command(n.args[0], n.args[1:]...)
+	_ = os.Remove(n.pidFile())
+	_ = os.Remove(n.listeningURLFile())
+
+	n.cmd = exec.Command(n.cfg.ExtraArgs[0], n.cfg.ExtraArgs[1:]...)
 	n.cmd.Env = os.Environ()
-	n.cmd.Env = append(n.cmd.Env, n.env...)
+	n.cmd.Env = append(n.cmd.Env, n.cfg.ExtraEnv...)
 
 	ctx := context.Background()
 
-	stdoutPath := filepath.Join(n.logDir, "stdout")
+	_ = os.MkdirAll(n.logDir(), 0755)
+
+	stdoutPath := filepath.Join(n.logDir(), "stdout")
 	stdout, err := os.OpenFile(stdoutPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		log.Fatalf(ctx, "unable to open file %s: %s", stdoutPath, err)
 	}
-	n.cmd.Stdout = stdout
+	n.cmd.Stdout = io.MultiWriter(stdout, os.Stdout)
 
-	stderrPath := filepath.Join(n.logDir, "stderr")
+	stderrPath := filepath.Join(n.logDir(), "stderr")
 	stderr, err := os.OpenFile(stderrPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		log.Fatalf(ctx, "unable to open file %s: %s", stderrPath, err)
 	}
+	//n.cmd.Stderr = io.MultiWriter(stderr, os.Stderr)
 	n.cmd.Stderr = stderr
 
+	if n.cfg.RPCPort > 0 {
+		n.rpcPort = fmt.Sprintf("%d", n.cfg.RPCPort)
+	}
+	if n.cfg.HTTPPort > 0 {
+		n.httpPort = fmt.Sprintf("%d", n.cfg.HTTPPort)
+	}
+
 	if err := n.cmd.Start(); err != nil {
-		log.Error(ctx, err)
+		log.Fatal(context.TODO(), err)
 		if err := stdout.Close(); err != nil {
 			log.Warning(ctx, err)
 		}
@@ -406,12 +488,11 @@ func (n *Node) Start() {
 		return
 	}
 
-	pid := n.cmd.Process.Pid
-	log.Infof(ctx, "process %d started: %s", pid, n.cmd.Args)
+	log.Infof(ctx, "process %d starting: %s", n.cmd.Process.Pid, n.cmd.Args)
 
-	go func(cmd *exec.Cmd) {
+	go func(cmd *exec.Cmd, pid int) {
 		if err := cmd.Wait(); err != nil {
-			log.Errorf(ctx, "waiting for command: %s", err)
+			log.Warning(ctx, err)
 		}
 		if err := stdout.Close(); err != nil {
 			log.Warning(ctx, err)
@@ -425,15 +506,139 @@ func (n *Node) Start() {
 		n.Lock()
 		n.cmd = nil
 		n.Unlock()
-	}(n.cmd)
+	}(n.cmd, n.cmd.Process.Pid)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		n.waitUntilLive()
+	}()
+}
+
+func portFromURL(rawURL string) (string, *url.URL, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "", nil, err
+	}
+
+	_, port, err := net.SplitHostPort(u.Host)
+	return port, u, err
+}
+
+func makeDB(url string, numWorkers int, dbName string) *gosql.DB {
+	conn, err := gosql.Open("postgres", url)
+	if err != nil {
+		log.Fatal(context.Background(), err)
+	}
+	if numWorkers == 0 {
+		numWorkers = 1
+	}
+	conn.SetMaxOpenConns(numWorkers)
+	conn.SetMaxIdleConns(numWorkers)
+	return conn
+}
+
+func (n *Node) waitUntilLive() {
+	ctx := context.Background()
+	opts := retry.Options{
+		InitialBackoff: time.Millisecond,
+		MaxBackoff:     500 * time.Millisecond,
+		Multiplier:     2,
+	}
+	for r := retry.Start(opts); r.Next(); {
+		urlBytes, err := ioutil.ReadFile(n.listeningURLFile())
+		if err != nil {
+			continue
+		}
+
+		var pgURL *url.URL
+		_, pgURL, err = portFromURL(string(urlBytes))
+		if err != nil {
+			log.Info(ctx, err)
+			continue
+		}
+
+		if n.cfg.RPCPort == 0 {
+			n.Lock()
+			n.rpcPort = pgURL.Port()
+			n.Unlock()
+		}
+
+		pgURL.Path = n.cfg.DB
+		n.Lock()
+		n.pgURL = pgURL.String()
+		n.Unlock()
+
+		pidBytes, err := ioutil.ReadFile(n.pidFile())
+		if err != nil {
+			log.Info(ctx, err)
+			continue
+		}
+
+		pid := strings.TrimSpace(string(pidBytes))
+
+		var uiURL *url.URL
+		defer func() {
+			log.Infof(ctx, "process %s started (db: %s ui: %s)", pid, pgURL, uiURL)
+		}()
+
+		// We're basically running, but (at least) the decommissioning test sometimes starts
+		// up servers that can already be draining when they get here. For that reason, leave
+		// the admin port undefined if we don't manage to get it.
+		//
+		// This can be improved by making the below code run opportunistically whenever the
+		// http port is required but isn't initialized yet.
+		n.Lock()
+		n.db = makeDB(n.pgURL, n.cfg.NumWorkers, n.cfg.DB)
+		n.Unlock()
+
+		var uiStr string
+		if err := n.db.QueryRow(
+			"SELECT value FROM crdb_internal.node_runtime_info WHERE field='AdminURL'",
+		).Scan(&uiStr); err != nil {
+			log.Info(ctx, err)
+			break
+		}
+
+		n.Lock()
+		n.httpPort, uiURL, err = portFromURL(uiStr)
+		n.Unlock()
+		if err != nil {
+			log.Info(ctx, err)
+			// TODO(tschottdorf): see above.
+		}
+		break
+	}
 }
 
 // Kill stops a node abruptly by sending it SIGKILL.
 func (n *Node) Kill() {
+	func() {
+		n.Lock()
+		defer n.Unlock()
+		if n.cmd == nil || n.cmd.Process == nil {
+			return
+		}
+		_ = n.cmd.Process.Kill()
+	}()
+	// Wait for the process to have been cleaned up (or a call to Start() could
+	// turn into an unintended no-op).
+	for ok := false; !ok; {
+		n.Lock()
+		ok = n.cmd == nil
+		n.Unlock()
+	}
+}
+
+// IPAddr returns the node's listening address (for ui, inter-node, cli, and
+// Postgres alike).
+func (n *Node) IPAddr() string {
+	return n.cfg.Addr
+}
+
+// DB returns a Postgres connection set up to talk to the node.
+func (n *Node) DB() *gosql.DB {
 	n.Lock()
 	defer n.Unlock()
-	if n.cmd == nil || n.cmd.Process == nil {
-		return
-	}
-	_ = n.cmd.Process.Kill()
+	return n.db
 }

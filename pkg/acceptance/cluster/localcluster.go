@@ -359,6 +359,9 @@ func (l *LocalCluster) initCluster(ctx context.Context) {
 	var nodeCount int
 	for _, nc := range l.config.Nodes {
 		for i := 0; i < int(nc.Count); i++ {
+			// FIXME(tschottdorf): this completely ignores the nodeCount. Really
+			// a TestConfig is a sequence of individual test clusters that need
+			// to be stood up. We can probably just rip this out.
 			newTestNode := &testNode{
 				config:  nc,
 				index:   nodeCount,
@@ -879,7 +882,7 @@ func (l *LocalCluster) Hostname(i int) string {
 	return l.Nodes[i].nodeStr
 }
 
-// ExecCLI runs ./cockroach <args>.
+// ExecCLI runs ./cockroach <args> with sane defaults.
 func (l *LocalCluster) ExecCLI(ctx context.Context, i int, cmd []string) (string, string, error) {
 	cmd = append([]string{"--host", l.Hostname(i), "--certs-dir=/certs"}, cmd...)
 	cfg := types.ExecConfig{
