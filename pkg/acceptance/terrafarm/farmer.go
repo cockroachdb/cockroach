@@ -285,11 +285,14 @@ func (f *Farmer) Destroy(t testing.TB) error {
 		defer f.logf("logs copied to %s\n", logDir)
 	}
 
-	wd, err := os.Getwd()
-	if err != nil {
-		wd = "acceptance"
+	baseDir := f.Cwd
+	if !filepath.IsAbs(baseDir) {
+		wd, err := os.Getwd()
+		if err != nil {
+			wd = "acceptance"
+		}
+		baseDir = filepath.Join(wd, baseDir)
 	}
-	baseDir := filepath.Join(wd, f.Cwd)
 	if (t.Failed() && f.KeepCluster == KeepClusterFailed) ||
 		f.KeepCluster == KeepClusterAlways {
 
