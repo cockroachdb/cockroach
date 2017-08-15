@@ -43,7 +43,7 @@ import (
 )
 
 const (
-	archivedStoreURL = "gs://cockroach-test/allocatortest"
+	archivedStoreURL = "https://cockroachnightlystorage.blob.core.windows.net/allocatortest"
 	StableInterval   = 3 * time.Minute
 	adminPort        = base.DefaultHTTPPort
 )
@@ -94,9 +94,12 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 	at.f.Assert(ctx, t)
 	log.Info(ctx, "initial cluster is up")
 
-	// We must stop the cluster because a) `nodectl` pokes at the data directory
-	// and, more importantly, b) we don't want the cluster above and the cluster
-	// below to ever talk to each other (see #7224).
+	// We must stop the cluster because:
+	//
+	// We're about to overwrite data directories.
+	//
+	// We don't want the cluster above and the cluster below to ever talk to
+	// each other (see #7224).
 	log.Info(ctx, "stopping cluster")
 	for i := 0; i < at.f.NumNodes(); i++ {
 		if err := at.f.Kill(ctx, i); err != nil {
@@ -104,11 +107,15 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 		}
 	}
 
-	log.Info(ctx, "downloading archived stores from Google Cloud Storage in parallel")
+	log.Infof(ctx, "downloading archived stores from %s in parallel", at.StoreURL)
 	errors := make(chan error, at.f.NumNodes())
 	for i := 0; i < at.f.NumNodes(); i++ {
 		go func(nodeNum int) {
-			errors <- at.f.Exec(nodeNum, "./nodectl download "+at.StoreURL)
+			errors <- at.f.Exec(nodeNum,
+				fmt.Sprintf("find %[1]s -type f -delete && curl -sfSL %s/store%d.tgz | tar -C %[1]s -zx",
+					"/mnt/data0", at.StoreURL, nodeNum+1,
+				),
+			)
 		}(i)
 	}
 	for i := 0; i < at.f.NumNodes(); i++ {

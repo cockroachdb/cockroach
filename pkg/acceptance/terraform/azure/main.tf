@@ -187,11 +187,6 @@ resource "null_resource" "cockroach-runner" {
   }
 
   provisioner "file" {
-    source = "../common/nodectl"
-    destination = "/home/ubuntu/nodectl"
-  }
-
-  provisioner "file" {
     source = "../../../../build/disable-hyperv-timesync.sh"
     destination = "/home/ubuntu/disable-hyperv-timesync.sh"
   }
@@ -204,22 +199,11 @@ resource "null_resource" "cockroach-runner" {
   # Launch CockroachDB.
   provisioner "remote-exec" {
     inline = [
-      "chmod +x cockroach nodectl disable-hyperv-timesync.sh",
+      "chmod +x cockroach disable-hyperv-timesync.sh",
       # For consistency with other Terraform configs, we create the store in
       # /mnt/data0.
       "sudo mkdir /mnt/data0",
       "sudo chown ubuntu:ubuntu /mnt/data0",
-      # This sleep is needed to avoid apt-get errors below. It appears that when
-      # the VM first launches, something is interfering with launches of apt-get.
-      "sleep 30",
-      # Install test dependencies.
-      # TODO(cuongdo): Remove this dependency on Google Cloud SDK after we move
-      # the test data to Azure Storage.
-      "export CLOUD_SDK_REPO=\"cloud-sdk-$(lsb_release -c -s)\"",
-      "echo \"deb http://packages.cloud.google.com/apt $CLOUD_SDK_REPO main\" | sudo tee /etc/apt/sources.list.d/google-cloud-sdk.list",
-      "curl -sS https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -",
-      "sudo apt-get -qqy update >/dev/null",
-      "sudo apt-get -qqy install google-cloud-sdk >/dev/null",
       # Disable hypervisor clock sync, because it can cause an unrecoverable
       # amount of clock skew. This also forces an NTP sync.
       "./disable-hyperv-timesync.sh",

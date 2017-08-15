@@ -35,6 +35,7 @@ if ! echo -n "${dev_id}" | sudo tee ${UNBIND_PATH} > /dev/null; then
 fi
 
 # Force an NTP time sync.
+sudo apt-get -qqy update
 sudo apt-get -qqy install ntpdate
 # Disable systemd-timesyncd
 sudo timedatectl set-ntp false

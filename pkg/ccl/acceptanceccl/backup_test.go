@@ -83,12 +83,11 @@ func (bt *benchmarkTest) Start(ctx context.Context) {
 			}
 		}
 
-		log.Info(ctx, "downloading archived stores from Google Cloud Storage in parallel")
+		log.Infof(ctx, "downloading archived stores from %s in parallel", bt.storeURL)
 		errors := make(chan error, bt.f.NumNodes())
 		for i := 0; i < bt.f.NumNodes(); i++ {
 			go func(nodeNum int) {
 				cmd := fmt.Sprintf(`gsutil -m cp -r "%s/node%d/*" "%s"`, bt.storeURL, nodeNum, "/mnt/data0")
-				log.Infof(ctx, "exec on node %d: %s", nodeNum, cmd)
 				errors <- bt.f.Exec(nodeNum, cmd)
 			}(i)
 		}
