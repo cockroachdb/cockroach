@@ -15,8 +15,10 @@
 package jobs
 
 import (
+	"fmt"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -31,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/pkg/errors"
 )
 
 // nodeLiveness is the subset of storage.NodeLiveness's interface needed
@@ -291,7 +292,25 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl nodeLiveness) error {
 		go func() {
 			log.Infof(ctx, "job %d: resuming", *id)
 			err := resumeFn(ctx, &job)
-			if err := job.FinishedWith(ctx, err); err != nil {
+			if _, isDuplicate := errors.Cause(err).(*duplicateRegistrationError); isDuplicate {
+				// Another turn of the adoption loop already resumed this job. Swallow
+				// the error, as the job is properly resumed.
+				//
+				// This happens because job registration is asynchronous. This
+				// goroutine, not the adoption loop's goroutine, is responsible for
+				// calling Registry.register. There's a window where resumeFn has not
+				// yet registered the job with the registry, so the next turn of the
+				// adoption loop will see it holds the lease on a job that's not
+				// running, and attempt to resume it again. This likely never happens in
+				// practice because DefaultAdoptInterval is several orders of magnitude
+				// larger than the delay between resuming a job and that job registering
+				// itself. In tests, though, double resumption is a real possibility, as
+				// the DefaultAdoptInterval gets turned down an order of magnitude.
+				//
+				// TODO(benesch): make the adoption loop synchronously register the jobs
+				// it resumes. This requires API changes to "invert control"; see the
+				// TODOs in jobs.go for details.
+			} else if err := job.FinishedWith(ctx, err); err != nil {
 				// Nowhere to report this error but the log.
 				log.Errorf(ctx, "job %d: ignoring FinishedWith error: %+v", *id, err)
 			}
@@ -323,11 +342,19 @@ func (r *Registry) newLease() *Lease {
 	return &Lease{NodeID: nodeID, Epoch: r.mu.epoch}
 }
 
+type duplicateRegistrationError struct {
+	jobID int64
+}
+
+func (e *duplicateRegistrationError) Error() string {
+	return fmt.Sprintf("job %d is already registered", e.jobID)
+}
+
 func (r *Registry) register(jobID int64, j *Job) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, ok := r.mu.jobs[jobID]; ok {
-		return errors.Errorf("already tracking job ID %d", jobID)
+		return &duplicateRegistrationError{jobID: jobID}
 	}
 	r.mu.jobs[jobID] = j
 	return nil
