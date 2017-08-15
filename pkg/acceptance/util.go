@@ -104,7 +104,9 @@ var flagTFReuseCluster = flag.String("reuse", "",
 	  This flag can also be set to have a test create a cluster
 	  with predetermined name.`,
 )
-
+var flagTFFixtureLocation = flag.String("tf.fixture-location", "eastus",
+	"the azure location from which to download fixtures",
+)
 var flagTFKeepCluster = keepClusterVar(terrafarm.KeepClusterNever) // see init()
 var flagTFCockroachFlags = flag.String("tf.cockroach-flags", "",
 	"command-line flags to pass to cockroach for allocator tests")
@@ -141,6 +143,17 @@ func RunTests(m *testing.M) {
 		}
 	}()
 	os.Exit(m.Run())
+}
+
+// FixtureURL returns the URL at which the object with the given name should be
+// downloaded from Azure Cloud Storage. It uses a storage account located in the
+// region specified by the -tf.fixture-location flag to avoid bandwidth egress
+// charges.
+func FixtureURL(name string) string {
+	return fmt.Sprintf(
+		"https://roachfixtures%s.blob.core.windows.net/%s",
+		*flagTFFixtureLocation, name,
+	)
 }
 
 // prefixRE is based on a Terraform error message regarding invalid resource
