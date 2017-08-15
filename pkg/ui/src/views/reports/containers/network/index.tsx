@@ -397,7 +397,7 @@ class Network extends React.Component<NetworkProps, {}> {
     }
 
     return (
-      <div>
+      <div className="section">
         <h1>Network Diagnostics</h1>
         <NodeFilterList nodeIDs={filters.nodeIDs} localityRegex={filters.localityRegex} />
         {content}

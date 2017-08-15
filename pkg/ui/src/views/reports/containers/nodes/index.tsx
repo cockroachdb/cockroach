@@ -1,13 +1,16 @@
 import _ from "lodash";
+import Long from "long";
+import moment from "moment";
 import React from "react";
 import { connect } from "react-redux";
-import moment from "moment";
 import { RouterState } from "react-router";
 
+import * as protos from "src/js/protos";
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import { NodesSummary, nodesSummarySelector } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { LongToMoment } from "src/util/convert";
+import { FixLong } from "src/util/fixLong";
 import { getFilters, localityToString, NodeFilterList } from "src/views/reports/components/nodeFilterList";
 
 interface NodesOwnProps {
@@ -16,45 +19,116 @@ interface NodesOwnProps {
   refreshLiveness: typeof refreshLiveness;
 }
 
-interface Detail {
-  [name: string]: string[];
-}
-
-interface Title {
-  readonly variable: string;
-  readonly display: string;
-  readonly equality: boolean; // When true, displays a warning when all values don't match.
-}
+type NodesProps = NodesOwnProps & RouterState;
 
 const dateFormat = "Y-MM-DD HH:mm:ss";
 const detailTimeFormat = "Y/MM/DD HH:mm:ss";
-
-const displayList: Title[] = [
-  { variable: "nodeID", display: "Node ID", equality: false },
-  { variable: "address", display: "Address", equality: false },
-  { variable: "locality", display: "Locality", equality: false },
-  { variable: "attributes", display: "Attributes", equality: false },
-  { variable: "environment", display: "Environment", equality: false },
-  { variable: "arguments", display: "Arguments", equality: false },
-  { variable: "tag", display: "Tag", equality: true },
-  { variable: "revision", display: "Revision", equality: true },
-  { variable: "time", display: "Time", equality: true },
-  { variable: "type", display: "Type", equality: true },
-  { variable: "platform", display: "Platform", equality: true },
-  { variable: "goVersion", display: "Go Version", equality: true },
-  { variable: "cgo", display: "CGO", equality: true },
-  { variable: "distribution", display: "Distribution", equality: true },
-  { variable: "startedAt", display: "Started at", equality: false },
-  { variable: "updatedAt", display: "Updated at", equality: false },
-];
-
-type NodesProps = NodesOwnProps & RouterState;
 
 const loading = (
   <div className="section">
     <h1>Loading cluster status...</h1>
   </div>
 );
+
+function NodeTableCell(props: { value: React.ReactNode, title: string }) {
+  return (
+    <td className="nodes-table__cell" title={props.title}>
+      {props.value}
+    </td>
+  );
+}
+
+// Functions starting with "print" return a single string representation which
+// can be used for title, the main content or even equality comparisons.
+function printNodeID(status: protos.cockroach.server.status.NodeStatus$Properties) {
+  return `n${status.desc.node_id}`;
+}
+
+function printSingleValue(value: string) {
+  return function (status: protos.cockroach.server.status.NodeStatus$Properties) {
+    return _.get(status, value, null);
+  };
+}
+
+function printSingleValueWithFunction(value: string, fn: (item: any) => string) {
+  return function (status: protos.cockroach.server.status.NodeStatus$Properties) {
+    return fn(_.get(status, value, null));
+  };
+}
+
+function printMultiValue(value: string) {
+  return function (status: protos.cockroach.server.status.NodeStatus$Properties) {
+    return _.join(_.get(status, value, []), "\n");
+  };
+}
+
+function printDateValue(value: string, inputDateFormat: string) {
+  return function (status: protos.cockroach.server.status.NodeStatus$Properties) {
+    if (!_.has(status, value)) {
+      return null;
+    }
+    return moment(_.get(status, value), inputDateFormat).format(dateFormat);
+  };
+}
+
+function printTimestampValue(value: string) {
+  return function (status: protos.cockroach.server.status.NodeStatus$Properties) {
+    if (!_.has(status, value)) {
+      return null;
+    }
+    return LongToMoment(FixLong(_.get(status, value) as Long)).format(dateFormat);
+  };
+}
+
+// Functions starting with "title" are used exclusively to print the cell
+// titles. They always return a single string.
+function titleDateValue(value: string, inputDateFormat: string) {
+  return function (status: protos.cockroach.server.status.NodeStatus$Properties) {
+    if (!_.has(status, value)) {
+      return null;
+    }
+    const raw = _.get(status, value);
+    return `${moment(raw, inputDateFormat).format(dateFormat)}\n${raw}`;
+  };
+}
+
+function titleTimestampValue(value: string) {
+  return function (status: protos.cockroach.server.status.NodeStatus$Properties) {
+    if (!_.has(status, value)) {
+      return null;
+    }
+    const raw = FixLong(_.get(status, value) as Long);
+    return `${LongToMoment(raw).format(dateFormat)}\n${raw.toString}`;
+  };
+}
+
+// Functions starting with "extract" are used exclusively for for extracting
+// the main content of a cell.
+function extractMultiValue(value: string) {
+  return function (status: protos.cockroach.server.status.NodeStatus$Properties) {
+    const items = _.map(_.get(status, value, []), item => item.toString());
+    return (
+      <ul className="nodes-entries-list">
+        {
+          _.map(items, (item, key) => (
+            <li key={key} className="nodes-entries-list--item">
+              {item}
+            </li>
+          ))
+        }
+      </ul>
+    );
+  };
+}
+
+function extractCertificateLink(status: protos.cockroach.server.status.NodeStatus$Properties) {
+  const nodeID = status.desc.node_id;
+  return (
+    <a className="debug-link" href={`#/reports/certificates/${nodeID}`}>
+      n{nodeID} Certificates
+    </a>
+  );
+}
 
 /**
  * Renders the Nodes Diagnostics Report page.
@@ -76,49 +150,9 @@ class Nodes extends React.Component<NodesProps, {}> {
     }
   }
 
-  renderResultsCell(title: Title, nodeDetail: Detail, key: number) {
-    return (
-      <td key={key} className="nodes-table__cell" title={
-        _.join(nodeDetail[title.variable], "\n")
-      }>
-        <ul className="nodes-entries-list">
-          {
-            _.map(nodeDetail[title.variable], (value, k) => (
-              <li key={k}>
-                {value}
-              </li>
-            ))
-          }
-        </ul>
-      </td>
-    );
-  }
-
-  renderResultsRow(title: Title, nodeDetails: Detail[], key: number) {
-    let headerClassName: string = "nodes-table__cell nodes-table__cell--header";
-    if (title.equality && _.chain(nodeDetails)
-      .map(detail => _.join(detail[title.variable], " "))
-      .uniq()
-      .value()
-      .length > 1) {
-      headerClassName += " nodes-table__cell--header-warning";
-    }
-    return (
-      <tr key={key} className="nodes-table__row">
-        <th className={headerClassName}>
-          {title.display}
-        </th>
-        {
-          _.map(nodeDetails, (detail, key2) => (
-            this.renderResultsCell(title, detail, key2)
-          ))
-        }
-      </tr>
-    );
-  }
-
   render() {
     const { nodesSummary } = this.props;
+    const { nodeStatusByID } = nodesSummary;
     if (_.isEmpty(nodesSummary.nodeIDs)) {
       return loading;
     }
@@ -132,37 +166,17 @@ class Nodes extends React.Component<NodesProps, {}> {
     }
     if (!_.isNil(filters.localityRegex)) {
       nodeIDsContext = nodeIDsContext.filter(nodeID => (
-        filters.localityRegex.test(localityToString(nodesSummary.nodeStatusByID[nodeID].desc.locality))
+        filters.localityRegex.test(localityToString(nodeStatusByID[nodeID.toString()].desc.locality))
       ));
     }
 
-    const nodeDetails: Detail[] = nodeIDsContext
-      .map(nodeID => nodesSummary.nodeStatusByID[nodeID])
-      .map(status => {
-        return {
-          nodeID: [`n${status.desc.node_id}`],
-          address: [status.desc.address.address_field],
-          locality: [localityToString(status.desc.locality)],
-          attributes: status.desc.attrs.attrs,
-          environment: status.env,
-          arguments: status.args,
-          tag: [status.build_info.tag],
-          revision: [status.build_info.revision],
-          time: [moment(status.build_info.time, detailTimeFormat).format(dateFormat)],
-          type: [status.build_info.type],
-          platform: [status.build_info.platform],
-          goVersion: [status.build_info.go_version],
-          cgo: [status.build_info.cgo_compiler],
-          distribution: [status.build_info.distribution],
-          startedAt: [LongToMoment(status.started_at).format(dateFormat)],
-          updatedAt: [LongToMoment(status.updated_at).format(dateFormat)],
-        };
-      })
-      .sortBy(identity => identity.nodeID)
-      .sortBy(identity => identity.locality)
+    // Sort the node IDs and then convert them back to string for lookups.
+    const orderedNodeIDs = nodeIDsContext
+      .orderBy(nodeID => nodeID)
+      .map(nodeID => nodeID.toString())
       .value();
 
-    if (_.isEmpty(nodeDetails)) {
+    if (_.isEmpty(orderedNodeIDs)) {
       return (
         <div>
           <h1>Node Diagnostics</h1>
@@ -172,18 +186,143 @@ class Nodes extends React.Component<NodesProps, {}> {
       );
     }
 
+    // This is implemented in-line to be able to access orderedNodeIDs and
+    // nodeStatusByID directly.
+    function NodesTableRow(props: {
+      title: string,
+      extract: (ns: protos.cockroach.server.status.NodeStatus$Properties) => React.ReactNode,
+      equality?: (ns: protos.cockroach.server.status.NodeStatus$Properties) => string,
+      cellTitle?: (ns: protos.cockroach.server.status.NodeStatus$Properties) => string,
+    }) {
+      let headerClassName: string = "nodes-table__cell nodes-table__cell--header";
+      if (!_.isNil(props.equality) && _.chain(orderedNodeIDs)
+        .map(nodeID => nodeStatusByID[nodeID])
+        .map(status => props.equality(status))
+        .uniq()
+        .value()
+        .length > 1) {
+        headerClassName += " nodes-table__cell--header-warning";
+      }
+
+      return (
+        <tr className="nodes-table__row">
+          <th className={headerClassName}>
+            {props.title}
+          </th>
+          {
+            _.map(orderedNodeIDs, nodeID => {
+              const status = nodeStatusByID[nodeID];
+              return (
+                <NodeTableCell
+                  key={nodeID}
+                  value={props.extract(status)}
+                  title={_.isNil(props.cellTitle) ? null : props.cellTitle(status)}
+                />
+              );
+            })
+          }
+        </tr>
+      );
+    }
+
     return (
-      <div>
+      <div className="section">
         <h1>Node Diagnostics</h1>
         <NodeFilterList nodeIDs={filters.nodeIDs} localityRegex={filters.localityRegex} />
         <h2>Nodes</h2>
         <table className="nodes-table">
           <tbody>
-            {
-              _.map(displayList, (title, key) => (
-                this.renderResultsRow(title, nodeDetails, key)
-              ))
-            }
+            <NodesTableRow
+              title="Node ID"
+              extract={printNodeID}
+            />
+            <NodesTableRow
+              title="Address"
+              extract={printSingleValue("desc.address.address_field")}
+              cellTitle={printSingleValue("desc.address.address_field")}
+            />
+            <NodesTableRow
+              title="Locality"
+              extract={printSingleValueWithFunction("desc.locality", localityToString)}
+              cellTitle={printSingleValueWithFunction("desc.locality", localityToString)}
+            />
+            <NodesTableRow
+              title="Certificates"
+              extract={extractCertificateLink}
+            />
+            <NodesTableRow
+              title="Attributes"
+              extract={extractMultiValue("desc.attrs.attrs")}
+              cellTitle={printMultiValue("desc.attrs.attrs")}
+            />
+            <NodesTableRow
+              title="Environment"
+              extract={extractMultiValue("env")}
+              cellTitle={printMultiValue("env")}
+            />
+            <NodesTableRow
+              title="Arguments"
+              extract={extractMultiValue("args")}
+              cellTitle={printMultiValue("args")}
+            />
+            <NodesTableRow
+              title="Tag"
+              extract={printSingleValue("build_info.tag")}
+              cellTitle={printSingleValue("build_info.tag")}
+              equality={printSingleValue("build_info.tag")}
+            />
+            <NodesTableRow
+              title="Revision"
+              extract={printSingleValue("build_info.revision")}
+              cellTitle={printSingleValue("build_info.revision")}
+              equality={printSingleValue("build_info.revision")}
+            />
+            <NodesTableRow
+              title="Time"
+              extract={printDateValue("build_info.time", detailTimeFormat)}
+              cellTitle={titleDateValue("build_info.time", detailTimeFormat)}
+              equality={printDateValue("build_info.time", detailTimeFormat)}
+            />
+            <NodesTableRow
+              title="Type"
+              extract={printSingleValue("build_info.type")}
+              cellTitle={printSingleValue("build_info.type")}
+              equality={printSingleValue("build_info.type")}
+            />
+            <NodesTableRow
+              title="Platform"
+              extract={printSingleValue("build_info.platform")}
+              cellTitle={printSingleValue("build_info.platform")}
+              equality={printSingleValue("build_info.platform")}
+            />
+            <NodesTableRow
+              title="Go Version"
+              extract={printSingleValue("build_info.go_version")}
+              cellTitle={printSingleValue("build_info.go_version")}
+              equality={printSingleValue("build_info.go_version")}
+            />
+            <NodesTableRow
+              title="CGO"
+              extract={printSingleValue("build_info.cgo_compiler")}
+              cellTitle={printSingleValue("build_info.cgo_compiler")}
+              equality={printSingleValue("build_info.cgo_compiler")}
+            />
+            <NodesTableRow
+              title="Distribution"
+              extract={printSingleValue("build_info.distribution")}
+              cellTitle={printSingleValue("build_info.distribution")}
+              equality={printSingleValue("build_info.distribution")}
+            />
+            <NodesTableRow
+              title="Started at"
+              extract={printTimestampValue("started_at")}
+              cellTitle={titleTimestampValue("started_at")}
+            />
+            <NodesTableRow
+              title="Updated at"
+              extract={printTimestampValue("updated_at")}
+              cellTitle={titleTimestampValue("updated_at")}
+            />
           </tbody>
         </table>
       </div>
