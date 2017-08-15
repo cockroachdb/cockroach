@@ -57,7 +57,7 @@ const showSetting = new LocalSetting<AdminUIState, string>(
 
 // Moment cannot render durations (moment/moment#1048). Hack it ourselves.
 const formatDuration = (d: moment.Duration) =>
-  [d.asHours().toFixed(0), d.minutes(), d.seconds()]
+  [Math.floor(d.asHours()).toFixed(0), d.minutes(), d.seconds()]
     .map(c => ("0" + c).slice(-2))
     .join(":");
 
