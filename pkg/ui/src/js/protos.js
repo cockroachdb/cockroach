@@ -29924,8 +29924,8 @@ export const cockroach = $root.cockroach = (() => {
              * Properties of a Version.
              * @typedef cockroach.roachpb.Version$Properties
              * @type {Object}
-             * @property {number} [major] Version major.
-             * @property {number} [minor] Version minor.
+             * @property {number} [majorval] Version majorval.
+             * @property {number} [minorval] Version minorval.
              * @property {number} [patch] Version patch.
              * @property {number} [unstable] Version unstable.
              */
@@ -29944,16 +29944,16 @@ export const cockroach = $root.cockroach = (() => {
             }
 
             /**
-             * Version major.
+             * Version majorval.
              * @type {number}
              */
-            Version.prototype.major = 0;
+            Version.prototype.majorval = 0;
 
             /**
-             * Version minor.
+             * Version minorval.
              * @type {number}
              */
-            Version.prototype.minor = 0;
+            Version.prototype.minorval = 0;
 
             /**
              * Version patch.
@@ -29985,10 +29985,10 @@ export const cockroach = $root.cockroach = (() => {
             Version.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
-                if (message.major != null && message.hasOwnProperty("major"))
-                    writer.uint32(/* id 1, wireType 0 =*/8).int32(message.major);
-                if (message.minor != null && message.hasOwnProperty("minor"))
-                    writer.uint32(/* id 2, wireType 0 =*/16).int32(message.minor);
+                if (message.majorval != null && message.hasOwnProperty("majorval"))
+                    writer.uint32(/* id 1, wireType 0 =*/8).int32(message.majorval);
+                if (message.minorval != null && message.hasOwnProperty("minorval"))
+                    writer.uint32(/* id 2, wireType 0 =*/16).int32(message.minorval);
                 if (message.patch != null && message.hasOwnProperty("patch"))
                     writer.uint32(/* id 3, wireType 0 =*/24).int32(message.patch);
                 if (message.unstable != null && message.hasOwnProperty("unstable"))
@@ -30022,10 +30022,10 @@ export const cockroach = $root.cockroach = (() => {
                     let tag = reader.uint32();
                     switch (tag >>> 3) {
                     case 1:
-                        message.major = reader.int32();
+                        message.majorval = reader.int32();
                         break;
                     case 2:
-                        message.minor = reader.int32();
+                        message.minorval = reader.int32();
                         break;
                     case 3:
                         message.patch = reader.int32();
@@ -30062,12 +30062,12 @@ export const cockroach = $root.cockroach = (() => {
             Version.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.major != null && message.hasOwnProperty("major"))
-                    if (!$util.isInteger(message.major))
-                        return "major: integer expected";
-                if (message.minor != null && message.hasOwnProperty("minor"))
-                    if (!$util.isInteger(message.minor))
-                        return "minor: integer expected";
+                if (message.majorval != null && message.hasOwnProperty("majorval"))
+                    if (!$util.isInteger(message.majorval))
+                        return "majorval: integer expected";
+                if (message.minorval != null && message.hasOwnProperty("minorval"))
+                    if (!$util.isInteger(message.minorval))
+                        return "minorval: integer expected";
                 if (message.patch != null && message.hasOwnProperty("patch"))
                     if (!$util.isInteger(message.patch))
                         return "patch: integer expected";
@@ -30086,10 +30086,10 @@ export const cockroach = $root.cockroach = (() => {
                 if (object instanceof $root.cockroach.roachpb.Version)
                     return object;
                 let message = new $root.cockroach.roachpb.Version();
-                if (object.major != null)
-                    message.major = object.major | 0;
-                if (object.minor != null)
-                    message.minor = object.minor | 0;
+                if (object.majorval != null)
+                    message.majorval = object.majorval | 0;
+                if (object.minorval != null)
+                    message.minorval = object.minorval | 0;
                 if (object.patch != null)
                     message.patch = object.patch | 0;
                 if (object.unstable != null)
@@ -30117,15 +30117,15 @@ export const cockroach = $root.cockroach = (() => {
                     options = {};
                 let object = {};
                 if (options.defaults) {
-                    object.major = 0;
-                    object.minor = 0;
+                    object.majorval = 0;
+                    object.minorval = 0;
                     object.patch = 0;
                     object.unstable = 0;
                 }
-                if (message.major != null && message.hasOwnProperty("major"))
-                    object.major = message.major;
-                if (message.minor != null && message.hasOwnProperty("minor"))
-                    object.minor = message.minor;
+                if (message.majorval != null && message.hasOwnProperty("majorval"))
+                    object.majorval = message.majorval;
+                if (message.minorval != null && message.hasOwnProperty("minorval"))
+                    object.minorval = message.minorval;
                 if (message.patch != null && message.hasOwnProperty("patch"))
                     object.patch = message.patch;
                 if (message.unstable != null && message.hasOwnProperty("unstable"))

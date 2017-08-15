@@ -172,8 +172,8 @@ message Tier {
 message Version {
   option (gogoproto.goproto_stringer) = false;
 
-  optional int32 major = 1 [(gogoproto.nullable) = false];
-  optional int32 minor = 2 [(gogoproto.nullable) = false];
+  optional int32 majorval = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "Major"];
+  optional int32 minorval = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "Minor"];
   // Note that patch is a placeholder and will always be zero.
   optional int32 patch = 3 [(gogoproto.nullable) = false];
   // The unstable version is used to migrate during development.
