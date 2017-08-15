@@ -1,4 +1,4 @@
-# LogicTest: default-v1
+# LogicTest: default-v1.1@v1.0
 
 query T
 SHOW CLUSTER SETTING version
