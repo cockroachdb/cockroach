@@ -15,6 +15,7 @@
 package sqlmigrations
 
 import (
+	"fmt"
 	"time"
 
 	"golang.org/x/net/context"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -76,6 +78,10 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// The table ID for the sessions table is greater than the previous
 		// table ID by 4 (3 IDs were reserved for non-table entities).
 		newRanges: 4,
+	},
+	{
+		name:   "populate initial version cluster setting table entry",
+		workFn: populateVersionSetting,
 	},
 }
 
@@ -403,6 +409,58 @@ func optInToDiagnosticsStatReporting(ctx context.Context, r runner) error {
 		log.Warningf(ctx, "failed attempt to update setting: %v", err)
 	}
 	return err
+}
+
+func populateVersionSetting(ctx context.Context, r runner) error {
+	var v roachpb.Version
+	if err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		return txn.GetProto(ctx, keys.BootstrapVersionKey, &v)
+	}); err != nil {
+		return err
+	}
+	if v == (roachpb.Version{}) {
+		// The cluster was bootstrapped at v1.0 (or even earlier), so make that
+		// the version.
+		v = cluster.VersionBase
+	}
+
+	b, err := (&cluster.ClusterVersion{
+		MinimumVersion: v,
+		UseVersion:     v,
+	}).Marshal()
+	if err != nil {
+		return errors.Wrap(err, "while marshaling version")
+	}
+
+	// System tables can only be modified by a privileged internal user.
+	session := r.newRootSession(ctx)
+	defer session.Finish(r.sqlExecutor)
+
+	// Add a ON CONFLICT DO NOTHING to avoid changing an existing version.
+	// Again, this can happen if the migration doesn't run to completion
+	// (overwriting also seems reasonable, but what for).
+	// We don't allow users to perform version changes until we have run
+	// the insert below.
+	if res, err := r.sqlExecutor.ExecuteStatementsBuffered(
+		session,
+		fmt.Sprintf(`INSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ('version', x'%x', NOW(), 'm') ON CONFLICT(name) DO NOTHING`, b),
+		nil, 1,
+	); err == nil {
+		res.Close(ctx)
+	} else if err != nil {
+		return err
+	}
+
+	// TODO(tschottdorf): revisit after https://github.com/cockroachdb/cockroach/pull/17591.
+	if res, err := r.sqlExecutor.ExecuteStatementsBuffered(
+		session,
+		fmt.Sprintf("SET CLUSTER SETTING version = '%s'", v.String()),
+		nil, 1); err == nil {
+		res.Close(ctx)
+	} else if err != nil {
+		return err
+	}
+	return nil
 }
 
 // repopulateViewDeps recomputes the dependencies of all views, as

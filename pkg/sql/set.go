@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -183,30 +182,24 @@ func (p *planner) toSettingString(
 				if err != nil {
 					return "", err
 				}
-				var prevRawVal []byte
-				if len(datums) != 0 {
-					dStr, ok := datums[0].(*parser.DString)
-					if !ok {
-						return "", errors.New("the existing value is not a string")
-					}
-					prevRawVal = []byte(string(*dStr))
-				} else {
-					// If no entry is present, treat like v1.0.
-					// This is subject to change. See
-					// https://github.com/cockroachdb/cockroach/issues/17389
-					var err error
-					prevRawVal, err = (&cluster.ClusterVersion{
-						MinimumVersion: cluster.VersionBase,
-						UseVersion:     cluster.VersionBase,
-					}).Marshal()
-					if err != nil {
-						return "", err
-					}
+				if len(datums) == 0 {
+					// There is a SQL migration which adds this value. If it
+					// hasn't run yet, we can't update the version as we don't
+					// have good enough information about the current cluster
+					// version.
+					return "", errors.New("no persisted cluster version found, please retry later")
 				}
+
+				dStr, ok := datums[0].(*parser.DString)
+				if !ok {
+					return "", errors.New("the existing value is not a string")
+				}
+				prevRawVal := []byte(string(*dStr))
 				newBytes, _, err := setting.Validate(prevRawVal, (*string)(s))
 				if err != nil {
 					return "", err
 				}
+
 				return string(newBytes), nil
 			}
 			return "", errors.Errorf("cannot use %s %T value for string setting", d.ResolvedType(), d)
