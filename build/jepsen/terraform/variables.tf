@@ -73,3 +73,15 @@ variable "controller_root_disk_size" {
 variable "controller_root_disk_type" {
   default = "pd-standard" # can set this to 'pd-ssd' for persistent SSD
 }
+
+# Local path to the cockroach binary. An empty value downloads a
+# pre-built binary using cockroach_sha.
+variable "cockroach_binary" {
+  default = ""
+}
+
+# SHA of the cockroach binary to download if cockroach_binary is
+# unset. Defaults to the latest master build.
+variable "cockroach_sha" {
+  default = "LATEST"
+}
