@@ -407,6 +407,8 @@ CREATE INDEX foo ON t.test (v)
 	}
 }
 
+// checkTableKeyCount returns the number of KVs in the DB, the multiple should be the
+// number of columns.
 func checkTableKeyCount(ctx context.Context, kvDB *client.DB, multiple int, maxValue int) error {
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
@@ -1561,7 +1563,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	// Create a column that is not NULL. This schema change doesn't return an
 	// error only because we've turned off the synchronous execution path; it
 	// will eventually fail when run by the asynchronous path.
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD a INT NOT NULL, ADD c INT`); err != nil {
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD a INT DEFAULT 0 UNIQUE, ADD c INT`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1588,7 +1590,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	if e := 7; e != len(tableDesc.Mutations) {
+	if e := 8; e != len(tableDesc.Mutations) {
 		t.Fatalf("e = %d, v = %d", e, len(tableDesc.Mutations))
 	}
 
