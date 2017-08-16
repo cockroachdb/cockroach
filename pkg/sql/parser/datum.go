@@ -16,6 +16,7 @@ package parser
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"math"
 	"math/big"
@@ -197,6 +198,19 @@ func ParseDBool(s string) (*DBool, error) {
 		return nil, makeParseError(s, TypeBool, err)
 	}
 	return MakeDBool(DBool(b)), nil
+}
+
+// ParseDByte parses a string representation of hex encoded binary data.
+func ParseDByte(s string) (*DBytes, error) {
+	re := regexp.MustCompile(`^\\[x,X]`)
+	if (len(re.FindStringIndex(s))) > 0 {
+		hexstr, err := hex.DecodeString(s[2:])
+		if err != nil {
+			return NewDBytes(DBytes(s)), nil
+		}
+		return NewDBytes(DBytes(hexstr)), nil
+	}
+	return NewDBytes(DBytes(s)), nil
 }
 
 // ParseDUuidFromString parses and returns the *DUuid Datum value represented
