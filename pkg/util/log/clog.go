@@ -737,7 +737,9 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 		}
 	}
 
-	if s >= l.stderrThreshold.get() {
+	if s >= l.stderrThreshold.get() || (s == Severity_FATAL && stderrRedirected) {
+		// We force-copy FATAL messages to stderr, because the process is bound
+		// to terminate and the user will want to know why.
 		l.outputToStderr(entry, stacks)
 	}
 	if logDir.isSet() && s >= l.fileThreshold.get() {
