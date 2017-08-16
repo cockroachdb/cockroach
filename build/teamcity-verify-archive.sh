@@ -20,3 +20,6 @@ docker run \
   --volume="$(cd "$(dirname "$0")" && pwd):/work" \
   --workdir="/work" \
   golang:stretch ./verify-archive.sh
+
+# Clean up the archive we produced.
+build/builder.sh rm build/cockroach.src.tgz
