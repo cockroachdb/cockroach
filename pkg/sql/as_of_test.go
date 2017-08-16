@@ -115,7 +115,7 @@ func TestAsOfTime(t *testing.T) {
 	// Future queries shouldn't work.
 	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '2200-01-01'").Scan(&i); err == nil {
 		t.Fatal("expected error")
-	} else if !testutils.IsError(err, "pq: cannot specify timestamp in the future") {
+	} else if !testutils.IsError(err, "pq: AS OF SYSTEM TIME: cannot specify timestamp in the future") {
 		t.Fatal(err)
 	}
 
@@ -152,6 +152,29 @@ func TestAsOfTime(t *testing.T) {
 		t.Fatal("expected error")
 	} else if !testutils.IsError(err, "logical part has too many digits") {
 		t.Fatal(err)
+	}
+
+	// Ditto, as string.
+	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME '1.12345678901'"); err == nil {
+		t.Fatal("expected error")
+	} else if !testutils.IsError(err, "logical part has too many digits") {
+		t.Fatal(err)
+	}
+
+	// String values that are neither timestamps nor decimals are an error.
+	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 'xxx'"); err == nil {
+		t.Fatal("expected error")
+	} else if !testutils.IsError(err, "value is not decimal") {
+		t.Fatal(err)
+	}
+
+	// Zero is not a valid value.
+	for _, zero := range []string{"0", "'0'", "0.0000000000", "'0.0000000000'"} {
+		if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME " + zero); err == nil {
+			t.Fatal("expected error")
+		} else if !testutils.IsError(err, "zero timestamp is invalid") {
+			t.Fatal(err)
+		}
 	}
 
 	// Old queries shouldn't work.
