@@ -1653,7 +1653,9 @@ func (s *Store) RaftStatus(rangeID roachpb.RangeID) *raft.Status {
 // It also adds the range tree and the root node, the first range, to it.
 // The 'initialValues' are written as well after each value's checksum
 // is initialized.
-func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
+func (s *Store) BootstrapRange(
+	initialValues []roachpb.KeyValue, bootstrapVersion roachpb.Version,
+) error {
 	desc := &roachpb.RangeDescriptor{
 		RangeID:       1,
 		StartKey:      roachpb.RKeyMin,
@@ -1676,6 +1678,14 @@ func (s *Store) BootstrapRange(initialValues []roachpb.KeyValue) error {
 	now := s.cfg.Clock.Now()
 	ctx := context.Background()
 
+	// Bootstrap version information. We don't do this if this is v1.0, which is
+	// never going to be true in versions that have this code in production, but
+	// can be true in tests.
+	if bootstrapVersion != cluster.VersionBase {
+		if err := engine.MVCCPutProto(ctx, batch, ms /* ms */, keys.BootstrapVersionKey, hlc.Timestamp{}, nil, &bootstrapVersion); err != nil {
+			return err
+		}
+	}
 	// Range descriptor.
 	if err := engine.MVCCPutProto(ctx, batch, ms, keys.RangeDescriptorKey(desc.StartKey), now, nil, desc); err != nil {
 		return err

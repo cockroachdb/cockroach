@@ -144,7 +144,7 @@ func createTestStoreWithoutStart(t testing.TB, stopper *stop.Stopper, cfg *Store
 	); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.BootstrapRange(nil); err != nil {
+	if err := store.BootstrapRange(nil, cfg.Settings.Version.ServerVersion); err != nil {
 		t.Fatal(err)
 	}
 	return store
@@ -213,7 +213,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		}
 
 		// Bootstrap first range.
-		if err := store.BootstrapRange(nil); err != nil {
+		if err := store.BootstrapRange(nil, cfg.Settings.Version.ServerVersion); err != nil {
 			t.Errorf("failure to create first range: %s", err)
 		}
 	}

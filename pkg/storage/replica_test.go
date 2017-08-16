@@ -177,7 +177,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 		tc.store.splitQueue.SetDisabled(true)
 
 		if tc.repl == nil && tc.bootstrapMode == bootstrapRangeWithMetadata {
-			if err := tc.store.BootstrapRange(nil); err != nil {
+			if err := tc.store.BootstrapRange(nil, cfg.Settings.Version.ServerVersion); err != nil {
 				t.Fatal(err)
 			}
 		}
