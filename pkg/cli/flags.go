@@ -47,6 +47,7 @@ func InitCLIDefaults() {
 	cliCtx.tableDisplayFormat = tableDisplayTSV
 	cliCtx.showTimes = false
 	dumpCtx.dumpMode = dumpBoth
+	dumpCtx.asOf = ""
 }
 
 const usageIndentation = 8
