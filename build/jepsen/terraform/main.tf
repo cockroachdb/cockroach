@@ -137,13 +137,13 @@ FILE
       # Install test dependencies.
       "sudo apt-get -qqy update >/dev/null",
       "sudo apt-get -qqy upgrade -o Dpkg::Options::='--force-confold' >/dev/null",
-      "sudo apt-get -qqy install openjdk-8-jre openjdk-8-jre-headless libjna-java git gnuplot",
+      "sudo apt-get -qqy install openjdk-8-jre openjdk-8-jre-headless libjna-java git gnuplot >/dev/null",
       "chmod 600 /home/ubuntu/.ssh/id_rsa",
       # Work around JSCH auth error: https://github.com/jepsen-io/jepsen/blob/master/README.md
       "cat /home/ubuntu/nodes | xargs -n1 ssh-keyscan -t rsa >> ~/.ssh/known_hosts",
       "curl https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein > /home/ubuntu/lein",
       "chmod +x /home/ubuntu/lein",
-      "cd /home/ubuntu && git clone https://github.com/cockroachdb/jepsen && cd jepsen && git checkout tc-nightly",
+      "cd /home/ubuntu && git clone -q https://github.com/cockroachdb/jepsen && cd jepsen && git checkout bdarnell/wip",
     ]
   }
 }
@@ -155,6 +155,14 @@ resource "null_resource" "cockroach-runner" {
     user = "ubuntu"
     private_key = "${file(format("~/.ssh/%s", var.key_name))}"
     host = "${element(google_compute_instance.cockroach.*.network_interface.0.access_config.0.assigned_nat_ip, count.index)}"
+  }
+
+  provisioner "file" {
+    # If no binary is specified, we'll copy /dev/null (always 0 bytes) to the
+    # instance. The "remote-exec" block will then overwrite that. There's no
+    # such thing as conditional file copying in Terraform, so we fake it.
+    source = "${coalesce(var.cockroach_binary, "/dev/null")}"
+    destination = "/home/ubuntu/cockroach"
   }
 
   # Provision the CockroachDB instances.
@@ -170,9 +178,10 @@ resource "null_resource" "cockroach-runner" {
       "sudo apt-get -qqy upgrade -o Dpkg::Options::='--force-confold' >/dev/null",
       # Allow access to the cockroach instances from the Jepsen controller.
       "sudo cp ~/.ssh/authorized_keys2 /root/.ssh/authorized_keys2",
-      # Download latest cockroach binary, zip so that Jepsen understands it
+      # Download cockroach binary, zip so that Jepsen understands it
       "mkdir -p /tmp/cockroach",
-      "curl -L https://edge-binaries.cockroachdb.com/cockroach/cockroach.linux-gnu-amd64.LATEST -o /tmp/cockroach/cockroach",
+      "[ $(stat --format=%s cockroach) -ne 0 ] || curl -sfSL https://edge-binaries.cockroachdb.com/cockroach/cockroach.linux-gnu-amd64.${var.cockroach_sha} -o cockroach",
+      "cp cockroach /tmp/cockroach/",
       "chmod +x /tmp/cockroach/cockroach",
       "tar -C /tmp -czf /home/ubuntu/cockroach.tgz cockroach",
     ]
