@@ -40,6 +40,10 @@ const (
 	allocatorRandomCount = 2
 )
 
+func statsBasedRebalancingEnabled(st *cluster.Settings) bool {
+	return st.EnableStatsBasedRebalancing.Get() && st.Version.IsActive(cluster.VersionStatsBasedRebalancing)
+}
+
 type balanceDimensions struct {
 	ranges rangeCountStatus
 	bytes  float64
@@ -510,7 +514,7 @@ func shouldRebalance(
 		return true
 	}
 
-	if !st.EnableStatsBasedRebalancing.Get() {
+	if !statsBasedRebalancingEnabled(st) {
 		return shouldRebalanceNoStats(ctx, st, store, sl)
 	}
 
@@ -570,7 +574,7 @@ func shouldRebalance(
 }
 
 // shouldRebalance implements the decision of whether to rebalance for the case
-// when EnableStatsBasedRebalancing is disabled and decisions should thus be
+// when stats-based rebalancing is disabled and decisions should thus be
 // made based only on range counts.
 func shouldRebalanceNoStats(
 	ctx context.Context, st *cluster.Settings, store roachpb.StoreDescriptor, sl StoreList,
@@ -740,7 +744,7 @@ func balanceScore(
 	} else {
 		dimensions.ranges = balanced
 	}
-	if st.EnableStatsBasedRebalancing.Get() {
+	if statsBasedRebalancingEnabled(st) {
 		dimensions.bytes = balanceContribution(
 			st,
 			dimensions.ranges,
@@ -871,14 +875,14 @@ func rangeIsPoorFit(bd balanceDimensions) bool {
 }
 
 func overfullRangeThreshold(st *cluster.Settings, mean float64) float64 {
-	if !st.EnableStatsBasedRebalancing.Get() {
+	if !statsBasedRebalancingEnabled(st) {
 		return mean * (1 + st.RangeRebalanceThreshold.Get())
 	}
 	return math.Max(mean*(1+st.RangeRebalanceThreshold.Get()), mean+5)
 }
 
 func underfullRangeThreshold(st *cluster.Settings, mean float64) float64 {
-	if !st.EnableStatsBasedRebalancing.Get() {
+	if !statsBasedRebalancingEnabled(st) {
 		return mean * (1 - st.RangeRebalanceThreshold.Get())
 	}
 	return math.Min(mean*(1-st.RangeRebalanceThreshold.Get()), mean-5)
@@ -924,7 +928,7 @@ func rebalanceConvergesOnMean(
 	newFractionUsed float64,
 	newWritesPerSecond float64,
 ) bool {
-	if !st.EnableStatsBasedRebalancing.Get() {
+	if !statsBasedRebalancingEnabled(st) {
 		return convergesOnMean(float64(sc.RangeCount), float64(newRangeCount), sl.candidateRanges.mean)
 	}
 
