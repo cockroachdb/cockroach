@@ -1781,7 +1781,8 @@ func matchLike(ctx *EvalContext, left, right Datum, caseInsensitive bool) (Datum
 		key := likeKey{s: pattern, caseInsensitive: caseInsensitive}
 		re, err := ctx.ReCache.GetRegexp(key)
 		if err != nil {
-			return DBoolFalse, fmt.Errorf("LIKE regexp compilation failed: %v", err)
+			return DBoolFalse, pgerror.NewErrorf(
+				pgerror.CodeInvalidRegularExpressionError, "LIKE regexp compilation failed: %v", err)
 		}
 		like = re.MatchString
 	}
@@ -2391,7 +2392,8 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			s = t.Contents
 		case *DBytes:
 			if !utf8.ValidString(string(*t)) {
-				return nil, fmt.Errorf("invalid utf8: %q", string(*t))
+				return nil, pgerror.NewErrorf(
+					pgerror.CodeCharacterNotInRepertoireError, "invalid UTF-8: %q", string(*t))
 			}
 			s = string(*t)
 		case *DOid:
@@ -2609,7 +2611,8 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("invalid cast: %s -> %s", d.ResolvedType(), expr.Type)
+	return nil, pgerror.NewErrorf(
+		pgerror.CodeCannotCoerceError, "invalid cast: %s -> %s", d.ResolvedType(), expr.Type)
 }
 
 // Eval implements the TypedExpr interface.
@@ -2730,7 +2733,7 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 // Eval implements the TypedExpr interface.
 func (t *ExistsExpr) Eval(ctx *EvalContext) (Datum, error) {
 	// Exists expressions are handled during subquery expansion.
-	return nil, errors.Errorf("unhandled type %T", t)
+	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", t)
 }
 
 // Eval implements the TypedExpr interface.
@@ -2760,7 +2763,7 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 		if fName == `crdb_internal.force_error` {
 			return nil, err
 		}
-		return nil, pgerror.AnnotateError(fmt.Sprintf("%s():", fName), err)
+		return nil, errors.Wrapf(err, "%s()", fName)
 	}
 	return res, nil
 }
@@ -2868,7 +2871,7 @@ func (expr *ParenExpr) Eval(ctx *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (expr *RangeCond) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, errors.Errorf("unhandled type %T", expr)
+	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
@@ -2885,27 +2888,27 @@ func (expr *UnaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (expr DefaultVal) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, errors.Errorf("unhandled type %T", expr)
+	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr UnqualifiedStar) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, errors.Errorf("unhandled type %T", expr)
+	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr UnresolvedName) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, errors.Errorf("unhandled type %T", expr)
+	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr *AllColumnsSelector) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, errors.Errorf("unhandled type %T", expr)
+	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr *ColumnItem) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, errors.Errorf("unhandled type %T", expr)
+	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
@@ -2925,7 +2928,8 @@ func (t *Tuple) Eval(ctx *EvalContext) (Datum, error) {
 func arrayOfType(typ Type) (*DArray, error) {
 	arrayTyp, ok := typ.(TArray)
 	if !ok {
-		return nil, errors.Errorf("array node type (%v) is not TArray", typ)
+		return nil, pgerror.NewErrorf(
+			pgerror.CodeInternalError, "array node type (%v) is not TArray", typ)
 	}
 	return NewDArray(arrayTyp.Typ), nil
 }
@@ -2963,7 +2967,8 @@ func (t *ArrayFlatten) Eval(ctx *EvalContext) (Datum, error) {
 
 	tuple, ok := d.(*DTuple)
 	if !ok {
-		return nil, errors.Errorf("array subquery result (%v) is not DTuple", d)
+		return nil, pgerror.NewErrorf(
+			pgerror.CodeInternalError, "array subquery result (%v) is not DTuple", d)
 	}
 	array.Array = tuple.D
 	return array, nil
@@ -3061,7 +3066,8 @@ func (t *DOidWrapper) Eval(_ *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (node *Placeholder) Eval(_ *EvalContext) (Datum, error) {
-	return nil, fmt.Errorf("no value provided for placeholder: $%s", node.Name)
+	return nil, pgerror.NewErrorf(
+		pgerror.CodeUndefinedParameterError, "no value provided for placeholder: $%s", node.Name)
 }
 
 func evalComparison(ctx *EvalContext, op ComparisonOperator, left, right Datum) (Datum, error) {
@@ -3073,7 +3079,8 @@ func evalComparison(ctx *EvalContext, op ComparisonOperator, left, right Datum) 
 	if fn, ok := CmpOps[op].lookupImpl(ltype, rtype); ok {
 		return fn.fn(ctx, left, right)
 	}
-	return nil, fmt.Errorf("unsupported comparison operator: <%s> %s <%s>", ltype, op, rtype)
+	return nil, pgerror.NewErrorf(
+		pgerror.CodeUndefinedFunctionError, "unsupported comparison operator: <%s> %s <%s>", ltype, op, rtype)
 }
 
 // foldComparisonExpr folds a given comparison operation and its expressions

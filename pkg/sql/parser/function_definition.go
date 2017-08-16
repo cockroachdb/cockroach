@@ -16,8 +16,9 @@ package parser
 
 import (
 	"bytes"
-	"fmt"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
 // FunctionDefinition implements a reference to the (possibly several)
@@ -73,7 +74,7 @@ func (n UnresolvedName) ResolveFunction(searchPath SearchPath) (*FunctionDefinit
 
 	if len(fn.selector) > 0 {
 		// We do not support selectors at this point.
-		return nil, fmt.Errorf("invalid function name: %s", n)
+		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "invalid function name: %s", n)
 	}
 
 	if d, ok := funDefs[fn.function()]; ok && fn.prefix() == "" {
@@ -116,7 +117,8 @@ func (n UnresolvedName) ResolveFunction(searchPath SearchPath) (*FunctionDefinit
 			}
 		}
 		if !found {
-			return nil, fmt.Errorf("unknown function: %s()", n)
+			return nil, pgerror.NewErrorf(
+				pgerror.CodeUndefinedFunctionError, "unknown function: %s()", n)
 		}
 	}
 

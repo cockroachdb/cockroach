@@ -15,7 +15,7 @@
 package parser
 
 import (
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
 type normalizableExpr interface {
@@ -652,7 +652,7 @@ func invertComparisonOp(op ComparisonOperator) (ComparisonOperator, error) {
 	case LT:
 		return GT, nil
 	default:
-		return op, errors.Errorf("internal error: unable to invert: %s", op)
+		return op, pgerror.NewErrorf(pgerror.CodeInternalError, "internal error: unable to invert: %s", op)
 	}
 }
 

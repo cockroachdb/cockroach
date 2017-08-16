@@ -382,6 +382,35 @@ func TestPGWireDBName(t *testing.T) {
 	}
 }
 
+// We want to ensure that despite use of errors.{Wrap,Wrapf}, we are surfacing a
+// pq.Error.
+func TestPGUnwrapError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), t.Name(), url.User(security.RootUser))
+	defer cleanupFn()
+
+	db, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// This is just a statement that is known to utilize errors.Wrap.
+	stmt := "SELECT COALESCE(2, 'foo')"
+
+	if _, err := db.Exec(stmt); err == nil {
+		t.Fatalf("expected %s to error", stmt)
+	} else {
+		if _, ok := err.(*pq.Error); !ok {
+			t.Fatalf("pgwire should be surfacing a pq.Error")
+		}
+	}
+}
+
 func TestPGPrepareFail(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

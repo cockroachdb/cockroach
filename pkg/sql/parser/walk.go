@@ -20,7 +20,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
 // Visitor defines methods that are called for nodes during an expression or statement walk.
@@ -615,7 +615,7 @@ func walkReturningClause(v Visitor, clause ReturningClause) (ReturningClause, bo
 	case *ReturningNothing, *NoReturningClause:
 		return t, false
 	default:
-		panic(errors.Errorf("unexpected ReturningClause type: %T", t))
+		panic(pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected ReturningClause type: %T", t))
 	}
 }
 

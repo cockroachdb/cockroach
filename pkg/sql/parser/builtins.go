@@ -425,7 +425,8 @@ var Builtins = map[string][]Builtin{
 				// If ipdstr could not be parsed to a valid IP,
 				// ip will be nil.
 				if ip == nil {
-					return nil, fmt.Errorf("invalid IP format: %s", ipdstr.String())
+					return nil, pgerror.NewErrorf(
+						pgerror.CodeInvalidParameterValueError, "invalid IP format: %s", ipdstr.String())
 				}
 				return NewDBytes(DBytes(ip)), nil
 			},
@@ -448,7 +449,8 @@ var Builtins = map[string][]Builtin{
 				field := int(MustBeDInt(args[2]))
 
 				if field <= 0 {
-					return nil, fmt.Errorf("field position %d must be greater than zero", field)
+					return nil, pgerror.NewErrorf(
+						pgerror.CodeInvalidParameterValueError, "field position %d must be greater than zero", field)
 				}
 
 				splits := strings.Split(text, sep)
@@ -1147,7 +1149,8 @@ var Builtins = map[string][]Builtin{
 					return NewDInt(DInt(fromInterval.Nanos / int64(time.Microsecond))), nil
 
 				default:
-					return nil, fmt.Errorf("unsupported timespan: %s", timeSpan)
+					return nil, pgerror.NewErrorf(
+						pgerror.CodeInvalidParameterValueError, "unsupported timespan: %s", timeSpan)
 				}
 			},
 			Info: "Extracts `element` from `input`. Compatible `elements` are: <br/>&#8226; hour" +
@@ -1948,7 +1951,8 @@ var substringImpls = []Builtin{
 			length := int(MustBeDInt(args[2]))
 
 			if length < 0 {
-				return nil, fmt.Errorf("negative substring length %d not allowed", length)
+				return nil, pgerror.NewErrorf(
+					pgerror.CodeInvalidParameterValueError, "negative substring length %d not allowed", length)
 			}
 
 			end := start + length
@@ -2442,7 +2446,8 @@ func regexpEvalFlags(pattern, sqlFlags string) (string, error) {
 			flags |= syntax.DotNL
 			flags &^= syntax.OneLine
 		default:
-			return "", fmt.Errorf("invalid regexp flag: %q", sqlFlag)
+			return "", pgerror.NewErrorf(
+				pgerror.CodeInvalidRegularExpressionError, "invalid regexp flag: %q", sqlFlag)
 		}
 	}
 
@@ -2467,7 +2472,8 @@ func regexpEvalFlags(pattern, sqlFlags string) (string, error) {
 
 func overlay(s, to string, pos, size int) (Datum, error) {
 	if pos < 1 {
-		return nil, fmt.Errorf("non-positive substring length not allowed: %d", pos)
+		return nil, pgerror.NewErrorf(
+			pgerror.CodeInvalidParameterValueError, "non-positive substring length not allowed: %d", pos)
 	}
 	pos--
 
@@ -2715,6 +2721,6 @@ func extractStringFromTimestamp(
 		return NewDInt(DInt(fromTime.Unix())), nil
 
 	default:
-		return nil, fmt.Errorf("unsupported timespan: %s", timeSpan)
+		return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "unsupported timespan: %s", timeSpan)
 	}
 }

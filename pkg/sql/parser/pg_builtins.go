@@ -18,6 +18,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+
 	"github.com/lib/pq/oid"
 )
 
@@ -170,7 +172,7 @@ var pgBuiltins = map[string][]Builtin{
 					return nil, err
 				}
 				if len(r) == 0 {
-					return nil, fmt.Errorf("unknown index (OID=%s)", args[0])
+					return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "unknown index (OID=%s)", args[0])
 				}
 				return r[0], nil
 			},

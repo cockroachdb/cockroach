@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/pkg/errors"
 )
 
 func initAggregateBuiltins() {
@@ -367,7 +366,7 @@ func (a *avgAggregate) Result() (Datum, error) {
 		_, err := DecimalCtx.Quo(&t.Decimal, &t.Decimal, count)
 		return t, err
 	default:
-		return nil, errors.Errorf("unexpected SUM result type: %s", t)
+		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected SUM result type: %s", t)
 	}
 }
 
@@ -972,7 +971,7 @@ func (a *stdDevAggregate) Result() (Datum, error) {
 		_, err := DecimalCtx.Sqrt(&t.Decimal, &t.Decimal)
 		return t, err
 	}
-	return nil, errors.Errorf("unexpected variance result type: %s", variance.ResolvedType())
+	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected variance result type: %s", variance.ResolvedType())
 }
 
 // Close is part of the AggregateFunc interface.
@@ -998,7 +997,7 @@ func (a *bytesXorAggregate) Add(_ context.Context, datum Datum) error {
 	if !a.sawNonNull {
 		a.sum = append([]byte(nil), t...)
 	} else if len(a.sum) != len(t) {
-		return fmt.Errorf("arguments to xor must all be the same length %d vs %d", len(a.sum), len(t))
+		return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "arguments to xor must all be the same length %d vs %d", len(a.sum), len(t))
 	} else {
 		for i := range t {
 			a.sum[i] = a.sum[i] ^ t[i]

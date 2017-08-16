@@ -16,7 +16,6 @@ package parser
 
 import (
 	"bytes"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
@@ -198,7 +197,7 @@ func newInvColRef(fmt string, args ...interface{}) error {
 // inside an expression context.
 func (n UnresolvedName) NormalizeVarName() (VarName, error) {
 	if len(n) == 0 {
-		return nil, fmt.Errorf("invalid name: %q", n)
+		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError, "invalid name: %q", n)
 	}
 
 	if s, isStar := n[len(n)-1].(UnqualifiedStar); isStar {

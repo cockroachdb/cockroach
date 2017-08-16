@@ -23,6 +23,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/pkg/errors"
 )
 
@@ -269,7 +270,8 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ Type) (Datum, error) {
 		oid.semanticType = oidTypeToColType(typ)
 		return oid, nil
 	default:
-		return nil, fmt.Errorf("could not resolve %T %v into a %T", expr, expr, typ)
+		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
+			"could not resolve %T %v into a %T", expr, expr, typ)
 	}
 }
 
@@ -440,7 +442,8 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ Type) (Datum, error) {
 		}
 		return ParseDUuidFromString(expr.s)
 	default:
-		return nil, fmt.Errorf("could not resolve %T %v into a %T", expr, expr, typ)
+		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
+			"could not resolve %T %v into a %T", expr, expr, typ)
 	}
 }
 
