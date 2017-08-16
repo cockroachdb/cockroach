@@ -20,10 +20,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -61,9 +63,35 @@ func runDump(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// TODO(knz/mjibson): dump foreign key constraints and dump in
-	// topological order to ensure key relationships can be verified
-	// during load.
+	byID := make(map[int64]tableMetadata)
+	for _, md := range mds {
+		byID[md.ID] = md
+	}
+
+	// First sort by name to guarantee stable output.
+	sort.Slice(mds, func(i, j int) bool {
+		return mds[i].name.String() < mds[j].name.String()
+	})
+
+	// Collect transitive dependencies in topological order into collected.
+	var collected []int64
+	seen := make(map[int64]bool)
+	for _, md := range mds {
+		collect(md.ID, byID, seen, &collected)
+	}
+	// collectOrder maps a table ID to its collection index. This is needed
+	// instead of just using range over collected because collected may contain
+	// table IDs not present in the dump spec. It is simpler to sort mds correctly
+	// to skip over these referenced-but-not-dumped tables.
+	collectOrder := make(map[int64]int)
+	for i, id := range collected {
+		collectOrder[id] = i
+	}
+
+	// Second sort dumped tables by dependency order.
+	sort.SliceStable(mds, func(i, j int) bool {
+		return collectOrder[mds[i].ID] < collectOrder[mds[j].ID]
+	})
 
 	w := os.Stdout
 
@@ -79,6 +107,9 @@ func runDump(cmd *cobra.Command, args []string) error {
 	}
 	if dumpCtx.dumpMode != dumpSchemaOnly {
 		for _, md := range mds {
+			if md.isView {
+				continue
+			}
 			if err := dumpTableData(w, conn, ts, md); err != nil {
 				return err
 			}
@@ -87,15 +118,31 @@ func runDump(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+func collect(tid int64, byID map[int64]tableMetadata, seen map[int64]bool, collected *[]int64) {
+	for dep := range byID[tid].dependsOn {
+		// depth-first collection of dependencies
+		collect(dep, byID, seen, collected)
+	}
+	// has this table already been collected previously?
+	if seen[tid] {
+		return
+	}
+	// no: add it
+	*collected = append(*collected, tid)
+	seen[tid] = true
+}
+
 // tableMetadata describes one table to dump.
 type tableMetadata struct {
+	ID           int64
 	name         *parser.TableName
-	primaryIndex string
 	numIndexCols int
 	idxColNames  string
 	columnNames  string
 	columnTypes  map[string]string
 	createStmt   string
+	dependsOn    map[int64]bool
+	isView       bool
 }
 
 // getDumpMetadata retrieves the table information for the specified table(s).
@@ -174,6 +221,24 @@ func getTableNames(conn *sqlConn, dbName string, ts string) (tableNames []string
 func getMetadataForTable(
 	conn *sqlConn, dbName, tableName string, ts string,
 ) (tableMetadata, error) {
+	name := &parser.TableName{DatabaseName: parser.Name(dbName), TableName: parser.Name(tableName)}
+
+	// Fetch table ID.
+	vals, err := conn.QueryRow(fmt.Sprintf(`
+		SELECT table_id
+		FROM %s.crdb_internal.tables
+		AS OF SYSTEM TIME '%s'
+		WHERE DATABASE_NAME = $1
+			AND NAME = $2
+		`, parser.Name(dbName).String(), ts), []driver.Value{dbName, tableName})
+	if err != nil {
+		if err == io.EOF {
+			return tableMetadata{}, errors.Errorf("relation %s does not exist", name)
+		}
+		return tableMetadata{}, err
+	}
+	tableID := vals[0].(int64)
+
 	// Fetch column types.
 	rows, err := conn.Query(fmt.Sprintf(`
 		SELECT COLUMN_NAME, DATA_TYPE
@@ -185,7 +250,7 @@ func getMetadataForTable(
 	if err != nil {
 		return tableMetadata{}, err
 	}
-	vals := make([]driver.Value, 2)
+	vals = make([]driver.Value, 2)
 	coltypes := make(map[string]string)
 	var colnames bytes.Buffer
 	for {
@@ -213,28 +278,6 @@ func getMetadataForTable(
 		return tableMetadata{}, err
 	}
 
-	// Fetch the primary index name.
-	vals, err = conn.QueryRow(fmt.Sprintf(`
-		SELECT CONSTRAINT_NAME
-		FROM "".information_schema.table_constraints
-		AS OF SYSTEM TIME '%s'
-		WHERE TABLE_SCHEMA = $1
-			AND TABLE_NAME = $2
-			AND CONSTRAINT_TYPE='PRIMARY KEY'
-		`, ts), []driver.Value{dbName, tableName})
-
-	var primaryIndex string
-
-	if err != nil {
-		// If the above query returns no rows, err will be set to io.EOF.
-		// This indicates that there is no visible primary index in the table.
-		if err != io.EOF {
-			return tableMetadata{}, err
-		}
-	} else {
-		primaryIndex = vals[0].(string)
-	}
-
 	rows, err = conn.Query(fmt.Sprintf(`
 		SELECT COLUMN_NAME
 		FROM "".information_schema.key_column_usage
@@ -243,7 +286,7 @@ func getMetadataForTable(
 			AND TABLE_NAME = $2
 			AND CONSTRAINT_NAME = $3
 		ORDER BY ORDINAL_POSITION
-		`, ts), []driver.Value{dbName, tableName, primaryIndex})
+		`, ts), []driver.Value{dbName, tableName, sqlbase.PrimaryKeyIndexName})
 	if err != nil {
 		return tableMetadata{}, err
 	}
@@ -269,31 +312,54 @@ func getMetadataForTable(
 		return tableMetadata{}, err
 	}
 
-	name := &parser.TableName{DatabaseName: parser.Name(dbName), TableName: parser.Name(tableName)}
-
 	vals, err = conn.QueryRow(fmt.Sprintf(`
-		SELECT create_statement
+		SELECT create_statement, descriptor_type = 'view'
 		FROM %s.crdb_internal.create_statements
 		AS OF SYSTEM TIME '%s'
 		WHERE descriptor_name = $1
 			AND database_name = $2
 		`, parser.Name(dbName).String(), ts), []driver.Value{tableName, dbName})
 	if err != nil {
-		if err == io.EOF {
-			return tableMetadata{}, errors.Errorf("relation %s does not exist", name)
-		}
 		return tableMetadata{}, err
 	}
 	create := vals[0].(string)
+	descType := vals[1].(bool)
+
+	rows, err = conn.Query(fmt.Sprintf(`
+		SELECT dependson_id
+		FROM %s.crdb_internal.backward_dependencies
+		AS OF SYSTEM TIME '%s'
+		WHERE descriptor_id = $1
+		`, parser.Name(dbName).String(), ts), []driver.Value{tableID})
+	if err != nil {
+		return tableMetadata{}, err
+	}
+	vals = make([]driver.Value, 1)
+
+	refs := make(map[int64]bool)
+	for {
+		if err := rows.Next(vals); err == io.EOF {
+			break
+		} else if err != nil {
+			return tableMetadata{}, err
+		}
+		id := vals[0].(int64)
+		refs[id] = true
+	}
+	if err := rows.Close(); err != nil {
+		return tableMetadata{}, err
+	}
 
 	return tableMetadata{
+		ID:           tableID,
 		name:         name,
-		primaryIndex: primaryIndex,
 		numIndexCols: numIndexCols,
 		idxColNames:  idxColNames.String(),
 		columnNames:  colnames.String(),
 		columnTypes:  coltypes,
 		createStmt:   create,
+		dependsOn:    refs,
+		isView:       descType,
 	}, nil
 }
 
@@ -326,9 +392,6 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 		md.numIndexCols = 1
 	}
 	fmt.Fprintf(&sbuf, "SELECT %s, %s FROM %s", md.idxColNames, md.columnNames, md.name)
-	if md.primaryIndex != "" {
-		fmt.Fprintf(&sbuf, "@%s", parser.Name(md.primaryIndex))
-	}
 	fmt.Fprintf(&sbuf, " AS OF SYSTEM TIME '%s'", clusterTS)
 
 	var wbuf bytes.Buffer
@@ -341,7 +404,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 	}
 	wbuf.WriteString(")")
 	// No WHERE clause first time, so add a place to inject it.
-	fmt.Fprintf(&sbuf, "%%s ORDER BY %s LIMIT %d", md.idxColNames, limit)
+	fmt.Fprintf(&sbuf, "%%s ORDER BY PRIMARY KEY %s LIMIT %d", md.name, limit)
 	bs := sbuf.String()
 
 	// pk holds the last values of the fetched primary keys
