@@ -67,7 +67,12 @@ func GetAggregateInfo(
 			constructAgg := func(evalCtx *parser.EvalContext) parser.AggregateFunc {
 				return b.AggregateFunc(datumTypes, evalCtx)
 			}
-			return constructAgg, sqlbase.DatumTypeToColumnType(b.FixedReturnType()), nil
+
+			colTyp, err := sqlbase.DatumTypeToColumnType(b.FixedReturnType())
+			if err != nil {
+				return nil, sqlbase.ColumnType{}, err
+			}
+			return constructAgg, colTyp, nil
 		}
 	}
 	return nil, sqlbase.ColumnType{}, errors.Errorf(

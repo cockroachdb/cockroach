@@ -94,7 +94,11 @@ func MakeColumnDefDescs(
 
 	// Set Type.SemanticType and Type.Locale.
 	colDatumType := parser.CastTargetToDatumType(d.Type)
-	col.Type = DatumTypeToColumnType(colDatumType)
+	colTyp, err := DatumTypeToColumnType(colDatumType)
+	if err != nil {
+		return nil, nil, err
+	}
+	col.Type = colTyp
 
 	// Set other attributes of col.Type and perform type-specific verification.
 	switch t := d.Type.(type) {
@@ -1518,7 +1522,11 @@ func CheckColumnType(col ColumnDescriptor, typ parser.Type, pmap *parser.Placeho
 }
 
 func checkElementType(paramType parser.Type, columnType ColumnType) error {
-	if DatumTypeToColumnSemanticType(paramType) != *columnType.ArrayContents {
+	semanticType, err := DatumTypeToColumnSemanticType(paramType)
+	if err != nil {
+		return err
+	}
+	if semanticType != *columnType.ArrayContents {
 		return errors.Errorf("type of array contents %s doesn't match column type %s",
 			paramType, columnType.ArrayContents)
 	}
@@ -2109,7 +2117,11 @@ func MakePrimaryIndexKey(desc *TableDescriptor, vals ...interface{}) (roachpb.Ke
 		colID := index.ColumnIDs[i]
 		for _, c := range desc.Columns {
 			if c.ID == colID {
-				if t := DatumTypeToColumnType(datums[i].ResolvedType()).SemanticType; t != c.Type.SemanticType {
+				colTyp, err := DatumTypeToColumnType(datums[i].ResolvedType())
+				if err != nil {
+					return nil, err
+				}
+				if t := colTyp.SemanticType; t != c.Type.SemanticType {
 					return nil, errors.Errorf("column %d of type %s, got value of type %s", i, c.Type.SemanticType, t)
 				}
 				break
