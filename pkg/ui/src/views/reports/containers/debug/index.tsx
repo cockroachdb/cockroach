@@ -113,7 +113,7 @@ export default function Debug() {
           <DebugTableLink name="Active Tasks" url="/debug/stopper" />
         </DebugTableRow>
         <DebugTableRow title="pprof">
-          <DebugTableLink name="Heap" url="/debug/pprof/head?debug=1" />
+          <DebugTableLink name="Heap" url="/debug/pprof/heap?debug=1" />
           <DebugTableLink name="Profile" url="/debug/pprof/profile?debug=1" />
           <DebugTableLink name="Block" url="/debug/pprof/block?debug=1" />
           <DebugTableLink name="Trace" url="/debug/pprof/trace?debug=1" />
