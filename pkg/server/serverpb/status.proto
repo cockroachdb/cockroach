@@ -328,6 +328,8 @@ message Session {
   // doesn't currently have a transaction.
   bytes kv_txn_id = 7 [(gogoproto.customname) = "KvTxnID",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+  // SQL string of the last query executed on this session.
+  string last_active_query = 8;
 }
 
 // An error wrapper object for ListSessionsResponse.

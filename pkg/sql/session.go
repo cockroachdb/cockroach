@@ -68,7 +68,7 @@ const (
 )
 
 // queryMeta stores metadata about a query. Stored as reference in
-// session.mu.ActiveQueries and executor.cfg.queryRegistry.
+// session.mu.ActiveQueries.
 type queryMeta struct {
 	// The timestamp when this query began execution.
 	start time.Time
@@ -250,6 +250,10 @@ type Session struct {
 	// If set, contains the in progress COPY FROM columns.
 	copyFrom *copyNode
 
+	// ActiveSyncQueries contains query IDs of all synchronous (i.e. non-parallel)
+	// queries in flight. All ActiveSyncQueries must also be in mu.ActiveQueries.
+	ActiveSyncQueries []uint128.Uint128
+
 	// mu contains of all elements of the struct that can be changed
 	// after initialization, and may be accessed from another thread.
 	mu struct {
@@ -270,6 +274,10 @@ type Session struct {
 
 		// ActiveQueries contains all queries in flight.
 		ActiveQueries map[uint128.Uint128]*queryMeta
+
+		// LastActiveQuery contains a reference to the AST of the last
+		// query that ran on this session.
+		LastActiveQuery parser.Statement
 	}
 
 	//
@@ -342,6 +350,35 @@ func (r *SessionRegistry) deregister(s *Session) {
 	r.Unlock()
 }
 
+// CancelQuery looks up the associated query in the session registry and cancels it.
+func (r *SessionRegistry) CancelQuery(queryIDStr string, username string) (bool, error) {
+	queryID, err := uint128.FromString(queryIDStr)
+	if err != nil {
+		return false, fmt.Errorf("query ID %s malformed: %s", queryID, err)
+	}
+
+	r.Lock()
+	defer r.Unlock()
+
+	for session := range r.store {
+		if !(username == security.RootUser || username == session.User) {
+			// Skip this session.
+			continue
+		}
+
+		session.mu.Lock()
+		if queryMeta, exists := session.mu.ActiveQueries[queryID]; exists {
+			queryMeta.cancel()
+
+			session.mu.Unlock()
+			return true, nil
+		}
+		session.mu.Unlock()
+	}
+
+	return false, fmt.Errorf("query ID %s not found", queryID)
+}
+
 // SerializeAll returns a slice of all sessions in the registry, converted to serverpb.Sessions.
 func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 	r.Lock()
@@ -391,6 +428,7 @@ func NewSession(
 	s.PreparedPortals = makePreparedPortals(s)
 	s.Tracing.session = s
 	s.mu.ActiveQueries = make(map[uint128.Uint128]*queryMeta)
+	s.ActiveSyncQueries = make([]uint128.Uint128, 0)
 
 	remoteStr := "<admin>"
 	if remote != nil {
@@ -553,8 +591,23 @@ func (s *Session) resetPlanner(p *planner, e *Executor, txn *client.Txn) {
 // FinishPlan releases the resources that were consumed by the currently active
 // default planner. It does not check to see whether any other resources are
 // still pointing to the planner, so it should only be called when a connection
-// is entirely finished executing a statement.
+// is entirely finished executing a statement and all results have been sent.
 func (s *Session) FinishPlan() {
+	if len(s.ActiveSyncQueries) > 0 {
+		s.mu.Lock()
+		// Store the last sync query as the last active query.
+		lastQueryID := s.ActiveSyncQueries[len(s.ActiveSyncQueries)-1]
+		s.mu.LastActiveQuery = s.mu.ActiveQueries[lastQueryID].stmt
+		// All results have been sent to the client; so deregister all synchronous
+		// active queries from this session. Cannot deregister asynchronous ones
+		// because those might still be executing in the parallelizeQueue.
+		for _, queryID := range s.ActiveSyncQueries {
+			delete(s.mu.ActiveQueries, queryID)
+		}
+		s.mu.Unlock()
+		s.ActiveSyncQueries = make([]uint128.Uint128, 0)
+	}
+
 	s.planner = emptyPlanner
 }
 
@@ -597,30 +650,53 @@ func (s *Session) setTestingVerifyMetadata(fn func(config.SystemConfig) error) {
 }
 
 // addActiveQuery adds a running query to the session's internal store of active
-// queries. Called from executor's execStmt and execStmtInParallel.
+// queries, as well as to the executor's query registry. Called from executor
+// before start of execution.
 func (s *Session) addActiveQuery(queryID uint128.Uint128, queryMeta *queryMeta) {
 	s.mu.Lock()
 	s.mu.ActiveQueries[queryID] = queryMeta
 	queryMeta.session = s
 	s.mu.Unlock()
+	// addActiveQuery is called from the main goroutine of the session;
+	// and at this stage, this query is a synchronous query for our purposes.
+	// setQueryExecutionMode will remove this element if this query enters the
+	// parallelizeQueue.
+	s.ActiveSyncQueries = append(s.ActiveSyncQueries, queryID)
 }
 
 // removeActiveQuery removes a query from a session's internal store of active
-// queries. Called when a query finishes execution.
+// queries, as well as from the executor's query registry.
+// Called when a query finishes execution.
 func (s *Session) removeActiveQuery(queryID uint128.Uint128) {
 	s.mu.Lock()
-	delete(s.mu.ActiveQueries, queryID)
+	queryMeta, ok := s.mu.ActiveQueries[queryID]
+	if ok {
+		delete(s.mu.ActiveQueries, queryID)
+		s.mu.LastActiveQuery = queryMeta.stmt
+	}
 	s.mu.Unlock()
 }
 
 // setQueryExecutionMode is called upon start of execution of a query, and sets
 // the query's metadata to indicate whether it's distributed or not.
-func (s *Session) setQueryExecutionMode(queryID uint128.Uint128, isDistributed bool) {
+func (s *Session) setQueryExecutionMode(
+	queryID uint128.Uint128, isDistributed bool, isParallel bool,
+) {
 	s.mu.Lock()
 	queryMeta := s.mu.ActiveQueries[queryID]
 	queryMeta.phase = executing
 	queryMeta.isDistributed = isDistributed
 	s.mu.Unlock()
+
+	if isParallel {
+		// We default to putting queries in ActiveSyncQueries. Since
+		// this query is not synchronous anymore, remove it from
+		// ActiveSyncQueries. We expect the last element in
+		// ActiveSyncQueries to be this query; because all execution
+		// up to this call of setQueryExecutionMode is synchronous.
+		lenSyncQueries := len(s.ActiveSyncQueries)
+		s.ActiveSyncQueries = s.ActiveSyncQueries[:lenSyncQueries-1]
+	}
 }
 
 // MaxSQLBytes is the maximum length in bytes of SQL statements serialized
@@ -643,9 +719,7 @@ func (s *Session) serialize() serverpb.Session {
 	}
 
 	activeQueries := make([]serverpb.ActiveQuery, 0, len(s.mu.ActiveQueries))
-
-	for id, query := range s.mu.ActiveQueries {
-		sql := query.stmt.String()
+	truncateSQL := func(sql string) string {
 		if len(sql) > MaxSQLBytes {
 			sql = sql[:MaxSQLBytes-utf8.RuneLen('…')]
 			// Ensure the resulting string is valid utf8.
@@ -657,6 +731,11 @@ func (s *Session) serialize() serverpb.Session {
 			}
 			sql += "…"
 		}
+		return sql
+	}
+
+	for id, query := range s.mu.ActiveQueries {
+		sql := truncateSQL(query.stmt.String())
 		activeQueries = append(activeQueries, serverpb.ActiveQuery{
 			ID:            id.String(),
 			Start:         query.start.UTC(),
@@ -664,6 +743,10 @@ func (s *Session) serialize() serverpb.Session {
 			IsDistributed: query.isDistributed,
 			Phase:         (serverpb.ActiveQuery_Phase)(query.phase),
 		})
+	}
+	lastActiveQuery := ""
+	if s.mu.LastActiveQuery != nil {
+		lastActiveQuery = truncateSQL(s.mu.LastActiveQuery.String())
 	}
 
 	return serverpb.Session{
@@ -673,6 +756,7 @@ func (s *Session) serialize() serverpb.Session {
 		Start:           s.phaseTimes[sessionInit].UTC(),
 		ActiveQueries:   activeQueries,
 		KvTxnID:         kvTxnID,
+		LastActiveQuery: lastActiveQuery,
 	}
 }
 

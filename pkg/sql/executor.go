@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -259,7 +258,6 @@ type ExecutorConfig struct {
 	DistSQLSrv      *distsqlrun.ServerImpl
 	StatusServer    serverpb.StatusServer
 	SessionRegistry *SessionRegistry
-	QueryRegistry   *QueryRegistry
 	JobRegistry     *jobs.Registry
 
 	TestingKnobs              *ExecutorTestingKnobs
@@ -332,55 +330,6 @@ type DistSQLPlannerTestingKnobs struct {
 	// If OverrideSQLHealthCheck is set, we use this callback to get the health of
 	// a node.
 	OverrideHealthCheck func(node roachpb.NodeID, addrString string) error
-}
-
-// QueryRegistry holds a map of all queries executing with this node as its gateway.
-type QueryRegistry struct {
-	// TODO(peter): Investigate if it is worthwhile to shard based on the query
-	// ID in order to reduce contention on this lock.
-	syncutil.Mutex
-	store map[uint128.Uint128]*queryMeta
-}
-
-// MakeQueryRegistry instantiates a new, empty query registry.
-func MakeQueryRegistry() *QueryRegistry {
-	return &QueryRegistry{store: make(map[uint128.Uint128]*queryMeta)}
-}
-
-func (r *QueryRegistry) register(queryID uint128.Uint128, query *queryMeta) {
-	r.Lock()
-	r.store[queryID] = query
-	r.Unlock()
-}
-
-func (r *QueryRegistry) deregister(queryID uint128.Uint128) {
-	r.Lock()
-	delete(r.store, queryID)
-	r.Unlock()
-}
-
-// Cancel looks up the associated query in the registry and cancels it (if it is cancellable).
-func (r *QueryRegistry) Cancel(queryIDStr string, username string) (bool, error) {
-	queryID, err := uint128.FromString(queryIDStr)
-	if err != nil {
-		return false, fmt.Errorf("query ID %s malformed: %s", queryID, err)
-	}
-
-	r.Lock()
-	defer r.Unlock()
-
-	if queryMeta, exists := r.store[queryID]; exists {
-		if !(username == security.RootUser || username == queryMeta.session.User) {
-			// This user does not have cancel privileges over this query.
-			return false, fmt.Errorf("query ID %s not found", queryID)
-		}
-
-		queryMeta.cancel()
-
-		return true, nil
-	}
-
-	return false, fmt.Errorf("query ID %s not found", queryID)
 }
 
 // NewExecutor creates an Executor and registers a callback on the
@@ -1134,10 +1083,12 @@ func (e *Executor) execStmtsInCurrentTxn(
 		queryMeta.ctx = txnState.Ctx
 		queryMeta.ctxCancel = txnState.cancel
 
+		// For parallel/async queries, we deregister queryMeta from these registries
+		// after execution finishes in the parallelizeQueue. For all other (synchronous) queries,
+		// we deregister these in session.FinishPlan when all results have been sent. We cannot
+		// deregister asynchronous queries in session.FinishPlan because they may still be
+		// executing at that instant.
 		session.addActiveQuery(queryID, queryMeta)
-		defer session.removeActiveQuery(queryID)
-		e.cfg.QueryRegistry.register(queryID, queryMeta)
-		defer e.cfg.QueryRegistry.deregister(queryID)
 
 		var stmtStrBefore string
 		// TODO(nvanbenschoten): Constant literals can change their representation (1.0000 -> 1) when type checking,
@@ -1856,7 +1807,7 @@ func (e *Executor) execStmt(
 	}
 
 	planner.phaseTimes[plannerStartExecStmt] = timeutil.Now()
-	session.setQueryExecutionMode(stmt.queryID, useDistSQL)
+	session.setQueryExecutionMode(stmt.queryID, useDistSQL, false /* isParallel */)
 	if useDistSQL {
 		err = e.execDistSQL(planner, plan, statementResultWriter)
 	} else {
@@ -1900,6 +1851,10 @@ func (e *Executor) execStmtInParallel(
 		return err
 	}
 
+	// This ensures we don't unintentionally clean up the queryMeta object when we
+	// send the mock result back to the client.
+	session.setQueryExecutionMode(stmt.queryID, false /* isDistributed */, true /* isParallel */)
+
 	session.parallelizeQueue.Add(ctx, plan, func(plan planNode) error {
 		// TODO(andrei): this should really be a result writer implementation that
 		// does nothing.
@@ -1922,6 +1877,8 @@ func (e *Executor) execStmtInParallel(
 		}
 		results := bufferedWriter.results()
 		results.Close(ctx)
+		// Deregister query from registry.
+		session.removeActiveQuery(stmt.queryID)
 		return err
 	})
 	return statementResultWriter.EndResult()
