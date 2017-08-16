@@ -208,6 +208,7 @@ func TestBootstrapCluster(t *testing.T) {
 	var expectedKeys = keySlice{
 		testutils.MakeKey(roachpb.Key("\x02"), roachpb.KeyMax),
 		testutils.MakeKey(roachpb.Key("\x03"), roachpb.KeyMax),
+		roachpb.Key("\x04bootstrap-version"),
 		roachpb.Key("\x04node-idgen"),
 		roachpb.Key("\x04store-idgen"),
 	}

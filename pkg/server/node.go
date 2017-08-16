@@ -215,7 +215,10 @@ func bootstrapCluster(
 		// first store.
 		if i == 0 {
 			initialValues := GetBootstrapSchema().GetInitialValues()
-			if err := s.BootstrapRange(initialValues); err != nil {
+			// The MinimumVersion is the ServerVersion when we are bootstrapping
+			// a cluster (except in some tests that specifically want to set up
+			// an "old-looking" cluster).
+			if err := s.BootstrapRange(initialValues, bootstrapVersion.MinimumVersion); err != nil {
 				return uuid.UUID{}, err
 			}
 		}

@@ -332,16 +332,19 @@ GRANT ALL ON system.lease TO root
 statement ok
 GRANT ALL ON system.lease TO testuser
 
+# NB: the "order by" is necessary or this test is flaky under DistSQL.
+# This is somewhat surprising.
 query T
-select name from system.settings
+select name from system.settings order by name
 ----
 diagnostics.reporting.enabled
+version
 
 statement ok
 INSERT INTO system.settings (name, value) VALUES ('somesetting', 'somevalue')
 
 query TT
-select name, value from system.settings order by name
+select name, value from system.settings where name != 'version' order by name
 ----
 diagnostics.reporting.enabled  true
 somesetting   somevalue
