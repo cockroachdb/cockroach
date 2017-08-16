@@ -94,7 +94,7 @@ func decorateTypeCheckError(err error, format string, a ...interface{}) error {
 	if _, ok := err.(placeholderTypeAmbiguityError); ok {
 		return err
 	}
-	return fmt.Errorf(format+": %v", append(a, err)...)
+	return errors.Wrapf(err, format, a...)
 }
 
 // TypeCheck implements the Expr interface.
@@ -151,10 +151,10 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, er
 		}
 		sig := fmt.Sprintf("<%s> %s <%s>%s", leftReturn, expr.Operator, rightReturn, desStr)
 		if len(fns) == 0 {
-			return nil, fmt.Errorf("unsupported binary operator: %s", sig)
+			return nil, pgerror.NewErrorf(pgerror.CodeUndefinedFunctionError, "unsupported binary operator: %s", sig)
 		}
 		fnsStr := formatCandidates(expr.Operator.String(), fns)
-		return nil, fmt.Errorf("ambiguous binary operator: %s, candidates are:\n%s", sig, fnsStr)
+		return nil, pgerror.NewErrorf(pgerror.CodeAmbiguousFunctionError, "ambiguous binary operator: %s, candidates are:\n%s", sig, fnsStr)
 	}
 
 	binOp := fns[0].(BinOp)
@@ -177,7 +177,7 @@ func (expr *CaseExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 
 		typedSubExprs, _, err := typeCheckSameTypedExprs(ctx, TypeAny, tmpExprs...)
 		if err != nil {
-			return nil, decorateTypeCheckError(err, "incompatible condition type")
+			return nil, decorateTypeCheckError(err, "incompatible condition type:")
 		}
 		expr.Expr = typedSubExprs[0]
 		for i, whenCond := range typedSubExprs[1:] {
@@ -203,7 +203,7 @@ func (expr *CaseExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 	}
 	typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, desired, tmpExprs...)
 	if err != nil {
-		return nil, decorateTypeCheckError(err, "incompatible value type")
+		return nil, decorateTypeCheckError(err, "incompatible value type:")
 	}
 	if expr.Else != nil {
 		expr.Else = typedSubExprs[len(typedSubExprs)-1]
@@ -262,7 +262,7 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ Type) (TypedExpr, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("invalid cast: %s -> %s", castFrom, expr.Type)
+	return nil, pgerror.NewErrorf(pgerror.CodeCannotCoerceError, "invalid cast: %s -> %s", castFrom, expr.Type)
 }
 
 // TypeCheck implements the Expr interface.
@@ -289,7 +289,7 @@ func (expr *IndirectionExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExp
 	typ := UnwrapType(subExpr.ResolvedType())
 	arrType, ok := typ.(TArray)
 	if !ok {
-		return nil, errors.Errorf("cannot subscript type %s because it is not an array", typ)
+		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "cannot subscript type %s because it is not an array", typ)
 	}
 	expr.Expr = subExpr
 	expr.typ = arrType.Typ
@@ -323,7 +323,7 @@ func (expr *CollateExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, e
 		expr.typ = TCollatedString{expr.Locale}
 		return expr, nil
 	default:
-		return nil, fmt.Errorf("incompatible type for COLLATE: %s", t)
+		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "incompatible type for COLLATE: %s", t)
 	}
 }
 
@@ -409,7 +409,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 
 	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, desired, def.Definition, false, expr.Exprs...)
 	if err != nil {
-		return nil, fmt.Errorf("%s(): %v", def.Name, err)
+		return nil, errors.Wrapf(err, "%s()", def.Name)
 	}
 
 	// Return NULL if at least one overload is possible and NULL is an argument.
@@ -447,10 +447,10 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 		}
 		sig := fmt.Sprintf("%s(%s)%s", expr.Func, strings.Join(typeNames, ", "), desStr)
 		if len(fns) == 0 {
-			return nil, fmt.Errorf("unknown signature: %s", sig)
+			return nil, pgerror.NewErrorf(pgerror.CodeUndefinedFunctionError, "unknown signature: %s", sig)
 		}
 		fnsStr := formatCandidates(expr.Func.String(), fns)
-		return nil, fmt.Errorf("ambiguous call: %s, candidates are:\n%s", sig, fnsStr)
+		return nil, pgerror.NewErrorf(pgerror.CodeAmbiguousFunctionError, "ambiguous call: %s, candidates are:\n%s", sig, fnsStr)
 	}
 
 	if expr.WindowDef != nil {
@@ -489,25 +489,25 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 		case AggregateClass:
 		case WindowClass:
 		default:
-			return nil, fmt.Errorf("OVER specified, but %s() is neither a window function nor an "+
+			return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError, "OVER specified, but %s() is neither a window function nor an "+
 				"aggregate function", expr.Func)
 		}
 
 		if expr.Filter != nil {
-			return nil, fmt.Errorf("FILTER within a window function call is not yet supported")
+			return nil, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "FILTER within a window function call is not yet supported")
 		}
 	} else {
 		// Make sure the window function builtins are used as window function applications.
 		switch builtin.class {
 		case WindowClass:
-			return nil, fmt.Errorf("window function %s() requires an OVER clause", expr.Func)
+			return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError, "window function %s() requires an OVER clause", expr.Func)
 		}
 	}
 
 	if expr.Filter != nil {
 		if builtin.class != AggregateClass {
 			// Same error message as Postgres.
-			return nil, fmt.Errorf("FILTER specified but %s() is not an aggregate function", expr.Func)
+			return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError, "FILTER specified but %s() is not an aggregate function", expr.Func)
 		}
 
 	}
@@ -625,7 +625,7 @@ func (expr *ColumnItem) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, erro
 	if _, ok := presetTypesForTesting[name]; ok {
 		return expr, nil
 	}
-	return nil, fmt.Errorf("name \"%s\" is not defined", name)
+	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "name \"%s\" is not defined", name)
 }
 
 // TypeCheck implements the Expr interface.
@@ -644,7 +644,7 @@ func (expr UnresolvedName) TypeCheck(s *SemaContext, desired Type) (TypedExpr, e
 
 // TypeCheck implements the Expr interface.
 func (expr *AllColumnsSelector) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) {
-	return nil, fmt.Errorf("cannot use %q in this context", expr)
+	return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "cannot use %q in this context", expr)
 }
 
 // TypeCheck implements the Expr interface.
@@ -696,10 +696,10 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, err
 		}
 		sig := fmt.Sprintf("%s <%s>%s", expr.Operator, exprReturn, desStr)
 		if len(fns) == 0 {
-			return nil, fmt.Errorf("unsupported unary operator: %s", sig)
+			return nil, pgerror.NewErrorf(pgerror.CodeUndefinedFunctionError, "unsupported unary operator: %s", sig)
 		}
 		fnsStr := formatCandidates(expr.Operator.String(), fns)
-		return nil, fmt.Errorf("ambiguous unary operator: %s, candidates are:\n%s", sig, fnsStr)
+		return nil, pgerror.NewErrorf(pgerror.CodeAmbiguousFunctionError, "ambiguous unary operator: %s, candidates are:\n%s", sig, fnsStr)
 	}
 
 	unaryOp := fns[0].(UnaryOp)
@@ -744,7 +744,7 @@ func (expr *Tuple) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) 
 	return expr, nil
 }
 
-var errAmbiguousArrayType = errors.Errorf("cannot determine type of empty array. " +
+var errAmbiguousArrayType = pgerror.NewErrorf(pgerror.CodeIndeterminateDatatypeError, "cannot determine type of empty array. "+
 	"Consider annotating with the desired type, for example ARRAY[]:::int[]")
 
 // TypeCheck implements the Expr interface.
@@ -892,7 +892,7 @@ func typeCheckAndRequire(ctx *SemaContext, expr Expr, required Type, op string) 
 		return nil, err
 	}
 	if typ := typedExpr.ResolvedType(); !(typ == TypeNull || typ.Equivalent(required)) {
-		return nil, fmt.Errorf("incompatible %s type: %s", op, typ)
+		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "incompatible %s type: %s", op, typ)
 	}
 	return typedExpr, nil
 }
@@ -926,7 +926,7 @@ func typeCheckComparisonOpWithSubOperator(
 		typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, TypeAny, sameTypeExprs...)
 		if err != nil {
 			sigWithErr := fmt.Sprintf(compExprsWithSubOpFmt, left, op, subOp, right, err)
-			return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmt, sigWithErr)
+			return nil, nil, CmpOp{}, pgerror.NewErrorf(pgerror.CodeUndefinedFunctionError, unsupportedCompErrFmt, sigWithErr)
 		}
 
 		// Determine TypedExpr and comparison type for left operand.
@@ -981,7 +981,7 @@ func typeCheckComparisonOpWithSubOperator(
 		if !ok {
 			sigWithErr := fmt.Sprintf(compExprsWithSubOpFmt, left, subOp, op, right,
 				fmt.Sprintf("op %s array requires array on right side", op))
-			return nil, nil, CmpOp{}, errors.Errorf(unsupportedCompErrFmt, sigWithErr)
+			return nil, nil, CmpOp{}, pgerror.NewErrorf(pgerror.CodeUndefinedFunctionError, unsupportedCompErrFmt, sigWithErr)
 		}
 		cmpTypeRight = rightArr.Typ
 	}
@@ -989,7 +989,7 @@ func typeCheckComparisonOpWithSubOperator(
 	fn, ok := ops.lookupImpl(cmpTypeLeft, cmpTypeRight)
 	if !ok {
 		sig := fmt.Sprintf(compSignatureWithSubOpFmt, cmpTypeLeft, subOp, op, TArray{cmpTypeRight})
-		return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmt, sig)
+		return nil, nil, CmpOp{}, pgerror.NewErrorf(pgerror.CodeUndefinedFunctionError, unsupportedCompErrFmt, sig)
 	}
 	return leftTyped, rightTyped, fn, nil
 }
@@ -1011,13 +1011,13 @@ func typeCheckComparisonOp(
 		typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, TypeAny, sameTypeExprs...)
 		if err != nil {
 			sigWithErr := fmt.Sprintf(compExprsFmt, left, op, right, err)
-			return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmt, sigWithErr)
+			return nil, nil, CmpOp{}, pgerror.NewErrorf(pgerror.CodeUndefinedFunctionError, unsupportedCompErrFmt, sigWithErr)
 		}
 
 		fn, ok := ops.lookupImpl(retType, TypeTuple)
 		if !ok {
 			sig := fmt.Sprintf(compSignatureFmt, retType, op, TypeTuple)
-			return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmt, sig)
+			return nil, nil, CmpOp{}, pgerror.NewErrorf(pgerror.CodeUndefinedFunctionError, unsupportedCompErrFmt, sig)
 		}
 
 		typedLeft := typedSubExprs[0]
@@ -1036,7 +1036,7 @@ func typeCheckComparisonOp(
 		fn, ok := ops.lookupImpl(TypeTuple, TypeTuple)
 		if !ok {
 			sig := fmt.Sprintf(compSignatureFmt, TypeTuple, op, TypeTuple)
-			return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmt, sig)
+			return nil, nil, CmpOp{}, pgerror.NewErrorf(pgerror.CodeUndefinedFunctionError, unsupportedCompErrFmt, sig)
 		}
 		// Using non-folded left and right to avoid having to swap later.
 		typedLeft, typedRight, err := typeCheckTupleComparison(ctx, op, left.(*Tuple), right.(*Tuple))
@@ -1077,10 +1077,10 @@ func typeCheckComparisonOp(
 	if len(fns) != 1 || collationMismatch {
 		sig := fmt.Sprintf(compSignatureFmt, leftReturn, op, rightReturn)
 		if len(fns) == 0 || collationMismatch {
-			return nil, nil, CmpOp{}, fmt.Errorf(unsupportedCompErrFmt, sig)
+			return nil, nil, CmpOp{}, pgerror.NewErrorf(pgerror.CodeUndefinedFunctionError, unsupportedCompErrFmt, sig)
 		}
 		fnsStr := formatCandidates(op.String(), fns)
-		return nil, nil, CmpOp{}, fmt.Errorf(ambiguousCompErrFmt, sig, fnsStr)
+		return nil, nil, CmpOp{}, pgerror.NewErrorf(pgerror.CodeAmbiguousFunctionError, ambiguousCompErrFmt, sig, fnsStr)
 	}
 
 	return leftExpr, rightExpr, fns[0].(CmpOp), nil
@@ -1305,7 +1305,7 @@ func typeCheckTupleComparison(
 		rightSubExpr := right.Exprs[elemIdx]
 		leftSubExprTyped, rightSubExprTyped, _, err := typeCheckComparisonOp(ctx, op, leftSubExpr, rightSubExpr)
 		if err != nil {
-			return nil, nil, fmt.Errorf("tuples %s are not comparable at index %d: %s",
+			return nil, nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "tuples %s are not comparable at index %d: %s",
 				Exprs([]Expr{left, right}), elemIdx+1, err)
 		}
 		left.Exprs[elemIdx] = leftSubExprTyped
@@ -1360,7 +1360,7 @@ func typeCheckSameTypedTupleExprs(
 		}
 		typedSubExprs, resType, err := typeCheckSameTypedExprs(ctx, desiredElem, sameTypeExprs...)
 		if err != nil {
-			return nil, nil, fmt.Errorf("tuples %s are not the same type: %v", Exprs(exprs), err)
+			return nil, nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "tuples %s are not the same type: %v", Exprs(exprs), err)
 		}
 		for j, typedExpr := range typedSubExprs {
 			exprs[j].(*Tuple).Exprs[elemIdx] = typedExpr
@@ -1398,7 +1398,7 @@ func checkAllTuplesHaveLength(exprs []Expr, expectedLen int) error {
 
 func checkTupleHasLength(t *Tuple, expectedLen int) error {
 	if len(t.Exprs) != expectedLen {
-		return fmt.Errorf("expected tuple %v to have a length of %d", t, expectedLen)
+		return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "expected tuple %v to have a length of %d", t, expectedLen)
 	}
 	return nil
 }
@@ -1505,10 +1505,10 @@ func (p PlaceholderTypes) ProcessPlaceholderAnnotations(stmt Statement) error {
 			// If we should not annotate the type but we did see a type assertion,
 			// there were conflicting type assertions.
 			if prevType, ok := p[placeholder]; ok {
-				return fmt.Errorf("found type annotation around %s that conflicts with previously "+
+				return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "found type annotation around %s that conflicts with previously "+
 					"inferred type %s", placeholder, prevType)
 			}
-			return fmt.Errorf("found multiple conflicting type annotations around %s", placeholder)
+			return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "found multiple conflicting type annotations around %s", placeholder)
 		}
 	}
 	return nil

@@ -23,6 +23,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
 const eof = -1
@@ -621,7 +623,7 @@ func (s *Scanner) scanPlaceholder(lval *sqlSymType) {
 
 	uval, err := strconv.ParseUint(lval.str, 10, 64)
 	if err == nil && uval > 1<<63 {
-		err = fmt.Errorf("integer value out of range: %d", uval)
+		err = pgerror.NewErrorf(pgerror.CodeNumericValueOutOfRangeError, "integer value out of range: %d", uval)
 	}
 	if err != nil {
 		lval.id = ERROR

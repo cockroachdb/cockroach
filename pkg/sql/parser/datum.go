@@ -34,6 +34,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -180,7 +181,8 @@ func makeParseError(s string, typ Type, err error) error {
 	if err != nil {
 		suffix = fmt.Sprintf(": %v", err)
 	}
-	return fmt.Errorf("could not parse '%s' as type %s%s", s, typ, suffix)
+	return pgerror.NewErrorf(
+		pgerror.CodeInvalidTextRepresentationError, "could not parse '%s' as type %s%s", s, typ, suffix)
 }
 
 func makeUnsupportedComparisonMessage(d1, d2 Datum) string {
@@ -227,7 +229,8 @@ func GetBool(d Datum) (DBool, error) {
 	if d == DNull {
 		return DBool(false), nil
 	}
-	return false, fmt.Errorf("cannot convert %s to type %s", d.ResolvedType(), TypeBool)
+	return false, pgerror.NewErrorf(
+		pgerror.CodeInternalError, "cannot convert %s to type %s", d.ResolvedType(), TypeBool)
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -334,7 +337,7 @@ func AsDInt(e Expr) (DInt, bool) {
 func MustBeDInt(e Expr) DInt {
 	i, ok := AsDInt(e)
 	if !ok {
-		panic(fmt.Errorf("expected *DInt, found %T", e))
+		panic(pgerror.NewErrorf(pgerror.CodeInternalError, "expected *DInt, found %T", e))
 	}
 	return i
 }
@@ -697,7 +700,7 @@ func AsDString(e Expr) (DString, bool) {
 func MustBeDString(e Expr) DString {
 	i, ok := AsDString(e)
 	if !ok {
-		panic(fmt.Errorf("expected *DString, found %T", e))
+		panic(pgerror.NewErrorf(pgerror.CodeInternalError, "expected *DString, found %T", e))
 	}
 	return i
 }
@@ -1282,7 +1285,7 @@ func parseTimestampInLocation(s string, loc *time.Location, typ Type) (time.Time
 // ends up catching too many users, we may need to do the same.
 func checkForMissingZone(t time.Time, parseLoc *time.Location) error {
 	if z, off := t.Zone(); off == 0 && t.Location() != parseLoc && z != "UTC" && !strings.HasPrefix(z, "GMT") {
-		return errors.Errorf("unknown zone %q", z)
+		return pgerror.NewErrorf(pgerror.CodeInvalidDatetimeFormatError, "unknown zone %q", z)
 	}
 	return nil
 }
@@ -2056,7 +2059,7 @@ func AsDArray(e Expr) (*DArray, bool) {
 func MustBeDArray(e Expr) *DArray {
 	i, ok := AsDArray(e)
 	if !ok {
-		panic(fmt.Errorf("expected *DArray, found %T", e))
+		panic(pgerror.NewErrorf(pgerror.CodeInternalError, "expected *DArray, found %T", e))
 	}
 	return i
 }
@@ -2145,7 +2148,8 @@ func (d *DArray) Format(buf *bytes.Buffer, f FmtFlags) {
 
 const maxArrayLength = math.MaxInt32
 
-var arrayTooLongError = errors.Errorf("ARRAYs can be at most 2^31-1 elements long")
+var arrayTooLongError = pgerror.NewErrorf(
+	pgerror.CodeDataExceptionError, "ARRAYs can be at most 2^31-1 elements long")
 
 // Validate checks that the given array is valid,
 // for example, that it's not too big.
@@ -2177,7 +2181,8 @@ var errNonHomogeneousArray = errors.New("multidimensional arrays must have array
 // consistent with the type of the Datum.
 func (d *DArray) Append(v Datum) error {
 	if v != DNull && !d.ParamTyp.Equivalent(v.ResolvedType()) {
-		return errors.Errorf("cannot append %s to array containing %s", d.ParamTyp,
+		return pgerror.NewErrorf(
+			pgerror.CodeInternalError, "cannot append %s to array containing %s", d.ParamTyp,
 			v.ResolvedType())
 	}
 	if d.Len() >= maxArrayLength {
@@ -2395,13 +2400,14 @@ func wrapWithOid(d Datum, oid oid.Oid) Datum {
 	case *DString:
 	case *DArray:
 	case dNull, *DOidWrapper:
-		panic(fmt.Errorf("cannot wrap %T with an Oid", v))
+		panic(pgerror.NewErrorf(
+			pgerror.CodeInternalError, "cannot wrap %T with an Oid", v))
 	default:
 		// Currently only *DInt, *DString, *DArray are hooked up to work with
 		// *DOidWrapper. To support another base Datum type, replace all type
 		// assertions to that type with calls to functions like AsDInt and
 		// MustBeDInt.
-		panic(fmt.Errorf("unsupported Datum type passed to wrapWithOid: %T", d))
+		panic(pgerror.NewErrorf(pgerror.CodeInternalError, "unsupported Datum type passed to wrapWithOid: %T", d))
 	}
 	return &DOidWrapper{
 		Wrapped: d,
