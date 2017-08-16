@@ -17891,6 +17891,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @property {Array.<cockroach.server.serverpb.ActiveQuery$Properties>} [active_queries] Session active_queries.
                  * @property {google.protobuf.Timestamp$Properties} [start] Session start.
                  * @property {Uint8Array} [kv_txn_id] Session kv_txn_id.
+                 * @property {string} [last_active_query] Session last_active_query.
                  */
 
                 /**
@@ -17950,6 +17951,12 @@ export const cockroach = $root.cockroach = (() => {
                 Session.prototype.kv_txn_id = $util.newBuffer([]);
 
                 /**
+                 * Session last_active_query.
+                 * @type {string}
+                 */
+                Session.prototype.last_active_query = "";
+
+                /**
                  * Creates a new Session instance using the specified properties.
                  * @param {cockroach.server.serverpb.Session$Properties=} [properties] Properties to set
                  * @returns {cockroach.server.serverpb.Session} Session instance
@@ -17982,6 +17989,8 @@ export const cockroach = $root.cockroach = (() => {
                         $root.google.protobuf.Timestamp.encode(message.start, writer.uint32(/* id 6, wireType 2 =*/50).fork()).ldelim();
                     if (message.kv_txn_id != null && message.hasOwnProperty("kv_txn_id"))
                         writer.uint32(/* id 7, wireType 2 =*/58).bytes(message.kv_txn_id);
+                    if (message.last_active_query != null && message.hasOwnProperty("last_active_query"))
+                        writer.uint32(/* id 8, wireType 2 =*/66).string(message.last_active_query);
                     return writer;
                 };
 
@@ -18032,6 +18041,9 @@ export const cockroach = $root.cockroach = (() => {
                             break;
                         case 7:
                             message.kv_txn_id = reader.bytes();
+                            break;
+                        case 8:
+                            message.last_active_query = reader.string();
                             break;
                         default:
                             reader.skipType(tag & 7);
@@ -18091,6 +18103,9 @@ export const cockroach = $root.cockroach = (() => {
                     if (message.kv_txn_id != null && message.hasOwnProperty("kv_txn_id"))
                         if (!(message.kv_txn_id && typeof message.kv_txn_id.length === "number" || $util.isString(message.kv_txn_id)))
                             return "kv_txn_id: buffer expected";
+                    if (message.last_active_query != null && message.hasOwnProperty("last_active_query"))
+                        if (!$util.isString(message.last_active_query))
+                            return "last_active_query: string expected";
                     return null;
                 };
 
@@ -18131,6 +18146,8 @@ export const cockroach = $root.cockroach = (() => {
                             $util.base64.decode(object.kv_txn_id, message.kv_txn_id = $util.newBuffer($util.base64.length(object.kv_txn_id)), 0);
                         else if (object.kv_txn_id.length)
                             message.kv_txn_id = object.kv_txn_id;
+                    if (object.last_active_query != null)
+                        message.last_active_query = String(object.last_active_query);
                     return message;
                 };
 
@@ -18162,6 +18179,7 @@ export const cockroach = $root.cockroach = (() => {
                         object.application_name = "";
                         object.start = null;
                         object.kv_txn_id = options.bytes === String ? "" : [];
+                        object.last_active_query = "";
                     }
                     if (message.node_id != null && message.hasOwnProperty("node_id"))
                         object.node_id = message.node_id;
@@ -18180,6 +18198,8 @@ export const cockroach = $root.cockroach = (() => {
                         object.start = $root.google.protobuf.Timestamp.toObject(message.start, options);
                     if (message.kv_txn_id != null && message.hasOwnProperty("kv_txn_id"))
                         object.kv_txn_id = options.bytes === String ? $util.base64.encode(message.kv_txn_id, 0, message.kv_txn_id.length) : options.bytes === Array ? Array.prototype.slice.call(message.kv_txn_id) : message.kv_txn_id;
+                    if (message.last_active_query != null && message.hasOwnProperty("last_active_query"))
+                        object.last_active_query = message.last_active_query;
                     return object;
                 };
 

@@ -9938,6 +9938,7 @@ export namespace cockroach {
                 active_queries?: cockroach.server.serverpb.ActiveQuery$Properties[];
                 start?: google.protobuf.Timestamp$Properties;
                 kv_txn_id?: Uint8Array;
+                last_active_query?: string;
             };
 
             /**
@@ -9997,6 +9998,12 @@ export namespace cockroach {
                  * @type {Uint8Array}
                  */
                 public kv_txn_id: Uint8Array;
+
+                /**
+                 * Session last_active_query.
+                 * @type {string}
+                 */
+                public last_active_query: string;
 
                 /**
                  * Creates a new Session instance using the specified properties.
