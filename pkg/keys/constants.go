@@ -200,15 +200,19 @@ var (
 	SystemPrefix = roachpb.Key{systemPrefixByte}
 	SystemMax    = roachpb.Key{systemMaxByte}
 
+	// BootstrapVersion is the key at which clusters bootstrapped with a version
+	// > 1.0 persist the version at which they were bootstrapped.
+	BootstrapVersionKey = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("bootstrap-version")))
+
 	// MigrationPrefix specifies the key prefix to store all migration details.
 	MigrationPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("system-version/")))
-
-	// MigrationKeyMax is the maximum value for any system migration key.
-	MigrationKeyMax = MigrationPrefix.PrefixEnd()
 
 	// MigrationLease is the key that nodes must take a lease on in order to run
 	// system migrations on the cluster.
 	MigrationLease = roachpb.Key(makeKey(MigrationPrefix, roachpb.RKey("lease")))
+
+	// MigrationKeyMax is the maximum value for any system migration key.
+	MigrationKeyMax = MigrationPrefix.PrefixEnd()
 
 	// NodeLivenessPrefix specifies the key prefix for the node liveness
 	// table.  Note that this should sort before the rest of the system

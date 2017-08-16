@@ -128,11 +128,6 @@ func TestClusterVersionUpgrade1_0To1_1(t *testing.T) {
 	tc := setupMixedCluster(t, bootstrapVersion, versions)
 	defer tc.Stopper().Stop(ctx)
 
-	// TODO(tschottdorf): once the migration in #17389 is in place, verify that
-	// there's a suitable entry in the `system.settings` table for a freshly
-	// bootstrapped cluster (at 1.1). It's acceptable that an 1.0 cluster (as
-	// this one) doesn't write one.
-
 	for i := 0; i < tc.NumServers(); i++ {
 		if exp, version := bootstrapVersion.MinimumVersion.String(), tc.getVersionFromShow(i); version != exp {
 			t.Fatalf("%d: incorrect version %s (wanted %s)", i, version, exp)
@@ -149,6 +144,10 @@ func TestClusterVersionUpgrade1_0To1_1(t *testing.T) {
 			wantActive := newVersion == bootstrapVersion.MinimumVersion
 			if isActive := v.IsActive(newVersion); isActive != wantActive {
 				t.Fatalf("%d: v%s active=%t (wanted %t)", i, newVersion, isActive, wantActive)
+			}
+
+			if tableV, curV := tc.getVersionFromSelect(i), v.Version().MinimumVersion.String(); tableV != curV {
+				t.Fatalf("%d: read v%s from table, v%s from setting", i, tableV, curV)
 			}
 		}
 
@@ -229,23 +228,8 @@ func TestClusterVersionBootstrapStrict(t *testing.T) {
 					t.Fatalf("%d: incorrect version %s (wanted %s)", i, version, exp)
 				}
 
-				// TODO(tschottdorf): this documents the oddity that exists at
-				// the moment, see
-				// https://github.com/cockroachdb/cockroach/issues/17389.
-				//
-				// In short, there's nothing that initially populates the
-				// settings table as this is difficult to do during
-				// bootstrapping, and using a sql migration is awkward since
-				// we'd need a new migration for each release of CockroachDB and
-				// must not have users restart into a newer version immediately
-				// after bootstrap.
-				//
-				// Details here are TBD and should be updated with the outcome
-				// of the aforementioned issue.
-				brokenExp := "" // in a better world, would have brokenExp == exp
-
-				if version := tc.getVersionFromSelect(i); version != brokenExp {
-					t.Fatalf("%d: incorrect version %q (wanted %s)", i, version, brokenExp)
+				if version := tc.getVersionFromSelect(i); version != exp {
+					t.Fatalf("%d: incorrect version %q (wanted %s)", i, version, exp)
 				}
 			}
 		}()

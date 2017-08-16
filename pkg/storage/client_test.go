@@ -161,7 +161,7 @@ func createTestStoreWithEngine(
 	}
 	stores.AddStore(store)
 	if bootstrap {
-		err := store.BootstrapRange(sqlbase.MakeMetadataSchema().GetInitialValues())
+		err := store.BootstrapRange(sqlbase.MakeMetadataSchema().GetInitialValues(), storeCfg.Settings.Version.ServerVersion)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -757,7 +757,7 @@ func (m *multiTestContext) addStore(idx int) {
 
 		// Bootstrap the initial range on the first store
 		if idx == 0 {
-			err := store.BootstrapRange(sqlbase.MakeMetadataSchema().GetInitialValues())
+			err := store.BootstrapRange(sqlbase.MakeMetadataSchema().GetInitialValues(), cfg.Settings.Version.ServerVersion)
 			if err != nil {
 				m.t.Fatal(err)
 			}
