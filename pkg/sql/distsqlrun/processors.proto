@@ -119,6 +119,7 @@ message ProcessorCoreUnion {
   optional BackfillerSpec backfiller = 11;
   optional AlgebraicSetOpSpec setOp = 12;
   optional ReadCSVSpec readCSV = 13;
+  optional SSTWriterSpec SSTWriter = 14;
 }
 
 // NoopCoreSpec indicates a "no-op" processor core. This is used when we just
@@ -430,11 +431,40 @@ message AlgebraicSetOpSpec {
   optional SetOpType op_type = 2 [(gogoproto.nullable) = false];
 }
 
+// ReadCSVSpec is the specification for a processor that reads a CSV
+// file at uri with descriptor table_desc, specified delimiter (comma),
+// optional comment rune, and optional nullif string (which is nullable to
+// differentiate between not set (nil) and the empty string (which could be
+// used as the null marker). It outputs rows that are a sampling of the file
+// at a rate of (row size) / sample_size.
+// See ccs/sqlccl/csv.go for implementation.
 message ReadCSVSpec {
+  // comma is an optional delimiter used by the CSV file; defaults to a comma.
   optional int32 comma = 1 [(gogoproto.nullable) = false];
+  // comment is an optional comment rune; zero value means comments not enabled.
   optional int32 comment = 2 [(gogoproto.nullable) = false];
+  // nullif, if not nil, is the string which identifies a NULL. Can be the empty string.
   optional string nullif = 3 [(gogoproto.nullable) = true];
+  // sample_size is the rate at which to output rows, based on an input row's size.
   optional int32 sample_size = 4 [(gogoproto.nullable) = false];
+  // table_desc is the table descriptor of the CSV file.
   optional sqlbase.TableDescriptor table_desc = 5 [(gogoproto.nullable) = false];
+
+  // uri is a storageccl.ExportStorage URI pointing to the CSV file to be read.
   optional string uri = 6 [(gogoproto.nullable) = false];
+}
+
+// SSTWriterSpec is the specification for a processor that consumes rows,
+// uses tempStorage to sort them, then writes them all to a single SST file
+// at uri/name. walltime is used as the MVCC timestamp. It outputs a single
+// row containing the file name, size, checksum, observed start and end keys.
+// See ccs/sqlccl/csv.go for implementation.
+message SSTWriterSpec {
+  // destination as a storageccl.ExportStorage URI pointing to an export store
+  // location (directory).
+  optional string destination = 1 [(gogoproto.nullable) = false];
+  // name is the file name that will be written by the export store.
+  optional string name = 2 [(gogoproto.nullable) = false];
+  // walltimeNanos is the MVCC time at which the created KVs will be written.
+  optional int64 walltimeNanos = 3 [(gogoproto.nullable) = false];
 }

@@ -536,7 +536,7 @@ func TestHashJoiner(t *testing.T) {
 			flowCtx := FlowCtx{
 				Settings:    cluster.MakeTestingClusterSettings(),
 				EvalCtx:     evalCtx,
-				tempStorage: tempEngine,
+				TempStorage: tempEngine,
 				diskMonitor: &diskMonitor,
 			}
 

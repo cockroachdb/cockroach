@@ -120,7 +120,7 @@ func TestServer(t *testing.T) {
 				expectedErr: "version mismatch",
 			},
 			{
-				version:     Version - 1,
+				version:     MinAcceptedVersion - 1,
 				expectedErr: "version mismatch",
 			},
 			{
