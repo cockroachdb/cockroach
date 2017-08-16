@@ -62,7 +62,7 @@ import (
 //  - at some later point, we can choose to deprecate version 1 and have
 //    servers only accept versions >= 2 (by setting
 //    MinAcceptedVersion to 2).
-const Version = 4
+const Version = 5
 
 // MinAcceptedVersion is the oldest version that the server is
 // compatible with; see above.
