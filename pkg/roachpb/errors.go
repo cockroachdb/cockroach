@@ -392,11 +392,11 @@ func NewTransactionRetryError(reason TransactionRetryReason) *TransactionRetryEr
 }
 
 func (e *TransactionRetryError) Error() string {
-	return fmt.Sprintf("TransactionRetryError: retry txn")
+	return fmt.Sprintf("TransactionRetryError: retry txn (%s)", e.Reason)
 }
 
 func (e *TransactionRetryError) message(pErr *Error) string {
-	return fmt.Sprintf("TransactionRetryError: retry txn %s", pErr.GetTxn())
+	return fmt.Sprintf("TransactionRetryError: retry txn (%s): %s", e.Reason, pErr.GetTxn())
 }
 
 var _ ErrorDetailInterface = &TransactionRetryError{}
