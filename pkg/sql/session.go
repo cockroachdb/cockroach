@@ -998,8 +998,6 @@ func (ts *txnState) updateStateAndCleanupOnErr(err error, e *Executor) {
 		ts.resetStateAndTxn(Aborted)
 	} else {
 		// If we got a retriable error, move the SQL txn to the RestartWait state.
-		// Note that TransactionAborted is also a retriable error, handled here;
-		// in this case cleanup for the txn has been done for us under the hood.
 		ts.SetState(RestartWait)
 	}
 }

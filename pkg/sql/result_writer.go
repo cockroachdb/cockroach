@@ -63,13 +63,15 @@ type GroupResultWriter interface {
 
 // StatementResultWriter provides a writer interface for a single statement.
 type StatementResultWriter interface {
+	GroupResultWriter
+
 	// BeginResult should be called prior to any of the other methods.
 	// TODO(andrei): remove BeginResult and SetColumns, and have
 	// NewStatementResultWriter take in a parser.Statement
 	BeginResult(stmt parser.Statement)
-	// GetPGTag returns the PGTag of the statement passed into BeginResult.
+	// PGTag returns the PGTag of the statement passed into BeginResult.
 	PGTag() string
-	// GetStatementType returns the StatementType that corresponds to the type of
+	// StatementType returns the StatementType that corresponds to the type of
 	// results that should be sent to this interface.
 	StatementType() parser.StatementType
 	// SetColumns should be called after BeginResult and before AddRow if the
@@ -102,6 +104,9 @@ type bufferedWriter struct {
 	resultInProgress bool
 }
 
+var _ GroupResultWriter = &bufferedWriter{}
+var _ StatementResultWriter = &bufferedWriter{}
+
 func newBufferedWriter(acc mon.BoundAccount) *bufferedWriter {
 	return &bufferedWriter{acc: acc}
 }
@@ -120,12 +125,12 @@ func (b *bufferedWriter) NewGroupResultWriter() GroupResultWriter {
 func (b *bufferedWriter) SetEmptyQuery() {
 }
 
-// SetEmptyQuery implements the GroupResultWriter interface.
+// NewStatementResultWriter implements the GroupResultWriter interface.
 func (b *bufferedWriter) NewStatementResultWriter() StatementResultWriter {
 	return b
 }
 
-// CanAutomaticallyRetry implements the GroupResultWriter interface.
+// ResultsSentToClient implements the GroupResultWriter interface.
 func (b *bufferedWriter) ResultsSentToClient() bool {
 	return false
 }
@@ -158,7 +163,7 @@ func (b *bufferedWriter) BeginResult(stmt parser.Statement) {
 	b.currentResult = Result{PGTag: stmt.StatementTag(), Type: stmt.StatementType()}
 }
 
-// GetPGTag implements the StatementResultWriter interface.
+// PGTag implements the StatementResultWriter interface.
 func (b *bufferedWriter) PGTag() string {
 	return b.currentResult.PGTag
 }

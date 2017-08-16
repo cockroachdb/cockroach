@@ -816,3 +816,32 @@ SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL)
 
 statement ok
 ROLLBACK
+
+# Retryable error after results are streamed should be sent back to the client.
+statement error pgcode 40001 restart transaction: HandledRetryableTxnError: forced by crdb_internal.force_retry()
+BEGIN; SELECT * from generate_series(1, 10000); SELECT CRDB_INTERNAL.FORCE_RETRY('1s');
+
+query T
+SHOW TRANSACTION STATUS
+----
+Aborted
+
+statement ok
+ROLLBACK
+
+statement error pgcode 40001 restart transaction: HandledRetryableTxnError: forced by crdb_internal.force_retry()
+BEGIN; SAVEPOINT cockroach_restart; SELECT * from generate_series(1, 10000); SELECT CRDB_INTERNAL.FORCE_RETRY('1s');
+
+query T
+SHOW TRANSACTION STATUS
+----
+RestartWait
+
+statement ok
+ROLLBACK
+
+# Retryable error before results are streamed should be retried as normal.
+query I
+BEGIN; SAVEPOINT cockroach_restart; SELECT 1; SELECT CRDB_INTERNAL.FORCE_RETRY('100ms'); COMMIT
+----
+1
