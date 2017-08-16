@@ -558,9 +558,24 @@ This obviously works if the migration runs when the cluster is still running
 the bootstrapped version, even if the operator set the version explicitly  (`SET
 CLUSTER SETTING version = x` is idempotent).
 
-Interestingly, this also solves the bootstrapping problem below - we can simply
-delay bootstrap until the `system.settings` table has a `version`, and then use
-that.
+
+### Bootstrapping new stores
+
+When an existing node restarts, it has on-disk markers that should reflect a
+reasonable version configuration to assume until gossip updates are in effect.
+
+The situation is slightly different when a new node joins a cluster for the
+first time. In this case, it'll bootstrap its stores using its binary's
+`MinimumSupportedVersion`, (for that is all that it knows), which is usually
+one minor version behind the cluster's active version.
+
+This is not an issue since the node's binary can still participate in newer
+features, and it will bump its version once it receives the first gossip update,
+typically after seconds.
+
+We could conceivably be smarter about finding out the active cluster version
+proactively (we're connected to gossip when we bootstrap), but this is not
+deemed worth the extra complexity.
 
 ## Drawbacks
 
@@ -600,24 +615,6 @@ additional complexity at this point. We are not locked into the process in the
 long term.
 
 ## Unresolved questions
-
-### Bootstrapping new stores
-
-When an existing node restarts, it has on-disk markers that should reflect a
-reasonable version configuration to assume until gossip updates are in effect.
-
-The situation is different when a new node joins a cluster for the first time.
-In this case, it'll bootstrap its stores using its binary's
-`MinimumSupportedVersion`. There's no guarantee however that this version is
-compatible with the running cluster, and the node could die and restart before
-filling in a correct version from gossip; once restarted, it could find that it
-is now incompatible. We could run a sanity check: run through the visible
-`NodeDescriptor`s of our peers (we're connected to Gossip at this point), and if
-any of them are incompatible with `MinimumSupportedVersion`, exit with an error.
-Or, even better, check the settings table -- but then again, this may not yet
-have been populated.
-
-See also the last section for a seemingly good solution to this.
 
 ### Naming
 
