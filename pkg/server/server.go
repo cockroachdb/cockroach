@@ -117,7 +117,6 @@ type Server struct {
 	sqlExecutor        *sql.Executor
 	leaseMgr           *sql.LeaseManager
 	sessionRegistry    *sql.SessionRegistry
-	queryRegistry      *sql.QueryRegistry
 	jobRegistry        *jobs.Registry
 	engines            Engines
 	internalMemMetrics sql.MemoryMetrics
@@ -357,7 +356,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	storage.RegisterConsistencyServer(s.grpc, s.node.storesServer)
 
 	s.sessionRegistry = sql.MakeSessionRegistry()
-	s.queryRegistry = sql.MakeQueryRegistry()
 	s.jobRegistry = jobs.MakeRegistry(
 		s.clock, s.db, sqlExecutor, s.gossip, &s.nodeIDContainer, s.ClusterID)
 
@@ -403,7 +401,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.node.stores,
 		s.stopper,
 		s.sessionRegistry,
-		s.queryRegistry,
 	)
 	s.authentication = newAuthenticationServer(s)
 	for _, gw := range []grpcGatewayServer{s.admin, s.status, s.authentication, &s.tsServer} {
@@ -430,7 +427,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		DistSQLSrv:              s.distSQLServer,
 		StatusServer:            s.status,
 		SessionRegistry:         s.sessionRegistry,
-		QueryRegistry:           s.queryRegistry,
 		JobRegistry:             s.jobRegistry,
 		HistogramWindowInterval: s.cfg.HistogramWindowInterval(),
 		RangeDescriptorCache:    s.distSender.RangeDescriptorCache(),

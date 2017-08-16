@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -259,7 +258,6 @@ type ExecutorConfig struct {
 	DistSQLSrv      *distsqlrun.ServerImpl
 	StatusServer    serverpb.StatusServer
 	SessionRegistry *SessionRegistry
-	QueryRegistry   *QueryRegistry
 	JobRegistry     *jobs.Registry
 
 	TestingKnobs              *ExecutorTestingKnobs
@@ -332,55 +330,6 @@ type DistSQLPlannerTestingKnobs struct {
 	// If OverrideSQLHealthCheck is set, we use this callback to get the health of
 	// a node.
 	OverrideHealthCheck func(node roachpb.NodeID, addrString string) error
-}
-
-// QueryRegistry holds a map of all queries executing with this node as its gateway.
-type QueryRegistry struct {
-	// TODO(peter): Investigate if it is worthwhile to shard based on the query
-	// ID in order to reduce contention on this lock.
-	syncutil.Mutex
-	store map[uint128.Uint128]*queryMeta
-}
-
-// MakeQueryRegistry instantiates a new, empty query registry.
-func MakeQueryRegistry() *QueryRegistry {
-	return &QueryRegistry{store: make(map[uint128.Uint128]*queryMeta)}
-}
-
-func (r *QueryRegistry) register(queryID uint128.Uint128, query *queryMeta) {
-	r.Lock()
-	r.store[queryID] = query
-	r.Unlock()
-}
-
-func (r *QueryRegistry) deregister(queryID uint128.Uint128) {
-	r.Lock()
-	delete(r.store, queryID)
-	r.Unlock()
-}
-
-// Cancel looks up the associated query in the registry and cancels it (if it is cancellable).
-func (r *QueryRegistry) Cancel(queryIDStr string, username string) (bool, error) {
-	queryID, err := uint128.FromString(queryIDStr)
-	if err != nil {
-		return false, fmt.Errorf("query ID %s malformed: %s", queryID, err)
-	}
-
-	r.Lock()
-	defer r.Unlock()
-
-	if queryMeta, exists := r.store[queryID]; exists {
-		if !(username == security.RootUser || username == queryMeta.session.User) {
-			// This user does not have cancel privileges over this query.
-			return false, fmt.Errorf("query ID %s not found", queryID)
-		}
-
-		queryMeta.cancel()
-
-		return true, nil
-	}
-
-	return false, fmt.Errorf("query ID %s not found", queryID)
 }
 
 // NewExecutor creates an Executor and registers a callback on the
