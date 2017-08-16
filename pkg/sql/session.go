@@ -68,7 +68,7 @@ const (
 )
 
 // queryMeta stores metadata about a query. Stored as reference in
-// session.mu.ActiveQueries and executor.cfg.queryRegistry.
+// session.mu.ActiveQueries.
 type queryMeta struct {
 	// The timestamp when this query began execution.
 	start time.Time
@@ -350,6 +350,35 @@ func (r *SessionRegistry) deregister(s *Session) {
 	r.Unlock()
 }
 
+// CancelQuery looks up the associated query in the session registry and cancels it.
+func (r *SessionRegistry) CancelQuery(queryIDStr string, username string) (bool, error) {
+	queryID, err := uint128.FromString(queryIDStr)
+	if err != nil {
+		return false, fmt.Errorf("query ID %s malformed: %s", queryID, err)
+	}
+
+	r.Lock()
+	defer r.Unlock()
+
+	for session := range r.store {
+		if !(username == security.RootUser || username == session.User) {
+			// Skip this session.
+			continue
+		}
+
+		session.mu.Lock()
+		if queryMeta, exists := session.mu.ActiveQueries[queryID]; exists {
+			queryMeta.cancel()
+
+			session.mu.Unlock()
+			return true, nil
+		}
+		session.mu.Unlock()
+	}
+
+	return false, fmt.Errorf("query ID %s not found", queryID)
+}
+
 // SerializeAll returns a slice of all sessions in the registry, converted to serverpb.Sessions.
 func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 	r.Lock()
@@ -574,7 +603,6 @@ func (s *Session) FinishPlan() {
 		// because those might still be executing in the parallelizeQueue.
 		for _, queryID := range s.ActiveSyncQueries {
 			delete(s.mu.ActiveQueries, queryID)
-			s.execCfg.QueryRegistry.deregister(queryID)
 		}
 		s.mu.Unlock()
 		s.ActiveSyncQueries = make([]uint128.Uint128, 0)
@@ -629,7 +657,6 @@ func (s *Session) addActiveQuery(queryID uint128.Uint128, queryMeta *queryMeta) 
 	s.mu.ActiveQueries[queryID] = queryMeta
 	queryMeta.session = s
 	s.mu.Unlock()
-	s.execCfg.QueryRegistry.register(queryID, queryMeta)
 	// addActiveQuery is called from the main goroutine of the session;
 	// and at this stage, this query is a synchronous query for our purposes.
 	// setQueryExecutionMode will remove this element if this query enters the
@@ -648,7 +675,6 @@ func (s *Session) removeActiveQuery(queryID uint128.Uint128) {
 		s.mu.LastActiveQuery = queryMeta.stmt
 	}
 	s.mu.Unlock()
-	s.execCfg.QueryRegistry.deregister(queryID)
 }
 
 // setQueryExecutionMode is called upon start of execution of a query, and sets
