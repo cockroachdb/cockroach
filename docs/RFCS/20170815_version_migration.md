@@ -111,7 +111,7 @@ that we want.
    This also suggests that it should use the existing value from the
    `system.settings` table, and not from `SHOW` (which may not be
    authoritative).
-2. Using the `system.settings` table is tricky -- as explained above, settings
+2. If we use the `system.settings` table naively, we may have a problem: settings
    don't persist their default value, and in particular, a new cluster (or one
    started during 1.0) does not have a `version` setting persisted. It is hard
    to persist a setting during bootstrap since the `settings` table is only
@@ -488,54 +488,20 @@ special cases:
   below the new `MinimumVersion` or its `MinSupportedVersion` is newer than the
   `MinimumVersion`.
 
-## Drawbacks
-
-- relying on the operator to promise that no old version is around opens cluster
-  health up to user error.
-- we can't roll back upgrades, which will make many users nervous
-    - in particular, it discounts the OSS version of CockroachDB
-
-## Rationale and Alternatives
-
-The main concern in designing the mechanism here is operator friendlyness. We
-don't want to make the process more complicated; it should be scriptable; it
-should be hard to get wrong (and if you do, it shouldn't matter).
-
-The main concessions we make in this design are
-
-1. no support for downgrades. This was discussed early in the life of this RFC
-   but was discarded for its inherent complexity and large search space that
-   would have to be tested.
-
-   It will be difficult to retrofit this, though a change in the upgrade process
-   can itself be migrated through the upgrade process presented here (though it
-   would take one release to go through the transition).
-1. relying on the operator to guarantee that a cluster is not running mixed
-   versions when the explicit version bump is issued.
-   
-   There are ways in which this could be approximately inferred, but again it
-   was deemed to complex given the time frame. Besides, operators may prefer to
-   have some level of control over the migration process, and it is difficult to
-   make an autonomous upgrade workflow foolproof.
-
-   If desired in the future, this can be retrofitted.
-
-As a result, we get a design that's ergonomic but limited. The complexity
-inherent with it as written indicates that it is a good choice to not add
-additional complexity at this point. We are not locked into the process in the
-long term.
-
-## Unresolved questions
+## Initially populating the settings table version entry
 
 ### Populating the settings table
 
 As outlined in the guide-level explanation, we'd like the settings table to hold
 the "current" cluster version for new clusters, but we have no good way of
 populating it at bootstrap time and don't have sufficient information to
-populate it in a foolproof manner later.
+populate it in a foolproof manner later. The solution is presented at the end of
+this section. We first detail the "obvious" approaches and their shortcomings.
 
-The current state of affairs is that  when no `version` is persisted in the
-table, use the "suspected" local version during cluster version setting updates.
+#### Approaches that don't work
+
+We could use the "suspected" local version during cluster version when no
+`version` is persisted in the table, but:
 
 - this is incorrect when, say, adding a v3.0 node to a v1.0 cluster and
   running `SET CLUSTER SETTING version = '3.1'` on that node. All other
@@ -550,7 +516,8 @@ table, use the "suspected" local version during cluster version setting updates.
 - in effect, to realize the above problem in practice, an operator would
   have to add a brand new node running a too new version to a preexisting
   cluster and run the version bump on that node.
-- This might be an acceptable solution?
+- This might be an acceptable solution in practice, but it's hard to reason
+  about and explain.
 
 An alternative (but apparently problematic) approach is adding a sql migration.
 The problem with those is that it's not clear which value the migration should
@@ -563,7 +530,9 @@ And of course there is the third approach, which is writing the settings table
 during actual bootstrapping. This seems to much work to be realistic at this
 point in the cycle, and it may come with its own migration concerns.
 
-Both of the previous approaches suggest a more workable combination:
+#### The combination that does work
+
+All of the previous approaches combined suggest a more workable combination:
 
 1. instead of populating the settings table at bootstrap, populate a new key
    `BootstrapVersion` (similar to the `ClusterIdent`). In effect, for the
@@ -593,6 +562,45 @@ Interestingly, this also solves the bootstrapping problem below - we can simply
 delay bootstrap until the `system.settings` table has a `version`, and then use
 that.
 
+## Drawbacks
+
+- relying on the operator to promise that no old version is around opens cluster
+  health up to user error.
+- we can't roll back upgrades, which will make many users nervous
+    - in particular, it discounts the OSS version of CockroachDB
+
+## Rationale and Alternatives
+
+The main concern in designing the mechanism here is operator friendlyness. We
+don't want to make the process more complicated; it should be scriptable; it
+should be hard to get wrong (and if you do, it shouldn't matter).
+
+The main concessions we make in this design are
+
+1. no support for downgrades. This was discussed early in the life of this RFC
+   but was discarded for its inherent complexity and large search space that
+   would have to be tested.
+
+   It will be difficult to retrofit this, though a change in the upgrade process
+   can itself be migrated through the upgrade process presented here (though it
+   would take one release to go through the transition).
+1. relying on the operator to guarantee that a cluster is not running mixed
+   versions when the explicit version bump is issued.
+
+   There are ways in which this could be approximately inferred, but again it
+   was deemed to complex given the time frame. Besides, operators may prefer to
+   have some level of control over the migration process, and it is difficult to
+   make an autonomous upgrade workflow foolproof.
+
+   If desired in the future, this can be retrofitted.
+
+As a result, we get a design that's ergonomic but limited. The complexity
+inherent with it as written indicates that it is a good choice to not add
+additional complexity at this point. We are not locked into the process in the
+long term.
+
+## Unresolved questions
+
 ### Bootstrapping new stores
 
 When an existing node restarts, it has on-disk markers that should reflect a
@@ -601,11 +609,13 @@ reasonable version configuration to assume until gossip updates are in effect.
 The situation is different when a new node joins a cluster for the first time.
 In this case, it'll bootstrap its stores using its binary's
 `MinimumSupportedVersion`. There's no guarantee however that this version is
-compatible with the running cluster. We could run a sanity check: run through
-the visible `NodeDescriptor`s of our peers (we're connected to Gossip at this
-point), and if any of them are incompatible with `MinimumSupportedVersion`, exit
-with an error. Or, even better, check the settings table -- but then again, this
-may not yet have been populated.
+compatible with the running cluster, and the node could die and restart before
+filling in a correct version from gossip; once restarted, it could find that it
+is now incompatible. We could run a sanity check: run through the visible
+`NodeDescriptor`s of our peers (we're connected to Gossip at this point), and if
+any of them are incompatible with `MinimumSupportedVersion`, exit with an error.
+Or, even better, check the settings table -- but then again, this may not yet
+have been populated.
 
 See also the last section for a seemingly good solution to this.
 
