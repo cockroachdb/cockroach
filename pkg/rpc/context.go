@@ -135,6 +135,13 @@ func NewServer(ctx *Context) *grpc.Server {
 		)
 		opts = append(opts, grpc.UnaryInterceptor(interceptor))
 	}
+	// By default, gRPC disconnects clients that send "too many" pings,
+	// so we need to ensure that our server permits as many pings as our
+	// client is configured to send.
+	opts = append(opts, grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+		MinTime:             base.NetworkTimeout,
+		PermitWithoutStream: true,
+	}))
 	s := grpc.NewServer(opts...)
 	RegisterHeartbeatServer(s, &HeartbeatService{
 		clock:              ctx.LocalClock,
@@ -296,6 +303,8 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		if ctx.rpcCompression {
 			dialOpts = append(dialOpts, grpc.WithCompressor(snappyCompressor{}))
 		}
+		// Client KeepaliveParams must be kept in sync with the server's
+		// KeepaliveEnforcementPolicy.
 		dialOpts = append(dialOpts, grpc.WithKeepaliveParams(keepalive.ClientParameters{
 			// Send periodic pings on the connection.
 			Time: base.NetworkTimeout,
