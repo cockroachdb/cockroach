@@ -35,8 +35,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // The constants below are the possible values of the KeepCluster field.
@@ -469,6 +469,7 @@ func (f *Farmer) Restart(ctx context.Context, i int) error {
 		return err
 	}
 
+	done := make(chan error, 1)
 	{
 		s, err := c.NewSession()
 		if err != nil {
@@ -476,27 +477,55 @@ func (f *Farmer) Restart(ctx context.Context, i int) error {
 		}
 		defer s.Close()
 
+		var outBuf, errBuf bytes.Buffer
+		s.Stdout = &outBuf
+		s.Stderr = &errBuf
+
 		if err := s.Start(cmd); err != nil {
 			return errors.Wrap(err, cmd)
 		}
+		go func() {
+			err := s.Wait()
+			done <- errors.Wrapf(err, "failed: %s\nstdout:\n%s\nstderr:\n%s", cmd, outBuf.String(), errBuf.String())
+		}()
 	}
 
-	if err := util.RetryForDuration(2*time.Minute, func() error {
-		s, err := c.NewSession()
+	// Wait for the URL file, paying attention to the Cockroach command itself
+	// above.
+	{
+		var err error
+		for start := timeutil.Now(); timeutil.Since(start) < 2*time.Minute; time.Sleep(time.Second) {
+			select {
+			case err := <-done:
+				if err != nil {
+					return err
+				}
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+
+			if err = func() error {
+				s, err := c.NewSession()
+				if err != nil {
+					return err
+				}
+				defer s.Close()
+
+				const cmd = "cat " + listeningURLFileName
+				stdout, err := s.Output(cmd)
+				if err != nil {
+					return errors.Wrap(err, cmd)
+				}
+				f.nodes[i].cockroachURL = string(bytes.TrimSpace(stdout))
+				return nil
+			}(); err == nil {
+				break
+			}
+		}
 		if err != nil {
 			return err
 		}
-		defer s.Close()
-
-		const cmd = "cat " + listeningURLFileName
-		stdout, err := s.Output(cmd)
-		if err != nil {
-			return errors.Wrap(err, cmd)
-		}
-		f.nodes[i].cockroachURL = string(bytes.TrimSpace(stdout))
-		return nil
-	}); err != nil {
-		return err
 	}
 
 	{
