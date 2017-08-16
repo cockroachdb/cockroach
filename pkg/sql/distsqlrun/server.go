@@ -62,7 +62,7 @@ import (
 //  - at some later point, we can choose to deprecate version 1 and have
 //    servers only accept versions >= 2 (by setting
 //    MinAcceptedVersion to 2).
-const Version = 4
+const Version = 5
 
 // MinAcceptedVersion is the oldest version that the server is
 // compatible with; see above.
@@ -100,8 +100,7 @@ type ServerConfig struct {
 	ParentMemoryMonitor *mon.BytesMonitor
 
 	// TempStorage is used by some DistSQL processors to store rows when the
-	// working set is larger than can be stored in memory. It can be nil, if this
-	// cockroach node does not have an engine for temporary storage.
+	// working set is larger than can be stored in memory.
 	TempStorage engine.Engine
 
 	Metrics *DistSQLMetrics
@@ -122,8 +121,7 @@ type ServerImpl struct {
 	memMonitor    mon.BytesMonitor
 	regexpCache   *parser.RegexpCache
 	// tempStorage is used by some DistSQL processors to store working sets
-	// larger than memory. It can be nil, in which case processors should still
-	// gracefully OOM if the working set gets too large.
+	// larger than memory.
 	tempStorage engine.Engine
 	// diskMonitor is used to monitor temporary storage disk usage. Actual disk
 	// space used will be a small multiple (~1.1) of this because of RocksDB
@@ -151,9 +149,6 @@ func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
 		tempStorage: cfg.TempStorage,
 	}
 	ds.memMonitor.Start(ctx, cfg.ParentMemoryMonitor, mon.BoundAccount{})
-	if ds.tempStorage == nil {
-		return ds
-	}
 
 	capacity, err := ds.tempStorage.Capacity()
 	if err != nil {
@@ -268,7 +263,7 @@ func (ds *ServerImpl) setupFlow(
 		clientDB:       ds.DB,
 		testingKnobs:   ds.TestingKnobs,
 		nodeID:         nodeID,
-		tempStorage:    ds.tempStorage,
+		TempStorage:    ds.tempStorage,
 		diskMonitor:    &ds.diskMonitor,
 		JobRegistry:    ds.ServerConfig.JobRegistry,
 	}

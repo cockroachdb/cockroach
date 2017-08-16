@@ -281,32 +281,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	rootSQLMemoryMonitor.Start(context.Background(), nil, mon.MakeStandaloneBudget(s.cfg.SQLMemoryPoolSize))
 
 	// Set up the DistSQL temp engine.
-
-	// Check if all our configured stores are in-memory. if this is the case, we
-	// are probably in a testing scenario, and don't want to use a physical store
-	// for temp storage.
-	allInMemory := true
-	for _, storeSpec := range s.cfg.Stores.Specs {
-		if !storeSpec.InMemory {
-			allInMemory = false
-			break
-		}
+	tempEngine, err := engine.NewTempEngine(ctx, s.cfg.TempStore)
+	if err != nil {
+		log.Fatalf(ctx, "could not create temporary store: %v", err)
 	}
-	var tempEngine engine.Engine
-
-	if allInMemory && !s.cfg.TempStore.InMemory {
-		log.Warning(ctx, "all stores are configured as in-memory stores, so not setting up a disk-backed temporary store. Queries with working set larger than memory will fail")
-	} else {
-		var err error
-		// Set up TempEngine for DistSQL. Note that it could be nil, which we support,
-		// gracefully erroring out on queries that don't fit in memory.
-		tempEngine, err = engine.NewTempEngine(ctx, s.cfg.TempStore)
-		if err != nil {
-			log.Warningf(ctx, "could not create temporary store. Queries with working set larger than memory will fail: %v", err)
-		} else {
-			s.stopper.AddCloser(tempEngine)
-		}
-	}
+	s.stopper.AddCloser(tempEngine)
 
 	// Set up admin memory metrics for use by admin SQL executors.
 	s.adminMemMetrics = sql.MakeMemMetrics("admin", cfg.HistogramWindowInterval())
