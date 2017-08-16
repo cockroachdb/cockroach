@@ -24,7 +24,7 @@ var (
 	BinaryMinimumSupportedVersion = VersionBase
 
 	// BinaryServerVersion is the version of this binary.
-	BinaryServerVersion = VersionSplitHardStateBelowRaft
+	BinaryServerVersion = VersionStatsBasedRebalancing
 )
 
 // List all historical versions here in reverse chronological order, with
@@ -33,6 +33,9 @@ var (
 // NB: when adding a version, don't forget to bump ServerVersion above (and
 // perhaps MinimumSupportedVersion, if necessary).
 var (
+	// VersionStatsBasedRebalancing is https://github.com/cockroachdb/cockroach/pull/16878.
+	VersionStatsBasedRebalancing = roachpb.Version{Major: 1, Minor: 0, Unstable: 3}
+
 	// VersionSplitHardStateBelowRaft is https://github.com/cockroachdb/cockroach/pull/17051.
 	VersionSplitHardStateBelowRaft = roachpb.Version{Major: 1, Minor: 0, Unstable: 2}
 
