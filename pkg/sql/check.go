@@ -126,7 +126,8 @@ func (c *checkHelper) check(ctx *parser.EvalContext) error {
 			return err
 		} else if !res && d != parser.DNull {
 			// Failed to satisfy CHECK constraint.
-			return fmt.Errorf("failed to satisfy CHECK constraint (%s)", expr)
+			return pgerror.NewErrorf(pgerror.CodeCheckViolationError,
+				"failed to satisfy CHECK constraint (%s)", expr)
 		}
 	}
 	return nil
