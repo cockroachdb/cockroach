@@ -254,7 +254,13 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		if t := s.peek(); t == singleQuote || t == s.stringQuote {
 			// [eE]'[^']'
 			s.pos++
-			if s.scanString(lval, t, true, true) {
+			// We're checking for the escaped version of a BYTEA represented in hex.
+			lookAhead := s.peekN(2)
+			if s.peek() == '\\' && (lookAhead == 'x' || lookAhead == 'X') {
+				if s.scanStringOrHex(lval, t, true, false, true) {
+					lval.id = BCONST
+				}
+			} else if s.scanString(lval, t, true, true) {
 				lval.id = SCONST
 			}
 			return
@@ -696,6 +702,13 @@ outer:
 						tmp = "\\x" + s.in[s.pos+1:s.pos+3]
 					} else {
 						tmp = s.in[s.pos-1:]
+					}
+					lookAhead := s.peekN(1)
+					if lookAhead == 'x' && decodeHex || lookAhead == 'X' {
+						tmp = s.in[s.pos+2:]
+						s.pos += 2
+						start = s.pos
+						continue
 					}
 					v, multibyte, tail, err := strconv.UnquoteChar(tmp, byte(ch))
 					if err != nil {

@@ -287,6 +287,8 @@ func TestScanString(t *testing.T) {
 world'`, `hello
 world`},
 		{`x'666f6f'`, `foo`},
+		{`e'\\x666f6f'`, `foo`},
+		{`e'\\X666f6f'`, `foo`},
 		{`X'626172'`, `bar`},
 		{`X'FF'`, "\xff"},
 	}
