@@ -22,6 +22,7 @@ import (
 	"go/token"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -254,7 +255,12 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		if t := s.peek(); t == singleQuote || t == s.stringQuote {
 			// [eE]'[^']'
 			s.pos++
-			if s.scanString(lval, t, true, true) {
+			// We're checking for the escaped version of a BYTEA represented in hex.
+			if s.peek() == '\\' && unicode.ToLower(rune(s.peekN(2))) == 'x' {
+				if s.scanStringOrHex(lval, t, true, false, true) {
+					lval.id = BCONST
+				}
+			} else if s.scanString(lval, t, true, true) {
 				lval.id = SCONST
 			}
 			return
@@ -696,6 +702,12 @@ outer:
 						tmp = "\\x" + s.in[s.pos+1:s.pos+3]
 					} else {
 						tmp = s.in[s.pos-1:]
+					}
+					if unicode.ToLower(rune(s.peekN(1))) == 'x' && decodeHex {
+						tmp = s.in[s.pos+2:]
+						s.pos += 2
+						start = s.pos
+						continue
 					}
 					v, multibyte, tail, err := strconv.UnquoteChar(tmp, byte(ch))
 					if err != nil {
