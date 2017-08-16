@@ -19,9 +19,6 @@ import (
 	"sync/atomic"
 	"unsafe"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -1183,7 +1180,7 @@ func (ds *DistSender) sendToReplicas(
 				// if a node is down.
 				// See https://github.com/grpc/grpc-go/blob/52f6504dc290bd928a8139ba94e3ab32ed9a6273/call.go#L182
 				// See https://github.com/grpc/grpc-go/blob/52f6504dc290bd928a8139ba94e3ab32ed9a6273/stream.go#L158
-				if haveCommit && grpc.Code(err) != codes.Unavailable {
+				if haveCommit {
 					ambiguousError = err
 				}
 				log.ErrEventf(ctx, "RPC error: %s", err)
