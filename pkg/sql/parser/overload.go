@@ -18,6 +18,8 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
 // overloadImpl is an implementation of an overloaded function. It provides
@@ -259,7 +261,7 @@ func typeCheckOverloadedExprs(
 	ctx *SemaContext, desired Type, overloads []overloadImpl, inBinOp bool, exprs ...Expr,
 ) ([]TypedExpr, []overloadImpl, error) {
 	if len(overloads) > math.MaxUint8 {
-		return nil, nil, fmt.Errorf("too many overloads (%d > 255)", len(overloads))
+		return nil, nil, pgerror.NewErrorf(pgerror.CodeInternalError, "too many overloads (%d > 255)", len(overloads))
 	}
 
 	var s typeCheckOverloadState
@@ -291,7 +293,7 @@ func typeCheckOverloadedExprs(
 		for _, i := range s.resolvableIdxs {
 			typ, err := exprs[i].TypeCheck(ctx, TypeAny)
 			if err != nil {
-				return nil, nil, fmt.Errorf("error type checking resolved expression: %v", err)
+				return nil, nil, pgerror.AnnotateError("error type checking resolved expression:", err)
 			}
 			s.typedExprs[i] = typ
 		}
@@ -565,7 +567,7 @@ func defaultTypeCheck(
 	for _, i := range s.constIdxs {
 		typ, err := s.exprs[i].TypeCheck(ctx, TypeAny)
 		if err != nil {
-			return s, fmt.Errorf("error type checking constant value: %v", err)
+			return s, pgerror.AnnotateError("error type checking constant value:", err)
 		}
 		s.typedExprs[i] = typ
 	}
@@ -607,9 +609,10 @@ func checkReturn(
 			des := p.getAt(i)
 			typ, err := s.exprs[i].TypeCheck(ctx, des)
 			if err != nil {
-				return s.typedExprs, nil, true, fmt.Errorf("error type checking constant value: %v", err)
+				return s.typedExprs, nil, true, pgerror.AnnotateError("error type checking constant value:", err)
 			} else if des != nil && !typ.ResolvedType().Equivalent(des) {
-				panic(fmt.Errorf("desired constant value type %s but set type %s", des, typ.ResolvedType()))
+				panic(pgerror.NewErrorf(
+					pgerror.CodeInternalError, "desired constant value type %s but set type %s", des, typ.ResolvedType()))
 			}
 			s.typedExprs[i] = typ
 		}
