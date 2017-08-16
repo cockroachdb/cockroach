@@ -829,7 +829,6 @@ func (e *Executor) execParsed(
 			// If we are in a txn, the first batch get auto-retried.
 			txnState.autoRetry = txnState.State() == FirstBatch
 		}
-		execOpt.AutoRetry = txnState.autoRetry
 		if txnState.State() == NoTxn {
 			panic("we failed to initialize a txn")
 		}
@@ -879,10 +878,25 @@ func (e *Executor) execParsed(
 		}
 		// This is where the magic happens - we ask db to run a KV txn and possibly retry it.
 		txn := txnState.mu.txn // this might be nil if the txn was already aborted.
-		err := txn.Exec(session.Ctx(), execOpt, txnClosure)
+		var err error
+		for {
+			err = txn.Exec(session.Ctx(), execOpt, txnClosure)
+			_, retryable := err.(*roachpb.HandledRetryableTxnError)
 
-		if err != nil && (log.V(2) || e.cfg.Settings.LogStatementsExecuteEnabled.Get()) {
-			log.Infof(session.Ctx(), "execParsed: error: %v", err)
+			if err != nil {
+
+				if !retryable && (log.V(2) || e.cfg.Settings.LogStatementsExecuteEnabled.Get()) {
+					log.Infof(session.Ctx(), "execParsed: error: %v", err)
+				}
+				if retryable {
+					log.VEventf(session.Ctx(), 2, "automatically retrying transaction: %s because of error: %s",
+						txn.DebugName(), err)
+				}
+			}
+
+			if !txnState.autoRetry || !retryable || groupResultWriter.ResultsSentToClient() {
+				break
+			}
 		}
 
 		// Update the Err field of the last result if the error was coming from
@@ -1161,8 +1175,7 @@ func (e *Executor) execStmtsInCurrentTxn(
 			case Open, FirstBatch:
 				err = e.execStmtInOpenTxn(
 					session, stmt, pinfo, txnPrefix && (i == 0), /* firstInTxn */
-					avoidCachedDescriptors, automaticRetryCount, statementResultWriter,
-					groupResultWriter.ResultsSentToClient)
+					avoidCachedDescriptors, automaticRetryCount, statementResultWriter)
 			case Aborted, RestartWait:
 				err = e.execStmtInAbortedTxn(session, stmt, groupResultWriter)
 			case CommitWait:
@@ -1377,7 +1390,6 @@ func (e *Executor) execStmtInOpenTxn(
 	avoidCachedDescriptors bool,
 	automaticRetryCount int,
 	statementResultWriter StatementResultWriter,
-	resultsSentToClient func() bool,
 ) (err error) {
 	txnState := &session.TxnState
 	if !txnState.TxnIsOpen() {
@@ -1428,8 +1440,7 @@ func (e *Executor) execStmtInOpenTxn(
 				// client.Txn.
 				roachpb.Transaction{},
 			)
-		} else if txnState.State() == FirstBatch &&
-			!canStayInFirstBatchState(stmt) && !resultsSentToClient() {
+		} else if txnState.State() == FirstBatch && !canStayInFirstBatchState(stmt) {
 			// Transition from FirstBatch to Open except in the case of special
 			// statements that don't return results to the client. This transition
 			// does not affect the current batch - future statements in it will still
