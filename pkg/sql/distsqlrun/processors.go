@@ -481,7 +481,8 @@ func newProcessor(
 	return nil, errors.Errorf("unsupported processor core %s", core)
 }
 
-// NewReadCSVProcessor is externally implemented.
+// NewReadCSVProcessor is externally implemented and registered by
+// ccl/sqlccl/csv.go.
 var NewReadCSVProcessor func(*FlowCtx, ReadCSVSpec, RowReceiver) (Processor, error)
 
 // NewSSTWriterProcessor is externally implemented and registered by
