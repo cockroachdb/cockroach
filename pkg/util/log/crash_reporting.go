@@ -20,6 +20,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sync/atomic"
+	"time"
 
 	raven "github.com/getsentry/raven-go"
 	"github.com/pkg/errors"
@@ -177,6 +178,10 @@ func sendCrashReport(ctx context.Context, st ReportingSettings, r interface{}, d
 	// automatically fill in the machine's hostname.
 	packet.ServerName = "<redacted>"
 	eventID, ch := raven.DefaultClient.Capture(packet, nil /* tags */)
-	<-ch
-	Shout(ctx, Severity_ERROR, "Reported as error "+eventID)
+	select {
+	case <-ch:
+		Shout(ctx, Severity_ERROR, "Reported as error "+eventID)
+	case <-time.After(10 * time.Second):
+		Shout(ctx, Severity_ERROR, "Time out trying to report panic")
+	}
 }
