@@ -18,13 +18,13 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
@@ -553,7 +553,7 @@ func (mm *BytesMonitor) reserveBytes(ctx context.Context, x int64) error {
 	defer mm.mu.Unlock()
 	// Check the local limit first.
 	if mm.mu.curAllocated+x > mm.limit {
-		return pgerror.AnnotateError(mm.name, mm.resource.NewBudgetExceededError(x, mm.limit))
+		return errors.Wrap(mm.resource.NewBudgetExceededError(x, mm.limit), mm.name)
 	}
 	// Check whether we need to request an increase of our budget.
 	if mm.mu.curAllocated > mm.mu.curBudget.curAllocated+mm.reserved.curAllocated-x {
@@ -617,9 +617,7 @@ func (mm *BytesMonitor) releaseBytes(ctx context.Context, sz int64) {
 func (mm *BytesMonitor) increaseBudget(ctx context.Context, minExtra int64) error {
 	// NB: mm.mu Already locked by reserveBytes().
 	if mm.pool == nil {
-		return pgerror.AnnotateError(
-			mm.name, mm.resource.NewBudgetExceededError(minExtra, mm.reserved.curAllocated),
-		)
+		return errors.Wrap(mm.resource.NewBudgetExceededError(minExtra, mm.reserved.curAllocated), mm.name)
 	}
 	minExtra = mm.roundSize(minExtra)
 	if log.V(2) {

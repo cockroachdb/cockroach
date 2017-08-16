@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+
 	"github.com/lib/pq/oid"
 )
 
@@ -654,7 +656,7 @@ func (t tOidWrapper) Oid() oid.Oid { return t.oid }
 func wrapTypeWithOid(t Type, oid oid.Oid) Type {
 	switch v := t.(type) {
 	case tNull, tAny, tOidWrapper:
-		panic(fmt.Errorf("cannot wrap %T with an Oid", v))
+		panic(pgerror.NewErrorf(pgerror.CodeInternalError, "cannot wrap %T with an Oid", v))
 	}
 	return tOidWrapper{
 		Type: t,

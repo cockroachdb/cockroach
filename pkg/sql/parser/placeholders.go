@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -77,7 +78,8 @@ func (p *PlaceholderInfo) AssertAllAssigned() error {
 	}
 	if len(missing) > 0 {
 		sort.Strings(missing)
-		return fmt.Errorf("no value provided for placeholder%s: %s",
+		return pgerror.NewErrorf(pgerror.CodeUndefinedParameterError,
+			"no value provided for placeholder%s: %s",
 			util.Pluralize(int64(len(missing))),
 			strings.Join(missing, ", "),
 		)
@@ -120,7 +122,8 @@ func (p *PlaceholderInfo) SetValue(name string, val Datum) {
 // Reports an error if another type was previously assigned.
 func (p *PlaceholderInfo) SetType(name string, typ Type) error {
 	if t, ok := p.Types[name]; ok && !typ.Equivalent(t) {
-		return fmt.Errorf("placeholder %s already has type %s, cannot assign %s", name, t, typ)
+		return pgerror.NewErrorf(
+			pgerror.CodeInternalError, "placeholder %s already has type %s, cannot assign %s", name, t, typ)
 	}
 	p.Types[name] = typ
 	return nil

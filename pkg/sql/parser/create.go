@@ -24,6 +24,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+
 	"golang.org/x/text/language"
 
 	"github.com/pkg/errors"
@@ -215,7 +217,8 @@ func processCollationOnType(name Name, typ ColumnType, c ColumnCollation) (Colum
 	case *StringColType:
 		return &CollatedStringColType{s.Name, s.N, locale}, nil
 	case *CollatedStringColType:
-		return nil, errors.Errorf("multiple COLLATE declarations for column %q", name)
+		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			"multiple COLLATE declarations for column %q", name)
 	case *ArrayColType:
 		var err error
 		s.ParamType, err = processCollationOnType(name, s.ParamType, c)
@@ -224,7 +227,8 @@ func processCollationOnType(name Name, typ ColumnType, c ColumnCollation) (Colum
 		}
 		return s, nil
 	default:
-		return nil, errors.Errorf("COLLATE declaration for non-string-typed column %q", name)
+		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+			"COLLATE declaration for non-string-typed column %q", name)
 	}
 }
 
@@ -250,19 +254,22 @@ func newColumnTableDef(
 			}
 		case *ColumnDefault:
 			if d.HasDefaultExpr() {
-				return nil, errors.Errorf("multiple default values specified for column %q", name)
+				return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+					"multiple default values specified for column %q", name)
 			}
 			d.DefaultExpr.Expr = t.Expr
 			d.DefaultExpr.ConstraintName = c.Name
 		case NotNullConstraint:
 			if d.Nullable.Nullability == Null {
-				return nil, errors.Errorf("conflicting NULL/NOT NULL declarations for column %q", name)
+				return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+					"conflicting NULL/NOT NULL declarations for column %q", name)
 			}
 			d.Nullable.Nullability = NotNull
 			d.Nullable.ConstraintName = c.Name
 		case NullConstraint:
 			if d.Nullable.Nullability == NotNull {
-				return nil, errors.Errorf("conflicting NULL/NOT NULL declarations for column %q", name)
+				return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+					"conflicting NULL/NOT NULL declarations for column %q", name)
 			}
 			d.Nullable.Nullability = Null
 			d.Nullable.ConstraintName = c.Name
@@ -279,14 +286,16 @@ func newColumnTableDef(
 			})
 		case *ColumnFKConstraint:
 			if d.HasFKConstraint() {
-				return nil, errors.Errorf("multiple foreign key constraints specified for column %q", name)
+				return nil, pgerror.NewErrorf(pgerror.CodeInvalidTableDefinitionError,
+					"multiple foreign key constraints specified for column %q", name)
 			}
 			d.References.Table = t.Table
 			d.References.Col = t.Col
 			d.References.ConstraintName = c.Name
 		case *ColumnFamilyConstraint:
 			if d.HasColumnFamily() {
-				return nil, errors.Errorf("multiple column families specified for column %q", name)
+				return nil, pgerror.NewErrorf(pgerror.CodeInvalidTableDefinitionError,
+					"multiple column families specified for column %q", name)
 			}
 			d.Family.Name = t.Family
 			d.Family.Create = t.Create

@@ -17,6 +17,8 @@ package parser
 import (
 	"bytes"
 	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
 // Table patterns are used by e.g. GRANT statements, to designate
@@ -48,7 +50,7 @@ var _ TablePattern = &AllTablesSelector{}
 // TableName or AllTablesSelector.
 func (n UnresolvedName) NormalizeTablePattern() (TablePattern, error) {
 	if len(n) == 0 || len(n) > 2 {
-		return nil, fmt.Errorf("invalid table name: %q", n)
+		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError, "invalid table name: %q", n)
 	}
 
 	var db Name
@@ -56,7 +58,7 @@ func (n UnresolvedName) NormalizeTablePattern() (TablePattern, error) {
 	if len(n) > 1 {
 		dbName, ok := n[0].(Name)
 		if !ok {
-			return nil, fmt.Errorf("invalid database name: %q", n[0])
+			return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError, "invalid database name: %q", n[0])
 		}
 		db = dbName
 		dbOmitted = false
@@ -67,11 +69,11 @@ func (n UnresolvedName) NormalizeTablePattern() (TablePattern, error) {
 		return &AllTablesSelector{Database: db, DBNameOriginallyOmitted: dbOmitted}, nil
 	case Name:
 		if len(t) == 0 {
-			return nil, fmt.Errorf("empty table name: %q", n)
+			return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError, "empty table name: %q", n)
 		}
 		return &TableName{DatabaseName: db, TableName: t, DBNameOriginallyOmitted: dbOmitted}, nil
 	default:
-		return nil, fmt.Errorf("invalid table pattern: %q", n)
+		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError, "invalid table pattern: %q", n)
 	}
 }
 
@@ -105,7 +107,7 @@ func (at *AllTablesSelector) QualifyWithDatabase(database string) error {
 		return nil
 	}
 	if database == "" {
-		return fmt.Errorf("no database specified: %q", at)
+		return pgerror.NewErrorf(pgerror.CodeInvalidDatabaseDefinitionError, "no database specified: %q", at)
 	}
 	at.Database = Name(database)
 	return nil

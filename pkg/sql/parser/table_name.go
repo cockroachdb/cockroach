@@ -208,7 +208,7 @@ func (t *TableName) QualifyWithDatabase(database string) error {
 		return nil
 	}
 	if database == "" {
-		return fmt.Errorf("no database specified: %q", t)
+		return pgerror.NewErrorf(pgerror.CodeUndefinedTableError, "no database specified: %q", t)
 	}
 	t.DatabaseName = Name(database)
 	return nil
