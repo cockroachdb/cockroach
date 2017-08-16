@@ -2,7 +2,7 @@
 - Status: in-progress
 - Start Date: 2017-07-10
 - Authors: Spencer Kimball, Tobias Schottdorf
-- RFC PR: [#16977](https://github.com/cockroachdb/cockroach/pull/16977), [#17216](https://github.com/cockroachdb/cockroach/pull/17216), [#17411](https://github.com/cockroachdb/cockroach/pull/17411)
+- RFC PR: [#16977](https://github.com/cockroachdb/cockroach/pull/16977), [#17216](https://github.com/cockroachdb/cockroach/pull/17216), [#17411](https://github.com/cockroachdb/cockroach/pull/17411), [#17694](https://github.com/cockroachdb/cockroach/pull/17694)
 - Cockroach Issue(s): [#17389](https://github.com/cockroachdb/cockroach/issues/17389)
 
 
