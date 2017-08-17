@@ -113,6 +113,13 @@ func NewServer(ctx *Context) *grpc.Server {
 		// streams/requests on either the client or server.
 		grpc.MaxConcurrentStreams(math.MaxInt32),
 		grpc.RPCDecompressor(snappyDecompressor{}),
+		// By default, gRPC disconnects clients that send "too many" pings,
+		// but we don't really care about that, so configure the server to be
+		// as permissive as possible.
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             time.Nanosecond,
+			PermitWithoutStream: true,
+		}),
 	}
 	// Compression is enabled separately from decompression to allow staged
 	// rollout.
