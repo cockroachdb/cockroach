@@ -20,6 +20,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -92,10 +93,23 @@ type memRowContainer struct {
 var _ heap.Interface = &memRowContainer{}
 var _ sortableRowContainer = &memRowContainer{}
 
+// init initializes the memRowContainer. The memRowContainer uses evalCtx.Mon
+// to track memory usage.
 func (mc *memRowContainer) init(
 	ordering sqlbase.ColumnOrdering, types []sqlbase.ColumnType, evalCtx *parser.EvalContext,
 ) {
-	acc := evalCtx.Mon.MakeBoundAccount()
+	mc.initWithMon(ordering, types, evalCtx, evalCtx.Mon)
+}
+
+// initWithMon initializes the memRowContainer with an explicit monitor. Only
+// use this if the default memRowContainer.init() function is insufficient.
+func (mc *memRowContainer) initWithMon(
+	ordering sqlbase.ColumnOrdering,
+	types []sqlbase.ColumnType,
+	evalCtx *parser.EvalContext,
+	mon *mon.BytesMonitor,
+) {
+	acc := mon.MakeBoundAccount()
 	mc.RowContainer.Init(acc, sqlbase.ColTypeInfoFromColTypes(types), 0)
 	mc.types = types
 	mc.ordering = ordering
