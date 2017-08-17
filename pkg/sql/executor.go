@@ -1792,7 +1792,6 @@ func checkResultType(typ parser.Type) error {
 func EvalAsOfTimestamp(
 	evalCtx *parser.EvalContext, asOf parser.AsOfClause, max hlc.Timestamp,
 ) (hlc.Timestamp, error) {
-	var ts hlc.Timestamp
 	te, err := asOf.Expr.TypeCheck(nil, parser.TypeString)
 	if err != nil {
 		return hlc.Timestamp{}, err
@@ -1801,6 +1800,10 @@ func EvalAsOfTimestamp(
 	if err != nil {
 		return hlc.Timestamp{}, err
 	}
+
+	var ts hlc.Timestamp
+	var convErr error
+
 	switch d := d.(type) {
 	case *parser.DString:
 		s := string(*d)
@@ -1811,23 +1814,30 @@ func EvalAsOfTimestamp(
 			break
 		}
 		// Attempt to parse as a decimal.
-		if dec, _, err := apd.NewFromString(s); err == nil {
-			if ts, err = decimalToHLC(dec); err == nil {
-				break
-			}
+		if dec, _, err := apd.NewFromString(s); err != nil {
+			// Override the error. It would be misleading to fail with a
+			// DECIMAL conversion error if a user was attempting to use a
+			// timestamp string and the conversion above failed.
+			convErr = errors.Errorf("AS OF SYSTEM TIME: value is neither interval nor decimal")
+		} else {
+			ts, convErr = decimalToHLC(dec)
 		}
-		return hlc.Timestamp{}, fmt.Errorf("could not parse '%s' as timestamp", s)
 	case *parser.DInt:
 		ts.WallTime = int64(*d)
 	case *parser.DDecimal:
-		if ts, err = decimalToHLC(&d.Decimal); err != nil {
-			return hlc.Timestamp{}, err
-		}
+		ts, convErr = decimalToHLC(&d.Decimal)
 	default:
-		return hlc.Timestamp{}, fmt.Errorf("unexpected AS OF SYSTEM TIME argument: %s (%T)", d.ResolvedType(), d)
+		convErr = errors.Errorf("AS OF SYSTEM TIME: expected timestamp, got %s (%T)", d.ResolvedType(), d)
 	}
-	if max.Less(ts) {
-		return hlc.Timestamp{}, fmt.Errorf("cannot specify timestamp in the future")
+	if convErr != nil {
+		return ts, convErr
+	}
+
+	var zero hlc.Timestamp
+	if ts == zero {
+		return ts, errors.Errorf("AS OF SYSTEM TIME: zero timestamp is invalid")
+	} else if max.Less(ts) {
+		return ts, errors.Errorf("AS OF SYSTEM TIME: cannot specify timestamp in the future")
 	}
 	return ts, nil
 }
@@ -1840,7 +1850,7 @@ func decimalToHLC(d *apd.Decimal) (hlc.Timestamp, error) {
 	parts := strings.SplitN(s, ".", 2)
 	nanos, err := strconv.ParseInt(parts[0], 10, 64)
 	if err != nil {
-		return hlc.Timestamp{}, errors.Wrap(err, "parse AS OF SYSTEM TIME argument")
+		return hlc.Timestamp{}, errors.Wrap(err, "AS OF SYSTEM TIME: parsing argument")
 	}
 	var logical int64
 	if len(parts) > 1 {
@@ -1850,13 +1860,13 @@ func decimalToHLC(d *apd.Decimal) (hlc.Timestamp, error) {
 		const logicalLength = 10
 		p := parts[1]
 		if lp := len(p); lp > logicalLength {
-			return hlc.Timestamp{}, errors.Errorf("bad AS OF SYSTEM TIME argument: logical part has too many digits")
+			return hlc.Timestamp{}, errors.Errorf("AS OF SYSTEM TIME: logical part has too many digits")
 		} else if lp < logicalLength {
 			p += strings.Repeat("0", logicalLength-lp)
 		}
 		logical, err = strconv.ParseInt(p, 10, 32)
 		if err != nil {
-			return hlc.Timestamp{}, errors.Wrap(err, "parse AS OF SYSTEM TIME argument")
+			return hlc.Timestamp{}, errors.Wrap(err, "AS OF SYSTEM TIME: parsing argument")
 		}
 	}
 	return hlc.Timestamp{
