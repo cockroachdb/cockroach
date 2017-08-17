@@ -80,9 +80,10 @@ type tableWriter interface {
 	//
 	// TODO(nvanbenschoten): we are currently pretty pessimistic here, assuming
 	// that table operations will touch the entire table. In cases where we
-	// can determine ahead of time that this isn't true, we should true to
+	// can determine ahead of time that this isn't true, we should try to
 	// constrain these spans.
 	spans() (reads, writes roachpb.Spans, err error)
+	// spansForValues(*valuesNode, runParams) (reads, writes roachpb.Spans, err error)
 
 	// close frees all resources held by the tableWriter.
 	close(ctx context.Context)

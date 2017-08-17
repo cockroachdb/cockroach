@@ -17,8 +17,6 @@ package sql
 import (
 	"fmt"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/pkg/errors"
 )
@@ -30,7 +28,7 @@ import (
 // set are disjoint. It is an error for a planNode to touch any span outside
 // those that it reports from this method, but a planNode is not required to
 // touch all spans that it reports.
-func collectSpans(ctx context.Context, plan planNode) (reads, writes roachpb.Spans, err error) {
+func collectSpans(params runParams, plan planNode) (reads, writes roachpb.Spans, err error) {
 	switch n := plan.(type) {
 	case
 		*valueGenerator,
@@ -42,52 +40,50 @@ func collectSpans(ctx context.Context, plan planNode) (reads, writes roachpb.Spa
 		return n.spans, nil, nil
 
 	case *updateNode:
-		return n.run.collectSpans(ctx)
+		return n.run.collectSpans(params)
 	case *insertNode:
-		return n.run.collectSpans(ctx)
+		return n.run.collectSpans(params)
 	case *deleteNode:
-		return n.run.collectSpans(ctx)
+		return n.run.collectSpans(params)
 
 	case *delayedNode:
-		return collectSpans(ctx, n.plan)
+		return collectSpans(params, n.plan)
 	case *distinctNode:
-		return collectSpans(ctx, n.plan)
+		return collectSpans(params, n.plan)
 	case *explainDistSQLNode:
-		return collectSpans(ctx, n.plan)
+		return collectSpans(params, n.plan)
 	case *explainPlanNode:
-		return collectSpans(ctx, n.plan)
+		return collectSpans(params, n.plan)
 	case *traceNode:
-		return collectSpans(ctx, n.plan)
+		return collectSpans(params, n.plan)
 	case *limitNode:
-		return collectSpans(ctx, n.plan)
+		return collectSpans(params, n.plan)
 	case *sortNode:
-		return collectSpans(ctx, n.plan)
+		return collectSpans(params, n.plan)
 	case *groupNode:
-		return collectSpans(ctx, n.plan)
+		return collectSpans(params, n.plan)
 	case *windowNode:
-		return collectSpans(ctx, n.plan)
+		return collectSpans(params, n.plan)
 	case *ordinalityNode:
-		return collectSpans(ctx, n.source)
+		return collectSpans(params, n.source)
 	case *filterNode:
-		return collectSpans(ctx, n.source.plan)
+		return collectSpans(params, n.source.plan)
 	case *renderNode:
-		return collectSpans(ctx, n.source.plan)
+		return collectSpans(params, n.source.plan)
 
 	case *indexJoinNode:
-		return indexJoinSpans(ctx, n)
+		return indexJoinSpans(params, n)
 	case *joinNode:
-		return concatSpans(ctx, n.left.plan, n.right.plan)
+		return concatSpans(params, n.left.plan, n.right.plan)
 	case *unionNode:
-		return concatSpans(ctx, n.left, n.right)
+		return concatSpans(params, n.left, n.right)
 	}
 
 	panic(fmt.Sprintf("don't know how to collect spans for node %T", plan))
 }
 
-func indexJoinSpans(
-	ctx context.Context, n *indexJoinNode,
-) (reads, writes roachpb.Spans, err error) {
-	indexReads, indexWrites, err := collectSpans(ctx, n.index)
+func indexJoinSpans(params runParams, n *indexJoinNode) (reads, writes roachpb.Spans, err error) {
+	indexReads, indexWrites, err := collectSpans(params, n.index)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -102,14 +98,12 @@ func indexJoinSpans(
 	return append(indexReads, primaryReads), nil, nil
 }
 
-func concatSpans(
-	ctx context.Context, left, right planNode,
-) (reads, writes roachpb.Spans, err error) {
-	leftReads, leftWrites, err := collectSpans(ctx, left)
+func concatSpans(params runParams, left, right planNode) (reads, writes roachpb.Spans, err error) {
+	leftReads, leftWrites, err := collectSpans(params, left)
 	if err != nil {
 		return nil, nil, err
 	}
-	rightReads, rightWrites, err := collectSpans(ctx, right)
+	rightReads, rightWrites, err := collectSpans(params, right)
 	if err != nil {
 		return nil, nil, err
 	}
