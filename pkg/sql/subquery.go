@@ -189,6 +189,8 @@ func (s *subquery) doEval(ctx context.Context) (result parser.Datum, err error) 
 				return result, fmt.Errorf("more than one row returned by a subquery used as an expression")
 			}
 		}
+	default:
+		panic(fmt.Sprintf("unexpected subqueryExecMode: %d", s.execMode))
 	}
 
 	return result, nil
