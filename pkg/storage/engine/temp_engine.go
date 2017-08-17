@@ -32,9 +32,8 @@ import (
 // could not set up a temporary Engine.
 func NewTempEngine(ctx context.Context, storeCfg base.StoreSpec) (Engine, error) {
 	if storeCfg.InMemory {
-		// TODO(arjun): Copy the size in a principled fashion from the main store
-		// after #16750 is addressed.
-		return NewInMem(roachpb.Attributes{}, 0 /*cacheSize */), nil
+		// TODO(arjun): Limit the size of the store once #16750 is addressed.
+		return NewInMem(storeCfg.Attributes, 0 /* cacheSize */), nil
 	}
 
 	if err := cleanupTempStorageDirs(ctx, storeCfg.Path, nil /* *WaitGroup */); err != nil {
