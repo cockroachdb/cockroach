@@ -1914,7 +1914,7 @@ func (e *Executor) execStmtInParallel(
 	// send the mock result back to the client.
 	session.setQueryExecutionMode(stmt.queryID, false /* isDistributed */, true /* isParallel */)
 
-	session.parallelizeQueue.Add(params, plan, func(plan planNode) error {
+	if err := session.parallelizeQueue.Add(params, plan, func(plan planNode) error {
 		// TODO(andrei): this should really be a result writer implementation that
 		// does nothing.
 		bufferedWriter := newBufferedWriter(session.makeBoundAccount())
@@ -1939,7 +1939,10 @@ func (e *Executor) execStmtInParallel(
 		// Deregister query from registry.
 		session.removeActiveQuery(stmt.queryID)
 		return err
-	})
+	}); err != nil {
+		return err
+	}
+
 	return statementResultWriter.EndResult()
 }
 
