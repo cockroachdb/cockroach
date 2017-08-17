@@ -43,9 +43,7 @@ func TestDecommission(t *testing.T) {
 func decommission(
 	ctx context.Context, c cluster.Cluster, runNode int, targetNode roachpb.NodeID, verbs ...string,
 ) (string, error) {
-	args := []string{
-		"node", verbs[0], "--host", c.Hostname(runNode), "--certs-dir=/certs",
-	}
+	args := []string{"node", verbs[0]}
 	if targetNode > 0 {
 		args = append(args, strconv.Itoa(int(targetNode)))
 	}
@@ -148,9 +146,7 @@ func testDecommissionInner(
 	log.Info(ctx, "decommissioning third node via `quit --decommission`")
 	{
 		o, err := func() (string, error) {
-			args := []string{
-				"quit", "--decommission", "--host", c.Hostname(2), "--certs-dir=/certs",
-			}
+			args := []string{"quit", "--decommission"}
 			o, _, err := c.ExecCLI(ctx, 2, args)
 			return o, err
 		}()
