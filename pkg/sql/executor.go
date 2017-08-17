@@ -1355,19 +1355,26 @@ func (e *Executor) execStmtInOpenTxn(
 				// txn in the Aborted state; we transition back to NoTxn.
 				txnState.resetStateAndTxn(NoTxn)
 			}
-		} else if txnState.autoRetry &&
-			session.parallelizeQueue.Empty() &&
-			txnState.isSerializableRestart() {
+		} else if txnState.autoRetry && txnState.isSerializableRestart() {
+			// If we just ran a statement synchronously, then the parallel queue
+			// would have been synchronized first, so this would be a no-op.
+			// However, if we just ran a statement asynchronously, then the
+			// queue could still contain statements executing. So if we're in a
+			// SerializableRestart state, we synchronize to drain the rest of
+			// the stmts and clear the parallel batch's error-set before
+			// restarting.
+			if parErr := session.synchronizeParallelStmts(session.context); parErr != nil {
+				// If synchronizing results in a non-retryable error, it takes priority.
+				if _, ok := parErr.(*roachpb.HandledRetryableTxnError); !ok {
+					err = parErr
+					return
+				}
+			}
+
 			// If we can still automatically retry the txn, and we detect that the
 			// transaction won't be allowed to commit because its timestamp has been
 			// pushed, we go ahead and retry now - if we'd execute further statements,
 			// we probably wouldn't be allowed to retry automatically any more.
-			// If there are any statements currently being executed (through the
-			// parallelize queue), then we don't do this push detection. That's
-			// because it's currently not kosher to send request after the proto has
-			// been restarted (see #17197).
-			// TODO(andrei): Remove the parallelizeQueue restriction after #17197 is
-			// fixed.
 			txnState.mu.txn.Proto().Restart(
 				0 /* userPriority */, 0 /* upgradePriority */, e.cfg.Clock.Now())
 			// Force an auto-retry by returning a retryable error to the higher
@@ -1395,7 +1402,7 @@ func (e *Executor) execStmtInOpenTxn(
 	parallelize := IsStmtParallelized(stmt)
 	_, independentFromParallelStmts := stmt.AST.(parser.IndependentFromParallelizedPriors)
 	if !(parallelize || independentFromParallelStmts) {
-		if err := session.synchronizeParallelStmts(); err != nil {
+		if err := session.synchronizeParallelStmts(session.context); err != nil {
 			return err
 		}
 	}
@@ -1534,7 +1541,7 @@ func (e *Executor) execStmtInOpenTxn(
 			// If the statement run was independent from parallelized execution, it
 			// might have been run concurrently with parallelized statements. Make
 			// sure all complete before returning the error.
-			_ = session.synchronizeParallelStmts()
+			_ = session.synchronizeParallelStmts(session.context)
 		}
 
 		sessionEventf(session, "ERROR: %v", err)

@@ -22,6 +22,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -45,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -103,35 +105,49 @@ func checkCorrectTxn(value string, magicVals *filterVals, txn *roachpb.Transacti
 	return nil
 }
 
-func injectErrors(req roachpb.Request, hdr roachpb.Header, magicVals *filterVals) error {
+type injectionApproach struct {
+	counts map[string]int
+	errFn  func() error
+}
+
+type injectionApproaches []injectionApproach
+
+func (ia injectionApproaches) Len() int      { return len(ia) }
+func (ia injectionApproaches) Swap(i, j int) { ia[i], ia[j] = ia[j], ia[i] }
+
+func injectErrors(
+	req roachpb.Request, hdr roachpb.Header, magicVals *filterVals, verifyTxn bool,
+) error {
 	magicVals.Lock()
 	defer magicVals.Unlock()
 
 	switch req := req.(type) {
 	case *roachpb.ConditionalPutRequest:
-		for key, count := range magicVals.restartCounts {
-			if err := checkCorrectTxn(string(req.Value.RawBytes), magicVals, hdr.Txn); err != nil {
-				return err
-			}
-			if count > 0 && bytes.Contains(req.Value.RawBytes, []byte(key)) {
-				magicVals.restartCounts[key]--
-				err := roachpb.NewReadWithinUncertaintyIntervalError(
-					hlc.Timestamp{}, hlc.Timestamp{})
-				magicVals.failedValues[string(req.Value.RawBytes)] =
-					failureRecord{err, hdr.Txn}
-				return err
-			}
+		// Create a list of each injection approach and shuffle the order of
+		// injection for some additional randomness.
+		injections := injectionApproaches{
+			{counts: magicVals.restartCounts, errFn: func() error {
+				return roachpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.Timestamp{})
+			}},
+			{counts: magicVals.abortCounts, errFn: func() error {
+				return roachpb.NewTransactionAbortedError()
+			}},
 		}
-		for key, count := range magicVals.abortCounts {
-			if err := checkCorrectTxn(string(req.Value.RawBytes), magicVals, hdr.Txn); err != nil {
-				return err
-			}
-			if count > 0 && bytes.Contains(req.Value.RawBytes, []byte(key)) {
-				magicVals.abortCounts[key]--
-				err := roachpb.NewTransactionAbortedError()
-				magicVals.failedValues[string(req.Value.RawBytes)] =
-					failureRecord{err, hdr.Txn}
-				return err
+		shuffle.Shuffle(injections)
+
+		for _, injection := range injections {
+			for key, count := range injection.counts {
+				if verifyTxn {
+					if err := checkCorrectTxn(string(req.Value.RawBytes), magicVals, hdr.Txn); err != nil {
+						return err
+					}
+				}
+				if count > 0 && bytes.Contains(req.Value.RawBytes, []byte(key)) {
+					injection.counts[key]--
+					err := injection.errFn()
+					magicVals.failedValues[string(req.Value.RawBytes)] = failureRecord{err, hdr.Txn}
+					return err
+				}
 			}
 		}
 		return nil
@@ -473,7 +489,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT, t DECIMAL);
 	}
 	cleanupFilter := cmdFilters.AppendFilter(
 		func(args storagebase.FilterArgs) *roachpb.Error {
-			if err := injectErrors(args.Req, args.Hdr, magicVals); err != nil {
+			if err := injectErrors(args.Req, args.Hdr, magicVals, true /* verifyTxn */); err != nil {
 				return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
 			}
 			return nil
@@ -555,7 +571,7 @@ INSERT INTO t.test(k, v, t) VALUES (6, 'laureal', cluster_logical_timestamp());
 	}
 	cleanupFilter = cmdFilters.AppendFilter(
 		func(args storagebase.FilterArgs) *roachpb.Error {
-			if err := injectErrors(args.Req, args.Hdr, magicVals); err != nil {
+			if err := injectErrors(args.Req, args.Hdr, magicVals, true /* verifyTxn */); err != nil {
 				return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
 			}
 			return nil
@@ -581,6 +597,148 @@ BEGIN;
 	if !testutils.IsError(
 		err, "encountered previous write with future timestamp") {
 		t.Errorf("didn't get expected injected error. Got: %v", err)
+	}
+}
+
+// Test the logic in the sql executor for retrying txns in case of retriable
+// errors with parallel statements. We test that when a statement running in
+// parallel with others gets a retryable error, the other statements synchronize
+// and retry without leaving around any unintended committable data. This was
+// the case before #17197 was addressed.
+func TestTxnAutoRetryParallelStmts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params, cmdFilters := createTestServerParams()
+	// Disable one phase commits because they cannot be restarted.
+	params.Knobs.Store.(*storage.StoreTestingKnobs).DisableOnePhaseCommits = true
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+	sqlDB.SetMaxOpenConns(1)
+
+	// Create three tables because spanBasedDependencyAnalyzer currently
+	// considers all writes to the same table to be dependent.
+	//
+	// TODO(nvanbenschoten): once #14953 is addressed, we can get rid of the
+	// extra tables.
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test  (k INT PRIMARY KEY, v TEXT, t DECIMAL);
+CREATE TABLE t.test2 (k INT PRIMARY KEY, v TEXT, t DECIMAL);
+CREATE TABLE t.test3 (k INT PRIMARY KEY, v TEXT, t DECIMAL);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run a subtest for each combination of three different statements facing
+	// retryable errors or not.
+	for _, firstRetry := range []bool{false, true} {
+		for _, secondRetry := range []bool{false, true} {
+			for _, thirdRetry := range []bool{false, true} {
+				name := fmt.Sprintf("retryStmt1=%t,retryStmt2=%t,retryStmt3=%t",
+					firstRetry, secondRetry, thirdRetry)
+				t.Run(name, func(t *testing.T) {
+					if _, err := sqlDB.Exec(`
+DELETE FROM t.test;
+DELETE FROM t.test2;
+DELETE FROM t.test3;
+`); err != nil {
+						t.Fatal(err)
+					}
+
+					magicVals := createFilterVals(nil, nil)
+					for key, retry := range map[string]bool{
+						"boulanger": firstRetry,
+						"dromedary": secondRetry,
+						"josephine": thirdRetry,
+					} {
+						if retry {
+							magicVals.restartCounts = map[string]int{key: 2}
+							magicVals.abortCounts = map[string]int{key: 2}
+						}
+					}
+					var wg sync.WaitGroup
+					defer wg.Wait()
+					cleanupFilter := cmdFilters.AppendFilter(
+						func(args storagebase.FilterArgs) *roachpb.Error {
+							if err := injectErrors(args.Req, args.Hdr, magicVals, false /* verifyTxn */); err != nil {
+								// When we inject a TransactionAbortedError, we need to make sure
+								// that the transaction's meta record is actually aborted, otherwise
+								// it's possible that concurrent requests for the same transaction
+								// could continue to heartbeat the pending transaction record, which
+								// could lead to a deadlock where a retry is blocked trying to push
+								// the previous incarnation of the meta record.
+								//
+								// In real scenerios (not injected test errors), a TransactionAbortedError
+								// will never be seen unless the txn record is actually aborted, so
+								// this isn't a concern. We are simply trying to mirror that behavior
+								// here.
+								if _, ok := err.(*roachpb.TransactionAbortedError); ok {
+									// We use a WaitGroup to make sure this async abort cleans up
+									// before the subtest.
+									wg.Add(1)
+									go func() {
+										defer wg.Done()
+										assureTxnAborted(t, s, args.Hdr.Txn)
+									}()
+								}
+								return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
+							}
+							return nil
+						}, false)
+
+					// In the case of `retryStmt1=true,retryStmt2=false,retryStmt3=false`,
+					// the first insert will get a retry error while the second and third
+					// inserts are concurrently executing. The entire transaction should
+					// be auto-retried a few times without the successful inserts ever
+					// getting duplicate key errors.
+					if _, err := sqlDB.Exec(`
+BEGIN;
+INSERT INTO t.test(k, v, t)  VALUES (1, 'boulanger', cluster_logical_timestamp()) RETURNING NOTHING;
+INSERT INTO t.test2(k, v, t) VALUES (2, 'dromedary', cluster_logical_timestamp()) RETURNING NOTHING;
+INSERT INTO t.test3(k, v, t) VALUES (3, 'josephine', cluster_logical_timestamp()) RETURNING NOTHING;
+END;
+`); err != nil {
+						t.Fatal(err)
+					}
+
+					cleanupFilter()
+					checkRestarts(t, magicVals)
+
+					// Verify that the txns succeeded by reading the rows from each table.
+					// Each should have written exactly one row.
+					for _, table := range []string{"test", "test2", "test3"} {
+						var count int
+						if err := sqlDB.QueryRow(fmt.Sprintf("SELECT count(*) FROM t.%s", table)).Scan(&count); err != nil {
+							t.Fatal(err)
+						}
+						if count != 1 {
+							t.Fatalf("Expected 1 rows, got %d", count)
+						}
+					}
+				})
+			}
+		}
+	}
+}
+
+// assureTxnAborted makes sure that the meta record for the provided transaction
+// is aborted. It is important that this accompanies an injected
+// TransactionAbortedError in situations with concurrent Txn requests. If not,
+// this can lead to incorrect assumptions by the client.
+func assureTxnAborted(t *testing.T, s serverutils.TestServerInterface, txn *roachpb.Transaction) {
+	abortBa := roachpb.BatchRequest{}
+	push := &roachpb.PushTxnRequest{
+		Span: roachpb.Span{
+			Key: txn.Key,
+		},
+		PusheeTxn: txn.TxnMeta,
+		PushType:  roachpb.PUSH_ABORT,
+		Force:     true,
+	}
+	push.PusherTxn.Priority = roachpb.MaxTxnPriority
+	abortBa.Add(push)
+	if _, pErr := s.DistSender().Send(context.Background(), abortBa); pErr != nil {
+		t.Fatalf("failed to abort transaction: %v", pErr)
 	}
 }
 
@@ -766,58 +924,63 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 
 	for _, tc := range testCases {
 		for _, rs := range []rollbackStrategy{rollbackToSavepoint, declareSavepoint} {
-			cleanupFilter := cmdFilters.AppendFilter(
-				func(args storagebase.FilterArgs) *roachpb.Error {
-					if err := injectErrors(args.Req, args.Hdr, tc.magicVals); err != nil {
-						return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
-					}
-					return nil
-				}, false)
+			for _, parallel := range []bool{false, true} {
+				cleanupFilter := cmdFilters.AppendFilter(
+					func(args storagebase.FilterArgs) *roachpb.Error {
+						if err := injectErrors(args.Req, args.Hdr, tc.magicVals, true /* verifyTxn */); err != nil {
+							return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
+						}
+						return nil
+					}, false)
 
-			// Also inject an error at RELEASE time, besides the error injected by magicVals.
-			const sentinelInsert = "INSERT INTO t.test(k, v) VALUES (0, 'sentinel')"
-			if err := aborter.QueueStmtForAbortion(
-				sentinelInsert, 1 /* abortCount */, true, /* willBeRetriedIbid */
-			); err != nil {
-				t.Fatal(err)
-			}
+				// Also inject an error at RELEASE time, besides the error injected by magicVals.
+				sentinelInsert := "INSERT INTO t.test(k, v) VALUES (0, 'sentinel')"
+				if parallel {
+					sentinelInsert += " RETURNING NOTHING"
+				}
+				if err := aborter.QueueStmtForAbortion(
+					sentinelInsert, 1 /* abortCount */, true, /* willBeRetriedIbid */
+				); err != nil {
+					t.Fatal(err)
+				}
 
-			commitCount := s.MustGetSQLCounter(sql.MetaTxnCommit.Name)
-			// This is the magic. Run the txn closure until all the retries are exhausted.
-			retryExec(t, sqlDB, rs, func(tx *gosql.Tx) bool {
-				return runTestTxn(t, tc.magicVals, tc.expectedErr, sqlDB, tx, sentinelInsert)
-			})
-			checkRestarts(t, tc.magicVals)
+				commitCount := s.MustGetSQLCounter(sql.MetaTxnCommit.Name)
+				// This is the magic. Run the txn closure until all the retries are exhausted.
+				retryExec(t, sqlDB, rs, func(tx *gosql.Tx) bool {
+					return runTestTxn(t, tc.magicVals, tc.expectedErr, sqlDB, tx, sentinelInsert)
+				})
+				checkRestarts(t, tc.magicVals)
 
-			// Check that we only wrote the sentinel row.
-			rows, err := sqlDB.Query("SELECT * FROM t.test")
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer rows.Close()
-			for rows.Next() {
-				var k int
-				var v string
-				err = rows.Scan(&k, &v)
+				// Check that we only wrote the sentinel row.
+				rows, err := sqlDB.Query("SELECT * FROM t.test")
 				if err != nil {
 					t.Fatal(err)
 				}
-				if k != 0 || v != "sentinel" {
-					t.Fatalf("didn't find expected row: %d %s", k, v)
+				defer rows.Close()
+				for rows.Next() {
+					var k int
+					var v string
+					err = rows.Scan(&k, &v)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if k != 0 || v != "sentinel" {
+						t.Fatalf("didn't find expected row: %d %s", k, v)
+					}
 				}
+				// Check that the commit counter was incremented. It could have been
+				// incremented by more than 1 because of the transactions we use to force
+				// aborts, plus who knows what else the server is doing in the background.
+				if err := checkCounterGE(s, sql.MetaTxnCommit, commitCount+1); err != nil {
+					t.Error(err)
+				}
+				// Clean up the table for the next test iteration.
+				_, err = sqlDB.Exec("DELETE FROM t.test WHERE true")
+				if err != nil {
+					t.Fatal(err)
+				}
+				cleanupFilter()
 			}
-			// Check that the commit counter was incremented. It could have been
-			// incremented by more than 1 because of the transactions we use to force
-			// aborts, plus who knows what else the server is doing in the background.
-			if err := checkCounterGE(s, sql.MetaTxnCommit, commitCount+1); err != nil {
-				t.Error(err)
-			}
-			// Clean up the table for the next test iteration.
-			_, err = sqlDB.Exec("DELETE FROM t.test WHERE true")
-			if err != nil {
-				t.Fatal(err)
-			}
-			cleanupFilter()
 		}
 	}
 }

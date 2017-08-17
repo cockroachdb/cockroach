@@ -844,7 +844,7 @@ func MakePriority(userPriority UserPriority) int32 {
 func (t *Transaction) Restart(
 	userPriority UserPriority, upgradePriority int32, timestamp hlc.Timestamp,
 ) {
-	t.Epoch++
+	t.BumpEpoch()
 	if t.Timestamp.Less(timestamp) {
 		t.Timestamp = timestamp
 	}
@@ -859,6 +859,13 @@ func (t *Transaction) Restart(
 	t.WriteTooOld = false
 	t.RetryOnPush = false
 	t.Sequence = 0
+}
+
+// BumpEpoch increments the transaction's epoch, allowing for an in-place
+// restart. This invalidates all write intents previously written at lower
+// epochs.
+func (t *Transaction) BumpEpoch() {
+	t.Epoch++
 }
 
 // Update ratchets priority, timestamp and original timestamp values (among

@@ -51,13 +51,13 @@ func teardownHeartbeats(tc *TxnCoordSender) {
 		panic(r)
 	}
 	tc.txnMu.Lock()
+	defer tc.txnMu.Unlock()
 	for _, tm := range tc.txnMu.txns {
 		if tm.txnEnd != nil {
 			close(tm.txnEnd)
 			tm.txnEnd = nil
 		}
 	}
-	defer tc.txnMu.Unlock()
 }
 
 // createTestDB creates a local test server and starts it. The caller
@@ -952,7 +952,7 @@ func TestTxnCoordIdempotentCleanup(t *testing.T) {
 	ba = txn.NewBatch()
 	ba.AddRawRequest(&roachpb.EndTransactionRequest{})
 	err := txn.Run(context.TODO(), ba)
-	if err != nil && !testutils.IsError(err, errNoState.Error()) {
+	if _, ok := err.(*roachpb.UntrackedTxnError); err != nil && !ok {
 		t.Fatal(err)
 	}
 }
