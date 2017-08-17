@@ -97,9 +97,6 @@ var flagTestConfigs = flag.Bool("test-configs", false, "instead of using the pas
 	"against a collection of pre-specified cluster configurations.")
 var flagConfig = flag.String("config", "", "a json TestConfig proto, see testconfig.proto")
 
-var flagPrivileged = flag.Bool("privileged", true,
-	"run containers in privileged mode (required for nemesis tests)")
-
 // Terrafarm flags.
 var flagTFReuseCluster = flag.String("reuse", "",
 	`attempt to use the cluster with the given name.
@@ -405,7 +402,7 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 		if logDir != "" {
 			logDir = filepath.Join(logDir, filepath.Clean(t.Name()))
 		}
-		l := cluster.CreateLocal(ctx, cfg, logDir, *flagPrivileged, stopper)
+		l := cluster.CreateLocal(ctx, cfg, logDir, stopper)
 		l.Start(ctx)
 		c = l
 	}
@@ -485,13 +482,6 @@ func SkipUnlessLocal(t testing.TB) {
 func SkipUnlessRemote(t testing.TB) {
 	if !*flagRemote {
 		t.Skip("skipping since not run against remote cluster")
-	}
-}
-
-// SkipUnlessPrivileged calls t.Skip if not running with the privileged flag.
-func SkipUnlessPrivileged(t testing.TB) {
-	if !*flagPrivileged {
-		t.Skip("skipping since not run in privileged mode")
 	}
 }
 

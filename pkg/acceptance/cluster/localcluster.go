@@ -148,7 +148,6 @@ type LocalCluster struct {
 	clusterID            string
 	networkID            string
 	networkName          string
-	privileged           bool   // whether to run containers in privileged mode
 	logDir               string // no logging if empty
 	logDirRemovable      bool   // if true, the log directory can be removed after use
 }
@@ -158,7 +157,7 @@ type LocalCluster struct {
 // must be started before being used and keeps logs in the specified logDir, if
 // supplied.
 func CreateLocal(
-	ctx context.Context, cfg TestConfig, logDir string, privileged bool, stopper *stop.Stopper,
+	ctx context.Context, cfg TestConfig, logDir string, stopper *stop.Stopper,
 ) *LocalCluster {
 	select {
 	case <-stopper.ShouldStop():
@@ -202,7 +201,6 @@ func CreateLocal(
 		expectedEvents:  make(chan Event, 1000),
 		logDir:          uniqueLogDir,
 		logDirRemovable: logDirRemovable,
-		privileged:      privileged,
 	}
 }
 
@@ -433,7 +431,6 @@ func (l *LocalCluster) createRoach(
 	hostConfig := container.HostConfig{
 		PublishAllPorts: true,
 		NetworkMode:     container.NetworkMode(l.networkID),
-		Privileged:      l.privileged,
 	}
 
 	if vols != nil {
