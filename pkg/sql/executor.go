@@ -1894,6 +1894,10 @@ func (e *Executor) execStmtInParallel(
 ) error {
 	session := planner.session
 	ctx := session.Ctx()
+	params := runParams{
+		ctx: ctx,
+		p:   planner,
+	}
 
 	plan, err := planner.makePlan(ctx, stmt)
 	if err != nil {
@@ -1910,7 +1914,7 @@ func (e *Executor) execStmtInParallel(
 	// send the mock result back to the client.
 	session.setQueryExecutionMode(stmt.queryID, false /* isDistributed */, true /* isParallel */)
 
-	session.parallelizeQueue.Add(ctx, plan, func(plan planNode) error {
+	session.parallelizeQueue.Add(params, plan, func(plan planNode) error {
 		// TODO(andrei): this should really be a result writer implementation that
 		// does nothing.
 		bufferedWriter := newBufferedWriter(session.makeBoundAccount())
