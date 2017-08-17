@@ -890,12 +890,20 @@ class StoreCapacity : public ::google::protobuf::MessageLite /* @@protoc_inserti
   double writes_per_second() const;
   void set_writes_per_second(double value);
 
+  bool has_logical_bytes() const;
+  void clear_logical_bytes();
+  static const int kLogicalBytesFieldNumber = 9;
+  ::google::protobuf::int64 logical_bytes() const;
+  void set_logical_bytes(::google::protobuf::int64 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.StoreCapacity)
  private:
   void set_has_capacity();
   void clear_has_capacity();
   void set_has_available();
   void clear_has_available();
+  void set_has_logical_bytes();
+  void clear_has_logical_bytes();
   void set_has_range_count();
   void clear_has_range_count();
   void set_has_lease_count();
@@ -917,6 +925,7 @@ class StoreCapacity : public ::google::protobuf::MessageLite /* @@protoc_inserti
   ::google::protobuf::int32 range_count_;
   ::google::protobuf::int32 lease_count_;
   double writes_per_second_;
+  ::google::protobuf::int64 logical_bytes_;
   friend struct protobuf_cockroach_2fpkg_2froachpb_2fmetadata_2eproto::TableStruct;
 };
 // -------------------------------------------------------------------
@@ -2237,6 +2246,29 @@ inline void StoreCapacity::set_available(::google::protobuf::int64 value) {
   set_has_available();
   available_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.StoreCapacity.available)
+}
+
+inline bool StoreCapacity::has_logical_bytes() const {
+  return (_has_bits_[0] & 0x00000080u) != 0;
+}
+inline void StoreCapacity::set_has_logical_bytes() {
+  _has_bits_[0] |= 0x00000080u;
+}
+inline void StoreCapacity::clear_has_logical_bytes() {
+  _has_bits_[0] &= ~0x00000080u;
+}
+inline void StoreCapacity::clear_logical_bytes() {
+  logical_bytes_ = GOOGLE_LONGLONG(0);
+  clear_has_logical_bytes();
+}
+inline ::google::protobuf::int64 StoreCapacity::logical_bytes() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.StoreCapacity.logical_bytes)
+  return logical_bytes_;
+}
+inline void StoreCapacity::set_logical_bytes(::google::protobuf::int64 value) {
+  set_has_logical_bytes();
+  logical_bytes_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.StoreCapacity.logical_bytes)
 }
 
 inline bool StoreCapacity::has_range_count() const {

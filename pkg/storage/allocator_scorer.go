@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -519,10 +520,11 @@ func shouldRebalance(
 	if rangeIsBadFit(score) {
 		if log.V(2) {
 			log.Infof(ctx,
-				"s%d: should-rebalance(bad-fit): - balanceScore=%s, capacity=(%v), rangeInfo=%+v, "+
-					"(meanRangeCount=%.1f, meanDiskUsage=%.2f, meanWritesPerSecond=%.2f), ",
+				"s%d: should-rebalance(bad-fit): balanceScore=%s, capacity=(%v), rangeInfo=%+v, "+
+					"(meanRangeCount=%.1f, meanDiskUsage=%s, meanWritesPerSecond=%.2f), ",
 				store.StoreID, score, store.Capacity, rangeInfo,
-				sl.candidateRanges.mean, sl.candidateDiskUsage.mean, sl.candidateWritesPerSecond.mean)
+				sl.candidateRanges.mean, humanizeutil.IBytes(int64(sl.candidateLogicalBytes.mean)),
+				sl.candidateWritesPerSecond.mean)
 		}
 		return true
 	}
@@ -536,9 +538,10 @@ func shouldRebalance(
 				if log.V(5) {
 					log.Infof(ctx,
 						"s%d is not a good enough fit to replace s%d: balanceScore=%s, capacity=(%v), rangeInfo=%+v, "+
-							"(meanRangeCount=%.1f, meanDiskUsage=%.2f, meanWritesPerSecond=%.2f), ",
+							"(meanRangeCount=%.1f, meanDiskUsage=%s, meanWritesPerSecond=%.2f), ",
 						desc.StoreID, store.StoreID, otherScore, desc.Capacity, rangeInfo,
-						sl.candidateRanges.mean, sl.candidateDiskUsage.mean, sl.candidateWritesPerSecond.mean)
+						sl.candidateRanges.mean, humanizeutil.IBytes(int64(sl.candidateLogicalBytes.mean)),
+						sl.candidateWritesPerSecond.mean)
 				}
 				continue
 			}
@@ -549,10 +552,10 @@ func shouldRebalance(
 				log.Infof(ctx,
 					"s%d: should-rebalance(better-fit=s%d): balanceScore=%s, capacity=(%v), rangeInfo=%+v, "+
 						"otherScore=%s, otherCapacity=(%v), "+
-						"(meanRangeCount=%.1f, meanDiskUsage=%.2f, meanWritesPerSecond=%.2f), ",
+						"(meanRangeCount=%.1f, meanDiskUsage=%s, meanWritesPerSecond=%.2f), ",
 					store.StoreID, desc.StoreID, score, store.Capacity, rangeInfo,
-					otherScore, desc.Capacity,
-					sl.candidateRanges.mean, sl.candidateDiskUsage.mean, sl.candidateWritesPerSecond.mean)
+					otherScore, desc.Capacity, sl.candidateRanges.mean,
+					humanizeutil.IBytes(int64(sl.candidateLogicalBytes.mean)), sl.candidateWritesPerSecond.mean)
 			}
 			return true
 		}
@@ -561,10 +564,10 @@ func shouldRebalance(
 	// If we reached this point, we're happy with the range where it is.
 	if log.V(3) {
 		log.Infof(ctx,
-			"s%d: should-not-rebalance: - balanceScore=%s, capacity=(%v), rangeInfo=%+v, "+
-				"(meanRangeCount=%.1f, meanDiskUsage=%.2f, meanWritesPerSecond=%.2f), ",
-			store.StoreID, score, store.Capacity, rangeInfo,
-			sl.candidateRanges.mean, sl.candidateDiskUsage.mean, sl.candidateWritesPerSecond.mean)
+			"s%d: should-not-rebalance: balanceScore=%s, capacity=(%v), rangeInfo=%+v, "+
+				"(meanRangeCount=%.1f, meanDiskUsage=%s, meanWritesPerSecond=%.2f), ",
+			store.StoreID, score, store.Capacity, rangeInfo, sl.candidateRanges.mean,
+			humanizeutil.IBytes(int64(sl.candidateLogicalBytes.mean)), sl.candidateWritesPerSecond.mean)
 	}
 	return false
 }
@@ -744,10 +747,10 @@ func balanceScore(
 		dimensions.bytes = balanceContribution(
 			st,
 			dimensions.ranges,
-			sl.candidateDiskUsage.mean,
-			sc.FractionUsed(),
+			sl.candidateLogicalBytes.mean,
+			float64(sc.LogicalBytes),
 			sc.BytesPerReplica,
-			float64(rangeInfo.LiveBytes))
+			float64(rangeInfo.LogicalBytes))
 		dimensions.writes = balanceContribution(
 			st,
 			dimensions.ranges,
@@ -900,7 +903,7 @@ func rebalanceFromConvergesOnMean(
 		sl,
 		sc,
 		sc.RangeCount-1,
-		float64(sc.Capacity-(sc.Available+rangeInfo.LiveBytes))/float64(sc.Capacity),
+		sc.LogicalBytes-rangeInfo.LogicalBytes,
 		sc.WritesPerSecond-rangeInfo.WritesPerSecond)
 }
 
@@ -912,7 +915,7 @@ func rebalanceToConvergesOnMean(
 		sl,
 		sc,
 		sc.RangeCount+1,
-		float64(sc.Capacity-(sc.Available-rangeInfo.LiveBytes))/float64(sc.Capacity),
+		sc.LogicalBytes+rangeInfo.LogicalBytes,
 		sc.WritesPerSecond+rangeInfo.WritesPerSecond)
 }
 
@@ -921,7 +924,7 @@ func rebalanceConvergesOnMean(
 	sl StoreList,
 	sc roachpb.StoreCapacity,
 	newRangeCount int32,
-	newFractionUsed float64,
+	newLogicalBytes int64,
 	newWritesPerSecond float64,
 ) bool {
 	if !st.EnableStatsBasedRebalancing.Get() {
@@ -937,9 +940,9 @@ func rebalanceConvergesOnMean(
 	} else if divergesFromMean(float64(sc.RangeCount), float64(newRangeCount), sl.candidateRanges.mean) {
 		convergeCount--
 	}
-	if convergesOnMean(sc.FractionUsed(), newFractionUsed, sl.candidateDiskUsage.mean) {
+	if convergesOnMean(float64(sc.LogicalBytes), float64(newLogicalBytes), sl.candidateLogicalBytes.mean) {
 		convergeCount++
-	} else if divergesFromMean(sc.FractionUsed(), newFractionUsed, sl.candidateDiskUsage.mean) {
+	} else if divergesFromMean(float64(sc.LogicalBytes), float64(newLogicalBytes), sl.candidateLogicalBytes.mean) {
 		convergeCount--
 	}
 	if convergesOnMean(sc.WritesPerSecond, newWritesPerSecond, sl.candidateWritesPerSecond.mean) {
