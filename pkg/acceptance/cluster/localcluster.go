@@ -880,12 +880,7 @@ func (l *LocalCluster) Hostname(i int) string {
 }
 
 // ExecCLI runs ./cockroach <args>.
-func (l *LocalCluster) ExecCLI(ctx context.Context, i int, args []string) (string, string, error) {
-	return l.ExecRoot(ctx, i, append([]string{CockroachBinaryInContainer}, args...))
-}
-
-// ExecRoot runs a command as root.
-func (l *LocalCluster) ExecRoot(ctx context.Context, i int, cmd []string) (string, string, error) {
+func (l *LocalCluster) ExecCLI(ctx context.Context, i int, cmd []string) (string, string, error) {
 	cfg := types.ExecConfig{
 		User:         "root",
 		Privileged:   true,

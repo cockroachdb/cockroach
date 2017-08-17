@@ -43,9 +43,6 @@ type Cluster interface {
 	// AssertAndStop performs the same test as Assert but then proceeds to
 	// dismantle the cluster.
 	AssertAndStop(context.Context, testing.TB)
-	// ExecRoot executes the given command with super-user privileges.
-	// Returns stdout, stderr, and an error.
-	ExecRoot(ctx context.Context, i int, cmd []string) (string, string, error)
 	// ExecCLI runs `./cockroach <args>`.
 	// Returns stdout, stderr, and an error.
 	ExecCLI(ctx context.Context, i int, args []string) (string, string, error)
