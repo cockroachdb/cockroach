@@ -233,3 +233,17 @@ message RemoteProducerMetadata {
     TraceData trace_data = 3;
   }
 }
+
+// DistSQLVersionGossipInfo represents the DistSQL server version information
+// that gets gossiped for each node. This is used by planners to avoid planning
+// on nodes with incompatible version during rolling cluster updates.
+//
+// For the meaning of the fields, see the corresponding constants in
+// distsqlrun/server.go.
+message DistSQLVersionGossipInfo {
+  optional uint32 version = 1 [(gogoproto.nullable) = false,
+                               (gogoproto.casttype) = "DistSQLVersion"];
+
+  optional uint32 min_accepted_version = 2 [(gogoproto.nullable) = false,
+                                            (gogoproto.casttype) = "DistSQLVersion"];
+}

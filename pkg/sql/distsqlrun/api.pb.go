@@ -28,6 +28,7 @@
 		ProducerData
 		ProducerMessage
 		RemoteProducerMetadata
+		DistSQLVersionGossipInfo
 		ProcessorSpec
 		PostProcessSpec
 		ProcessorCoreUnion
