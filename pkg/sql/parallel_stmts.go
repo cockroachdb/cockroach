@@ -80,8 +80,8 @@ func MakeParallelizeQueue(analyzer DependencyAnalyzer) ParallelizeQueue {
 //
 // Add should not be called concurrently with Wait. See Wait's comment for more
 // details.
-func (pq *ParallelizeQueue) Add(ctx context.Context, plan planNode, exec func(planNode) error) {
-	prereqs, finishLocked := pq.insertInQueue(ctx, plan)
+func (pq *ParallelizeQueue) Add(params runParams, plan planNode, exec func(planNode) error) {
+	prereqs, finishLocked := pq.insertInQueue(params, plan)
 	pq.runningGroup.Add(1)
 	go func() {
 		defer pq.runningGroup.Done()
@@ -115,7 +115,7 @@ func (pq *ParallelizeQueue) Add(ctx context.Context, plan planNode, exec func(pl
 		pq.mu.Unlock()
 
 		// Close the plan after removing it from the plans map and analyzer.
-		plan.Close(ctx)
+		plan.Close(params.ctx)
 	}()
 }
 
@@ -123,14 +123,12 @@ func (pq *ParallelizeQueue) Add(ctx context.Context, plan planNode, exec func(pl
 // channels of prerequisite blocking the new plan from executing. It also returns a
 // function to call when the new plan has finished executing. This function must be
 // called while pq.mu is held.
-func (pq *ParallelizeQueue) insertInQueue(
-	ctx context.Context, newPlan planNode,
-) ([]doneChan, func()) {
+func (pq *ParallelizeQueue) insertInQueue(params runParams, newPlan planNode) ([]doneChan, func()) {
 	pq.mu.Lock()
 	defer pq.mu.Unlock()
 
 	// Determine the set of prerequisite plans.
-	prereqs := pq.prereqsForPlanLocked(ctx, newPlan)
+	prereqs := pq.prereqsForPlanLocked(params, newPlan)
 
 	// Insert newPlan in running set.
 	newDoneChan := make(doneChan)
@@ -152,11 +150,11 @@ func (pq *ParallelizeQueue) insertInQueue(
 // that a new plan is dependent on. It returns a slice of doneChans for each plan
 // in this set. Returns a nil slice if the plan has no prerequisites and can be run
 // immediately.
-func (pq *ParallelizeQueue) prereqsForPlanLocked(ctx context.Context, newPlan planNode) []doneChan {
+func (pq *ParallelizeQueue) prereqsForPlanLocked(params runParams, newPlan planNode) []doneChan {
 	// Add all plans from the plan set that this new plan is dependent on.
 	var prereqs []doneChan
 	for plan, doneChan := range pq.plans {
-		if !pq.analyzer.Independent(ctx, plan, newPlan) {
+		if !pq.analyzer.Independent(params, plan, newPlan) {
 			prereqs = append(prereqs, doneChan)
 		}
 	}
@@ -210,7 +208,7 @@ func (pq *ParallelizeQueue) Errs() []error {
 type DependencyAnalyzer interface {
 	// Independent determines if the provided planNodes are independent from one
 	// another. Implementations of Independent are always commutative.
-	Independent(context.Context, planNode, planNode) bool
+	Independent(runParams, planNode, planNode) bool
 	// Clear is a hint to the DependencyAnalyzer that the provided planNode will
 	// no longer be needed. It is useful for DependencyAnalyzers that cache state
 	// on the planNodes.
@@ -224,7 +222,7 @@ var _ DependencyAnalyzer = &spanBasedDependencyAnalyzer{}
 // to a function for all dependency decisions.
 type dependencyAnalyzerFunc func(planNode, planNode) bool
 
-func (f dependencyAnalyzerFunc) Independent(_ context.Context, p1 planNode, p2 planNode) bool {
+func (f dependencyAnalyzerFunc) Independent(_ runParams, p1 planNode, p2 planNode) bool {
 	return f(p1, p2)
 }
 
@@ -264,9 +262,9 @@ func NewSpanBasedDependencyAnalyzer() DependencyAnalyzer {
 }
 
 func (a *spanBasedDependencyAnalyzer) Independent(
-	ctx context.Context, p1 planNode, p2 planNode,
+	params runParams, p1 planNode, p2 planNode,
 ) bool {
-	a1, a2 := a.analyzePlan(ctx, p1), a.analyzePlan(ctx, p2)
+	a1, a2 := a.analyzePlan(params, p1), a.analyzePlan(params, p2)
 	if a1.hasOrderingFn || a2.hasOrderingFn {
 		return false
 	}
@@ -282,16 +280,16 @@ func (a *spanBasedDependencyAnalyzer) Independent(
 	return true
 }
 
-func (a *spanBasedDependencyAnalyzer) analyzePlan(ctx context.Context, p planNode) planAnalysis {
+func (a *spanBasedDependencyAnalyzer) analyzePlan(params runParams, p planNode) planAnalysis {
 	if a, ok := a.analysisCache[p]; ok {
 		return a
 	}
 
-	readSpans, writeSpans, err := collectSpans(ctx, p)
+	readSpans, writeSpans, err := collectSpans(params, p)
 	if err != nil {
 		panic(err)
 	}
-	hasOrderingFn := containsOrderingFunction(ctx, p)
+	hasOrderingFn := containsOrderingFunction(params.ctx, p)
 	analysis := planAnalysis{
 		read:          rangeGroupFromSpans(readSpans),
 		write:         rangeGroupFromSpans(writeSpans),

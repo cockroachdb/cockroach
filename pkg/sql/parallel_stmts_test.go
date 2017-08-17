@@ -73,27 +73,30 @@ func waitAndAssertEmpty(t *testing.T, pq *ParallelizeQueue) {
 // we use channels to guarantee deterministic execution.
 func TestParallelizeQueueNoDependencies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
+	params := runParams{
+		ctx: context.TODO(),
+		p:   makeTestPlanner(),
+	}
 
 	var res []int
 	run1, run2, run3 := make(chan struct{}), make(chan struct{}), make(chan struct{})
 
 	// Executes: plan3 -> plan1 -> plan2.
 	pq := MakeParallelizeQueue(NoDependenciesAnalyzer)
-	pq.Add(ctx, newPlanNode(), func(plan planNode) error {
+	pq.Add(params, newPlanNode(), func(plan planNode) error {
 		<-run1
 		res = append(res, 1)
 		assertLen(t, &pq, 3)
 		close(run3)
 		return nil
 	})
-	pq.Add(ctx, newPlanNode(), func(plan planNode) error {
+	pq.Add(params, newPlanNode(), func(plan planNode) error {
 		<-run2
 		res = append(res, 2)
 		assertLenEventually(t, &pq, 1)
 		return nil
 	})
-	pq.Add(ctx, newPlanNode(), func(plan planNode) error {
+	pq.Add(params, newPlanNode(), func(plan planNode) error {
 		<-run3
 		res = append(res, 3)
 		assertLenEventually(t, &pq, 2)
@@ -114,7 +117,10 @@ func TestParallelizeQueueNoDependencies(t *testing.T) {
 // need no extra synchronization to guarantee deterministic execution.
 func TestParallelizeQueueAllDependent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
+	params := runParams{
+		ctx: context.TODO(),
+		p:   makeTestPlanner(),
+	}
 
 	var res []int
 	run := make(chan struct{})
@@ -124,18 +130,18 @@ func TestParallelizeQueueAllDependent(t *testing.T) {
 
 	// Executes: plan1 -> plan2 -> plan3.
 	pq := MakeParallelizeQueue(analyzer)
-	pq.Add(ctx, newPlanNode(), func(plan planNode) error {
+	pq.Add(params, newPlanNode(), func(plan planNode) error {
 		<-run
 		res = append(res, 1)
 		assertLen(t, &pq, 3)
 		return nil
 	})
-	pq.Add(ctx, newPlanNode(), func(plan planNode) error {
+	pq.Add(params, newPlanNode(), func(plan planNode) error {
 		res = append(res, 2)
 		assertLen(t, &pq, 2)
 		return nil
 	})
-	pq.Add(ctx, newPlanNode(), func(plan planNode) error {
+	pq.Add(params, newPlanNode(), func(plan planNode) error {
 		res = append(res, 3)
 		assertLen(t, &pq, 1)
 		return nil
@@ -154,7 +160,10 @@ func TestParallelizeQueueAllDependent(t *testing.T) {
 // until the prerequisite plan completes execution.
 func TestParallelizeQueueSingleDependency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
+	params := runParams{
+		ctx: context.TODO(),
+		p:   makeTestPlanner(),
+	}
 
 	var res []int
 	plan1, plan2, plan3 := newPlanNode(), newPlanNode(), newPlanNode()
@@ -169,18 +178,18 @@ func TestParallelizeQueueSingleDependency(t *testing.T) {
 
 	// Executes: plan3 -> plan1 -> plan2.
 	pq := MakeParallelizeQueue(analyzer)
-	pq.Add(ctx, plan1, func(plan planNode) error {
+	pq.Add(params, plan1, func(plan planNode) error {
 		<-run1
 		res = append(res, 1)
 		assertLenEventually(t, &pq, 2)
 		return nil
 	})
-	pq.Add(ctx, plan2, func(plan planNode) error {
+	pq.Add(params, plan2, func(plan planNode) error {
 		res = append(res, 2)
 		assertLen(t, &pq, 1)
 		return nil
 	})
-	pq.Add(ctx, plan3, func(plan planNode) error {
+	pq.Add(params, plan3, func(plan planNode) error {
 		<-run3
 		res = append(res, 3)
 		assertLen(t, &pq, 3)
@@ -200,7 +209,10 @@ func TestParallelizeQueueSingleDependency(t *testing.T) {
 // and the prerequisite plan throws an error.
 func TestParallelizeQueueError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
+	params := runParams{
+		ctx: context.TODO(),
+		p:   makeTestPlanner(),
+	}
 
 	var res []int
 	plan1, plan2, plan3 := newPlanNode(), newPlanNode(), newPlanNode()
@@ -216,19 +228,19 @@ func TestParallelizeQueueError(t *testing.T) {
 
 	// Executes: plan3 -> plan1 (error!) -> plan2 (dropped).
 	pq := MakeParallelizeQueue(analyzer)
-	pq.Add(ctx, plan1, func(plan planNode) error {
+	pq.Add(params, plan1, func(plan planNode) error {
 		<-run1
 		res = append(res, 1)
 		assertLenEventually(t, &pq, 2)
 		return planErr
 	})
-	pq.Add(ctx, plan2, func(plan planNode) error {
+	pq.Add(params, plan2, func(plan planNode) error {
 		// Should never be called. We assert this using the res slice, because
 		// we can't call t.Fatalf in a different goroutine.
 		res = append(res, 2)
 		return nil
 	})
-	pq.Add(ctx, plan3, func(plan planNode) error {
+	pq.Add(params, plan3, func(plan planNode) error {
 		<-run3
 		res = append(res, 3)
 		assertLen(t, &pq, 3)
@@ -254,7 +266,10 @@ func TestParallelizeQueueError(t *testing.T) {
 // will be cleared.
 func TestParallelizeQueueAddAfterError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
+	params := runParams{
+		ctx: context.TODO(),
+		p:   makeTestPlanner(),
+	}
 
 	var res []int
 	plan1, plan2, plan3 := newPlanNode(), newPlanNode(), newPlanNode()
@@ -262,7 +277,7 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 
 	// Executes: plan1 (error!) -> plan2 (dropped) -> plan3.
 	pq := MakeParallelizeQueue(NoDependenciesAnalyzer)
-	pq.Add(ctx, plan1, func(plan planNode) error {
+	pq.Add(params, plan1, func(plan planNode) error {
 		res = append(res, 1)
 		assertLen(t, &pq, 1)
 		return planErr
@@ -276,7 +291,7 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 		return nil
 	})
 
-	pq.Add(ctx, plan2, func(plan planNode) error {
+	pq.Add(params, plan2, func(plan planNode) error {
 		// Should never be called. We assert this using the res slice, because
 		// we can't call t.Fatalf in a different goroutine.
 		res = append(res, 2)
@@ -290,7 +305,7 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 		t.Fatalf("expected plan1 to throw error %v, found %v", planErr, resErrs)
 	}
 
-	pq.Add(ctx, plan3, func(plan planNode) error {
+	pq.Add(params, plan3, func(plan planNode) error {
 		// Will be called, because the error is cleared when Wait is called.
 		res = append(res, 3)
 		assertLen(t, &pq, 1)
@@ -423,12 +438,17 @@ func TestSpanBasedDependencyAnalyzer(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				da := NewSpanBasedDependencyAnalyzer()
 
+				params := runParams{
+					ctx: context.TODO(),
+					p:   makeTestPlanner(),
+				}
+
 				plan1, finish1 := planNodeForQuery(t, s, q1)
 				defer finish1()
 				plan2, finish2 := planNodeForQuery(t, s, q2)
 				defer finish2()
 
-				indep := da.Independent(context.TODO(), plan1, plan2)
+				indep := da.Independent(params, plan1, plan2)
 				if exp := test.independent; indep != exp {
 					t.Errorf("expected da.Independent(%q, %q) = %t, but found %t",
 						q1, q2, exp, indep)
