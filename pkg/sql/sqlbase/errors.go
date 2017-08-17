@@ -197,6 +197,16 @@ func NewStatementCompletionUnknownError(err *roachpb.AmbiguousResultError) error
 	return pgerror.NewErrorf(pgerror.CodeStatementCompletionUnknownError, err.Error())
 }
 
+// NewQueryCanceledError creates a query cancellation error.
+func NewQueryCanceledError() error {
+	return pgerror.NewErrorf(pgerror.CodeQueryCanceledError, "query execution canceled")
+}
+
+// IsQueryCanceledError checks whether this is a query canceled error.
+func IsQueryCanceledError(err error) bool {
+	return errHasCode(err, pgerror.CodeQueryCanceledError) || strings.Contains(err.Error(), "query execution canceled")
+}
+
 func errHasCode(err error, code string) bool {
 	if pgErr, ok := pgerror.GetPGCause(err); ok {
 		return pgErr.Code == code
