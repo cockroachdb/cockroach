@@ -707,23 +707,28 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		t.cluster.Server(t.nodeIdx).SetDistSQLSpanResolver(fakeResolver)
 	}
 
-	for i := 0; i < t.cluster.NumServers(); i++ {
-		server := t.cluster.Server(i)
-		// We want to collect SQL per-statement statistics in tests,
-		// regardless of what the environment / config says.
-		st := server.ClusterSettings()
-		st.Manual.Store(true)
-		st.StmtStatsEnable.Override(true)
-
-		// NB: We must set this before the Exec() below as that opens a session,
-		// locking in the DistSQL setting for that session. If we change it
-		// after, we might still see the old value in tests since they use the
-		// existing Session.
-		if cfg.overrideDistSQLMode != "" {
-			mode := cluster.DistSQLExecModeFromString(cfg.overrideDistSQLMode)
-			st := server.ClusterSettings()
-			st.Manual.Store(true)
-			st.DistSQLClusterExecMode.Override(int64(mode))
+	if cfg.overrideDistSQLMode != "" {
+		// TODO(tschottdorf): avoid Sprintf after https://github.com/cockroachdb/cockroach/pull/17591.
+		if _, err := t.cluster.ServerConn(0).Exec(
+			fmt.Sprintf("SET CLUSTER SETTING sql.defaults.distsql = '%s'", cfg.overrideDistSQLMode),
+		); err != nil {
+			t.Fatal(err)
+		}
+		// Wait until all servers are aware of the setting.
+		for allOK := false; !allOK; allOK = true {
+			for i := 0; i < t.cluster.NumServers(); i++ {
+				var s string
+				err := t.cluster.ServerConn(i % t.cluster.NumServers()).QueryRow(
+					"SHOW CLUSTER SETTING sql.defaults.distsql",
+				).Scan(&s)
+				if err != nil {
+					t.Fatal(errors.Wrapf(err, "%d", i))
+				}
+				if s == cfg.overrideDistSQLMode {
+					continue
+				}
+				allOK = false
+			}
 		}
 	}
 

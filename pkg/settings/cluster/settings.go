@@ -87,22 +87,6 @@ func (m DistSQLExecMode) String() string {
 	}
 }
 
-// DistSQLExecModeFromString converts a string into a DistSQLExecMode
-func DistSQLExecModeFromString(val string) DistSQLExecMode {
-	switch strings.ToUpper(val) {
-	case "OFF":
-		return DistSQLOff
-	case "AUTO":
-		return DistSQLAuto
-	case "ON":
-		return DistSQLOn
-	case "ALWAYS":
-		return DistSQLAlways
-	default:
-		panic(fmt.Sprintf("unknown DistSQL mode %s", val))
-	}
-}
-
 // TracingSettings is the subset of ClusterSettings affecting tracing.
 type TracingSettings struct {
 	EnableNetTrace  *settings.BoolSetting
