@@ -59,8 +59,6 @@ func setupRouter(
 func TestRouters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/17721")
-
 	const numCols = 6
 	const numRows = 200
 
@@ -222,7 +220,7 @@ func TestRouters(t *testing.T) {
 				var alloc sqlbase.DatumAlloc
 				for bIdx := range rows {
 					for _, row := range rows[bIdx] {
-						data, err := row[0].Encode(&alloc, sqlbase.DatumEncoding(enc.Encoding), nil)
+						data, err := row[enc.Column].Encode(&alloc, enc.Encoding, nil)
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -258,9 +256,7 @@ func getRowsFromBuffer(t *testing.T, buf *RowBuffer) sqlbase.EncDatumRows {
 const testRangeRouterSpanBreak byte = (encoding.IntMax + encoding.IntMin) / 2
 
 var (
-	// testRangeRouterOther's zero value of 0 is indeed the column we want.
-	testRangeRouterOther int32
-	testRangeRouterSpec  = OutputRouterSpec_RangeRouterSpec{
+	testRangeRouterSpec = OutputRouterSpec_RangeRouterSpec{
 		Spans: []OutputRouterSpec_RangeRouterSpec_Span{
 			{
 				Start: []byte{0x00},
@@ -268,7 +264,7 @@ var (
 			},
 			{
 				Start: []byte{testRangeRouterSpanBreak},
-				End:   []byte{encoding.IntMax},
+				End:   []byte{0xff},
 			},
 		},
 		Encodings: []OutputRouterSpec_RangeRouterSpec_ColumnEncoding{
@@ -277,7 +273,6 @@ var (
 				Encoding: sqlbase.DatumEncoding_ASCENDING_KEY,
 			},
 		},
-		DefaultDest: &testRangeRouterOther,
 	}
 )
 
@@ -652,6 +647,61 @@ func TestRouterBlocks(t *testing.T) {
 				go drainRowChannel(&chans[i])
 			}
 			wg.Wait()
+		})
+	}
+}
+
+func TestRangeRouterInit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tests := []struct {
+		spec OutputRouterSpec_RangeRouterSpec
+		err  string
+	}{
+		{
+			spec: testRangeRouterSpec,
+		},
+		{
+			spec: OutputRouterSpec_RangeRouterSpec{
+				Spans: []OutputRouterSpec_RangeRouterSpec_Span{
+					{
+						Start: []byte{testRangeRouterSpanBreak},
+						End:   []byte{0xff},
+					},
+					{
+						Start: []byte{0x00},
+						End:   []byte{testRangeRouterSpanBreak},
+					},
+				},
+				Encodings: testRangeRouterSpec.Encodings,
+			},
+			err: "not after previous span",
+		},
+		{
+			spec: OutputRouterSpec_RangeRouterSpec{
+				Spans: testRangeRouterSpec.Spans,
+			},
+			err: "missing encodings",
+		},
+	}
+
+	for i, tc := range tests {
+		t.Run(fmt.Sprint(i), func(t *testing.T) {
+			spec := OutputRouterSpec{
+				Type:            OutputRouterSpec_BY_RANGE,
+				RangeRouterSpec: tc.spec,
+			}
+			colTypes := []sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_INT}}
+			chans := make([]RowChannel, 2)
+			recvs := make([]RowReceiver, 2)
+			for i := 0; i < 2; i++ {
+				chans[i].InitWithBufSize(colTypes, 1)
+				recvs[i] = &chans[i]
+			}
+			_, err := makeRouter(&spec, recvs)
+			if !testutils.IsError(err, tc.err) {
+				t.Fatalf("got %v, expected %v", err, tc.err)
+			}
 		})
 	}
 }
