@@ -319,6 +319,21 @@ message HandledRetryableTxnError {
   optional Transaction transaction = 3 [(gogoproto.nullable) = false];
 }
 
+// An UntrackedTxnError indicates that an attempt to transmit a batch request
+// for a Transaction failed because the Transaction was not being tracked by
+// the TxnCoordSender properly.
+message UntrackedTxnError {
+  option (gogoproto.equal) = true;
+}
+
+// A TxnPrevAttemptError indicates a batch response for a request sent through
+// client Txn was found that was meant for a previous incarnation of the
+// transaction. This can happen in cases where concurrent requests are made
+// for a Transaction and one of the requests results in a Txn abort.
+message TxnPrevAttemptError {
+  option (gogoproto.equal) = true;
+}
+
 // ErrorDetail is a union type containing all available errors.
 message ErrorDetail {
   option (gogoproto.equal) = true;
@@ -348,10 +363,12 @@ message ErrorDetail {
   reserved 25;
   optional AmbiguousResultError ambiguous_result = 26;
   optional StoreNotFoundError store_not_found = 27;
-  // HandledRetryableError is an ErrorDetail (and a proto message) because it
-  // needs to be communicated from the TxnCoordSender to the upper layers
-  // through the Sender interface.
+  // The following three are ErrorDetails (and proto messages) because they
+  // needs to be communicated from the TxnCoordSender and Txn to the upper
+  // layers through the Sender interface.
   optional HandledRetryableTxnError handled_retryable_txn_error = 28;
+  optional UntrackedTxnError untracked_txn_error = 29;
+  optional TxnPrevAttemptError txn_aborted_async_err = 30;
 }
 
 // TransactionRestart indicates how an error should be handled in a

@@ -43,8 +43,6 @@ const (
 	opHeartbeatLoop   = "heartbeat"
 )
 
-var errNoState = errors.New("writing transaction timed out or ran on multiple coordinators")
-
 // txnMetadata holds information about an ongoing transaction, as
 // seen from the perspective of this coordinator. It records all
 // keys (and key ranges) mutated as part of the transaction for
@@ -191,7 +189,7 @@ type TxnCoordSender struct {
 	metrics      TxnMetrics
 }
 
-var _ client.Sender = &TxnCoordSender{}
+var _ client.SenderWithDistSQLBackdoor = &TxnCoordSender{}
 
 const defaultClientTimeout = 10 * time.Second
 
@@ -506,7 +504,7 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 		// transaction session so that we can definitively return the right
 		// error between these possible errors. Or update the code to make an
 		// educated guess based on the incoming transaction timestamp.
-		return roachpb.NewError(errNoState)
+		return roachpb.NewError(&roachpb.UntrackedTxnError{})
 	case txnMeta.txn.Status == roachpb.ABORTED:
 		tc.cleanupTxnLocked(ctx, txnMeta.txn)
 		abortedErr := roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), &txnMeta.txn)
@@ -686,21 +684,22 @@ func (tc *TxnCoordSender) tryAsyncAbort(txnID uuid.UUID) {
 		return
 	}
 
-	ba := roachpb.BatchRequest{}
-	ba.Txn = &txn
-
-	et := &roachpb.EndTransactionRequest{
-		Span: roachpb.Span{
-			Key: txn.Key,
-		},
-		Commit:      false,
-		IntentSpans: intentSpans,
-	}
-	ba.Add(et)
 	// NB: use context.Background() here because we may be called when the
 	// caller's context has been cancelled.
 	ctx := tc.AnnotateCtx(context.Background())
 	if err := tc.stopper.RunAsyncTask(ctx, "kv.TxnCoordSender: aborting txn", func(ctx context.Context) {
+		ba := roachpb.BatchRequest{}
+		ba.Txn = &txn
+
+		et := &roachpb.EndTransactionRequest{
+			Span: roachpb.Span{
+				Key: txn.Key,
+			},
+			Commit:      false,
+			IntentSpans: intentSpans,
+		}
+		ba.Add(et)
+
 		// Use the wrapped sender since the normal Sender does not allow
 		// clients to specify intents.
 		if _, pErr := tc.wrapped.Send(ctx, ba); pErr != nil {
@@ -854,10 +853,6 @@ func (tc *TxnCoordSender) updateState(
 				// If the ID changed, it means we had to start a new transaction and the
 				// old one is toast. Clean up the freshly aborted transaction in
 				// defer(), avoiding a race with the state update below.
-				//
-				// TODO(andrei): If the epoch that our map is aware of has already been
-				// incremented compared to ba.Txn, perhaps we shouldn't abort the txn
-				// here. This would match client.Txn, who will ignore this error.
 				defer tc.cleanupTxnLocked(ctx, *ba.Txn)
 			}
 			// Pass a HandledRetryableTxnError up to the next layer.
