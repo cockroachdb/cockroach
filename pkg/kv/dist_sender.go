@@ -19,9 +19,6 @@ import (
 	"sync/atomic"
 	"unsafe"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -1162,10 +1159,9 @@ func (ds *DistSender) sendToReplicas(
 
 		case call := <-done:
 			if err := call.Err; err != nil {
-				// All connection errors except for an unavailable node (this
-				// is GRPC's fail-fast error), may mean that the request
-				// succeeded on the remote server, but we were unable to
-				// receive the reply. Set the ambiguous commit flag.
+				// All connection errors may mean that the request succeeded
+				// on the remote server, but we were unable to receive the
+				// reply. Set the ambiguous commit flag.
 				//
 				// We retry ambiguous commit batches to avoid returning the
 				// unrecoverable AmbiguousResultError. This is safe because
@@ -1176,14 +1172,7 @@ func (ds *DistSender) sendToReplicas(
 				// leader). If the original attempt merely timed out or was
 				// lost, then the batch will succeed and we can be assured the
 				// commit was applied just once.
-				//
-				// The Unavailable code is used by GRPC to indicate that a
-				// request fails fast and is not sent, so we can be sure there
-				// is no ambiguity on these errors. Note that these are common
-				// if a node is down.
-				// See https://github.com/grpc/grpc-go/blob/52f6504dc290bd928a8139ba94e3ab32ed9a6273/call.go#L182
-				// See https://github.com/grpc/grpc-go/blob/52f6504dc290bd928a8139ba94e3ab32ed9a6273/stream.go#L158
-				if haveCommit && grpc.Code(err) != codes.Unavailable {
+				if haveCommit {
 					ambiguousError = err
 				}
 				log.ErrEventf(ctx, "RPC error: %s", err)
