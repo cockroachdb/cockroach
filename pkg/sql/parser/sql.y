@@ -3055,8 +3055,8 @@ transaction_stmt:
 // %Help: BEGIN - start a transaction
 // %Category: Txn
 // %Text:
-// BEGIN [TRANSACTION] [ <txnparameter> [, ...] ]
-// START TRANSACTION [ <txnparameter> [, ...] ]
+// BEGIN [TRANSACTION] [ <txnparameter> [[,] ...] ]
+// START TRANSACTION [ <txnparameter> [[,] ...] ]
 //
 // Transaction parameters:
 //    ISOLATION LEVEL { SNAPSHOT | SERIALIZABLE }
@@ -3156,9 +3156,19 @@ transaction_mode_list:
     $$.val = $1.transactionModes()
   }
 | transaction_mode_list ',' transaction_mode
+/* With commas is SQL-spec */
   {
     a := $1.transactionModes()
     b := $3.transactionModes()
+    err := a.merge(b)
+    if err != nil { sqllex.Error(err.Error()); return 1}
+    $$.val = a
+  }
+| transaction_mode_list transaction_mode
+/* Without commas is postgres historical */
+  {
+    a := $1.transactionModes()
+    b := $2.transactionModes()
     err := a.merge(b)
     if err != nil { sqllex.Error(err.Error()); return 1}
     $$.val = a
