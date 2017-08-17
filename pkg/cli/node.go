@@ -208,7 +208,7 @@ func nodeStatusesToRows(
 ) [][]string {
 	// Create results that are like the results for SQL results, so that we can pretty-print them.
 	var rows [][]string
-	for _, nodeStatus := range statuses {
+	for i, nodeStatus := range statuses {
 		hostPort := nodeStatus.Desc.Address.AddressField
 		updatedAt := time.Unix(0, nodeStatus.UpdatedAt)
 		updatedAtStr := updatedAt.Format(localTimeFormat)
@@ -248,7 +248,7 @@ func nodeStatusesToRows(
 			)
 		}
 		if nodeCtx.statusShowAll || nodeCtx.statusShowDecommission {
-			row = append(row, decommissionResponseValueToRows(decomStatus.Status)[0][1:]...)
+			row = append(row, decommissionResponseValueToRows(decomStatus.Status)[i][1:]...)
 		}
 		rows = append(rows, row)
 	}
