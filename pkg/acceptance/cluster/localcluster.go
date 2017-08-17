@@ -881,6 +881,7 @@ func (l *LocalCluster) Hostname(i int) string {
 
 // ExecCLI runs ./cockroach <args>.
 func (l *LocalCluster) ExecCLI(ctx context.Context, i int, cmd []string) (string, string, error) {
+	cmd = append([]string{"--host", l.Hostname(i), "--certs-dir=/certs"}, cmd...)
 	cfg := types.ExecConfig{
 		User:         "root",
 		Privileged:   true,

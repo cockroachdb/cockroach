@@ -43,7 +43,9 @@ type Cluster interface {
 	// AssertAndStop performs the same test as Assert but then proceeds to
 	// dismantle the cluster.
 	AssertAndStop(context.Context, testing.TB)
-	// ExecCLI runs `./cockroach <args>`.
+	// ExecCLI runs `./cockroach <args>`, while filling in required flags such as
+	// --insecure, --certs-dir, --host or --port.
+	//
 	// Returns stdout, stderr, and an error.
 	ExecCLI(ctx context.Context, i int, args []string) (string, string, error)
 	// Kill terminates the cockroach process running on the given node number.
