@@ -346,19 +346,27 @@ func SetOpenFileLimitForOneStore() (int, error) {
 }
 
 // MakeTempStoreSpecFromStoreSpec creates a spec for a temporary store under
-// the given StoreSpec's path.
-// TODO(arjun): Add a Cli flag to override this.
-func MakeTempStoreSpecFromStoreSpec(spec base.StoreSpec) (base.StoreSpec, error) {
-	return base.NewStoreSpec(filepath.Join(spec.Path, defaultTempStoreRelativePath))
+// the given StoreSpec's path. If the given spec specifies an in-memory store,
+// the temporary store will be in-memory as well. The Attributes field of the
+// given spec is intentionally not propagated to the temporary store.
+//
+// TODO(arjun): Add a CLI flag to override this.
+func MakeTempStoreSpecFromStoreSpec(spec base.StoreSpec) base.StoreSpec {
+	if spec.InMemory {
+		return base.StoreSpec{
+			// TODO(arjun): Set the size in a principled fashion from the main store
+			// after #16750 is addressed.
+			InMemory: true,
+		}
+	}
+	return base.StoreSpec{
+		Path: filepath.Join(spec.Path, defaultTempStoreRelativePath),
+	}
 }
 
 // MakeConfig returns a Context with default values.
 func MakeConfig(st *cluster.Settings) Config {
 	storeSpec, err := base.NewStoreSpec(defaultStorePath)
-	if err != nil {
-		panic(err)
-	}
-	TempStore, err := MakeTempStoreSpecFromStoreSpec(storeSpec)
 	if err != nil {
 		panic(err)
 	}
@@ -379,7 +387,7 @@ func MakeConfig(st *cluster.Settings) Config {
 		Stores: base.StoreSpecList{
 			Specs: []base.StoreSpec{storeSpec},
 		},
-		TempStore: TempStore,
+		TempStore: MakeTempStoreSpecFromStoreSpec(storeSpec),
 	}
 	cfg.AmbientCtx.Tracer = st.Tracer
 
