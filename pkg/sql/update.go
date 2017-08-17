@@ -20,7 +20,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -107,27 +106,6 @@ func (r *editNodeRun) startEditNode(params runParams, en *editNodeBase) error {
 	}
 
 	return r.rows.Start(params)
-}
-
-func (r *editNodeRun) collectSpans(params runParams) (reads, writes roachpb.Spans, err error) {
-	scanReads, scanWrites, err := collectSpans(params, r.rows)
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(scanWrites) > 0 {
-		return nil, nil, errors.Errorf("unexpected scan span writes: %v", scanWrites)
-	}
-	// TODO(nvanbenschoten): if we notice that r.rows is a ValuesClause, we
-	// may be able to contrain the tableWriter Spans.
-	writerReads, writerWrites, err := r.tw.spans()
-	if err != nil {
-		return nil, nil, err
-	}
-	sqReads, err := collectSubquerySpans(params, r.rows)
-	if err != nil {
-		return nil, nil, err
-	}
-	return append(scanReads, append(writerReads, sqReads...)...), writerWrites, nil
 }
 
 type updateNode struct {

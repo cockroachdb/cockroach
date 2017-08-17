@@ -41,11 +41,11 @@ func collectSpans(params runParams, plan planNode) (reads, writes roachpb.Spans,
 		return n.spans, nil, nil
 
 	case *updateNode:
-		return n.run.collectSpans(params)
+		return editNodeSpans(params, &n.run.editNodeRun)
 	case *insertNode:
-		return n.run.collectSpans(params)
+		return editNodeSpans(params, &n.run.editNodeRun)
 	case *deleteNode:
-		return n.run.collectSpans(params)
+		return editNodeSpans(params, &n.run.editNodeRun)
 
 	case *delayedNode:
 		return collectSpans(params, n.plan)
@@ -81,6 +81,40 @@ func collectSpans(params runParams, plan planNode) (reads, writes roachpb.Spans,
 	}
 
 	panic(fmt.Sprintf("don't know how to collect spans for node %T", plan))
+}
+
+func editNodeSpans(params runParams, r *editNodeRun) (reads, writes roachpb.Spans, err error) {
+	scanReads, scanWrites, err := collectSpans(params, r.rows)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(scanWrites) > 0 {
+		return nil, nil, errors.Errorf("unexpected scan span writes: %v", scanWrites)
+	}
+
+	writerReads, writerWrites, err := tableWriterSpans(params, r.tw)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	sqReads, err := collectSubquerySpans(params, r.rows)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return append(scanReads, append(writerReads, sqReads...)...), writerWrites, nil
+}
+
+func tableWriterSpans(params runParams, tw tableWriter) (reads, writes roachpb.Spans, err error) {
+	// We don't generally know which spans we will be modifying so we must be
+	// conservative and assume anything in the table might change. See TODO on
+	// tableWriter.spans for discussion on constraining spans wherever possible.
+	tableSpans := tw.tableDesc().AllIndexSpans()
+	fkReads, fkWrites := tw.fkSpanCollector().CollectSpans()
+	if len(fkWrites) > 0 {
+		return nil, nil, errors.Errorf("unexpected foreign key span writes: %v", fkWrites)
+	}
+	return fkReads, tableSpans, nil
 }
 
 func indexJoinSpans(params runParams, n *indexJoinNode) (reads, writes roachpb.Spans, err error) {
