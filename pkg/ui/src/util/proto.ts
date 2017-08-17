@@ -58,6 +58,7 @@ export namespace MetricConstants {
   export const lastUpdateNano: string = "lastupdatenanos";
   export const capacity: string = "capacity";
   export const availableCapacity: string = "capacity.available";
+  export const usedCapacity: string = "capacity.used";
   export const sysBytes: string = "sysbytes";
   export const sysCount: string = "syscount";
 
@@ -77,17 +78,6 @@ export function TotalCpu(status: NodeStatus$Properties): number {
   return metrics[MetricConstants.sysCPUPercent] + metrics[MetricConstants.userCPUPercent];
 }
 
-/**
- * BytesUsed computes the total byte usage accounted for in a NodeStatus.
- */
-const aggregateByteKeys = [
-  MetricConstants.liveBytes,
-  MetricConstants.intentBytes,
-  MetricConstants.sysBytes,
-];
-
 export function BytesUsed(s: NodeStatus$Properties): number {
-  return _.sumBy(aggregateByteKeys, (key: string) => {
-    return s.metrics[key];
-  });
+  return s.metrics[MetricConstants.usedCapacity]
 }

@@ -636,16 +636,6 @@ func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
 	fsuTotal := int64(fileSystemUsage.Total)
 	fsuAvail := int64(fileSystemUsage.Avail)
 
-	// If no size limitation have been placed on the store size or if the
-	// limitation is greater than what's available, just return the actual
-	// totals.
-	if r.cfg.MaxSizeBytes == 0 || r.cfg.MaxSizeBytes >= fsuTotal || r.cfg.Dir == "" {
-		return roachpb.StoreCapacity{
-			Capacity:  fsuTotal,
-			Available: fsuAvail,
-		}, nil
-	}
-
 	// Find the total size of all the files in the r.dir and all its
 	// subdirectories.
 	var totalUsedBytes int64
@@ -661,6 +651,17 @@ func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
 		return roachpb.StoreCapacity{}, errOuter
 	}
 
+	// If no size limitation have been placed on the store size or if the
+	// limitation is greater than what's available, just return the actual
+	// totals.
+	if r.cfg.MaxSizeBytes == 0 || r.cfg.MaxSizeBytes >= fsuTotal || r.cfg.Dir == "" {
+		return roachpb.StoreCapacity{
+			Capacity:  fsuTotal,
+			Available: fsuAvail,
+			Used:      totalUsedBytes,
+		}, nil
+	}
+
 	available := r.cfg.MaxSizeBytes - totalUsedBytes
 	if available > fsuAvail {
 		available = fsuAvail
@@ -672,6 +673,7 @@ func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
 	return roachpb.StoreCapacity{
 		Capacity:  r.cfg.MaxSizeBytes,
 		Available: available,
+		Used:      totalUsedBytes,
 	}, nil
 }
 
