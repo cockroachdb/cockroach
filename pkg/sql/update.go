@@ -109,8 +109,8 @@ func (r *editNodeRun) startEditNode(params runParams, en *editNodeBase) error {
 	return r.rows.Start(params)
 }
 
-func (r *editNodeRun) collectSpans(ctx context.Context) (reads, writes roachpb.Spans, err error) {
-	scanReads, scanWrites, err := collectSpans(ctx, r.rows)
+func (r *editNodeRun) collectSpans(params runParams) (reads, writes roachpb.Spans, err error) {
+	scanReads, scanWrites, err := collectSpans(params, r.rows)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -123,7 +123,7 @@ func (r *editNodeRun) collectSpans(ctx context.Context) (reads, writes roachpb.S
 	if err != nil {
 		return nil, nil, err
 	}
-	sqReads, err := collectSubquerySpans(ctx, r.rows)
+	sqReads, err := collectSubquerySpans(params, r.rows)
 	if err != nil {
 		return nil, nil, err
 	}
