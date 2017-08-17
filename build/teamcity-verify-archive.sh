@@ -15,8 +15,16 @@ build/builder.sh make archive ARCHIVE=build/cockroach.src.tgz
 
 # We use test the source archive in a minimal image; the builder image bundles
 # too much developer configuration to simulate a build on a fresh user machine.
+#
+# TODO(benesch): evaluate whether we need to synthesize an /etc/passwd in the
+# container, like we do in builder.sh. For now, we just use the UID/GID from the
+# host and hope nothing in the container notices.
 docker run \
   --rm \
+  --user "$(id -u):$(id -g)" \
   --volume="$(cd "$(dirname "$0")" && pwd):/work" \
   --workdir="/work" \
   golang:stretch ./verify-archive.sh
+
+# Clean up the archive we produced.
+build/builder.sh rm build/cockroach.src.tgz
