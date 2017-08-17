@@ -119,6 +119,7 @@ func TestMetricsRecorder(t *testing.T) {
 		Capacity: roachpb.StoreCapacity{
 			Capacity:  100,
 			Available: 50,
+			Used:      50,
 		},
 	}
 	storeDesc2 := roachpb.StoreDescriptor{
@@ -126,6 +127,7 @@ func TestMetricsRecorder(t *testing.T) {
 		Capacity: roachpb.StoreCapacity{
 			Capacity:  200,
 			Available: 75,
+			Used:      125,
 		},
 	}
 

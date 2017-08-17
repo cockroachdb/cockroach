@@ -112,6 +112,9 @@ class NodeOverview extends React.Component<NodeOverviewProps, {}> {
                           title="Under Replicated %"
                           valueFn={(metrics) => Percentage(metrics[MetricConstants.underReplicatedRanges], metrics[MetricConstants.ranges])} />
                 <TableRow data={node}
+                          title="Used Capacity"
+                          valueFn={(metrics) => Bytes(metrics[MetricConstants.usedCapacity])} />
+                <TableRow data={node}
                           title="Available Capacity"
                           valueFn={(metrics) => Bytes(metrics[MetricConstants.availableCapacity])} />
                 <TableRow data={node}
