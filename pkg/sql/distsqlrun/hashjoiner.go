@@ -159,7 +159,7 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 		h.flowCtx.Settings.DistSQLUseTempStorageJoins.Get()) ||
 		h.flowCtx.testingKnobs.MemoryLimitBytes > 0 ||
 		h.testingKnobMemFailPoint != unset
-	evalCtx := h.flowCtx.EvalCtx
+	rowContainerMon := h.flowCtx.EvalCtx.Mon
 	if useTempStorage {
 		// Limit the memory use by creating a child monitor with a hard limit.
 		// The hashJoiner will overflow to disk if this limit is not enough.
@@ -167,8 +167,8 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 		if limit <= 0 {
 			limit = workMemBytes
 		}
-		limitedMon := mon.MakeMonitorInheritWithLimit("hashjoiner-limited", limit, evalCtx.Mon)
-		limitedMon.Start(ctx, evalCtx.Mon, mon.BoundAccount{})
+		limitedMon := mon.MakeMonitorInheritWithLimit("hashjoiner-limited", limit, rowContainerMon)
+		limitedMon.Start(ctx, rowContainerMon, mon.BoundAccount{})
 		defer limitedMon.Stop(ctx)
 
 		// Override initialBufferSize to be a third of this processor's memory
@@ -182,11 +182,11 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 		// the buffer phase.
 		h.initialBufferSize = limit / 3
 
-		evalCtx.Mon = &limitedMon
+		rowContainerMon = &limitedMon
 	}
 
-	h.rows[leftSide].init(nil /* ordering */, h.leftSource.Types(), &evalCtx)
-	h.rows[rightSide].init(nil /* ordering */, h.rightSource.Types(), &evalCtx)
+	h.rows[leftSide].initWithMon(nil /* ordering */, h.leftSource.Types(), &h.flowCtx.EvalCtx, rowContainerMon)
+	h.rows[rightSide].initWithMon(nil /* ordering */, h.rightSource.Types(), &h.flowCtx.EvalCtx, rowContainerMon)
 	defer h.rows[leftSide].Close(ctx)
 	defer h.rows[rightSide].Close(ctx)
 

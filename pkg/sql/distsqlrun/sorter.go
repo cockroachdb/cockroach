@@ -99,6 +99,7 @@ func (s *sorter) Run(ctx context.Context, wg *sync.WaitGroup) {
 	useTempStorage := (s.flowCtx.Settings.DistSQLUseTempStorage.Get() &&
 		s.flowCtx.Settings.DistSQLUseTempStorageSorts.Get()) ||
 		s.testingKnobMemLimit > 0
+	rowContainerMon := s.flowCtx.EvalCtx.Mon
 	if s.matchLen == 0 && s.count == 0 && useTempStorage {
 		// We will use the sortAllStrategy in this case and potentially fall
 		// back to disk.
@@ -114,12 +115,9 @@ func (s *sorter) Run(ctx context.Context, wg *sync.WaitGroup) {
 		limitedMon.Start(ctx, s.flowCtx.EvalCtx.Mon, mon.BoundAccount{})
 		defer limitedMon.Stop(ctx)
 
-		evalCtx := s.flowCtx.EvalCtx
-		evalCtx.Mon = &limitedMon
-		sv.init(s.ordering, s.rawInput.Types(), &evalCtx)
-	} else {
-		sv.init(s.ordering, s.rawInput.Types(), &s.flowCtx.EvalCtx)
+		rowContainerMon = &limitedMon
 	}
+	sv.initWithMon(s.ordering, s.rawInput.Types(), &s.flowCtx.EvalCtx, rowContainerMon)
 	// Construct the optimal sorterStrategy.
 	var ss sorterStrategy
 	if s.matchLen == 0 {
