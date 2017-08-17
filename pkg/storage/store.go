@@ -2268,6 +2268,7 @@ func (s *Store) Capacity() (roachpb.StoreCapacity, error) {
 
 	now := s.cfg.Clock.Now()
 	var leaseCount int32
+	var logicalBytes int64
 	var totalWritesPerSecond float64
 	bytesPerReplica := make([]float64, 0, capacity.RangeCount)
 	writesPerReplica := make([]float64, 0, capacity.RangeCount)
@@ -2275,7 +2276,11 @@ func (s *Store) Capacity() (roachpb.StoreCapacity, error) {
 		if r.ownsValidLease(now) {
 			leaseCount++
 		}
-		bytesPerReplica = append(bytesPerReplica, float64(r.GetMVCCStats().LiveBytes))
+		mvccStats := r.GetMVCCStats()
+		// TODO(DONOTSUBMIT): Which MVCCStats fields should we use for this?
+		// Just LiveBytes? LiveBytes+IntentBytes+SysBytes? KeyBytes+ValBytes+SysBytes?
+		logicalBytes += mvccStats.LiveBytes
+		bytesPerReplica = append(bytesPerReplica, float64(mvccStats.LiveBytes))
 		// TODO(a-robinson): How dangerous is it that this number will be incorrectly
 		// low the first time or two it gets gossiped when a store starts? We can't
 		// easily have a countdown as its value changes like for leases/replicas.
@@ -2286,6 +2291,7 @@ func (s *Store) Capacity() (roachpb.StoreCapacity, error) {
 		return true
 	})
 	capacity.LeaseCount = leaseCount
+	capacity.LogicalBytes = logicalBytes
 	capacity.WritesPerSecond = totalWritesPerSecond
 	capacity.BytesPerReplica = roachpb.PercentilesFromData(bytesPerReplica)
 	capacity.WritesPerReplica = roachpb.PercentilesFromData(writesPerReplica)

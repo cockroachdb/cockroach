@@ -328,9 +328,10 @@ func testStoreTierSetup(datacenter, floor, rack, slot string) []roachpb.Tier {
 // is always 100 and available and range count are passed in.
 func testStoreCapacitySetup(available int64, rangeCount int32) roachpb.StoreCapacity {
 	return roachpb.StoreCapacity{
-		Capacity:   100,
-		Available:  available,
-		RangeCount: rangeCount,
+		Capacity:     100,
+		Available:    available,
+		LogicalBytes: 100 - available,
+		RangeCount:   rangeCount,
 	}
 }
 
@@ -800,17 +801,19 @@ func TestBalanceScore(t *testing.T) {
 
 	storeList := StoreList{
 		candidateRanges:          stat{mean: 1000},
-		candidateDiskUsage:       stat{mean: 0.50},
+		candidateLogicalBytes:    stat{mean: 512 * 1024 * 1024},
 		candidateWritesPerSecond: stat{mean: 1000},
 	}
 
 	sEmpty := roachpb.StoreCapacity{
-		Capacity:  1024 * 1024 * 1024,
-		Available: 1024 * 1024 * 1024,
+		Capacity:     1024 * 1024 * 1024,
+		Available:    1024 * 1024 * 1024,
+		LogicalBytes: 0,
 	}
 	sMean := roachpb.StoreCapacity{
 		Capacity:        1024 * 1024 * 1024,
 		Available:       512 * 1024 * 1024,
+		LogicalBytes:    512 * 1024 * 1024,
 		RangeCount:      1000,
 		WritesPerSecond: 1000,
 		BytesPerReplica: roachpb.Percentiles{
@@ -834,16 +837,26 @@ func TestBalanceScore(t *testing.T) {
 	sRangesUnderfull.RangeCount = 500
 	sBytesOverfull := sMean
 	sBytesOverfull.Available = 256 * 1024 * 1024
+	sBytesOverfull.LogicalBytes = sBytesOverfull.Capacity - sBytesOverfull.Available
 	sBytesUnderfull := sMean
 	sBytesUnderfull.Available = 768 * 1024 * 1024
+	sBytesUnderfull.LogicalBytes = sBytesUnderfull.Capacity - sBytesUnderfull.Available
 	sRangesOverfullBytesOverfull := sRangesOverfull
 	sRangesOverfullBytesOverfull.Available = 256 * 1024 * 1024
+	sRangesOverfullBytesOverfull.LogicalBytes =
+		sRangesOverfullBytesOverfull.Capacity - sRangesOverfullBytesOverfull.Available
 	sRangesUnderfullBytesUnderfull := sRangesUnderfull
 	sRangesUnderfullBytesUnderfull.Available = 768 * 1024 * 1024
+	sRangesUnderfullBytesUnderfull.LogicalBytes =
+		sRangesUnderfullBytesUnderfull.Capacity - sRangesUnderfullBytesUnderfull.Available
 	sRangesUnderfullBytesOverfull := sRangesUnderfull
 	sRangesUnderfullBytesOverfull.Available = 256 * 1024 * 1024
+	sRangesUnderfullBytesOverfull.LogicalBytes =
+		sRangesUnderfullBytesOverfull.Capacity - sRangesUnderfullBytesOverfull.Available
 	sRangesOverfullBytesUnderfull := sRangesOverfull
 	sRangesOverfullBytesUnderfull.Available = 768 * 1024 * 1024
+	sRangesOverfullBytesUnderfull.LogicalBytes =
+		sRangesOverfullBytesUnderfull.Capacity - sRangesOverfullBytesUnderfull.Available
 	sRangesUnderfullBytesOverfullWritesOverfull := sRangesUnderfullBytesOverfull
 	sRangesUnderfullBytesOverfullWritesOverfull.WritesPerSecond = 1500
 	sRangesUnderfullBytesUnderfullWritesOverfull := sRangesUnderfullBytesUnderfull
@@ -950,7 +963,7 @@ func TestRebalanceConvergesOnMean(t *testing.T) {
 	const diskCapacity = 2000
 	storeList := StoreList{
 		candidateRanges:          stat{mean: 1000},
-		candidateDiskUsage:       stat{mean: 1000.0 / float64(diskCapacity)},
+		candidateLogicalBytes:    stat{mean: 1000},
 		candidateWritesPerSecond: stat{mean: 1000},
 	}
 	emptyRange := RangeInfo{}
@@ -1005,6 +1018,7 @@ func TestRebalanceConvergesOnMean(t *testing.T) {
 		sc := roachpb.StoreCapacity{
 			Capacity:        diskCapacity,
 			Available:       diskCapacity - tc.liveBytes,
+			LogicalBytes:    tc.liveBytes,
 			RangeCount:      tc.rangeCount,
 			WritesPerSecond: tc.writesPerSecond,
 		}
