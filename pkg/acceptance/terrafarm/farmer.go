@@ -412,6 +412,11 @@ func (f *Farmer) AssertAndStop(ctx context.Context, t testing.TB) {
 	f.MustDestroy(t)
 }
 
+// ExecCLI runs ./cockroach <args>.
+func (f *Farmer) ExecCLI(ctx context.Context, i int, args []string) (string, string, error) {
+	return f.ExecRoot(ctx, i, append([]string{"./cockroach"}, args...))
+}
+
 // ExecRoot executes the given command with super-user privileges.
 // Returns stdout, stderr, and an error.
 func (f *Farmer) ExecRoot(ctx context.Context, i int, cmd []string) (string, string, error) {
