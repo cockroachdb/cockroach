@@ -88,6 +88,16 @@ var (
 	// is to allow a restarting node to discover approximately how long it has
 	// been down without needing to retrieve liveness records from the cluster.
 	localStoreLastUpSuffix = []byte("uptm")
+	// In windows, DB:SyncWAL() is not implemented due to fact that
+	// `WinWritableFile` is not thread safe. To get around that, the only other
+	// methods that can be used to ensure that a sync is triggered is to either
+	// flush the memtables or perform a write with `WriteOptions.sync=true`. See
+	// https://github.com/facebook/rocksdb/wiki/RocksDB-FAQ for more details.
+	// Please also see #17442 for more discussion on the topic.
+	// So in order to force a sync, we issue a write to a single store local key
+	// with `sync=true`. localStoreSyncSuffix is this key and is used solely for
+	// this purpose.
+	localStoreSyncSuffix = []byte("sync")
 
 	// LocalRangeIDPrefix is the prefix identifying per-range data
 	// indexed by Range ID. The Range ID is appended to this prefix,
