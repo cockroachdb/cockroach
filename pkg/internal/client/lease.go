@@ -30,7 +30,7 @@ import (
 // DefaultLeaseDuration is the duration a lease will be acquired for if no
 // duration was specified in a LeaseManager's options.
 // Exported for testing purposes.
-const DefaultLeaseDuration = time.Minute
+const DefaultLeaseDuration = 1 * time.Minute
 
 // LeaseNotAvailableError indicates that the lease the caller attempted to
 // acquire is currently held by a different client.
