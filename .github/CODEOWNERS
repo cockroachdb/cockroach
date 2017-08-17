@@ -16,7 +16,7 @@
 /pkg/server/                 @cockroachdb/core-prs
 /pkg/storage/                @cockroachdb/core-prs
 /pkg/migration/              @cockroachdb/core-prs
-/pkg/migration/sqlmigrations @cockroachdb/core-prs @cockroachdb/sql-wiring-prs
+/pkg/sqlmigrations           @cockroachdb/core-prs @cockroachdb/sql-wiring-prs
 
 /pkg/ccl/                    @cockroachdb/sql-ccl-prs
 /pkg/cli/                    @cockroachdb/cli-prs
