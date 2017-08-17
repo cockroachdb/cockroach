@@ -262,11 +262,11 @@ func (p Percentiles) String() string {
 
 // String returns a string representation of the StoreCapacity.
 func (sc StoreCapacity) String() string {
-	return fmt.Sprintf("disk (capacity=%s, available=%s, logicalBytes=%s), "+
+	return fmt.Sprintf("disk (capacity=%s, available=%s, used=%s, logicalBytes=%s), "+
 		"ranges=%d, leases=%d, writes=%.2f, "+
 		"bytesPerReplica={%s}, writesPerReplica={%s}",
 		humanizeutil.IBytes(sc.Capacity), humanizeutil.IBytes(sc.Available),
-		humanizeutil.IBytes(sc.LogicalBytes),
+		humanizeutil.IBytes(sc.Used), humanizeutil.IBytes(sc.LogicalBytes),
 		sc.RangeCount, sc.LeaseCount, sc.WritesPerSecond,
 		sc.BytesPerReplica, sc.WritesPerReplica)
 }
@@ -276,7 +276,17 @@ func (sc StoreCapacity) FractionUsed() float64 {
 	if sc.Capacity == 0 {
 		return 0
 	}
-	return float64(sc.Capacity-sc.Available) / float64(sc.Capacity)
+	// Prefer computing the fraction of available disk space used by considering
+	// anything on the disk that isn't in the store's data directory just a sunk
+	// cost, not truly part of the disk's capacity. This means that the disk's
+	// capacity is really just the available space plus cockroach's usage.
+	//
+	// Fall back to a more pessimistic calcuation of disk usage if we don't know
+	// how much space the store's data is taking up.
+	if sc.Used == 0 {
+		return float64(sc.Capacity-sc.Available) / float64(sc.Capacity)
+	}
+	return float64(sc.Used) / float64(sc.Available+sc.Used)
 }
 
 // CombinedAttrs returns the full list of attributes for the store, including

@@ -16226,6 +16226,8 @@ export namespace cockroach {
         type StoreCapacity$Properties = {
             capacity?: Long;
             available?: Long;
+            used?: Long;
+            logical_bytes?: Long;
             range_count?: number;
             lease_count?: number;
             writes_per_second?: number;
@@ -16260,6 +16262,18 @@ export namespace cockroach {
              * @type {Long}
              */
             public available: Long;
+
+            /**
+             * StoreCapacity used.
+             * @type {Long}
+             */
+            public used: Long;
+
+            /**
+             * StoreCapacity logical_bytes.
+             * @type {Long}
+             */
+            public logical_bytes: Long;
 
             /**
              * StoreCapacity range_count.
