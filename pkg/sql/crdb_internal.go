@@ -697,9 +697,12 @@ func populateSessionsTable(
 		var oldestStart time.Time
 		var oldestStartDatum parser.Datum
 
-		for _, query := range session.ActiveQueries {
+		numQueries := len(session.ActiveQueries)
+		for idx, query := range session.ActiveQueries {
 			activeQueries.WriteString(query.Sql)
-			activeQueries.WriteString("; ")
+			if idx+1 < numQueries {
+				activeQueries.WriteString("; ")
+			}
 
 			if oldestStart.IsZero() || query.Start.Before(oldestStart) {
 				oldestStart = query.Start
