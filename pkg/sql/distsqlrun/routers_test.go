@@ -58,6 +58,9 @@ func setupRouter(
 
 func TestRouters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/17721")
+
 	const numCols = 6
 	const numRows = 200
 
