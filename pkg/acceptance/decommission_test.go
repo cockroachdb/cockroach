@@ -44,14 +44,13 @@ func decommission(
 	ctx context.Context, c cluster.Cluster, runNode int, targetNode roachpb.NodeID, verbs ...string,
 ) (string, error) {
 	args := []string{
-		cluster.CockroachBinaryInContainer,
 		"node", verbs[0], "--host", c.Hostname(runNode), "--certs-dir=/certs",
 	}
 	if targetNode > 0 {
 		args = append(args, strconv.Itoa(int(targetNode)))
 	}
 	args = append(args, verbs[1:]...)
-	o, _, err := c.ExecRoot(ctx, runNode, args)
+	o, _, err := c.ExecCLI(ctx, runNode, args)
 	return o, err
 }
 
@@ -150,10 +149,9 @@ func testDecommissionInner(
 	{
 		o, err := func() (string, error) {
 			args := []string{
-				cluster.CockroachBinaryInContainer,
 				"quit", "--decommission", "--host", c.Hostname(2), "--certs-dir=/certs",
 			}
-			o, _, err := c.ExecRoot(ctx, 2, args)
+			o, _, err := c.ExecCLI(ctx, 2, args)
 			return o, err
 		}()
 		if err != nil {
