@@ -294,11 +294,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	serverCfg.SSLCertsDir = startCtx.serverSSLCertsDir
 	serverCfg.User = security.NodeUser
 
-	var err error
-	serverCfg.TempStore, err = server.MakeTempStoreSpecFromStoreSpec(serverCfg.Stores.Specs[0])
-	if err != nil {
-		return err
-	}
+	serverCfg.TempStore = server.MakeTempStoreSpecFromStoreSpec(serverCfg.Stores.Specs[0])
 
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
