@@ -55,6 +55,12 @@ func (*StatementStatistics) ProtoMessage()               {}
 func (*StatementStatistics) Descriptor() ([]byte, []int) { return fileDescriptorAppStats, []int{0} }
 
 type NumericStat struct {
+	// NumericStat keeps track of two running values --- the running mean and
+	// the running sum of squared differences from the mean. Using this along
+	// with the total count of values, we can compute variance using Welford's
+	// method. This is more reliable than keeping track of the sum of
+	// squared values, which is liable to overflow. See
+	// https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Online_algorithm
 	Mean         float64 `protobuf:"fixed64,1,opt,name=mean" json:"mean"`
 	SquaredDiffs float64 `protobuf:"fixed64,2,opt,name=squared_diffs,json=squaredDiffs" json:"squared_diffs"`
 }

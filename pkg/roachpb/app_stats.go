@@ -19,7 +19,9 @@ func (l *NumericStat) GetVariance(count int64) float64 {
 	return l.SquaredDiffs / (float64(count) - 1)
 }
 
-// Record adjusts the derived statistics for a new value.
+// Record updates the underlying running counts, incorporating the given value.
+// It follows Welford's algorithm (Technometrics, 1962). The running count must
+// be stored as it is required to finalize and retrieve the variance.
 func (l *NumericStat) Record(count int64, val float64) {
 	delta := val - l.Mean
 	l.Mean += delta / float64(count)
