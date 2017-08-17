@@ -352,8 +352,6 @@ func getConfigs(t *testing.T) []cluster.TestConfig {
 	return configs
 }
 
-type configTestRunner func(context.Context, *testing.T, cluster.Cluster, cluster.TestConfig)
-
 // runTestOnConfigs retrieves the full list of test configurations and runs the
 // passed in test against each on serially. If any options are specified, they may mutate
 // the test config before it runs.
