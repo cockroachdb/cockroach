@@ -925,6 +925,7 @@ func NewSchemaChangeManager(
 		schemaChangers: make(map[sqlbase.ID]SchemaChanger),
 		// TODO(radu): investigate using the same distSQLPlanner from the executor.
 		distSQLPlanner: newDistSQLPlanner(
+			distsqlrun.Version,
 			st,
 			nodeDesc,
 			rpcContext,
