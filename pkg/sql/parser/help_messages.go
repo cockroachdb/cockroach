@@ -832,8 +832,8 @@ https://www.cockroachlabs.com/docs/create-index.html
 		Category: hTxn,
 		//line sql.y: 3057
 		Text: `
-BEGIN [TRANSACTION] [ <txnparameter> [, ...] ]
-START TRANSACTION [ <txnparameter> [, ...] ]
+BEGIN [TRANSACTION] [ <txnparameter> [[,] ...] ]
+START TRANSACTION [ <txnparameter> [[,] ...] ]
 
 Transaction parameters:
    ISOLATION LEVEL { SNAPSHOT | SERIALIZABLE }
@@ -870,67 +870,67 @@ END [TRANSACTION]
 		SeeAlso: `BEGIN, COMMIT, SAVEPOINT, https://www.cockroachlabs.com/docs/rollback-transaction.html
 `,
 	},
-	//line sql.y: 3203
+	//line sql.y: 3213
 	`CREATE DATABASE`: {
 		ShortDescription: `create a new database`,
-		//line sql.y: 3204
+		//line sql.y: 3214
 		Category: hDDL,
-		//line sql.y: 3205
+		//line sql.y: 3215
 		Text: `CREATE DATABASE [IF NOT EXISTS] <name>
 `,
-		//line sql.y: 3206
+		//line sql.y: 3216
 		SeeAlso: `https://www.cockroachlabs.com/docs/create-database.html
 `,
 	},
-	//line sql.y: 3275
+	//line sql.y: 3285
 	`INSERT`: {
 		ShortDescription: `create new rows in a table`,
-		//line sql.y: 3276
+		//line sql.y: 3286
 		Category: hDML,
-		//line sql.y: 3277
+		//line sql.y: 3287
 		Text: `
 INSERT INTO <tablename> [[AS] <name>] [( <colnames...> )]
        <selectclause>
        [ON CONFLICT [( <colnames...> )] {DO UPDATE SET ... [WHERE <expr>] | DO NOTHING}]
        [RETURNING <exprs...>]
 `,
-		//line sql.y: 3282
+		//line sql.y: 3292
 		SeeAlso: `UPSERT, UPDATE, DELETE, https://www.cockroachlabs.com/docs/insert.html
 `,
 	},
-	//line sql.y: 3299
+	//line sql.y: 3309
 	`UPSERT`: {
 		ShortDescription: `create or replace rows in a table`,
-		//line sql.y: 3300
+		//line sql.y: 3310
 		Category: hDML,
-		//line sql.y: 3301
+		//line sql.y: 3311
 		Text: `
 UPSERT INTO <tablename> [AS <name>] [( <colnames...> )]
        <selectclause>
        [RETURNING <exprs...>]
 `,
-		//line sql.y: 3305
+		//line sql.y: 3315
 		SeeAlso: `INSERT, UPDATE, DELETE, https://www.cockroachlabs.com/docs/upsert.html
 `,
 	},
-	//line sql.y: 3381
+	//line sql.y: 3391
 	`UPDATE`: {
 		ShortDescription: `update rows of a table`,
-		//line sql.y: 3382
+		//line sql.y: 3392
 		Category: hDML,
-		//line sql.y: 3383
+		//line sql.y: 3393
 		Text: `UPDATE <tablename> [[AS] <name>] SET ... [WHERE <expr>] [RETURNING <exprs...>]
 `,
-		//line sql.y: 3384
+		//line sql.y: 3394
 		SeeAlso: `INSERT, UPSERT, DELETE, https://www.cockroachlabs.com/docs/update.html
 `,
 	},
-	//line sql.y: 3552
+	//line sql.y: 3562
 	`<SELECTCLAUSE>`: {
 		ShortDescription: `access tabular data`,
-		//line sql.y: 3553
+		//line sql.y: 3563
 		Category: hDML,
-		//line sql.y: 3554
+		//line sql.y: 3564
 		Text: `
 Select clause:
   TABLE <tablename>
@@ -938,12 +938,12 @@ Select clause:
   SELECT ... [ { INTERSECT | UNION | EXCEPT } [ ALL | DISTINCT ] <selectclause> ]
 `,
 	},
-	//line sql.y: 3565
+	//line sql.y: 3575
 	`SELECT`: {
 		ShortDescription: `retrieve rows from a data source and compute a result`,
-		//line sql.y: 3566
+		//line sql.y: 3576
 		Category: hDML,
-		//line sql.y: 3567
+		//line sql.y: 3577
 		Text: `
 SELECT [DISTINCT]
        { <expr> [[AS] <name>] | [ [<dbname>.] <tablename>. ] * } [, ...]
@@ -957,40 +957,40 @@ SELECT [DISTINCT]
        [ LIMIT { <expr> | ALL } ]
        [ OFFSET <expr> [ ROW | ROWS ] ]
 `,
-		//line sql.y: 3579
+		//line sql.y: 3589
 		SeeAlso: `https://www.cockroachlabs.com/docs/select.html
 `,
 	},
-	//line sql.y: 3639
+	//line sql.y: 3649
 	`TABLE`: {
 		ShortDescription: `select an entire table`,
-		//line sql.y: 3640
+		//line sql.y: 3650
 		Category: hDML,
-		//line sql.y: 3641
+		//line sql.y: 3651
 		Text: `TABLE <tablename>
 `,
-		//line sql.y: 3642
+		//line sql.y: 3652
 		SeeAlso: `SELECT, VALUES, https://www.cockroachlabs.com/docs/table-expressions.html
 `,
 	},
-	//line sql.y: 3881
+	//line sql.y: 3891
 	`VALUES`: {
 		ShortDescription: `select a given set of values`,
-		//line sql.y: 3882
+		//line sql.y: 3892
 		Category: hDML,
-		//line sql.y: 3883
+		//line sql.y: 3893
 		Text: `VALUES ( <exprs...> ) [, ...]
 `,
-		//line sql.y: 3884
+		//line sql.y: 3894
 		SeeAlso: `SELECT, TABLE, https://www.cockroachlabs.com/docs/table-expressions.html
 `,
 	},
-	//line sql.y: 3989
+	//line sql.y: 3999
 	`<SOURCE>`: {
 		ShortDescription: `define a data source for SELECT`,
-		//line sql.y: 3990
+		//line sql.y: 4000
 		Category: hDML,
-		//line sql.y: 3991
+		//line sql.y: 4001
 		Text: `
 Data sources:
   <tablename> [ @ { <idxname> | <indexhint> } ]
@@ -1010,7 +1010,7 @@ Index hints:
   '{' NO_INDEX_JOIN [, ...] '}'
 
 `,
-		//line sql.y: 4009
+		//line sql.y: 4019
 		SeeAlso: `https://www.cockroachlabs.com/docs/table-expressions.html
 `,
 	},
