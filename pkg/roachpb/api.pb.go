@@ -136,6 +136,8 @@
 		StoreNotFoundError
 		UnhandledRetryableError
 		HandledRetryableTxnError
+		UntrackedTxnError
+		TxnPrevAttemptError
 		ErrorDetail
 		ErrPosition
 		Error
