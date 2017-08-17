@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"time"
 
 	raven "github.com/getsentry/raven-go"
 	"github.com/pkg/errors"
@@ -170,6 +171,10 @@ func sendCrashReport(ctx context.Context, r interface{}, depth int) {
 	ex := raven.NewException(err, raven.NewStacktrace(depth+1, contextLines, crdbPaths))
 	packet := raven.NewPacket(err.Error(), ex)
 	eventID, ch := raven.DefaultClient.Capture(packet, nil /* tags */)
-	<-ch
-	Shout(ctx, Severity_ERROR, "Reported as error "+eventID)
+	select {
+	case <-ch:
+		Shout(ctx, Severity_ERROR, "Reported as error "+eventID)
+	case <-time.After(10 * time.Second):
+		Shout(ctx, Severity_ERROR, "Time out trying to submit crash report")
+	}
 }
