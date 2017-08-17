@@ -42,19 +42,19 @@ features, and this is what's introduced in this RFC.
 # Guide-level explanation
 
 We'll identify the "moving parts" in this machinery first and then walk through
-an example migration from 1.0 to 1.1, which contains exactly one incompatible
-upgrade, namely:
+an example migration from 1.1 to 1.2, which contains exactly one incompatible
+upgrade (which really lands in `v1.1`, but let's forget that), namely:
 
 On splits,
 
-- v1.0 was creating a Raft `HardState` while *proposing* the split. By the time
+- v1.1 was creating a Raft `HardState` while *proposing* the split. By the time
   it was applied, it was potentially stale, which could lead to anomalies.
-- v1.1 does not write a `HardState` during the split, but it writes a "correct"
+- v1.2 does not write a `HardState` during the split, but it writes a "correct"
   `HardState` immediately before the right-hand side's Raft group is booted up.
 
-This is an incompatible change because in a mixed cluster in which v1.1 issues
-the split and v1.0 applies it, the node at v1.0 would end up without a
-`HardState`, and immediately crash. We need a proper migration -- `v1.1` must know
+This is an incompatible change because in a mixed cluster in which v1.2 issues
+the split and v1.1 applies it, the node at v1.1 would end up without a
+`HardState`, and immediately crash. We need a proper migration -- `v1.2` must know
 when it is safe to use the new behavior; it must use the previous (incorrect) one
 until it knows that, and hopes that the anomaly doesn't strike in the meantime.
 
@@ -64,11 +64,17 @@ works around the incompatibility, and we can't keep the status quo.
 
 Now let's do the actual update. For that, the operator
 
-1. performs a rolling restart into the `v1.1` binary,
-1. checks that all nodes are *really* running `v1.1` (in particular, auto-scaling etc are disabled),
-1. in the meantime the nodes are running `v1.1`, but with 1.0-compatible features, until the operator
-1. runs `SET CLUSTER SETTING version = '1.1'`.
-1. The cluster now operates at `v1.1`.
+1. verify the output of `SHOW CLUSTER SETTING version` on each node, to assert
+   they are using `v1.1` (it could be that the operator previously updated
+   the *binary* from `v1.0` to `v1.1` but forgot to actually bump the version
+   in use!)
+1. performs a rolling restart into the `v1.2` binary,
+1. checks that the nodes are *really* running a `v1.2` binary. This includes
+   making sure auto-scalers, failover, etc, would spawn nodes at `v1.2`
+1. in the meantime the nodes are running `v1.2`, but with `v1.1`-compatible
+   features, until the operator
+1. runs `SET CLUSTER SETTING version = '1.2'`.
+1. The cluster now operates at `v1.2`.
 
 We run in detail through what the last one does under the hood.
 
@@ -95,14 +101,15 @@ which an explicit `SET CLUSTER SETTING` has been issued.
 Note that the `version` variable has additional logic to be detailed in the next
 section.
 
-## Running `SET CLUSTER SETTING version = '1.1'`
+## Running `SET CLUSTER SETTING version = '1.2'`
 
 What actually happens when the cluster version is bumped? There are a few things
 that we want.
 
 1. The operator should not be able to perform "illegal" version bumps. A legal
    bump is from one version to the next: 1.0 to 1.1, 1.1 to 1.2, perhaps 1.6 to
-   2.0 (if 1.6 is the last release in the 1.x series), but *not* 1.0 to 1.3.
+   2.0 (if 1.6 is the last release in the 1.x series), but *not* 1.0 to 1.3 and
+   definitely not `v1.0` to `v5.0`.
 
    This immediately tells us that the `version` setting needs to take into
    account its existing value before updating to the new one, and may need
@@ -200,7 +207,7 @@ here.
 
 Note that a server always accepts features that require the new version, even if
 it hasn't received note that they are safe to use, when their use is prompted by
-another node. For instance, if a new intra-node RPC is introduced, nodes should
+another node. For instance, if a new inter-node RPC is introduced, nodes should
 always respond to it if they can (i.e. know about the RPC). A bump in the
 cluster version propagates through the cluster asynchronously, so a node may
 start using a new feature before others realize it is safe.
@@ -234,7 +241,8 @@ Note that there is no `v1.1` yet. This version will only exist with the stable
 
 Tagging the unstable versions individually has the advantage that we can
 properly migrate our test clusters simply through a rolling restart, and then a
-version bump to `<major>.<minor>-<old_unstable+1>`.
+version bump to `<major>.<minor>-<latest_unstable>` (it's allowed to enable
+multiple unstable versions at once).
 
 ## Upgrade process (close to documentation)
 
@@ -251,6 +259,10 @@ create appropriate backups. They should roughly follow this checklist:
 ### Steps in production
 - Disable auto-scaling or other systems that could add a node with a conflicting
   version at an inopportune time.
+- Ensure that all nodes are either running or guaranteed to not rejoin the
+  cluster after it has been updated.
+    - We intend to protect the cluster from mismatched nodes, but the exact
+      mechanism is TBD. Check back when writing the docs.
 - Create a (full or incremental) backup of the cluster.
 - Rolling upgrade of nodes to next version.
 - At this point, all nodes will be running the new binary, albeit with
@@ -259,7 +271,7 @@ create appropriate backups. They should roughly follow this checklist:
   will accidentally be added).
 - Verify basic cluster stability. If problems occur, a rolling downgrade is
   still an option.
-- Depending on how much time has passed, another incremental update could be
+- Depending on how much time has passed, another incremental backup could be
   advisable.
 - `SET CLUSTER SETTING version = '<newversion>'`
 - In the event of a catastrophic failure or corruption due to usage of new
@@ -273,9 +285,7 @@ create appropriate backups. They should roughly follow this checklist:
 
 # Reference-level explanation
 
-This section runs through the moving parts involved in the implementation. Note
-that at the time of writing and contrary to how the RFC process should work, it
-has *already been implemented* (mod some caveats). See the links in the header.
+This section runs through the moving parts involved in the implementation.
 
 ## Detailed design
 
@@ -338,15 +348,19 @@ The `system.settings` table entry for `version` is in fact a marshalled
 
 ### Server Configuration
 
-The "binary version" is `ServerVersion` (type `roachpb.Version`) and is part of
-the configuration of a `*Server`. For a running binary, it will always be equal
-to `cluster.BinaryServerVersion` but in tests it can in principle be configured
-freely.
+The `ServerVersion` (type `roachpb.Version`, sometimes referred to as "binary
+version") is baked into the binaries we release (in which case it equals
+`cluster.BinaryServerVersion`, so our `v1.1` release will have `ServerVersion
+==roachpb.Version{Major: 1, Minor: 1}`). However, internally, ServerVersion` is
+part of the configuration of a `*Server` and can be set freely (which we do in
+tests).
 
-Similarly a `Server` is configured with `MinimumSupportedVersion`. If a server
-starts up with a store that has a persisted smaller than this or larger than its
+Similarly a `Server` is configured with `MinimumSupportedVersion` (which, again,
+is hard-coded in release builds to equal `cluster.BinaryServerVersion`, and
+usually trails `ServerVersion` by a minor version). If a server starts up with a
+store that has a persisted version smaller than this or larger than its
 `ServerVersion`, it exits with an error. We'll talk about store persistence in
-the appropriate subsection.
+the corresponding subsection.
 
 ### Gossip
 
@@ -356,8 +370,19 @@ used at the time of writing; see the unresolved section for discussion.
 ### Storage (persistence)
 
 Once a node has received a cluster-wide minimum version from the settings table
-via Gossip, it is be used as the authoritative version to use (unless the binary
-can't support it, in which case it commits suicide).
+via Gossip, it is used as the authoritative version the server is operating at
+(unless the binary can't support it, in which case it commits suicide).
+
+Typically, the server will go through the following transitions:
+
+- `ServerVersion` is (say) `v1.1`, runs `v1.1` (`MinimumVersion == UseVersion == v1.1`),
+  stores have the above `MinimumVersion` and `UseVersion` persisted
+- rolling restart
+- `ServerVersion` is `v1.2`, runs `v1.1`-compatible (`MinimumVersion == UseVersion == v1.1`)
+- operator issues `SET CLUSTER SETTING version = '1.2'`
+- gossip received: stores updated to `MinimumVersion == UseVersion == v1.2`
+- new `MinimumVersion` (and equal `UseVersion`) exposed to running process:
+  `ServerVersion` is (still) `v1.2`, but now `MinimumVersion == UseVersion == v1.2`.
 
 We need to close the gap between starting the server and receiving the above
 information, and we also want to prevent restarting into a too-recent version
@@ -368,7 +393,8 @@ to a store local key (`keys.StoreClusterVersionKey()`) on *all* of its stores
 (as a `ClusterVersion`).
 
 Additionally, when a cluster is bootstrapped, the store is populated with
-the running server's version.
+the running server's version (this will not happen for `v1.0` binaries as
+these don't know about this RFC).
 
 When a node starts up with new stores to bootstrap, it takes precautions to
 propagate the cluster version to these stores as well. See the unresolved
@@ -379,13 +405,14 @@ This seems simple enough, but the logic that reads from the stores has to deal
 with the case in which the various stores either have no (as could happen as we
 boot into them from 1.0) or conflicting information. Roughly speaking,
 bootstrapping stores can afford to wait for an authoritative version from gossip
-and uses that, and whenever we ask a store about its version and it has none
-persisted, it counts as a store at `v1.0`. We make sure to write the version
-atomically with the bootstrap information (to make sure we don't bootstrap a
-store, crash, and then have it count as `v1.0`). We also write all versions
-again after bootstrap to immunize against the case in which the cluster version
-was bumped mid-bootstrap (this could cause trouble if we add one store and then
-remove the original one between restarts).
+and use that, and whenever we ask a store about its persisted `MinimumVersion`
+and it has none persisted, it counts as a store at
+`MinimumVersion=UseVersion=v1.0`. We make sure to write the version atomically
+with the bootstrap information (to make sure we don't bootstrap a store, crash,
+and then misidentify as `v1.0`). We also write all versions again after
+bootstrap to immunize against the case in which the cluster version was bumped
+mid-bootstrap (this could cause trouble if we add one store and then remove the
+original one between restarts).
 
 The cluster version we synthesize at node start is then the one with the largest
 `MinimumVersion` (and the smallest `UseVersion`).
@@ -504,15 +531,20 @@ We could use the "suspected" local version during cluster version when no
 `version` is persisted in the table, but:
 
 - this is incorrect when, say, adding a v3.0 node to a v1.0 cluster and
-  running `SET CLUSTER SETTING version = '3.1'` on that node. All other
-  nodes in the cluster would die instantly.
-- it would "work" on all nodes running the "actual" version; the `v3.0` node
-  would die instead.
+  running `SET CLUSTER SETTING version = '3.1'` on that node:
+  - in the absence of any other information (and assume that we don't try any
+    "polling" of everyone's version which can quickly get out of hand), the node
+    assumes the cluster version is `v3.1` (or `v3.0`).
+  - it manages to write `version = v3.1` to the settings table.
+  - all other nodes in the cluster die when they learn about that.
+- it would "work" (with `v1.1`) on all nodes running the "actual" version; the
+  `v3.0` node would die instead, learning that the cluster is now at `v1.1`.
 - the classic case to worry about is that of an operator "skipping a version"
   during the rolling restart. We would catch this as the new binary can't run
-  from the old storage directory (i.e. `v1.7` can't be started on a `v1.5` store).
+  from the old storage directory (i.e. `v1.7` can't be started on a `v1.5`
+  store).
 - it would equally be impossible to roll from `v1.5` into `v1.6` into `v1.7`
-  (the storage markers would remain at `v1.5`)
+  (the storage markers would remain at `v1.5`).
 - in effect, to realize the above problem in practice, an operator would
   have to add a brand new node running a too new version to a preexisting
   cluster and run the version bump on that node.
@@ -592,18 +624,27 @@ should be hard to get wrong (and if you do, it shouldn't matter).
 
 The main concessions we make in this design are
 
-1. no support for downgrades. This was discussed early in the life of this RFC
-   but was discarded for its inherent complexity and large search space that
-   would have to be tested.
+1. no support for downgrades once the version setting has been bumped. This was
+   discussed early in the life of this RFC but was discarded for its inherent
+   complexity and large search space that would have to be tested.
 
    It will be difficult to retrofit this, though a change in the upgrade process
    can itself be migrated through the upgrade process presented here (though it
    would take one release to go through the transition).
+
+   We can at least downgrade before bumping the cluster version setting though,
+   which allows all backwards-compatible changes (ideally the bulk) to be
+   tested.
+
+   Additionally, we could implement the originally envisioned `UseVersion`
+   functionality so that the following conditions must be met until a backup is
+   really necessary if a problem is a) severe and b) can't be "deactivated" (via
+   `UseVersion`).
 1. relying on the operator to guarantee that a cluster is not running mixed
    versions when the explicit version bump is issued.
 
    There are ways in which this could be approximately inferred, but again it
-   was deemed to complex given the time frame. Besides, operators may prefer to
+   was deemed too complex given the time frame. Besides, operators may prefer to
    have some level of control over the migration process, and it is difficult to
    make an autonomous upgrade workflow foolproof.
 
