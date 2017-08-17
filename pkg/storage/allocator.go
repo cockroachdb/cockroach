@@ -153,7 +153,7 @@ func makeAllocatorRand(source rand.Source) allocatorRand {
 // rebalancing decisions for a given range.
 type RangeInfo struct {
 	Desc            *roachpb.RangeDescriptor
-	LiveBytes       int64
+	LogicalBytes    int64
 	WritesPerSecond float64
 }
 
@@ -161,7 +161,7 @@ func rangeInfoForRepl(repl *Replica, desc *roachpb.RangeDescriptor) RangeInfo {
 	writesPerSecond, _ := repl.writeStats.avgQPS()
 	return RangeInfo{
 		Desc:            desc,
-		LiveBytes:       repl.GetMVCCStats().LiveBytes,
+		LogicalBytes:    repl.GetMVCCStats().Total(),
 		WritesPerSecond: writesPerSecond,
 	}
 }
