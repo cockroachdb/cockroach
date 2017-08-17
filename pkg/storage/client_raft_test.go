@@ -640,7 +640,7 @@ func TestRaftLogSizeAfterTruncation(t *testing.T) {
 // truncated.
 func TestSnapshotAfterTruncation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
+	t.Skip("#17448")
 	for _, changeTerm := range []bool{false, true} {
 		name := "sameTerm"
 		if changeTerm {
