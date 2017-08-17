@@ -76,8 +76,9 @@ var singleStore = []*roachpb.StoreDescriptor{
 			Attrs:  roachpb.Attributes{Attrs: []string{"a"}},
 		},
 		Capacity: roachpb.StoreCapacity{
-			Capacity:  100,
-			Available: 200,
+			Capacity:     200,
+			Available:    100,
+			LogicalBytes: 100,
 		},
 	},
 }
@@ -91,8 +92,9 @@ var sameDCStores = []*roachpb.StoreDescriptor{
 			Attrs:  roachpb.Attributes{Attrs: []string{"a"}},
 		},
 		Capacity: roachpb.StoreCapacity{
-			Capacity:  100,
-			Available: 200,
+			Capacity:     200,
+			Available:    100,
+			LogicalBytes: 100,
 		},
 	},
 	{
@@ -103,8 +105,9 @@ var sameDCStores = []*roachpb.StoreDescriptor{
 			Attrs:  roachpb.Attributes{Attrs: []string{"a"}},
 		},
 		Capacity: roachpb.StoreCapacity{
-			Capacity:  100,
-			Available: 200,
+			Capacity:     200,
+			Available:    100,
+			LogicalBytes: 100,
 		},
 	},
 	{
@@ -115,8 +118,9 @@ var sameDCStores = []*roachpb.StoreDescriptor{
 			Attrs:  roachpb.Attributes{Attrs: []string{"a"}},
 		},
 		Capacity: roachpb.StoreCapacity{
-			Capacity:  100,
-			Available: 200,
+			Capacity:     200,
+			Available:    100,
+			LogicalBytes: 100,
 		},
 	},
 	{
@@ -127,8 +131,9 @@ var sameDCStores = []*roachpb.StoreDescriptor{
 			Attrs:  roachpb.Attributes{Attrs: []string{"a"}},
 		},
 		Capacity: roachpb.StoreCapacity{
-			Capacity:  100,
-			Available: 200,
+			Capacity:     200,
+			Available:    100,
+			LogicalBytes: 100,
 		},
 	},
 	{
@@ -139,8 +144,9 @@ var sameDCStores = []*roachpb.StoreDescriptor{
 			Attrs:  roachpb.Attributes{Attrs: []string{"a"}},
 		},
 		Capacity: roachpb.StoreCapacity{
-			Capacity:  100,
-			Available: 200,
+			Capacity:     200,
+			Available:    100,
+			LogicalBytes: 100,
 		},
 	},
 }
@@ -154,8 +160,9 @@ var multiDCStores = []*roachpb.StoreDescriptor{
 			Attrs:  roachpb.Attributes{Attrs: []string{"a"}},
 		},
 		Capacity: roachpb.StoreCapacity{
-			Capacity:  100,
-			Available: 200,
+			Capacity:     200,
+			Available:    100,
+			LogicalBytes: 100,
 		},
 	},
 	{
@@ -166,8 +173,9 @@ var multiDCStores = []*roachpb.StoreDescriptor{
 			Attrs:  roachpb.Attributes{Attrs: []string{"b"}},
 		},
 		Capacity: roachpb.StoreCapacity{
-			Capacity:  100,
-			Available: 200,
+			Capacity:     200,
+			Available:    100,
+			LogicalBytes: 100,
 		},
 	},
 }
@@ -695,9 +703,10 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 
 	ranges := func(rangeCount int32) roachpb.StoreCapacity {
 		return roachpb.StoreCapacity{
-			Capacity:   1000,
-			Available:  1000,
-			RangeCount: rangeCount,
+			Capacity:     1000,
+			Available:    1000,
+			LogicalBytes: 0,
+			RangeCount:   rangeCount,
 		}
 	}
 
@@ -2546,6 +2555,7 @@ type testStore struct {
 func (ts *testStore) add(bytes int64) {
 	ts.Capacity.RangeCount++
 	ts.Capacity.Available -= bytes
+	ts.Capacity.LogicalBytes += bytes
 }
 
 func (ts *testStore) rebalance(ots *testStore, bytes int64) {
@@ -2554,8 +2564,10 @@ func (ts *testStore) rebalance(ots *testStore, bytes int64) {
 	}
 	ts.Capacity.RangeCount--
 	ts.Capacity.Available += bytes
+	ts.Capacity.LogicalBytes -= bytes
 	ots.Capacity.RangeCount++
 	ots.Capacity.Available -= bytes
+	ots.Capacity.LogicalBytes += bytes
 }
 
 func Example_rebalancing() {
