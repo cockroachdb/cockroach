@@ -126,7 +126,6 @@ INSERT INTO t (i, f, s, b, d, t, n, o, e, tz, e1, e2, s1) VALUES
 	if string(out) != expect {
 		t.Fatalf("expected: %s\ngot: %s", expect, out)
 	}
-
 }
 
 func TestDumpFlags(t *testing.T) {
@@ -562,5 +561,280 @@ INSERT INTO t (i, j) VALUES
 		t.Fatal(err)
 	} else if !strings.Contains(string(out), "relation d.t does not exist") {
 		t.Fatalf("unexpected output: %s", out)
+	}
+}
+
+// TestDumpIdentifiers tests dumping a table with a semicolon in the table,
+// index, and column names properly escapes.
+func TestDumpIdentifiers(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c := newCLITest(cliTestParams{t: t})
+	defer c.cleanup()
+
+	const create = `
+	CREATE DATABASE d;
+	CREATE TABLE d.";" (";" int, index (";"));
+	INSERT INTO d.";" VALUES (1);
+`
+
+	if out, err := c.RunWithCaptureArgs([]string{"sql", "-e", create}); err != nil {
+		t.Fatal(err)
+	} else {
+		t.Log(string(out))
+	}
+
+	out, err := c.RunWithCaptureArgs([]string{"dump", "d"})
+	if err != nil {
+		t.Fatal(err)
+	} else {
+		t.Log(string(out))
+	}
+
+	const expect = `dump d
+CREATE TABLE ";" (
+	";" INT NULL,
+	INDEX ";_;_idx" (";" ASC),
+	FAMILY "primary" (";", rowid)
+);
+
+INSERT INTO ";" (";") VALUES
+	(1);
+`
+
+	if string(out) != expect {
+		t.Fatalf("expected: %s\ngot: %s", expect, out)
+	}
+}
+
+// TestDumpReferenceOrder tests dumping a database with foreign keys does
+// so in correct order.
+func TestDumpReferenceOrder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c := newCLITest(cliTestParams{t: t})
+	defer c.cleanup()
+
+	// Create tables so they would be in incorrect order if sorted alphabetically.
+	const create = `
+CREATE DATABASE d1;
+CREATE DATABASE d2;
+USE d1;
+
+-- B -> A
+CREATE TABLE b (i int PRIMARY KEY);
+CREATE TABLE a (i int REFERENCES b);
+INSERT INTO b VALUES (1);
+INSERT INTO a VALUES (1);
+
+-- Test multiple tables to make sure transitive deps are sorted correctly.
+-- E -> D -> C
+-- G -> F -> D -> C
+CREATE TABLE g (i int PRIMARY KEY);
+CREATE TABLE f (i int PRIMARY KEY, g int REFERENCES g);
+CREATE TABLE e (i int PRIMARY KEY);
+CREATE TABLE d (i int PRIMARY KEY, e int REFERENCES e, f int REFERENCES f);
+CREATE TABLE c (i int REFERENCES d);
+INSERT INTO g VALUES (1);
+INSERT INTO f VALUES (1, 1);
+INSERT INTO e VALUES (1);
+INSERT INTO d VALUES (1, 1, 1);
+INSERT INTO c VALUES (1);
+`
+	if out, err := c.RunWithCaptureArgs([]string{"sql", "-e", create}); err != nil {
+		t.Fatal(err)
+	} else {
+		t.Log(string(out))
+	}
+
+	out, err := c.RunWithCapture("dump d1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const expectDump = `dump d1
+CREATE TABLE b (
+	i INT NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (i ASC),
+	FAMILY "primary" (i)
+);
+
+CREATE TABLE a (
+	i INT NULL,
+	CONSTRAINT fk_i_ref_b FOREIGN KEY (i) REFERENCES b (i),
+	INDEX a_auto_index_fk_i_ref_b (i ASC),
+	FAMILY "primary" (i, rowid)
+);
+
+CREATE TABLE e (
+	i INT NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (i ASC),
+	FAMILY "primary" (i)
+);
+
+CREATE TABLE g (
+	i INT NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (i ASC),
+	FAMILY "primary" (i)
+);
+
+CREATE TABLE f (
+	i INT NOT NULL,
+	g INT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (i ASC),
+	CONSTRAINT fk_g_ref_g FOREIGN KEY (g) REFERENCES g (i),
+	INDEX f_auto_index_fk_g_ref_g (g ASC),
+	FAMILY "primary" (i, g)
+);
+
+CREATE TABLE d (
+	i INT NOT NULL,
+	e INT NULL,
+	f INT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (i ASC),
+	CONSTRAINT fk_e_ref_e FOREIGN KEY (e) REFERENCES e (i),
+	INDEX d_auto_index_fk_e_ref_e (e ASC),
+	CONSTRAINT fk_f_ref_f FOREIGN KEY (f) REFERENCES f (i),
+	INDEX d_auto_index_fk_f_ref_f (f ASC),
+	FAMILY "primary" (i, e, f)
+);
+
+CREATE TABLE c (
+	i INT NULL,
+	CONSTRAINT fk_i_ref_d FOREIGN KEY (i) REFERENCES d (i),
+	INDEX c_auto_index_fk_i_ref_d (i ASC),
+	FAMILY "primary" (i, rowid)
+);
+
+INSERT INTO b (i) VALUES
+	(1);
+
+INSERT INTO a (i) VALUES
+	(1);
+
+INSERT INTO e (i) VALUES
+	(1);
+
+INSERT INTO g (i) VALUES
+	(1);
+
+INSERT INTO f (i, g) VALUES
+	(1, 1);
+
+INSERT INTO d (i, e, f) VALUES
+	(1, 1, 1);
+
+INSERT INTO c (i) VALUES
+	(1);
+`
+
+	if string(out) != expectDump {
+		t.Fatalf("expected: %s\ngot: %s", expectDump, out)
+	}
+
+	// Remove first line of output ("dump a").
+	dump := strings.SplitN(string(out), "\n", 2)[1]
+	out, err = c.RunWithCaptureArgs([]string{"sql", "-d", "d2", "-e", dump})
+	if err != nil {
+		t.Fatal(err)
+	} else {
+		t.Log(out)
+	}
+
+	// Verify import of dump was successful.
+	const SELECT = `
+SELECT * FROM a;
+SELECT * FROM c;
+`
+	out, err = c.RunWithCaptureArgs([]string{"sql", "-d", "d2", "-e", SELECT})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const expect = `sql -d d2 -e 
+SELECT * FROM a;
+SELECT * FROM c;
+
+1 row
+i
+1
+1 row
+i
+1
+`
+
+	if string(out) != expect {
+		t.Fatalf("expected: %s\ngot: %s", expect, out)
+	}
+
+	// Ensure dump specifying only some tables works if those tables reference
+	// tables not in the dump.
+
+	out, err = c.RunWithCapture("dump d1 d e")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const expectDump2 = `dump d1 d e
+CREATE TABLE e (
+	i INT NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (i ASC),
+	FAMILY "primary" (i)
+);
+
+CREATE TABLE d (
+	i INT NOT NULL,
+	e INT NULL,
+	f INT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (i ASC),
+	CONSTRAINT fk_e_ref_e FOREIGN KEY (e) REFERENCES e (i),
+	INDEX d_auto_index_fk_e_ref_e (e ASC),
+	CONSTRAINT fk_f_ref_f FOREIGN KEY (f) REFERENCES f (i),
+	INDEX d_auto_index_fk_f_ref_f (f ASC),
+	FAMILY "primary" (i, e, f)
+);
+
+INSERT INTO e (i) VALUES
+	(1);
+
+INSERT INTO d (i, e, f) VALUES
+	(1, 1, 1);
+`
+
+	if string(out) != expectDump2 {
+		t.Fatalf("expected: %s\ngot: %s", expectDump2, out)
+	}
+}
+
+// TestDumpView verifies dump doesn't attempt to dump data of views.
+func TestDumpView(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c := newCLITest(cliTestParams{t: t})
+	defer c.cleanup()
+
+	const create = `
+	CREATE DATABASE d;
+	CREATE VIEW d.bar AS SELECT 1;
+`
+	if out, err := c.RunWithCaptureArgs([]string{"sql", "-e", create}); err != nil {
+		t.Fatal(err)
+	} else {
+		t.Log(string(out))
+	}
+
+	out, err := c.RunWithCaptureArgs([]string{"dump", "d"})
+	if err != nil {
+		t.Fatal(err)
+	} else {
+		t.Log(string(out))
+	}
+
+	const expect = `dump d
+CREATE VIEW bar ("1") AS SELECT 1;
+`
+
+	if string(out) != expect {
+		t.Fatalf("expected: %s\ngot: %s", expect, out)
 	}
 }
