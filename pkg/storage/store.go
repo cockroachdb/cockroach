@@ -3920,6 +3920,7 @@ func (s *Store) updateCapacityGauges() error {
 	}
 	s.metrics.Capacity.Update(desc.Capacity.Capacity)
 	s.metrics.Available.Update(desc.Capacity.Available)
+	s.metrics.Used.Update(desc.Capacity.Used)
 
 	return nil
 }
