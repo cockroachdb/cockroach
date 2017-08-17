@@ -29,6 +29,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -636,7 +637,7 @@ func TestPartitionSpans(t *testing.T) {
 		// spans to be passed to partitionSpans
 		spans [][2]string
 
-		// expected result: a list of spans, one for each node.
+		// expected result: a map of node to list of spans.
 		partitions map[int][][2]string
 	}{
 		{
@@ -736,6 +737,7 @@ func TestPartitionSpans(t *testing.T) {
 			tsp.ranges = tc.ranges
 
 			dsp := distSQLPlanner{
+				planVersion:  distsqlrun.Version,
 				st:           cluster.MakeTestingClusterSettings(),
 				nodeDesc:     *tsp.nodes[tc.gatewayNode-1],
 				stopper:      stopper,
@@ -747,6 +749,14 @@ func TestPartitionSpans(t *testing.T) {
 								return fmt.Errorf("test node is unhealthy")
 							}
 						}
+						return nil
+					},
+					OverrideDistSQLVersionCheck: func(
+						node roachpb.NodeID, res *distsqlrun.DistSQLVersionGossipInfo,
+					) error {
+						// Accept any version.
+						res.MinAcceptedVersion = 0
+						res.Version = 1000000
 						return nil
 					},
 				},
@@ -773,6 +783,161 @@ func TestPartitionSpans(t *testing.T) {
 					spans = append(spans, [2]string{string(s.Key), string(s.EndKey)})
 				}
 				resMap[int(p.node)] = spans
+			}
+
+			if !reflect.DeepEqual(resMap, tc.partitions) {
+				t.Errorf("expected partitions:\n  %v\ngot:\n  %v", tc.partitions, resMap)
+			}
+		})
+	}
+}
+
+// Test that span partitioning takes into account the advertised acceptable
+// versions of each node. Spans for which the owner node doesn't support our
+// plan's version will be planned on the gateway.
+func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// The spans that we're going to plan for.
+	span := roachpb.Span{Key: roachpb.Key("A"), EndKey: roachpb.Key("Z")}
+	gatewayNode := roachpb.NodeID(2)
+	ranges := []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}}
+
+	testCases := []struct {
+		// the test's name
+		name string
+
+		// planVersion is the DistSQL version that this plan is targeting.
+		// We'll play with this version and expect nodes to be skipped because of
+		// this.
+		planVersion distsqlrun.DistSQLVersion
+
+		// The versions accepted by each node.
+		nodeVersions map[roachpb.NodeID]distsqlrun.DistSQLVersionGossipInfo
+
+		// nodesNotInGossip is the set of nodes for which we're going to pretend
+		// that gossip returns an error when queried about the DistSQL version.
+		nodesNotInGossip map[roachpb.NodeID]struct{}
+
+		// expected result: a map of node to list of spans.
+		partitions map[roachpb.NodeID][][2]string
+	}{
+		{
+			// In the first test, all nodes are compatible.
+			name:        "current_version",
+			planVersion: 2,
+			nodeVersions: map[roachpb.NodeID]distsqlrun.DistSQLVersionGossipInfo{
+				1: {
+					MinAcceptedVersion: 1,
+					Version:            2,
+				},
+				2: {
+					MinAcceptedVersion: 1,
+					Version:            2,
+				},
+			},
+			partitions: map[roachpb.NodeID][][2]string{
+				1: {{"A", "B"}, {"C", "Z"}},
+				2: {{"B", "C"}},
+			},
+		},
+		{
+			// Plan version is incompatible with node 1. We expect everything to be
+			// assigned to the gateway.
+			// Remember that the gateway is node 2.
+			name:        "next_version",
+			planVersion: 3,
+			nodeVersions: map[roachpb.NodeID]distsqlrun.DistSQLVersionGossipInfo{
+				1: {
+					MinAcceptedVersion: 1,
+					Version:            2,
+				},
+				2: {
+					MinAcceptedVersion: 3,
+					Version:            3,
+				},
+			},
+			partitions: map[roachpb.NodeID][][2]string{
+				2: {{"A", "Z"}},
+			},
+		},
+		{
+			// Like the above, except node 1 is not gossiping its version (simulating
+			// a crdb 1.0 node).
+			name:        "crdb_1.0",
+			planVersion: 3,
+			nodeVersions: map[roachpb.NodeID]distsqlrun.DistSQLVersionGossipInfo{
+				2: {
+					MinAcceptedVersion: 3,
+					Version:            3,
+				},
+			},
+			nodesNotInGossip: map[roachpb.NodeID]struct{}{
+				1: {},
+			},
+			partitions: map[roachpb.NodeID][][2]string{
+				2: {{"A", "Z"}},
+			},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+
+			stopper := stop.NewStopper()
+			defer stopper.Stop(context.TODO())
+
+			tsp := &testSpanResolver{}
+			for i := 1; i <= 2; i++ {
+				tsp.nodes = append(tsp.nodes, &roachpb.NodeDescriptor{
+					NodeID: roachpb.NodeID(i),
+					Address: util.UnresolvedAddr{
+						AddressField: fmt.Sprintf("addr%d", i),
+					},
+				})
+			}
+			tsp.ranges = ranges
+
+			dsp := distSQLPlanner{
+				planVersion:  tc.planVersion,
+				st:           cluster.MakeTestingClusterSettings(),
+				nodeDesc:     *tsp.nodes[gatewayNode-1],
+				stopper:      stopper,
+				spanResolver: tsp,
+				testingKnobs: DistSQLPlannerTestingKnobs{
+					OverrideHealthCheck: func(node roachpb.NodeID, addr string) error {
+						// All the nodes are healthy.
+						return nil
+					},
+					OverrideDistSQLVersionCheck: func(
+						nodeID roachpb.NodeID, res *distsqlrun.DistSQLVersionGossipInfo,
+					) error {
+						if _, ok := tc.nodesNotInGossip[nodeID]; ok {
+							return gossip.NewKeyNotPresentError(
+								gossip.MakeDistSQLNodeVersionKey(nodeID),
+							)
+						}
+						*res = tc.nodeVersions[nodeID]
+						return nil
+					},
+				},
+			}
+
+			planCtx := dsp.NewPlanningCtx(context.Background(), nil /* txn */)
+			partitions, err := dsp.partitionSpans(&planCtx, roachpb.Spans{span})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			resMap := make(map[roachpb.NodeID][][2]string)
+			for _, p := range partitions {
+				if _, ok := resMap[p.node]; ok {
+					t.Fatalf("node %d shows up in multiple partitions", p)
+				}
+				var spans [][2]string
+				for _, s := range p.spans {
+					spans = append(spans, [2]string{string(s.Key), string(s.EndKey)})
+				}
+				resMap[p.node] = spans
 			}
 
 			if !reflect.DeepEqual(resMap, tc.partitions) {

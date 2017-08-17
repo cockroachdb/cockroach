@@ -22,6 +22,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -112,7 +113,7 @@ func TestServer(t *testing.T) {
 	// Verify version handling.
 	t.Run("version", func(t *testing.T) {
 		testCases := []struct {
-			version     uint32
+			version     DistSQLVersion
 			expectedErr string
 		}{
 			{
@@ -146,4 +147,24 @@ func TestServer(t *testing.T) {
 			})
 		}
 	})
+}
+
+// Test that a node gossips its DistSQL version information.
+func TestDistSQLServerGossipsVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	var v DistSQLVersionGossipInfo
+	if err := s.Gossip().GetInfoProto(
+		gossip.MakeDistSQLNodeVersionKey(s.NodeID()), &v,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if v.Version != Version || v.MinAcceptedVersion != MinAcceptedVersion {
+		t.Fatalf("node is gossipping the wrong version. Expected: [%d-%d], got [%d-%d",
+			Version, MinAcceptedVersion, v.Version, v.MinAcceptedVersion)
+	}
 }

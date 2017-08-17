@@ -60,6 +60,11 @@ import (
 //    and add processing stages (connected to the result routers of the children
 //    node).
 type distSQLPlanner struct {
+	// planVersion is the version of DistSQL targeted by the plan we're building.
+	// This is currently only assigned to the node's current DistSQL version and
+	// is used to skip incompatible nodes when mapping spans.
+	planVersion distsqlrun.DistSQLVersion
+
 	st *cluster.Settings
 	// The node descriptor for the gateway node that initiated this query.
 	nodeDesc     roachpb.NodeDescriptor
@@ -72,6 +77,9 @@ type distSQLPlanner struct {
 	// runnerChan is used to send out requests (for running SetupFlow RPCs) to a
 	// pool of workers.
 	runnerChan chan runnerRequest
+
+	// gossip handle use to check node version compatibility
+	gossip *gossip.Gossip
 }
 
 const resolverPolicy = distsqlplan.BinPackingLeaseHolderChoice
@@ -81,6 +89,7 @@ const resolverPolicy = distsqlplan.BinPackingLeaseHolderChoice
 var logPlanDiagram = envutil.EnvOrDefaultBool("COCKROACH_DISTSQL_LOG_PLAN", false)
 
 func newDistSQLPlanner(
+	planVersion distsqlrun.DistSQLVersion,
 	st *cluster.Settings,
 	nodeDesc roachpb.NodeDescriptor,
 	rpcCtx *rpc.Context,
@@ -91,11 +100,13 @@ func newDistSQLPlanner(
 	testingKnobs DistSQLPlannerTestingKnobs,
 ) *distSQLPlanner {
 	dsp := &distSQLPlanner{
+		planVersion:  planVersion,
 		st:           st,
 		nodeDesc:     nodeDesc,
 		rpcContext:   rpcCtx,
 		stopper:      stopper,
 		distSQLSrv:   distSQLSrv,
+		gossip:       gossip,
 		spanResolver: distsqlplan.NewSpanResolver(distSender, gossip, nodeDesc, resolverPolicy),
 		testingKnobs: testingKnobs,
 	}
@@ -412,6 +423,10 @@ type spanPartition struct {
 // spanPartitions (one for each relevant node), which form a partitioning of the
 // spans (i.e. they are non-overlapping and their union is exactly the original
 // set of spans).
+//
+// partitionSpans does its best to not assign ranges on nodes that are known to
+// either be unhealthy or running an incompatible version. The ranges owned by
+// such nodes are assigned to the gateway.
 func (dsp *distSQLPlanner) partitionSpans(
 	planCtx *planningCtx, spans roachpb.Spans,
 ) ([]spanPartition, error) {
@@ -422,6 +437,9 @@ func (dsp *distSQLPlanner) partitionSpans(
 	partitions := make([]spanPartition, 0, 1)
 	// nodeMap maps a nodeID to an index inside the partitions array.
 	nodeMap := make(map[roachpb.NodeID]int)
+	// nodeVerCompatMap maintains info about which nodes advertise DistSQL
+	// versions compatible with this plan and which ones don't.
+	nodeVerCompatMap := make(map[roachpb.NodeID]bool)
 	it := planCtx.spanIter
 	for _, span := range spans {
 		var rspan roachpb.RSpan
@@ -489,12 +507,26 @@ func (dsp *distSQLPlanner) partitionSpans(
 					}
 					planCtx.nodeAddresses[nodeID] = addr
 				}
-				if addr == "" {
-					// An empty address indicates an unhealthy host. Use the gateway to
-					// process this span instead of the unhealthy host.
+				var compat bool
+				if addr != "" {
+					// Check if the node's DistSQL version is compatible with this plan.
+					// If it isn't, we'll use the gateway.
+					var ok bool
+					if compat, ok = nodeVerCompatMap[nodeID]; !ok {
+						compat = dsp.nodeVersionIsCompatible(nodeID, dsp.planVersion)
+						nodeVerCompatMap[nodeID] = compat
+					}
+				}
+				// If the node is unhealthy or its DistSQL version is incompatible, use
+				// the gateway to process this span instead of the unhealthy host.
+				// An empty address indicates an unhealthy host.
+				if addr == "" || !compat {
+					log.Eventf(ctx, "not planning on node %d. unhealthy: %t, incompatible version: %t",
+						nodeID, addr == "", !compat)
 					nodeID = dsp.nodeDesc.NodeID
 					partitionIdx, inNodeMap = nodeMap[nodeID]
 				}
+
 				if !inNodeMap {
 					partitionIdx = len(partitions)
 					partitions = append(partitions, spanPartition{node: nodeID})
@@ -523,6 +555,25 @@ func (dsp *distSQLPlanner) partitionSpans(
 		}
 	}
 	return partitions, nil
+}
+
+// nodeVersionIsCompatible decides whether a particular node's DistSQL version
+// is compatible with planVer. It uses gossip to find out the node's version
+// range.
+func (dsp *distSQLPlanner) nodeVersionIsCompatible(
+	nodeID roachpb.NodeID, planVer distsqlrun.DistSQLVersion,
+) bool {
+	var v distsqlrun.DistSQLVersionGossipInfo
+	if hook := dsp.testingKnobs.OverrideDistSQLVersionCheck; hook != nil {
+		if err := hook(nodeID, &v); err != nil {
+			return false
+		}
+	} else {
+		if err := dsp.gossip.GetInfoProto(gossip.MakeDistSQLNodeVersionKey(nodeID), &v); err != nil {
+			return false
+		}
+	}
+	return distsqlrun.FlowVerIsCompatible(dsp.planVersion, v.MinAcceptedVersion, v.Version)
 }
 
 // initTableReaderSpec initializes a TableReaderSpec/PostProcessSpec that
