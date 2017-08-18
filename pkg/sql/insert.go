@@ -645,3 +645,7 @@ func (n *insertNode) Values() parser.Datums {
 	n.run.rowsUpserted.PopFirst()
 	return row
 }
+
+func (n *insertNode) isUpsert() bool {
+	return n.n.OnConflict != nil
+}

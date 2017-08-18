@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func newValuesListLenErr(exp, got int) error {
@@ -39,12 +40,16 @@ type valuesNode struct {
 	tuples   [][]parser.TypedExpr
 	rows     *sqlbase.RowContainer
 
+	// isConst is set if the valuesNode only contains constant expressions (no
+	// subqueries). In this case, rows will be evaluated during the first call
+	// to planNode.Start and memoized for future consumption. A valuesNode with
+	// isConst = true can serve its values multiple times. See valuesNode.Reset.
+	isConst bool
+
 	// rowsPopped is used for heaps, it indicates the number of rows that were
 	// "popped". These rows are still part of the underlying sqlbase.RowContainer, in the
 	// range [rows.Len()-n.rowsPopped, rows.Len).
 	rowsPopped int
-
-	desiredTypes []parser.Type // This can be removed when we only type check once.
 
 	nextRow       int  // The index of the next row.
 	invertSorting bool // Inverts the sorting predicate.
@@ -57,6 +62,7 @@ func (p *planner) newContainerValuesNode(columns sqlbase.ResultColumns, capacity
 		rows: sqlbase.NewRowContainer(
 			p.session.TxnState.makeBoundAccount(), sqlbase.ColTypeInfoFromResCols(columns), capacity,
 		),
+		isConst: true,
 	}
 }
 
@@ -64,9 +70,9 @@ func (p *planner) ValuesClause(
 	ctx context.Context, n *parser.ValuesClause, desiredTypes []parser.Type,
 ) (planNode, error) {
 	v := &valuesNode{
-		p:            p,
-		n:            n,
-		desiredTypes: desiredTypes,
+		p:       p,
+		n:       n,
+		isConst: true,
 	}
 	if len(n.Tuples) == 0 {
 		return v, nil
@@ -78,6 +84,9 @@ func (p *planner) ValuesClause(
 	tupleBuf := make([]parser.TypedExpr, len(n.Tuples)*numCols)
 
 	v.columns = make(sqlbase.ResultColumns, 0, numCols)
+
+	defer func(prev bool) { p.hasSubqueries = prev }(p.hasSubqueries)
+	p.hasSubqueries = false
 
 	for num, tuple := range n.Tuples {
 		if a, e := len(tuple.Exprs), numCols; a != e {
@@ -118,11 +127,21 @@ func (p *planner) ValuesClause(
 		v.tuples = append(v.tuples, tupleRow)
 	}
 
+	// TODO(nvanbenschoten) if v.isConst, we should be able to evaluate n.rows
+	// ahead of time. This requires changing the contract for planNode.Close such
+	// that it must always be called unless an error is returned from a planNode
+	// constructor. This would simplify the Close contract, but would make some
+	// code (like in planner.SelectClause) more messy.
+	v.isConst = !p.hasSubqueries
 	return v, nil
 }
 
+// Start implements the planNode interface.
 func (n *valuesNode) Start(params runParams) error {
-	if n.n == nil {
+	if n.rows != nil {
+		if !n.isConst {
+			log.Fatalf(params.ctx, "valuesNode evaluted twice")
+		}
 		return nil
 	}
 
@@ -167,6 +186,16 @@ func (n *valuesNode) Next(runParams) (bool, error) {
 	}
 	n.nextRow++
 	return true, nil
+}
+
+// Reset resets the valuesNode processing state without requiring recomputation
+// of the values tuples if the valuesNode is processed again. Reset can only
+// be called if valuesNode.isConst.
+func (n *valuesNode) Reset(ctx context.Context) {
+	if !n.isConst {
+		log.Fatalf(ctx, "valuesNode.Reset can only be called on constant valuesNodes")
+	}
+	n.nextRow = 0
 }
 
 func (n *valuesNode) Close(ctx context.Context) {
