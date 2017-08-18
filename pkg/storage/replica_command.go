@@ -3526,8 +3526,10 @@ func (r *Replica) ChangeReplicas(
 	changeType roachpb.ReplicaChangeType,
 	target roachpb.ReplicationTarget,
 	desc *roachpb.RangeDescriptor,
+	reason RangeLogEventReason,
+	details string,
 ) error {
-	return r.changeReplicas(ctx, changeType, target, desc, SnapshotRequest_REBALANCE)
+	return r.changeReplicas(ctx, changeType, target, desc, SnapshotRequest_REBALANCE, reason, details)
 }
 
 func (r *Replica) changeReplicas(
@@ -3536,6 +3538,8 @@ func (r *Replica) changeReplicas(
 	target roachpb.ReplicationTarget,
 	desc *roachpb.RangeDescriptor,
 	priority SnapshotRequest_Priority,
+	reason RangeLogEventReason,
+	details string,
 ) error {
 	repDesc := roachpb.ReplicaDescriptor{
 		NodeID:  target.NodeID,
@@ -3651,7 +3655,9 @@ func (r *Replica) changeReplicas(
 		}
 
 		// Log replica change into range event log.
-		if err := r.store.logChange(ctx, txn, changeType, repDesc, updatedDesc); err != nil {
+		if err := r.store.logChange(
+			ctx, txn, changeType, repDesc, updatedDesc, reason, details,
+		); err != nil {
 			return err
 		}
 

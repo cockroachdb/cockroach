@@ -195,7 +195,7 @@ func (rq *replicateQueue) shouldQueue(
 		return false, 0
 	}
 
-	target := rq.allocator.RebalanceTarget(ctx, zone.Constraints, rangeInfo, storeFilterThrottled)
+	target, _ := rq.allocator.RebalanceTarget(ctx, zone.Constraints, rangeInfo, storeFilterThrottled)
 	if log.V(2) {
 		if target != nil {
 			log.Infof(ctx, "rebalance target found, enqueuing")
@@ -270,7 +270,7 @@ func (rq *replicateQueue) processOneChange(
 		if log.V(1) {
 			log.Infof(ctx, "adding a new replica")
 		}
-		newStore, err := rq.allocator.AllocateTarget(
+		newStore, details, err := rq.allocator.AllocateTarget(
 			ctx,
 			zone.Constraints,
 			desc.Replicas,
@@ -305,7 +305,7 @@ func (rq *replicateQueue) processOneChange(
 				NodeID:  newStore.Node.NodeID,
 				StoreID: newStore.StoreID,
 			})
-			_, err := rq.allocator.AllocateTarget(
+			_, _, err := rq.allocator.AllocateTarget(
 				ctx,
 				zone.Constraints,
 				oldPlusNewReplicas,
@@ -324,7 +324,14 @@ func (rq *replicateQueue) processOneChange(
 				newReplica, rangeRaftProgress(repl.RaftStatus(), desc.Replicas))
 		}
 		if err := rq.addReplica(
-			ctx, repl, newReplica, desc, SnapshotRequest_RECOVERY); err != nil {
+			ctx,
+			repl,
+			newReplica,
+			desc,
+			SnapshotRequest_RECOVERY,
+			ReasonRangeUnderReplicated,
+			details,
+		); err != nil {
 			return false, err
 		}
 	case AllocatorRemove:
@@ -332,7 +339,7 @@ func (rq *replicateQueue) processOneChange(
 			log.Infof(ctx, "removing a replica")
 		}
 		candidates := filterUnremovableReplicas(repl.RaftStatus(), desc.Replicas)
-		removeReplica, err := rq.allocator.RemoveTarget(ctx, zone.Constraints, candidates, rangeInfo)
+		removeReplica, details, err := rq.allocator.RemoveTarget(ctx, zone.Constraints, candidates, rangeInfo)
 		if err != nil {
 			return false, err
 		}
@@ -372,7 +379,9 @@ func (rq *replicateQueue) processOneChange(
 				NodeID:  removeReplica.NodeID,
 				StoreID: removeReplica.StoreID,
 			}
-			if err := rq.removeReplica(ctx, repl, target, desc); err != nil {
+			if err := rq.removeReplica(
+				ctx, repl, target, desc, ReasonRangeOverReplicated, details,
+			); err != nil {
 				return false, err
 			}
 		}
@@ -416,7 +425,9 @@ func (rq *replicateQueue) processOneChange(
 				NodeID:  decommissioningReplica.NodeID,
 				StoreID: decommissioningReplica.StoreID,
 			}
-			if err := rq.removeReplica(ctx, repl, target, desc); err != nil {
+			if err := rq.removeReplica(
+				ctx, repl, target, desc, ReasonStoreDecommissioning, "",
+			); err != nil {
 				return false, err
 			}
 		}
@@ -439,7 +450,9 @@ func (rq *replicateQueue) processOneChange(
 			NodeID:  deadReplica.NodeID,
 			StoreID: deadReplica.StoreID,
 		}
-		if err := rq.removeReplica(ctx, repl, target, desc); err != nil {
+		if err := rq.removeReplica(
+			ctx, repl, target, desc, ReasonStoreDead, "",
+		); err != nil {
 			return false, err
 		}
 	case AllocatorConsiderRebalance:
@@ -470,7 +483,7 @@ func (rq *replicateQueue) processOneChange(
 		}
 
 		if !rq.store.TestingKnobs().DisableReplicaRebalancing {
-			rebalanceStore := rq.allocator.RebalanceTarget(
+			rebalanceStore, details := rq.allocator.RebalanceTarget(
 				ctx, zone.Constraints, rangeInfo, storeFilterThrottled)
 			if rebalanceStore == nil {
 				if log.V(1) {
@@ -487,7 +500,14 @@ func (rq *replicateQueue) processOneChange(
 						rebalanceReplica, rangeRaftProgress(repl.RaftStatus(), desc.Replicas))
 				}
 				if err := rq.addReplica(
-					ctx, repl, rebalanceReplica, desc, SnapshotRequest_REBALANCE); err != nil {
+					ctx,
+					repl,
+					rebalanceReplica,
+					desc,
+					SnapshotRequest_REBALANCE,
+					ReasonRebalance,
+					details,
+				); err != nil {
 					return false, err
 				}
 				return true, nil
@@ -541,8 +561,10 @@ func (rq *replicateQueue) addReplica(
 	target roachpb.ReplicationTarget,
 	desc *roachpb.RangeDescriptor,
 	priority SnapshotRequest_Priority,
+	reason RangeLogEventReason,
+	details string,
 ) error {
-	return repl.changeReplicas(ctx, roachpb.ADD_REPLICA, target, desc, priority)
+	return repl.changeReplicas(ctx, roachpb.ADD_REPLICA, target, desc, priority, reason, details)
 }
 
 func (rq *replicateQueue) removeReplica(
@@ -550,8 +572,10 @@ func (rq *replicateQueue) removeReplica(
 	repl *Replica,
 	target roachpb.ReplicationTarget,
 	desc *roachpb.RangeDescriptor,
+	reason RangeLogEventReason,
+	details string,
 ) error {
-	return repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, target, desc)
+	return repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, target, desc, reason, details)
 }
 
 func (rq *replicateQueue) canTransferLease() bool {

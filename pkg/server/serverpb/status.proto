@@ -446,6 +446,8 @@ message RangeResponse {
       string new_desc = 2;
       string added_replica = 3;
       string removed_replica = 4;
+      string reason = 5;
+      string details = 6;
     }
     repeated storage.RangeLogEvent events = 1 [(gogoproto.nullable) = false];
     repeated PrettyInfo pretty_infos = 2 [(gogoproto.nullable) = false];

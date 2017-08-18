@@ -21314,6 +21314,8 @@ export const cockroach = $root.cockroach = (() => {
                          * @property {string} [new_desc] PrettyInfo new_desc.
                          * @property {string} [added_replica] PrettyInfo added_replica.
                          * @property {string} [removed_replica] PrettyInfo removed_replica.
+                         * @property {string} [reason] PrettyInfo reason.
+                         * @property {string} [details] PrettyInfo details.
                          */
 
                         /**
@@ -21354,6 +21356,18 @@ export const cockroach = $root.cockroach = (() => {
                         PrettyInfo.prototype.removed_replica = "";
 
                         /**
+                         * PrettyInfo reason.
+                         * @type {string}
+                         */
+                        PrettyInfo.prototype.reason = "";
+
+                        /**
+                         * PrettyInfo details.
+                         * @type {string}
+                         */
+                        PrettyInfo.prototype.details = "";
+
+                        /**
                          * Creates a new PrettyInfo instance using the specified properties.
                          * @param {cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo$Properties=} [properties] Properties to set
                          * @returns {cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo} PrettyInfo instance
@@ -21379,6 +21393,10 @@ export const cockroach = $root.cockroach = (() => {
                                 writer.uint32(/* id 3, wireType 2 =*/26).string(message.added_replica);
                             if (message.removed_replica != null && message.hasOwnProperty("removed_replica"))
                                 writer.uint32(/* id 4, wireType 2 =*/34).string(message.removed_replica);
+                            if (message.reason != null && message.hasOwnProperty("reason"))
+                                writer.uint32(/* id 5, wireType 2 =*/42).string(message.reason);
+                            if (message.details != null && message.hasOwnProperty("details"))
+                                writer.uint32(/* id 6, wireType 2 =*/50).string(message.details);
                             return writer;
                         };
 
@@ -21418,6 +21436,12 @@ export const cockroach = $root.cockroach = (() => {
                                     break;
                                 case 4:
                                     message.removed_replica = reader.string();
+                                    break;
+                                case 5:
+                                    message.reason = reader.string();
+                                    break;
+                                case 6:
+                                    message.details = reader.string();
                                     break;
                                 default:
                                     reader.skipType(tag & 7);
@@ -21460,6 +21484,12 @@ export const cockroach = $root.cockroach = (() => {
                             if (message.removed_replica != null && message.hasOwnProperty("removed_replica"))
                                 if (!$util.isString(message.removed_replica))
                                     return "removed_replica: string expected";
+                            if (message.reason != null && message.hasOwnProperty("reason"))
+                                if (!$util.isString(message.reason))
+                                    return "reason: string expected";
+                            if (message.details != null && message.hasOwnProperty("details"))
+                                if (!$util.isString(message.details))
+                                    return "details: string expected";
                             return null;
                         };
 
@@ -21480,6 +21510,10 @@ export const cockroach = $root.cockroach = (() => {
                                 message.added_replica = String(object.added_replica);
                             if (object.removed_replica != null)
                                 message.removed_replica = String(object.removed_replica);
+                            if (object.reason != null)
+                                message.reason = String(object.reason);
+                            if (object.details != null)
+                                message.details = String(object.details);
                             return message;
                         };
 
@@ -21507,6 +21541,8 @@ export const cockroach = $root.cockroach = (() => {
                                 object.new_desc = "";
                                 object.added_replica = "";
                                 object.removed_replica = "";
+                                object.reason = "";
+                                object.details = "";
                             }
                             if (message.updated_desc != null && message.hasOwnProperty("updated_desc"))
                                 object.updated_desc = message.updated_desc;
@@ -21516,6 +21552,10 @@ export const cockroach = $root.cockroach = (() => {
                                 object.added_replica = message.added_replica;
                             if (message.removed_replica != null && message.hasOwnProperty("removed_replica"))
                                 object.removed_replica = message.removed_replica;
+                            if (message.reason != null && message.hasOwnProperty("reason"))
+                                object.reason = message.reason;
+                            if (message.details != null && message.hasOwnProperty("details"))
+                                object.details = message.details;
                             return object;
                         };
 
@@ -35786,6 +35826,8 @@ export const cockroach = $root.cockroach = (() => {
                  * @property {cockroach.roachpb.RangeDescriptor$Properties} [new_desc] Info new_desc.
                  * @property {cockroach.roachpb.ReplicaDescriptor$Properties} [added_replica] Info added_replica.
                  * @property {cockroach.roachpb.ReplicaDescriptor$Properties} [removed_replica] Info removed_replica.
+                 * @property {string} [reason] Info reason.
+                 * @property {string} [details] Info details.
                  */
 
                 /**
@@ -35826,6 +35868,18 @@ export const cockroach = $root.cockroach = (() => {
                 Info.prototype.removed_replica = null;
 
                 /**
+                 * Info reason.
+                 * @type {string}
+                 */
+                Info.prototype.reason = "";
+
+                /**
+                 * Info details.
+                 * @type {string}
+                 */
+                Info.prototype.details = "";
+
+                /**
                  * Creates a new Info instance using the specified properties.
                  * @param {cockroach.storage.RangeLogEvent.Info$Properties=} [properties] Properties to set
                  * @returns {cockroach.storage.RangeLogEvent.Info} Info instance
@@ -35851,6 +35905,10 @@ export const cockroach = $root.cockroach = (() => {
                         $root.cockroach.roachpb.ReplicaDescriptor.encode(message.added_replica, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
                     if (message.removed_replica != null && message.hasOwnProperty("removed_replica"))
                         $root.cockroach.roachpb.ReplicaDescriptor.encode(message.removed_replica, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
+                    if (message.reason != null && message.hasOwnProperty("reason"))
+                        writer.uint32(/* id 5, wireType 2 =*/42).string(message.reason);
+                    if (message.details != null && message.hasOwnProperty("details"))
+                        writer.uint32(/* id 6, wireType 2 =*/50).string(message.details);
                     return writer;
                 };
 
@@ -35890,6 +35948,12 @@ export const cockroach = $root.cockroach = (() => {
                             break;
                         case 4:
                             message.removed_replica = $root.cockroach.roachpb.ReplicaDescriptor.decode(reader, reader.uint32());
+                            break;
+                        case 5:
+                            message.reason = reader.string();
+                            break;
+                        case 6:
+                            message.details = reader.string();
                             break;
                         default:
                             reader.skipType(tag & 7);
@@ -35940,6 +36004,12 @@ export const cockroach = $root.cockroach = (() => {
                         if (error)
                             return "removed_replica." + error;
                     }
+                    if (message.reason != null && message.hasOwnProperty("reason"))
+                        if (!$util.isString(message.reason))
+                            return "reason: string expected";
+                    if (message.details != null && message.hasOwnProperty("details"))
+                        if (!$util.isString(message.details))
+                            return "details: string expected";
                     return null;
                 };
 
@@ -35972,6 +36042,10 @@ export const cockroach = $root.cockroach = (() => {
                             throw TypeError(".cockroach.storage.RangeLogEvent.Info.removed_replica: object expected");
                         message.removed_replica = $root.cockroach.roachpb.ReplicaDescriptor.fromObject(object.removed_replica);
                     }
+                    if (object.reason != null)
+                        message.reason = String(object.reason);
+                    if (object.details != null)
+                        message.details = String(object.details);
                     return message;
                 };
 
@@ -35999,6 +36073,8 @@ export const cockroach = $root.cockroach = (() => {
                         object.new_desc = null;
                         object.added_replica = null;
                         object.removed_replica = null;
+                        object.reason = "";
+                        object.details = "";
                     }
                     if (message.updated_desc != null && message.hasOwnProperty("updated_desc"))
                         object.updated_desc = $root.cockroach.roachpb.RangeDescriptor.toObject(message.updated_desc, options);
@@ -36008,6 +36084,10 @@ export const cockroach = $root.cockroach = (() => {
                         object.added_replica = $root.cockroach.roachpb.ReplicaDescriptor.toObject(message.added_replica, options);
                     if (message.removed_replica != null && message.hasOwnProperty("removed_replica"))
                         object.removed_replica = $root.cockroach.roachpb.ReplicaDescriptor.toObject(message.removed_replica, options);
+                    if (message.reason != null && message.hasOwnProperty("reason"))
+                        object.reason = message.reason;
+                    if (message.details != null && message.hasOwnProperty("details"))
+                        object.details = message.details;
                     return object;
                 };
 

@@ -15,6 +15,8 @@
 package storage_test
 
 import (
+	gosql "database/sql"
+	"encoding/json"
 	"math"
 	"strings"
 	"testing"
@@ -166,6 +168,12 @@ func TestReplicateQueueUpReplicate(t *testing.T) {
 		}
 		return nil
 	})
+
+	if err := verifyRangeLog(
+		tc.Conns[0], storage.RangeLogEventType_add, storage.ReasonRangeUnderReplicated,
+	); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // TestReplicateQueueDownReplicate verifies that the replication queue will
@@ -233,4 +241,46 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 		}
 		return nil
 	})
+
+	if err := verifyRangeLog(
+		tc.Conns[0], storage.RangeLogEventType_remove, storage.ReasonRangeOverReplicated,
+	); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func verifyRangeLog(
+	conn *gosql.DB, eventType storage.RangeLogEventType, reason storage.RangeLogEventReason,
+) error {
+	rows, err := conn.Query(
+		"SELECT info FROM system.rangelog WHERE \"eventType\" = $1;", eventType.String())
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	var numEntries int
+	for rows.Next() {
+		numEntries++
+		var infoStr string
+		if err := rows.Scan(&infoStr); err != nil {
+			return err
+		}
+		var info storage.RangeLogEvent_Info
+		if err := json.Unmarshal([]byte(infoStr), &info); err != nil {
+			return errors.Errorf("error unmarshalling info string %q: %s", infoStr, err)
+		}
+		if a, e := info.Reason, reason; a != e {
+			return errors.Errorf("expected range log event reason %s, got %s from info %v", e, a, info)
+		}
+		if info.Details == "" {
+			return errors.Errorf("got empty range log event details: %v", info)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if numEntries == 0 {
+		return errors.New("no range log entries found for up-replication events")
+	}
+	return nil
 }
