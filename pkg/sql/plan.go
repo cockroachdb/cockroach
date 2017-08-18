@@ -109,7 +109,7 @@ type planNode interface {
 	// encountered or if there is no more work to do. For statements
 	// that return a result set, the Values() method will return one row
 	// of results each time that Next() returns true.
-	// See executor.go: countRowsAffected() and execStmt() for an example.
+	// See executor.go: forEachRow() for an example.
 	//
 	// Available after Start(). It is illegal to call Next() after it returns
 	// false.
