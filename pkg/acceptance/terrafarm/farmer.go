@@ -221,6 +221,13 @@ func (f *Farmer) CollectLogs() error {
 			src = srcRead
 		}
 
+		// Remove the existing log directory, because previous nightly runs might
+		// have left log files that would be confusing when mixed with log files for
+		// the current run.
+		if err := os.RemoveAll(dst); err != nil {
+			return errors.Wrapf(err, "could not remove old destination directory %q", dst)
+		}
+
 		if err := os.Mkdir(dst, 0777); err != nil {
 			return errors.Wrapf(err, "could not create destination directory %q", dst)
 		}
