@@ -14,7 +14,7 @@ case ${1-} in
            --network "default" \
            --maintenance-policy "MIGRATE" \
            --image-project "ubuntu-os-cloud" \
-           --image "ubuntu-1604-lts" \
+           --image-family "ubuntu-1604-lts" \
            --boot-disk-size "100" \
            --boot-disk-type "pd-ssd" \
            --boot-disk-device-name "${NAME}"
