@@ -16,6 +16,16 @@ set -euxo pipefail
 
 export BUILDER_HIDE_GOPATH_SRC=1
 
+syntax() {
+  echo "syntax: $0 test_name"
+}
+
+if [[ -z "${1-}" ]]; then
+  echo "missing test name"
+  syntax
+  exit 1
+fi
+
 TESTNAME=$1
 
 PKG=./pkg/acceptance
@@ -60,6 +70,7 @@ case $TESTNAME in
     ;;
   *)
     echo "unknown test name $TESTNAME"
+    syntax
     exit 1
     ;;
 esac
