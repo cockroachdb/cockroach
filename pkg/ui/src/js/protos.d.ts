@@ -11724,6 +11724,8 @@ export namespace cockroach {
                         new_desc?: string;
                         added_replica?: string;
                         removed_replica?: string;
+                        reason?: string;
+                        details?: string;
                     };
 
                     /**
@@ -11765,6 +11767,18 @@ export namespace cockroach {
                          * @type {string}
                          */
                         public removed_replica: string;
+
+                        /**
+                         * PrettyInfo reason.
+                         * @type {string}
+                         */
+                        public reason: string;
+
+                        /**
+                         * PrettyInfo details.
+                         * @type {string}
+                         */
+                        public details: string;
 
                         /**
                          * Creates a new PrettyInfo instance using the specified properties.
@@ -19230,6 +19244,8 @@ export namespace cockroach {
                 new_desc?: cockroach.roachpb.RangeDescriptor$Properties;
                 added_replica?: cockroach.roachpb.ReplicaDescriptor$Properties;
                 removed_replica?: cockroach.roachpb.ReplicaDescriptor$Properties;
+                reason?: string;
+                details?: string;
             };
 
             /**
@@ -19271,6 +19287,18 @@ export namespace cockroach {
                  * @type {(cockroach.roachpb.ReplicaDescriptor$Properties|null)}
                  */
                 public removed_replica: (cockroach.roachpb.ReplicaDescriptor$Properties|null);
+
+                /**
+                 * Info reason.
+                 * @type {string}
+                 */
+                public reason: string;
+
+                /**
+                 * Info details.
+                 * @type {string}
+                 */
+                public details: string;
 
                 /**
                  * Creates a new Info instance using the specified properties.

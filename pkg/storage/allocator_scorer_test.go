@@ -163,15 +163,6 @@ func TestCandidateSelection(t *testing.T) {
 		},
 	}
 
-	pickResult := func(cl candidateList, storeID roachpb.StoreID) *candidate {
-		for _, c := range cl {
-			if c.store.StoreID == storeID {
-				return &c
-			}
-		}
-		return nil
-	}
-
 	allocRand := makeAllocatorRand(rand.NewSource(0))
 	for _, tc := range testCases {
 		cl := genCandidates(tc.candidates, 1)
@@ -190,13 +181,9 @@ func TestCandidateSelection(t *testing.T) {
 			}
 		})
 		t.Run(fmt.Sprintf("good-%s", formatter(cl)), func(t *testing.T) {
-			goodStore := cl.selectGood(allocRand)
-			if goodStore == nil {
-				t.Fatalf("no good store found")
-			}
-			good := pickResult(cl, goodStore.StoreID)
+			good := cl.selectGood(allocRand)
 			if good == nil {
-				t.Fatalf("candidate for store %d not found in candidate list: %s", goodStore.StoreID, cl)
+				t.Fatalf("no good candidate found")
 			}
 			actual := scoreTuple{int(good.constraintScore), good.rangeCount}
 			if actual != tc.good {
@@ -204,13 +191,9 @@ func TestCandidateSelection(t *testing.T) {
 			}
 		})
 		t.Run(fmt.Sprintf("bad-%s", formatter(cl)), func(t *testing.T) {
-			badStore := cl.selectBad(allocRand)
-			if badStore == nil {
-				t.Fatalf("no bad store found")
-			}
-			bad := pickResult(cl, badStore.StoreID)
+			bad := cl.selectBad(allocRand)
 			if bad == nil {
-				t.Fatalf("candidate for store %d not found in candidate list: %s", badStore.StoreID, cl)
+				t.Fatalf("no bad candidate found")
 			}
 			actual := scoreTuple{int(bad.constraintScore), bad.rangeCount}
 			if actual != tc.bad {
