@@ -77,11 +77,6 @@ export default function Debug() {
           <DebugTableLink name="Certificates on this node" url="#/reports/certificates/local" />
           <DebugTableLink
             name="Certificates on a specific node"
-            url="#/reports/network?node_ids=1,2"
-            note="#/reports/network?node_ids=[node_id{,node_id...}]"
-          />
-          <DebugTableLink
-            name="Latency filtered by locality (regex)"
             url="#/reports/certificates/1"
             note="#/reports/certificates/[node_id]"
           />

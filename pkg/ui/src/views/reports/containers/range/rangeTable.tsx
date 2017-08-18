@@ -35,6 +35,7 @@ interface RangeTableDetail {
 const rangeTableDisplayList: RangeTableRow[] = [
   { variable: "id", display: "ID", compareToLeader: false },
   { variable: "keyRange", display: "Key Range", compareToLeader: true },
+  { variable: "problems", display: "Problems", compareToLeader: true },
   { variable: "raftState", display: "Raft State", compareToLeader: false },
   { variable: "leaseHolder", display: "Lease Holder", compareToLeader: true },
   { variable: "leaseType", display: "Lease Type", compareToLeader: true },
@@ -127,6 +128,32 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     return {
       value: [humanized],
       title: [humanized, timestamp.wall_time.toString()],
+    };
+  }
+
+  contentProblems(
+    problems: protos.cockroach.server.serverpb.RangeProblems$Properties,
+  ): RangeTableCellContent {
+    let results: string[] = [];
+    if (problems.no_lease) {
+      results = _.concat(results, "No Lease");
+    }
+    if (problems.leader_not_lease_holder) {
+      results = _.concat(results, "Leader is Not Lease holder");
+    }
+    if (problems.underreplicated) {
+      results = _.concat(results, "Underreplicated (or slow)");
+    }
+    if (problems.no_raft_leader) {
+      results = _.concat(results, "No Raft Leader");
+    }
+    if (problems.unavailable) {
+      results = _.concat(results, "Unavailable");
+    }
+    return {
+      value: results,
+      title: results,
+      className: results.length > 0 ? ["range-table__cell--problems"] : [],
     };
   }
 
@@ -309,6 +336,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
       detailsByStoreID.set(info.source_store_id, {
         id: this.createContent(Print.ReplicaID(rangeID, RangeInfo.GetLocalReplica(info))),
         keyRange: this.createContent(`${info.span.end_key} to ${info.span.end_key}`),
+        problems: this.contentProblems(info.problems),
         raftState: raftState,
         leaseHolder: this.createContent(
           Print.ReplicaID(rangeID, lease.replica),
