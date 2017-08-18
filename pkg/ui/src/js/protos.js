@@ -29737,6 +29737,8 @@ export const cockroach = $root.cockroach = (() => {
              * @type {Object}
              * @property {Long} [capacity] StoreCapacity capacity.
              * @property {Long} [available] StoreCapacity available.
+             * @property {Long} [used] StoreCapacity used.
+             * @property {Long} [logical_bytes] StoreCapacity logical_bytes.
              * @property {number} [range_count] StoreCapacity range_count.
              * @property {number} [lease_count] StoreCapacity lease_count.
              * @property {number} [writes_per_second] StoreCapacity writes_per_second.
@@ -29768,6 +29770,18 @@ export const cockroach = $root.cockroach = (() => {
              * @type {Long}
              */
             StoreCapacity.prototype.available = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+            /**
+             * StoreCapacity used.
+             * @type {Long}
+             */
+            StoreCapacity.prototype.used = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+            /**
+             * StoreCapacity logical_bytes.
+             * @type {Long}
+             */
+            StoreCapacity.prototype.logical_bytes = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
             /**
              * StoreCapacity range_count.
@@ -29831,6 +29845,10 @@ export const cockroach = $root.cockroach = (() => {
                     $root.cockroach.roachpb.Percentiles.encode(message.bytes_per_replica, writer.uint32(/* id 6, wireType 2 =*/50).fork()).ldelim();
                 if (message.writes_per_replica != null && message.hasOwnProperty("writes_per_replica"))
                     $root.cockroach.roachpb.Percentiles.encode(message.writes_per_replica, writer.uint32(/* id 7, wireType 2 =*/58).fork()).ldelim();
+                if (message.used != null && message.hasOwnProperty("used"))
+                    writer.uint32(/* id 8, wireType 0 =*/64).int64(message.used);
+                if (message.logical_bytes != null && message.hasOwnProperty("logical_bytes"))
+                    writer.uint32(/* id 9, wireType 0 =*/72).int64(message.logical_bytes);
                 return writer;
             };
 
@@ -29864,6 +29882,12 @@ export const cockroach = $root.cockroach = (() => {
                         break;
                     case 2:
                         message.available = reader.int64();
+                        break;
+                    case 8:
+                        message.used = reader.int64();
+                        break;
+                    case 9:
+                        message.logical_bytes = reader.int64();
                         break;
                     case 3:
                         message.range_count = reader.int32();
@@ -29915,6 +29939,12 @@ export const cockroach = $root.cockroach = (() => {
                 if (message.available != null && message.hasOwnProperty("available"))
                     if (!$util.isInteger(message.available) && !(message.available && $util.isInteger(message.available.low) && $util.isInteger(message.available.high)))
                         return "available: integer|Long expected";
+                if (message.used != null && message.hasOwnProperty("used"))
+                    if (!$util.isInteger(message.used) && !(message.used && $util.isInteger(message.used.low) && $util.isInteger(message.used.high)))
+                        return "used: integer|Long expected";
+                if (message.logical_bytes != null && message.hasOwnProperty("logical_bytes"))
+                    if (!$util.isInteger(message.logical_bytes) && !(message.logical_bytes && $util.isInteger(message.logical_bytes.low) && $util.isInteger(message.logical_bytes.high)))
+                        return "logical_bytes: integer|Long expected";
                 if (message.range_count != null && message.hasOwnProperty("range_count"))
                     if (!$util.isInteger(message.range_count))
                         return "range_count: integer expected";
@@ -29964,6 +29994,24 @@ export const cockroach = $root.cockroach = (() => {
                         message.available = object.available;
                     else if (typeof object.available === "object")
                         message.available = new $util.LongBits(object.available.low >>> 0, object.available.high >>> 0).toNumber();
+                if (object.used != null)
+                    if ($util.Long)
+                        (message.used = $util.Long.fromValue(object.used)).unsigned = false;
+                    else if (typeof object.used === "string")
+                        message.used = parseInt(object.used, 10);
+                    else if (typeof object.used === "number")
+                        message.used = object.used;
+                    else if (typeof object.used === "object")
+                        message.used = new $util.LongBits(object.used.low >>> 0, object.used.high >>> 0).toNumber();
+                if (object.logical_bytes != null)
+                    if ($util.Long)
+                        (message.logical_bytes = $util.Long.fromValue(object.logical_bytes)).unsigned = false;
+                    else if (typeof object.logical_bytes === "string")
+                        message.logical_bytes = parseInt(object.logical_bytes, 10);
+                    else if (typeof object.logical_bytes === "number")
+                        message.logical_bytes = object.logical_bytes;
+                    else if (typeof object.logical_bytes === "object")
+                        message.logical_bytes = new $util.LongBits(object.logical_bytes.low >>> 0, object.logical_bytes.high >>> 0).toNumber();
                 if (object.range_count != null)
                     message.range_count = object.range_count | 0;
                 if (object.lease_count != null)
@@ -30018,6 +30066,16 @@ export const cockroach = $root.cockroach = (() => {
                     object.writes_per_second = 0;
                     object.bytes_per_replica = null;
                     object.writes_per_replica = null;
+                    if ($util.Long) {
+                        let long = new $util.Long(0, 0, false);
+                        object.used = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                    } else
+                        object.used = options.longs === String ? "0" : 0;
+                    if ($util.Long) {
+                        let long = new $util.Long(0, 0, false);
+                        object.logical_bytes = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                    } else
+                        object.logical_bytes = options.longs === String ? "0" : 0;
                 }
                 if (message.capacity != null && message.hasOwnProperty("capacity"))
                     if (typeof message.capacity === "number")
@@ -30039,6 +30097,16 @@ export const cockroach = $root.cockroach = (() => {
                     object.bytes_per_replica = $root.cockroach.roachpb.Percentiles.toObject(message.bytes_per_replica, options);
                 if (message.writes_per_replica != null && message.hasOwnProperty("writes_per_replica"))
                     object.writes_per_replica = $root.cockroach.roachpb.Percentiles.toObject(message.writes_per_replica, options);
+                if (message.used != null && message.hasOwnProperty("used"))
+                    if (typeof message.used === "number")
+                        object.used = options.longs === String ? String(message.used) : message.used;
+                    else
+                        object.used = options.longs === String ? $util.Long.prototype.toString.call(message.used) : options.longs === Number ? new $util.LongBits(message.used.low >>> 0, message.used.high >>> 0).toNumber() : message.used;
+                if (message.logical_bytes != null && message.hasOwnProperty("logical_bytes"))
+                    if (typeof message.logical_bytes === "number")
+                        object.logical_bytes = options.longs === String ? String(message.logical_bytes) : message.logical_bytes;
+                    else
+                        object.logical_bytes = options.longs === String ? $util.Long.prototype.toString.call(message.logical_bytes) : options.longs === Number ? new $util.LongBits(message.logical_bytes.low >>> 0, message.logical_bytes.high >>> 0).toNumber() : message.logical_bytes;
                 return object;
             };
 

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -440,9 +441,9 @@ type StoreList struct {
 	// be rebalance targets.
 	candidateLeases stat
 
-	// candidateDiskUsage tracks disk use percentage stats for stores that are
-	// eligible to be rebalance targets.
-	candidateDiskUsage stat
+	// candidateLogicalBytes tracks disk usage stats for stores that are eligible
+	// to be rebalance targets.
+	candidateLogicalBytes stat
 
 	// candidateWritesPerSecond tracks writes-per-second stats for stores that are
 	// eligible to be rebalance targets.
@@ -458,7 +459,7 @@ func makeStoreList(descriptors []roachpb.StoreDescriptor) StoreList {
 			sl.candidateRanges.update(float64(desc.Capacity.RangeCount))
 		}
 		sl.candidateLeases.update(float64(desc.Capacity.LeaseCount))
-		sl.candidateDiskUsage.update(desc.Capacity.FractionUsed())
+		sl.candidateLogicalBytes.update(float64(desc.Capacity.LogicalBytes))
 		sl.candidateWritesPerSecond.update(desc.Capacity.WritesPerSecond)
 	}
 	return sl
@@ -470,7 +471,7 @@ func (sl StoreList) String() string {
 		"  candidate: avg-ranges=%v avg-leases=%v avg-disk-usage=%v avg-writes-per-second=%v",
 		sl.candidateRanges.mean,
 		sl.candidateLeases.mean,
-		sl.candidateDiskUsage.mean,
+		humanizeutil.IBytes(int64(sl.candidateLogicalBytes.mean)),
 		sl.candidateWritesPerSecond.mean)
 	if len(sl.stores) > 0 {
 		fmt.Fprintf(&buf, "\n")
@@ -478,9 +479,9 @@ func (sl StoreList) String() string {
 		fmt.Fprintf(&buf, " <no candidates>")
 	}
 	for _, desc := range sl.stores {
-		fmt.Fprintf(&buf, "  %d: ranges=%d leases=%d disk-usage=%.2f writes-per-second=%.2f\n",
+		fmt.Fprintf(&buf, "  %d: ranges=%d leases=%d disk-usage=%s writes-per-second=%.2f\n",
 			desc.StoreID, desc.Capacity.RangeCount,
-			desc.Capacity.LeaseCount, desc.Capacity.FractionUsed(), desc.Capacity.WritesPerSecond)
+			desc.Capacity.LeaseCount, humanizeutil.IBytes(desc.Capacity.LogicalBytes), desc.Capacity.WritesPerSecond)
 	}
 	return buf.String()
 }

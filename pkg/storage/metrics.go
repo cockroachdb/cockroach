@@ -144,6 +144,9 @@ var (
 	metaAvailable = metric.Metadata{
 		Name: "capacity.available",
 		Help: "Available storage capacity"}
+	metaUsed = metric.Metadata{
+		Name: "capacity.used",
+		Help: "Used storage capacity"}
 	metaReserved = metric.Metadata{
 		Name: "capacity.reserved",
 		Help: "Capacity reserved for snapshots"}
@@ -517,6 +520,7 @@ type StoreMetrics struct {
 	LastUpdateNanos *metric.Gauge
 	Capacity        *metric.Gauge
 	Available       *metric.Gauge
+	Used            *metric.Gauge
 	Reserved        *metric.Counter
 	SysBytes        *metric.Gauge
 	SysCount        *metric.Gauge
@@ -708,6 +712,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		LastUpdateNanos: metric.NewGauge(metaLastUpdateNanos),
 		Capacity:        metric.NewGauge(metaCapacity),
 		Available:       metric.NewGauge(metaAvailable),
+		Used:            metric.NewGauge(metaUsed),
 		Reserved:        metric.NewCounter(metaReserved),
 		SysBytes:        metric.NewGauge(metaSysBytes),
 		SysCount:        metric.NewGauge(metaSysCount),

@@ -2312,6 +2312,8 @@ void Percentiles::set_p90(double value) {
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int StoreCapacity::kCapacityFieldNumber;
 const int StoreCapacity::kAvailableFieldNumber;
+const int StoreCapacity::kUsedFieldNumber;
+const int StoreCapacity::kLogicalBytesFieldNumber;
 const int StoreCapacity::kRangeCountFieldNumber;
 const int StoreCapacity::kLeaseCountFieldNumber;
 const int StoreCapacity::kWritesPerSecondFieldNumber;
@@ -2344,15 +2346,15 @@ StoreCapacity::StoreCapacity(const StoreCapacity& from)
     writes_per_replica_ = NULL;
   }
   ::memcpy(&capacity_, &from.capacity_,
-    reinterpret_cast<char*>(&writes_per_second_) -
-    reinterpret_cast<char*>(&capacity_) + sizeof(writes_per_second_));
+    reinterpret_cast<char*>(&logical_bytes_) -
+    reinterpret_cast<char*>(&capacity_) + sizeof(logical_bytes_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.StoreCapacity)
 }
 
 void StoreCapacity::SharedCtor() {
   _cached_size_ = 0;
-  ::memset(&bytes_per_replica_, 0, reinterpret_cast<char*>(&writes_per_second_) -
-    reinterpret_cast<char*>(&bytes_per_replica_) + sizeof(writes_per_second_));
+  ::memset(&bytes_per_replica_, 0, reinterpret_cast<char*>(&logical_bytes_) -
+    reinterpret_cast<char*>(&bytes_per_replica_) + sizeof(logical_bytes_));
 }
 
 StoreCapacity::~StoreCapacity() {
@@ -2399,10 +2401,11 @@ void StoreCapacity::Clear() {
       writes_per_replica_->::cockroach::roachpb::Percentiles::Clear();
     }
   }
-  if (_has_bits_[0 / 32] & 124u) {
-    ::memset(&capacity_, 0, reinterpret_cast<char*>(&writes_per_second_) -
-      reinterpret_cast<char*>(&capacity_) + sizeof(writes_per_second_));
+  if (_has_bits_[0 / 32] & 252u) {
+    ::memset(&capacity_, 0, reinterpret_cast<char*>(&used_) -
+      reinterpret_cast<char*>(&capacity_) + sizeof(used_));
   }
+  logical_bytes_ = GOOGLE_LONGLONG(0);
   _has_bits_.Clear();
   _internal_metadata_.Clear();
 }
@@ -2510,6 +2513,32 @@ bool StoreCapacity::MergePartialFromCodedStream(
         break;
       }
 
+      case 8: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(64u)) {
+          set_has_used();
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &used_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 9: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(72u)) {
+          set_has_logical_bytes();
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &logical_bytes_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0 ||
@@ -2569,6 +2598,14 @@ void StoreCapacity::SerializeWithCachedSizes(
       7, *this->writes_per_replica_, output);
   }
 
+  if (cached_has_bits & 0x00000080u) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(8, this->used(), output);
+  }
+
+  if (cached_has_bits & 0x00000100u) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(9, this->logical_bytes(), output);
+  }
+
   output->WriteRaw(unknown_fields().data(),
                    static_cast<int>(unknown_fields().size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.StoreCapacity)
@@ -2580,7 +2617,7 @@ size_t StoreCapacity::ByteSizeLong() const {
 
   total_size += unknown_fields().size();
 
-  if (_has_bits_[0 / 32] & 127u) {
+  if (_has_bits_[0 / 32] & 255u) {
     if (has_bytes_per_replica()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -2621,7 +2658,19 @@ size_t StoreCapacity::ByteSizeLong() const {
       total_size += 1 + 8;
     }
 
+    if (has_used()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int64Size(
+          this->used());
+    }
+
   }
+  if (has_logical_bytes()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::Int64Size(
+        this->logical_bytes());
+  }
+
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
   _cached_size_ = cached_size;
@@ -2642,7 +2691,7 @@ void StoreCapacity::MergeFrom(const StoreCapacity& from) {
   (void) cached_has_bits;
 
   cached_has_bits = from._has_bits_[0];
-  if (cached_has_bits & 127u) {
+  if (cached_has_bits & 255u) {
     if (cached_has_bits & 0x00000001u) {
       mutable_bytes_per_replica()->::cockroach::roachpb::Percentiles::MergeFrom(from.bytes_per_replica());
     }
@@ -2664,7 +2713,13 @@ void StoreCapacity::MergeFrom(const StoreCapacity& from) {
     if (cached_has_bits & 0x00000040u) {
       writes_per_second_ = from.writes_per_second_;
     }
+    if (cached_has_bits & 0x00000080u) {
+      used_ = from.used_;
+    }
     _has_bits_[0] |= cached_has_bits;
+  }
+  if (cached_has_bits & 0x00000100u) {
+    set_logical_bytes(from.logical_bytes());
   }
 }
 
@@ -2691,6 +2746,8 @@ void StoreCapacity::InternalSwap(StoreCapacity* other) {
   std::swap(range_count_, other->range_count_);
   std::swap(lease_count_, other->lease_count_);
   std::swap(writes_per_second_, other->writes_per_second_);
+  std::swap(used_, other->used_);
+  std::swap(logical_bytes_, other->logical_bytes_);
   std::swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   std::swap(_cached_size_, other->_cached_size_);
@@ -2747,6 +2804,52 @@ void StoreCapacity::set_available(::google::protobuf::int64 value) {
   set_has_available();
   available_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.StoreCapacity.available)
+}
+
+bool StoreCapacity::has_used() const {
+  return (_has_bits_[0] & 0x00000080u) != 0;
+}
+void StoreCapacity::set_has_used() {
+  _has_bits_[0] |= 0x00000080u;
+}
+void StoreCapacity::clear_has_used() {
+  _has_bits_[0] &= ~0x00000080u;
+}
+void StoreCapacity::clear_used() {
+  used_ = GOOGLE_LONGLONG(0);
+  clear_has_used();
+}
+::google::protobuf::int64 StoreCapacity::used() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.StoreCapacity.used)
+  return used_;
+}
+void StoreCapacity::set_used(::google::protobuf::int64 value) {
+  set_has_used();
+  used_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.StoreCapacity.used)
+}
+
+bool StoreCapacity::has_logical_bytes() const {
+  return (_has_bits_[0] & 0x00000100u) != 0;
+}
+void StoreCapacity::set_has_logical_bytes() {
+  _has_bits_[0] |= 0x00000100u;
+}
+void StoreCapacity::clear_has_logical_bytes() {
+  _has_bits_[0] &= ~0x00000100u;
+}
+void StoreCapacity::clear_logical_bytes() {
+  logical_bytes_ = GOOGLE_LONGLONG(0);
+  clear_has_logical_bytes();
+}
+::google::protobuf::int64 StoreCapacity::logical_bytes() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.StoreCapacity.logical_bytes)
+  return logical_bytes_;
+}
+void StoreCapacity::set_logical_bytes(::google::protobuf::int64 value) {
+  set_has_logical_bytes();
+  logical_bytes_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.StoreCapacity.logical_bytes)
 }
 
 bool StoreCapacity::has_range_count() const {

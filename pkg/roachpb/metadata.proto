@@ -106,8 +106,21 @@ message Percentiles {
 message StoreCapacity {
   option (gogoproto.goproto_stringer) = false;
 
+  // Total capacity of the disk used by the store, including space used by the
+  // operating system and other applications.
   optional int64 capacity = 1 [(gogoproto.nullable) = false];
+  // Available space remaining on the disk used by the store.
   optional int64 available = 2 [(gogoproto.nullable) = false];
+  // Amount of disk space used by the data in the CockroachDB store. Note that
+  // this is going to be less than (capacity - available), because those two
+  // fields consider the entire disk and everything on it, while this only
+  // tracks the store's disk usage.
+  optional int64 used = 8 [(gogoproto.nullable) = false];
+  // Amount of logical bytes stored in the store, ignoring RocksDB space
+  // overhead. Useful for rebalancing so that moving a replica from one store
+  // to another actually removes its bytes from the source store even though
+  // RocksDB may not actually reclaim the physical disk space for a while.
+  optional int64 logical_bytes = 9 [(gogoproto.nullable) = false];
   optional int32 range_count = 3 [(gogoproto.nullable) = false];
   optional int32 lease_count = 4 [(gogoproto.nullable) = false];
   // writes_per_second tracks the average number of keys written per second
