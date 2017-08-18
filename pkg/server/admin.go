@@ -744,8 +744,10 @@ func (s *adminServer) RangeLog(
 	q := makeSQLQuery()
 	q.Append(`SELECT timestamp, "rangeID", "storeID", "eventType", "otherRangeID", info `)
 	q.Append("FROM system.rangelog ")
-	rangeID := parser.NewDInt(parser.DInt(req.RangeId))
-	q.Append(`WHERE "rangeID" = $ OR "otherRangeID" = $`, rangeID, rangeID)
+	if req.RangeId > 0 {
+		rangeID := parser.NewDInt(parser.DInt(req.RangeId))
+		q.Append(`WHERE "rangeID" = $ OR "otherRangeID" = $`, rangeID, rangeID)
+	}
 	q.Append("ORDER BY timestamp DESC ")
 	if limit > 0 {
 		q.Append("LIMIT $", parser.NewDInt(parser.DInt(limit)))
