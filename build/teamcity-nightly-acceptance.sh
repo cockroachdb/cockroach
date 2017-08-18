@@ -75,7 +75,9 @@ case $TESTNAME in
     ;;
 esac
 
-"$(dirname "${0}")"/../pkg/acceptance/prepare.sh
+cd "$(dirname "${0}")"/..
+
+pkg/acceptance/prepare.sh
 
 [ -f ~/.ssh/terraform ] || ssh-keygen -f ~/.ssh/terraform -N ''
 
