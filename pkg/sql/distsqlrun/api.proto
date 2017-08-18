@@ -31,7 +31,8 @@ message SetupFlowRequest {
 
   // Version of distsqlrun protocol; a server accepts a certain range of
   // versions, up to its own version. See server.go for more details.
-  optional uint32 version = 5 [(gogoproto.nullable) = false];
+  optional uint32 version = 5 [(gogoproto.nullable) = false,
+                               (gogoproto.casttype) = "DistSQLVersion"];
 
   optional FlowSpec flow = 3 [(gogoproto.nullable) = false];
 
@@ -54,6 +55,8 @@ message SimpleResponse {
   optional Error error = 1;
 }
 
+// ConsumerSignal are messages flowing from consumer to producer (so, from RPC
+// server to client) for the FlowStream RPC.
 message ConsumerSignal {
   option (gogoproto.onlyone) = true;
 
@@ -65,9 +68,39 @@ message ConsumerSignal {
   // Used in the RunSyncFlow case; the first message on the client stream must
   // contain this message.
   optional SetupFlowRequest setup_flow_request = 2;
+
+  // Consumer->Producer handshake messages. See message definition.
+  optional ConsumerHandshake handshake = 3;
 }
 
 message DrainRequest {
+}
+
+// ConsumerHandshake are the first one or two message sent in the
+// consumer->producer direction on a stream. It informs the producer about the
+// status of the consumer flow.
+// Introduced in version 1.1 for future use by producers.
+message ConsumerHandshake {
+  // consumer_scheduled is true if the flow that's consuming this stream has
+  // already been scheduled and so it is ready to consume data. If this is
+  // false, then the consumer has not yet been scheduled. In this case, the
+  // server (i.e. the consumer node) will send another ConsumerHandshake with
+  // consumer_scheduled = true when the consumer is finally scheduled (unless
+  // the scheduling timeout fires first, in which case the stream will be
+  // closed server-side).
+  optional bool consumer_scheduled = 1 [(gogoproto.nullable) = false];
+
+  // If consumer_scheduled is false, then this indicates the deadline for the
+  // scheduling of the consumer flow. If the flow is not scheduled within that
+  // dealine, this stream will be disconnected by the server-side.
+  // Expressed in nanos since epoch.
+  optional int64 consumer_schedule_deadline = 2;
+
+  // The server's DistSQL version range.
+  optional uint32 version = 3 [(gogoproto.nullable) = false,
+                               (gogoproto.casttype) = "DistSQLVersion"];
+  optional uint32 min_accepted_version = 4 [(gogoproto.nullable) = false,
+                                            (gogoproto.casttype) = "DistSQLVersion"];
 }
 
 service DistSQL {
@@ -84,7 +117,11 @@ service DistSQL {
   // first message will have a StreamHeader which identifies the flow and the
   // stream (mailbox).
   //
-  // The response is a stream because the consumer can signal the producer at
-  // any point to start draining.
+  // The response is a stream that the consumer uses to perform a handshake and
+  // to signal the producer when it wants it to start draining. The client (i.e.
+  // the producer) will read from this consumer->producer stream until it has
+  // sent everything it needs to send and it performs CloseSend() on the
+  // producer->consumer stream; after that point the producer isn't listening
+  // for consumer signals any more.
   rpc FlowStream(stream ProducerMessage) returns (stream ConsumerSignal) {}
 }
