@@ -727,15 +727,28 @@ func (s *adminServer) Events(
 	return &resp, nil
 }
 
+// FullRangeLog is an endpoint that returns the latest range log entries for
+// all ranges.
+func (s *adminServer) FullRangeLog(
+	ctx context.Context, req *serverpb.FullRangeLogRequest,
+) (*serverpb.RangeLogResponse, error) {
+	return s.doRangeLog(ctx, s.getUser(req), nil, req.Limit)
+}
+
 // RangeLog is an endpoint that returns the latest range log entries.
 func (s *adminServer) RangeLog(
 	ctx context.Context, req *serverpb.RangeLogRequest,
 ) (*serverpb.RangeLogResponse, error) {
-	args := sql.SessionArgs{User: s.getUser(req)}
+	return s.doRangeLog(ctx, s.getUser(req), &req.RangeId, req.Limit)
+}
+
+func (s *adminServer) doRangeLog(
+	ctx context.Context, user string, rangeID *int64, limit int32,
+) (*serverpb.RangeLogResponse, error) {
+	args := sql.SessionArgs{User: user}
 	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
 	defer session.Finish(s.server.sqlExecutor)
 
-	limit := req.Limit
 	if limit == 0 {
 		limit = defaultAPIEventLimit
 	}
@@ -744,8 +757,10 @@ func (s *adminServer) RangeLog(
 	q := makeSQLQuery()
 	q.Append(`SELECT timestamp, "rangeID", "storeID", "eventType", "otherRangeID", info `)
 	q.Append("FROM system.rangelog ")
-	rangeID := parser.NewDInt(parser.DInt(req.RangeId))
-	q.Append(`WHERE "rangeID" = $ OR "otherRangeID" = $`, rangeID, rangeID)
+	if rangeID != nil {
+		rangeID := parser.NewDInt(parser.DInt(*rangeID))
+		q.Append(`WHERE "rangeID" = $ OR "otherRangeID" = $`, rangeID, rangeID)
+	}
 	q.Append("ORDER BY timestamp DESC ")
 	if limit > 0 {
 		q.Append("LIMIT $", parser.NewDInt(parser.DInt(limit)))

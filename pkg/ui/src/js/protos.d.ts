@@ -5302,6 +5302,119 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
+            type FullRangeLogRequest$Properties = {
+                limit?: number;
+            };
+
+            /**
+             * Constructs a new FullRangeLogRequest.
+             * @exports cockroach.server.serverpb.FullRangeLogRequest
+             * @constructor
+             * @param {cockroach.server.serverpb.FullRangeLogRequest$Properties=} [properties] Properties to set
+             */
+            class FullRangeLogRequest {
+
+                /**
+                 * Constructs a new FullRangeLogRequest.
+                 * @exports cockroach.server.serverpb.FullRangeLogRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.FullRangeLogRequest$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.FullRangeLogRequest$Properties);
+
+                /**
+                 * FullRangeLogRequest limit.
+                 * @type {number}
+                 */
+                public limit: number;
+
+                /**
+                 * Creates a new FullRangeLogRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.FullRangeLogRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.FullRangeLogRequest} FullRangeLogRequest instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.FullRangeLogRequest$Properties): cockroach.server.serverpb.FullRangeLogRequest;
+
+                /**
+                 * Encodes the specified FullRangeLogRequest message. Does not implicitly {@link cockroach.server.serverpb.FullRangeLogRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.FullRangeLogRequest$Properties} message FullRangeLogRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.FullRangeLogRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified FullRangeLogRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.FullRangeLogRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.FullRangeLogRequest$Properties} message FullRangeLogRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.FullRangeLogRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a FullRangeLogRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.FullRangeLogRequest} FullRangeLogRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.FullRangeLogRequest;
+
+                /**
+                 * Decodes a FullRangeLogRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.FullRangeLogRequest} FullRangeLogRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.FullRangeLogRequest;
+
+                /**
+                 * Verifies a FullRangeLogRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a FullRangeLogRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.FullRangeLogRequest} FullRangeLogRequest
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.FullRangeLogRequest;
+
+                /**
+                 * Creates a FullRangeLogRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.FullRangeLogRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.FullRangeLogRequest} FullRangeLogRequest
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.FullRangeLogRequest;
+
+                /**
+                 * Creates a plain object from a FullRangeLogRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.FullRangeLogRequest} message FullRangeLogRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.FullRangeLogRequest, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this FullRangeLogRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this FullRangeLogRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
             type RangeLogResponse$Properties = {
                 events?: cockroach.storage.RangeLogEvent$Properties[];
             };
@@ -5815,6 +5928,14 @@ export namespace cockroach {
                  * @returns {undefined}
                  */
                 public rangeLog(request: (cockroach.server.serverpb.RangeLogRequest|{ [k: string]: any }), callback: Admin_rangeLog_Callback): void;
+
+                /**
+                 * Calls FullRangeLog.
+                 * @param {cockroach.server.serverpb.FullRangeLogRequest|Object.<string,*>} request FullRangeLogRequest message or plain object
+                 * @param {Admin_fullRangeLog_Callback} callback Node-style callback called with the error, if any, and RangeLogResponse
+                 * @returns {undefined}
+                 */
+                public fullRangeLog(request: (cockroach.server.serverpb.FullRangeLogRequest|{ [k: string]: any }), callback: Admin_fullRangeLog_Callback): void;
             }
 
             type CertificatesRequest$Properties = {
@@ -22416,6 +22537,8 @@ type Admin_decommission_Callback = (error: Error, response?: cockroach.server.se
 type Admin_decommissionStatus_Callback = (error: Error, response?: cockroach.server.serverpb.DecommissionStatusResponse) => void;
 
 type Admin_rangeLog_Callback = (error: Error, response?: cockroach.server.serverpb.RangeLogResponse) => void;
+
+type Admin_fullRangeLog_Callback = (error: Error, response?: cockroach.server.serverpb.RangeLogResponse) => void;
 
 type Status_certificates_Callback = (error: Error, response?: cockroach.server.serverpb.CertificatesResponse) => void;
 

@@ -9435,6 +9435,180 @@ export const cockroach = $root.cockroach = (() => {
                 return RangeLogRequest;
             })();
 
+            serverpb.FullRangeLogRequest = (function() {
+
+                /**
+                 * Properties of a FullRangeLogRequest.
+                 * @typedef cockroach.server.serverpb.FullRangeLogRequest$Properties
+                 * @type {Object}
+                 * @property {number} [limit] FullRangeLogRequest limit.
+                 */
+
+                /**
+                 * Constructs a new FullRangeLogRequest.
+                 * @exports cockroach.server.serverpb.FullRangeLogRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.FullRangeLogRequest$Properties=} [properties] Properties to set
+                 */
+                function FullRangeLogRequest(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * FullRangeLogRequest limit.
+                 * @type {number}
+                 */
+                FullRangeLogRequest.prototype.limit = 0;
+
+                /**
+                 * Creates a new FullRangeLogRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.FullRangeLogRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.FullRangeLogRequest} FullRangeLogRequest instance
+                 */
+                FullRangeLogRequest.create = function create(properties) {
+                    return new FullRangeLogRequest(properties);
+                };
+
+                /**
+                 * Encodes the specified FullRangeLogRequest message. Does not implicitly {@link cockroach.server.serverpb.FullRangeLogRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.FullRangeLogRequest$Properties} message FullRangeLogRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                FullRangeLogRequest.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.limit != null && message.hasOwnProperty("limit"))
+                        writer.uint32(/* id 1, wireType 0 =*/8).int32(message.limit);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified FullRangeLogRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.FullRangeLogRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.FullRangeLogRequest$Properties} message FullRangeLogRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                FullRangeLogRequest.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a FullRangeLogRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.FullRangeLogRequest} FullRangeLogRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                FullRangeLogRequest.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.FullRangeLogRequest();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.limit = reader.int32();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a FullRangeLogRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.FullRangeLogRequest} FullRangeLogRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                FullRangeLogRequest.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a FullRangeLogRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                FullRangeLogRequest.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.limit != null && message.hasOwnProperty("limit"))
+                        if (!$util.isInteger(message.limit))
+                            return "limit: integer expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a FullRangeLogRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.FullRangeLogRequest} FullRangeLogRequest
+                 */
+                FullRangeLogRequest.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.FullRangeLogRequest)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.FullRangeLogRequest();
+                    if (object.limit != null)
+                        message.limit = object.limit | 0;
+                    return message;
+                };
+
+                /**
+                 * Creates a FullRangeLogRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.FullRangeLogRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.FullRangeLogRequest} FullRangeLogRequest
+                 */
+                FullRangeLogRequest.from = FullRangeLogRequest.fromObject;
+
+                /**
+                 * Creates a plain object from a FullRangeLogRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.FullRangeLogRequest} message FullRangeLogRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                FullRangeLogRequest.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults)
+                        object.limit = 0;
+                    if (message.limit != null && message.hasOwnProperty("limit"))
+                        object.limit = message.limit;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this FullRangeLogRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                FullRangeLogRequest.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this FullRangeLogRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                FullRangeLogRequest.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return FullRangeLogRequest;
+            })();
+
             serverpb.RangeLogResponse = (function() {
 
                 /**
@@ -10488,6 +10662,33 @@ export const cockroach = $root.cockroach = (() => {
                  * @name Admin#rangeLog
                  * @function
                  * @param {cockroach.server.serverpb.RangeLogRequest|Object.<string,*>} request RangeLogRequest message or plain object
+                 * @returns {Promise<cockroach.server.serverpb.RangeLogResponse>} Promise
+                 * @variation 2
+                 */
+
+                /**
+                 * Callback as used by {@link Admin#fullRangeLog}.
+                 * @typedef Admin_fullRangeLog_Callback
+                 * @type {function}
+                 * @param {?Error} error Error, if any
+                 * @param {cockroach.server.serverpb.RangeLogResponse} [response] RangeLogResponse
+                 */
+
+                /**
+                 * Calls FullRangeLog.
+                 * @param {cockroach.server.serverpb.FullRangeLogRequest|Object.<string,*>} request FullRangeLogRequest message or plain object
+                 * @param {Admin_fullRangeLog_Callback} callback Node-style callback called with the error, if any, and RangeLogResponse
+                 * @returns {undefined}
+                 */
+                Admin.prototype.fullRangeLog = function fullRangeLog(request, callback) {
+                    return this.rpcCall(fullRangeLog, $root.cockroach.server.serverpb.FullRangeLogRequest, $root.cockroach.server.serverpb.RangeLogResponse, request, callback);
+                };
+
+                /**
+                 * Calls FullRangeLog.
+                 * @name Admin#fullRangeLog
+                 * @function
+                 * @param {cockroach.server.serverpb.FullRangeLogRequest|Object.<string,*>} request FullRangeLogRequest message or plain object
                  * @returns {Promise<cockroach.server.serverpb.RangeLogResponse>} Promise
                  * @variation 2
                  */

@@ -440,6 +440,16 @@ message RangeLogRequest {
   int32 limit = 2;
 }
 
+// FullRangeLogRequest request the history of all ranges from the range log.
+message FullRangeLogRequest {
+  // limit is the total number of results that are retreived by the query. If
+  // this is obmited or set to 0, the default maximum number of results are
+  // returned. When set to > 0, at most only that number of results are
+  // returned. When set to < 0, an unlimited number of results are returned.
+  int32 limit = 1;
+}
+
+
 // RangeLogResponse contains a list of entries from the range log table.
 message RangeLogResponse {
   repeated storage.RangeLogEvent events = 1 [(gogoproto.nullable) = false];
@@ -609,6 +619,14 @@ service Admin {
   rpc RangeLog(RangeLogRequest) returns (RangeLogResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/rangelog/{range_id}"
+    };
+  }
+
+  // URL: /_admin/v1/rangelog
+  // URL: /_admin/v1/rangelog?limit=100
+  rpc FullRangeLog(FullRangeLogRequest) returns (RangeLogResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/rangelog"
     };
   }
 }
