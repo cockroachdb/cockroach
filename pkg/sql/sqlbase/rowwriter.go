@@ -343,6 +343,15 @@ func (ri *RowInserter) InsertRow(
 	return nil
 }
 
+// EncodeIndexesForRow encodes the provided values into their primary and
+// secondary index keys. The secondaryIndexEntries are only valid until the next
+// call to EncodeIndexesForRow.
+func (ri *RowInserter) EncodeIndexesForRow(
+	values []parser.Datum,
+) (primaryIndexKey []byte, secondaryIndexEntries []IndexEntry, err error) {
+	return ri.Helper.encodeIndexes(ri.InsertColIDtoRowIndex, values)
+}
+
 // RowUpdater abstracts the key/value operations for updating table rows.
 type RowUpdater struct {
 	Helper                rowHelper
