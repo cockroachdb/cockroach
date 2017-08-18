@@ -965,22 +965,6 @@ func (e *Executor) execParsed(
 	return nil
 }
 
-// If the plan has a fast path we attempt to query that,
-// otherwise we fall back to counting via plan.Next().
-func countRowsAffected(runParams runParams, p planNode) (int, error) {
-	if a, ok := p.(planNodeFastPath); ok {
-		if count, res := a.FastPathResults(); res {
-			return count, nil
-		}
-	}
-	count := 0
-	next, err := p.Next(runParams)
-	for ; next; next, err = p.Next(runParams) {
-		count++
-	}
-	return count, err
-}
-
 // runTxnAttempt is used in the closure we pass to txn.Exec(). It
 // will be called possibly multiple times (if opt.AutoRetry is set).
 //
@@ -1690,14 +1674,11 @@ func (e *Executor) execClassic(
 	planner *planner, plan planNode, rowResultWriter StatementResultWriter,
 ) error {
 	ctx := planner.session.Ctx()
+
+	// Create a BoundAccount to track the memory usage of each row.
 	rowAcc := planner.evalCtx.Mon.MakeBoundAccount()
 	planner.evalCtx.ActiveMemAcc = &rowAcc
-	// We enclose this in a func because in the parser.Rows case we swap out the
-	// account, so we want to ensure that we close the currently active account at
-	// the conclusion of this function.
-	defer func() {
-		planner.evalCtx.ActiveMemAcc.Close(ctx)
-	}()
+	defer rowAcc.Close(ctx)
 
 	if err := planner.startPlan(ctx, plan); err != nil {
 		return err
@@ -1717,13 +1698,7 @@ func (e *Executor) execClassic(
 		rowResultWriter.IncrementRowsAffected(count)
 
 	case parser.Rows:
-		next, err := plan.Next(params)
-		for ; next; next, err = plan.Next(params) {
-			planner.evalCtx.ActiveMemAcc.Close(ctx)
-			rowAcc = planner.evalCtx.Mon.MakeBoundAccount()
-			planner.evalCtx.ActiveMemAcc = &rowAcc
-
-			// The plan.Values Datums needs to be copied on each iteration.
+		err := forEachRow(params, plan, func(plan planNode) error {
 			values := plan.Values()
 
 			for _, val := range values {
@@ -1731,10 +1706,9 @@ func (e *Executor) execClassic(
 					return err
 				}
 			}
-			if err := rowResultWriter.AddRow(ctx, values); err != nil {
-				return err
-			}
-		}
+
+			return rowResultWriter.AddRow(ctx, values)
+		})
 		if err != nil {
 			return err
 		}
@@ -1744,6 +1718,40 @@ func (e *Executor) execClassic(
 		}
 	}
 	return nil
+}
+
+// forEachRow calls the provided closure for each successful call to
+// planNode.Next, making sure to properly track memory usage.
+func forEachRow(params runParams, p planNode, f func(planNode) error) error {
+	next, err := p.Next(params)
+	for ; next; next, err = p.Next(params) {
+		// If we're tracking memory, clear the previous row's memory account.
+		if params.p.evalCtx.ActiveMemAcc != nil {
+			params.p.evalCtx.ActiveMemAcc.Clear(params.ctx)
+		}
+
+		if err := f(p); err != nil {
+			return err
+		}
+	}
+	return err
+}
+
+// If the plan has a fast path we attempt to query that,
+// otherwise we fall back to counting via plan.Next().
+func countRowsAffected(params runParams, p planNode) (int, error) {
+	if a, ok := p.(planNodeFastPath); ok {
+		if count, res := a.FastPathResults(); res {
+			return count, nil
+		}
+	}
+
+	count := 0
+	err := forEachRow(params, p, func(_ planNode) error {
+		count++
+		return nil
+	})
+	return count, err
 }
 
 // shouldUseDistSQL determines whether we should use DistSQL for a plan, based
