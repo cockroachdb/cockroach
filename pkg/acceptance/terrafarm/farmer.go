@@ -412,13 +412,14 @@ func (f *Farmer) AssertAndStop(ctx context.Context, t testing.TB) {
 	f.MustDestroy(t)
 }
 
-// ExecRoot executes the given command with super-user privileges.
-// Returns stdout, stderr, and an error.
-func (f *Farmer) ExecRoot(ctx context.Context, i int, cmd []string) (string, string, error) {
+// ExecCLI runs ./cockroach <args>.
+func (f *Farmer) ExecCLI(ctx context.Context, i int, cmd []string) (string, string, error) {
 	// TODO(tschottdorf): This doesn't handle escapes properly. May it never
 	// have to.
-	// TODO(tschottdorf): Exec() knows stdout/stderr, easy to actually return it if needed.
-	return "", "", f.Exec(i, "sudo "+strings.Join(cmd, " "))
+	//
+	// TODO(tschottdorf): Exec() knows stdout/stderr, easy to actually return it
+	// if needed.
+	return "", "", f.Exec(i, strings.Join(cmd, " "))
 }
 
 const (
