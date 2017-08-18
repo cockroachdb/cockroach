@@ -28,6 +28,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+// RangeLogEventReason specifies the reason why a range-log event happened.
+type RangeLogEventReason string
+
+// The set of possible reasons for range events to happen.
+const (
+	ReasonUnknown              RangeLogEventReason = ""
+	ReasonRangeUnderReplicated RangeLogEventReason = "range under-replicated"
+	ReasonRangeOverReplicated  RangeLogEventReason = "range over-replicated"
+	ReasonStoreDead            RangeLogEventReason = "store dead"
+	ReasonStoreDecommissioning RangeLogEventReason = "store decommissioning"
+	ReasonRebalance            RangeLogEventReason = "rebalance"
+	ReasonAdminRequest         RangeLogEventReason = "admin request"
+)
+
 func (s *Store) insertRangeLogEvent(
 	ctx context.Context, txn *client.Txn, event RangeLogEvent,
 ) error {
@@ -124,6 +138,8 @@ func (s *Store) logChange(
 	changeType roachpb.ReplicaChangeType,
 	replica roachpb.ReplicaDescriptor,
 	desc roachpb.RangeDescriptor,
+	reason RangeLogEventReason,
+	details string,
 ) error {
 	if !s.cfg.LogRangeEvents {
 		return nil
@@ -137,12 +153,16 @@ func (s *Store) logChange(
 		info = RangeLogEvent_Info{
 			AddedReplica: &replica,
 			UpdatedDesc:  &desc,
+			Reason:       reason,
+			Details:      details,
 		}
 	case roachpb.REMOVE_REPLICA:
 		logType = RangeLogEventType_remove
 		info = RangeLogEvent_Info{
 			RemovedReplica: &replica,
 			UpdatedDesc:    &desc,
+			Reason:         reason,
+			Details:        details,
 		}
 	default:
 		return errors.Errorf("unknown replica change type %s", changeType)
