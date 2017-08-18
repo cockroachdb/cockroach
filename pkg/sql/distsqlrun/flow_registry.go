@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
@@ -203,17 +204,17 @@ func (fr *flowRegistry) UnregisterFlow(id FlowID) {
 	fr.Unlock()
 }
 
-// waitForFlowLocked returns the flowEntry of a registered flow with the given
-// ID. If no such flow is registered, waits until it gets registered - up to the
-// given timeout. If the timeout elapses, returns nil. It should only be called
-// while holding the mutex. The mutex is temporarily unlocked if we need to
-// wait.
+// waitForFlowLocked  waits until the flow with the given id gets registered -
+// up to the given timeout - and returns the flowEntry. If the timeout elapses,
+// returns nil. It should only be called while holding the mutex. The mutex is
+// temporarily unlocked if we need to wait.
+// It is illegal to call this if the flow is already connected.
 func (fr *flowRegistry) waitForFlowLocked(
 	ctx context.Context, id FlowID, timeout time.Duration,
 ) *flowEntry {
 	entry := fr.getEntryLocked(id)
 	if entry.flow != nil {
-		return entry
+		log.Fatalf(ctx, "waitForFlowLocked called for a flow that's already registered: %d", id)
 	}
 
 	// Flow not registered (at least not yet).
@@ -245,9 +246,12 @@ func (fr *flowRegistry) waitForFlowLocked(
 	return entry
 }
 
-// ConnectInboundStream finds the inboundStreamInfo for the given ID and marks it
-// as connected. It waits up to timeout for the stream to be registered with the
-// registry.
+// ConnectInboundStream finds the inboundStreamInfo for the given
+// <flowID,streamID> pair and marks it as connected. It waits up to timeout for
+// the stream to be registered with the registry. It also sends the handshake
+// messages to the producer of the stream.
+//
+// stream is the inbound stream.
 //
 // It returns the Flow that the stream is connecting to, the receiver that the
 // stream must push data to and a cleanup function that must be called to
@@ -255,14 +259,45 @@ func (fr *flowRegistry) waitForFlowLocked(
 //
 // The cleanup function will decrement the flow's WaitGroup, so that Flow.Wait()
 // is not blocked on this stream any more.
+// In case an error is returned, the cleanup function is nil, the Flow is not
+// considered connected and is not cleaned up.
 func (fr *flowRegistry) ConnectInboundStream(
-	ctx context.Context, flowID FlowID, streamID StreamID, timeout time.Duration,
-) (*Flow, RowReceiver, func(), error) {
+	ctx context.Context,
+	flowID FlowID,
+	streamID StreamID,
+	stream DistSQL_FlowStreamServer,
+	timeout time.Duration,
+) (_ *Flow, _ RowReceiver, _ func(), retErr error) {
 	fr.Lock()
 	defer fr.Unlock()
-	entry := fr.waitForFlowLocked(ctx, flowID, timeout)
-	if entry == nil {
-		return nil, nil, nil, errors.Errorf("flow %s not found", flowID)
+
+	entry := fr.getEntryLocked(flowID)
+	if entry.flow == nil {
+		// Send the handshake message informing the producer that the consumer has
+		// not been scheduled yet. Another handshake will be sent below once the
+		// consumer has been connected.
+		deadline := timeutil.Now().Add(timeout)
+		if err := stream.Send(&ConsumerSignal{
+			Handshake: &ConsumerHandshake{
+				ConsumerScheduled:        false,
+				ConsumerScheduleDeadline: &deadline,
+				Version:                  Version,
+				MinAcceptedVersion:       MinAcceptedVersion,
+			},
+		}); err != nil {
+			// TODO(andrei): We failed to send a message to the producer; we'll return
+			// an error and leave this stream with connected == false so it times out
+			// later. We could call finishInboundStreamLocked() now so that the flow
+			// doesn't wait for the timeout and we could remember the error for the
+			// consumer if the consumer comes later, but I'm not sure what the best
+			// way to do that is. Similarly for the 2nd handshake message below,
+			// except there we already have the consumer and we can push the error.
+			return nil, nil, nil, err
+		}
+		entry = fr.waitForFlowLocked(ctx, flowID, timeout)
+		if entry == nil {
+			return nil, nil, nil, errors.Errorf("flow %s not found", flowID)
+		}
 	}
 
 	s, ok := entry.inboundStreams[streamID]
@@ -275,7 +310,28 @@ func (fr *flowRegistry) ConnectInboundStream(
 	if s.timedOut {
 		return nil, nil, nil, errors.Errorf("flow %s: inbound stream %d came too late", flowID, streamID)
 	}
+
+	// We now mark the stream as connected but, if an error happens later because
+	// the handshake fails, we reset the state; we want the stream to be
+	// considered timed out when the moment comes just as if this connection
+	// attempt never happened.
 	s.connected = true
+	defer func() {
+		if retErr != nil {
+			s.connected = false
+		}
+	}()
+
+	if err := stream.Send(&ConsumerSignal{
+		Handshake: &ConsumerHandshake{
+			ConsumerScheduled:  true,
+			Version:            Version,
+			MinAcceptedVersion: MinAcceptedVersion,
+		},
+	}); err != nil {
+		return nil, nil, nil, err
+	}
+
 	cleanup := func() {
 		fr.Lock()
 		fr.finishInboundStreamLocked(flowID, streamID)

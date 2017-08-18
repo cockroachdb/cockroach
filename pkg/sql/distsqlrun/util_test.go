@@ -108,3 +108,42 @@ func (ds *MockDistSQLServer) FlowStream(stream DistSQL_FlowStreamServer) error {
 	ds.inboundStreams <- InboundStreamNotification{stream: stream, donec: donec}
 	return <-donec
 }
+
+// createDummyStream creates the server and client side of a FlowStream stream.
+// This can be use by tests to pretend that then have received a FlowStream RPC.
+// The stream can be used to send messages (ConsumerSignal's) on it (within a
+// gRPC window limit since nobody's reading from the stream), for example
+// Handshake messages.
+//
+// We do this by creating a mock server, dialing into it and capturing the
+// server stream. The server-side RPC call will be blocked until the caller
+// calls the returned cleanup function.
+func createDummyStream() (
+	serverStream DistSQL_FlowStreamServer,
+	clientStream DistSQL_FlowStreamClient,
+	cleanup func(),
+	err error,
+) {
+	stopper := stop.NewStopper()
+	mockServer, addr, err := startMockDistSQLServer(stopper)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	rpcCtx := newInsecureRPCContext(stopper)
+	conn, err := rpcCtx.GRPCDial(addr.String())
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	client := NewDistSQLClient(conn)
+	clientStream, err = client.FlowStream(context.TODO())
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	streamNotification := <-mockServer.inboundStreams
+	serverStream = streamNotification.stream
+	cleanup = func() {
+		close(streamNotification.donec)
+		stopper.Stop(context.TODO())
+	}
+	return serverStream, clientStream, cleanup, nil
+}
