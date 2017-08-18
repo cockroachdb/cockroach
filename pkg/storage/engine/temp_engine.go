@@ -29,7 +29,8 @@ import (
 
 // NewTempEngine creates a new engine for DistSQL processors to use when the
 // working set is larger than can be stored in memory. It returns nil if it
-// could not set up a temporary Engine.
+// could not set up a temporary Engine. When closed, it destroys the
+// underlying data.
 func NewTempEngine(ctx context.Context, storeCfg base.StoreSpec) (Engine, error) {
 	if storeCfg.InMemory {
 		// TODO(arjun): Limit the size of the store once #16750 is addressed.
@@ -51,7 +52,23 @@ func NewTempEngine(ctx context.Context, storeCfg base.StoreSpec) (Engine, error)
 		MaxOpenFiles:    128, // TODO(arjun): Revisit this.
 	}
 	rocksDBCache := NewRocksDBCache(0)
-	return NewRocksDB(rocksDBCfg, rocksDBCache)
+	rocksdb, err := NewRocksDB(rocksDBCfg, rocksDBCache)
+	return &tempEngine{RocksDB: rocksdb}, err
+}
+
+type tempEngine struct {
+	*RocksDB
+}
+
+func (e *tempEngine) Close() {
+	e.RocksDB.Close()
+	dir := e.RocksDB.cfg.Dir
+	if dir == "" {
+		return
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		log.Errorf(context.TODO(), "could not remove rocksdb dir: %v", err)
+	}
 }
 
 // wg is allowed to be nil, if the caller does not want to wait on the cleanup.
