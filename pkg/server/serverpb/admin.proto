@@ -226,7 +226,7 @@ message EventsRequest {
   string type = 1;
   int64 target_id = 2;
   // limit is the total number of results that are retreived by the query. If
-  // this is obmited or set to 0, the default maximum number of results are
+  // this is omitted or set to 0, the default maximum number of results are
   // returned. When set to > 0, at most only that number of results are
   // returned. When set to < 0, an unlimited number of results are returned.
   int32 limit = 3;
@@ -432,9 +432,10 @@ message JobsResponse {
 message RangeLogRequest {
   // TODO(tamird): use [(gogoproto.customname) = "RangeID"] below. Need to
   // figure out how to teach grpc-gateway about custom names.
+  // If RangeID is 0, returns range log history without filtering by range.
   int64 range_id = 1;
   // limit is the total number of results that are retreived by the query. If
-  // this is obmited or set to 0, the default maximum number of results are
+  // this is omitted or set to 0, the default maximum number of results are
   // returned. When set to > 0, at most only that number of results are
   // returned. When set to < 0, an unlimited number of results are returned.
   int32 limit = 2;
@@ -604,11 +605,16 @@ service Admin {
   rpc DecommissionStatus(DecommissionStatusRequest) returns (DecommissionStatusResponse) {
   }
 
+  // URL: /_admin/v1/rangelog
+  // URL: /_admin/v1/rangelog?limit=100
   // URL: /_admin/v1/rangelog/1
   // URL: /_admin/v1/rangelog/1?limit=100
   rpc RangeLog(RangeLogRequest) returns (RangeLogResponse) {
     option (google.api.http) = {
-      get: "/_admin/v1/rangelog/{range_id}"
+      get: "/_admin/v1/rangelog"
+      additional_bindings {
+        get: "/_admin/v1/rangelog/{range_id}"
+     }
     };
   }
 }
