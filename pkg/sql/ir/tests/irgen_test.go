@@ -17,10 +17,13 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 
-	d "github.com/cockroachdb/cockroach/pkg/sql/ir/example/base"
+	d "github.com/cockroachdb/cockroach/pkg/sql/ir/tests/defcfg/example/base"
+	p "github.com/cockroachdb/cockroach/pkg/sql/ir/tests/defcfg/prims/base"
 )
 
 func makeSampleExpr(a d.Allocator) d.Expr {
@@ -30,6 +33,24 @@ func makeSampleExpr(a d.Allocator) d.Expr {
 	b4 := d.BinExprValue{Left: c1, Op: d.BinOpAdd, Right: c2}.R(a).Expr()
 	b5 := d.BinExprValue{Left: c3, Op: d.BinOpMul, Right: b4}.R(a).Expr()
 	return b5
+}
+
+func assertEq(t *testing.T, n int, val interface{}, exp interface{}) {
+	if !reflect.DeepEqual(val, exp) {
+		t.Errorf("equal failed %d: expected %v, got %v", n, exp, val)
+	}
+}
+
+func TestExprValues(t *testing.T) {
+	a := d.NewAllocator()
+	e := makeSampleExpr(a)
+	b5 := e.MustBeBinExpr()
+	assertEq(t, 1, b5.Op(), d.BinOpMul)
+	assertEq(t, 2, b5.Left().MustBeConstExpr().Datum(), int64(3))
+	b4 := b5.Right().MustBeBinExpr()
+	assertEq(t, 3, b4.Op(), d.BinOpAdd)
+	assertEq(t, 4, b4.Left().MustBeConstExpr().Datum(), int64(1))
+	assertEq(t, 5, b4.Right().MustBeConstExpr().Datum(), int64(2))
 }
 
 func format(ref d.Expr) string {
@@ -127,4 +148,104 @@ func TestDeepEqual(t *testing.T) {
 	if !deepEqual(e, reverse(reverse(e, a), a)) {
 		t.Fatalf("expected expression to be deepEqual to the reverse of its reverse")
 	}
+}
+
+func TestPrimValues(t *testing.T) {
+	a := p.NewAllocator()
+	all := p.AllValue{
+		B:   true,
+		Bi:  'a',
+		I8:  'b',
+		U8:  'c',
+		I16: 0x1234,
+		U16: 0x4321,
+		Rn:  'f',
+		I32: 0x12345678,
+		U32: 0x87654321,
+		I64: 0x123456789abcdef0,
+		U64: 0x0fedcba987654321,
+		S:   "k",
+		F32: 1.234,
+		F64: 5.678,
+	}.R(a)
+	assertEq(t, 1, all.B(), true)
+	assertEq(t, 2, all.Bi(), byte('a'))
+	assertEq(t, 3, all.I8(), int8('b'))
+	assertEq(t, 4, all.U8(), uint8('c'))
+	assertEq(t, 5, all.I16(), int16(0x1234))
+	assertEq(t, 6, all.U16(), uint16(0x4321))
+	assertEq(t, 11, all.Rn(), rune('f'))
+	assertEq(t, 7, all.I32(), int32(0x12345678))
+	assertEq(t, 8, all.U32(), uint32(0x87654321))
+	assertEq(t, 9, all.I64(), int64(0x123456789abcdef0))
+	assertEq(t, 10, all.U64(), uint64(0x0fedcba987654321))
+	assertEq(t, 12, all.S(), "k")
+	assertEq(t, 13, all.F32(), float32(1.234))
+	assertEq(t, 14, all.F64(), float64(5.678))
+
+	var buf bytes.Buffer
+	all.FormatSExpr(&buf)
+	assertEq(t, 100, buf.String(), strings.TrimSpace(`
+(All B: true Bi: 'a' I8: 98 U8: 99 I16: 4660 U16: 17185 Rn: 'f' I32: 305419896 U32: 2271560481 I64: 1311768467463790320 U64: 1147797409030816545 S: "k" F32: 1.234 F64: 5.678)
+`))
+}
+
+func TestPrimValues2(t *testing.T) {
+	a := p.NewAllocator()
+	v := p.SmallBeforeValue{
+		A: true,
+		B: false,
+		C: 'c',
+		D: 'd',
+		E: 'e',
+		F: 0x1234,
+		G: 0x4321,
+		H: 0x12345678,
+		I: 0x123456789abcdef0,
+	}.R(a)
+	assertEq(t, 1, v.A(), true)
+	assertEq(t, 2, v.B(), false)
+	assertEq(t, 3, v.C(), byte('c'))
+	assertEq(t, 4, v.D(), byte('d'))
+	assertEq(t, 5, v.E(), byte('e'))
+	assertEq(t, 6, v.F(), uint16(0x1234))
+	assertEq(t, 7, v.G(), uint16(0x4321))
+	assertEq(t, 8, v.H(), uint32(0x12345678))
+	assertEq(t, 9, v.I(), uint64(0x123456789abcdef0))
+
+	var buf bytes.Buffer
+	v.FormatSExpr(&buf)
+	assertEq(t, 100, buf.String(), strings.TrimSpace(`
+(SmallBefore A: true B: false C: 'c' D: 'd' E: 'e' F: 4660 G: 17185 H: 305419896 I: 1311768467463790320)
+`))
+}
+
+func TestPrimValues3(t *testing.T) {
+	a := p.NewAllocator()
+	v := p.BigBeforeValue{
+		A: 0x123456789abcdef0,
+		B: 0x12345678,
+		C: 0x1234,
+		D: 0x4321,
+		E: 'e',
+		F: 'f',
+		G: 'g',
+		H: false,
+		I: true,
+	}.R(a)
+	assertEq(t, 1, v.A(), uint64(0x123456789abcdef0))
+	assertEq(t, 2, v.B(), uint32(0x12345678))
+	assertEq(t, 3, v.C(), uint16(0x1234))
+	assertEq(t, 4, v.D(), uint16(0x4321))
+	assertEq(t, 5, v.E(), byte('e'))
+	assertEq(t, 6, v.F(), byte('f'))
+	assertEq(t, 7, v.G(), byte('g'))
+	assertEq(t, 8, v.H(), false)
+	assertEq(t, 9, v.I(), true)
+
+	var buf bytes.Buffer
+	v.FormatSExpr(&buf)
+	assertEq(t, 100, buf.String(), strings.TrimSpace(`
+(BigBefore A: 1311768467463790320 B: 305419896 C: 4660 D: 17185 E: 'e' F: 'f' G: 'g' H: false I: true)
+`))
 }

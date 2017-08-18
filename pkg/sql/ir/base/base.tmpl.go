@@ -14,18 +14,28 @@
 
 package base
 
-import "fmt"
+import (
+	"fmt"
+	"unsafe"
+)
 
 // node is a generic ADT node type, with slots for references to other nodes and
 // enumeration values. Values that don't fit and values of other types go in the
 // extra field.
 type node struct {
-	refs  ['r']*node
-	enums ['e']enum
+	refs ['r']*node
+	nums ['e']numvalslot
+	strs ['s']string
 	extra
 }
 
-type enum int32
+// enum is the type to define the tag part for working copies of IR
+// node with sum and enum types.
+type enum uint32
+
+// ivalslot is the type used to store integer values in persistent IR nodes.
+// must be larger than or as large as enum.
+type numvalslot numValSlotType
 
 type extra interface {
 	extraRefs() []*node
@@ -89,6 +99,18 @@ func (x Enum) String() string {
 // Struct is the type of a reference to an immutable record.
 type Struct struct{ ref *node }
 
+// @for slot
+
+const Struct_Slot_slotName_Type = slotType
+const Struct_Slot_slotName_Num = slotNum
+const Struct_Slot_slotName_BitSize = slotBitSize
+const Struct_Slot_slotName_BitOffset = slotBitOffset
+const Struct_Slot_slotName_ByteSize = slotByteSize
+const Struct_Slot_slotName_ByteOffset = slotByteOffset
+const Struct_Slot_slotName_ValueMask = slotValueMask
+
+// @done slot
+
 // StructValue is the logical type of a record. Immutable records are stored in
 // nodes.
 type StructValue struct {
@@ -134,7 +156,7 @@ func (x Struct) Name() Type { return macroGetName(x.ref) }
 func (x Struct) V() StructValue {
 	return StructValue{
 		// @for item
-		macroGetName(x.ref),
+		Name: macroGetName(x.ref),
 		// @done item
 	}
 }
@@ -210,3 +232,10 @@ func (x Sum) MustBeType() Type {
 // @done item
 
 // @done sum
+
+// @for unused
+var x int
+
+func Unused() uint { return *(*uint)(unsafe.Pointer(&x)) }
+
+// @done unused

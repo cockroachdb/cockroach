@@ -1,0 +1,40 @@
+struct All {
+  bool    B = 1
+  byte    Bi = 2
+  int8    I8 = 3
+  uint8   U8 = 4
+  int16   I16 = 5
+  uint16  U16 = 6
+  rune    Rn = 7
+  int32   I32 = 8
+  uint32  U32 = 9
+  int64   I64 = 10
+  uint64  U64 = 11
+  string  S = 12
+  float32 F32 = 13
+  float64 F64 = 14
+}
+
+struct SmallBefore {
+  bool    A = 1
+  bool    B = 2
+  byte    C = 3
+  byte    D = 4
+  byte    E = 5
+  uint16  F = 6
+  uint16  G = 7
+  uint32  H = 8
+  uint64  I = 9
+}
+
+struct BigBefore {
+  uint64  A = 1
+  uint32  B = 2
+  uint16  C = 3
+  uint16  D = 4
+  byte    E = 5
+  byte    F = 6
+  byte    G = 7
+  bool    H = 8
+  bool    I = 9
+}

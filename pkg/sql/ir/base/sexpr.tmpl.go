@@ -16,16 +16,27 @@ package base
 
 import (
 	"bytes"
-	"strconv"
+	"fmt"
 )
 
 type SexprFormatter interface {
 	FormatSExpr(buf *bytes.Buffer)
 }
 
-func FormatSExprInt64(buf *bytes.Buffer, x int64) {
-	buf.WriteString(strconv.FormatInt(x, 10))
-}
+func FormatSExprBool(buf *bytes.Buffer, x bool)       { fmt.Fprintf(buf, "%v", x) }
+func FormatSExprInt64(buf *bytes.Buffer, x int64)     { fmt.Fprintf(buf, "%v", x) }
+func FormatSExprInt32(buf *bytes.Buffer, x int32)     { fmt.Fprintf(buf, "%v", x) }
+func FormatSExprInt16(buf *bytes.Buffer, x int16)     { fmt.Fprintf(buf, "%v", x) }
+func FormatSExprRune(buf *bytes.Buffer, x rune)       { fmt.Fprintf(buf, "%q", x) }
+func FormatSExprInt8(buf *bytes.Buffer, x int8)       { fmt.Fprintf(buf, "%v", x) }
+func FormatSExprUint64(buf *bytes.Buffer, x uint64)   { fmt.Fprintf(buf, "%v", x) }
+func FormatSExprUint32(buf *bytes.Buffer, x uint32)   { fmt.Fprintf(buf, "%v", x) }
+func FormatSExprUint16(buf *bytes.Buffer, x uint16)   { fmt.Fprintf(buf, "%v", x) }
+func FormatSExprUint8(buf *bytes.Buffer, x uint8)     { fmt.Fprintf(buf, "%v", x) }
+func FormatSExprByte(buf *bytes.Buffer, x byte)       { fmt.Fprintf(buf, "%q", x) }
+func FormatSExprString(buf *bytes.Buffer, x string)   { fmt.Fprintf(buf, "%q", x) }
+func FormatSExprFloat32(buf *bytes.Buffer, x float32) { fmt.Fprintf(buf, "%v", x) }
+func FormatSExprFloat64(buf *bytes.Buffer, x float64) { fmt.Fprintf(buf, "%v", x) }
 
 // @for enum
 
