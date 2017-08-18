@@ -84,6 +84,9 @@ pkg/acceptance/prepare.sh
 # The log files that should be created by -l below can only
 # be created if the parent directory already exists. Ensure
 # that it exists before running the test.
+#
+# TODO(cuongdo): give this a unique name, to allow multiple local runs of the
+# nightlies to execute simultaneously
 mkdir -p artifacts/acceptance
 export TMPDIR=$PWD/artifacts/acceptance
 
