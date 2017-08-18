@@ -53,9 +53,9 @@ type benchmarkTest struct {
 	// Terraform configs. This must be in GB, because Terraform only accepts
 	// disk size for GCE in GB.
 	cockroachDiskSizeGB int
-	// storeURL is the Google Cloud Storage URL from which the test will
-	// download stores. Nothing is downloaded if storeURL is empty.
-	storeURL        string
+	// storeFixture is the name of the Azure Storage fixture to download and use
+	// as the store. Nothing is downloaded if storeFixture is empty.
+	storeFixture    string
 	skipClusterInit bool
 
 	f *terrafarm.Farmer
@@ -74,8 +74,10 @@ func (bt *benchmarkTest) Start(ctx context.Context) {
 		bt.b.Fatal(err)
 	}
 
-	if bt.storeURL != "" {
-		// We must stop the cluster because `nodectl` pokes at the data directory.
+	// TODO(benesch): avoid duplicating all this logic with allocator_test.
+	if bt.storeFixture != "" {
+		// We must stop the cluster because we're about to overwrite the data
+		// directory.
 		log.Info(ctx, "stopping cluster")
 		for i := 0; i < bt.f.NumNodes(); i++ {
 			if err := bt.f.Kill(ctx, i); err != nil {
@@ -83,12 +85,15 @@ func (bt *benchmarkTest) Start(ctx context.Context) {
 			}
 		}
 
-		log.Infof(ctx, "downloading archived stores from %s in parallel", bt.storeURL)
+		log.Infof(ctx, "downloading archived stores %s in parallel", bt.storeFixture)
 		errors := make(chan error, bt.f.NumNodes())
 		for i := 0; i < bt.f.NumNodes(); i++ {
 			go func(nodeNum int) {
-				cmd := fmt.Sprintf(`gsutil -m cp -r "%s/node%d/*" "%s"`, bt.storeURL, nodeNum, "/mnt/data0")
-				errors <- bt.f.Exec(nodeNum, cmd)
+				errors <- bt.f.Exec(nodeNum,
+					fmt.Sprintf("find %[1]s -type f -delete && curl -sfSL %s/store%d.tgz | tar -C %[1]s -zx",
+						"/mnt/data0", acceptance.FixtureURL(bt.storeFixture), nodeNum+1,
+					),
+				)
 			}(i)
 		}
 		for i := 0; i < bt.f.NumNodes(); i++ {

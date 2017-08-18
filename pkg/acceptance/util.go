@@ -107,7 +107,9 @@ var flagTFReuseCluster = flag.String("reuse", "",
 	  This flag can also be set to have a test create a cluster
 	  with predetermined name.`,
 )
-
+var flagTFLocation = flag.String("location", "eastus",
+	"the cloud provider location or region in which to create resources",
+)
 var flagTFKeepCluster = keepClusterVar(terrafarm.KeepClusterNever) // see init()
 var flagTFCockroachFlags = flag.String("tf.cockroach-flags", "",
 	"command-line flags to pass to cockroach for allocator tests")
@@ -144,6 +146,11 @@ func RunTests(m *testing.M) {
 		}
 	}()
 	os.Exit(m.Run())
+}
+
+func FixtureURL(path string) string {
+	base := fmt.Sprintf("https://roachfixtures%s.blob.core.windows.net", *flagTFLocation)
+	return filepath.Join(base, path)
 }
 
 // prefixRE is based on a Terraform error message regarding invalid resource

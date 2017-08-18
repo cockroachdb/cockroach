@@ -43,16 +43,17 @@ import (
 )
 
 const (
-	archivedStoreURL = "https://cockroachnightlystorage.blob.core.windows.net/allocatortest"
-	StableInterval   = 3 * time.Minute
-	adminPort        = base.DefaultHTTPPort
+	StableInterval = 3 * time.Minute
+	adminPort      = base.DefaultHTTPPort
 )
 
+// Paths to cloud storage blobs that contain stores with pre-generated data.
+// Please keep /docs/cloud-resources.md up-to-date if you change these.
 const (
-	urlStore1s = archivedStoreURL + "/1node-10g-262ranges"
-	urlStore1m = archivedStoreURL + "/1node-2065replicas-108G"
-	urlStore3s = archivedStoreURL + "/3nodes-10g-262ranges"
-	urlStore6m = archivedStoreURL + "/6nodes-1038replicas-56G"
+	fixtureStore1s = "store-dumps/1node-10gb-262ranges"
+	fixtureStore1m = "store-dumps/1node-108gb-2065ranges"
+	fixtureStore3s = "store-dumps/3nodes-10g-262ranges"
+	fixtureStore6m = "store-dumps/6nodes-56gb-1038ranges"
 )
 
 type allocatorTest struct {
@@ -453,7 +454,7 @@ func TestUpreplicate_1To3Small(t *testing.T) {
 	at := allocatorTest{
 		StartNodes: 1,
 		EndNodes:   3,
-		StoreURL:   urlStore1s,
+		StoreURL:   FixtureURL(fixtureStore1s),
 		Prefix:     "uprep-1to3s",
 	}
 	at.RunAndCleanup(ctx, t)
@@ -467,7 +468,7 @@ func TestRebalance_3To5Small_WithSchemaChanges(t *testing.T) {
 	at := allocatorTest{
 		StartNodes:       3,
 		EndNodes:         5,
-		StoreURL:         urlStore3s,
+		StoreURL:         FixtureURL(fixtureStore3s),
 		Prefix:           "rebal-3to5s",
 		RunSchemaChanges: true,
 	}
@@ -481,7 +482,7 @@ func TestRebalance_3To5Small(t *testing.T) {
 	at := allocatorTest{
 		StartNodes: 3,
 		EndNodes:   5,
-		StoreURL:   urlStore3s,
+		StoreURL:   FixtureURL(fixtureStore3s),
 		Prefix:     "rebal-3to5s",
 	}
 	at.RunAndCleanup(ctx, t)
@@ -494,7 +495,7 @@ func TestUpreplicate_1To3Medium(t *testing.T) {
 	at := allocatorTest{
 		StartNodes: 1,
 		EndNodes:   3,
-		StoreURL:   urlStore1m,
+		StoreURL:   FixtureURL(fixtureStore1m),
 		Prefix:     "uprep-1to3m",
 	}
 	at.RunAndCleanup(ctx, t)
@@ -508,7 +509,7 @@ func TestUpreplicate_1To6Medium(t *testing.T) {
 	at := allocatorTest{
 		StartNodes: 1,
 		EndNodes:   6,
-		StoreURL:   urlStore1m,
+		StoreURL:   FixtureURL(fixtureStore1m),
 		Prefix:     "uprep-1to6m",
 	}
 	at.RunAndCleanup(ctx, t)
@@ -522,7 +523,7 @@ func TestSteady_6Medium(t *testing.T) {
 	at := allocatorTest{
 		StartNodes:       6,
 		EndNodes:         6,
-		StoreURL:         urlStore6m,
+		StoreURL:         FixtureURL(fixtureStore6m),
 		Prefix:           "steady-6m",
 		RunSchemaChanges: true,
 	}
@@ -535,7 +536,7 @@ func TestSteady_3Small(t *testing.T) {
 	at := allocatorTest{
 		StartNodes:       3,
 		EndNodes:         3,
-		StoreURL:         urlStore3s,
+		StoreURL:         FixtureURL(fixtureStore3s),
 		Prefix:           "steady-3s",
 		RunSchemaChanges: true,
 	}
