@@ -332,6 +332,7 @@ func planNodeForQuery(
 		t.Fatal(err)
 	}
 	return plan, func() {
+		plan.Close(context.TODO())
 		finishInternalPlanner(p)
 	}
 }
@@ -387,10 +388,8 @@ func TestSpanBasedDependencyAnalyzer(t *testing.T) {
 		{`DELETE FROM bar`, `SELECT * FROM bar@idx`, false},
 
 		{`INSERT INTO foo VALUES (1)`, `INSERT INTO bar VALUES (1)`, true},
-		{`INSERT INTO foo VALUES (1)`, `INSERT INTO foo VALUES (1)`, false},
 		{`INSERT INTO foo VALUES (1)`, `INSERT INTO bar SELECT k FROM foo`, false},
 		{`INSERT INTO foo VALUES (1)`, `INSERT INTO bar SELECT f FROM fks`, true},
-		{`INSERT INTO foo VALUES (1)`, `INSERT INTO fks VALUES (1)`, false},
 		{`INSERT INTO bar VALUES (1)`, `INSERT INTO fks VALUES (1)`, true},
 		{`INSERT INTO foo VALUES (1)`, `SELECT * FROM foo`, false},
 		{`INSERT INTO foo VALUES (1)`, `SELECT * FROM bar`, true},
@@ -398,6 +397,25 @@ func TestSpanBasedDependencyAnalyzer(t *testing.T) {
 		{`INSERT INTO bar VALUES (1)`, `SELECT * FROM bar@idx`, false},
 		{`INSERT INTO foo VALUES (1)`, `DELETE FROM foo`, false},
 		{`INSERT INTO foo VALUES (1)`, `DELETE FROM bar`, true},
+
+		// INSERT ... VALUES statements are special-cased with tighter span
+		// analysis to allow inserts into the same table to be independent.
+		{`INSERT INTO foo VALUES (1)`, `INSERT INTO foo VALUES (1)`, false},
+		{`INSERT INTO foo VALUES (1)`, `INSERT INTO foo VALUES (2)`, true},
+		// Subqueries can be arbitrarily-complex, so they don't work.
+		{`INSERT INTO foo VALUES (1)`, `INSERT INTO foo SELECT 2`, false},
+		{`INSERT INTO foo VALUES (1)`, `INSERT INTO foo SELECT 2 FROM foo`, false},
+		{`INSERT INTO foo VALUES (1)`, `INSERT INTO foo VALUES ((SELECT 2))`, false},
+		{`INSERT INTO bar VALUES (1)`, `INSERT INTO bar VALUES (1)`, false},
+		{`INSERT INTO bar VALUES (1)`, `INSERT INTO bar VALUES (2)`, true},
+		// Secondary indexes need to be independent too.
+		{`INSERT INTO bar VALUES (1, 5)`, `INSERT INTO bar VALUES (2, 5)`, false},
+		{`INSERT INTO bar VALUES (1, 5)`, `INSERT INTO bar VALUES (2, 6)`, true},
+		{`INSERT INTO bar (a, k) VALUES (1, 5)`, `INSERT INTO bar (a, k) VALUES (2, 5)`, false},
+		{`INSERT INTO bar (k, a) VALUES (1, 5)`, `INSERT INTO bar (k, a) VALUES (2, 5)`, true},
+		// This also tightens FK span analysis for INSERT ... VALUES statements.
+		{`INSERT INTO foo VALUES (1)`, `INSERT INTO fks VALUES (1)`, false},
+		{`INSERT INTO foo VALUES (1)`, `INSERT INTO fks VALUES (2)`, true},
 
 		{`UPDATE foo SET k = 1`, `UPDATE bar SET k = 1`, true},
 		{`UPDATE foo SET k = 1`, `UPDATE foo SET k = 1`, false},

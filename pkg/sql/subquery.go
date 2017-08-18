@@ -233,6 +233,26 @@ func (s *subquery) subqueryTupleOrdering() (bool, encoding.Direction) {
 	return false, 0
 }
 
+var errSawSubquery = errors.New("saw subquery")
+
+// containsSubqueries checks if the walked plan contains subqueries.
+func containsSubqueries(params runParams, plan planNode) (bool, error) {
+	po := planObserver{subqueryNode: func(_ context.Context, _ *subquery) error {
+		// We return an error when we see a subquery to force the recursion to
+		// terminate early.
+		return errSawSubquery
+	}}
+	err := walkPlan(params.ctx, plan, po)
+	switch err {
+	case nil:
+		return false, nil
+	case errSawSubquery:
+		return true, nil
+	default:
+		return false, err
+	}
+}
+
 // subqueryPlanVisitor is responsible for acting on the query plan
 // that implements the sub-query, after it has been populated by
 // subqueryVisitor. This visitor supports both starting
