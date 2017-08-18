@@ -155,9 +155,10 @@ func TestLogRebalances(t *testing.T) {
 	}
 
 	// Log several fake events using the store.
-	logEvent := func(changeType roachpb.ReplicaChangeType) {
+	const details = "test"
+	logEvent := func(changeType roachpb.ReplicaChangeType, reason storage.RangeLogEventReason) {
 		if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			return store.LogReplicaChangeTest(ctx, txn, changeType, desc.Replicas[0], *desc)
+			return store.LogReplicaChangeTest(ctx, txn, changeType, desc.Replicas[0], *desc, reason, details)
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -170,11 +171,11 @@ func TestLogRebalances(t *testing.T) {
 			t.Errorf("range removes %d != expected %d", a, e)
 		}
 	}
-	logEvent(roachpb.ADD_REPLICA)
+	logEvent(roachpb.ADD_REPLICA, storage.ReasonRangeUnderReplicated)
 	checkMetrics(1 /*add*/, 0 /*remove*/)
-	logEvent(roachpb.ADD_REPLICA)
+	logEvent(roachpb.ADD_REPLICA, storage.ReasonRangeUnderReplicated)
 	checkMetrics(2 /*adds*/, 0 /*remove*/)
-	logEvent(roachpb.REMOVE_REPLICA)
+	logEvent(roachpb.REMOVE_REPLICA, storage.ReasonRangeOverReplicated)
 	checkMetrics(2 /*adds*/, 1 /*remove*/)
 
 	// Open a SQL connection to verify that the events have been logged.
@@ -223,6 +224,14 @@ func TestLogRebalances(t *testing.T) {
 			t.Errorf("recorded wrong updated replica %s for add replica of range %d, expected %s",
 				a, rangeID, e)
 		}
+		if a, e := info.Reason, storage.ReasonRangeUnderReplicated; a != e {
+			t.Errorf("recorded wrong reason %s for add replica of range %d, expected %s",
+				a, rangeID, e)
+		}
+		if a, e := info.Details, details; a != e {
+			t.Errorf("recorded wrong details %s for add replica of range %d, expected %s",
+				a, rangeID, e)
+		}
 	}
 	if rows.Err() != nil {
 		t.Fatal(rows.Err())
@@ -265,6 +274,14 @@ func TestLogRebalances(t *testing.T) {
 		}
 		if a, e := *info.RemovedReplica, desc.Replicas[0]; a != e {
 			t.Errorf("recorded wrong updated replica %s for remove replica of range %d, expected %s",
+				a, rangeID, e)
+		}
+		if a, e := info.Reason, storage.ReasonRangeOverReplicated; a != e {
+			t.Errorf("recorded wrong reason %s for add replica of range %d, expected %s",
+				a, rangeID, e)
+		}
+		if a, e := info.Details, details; a != e {
+			t.Errorf("recorded wrong details %s for add replica of range %d, expected %s",
 				a, rangeID, e)
 		}
 	}
