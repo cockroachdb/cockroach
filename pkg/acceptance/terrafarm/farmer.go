@@ -59,6 +59,7 @@ type node struct {
 	hostname     string
 	cockroachPID string
 	cockroachURL string
+	photosURL    string
 	ssh          *ssh.Client
 	processes    map[string]process
 }
@@ -219,6 +220,13 @@ func (f *Farmer) CollectLogs() error {
 				return errors.Wrapf(err, "could not read link %q on %q", src, host)
 			}
 			src = srcRead
+		}
+
+		// Remove the existing log directory, because previous nightly runs might
+		// have left log files that would be confusing when mixed with log files for
+		// the current run.
+		if err := os.RemoveAll(dst); err != nil {
+			return errors.Wrapf(err, "could not remove old destination directory %q", dst)
 		}
 
 		if err := os.Mkdir(dst, 0777); err != nil {
@@ -519,6 +527,9 @@ func (f *Farmer) Restart(ctx context.Context, i int) error {
 					return errors.Wrap(err, cmd)
 				}
 				f.nodes[i].cockroachURL = string(bytes.TrimSpace(stdout))
+				// This is pretty ugly, but photos needs a database name in its URL.
+				// TODO(cuongdo): remove this when we've fixed photos
+				f.nodes[i].photosURL = strings.Replace(f.nodes[i].cockroachURL, "?", "/photos?", 1)
 				return nil
 			}(); err == nil {
 				break
@@ -570,11 +581,12 @@ func (f *Farmer) Start(ctx context.Context, i int, name string) error {
 	switch name {
 	// TODO(tamird,petermattis): replace this with "kv".
 	case "block_writer":
-		cmd += fmt.Sprintf("--tolerate-errors --min-block-bytes=8 --max-block-bytes=128 --benchmark-name %s %s", f.BenchmarkName, f.nodes[i].cockroachURL)
+		cmd += fmt.Sprintf(" --tolerate-errors --min-block-bytes=8 --max-block-bytes=128 --benchmark-name %s %s", f.BenchmarkName, f.nodes[i].cockroachURL)
 	case "photos":
-		cmd += fmt.Sprintf("--users 1 --benchmark-name %s --db %s", f.BenchmarkName, f.nodes[i].cockroachURL)
+		cmd += fmt.Sprintf(" --users 1 --benchmark-name %s --db %s", f.BenchmarkName, f.nodes[i].photosURL)
 	}
 	cmd += fmt.Sprintf(" 1>logs/%[1]s.stdout 2>logs/%[1]s.stderr", name)
+	f.logf("+ node %d: %s\n", i, cmd)
 	if err := s.Start(cmd); err != nil {
 		return err
 	}

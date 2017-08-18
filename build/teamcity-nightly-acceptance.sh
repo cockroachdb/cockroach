@@ -16,6 +16,16 @@ set -euxo pipefail
 
 export BUILDER_HIDE_GOPATH_SRC=1
 
+usage() {
+  echo "usage: $0 test_name"
+}
+
+if [[ -z "${1-}" ]]; then
+  echo "missing test name"
+  usage
+  exit 1
+fi
+
 TESTNAME=$1
 
 PKG=./pkg/acceptance
@@ -60,17 +70,23 @@ case $TESTNAME in
     ;;
   *)
     echo "unknown test name $TESTNAME"
+    usage
     exit 1
     ;;
 esac
 
-"$(dirname "${0}")"/../pkg/acceptance/prepare.sh
+cd "$(dirname "${0}")"/..
+
+pkg/acceptance/prepare.sh
 
 [ -f ~/.ssh/terraform ] || ssh-keygen -f ~/.ssh/terraform -N ''
 
 # The log files that should be created by -l below can only
 # be created if the parent directory already exists. Ensure
 # that it exists before running the test.
+#
+# TODO(cuongdo): give this a unique name, to allow multiple local runs of the
+# nightlies to execute simultaneously
 mkdir -p artifacts/acceptance
 export TMPDIR=$PWD/artifacts/acceptance
 
