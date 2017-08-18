@@ -112,7 +112,7 @@ func TestServer(t *testing.T) {
 	// Verify version handling.
 	t.Run("version", func(t *testing.T) {
 		testCases := []struct {
-			version     uint32
+			version     DistSQLVersion
 			expectedErr string
 		}{
 			{

@@ -580,6 +580,7 @@ func (t *logicTest) close() {
 	t.cleanupFuncs = nil
 
 	if t.cluster != nil {
+		t.outf("stopping cluster")
 		t.cluster.Stopper().Stop(context.TODO())
 		t.cluster = nil
 	}
@@ -816,7 +817,7 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 	defer t.traceStop()
 
 	if *showSQL {
-		t.outf("--- queries start here")
+		t.outf("--- queries start here (file: %s)", path)
 	}
 	defer t.printCompletion(path)
 
@@ -1495,6 +1496,7 @@ func (t *logicTest) runFile(path string, config testClusterConfig) {
 	if err := t.processTestFile(path, config); err != nil {
 		t.Fatal(err)
 	}
+	t.outf("file %s done with config: %s", path, config.name)
 }
 
 func TestLogic(t *testing.T) {
