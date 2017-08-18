@@ -586,6 +586,7 @@ func (f *Farmer) Start(ctx context.Context, i int, name string) error {
 		cmd += fmt.Sprintf(" --users 1 --benchmark-name %s --db %s", f.BenchmarkName, f.nodes[i].photosURL)
 	}
 	cmd += fmt.Sprintf(" 1>logs/%[1]s.stdout 2>logs/%[1]s.stderr", name)
+	f.logf("+ node %d: %s\n", i, cmd)
 	if err := s.Start(cmd); err != nil {
 		return err
 	}
