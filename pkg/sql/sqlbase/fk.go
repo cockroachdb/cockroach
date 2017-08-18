@@ -151,8 +151,13 @@ func (fks fkInsertHelper) checkIdx(ctx context.Context, idx IndexID, row parser.
 }
 
 // CollectSpans implements the FkSpanCollector interface.
-func (fks fkInsertHelper) CollectSpans() (reads roachpb.Spans, writes roachpb.Spans) {
-	return collectSpansForFKMap(fks)
+func (fks fkInsertHelper) CollectSpans() roachpb.Spans {
+	return collectSpansWithFKMap(fks)
+}
+
+// CollectSpansForValues implements the FkSpanCollector interface.
+func (fks fkInsertHelper) CollectSpansForValues(values parser.Datums) (roachpb.Spans, error) {
+	return collectSpansForValuesWithFKMap(fks, values)
 }
 
 type fkDeleteHelper map[IndexID][]baseFKHelper
@@ -223,8 +228,13 @@ func (fks fkDeleteHelper) checkIdx(ctx context.Context, idx IndexID, row parser.
 }
 
 // CollectSpans implements the FkSpanCollector interface.
-func (fks fkDeleteHelper) CollectSpans() (reads roachpb.Spans, writes roachpb.Spans) {
-	return collectSpansForFKMap(fks)
+func (fks fkDeleteHelper) CollectSpans() roachpb.Spans {
+	return collectSpansWithFKMap(fks)
+}
+
+// CollectSpansForValues implements the FkSpanCollector interface.
+func (fks fkDeleteHelper) CollectSpansForValues(values parser.Datums) (roachpb.Spans, error) {
+	return collectSpansForValuesWithFKMap(fks, values)
 }
 
 type fkUpdateHelper struct {
@@ -258,10 +268,23 @@ func (fks fkUpdateHelper) checkIdx(
 }
 
 // CollectSpans implements the FkSpanCollector interface.
-func (fks fkUpdateHelper) CollectSpans() (reads roachpb.Spans, writes roachpb.Spans) {
-	inboundReads, inboundWrites := fks.inbound.CollectSpans()
-	outboundReads, outboundWrites := fks.outbound.CollectSpans()
-	return append(inboundReads, outboundReads...), append(inboundWrites, outboundWrites...)
+func (fks fkUpdateHelper) CollectSpans() roachpb.Spans {
+	inboundReads := fks.inbound.CollectSpans()
+	outboundReads := fks.outbound.CollectSpans()
+	return append(inboundReads, outboundReads...)
+}
+
+// CollectSpansForValues implements the FkSpanCollector interface.
+func (fks fkUpdateHelper) CollectSpansForValues(values parser.Datums) (roachpb.Spans, error) {
+	inboundReads, err := fks.inbound.CollectSpansForValues(values)
+	if err != nil {
+		return nil, err
+	}
+	outboundReads, err := fks.outbound.CollectSpansForValues(values)
+	if err != nil {
+		return nil, err
+	}
+	return append(inboundReads, outboundReads...), nil
 }
 
 type baseFKHelper struct {
@@ -328,49 +351,69 @@ func makeBaseFKHelper(
 
 // TODO(dt): Batch checks of many rows.
 func (f baseFKHelper) check(ctx context.Context, values parser.Datums) (parser.Datums, error) {
-	var key roachpb.Key
-	if values != nil {
-		keyBytes, _, err := EncodePartialIndexKey(
-			f.searchTable, f.searchIdx, f.prefixLen, f.ids, values, f.searchPrefix)
-		if err != nil {
-			return nil, err
-		}
-		key = roachpb.Key(keyBytes)
-	} else {
-		key = roachpb.Key(f.searchPrefix)
+	span, err := f.spanForValues(values)
+	if err != nil {
+		return nil, err
 	}
-	spans := roachpb.Spans{roachpb.Span{Key: key, EndKey: key.PrefixEnd()}}
-	if err := f.rf.StartScan(ctx, f.txn, spans, true /* limit batches */, 1); err != nil {
+	err = f.rf.StartScan(ctx, f.txn, roachpb.Spans{span}, true /* limit batches */, 1)
+	if err != nil {
 		return nil, err
 	}
 	return f.rf.NextRowDecoded(ctx, false /* traceKV */)
 }
 
-// CollectSpans implements the FkSpanCollector interface.
-func (f baseFKHelper) CollectSpans() (reads roachpb.Spans, writes roachpb.Spans) {
+func (f baseFKHelper) spanForValues(values parser.Datums) (roachpb.Span, error) {
+	var key roachpb.Key
+	if values != nil {
+		keyBytes, _, err := EncodePartialIndexKey(
+			f.searchTable, f.searchIdx, f.prefixLen, f.ids, values, f.searchPrefix)
+		if err != nil {
+			return roachpb.Span{}, err
+		}
+		key = roachpb.Key(keyBytes)
+	} else {
+		key = roachpb.Key(f.searchPrefix)
+	}
+	return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}, nil
+}
+
+func (f baseFKHelper) span() roachpb.Span {
 	key := roachpb.Key(f.searchPrefix)
-	return roachpb.Spans{roachpb.Span{Key: key, EndKey: key.PrefixEnd()}}, nil
+	return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}
 }
 
 // FkSpanCollector can collect the spans that foreign key validation will touch.
 type FkSpanCollector interface {
-	CollectSpans() (reads roachpb.Spans, writes roachpb.Spans)
+	CollectSpans() roachpb.Spans
+	CollectSpansForValues(values parser.Datums) (roachpb.Spans, error)
 }
 
-var _ FkSpanCollector = baseFKHelper{}
 var _ FkSpanCollector = fkInsertHelper{}
 var _ FkSpanCollector = fkDeleteHelper{}
 var _ FkSpanCollector = fkUpdateHelper{}
 
-func collectSpansForFKMap(
-	fks map[IndexID][]baseFKHelper,
-) (reads roachpb.Spans, writes roachpb.Spans) {
+func collectSpansWithFKMap(fks map[IndexID][]baseFKHelper) roachpb.Spans {
+	var reads roachpb.Spans
 	for idx := range fks {
 		for _, fk := range fks[idx] {
-			fkReads, fkWrites := fk.CollectSpans()
-			reads = append(reads, fkReads...)
-			writes = append(writes, fkWrites...)
+			reads = append(reads, fk.span())
 		}
 	}
-	return reads, writes
+	return reads
+}
+
+func collectSpansForValuesWithFKMap(
+	fks map[IndexID][]baseFKHelper, values parser.Datums,
+) (roachpb.Spans, error) {
+	var reads roachpb.Spans
+	for idx := range fks {
+		for _, fk := range fks[idx] {
+			read, err := fk.spanForValues(values)
+			if err != nil {
+				return nil, err
+			}
+			reads = append(reads, read)
+		}
+	}
+	return reads, nil
 }

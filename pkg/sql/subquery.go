@@ -348,6 +348,8 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 		}
 	}
 
+	v.hasSubqueries = true
+
 	// Calling newPlan() might recursively invoke expandSubqueries, so we need to preserve
 	// the state of the visitor across the call to newPlan().
 	visitorCopy := v.planner.subqueryVisitor
