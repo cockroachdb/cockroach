@@ -127,6 +127,7 @@ const nodeSumsSelector = createSelector(
         dead: 0,
         decommissioned: 0,
       },
+      capacityUsed: 0,
       capacityAvailable: 0,
       capacityTotal: 0,
       usedBytes: 0,
@@ -156,6 +157,7 @@ const nodeSumsSelector = createSelector(
             break;
         }
         if (status !== LivenessStatus.DEAD) {
+          result.capacityUsed += n.metrics[MetricConstants.usedCapacity];
           result.capacityAvailable += n.metrics[MetricConstants.availableCapacity];
           result.capacityTotal += n.metrics[MetricConstants.capacity];
           result.usedBytes += BytesUsed(n);

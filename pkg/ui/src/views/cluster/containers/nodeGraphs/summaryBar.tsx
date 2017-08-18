@@ -53,9 +53,9 @@ function ClusterNodeTotals (props: ClusterSummaryProps) {
  */
 export default function(props: ClusterSummaryProps) {
   // Capacity math used in the summary status section.
-  const { capacityTotal, capacityAvailable } = props.nodesSummary.nodeSums;
-  const capacityUsed = capacityTotal - capacityAvailable;
-  const capacityPercent = capacityTotal !== 0 ? (capacityUsed / capacityTotal * 100) : 100;
+  const { capacityAvailable, capacityUsed } = props.nodesSummary.nodeSums;
+  const usableCapacity = capacityAvailable + capacityUsed;
+  const capacityPercent = usableCapacity !== 0 ? (capacityUsed / (usableCapacity * 100)) : 100;
 
   return (
     <div>
@@ -64,8 +64,8 @@ export default function(props: ClusterSummaryProps) {
         <ClusterNodeTotals {...props}/>
         <SummaryStat title="Capacity Used" value={capacityPercent}
                       format={(v) => `${d3.format(".2f")(v)}%`}>
-          <SummaryStatMessage message={`You are using ${Bytes(capacityUsed)} of ${Bytes(capacityTotal)}
-                                        storage capacity across all nodes.`} />
+          <SummaryStatMessage message={`You are using ${Bytes(capacityUsed)} of ${Bytes(usableCapacity)}
+                                        usable storage capacity across all nodes.`} />
         </SummaryStat>
         <SummaryStat title="Unavailable ranges" value={props.nodesSummary.nodeSums.unavailableRanges} />
         <SummaryMetricStat id="qps" title="Queries per second" format={d3.format(".1f")} >

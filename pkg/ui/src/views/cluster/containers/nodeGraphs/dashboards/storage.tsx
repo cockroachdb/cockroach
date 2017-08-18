@@ -17,13 +17,8 @@ export default function (props: GraphDashboardProps) {
     >
       <Axis>
         <Metric name="cr.store.capacity" title="Capacity" />
-        {
-          // TODO(mrtracy): We really want to display a used capacity
-          // stat, but that is not directly recorded. We either need to
-          // start directly recording it, or add the ability to create
-          // derived series.
-        }
         <Metric name="cr.store.capacity.available" title="Available" />
+        <Metric name="cr.store.capacity.used" title="Used" />
       </Axis>
     </LineGraph>,
 

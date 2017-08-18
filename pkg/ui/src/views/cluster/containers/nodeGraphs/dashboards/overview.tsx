@@ -98,19 +98,16 @@ export default function (props: GraphDashboardProps) {
             </dd>
             <dt>Available</dt>
             <dd>Free disk space available {tooltipSelection} to CockroachDB.</dd>
+            <dt>Used</dt>
+            <dd>Disk space used {tooltipSelection} by CockroachDB.</dd>
           </dl>
         </div>
       )}
     >
       <Axis units={AxisUnits.Bytes}>
         <Metric name="cr.store.capacity" title="Capacity" />
-        {
-          // TODO(mrtracy): We really want to display a used capacity
-          // stat, but that is not directly recorded. We either need to
-          // start directly recording it, or add the ability to create
-          // derived series.
-        }
         <Metric name="cr.store.capacity.available" title="Available" />
+        <Metric name="cr.store.capacity.used" title="Used" />
       </Axis>
     </LineGraph>,
 
