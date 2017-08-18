@@ -1173,3 +1173,42 @@ func TestAdminAPIRangeLog(t *testing.T) {
 		})
 	}
 }
+
+func TestAdminAPIFullRangeLog(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	expectedRanges, err := ExpectedInitialRangeCount(kvDB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedEvents := expectedRanges - 1 // one for each split
+
+	testCases := []struct {
+		hasLimit bool
+		limit    int
+		expected int
+	}{
+		{false, 0, expectedEvents},
+		{true, 0, expectedEvents},
+		{true, -1, expectedEvents},
+		{true, 1, 1},
+	}
+
+	for _, tc := range testCases {
+		url := "rangelog"
+		if tc.hasLimit {
+			url += fmt.Sprintf("?limit=%d", tc.limit)
+		}
+		t.Run(url, func(t *testing.T) {
+			var resp serverpb.RangeLogResponse
+			if err := getAdminJSONProto(s, url, &resp); err != nil {
+				t.Fatal(err)
+			}
+			if e, a := tc.expected, len(resp.Events); e != a {
+				t.Fatalf("expected %d events, got %d", e, a)
+			}
+		})
+	}
+}
