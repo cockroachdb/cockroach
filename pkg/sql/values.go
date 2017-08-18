@@ -119,8 +119,11 @@ func (p *planner) ValuesClause(
 	return v, nil
 }
 
+// Start implements the planNode interface. Unlike for most planNode
+// implementations, valuesNode.Start can be called multiple times and
+// will only compute the values tuples once.
 func (n *valuesNode) Start(params runParams) error {
-	if n.n == nil {
+	if n.n == nil || n.rows != nil {
 		return nil
 	}
 
@@ -167,7 +170,14 @@ func (n *valuesNode) Next(runParams) (bool, error) {
 	return true, nil
 }
 
+// Reset resets the valuesNode processing state without requiring recomputation
+// of the values tuples if the valuesNode is processed again.
+func (n *valuesNode) Reset() {
+	n.nextRow = 0
+}
+
 func (n *valuesNode) Close(ctx context.Context) {
+	n.nextRow = 0
 	if n.rows != nil {
 		n.rows.Close(ctx)
 		n.rows = nil

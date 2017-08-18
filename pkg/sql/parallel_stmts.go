@@ -83,12 +83,14 @@ func MakeParallelizeQueue(analyzer DependencyAnalyzer) ParallelizeQueue {
 func (pq *ParallelizeQueue) Add(params runParams, plan planNode, exec func(planNode) error) error {
 	prereqs, finishLocked, err := pq.insertInQueue(params, plan)
 	if err != nil {
+		plan.Close(params.ctx)
 		return err
 	}
 
 	pq.runningGroup.Add(1)
 	go func() {
 		defer pq.runningGroup.Done()
+		defer plan.Close(params.ctx)
 
 		// Block on the execution of each prerequisite plan blocking us.
 		for _, prereq := range prereqs {
@@ -117,9 +119,6 @@ func (pq *ParallelizeQueue) Add(params runParams, plan planNode, exec func(planN
 		}
 		finishLocked()
 		pq.mu.Unlock()
-
-		// Close the plan after removing it from the plans map and analyzer.
-		plan.Close(params.ctx)
 	}()
 	return nil
 }

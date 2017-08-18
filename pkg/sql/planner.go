@@ -94,6 +94,9 @@ type planner struct {
 	// logical plan construction. This is used by CREATE VIEW until
 	// #10028 is addressed.
 	hasStar bool
+	// hasSubqueries collects whether any subqueries expansion has
+	// occurred during logical plan construction.
+	hasSubqueries bool
 
 	// Avoid allocations by embedding commonly used objects and visitors.
 	parser                parser.Parser
