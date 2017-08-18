@@ -59,6 +59,7 @@ type node struct {
 	hostname     string
 	cockroachPID string
 	cockroachURL string
+	photosURL    string
 	ssh          *ssh.Client
 	processes    map[string]process
 }
@@ -526,6 +527,9 @@ func (f *Farmer) Restart(ctx context.Context, i int) error {
 					return errors.Wrap(err, cmd)
 				}
 				f.nodes[i].cockroachURL = string(bytes.TrimSpace(stdout))
+				// This is pretty ugly, but photos needs a database name in its URL.
+				// TODO(cuongdo): remove this when we've fixed photos
+				f.nodes[i].photosURL = strings.Replace(f.nodes[i].cockroachURL, "?", "/photos?", 1)
 				return nil
 			}(); err == nil {
 				break
@@ -577,9 +581,9 @@ func (f *Farmer) Start(ctx context.Context, i int, name string) error {
 	switch name {
 	// TODO(tamird,petermattis): replace this with "kv".
 	case "block_writer":
-		cmd += fmt.Sprintf("--tolerate-errors --min-block-bytes=8 --max-block-bytes=128 --benchmark-name %s %s", f.BenchmarkName, f.nodes[i].cockroachURL)
+		cmd += fmt.Sprintf(" --tolerate-errors --min-block-bytes=8 --max-block-bytes=128 --benchmark-name %s %s", f.BenchmarkName, f.nodes[i].cockroachURL)
 	case "photos":
-		cmd += fmt.Sprintf("--users 1 --benchmark-name %s --db %s", f.BenchmarkName, f.nodes[i].cockroachURL)
+		cmd += fmt.Sprintf(" --users 1 --benchmark-name %s --db %s", f.BenchmarkName, f.nodes[i].photosURL)
 	}
 	cmd += fmt.Sprintf(" 1>logs/%[1]s.stdout 2>logs/%[1]s.stderr", name)
 	if err := s.Start(cmd); err != nil {
