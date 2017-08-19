@@ -5705,6 +5705,96 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	}
 }
 
+// Verify that range lookup operations do not synchronously perform intent
+// resolution as doing so can deadlock with the RangeDescriptorCache. See
+// #17760.
+func TestRangeLookupAsyncResolveIntent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	blockPushTxn := make(chan struct{})
+	defer close(blockPushTxn)
+
+	// Disable async tasks in the intent resolver. All tasks will be synchronous.
+	cfg := TestStoreConfig(nil)
+	cfg.IntentResolverTaskLimit = -1
+	cfg.TestingKnobs.TestingProposalFilter =
+		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+			if filterArgs.Req.Method() == roachpb.PushTxn {
+				<-blockPushTxn
+			}
+			return nil
+		}
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc.StartWithStoreConfig(t, stopper, cfg)
+
+	key := roachpb.Key("a")
+
+	// Get original meta2 descriptor.
+	rlArgs := &roachpb.RangeLookupRequest{
+		Span: roachpb.Span{
+			Key: keys.RangeMetaKey(roachpb.RKey(key)),
+		},
+		MaxRanges: 1,
+	}
+
+	var rlReply *roachpb.RangeLookupResponse
+
+	reply, pErr := tc.SendWrappedWith(roachpb.Header{
+		ReadConsistency: roachpb.INCONSISTENT,
+	}, rlArgs)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	rlReply = reply.(*roachpb.RangeLookupResponse)
+
+	origDesc := rlReply.Ranges[0]
+	newDesc := origDesc
+	var err error
+	newDesc.EndKey, err = keys.Addr(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Write the new descriptor as an intent.
+	data, err := protoutil.Marshal(&newDesc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
+	// Officially begin the transaction. If not for this, the intent resolution
+	// machinery would simply remove the intent we write below, see #3020.
+	// We send directly to Replica throughout this test, so there's no danger
+	// of the Store aborting this transaction (i.e. we don't have to set a high
+	// priority).
+	pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(key)), data)
+	txn.Sequence++
+	if _, pErr = maybeWrapWithBeginTransaction(context.Background(), tc.Sender(), roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Now lookup the range. Since the lookup is inconsistent, there's no
+	// WriteIntentError, but we'll try to resolve any intents that are found. If
+	// the RangeLookup op attempts to resolve the intents synchronously, the
+	// operation will block forever.
+	//
+	// Note that 'A' < 'a'.
+	rlArgs.Key = keys.RangeMetaKey(roachpb.RKey{'A'})
+
+	reply, pErr = tc.SendWrappedWith(roachpb.Header{
+		Timestamp:       tc.Clock().Now(),
+		ReadConsistency: roachpb.INCONSISTENT,
+	}, rlArgs)
+	if pErr != nil {
+		t.Errorf("unexpected lookup error: %s", pErr)
+	}
+	rlReply = reply.(*roachpb.RangeLookupResponse)
+	if !reflect.DeepEqual(rlReply.Ranges[0], origDesc) {
+		t.Errorf("expected original descriptor %s; got %s", &origDesc, &rlReply.Ranges[0])
+	}
+}
+
 // TestReplicaLookupUseReverseScan verifies the correctness of the results which are retrieved
 // from RangeLookup by using ReverseScan.
 func TestReplicaLookupUseReverseScan(t *testing.T) {

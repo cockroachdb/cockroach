@@ -34,12 +34,12 @@ import (
 	"golang.org/x/net/context"
 )
 
-// intentResolverTaskLimit is the maximum number of asynchronous tasks
+// defaultIntentResolverTaskLimit is the maximum number of asynchronous tasks
 // that may be started by intentResolver. When this limit is reached
-// asynchronous tasks will start to block to apply backpressure.
-// This is a last line of defense against issues like #4925.
+// asynchronous tasks will start to block to apply backpressure.  This is a
+// last line of defense against issues like #4925.
 // TODO(bdarnell): how to determine best value?
-const intentResolverTaskLimit = 100
+const defaultIntentResolverTaskLimit = 100
 
 // intentResolverBatchSize is the maximum number of intents that will
 // be resolved in a single batch. Batches that span many ranges (which
@@ -63,10 +63,10 @@ type intentResolver struct {
 	}
 }
 
-func newIntentResolver(store *Store) *intentResolver {
+func newIntentResolver(store *Store, taskLimit int) *intentResolver {
 	ir := &intentResolver{
 		store: store,
-		sem:   make(chan struct{}, intentResolverTaskLimit),
+		sem:   make(chan struct{}, taskLimit),
 	}
 	ir.mu.inFlight = map[uuid.UUID]int{}
 	return ir
@@ -251,7 +251,9 @@ func (ir *intentResolver) maybePushTransactions(
 // processing via this method). The two cases are handled somewhat
 // differently and would be better served by different entry points,
 // but combining them simplifies the plumbing necessary in Replica.
-func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithArg) {
+func (ir *intentResolver) processIntentsAsync(
+	r *Replica, intents []intentsWithArg, allowSyncProcessing bool,
+) {
 	if r.store.TestingKnobs().DisableAsyncIntentResolution {
 		return
 	}
@@ -266,7 +268,7 @@ func (ir *intentResolver) processIntentsAsync(r *Replica, intents []intentsWithA
 				ir.processIntents(ctx, r, item, now)
 			})
 		if err != nil {
-			if err == stop.ErrThrottled {
+			if err == stop.ErrThrottled && allowSyncProcessing {
 				// A limited task was not available. Rather than waiting for one, we
 				// reuse the current goroutine.
 				ir.processIntents(ctx, r, item, now)
@@ -464,8 +466,10 @@ func (ir *intentResolver) resolveIntents(
 			// TODO(tschottdorf): no tracing here yet.
 			return ir.store.DB().Run(ctx, b)
 		}
+		// NB: Don't wait for an async task slot as we might be configured with an
+		// insufficient number (i.e. 0 or 1).
 		if ir.store.Stopper().RunLimitedAsyncTask(
-			ctx, "storage.intentResolve: resolving intents", ir.sem, true, /* wait */
+			ctx, "storage.intentResolve: resolving intents", ir.sem, false, /* wait */
 			func(ctx context.Context) {
 				defer wg.Done()
 
