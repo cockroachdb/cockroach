@@ -833,6 +833,16 @@ func restore(
 	return mu.res, nil
 }
 
+var restoreHeader = sqlbase.ResultColumns{
+	{Name: "job_id", Typ: parser.TypeInt},
+	{Name: "status", Typ: parser.TypeString},
+	{Name: "fraction_completed", Typ: parser.TypeFloat},
+	{Name: "rows", Typ: parser.TypeInt},
+	{Name: "index_entries", Typ: parser.TypeInt},
+	{Name: "system_records", Typ: parser.TypeInt},
+	{Name: "bytes", Typ: parser.TypeInt},
+}
+
 func restorePlanHook(
 	stmt parser.Statement, p sql.PlanHookState,
 ) (func(context.Context, chan<- parser.Datums) error, sqlbase.ResultColumns, error) {
@@ -860,15 +870,6 @@ func restorePlanHook(
 		return nil, nil, err
 	}
 
-	header := sqlbase.ResultColumns{
-		{Name: "job_id", Typ: parser.TypeInt},
-		{Name: "status", Typ: parser.TypeString},
-		{Name: "fraction_completed", Typ: parser.TypeFloat},
-		{Name: "rows", Typ: parser.TypeInt},
-		{Name: "index_entries", Typ: parser.TypeInt},
-		{Name: "system_records", Typ: parser.TypeInt},
-		{Name: "bytes", Typ: parser.TypeInt},
-	}
 	fn := func(ctx context.Context, resultsCh chan<- parser.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
@@ -882,64 +883,75 @@ func restorePlanHook(
 		if err != nil {
 			return err
 		}
-		backupDescs, err := loadBackupDescs(ctx, from)
-		if err != nil {
-			return err
-		}
-		sqlDescs, err := selectTargets(backupDescs, restoreStmt.Targets)
-		if err != nil {
-			return err
-		}
-		tableRewrites, err := allocateTableRewrites(ctx, p, sqlDescs, opts)
-		if err != nil {
-			return err
-		}
-		description, err := restoreJobDescription(restoreStmt, from)
-		if err != nil {
-			return err
-		}
-		job := p.ExecCfg().JobRegistry.NewJob(jobs.Record{
-			Description: description,
-			Username:    p.User(),
-			DescriptorIDs: func() (sqlDescIDs []sqlbase.ID) {
-				for _, tableRewrite := range tableRewrites {
-					sqlDescIDs = append(sqlDescIDs, tableRewrite.TableID)
-				}
-				return sqlDescIDs
-			}(),
-			Details: jobs.RestoreDetails{
-				TableRewrites: tableRewrites,
-				URIs:          from,
-			},
-		})
-		res, restoreErr := restore(
-			ctx,
-			p.ExecCfg().DB,
-			p.ExecCfg().Gossip,
-			backupDescs,
-			sqlDescs,
-			tableRewrites,
-			job,
-		)
-		if err := job.FinishedWith(ctx, restoreErr); err != nil {
-			return err
-		}
-		if restoreErr != nil {
-			return restoreErr
-		}
-		// TODO(benesch): emit periodic progress updates.
-		resultsCh <- parser.Datums{
-			parser.NewDInt(parser.DInt(*job.ID())),
-			parser.NewDString(string(jobs.StatusSucceeded)),
-			parser.NewDFloat(parser.DFloat(1.0)),
-			parser.NewDInt(parser.DInt(res.Rows)),
-			parser.NewDInt(parser.DInt(res.IndexEntries)),
-			parser.NewDInt(parser.DInt(res.SystemRecords)),
-			parser.NewDInt(parser.DInt(res.DataSize)),
-		}
-		return nil
+		return doRestorePlan(ctx, restoreStmt, p, from, opts, resultsCh)
 	}
-	return fn, header, nil
+	return fn, restoreHeader, nil
+}
+
+func doRestorePlan(
+	ctx context.Context,
+	restoreStmt *parser.Restore,
+	p sql.PlanHookState,
+	from []string,
+	opts map[string]string,
+	resultsCh chan<- parser.Datums,
+) error {
+	backupDescs, err := loadBackupDescs(ctx, from)
+	if err != nil {
+		return err
+	}
+	sqlDescs, err := selectTargets(backupDescs, restoreStmt.Targets)
+	if err != nil {
+		return err
+	}
+	tableRewrites, err := allocateTableRewrites(ctx, p, sqlDescs, opts)
+	if err != nil {
+		return err
+	}
+	description, err := restoreJobDescription(restoreStmt, from)
+	if err != nil {
+		return err
+	}
+	job := p.ExecCfg().JobRegistry.NewJob(jobs.Record{
+		Description: description,
+		Username:    p.User(),
+		DescriptorIDs: func() (sqlDescIDs []sqlbase.ID) {
+			for _, tableRewrite := range tableRewrites {
+				sqlDescIDs = append(sqlDescIDs, tableRewrite.TableID)
+			}
+			return sqlDescIDs
+		}(),
+		Details: jobs.RestoreDetails{
+			TableRewrites: tableRewrites,
+			URIs:          from,
+		},
+	})
+	res, restoreErr := restore(
+		ctx,
+		p.ExecCfg().DB,
+		p.ExecCfg().Gossip,
+		backupDescs,
+		sqlDescs,
+		tableRewrites,
+		job,
+	)
+	if err := job.FinishedWith(ctx, restoreErr); err != nil {
+		return err
+	}
+	if restoreErr != nil {
+		return restoreErr
+	}
+	// TODO(benesch): emit periodic progress updates.
+	resultsCh <- parser.Datums{
+		parser.NewDInt(parser.DInt(*job.ID())),
+		parser.NewDString(string(jobs.StatusSucceeded)),
+		parser.NewDFloat(parser.DFloat(1.0)),
+		parser.NewDInt(parser.DInt(res.Rows)),
+		parser.NewDInt(parser.DInt(res.IndexEntries)),
+		parser.NewDInt(parser.DInt(res.SystemRecords)),
+		parser.NewDInt(parser.DInt(res.DataSize)),
+	}
+	return nil
 }
 
 func restoreResumeHook(typ jobs.Type) func(ctx context.Context, job *jobs.Job) error {

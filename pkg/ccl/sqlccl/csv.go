@@ -585,6 +585,8 @@ func makeBackup(
 	return int64(len(backupDesc.Files)), err
 }
 
+const csvDatabaseName = "csv"
+
 func finalizeCSVBackup(
 	ctx context.Context,
 	backupDesc *BackupDescriptor,
@@ -605,7 +607,7 @@ func finalizeCSVBackup(
 	}
 	backupDesc.Descriptors = []sqlbase.Descriptor{
 		*sqlbase.WrapDescriptor(&sqlbase.DatabaseDescriptor{
-			Name: "csv",
+			Name: csvDatabaseName,
 			ID:   parentID,
 		}),
 		*sqlbase.WrapDescriptor(tableDesc),
@@ -655,9 +657,6 @@ func importPlanHook(
 	// plumbing worked out while mjibson works on the new processors and router.
 	// Currently, it "uses" distsql to compute an int and this method returns
 	// it.
-	header := sqlbase.ResultColumns{
-		{Name: "data_size", Typ: parser.TypeInt},
-	}
 	fn := func(ctx context.Context, resultsCh chan<- parser.Datums) error {
 		walltime := timeutil.Now().UnixNano()
 
@@ -673,6 +672,18 @@ func importPlanHook(
 		files, err := filesFn()
 		if err != nil {
 			return err
+		}
+
+		var targetDB string
+		if override, ok := opts[restoreOptIntoDB]; !ok {
+			if session := p.EvalContext().Database; session != "" {
+				targetDB = session
+			} else {
+				return errors.Errorf("must specify target database with %q option", restoreOptIntoDB)
+			}
+		} else {
+			targetDB = override
+			// TODO(dt): verify db exists
 		}
 
 		comma := ','
@@ -744,15 +755,13 @@ func importPlanHook(
 			return err
 		}
 
-		var total int64
-
 		if distributed {
-			total, err = doDistributedCSVTransform(ctx, files, p, tableDesc, temp, walltime)
+			_, err = doDistributedCSVTransform(ctx, files, p, tableDesc, temp, walltime)
 			if err != nil {
 				return err
 			}
 		} else {
-			_, _, total, err = doLocalCSVTransform(
+			_, _, _, err = doLocalCSVTransform(
 				ctx, parentID, tableDesc, temp, files,
 				comma, comment, nullif, sstSize,
 			)
@@ -760,15 +769,17 @@ func importPlanHook(
 				return err
 			}
 		}
-
-		// TODO(dt): Run restore of temp data.
-
-		resultsCh <- parser.Datums{
-			parser.NewDInt(parser.DInt(total)),
+		restore := &parser.Restore{
+			Targets: parser.TargetList{
+				Tables: []parser.TablePattern{&parser.AllTablesSelector{Database: csvDatabaseName}},
+			},
+			From: parser.Exprs{parser.NewDString(temp)},
 		}
-		return nil
+		from := []string{temp}
+		opts = map[string]string{restoreOptIntoDB: targetDB}
+		return doRestorePlan(ctx, restore, p, from, opts, resultsCh)
 	}
-	return fn, header, nil
+	return fn, restoreHeader, nil
 }
 
 func doDistributedCSVTransform(

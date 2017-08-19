@@ -382,7 +382,9 @@ func TestImportStmt(t *testing.T) {
 		files = append(files, fmt.Sprintf(`'nodelocal://%s'`, path))
 	}
 
-	for _, tc := range []struct {
+	expectedRows := numFiles * rowsPerFile
+
+	for i, tc := range []struct {
 		name  string
 		query string        // must have one `%s` for the files list.
 		args  []interface{} // will have backupPath appended
@@ -420,6 +422,14 @@ func TestImportStmt(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			sqlDB.Exec(fmt.Sprintf(`CREATE DATABASE csv%d`, i))
+			sqlDB.Exec(fmt.Sprintf(`SET DATABASE = csv%d`, i))
+
+			var unused string
+			var restored struct {
+				rows, idx, sys, bytes int
+			}
+
 			backupPath := fmt.Sprintf("nodelocal://%s", filepath.Join(dir, t.Name()))
 			if strings.Contains(tc.query, "temp = $") {
 				tc.args = append(tc.args, backupPath)
@@ -428,25 +438,22 @@ func TestImportStmt(t *testing.T) {
 			var result int
 			if err := sqlDB.DB.QueryRow(
 				fmt.Sprintf(tc.query, strings.Join(files, ", ")), tc.args...,
-			).Scan(&result); err != nil {
+			).Scan(
+				&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.sys, &restored.bytes,
+			); err != nil {
 				if !testutils.IsError(err, tc.err) {
 					t.Fatal(err)
 				}
 				return
 			}
-			if expected := 1; result < expected {
-				t.Fatalf("expected >= %d, got %d", expected, result)
+
+			if expected, actual := expectedRows, restored.rows; expected != actual {
+				t.Fatalf("expected %d rows, got %d", expected, actual)
 			}
 
 			// Verify correct number of rows with RESTORE.
-			sqlDB.Exec(`DROP DATABASE IF EXISTS CSV`)
-			sqlDB.Exec(`CREATE DATABASE CSV`)
-			sqlDB.Exec(
-				`RESTORE csv.* FROM $1`,
-				fmt.Sprintf("nodelocal://%s", backupPath),
-			)
-			sqlDB.QueryRow(`SELECT count(*) FROM csv.t`).Scan(&result)
-			if expect := numFiles * rowsPerFile; result != expect {
+			sqlDB.QueryRow(`SELECT count(*) FROM t`).Scan(&result)
+			if expect := expectedRows; result != expect {
 				t.Fatalf("expected %d rows, got %d", expect, result)
 			}
 		})
