@@ -130,6 +130,21 @@ func TestLogSplits(t *testing.T) {
 	if a := store.Metrics().RangeSplits.Count(); a < minSplits {
 		t.Errorf("splits = %d < min %d", a, minSplits)
 	}
+
+	{
+		// Verify that the uniqueIDs have non-zero node IDs. The "& 0x7fff" is
+		// using internal knowledge of the structure of uniqueIDs that the node ID
+		// is embedded in the lower 15 bits. See #17560.
+		var count int
+		err := db.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM system.rangelog WHERE ("uniqueID" & 0x7fff) = 0`).Scan(&count)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if count != 0 {
+			t.Fatalf("found %d uniqueIDs with a zero node ID", count)
+		}
+	}
 }
 
 func TestLogRebalances(t *testing.T) {
