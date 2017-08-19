@@ -17,6 +17,7 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -40,6 +41,7 @@ var crdbInternal = virtualSchema{
 	name: crdbInternalName,
 	tables: []virtualSchemaTable{
 		crdbInternalBuildInfoTable,
+		crdbInternalRuntimeInfoTable,
 		crdbInternalTablesTable,
 		crdbInternalLeasesTable,
 		crdbInternalSchemaChangesTable,
@@ -82,6 +84,39 @@ CREATE TABLE crdb_internal.node_build_info (
 			"Organization": node.Organization.Get(),
 			"Build":        info.Short(),
 			"Version":      info.Tag,
+		} {
+			if err := addRow(
+				nodeID,
+				parser.NewDString(k),
+				parser.NewDString(v),
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
+var crdbInternalRuntimeInfoTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.node_runtime_info (
+  node_id INT NOT NULL,
+  field   STRING NOT NULL,
+  value   STRING NOT NULL
+);
+`,
+	populate: func(_ context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
+		node := p.ExecCfg().NodeInfo
+
+		nodeID := parser.NewDInt(parser.DInt(int64(node.NodeID.Get())))
+		url, err := node.PGURL(url.User(""))
+		if err != nil {
+			return err
+		}
+
+		for k, v := range map[string]string{
+			"AdminURL": node.AdminURL(),
+			"PGURL":    url.String(),
 		} {
 			if err := addRow(
 				nodeID,

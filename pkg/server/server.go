@@ -387,6 +387,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	nodeInfo := sql.NodeInfo{
+		AdminURL:     cfg.AdminURL,
+		PGURL:        cfg.PGURL,
 		ClusterID:    s.ClusterID,
 		NodeID:       &s.nodeIDContainer,
 		Organization: s.st.ClusterOrganization,

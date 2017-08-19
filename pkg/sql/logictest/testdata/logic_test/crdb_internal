@@ -181,3 +181,9 @@ select crdb_internal.force_panic('foo')
 
 query error pq: insufficient privilege
 select crdb_internal.force_log_fatal('foo')
+
+query ITT
+select node_id, field, substr(value, 1, 8) from crdb_internal.node_runtime_info
+----
+1 AdminURL  https://
+1 PGURL     postgres
