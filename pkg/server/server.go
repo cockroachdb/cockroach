@@ -294,7 +294,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.tsDB = ts.NewDB(s.db)
 	s.tsServer = ts.MakeServer(s.cfg.AmbientCtx, s.tsDB, s.cfg.TimeSeriesServerConfig, s.stopper)
 
-	sqlExecutor := sql.InternalExecutor{LeaseManager: s.leaseMgr}
+	sqlExecutor := sql.InternalExecutor{
+		NodeID:       &s.nodeIDContainer,
+		LeaseManager: s.leaseMgr,
+	}
 
 	// TODO(bdarnell): make StoreConfig configurable.
 	storeCfg := storage.StoreConfig{

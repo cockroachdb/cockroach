@@ -17,6 +17,7 @@ package sql
 import (
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -31,6 +32,7 @@ import (
 // that the caller has access to a cockroach KV client to handle connection and
 // transaction management.
 type InternalExecutor struct {
+	NodeID       *base.NodeIDContainer
 	LeaseManager *LeaseManager
 }
 
@@ -43,7 +45,7 @@ func (ie InternalExecutor) ExecuteStatementInTransaction(
 ) (int, error) {
 	p := makeInternalPlanner(opName, txn, security.RootUser, ie.LeaseManager.memMetrics)
 	defer finishInternalPlanner(p)
-	p.session.tables.leaseMgr = ie.LeaseManager
+	ie.initSession(p)
 	return p.exec(ctx, statement, qargs...)
 }
 
@@ -55,7 +57,7 @@ func (ie InternalExecutor) QueryRowInTransaction(
 ) (parser.Datums, error) {
 	p := makeInternalPlanner(opName, txn, security.RootUser, ie.LeaseManager.memMetrics)
 	defer finishInternalPlanner(p)
-	p.session.tables.leaseMgr = ie.LeaseManager
+	ie.initSession(p)
 	return p.QueryRow(ctx, statement, qargs...)
 }
 
@@ -67,7 +69,7 @@ func (ie InternalExecutor) QueryRowsInTransaction(
 ) ([]parser.Datums, error) {
 	p := makeInternalPlanner(opName, txn, security.RootUser, ie.LeaseManager.memMetrics)
 	defer finishInternalPlanner(p)
-	p.session.tables.leaseMgr = ie.LeaseManager
+	ie.initSession(p)
 	return p.queryRows(ctx, statement, qargs...)
 }
 
@@ -78,7 +80,7 @@ func (ie InternalExecutor) GetTableSpan(
 	// Lookup the table ID.
 	p := makeInternalPlanner("get-table-span", txn, user, ie.LeaseManager.memMetrics)
 	defer finishInternalPlanner(p)
-	p.session.tables.leaseMgr = ie.LeaseManager
+	ie.initSession(p)
 
 	tn := parser.TableName{DatabaseName: parser.Name(dbName), TableName: parser.Name(tableName)}
 	tableID, err := getTableID(ctx, p, &tn)
@@ -91,6 +93,13 @@ func (ie InternalExecutor) GetTableSpan(
 	tableStartKey := roachpb.Key(tablePrefix)
 	tableEndKey := tableStartKey.PrefixEnd()
 	return roachpb.Span{Key: tableStartKey, EndKey: tableEndKey}, nil
+}
+
+func (ie InternalExecutor) initSession(p *planner) {
+	if ie.NodeID != nil {
+		p.evalCtx.NodeID = ie.NodeID.Get()
+	}
+	p.session.tables.leaseMgr = ie.LeaseManager
 }
 
 // getTableID retrieves the table ID for the specified table.
