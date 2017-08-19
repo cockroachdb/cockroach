@@ -606,6 +606,11 @@ type StoreConfig struct {
 	// shared by all Raft groups managed by the store.
 	RaftEntryCacheSize uint64
 
+	// IntentResolverTaskLimit is the maximum number of asynchronous tasks that
+	// may be started by the intent resolver. -1 indicates no asynchronous tasks
+	// are allowed.
+	IntentResolverTaskLimit int
+
 	TestingKnobs StoreTestingKnobs
 
 	// concurrentSnapshotApplyLimit specifies the maximum number of empty
@@ -788,6 +793,11 @@ func (sc *StoreConfig) SetDefaults() {
 	if sc.RaftEntryCacheSize == 0 {
 		sc.RaftEntryCacheSize = defaultRaftEntryCacheSize
 	}
+	if sc.IntentResolverTaskLimit == 0 {
+		sc.IntentResolverTaskLimit = defaultIntentResolverTaskLimit
+	} else if sc.IntentResolverTaskLimit == -1 {
+		sc.IntentResolverTaskLimit = 0
+	}
 	if sc.concurrentSnapshotApplyLimit == 0 {
 		// NB: setting this value higher than 1 is likely to degrade client
 		// throughput.
@@ -836,7 +846,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 			return 0, false
 		})
 	}
-	s.intentResolver = newIntentResolver(s)
+	s.intentResolver = newIntentResolver(s, cfg.IntentResolverTaskLimit)
 	s.raftEntryCache = newRaftEntryCache(cfg.RaftEntryCacheSize)
 	s.draining.Store(false)
 	s.scheduler = newRaftScheduler(s.cfg.AmbientCtx, s.metrics, s, storeSchedulerConcurrency)

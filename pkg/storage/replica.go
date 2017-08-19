@@ -2413,7 +2413,13 @@ func (r *Replica) executeReadOnlyBatch(
 
 	if intents := result.Local.detachIntents(pErr != nil); len(intents) > 0 {
 		log.Eventf(ctx, "submitting %d intents to asynchronous processing", len(intents))
-		r.store.intentResolver.processIntentsAsync(r, intents)
+		// Do not allow synchronous intent resolution for RangeLookup requests as
+		// doing so can deadlock if the request originated from the local node
+		// which means the local range descriptor cache has an in-flight
+		// RangeLookup request which prohibits any concurrent requests for the same
+		// range. See #17760.
+		_, hasRangeLookup := ba.GetArg(roachpb.RangeLookup)
+		r.store.intentResolver.processIntentsAsync(r, intents, !hasRangeLookup)
 	}
 	if pErr != nil {
 		log.ErrEvent(ctx, pErr.String())
@@ -2623,7 +2629,7 @@ func (r *Replica) tryExecuteWriteBatch(
 				// both leave intents to GC that don't hit this code path. No good
 				// solution presents itself at the moment and such intents will be
 				// resolved on reads.
-				r.store.intentResolver.processIntentsAsync(r, propResult.Intents)
+				r.store.intentResolver.processIntentsAsync(r, propResult.Intents, true /* allowSync*/)
 			}
 			return propResult.Reply, propResult.Err, propResult.ProposalRetry
 		case <-slowTimer.C:
@@ -5215,7 +5221,7 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (config.SystemConfig, er
 		// There were intents, so what we read may not be consistent. Attempt
 		// to nudge the intents in case they're expired; next time around we'll
 		// hopefully have more luck.
-		r.store.intentResolver.processIntentsAsync(r, intents)
+		r.store.intentResolver.processIntentsAsync(r, intents, true /* allowSync */)
 		return config.SystemConfig{}, errSystemConfigIntent
 	}
 	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
