@@ -141,7 +141,7 @@ func (c *Clock) getPhysicalClockLocked() int64 {
 		interval := c.mu.lastPhysicalTime - newTime
 		if interval > int64(c.maxOffset/10) {
 			c.mu.monotonicityErrorsCount++
-			log.Warningf(context.TODO(), "backward time jump detected (%f seconds)", float64(newTime-c.mu.lastPhysicalTime)/1e9)
+			log.Warningf(context.TODO(), "backward time jump detected (%f seconds)", float64(-interval)/1e9)
 		}
 	}
 
@@ -204,7 +204,7 @@ func (c *Clock) Update(rt Timestamp) Timestamp {
 	}
 
 	// In the remaining cases, our physical clock plays no role
-	// as it is behind the local and remote wall times. Instead,
+	// as it is behind the local or remote wall times. Instead,
 	// the logical clock comes into play.
 	if rt.WallTime > c.mu.timestamp.WallTime {
 		offset := time.Duration(rt.WallTime-physicalClock) * time.Nanosecond
