@@ -193,10 +193,12 @@ func (k Key) String() string {
 func (k Key) Format(f fmt.State, verb rune) {
 	// Note: this implementation doesn't handle the width and precision
 	// specifiers such as "%20.10s".
-	if PrettyPrintKey != nil {
+	if verb == 'x' {
+		fmt.Fprintf(f, "%x", []byte(k))
+	} else if PrettyPrintKey != nil {
 		fmt.Fprint(f, PrettyPrintKey(k))
 	} else {
-		fmt.Fprintf(f, strconv.Quote(string(k)))
+		fmt.Fprint(f, strconv.Quote(string(k)))
 	}
 }
 
