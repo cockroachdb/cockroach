@@ -622,3 +622,13 @@ func TestRocksDBTimeBound(t *testing.T) {
 		t.Fatalf("got max %v expected %v", sst.TsMax, maxTimestamp)
 	}
 }
+
+func TestCppGo(t *testing.T) {
+	txn := &roachpb.Transaction{
+		Name: "hello world",
+	}
+	txn.UpdateObservedTimestamp(1, hlc.Timestamp{Logical: 1})
+	txn.UpdateObservedTimestamp(2, hlc.Timestamp{Logical: 2})
+	txn.UpdateObservedTimestamp(3, hlc.Timestamp{Logical: 3})
+	testCppGo(txn)
+}
