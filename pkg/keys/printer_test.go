@@ -16,6 +16,7 @@ package keys
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"math"
 	"testing"
@@ -209,5 +210,18 @@ func TestPrettyPrintRange(t *testing.T) {
 		if str != tc.expected {
 			t.Errorf("%d: expected \"%s\", got \"%s\"", i, tc.expected, str)
 		}
+	}
+}
+
+func TestFormatHexKey(t *testing.T) {
+	// Verify that we properly handling the 'x' formatting verb in
+	// roachpb.Key.Format.
+	key := StoreIdentKey()
+	decoded, err := hex.DecodeString(fmt.Sprintf("%x", key))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(key, decoded) {
+		t.Fatalf("expected %s, but found %s", key, decoded)
 	}
 }
