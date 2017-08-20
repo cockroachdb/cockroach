@@ -6740,23 +6740,23 @@ func TestDiffRange(t *testing.T) {
 -0.000001729,1 "a"
 -  ts:1970-01-01 00:00:00.000001729 +0000 UTC
 -  value:foo
--  raw_key:"a" raw_value:666f6f
+-  raw_key:61 raw_value:666f6f
 +0.000001729,1 "ab"
 +  ts:1970-01-01 00:00:00.000001729 +0000 UTC
 +  value:foo
-+  raw_key:"ab" raw_value:666f6f
++  raw_key:6162 raw_value:666f6f
 -0.000001729,1 "abcd"
 -  ts:1970-01-01 00:00:00.000001729 +0000 UTC
 -  value:foo
--  raw_key:"abcd" raw_value:666f6f
+-  raw_key:61626364 raw_value:666f6f
 +0.000001729,1 "abcdef"
 +  ts:1970-01-01 00:00:00.000001729 +0000 UTC
 +  value:foo
-+  raw_key:"abcdef" raw_value:666f6f
++  raw_key:616263646566 raw_value:666f6f
 +0.000000000,0 "foo"
 +  ts:<zero>
 +  value:foo
-+  raw_key:"foo" raw_value:666f6f
++  raw_key:666f6f raw_value:666f6f
 `
 
 	if diff := stringDiff.String(); diff != expDiff {
