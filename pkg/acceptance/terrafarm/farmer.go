@@ -527,6 +527,9 @@ func (f *Farmer) Restart(ctx context.Context, i int) error {
 					return errors.Wrap(err, cmd)
 				}
 				f.nodes[i].cockroachURL = string(bytes.TrimSpace(stdout))
+				if f.nodes[i].cockroachURL == "" {
+					return errors.New("cockroach url empty")
+				}
 				// This is pretty ugly, but photos needs a database name in its URL.
 				// TODO(cuongdo): remove this when we've fixed photos
 				f.nodes[i].photosURL = strings.Replace(f.nodes[i].cockroachURL, "?", "/photos?", 1)
@@ -554,6 +557,9 @@ func (f *Farmer) Restart(ctx context.Context, i int) error {
 		}
 
 		f.nodes[i].cockroachPID = string(bytes.TrimSpace(stdout))
+		if f.nodes[i].cockroachPID == "" {
+			return errors.New("cockroach pid empty")
+		}
 	}
 	return nil
 }
