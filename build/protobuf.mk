@@ -40,7 +40,7 @@ GRPC_GATEWAY_GOOGLEAPIS_PATH := $(GITHUB_ROOT)/../$(GRPC_GATEWAY_GOOGLEAPIS_PACK
 # Map protobuf includes to the Go package containing the generated Go code.
 MAPPINGS :=
 MAPPINGS := $(MAPPINGS)Mgoogle/api/annotations.proto=$(GRPC_GATEWAY_GOOGLEAPIS_PACKAGE)/google/api,
-MAPPINGS := $(MAPPINGS)Mgoogle/protobuf/timestamp.proto=$(GOGOPROTO_ROOT)/protobuf/types,
+MAPPINGS := $(MAPPINGS)Mgoogle/protobuf/timestamp.proto=$(GOGO_PROTOBUF_PACKAGE)/types,
 
 GW_SERVER_PROTOS := $(PKG_ROOT)/server/serverpb/admin.proto $(PKG_ROOT)/server/serverpb/status.proto $(PKG_ROOT)/server/serverpb/authentication.proto
 GW_TS_PROTOS := $(PKG_ROOT)/ts/tspb/timeseries.proto
