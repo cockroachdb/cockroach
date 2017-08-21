@@ -284,6 +284,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
 		return usageAndError(cmd)
 	}
+	tBegin := timeutil.Now()
 
 	if ok, err := maybeRerunBackground(); ok {
 		return err
@@ -386,7 +387,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 			var buf bytes.Buffer
 			info := build.GetInfo()
 			tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
-			fmt.Fprintf(tw, "CockroachDB node starting at %s\n", timeutil.Now())
+			fmt.Fprintf(tw, "CockroachDB node starting at %s (took %s)\n", timeutil.Now(), timeutil.Since(tBegin))
 			fmt.Fprintf(tw, "build:\t%s %s @ %s (%s)\n", info.Distribution, info.Tag, info.Time, info.GoVersion)
 			fmt.Fprintf(tw, "admin:\t%s\n", serverCfg.AdminURL())
 			fmt.Fprintf(tw, "sql:\t%s\n", pgURL)
