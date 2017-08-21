@@ -25,6 +25,22 @@ interface RangeOwnProps {
 
 type RangeProps = RangeOwnProps & RouterState;
 
+function ErrorPage(props: {
+  rangeID: string,
+  errorText: string,
+  rangeResponse?: protos.cockroach.server.serverpb.RangeResponse;
+}) {
+  return (
+    <div className="section">
+      <h1>Range r{props.rangeID}</h1>
+      <h2>{props.errorText}</h2>
+      {
+        _.isNil(props.rangeResponse) ? null : <ConnectionsTable rangeResponse={props.rangeResponse} />
+      }
+    </div>
+  );
+}
+
 /**
  * Renders the Range Report page.
  */
@@ -47,46 +63,44 @@ class Range extends React.Component<RangeProps, {}> {
     }
   }
 
-  renderError(
-    rangeID: string,
-    error: string,
-    rangeResponse: protos.cockroach.server.serverpb.RangeResponse$Properties,
-  ) {
-    return (
-      <div className="section">
-        <h1>Range r{rangeID}</h1>
-        <h2>{error}</h2>
-        <ConnectionsTable rangeResponse={rangeResponse} />
-      </div>
-    );
-  }
-
   render() {
     const rangeID = this.props.params[rangeIDAttr];
     const { range } = this.props;
 
     // A bunch of quick error cases.
     if (!_.isNil(this.props.lastError)) {
-      return this.renderError(rangeID, `Error loading range ${this.props.lastError}`, range);
+      return <ErrorPage
+        rangeID={rangeID}
+        errorText={`Error loading range ${this.props.lastError}`}
+      />;
     }
     if (_.isEmpty(range)) {
-      return this.renderError(rangeID, `Loading cluster status...`, range);
+      return <ErrorPage
+        rangeID={rangeID}
+        errorText={`Loading cluster status...`}
+      />;
     }
     const responseRangeID = FixLong(range.range_id);
     if (!responseRangeID.eq(rangeID)) {
-      return this.renderError(rangeID, `Could not parse "${rangeID}" into an integer.`, range);
+      return <ErrorPage
+        rangeID={rangeID}
+        errorText={`Updating cluster status...`}
+      />;
     }
     if (responseRangeID.isNegative() || responseRangeID.isZero()) {
-      return this.renderError(rangeID, `Range ID must be greater than 0. "${rangeID}"`, range);
+      return <ErrorPage
+        rangeID={rangeID}
+        errorText={`Range ID must be a positive non-zero integer. "${rangeID}"`}
+      />;
     }
 
     // Did we get any responses?
     if (!_.some(range.responses_by_node_id, resp => resp.infos.length > 0)) {
-      return this.renderError(
-        rangeID,
-        `No results found, perhaps r${this.props.params[rangeIDAttr]} doesn't exist.`,
-        range,
-      );
+      return <ErrorPage
+        rangeID={rangeID}
+        errorText={`No results found, perhaps r${this.props.params[rangeIDAttr]} doesn't exist.`}
+        rangeResponse={range}
+      />;
     }
 
     // Collect all the infos and sort them, putting the leader (or the replica
