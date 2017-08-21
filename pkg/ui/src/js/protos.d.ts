@@ -7616,6 +7616,7 @@ export namespace cockroach {
                 lease_history?: cockroach.roachpb.Lease$Properties[];
                 problems?: cockroach.server.serverpb.RangeProblems$Properties;
                 stats?: cockroach.server.serverpb.RangeStatistics$Properties;
+                simulated_allocator_output?: string;
             };
 
             /**
@@ -7687,6 +7688,12 @@ export namespace cockroach {
                  * @type {(cockroach.server.serverpb.RangeStatistics$Properties|null)}
                  */
                 public stats: (cockroach.server.serverpb.RangeStatistics$Properties|null);
+
+                /**
+                 * RangeInfo simulated_allocator_output.
+                 * @type {string}
+                 */
+                public simulated_allocator_output: string;
 
                 /**
                  * Creates a new RangeInfo instance using the specified properties.

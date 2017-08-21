@@ -14,6 +14,7 @@ import Print from "src/views/reports/containers/range/print";
 import ConnectionsTable from "src/views/reports/containers/range/connectionsTable";
 import RangeTable from "src/views/reports/containers/range/rangeTable";
 import LogTable from "src/views/reports/containers/range/logTable";
+import AllocatorOutput from "src/views/reports/containers/range/allocator";
 import RangeInfo from "src/views/reports/containers/range/rangeInfo";
 import LeaseTable from "src/views/reports/containers/range/leaseTable";
 
@@ -114,12 +115,17 @@ class Range extends React.Component<RangeProps, {}> {
       .sortedUniqBy(rep => rep.replica_id)
       .value();
 
+    const allocatorInfos = _.chain(infos)
+      .filter(info => info.simulated_allocator_output !== "")
+      .value();
+
     return (
       <div className="section">
         <h1>Range r{responseRangeID.toString()} at {Print.Time(moment().utc())} UTC</h1>
         <RangeTable infos={infos} replicas={replicas} />
         <LeaseTable info={_.head(infos)} />
         <LogTable rangeID={responseRangeID} log={range.range_log} />
+        <AllocatorOutput info={_.head(allocatorInfos)} />
         <ConnectionsTable rangeResponse={range} />
       </div>
     );

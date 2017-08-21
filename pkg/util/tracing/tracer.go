@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -687,4 +688,29 @@ func TestingCheckRecordedSpans(recSpans []RecordedSpan, expected string) error {
 func matchesWithoutFileLine(msg string, expected string) bool {
 	groups := regexp.MustCompile(`^(event: ).*:[0-9]* (.*)$`).FindStringSubmatch(msg)
 	return len(groups) == 3 && fmt.Sprintf("event: %s", groups[2]) == expected
+}
+
+// MakeRecordCtx returns a context with an embedded trace span which is finished
+// and its contents returned when the returned closure (which is idempotent but
+// not thread safe) is called. This closure also cancels the context.
+func MakeRecordCtx() (context.Context, func() string) {
+	tr := NewTracer()
+	sp := tr.StartSpan("recording span", Recordable)
+	StartRecording(sp, SingleNodeRecording)
+	ctx, cancel := context.WithCancel(context.Background())
+	ctx = opentracing.ContextWithSpan(ctx, sp)
+
+	var once sync.Once
+	var dump string
+
+	return ctx, func() string {
+		once.Do(func() {
+			dump = FormatRecordedSpans(GetRecording(sp))
+			StopRecording(sp)
+			sp.Finish()
+			tr.Close()
+			cancel()
+		})
+		return dump
+	}
 }

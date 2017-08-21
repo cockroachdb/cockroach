@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/kr/pretty"
 )
 
@@ -73,7 +74,7 @@ func TestDBAddSSTable(t *testing.T) {
 		}
 
 		// Do an initial ingest.
-		ingestCtx, collect := testutils.MakeRecordCtx()
+		ingestCtx, collect := tracing.MakeRecordCtx()
 		defer collect()
 		if err := db.ExperimentalAddSSTable(ingestCtx, "b", "c", data); err != nil {
 			t.Fatalf("%+v", err)
@@ -122,7 +123,7 @@ func TestDBAddSSTable(t *testing.T) {
 		}
 
 		for i := 0; i < 2; i++ {
-			ingestCtx, collect := testutils.MakeRecordCtx()
+			ingestCtx, collect := tracing.MakeRecordCtx()
 			defer collect()
 
 			if err := db.ExperimentalAddSSTable(ingestCtx, "b", "c", data); err != nil {

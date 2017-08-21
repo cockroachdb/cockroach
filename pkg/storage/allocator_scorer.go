@@ -388,9 +388,7 @@ func rebalanceCandidates(
 			constraintsOkStoreDescriptors = append(constraintsOkStoreDescriptors, s)
 		} else if exists {
 			rebalanceConstraintsCheck = true
-			if log.V(2) {
-				log.Infof(ctx, "must rebalance from s%d due to constraint check", s.StoreID)
-			}
+			log.VEventf(ctx, 2, "must rebalance from s%d due to constraint check", s.StoreID)
 		}
 	}
 
@@ -469,9 +467,8 @@ func rebalanceCandidates(
 			} else if !rebalanceConstraintsCheck {
 				// Only consider this candidate if we must rebalance due to a
 				// constraint check requirements.
-				if log.V(3) {
-					log.Infof(ctx, "not considering %+v as a candidate for range %+v: score=%s storeList=%+v", s, rangeInfo, balanceScore, sl)
-				}
+				log.VEventf(ctx, 3, "not considering %+v as a candidate for range %+v: score=%s storeList=%+v",
+					s, rangeInfo, balanceScore, sl)
 				continue
 			}
 			diversityScore := rebalanceToDiversityScore(s, existingNodeLocalities)
@@ -508,10 +505,8 @@ func shouldRebalance(
 	rangeInfo RangeInfo,
 ) bool {
 	if store.Capacity.FractionUsed() >= maxFractionUsedThreshold {
-		if log.V(2) {
-			log.Infof(ctx, "s%d: should-rebalance(disk-full): fraction-used=%.2f, capacity=(%v)",
-				store.StoreID, store.Capacity.FractionUsed(), store.Capacity)
-		}
+		log.VEventf(ctx, 2, "s%d: should-rebalance(disk-full): fraction-used=%.2f, capacity=(%v)",
+			store.StoreID, store.Capacity.FractionUsed(), store.Capacity)
 		return true
 	}
 
@@ -522,14 +517,12 @@ func shouldRebalance(
 	// Rebalance if this store is full enough that the range is a bad fit.
 	score := balanceScore(st, sl, store.Capacity, rangeInfo)
 	if rangeIsBadFit(score) {
-		if log.V(2) {
-			log.Infof(ctx,
-				"s%d: should-rebalance(bad-fit): balanceScore=%s, capacity=(%v), rangeInfo=%+v, "+
-					"(meanRangeCount=%.1f, meanDiskUsage=%s, meanWritesPerSecond=%.2f), ",
-				store.StoreID, score, store.Capacity, rangeInfo,
-				sl.candidateRanges.mean, humanizeutil.IBytes(int64(sl.candidateLogicalBytes.mean)),
-				sl.candidateWritesPerSecond.mean)
-		}
+		log.VEventf(ctx, 2,
+			"s%d: should-rebalance(bad-fit): balanceScore=%s, capacity=(%v), rangeInfo=%+v, "+
+				"(meanRangeCount=%.1f, meanDiskUsage=%s, meanWritesPerSecond=%.2f), ",
+			store.StoreID, score, store.Capacity, rangeInfo,
+			sl.candidateRanges.mean, humanizeutil.IBytes(int64(sl.candidateLogicalBytes.mean)),
+			sl.candidateWritesPerSecond.mean)
 		return true
 	}
 
@@ -539,40 +532,34 @@ func shouldRebalance(
 		for _, desc := range sl.stores {
 			otherScore := balanceScore(st, sl, desc.Capacity, rangeInfo)
 			if !rangeIsGoodFit(otherScore) {
-				if log.V(5) {
-					log.Infof(ctx,
-						"s%d is not a good enough fit to replace s%d: balanceScore=%s, capacity=(%v), rangeInfo=%+v, "+
-							"(meanRangeCount=%.1f, meanDiskUsage=%s, meanWritesPerSecond=%.2f), ",
-						desc.StoreID, store.StoreID, otherScore, desc.Capacity, rangeInfo,
-						sl.candidateRanges.mean, humanizeutil.IBytes(int64(sl.candidateLogicalBytes.mean)),
-						sl.candidateWritesPerSecond.mean)
-				}
+				log.VEventf(ctx, 5,
+					"s%d is not a good enough fit to replace s%d: balanceScore=%s, capacity=(%v), rangeInfo=%+v, "+
+						"(meanRangeCount=%.1f, meanDiskUsage=%s, meanWritesPerSecond=%.2f), ",
+					desc.StoreID, store.StoreID, otherScore, desc.Capacity, rangeInfo,
+					sl.candidateRanges.mean, humanizeutil.IBytes(int64(sl.candidateLogicalBytes.mean)),
+					sl.candidateWritesPerSecond.mean)
 				continue
 			}
 			if !preexistingReplicaCheck(desc.Node.NodeID, rangeInfo.Desc.Replicas) {
 				continue
 			}
-			if log.V(2) {
-				log.Infof(ctx,
-					"s%d: should-rebalance(better-fit=s%d): balanceScore=%s, capacity=(%v), rangeInfo=%+v, "+
-						"otherScore=%s, otherCapacity=(%v), "+
-						"(meanRangeCount=%.1f, meanDiskUsage=%s, meanWritesPerSecond=%.2f), ",
-					store.StoreID, desc.StoreID, score, store.Capacity, rangeInfo,
-					otherScore, desc.Capacity, sl.candidateRanges.mean,
-					humanizeutil.IBytes(int64(sl.candidateLogicalBytes.mean)), sl.candidateWritesPerSecond.mean)
-			}
+			log.VEventf(ctx, 2,
+				"s%d: should-rebalance(better-fit=s%d): balanceScore=%s, capacity=(%v), rangeInfo=%+v, "+
+					"otherScore=%s, otherCapacity=(%v), "+
+					"(meanRangeCount=%.1f, meanDiskUsage=%s, meanWritesPerSecond=%.2f), ",
+				store.StoreID, desc.StoreID, score, store.Capacity, rangeInfo,
+				otherScore, desc.Capacity, sl.candidateRanges.mean,
+				humanizeutil.IBytes(int64(sl.candidateLogicalBytes.mean)), sl.candidateWritesPerSecond.mean)
 			return true
 		}
 	}
 
 	// If we reached this point, we're happy with the range where it is.
-	if log.V(3) {
-		log.Infof(ctx,
-			"s%d: should-not-rebalance: balanceScore=%s, capacity=(%v), rangeInfo=%+v, "+
-				"(meanRangeCount=%.1f, meanDiskUsage=%s, meanWritesPerSecond=%.2f), ",
-			store.StoreID, score, store.Capacity, rangeInfo, sl.candidateRanges.mean,
-			humanizeutil.IBytes(int64(sl.candidateLogicalBytes.mean)), sl.candidateWritesPerSecond.mean)
-	}
+	log.VEventf(ctx, 3,
+		"s%d: should-not-rebalance: balanceScore=%s, capacity=(%v), rangeInfo=%+v, "+
+			"(meanRangeCount=%.1f, meanDiskUsage=%s, meanWritesPerSecond=%.2f), ",
+		store.StoreID, score, store.Capacity, rangeInfo, sl.candidateRanges.mean,
+		humanizeutil.IBytes(int64(sl.candidateLogicalBytes.mean)), sl.candidateWritesPerSecond.mean)
 	return false
 }
 

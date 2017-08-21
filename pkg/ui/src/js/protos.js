@@ -13792,6 +13792,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @property {Array.<cockroach.roachpb.Lease$Properties>} [lease_history] RangeInfo lease_history.
                  * @property {cockroach.server.serverpb.RangeProblems$Properties} [problems] RangeInfo problems.
                  * @property {cockroach.server.serverpb.RangeStatistics$Properties} [stats] RangeInfo stats.
+                 * @property {string} [simulated_allocator_output] RangeInfo simulated_allocator_output.
                  */
 
                 /**
@@ -13863,6 +13864,12 @@ export const cockroach = $root.cockroach = (() => {
                 RangeInfo.prototype.stats = null;
 
                 /**
+                 * RangeInfo simulated_allocator_output.
+                 * @type {string}
+                 */
+                RangeInfo.prototype.simulated_allocator_output = "";
+
+                /**
                  * Creates a new RangeInfo instance using the specified properties.
                  * @param {cockroach.server.serverpb.RangeInfo$Properties=} [properties] Properties to set
                  * @returns {cockroach.server.serverpb.RangeInfo} RangeInfo instance
@@ -13899,6 +13906,8 @@ export const cockroach = $root.cockroach = (() => {
                         $root.cockroach.server.serverpb.RangeProblems.encode(message.problems, writer.uint32(/* id 9, wireType 2 =*/74).fork()).ldelim();
                     if (message.stats != null && message.hasOwnProperty("stats"))
                         $root.cockroach.server.serverpb.RangeStatistics.encode(message.stats, writer.uint32(/* id 10, wireType 2 =*/82).fork()).ldelim();
+                    if (message.simulated_allocator_output != null && message.hasOwnProperty("simulated_allocator_output"))
+                        writer.uint32(/* id 11, wireType 2 =*/90).string(message.simulated_allocator_output);
                     return writer;
                 };
 
@@ -13955,6 +13964,9 @@ export const cockroach = $root.cockroach = (() => {
                             break;
                         case 10:
                             message.stats = $root.cockroach.server.serverpb.RangeStatistics.decode(reader, reader.uint32());
+                            break;
+                        case 11:
+                            message.simulated_allocator_output = reader.string();
                             break;
                         default:
                             reader.skipType(tag & 7);
@@ -14028,6 +14040,9 @@ export const cockroach = $root.cockroach = (() => {
                         if (error)
                             return "stats." + error;
                     }
+                    if (message.simulated_allocator_output != null && message.hasOwnProperty("simulated_allocator_output"))
+                        if (!$util.isString(message.simulated_allocator_output))
+                            return "simulated_allocator_output: string expected";
                     return null;
                 };
 
@@ -14081,6 +14096,8 @@ export const cockroach = $root.cockroach = (() => {
                             throw TypeError(".cockroach.server.serverpb.RangeInfo.stats: object expected");
                         message.stats = $root.cockroach.server.serverpb.RangeStatistics.fromObject(object.stats);
                     }
+                    if (object.simulated_allocator_output != null)
+                        message.simulated_allocator_output = String(object.simulated_allocator_output);
                     return message;
                 };
 
@@ -14114,6 +14131,7 @@ export const cockroach = $root.cockroach = (() => {
                         object.error_message = "";
                         object.problems = null;
                         object.stats = null;
+                        object.simulated_allocator_output = "";
                     }
                     if (message.span != null && message.hasOwnProperty("span"))
                         object.span = $root.cockroach.server.serverpb.PrettySpan.toObject(message.span, options);
@@ -14136,6 +14154,8 @@ export const cockroach = $root.cockroach = (() => {
                         object.problems = $root.cockroach.server.serverpb.RangeProblems.toObject(message.problems, options);
                     if (message.stats != null && message.hasOwnProperty("stats"))
                         object.stats = $root.cockroach.server.serverpb.RangeStatistics.toObject(message.stats, options);
+                    if (message.simulated_allocator_output != null && message.hasOwnProperty("simulated_allocator_output"))
+                        object.simulated_allocator_output = message.simulated_allocator_output;
                     return object;
                 };
 
