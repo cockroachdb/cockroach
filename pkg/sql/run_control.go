@@ -149,7 +149,7 @@ func (n *cancelQueryNode) Start(params runParams) error {
 	queryIDString := parser.AsStringWithFlags(queryIDDatum, parser.FmtBareStrings)
 	queryID, err := uint128.FromString(queryIDString)
 	if err != nil {
-		return errors.Wrapf(err, "Invalid query ID '%s'", queryIDString)
+		return errors.Wrapf(err, "invalid query ID '%s'", queryIDString)
 	}
 
 	// Get the lowest 32 bits of the query ID.
@@ -167,7 +167,7 @@ func (n *cancelQueryNode) Start(params runParams) error {
 	}
 
 	if !response.Cancelled {
-		return fmt.Errorf("Could not cancel query %s: %s", queryID, response.Error)
+		return fmt.Errorf("could not cancel query %s: %s", queryID, response.Error)
 	}
 
 	return nil
