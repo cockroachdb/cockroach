@@ -1085,7 +1085,7 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 			switch fields[1] {
 			case "":
 				return errors.New("skipif command requires a non-blank argument")
-			case "mysql":
+			case "mysql", "mssql":
 			case "postgresql", "cockroachdb":
 				s.skip = true
 				continue
@@ -1102,6 +1102,9 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 				return errors.New("onlyif command requires a non-blank argument")
 			case "cockroachdb":
 			case "mysql":
+				s.skip = true
+				continue
+			case "mssql":
 				s.skip = true
 				continue
 			default:
@@ -1524,18 +1527,18 @@ func TestLogic(t *testing.T) {
 			logicTestPath + "/test/index/in/*/*.test",
 			logicTestPath + "/test/index/orderby/*/*.test",
 			logicTestPath + "/test/index/orderby_nosort/*/*.test",
+			logicTestPath + "/test/index/view/*/*.test",
 
-			// TODO(pmattis): We don't support aggregate functions.
+			// TODO(pmattis): Incompatibilities in numeric types.
+			// For instance, we type SUM(int) as a decimal since all of our ints are
+			// int64.
 			// logicTestPath + "/test/random/expr/*.test",
 
-			// TODO(pmattis): We don't support tables without primary keys.
+			// TODO(pmattis): We don't support correlated subqueries.
 			// logicTestPath + "/test/select*.test",
 
-			// TODO(pmattis): We don't support views.
-			// logicTestPath + "/test/index/view/*/*.test",
-
-			// TODO(pmattis): We don't support joins.
-			// [uses joins] logicTestPath + "/test/index/random/*/*.test",
+			// TODO(pmattis): We don't support unary + on strings.
+			// logicTestPath + "/test/index/random/*/*.test",
 			// [uses joins] logicTestPath + "/test/random/aggregates/*.test",
 			// [uses joins] logicTestPath + "/test/random/groupby/*.test",
 			// [uses joins] logicTestPath + "/test/random/select/*.test",
