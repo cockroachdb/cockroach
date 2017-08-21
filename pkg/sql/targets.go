@@ -90,7 +90,12 @@ func (s *renderNode) equivalentRenders(i, j int) bool {
 // isRenderEquivalent is a helper function for equivalentRenders() and
 // addOrMergeRenders(). Do not use directly.
 func (s *renderNode) isRenderEquivalent(exprStr string, j int) bool {
-	return symbolicExprStr(s.render[j]) == exprStr
+	otherExprStr := s.renderStrings[j]
+	if otherExprStr == "" {
+		otherExprStr = symbolicExprStr(s.render[j])
+		s.renderStrings[j] = otherExprStr
+	}
+	return otherExprStr == exprStr
 }
 
 // addOrReuseRender adds the given result column to the select render list and
@@ -100,13 +105,13 @@ func (s *renderNode) isRenderEquivalent(exprStr string, j int) bool {
 func (s *renderNode) addOrReuseRender(
 	col sqlbase.ResultColumn, expr parser.TypedExpr, reuseExistingRender bool,
 ) (colIdx int) {
+	exprStr := symbolicExprStr(expr)
 	if reuseExistingRender && len(s.render) > 0 {
 		// Now, try to find an equivalent render. We use the syntax
 		// representation as approximation of equivalence.  At this
 		// point the expressions must have underwent name resolution
 		// already so that comparison occurs after replacing column names
 		// to IndexedVars.
-		exprStr := symbolicExprStr(expr)
 		for j := range s.render {
 			if s.isRenderEquivalent(exprStr, j) {
 				return j
@@ -114,7 +119,7 @@ func (s *renderNode) addOrReuseRender(
 		}
 	}
 
-	s.addRenderColumn(expr, col)
+	s.addRenderColumn(expr, exprStr, col)
 
 	return len(s.render) - 1
 }

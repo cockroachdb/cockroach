@@ -56,6 +56,12 @@ type renderNode struct {
 	// will add extra renderNode renders for the aggregation sources.
 	// windowNode also adds additional renders for the window functions.
 	render  []parser.TypedExpr
+
+	// renderStrings stores the symbolic representations of the expressions in
+	// render, in the same order. It's used to prevent recomputation of the
+	// symbolic representations.
+	renderStrings []string
+
 	columns sqlbase.ResultColumns
 
 	// A piece of metadata to indicate whether a star expression was expanded
@@ -512,8 +518,9 @@ func getRenderColName(searchPath parser.SearchPath, target parser.SelectExpr) (s
 
 // appendRenderColumn adds a new render expression at the end of the current list.
 // The expression must be normalized already.
-func (r *renderNode) addRenderColumn(expr parser.TypedExpr, col sqlbase.ResultColumn) {
+func (r *renderNode) addRenderColumn(expr parser.TypedExpr, exprStr string, col sqlbase.ResultColumn) {
 	r.render = append(r.render, expr)
+	r.renderStrings = append(r.renderStrings, exprStr)
 	r.columns = append(r.columns, col)
 }
 
@@ -526,6 +533,7 @@ func (r *renderNode) resetRenderColumns(exprs []parser.TypedExpr, cols sqlbase.R
 	}
 	r.render = exprs
 	r.columns = cols
+	r.renderStrings = make([]string, len(cols))
 }
 
 // renderRow renders the row by evaluating the render expressions.
