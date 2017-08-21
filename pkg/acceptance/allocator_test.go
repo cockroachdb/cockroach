@@ -128,6 +128,8 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 	}
 
 	log.Info(ctx, "restarting cluster with archived store(s)")
+	// Ensure all nodes get --join flags on restart.
+	at.f.SkipClusterInit = true
 	ch := make(chan error)
 	for i := 0; i < at.f.NumNodes(); i++ {
 		go func(i int) { ch <- at.f.Restart(ctx, i) }(i)
