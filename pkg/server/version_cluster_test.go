@@ -271,10 +271,10 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 
 	// Check that we can still talk to the first three nodes.
 	for i := 0; i < tc.NumServers()-1; i++ {
-		if version := tc.getVersionFromSetting(i).Version().MinimumVersion.String(); version != exp {
-			t.Fatalf("%d: incorrect version %s (wanted %s)", i, version, exp)
-		}
 		testutils.SucceedsSoon(tc, func() error {
+			if version := tc.getVersionFromSetting(i).Version().MinimumVersion.String(); version != exp {
+				return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
+			}
 			if version := tc.getVersionFromShow(i); version != exp {
 				return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
 			}
@@ -325,11 +325,14 @@ func TestClusterVersionMixedVersionTooNew(t *testing.T) {
 
 	// Check that we can still talk to the first three nodes.
 	for i := 0; i < tc.NumServers()-1; i++ {
-		if version := tc.getVersionFromSetting(i).Version().MinimumVersion.String(); version != exp {
-			t.Fatalf("%d: incorrect version %s (wanted %s)", i, version, exp)
-		}
-		if version := tc.getVersionFromShow(i); version != exp {
-			t.Fatalf("%d: incorrect version %s (wanted %s)", i, version, exp)
-		}
+		testutils.SucceedsSoon(tc, func() error {
+			if version := tc.getVersionFromSetting(i).Version().MinimumVersion.String(); version != exp {
+				return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
+			}
+			if version := tc.getVersionFromShow(i); version != exp {
+				return errors.Errorf("%d: incorrect version %s (wanted %s)", i, version, exp)
+			}
+			return nil
+		})
 	}
 }
