@@ -1083,12 +1083,18 @@ func (e *Executor) execStmtsInCurrentTxn(
 		queryMeta.ctx = txnState.Ctx
 		queryMeta.ctxCancel = txnState.cancel
 
-		// For parallel/async queries, we deregister queryMeta from these registries
-		// after execution finishes in the parallelizeQueue. For all other (synchronous) queries,
-		// we deregister these in session.FinishPlan when all results have been sent. We cannot
-		// deregister asynchronous queries in session.FinishPlan because they may still be
-		// executing at that instant.
-		session.addActiveQuery(queryID, queryMeta)
+		// Ignore BACKUP and RESTORE statements from the output of SHOW QUERIES, and from being
+		// cancellable using CANCEL QUERY. These statements spawn jobs, which have their own
+		// run control statements. We implement this ignore by not registering the queryMeta
+		// in session.mu.ActiveQueries.
+		if stmtAppearsInShowQueries(stmt.AST) {
+			// For parallel/async queries, we deregister queryMeta from these registries
+			// after execution finishes in the parallelizeQueue. For all other (synchronous) queries,
+			// we deregister these in session.FinishPlan when all results have been sent. We cannot
+			// deregister asynchronous queries in session.FinishPlan because they may still be
+			// executing at that instant.
+			session.addActiveQuery(queryID, queryMeta)
+		}
 
 		var stmtStrBefore string
 		// TODO(nvanbenschoten): Constant literals can change their representation (1.0000 -> 1) when type checking,
@@ -1148,6 +1154,19 @@ func (e *Executor) execStmtsInCurrentTxn(
 	}
 	// If we got here, we've managed to consume all statements and we're still in a txn.
 	return nil, nil
+}
+
+// stmtAppearsInShowQueries returns whether this statement is expected to appear in the output
+// of SHOW QUERIES. All statements except those that spawn jobs are expected to appear.
+func stmtAppearsInShowQueries(AST parser.Statement) bool {
+	switch AST.(type) {
+	case *parser.Backup:
+		return false
+	case *parser.Restore:
+		return false
+	default:
+		return true
+	}
 }
 
 // getTransactionState retrieves a text representation of the given state.
