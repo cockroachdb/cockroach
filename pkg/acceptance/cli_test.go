@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/docker/docker/api/types/container"
+	"strings"
 )
 
 const testGlob = "../cli/interactive_tests/test*.tcl"
@@ -60,6 +61,10 @@ func TestDockerCLI(t *testing.T) {
 	for _, p := range paths {
 		testFile := filepath.Base(p)
 		testPath := filepath.Join(containerPath, testFile)
+		if strings.Contains(testPath, "disabled") {
+			t.Logf("Skipping explicitly disabled test %s", testFile)
+			continue
+		}
 		t.Run(testFile, func(t *testing.T) {
 			log.Infof(ctx, "-- starting tests from: %s", testFile)
 
