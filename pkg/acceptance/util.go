@@ -415,7 +415,8 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 			c.AssertAndStop(ctx, t)
 		}
 	}()
-	if *flagRemote {
+
+	if *flagRemote { // force the test remote, no matter what run mode we think it should be run in
 		f := MakeFarmer(t, "", stopper)
 		c = f
 		if err := f.Resize(*flagNodes); err != nil {
@@ -428,33 +429,51 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 			t.Fatalf("cluster not ready in time: %s", err)
 		}
 	} else {
-		//logDir := *flagLogDir
-		//if logDir != "" {
-		//	logDir = filepath.Join(logDir, filepath.Clean(t.Name()))
-		//}
-		//l := cluster.CreateLocal(ctx, cfg, logDir, stopper)
-		//l.Start(ctx)
-		//c = l
+		parts := strings.Split(testName+"/", "/")
 
-		pwd, err := os.Getwd()
-		if err != nil {
-			t.Fatal(err)
-		}
-		dataDir, err := ioutil.TempDir(pwd, ".barecluster")
-		if err != nil {
-			t.Fatal(err)
+		switch parts[1] {
+		case BareTest:
+		case DockerTest:
+		case FarmerTest:
+		default:
+			return errors.New
 		}
 
-		clusterCfg := barecluster.ClusterConfig{
-			Ephemeral: true,
-			Binary:    "../../cockroach",
-			DataDir:   dataDir,
-			NumNodes:  int(cfg.Nodes[0].Count),
+		if len(parts) < 2 || parts[1] != BareTest {
+			t.Fatalf("acceptance test must be of format TestXYZ/<bare|docker|farmer>, found %+v", parts)
 		}
-		l := barecluster.New(clusterCfg)
 
-		l.Start()
-		c = &barecluster.BareCluster{l}
+		switch parts[1] {
+		case BareTest:
+			pwd, err := os.Getwd()
+			if err != nil {
+				t.Fatal(err)
+			}
+			dataDir, err := ioutil.TempDir(pwd, ".barecluster")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			clusterCfg := barecluster.ClusterConfig{
+				Ephemeral: true,
+				Binary:    "../../cockroach",
+				DataDir:   dataDir,
+				NumNodes:  int(cfg.Nodes[0].Count),
+			}
+			l := barecluster.New(clusterCfg)
+
+			l.Start()
+			c = &barecluster.BareCluster{l}
+
+		default:
+			logDir := *flagLogDir
+			if logDir != "" {
+				logDir = filepath.Join(logDir, filepath.Clean(t.Name()))
+			}
+			l := cluster.CreateLocal(ctx, cfg, logDir, stopper)
+			l.Start(ctx)
+			c = l
+		}
 	}
 
 	if cfg.InitMode != cluster.INIT_NONE {
