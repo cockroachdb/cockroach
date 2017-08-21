@@ -224,6 +224,7 @@ type StorageSettings struct {
 type UISettings struct {
 	WebSessionTimeout *settings.DurationSetting
 	DebugRemote       *settings.StringSetting
+	DebugVModule      *settings.BoolSetting
 }
 
 // CCLSettings is the subset of ClusterSettings affecting
@@ -694,6 +695,13 @@ func MakeClusterSettings(minVersion, serverVersion roachpb.Version) *Settings {
 			}
 		},
 	)
+
+	s.DebugVModule = r.RegisterBoolSetting(
+		"server.remote_debugging.vmodule",
+		"set to enable remote control over vmodule (this can severely impact performance)",
+		false,
+	)
+
 	s.ClusterOrganization = r.RegisterStringSetting("cluster.organization", "organization name", "")
 
 	// FIXME(tschottdorf): should be NonNegative?

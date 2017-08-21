@@ -17,26 +17,12 @@ package log
 import (
 	"fmt"
 	"io"
-	"net/http"
 	"strings"
 
 	"golang.org/x/net/context"
 )
 
-const httpLogLevelPrefix = "/debug/vmodule/"
-
-func handleVModule(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	spec := r.RequestURI[len(httpLogLevelPrefix):]
-	if err := logging.vmodule.Set(spec); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-	Infof(context.Background(), "vmodule changed to: %s", spec)
-	fmt.Fprint(w, "ok: "+spec)
-}
-
 func init() {
-	http.Handle(httpLogLevelPrefix, http.HandlerFunc(handleVModule))
 	copyStandardLogTo("INFO")
 }
 
@@ -191,4 +177,9 @@ func (e Entry) Format(w io.Writer) error {
 	defer logging.putBuffer(buf)
 	_, err := w.Write(buf.Bytes())
 	return err
+}
+
+// SetVModule alters the vmodule logging level to the passed in value.
+func SetVModule(value string) error {
+	return logging.vmodule.Set(value)
 }
