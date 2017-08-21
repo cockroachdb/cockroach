@@ -91,6 +91,9 @@ export const refreshCertificates = certificatesReducerObj.refresh;
 const rangeReducerObj = new CachedDataReducer(api.getRange, "range");
 export const refreshRange = rangeReducerObj.refresh;
 
+const allocatorRangeReducerObj = new CachedDataReducer(api.getAllocatorRange, "allocatorRange");
+export const refreshAllocatorRange = allocatorRangeReducerObj.refresh;
+
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
   events: CachedDataReducerState<api.EventsResponseMessage>;
@@ -109,6 +112,7 @@ export interface APIReducersState {
   problemRanges: CachedDataReducerState<api.ProblemRangesResponseMessage>;
   certificates: CachedDataReducerState<api.CertificatesResponseMessage>;
   range: CachedDataReducerState<api.RangeResponseMessage>;
+  allocatorRange: CachedDataReducerState<api.AllocatorRangeResponseMessage>;
 }
 
 export default combineReducers<APIReducersState>({
@@ -129,6 +133,7 @@ export default combineReducers<APIReducersState>({
   [problemRangesReducerObj.actionNamespace]: problemRangesReducerObj.reducer,
   [certificatesReducerObj.actionNamespace]: certificatesReducerObj.reducer,
   [rangeReducerObj.actionNamespace]: rangeReducerObj.reducer,
+  [allocatorRangeReducerObj.actionNamespace]: allocatorRangeReducerObj.reducer,
 });
 
 export {CachedDataReducerState, KeyedCachedDataReducerState};

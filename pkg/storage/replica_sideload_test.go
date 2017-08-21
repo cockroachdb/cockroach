@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
@@ -306,7 +307,8 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 	}
 
 	runOne := func(k string, test testCase) {
-		ctx, collect := testutils.MakeRecordCtx()
+		ctx, collect, cancel := tracing.ContextWithRecordingSpan(context.Background(), "test-recording")
+		defer cancel()
 
 		ec := newRaftEntryCache(1024) // large enough
 		ss := mustNewInMemSideloadStorage(rangeID, roachpb.ReplicaID(1), ".")
@@ -333,7 +335,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 			t.Fatalf("%s: %s", k, err)
 		}
 
-		if dump := collect(); test.expTrace != "" {
+		if dump := tracing.FormatRecordedSpans(collect()); test.expTrace != "" {
 			if ok, err := regexp.MatchString(test.expTrace, dump); err != nil {
 				t.Fatalf("%s: %s", k, err)
 			} else if !ok {
@@ -355,7 +357,9 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 func TestRaftSSTableSideloadingInflight(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx, collect := testutils.MakeRecordCtx()
+	ctx, collect, cancel := tracing.ContextWithRecordingSpan(context.Background(), "test-recording")
+	defer cancel()
+
 	sideloaded := mustNewInMemSideloadStorage(roachpb.RangeID(5), roachpb.ReplicaID(7), ".")
 
 	// We'll set things up so that while sideloading this entry, there
@@ -395,7 +399,7 @@ func TestRaftSSTableSideloadingInflight(t *testing.T) {
 	}
 
 	re := regexp.MustCompile(`(?ms)copying entries slice of length 1.*command already in memory.*writing payload`)
-	if trace := collect(); !re.MatchString(trace) {
+	if trace := tracing.FormatRecordedSpans(collect()); !re.MatchString(trace) {
 		t.Fatalf("trace did not match %s:\n%s", re, trace)
 	}
 }
@@ -487,8 +491,8 @@ func TestRaftSSTableSideloadingProposal(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
-	ctx, collect := testutils.MakeRecordCtx()
-	defer collect()
+	ctx, collect, cancel := tracing.ContextWithRecordingSpan(context.Background(), "test-recording")
+	defer cancel()
 
 	const (
 		key = "foo"
@@ -530,7 +534,7 @@ func TestRaftSSTableSideloadingProposal(t *testing.T) {
 		t.Fatal("sideloaded storage is empty")
 	}
 
-	if err := testutils.MatchInOrder(collect(), "sideloadable proposal detected", "ingested SSTable"); err != nil {
+	if err := testutils.MatchInOrder(tracing.FormatRecordedSpans(collect()), "sideloadable proposal detected", "ingested SSTable"); err != nil {
 		t.Fatal(err)
 	}
 

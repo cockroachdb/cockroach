@@ -65,6 +65,9 @@ export type CertificatesResponseMessage = protos.cockroach.server.serverpb.Certi
 export type RangeRequestMessage = protos.cockroach.server.serverpb.RangeRequest;
 export type RangeResponseMessage = protos.cockroach.server.serverpb.RangeResponse;
 
+export type AllocatorRangeRequestMessage = protos.cockroach.server.serverpb.AllocatorRangeRequest;
+export type AllocatorRangeResponseMessage = protos.cockroach.server.serverpb.AllocatorRangeResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
@@ -246,4 +249,9 @@ export function getCertificates(req: CertificatesRequestMessage, timeout?: momen
 // getRange returns information about a range form all nodes.
 export function getRange(req: RangeRequestMessage, timeout?: moment.Duration): Promise<RangeResponseMessage> {
   return timeoutFetch(serverpb.RangeResponse, `${STATUS_PREFIX}/range/${req.range_id}`, null, timeout);
+}
+
+// getAllocatorRange returns simulated Allocator info for the requested range
+export function getAllocatorRange(req: AllocatorRangeRequestMessage, timeout?: moment.Duration): Promise<AllocatorRangeResponseMessage> {
+  return timeoutFetch(serverpb.AllocatorRangeResponse, `${STATUS_PREFIX}/allocator_range/${req.range_id}`, null, timeout);
 }
