@@ -70,6 +70,11 @@
 		RangesRequest
 		RangesResponse
 		GossipRequest
+		AllocatorDryRun
+		AllocatorRangeRequest
+		AllocatorRangeResponse
+		AllocatorRequest
+		AllocatorResponse
 		JSONResponse
 		LogsRequest
 		LogEntriesResponse

@@ -14762,6 +14762,1262 @@ export const cockroach = $root.cockroach = (() => {
                 return GossipRequest;
             })();
 
+            serverpb.AllocatorDryRun = (function() {
+
+                /**
+                 * Properties of an AllocatorDryRun.
+                 * @typedef cockroach.server.serverpb.AllocatorDryRun$Properties
+                 * @type {Object}
+                 * @property {Long} [range_id] AllocatorDryRun range_id.
+                 * @property {Array.<cockroach.server.serverpb.AllocatorDryRun.Event$Properties>} [events] AllocatorDryRun events.
+                 */
+
+                /**
+                 * Constructs a new AllocatorDryRun.
+                 * @exports cockroach.server.serverpb.AllocatorDryRun
+                 * @constructor
+                 * @param {cockroach.server.serverpb.AllocatorDryRun$Properties=} [properties] Properties to set
+                 */
+                function AllocatorDryRun(properties) {
+                    this.events = [];
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * AllocatorDryRun range_id.
+                 * @type {Long}
+                 */
+                AllocatorDryRun.prototype.range_id = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                /**
+                 * AllocatorDryRun events.
+                 * @type {Array.<cockroach.server.serverpb.AllocatorDryRun.Event$Properties>}
+                 */
+                AllocatorDryRun.prototype.events = $util.emptyArray;
+
+                /**
+                 * Creates a new AllocatorDryRun instance using the specified properties.
+                 * @param {cockroach.server.serverpb.AllocatorDryRun$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.AllocatorDryRun} AllocatorDryRun instance
+                 */
+                AllocatorDryRun.create = function create(properties) {
+                    return new AllocatorDryRun(properties);
+                };
+
+                /**
+                 * Encodes the specified AllocatorDryRun message. Does not implicitly {@link cockroach.server.serverpb.AllocatorDryRun.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.AllocatorDryRun$Properties} message AllocatorDryRun message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                AllocatorDryRun.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.range_id != null && message.hasOwnProperty("range_id"))
+                        writer.uint32(/* id 1, wireType 0 =*/8).int64(message.range_id);
+                    if (message.events != null && message.events.length)
+                        for (let i = 0; i < message.events.length; ++i)
+                            $root.cockroach.server.serverpb.AllocatorDryRun.Event.encode(message.events[i], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified AllocatorDryRun message, length delimited. Does not implicitly {@link cockroach.server.serverpb.AllocatorDryRun.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.AllocatorDryRun$Properties} message AllocatorDryRun message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                AllocatorDryRun.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes an AllocatorDryRun message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.AllocatorDryRun} AllocatorDryRun
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                AllocatorDryRun.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.AllocatorDryRun();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.range_id = reader.int64();
+                            break;
+                        case 2:
+                            if (!(message.events && message.events.length))
+                                message.events = [];
+                            message.events.push($root.cockroach.server.serverpb.AllocatorDryRun.Event.decode(reader, reader.uint32()));
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes an AllocatorDryRun message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.AllocatorDryRun} AllocatorDryRun
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                AllocatorDryRun.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies an AllocatorDryRun message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                AllocatorDryRun.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.range_id != null && message.hasOwnProperty("range_id"))
+                        if (!$util.isInteger(message.range_id) && !(message.range_id && $util.isInteger(message.range_id.low) && $util.isInteger(message.range_id.high)))
+                            return "range_id: integer|Long expected";
+                    if (message.events != null && message.hasOwnProperty("events")) {
+                        if (!Array.isArray(message.events))
+                            return "events: array expected";
+                        for (let i = 0; i < message.events.length; ++i) {
+                            let error = $root.cockroach.server.serverpb.AllocatorDryRun.Event.verify(message.events[i]);
+                            if (error)
+                                return "events." + error;
+                        }
+                    }
+                    return null;
+                };
+
+                /**
+                 * Creates an AllocatorDryRun message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.AllocatorDryRun} AllocatorDryRun
+                 */
+                AllocatorDryRun.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.AllocatorDryRun)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.AllocatorDryRun();
+                    if (object.range_id != null)
+                        if ($util.Long)
+                            (message.range_id = $util.Long.fromValue(object.range_id)).unsigned = false;
+                        else if (typeof object.range_id === "string")
+                            message.range_id = parseInt(object.range_id, 10);
+                        else if (typeof object.range_id === "number")
+                            message.range_id = object.range_id;
+                        else if (typeof object.range_id === "object")
+                            message.range_id = new $util.LongBits(object.range_id.low >>> 0, object.range_id.high >>> 0).toNumber();
+                    if (object.events) {
+                        if (!Array.isArray(object.events))
+                            throw TypeError(".cockroach.server.serverpb.AllocatorDryRun.events: array expected");
+                        message.events = [];
+                        for (let i = 0; i < object.events.length; ++i) {
+                            if (typeof object.events[i] !== "object")
+                                throw TypeError(".cockroach.server.serverpb.AllocatorDryRun.events: object expected");
+                            message.events[i] = $root.cockroach.server.serverpb.AllocatorDryRun.Event.fromObject(object.events[i]);
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Creates an AllocatorDryRun message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.AllocatorDryRun.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.AllocatorDryRun} AllocatorDryRun
+                 */
+                AllocatorDryRun.from = AllocatorDryRun.fromObject;
+
+                /**
+                 * Creates a plain object from an AllocatorDryRun message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.AllocatorDryRun} message AllocatorDryRun
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                AllocatorDryRun.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.arrays || options.defaults)
+                        object.events = [];
+                    if (options.defaults)
+                        if ($util.Long) {
+                            let long = new $util.Long(0, 0, false);
+                            object.range_id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                        } else
+                            object.range_id = options.longs === String ? "0" : 0;
+                    if (message.range_id != null && message.hasOwnProperty("range_id"))
+                        if (typeof message.range_id === "number")
+                            object.range_id = options.longs === String ? String(message.range_id) : message.range_id;
+                        else
+                            object.range_id = options.longs === String ? $util.Long.prototype.toString.call(message.range_id) : options.longs === Number ? new $util.LongBits(message.range_id.low >>> 0, message.range_id.high >>> 0).toNumber() : message.range_id;
+                    if (message.events && message.events.length) {
+                        object.events = [];
+                        for (let j = 0; j < message.events.length; ++j)
+                            object.events[j] = $root.cockroach.server.serverpb.AllocatorDryRun.Event.toObject(message.events[j], options);
+                    }
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this AllocatorDryRun message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                AllocatorDryRun.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this AllocatorDryRun to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                AllocatorDryRun.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                AllocatorDryRun.Event = (function() {
+
+                    /**
+                     * Properties of an Event.
+                     * @typedef cockroach.server.serverpb.AllocatorDryRun.Event$Properties
+                     * @type {Object}
+                     * @property {google.protobuf.Timestamp$Properties} [time] Event time.
+                     * @property {string} [message] Event message.
+                     */
+
+                    /**
+                     * Constructs a new Event.
+                     * @exports cockroach.server.serverpb.AllocatorDryRun.Event
+                     * @constructor
+                     * @param {cockroach.server.serverpb.AllocatorDryRun.Event$Properties=} [properties] Properties to set
+                     */
+                    function Event(properties) {
+                        if (properties)
+                            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * Event time.
+                     * @type {(google.protobuf.Timestamp$Properties|null)}
+                     */
+                    Event.prototype.time = null;
+
+                    /**
+                     * Event message.
+                     * @type {string}
+                     */
+                    Event.prototype.message = "";
+
+                    /**
+                     * Creates a new Event instance using the specified properties.
+                     * @param {cockroach.server.serverpb.AllocatorDryRun.Event$Properties=} [properties] Properties to set
+                     * @returns {cockroach.server.serverpb.AllocatorDryRun.Event} Event instance
+                     */
+                    Event.create = function create(properties) {
+                        return new Event(properties);
+                    };
+
+                    /**
+                     * Encodes the specified Event message. Does not implicitly {@link cockroach.server.serverpb.AllocatorDryRun.Event.verify|verify} messages.
+                     * @param {cockroach.server.serverpb.AllocatorDryRun.Event$Properties} message Event message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    Event.encode = function encode(message, writer) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (message.time != null && message.hasOwnProperty("time"))
+                            $root.google.protobuf.Timestamp.encode(message.time, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+                        if (message.message != null && message.hasOwnProperty("message"))
+                            writer.uint32(/* id 2, wireType 2 =*/18).string(message.message);
+                        return writer;
+                    };
+
+                    /**
+                     * Encodes the specified Event message, length delimited. Does not implicitly {@link cockroach.server.serverpb.AllocatorDryRun.Event.verify|verify} messages.
+                     * @param {cockroach.server.serverpb.AllocatorDryRun.Event$Properties} message Event message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    Event.encodeDelimited = function encodeDelimited(message, writer) {
+                        return this.encode(message, writer).ldelim();
+                    };
+
+                    /**
+                     * Decodes an Event message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.server.serverpb.AllocatorDryRun.Event} Event
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    Event.decode = function decode(reader, length) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.AllocatorDryRun.Event();
+                        while (reader.pos < end) {
+                            let tag = reader.uint32();
+                            switch (tag >>> 3) {
+                            case 1:
+                                message.time = $root.google.protobuf.Timestamp.decode(reader, reader.uint32());
+                                break;
+                            case 2:
+                                message.message = reader.string();
+                                break;
+                            default:
+                                reader.skipType(tag & 7);
+                                break;
+                            }
+                        }
+                        return message;
+                    };
+
+                    /**
+                     * Decodes an Event message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.server.serverpb.AllocatorDryRun.Event} Event
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    Event.decodeDelimited = function decodeDelimited(reader) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader(reader);
+                        return this.decode(reader, reader.uint32());
+                    };
+
+                    /**
+                     * Verifies an Event message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    Event.verify = function verify(message) {
+                        if (typeof message !== "object" || message === null)
+                            return "object expected";
+                        if (message.time != null && message.hasOwnProperty("time")) {
+                            let error = $root.google.protobuf.Timestamp.verify(message.time);
+                            if (error)
+                                return "time." + error;
+                        }
+                        if (message.message != null && message.hasOwnProperty("message"))
+                            if (!$util.isString(message.message))
+                                return "message: string expected";
+                        return null;
+                    };
+
+                    /**
+                     * Creates an Event message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.server.serverpb.AllocatorDryRun.Event} Event
+                     */
+                    Event.fromObject = function fromObject(object) {
+                        if (object instanceof $root.cockroach.server.serverpb.AllocatorDryRun.Event)
+                            return object;
+                        let message = new $root.cockroach.server.serverpb.AllocatorDryRun.Event();
+                        if (object.time != null) {
+                            if (typeof object.time !== "object")
+                                throw TypeError(".cockroach.server.serverpb.AllocatorDryRun.Event.time: object expected");
+                            message.time = $root.google.protobuf.Timestamp.fromObject(object.time);
+                        }
+                        if (object.message != null)
+                            message.message = String(object.message);
+                        return message;
+                    };
+
+                    /**
+                     * Creates an Event message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.server.serverpb.AllocatorDryRun.Event.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.server.serverpb.AllocatorDryRun.Event} Event
+                     */
+                    Event.from = Event.fromObject;
+
+                    /**
+                     * Creates a plain object from an Event message. Also converts values to other types if specified.
+                     * @param {cockroach.server.serverpb.AllocatorDryRun.Event} message Event
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    Event.toObject = function toObject(message, options) {
+                        if (!options)
+                            options = {};
+                        let object = {};
+                        if (options.defaults) {
+                            object.time = null;
+                            object.message = "";
+                        }
+                        if (message.time != null && message.hasOwnProperty("time"))
+                            object.time = $root.google.protobuf.Timestamp.toObject(message.time, options);
+                        if (message.message != null && message.hasOwnProperty("message"))
+                            object.message = message.message;
+                        return object;
+                    };
+
+                    /**
+                     * Creates a plain object from this Event message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    Event.prototype.toObject = function toObject(options) {
+                        return this.constructor.toObject(this, options);
+                    };
+
+                    /**
+                     * Converts this Event to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    Event.prototype.toJSON = function toJSON() {
+                        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                    };
+
+                    return Event;
+                })();
+
+                return AllocatorDryRun;
+            })();
+
+            serverpb.AllocatorRangeRequest = (function() {
+
+                /**
+                 * Properties of an AllocatorRangeRequest.
+                 * @typedef cockroach.server.serverpb.AllocatorRangeRequest$Properties
+                 * @type {Object}
+                 * @property {Long} [range_id] AllocatorRangeRequest range_id.
+                 */
+
+                /**
+                 * Constructs a new AllocatorRangeRequest.
+                 * @exports cockroach.server.serverpb.AllocatorRangeRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.AllocatorRangeRequest$Properties=} [properties] Properties to set
+                 */
+                function AllocatorRangeRequest(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * AllocatorRangeRequest range_id.
+                 * @type {Long}
+                 */
+                AllocatorRangeRequest.prototype.range_id = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                /**
+                 * Creates a new AllocatorRangeRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.AllocatorRangeRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.AllocatorRangeRequest} AllocatorRangeRequest instance
+                 */
+                AllocatorRangeRequest.create = function create(properties) {
+                    return new AllocatorRangeRequest(properties);
+                };
+
+                /**
+                 * Encodes the specified AllocatorRangeRequest message. Does not implicitly {@link cockroach.server.serverpb.AllocatorRangeRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.AllocatorRangeRequest$Properties} message AllocatorRangeRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                AllocatorRangeRequest.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.range_id != null && message.hasOwnProperty("range_id"))
+                        writer.uint32(/* id 1, wireType 0 =*/8).int64(message.range_id);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified AllocatorRangeRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.AllocatorRangeRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.AllocatorRangeRequest$Properties} message AllocatorRangeRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                AllocatorRangeRequest.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes an AllocatorRangeRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.AllocatorRangeRequest} AllocatorRangeRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                AllocatorRangeRequest.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.AllocatorRangeRequest();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.range_id = reader.int64();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes an AllocatorRangeRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.AllocatorRangeRequest} AllocatorRangeRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                AllocatorRangeRequest.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies an AllocatorRangeRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                AllocatorRangeRequest.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.range_id != null && message.hasOwnProperty("range_id"))
+                        if (!$util.isInteger(message.range_id) && !(message.range_id && $util.isInteger(message.range_id.low) && $util.isInteger(message.range_id.high)))
+                            return "range_id: integer|Long expected";
+                    return null;
+                };
+
+                /**
+                 * Creates an AllocatorRangeRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.AllocatorRangeRequest} AllocatorRangeRequest
+                 */
+                AllocatorRangeRequest.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.AllocatorRangeRequest)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.AllocatorRangeRequest();
+                    if (object.range_id != null)
+                        if ($util.Long)
+                            (message.range_id = $util.Long.fromValue(object.range_id)).unsigned = false;
+                        else if (typeof object.range_id === "string")
+                            message.range_id = parseInt(object.range_id, 10);
+                        else if (typeof object.range_id === "number")
+                            message.range_id = object.range_id;
+                        else if (typeof object.range_id === "object")
+                            message.range_id = new $util.LongBits(object.range_id.low >>> 0, object.range_id.high >>> 0).toNumber();
+                    return message;
+                };
+
+                /**
+                 * Creates an AllocatorRangeRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.AllocatorRangeRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.AllocatorRangeRequest} AllocatorRangeRequest
+                 */
+                AllocatorRangeRequest.from = AllocatorRangeRequest.fromObject;
+
+                /**
+                 * Creates a plain object from an AllocatorRangeRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.AllocatorRangeRequest} message AllocatorRangeRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                AllocatorRangeRequest.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults)
+                        if ($util.Long) {
+                            let long = new $util.Long(0, 0, false);
+                            object.range_id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                        } else
+                            object.range_id = options.longs === String ? "0" : 0;
+                    if (message.range_id != null && message.hasOwnProperty("range_id"))
+                        if (typeof message.range_id === "number")
+                            object.range_id = options.longs === String ? String(message.range_id) : message.range_id;
+                        else
+                            object.range_id = options.longs === String ? $util.Long.prototype.toString.call(message.range_id) : options.longs === Number ? new $util.LongBits(message.range_id.low >>> 0, message.range_id.high >>> 0).toNumber() : message.range_id;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this AllocatorRangeRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                AllocatorRangeRequest.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this AllocatorRangeRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                AllocatorRangeRequest.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return AllocatorRangeRequest;
+            })();
+
+            serverpb.AllocatorRangeResponse = (function() {
+
+                /**
+                 * Properties of an AllocatorRangeResponse.
+                 * @typedef cockroach.server.serverpb.AllocatorRangeResponse$Properties
+                 * @type {Object}
+                 * @property {Long} [node_id] AllocatorRangeResponse node_id.
+                 * @property {cockroach.server.serverpb.AllocatorDryRun$Properties} [dry_run] AllocatorRangeResponse dry_run.
+                 */
+
+                /**
+                 * Constructs a new AllocatorRangeResponse.
+                 * @exports cockroach.server.serverpb.AllocatorRangeResponse
+                 * @constructor
+                 * @param {cockroach.server.serverpb.AllocatorRangeResponse$Properties=} [properties] Properties to set
+                 */
+                function AllocatorRangeResponse(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * AllocatorRangeResponse node_id.
+                 * @type {Long}
+                 */
+                AllocatorRangeResponse.prototype.node_id = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                /**
+                 * AllocatorRangeResponse dry_run.
+                 * @type {(cockroach.server.serverpb.AllocatorDryRun$Properties|null)}
+                 */
+                AllocatorRangeResponse.prototype.dry_run = null;
+
+                /**
+                 * Creates a new AllocatorRangeResponse instance using the specified properties.
+                 * @param {cockroach.server.serverpb.AllocatorRangeResponse$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.AllocatorRangeResponse} AllocatorRangeResponse instance
+                 */
+                AllocatorRangeResponse.create = function create(properties) {
+                    return new AllocatorRangeResponse(properties);
+                };
+
+                /**
+                 * Encodes the specified AllocatorRangeResponse message. Does not implicitly {@link cockroach.server.serverpb.AllocatorRangeResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.AllocatorRangeResponse$Properties} message AllocatorRangeResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                AllocatorRangeResponse.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        writer.uint32(/* id 1, wireType 0 =*/8).int64(message.node_id);
+                    if (message.dry_run != null && message.hasOwnProperty("dry_run"))
+                        $root.cockroach.server.serverpb.AllocatorDryRun.encode(message.dry_run, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified AllocatorRangeResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.AllocatorRangeResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.AllocatorRangeResponse$Properties} message AllocatorRangeResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                AllocatorRangeResponse.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes an AllocatorRangeResponse message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.AllocatorRangeResponse} AllocatorRangeResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                AllocatorRangeResponse.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.AllocatorRangeResponse();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.node_id = reader.int64();
+                            break;
+                        case 2:
+                            message.dry_run = $root.cockroach.server.serverpb.AllocatorDryRun.decode(reader, reader.uint32());
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes an AllocatorRangeResponse message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.AllocatorRangeResponse} AllocatorRangeResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                AllocatorRangeResponse.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies an AllocatorRangeResponse message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                AllocatorRangeResponse.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        if (!$util.isInteger(message.node_id) && !(message.node_id && $util.isInteger(message.node_id.low) && $util.isInteger(message.node_id.high)))
+                            return "node_id: integer|Long expected";
+                    if (message.dry_run != null && message.hasOwnProperty("dry_run")) {
+                        let error = $root.cockroach.server.serverpb.AllocatorDryRun.verify(message.dry_run);
+                        if (error)
+                            return "dry_run." + error;
+                    }
+                    return null;
+                };
+
+                /**
+                 * Creates an AllocatorRangeResponse message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.AllocatorRangeResponse} AllocatorRangeResponse
+                 */
+                AllocatorRangeResponse.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.AllocatorRangeResponse)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.AllocatorRangeResponse();
+                    if (object.node_id != null)
+                        if ($util.Long)
+                            (message.node_id = $util.Long.fromValue(object.node_id)).unsigned = false;
+                        else if (typeof object.node_id === "string")
+                            message.node_id = parseInt(object.node_id, 10);
+                        else if (typeof object.node_id === "number")
+                            message.node_id = object.node_id;
+                        else if (typeof object.node_id === "object")
+                            message.node_id = new $util.LongBits(object.node_id.low >>> 0, object.node_id.high >>> 0).toNumber();
+                    if (object.dry_run != null) {
+                        if (typeof object.dry_run !== "object")
+                            throw TypeError(".cockroach.server.serverpb.AllocatorRangeResponse.dry_run: object expected");
+                        message.dry_run = $root.cockroach.server.serverpb.AllocatorDryRun.fromObject(object.dry_run);
+                    }
+                    return message;
+                };
+
+                /**
+                 * Creates an AllocatorRangeResponse message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.AllocatorRangeResponse.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.AllocatorRangeResponse} AllocatorRangeResponse
+                 */
+                AllocatorRangeResponse.from = AllocatorRangeResponse.fromObject;
+
+                /**
+                 * Creates a plain object from an AllocatorRangeResponse message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.AllocatorRangeResponse} message AllocatorRangeResponse
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                AllocatorRangeResponse.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults) {
+                        if ($util.Long) {
+                            let long = new $util.Long(0, 0, false);
+                            object.node_id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                        } else
+                            object.node_id = options.longs === String ? "0" : 0;
+                        object.dry_run = null;
+                    }
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        if (typeof message.node_id === "number")
+                            object.node_id = options.longs === String ? String(message.node_id) : message.node_id;
+                        else
+                            object.node_id = options.longs === String ? $util.Long.prototype.toString.call(message.node_id) : options.longs === Number ? new $util.LongBits(message.node_id.low >>> 0, message.node_id.high >>> 0).toNumber() : message.node_id;
+                    if (message.dry_run != null && message.hasOwnProperty("dry_run"))
+                        object.dry_run = $root.cockroach.server.serverpb.AllocatorDryRun.toObject(message.dry_run, options);
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this AllocatorRangeResponse message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                AllocatorRangeResponse.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this AllocatorRangeResponse to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                AllocatorRangeResponse.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return AllocatorRangeResponse;
+            })();
+
+            serverpb.AllocatorRequest = (function() {
+
+                /**
+                 * Properties of an AllocatorRequest.
+                 * @typedef cockroach.server.serverpb.AllocatorRequest$Properties
+                 * @type {Object}
+                 * @property {string} [node_id] AllocatorRequest node_id.
+                 * @property {Array.<Long>} [range_ids] AllocatorRequest range_ids.
+                 */
+
+                /**
+                 * Constructs a new AllocatorRequest.
+                 * @exports cockroach.server.serverpb.AllocatorRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.AllocatorRequest$Properties=} [properties] Properties to set
+                 */
+                function AllocatorRequest(properties) {
+                    this.range_ids = [];
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * AllocatorRequest node_id.
+                 * @type {string}
+                 */
+                AllocatorRequest.prototype.node_id = "";
+
+                /**
+                 * AllocatorRequest range_ids.
+                 * @type {Array.<Long>}
+                 */
+                AllocatorRequest.prototype.range_ids = $util.emptyArray;
+
+                /**
+                 * Creates a new AllocatorRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.AllocatorRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.AllocatorRequest} AllocatorRequest instance
+                 */
+                AllocatorRequest.create = function create(properties) {
+                    return new AllocatorRequest(properties);
+                };
+
+                /**
+                 * Encodes the specified AllocatorRequest message. Does not implicitly {@link cockroach.server.serverpb.AllocatorRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.AllocatorRequest$Properties} message AllocatorRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                AllocatorRequest.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        writer.uint32(/* id 1, wireType 2 =*/10).string(message.node_id);
+                    if (message.range_ids != null && message.range_ids.length) {
+                        writer.uint32(/* id 2, wireType 2 =*/18).fork();
+                        for (let i = 0; i < message.range_ids.length; ++i)
+                            writer.int64(message.range_ids[i]);
+                        writer.ldelim();
+                    }
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified AllocatorRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.AllocatorRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.AllocatorRequest$Properties} message AllocatorRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                AllocatorRequest.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes an AllocatorRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.AllocatorRequest} AllocatorRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                AllocatorRequest.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.AllocatorRequest();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.node_id = reader.string();
+                            break;
+                        case 2:
+                            if (!(message.range_ids && message.range_ids.length))
+                                message.range_ids = [];
+                            if ((tag & 7) === 2) {
+                                let end2 = reader.uint32() + reader.pos;
+                                while (reader.pos < end2)
+                                    message.range_ids.push(reader.int64());
+                            } else
+                                message.range_ids.push(reader.int64());
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes an AllocatorRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.AllocatorRequest} AllocatorRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                AllocatorRequest.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies an AllocatorRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                AllocatorRequest.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        if (!$util.isString(message.node_id))
+                            return "node_id: string expected";
+                    if (message.range_ids != null && message.hasOwnProperty("range_ids")) {
+                        if (!Array.isArray(message.range_ids))
+                            return "range_ids: array expected";
+                        for (let i = 0; i < message.range_ids.length; ++i)
+                            if (!$util.isInteger(message.range_ids[i]) && !(message.range_ids[i] && $util.isInteger(message.range_ids[i].low) && $util.isInteger(message.range_ids[i].high)))
+                                return "range_ids: integer|Long[] expected";
+                    }
+                    return null;
+                };
+
+                /**
+                 * Creates an AllocatorRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.AllocatorRequest} AllocatorRequest
+                 */
+                AllocatorRequest.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.AllocatorRequest)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.AllocatorRequest();
+                    if (object.node_id != null)
+                        message.node_id = String(object.node_id);
+                    if (object.range_ids) {
+                        if (!Array.isArray(object.range_ids))
+                            throw TypeError(".cockroach.server.serverpb.AllocatorRequest.range_ids: array expected");
+                        message.range_ids = [];
+                        for (let i = 0; i < object.range_ids.length; ++i)
+                            if ($util.Long)
+                                (message.range_ids[i] = $util.Long.fromValue(object.range_ids[i])).unsigned = false;
+                            else if (typeof object.range_ids[i] === "string")
+                                message.range_ids[i] = parseInt(object.range_ids[i], 10);
+                            else if (typeof object.range_ids[i] === "number")
+                                message.range_ids[i] = object.range_ids[i];
+                            else if (typeof object.range_ids[i] === "object")
+                                message.range_ids[i] = new $util.LongBits(object.range_ids[i].low >>> 0, object.range_ids[i].high >>> 0).toNumber();
+                    }
+                    return message;
+                };
+
+                /**
+                 * Creates an AllocatorRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.AllocatorRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.AllocatorRequest} AllocatorRequest
+                 */
+                AllocatorRequest.from = AllocatorRequest.fromObject;
+
+                /**
+                 * Creates a plain object from an AllocatorRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.AllocatorRequest} message AllocatorRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                AllocatorRequest.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.arrays || options.defaults)
+                        object.range_ids = [];
+                    if (options.defaults)
+                        object.node_id = "";
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        object.node_id = message.node_id;
+                    if (message.range_ids && message.range_ids.length) {
+                        object.range_ids = [];
+                        for (let j = 0; j < message.range_ids.length; ++j)
+                            if (typeof message.range_ids[j] === "number")
+                                object.range_ids[j] = options.longs === String ? String(message.range_ids[j]) : message.range_ids[j];
+                            else
+                                object.range_ids[j] = options.longs === String ? $util.Long.prototype.toString.call(message.range_ids[j]) : options.longs === Number ? new $util.LongBits(message.range_ids[j].low >>> 0, message.range_ids[j].high >>> 0).toNumber() : message.range_ids[j];
+                    }
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this AllocatorRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                AllocatorRequest.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this AllocatorRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                AllocatorRequest.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return AllocatorRequest;
+            })();
+
+            serverpb.AllocatorResponse = (function() {
+
+                /**
+                 * Properties of an AllocatorResponse.
+                 * @typedef cockroach.server.serverpb.AllocatorResponse$Properties
+                 * @type {Object}
+                 * @property {Array.<cockroach.server.serverpb.AllocatorDryRun$Properties>} [dry_runs] AllocatorResponse dry_runs.
+                 */
+
+                /**
+                 * Constructs a new AllocatorResponse.
+                 * @exports cockroach.server.serverpb.AllocatorResponse
+                 * @constructor
+                 * @param {cockroach.server.serverpb.AllocatorResponse$Properties=} [properties] Properties to set
+                 */
+                function AllocatorResponse(properties) {
+                    this.dry_runs = [];
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * AllocatorResponse dry_runs.
+                 * @type {Array.<cockroach.server.serverpb.AllocatorDryRun$Properties>}
+                 */
+                AllocatorResponse.prototype.dry_runs = $util.emptyArray;
+
+                /**
+                 * Creates a new AllocatorResponse instance using the specified properties.
+                 * @param {cockroach.server.serverpb.AllocatorResponse$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.AllocatorResponse} AllocatorResponse instance
+                 */
+                AllocatorResponse.create = function create(properties) {
+                    return new AllocatorResponse(properties);
+                };
+
+                /**
+                 * Encodes the specified AllocatorResponse message. Does not implicitly {@link cockroach.server.serverpb.AllocatorResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.AllocatorResponse$Properties} message AllocatorResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                AllocatorResponse.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.dry_runs != null && message.dry_runs.length)
+                        for (let i = 0; i < message.dry_runs.length; ++i)
+                            $root.cockroach.server.serverpb.AllocatorDryRun.encode(message.dry_runs[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified AllocatorResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.AllocatorResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.AllocatorResponse$Properties} message AllocatorResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                AllocatorResponse.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes an AllocatorResponse message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.AllocatorResponse} AllocatorResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                AllocatorResponse.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.AllocatorResponse();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            if (!(message.dry_runs && message.dry_runs.length))
+                                message.dry_runs = [];
+                            message.dry_runs.push($root.cockroach.server.serverpb.AllocatorDryRun.decode(reader, reader.uint32()));
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes an AllocatorResponse message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.AllocatorResponse} AllocatorResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                AllocatorResponse.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies an AllocatorResponse message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                AllocatorResponse.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.dry_runs != null && message.hasOwnProperty("dry_runs")) {
+                        if (!Array.isArray(message.dry_runs))
+                            return "dry_runs: array expected";
+                        for (let i = 0; i < message.dry_runs.length; ++i) {
+                            let error = $root.cockroach.server.serverpb.AllocatorDryRun.verify(message.dry_runs[i]);
+                            if (error)
+                                return "dry_runs." + error;
+                        }
+                    }
+                    return null;
+                };
+
+                /**
+                 * Creates an AllocatorResponse message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.AllocatorResponse} AllocatorResponse
+                 */
+                AllocatorResponse.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.AllocatorResponse)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.AllocatorResponse();
+                    if (object.dry_runs) {
+                        if (!Array.isArray(object.dry_runs))
+                            throw TypeError(".cockroach.server.serverpb.AllocatorResponse.dry_runs: array expected");
+                        message.dry_runs = [];
+                        for (let i = 0; i < object.dry_runs.length; ++i) {
+                            if (typeof object.dry_runs[i] !== "object")
+                                throw TypeError(".cockroach.server.serverpb.AllocatorResponse.dry_runs: object expected");
+                            message.dry_runs[i] = $root.cockroach.server.serverpb.AllocatorDryRun.fromObject(object.dry_runs[i]);
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Creates an AllocatorResponse message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.AllocatorResponse.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.AllocatorResponse} AllocatorResponse
+                 */
+                AllocatorResponse.from = AllocatorResponse.fromObject;
+
+                /**
+                 * Creates a plain object from an AllocatorResponse message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.AllocatorResponse} message AllocatorResponse
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                AllocatorResponse.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.arrays || options.defaults)
+                        object.dry_runs = [];
+                    if (message.dry_runs && message.dry_runs.length) {
+                        object.dry_runs = [];
+                        for (let j = 0; j < message.dry_runs.length; ++j)
+                            object.dry_runs[j] = $root.cockroach.server.serverpb.AllocatorDryRun.toObject(message.dry_runs[j], options);
+                    }
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this AllocatorResponse message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                AllocatorResponse.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this AllocatorResponse to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                AllocatorResponse.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return AllocatorResponse;
+            })();
+
             serverpb.JSONResponse = (function() {
 
                 /**
@@ -21793,6 +23049,60 @@ export const cockroach = $root.cockroach = (() => {
                  * @function
                  * @param {cockroach.server.serverpb.GossipRequest|Object.<string,*>} request GossipRequest message or plain object
                  * @returns {Promise<cockroach.gossip.InfoStatus>} Promise
+                 * @variation 2
+                 */
+
+                /**
+                 * Callback as used by {@link Status#allocator}.
+                 * @typedef Status_allocator_Callback
+                 * @type {function}
+                 * @param {?Error} error Error, if any
+                 * @param {cockroach.server.serverpb.AllocatorResponse} [response] AllocatorResponse
+                 */
+
+                /**
+                 * Calls Allocator.
+                 * @param {cockroach.server.serverpb.AllocatorRequest|Object.<string,*>} request AllocatorRequest message or plain object
+                 * @param {Status_allocator_Callback} callback Node-style callback called with the error, if any, and AllocatorResponse
+                 * @returns {undefined}
+                 */
+                Status.prototype.allocator = function allocator(request, callback) {
+                    return this.rpcCall(allocator, $root.cockroach.server.serverpb.AllocatorRequest, $root.cockroach.server.serverpb.AllocatorResponse, request, callback);
+                };
+
+                /**
+                 * Calls Allocator.
+                 * @name Status#allocator
+                 * @function
+                 * @param {cockroach.server.serverpb.AllocatorRequest|Object.<string,*>} request AllocatorRequest message or plain object
+                 * @returns {Promise<cockroach.server.serverpb.AllocatorResponse>} Promise
+                 * @variation 2
+                 */
+
+                /**
+                 * Callback as used by {@link Status#allocatorRange}.
+                 * @typedef Status_allocatorRange_Callback
+                 * @type {function}
+                 * @param {?Error} error Error, if any
+                 * @param {cockroach.server.serverpb.AllocatorRangeResponse} [response] AllocatorRangeResponse
+                 */
+
+                /**
+                 * Calls AllocatorRange.
+                 * @param {cockroach.server.serverpb.AllocatorRangeRequest|Object.<string,*>} request AllocatorRangeRequest message or plain object
+                 * @param {Status_allocatorRange_Callback} callback Node-style callback called with the error, if any, and AllocatorRangeResponse
+                 * @returns {undefined}
+                 */
+                Status.prototype.allocatorRange = function allocatorRange(request, callback) {
+                    return this.rpcCall(allocatorRange, $root.cockroach.server.serverpb.AllocatorRangeRequest, $root.cockroach.server.serverpb.AllocatorRangeResponse, request, callback);
+                };
+
+                /**
+                 * Calls AllocatorRange.
+                 * @name Status#allocatorRange
+                 * @function
+                 * @param {cockroach.server.serverpb.AllocatorRangeRequest|Object.<string,*>} request AllocatorRangeRequest message or plain object
+                 * @returns {Promise<cockroach.server.serverpb.AllocatorRangeResponse>} Promise
                  * @variation 2
                  */
 

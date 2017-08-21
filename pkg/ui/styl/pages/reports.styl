@@ -180,6 +180,25 @@ $reports-table
     &--date
       min-width 14rem
 
+.allocator-table
+  @extend $reports-table
+  font-size 12px
+
+  &__row
+    text-align left
+    vertical-align top
+    alternating-background white $table-border-color
+
+    &&--header
+      background-color $link-color
+
+  &__cell
+    white-space normal
+    max-width none
+
+    &--date
+      min-width 14rem
+
 .lease-table
   @extend $reports-table
   font-size 12px
