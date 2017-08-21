@@ -114,7 +114,7 @@ func newGCQueue(store *Store, gossip *gossip.Gossip) *gcQueue {
 }
 
 type pushFunc func(hlc.Timestamp, *roachpb.Transaction, roachpb.PushTxnType)
-type resolveFunc func([]roachpb.Intent, bool, bool) error
+type resolveFunc func([]roachpb.Intent, ResolveOptions) error
 
 // gcQueueScore holds details about the score returned by makeGCQueueScoreImpl for
 // testing and logging. The fields in this struct are documented in
@@ -409,7 +409,7 @@ func processLocalKeyRange(
 				infoMu.Unlock() // intentional
 				defer infoMu.Lock()
 				if err := resolveIntents(roachpb.AsIntents(txn.Intents, &txn),
-					true /* wait */, false /* !poison */); err != nil {
+					ResolveOptions{Wait: true, Poison: false}); err != nil {
 					log.Warningf(ctx, "failed to resolve intents of aborted txn on gc: %s", err)
 				}
 			}()
@@ -419,7 +419,7 @@ func processLocalKeyRange(
 			if err := func() error {
 				infoMu.Unlock() // intentional
 				defer infoMu.Lock()
-				return resolveIntents(roachpb.AsIntents(txn.Intents, &txn), true /* wait */, false /* !poison */)
+				return resolveIntents(roachpb.AsIntents(txn.Intents, &txn), ResolveOptions{Wait: true, Poison: false})
 			}(); err != nil {
 				log.Warningf(ctx, "unable to resolve intents of committed txn on gc: %s", err)
 				// Returning the error here would abort the whole GC run, and
@@ -589,8 +589,8 @@ func (gcq *gcQueue) processImpl(
 		func(now hlc.Timestamp, txn *roachpb.Transaction, typ roachpb.PushTxnType) {
 			pushTxn(ctx, gcq.store.DB(), now, txn, typ)
 		},
-		func(intents []roachpb.Intent, poison bool, wait bool) error {
-			return repl.store.intentResolver.resolveIntents(ctx, intents, poison, wait)
+		func(intents []roachpb.Intent, opts ResolveOptions) error {
+			return repl.store.intentResolver.resolveIntents(ctx, intents, opts)
 		})
 
 	if err != nil {
@@ -711,7 +711,7 @@ func RunGC(
 
 	{
 		realResolveIntentsFn := resolveIntentsFn
-		resolveIntentsFn = func(intents []roachpb.Intent, poison bool, wait bool) (err error) {
+		resolveIntentsFn = func(intents []roachpb.Intent, opts ResolveOptions) (err error) {
 			defer func() {
 				infoMu.Lock()
 				infoMu.ResolveTotal += len(intents)
@@ -720,7 +720,7 @@ func RunGC(
 				}
 				infoMu.Unlock()
 			}()
-			return realResolveIntentsFn(intents, poison, wait)
+			return realResolveIntentsFn(intents, opts)
 		}
 		realPushTxnFn := pushTxnFn
 		pushTxnFn = func(ts hlc.Timestamp, txn *roachpb.Transaction, typ roachpb.PushTxnType) {
@@ -871,7 +871,7 @@ func RunGC(
 		}
 	}
 
-	if err := resolveIntentsFn(intents, true /* wait */, false /* !poison */); err != nil {
+	if err := resolveIntentsFn(intents, ResolveOptions{Wait: true, Poison: false}); err != nil {
 		return nil, GCInfo{}, err
 	}
 
