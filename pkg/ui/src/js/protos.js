@@ -13792,6 +13792,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @property {Array.<cockroach.roachpb.Lease$Properties>} [lease_history] RangeInfo lease_history.
                  * @property {cockroach.server.serverpb.RangeProblems$Properties} [problems] RangeInfo problems.
                  * @property {cockroach.server.serverpb.RangeStatistics$Properties} [stats] RangeInfo stats.
+                 * @property {Array.<string>} [simulated_allocator_output] RangeInfo simulated_allocator_output.
                  */
 
                 /**
@@ -13802,6 +13803,7 @@ export const cockroach = $root.cockroach = (() => {
                  */
                 function RangeInfo(properties) {
                     this.lease_history = [];
+                    this.simulated_allocator_output = [];
                     if (properties)
                         for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                             if (properties[keys[i]] != null)
@@ -13863,6 +13865,12 @@ export const cockroach = $root.cockroach = (() => {
                 RangeInfo.prototype.stats = null;
 
                 /**
+                 * RangeInfo simulated_allocator_output.
+                 * @type {Array.<string>}
+                 */
+                RangeInfo.prototype.simulated_allocator_output = $util.emptyArray;
+
+                /**
                  * Creates a new RangeInfo instance using the specified properties.
                  * @param {cockroach.server.serverpb.RangeInfo$Properties=} [properties] Properties to set
                  * @returns {cockroach.server.serverpb.RangeInfo} RangeInfo instance
@@ -13899,6 +13907,9 @@ export const cockroach = $root.cockroach = (() => {
                         $root.cockroach.server.serverpb.RangeProblems.encode(message.problems, writer.uint32(/* id 9, wireType 2 =*/74).fork()).ldelim();
                     if (message.stats != null && message.hasOwnProperty("stats"))
                         $root.cockroach.server.serverpb.RangeStatistics.encode(message.stats, writer.uint32(/* id 10, wireType 2 =*/82).fork()).ldelim();
+                    if (message.simulated_allocator_output != null && message.simulated_allocator_output.length)
+                        for (let i = 0; i < message.simulated_allocator_output.length; ++i)
+                            writer.uint32(/* id 11, wireType 2 =*/90).string(message.simulated_allocator_output[i]);
                     return writer;
                 };
 
@@ -13955,6 +13966,11 @@ export const cockroach = $root.cockroach = (() => {
                             break;
                         case 10:
                             message.stats = $root.cockroach.server.serverpb.RangeStatistics.decode(reader, reader.uint32());
+                            break;
+                        case 11:
+                            if (!(message.simulated_allocator_output && message.simulated_allocator_output.length))
+                                message.simulated_allocator_output = [];
+                            message.simulated_allocator_output.push(reader.string());
                             break;
                         default:
                             reader.skipType(tag & 7);
@@ -14028,6 +14044,13 @@ export const cockroach = $root.cockroach = (() => {
                         if (error)
                             return "stats." + error;
                     }
+                    if (message.simulated_allocator_output != null && message.hasOwnProperty("simulated_allocator_output")) {
+                        if (!Array.isArray(message.simulated_allocator_output))
+                            return "simulated_allocator_output: array expected";
+                        for (let i = 0; i < message.simulated_allocator_output.length; ++i)
+                            if (!$util.isString(message.simulated_allocator_output[i]))
+                                return "simulated_allocator_output: string[] expected";
+                    }
                     return null;
                 };
 
@@ -14081,6 +14104,13 @@ export const cockroach = $root.cockroach = (() => {
                             throw TypeError(".cockroach.server.serverpb.RangeInfo.stats: object expected");
                         message.stats = $root.cockroach.server.serverpb.RangeStatistics.fromObject(object.stats);
                     }
+                    if (object.simulated_allocator_output) {
+                        if (!Array.isArray(object.simulated_allocator_output))
+                            throw TypeError(".cockroach.server.serverpb.RangeInfo.simulated_allocator_output: array expected");
+                        message.simulated_allocator_output = [];
+                        for (let i = 0; i < object.simulated_allocator_output.length; ++i)
+                            message.simulated_allocator_output[i] = String(object.simulated_allocator_output[i]);
+                    }
                     return message;
                 };
 
@@ -14103,8 +14133,10 @@ export const cockroach = $root.cockroach = (() => {
                     if (!options)
                         options = {};
                     let object = {};
-                    if (options.arrays || options.defaults)
+                    if (options.arrays || options.defaults) {
                         object.lease_history = [];
+                        object.simulated_allocator_output = [];
+                    }
                     if (options.defaults) {
                         object.span = null;
                         object.raft_state = null;
@@ -14136,6 +14168,11 @@ export const cockroach = $root.cockroach = (() => {
                         object.problems = $root.cockroach.server.serverpb.RangeProblems.toObject(message.problems, options);
                     if (message.stats != null && message.hasOwnProperty("stats"))
                         object.stats = $root.cockroach.server.serverpb.RangeStatistics.toObject(message.stats, options);
+                    if (message.simulated_allocator_output && message.simulated_allocator_output.length) {
+                        object.simulated_allocator_output = [];
+                        for (let j = 0; j < message.simulated_allocator_output.length; ++j)
+                            object.simulated_allocator_output[j] = message.simulated_allocator_output[j];
+                    }
                     return object;
                 };
 

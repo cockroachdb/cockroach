@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
@@ -306,7 +307,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 	}
 
 	runOne := func(k string, test testCase) {
-		ctx, collect := testutils.MakeRecordCtx()
+		ctx, collect := tracing.MakeRecordCtx()
 
 		ec := newRaftEntryCache(1024) // large enough
 		ss := mustNewInMemSideloadStorage(rangeID, roachpb.ReplicaID(1), ".")
@@ -355,7 +356,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 func TestRaftSSTableSideloadingInflight(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx, collect := testutils.MakeRecordCtx()
+	ctx, collect := tracing.MakeRecordCtx()
 	sideloaded := mustNewInMemSideloadStorage(roachpb.RangeID(5), roachpb.ReplicaID(7), ".")
 
 	// We'll set things up so that while sideloading this entry, there
@@ -487,7 +488,7 @@ func TestRaftSSTableSideloadingProposal(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
-	ctx, collect := testutils.MakeRecordCtx()
+	ctx, collect := tracing.MakeRecordCtx()
 	defer collect()
 
 	const (

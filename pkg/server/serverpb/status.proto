@@ -166,6 +166,7 @@ message RangeInfo {
   repeated roachpb.Lease lease_history = 8 [(gogoproto.nullable) = false];
   RangeProblems problems = 9 [(gogoproto.nullable) = false];
   RangeStatistics stats = 10 [(gogoproto.nullable) = false];
+  repeated string simulated_allocator_output = 11;
 }
 
 message RangesRequest {

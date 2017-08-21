@@ -754,16 +754,30 @@ func (s *statusServer) Ranges(
 		raftStatus := rep.RaftStatus()
 		raftState := convertRaftStatus(raftStatus)
 		leaseHistory := rep.GetLeaseHistory()
+		// Running the allocator over every range could be expensive, so only
+		// simulate the allocator if we're the leaseholder and not all ranges
+		// are being examined.
+		var allocatorDryRun []string
+		if len(req.RangeIDs) != 0 && metrics.Leaseholder {
+			store, _ := s.stores.GetStore(storeID)
+			if store != nil {
+				allocatorDryRun, err = store.AllocatorDryRun(ctx, rep)
+				if err != nil {
+					allocatorDryRun = []string{err.Error()}
+				}
+			}
+		}
 		return serverpb.RangeInfo{
 			Span: serverpb.PrettySpan{
 				StartKey: desc.StartKey.String(),
 				EndKey:   desc.EndKey.String(),
 			},
-			RaftState:     raftState,
-			State:         rep.State(),
-			SourceNodeID:  nodeID,
-			SourceStoreID: storeID,
-			LeaseHistory:  leaseHistory,
+			RaftState:                raftState,
+			State:                    rep.State(),
+			SourceNodeID:             nodeID,
+			SourceStoreID:            storeID,
+			LeaseHistory:             leaseHistory,
+			SimulatedAllocatorOutput: allocatorDryRun,
 			Stats: serverpb.RangeStatistics{
 				QueriesPerSecond: rep.QueriesPerSecond(),
 				WritesPerSecond:  rep.WritesPerSecond(),

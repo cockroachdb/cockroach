@@ -120,3 +120,26 @@ func FormatRecordedSpans(spans []RecordedSpan) string {
 	}
 	return buf.String()
 }
+
+// RecordedSpansToStrings takes a simple approach to printing out a list of
+// recorded spans, eschewing nesting and timing information to print out just
+// the contents of each event in order.
+func RecordedSpansToStrings(spans []RecordedSpan) []string {
+	var buf bytes.Buffer
+	var strings []string
+	for _, sp := range spans {
+		for _, entry := range sp.Logs {
+			buf.Reset()
+			buf.WriteString(entry.Time.Format("2006-01-02T15:04:05.123456"))
+			buf.WriteByte(' ')
+			for i, f := range entry.Fields {
+				if i != 0 {
+					buf.WriteByte(' ')
+				}
+				fmt.Fprintf(&buf, "%s:%v", f.Key, f.Value)
+			}
+			strings = append(strings, buf.String())
+		}
+	}
+	return strings
+}
