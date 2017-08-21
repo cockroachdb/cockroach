@@ -37,8 +37,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-func createTestClient(t *testing.T, s serverutils.TestServerInterface) *client.DB {
-	return createTestClientForUser(t, s, security.NodeUser)
+func startNoSplitServer(t *testing.T) (serverutils.TestServerInterface, *client.DB) {
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &storage.StoreTestingKnobs{
+				DisableSplitQueue: true,
+			},
+		},
+	})
+	return s, db
 }
 
 func createTestClientForUser(
@@ -60,11 +67,10 @@ func createTestClientForUser(
 // key value database.
 func TestKVDBCoverage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db := startNoSplitServer(t)
 	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
 
-	db := createTestClient(t, s)
 	key := roachpb.Key("a")
 	value1 := []byte("value1")
 	value2 := []byte("value2")
@@ -166,7 +172,7 @@ func TestKVDBCoverage(t *testing.T) {
 
 func TestKVDBInternalMethods(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _ := startNoSplitServer(t)
 	defer s.Stopper().Stop(context.TODO())
 
 	testCases := []roachpb.Request{
@@ -185,7 +191,7 @@ func TestKVDBInternalMethods(t *testing.T) {
 		},
 	}
 	// Verify internal methods experience bad request errors.
-	db := createTestClient(t, s)
+	db := createTestClientForUser(t, s, security.NodeUser)
 	for i, args := range testCases {
 		{
 			header := args.Header()
@@ -210,10 +216,8 @@ func TestKVDBInternalMethods(t *testing.T) {
 // the KV DB endpoint.
 func TestKVDBTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db := startNoSplitServer(t)
 	defer s.Stopper().Stop(context.TODO())
-
-	db := createTestClient(t, s)
 
 	key := roachpb.Key("db-txn-test")
 	value := []byte("value")
@@ -257,7 +261,7 @@ func TestKVDBTransaction(t *testing.T) {
 // TestAuthentication tests authentication for the KV endpoint.
 func TestAuthentication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _ := startNoSplitServer(t)
 	defer s.Stopper().Stop(context.TODO())
 
 	b1 := &client.Batch{}

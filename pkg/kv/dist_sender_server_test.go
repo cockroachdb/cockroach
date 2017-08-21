@@ -51,9 +51,8 @@ import (
 // index record being read.
 func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _ := startNoSplitServer(t)
 	defer s.Stopper().Stop(context.TODO())
-	db := createTestClient(t, s)
 
 	// Create an intent on the meta1 record by writing directly to the
 	// engine.
@@ -65,6 +64,18 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 		nil, key, now, &txn, &roachpb.RangeDescriptor{}); err != nil {
 		t.Fatal(err)
 	}
+
+	// Create a new DistSender and client.DB so that the Get below is guaranteed
+	// to not hit in the range descriptor cache forcing a RangeLookup operation.
+	ds := kv.NewDistSender(
+		kv.DistSenderConfig{
+			AmbientCtx: log.AmbientContext{Tracer: s.ClusterSettings().Tracer},
+			Clock:      s.Clock(),
+			RPCContext: s.RPCContext(),
+		},
+		s.(*server.TestServer).Gossip(),
+	)
+	db := client.NewDB(ds, s.Clock())
 
 	// Now, with an intent pending, attempt (asynchronously) to read
 	// from an arbitrary key. This will cause the distributed sender to
@@ -84,7 +95,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 func setupMultipleRanges(
 	t *testing.T, s serverutils.TestServerInterface, splitAt ...string,
 ) *client.DB {
-	db := createTestClient(t, s)
+	db := s.KVClient().(*client.DB)
 
 	// Split the keyspace at the given keys.
 	for _, key := range splitAt {
@@ -217,7 +228,7 @@ func checkReverseScanResults(
 // Tests multiple scans across many ranges with multiple bounds.
 func TestMultiRangeBoundedBatchScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _ := startNoSplitServer(t)
 	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
 
@@ -288,7 +299,7 @@ func TestMultiRangeBoundedBatchScan(t *testing.T) {
 // Tests multiple reverse scans across many ranges with multiple bounds.
 func TestMultiRangeBoundedBatchReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _ := startNoSplitServer(t)
 	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
 
@@ -362,7 +373,7 @@ func TestMultiRangeBoundedBatchReverseScan(t *testing.T) {
 // contain two partial responses.
 func TestMultiRangeBoundedBatchScanUnsortedOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _ := startNoSplitServer(t)
 	defer s.Stopper().Stop(context.TODO())
 
 	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f")
@@ -396,7 +407,7 @@ func TestMultiRangeBoundedBatchScanUnsortedOrder(t *testing.T) {
 // contain two partial responses.
 func TestMultiRangeBoundedBatchScanSortedOverlapping(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _ := startNoSplitServer(t)
 	defer s.Stopper().Stop(context.TODO())
 
 	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f")
@@ -460,7 +471,7 @@ func checkResumeSpanDelRangeResults(
 // Tests a batch of bounded DelRange() requests.
 func TestMultiRangeBoundedBatchDelRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _ := startNoSplitServer(t)
 	defer s.Stopper().Stop(context.TODO())
 
 	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f", "g", "h")
@@ -524,7 +535,7 @@ func TestMultiRangeBoundedBatchDelRange(t *testing.T) {
 // ResumeSpan.
 func TestMultiRangeBoundedBatchDelRangeBoundary(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _ := startNoSplitServer(t)
 	defer s.Stopper().Stop(context.TODO())
 
 	db := setupMultipleRanges(t, s, "a", "b")
@@ -566,7 +577,7 @@ func TestMultiRangeBoundedBatchDelRangeBoundary(t *testing.T) {
 // overlap.
 func TestMultiRangeBoundedBatchDelRangeOverlappingKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _ := startNoSplitServer(t)
 	defer s.Stopper().Stop(context.TODO())
 
 	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f")
@@ -628,7 +639,7 @@ func TestMultiRangeBoundedBatchDelRangeOverlappingKeys(t *testing.T) {
 // truncation. In that case, the request is skipped.
 func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _ := startNoSplitServer(t)
 	defer s.Stopper().Stop(context.TODO())
 	db := setupMultipleRanges(t, s, "c", "d")
 
@@ -647,7 +658,7 @@ func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 // TestMultiRequestBatchWithFwdAndReverseRequests are disallowed.
 func TestMultiRequestBatchWithFwdAndReverseRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _ := startNoSplitServer(t)
 	defer s.Stopper().Stop(context.TODO())
 	db := setupMultipleRanges(t, s, "a", "b")
 	b := &client.Batch{}
@@ -665,7 +676,7 @@ func TestMultiRequestBatchWithFwdAndReverseRequests(t *testing.T) {
 // DeleteRange and ResolveIntentRange work across ranges.
 func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _ := startNoSplitServer(t)
 	defer s.Stopper().Stop(context.TODO())
 	db := setupMultipleRanges(t, s, "b")
 
@@ -720,7 +731,7 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _ := startNoSplitServer(t)
 	defer s.Stopper().Stop(context.TODO())
 	db := setupMultipleRanges(t, s, "b")
 
@@ -799,11 +810,9 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 // dist sender.
 func TestParallelSender(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db := startNoSplitServer(t)
 	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
-
-	db := createTestClient(t, s)
 
 	// Split into multiple ranges.
 	splitKeys := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"}
@@ -844,7 +853,7 @@ func TestParallelSender(t *testing.T) {
 }
 
 func initReverseScanTestEnv(s serverutils.TestServerInterface, t *testing.T) *client.DB {
-	db := createTestClient(t, s)
+	db := s.KVClient().(*client.DB)
 
 	// Set up multiple ranges:
 	// ["", "b"),["b", "e") ,["e", "g") and ["g", "\xff\xff").
@@ -867,7 +876,7 @@ func initReverseScanTestEnv(s serverutils.TestServerInterface, t *testing.T) *cl
 // on a single range.
 func TestSingleRangeReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _ := startNoSplitServer(t)
 	defer s.Stopper().Stop(context.TODO())
 	db := initReverseScanTestEnv(s, t)
 	ctx := context.TODO()
@@ -912,7 +921,7 @@ func TestSingleRangeReverseScan(t *testing.T) {
 // across multiple ranges.
 func TestMultiRangeReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _ := startNoSplitServer(t)
 	defer s.Stopper().Stop(context.TODO())
 	db := initReverseScanTestEnv(s, t)
 	ctx := context.TODO()
@@ -942,10 +951,8 @@ func TestMultiRangeReverseScan(t *testing.T) {
 // #12603 for more details.
 func TestBatchPutWithConcurrentSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db := startNoSplitServer(t)
 	defer s.Stopper().Stop(context.TODO())
-
-	db := createTestClient(t, s)
 
 	// Split first using the default client and scan to make sure that
 	// the range descriptor cache reflects the split.
@@ -996,7 +1003,7 @@ func TestBatchPutWithConcurrentSplit(t *testing.T) {
 // across multiple ranges while range splits and merges happen.
 func TestReverseScanWithSplitAndMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _ := startNoSplitServer(t)
 	defer s.Stopper().Stop(context.TODO())
 	db := initReverseScanTestEnv(s, t)
 
@@ -1027,9 +1034,8 @@ func TestReverseScanWithSplitAndMerge(t *testing.T) {
 
 func TestBadRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db := startNoSplitServer(t)
 	defer s.Stopper().Stop(context.TODO())
-	db := createTestClient(t, s)
 	ctx := context.TODO()
 
 	// Write key "a".
@@ -1059,7 +1065,7 @@ func TestBadRequest(t *testing.T) {
 // higher-level version of TestSequenceCacheShouldCache.
 func TestNoSequenceCachePutOnRangeMismatchError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _ := startNoSplitServer(t)
 	defer s.Stopper().Stop(context.TODO())
 	db := setupMultipleRanges(t, s, "b", "c")
 
