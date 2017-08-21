@@ -146,10 +146,16 @@ func RunTests(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+// turns someTest#123 into someTest when invoked with ReplicaAllLiteralString.
+// This is useful because the go test harness automatically disambiguates
+// subtests in that way when they are invoked multiple times with the same name,
+// and we sometimes call RunDocker multiple times in tests.
+var reStripTestEnumeration = regexp.MustCompile(`#\d+$`)
+
 const (
-	bareTest   = "bare"
-	dockerTest = "docker"
-	farmerTest = "farmer"
+	bareTest   = "runMode=bare"
+	dockerTest = "runMode=docker"
+	farmerTest = "runMode=farmer"
 )
 
 // RunBare runs the given acceptance test using a bare cluster.
@@ -450,10 +456,28 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 			t.Fatalf("cluster not ready in time: %s", err)
 		}
 	} else {
-		// The trailing "/" avoids having to bail early if len(parts) == 1.
-		parts := strings.Split(t.Name()+"/", "/")
+		parts := strings.Split(t.Name(), "/")
+		if len(parts) < 2 {
+			t.Fatal("must invoke RunBare, RunDocker, or RunFarmer")
+		}
 
-		switch parts[1] {
+		var runMode string
+		for _, part := range parts[1:] {
+			part = reStripTestEnumeration.ReplaceAllLiteralString(part, "")
+			switch part {
+			case bareTest:
+				fallthrough
+			case dockerTest:
+				fallthrough
+			case farmerTest:
+				if runMode != "" {
+					t.Fatalf("test has more than one run mode: %s and %s", runMode, part)
+				}
+				runMode = part
+			}
+		}
+
+		switch runMode {
 		case bareTest:
 			pwd, err := os.Getwd()
 			if err != nil {
@@ -485,7 +509,7 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 			c = l
 
 		default:
-			t.Fatalf("unable to run in mode '%q', use either RunBare, RunDocker, or RunFarmer", parts[1])
+			t.Fatalf("unable to run in mode %q, use either RunBare, RunDocker, or RunFarmer", parts[1])
 		}
 	}
 
@@ -613,27 +637,29 @@ const (
 func testDocker(
 	ctx context.Context, t *testing.T, num int32, name string, containerConfig container.Config,
 ) error {
-	SkipUnlessLocal(t)
-	cfg := cluster.TestConfig{
-		Name:     name,
-		Duration: *flagDuration,
-		Nodes:    []cluster.NodeConfig{{Count: num, Stores: []cluster.StoreConfig{{Count: 1}}}},
-	}
-	l := StartCluster(ctx, t, cfg).(*cluster.LocalCluster)
-	defer l.AssertAndStop(ctx, t)
+	var rErr error
+	RunDocker(t, func(t *testing.T) {
+		cfg := cluster.TestConfig{
+			Name:     name,
+			Duration: *flagDuration,
+			Nodes:    []cluster.NodeConfig{{Count: num, Stores: []cluster.StoreConfig{{Count: 1}}}},
+		}
+		l := StartCluster(ctx, t, cfg).(*cluster.LocalCluster)
+		defer l.AssertAndStop(ctx, t)
 
-	if len(l.Nodes) > 0 {
-		containerConfig.Env = append(containerConfig.Env, "PGHOST="+l.Hostname(0))
-	}
-	hostConfig := container.HostConfig{NetworkMode: "host"}
-	if err := l.OneShot(
-		ctx, postgresTestImage, types.ImagePullOptions{}, containerConfig, hostConfig, "docker-"+name,
-	); err != nil {
-		return err
-	}
-	// Clean up the log files if the run was successful.
-	l.Cleanup(ctx)
-	return nil
+		if len(l.Nodes) > 0 {
+			containerConfig.Env = append(containerConfig.Env, "PGHOST="+l.Hostname(0))
+		}
+		hostConfig := container.HostConfig{NetworkMode: "host"}
+		if err := l.OneShot(
+			ctx, postgresTestImage, types.ImagePullOptions{}, containerConfig, hostConfig, "docker-"+name,
+		); err != nil {
+			rErr = err
+		}
+		// Clean up the log files if the run was successful.
+		l.Cleanup(ctx)
+	})
+	return rErr
 }
 
 func testDockerSingleNode(
