@@ -59,6 +59,8 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
         {this.renderLogInfoDescriptor("New Range Descriptor", info.new_desc)}
         {this.renderLogInfoDescriptor("Added Replica", info.added_replica)}
         {this.renderLogInfoDescriptor("Removed Replica", info.removed_replica)}
+        {this.renderLogInfoDescriptor("Reason", info.reason)}
+        {this.renderLogInfoDescriptor("Details", info.details)}
       </ul>
     );
   }

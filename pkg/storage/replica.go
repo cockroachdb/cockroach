@@ -2309,7 +2309,8 @@ func (r *Replica) executeAdminBatch(
 	case *roachpb.AdminChangeReplicasRequest:
 		var err error
 		for _, target := range tArgs.Targets {
-			err = r.ChangeReplicas(ctx, tArgs.ChangeType, target, r.Desc())
+			err = r.ChangeReplicas(
+				ctx, tArgs.ChangeType, target, r.Desc(), ReasonAdminRequest, "")
 			if err != nil {
 				break
 			}

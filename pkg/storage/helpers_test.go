@@ -139,8 +139,10 @@ func (s *Store) LogReplicaChangeTest(
 	changeType roachpb.ReplicaChangeType,
 	replica roachpb.ReplicaDescriptor,
 	desc roachpb.RangeDescriptor,
+	reason RangeLogEventReason,
+	details string,
 ) error {
-	return s.logChange(ctx, txn, changeType, replica, desc)
+	return s.logChange(ctx, txn, changeType, replica, desc, reason, details)
 }
 
 // ReplicateQueuePurgatoryLength returns the number of replicas in replicate

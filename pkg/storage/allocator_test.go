@@ -264,7 +264,7 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
 	defer stopper.Stop(context.Background())
 	gossiputil.NewStoreGossiper(g).GossipStores(singleStore, t)
-	result, err := a.AllocateTarget(
+	result, _, err := a.AllocateTarget(
 		context.Background(),
 		simpleZoneConfig.Constraints,
 		[]roachpb.ReplicaDescriptor{},
@@ -298,7 +298,7 @@ func TestAllocatorCorruptReplica(t *testing.T) {
 		}}
 	sp.detailsMu.Unlock()
 
-	result, err := a.AllocateTarget(
+	result, _, err := a.AllocateTarget(
 		context.Background(),
 		simpleZoneConfig.Constraints,
 		[]roachpb.ReplicaDescriptor{},
@@ -318,7 +318,7 @@ func TestAllocatorNoAvailableDisks(t *testing.T) {
 
 	stopper, _, _, a, _ := createTestAllocator( /* deterministic */ false)
 	defer stopper.Stop(context.Background())
-	result, err := a.AllocateTarget(
+	result, _, err := a.AllocateTarget(
 		context.Background(),
 		simpleZoneConfig.Constraints,
 		[]roachpb.ReplicaDescriptor{},
@@ -340,7 +340,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 	defer stopper.Stop(context.Background())
 	gossiputil.NewStoreGossiper(g).GossipStores(multiDCStores, t)
 	ctx := context.Background()
-	result1, err := a.AllocateTarget(
+	result1, _, err := a.AllocateTarget(
 		ctx,
 		multiDCConfig.Constraints,
 		[]roachpb.ReplicaDescriptor{},
@@ -350,7 +350,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
-	result2, err := a.AllocateTarget(
+	result2, _, err := a.AllocateTarget(
 		ctx,
 		multiDCConfig.Constraints,
 		[]roachpb.ReplicaDescriptor{{
@@ -369,7 +369,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 		t.Errorf("Expected nodes %+v: %+v vs %+v", expected, result1.Node, result2.Node)
 	}
 	// Verify that no result is forthcoming if we already have a replica.
-	result3, err := a.AllocateTarget(
+	result3, _, err := a.AllocateTarget(
 		ctx,
 		multiDCConfig.Constraints,
 		[]roachpb.ReplicaDescriptor{
@@ -396,7 +396,7 @@ func TestAllocatorExistingReplica(t *testing.T) {
 	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
 	defer stopper.Stop(context.Background())
 	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
-	result, err := a.AllocateTarget(
+	result, _, err := a.AllocateTarget(
 		context.Background(),
 		config.Constraints{
 			Constraints: []config.Constraint{
@@ -580,7 +580,7 @@ func TestAllocatorRelaxConstraints(t *testing.T) {
 			for _, id := range test.existing {
 				existing = append(existing, roachpb.ReplicaDescriptor{NodeID: roachpb.NodeID(id), StoreID: roachpb.StoreID(id)})
 			}
-			result, err := a.AllocateTarget(
+			result, _, err := a.AllocateTarget(
 				context.Background(),
 				config.Constraints{Constraints: test.constraints},
 				existing,
@@ -655,7 +655,7 @@ func TestAllocatorRebalance(t *testing.T) {
 
 	// Every rebalance target must be either store 1 or 2.
 	for i := 0; i < 10; i++ {
-		result := a.RebalanceTarget(
+		result, _ := a.RebalanceTarget(
 			ctx,
 			config.Constraints{},
 			testRangeInfo([]roachpb.ReplicaDescriptor{{StoreID: 3}}, firstRange),
@@ -754,7 +754,7 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			result := a.RebalanceTarget(
+			result, _ := a.RebalanceTarget(
 				ctx, config.Constraints{}, testRangeInfo(c.existing, firstRange), storeFilterThrottled)
 			if c.expected > 0 {
 				if result == nil {
@@ -947,7 +947,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 
 	// Every rebalance target must be store 4 (or nil for case of missing the only option).
 	for i := 0; i < 10; i++ {
-		result := a.RebalanceTarget(
+		result, _ := a.RebalanceTarget(
 			ctx,
 			config.Constraints{},
 			testRangeInfo([]roachpb.ReplicaDescriptor{{StoreID: stores[0].StoreID}}, firstRange),
@@ -1501,7 +1501,7 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 
 	// Repeat this test 10 times, it should always be either store 2 or 3.
 	for i := 0; i < 10; i++ {
-		targetRepl, err := a.RemoveTarget(
+		targetRepl, _, err := a.RemoveTarget(
 			ctx,
 			config.Constraints{},
 			replicas,
@@ -2247,7 +2247,7 @@ func TestAllocatorThrottled(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	// First test to make sure we would send the replica to purgatory.
-	_, err := a.AllocateTarget(
+	_, _, err := a.AllocateTarget(
 		ctx,
 		simpleZoneConfig.Constraints,
 		[]roachpb.ReplicaDescriptor{},
@@ -2260,7 +2260,7 @@ func TestAllocatorThrottled(t *testing.T) {
 
 	// Second, test the normal case in which we can allocate to the store.
 	gossiputil.NewStoreGossiper(g).GossipStores(singleStore, t)
-	result, err := a.AllocateTarget(
+	result, _, err := a.AllocateTarget(
 		ctx,
 		simpleZoneConfig.Constraints,
 		[]roachpb.ReplicaDescriptor{},
@@ -2283,7 +2283,7 @@ func TestAllocatorThrottled(t *testing.T) {
 	}
 	storeDetail.throttledUntil = timeutil.Now().Add(24 * time.Hour)
 	a.storePool.detailsMu.Unlock()
-	_, err = a.AllocateTarget(
+	_, _, err = a.AllocateTarget(
 		ctx,
 		simpleZoneConfig.Constraints,
 		[]roachpb.ReplicaDescriptor{},
@@ -2530,7 +2530,7 @@ func TestAllocatorRebalanceAway(t *testing.T) {
 				},
 			}
 
-			actual := a.RebalanceTarget(
+			actual, _ := a.RebalanceTarget(
 				ctx,
 				constraints,
 				testRangeInfo(existingReplicas, firstRange),
@@ -2649,7 +2649,7 @@ func Example_rebalancing() {
 		// Next loop through test stores and maybe rebalance.
 		for j := 0; j < len(testStores); j++ {
 			ts := &testStores[j]
-			target := alloc.RebalanceTarget(
+			target, _ := alloc.RebalanceTarget(
 				context.Background(),
 				config.Constraints{},
 				testRangeInfo([]roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}}, firstRange),

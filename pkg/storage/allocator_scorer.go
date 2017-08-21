@@ -72,8 +72,10 @@ type candidate struct {
 }
 
 func (c candidate) String() string {
-	return fmt.Sprintf("s%d, valid:%t, constraint:%.2f, converges:%d, balance:%s, rangeCount:%d, details:(%s)",
-		c.store.StoreID, c.valid, c.constraintScore, c.convergesScore, c.balanceScore, c.rangeCount, c.details)
+	return fmt.Sprintf("s%d, valid:%t, constraint:%.2f, converges:%d, balance:%s, rangeCount:%d, "+
+		"logicalBytes:%s, writesPerSecond:%.2f, details:(%s)",
+		c.store.StoreID, c.valid, c.constraintScore, c.convergesScore, c.balanceScore, c.rangeCount,
+		humanizeutil.IBytes(c.store.Capacity.LogicalBytes), c.store.Capacity.WritesPerSecond, c.details)
 }
 
 // less returns true if o is a better fit for some range than c is.
@@ -205,13 +207,13 @@ func (cl candidateList) betterThan(c candidate) candidateList {
 
 // selectGood randomly chooses a good candidate store from a sorted (by score
 // reversed) candidate list using the provided random generator.
-func (cl candidateList) selectGood(randGen allocatorRand) *roachpb.StoreDescriptor {
+func (cl candidateList) selectGood(randGen allocatorRand) *candidate {
 	if len(cl) == 0 {
 		return nil
 	}
 	cl = cl.best()
 	if len(cl) == 1 {
-		return &cl[0].store
+		return &cl[0]
 	}
 	randGen.Lock()
 	order := randGen.Perm(len(cl))
@@ -222,18 +224,18 @@ func (cl candidateList) selectGood(randGen allocatorRand) *roachpb.StoreDescript
 			best = &cl[order[i]]
 		}
 	}
-	return &best.store
+	return best
 }
 
 // selectBad randomly chooses a bad candidate store from a sorted (by score
 // reversed) candidate list using the provided random generator.
-func (cl candidateList) selectBad(randGen allocatorRand) *roachpb.StoreDescriptor {
+func (cl candidateList) selectBad(randGen allocatorRand) *candidate {
 	if len(cl) == 0 {
 		return nil
 	}
 	cl = cl.worst()
 	if len(cl) == 1 {
-		return &cl[0].store
+		return &cl[0]
 	}
 	randGen.Lock()
 	order := randGen.Perm(len(cl))
@@ -244,7 +246,7 @@ func (cl candidateList) selectBad(randGen allocatorRand) *roachpb.StoreDescripto
 			worst = &cl[order[i]]
 		}
 	}
-	return &worst.store
+	return worst
 }
 
 // allocateCandidates creates a candidate list of all stores that can be used
