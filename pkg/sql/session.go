@@ -656,7 +656,12 @@ func (s *Session) setQueryExecutionMode(
 	queryID uint128.Uint128, isDistributed bool, isParallel bool,
 ) {
 	s.mu.Lock()
-	queryMeta := s.mu.ActiveQueries[queryID]
+	queryMeta, ok := s.mu.ActiveQueries[queryID]
+	if !ok {
+		// Could be an ignored statement type.
+		s.mu.Unlock()
+		return
+	}
 	queryMeta.phase = executing
 	queryMeta.isDistributed = isDistributed
 	s.mu.Unlock()

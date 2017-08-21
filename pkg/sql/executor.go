@@ -1094,12 +1094,17 @@ func (e *Executor) execStmtsInCurrentTxn(
 		queryMeta.ctx = txnState.Ctx
 		queryMeta.ctxCancel = txnState.cancel
 
-		// For parallel/async queries, we deregister queryMeta from these registries
-		// after execution finishes in the parallelizeQueue. For all other (synchronous) queries,
-		// we deregister these in session.FinishPlan when all results have been sent. We cannot
-		// deregister asynchronous queries in session.FinishPlan because they may still be
-		// executing at that instant.
-		session.addActiveQuery(queryID, queryMeta)
+		// Ignore statements that spawn jobs from SHOW QUERIES and from being cancellable using CANCEL QUERY.
+		// Jobs have their own run control statements (CANCEL JOB, PAUSE JOB, etc).
+		// We implement this ignore by not registering queryMeta in session.mu.ActiveQueries.
+		if _, ok := stmt.AST.(parser.HiddenFromShowQueries); !ok {
+			// For parallel/async queries, we deregister queryMeta from these registries
+			// after execution finishes in the parallelizeQueue. For all other (synchronous) queries,
+			// we deregister these in session.FinishPlan when all results have been sent. We cannot
+			// deregister asynchronous queries in session.FinishPlan because they may still be
+			// executing at that instant.
+			session.addActiveQuery(queryID, queryMeta)
+		}
 
 		var stmtStrBefore string
 		// TODO(nvanbenschoten): Constant literals can change their representation (1.0000 -> 1) when type checking,
