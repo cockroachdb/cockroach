@@ -184,6 +184,12 @@ export default function Debug() {
             url="/_status/range/1"
             note="/_status/range/[range_id]"
           />
+          <DebugTableLink name="Range Log" url="/_admin/v1/rangelog?limit=100" />
+          <DebugTableLink
+            name="Range Log for Specific Range"
+            url="/_admin/v1/rangelog/1?limit=100"
+            note="/_admin/v1/rangelog/[range_id]?limit=100"
+          />
         </DebugTableRow>
       </DebugTable>
       <h3>Change Logging Level (vmodule)</h3>
