@@ -15,7 +15,7 @@
 package sql
 
 import (
-	"errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // Interval of rows to wait between cancellation checks.
@@ -69,7 +69,7 @@ func (c *cancelChecker) Check() error {
 	c.rowsSinceLastCheck++
 
 	if c.isCancelled {
-		return errors.New("query execution cancelled")
+		return sqlbase.NewQueryCanceledError()
 	}
 	return nil
 }

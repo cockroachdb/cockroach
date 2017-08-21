@@ -25,7 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -76,7 +76,7 @@ func TestCancelSelectQuery(t *testing.T) {
 
 	select {
 	case err := <-errChan:
-		if !strings.Contains(err.Error(), "query execution cancelled") {
+		if !sqlbase.IsQueryCanceledError(err) {
 			t.Fatal(err)
 		}
 	case <-time.After(time.Second * 5):
@@ -121,7 +121,7 @@ func TestCancelParallelQuery(t *testing.T) {
 								// Ensure queryToBlock errored out with the cancellation error.
 								if err == nil {
 									errChan <- errors.New("didn't get an error from query that should have been indirectly cancelled")
-								} else if !testutils.IsError(err, ".*query execution cancelled.*") {
+								} else if !sqlbase.IsQueryCanceledError(err) {
 									errChan <- err
 								}
 								close(errChan)
@@ -160,7 +160,7 @@ func TestCancelParallelQuery(t *testing.T) {
 	// Start the txn. Both queries should run in parallel - and queryToBlock
 	// should error out.
 	_, err := conn1.Exec(sqlToRun)
-	if err != nil && !testutils.IsError(err, ".*query execution cancelled.*") {
+	if err != nil && !sqlbase.IsQueryCanceledError(err) {
 		t.Fatal(err)
 	} else if err == nil {
 		t.Fatal("didn't get an error from txn that should have been cancelled")
