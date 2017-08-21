@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -971,8 +972,7 @@ func (s *Store) SetDraining(drain bool) {
 						r,
 						desc,
 						zone,
-						false, /* checkTransferLeaseSource */
-						false, /* checkCandidateFullness */
+						transferLeaseOptions{},
 					); log.V(1) && err != nil {
 						log.Errorf(ctx, "error transferring lease when draining: %s", err)
 					}
@@ -2283,7 +2283,7 @@ func (s *Store) Capacity() (roachpb.StoreCapacity, error) {
 	bytesPerReplica := make([]float64, 0, capacity.RangeCount)
 	writesPerReplica := make([]float64, 0, capacity.RangeCount)
 	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
-		if r.ownsValidLease(now) {
+		if r.OwnsValidLease(now) {
 			leaseCount++
 		}
 		mvccStats := r.GetMVCCStats()
@@ -4153,6 +4153,27 @@ func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (enginepb.
 	})
 
 	return output, count
+}
+
+// AllocatorDryRun runs the given replica through the allocator without actually
+// carrying out any changes, returning all trace messages collected along the way.
+// Intended to help power a debug endpoint.
+func (s *Store) AllocatorDryRun(
+	ctx context.Context, repl *Replica,
+) ([]tracing.RecordedSpan, error) {
+	sysCfg, ok := s.cfg.Gossip.GetSystemConfig()
+	if !ok {
+		return nil, errors.New("allocator dry runs require a valid system config")
+	}
+	ctx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "allocator dry run")
+	defer cancel()
+	canTransferLease := func() bool { return true }
+	_, err := s.replicateQueue.processOneChange(
+		ctx, repl, sysCfg, canTransferLease, true /* dryRun */)
+	if err != nil {
+		log.Eventf(ctx, "error simulating allocator on replica %s: %s", repl, err)
+	}
+	return collect(), nil
 }
 
 // WriteClusterVersion writes the given cluster version to the store-local cluster version key.

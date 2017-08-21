@@ -215,9 +215,7 @@ func (a *Allocator) ComputeAction(
 		// Priority is adjusted by the difference between the current replica
 		// count and the quorum of the desired replica count.
 		priority := addMissingReplicaPriority + float64(quorum-have)
-		if log.V(3) {
-			log.Infof(ctx, "AllocatorAdd - missing replica need=%d, have=%d, priority=%.2f", need, have, priority)
-		}
+		log.VEventf(ctx, 3, "AllocatorAdd - missing replica need=%d, have=%d, priority=%.2f", need, have, priority)
 		return AllocatorAdd, priority
 	}
 
@@ -227,9 +225,8 @@ func (a *Allocator) ComputeAction(
 		// another replica. The decommissioning replica(s) will be down-replicated
 		// later.
 		priority := addDecommissioningReplacementPriority
-		if log.V(3) {
-			log.Infof(ctx, "AllocatorAdd - replacement for %d decommissioning replicas priority=%.2f", len(decommissioningReplicas), priority)
-		}
+		log.VEventf(ctx, 3, "AllocatorAdd - replacement for %d decommissioning replicas priority=%.2f",
+			len(decommissioningReplicas), priority)
 		return AllocatorAdd, priority
 	}
 
@@ -267,10 +264,8 @@ func (a *Allocator) ComputeAction(
 		if removeDead {
 			// Adjust the priority by the distance of live replicas from quorum.
 			priority := removeDeadReplicaPriority + float64(quorum-len(liveReplicas))
-			if log.V(3) {
-				log.Infof(ctx, "AllocatorRemoveDead - dead=%d, live=%d, quorum=%d, priority=%.2f",
-					len(deadReplicas), len(liveReplicas), quorum, priority)
-			}
+			log.VEventf(ctx, 3, "AllocatorRemoveDead - dead=%d, live=%d, quorum=%d, priority=%.2f",
+				len(deadReplicas), len(liveReplicas), quorum, priority)
 			return AllocatorRemoveDead, priority
 		}
 	}
@@ -279,11 +274,9 @@ func (a *Allocator) ComputeAction(
 		// Range is over-replicated, and has a decommissioning replica which
 		// should be removed.
 		priority := removeDecommissioningReplicaPriority
-		if log.V(3) {
-			log.Infof(
-				ctx, "AllocatorRemoveDecommissioning - need=%d, have=%d, num_decommissioning=%d, priority=%.2f",
-				need, have, len(decommissioningReplicas), priority)
-		}
+		log.VEventf(ctx, 3,
+			"AllocatorRemoveDecommissioning - need=%d, have=%d, num_decommissioning=%d, priority=%.2f",
+			need, have, len(decommissioningReplicas), priority)
 		return AllocatorRemoveDecommissioning, priority
 	}
 
@@ -292,9 +285,7 @@ func (a *Allocator) ComputeAction(
 		// Ranges with an even number of replicas get extra priority because
 		// they have a more fragile quorum.
 		priority := removeExtraReplicaPriority - float64(have%2)
-		if log.V(3) {
-			log.Infof(ctx, "AllocatorRemove - need=%d, have=%d, priority=%.2f", need, have, priority)
-		}
+		log.VEventf(ctx, 3, "AllocatorRemove - need=%d, have=%d, priority=%.2f", need, have, priority)
 		return AllocatorRemove, priority
 	}
 
@@ -334,13 +325,9 @@ func (a *Allocator) AllocateTarget(
 		a.storePool.getLocalities(existing),
 		a.storePool.deterministic,
 	)
-	if log.V(3) {
-		log.Infof(ctx, "allocate candidates: %s", candidates)
-	}
+	log.VEventf(ctx, 3, "allocate candidates: %s", candidates)
 	if target := candidates.selectGood(a.randGen); target != nil {
-		if log.V(3) {
-			log.Infof(ctx, "add target: %s", target)
-		}
+		log.VEventf(ctx, 3, "add target: %s", target)
 		details, err := json.Marshal(decisionDetails{
 			Target:               target.String(),
 			RangeBytes:           rangeInfo.LogicalBytes,
@@ -392,15 +379,11 @@ func (a Allocator) RemoveTarget(
 		a.storePool.getLocalities(rangeInfo.Desc.Replicas),
 		a.storePool.deterministic,
 	)
-	if log.V(3) {
-		log.Infof(ctx, "remove candidates: %s", rankedCandidates)
-	}
+	log.VEventf(ctx, 3, "remove candidates: %s", rankedCandidates)
 	if bad := rankedCandidates.selectBad(a.randGen); bad != nil {
 		for _, exist := range rangeInfo.Desc.Replicas {
 			if exist.StoreID == bad.store.StoreID {
-				if log.V(3) {
-					log.Infof(ctx, "remove target: %s", bad)
-				}
+				log.VEventf(ctx, 3, "remove target: %s", bad)
 				details, err := json.Marshal(decisionDetails{
 					Target:               bad.String(),
 					RangeBytes:           rangeInfo.LogicalBytes,
@@ -478,10 +461,8 @@ func (a Allocator) RebalanceTarget(
 	// Find all candidates that are better than the worst existing replica.
 	targets := candidates.betterThan(existingCandidates[len(existingCandidates)-1])
 	target := targets.selectGood(a.randGen)
-	if log.V(3) {
-		log.Infof(ctx, "rebalance candidates: %s\nexisting replicas: %s\ntarget: %s",
-			candidates, existingCandidates, target)
-	}
+	log.VEventf(ctx, 3, "rebalance candidates: %s\nexisting replicas: %s\ntarget: %s",
+		candidates, existingCandidates, target)
 	if target == nil {
 		return nil, ""
 	}
@@ -609,9 +590,7 @@ func (a *Allocator) ShouldTransferLease(
 	}
 	sl, _, _ := a.storePool.getStoreList(rangeID, storeFilterNone)
 	sl = sl.filter(constraints)
-	if log.V(3) {
-		log.Infof(ctx, "ShouldTransferLease (lease-holder=%d):\n%s", leaseStoreID, sl)
-	}
+	log.VEventf(ctx, 3, "ShouldTransferLease (lease-holder=%d):\n%s", leaseStoreID, sl)
 
 	transferDec, _ := a.shouldTransferLeaseUsingStats(ctx, sl, source, existing, stats)
 	var result bool
@@ -626,9 +605,7 @@ func (a *Allocator) ShouldTransferLease(
 		log.Fatalf(ctx, "unexpected transfer decision %d", transferDec)
 	}
 
-	if log.V(3) {
-		log.Infof(ctx, "ShouldTransferLease decision (lease-holder=%d): %t", leaseStoreID, result)
-	}
+	log.VEventf(ctx, 3, "ShouldTransferLease decision (lease-holder=%d): %t", leaseStoreID, result)
 	return result
 }
 
@@ -684,11 +661,9 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 		}
 	}
 
-	if log.V(1) {
-		log.Infof(ctx,
-			"shouldTransferLease qpsStats: %+v, replicaLocalities: %+v, replicaWeights: %+v",
-			qpsStats, replicaLocalities, replicaWeights)
-	}
+	log.VEventf(ctx, 1,
+		"shouldTransferLease qpsStats: %+v, replicaLocalities: %+v, replicaWeights: %+v",
+		qpsStats, replicaLocalities, replicaWeights)
 	sourceWeight := math.Max(minReplicaWeight, replicaWeights[source.Node.NodeID])
 
 	// TODO(a-robinson): This may not have enough protection against all leases
@@ -790,16 +765,14 @@ func loadBasedLeaseRebalanceScore(
 	underfullScore := underfullLeaseThreshold - remoteStore.Capacity.LeaseCount
 	totalScore := overfullScore + underfullScore
 
-	if log.V(1) {
-		log.Infof(ctx,
-			"node: %d, sourceWeight: %.2f, remoteWeight: %.2f, remoteLatency: %v, "+
-				"rebalanceThreshold: %.2f, meanLeases: %.2f, sourceLeaseCount: %d, overfullThreshold: %d, "+
-				"remoteLeaseCount: %d, underfullThreshold: %d, totalScore: %d",
-			remoteStore.Node.NodeID, sourceWeight, remoteWeight, remoteLatency,
-			rebalanceThreshold, meanLeases, source.Capacity.LeaseCount, overfullLeaseThreshold,
-			remoteStore.Capacity.LeaseCount, underfullLeaseThreshold, totalScore,
-		)
-	}
+	log.VEventf(ctx, 1,
+		"node: %d, sourceWeight: %.2f, remoteWeight: %.2f, remoteLatency: %v, "+
+			"rebalanceThreshold: %.2f, meanLeases: %.2f, sourceLeaseCount: %d, overfullThreshold: %d, "+
+			"remoteLeaseCount: %d, underfullThreshold: %d, totalScore: %d",
+		remoteStore.Node.NodeID, sourceWeight, remoteWeight, remoteLatency,
+		rebalanceThreshold, meanLeases, source.Capacity.LeaseCount, overfullLeaseThreshold,
+		remoteStore.Capacity.LeaseCount, underfullLeaseThreshold, totalScore,
+	)
 	return totalScore
 }
 
