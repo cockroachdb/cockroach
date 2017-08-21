@@ -114,6 +114,9 @@ var (
 	metaValBytes = metric.Metadata{
 		Name: "valbytes",
 		Help: "Number of bytes taken up by values"}
+	metaTotalBytes = metric.Metadata{
+		Name: "totalbytes",
+		Help: "Total number of bytes taken up by keys and values including non-live data"}
 	metaIntentBytes = metric.Metadata{
 		Name: "intentbytes",
 		Help: "Number of bytes in intent KV pairs"}
@@ -510,6 +513,7 @@ type StoreMetrics struct {
 	LiveBytes       *metric.Gauge
 	KeyBytes        *metric.Gauge
 	ValBytes        *metric.Gauge
+	TotalBytes      *metric.Gauge
 	IntentBytes     *metric.Gauge
 	LiveCount       *metric.Gauge
 	KeyCount        *metric.Gauge
@@ -702,6 +706,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		LiveBytes:       metric.NewGauge(metaLiveBytes),
 		KeyBytes:        metric.NewGauge(metaKeyBytes),
 		ValBytes:        metric.NewGauge(metaValBytes),
+		TotalBytes:      metric.NewGauge(metaTotalBytes),
 		IntentBytes:     metric.NewGauge(metaIntentBytes),
 		LiveCount:       metric.NewGauge(metaLiveCount),
 		KeyCount:        metric.NewGauge(metaKeyCount),
@@ -868,6 +873,7 @@ func (sm *StoreMetrics) updateMVCCGaugesLocked() {
 	sm.LiveBytes.Update(sm.mu.stats.LiveBytes)
 	sm.KeyBytes.Update(sm.mu.stats.KeyBytes)
 	sm.ValBytes.Update(sm.mu.stats.ValBytes)
+	sm.TotalBytes.Update(sm.mu.stats.Total())
 	sm.IntentBytes.Update(sm.mu.stats.IntentBytes)
 	sm.LiveCount.Update(sm.mu.stats.LiveCount)
 	sm.KeyCount.Update(sm.mu.stats.KeyCount)
