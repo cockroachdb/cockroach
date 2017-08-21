@@ -48,6 +48,7 @@ export namespace MetricConstants {
   export const liveBytes: string = "livebytes";
   export const keyBytes: string = "keybytes";
   export const valBytes: string = "valbytes";
+  export const totalBytes: string = "totalbytes";
   export const intentBytes: string = "intentbytes";
   export const liveCount: string = "livecount";
   export const keyCount: string = "keycount";

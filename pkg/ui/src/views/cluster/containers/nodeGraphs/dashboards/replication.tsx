@@ -51,13 +51,13 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Live Bytes per Store" tooltip={`The number of live bytes of data on each store.`}>
+    <LineGraph title="Logical Bytes per Store" tooltip={`The number of logical bytes of data on each store.`}>
       <Axis units={AxisUnits.Bytes}>
         {
           _.map(nodeIDs, (nid) => (
             <Metric
               key={nid}
-              name="cr.store.livebytes"
+              name="cr.store.totalbytes"
               title={nodeAddress(nodesSummary, nid)}
               sources={storeIDsForNode(nodesSummary, nid)}
             />
