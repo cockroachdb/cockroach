@@ -362,22 +362,33 @@ func localRangeKeyPrint(key roachpb.Key) string {
 		if s.atEnd {
 			if bytes.HasSuffix(key, s.suffix) {
 				key = key[:len(key)-len(s.suffix)]
-				fmt.Fprintf(&buf, "%s/%s", decodeKeyPrint(key), s.name)
+				_, decodedKey, err := encoding.DecodeBytesAscending([]byte(key), nil)
+				if err != nil {
+					fmt.Fprintf(&buf, "%s/%s", decodeKeyPrint(key), s.name)
+				} else {
+					fmt.Fprintf(&buf, "%s/%s", roachpb.Key(decodedKey), s.name)
+				}
 				return buf.String()
 			}
 		} else {
 			begin := bytes.Index(key, s.suffix)
 			if begin > 0 {
 				addrKey := key[:begin]
+				_, decodedAddrKey, err := encoding.DecodeBytesAscending([]byte(addrKey), nil)
+				if err != nil {
+					fmt.Fprintf(&buf, "%s/%s", decodeKeyPrint(addrKey), s.name)
+				} else {
+					fmt.Fprintf(&buf, "%s/%s", roachpb.Key(decodedAddrKey), s.name)
+				}
 				if bytes.Equal(s.suffix, LocalTransactionSuffix) {
 					txnID, err := uuid.FromBytes(key[(begin + len(s.suffix)):])
 					if err != nil {
 						return fmt.Sprintf("/%q/err:%v", key, err)
 					}
-					fmt.Fprintf(&buf, "%s/%s/addrKey:/id:%q", decodeKeyPrint(addrKey), s.name, txnID)
+					fmt.Fprintf(&buf, "/%q", txnID)
 				} else {
 					id := key[(begin + len(s.suffix)):]
-					fmt.Fprintf(&buf, "%s/%s/addrKey:/id:%q", decodeKeyPrint(addrKey), s.name, id)
+					fmt.Fprintf(&buf, "/%q", []byte(id))
 				}
 				return buf.String()
 			}
@@ -519,9 +530,9 @@ func prettyPrintInternal(key roachpb.Key, quoteRawKeys bool) string {
 //			/[rangeid]/RangeLastVerificationTimestamp    "\x01s"+[rangeid]+"rlvt"
 //			/[rangeid]/RangeStats                        "\x01s"+[rangeid]+"stat"
 //		/Range/...                                     "\x01k"+...
-//			/RangeDescriptor/[key]                       "\x01k"+[key]+"rdsc"
-//			/Transaction/addrKey:[key]/id:[id]	         "\x01k"+[key]+"txn-"+[txn-id]
-//			/QueueLastProcessed/addrKey:[key]/id:[queue] "\x01k"+[key]+"qlpt"+[queue]
+//			[key]/RangeDescriptor                        "\x01k"+[key]+"rdsc"
+//			[key]/Transaction/[id]	                     "\x01k"+[key]+"txn-"+[txn-id]
+//			[key]/QueueLastProcessed/[queue]             "\x01k"+[key]+"qlpt"+[queue]
 // /Local/Max                                        "\x02"
 //
 // /Meta1/[key]                                      "\x02"+[key]
