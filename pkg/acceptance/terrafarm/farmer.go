@@ -463,14 +463,16 @@ func (f *Farmer) Restart(ctx context.Context, i int) error {
 		pidFileName,
 	)
 
-	if f.SkipClusterInit {
+	if f.SkipClusterInit || i != 0 {
+		// Unless we're the first node and we're bootstrapping this cluster, list
+		// every other node in the cluster in the --join flag. (Since we start nodes
+		// in parallel, every non-bootstrapping node needs to know about all the
+		// other nodes to avoid startup races.)
 		hosts := make([]string, len(f.nodes))
 		for i := range hosts {
 			hosts[i] = f.nodes[i].hostname
 		}
 		cmd += " --join=" + strings.Join(hosts, ",")
-	} else if i > 0 {
-		cmd += " --join=" + f.nodes[i-1].hostname
 	}
 
 	c, err := f.getSSH(f.nodes[i].hostname, f.defaultKeyFile())
