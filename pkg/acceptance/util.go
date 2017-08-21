@@ -146,6 +146,27 @@ func RunTests(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+const (
+	bareTest   = "bare"
+	dockerTest = "docker"
+	farmerTest = "farmer"
+)
+
+// RunBare runs the given acceptance test using a bare cluster.
+func RunBare(t *testing.T, testee func(t *testing.T)) {
+	t.Run(bareTest, testee)
+}
+
+// RunDocker runs the given acceptance test using a Docker cluster.
+func RunDocker(t *testing.T, testee func(t *testing.T)) {
+	t.Run(dockerTest, testee)
+}
+
+// RunTerraform runs the given acceptance test using a terraform cluster.
+func RunTerraform(t *testing.T, testee func(t *testing.T)) {
+	t.Run(farmerTest, testee)
+}
+
 // EphemeralStorageAccount returns the name of the storage account to use to
 // store data that should be periodically purged. It returns a storage account
 // in the region specified by the -tf.storage-location flag to avoid bandwidth
@@ -429,22 +450,11 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 			t.Fatalf("cluster not ready in time: %s", err)
 		}
 	} else {
-		parts := strings.Split(testName+"/", "/")
+		// The trailing "/" avoids having to bail early if len(parts) == 1.
+		parts := strings.Split(t.Name()+"/", "/")
 
 		switch parts[1] {
-		case BareTest:
-		case DockerTest:
-		case FarmerTest:
-		default:
-			return errors.New
-		}
-
-		if len(parts) < 2 || parts[1] != BareTest {
-			t.Fatalf("acceptance test must be of format TestXYZ/<bare|docker|farmer>, found %+v", parts)
-		}
-
-		switch parts[1] {
-		case BareTest:
+		case bareTest:
 			pwd, err := os.Getwd()
 			if err != nil {
 				t.Fatal(err)
@@ -463,9 +473,9 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 			l := barecluster.New(clusterCfg)
 
 			l.Start()
-			c = &barecluster.BareCluster{l}
+			c = &barecluster.BareCluster{Cluster: l}
 
-		default:
+		case dockerTest:
 			logDir := *flagLogDir
 			if logDir != "" {
 				logDir = filepath.Join(logDir, filepath.Clean(t.Name()))
@@ -473,6 +483,9 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 			l := cluster.CreateLocal(ctx, cfg, logDir, stopper)
 			l.Start(ctx)
 			c = l
+
+		default:
+			t.Fatalf("unable to run in mode '%q', use either RunBare, RunDocker, or RunFarmer", parts[1])
 		}
 	}
 

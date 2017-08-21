@@ -33,16 +33,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
-const (
-	BareTest   = "bare"
-	DockerTest = "docker"
-	FarmerTest = "farmer"
-)
-
 // TestDecommission starts up an >3 node cluster and decomissions and
 // recommissions nodes in various ways.
 func TestDecommission(t *testing.T) {
-	t.Run(BareTest, func(t *testing.T) {
+	RunBare(t, func(t *testing.T) {
 		s := log.Scope(t)
 		defer s.Close(t)
 
