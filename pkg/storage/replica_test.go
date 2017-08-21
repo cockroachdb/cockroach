@@ -4366,7 +4366,7 @@ func TestReplicaResolveIntentNoWait(t *testing.T) {
 			Span:   roachpb.Span{Key: key},
 			Txn:    txn.TxnMeta,
 			Status: txn.Status,
-		}}, false /* !wait */, false /* !poison; irrelevant */); pErr != nil {
+		}}, ResolveOptions{Wait: false, Poison: false}); pErr != nil {
 		t.Fatal(pErr)
 	}
 	testutils.SucceedsSoon(t, func() error {
