@@ -15,6 +15,7 @@
 package storage
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"math/rand"
@@ -253,7 +254,7 @@ func (a *Allocator) ComputeAction(
 			// Only allow removal of a dead replica if we have a suitable allocation
 			// target that we can up-replicate to. This isn't necessarily the target
 			// we'll up-replicate to, just an indication that such a target exists.
-			if _, err := a.AllocateTarget(
+			if _, _, err := a.AllocateTarget(
 				ctx,
 				zone.Constraints,
 				liveReplicas,
@@ -301,6 +302,13 @@ func (a *Allocator) ComputeAction(
 	return AllocatorConsiderRebalance, 0
 }
 
+type decisionDetails struct {
+	Target               string
+	Existing             string `json:",omitempty"`
+	RangeBytes           int64
+	RangeWritesPerSecond float64
+}
+
 // AllocateTarget returns a suitable store for a new allocation with the
 // required attributes. Nodes already accommodating existing replicas are ruled
 // out as targets. The range ID of the replica being allocated for is also
@@ -314,7 +322,7 @@ func (a *Allocator) AllocateTarget(
 	existing []roachpb.ReplicaDescriptor,
 	rangeInfo RangeInfo,
 	relaxConstraints bool,
-) (*roachpb.StoreDescriptor, error) {
+) (*roachpb.StoreDescriptor, string, error) {
 	sl, _, throttledStoreCount := a.storePool.getStoreList(rangeInfo.Desc.RangeID, storeFilterThrottled)
 
 	candidates := allocateCandidates(
@@ -333,15 +341,23 @@ func (a *Allocator) AllocateTarget(
 		if log.V(3) {
 			log.Infof(ctx, "add target: %s", target)
 		}
-		return target, nil
+		details, err := json.Marshal(decisionDetails{
+			Target:               target.String(),
+			RangeBytes:           rangeInfo.LogicalBytes,
+			RangeWritesPerSecond: rangeInfo.WritesPerSecond,
+		})
+		if err != nil {
+			log.Warningf(ctx, "failed to marshal details for choosing allocate target: %s", err)
+		}
+		return &target.store, string(details), nil
 	}
 
 	// When there are throttled stores that do match, we shouldn't send
 	// the replica to purgatory.
 	if throttledStoreCount > 0 {
-		return nil, errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
+		return nil, "", errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
 	}
-	return nil, &allocatorError{
+	return nil, "", &allocatorError{
 		required: constraints.Constraints,
 	}
 }
@@ -356,9 +372,9 @@ func (a Allocator) RemoveTarget(
 	constraints config.Constraints,
 	candidates []roachpb.ReplicaDescriptor,
 	rangeInfo RangeInfo,
-) (roachpb.ReplicaDescriptor, error) {
+) (roachpb.ReplicaDescriptor, string, error) {
 	if len(candidates) == 0 {
-		return roachpb.ReplicaDescriptor{}, errors.Errorf("must supply at least one candidate replica to allocator.RemoveTarget()")
+		return roachpb.ReplicaDescriptor{}, "", errors.Errorf("must supply at least one candidate replica to allocator.RemoveTarget()")
 	}
 
 	// Retrieve store descriptors for the provided candidates from the StorePool.
@@ -381,16 +397,24 @@ func (a Allocator) RemoveTarget(
 	}
 	if bad := rankedCandidates.selectBad(a.randGen); bad != nil {
 		for _, exist := range rangeInfo.Desc.Replicas {
-			if exist.StoreID == bad.StoreID {
+			if exist.StoreID == bad.store.StoreID {
 				if log.V(3) {
 					log.Infof(ctx, "remove target: %s", bad)
 				}
-				return exist, nil
+				details, err := json.Marshal(decisionDetails{
+					Target:               bad.String(),
+					RangeBytes:           rangeInfo.LogicalBytes,
+					RangeWritesPerSecond: rangeInfo.WritesPerSecond,
+				})
+				if err != nil {
+					log.Warningf(ctx, "failed to marshal details for choosing remove target: %s", err)
+				}
+				return exist, string(details), nil
 			}
 		}
 	}
 
-	return roachpb.ReplicaDescriptor{}, errors.New("could not select an appropriate replica to be removed")
+	return roachpb.ReplicaDescriptor{}, "", errors.New("could not select an appropriate replica to be removed")
 }
 
 // RebalanceTarget returns a suitable store for a rebalance target with
@@ -413,7 +437,7 @@ func (a Allocator) RemoveTarget(
 // under-utilized store.
 func (a Allocator) RebalanceTarget(
 	ctx context.Context, constraints config.Constraints, rangeInfo RangeInfo, filter storeFilter,
-) *roachpb.StoreDescriptor {
+) (*roachpb.StoreDescriptor, string) {
 	sl, _, _ := a.storePool.getStoreList(rangeInfo.Desc.RangeID, filter)
 
 	existingCandidates, candidates := rebalanceCandidates(
@@ -443,12 +467,12 @@ func (a Allocator) RebalanceTarget(
 	if len(rangeInfo.Desc.Replicas) > 1 && len(existingCandidates) < newQuorum {
 		// Don't rebalance as we won't be able to make quorum after the rebalance
 		// until the new replica has been caught up.
-		return nil
+		return nil, ""
 	}
 
 	// No need to rebalance.
 	if len(existingCandidates) == 0 {
-		return nil
+		return nil, ""
 	}
 
 	// Find all candidates that are better than the worst existing replica.
@@ -458,7 +482,19 @@ func (a Allocator) RebalanceTarget(
 		log.Infof(ctx, "rebalance candidates: %s\nexisting replicas: %s\ntarget: %s",
 			candidates, existingCandidates, target)
 	}
-	return target
+	if target == nil {
+		return nil, ""
+	}
+	details, err := json.Marshal(decisionDetails{
+		Target:               target.String(),
+		Existing:             existingCandidates.String(),
+		RangeBytes:           rangeInfo.LogicalBytes,
+		RangeWritesPerSecond: rangeInfo.WritesPerSecond,
+	})
+	if err != nil {
+		log.Warningf(ctx, "failed to marshal details for choosing rebalance target: %s", err)
+	}
+	return &target.store, string(details)
 }
 
 // TransferLeaseTarget returns a suitable replica to transfer the range lease

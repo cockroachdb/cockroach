@@ -932,6 +932,8 @@ func (s *statusServer) Range(
 			if event.Info.RemovedReplica != nil {
 				prettyInfo.RemovedReplica = event.Info.RemovedReplica.String()
 			}
+			prettyInfo.Reason = string(event.Info.Reason)
+			prettyInfo.Details = event.Info.Details
 			response.RangeLog.PrettyInfos = append(
 				response.RangeLog.PrettyInfos, prettyInfo)
 		}

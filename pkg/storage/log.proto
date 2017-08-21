@@ -37,6 +37,11 @@ message RangeLogEvent {
       roachpb.RangeDescriptor new_desc = 2 [(gogoproto.jsontag) = "NewDesc"];
       roachpb.ReplicaDescriptor added_replica = 3 [(gogoproto.jsontag) = "AddReplica"];
       roachpb.ReplicaDescriptor removed_replica = 4 [(gogoproto.jsontag) = "RemovedReplica"];
+      string reason = 5 [
+        (gogoproto.jsontag) = "Reason",
+        (gogoproto.casttype) = "RangeLogEventReason"
+      ];
+      string details = 6 [(gogoproto.jsontag) = "Details"];
   }
 
   google.protobuf.Timestamp timestamp = 1 [
