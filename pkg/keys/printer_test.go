@@ -30,7 +30,6 @@ import (
 )
 
 func TestPrettyPrint(t *testing.T) {
-
 	tm, _ := time.Parse(time.RFC3339Nano, "2016-03-30T13:40:35.053725008Z")
 	duration := duration.Duration{Months: 1, Days: 1, Nanos: 1 * time.Second.Nanoseconds()}
 	durationAsc, _ := encoding.EncodeDurationAscending(nil, duration)
@@ -68,9 +67,9 @@ func TestPrettyPrint(t *testing.T) {
 		{RangeLastVerificationTimestampKeyDeprecated(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/u/RangeLastVerificationTimestamp"},
 
 		{MakeRangeKeyPrefix(roachpb.RKey("ok")), `/Local/Range/"ok"`},
-		{RangeDescriptorKey(roachpb.RKey("111")), `/Local/Range/"111"/RangeDescriptor`},
-		{TransactionKey(roachpb.Key("111"), txnID), fmt.Sprintf(`/Local/Range/"111"/Transaction/addrKey:/id:%q`, txnID)},
-		{QueueLastProcessedKey(roachpb.RKey("111"), "foo"), `/Local/Range/"111"/QueueLastProcessed/addrKey:/id:"foo"`},
+		{RangeDescriptorKey(roachpb.RKey(MakeTablePrefix(42))), `/Local/Range/Table/42/RangeDescriptor`},
+		{TransactionKey(roachpb.Key(MakeTablePrefix(42)), txnID), fmt.Sprintf(`/Local/Range/Table/42/Transaction/%q`, txnID)},
+		{QueueLastProcessedKey(roachpb.RKey(MakeTablePrefix(42)), "foo"), `/Local/Range/Table/42/QueueLastProcessed/"foo"`},
 
 		{LocalMax, `/Meta1/""`}, // LocalMax == Meta1Prefix
 
