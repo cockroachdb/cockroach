@@ -98,7 +98,7 @@ func (ir *intentResolver) processWriteIntentError(
 	}
 
 	if err := ir.resolveIntents(ctx, resolveIntents,
-		false /* !wait */, pushType == roachpb.PUSH_ABORT /* poison */); err != nil {
+		ResolveOptions{Wait: false, Poison: pushType == roachpb.PUSH_ABORT}); err != nil {
 		return roachpb.NewError(err)
 	}
 
@@ -313,7 +313,7 @@ func (ir *intentResolver) processIntents(
 		//
 		// Thus, we must poison.
 		if err := ir.resolveIntents(ctxWithTimeout, resolveIntents,
-			true /* wait */, true /* poison */); err != nil {
+			ResolveOptions{Wait: true, Poison: true}); err != nil {
 			log.Warningf(ctx, "%s: failed to resolve intents: %s", r, err)
 			return
 		}
@@ -331,7 +331,7 @@ func (ir *intentResolver) processIntents(
 		// may succeed (triggering this code path), but the result may
 		// not make it back to the client.
 		if err := ir.resolveIntents(ctxWithTimeout, item.intents,
-			true /* wait */, false /* !poison */); err != nil {
+			ResolveOptions{Wait: true, Poison: false}); err != nil {
 			log.Warningf(ctx, "%s: failed to resolve intents: %s", r, err)
 			return
 		}
@@ -381,6 +381,13 @@ func (ir *intentResolver) processIntents(
 	}
 }
 
+// ResolveOptions is used during intent resolution. It specifies whether the caller wants the
+// call to block, and whether the ranges containing the intents are to be poisoned.
+type ResolveOptions struct {
+	Wait   bool
+	Poison bool
+}
+
 // resolveIntents resolves the given intents. `wait` is currently a
 // no-op; all intents are resolved synchronously.
 //
@@ -393,17 +400,17 @@ func (ir *intentResolver) processIntents(
 // guarantee by resolving the intents synchronously regardless of the
 // `wait` argument).
 func (ir *intentResolver) resolveIntents(
-	ctx context.Context, intents []roachpb.Intent, wait bool, poison bool,
+	ctx context.Context, intents []roachpb.Intent, opts ResolveOptions,
 ) error {
 	// Force synchronous operation; see above TODO.
-	wait = true
+	opts.Wait = true
 	if len(intents) == 0 {
 		return nil
 	}
 	// We're doing async stuff below; those need new traces.
 	ctx, cleanup := tracing.EnsureContext(ctx, ir.store.Tracer(), "resolve intents")
 	defer cleanup()
-	log.Eventf(ctx, "resolving intents [wait=%t]", wait)
+	log.Eventf(ctx, "resolving intents [wait=%t]", opts.Wait)
 
 	var reqs []roachpb.Request
 	for i := range intents {
@@ -415,14 +422,14 @@ func (ir *intentResolver) resolveIntents(
 					Span:      intent.Span,
 					IntentTxn: intent.Txn,
 					Status:    intent.Status,
-					Poison:    poison,
+					Poison:    opts.Poison,
 				}
 			} else {
 				resolveArgs = &roachpb.ResolveIntentRangeRequest{
 					Span:      intent.Span,
 					IntentTxn: intent.Txn,
 					Status:    intent.Status,
-					Poison:    poison,
+					Poison:    opts.Poison,
 				}
 			}
 		}
@@ -438,7 +445,7 @@ func (ir *intentResolver) resolveIntents(
 	// Resolve all of the intents.
 	var wg sync.WaitGroup
 	var errCh chan error
-	if wait {
+	if opts.Wait {
 		// If the caller is waiting, use this channel to collect the first
 		// non-nil error (if any) from the async tasks.
 		errCh = make(chan error, 1)
@@ -484,7 +491,7 @@ func (ir *intentResolver) resolveIntents(
 		}
 	}
 
-	if wait {
+	if opts.Wait {
 		// Wait for all resolutions to complete. We don't want to return
 		// as soon as the first one fails because of issue #8360 (see
 		// comment at the top of this method)
