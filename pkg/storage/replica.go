@@ -1135,11 +1135,11 @@ func (r *Replica) getLeaseRLocked() (roachpb.Lease, *roachpb.Lease) {
 	return *r.mu.state.Lease, nil
 }
 
-// ownsValidLease returns whether this replica is the current valid
+// OwnsValidLease returns whether this replica is the current valid
 // leaseholder. Note that this method does not check to see if a transfer is
 // pending, but returns the status of the current lease and ownership at the
 // specified point in time.
-func (r *Replica) ownsValidLease(ts hlc.Timestamp) bool {
+func (r *Replica) OwnsValidLease(ts hlc.Timestamp) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.state.Lease.OwnedBy(r.store.StoreID()) &&
@@ -5079,7 +5079,7 @@ func (r *Replica) gossipFirstRange(ctx context.Context) {
 // inherently inconsistent and asynchronous, we're using the lease as a way to
 // ensure that only one node gossips at a time.
 func (r *Replica) shouldGossip() bool {
-	return r.ownsValidLease(r.store.Clock().Now())
+	return r.OwnsValidLease(r.store.Clock().Now())
 }
 
 // maybeGossipSystemConfig scans the entire SystemConfig span and gossips it.

@@ -15,6 +15,7 @@
 package server
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/x509/pkix"
@@ -54,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 const (
@@ -192,6 +194,190 @@ func (s *statusServer) Gossip(
 		return nil, err
 	}
 	return status.Gossip(ctx, req)
+}
+
+// Allocator returns simulated allocator info for the ranges on the given node.
+func (s *statusServer) Allocator(
+	ctx context.Context, req *serverpb.AllocatorRequest,
+) (*serverpb.AllocatorResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
+	nodeID, local, err := s.parseNodeID(req.NodeId)
+	if err != nil {
+		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+	}
+
+	if !local {
+		status, err := s.dialNode(nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.Allocator(ctx, req)
+	}
+
+	output := new(serverpb.AllocatorResponse)
+	err = s.stores.VisitStores(func(store *storage.Store) error {
+		// All ranges requested:
+		if len(req.RangeIDs) == 0 {
+			// Use IterateRangeDescriptors to read from the engine only
+			// because it's already exported.
+			err := storage.IterateRangeDescriptors(ctx, store.Engine(),
+				func(desc roachpb.RangeDescriptor) (bool, error) {
+					rep, err := store.GetReplica(desc.RangeID)
+					if err != nil {
+						return true, err
+					}
+					if !rep.OwnsValidLease(store.Clock().Now()) {
+						return false, nil
+					}
+					allocatorSpans, err := store.AllocatorDryRun(ctx, rep)
+					if err != nil {
+						return true, err
+					}
+					output.DryRuns = append(output.DryRuns, &serverpb.AllocatorDryRun{
+						RangeID: desc.RangeID,
+						Events:  recordedSpansToAllocatorEvents(allocatorSpans),
+					})
+					return false, nil
+				})
+			return err
+		}
+
+		// Specific ranges requested:
+		for _, rid := range req.RangeIDs {
+			rep, err := store.GetReplica(rid)
+			if err != nil {
+				// Not found: continue.
+				continue
+			}
+			if !rep.OwnsValidLease(store.Clock().Now()) {
+				continue
+			}
+			allocatorSpans, err := store.AllocatorDryRun(ctx, rep)
+			if err != nil {
+				return err
+			}
+			output.DryRuns = append(output.DryRuns, &serverpb.AllocatorDryRun{
+				RangeID: rep.RangeID,
+				Events:  recordedSpansToAllocatorEvents(allocatorSpans),
+			})
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, grpc.Errorf(codes.Internal, err.Error())
+	}
+	return output, nil
+}
+
+func recordedSpansToAllocatorEvents(
+	spans []tracing.RecordedSpan,
+) []*serverpb.AllocatorDryRun_Event {
+	var output []*serverpb.AllocatorDryRun_Event
+	var buf bytes.Buffer
+	for _, sp := range spans {
+		for _, entry := range sp.Logs {
+			event := &serverpb.AllocatorDryRun_Event{
+				Time: entry.Time,
+			}
+			if len(entry.Fields) == 1 {
+				event.Message = entry.Fields[0].Value
+			} else {
+				buf.Reset()
+				for i, f := range entry.Fields {
+					if i != 0 {
+						buf.WriteByte(' ')
+					}
+					fmt.Fprintf(&buf, "%s:%v", f.Key, f.Value)
+				}
+				event.Message = buf.String()
+			}
+			output = append(output, event)
+		}
+	}
+	return output
+}
+
+// AllocatorRange returns simulated allocator info for the requested range.
+func (s *statusServer) AllocatorRange(
+	ctx context.Context, req *serverpb.AllocatorRangeRequest,
+) (*serverpb.AllocatorRangeResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
+	nodeCtx, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
+	defer cancel()
+
+	isLiveMap := s.nodeLiveness.GetIsLiveMap()
+	type nodeResponse struct {
+		nodeID roachpb.NodeID
+		resp   *serverpb.AllocatorResponse
+		err    error
+	}
+
+	responses := make(chan nodeResponse)
+	// TODO(bram): consider abstracting out this repeated pattern.
+	for nodeID := range isLiveMap {
+		nodeID := nodeID
+		if err := s.stopper.RunAsyncTask(
+			nodeCtx,
+			"server.statusServer: requesting remote Allocator simulation",
+			func(ctx context.Context) {
+				status, err := s.dialNode(nodeID)
+				var allocatorResponse *serverpb.AllocatorResponse
+				if err == nil {
+					allocatorRequest := &serverpb.AllocatorRequest{
+						RangeIDs: []roachpb.RangeID{roachpb.RangeID(req.RangeId)},
+					}
+					allocatorResponse, err = status.Allocator(ctx, allocatorRequest)
+				}
+				response := nodeResponse{
+					nodeID: nodeID,
+					resp:   allocatorResponse,
+					err:    err,
+				}
+
+				select {
+				case responses <- response:
+					// Response processed.
+				case <-ctx.Done():
+					// Context completed, response no longer needed.
+				}
+			}); err != nil {
+			return nil, grpc.Errorf(codes.Internal, err.Error())
+		}
+	}
+
+	errs := make(map[roachpb.NodeID]error)
+	for remainingResponses := len(isLiveMap); remainingResponses > 0; remainingResponses-- {
+		select {
+		case resp := <-responses:
+			if resp.err != nil {
+				errs[resp.nodeID] = resp.err
+				continue
+			}
+			if len(resp.resp.DryRuns) > 0 {
+				return &serverpb.AllocatorRangeResponse{
+					NodeID: resp.nodeID,
+					DryRun: resp.resp.DryRuns[0],
+				}, nil
+			}
+		case <-ctx.Done():
+			return nil, grpc.Errorf(codes.DeadlineExceeded, "request timed out")
+		}
+	}
+
+	// We didn't get a valid simulated Allocator run. Just return whatever errors
+	// we got instead. If we didn't even get any errors, then there is no active
+	// leaseholder for the range.
+	if len(errs) > 0 {
+		var buf bytes.Buffer
+		for nodeID, err := range errs {
+			if buf.Len() > 0 {
+				buf.WriteByte('\n')
+			}
+			fmt.Fprintf(&buf, "n%d: %s", nodeID, err)
+		}
+		return nil, grpc.Errorf(codes.Internal, buf.String())
+	}
+	return &serverpb.AllocatorRangeResponse{}, nil
 }
 
 // Certificates returns the x509 certificates.
