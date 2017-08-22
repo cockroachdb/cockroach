@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
@@ -342,7 +343,11 @@ func (p *planner) TypeAsString(e parser.Expr, op string) (func() (string, error)
 		if err != nil {
 			return "", err
 		}
-		return parser.AsStringWithFlags(d, parser.FmtBareStrings), nil
+		str, ok := d.(*parser.DString)
+		if !ok {
+			return "", errors.Errorf("failed to cast %T to string", d)
+		}
+		return string(*str), nil
 	}
 	return fn, nil
 }
@@ -377,7 +382,11 @@ func (p *planner) TypeAsStringOpts(
 			if err != nil {
 				return nil, err
 			}
-			res[name] = parser.AsStringWithFlags(d, parser.FmtBareStrings)
+			str, ok := d.(*parser.DString)
+			if !ok {
+				return res, errors.Errorf("failed to cast %T to string", d)
+			}
+			res[name] = string(*str)
 		}
 		return res, nil
 	}
@@ -405,7 +414,11 @@ func (p *planner) TypeAsStringArray(
 			if err != nil {
 				return nil, err
 			}
-			strs[i] = parser.AsStringWithFlags(d, parser.FmtBareStrings)
+			str, ok := d.(*parser.DString)
+			if !ok {
+				return strs, errors.Errorf("failed to cast %T to string", d)
+			}
+			strs[i] = string(*str)
 		}
 		return strs, nil
 	}
