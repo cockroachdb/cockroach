@@ -245,3 +245,57 @@ PREPARE groupbyhaving AS SELECT min(1) FROM foo WHERE a = $1 GROUP BY a HAVING c
 query I
 EXECUTE groupbyhaving(1)
 ----
+
+# Check statement compatibility
+
+statement ok
+PREPARE s AS SELECT a FROM t; PREPARE p1 AS UPSERT INTO t(a) VALUES($1) RETURNING a
+
+query I
+EXECUTE s
+----
+1
+2
+3
+
+query I
+EXECUTE p1(123)
+----
+123
+
+
+statement ok
+PREPARE p2 AS UPDATE t SET a = a + $1 RETURNING a
+
+query I
+EXECUTE s
+----
+1
+2
+3
+123
+
+query I
+EXECUTE p2(123)
+----
+124
+125
+126
+246
+
+statement ok
+PREPARE p3 AS DELETE FROM t WHERE a = $1 RETURNING a
+
+query I
+EXECUTE s
+----
+124
+125
+126
+246
+
+query I
+EXECUTE p3(124)
+----
+124
+
