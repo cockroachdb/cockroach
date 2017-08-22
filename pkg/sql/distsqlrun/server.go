@@ -39,6 +39,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
+// DistSQLVersion identifies DistSQL engine versions.
+type DistSQLVersion uint32
+
 // Version identifies the distsqlrun protocol version.
 //
 // This version is separate from the main CockroachDB version numbering; it is
@@ -62,11 +65,14 @@ import (
 //  - at some later point, we can choose to deprecate version 1 and have
 //    servers only accept versions >= 2 (by setting
 //    MinAcceptedVersion to 2).
-const Version = 5
+//
+// ATTENTION: When updating these fields, add to version_history.txt explaining
+// what changed.
+const Version DistSQLVersion = 5
 
 // MinAcceptedVersion is the oldest version that the server is
 // compatible with; see above.
-const MinAcceptedVersion = 4
+const MinAcceptedVersion DistSQLVersion = 4
 
 // workMemBytes specifies the maximum amount of memory in bytes a processor can
 // use. This limit is only observed if the use of temporary storage is enabled
@@ -362,7 +368,7 @@ func (ds *ServerImpl) flowStreamInt(ctx context.Context, stream DistSQL_FlowStre
 		log.Infof(ctx, "connecting inbound stream %s/%d", flowID.Short(), streamID)
 	}
 	f, receiver, cleanup, err := ds.flowRegistry.ConnectInboundStream(
-		ctx, flowID, streamID, flowStreamDefaultTimeout)
+		ctx, flowID, streamID, stream, flowStreamDefaultTimeout)
 	if err != nil {
 		return err
 	}
