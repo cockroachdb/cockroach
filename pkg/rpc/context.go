@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"math"
 	"net"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -452,15 +451,6 @@ func (ctx *Context) runHeartbeat(meta *connMeta, target string) error {
 			cancel()
 		}
 		meta.heartbeatErr.Store(errValue{err})
-
-		// HACK: work around https://github.com/grpc/grpc-go/issues/1026
-		// Getting a "connection refused" error from the "write" system call
-		// has confused grpc's error handling and this connection is permanently
-		// broken.
-		// TODO(bdarnell): remove this when the upstream bug is fixed.
-		if err != nil && strings.Contains(err.Error(), "write: connection refused") {
-			return nil
-		}
 
 		if err == nil {
 			receiveTime := ctx.LocalClock.PhysicalTime()
