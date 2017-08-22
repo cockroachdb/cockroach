@@ -242,7 +242,7 @@ func (p *planner) groupBy(
 		if err != nil {
 			return nil, nil, err
 		}
-		postRender.addRenderColumn(renderExpr, origColumns[i])
+		postRender.addRenderColumn(renderExpr, symbolicExprStr(renderExpr), origColumns[i])
 	}
 
 	postRender.source.info = newSourceInfoForSingleTable(anonymousTable, group.columns)
