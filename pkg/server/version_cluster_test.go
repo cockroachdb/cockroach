@@ -312,6 +312,9 @@ func TestClusterVersionMixedVersionTooNew(t *testing.T) {
 	// an illegal combination of versions. The root cause is that nothing
 	// populates the version setting table entry, and so each node implicitly
 	// assumes its own version.
+	//
+	// TODO(tschottdorf): validate something about the on-disk contents of the
+	// nodes at this point.
 	exp := "1.1"
 
 	// Write the de facto cluster version (v1.1) into the table. Note that we
