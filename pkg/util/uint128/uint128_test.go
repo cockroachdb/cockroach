@@ -55,7 +55,7 @@ func TestStringInvalidHex(t *testing.T) {
 
 	_, err := FromString(s)
 
-	if err == nil || !strings.Contains(err.Error(), "Could not decode") {
+	if err == nil || !strings.Contains(err.Error(), "could not decode") {
 		t.Error("did not get error for encoding invalid uint128 string")
 	}
 }

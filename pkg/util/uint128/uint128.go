@@ -17,7 +17,6 @@ package uint128
 import (
 	"encoding/binary"
 	"encoding/hex"
-	"fmt"
 
 	"github.com/pkg/errors"
 )
@@ -70,11 +69,11 @@ func FromBytes(b []byte) Uint128 {
 // FromString parses a hexadecimal string as a 128-bit big-endian unsigned integer.
 func FromString(s string) (Uint128, error) {
 	if len(s) > 32 {
-		return Uint128{}, fmt.Errorf("Input string %s too large for uint128", s)
+		return Uint128{}, errors.Errorf("input string %s too large for uint128", s)
 	}
 	bytes, err := hex.DecodeString(s)
 	if err != nil {
-		return Uint128{}, errors.Wrapf(err, "Could not decode %s as hex", s)
+		return Uint128{}, errors.Wrapf(err, "could not decode %s as hex", s)
 	}
 
 	// Grow the byte slice if it's smaller than 16 bytes, by prepending 0s
