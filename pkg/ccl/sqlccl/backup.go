@@ -595,12 +595,6 @@ func backupPlanHook(
 		return nil, nil, nil
 	}
 
-	if err := utilccl.CheckEnterpriseEnabled(
-		p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization.Get(), "BACKUP",
-	); err != nil {
-		return nil, nil, err
-	}
-
 	if err := p.RequireSuperUser("BACKUP"); err != nil {
 		return nil, nil, err
 	}
@@ -624,6 +618,15 @@ func backupPlanHook(
 		{Name: "bytes", Typ: parser.TypeInt},
 	}
 	fn := func(ctx context.Context, resultsCh chan<- parser.Datums) error {
+		// We only check whether the feature is enabled during execute so
+		// that tests can use the statement for checking pgwire and
+		// placeholders.
+		if err := utilccl.CheckEnterpriseEnabled(
+			p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization.Get(), "BACKUP",
+		); err != nil {
+			return err
+		}
+
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
@@ -799,12 +802,6 @@ func showBackupPlanHook(
 		return nil, nil, nil
 	}
 
-	if err := utilccl.CheckEnterpriseEnabled(
-		p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization.Get(), "SHOW BACKUP",
-	); err != nil {
-		return nil, nil, err
-	}
-
 	if err := p.RequireSuperUser("SHOW BACKUP"); err != nil {
 		return nil, nil, err
 	}
@@ -821,6 +818,15 @@ func showBackupPlanHook(
 		{Name: "size_bytes", Typ: parser.TypeInt},
 	}
 	fn := func(ctx context.Context, resultsCh chan<- parser.Datums) error {
+		// We only check whether the feature is enabled during execute so
+		// that tests can use the statement for checking pgwire and
+		// placeholders.
+		if err := utilccl.CheckEnterpriseEnabled(
+			p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization.Get(), "SHOW BACKUP",
+		); err != nil {
+			return nil, nil, err
+		}
+
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
