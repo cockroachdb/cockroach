@@ -518,7 +518,7 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 		}
 
 		id := path[len(path)-1]
-		_, _, _, err = runQuery(conn, makeQuery(
+		_, _, err = runQuery(conn, makeQuery(
 			`UPSERT INTO system.zones (id, config) VALUES ($1, $2)`,
 			id, buf), false)
 		if err != nil {
