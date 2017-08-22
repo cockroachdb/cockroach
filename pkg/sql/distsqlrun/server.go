@@ -23,6 +23,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -117,6 +118,9 @@ type ServerConfig struct {
 
 	// JobRegistry manages jobs being used by this Server.
 	JobRegistry *jobs.Registry
+
+	// A handle to gossip used to broadcast the node's DistSQL version.
+	Gossip *gossip.Gossip
 }
 
 // ServerImpl implements the server for the distributed SQL APIs.
@@ -178,7 +182,26 @@ func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
 
 // Start launches workers for the server.
 func (ds *ServerImpl) Start() {
+	// Gossip the version info so that other nodes don't plan incompatible flows
+	// for us.
+	if err := ds.ServerConfig.Gossip.AddInfoProto(
+		gossip.MakeDistSQLNodeVersionKey(ds.ServerConfig.NodeID.Get()),
+		&DistSQLVersionGossipInfo{
+			Version:            Version,
+			MinAcceptedVersion: MinAcceptedVersion,
+		},
+		0, // ttl - no expiration
+	); err != nil {
+		panic(err)
+	}
+
 	ds.flowScheduler.Start()
+}
+
+// FlowVerIsCompatible checks a flow's version is compatible with this node's
+// DistSQL version.
+func FlowVerIsCompatible(flowVer, minAcceptedVersion, serverVersion DistSQLVersion) bool {
+	return flowVer >= minAcceptedVersion && flowVer <= serverVersion
 }
 
 // Note: unless an error is returned, the returned context contains a span that
@@ -189,8 +212,7 @@ func (ds *ServerImpl) setupFlow(
 	req *SetupFlowRequest,
 	syncFlowConsumer RowReceiver,
 ) (context.Context, *Flow, error) {
-	if req.Version < MinAcceptedVersion ||
-		req.Version > Version {
+	if !FlowVerIsCompatible(req.Version, MinAcceptedVersion, Version) {
 		err := errors.Errorf(
 			"version mismatch in flow request: %d; this node accepts %d through %d",
 			req.Version, MinAcceptedVersion, Version,
