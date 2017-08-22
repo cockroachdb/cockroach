@@ -48,11 +48,6 @@ type benchmarkTest struct {
 	// prefix is the prefix that will be prepended to all resources created by
 	// Terraform.
 	prefix string
-	// cockroachDiskSizeGB is the size, in gigabytes, of the disks allocated
-	// for CockroachDB nodes. Leaving this as 0 accepts the default in the
-	// Terraform configs. This must be in GB, because Terraform only accepts
-	// disk size for GCE in GB.
-	cockroachDiskSizeGB int
 	// storeFixture is the name of the Azure Storage fixture to download and use
 	// as the store. Nothing is downloaded if storeFixture is empty.
 	storeFixture    string
@@ -68,6 +63,27 @@ func (bt *benchmarkTest) Start(ctx context.Context) {
 	}
 	bt.f = acceptance.MakeFarmer(bt.b, bt.prefix, acceptance.GetStopper())
 	bt.f.SkipClusterInit = bt.skipClusterInit
+	bt.f.TerraformArgs = []string{
+		// Ls-series VMs are "storage optimized," which means they have large local
+		// SSDs (678GB on the L4s) and no disk throttling beyond the physical limit
+		// of the disk. All other VM series on Azure are subject to VM-level I/O
+		// throttling, where sync latencies jump to upwards of a 1s when the rate
+		// limit is exceeded. Since we expect syncs to take a few milliseconds at
+		// most, this causes cascading liveness failures which tank a restore.
+		//
+		// To determine the temporary SSD I/O rate limit for a particular VM size,
+		// look for the "max cached [and temp storage] throughput" column on the
+		// Azure VM size chart [0].
+		//
+		// TODO(benesch): build a rate-limiter that rate limits all write traffic
+		// (not just bulk I/O write traffic like kv.bulk_io_write.max_rate), and
+		// additionally run these tests on D-series VMs with a suitable rate limit.
+		//
+		// [0]: https://docs.microsoft.com/en-us/azure/virtual-machines/linux/sizes
+		"-var", "azure_vm_size=Standard_L4s",
+		"-var", "azure_location=westus",
+		"-var", "azure_vhd_storage_account=cockroachnightlywestvhds",
+	}
 
 	log.Infof(ctx, "creating cluster with %d node(s)", bt.nodes)
 	if err := bt.f.Resize(bt.nodes); err != nil {
@@ -127,6 +143,13 @@ func (bt *benchmarkTest) Start(ctx context.Context) {
 	// liveness failures. This limit was determined experimentally on
 	// Standard_D3_v2 instances.
 	sqlDB.Exec(`SET CLUSTER SETTING kv.bulk_io_write.max_rate = '30MB'`)
+	// Stats-based replica and lease rebalancing interacts badly with restore's
+	// splits and scatters.
+	//
+	// TODO(benesch): Remove these settings when #17671 is fixed, or document the
+	// necessity of these settings as 1.1 known limitation.
+	sqlDB.Exec(`SET CLUSTER SETTING kv.allocator.stat_based_rebalancing.enabled = false`)
+	sqlDB.Exec(`SET CLUSTER SETTING kv.allocator.load_based_lease_rebalancing.enabled = false`)
 
 	log.Info(ctx, "initial cluster is up")
 }
@@ -155,38 +178,45 @@ const (
 	bankInsert = `INSERT INTO data.bank VALUES (%d, %d, '%s')`
 )
 
-func getAzureURI(t testing.TB) url.URL {
-	container := os.Getenv("AZURE_CONTAINER")
-	accountName := os.Getenv("AZURE_ACCOUNT_NAME")
-	accountKey := os.Getenv("AZURE_ACCOUNT_KEY")
-	if container == "" || accountName == "" || accountKey == "" {
-		t.Fatal("env variables AZURE_CONTAINER, AZURE_ACCOUNT_NAME, AZURE_ACCOUNT_KEY must be set")
+func getAzureURI(t testing.TB, accountName, accountKeyVar, container, object string) string {
+	accountKey := os.Getenv(accountKeyVar)
+	if accountKey == "" {
+		t.Fatalf("env var %s must be set", accountKeyVar)
 	}
-
-	return url.URL{
+	return (&url.URL{
 		Scheme: "azure",
 		Host:   container,
+		Path:   object,
 		RawQuery: url.Values{
 			storageccl.AzureAccountNameParam: []string{accountName},
 			storageccl.AzureAccountKeyParam:  []string{accountKey},
 		}.Encode(),
-	}
+	}).String()
+}
+
+func getAzureBackupFixtureURI(t testing.TB, name string) string {
+	return getAzureURI(
+		t, acceptance.FixtureStorageAccount(), "AZURE_FIXTURE_ACCOUNT_KEY", "backups", name,
+	)
+}
+
+func getAzureEphemeralURI(b *testing.B) string {
+	name := fmt.Sprintf("%s/%s-%d", b.Name(), timeutil.Now().Format(time.RFC3339Nano), b.N)
+	return getAzureURI(
+		b, acceptance.EphemeralStorageAccount(), "AZURE_EPHEMERAL_ACCOUNT_KEY", "backups", name,
+	)
 }
 
 // BenchmarkRestoreBig creates a backup via Load with b.N rows then benchmarks
-// the time to restore it. Run with:
-// make bench TESTTIMEOUT=1h PKG=./pkg/ccl/acceptanceccl BENCHES=BenchmarkRestoreBig TESTFLAGS='-v -benchtime 1m -remote -key-name azure -cwd ../../acceptance/terraform/azure'
+// the time to restore it.
 func BenchmarkRestoreBig(b *testing.B) {
 	ctx := context.Background()
 	rng, _ := randutil.NewPseudoRand()
 
-	restoreBaseURI := getAzureURI(b)
-
 	bt := benchmarkTest{
-		b:                   b,
-		nodes:               3,
-		cockroachDiskSizeGB: 250,
-		prefix:              "restore",
+		b:      b,
+		nodes:  3,
+		prefix: "restore",
 	}
 
 	defer bt.Close(ctx)
@@ -204,8 +234,6 @@ func BenchmarkRestoreBig(b *testing.B) {
 
 	// (mis-)Use a sub benchmark to avoid running the setup code more than once.
 	b.Run("", func(b *testing.B) {
-		restoreBaseURI.Path = fmt.Sprintf("BenchmarkRestoreBig/%s-%d", timeutil.Now().Format(time.RFC3339Nano), b.N)
-
 		var buf bytes.Buffer
 		buf.WriteString(bankCreateTable)
 		buf.WriteString(";\n")
@@ -216,7 +244,7 @@ func BenchmarkRestoreBig(b *testing.B) {
 		}
 
 		ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
-		restoreURI := restoreBaseURI.String()
+		restoreURI := getAzureEphemeralURI(b)
 		desc, err := sqlccl.Load(ctx, sqlDB, &buf, "data", restoreURI, ts, 0, os.TempDir())
 		if err != nil {
 			b.Fatal(err)
@@ -235,10 +263,6 @@ func BenchmarkRestoreBig(b *testing.B) {
 }
 
 func BenchmarkRestoreTPCH10(b *testing.B) {
-	restoreBaseURI := getAzureURI(b)
-	restoreBaseURI.Path = `benchmarks/tpch/scalefactor-10`
-	restoreTPCH10URI := restoreBaseURI.String()
-
 	for _, numNodes := range []int{1, 3, 10} {
 		b.Run(fmt.Sprintf("numNodes=%d", numNodes), func(b *testing.B) {
 			if b.N != 1 {
@@ -265,7 +289,9 @@ func BenchmarkRestoreTPCH10(b *testing.B) {
 				b.Fatal(err)
 			}
 
-			if _, err := db.Exec(`RESTORE tpch.* FROM $1`, restoreTPCH10URI); err != nil {
+			if _, err := db.Exec(
+				`RESTORE tpch.* FROM $1`, getAzureBackupFixtureURI(b, "tpch10"),
+			); err != nil {
 				b.Fatal(err)
 			}
 		})
@@ -277,20 +303,10 @@ func BenchmarkRestore2TB(b *testing.B) {
 		b.Fatal("b.N must be 1")
 	}
 
-	const backupBaseURI = "gs://cockroach-test/2t-backup"
-
 	bt := benchmarkTest{
-		b: b,
-		// TODO(dan): This is intended to be a 10 node test, but gce local ssds
-		// are only available as 375GB, which doesn't fit a 2TB restore (at
-		// least until #15210 is fixed). We could have more than one ssd per
-		// machine and raid them together but in the lead up to 1.0, I'm trying
-		// to change as little as possible while getting this working. Azure has
-		// large storage machines available, but has other issues we're working
-		// through (#15381).
-		nodes:               15,
-		cockroachDiskSizeGB: 250,
-		prefix:              "restore2tb",
+		b:      b,
+		nodes:  10,
+		prefix: "restore2tb",
 	}
 
 	ctx := context.Background()
@@ -307,7 +323,9 @@ func BenchmarkRestore2TB(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	if _, err := db.Exec(`RESTORE datablocks.* FROM $1`, backupBaseURI); err != nil {
+	if _, err := db.Exec(
+		`RESTORE datablocks.* FROM $1`, getAzureBackupFixtureURI(b, "2tb"),
+	); err != nil {
 		b.Fatal(err)
 	}
 }
@@ -317,15 +335,12 @@ func BenchmarkBackup2TB(b *testing.B) {
 		b.Fatal("b.N must be 1")
 	}
 
-	backupBaseURI := getAzureURI(b)
-
 	bt := benchmarkTest{
-		b:                   b,
-		nodes:               10,
-		storeFixture:        acceptance.FixtureURL(bulkArchiveStoreFixture),
-		cockroachDiskSizeGB: 250,
-		prefix:              "backup2tb",
-		skipClusterInit:     true,
+		b:               b,
+		nodes:           10,
+		storeFixture:    acceptance.FixtureURL(bulkArchiveStoreFixture),
+		prefix:          "backup2tb",
+		skipClusterInit: true,
 	}
 
 	ctx := context.Background()
@@ -338,10 +353,8 @@ func BenchmarkBackup2TB(b *testing.B) {
 	}
 	defer db.Close()
 
-	backupBaseURI.Path = fmt.Sprintf("BenchmarkBackup2TB/%s-%d", timeutil.Now().Format(time.RFC3339Nano), b.N)
-
 	log.Infof(ctx, "starting backup")
-	row := db.QueryRow(`BACKUP DATABASE datablocks TO $1`, backupBaseURI.String())
+	row := db.QueryRow(`BACKUP DATABASE datablocks TO $1`, getAzureEphemeralURI(b))
 	var unused string
 	var dataSize int64
 	if err := row.Scan(&unused, &unused, &unused, &unused, &unused, &unused, &dataSize); err != nil {
