@@ -222,7 +222,7 @@ func BenchmarkRestoreBig(b *testing.B) {
 			b.Fatal(err)
 		}
 
-		dbName := fmt.Sprintf("bank%d", b.N)
+		dbName := fmt.Sprintf("bank %d", b.N)
 		r.Exec(fmt.Sprintf("CREATE DATABASE %s", dbName))
 
 		b.ResetTimer()
