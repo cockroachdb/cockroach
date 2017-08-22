@@ -73,7 +73,7 @@ const MinAcceptedVersion = 4
 // (see sql.defaults.distsql.tempstorage).
 var workMemBytes = envutil.EnvOrDefaultInt64("COCKROACH_WORK_MEM", 64*1024*1024 /* 64MB */)
 
-var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_DISTSQL_MEMORY_USAGE", 10*1024)
+var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_DISTSQL_MEMORY_USAGE", 1024*1024)
 
 // All queries that spill over to disk will be limited to use
 // total space / diskBudgetTotalSizeDivisor.
