@@ -212,6 +212,11 @@ func TestParse(t *testing.T) {
 		{`DROP USER a`},
 		{`DROP USER a, b`},
 
+		{`CANCEL JOB a`},
+		{`CANCEL QUERY a`},
+		{`RESUME JOB a`},
+		{`PAUSE JOB a`},
+
 		{`EXPLAIN SELECT 1`},
 		{`EXPLAIN EXPLAIN SELECT 1`},
 		{`EXPLAIN (A, B, C) SELECT 1`},
