@@ -686,7 +686,7 @@ func importPlanHook(
 			// TODO(dt): verify db exists
 		}
 
-		comma := ','
+		var comma rune
 		if override, ok := opts[importOptionComma]; ok {
 			comma, err = util.GetSingleRune(override)
 			if err != nil {
@@ -756,7 +756,10 @@ func importPlanHook(
 		}
 
 		if distributed {
-			_, err = doDistributedCSVTransform(ctx, files, p, tableDesc, temp, walltime)
+			_, err = doDistributedCSVTransform(
+				ctx, files, p, tableDesc, temp,
+				comma, comment, nullif, walltime,
+			)
 			if err != nil {
 				return err
 			}
@@ -788,6 +791,8 @@ func doDistributedCSVTransform(
 	p sql.PlanHookState,
 	tableDesc *sqlbase.TableDescriptor,
 	temp string,
+	comma, comment rune,
+	nullif *string,
 	walltime int64,
 ) (int64, error) {
 	evalCtx := p.EvalContext()
@@ -826,6 +831,8 @@ func doDistributedCSVTransform(
 		tableDesc,
 		files,
 		temp,
+		comma, comment,
+		nullif,
 		walltime,
 	); err != nil {
 		return 0, err
