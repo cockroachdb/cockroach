@@ -198,7 +198,9 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 	// producer to drain). Perhaps what we want is a way to tell when all the rows
 	// corresponding to the first KV batch have been sent and only start the
 	// goroutine if more batches are needed to satisfy the query.
-	drainCh, err := m.listenForDrainSignalFromConsumer(ctx)
+	listenToConsumerCtx, cancel := context.WithCancel(ctx)
+	drainCh, err := m.listenForDrainSignalFromConsumer(listenToConsumerCtx)
+	defer cancel()
 	if err != nil {
 		return err
 	}
@@ -274,6 +276,11 @@ type receivable interface {
 
 // listenForDrainSignalFromConsumer returns a channel that will be pinged once the
 // consumer has closed its send-side of the stream, or has sent a drain signal.
+//
+// This method runs a task that will run until either the consumer closes the
+// stream or until the caller cancels the context. The caller has to cancel the
+// context once it no longer reads from the channel, otherwise this method might
+// deadlock when attempting to write to the channel.
 func (m *outbox) listenForDrainSignalFromConsumer(ctx context.Context) (<-chan drainSignal, error) {
 	ch := make(chan drainSignal, 1)
 
@@ -285,16 +292,50 @@ func (m *outbox) listenForDrainSignalFromConsumer(ctx context.Context) (<-chan d
 	}
 
 	if err := m.flowCtx.stopper.RunAsyncTask(ctx, "drain", func(ctx context.Context) {
-		signal, err := stream.Recv()
-		if err == io.EOF {
-			ch <- drainSignal{drainRequested: false, err: nil}
-			return
+		sendDrainSignal := func(drainRequested bool, err error) bool {
+			select {
+			case ch <- drainSignal{drainRequested: drainRequested, err: err}:
+				return true
+			case <-ctx.Done():
+				// Listening for consumer signals has been cancelled. This generally
+				// means that the main outbox routine is no longer listening to these
+				// signals but, in the RunSyncFlow case, it may also mean that the
+				// client (the consumer) has cancelled the RPC. In that case, the main
+				// routine is still listening (and this branch of the select has been
+				// randomly selected; the other was also available), so we have to
+				// notify it. Thus, we attempt sending again.
+				select {
+				case ch <- drainSignal{drainRequested: drainRequested, err: err}:
+					return true
+				default:
+					return false
+				}
+			}
 		}
-		if err != nil {
-			ch <- drainSignal{drainRequested: false, err: err}
-			return
+
+		for {
+			signal, err := stream.Recv()
+			if err == io.EOF {
+				sendDrainSignal(false, nil)
+				return
+			}
+			if err != nil {
+				sendDrainSignal(false, err)
+				return
+			}
+			switch {
+			case signal.DrainRequest != nil:
+				if !sendDrainSignal(true, nil) {
+					return
+				}
+			case signal.SetupFlowRequest != nil:
+				log.Fatalf(ctx, "Unexpected SetupFlowRequest. "+
+					"This SyncFlow specific message should have been handled in RunSyncFlow.")
+			case signal.Handshake != nil:
+				log.Eventf(ctx, "Consumer sent handshake. Consuming flow scheduled: %t",
+					signal.Handshake.ConsumerScheduled)
+			}
 		}
-		ch <- drainSignal{drainRequested: signal.DrainRequest != nil, err: nil}
 	}); err != nil {
 		return nil, err
 	}

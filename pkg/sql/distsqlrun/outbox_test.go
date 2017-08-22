@@ -17,27 +17,18 @@ package distsqlrun
 import (
 	"fmt"
 	"io"
-	"net"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -378,78 +369,4 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			}
 		})
 	}
-}
-
-// startMockDistSQLServer starts a MockDistSQLServer and returns the address on
-// which it's listening.
-func startMockDistSQLServer(stopper *stop.Stopper) (*MockDistSQLServer, net.Addr, error) {
-	rpcContext := newInsecureRPCContext(stopper)
-	server := rpc.NewServer(rpcContext)
-	mock := newMockDistSQLServer()
-	RegisterDistSQLServer(server, mock)
-	ln, err := netutil.ListenAndServeGRPC(stopper, server, util.IsolatedTestAddr)
-	if err != nil {
-		return nil, nil, err
-	}
-	return mock, ln.Addr(), nil
-}
-
-func newInsecureRPCContext(stopper *stop.Stopper) *rpc.Context {
-	return rpc.NewContext(
-		log.AmbientContext{Tracer: tracing.NewTracer()},
-		&base.Config{Insecure: true},
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
-		stopper,
-	)
-}
-
-// MockDistSQLServer implements the DistSQLServer (gRPC) interface and allows
-// clients to control the inbound streams.
-type MockDistSQLServer struct {
-	inboundStreams   chan InboundStreamNotification
-	runSyncFlowCalls chan RunSyncFlowCall
-}
-
-// InboundStreamNotification is the MockDistSQLServer's way to tell its clients
-// that a new gRPC call has arrived and thus a stream has arrived. The rpc
-// handler is blocked until donec is signaled.
-type InboundStreamNotification struct {
-	stream DistSQL_FlowStreamServer
-	donec  chan<- error
-}
-
-type RunSyncFlowCall struct {
-	stream DistSQL_RunSyncFlowServer
-	donec  chan<- error
-}
-
-// MockDistSQLServer implements the DistSQLServer interface.
-var _ DistSQLServer = &MockDistSQLServer{}
-
-func newMockDistSQLServer() *MockDistSQLServer {
-	return &MockDistSQLServer{
-		inboundStreams:   make(chan InboundStreamNotification),
-		runSyncFlowCalls: make(chan RunSyncFlowCall),
-	}
-}
-
-// RunSyncFlow is part of the DistSQLServer interface.
-func (ds *MockDistSQLServer) RunSyncFlow(stream DistSQL_RunSyncFlowServer) error {
-	donec := make(chan error)
-	ds.runSyncFlowCalls <- RunSyncFlowCall{stream: stream, donec: donec}
-	return <-donec
-}
-
-// SetupFlow is part of the DistSQLServer interface.
-func (ds *MockDistSQLServer) SetupFlow(
-	_ context.Context, req *SetupFlowRequest,
-) (*SimpleResponse, error) {
-	return nil, nil
-}
-
-// FlowStream is part of the DistSQLServer interface.
-func (ds *MockDistSQLServer) FlowStream(stream DistSQL_FlowStreamServer) error {
-	donec := make(chan error)
-	ds.inboundStreams <- InboundStreamNotification{stream: stream, donec: donec}
-	return <-donec
 }

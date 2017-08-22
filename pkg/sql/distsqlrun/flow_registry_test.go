@@ -34,7 +34,11 @@ import (
 func lookupFlow(fr *flowRegistry, fid FlowID, timeout time.Duration) *Flow {
 	fr.Lock()
 	defer fr.Unlock()
-	entry := fr.waitForFlowLocked(context.TODO(), fid, timeout)
+	entry := fr.getEntryLocked(fid)
+	if entry.flow != nil {
+		return entry.flow
+	}
+	entry = fr.waitForFlowLocked(context.TODO(), fid, timeout)
 	if entry == nil {
 		return nil
 	}
@@ -211,7 +215,14 @@ func TestStreamConnectionTimeout(t *testing.T) {
 		t.Fatalf("expected consumer to have been closed when the flow timed out")
 	}
 
-	_, _, _, err := reg.ConnectInboundStream(context.TODO(), id1, streamID1, jiffy)
+	// Create a dummy server stream to pass to ConnectInboundStream.
+	serverStream, _ /* clientStream */, cleanup, err := createDummyStream()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+
+	_, _, _, err = reg.ConnectInboundStream(context.TODO(), id1, streamID1, serverStream, jiffy)
 	if !testutils.IsError(err, "came too late") {
 		t.Fatalf("expected %q, got: %v", "came too late", err)
 	}
@@ -219,8 +230,106 @@ func TestStreamConnectionTimeout(t *testing.T) {
 	// Unregister the flow. Subsequent attempts to connect a stream should result
 	// in a different error than before.
 	reg.UnregisterFlow(id1)
-	_, _, _, err = reg.ConnectInboundStream(context.TODO(), id1, streamID1, jiffy)
+	_, _, _, err = reg.ConnectInboundStream(context.TODO(), id1, streamID1, serverStream, jiffy)
 	if !testutils.IsError(err, "not found") {
 		t.Fatalf("expected %q, got: %v", "not found", err)
+	}
+}
+
+// Test that the FlowRegistry send the correct handshake messages:
+// - if an inbound stream arrives to the registry before the consumer is
+// scheduled, then a Handshake message informing that the consumer is not yet
+// connected is sent;
+// - once the consumer connects, another Handshake message is sent.
+func TestHandshake(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	reg := makeFlowRegistry()
+
+	tests := []struct {
+		name                   string
+		consumerConnectedEarly bool
+	}{
+		{
+			name: "consumer early",
+			consumerConnectedEarly: true,
+		},
+		{
+			name: "consumer late",
+			consumerConnectedEarly: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			flowID := FlowID{uuid.MakeV4()}
+			streamID := StreamID(1)
+
+			serverStream, clientStream, cleanup, err := createDummyStream()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer cleanup()
+
+			connectProducer := func() {
+				// Simulate a producer connecting to the server. This should be called
+				// async because the consumer is not yet there and ConnectInboundStream
+				// is blocking.
+				if _, _, _, err := reg.ConnectInboundStream(
+					context.TODO(), flowID, streamID, serverStream, time.Hour,
+				); err != nil {
+					t.Error(err)
+				}
+			}
+			connectConsumer := func() {
+				f1 := &Flow{}
+				consumer := &RowBuffer{}
+				wg := &sync.WaitGroup{}
+				wg.Add(1)
+				inboundStreams := map[StreamID]*inboundStreamInfo{
+					streamID: {receiver: consumer, waitGroup: wg},
+				}
+				reg.RegisterFlow(
+					context.TODO(), flowID, f1, inboundStreams, time.Hour /* timeout */)
+			}
+
+			// If the consumer is supposed to be connected early, then we connect the
+			// consumer and then we connect the producer. Otherwise, we connect the
+			// producer and expect a first handshake and only then we connect the
+			// consumer.
+			if tc.consumerConnectedEarly {
+				connectConsumer()
+				go connectProducer()
+			} else {
+				go connectProducer()
+
+				// Expect the client (the producer) to receive a Handshake saying that the
+				// consumer is not connected yet.
+				consumerSignal, err := clientStream.Recv()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if consumerSignal.Handshake == nil {
+					t.Fatalf("expected handshake, got: %+v", consumerSignal)
+				}
+				if consumerSignal.Handshake.ConsumerScheduled {
+					t.Fatal("expected !ConsumerScheduled")
+				}
+
+				connectConsumer()
+			}
+
+			// Now expect another Handshake message telling the producer that the consumer
+			// has connected.
+			consumerSignal, err := clientStream.Recv()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if consumerSignal.Handshake == nil {
+				t.Fatalf("expected handshake, got: %+v", consumerSignal)
+			}
+			if !consumerSignal.Handshake.ConsumerScheduled {
+				t.Fatal("expected ConsumerScheduled")
+			}
+		})
 	}
 }
