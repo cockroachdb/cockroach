@@ -1371,7 +1371,7 @@ func TestBackupRestoreIncremental(t *testing.T) {
 		// the greatest key in the diff is less than the previous backups.
 		sqlDB.Exec(`INSERT INTO data.bank VALUES (0, -1, 'final')`)
 		checksums = append(checksums, checksumBankPayload(t, sqlDB))
-		finalBackupDir := filepath.Join(dir, "final")
+		finalBackupDir := filepath.Join(dir, "final layer")
 		sqlDB.Exec(fmt.Sprintf(`BACKUP TABLE data.bank TO '%s' %s`,
 			finalBackupDir, fmt.Sprintf(` INCREMENTAL FROM %s`, strings.Join(backupDirs, `,`)),
 		))
@@ -1837,18 +1837,18 @@ func TestRestoreInto(t *testing.T) {
 
 	sqlDB.Exec(`BACKUP DATABASE data TO $1`, dir)
 
-	restoreStmt := fmt.Sprintf(`RESTORE data.bank FROM '%s' WITH OPTIONS ('into_db'='data2')`, dir)
+	restoreStmt := fmt.Sprintf(`RESTORE data.bank FROM '%s' WITH into_db = 'data 2'`, dir)
 
 	_, err := sqlDB.DB.Exec(restoreStmt)
-	if !testutils.IsError(err, "a database named \"data2\" needs to exist") {
+	if !testutils.IsError(err, "a database named \"data 2\" needs to exist") {
 		t.Fatal(err)
 	}
 
-	sqlDB.Exec(`CREATE DATABASE data2`)
+	sqlDB.Exec(`CREATE DATABASE "data 2"`)
 	sqlDB.Exec(restoreStmt)
 
 	expected := sqlDB.QueryStr(`SELECT * FROM data.bank`)
-	sqlDB.CheckQueryResults(`SELECT * FROM data2.bank`, expected)
+	sqlDB.CheckQueryResults(`SELECT * FROM "data 2".bank`, expected)
 }
 
 func TestBackupRestorePermissions(t *testing.T) {
