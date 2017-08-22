@@ -816,6 +816,8 @@ func (l *DistLoader) LoadCSV(
 	tableDesc *sqlbase.TableDescriptor,
 	from []string,
 	to string,
+	comma, comment rune,
+	nullif *string,
 	walltime int64,
 ) error {
 	const (
@@ -835,6 +837,9 @@ func (l *DistLoader) LoadCSV(
 			SampleSize: sampleSize,
 			TableDesc:  *tableDesc,
 			Uri:        input,
+			Comma:      comma,
+			Comment:    comment,
+			Nullif:     nullif,
 		}
 		node := nodes[i%len(nodes)]
 		proc := distsqlplan.Processor{
@@ -955,6 +960,9 @@ func (l *DistLoader) LoadCSV(
 	for i, input := range from {
 		// TODO(mjibson): attempt to intelligently schedule http files to matching cockroach nodes
 		rcs := distsqlrun.ReadCSVSpec{
+			Comma:      comma,
+			Comment:    comment,
+			Nullif:     nullif,
 			SampleSize: 0,
 			TableDesc:  *tableDesc,
 			Uri:        input,
