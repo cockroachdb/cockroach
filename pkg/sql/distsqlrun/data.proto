@@ -151,8 +151,8 @@ message OutputRouterSpec {
     }
     // Span matches bytes in [start, end).
     message Span {
-      optional bytes start = 1 [(gogoproto.nullable) = false];
-      optional bytes end = 2 [(gogoproto.nullable) = true];
+      optional bytes start = 1;
+      optional bytes end = 2;
     }
 
     // spans is a slice of Span. Input matching the Nth span will be routed to the
