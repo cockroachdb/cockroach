@@ -336,7 +336,9 @@ func TestClusterRecovery(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	runTestOnConfigs(t, testClusterRecoveryInner)
+	RunBare(t, func(t *testing.T) {
+		runTestOnConfigs(t, testClusterRecoveryInner)
+	})
 }
 
 func testClusterRecoveryInner(
@@ -398,7 +400,9 @@ func TestNodeRestart(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	runTestOnConfigs(t, testNodeRestartInner)
+	RunBare(t, func(t *testing.T) {
+		runTestOnConfigs(t, testNodeRestartInner)
+	})
 }
 
 func testNodeRestartInner(

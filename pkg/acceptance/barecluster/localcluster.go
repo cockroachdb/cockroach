@@ -301,7 +301,10 @@ func (c *Cluster) isReplicated() (bool, string) {
 		}
 		fmt.Fprintf(tw, "\t%s\t%s\t[%d]\t%d\n",
 			desc.StartKey, desc.EndKey, desc.RangeID, storeIDs)
-		if len(desc.Replicas) < 3 { // allow overreplication
+		// This check is coarse since it doesn't know the real configuration.
+		// Assume all is well when there are 3+ replicas, or if there are as
+		// many replicas as there are nodes.
+		if len(desc.Replicas) < 3 && len(desc.Replicas) != len(c.Nodes) {
 			done = false
 		}
 	}

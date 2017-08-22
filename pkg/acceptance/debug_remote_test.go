@@ -30,7 +30,11 @@ import (
 func TestDebugRemote(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
+	// TODO(tschottdorf): with some love, this might run under RunBare.
+	RunDocker(t, testDebugRemote)
+}
 
+func testDebugRemote(t *testing.T) {
 	SkipUnlessLocal(t)
 	cfg := cluster.TestConfig{
 		Name:     "TestDebugRemote",

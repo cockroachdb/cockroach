@@ -34,7 +34,9 @@ func TestGossipPeerings(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	runTestOnConfigs(t, testGossipPeeringsInner)
+	RunBare(t, func(t *testing.T) {
+		runTestOnConfigs(t, testGossipPeeringsInner)
+	})
 }
 
 func testGossipPeeringsInner(
@@ -85,9 +87,16 @@ func TestGossipRestart(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	// TODO(bram): #4559 Limit this test to only the relevant cases. No chaos
-	// agents should be required.
-	runTestOnConfigs(t, testGossipRestartInner)
+	// TODO(tschottdorf): at the time of writing, this can't run under RunBare
+	// simply because that mode uses ephemeral ports, and so restarting a whole
+	// cluster leads to no node knowing where to reach any other node. To change
+	// this, we could introduce an RPC we can send to the cluster that gives it
+	// "hints" for its --join list after it has started.
+	RunDocker(t, func(t *testing.T) {
+		// TODO(bram): #4559 Limit this test to only the relevant cases. No chaos
+		// agents should be required.
+		runTestOnConfigs(t, testGossipRestartInner)
+	})
 }
 
 func testGossipRestartInner(

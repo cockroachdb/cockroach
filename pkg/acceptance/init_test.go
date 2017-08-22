@@ -38,14 +38,21 @@ func TestInitModeBootstrapNodeZero(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	runTestOnConfigs(t, testInitModeInner, useInitMode(cluster.INIT_BOOTSTRAP_NODE_ZERO))
+	// TODO(tschottdorf): give BareCluster support for the init modes and we should be able
+	// to switch this to RunBare. Ditto below.
+	RunDocker(t, func(t *testing.T) {
+		runTestOnConfigs(t, testInitModeInner, useInitMode(cluster.INIT_BOOTSTRAP_NODE_ZERO))
+	})
 }
 
 func TestInitModeCommand(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	runTestOnConfigs(t, testInitModeInner, useInitMode(cluster.INIT_COMMAND))
+	// TODO(tschottdorf): see above.
+	RunBare(t, func(t *testing.T) {
+		runTestOnConfigs(t, testInitModeInner, useInitMode(cluster.INIT_COMMAND))
+	})
 }
 
 func testInitModeInner(
@@ -67,7 +74,10 @@ func TestInitModeNone(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	runTestOnConfigs(t, testInitModeNoneInner, useInitMode(cluster.INIT_NONE))
+	// TODO(tschottdorf): see above.
+	RunBare(t, func(t *testing.T) {
+		runTestOnConfigs(t, testInitModeNoneInner, useInitMode(cluster.INIT_NONE))
+	})
 }
 
 func testInitModeNoneInner(
