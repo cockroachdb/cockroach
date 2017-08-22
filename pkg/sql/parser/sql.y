@@ -1615,13 +1615,18 @@ explain_stmt:
 | EXPLAIN '(' error // SHOW HELP: EXPLAIN
 
 preparable_stmt:
-  select_stmt // help texts in sub-rule
+  backup_stmt // EXTEND WITH HELP: BACKUP
+| cancel_stmt // help texts in sub-rule
+| delete_stmt // EXTEND WITH HELP: DELETE
+| import_stmt // EXTEND WITH HELP: IMPORT
+| insert_stmt // EXTEND WITH HELP: INSERT
+| pause_stmt  // EXTEND WITH HELP: PAUSE JOB
+| resume_stmt // EXTEND WITH HELP: RESUME JOB
+| select_stmt // help texts in sub-rule
   {
     $$.val = $1.slct()
   }
 | show_stmt   // help texts in sub-rule
-| delete_stmt // EXTEND WITH HELP: DELETE
-| insert_stmt // EXTEND WITH HELP: INSERT
 | update_stmt // EXTEND WITH HELP: UPDATE
 | upsert_stmt // EXTEND WITH HELP: UPSERT
 
