@@ -98,9 +98,10 @@ func handleVModule(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
-	spec := r.RequestURI[len(vmodulePrefix):]
+	spec := strings.TrimPrefix(r.URL.Path, vmodulePrefix)
 	if err := log.SetVModule(spec); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	log.Infof(context.Background(), "vmodule changed to: %s", spec)
 	fmt.Fprint(w, "ok: "+spec)
