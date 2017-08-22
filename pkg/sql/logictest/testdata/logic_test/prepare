@@ -316,3 +316,20 @@ EXECUTE p3(124)
 ----
 124
 
+statement ok
+PREPARE p4 AS CANCEL JOB $1
+
+query error pq: job with ID 123 does not exist
+EXECUTE p4(123)
+
+statement ok
+PREPARE p5 AS PAUSE JOB $1
+
+query error pq: job with ID 123 does not exist
+EXECUTE p5(123)
+
+statement ok
+PREPARE p6 AS RESUME JOB $1
+
+query error pq: job with ID 123 does not exist
+EXECUTE p6(123)
