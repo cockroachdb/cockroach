@@ -851,11 +851,11 @@ func Example_sql_column_labels() {
 	// INSERT INTO results VALUES ('0', '0', '0', '0', '0', '0');
 	// sql --format=html -e select * from t.u
 	// <table>
-	// <thead><tr><th>&#34;foo</th><th>\foo</th><th>&#34;foo\nbar&#34;</th><th>κόσμε</th><th>a|b</th><th>܈85</th></tr></head>
+	// <thead><tr><th>row</th><th>&#34;foo</th><th>\foo</th><th>&#34;foo\nbar&#34;</th><th>κόσμε</th><th>a|b</th><th>܈85</th></tr></head>
 	// <tbody>
-	// <tr><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+	// <tr><td>1</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
 	// </tbody>
-	// </table>
+	// <tfoot><tr><td colspan=7>1 row</td></tr></tfoot></table>
 	// sql --format=records -e select * from t.u
 	// -[ RECORD 1 ]
 	// "foo       | 0
@@ -864,6 +864,113 @@ func Example_sql_column_labels() {
 	// κόσμε      | 0
 	// a|b        | 0
 	// ܈85        | 0
+}
+
+func Example_sql_empty_table() {
+	c := newCLITest(cliTestParams{})
+	defer c.cleanup()
+
+	c.RunWithArgs([]string{"sql", "-e", "create database t;" +
+		"create table t.norows(x int);" +
+		"create table t.nocolsnorows();" +
+		"create table t.nocols(); insert into t.nocols(rowid) values (1),(2),(3);"})
+	for _, table := range []string{"norows", "nocols", "nocolsnorows"} {
+		for _, format := range []string{"pretty", "tsv", "csv", "sql", "html", "raw", "records"} {
+			c.RunWithArgs([]string{"sql", "--format=" + format, "-e", "select * from t." + table})
+		}
+	}
+
+	// Output:
+	// sql -e create database t;create table t.norows(x int);create table t.nocolsnorows();create table t.nocols(); insert into t.nocols(rowid) values (1),(2),(3);
+	// INSERT 3
+	// sql --format=pretty -e select * from t.norows
+	// +---+
+	// | x |
+	// +---+
+	// +---+
+	// (0 rows)
+	// sql --format=tsv -e select * from t.norows
+	// 0 rows
+	// x
+	// sql --format=csv -e select * from t.norows
+	// 0 rows
+	// x
+	// sql --format=sql -e select * from t.norows
+	// CREATE TABLE results (
+	//   x STRING
+	// );
+	//
+	// sql --format=html -e select * from t.norows
+	// <table>
+	// <thead><tr><th>row</th><th>x</th></tr></head>
+	// </tbody>
+	// <tfoot><tr><td colspan=2>0 rows</td></tr></tfoot></table>
+	// sql --format=raw -e select * from t.norows
+	// # 1 column
+	// # 0 rows
+	// sql --format=records -e select * from t.norows
+	// sql --format=pretty -e select * from t.nocols
+	// --
+	// (3 rows)
+	// sql --format=tsv -e select * from t.nocols
+	// 3 rows
+	// # no columns
+	// # empty
+	// # empty
+	// # empty
+	// sql --format=csv -e select * from t.nocols
+	// 3 rows
+	// # no columns
+	// # empty
+	// # empty
+	// # empty
+	// sql --format=sql -e select * from t.nocols
+	// CREATE TABLE results (
+	// );
+	//
+	// INSERT INTO results(rowid) VALUES (DEFAULT);
+	// INSERT INTO results(rowid) VALUES (DEFAULT);
+	// INSERT INTO results(rowid) VALUES (DEFAULT);
+	// sql --format=html -e select * from t.nocols
+	// <table>
+	// <thead><tr><th>row</th></tr></head>
+	// <tbody>
+	// <tr><td>1</td></tr>
+	// <tr><td>2</td></tr>
+	// <tr><td>3</td></tr>
+	// </tbody>
+	// <tfoot><tr><td colspan=1>3 rows</td></tr></tfoot></table>
+	// sql --format=raw -e select * from t.nocols
+	// # 0 columns
+	// # row 1
+	// # row 2
+	// # row 3
+	// # 3 rows
+	// sql --format=records -e select * from t.nocols
+	// (3 rows)
+	// sql --format=pretty -e select * from t.nocolsnorows
+	// --
+	// (0 rows)
+	// sql --format=tsv -e select * from t.nocolsnorows
+	// 0 rows
+	// # no columns
+	// sql --format=csv -e select * from t.nocolsnorows
+	// 0 rows
+	// # no columns
+	// sql --format=sql -e select * from t.nocolsnorows
+	// CREATE TABLE results (
+	// );
+	//
+	// sql --format=html -e select * from t.nocolsnorows
+	// <table>
+	// <thead><tr><th>row</th></tr></head>
+	// </tbody>
+	// <tfoot><tr><td colspan=1>0 rows</td></tr></tfoot></table>
+	// sql --format=raw -e select * from t.nocolsnorows
+	// # 0 columns
+	// # 0 rows
+	// sql --format=records -e select * from t.nocolsnorows
+	// (0 rows)
 }
 
 func Example_sql_table() {
@@ -995,19 +1102,19 @@ func Example_sql_table() {
 	// INSERT INTO results VALUES (e'a\tb\tc\n12\t123123213\t12313', 'tabs');
 	// sql --format=html -e select * from t.t
 	// <table>
-	// <thead><tr><th>s</th><th>d</th></tr></head>
+	// <thead><tr><th>row</th><th>s</th><th>d</th></tr></head>
 	// <tbody>
-	// <tr><td>foo</td><td>printable ASCII</td></tr>
-	// <tr><td>&#34;foo</td><td>printable ASCII with quotes</td></tr>
-	// <tr><td>\foo</td><td>printable ASCII with backslash</td></tr>
-	// <tr><td>foo<br/>bar</td><td>non-printable ASCII</td></tr>
-	// <tr><td>κόσμε</td><td>printable UTF8</td></tr>
-	// <tr><td>ñ</td><td>printable UTF8 using escapes</td></tr>
-	// <tr><td>&#34;\x01&#34;</td><td>non-printable UTF8 string</td></tr>
-	// <tr><td>܈85</td><td>UTF8 string with RTL char</td></tr>
-	// <tr><td>a	b	c<br/>12	123123213	12313</td><td>tabs</td></tr>
+	// <tr><td>1</td><td>foo</td><td>printable ASCII</td></tr>
+	// <tr><td>2</td><td>&#34;foo</td><td>printable ASCII with quotes</td></tr>
+	// <tr><td>3</td><td>\foo</td><td>printable ASCII with backslash</td></tr>
+	// <tr><td>4</td><td>foo<br/>bar</td><td>non-printable ASCII</td></tr>
+	// <tr><td>5</td><td>κόσμε</td><td>printable UTF8</td></tr>
+	// <tr><td>6</td><td>ñ</td><td>printable UTF8 using escapes</td></tr>
+	// <tr><td>7</td><td>&#34;\x01&#34;</td><td>non-printable UTF8 string</td></tr>
+	// <tr><td>8</td><td>܈85</td><td>UTF8 string with RTL char</td></tr>
+	// <tr><td>9</td><td>a	b	c<br/>12	123123213	12313</td><td>tabs</td></tr>
 	// </tbody>
-	// </table>
+	// <tfoot><tr><td colspan=3>9 rows</td></tr></tfoot></table>
 	// sql --format=raw -e select * from t.t
 	// # 2 columns
 	// # row 1
