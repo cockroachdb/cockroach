@@ -82,6 +82,27 @@ TODO(benesch): install `azcopy` on azworkers.
 
 TODO(benesch): set up a TeamCity build to sync fixtures buckets automatically.
 
+## Ephemeral Storage
+
+Backup acceptance tests need a cloud storage account to use as the backup
+destination. These backups don't need to last beyond the end of each acceptance
+test, and so the files are periodically cleaned up to avoid paying for
+unnecessary storage.
+
+TODO(benesch): automate cleaning out ephemeral data. Right now, the process is
+entirely manual.
+
+To avoid accidentally deleting fixture data—which can take several *days* to
+regenerate—the ephemeral data is stored in separate storage accounts from the
+backup data. Currently, we maintain the following storage accounts:
+
+* **`roachephemeraleastus`**
+* **`roachephemeralwestus`**
+
+Some acceptance tests follow a backup to ephemeral storage with a restore from
+that same ephemeral storage, triggering both ingress and egress bandwidth. To
+avoid paying for this egress bandwidth, we colocate storage accounts with the
+VMs running the acceptance tests, as we do for test fixtures.
 
 [azcopy]: https://docs.microsoft.com/en-us/azure/storage/storage-use-azcopy-linux
 [azure-blob-storage]: https://docs.microsoft.com/en-us/azure/storage/storage-introduction#blob-storage
