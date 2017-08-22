@@ -44,6 +44,7 @@ var informationSchema = virtualSchema{
 		informationSchemaTablesTable,
 		informationSchemaViewsTable,
 		informationSchemaUserPrivileges,
+		informationSchemaSequences,
 	},
 }
 
@@ -507,6 +508,30 @@ CREATE TABLE information_schema.tables (
 				parser.NewDInt(parser.DInt(table.Version)), // version
 			)
 		})
+	},
+}
+
+var informationSchemaSequences = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.sequences (
+    SEQUENCE_CATALOG STRING NOT NULL DEFAULT '',
+    SEQUENCE_SCHEMA STRING NOT NULL DEFAULT '',
+    SEQUENCE_NAME STRING NOT NULL DEFAULT '',
+    DATA_TYPE STRING NOT NULL DEFAULT '',
+    NUMERIC_PRECISION INT NOT NULL DEFAULT 0,
+    NUMERIC_PRECISION_RADIX INT NOT NULL DEFAULT 0,
+    NUMERIC_SCALE INT NOT NULL DEFAULT 0,
+    START_VALUE STRING NOT NULL DEFAULT '',
+    MINIMUM_VALUE STRING NOT NULL DEFAULT '',
+    MAXIMUM_VALUE STRING NOT NULL DEFAULT '',
+    INCREMENT STRING NOT NULL DEFAULT '',
+    CYCLE_OPTION STRING NOT NULL DEFAULT 'NO'
+);`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error {
+		// Sequences are not yet supported: #5811
+		// However, we support an empty information_schema table to enable
+		// clients to observe that there are no sequences.
+		return nil
 	},
 }
 
