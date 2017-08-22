@@ -330,6 +330,13 @@ type DistSQLPlannerTestingKnobs struct {
 	// If OverrideSQLHealthCheck is set, we use this callback to get the health of
 	// a node.
 	OverrideHealthCheck func(node roachpb.NodeID, addrString string) error
+	// If OverrideDistSQLVersionCheck is set, the distSQLPlanner uses this instead
+	// of gossip for figuring out a node's DistSQL version. The callback can
+	// return an error to simulate gossip not having any info for the node. If the
+	// test wants to simulate the node accepting any version, the callback can
+	// return a 0..+inf acceptable version range.
+	OverrideDistSQLVersionCheck func(
+		node roachpb.NodeID) (distsqlrun.DistSQLVersionGossipInfo, error)
 }
 
 // NewExecutor creates an Executor and registers a callback on the
@@ -372,6 +379,7 @@ func (e *Executor) Start(
 	ctx = e.AnnotateCtx(ctx)
 	log.Infof(ctx, "creating distSQLPlanner with address %s", nodeDesc.Address)
 	e.distSQLPlanner = newDistSQLPlanner(
+		distsqlrun.Version,
 		e.cfg.Settings,
 		nodeDesc,
 		e.cfg.RPCContext,

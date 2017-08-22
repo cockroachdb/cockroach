@@ -151,6 +151,22 @@ var (
 		defaultGossipStoresInterval)
 )
 
+// KeyNotPresentError is returned by gossip when queried for a key that doesn't
+// exist of has expired.
+type KeyNotPresentError struct {
+	key string
+}
+
+// Error implements the error interface.
+func (err KeyNotPresentError) Error() string {
+	return fmt.Sprintf("KeyNotPresentError: gossip key %q does not exist or has expired", err.key)
+}
+
+// NewKeyNotPresentError creates a new KeyNotPresentError.
+func NewKeyNotPresentError(key string) error {
+	return KeyNotPresentError{key: key}
+}
+
 // Storage is an interface which allows the gossip instance
 // to read and write bootstrapping data to persistent storage
 // between instantiations.
@@ -788,7 +804,7 @@ func (g *Gossip) AddInfoProto(key string, msg proto.Message, ttl time.Duration) 
 	return g.AddInfo(key, bytes, ttl)
 }
 
-// GetInfo returns an info value by key or an error if specified
+// GetInfo returns an info value by key or an KeyNotPresentError if specified
 // key does not exist or has expired.
 func (g *Gossip) GetInfo(key string) ([]byte, error) {
 	g.mu.Lock()
@@ -801,10 +817,10 @@ func (g *Gossip) GetInfo(key string) ([]byte, error) {
 		}
 		return i.Value.GetBytes()
 	}
-	return nil, errors.Errorf("key %q does not exist or has expired", key)
+	return nil, NewKeyNotPresentError(key)
 }
 
-// GetInfoProto returns an info value by key or an error if specified
+// GetInfoProto returns an info value by key or KeyNotPresentError if specified
 // key does not exist or has expired.
 func (g *Gossip) GetInfoProto(key string, msg proto.Message) error {
 	bytes, err := g.GetInfo(key)
