@@ -1152,6 +1152,7 @@ func (ds *DistSender) sendToReplicas(
 	for {
 		select {
 		case <-slowTimer.C:
+			slowTimer.Read = true
 			log.Warningf(ctx, "have been waiting %s sending RPC to r%d for batch: %s",
 				base.SlowRequestThreshold, rangeID, args)
 			ds.metrics.SlowRequestsCount.Inc(1)
