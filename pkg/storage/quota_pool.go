@@ -140,14 +140,14 @@ func (qp *quotaPool) acquire(ctx context.Context, v int64) error {
 	}
 	qp.Unlock()
 	slowTimer := timeutil.NewTimer()
-	slowTimer.Reset(base.SlowRequestThreshold)
 	defer slowTimer.Stop()
 	start := timeutil.Now()
 
 	for {
+		slowTimer.Reset(base.SlowRequestThreshold)
 		select {
 		case now := <-slowTimer.C:
-			slowTimer.Reset(base.SlowRequestThreshold)
+			slowTimer.Read = true
 			log.Warningf(ctx, "have been waiting %s attempting to acquire quota",
 				now.Sub(start))
 			continue
@@ -191,9 +191,10 @@ func (qp *quotaPool) acquire(ctx context.Context, v int64) error {
 
 	var acquired int64
 	for acquired < v {
+		slowTimer.Reset(base.SlowRequestThreshold)
 		select {
 		case now := <-slowTimer.C:
-			slowTimer.Reset(base.SlowRequestThreshold)
+			slowTimer.Read = true
 			log.Warningf(ctx, "have been waiting %s attempting to acquire quota",
 				now.Sub(start))
 		case <-ctx.Done():
