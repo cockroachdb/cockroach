@@ -70,7 +70,7 @@ func runLsNodes(cmd *cobra.Command, args []string) error {
 		})
 	}
 
-	return printQueryOutput(os.Stdout, lsNodesColumnHeaders, newRowSliceIter(rows), "")
+	return printQueryOutput(os.Stdout, lsNodesColumnHeaders, newRowSliceIter(rows))
 }
 
 var baseNodeColumnHeaders = []string{
@@ -122,7 +122,7 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	return printQueryOutput(os.Stdout, getStatusNodeHeaders(), newRowSliceIter(nodeStatusesToRows(nodeStatuses, decommissionStatusResp)), "")
+	return printQueryOutput(os.Stdout, getStatusNodeHeaders(), newRowSliceIter(nodeStatusesToRows(nodeStatuses, decommissionStatusResp)))
 }
 
 func runStatusNodeInner(
@@ -413,7 +413,7 @@ effect and the nodes will participate in the cluster as regular nodes.
 
 func printDecommissionStatus(resp serverpb.DecommissionStatusResponse) error {
 	return printQueryOutput(os.Stdout, decommissionNodesColumnHeaders,
-		newRowSliceIter(decommissionResponseValueToRows(resp.Status)), "")
+		newRowSliceIter(decommissionResponseValueToRows(resp.Status)))
 }
 
 func runRecommissionNode(cmd *cobra.Command, args []string) error {
