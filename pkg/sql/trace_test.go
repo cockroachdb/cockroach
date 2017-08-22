@@ -34,6 +34,9 @@ func TestTrace(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
+	// These are always appended, even without the test specifying it.
+	alwaysOptionalSpans := []string{"[async] storage.pendingLeaseRequest: requesting lease"}
+
 	testData := []struct {
 		name          string
 		getRows       func(t *testing.T, sqlDB *gosql.DB) (*gosql.Rows, error)
@@ -157,6 +160,7 @@ func TestTrace(t *testing.T) {
 	}
 
 	for _, test := range testData {
+		test.optionalSpans = append(test.optionalSpans, alwaysOptionalSpans...)
 		sort.Strings(test.expSpans)
 
 		t.Run(test.name, func(t *testing.T) {
