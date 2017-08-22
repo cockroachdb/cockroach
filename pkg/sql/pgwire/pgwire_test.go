@@ -854,81 +854,80 @@ func TestPGPreparedQuery(t *testing.T) {
 		tests []preparedQueryTest,
 		queryFunc func(...interface{}) (*gosql.Rows, error),
 	) {
-		for _, test := range tests {
-			if testing.Verbose() || log.V(1) {
-				log.Infof(context.Background(), "query: %s", query)
-			}
-			rows, err := queryFunc(test.qargs...)
-			if err != nil {
-				if test.error == "" {
-					t.Errorf("%s: %v: unexpected error: %s", query, test.qargs, err)
-				} else {
-					expectedErr := test.error
-					if prepared && test.preparedError != "" {
-						expectedErr = test.preparedError
+		for idx, test := range tests {
+			t.Run(fmt.Sprintf("%d", idx), func(t *testing.T) {
+				if testing.Verbose() || log.V(1) {
+					log.Infof(context.Background(), "query: %s", query)
+				}
+				rows, err := queryFunc(test.qargs...)
+				if err != nil {
+					if test.error == "" {
+						t.Errorf("%s: %v: unexpected error: %s", query, test.qargs, err)
+					} else {
+						expectedErr := test.error
+						if prepared && test.preparedError != "" {
+							expectedErr = test.preparedError
+						}
+						if err.Error() != expectedErr {
+							t.Errorf("%s: %v: expected error: %s, got %s", query, test.qargs, expectedErr, err)
+						}
 					}
-					if err.Error() != expectedErr {
-						t.Errorf("%s: %v: expected error: %s, got %s", query, test.qargs, expectedErr, err)
+					return
+				}
+				defer rows.Close()
+
+				if test.error != "" {
+					t.Fatalf("expected error: %s: %v", query, test.qargs)
+				}
+
+				for _, expected := range test.results {
+					if !rows.Next() {
+						t.Fatalf("expected row: %s: %v", query, test.qargs)
+					}
+					dst := make([]interface{}, len(expected))
+					for i, d := range expected {
+						dst[i] = reflect.New(reflect.TypeOf(d)).Interface()
+					}
+					if err := rows.Scan(dst...); err != nil {
+						t.Error(err)
+					}
+					for i, d := range dst {
+						dst[i] = reflect.Indirect(reflect.ValueOf(d)).Interface()
+					}
+					if !reflect.DeepEqual(dst, expected) {
+						t.Errorf("%s: %v: expected %v, got %v", query, test.qargs, expected, dst)
 					}
 				}
-				continue
-			}
-			defer rows.Close()
-
-			if test.error != "" {
-				t.Errorf("expected error: %s: %v", query, test.qargs)
-				continue
-			}
-
-			for _, expected := range test.results {
-				if !rows.Next() {
-					t.Errorf("expected row: %s: %v", query, test.qargs)
-					continue
+				for rows.Next() {
+					if test.others > 0 {
+						test.others--
+						continue
+					}
+					cols, err := rows.Columns()
+					if err != nil {
+						t.Errorf("%s: %s", query, err)
+						continue
+					}
+					// Unexpected line. Get and print out the details.
+					dst := make([]interface{}, len(cols))
+					for i := range dst {
+						dst[i] = new(interface{})
+					}
+					if err := rows.Scan(dst...); err != nil {
+						t.Errorf("%s: %s", query, err)
+						continue
+					}
+					b, err := json.Marshal(dst)
+					if err != nil {
+						t.Errorf("%s: %s", query, err)
+						continue
+					}
+					t.Errorf("%s: unexpected row: %s", query, b)
 				}
-				dst := make([]interface{}, len(expected))
-				for i, d := range expected {
-					dst[i] = reflect.New(reflect.TypeOf(d)).Interface()
-				}
-				if err := rows.Scan(dst...); err != nil {
-					t.Error(err)
-				}
-				for i, d := range dst {
-					dst[i] = reflect.Indirect(reflect.ValueOf(d)).Interface()
-				}
-				if !reflect.DeepEqual(dst, expected) {
-					t.Errorf("%s: %v: expected %v, got %v", query, test.qargs, expected, dst)
-				}
-			}
-			for rows.Next() {
 				if test.others > 0 {
-					test.others--
-					continue
+					t.Fatalf("%s: expected %d more rows", query, test.others)
 				}
-				cols, err := rows.Columns()
-				if err != nil {
-					t.Errorf("%s: %s", query, err)
-					continue
-				}
-				// Unexpected line. Get and print out the details.
-				dst := make([]interface{}, len(cols))
-				for i := range dst {
-					dst[i] = new(interface{})
-				}
-				if err := rows.Scan(dst...); err != nil {
-					t.Errorf("%s: %s", query, err)
-					continue
-				}
-				b, err := json.Marshal(dst)
-				if err != nil {
-					t.Errorf("%s: %s", query, err)
-					continue
-				}
-				t.Errorf("%s: unexpected row: %s", query, b)
-			}
-			if test.others > 0 {
-				t.Errorf("%s: expected %d more rows", query, test.others)
-				continue
-			}
+			})
 		}
 	}
 
@@ -1141,48 +1140,58 @@ func TestPGPreparedExec(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 
-	runTests := func(query string, tests []preparedExecTest, execFunc func(...interface{}) (gosql.Result, error)) {
-		for _, test := range tests {
-			if testing.Verbose() || log.V(1) {
-				log.Infof(context.Background(), "exec: %s", query)
-			}
-			if result, err := execFunc(test.qargs...); err != nil {
-				if test.error == "" {
-					t.Errorf("%s: %v: unexpected error: %s", query, test.qargs, err)
-				} else if err.Error() != test.error {
-					t.Errorf("%s: %v: expected error: %s, got %s", query, test.qargs, test.error, err)
+	runTests := func(
+		t *testing.T, query string, tests []preparedExecTest, execFunc func(...interface{},
+		) (gosql.Result, error)) {
+		for idx, test := range tests {
+			t.Run(fmt.Sprintf("%d", idx), func(t *testing.T) {
+				if testing.Verbose() || log.V(1) {
+					log.Infof(context.Background(), "exec: %s", query)
 				}
-			} else {
-				rowsAffected, err := result.RowsAffected()
-				if !testutils.IsError(err, test.rowsAffectedErr) {
-					t.Errorf("%s: %v: expected %q, got %v", query, test.qargs, test.rowsAffectedErr, err)
-				} else if rowsAffected != test.rowsAffected {
-					t.Errorf("%s: %v: expected %v, got %v", query, test.qargs, test.rowsAffected, rowsAffected)
+				if result, err := execFunc(test.qargs...); err != nil {
+					if test.error == "" {
+						t.Errorf("%s: %v: unexpected error: %s", query, test.qargs, err)
+					} else if err.Error() != test.error {
+						t.Errorf("%s: %v: expected error: %s, got %s", query, test.qargs, test.error, err)
+					}
+				} else {
+					rowsAffected, err := result.RowsAffected()
+					if !testutils.IsError(err, test.rowsAffectedErr) {
+						t.Errorf("%s: %v: expected %q, got %v", query, test.qargs, test.rowsAffectedErr, err)
+					} else if rowsAffected != test.rowsAffected {
+						t.Errorf("%s: %v: expected %v, got %v", query, test.qargs, test.rowsAffected, rowsAffected)
+					}
 				}
-			}
+			})
 		}
 	}
 
-	for _, execTest := range execTests {
-		runTests(execTest.query, execTest.tests, func(args ...interface{}) (gosql.Result, error) {
-			return db.Exec(execTest.query, args...)
-		})
-	}
-
-	for _, execTest := range execTests {
-		if testing.Verbose() || log.V(1) {
-			log.Infof(context.Background(), "prepare: %s", execTest.query)
+	t.Run("exec", func(t *testing.T) {
+		for _, execTest := range execTests {
+			t.Run(execTest.query, func(t *testing.T) {
+				runTests(t, execTest.query, execTest.tests, func(args ...interface{}) (gosql.Result, error) {
+					return db.Exec(execTest.query, args...)
+				})
+			})
 		}
-		if stmt, err := db.Prepare(execTest.query); err != nil {
-			t.Errorf("%s: prepare error: %s", execTest.query, err)
-		} else {
-			func() {
-				defer stmt.Close()
+	})
 
-				runTests(execTest.query, execTest.tests, stmt.Exec)
-			}()
+	t.Run("prepare", func(t *testing.T) {
+		for _, execTest := range execTests {
+			t.Run(execTest.query, func(t *testing.T) {
+				if testing.Verbose() || log.V(1) {
+					log.Infof(context.Background(), "prepare: %s", execTest.query)
+				}
+				if stmt, err := db.Prepare(execTest.query); err != nil {
+					t.Errorf("%s: prepare error: %s", execTest.query, err)
+				} else {
+					defer stmt.Close()
+
+					runTests(t, execTest.query, execTest.tests, stmt.Exec)
+				}
+			})
 		}
-	}
+	})
 }
 
 // Names should be qualified automatically during Prepare when a database name
