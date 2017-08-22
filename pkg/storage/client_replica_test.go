@@ -1526,6 +1526,7 @@ func TestSystemZoneConfigs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	config.DefaultZoneConfig()
 	expectedReplicas := expectedRanges * int(config.DefaultZoneConfig().NumReplicas)
 
 	waitForReplicas := func() error {
@@ -1587,6 +1588,6 @@ func TestSystemZoneConfigs(t *testing.T) {
 	zoneConfig = config.DefaultZoneConfig()
 	zoneConfig.NumReplicas += 2
 	config.TestingSetZoneConfig(keys.SystemRangesID, zoneConfig)
-	expectedReplicas += 4
+	expectedReplicas += 8
 	testutils.SucceedsSoon(t, waitForReplicas)
 }
