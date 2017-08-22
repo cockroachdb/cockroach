@@ -20,9 +20,11 @@ import (
 	"strings"
 
 	// Register the net/trace endpoint with http.DefaultServeMux.
+	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/rcrowley/go-metrics"
 	"github.com/rcrowley/go-metrics/exp"
 
@@ -34,6 +36,9 @@ import (
 // debugEndpoint is the prefix of golang's standard debug functionality
 // for access to exported vars and pprof tools.
 const debugEndpoint = "/debug/"
+
+// vmoduleEndpoint is used to change logging's vmodule settings.
+const vmodulePrefix = debugEndpoint + "vmodule/"
 
 // We use the default http mux for the debug endpoint (as pprof and net/trace
 // register to that via import, and go-metrics registers to that via exp.Exp())
@@ -83,6 +88,24 @@ func authRequest(r *http.Request) (allow, sensitive bool) {
 	return allow, sensitive
 }
 
+func handleVModule(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	if !ClusterSettings.DebugVModule.Get() {
+		http.Error(
+			w,
+			"not allowed (due to the 'server.remote_debugging.vmodule' setting)",
+			http.StatusForbidden,
+		)
+		return
+	}
+	spec := r.RequestURI[len(vmodulePrefix):]
+	if err := log.SetVModule(spec); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	log.Infof(context.Background(), "vmodule changed to: %s", spec)
+	fmt.Fprint(w, "ok: "+spec)
+}
+
 func init() {
 	traceAuthRequest = trace.AuthRequest
 
@@ -92,6 +115,8 @@ func init() {
 	//
 	// TODO(mberhault): properly secure this once we require client certs.
 	trace.AuthRequest = authRequest
+
+	debugServeMux.HandleFunc(vmodulePrefix, handleVModule)
 
 	debugServeMux.HandleFunc(debugEndpoint, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != debugEndpoint {
