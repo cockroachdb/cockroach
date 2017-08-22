@@ -1376,6 +1376,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 					log.Eventf(ctx, "lease acquisition succeeded: %+v", status.lease)
 					return nil
 				case <-slowTimer.C:
+					slowTimer.Read = true
 					log.Warningf(ctx, "have been waiting %s attempting to acquire lease",
 						base.SlowRequestThreshold)
 					r.store.metrics.SlowLeaseRequests.Inc(1)
@@ -2633,6 +2634,7 @@ func (r *Replica) tryExecuteWriteBatch(
 			}
 			return propResult.Reply, propResult.Err, propResult.ProposalRetry
 		case <-slowTimer.C:
+			slowTimer.Read = true
 			log.Warningf(ctx, "have been waiting %s for proposing command %s",
 				base.SlowRequestThreshold, ba)
 			r.store.metrics.SlowRaftRequests.Inc(1)
