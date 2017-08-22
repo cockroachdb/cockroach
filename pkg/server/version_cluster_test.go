@@ -139,9 +139,12 @@ func TestClusterVersionUpgrade1_0To1_1(t *testing.T) {
 		{Major: 1, Unstable: 500},
 		{Major: 1, Minor: 1},
 	} {
+		curVersion := tc.getVersionFromSelect(0)
+		isNoopUpdate := curVersion == newVersion.String()
+
 		for i := 0; i < tc.NumServers(); i++ {
 			v := tc.getVersionFromSetting(i)
-			wantActive := newVersion == bootstrapVersion.MinimumVersion
+			wantActive := isNoopUpdate
 			if isActive := v.IsActive(newVersion); isActive != wantActive {
 				t.Fatalf("%d: v%s active=%t (wanted %t)", i, newVersion, isActive, wantActive)
 			}
@@ -173,7 +176,11 @@ func TestClusterVersionUpgrade1_0To1_1(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			for i := 0; i < tc.NumServers(); i++ {
 				vers := tc.getVersionFromSetting(i)
-				if v := vers.Version().MinimumVersion.String(); v == bootstrapVersion.String() {
+				if v := vers.Version().MinimumVersion.String(); v == curVersion {
+					if isNoopUpdate {
+						// Just what we wanted!
+						return nil
+					}
 					return errors.Errorf("%d: still waiting for %s (now at %s)", i, exp, v)
 				} else if v != exp {
 					t.Fatalf("%d: should never see version %s (wanted %s)", i, v, exp)
