@@ -785,22 +785,29 @@ func (r *Replica) handleReplicatedEvalResult(
 
 		if r.store.cfg.Settings.Version.IsActive(cluster.VersionRaftLogTruncationBelowRaft) {
 			// Truncate the Raft log.
+			batch := r.store.Engine().NewWriteOnlyBatch()
+			// We know that all of the deletions from here forward will be to distinct keys.
+			writer := batch.Distinct()
 			start := engine.MakeMVCCMetadataKey(keys.RaftLogKey(r.RangeID, 0))
 			end := engine.MakeMVCCMetadataKey(
 				keys.RaftLogKey(r.RangeID, newTruncState.Index).PrefixEnd(),
 			)
-			iter := r.store.engine.NewIterator(false /* !prefix */)
+			iter := r.store.Engine().NewIterator(false /* !prefix */)
 			// Clear the log entries. Intentionally don't use range deletion
 			// tombstones (ClearRange()) due to performance concerns connected
 			// to having many range deletion tombstones. There is a chance that
 			// ClearRange will perform well here because the tombstones could be
 			// "collapsed", but it is hardly worth the risk at this point.
-			err := r.store.engine.ClearIterRange(iter, start, end)
-			iter.Close()
-
-			if err != nil {
+			if err := writer.ClearIterRange(iter, start, end); err != nil {
 				log.Errorf(ctx, "unable to clear truncated Raft entries for %+v: %s", newTruncState, err)
 			}
+			iter.Close()
+			writer.Close()
+
+			if err := batch.Commit(false); err != nil {
+				log.Errorf(ctx, "unable to clear truncated Raft entries for %+v: %s", newTruncState, err)
+			}
+			batch.Close()
 		}
 
 		// Clear any entries in the Raft log entry cache for this range up
