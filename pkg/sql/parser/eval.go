@@ -2419,7 +2419,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 	case *BytesColType:
 		switch t := d.(type) {
 		case *DString:
-			return NewDBytes(DBytes(*t)), nil
+			return ParseDByte(string(*t))
 		case *DCollatedString:
 			return NewDBytes(DBytes(t.Contents)), nil
 		case *DUuid:

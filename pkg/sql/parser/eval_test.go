@@ -103,6 +103,10 @@ func TestEval(t *testing.T) {
 		{`x'636174'`, `b'cat'`},
 		{`X'636174'`, `b'cat'`},
 		{`x'636174'::string`, `'cat'`},
+		{`e'\\x636174'::BYTES`, `b'cat'`},
+		{`e'\\X636174'::BYTES`, `b'cat'`},
+		{`e'\\x636174'::STRING::BYTES`, `b'cat'`},
+		{`e'\\x636174'::STRING`, `e'\\x636174'`},
 		// String concatenation.
 		{`'a' || 'b'`, `'ab'`},
 		{`'a' || (1 + 2)::char`, `'a3'`},
