@@ -75,14 +75,14 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
     }
   }
 
-  renderPagination(pageNum: number): React.ReactNode {
+  renderPagination(pageCount: number): React.ReactNode {
     return <ReactPaginate previousLabel={"previous"}
       nextLabel={"next"}
-      breakLabel={<a href="">...</a>}
-      pageNum={pageNum}
+      breakLabel={"..."}
+      pageCount={pageCount}
       marginPagesDisplayed={2}
       pageRangeDisplayed={5}
-      clickCallback={this.handlePageClick.bind(this)}
+      onPageChange={this.handlePageClick.bind(this)}
       containerClassName={"pagination"}
       activeClassName={"active"} />;
   }
@@ -146,12 +146,16 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
       const columns = [<th key={-1}>Range</th>];
       nodeIDs.forEach((id, i) => {
         nodeIDIndex[id] = i + 1;
-        columns.push(<th key={i}><Link to={"/nodes/" + id}>Node {id}</Link></th>);
+        columns.push((
+          <th key={i}>
+            <Link className="debug-link" to={"/cluster/nodes/" + id}>Node {id}</Link>
+          </th>
+        ));
       });
 
       // Filter ranges and paginate
-      const rangesPairs: [string, protos.cockroach.server.serverpb.RaftRangeStatus$Properties][] = _.toPairs(statuses.ranges);
-      const filteredRanges = _.filter(rangesPairs, ([, range]) => {
+      const justRanges = _.values(statuses.ranges);
+      const filteredRanges = _.filter(justRanges, (range) => {
         return !this.state.showOnlyErrors || range.errors.length > 0;
       });
       let offset = this.state.offset;
@@ -160,13 +164,15 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
       }
       const ranges = filteredRanges.slice(offset, offset + RANGES_PER_PAGE);
       const rows: React.ReactNode[][] = [];
-      ranges.forEach(([key, range], i) => {
+      _.map(ranges, (range, i) => {
         const hasErrors = range.errors.length > 0;
         const rangeErrors = <ul>{_.map(range.errors, (error, j) => {
           return <li key={j}>{error.message}</li>;
           })}</ul>;
-        const row = [<td key={-1}>
-            {key}
+        const row = [<td key="row{i}">
+            <Link className="debug-link" to={`#/reports/range/${range.range_id.toString()}`}>
+              r{range.range_id.toString()}
+            </Link>
             {
               (hasErrors) ? (
                 <span style={{position: "relative"}}>

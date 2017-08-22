@@ -151,9 +151,9 @@
   dependencies:
     "@types/react" "*"
 
-"@types/react-paginate@<3.0.0":
-  version "2.1.5"
-  resolved "https://registry.yarnpkg.com/@types/react-paginate/-/react-paginate-2.1.5.tgz#78be4cafb871c031e938304e75685ec16718fdda"
+"@types/react-paginate@^4.3.1":
+  version "4.3.1"
+  resolved "https://registry.yarnpkg.com/@types/react-paginate/-/react-paginate-4.3.1.tgz#04c558a67751c38c24160df8f812f6b57600081a"
   dependencies:
     "@types/react" "*"
 
@@ -4712,9 +4712,9 @@ react-input-autosize@^1.1.3:
     create-react-class "^15.5.2"
     prop-types "^15.5.8"
 
-react-paginate@^4.4.2:
-  version "4.4.2"
-  resolved "https://registry.yarnpkg.com/react-paginate/-/react-paginate-4.4.2.tgz#ca1a34c518b99f171e04234b5c62f4ac98568d40"
+react-paginate@^4.4.3:
+  version "4.4.3"
+  resolved "https://registry.yarnpkg.com/react-paginate/-/react-paginate-4.4.3.tgz#11817ece628fa59c54a2df7968c854ed64b99077"
   dependencies:
     classnames "^2.2.5"
     prop-types "^15.5.7"
