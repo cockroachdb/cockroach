@@ -364,9 +364,15 @@ func TestImportStmt(t *testing.T) {
 		t.Fatal(err)
 	}
 	var files []string
+	var filesWithOpts []string
 	for fn := 0; fn < numFiles; fn++ {
 		path := filepath.Join(csvPath, fmt.Sprintf("data-%d", fn))
 		f, err := os.Create(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pathWithOpts := filepath.Join(csvPath, fmt.Sprintf("data-%d-opts", fn))
+		fWithOpts, err := os.Create(pathWithOpts)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -375,11 +381,30 @@ func TestImportStmt(t *testing.T) {
 			if _, err := fmt.Fprintf(f, "%d,%c\n", x, 'A'+x%26); err != nil {
 				t.Fatal(err)
 			}
+
+			// Write a comment.
+			if _, err := fmt.Fprintf(fWithOpts, "# %d\n", x); err != nil {
+				t.Fatal(err)
+			}
+			// Write a pipe-delim line with trailing delim.
+			if x%4 == 0 { // 1/4 of rows have blank val for b
+				if _, err := fmt.Fprintf(fWithOpts, "%d||\n", x); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				if _, err := fmt.Fprintf(fWithOpts, "%d|%c|\n", x, 'A'+x%26); err != nil {
+					t.Fatal(err)
+				}
+			}
 		}
 		if err := f.Close(); err != nil {
 			t.Fatal(err)
 		}
+		if err := fWithOpts.Close(); err != nil {
+			t.Fatal(err)
+		}
 		files = append(files, fmt.Sprintf(`'nodelocal://%s'`, path))
+		filesWithOpts = append(filesWithOpts, fmt.Sprintf(`'nodelocal://%s'`, pathWithOpts))
 	}
 
 	expectedRows := numFiles * rowsPerFile
@@ -388,36 +413,56 @@ func TestImportStmt(t *testing.T) {
 		name  string
 		query string        // must have one `%s` for the files list.
 		args  []interface{} // will have backupPath appended
+		files []string
 		err   string
 	}{
 		{
 			"schema-in-file",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2`,
 			[]interface{}{fmt.Sprintf("nodelocal://%s", tablePath)},
+			files,
 			"",
 		},
 		{
 			"schema-in-query",
 			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) WITH temp = $1`,
 			nil,
+			files,
+			"",
+		},
+		{
+			"schema-in-query-opts",
+			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) WITH temp = $1, comma = '|', comment = '#', nullif=''`,
+			nil,
+			filesWithOpts,
 			"",
 		},
 		{
 			"schema-in-file-dist",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, distributed`,
 			[]interface{}{fmt.Sprintf("nodelocal://%s", tablePath)},
+			files,
 			"",
 		},
 		{
 			"schema-in-query-dist",
 			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) WITH temp = $1, distributed`,
 			nil,
+			files,
+			"",
+		},
+		{
+			"schema-in-query-dist-opts",
+			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) WITH temp = $1, distributed, comma = '|', comment = '#', nullif=''`,
+			nil,
+			filesWithOpts,
 			"",
 		},
 		{
 			"missing-temp",
 			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s)`,
 			nil,
+			files,
 			"must provide a temporary storage location",
 		},
 	} {
@@ -437,7 +482,7 @@ func TestImportStmt(t *testing.T) {
 
 			var result int
 			if err := sqlDB.DB.QueryRow(
-				fmt.Sprintf(tc.query, strings.Join(files, ", ")), tc.args...,
+				fmt.Sprintf(tc.query, strings.Join(tc.files, ", ")), tc.args...,
 			).Scan(
 				&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.sys, &restored.bytes,
 			); err != nil {
@@ -451,10 +496,20 @@ func TestImportStmt(t *testing.T) {
 				t.Fatalf("expected %d rows, got %d", expected, actual)
 			}
 
-			// Verify correct number of rows with RESTORE.
+			// Verify correct number of rows via COUNT.
 			sqlDB.QueryRow(`SELECT count(*) FROM t`).Scan(&result)
 			if expect := expectedRows; result != expect {
 				t.Fatalf("expected %d rows, got %d", expect, result)
+			}
+
+			// Verify correct number of NULLs via COUNT.
+			sqlDB.QueryRow(`SELECT count(*) FROM t WHERE b IS NULL`).Scan(&result)
+			expectedNulls := 0
+			if strings.Contains(tc.query, "nullif") {
+				expectedNulls = expectedRows / 4
+			}
+			if result != expectedNulls {
+				t.Fatalf("expected %d rows, got %d", expectedNulls, result)
 			}
 		})
 	}
