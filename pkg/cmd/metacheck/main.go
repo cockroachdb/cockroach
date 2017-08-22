@@ -15,10 +15,13 @@
 package main
 
 import (
+	"fmt"
 	"go/ast"
+	"go/token"
 	"go/types"
 	"log"
 	"os"
+	"strings"
 
 	"honnef.co/go/tools/lint"
 	"honnef.co/go/tools/lint/lintutil"
@@ -39,7 +42,8 @@ func (m *metaChecker) Init(program *lint.Program) {
 
 func (m *metaChecker) Funcs() map[string]lint.Func {
 	funcs := map[string]lint.Func{
-		"FloatToUnsigned": checkConvertFloatToUnsigned,
+		"FloatToUnsigned":   checkConvertFloatToUnsigned,
+		"TimeutilTimerRead": checkSetTimeutilTimerRead,
 	}
 	for _, checker := range m.checkers {
 		for k, v := range checker.Funcs() {
@@ -51,6 +55,12 @@ func (m *metaChecker) Funcs() map[string]lint.Func {
 		}
 	}
 	return funcs
+}
+
+func forAllFiles(j *lint.Job, fn func(node ast.Node) bool) {
+	for _, f := range j.Program.Files {
+		ast.Inspect(f, fn)
+	}
 }
 
 // @ianlancetaylor via golang-nuts[0]:
@@ -75,8 +85,8 @@ func (m *metaChecker) Funcs() map[string]lint.Func {
 //
 // TODO(tamird): upstream this.
 func checkConvertFloatToUnsigned(j *lint.Job) {
-	fn := func(node ast.Node) bool {
-		call, ok := node.(*ast.CallExpr)
+	forAllFiles(j, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
 		if !ok {
 			return true
 		}
@@ -98,10 +108,138 @@ func checkConvertFloatToUnsigned(j *lint.Job) {
 			j.Errorf(arg, "do not convert a floating point number to an unsigned integer type")
 		}
 		return true
+	})
+}
+
+func walkForStmts(n ast.Node, fn func(s ast.Stmt) bool) bool {
+	fr, ok := n.(*ast.ForStmt)
+	if !ok {
+		return true
 	}
-	for _, f := range j.Program.Files {
-		ast.Inspect(f, fn)
+	return walkStmts(fr.Body.List, fn)
+}
+
+func walkSelectStmts(n ast.Node, fn func(s ast.Stmt) bool) bool {
+	sel, ok := n.(*ast.SelectStmt)
+	if !ok {
+		return true
 	}
+	return walkStmts(sel.Body.List, fn)
+}
+
+func walkStmts(stmts []ast.Stmt, fn func(s ast.Stmt) bool) bool {
+	for _, stmt := range stmts {
+		if !fn(stmt) {
+			return false
+		}
+	}
+	return true
+}
+
+// checkSetTimeutilTimerRead assures that timeutil.Timer objects are used
+// correctly, to avoid race conditions and deadlocks. These timers require
+// callers to set their Read field to true when their channel has been received
+// on. If this field is not set and the timer's Reset method is called, we will
+// deadlock. This lint assures that the Read field is set in the most common
+// case where Reset is used, within a for-loop where each iteration blocks
+// on a select statement. The timers are usually used as timeouts on these
+// select statements, and need to be reset after each iteration.
+//
+// for {
+//   timer.Reset(...)
+//   select {
+//     case <-timer.C:
+//       timer.Read = true   <--  lint verifies that this line is present
+//     case ...:
+//   }
+// }
+//
+func checkSetTimeutilTimerRead(j *lint.Job) {
+	selectorIsTimer := func(s *ast.SelectorExpr) bool {
+		typ := j.Program.Info.TypeOf(s.X).String()
+		return strings.HasSuffix(typ, "pkg/util/timeutil.Timer")
+	}
+
+	forAllFiles(j, func(n ast.Node) bool {
+		return walkForStmts(n, func(s ast.Stmt) bool {
+			return walkSelectStmts(s, func(s ast.Stmt) bool {
+				comm, ok := s.(*ast.CommClause)
+				if !ok || comm.Comm == nil /* default: */ {
+					return true
+				}
+
+				// if receiving on a timer's C chan.
+				var unary ast.Expr
+				switch v := comm.Comm.(type) {
+				case *ast.AssignStmt:
+					// case `now := <-timer.C:`
+					unary = v.Rhs[0]
+				case *ast.ExprStmt:
+					// case `<-timer.C:`
+					unary = v.X
+				default:
+					return true
+				}
+				chanRead, ok := unary.(*ast.UnaryExpr)
+				if !ok || chanRead.Op != token.ARROW {
+					return true
+				}
+				selector, ok := chanRead.X.(*ast.SelectorExpr)
+				if !ok {
+					return true
+				}
+				if !selectorIsTimer(selector) {
+					return true
+				}
+				selectorName := fmt.Sprint(selector.X)
+				if selector.Sel.String() != "C" {
+					return true
+				}
+
+				// Verify that the case body contains `timer.Read = true`.
+				noRead := walkStmts(comm.Body, func(s ast.Stmt) bool {
+					assign, ok := s.(*ast.AssignStmt)
+					if !ok || assign.Tok != token.ASSIGN {
+						return true
+					}
+					for i := range assign.Lhs {
+						l, r := assign.Lhs[i], assign.Rhs[i]
+
+						// if assignment to correct field in timer.
+						assignSelector, ok := l.(*ast.SelectorExpr)
+						if !ok {
+							return true
+						}
+						if !selectorIsTimer(assignSelector) {
+							return true
+						}
+						if fmt.Sprint(assignSelector.X) != selectorName {
+							return true
+						}
+						if assignSelector.Sel.String() != "Read" {
+							return true
+						}
+
+						// if assigning `true`.
+						val, ok := r.(*ast.Ident)
+						if !ok {
+							return true
+						}
+						if val.String() == "true" {
+							// returning false will short-circuit walkStmts and assign
+							// noRead to false instead of the default value of true.
+							return false
+						}
+					}
+					return true
+				})
+				if noRead {
+					j.Errorf(comm, "must set timer.Read = true after reading from timer.C (see timeutil/timer.go)")
+				}
+				return true
+			})
+		})
+	})
 }
 
 func main() {
