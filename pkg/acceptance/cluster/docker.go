@@ -320,6 +320,35 @@ type resilientDockerClient struct {
 	client.APIClient
 }
 
+func (cli resilientDockerClient) ContainerStart(clientCtx context.Context, id string, opts types.ContainerStartOptions) error {
+	ctx, _ := context.WithTimeout(clientCtx, 20*time.Second)
+	errCh := make(chan error, 1)
+
+	var err error
+	for err == nil {
+		go func() {
+			errCh <- cli.APIClient.ContainerStart(ctx, id, opts)
+		}()
+
+		select {
+		case err = <-errCh:
+			if err == nil {
+				return nil
+			}
+			if err == context.DeadlineExceeded {
+				// Keep going if client's context is up for it.
+				err = clientCtx.Err()
+				log.Warningf(ctx, "ContainerStart timed out, retrying: %t", err == nil)
+			} else {
+				return err
+			}
+		case <-clientCtx.Done():
+			return clientCtx.Err()
+		}
+	}
+	return err // unreachable, but compiler doesn't know
+}
+
 func (cli resilientDockerClient) ContainerCreate(
 	ctx context.Context,
 	config *container.Config,
