@@ -28403,6 +28403,221 @@ export const cockroach = $root.cockroach = (() => {
             return AbortCacheEntry;
         })();
 
+        roachpb.CSVOptions = (function() {
+
+            /**
+             * Properties of a CSVOptions.
+             * @typedef cockroach.roachpb.CSVOptions$Properties
+             * @type {Object}
+             * @property {number} [comma] CSVOptions comma.
+             * @property {number} [comment] CSVOptions comment.
+             * @property {string} [nullif] CSVOptions nullif.
+             */
+
+            /**
+             * Constructs a new CSVOptions.
+             * @exports cockroach.roachpb.CSVOptions
+             * @constructor
+             * @param {cockroach.roachpb.CSVOptions$Properties=} [properties] Properties to set
+             */
+            function CSVOptions(properties) {
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * CSVOptions comma.
+             * @type {number}
+             */
+            CSVOptions.prototype.comma = 0;
+
+            /**
+             * CSVOptions comment.
+             * @type {number}
+             */
+            CSVOptions.prototype.comment = 0;
+
+            /**
+             * CSVOptions nullif.
+             * @type {string}
+             */
+            CSVOptions.prototype.nullif = "";
+
+            /**
+             * Creates a new CSVOptions instance using the specified properties.
+             * @param {cockroach.roachpb.CSVOptions$Properties=} [properties] Properties to set
+             * @returns {cockroach.roachpb.CSVOptions} CSVOptions instance
+             */
+            CSVOptions.create = function create(properties) {
+                return new CSVOptions(properties);
+            };
+
+            /**
+             * Encodes the specified CSVOptions message. Does not implicitly {@link cockroach.roachpb.CSVOptions.verify|verify} messages.
+             * @param {cockroach.roachpb.CSVOptions$Properties} message CSVOptions message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            CSVOptions.encode = function encode(message, writer) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (message.comma != null && message.hasOwnProperty("comma"))
+                    writer.uint32(/* id 1, wireType 0 =*/8).int32(message.comma);
+                if (message.comment != null && message.hasOwnProperty("comment"))
+                    writer.uint32(/* id 2, wireType 0 =*/16).int32(message.comment);
+                if (message.nullif != null && message.hasOwnProperty("nullif"))
+                    writer.uint32(/* id 3, wireType 2 =*/26).string(message.nullif);
+                return writer;
+            };
+
+            /**
+             * Encodes the specified CSVOptions message, length delimited. Does not implicitly {@link cockroach.roachpb.CSVOptions.verify|verify} messages.
+             * @param {cockroach.roachpb.CSVOptions$Properties} message CSVOptions message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            CSVOptions.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a CSVOptions message from the specified reader or buffer.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {cockroach.roachpb.CSVOptions} CSVOptions
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            CSVOptions.decode = function decode(reader, length) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.roachpb.CSVOptions();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    switch (tag >>> 3) {
+                    case 1:
+                        message.comma = reader.int32();
+                        break;
+                    case 2:
+                        message.comment = reader.int32();
+                        break;
+                    case 3:
+                        message.nullif = reader.string();
+                        break;
+                    default:
+                        reader.skipType(tag & 7);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a CSVOptions message from the specified reader or buffer, length delimited.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {cockroach.roachpb.CSVOptions} CSVOptions
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            CSVOptions.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a CSVOptions message.
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {?string} `null` if valid, otherwise the reason why it is not
+             */
+            CSVOptions.verify = function verify(message) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (message.comma != null && message.hasOwnProperty("comma"))
+                    if (!$util.isInteger(message.comma))
+                        return "comma: integer expected";
+                if (message.comment != null && message.hasOwnProperty("comment"))
+                    if (!$util.isInteger(message.comment))
+                        return "comment: integer expected";
+                if (message.nullif != null && message.hasOwnProperty("nullif"))
+                    if (!$util.isString(message.nullif))
+                        return "nullif: string expected";
+                return null;
+            };
+
+            /**
+             * Creates a CSVOptions message from a plain object. Also converts values to their respective internal types.
+             * @param {Object.<string,*>} object Plain object
+             * @returns {cockroach.roachpb.CSVOptions} CSVOptions
+             */
+            CSVOptions.fromObject = function fromObject(object) {
+                if (object instanceof $root.cockroach.roachpb.CSVOptions)
+                    return object;
+                let message = new $root.cockroach.roachpb.CSVOptions();
+                if (object.comma != null)
+                    message.comma = object.comma | 0;
+                if (object.comment != null)
+                    message.comment = object.comment | 0;
+                if (object.nullif != null)
+                    message.nullif = String(object.nullif);
+                return message;
+            };
+
+            /**
+             * Creates a CSVOptions message from a plain object. Also converts values to their respective internal types.
+             * This is an alias of {@link cockroach.roachpb.CSVOptions.fromObject}.
+             * @function
+             * @param {Object.<string,*>} object Plain object
+             * @returns {cockroach.roachpb.CSVOptions} CSVOptions
+             */
+            CSVOptions.from = CSVOptions.fromObject;
+
+            /**
+             * Creates a plain object from a CSVOptions message. Also converts values to other types if specified.
+             * @param {cockroach.roachpb.CSVOptions} message CSVOptions
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            CSVOptions.toObject = function toObject(message, options) {
+                if (!options)
+                    options = {};
+                let object = {};
+                if (options.defaults) {
+                    object.comma = 0;
+                    object.comment = 0;
+                    object.nullif = "";
+                }
+                if (message.comma != null && message.hasOwnProperty("comma"))
+                    object.comma = message.comma;
+                if (message.comment != null && message.hasOwnProperty("comment"))
+                    object.comment = message.comment;
+                if (message.nullif != null && message.hasOwnProperty("nullif"))
+                    object.nullif = message.nullif;
+                return object;
+            };
+
+            /**
+             * Creates a plain object from this CSVOptions message. Also converts values to other types if specified.
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            CSVOptions.prototype.toObject = function toObject(options) {
+                return this.constructor.toObject(this, options);
+            };
+
+            /**
+             * Converts this CSVOptions to JSON.
+             * @returns {Object.<string,*>} JSON object
+             */
+            CSVOptions.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            return CSVOptions;
+        })();
+
         roachpb.Attributes = (function() {
 
             /**
