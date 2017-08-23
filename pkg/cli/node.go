@@ -16,7 +16,6 @@ package cli
 
 import (
 	"fmt"
-	"log"
 	"math"
 	"os"
 	"strconv"
@@ -356,8 +355,7 @@ func runDecommissionNodeImpl(
 			r.Reset()
 		}
 	}
-	log.Fatal(ctx, "unreachable!")
-	return nil
+	panic("unreachable!")
 }
 
 // decommissionResponseValueToRows converts DecommissionStatusResponse_Status to

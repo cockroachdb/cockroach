@@ -173,6 +173,8 @@ func RunTerraform(t *testing.T, testee func(t *testing.T)) {
 	t.Run(farmerTest, testee)
 }
 
+var _ = RunTerraform // silence unused warning
+
 // EphemeralStorageAccount returns the name of the storage account to use to
 // store data that should be periodically purged. It returns a storage account
 // in the region specified by the -tf.storage-location flag to avoid bandwidth

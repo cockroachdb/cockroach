@@ -336,7 +336,9 @@ func TestClusterRecovery(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	RunBare(t, func(t *testing.T) {
+	// TODO(tschottdorf): should run via RunBare, but only if we manage to deal
+	// with the loss of Gossip connectivity due to ever-changing ports.
+	RunDocker(t, func(t *testing.T) {
 		runTestOnConfigs(t, testClusterRecoveryInner)
 	})
 }

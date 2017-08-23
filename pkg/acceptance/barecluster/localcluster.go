@@ -65,6 +65,7 @@ func IsUnavailableError(err error) bool {
 	return strings.Contains(err.Error(), "grpc: the connection is unavailable")
 }
 
+// A ClusterConfig holds the configuration for a Cluster.
 type ClusterConfig struct {
 	Ephemeral   bool
 	Binary      string
@@ -143,7 +144,7 @@ func (c *Cluster) Start() {
 
 	var wg sync.WaitGroup
 	for i := range c.Nodes {
-		cfg, _ := c.cfg.PerNodeCfg[i]
+		cfg := c.cfg.PerNodeCfg[i] // zero value is ok
 		if cfg.DataDir == "" {
 			cfg.DataDir = filepath.Join(c.cfg.DataDir, fmt.Sprintf("%d", i+1))
 		}
@@ -393,18 +394,21 @@ type Node struct {
 	db                       *gosql.DB
 }
 
+// RPCPort returns the RPC + Posgres port.
 func (n *Node) RPCPort() string {
 	n.Lock()
 	defer n.Unlock()
 	return n.rpcPort
 }
 
+// HTTPPort returns the ui port (may be empty until known).
 func (n *Node) HTTPPort() string {
 	n.Lock()
 	defer n.Unlock()
 	return n.httpPort
 }
 
+// PGUrl returns the postgres connection string (may be empty until known).
 func (n *Node) PGUrl() string {
 	n.Lock()
 	defer n.Unlock()
