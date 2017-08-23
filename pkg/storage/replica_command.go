@@ -2272,11 +2272,10 @@ func (r *Replica) CheckConsistency(
 	}
 	wg.Wait()
 
-	logFunc := log.Errorf
+	logFunc := log.Fatalf
 	if p := r.store.TestingKnobs().BadChecksumPanic; p != nil {
 		p(r.store.Ident)
-	} else if r.store.cfg.ConsistencyCheckPanicOnFailure {
-		logFunc = log.Fatalf
+		logFunc = log.Errorf
 	}
 
 	if inconsistencyCount == 0 {
