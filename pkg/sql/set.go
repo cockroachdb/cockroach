@@ -15,6 +15,7 @@
 package sql
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"time"
@@ -113,12 +114,14 @@ func (p *planner) setClusterSetting(
 			return nil, err
 		}
 	case 1:
+		var buf bytes.Buffer
+		v[0].Format(&buf, parser.FmtBareStrings)
+		value = buf.String()
 		// TODO(dt): validate and properly encode str according to type.
 		encoded, err := p.toSettingString(ctx, ie, name, typ, v[0])
 		if err != nil {
 			return nil, err
 		}
-		value = encoded
 		upsertQ := `UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, NOW(), $3)`
 		if _, err := ie.ExecuteStatementInTransaction(
 			ctx, "update-setting", p.txn, upsertQ, name, encoded, typ.Typ(),

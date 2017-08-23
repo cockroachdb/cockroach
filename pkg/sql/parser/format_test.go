@@ -96,6 +96,8 @@ func TestFormatStatement(t *testing.T) {
 			`SET "time zone" = 'utc'`},
 		{`SET "time zone" = UTC`, FmtBareIdentifiers,
 			`SET time zone = 'utc'`},
+		{`SET "time zone" = UTC`, FmtBareStrings,
+			`SET "time zone" = utc`},
 	}
 
 	for i, test := range testData {
