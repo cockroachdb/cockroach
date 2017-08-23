@@ -91,7 +91,11 @@ func TestFlowRegistry(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	reg.RegisterFlow(ctx, id1, f1, nil /* inboundStreams */, flowStreamDefaultTimeout)
+	if err := reg.RegisterFlow(
+		ctx, id1, f1, nil /* inboundStreams */, flowStreamDefaultTimeout,
+	); err != nil {
+		t.Fatal(err)
+	}
 
 	if f := lookupFlow(reg, id1, 0); f != f1 {
 		t.Error("couldn't lookup previously registered flow")
@@ -107,7 +111,11 @@ func TestFlowRegistry(t *testing.T) {
 
 	go func() {
 		time.Sleep(jiffy)
-		reg.RegisterFlow(ctx, id1, f1, nil /* inboundStreams */, flowStreamDefaultTimeout)
+		if err := reg.RegisterFlow(
+			ctx, id1, f1, nil /* inboundStreams */, flowStreamDefaultTimeout,
+		); err != nil {
+			t.Error(err)
+		}
 	}()
 
 	if f := lookupFlow(reg, id1, 10*jiffy); f != f1 {
@@ -138,7 +146,11 @@ func TestFlowRegistry(t *testing.T) {
 	}()
 
 	time.Sleep(jiffy)
-	reg.RegisterFlow(ctx, id2, f2, nil /* inboundStreams */, flowStreamDefaultTimeout)
+	if err := reg.RegisterFlow(
+		ctx, id2, f2, nil /* inboundStreams */, flowStreamDefaultTimeout,
+	); err != nil {
+		t.Fatal(err)
+	}
 	wg.Wait()
 
 	// -- Multiple lookups, with the first one failing. --
@@ -163,14 +175,22 @@ func TestFlowRegistry(t *testing.T) {
 	}()
 
 	wg1.Wait()
-	reg.RegisterFlow(ctx, id3, f3, nil /* inboundStreams */, flowStreamDefaultTimeout)
+	if err := reg.RegisterFlow(
+		ctx, id3, f3, nil /* inboundStreams */, flowStreamDefaultTimeout,
+	); err != nil {
+		t.Fatal(err)
+	}
 	wg2.Wait()
 
 	// -- Lookup with huge timeout, register in the meantime. --
 
 	go func() {
 		time.Sleep(jiffy)
-		reg.RegisterFlow(ctx, id4, f4, nil /* inboundStreams */, flowStreamDefaultTimeout)
+		if err := reg.RegisterFlow(
+			ctx, id4, f4, nil /* inboundStreams */, flowStreamDefaultTimeout,
+		); err != nil {
+			t.Error(err)
+		}
 	}()
 
 	// This should return in a jiffy.
@@ -198,7 +218,11 @@ func TestStreamConnectionTimeout(t *testing.T) {
 	inboundStreams := map[StreamID]*inboundStreamInfo{
 		streamID1: {receiver: consumer, waitGroup: wg},
 	}
-	reg.RegisterFlow(context.TODO(), id1, f1, inboundStreams, jiffy)
+	if err := reg.RegisterFlow(
+		context.TODO(), id1, f1, inboundStreams, jiffy,
+	); err != nil {
+		t.Fatal(err)
+	}
 
 	testutils.SucceedsSoon(t, func() error {
 		si, err := lookupStreamInfo(reg, id1, streamID1)
@@ -288,8 +312,11 @@ func TestHandshake(t *testing.T) {
 				inboundStreams := map[StreamID]*inboundStreamInfo{
 					streamID: {receiver: consumer, waitGroup: wg},
 				}
-				reg.RegisterFlow(
-					context.TODO(), flowID, f1, inboundStreams, time.Hour /* timeout */)
+				if err := reg.RegisterFlow(
+					context.TODO(), flowID, f1, inboundStreams, time.Hour, /* timeout */
+				); err != nil {
+					t.Fatal(err)
+				}
 			}
 
 			// If the consumer is supposed to be connected early, then we connect the
