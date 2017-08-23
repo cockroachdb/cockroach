@@ -33,6 +33,7 @@ import (
 
 func TestServer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#17851, #17864")
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
