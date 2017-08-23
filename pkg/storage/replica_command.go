@@ -2275,7 +2275,7 @@ func (r *Replica) CheckConsistency(
 	logFunc := log.Errorf
 	if p := r.store.TestingKnobs().BadChecksumPanic; p != nil {
 		p(r.store.Ident)
-	} else if r.store.cfg.ConsistencyCheckPanicOnFailure {
+	} else {
 		logFunc = log.Fatalf
 	}
 
