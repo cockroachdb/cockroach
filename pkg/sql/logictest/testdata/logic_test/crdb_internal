@@ -180,13 +180,13 @@ node_id  component  field   value
 1        DB         User    root
 1        DB         Host    127.0.0.1
 1        DB         Port    <port>
-1        DB         Path    ·
+1        DB         URI     /?application_name=cockroach&sslcert=test_certs%2Fclient.root.crt&sslkey=test_certs%2Fclient.root.key&sslmode=verify-full&sslrootcert=test_certs%2Fca.crt
 1        UI         URL     https://127.0.0.1:<port>
 1        UI         Scheme  https
 1        UI         User    ·
 1        UI         Host    127.0.0.1
 1        UI         Port    <port>
-1        UI         Path    ·
+1        UI         URI     /
 
 user testuser
 
