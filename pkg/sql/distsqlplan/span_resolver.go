@@ -315,9 +315,10 @@ func (it *spanResolverIterator) ReplicaInfo(ctx context.Context) (kv.ReplicaInfo
 		if err != nil {
 			// Ignore the error; ask the oracle to pick another replica below.
 			log.VEventf(ctx, 2, "failed to resolve node %d: %s", repl.NodeID, err)
+		} else {
+			repl.NodeDesc = nd
+			resolvedLH = true
 		}
-		repl.NodeDesc = nd
-		resolvedLH = true
 	}
 	if !resolvedLH {
 		leaseHolder, err := it.oracle.ChoosePreferredLeaseHolder(
