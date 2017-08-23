@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -96,8 +95,6 @@ var defaultProposalQuota = raftLogMaxSize / 4
 // resolved synchronously with EndTransaction). Certain tests become
 // simpler with this being turned off.
 var txnAutoGC = true
-
-var tickQuiesced = envutil.EnvOrDefaultBool("COCKROACH_TICK_QUIESCED", true)
 
 // raftInitialLog{Index,Term} are the starting points for the raft log. We
 // bootstrap the raft membership by synthesizing a snapshot as if there were
@@ -3526,7 +3523,7 @@ func (r *Replica) tick() (bool, error) {
 		//
 		// For more details, see #9372.
 		// TODO(bdarnell): remove this once we have fully switched to PreVote
-		if tickQuiesced {
+		if !enablePreVote {
 			r.mu.internalRaftGroup.TickQuiesced()
 		}
 		return false, nil
@@ -3562,7 +3559,7 @@ func (r *Replica) maybeTickQuiesced() bool {
 		done = true
 	} else if r.mu.quiescent {
 		done = true
-		if tickQuiesced {
+		if !enablePreVote {
 			// NB: It is safe to call TickQuiesced without holding Replica.raftMu
 			// because that method simply increments a counter without performing any
 			// other logic.
