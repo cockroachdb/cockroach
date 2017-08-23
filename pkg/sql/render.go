@@ -434,14 +434,26 @@ func (r *renderNode) rewriteSRFs(
 	if err != nil {
 		return target, err
 	}
-	src, err = r.planner.makeJoin(ctx, "CROSS JOIN", r.source, src, nil)
-	if err != nil {
-		return target, err
+
+	if !isUnarySource(r.source) {
+		// The FROM clause specifies something. Replace with a cross-join.
+		src, err = r.planner.makeJoin(ctx, "CROSS JOIN", r.source, src, nil)
+		if err != nil {
+			return target, err
+		}
 	}
+
 	r.source = src
 	r.sourceInfo = multiSourceInfo{r.source.info}
 
 	return parser.SelectExpr{Expr: expr}, nil
+}
+
+// A unary source is the special source used with empty FROM clauses:
+// a pseudo-table with zero columns and exactly one row.
+func isUnarySource(src planDataSource) bool {
+	e, ok := src.plan.(*emptyNode)
+	return ok && e.results && len(src.info.sourceColumns) == 0
 }
 
 func (r *renderNode) initWhere(ctx context.Context, whereExpr parser.Expr) (*filterNode, error) {
