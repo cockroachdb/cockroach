@@ -111,6 +111,7 @@ columns
 key_column_usage
 schema_privileges
 schemata
+sequences
 statistics
 table_constraints
 table_privileges
@@ -229,6 +230,7 @@ information_schema  columns
 information_schema  key_column_usage
 information_schema  schema_privileges
 information_schema  schemata
+information_schema  sequences
 information_schema  statistics
 information_schema  table_constraints
 information_schema  table_privileges
@@ -379,6 +381,7 @@ def            information_schema  columns                    SYSTEM VIEW  1
 def            information_schema  key_column_usage           SYSTEM VIEW  1
 def            information_schema  schema_privileges          SYSTEM VIEW  1
 def            information_schema  schemata                   SYSTEM VIEW  1
+def            information_schema  sequences                  SYSTEM VIEW  1
 def            information_schema  statistics                 SYSTEM VIEW  1
 def            information_schema  table_constraints          SYSTEM VIEW  1
 def            information_schema  table_privileges           SYSTEM VIEW  1
@@ -903,3 +906,21 @@ root     def            GRANT           NULL
 root     def            INSERT          NULL
 root     def            SELECT          NULL
 root     def            UPDATE          NULL
+
+# Check existence of information_schema.sequences
+query TTBTT colnames
+SHOW COLUMNS FROM information_schema.sequences
+----
+Field                    Type    Null   Default        Indices
+sequence_catalog         STRING  false  '':::STRING    {}
+sequence_schema          STRING  false  '':::STRING    {}
+sequence_name            STRING  false  '':::STRING    {}
+data_type                STRING  false  '':::STRING    {}
+numeric_precision        INT     false  0:::INT        {}
+numeric_precision_radix  INT     false  0:::INT        {}
+numeric_scale            INT     false  0:::INT        {}
+start_value              STRING  false  '':::STRING    {}
+minimum_value            STRING  false  '':::STRING    {}
+maximum_value            STRING  false  '':::STRING    {}
+increment                STRING  false  '':::STRING    {}
+cycle_option             STRING  false  'NO':::STRING  {}
