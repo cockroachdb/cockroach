@@ -79,7 +79,7 @@ func parseAndNormalizeExpr(
 
 	// Perform name resolution because {analyze,simplify}Expr want
 	// expressions containing IndexedVars.
-	if expr, _, err = sel.resolveNames(expr); err != nil {
+	if expr, _, _, err = sel.resolveNames(expr); err != nil {
 		t.Fatalf("%s: %v", sql, err)
 	}
 	typedExpr, err := parser.TypeCheck(expr, nil, parser.TypeAny)

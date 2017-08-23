@@ -62,11 +62,8 @@ type renderNode struct {
 	// symbolic representations.
 	renderStrings []string
 
+	// columns is the set of result columns.
 	columns sqlbase.ResultColumns
-
-	// A piece of metadata to indicate whether a star expression was expanded
-	// during rendering.
-	isStar bool
 
 	// The number of initial columns - before adding any internal render
 	// targets for grouping, filtering or ordering. The original columns
@@ -344,7 +341,7 @@ func (r *renderNode) initTargets(
 			return err
 		}
 
-		r.isStar = r.isStar || hasStar
+		r.planner.hasStar = r.planner.hasStar || hasStar
 		_ = r.addOrReuseRenders(cols, exprs, false)
 	}
 	// `groupBy` or `orderBy` may internally add additional columns which we
@@ -603,7 +600,7 @@ func (r *renderNode) computeOrdering(fromOrder orderingInfo) {
 
 	// Detect constants.
 	for col, expr := range r.render {
-		_, hasRowDependentValues, err := r.resolveNames(expr)
+		_, hasRowDependentValues, _, err := r.resolveNames(expr)
 		if err != nil {
 			// If we get an error here, the expression must contain an unresolved name
 			// or invalid indexed var; ignore.

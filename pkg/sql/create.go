@@ -1541,30 +1541,3 @@ func makeCheckConstraint(
 	}
 	return &sqlbase.TableDescriptor_CheckConstraint{Expr: parser.Serialize(d.Expr), Name: name}, nil
 }
-
-// planContainsStar returns true if one of the render nodes in the
-// plan contains a star expansion.
-func (p *planner) planContainsStar(ctx context.Context, plan planNode) bool {
-	s := &starDetector{}
-	_ = walkPlan(ctx, plan, planObserver{enterNode: s.enterNode})
-	return s.foundStar
-}
-
-// starDetector supports planContainsStar().
-type starDetector struct {
-	foundStar bool
-}
-
-// enterNode implements the planObserver interface.
-func (s *starDetector) enterNode(_ context.Context, _ string, plan planNode) bool {
-	if s.foundStar {
-		return false
-	}
-	if sel, ok := plan.(*renderNode); ok {
-		if sel.isStar {
-			s.foundStar = true
-			return false
-		}
-	}
-	return true
-}
