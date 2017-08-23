@@ -498,6 +498,14 @@ func makeRangeRouter(
 		i := int(*spec.DefaultDest)
 		defaultDest = &i
 	}
+	var prevKey []byte
+	// Verify spans are sorted and non-overlapping.
+	for i, span := range spec.Spans {
+		if bytes.Compare(prevKey, span.Start) > 0 {
+			return nil, errors.Errorf("span %d not after previous span", i)
+		}
+		prevKey = span.End
+	}
 	rr := rangeRouter{
 		spans:       spec.Spans,
 		defaultDest: defaultDest,
