@@ -134,11 +134,13 @@
 		ReplicaCorruptionError
 		ReplicaTooOldError
 		StoreNotFoundError
+		UnhandledRetryableError
+		HandledRetryableTxnError
+		UntrackedTxnError
+		TxnPrevAttemptError
 		ErrorDetail
 		ErrPosition
 		Error
-		UnhandledRetryableError
-		HandledRetryableTxnError
 		InternalTimeSeriesData
 		InternalTimeSeriesSample
 		RaftTruncatedState
