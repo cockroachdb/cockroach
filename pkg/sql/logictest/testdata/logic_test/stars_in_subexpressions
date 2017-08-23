@@ -1,0 +1,118 @@
+statement ok
+CREATE TABLE a(x, y) AS VALUES (1, 1), (2, 2)
+
+query II
+SELECT a.* FROM a
+----
+1  1
+2  2
+
+query T
+SELECT (a.*) FROM a
+----
+(1,1)
+(2,2)
+
+query I
+SELECT COUNT(*) FROM a x, a y
+----
+4
+
+query I
+SELECT COUNT(DISTINCT x.*) FROM a x, a y
+----
+2
+
+query ITTTTT
+EXPLAIN(VERBOSE) SELECT COUNT(DISTINCT x.*) FROM a x, a y
+----
+0  group   ·            ·                           ("count(DISTINCT x.*)")                                                       ·
+0  ·       aggregate 0  count(DISTINCT (x.x, x.y))  ·                                                                             ·
+1  render  ·            ·                           ("(x, y)")                                                                    ·
+1  ·       render 0     (x.x, x.y)                  ·                                                                             ·
+2  join    ·            ·                           (x, y, rowid[hidden,omitted], x[omitted], y[omitted], rowid[hidden,omitted])  ·
+2  ·       type         cross                       ·                                                                             ·
+3  scan    ·            ·                           (x, y, rowid[hidden,omitted])                                                 ·
+3  ·       table        a@primary                   ·                                                                             ·
+3  ·       spans        ALL                         ·                                                                             ·
+3  scan    ·            ·                           (x[omitted], y[omitted], rowid[hidden,omitted])                               ·
+3  ·       table        a@primary                   ·                                                                             ·
+3  ·       spans        ALL                         ·                                                                             ·
+
+query ITTT
+EXPLAIN(EXPRS) SELECT * FROM a ORDER BY a.*
+----
+0  sort    ·         ·
+0  ·       order     +x,+y
+1  render  ·         ·
+1  ·       render 0  x
+1  ·       render 1  y
+2  scan    ·         ·
+2  ·       table     a@primary
+2  ·       spans     ALL
+
+query ITTT
+EXPLAIN(EXPRS) SELECT * FROM a ORDER BY (a.*)
+----
+0  sort    ·         ·
+0  ·       order     +x,+y
+1  render  ·         ·
+1  ·       render 0  x
+1  ·       render 1  y
+2  scan    ·         ·
+2  ·       table     a@primary
+2  ·       spans     ALL
+
+query ITTT
+EXPLAIN(EXPRS) SELECT MIN(y.x) FROM a x, a y GROUP BY x.*
+----
+0  group   ·            ·
+0  ·       aggregate 0  min(x)
+1  render  ·            ·
+1  ·       render 0     x
+1  ·       render 1     y
+1  ·       render 2     x
+2  join    ·            ·
+2  ·       type         cross
+3  scan    ·            ·
+3  ·       table        a@primary
+3  ·       spans        ALL
+3  scan    ·            ·
+3  ·       table        a@primary
+3  ·       spans        ALL
+
+query ITTT
+EXPLAIN(EXPRS) SELECT MIN(y.x) FROM a x, a y GROUP BY (1, (x.*))
+----
+0  group   ·            ·
+0  ·       aggregate 0  min(x)
+1  render  ·            ·
+1  ·       render 0     (1, (x, y))
+1  ·       render 1     x
+2  join    ·            ·
+2  ·       type         cross
+3  scan    ·            ·
+3  ·       table        a@primary
+3  ·       spans        ALL
+3  scan    ·            ·
+3  ·       table        a@primary
+3  ·       spans        ALL
+
+# A useful optimization: naked tuple expansion in GROUP BY clause.
+query ITTT
+EXPLAIN(EXPRS) SELECT MIN(y.x) FROM a x, a y GROUP BY (x.*)
+----
+0  group   ·            ·
+0  ·       aggregate 0  min(x)
+1  render  ·            ·
+1  ·       render 0     x
+1  ·       render 1     y
+1  ·       render 2     x
+2  join    ·            ·
+2  ·       type         cross
+3  scan    ·            ·
+3  ·       table        a@primary
+3  ·       spans        ALL
+3  scan    ·            ·
+3  ·       table        a@primary
+3  ·       spans        ALL

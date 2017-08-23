@@ -588,7 +588,7 @@ func (r *renderNode) computeOrdering(fromOrder orderingInfo) {
 
 	// Detect constants.
 	for col, expr := range r.render {
-		_, hasRowDependentValues, err := r.resolveNames(expr)
+		_, hasRowDependentValues, _, err := r.resolveNames(expr)
 		if err != nil {
 			// If we get an error here, the expression must contain an unresolved name
 			// or invalid indexed var; ignore.
