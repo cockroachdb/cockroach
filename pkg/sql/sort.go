@@ -413,7 +413,7 @@ func (p *planner) orderBy(
 			if err != nil {
 				return nil, err
 			}
-			s.isStar = s.isStar || hasStar
+			p.hasStar = p.hasStar || hasStar
 
 			if len(cols) == 0 {
 				// Nothing was expanded! No order here.

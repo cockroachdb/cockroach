@@ -84,6 +84,10 @@ func (p *planner) analyzeViewQuery(
 	defer func(prev planDependencies) { p.planDeps = prev }(p.planDeps)
 	p.planDeps = make(planDependencies)
 
+	// Request star detection
+	defer func(prev bool) { p.hasStar = prev }(p.hasStar)
+	p.hasStar = false
+
 	// Now generate the source plan.
 	sourcePlan, err := p.Select(ctx, viewSelect, []parser.Type{})
 	if err != nil {
@@ -93,7 +97,7 @@ func (p *planner) analyzeViewQuery(
 	defer sourcePlan.Close(ctx)
 
 	// TODO(a-robinson): Support star expressions as soon as we can (#10028).
-	if p.planContainsStar(ctx, sourcePlan) {
+	if p.hasStar {
 		return nil, nil, fmt.Errorf("views do not currently support * expressions")
 	}
 
