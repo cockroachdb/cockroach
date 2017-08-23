@@ -20,6 +20,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -53,6 +54,10 @@ type deleteNode struct {
 func (p *planner) Delete(
 	ctx context.Context, n *parser.Delete, desiredTypes []parser.Type,
 ) (planNode, error) {
+	if n.Where == nil && p.session.SafeUpdates {
+		return nil, pgerror.NewDangerousStatementErrorf("DELETE without WHERE clause")
+	}
+
 	tn, err := p.getAliasedTableName(n.Table)
 	if err != nil {
 		return nil, err

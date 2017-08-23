@@ -1003,6 +1003,12 @@ func runTerm(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	if sqlCtx.safeUpdates {
+		if err := conn.Exec("SET sql_safe_updates = TRUE", nil); err != nil {
+			return err
+		}
+	}
+
 	if len(sqlCtx.execStmts) > 0 {
 		// Single-line sql; run as simple as possible, without noise on stdout.
 		return runStatements(conn, sqlCtx.execStmts)
