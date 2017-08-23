@@ -231,10 +231,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 	s.db = client.NewDB(s.txnCoordSender, s.clock)
 
-	nlActive, nlRenewal := s.cfg.NodeLivenessDurations()
-
+	active, renewal := storage.NodeLivenessDurations(
+		storage.RaftElectionTimeout(s.cfg.RaftTickInterval, s.cfg.RaftElectionTimeoutTicks))
 	s.nodeLiveness = storage.NewNodeLiveness(
-		s.cfg.AmbientCtx, s.clock, s.db, s.gossip, nlActive, nlRenewal,
+		s.cfg.AmbientCtx, s.clock, s.db, s.gossip, active, renewal,
 	)
 	s.registry.AddMetricStruct(s.nodeLiveness.Metrics())
 
@@ -300,13 +300,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	storeCfg := storage.StoreConfig{
 		Settings:                       st,
 		AmbientCtx:                     s.cfg.AmbientCtx,
-		RaftConfig:                     s.cfg.RaftConfig,
 		Clock:                          s.clock,
 		DB:                             s.db,
 		Gossip:                         s.gossip,
 		NodeLiveness:                   s.nodeLiveness,
 		Transport:                      s.raftTransport,
 		RPCContext:                     s.rpcContext,
+		RaftTickInterval:               s.cfg.RaftTickInterval,
 		ScanInterval:                   s.cfg.ScanInterval,
 		ScanMaxIdleTime:                s.cfg.ScanMaxIdleTime,
 		ConsistencyCheckInterval:       s.cfg.ConsistencyCheckInterval,
@@ -316,6 +316,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		StorePool:                      s.storePool,
 		SQLExecutor:                    sqlExecutor,
 		LogRangeEvents:                 s.cfg.EventLogEnabled,
+		RangeLeaseActiveDuration:       active,
+		RangeLeaseRenewalDuration:      renewal,
 		TimeSeriesDataStore:            s.tsDB,
 
 		EnableEpochRangeLeases: true,

@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/pkg/errors"
@@ -49,31 +48,12 @@ const (
 	// NetworkTimeout is the timeout used for network operations.
 	NetworkTimeout = 3 * time.Second
 
+	// DefaultRaftTickInterval is the default resolution of the Raft timer.
+	DefaultRaftTickInterval = 200 * time.Millisecond
+
 	// DefaultCertsDirectory is the default value for the cert directory flag.
 	DefaultCertsDirectory = "${HOME}/.cockroach-certs"
-
-	// defaultRaftTickInterval is the default resolution of the Raft timer.
-	defaultRaftTickInterval = 200 * time.Millisecond
-
-	// rangeLeaseRaftElectionTimeoutMultiplier specifies what multiple the
-	// leader lease active duration should be of the raft election timeout.
-	rangeLeaseRaftElectionTimeoutMultiplier = 3
-
-	// rangeLeaseRenewalFraction specifies what fraction the range lease
-	// renewal duration should be of the range lease active time. For example,
-	// with a value of 0.2 and a lease duration of 10 seconds, leases would be
-	// eagerly renewed 2 seconds into each lease.
-	rangeLeaseRenewalFraction = 0.5
-
-	// livenessRenewalFraction specifies what fraction the node liveness
-	// renewal duration should be of the node liveness duration. For example,
-	// with a value of 0.2 and a liveness duration of 10 seconds, each node's
-	// liveness record would be eagerly renewed after 2 seconds.
-	livenessRenewalFraction = 0.5
 )
-
-var defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt(
-	"COCKROACH_RAFT_ELECTION_TIMEOUT_TICKS", 15)
 
 type lazyHTTPClient struct {
 	once       sync.Once
@@ -309,65 +289,6 @@ func (cfg *Config) GetHTTPClient() (http.Client, error) {
 	})
 
 	return cfg.httpClient.httpClient, cfg.httpClient.err
-}
-
-// RaftConfig holds raft tuning parameters.
-type RaftConfig struct {
-	// RaftTickInterval is the resolution of the Raft timer.
-	RaftTickInterval time.Duration
-
-	// RaftElectionTimeoutTicks is the number of raft ticks before the
-	// previous election expires. This value is inherited by individual stores
-	// unless overridden.
-	RaftElectionTimeoutTicks int
-}
-
-// SetDefaults initializes unset fields.
-func (cfg *RaftConfig) SetDefaults() {
-	if cfg.RaftTickInterval == 0 {
-		cfg.RaftTickInterval = defaultRaftTickInterval
-	}
-	if cfg.RaftElectionTimeoutTicks == 0 {
-		cfg.RaftElectionTimeoutTicks = defaultRaftElectionTimeoutTicks
-	}
-}
-
-// RaftElectionTimeout returns the raft election timeout, as computed from the
-// tick interval and number of election timeout ticks.
-func (cfg RaftConfig) RaftElectionTimeout() time.Duration {
-	return time.Duration(cfg.RaftElectionTimeoutTicks) * cfg.RaftTickInterval
-}
-
-// RangeLeaseDurations computes durations for range lease expiration and
-// renewal based on a default multiple of Raft election timeout.
-func (cfg RaftConfig) RangeLeaseDurations() (rangeLeaseActive, rangeLeaseRenewal time.Duration) {
-	rangeLeaseActive = time.Duration(rangeLeaseRaftElectionTimeoutMultiplier * float64(cfg.RaftElectionTimeout()))
-	rangeLeaseRenewal = time.Duration(float64(rangeLeaseActive) * rangeLeaseRenewalFraction)
-	return
-}
-
-// RangeLeaseActiveDuration is the duration of the active period of leader
-// leases requested.
-func (cfg RaftConfig) RangeLeaseActiveDuration() time.Duration {
-	rangeLeaseActive, _ := cfg.RangeLeaseDurations()
-	return rangeLeaseActive
-}
-
-// RangeLeaseRenewalDuration specifies a time interval at the end of the
-// active lease interval (i.e. bounded to the right by the start of the stasis
-// period) during which operations will trigger an asynchronous renewal of the
-// lease.
-func (cfg RaftConfig) RangeLeaseRenewalDuration() time.Duration {
-	_, rangeLeaseRenewal := cfg.RangeLeaseDurations()
-	return rangeLeaseRenewal
-}
-
-// NodeLivenessDurations computes durations for node liveness expiration and
-// renewal based on a default multiple of Raft election timeout.
-func (cfg RaftConfig) NodeLivenessDurations() (livenessActive, livenessRenewal time.Duration) {
-	livenessActive = cfg.RangeLeaseActiveDuration()
-	livenessRenewal = time.Duration(float64(livenessActive) * livenessRenewalFraction)
-	return
 }
 
 // DefaultRetryOptions should be used for retrying most

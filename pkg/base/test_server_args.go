@@ -33,7 +33,6 @@ type TestServerArgs struct {
 	Knobs TestingKnobs
 
 	*cluster.Settings
-	RaftConfig
 
 	// PartOfCluster must be set if the TestServer is joining others in a cluster.
 	// If not set (and hence the server is the only one in the cluster), the
@@ -63,6 +62,8 @@ type TestServerArgs struct {
 	Insecure                 bool
 	RetryOptions             retry.Options
 	MetricsSampleInterval    time.Duration
+	RaftTickInterval         time.Duration
+	RaftElectionTimeoutTicks int
 	SocketFile               string
 	ScanInterval             time.Duration
 	ScanMaxIdleTime          time.Duration
