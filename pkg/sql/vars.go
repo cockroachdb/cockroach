@@ -17,6 +17,7 @@ package sql
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -229,6 +230,18 @@ var varGen = map[string]sessionVar{
 		Get: func(session *Session) string { return fmt.Sprintf("%d", session.tables.leaseMgr.nodeID.Get()) },
 	},
 
+	`sql_safe_updates`: {
+		Get: func(session *Session) string { return strconv.FormatBool(session.SafeUpdates) },
+		Set: func(_ context.Context, session *Session, values []parser.TypedExpr) error {
+			b, err := getSingleBool("sql_safe_updates", session, values)
+			if err != nil {
+				return err
+			}
+			session.SafeUpdates = (b == parser.DBoolTrue)
+			return nil
+		},
+	},
+
 	`search_path`: {
 		Set: func(_ context.Context, session *Session, values []parser.TypedExpr) error {
 			// https://www.postgresql.org/docs/9.6/static/runtime-config-client.html
@@ -402,3 +415,22 @@ var varNames = func() []string {
 	sort.Strings(res)
 	return res
 }()
+
+func getSingleBool(
+	name string, session *Session, values []parser.TypedExpr,
+) (*parser.DBool, error) {
+	if len(values) != 1 {
+		return nil, fmt.Errorf("set %s requires a single argument", name)
+	}
+	evalCtx := session.evalCtx()
+	val, err := values[0].Eval(&evalCtx)
+	if err != nil {
+		return nil, err
+	}
+	b, ok := val.(*parser.DBool)
+	if !ok {
+		return nil, fmt.Errorf("set %s requires a boolean value: %s is a %s",
+			name, values[0], val.ResolvedType())
+	}
+	return b, nil
+}
