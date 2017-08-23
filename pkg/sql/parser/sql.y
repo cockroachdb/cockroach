@@ -1018,14 +1018,12 @@ alter_onetable_stmt:
 alter_split_stmt:
   ALTER TABLE qualified_name SPLIT AT select_stmt
   {
-    /* SKIP DOC */
     $$.val = &Split{Table: $3.newNormalizableTableName(), Rows: $6.slct()}
   }
 
 alter_split_index_stmt:
   ALTER INDEX table_name_with_index SPLIT AT select_stmt
   {
-    /* SKIP DOC */
     $$.val = &Split{Index: $3.tableWithIdx(), Rows: $6.slct()}
   }
 
@@ -1046,24 +1044,20 @@ alter_testing_relocate_index_stmt:
 alter_scatter_stmt:
   ALTER TABLE qualified_name SCATTER
   {
-    /* SKIP DOC */
     $$.val = &Scatter{Table: $3.newNormalizableTableName()}
   }
 | ALTER TABLE qualified_name SCATTER FROM '(' expr_list ')' TO '(' expr_list ')'
   {
-    /* SKIP DOC */
     $$.val = &Scatter{Table: $3.newNormalizableTableName(), From: $7.exprs(), To: $11.exprs()}
   }
 
 alter_scatter_index_stmt:
   ALTER INDEX table_name_with_index SCATTER
   {
-    /* SKIP DOC */
     $$.val = &Scatter{Index: $3.tableWithIdx()}
   }
 | ALTER INDEX table_name_with_index SCATTER FROM '(' expr_list ')' TO '(' expr_list ')'
   {
-    /* SKIP DOC */
     $$.val = &Scatter{Index: $3.tableWithIdx(), From: $7.exprs(), To: $11.exprs()}
   }
 
@@ -1294,12 +1288,10 @@ import_data_format:
 import_stmt:
   IMPORT TABLE any_name CREATE USING string_or_placeholder import_data_format DATA '(' string_or_placeholder_list ')' opt_with_options
   {
-    /* SKIP DOC */
     $$.val = &Import{Table: $3.unresolvedName(), CreateFile: $6.expr(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions()}
   }
 | IMPORT TABLE any_name '(' table_elem_list ')' import_data_format DATA '(' string_or_placeholder_list ')' opt_with_options
   {
-    /* SKIP DOC */
     $$.val = &Import{Table: $3.unresolvedName(), CreateDefs: $5.tblDefs(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions()}
   }
 | IMPORT error // SHOW HELP: IMPORT
@@ -1402,7 +1394,6 @@ cancel_stmt:
 cancel_job_stmt:
   CANCEL JOB a_expr
   {
-    /* SKIP DOC */
     $$.val = &CancelJob{ID: $3.expr()}
   }
 | CANCEL JOB error // SHOW HELP: CANCEL JOB
@@ -1414,7 +1405,6 @@ cancel_job_stmt:
 cancel_query_stmt:
   CANCEL QUERY a_expr
   {
-    /* SKIP DOC */
     $$.val = &CancelQuery{ID: $3.expr()}
   }
 | CANCEL QUERY error // SHOW HELP: CANCEL QUERY
@@ -2447,7 +2437,6 @@ for_grantee_clause:
 pause_stmt:
   PAUSE JOB a_expr
   {
-    /* SKIP DOC */
     $$.val = &PauseJob{ID: $3.expr()}
   }
 | PAUSE error // SHOW HELP: PAUSE JOB
@@ -3030,7 +3019,6 @@ release_stmt:
 resume_stmt:
   RESUME JOB a_expr
   {
-    /* SKIP DOC */
     $$.val = &ResumeJob{ID: $3.expr()}
   }
 | RESUME error // SHOW HELP: RESUME JOB
@@ -5192,7 +5180,6 @@ d_expr:
 | a_expr_const
 | '@' ICONST
   {
-    /* SKIP DOC */
     colNum, err := $2.numVal().AsInt64()
     if err != nil {
       sqllex.Error(err.Error())

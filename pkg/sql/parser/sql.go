@@ -8291,14 +8291,12 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
 		//line sql.y:1020
 		{
-			/* SKIP DOC */
 			sqlVAL.union.val = &Split{Table: sqlDollar[3].union.newNormalizableTableName(), Rows: sqlDollar[6].union.slct()}
 		}
 	case 82:
 		sqlDollar = sqlS[sqlpt-6 : sqlpt+1]
 		//line sql.y:1026
 		{
-			/* SKIP DOC */
 			sqlVAL.union.val = &Split{Index: sqlDollar[3].union.tableWithIdx(), Rows: sqlDollar[6].union.slct()}
 		}
 	case 83:
@@ -8319,28 +8317,24 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
 		//line sql.y:1044
 		{
-			/* SKIP DOC */
 			sqlVAL.union.val = &Scatter{Table: sqlDollar[3].union.newNormalizableTableName()}
 		}
 	case 86:
 		sqlDollar = sqlS[sqlpt-12 : sqlpt+1]
 		//line sql.y:1048
 		{
-			/* SKIP DOC */
 			sqlVAL.union.val = &Scatter{Table: sqlDollar[3].union.newNormalizableTableName(), From: sqlDollar[7].union.exprs(), To: sqlDollar[11].union.exprs()}
 		}
 	case 87:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
 		//line sql.y:1054
 		{
-			/* SKIP DOC */
 			sqlVAL.union.val = &Scatter{Index: sqlDollar[3].union.tableWithIdx()}
 		}
 	case 88:
 		sqlDollar = sqlS[sqlpt-12 : sqlpt+1]
 		//line sql.y:1058
 		{
-			/* SKIP DOC */
 			sqlVAL.union.val = &Scatter{Index: sqlDollar[3].union.tableWithIdx(), From: sqlDollar[7].union.exprs(), To: sqlDollar[11].union.exprs()}
 		}
 	case 89:
@@ -8566,14 +8560,12 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-12 : sqlpt+1]
 		//line sql.y:1288
 		{
-			/* SKIP DOC */
 			sqlVAL.union.val = &Import{Table: sqlDollar[3].union.unresolvedName(), CreateFile: sqlDollar[6].union.expr(), FileFormat: sqlDollar[7].str, Files: sqlDollar[10].union.exprs(), Options: sqlDollar[12].union.kvOptions()}
 		}
 	case 123:
 		sqlDollar = sqlS[sqlpt-12 : sqlpt+1]
 		//line sql.y:1292
 		{
-			/* SKIP DOC */
 			sqlVAL.union.val = &Import{Table: sqlDollar[3].union.unresolvedName(), CreateDefs: sqlDollar[5].union.tblDefs(), FileFormat: sqlDollar[7].str, Files: sqlDollar[10].union.exprs(), Options: sqlDollar[12].union.kvOptions()}
 		}
 	case 124:
@@ -8711,7 +8703,6 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:1394
 		{
-			/* SKIP DOC */
 			sqlVAL.union.val = &CancelJob{ID: sqlDollar[3].union.expr()}
 		}
 	case 149:
@@ -8724,7 +8715,6 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:1405
 		{
-			/* SKIP DOC */
 			sqlVAL.union.val = &CancelQuery{ID: sqlDollar[3].union.expr()}
 		}
 	case 151:
@@ -10108,7 +10098,6 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:2427
 		{
-			/* SKIP DOC */
 			sqlVAL.union.val = &PauseJob{ID: sqlDollar[3].union.expr()}
 		}
 	case 434:
@@ -10788,7 +10777,6 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:3007
 		{
-			/* SKIP DOC */
 			sqlVAL.union.val = &ResumeJob{ID: sqlDollar[3].union.expr()}
 		}
 	case 543:
@@ -13278,7 +13266,6 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:5164
 		{
-			/* SKIP DOC */
 			colNum, err := sqlDollar[2].union.numVal().AsInt64()
 			if err != nil {
 				sqllex.Error(err.Error())
