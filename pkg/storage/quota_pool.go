@@ -143,8 +143,10 @@ func (qp *quotaPool) acquire(ctx context.Context, v int64) error {
 	defer slowTimer.Stop()
 	start := timeutil.Now()
 
+	// Intentionally reset only once, for we care more about the select duration in
+	// goroutine profiles than periodic logging.
+	slowTimer.Reset(base.SlowRequestThreshold)
 	for {
-		slowTimer.Reset(base.SlowRequestThreshold)
 		select {
 		case now := <-slowTimer.C:
 			slowTimer.Read = true
@@ -190,8 +192,8 @@ func (qp *quotaPool) acquire(ctx context.Context, v int64) error {
 	// next in line (if any).
 
 	var acquired int64
+	slowTimer.Reset(base.SlowRequestThreshold)
 	for acquired < v {
-		slowTimer.Reset(base.SlowRequestThreshold)
 		select {
 		case now := <-slowTimer.C:
 			slowTimer.Read = true
