@@ -185,7 +185,7 @@ func (ms MetadataSchema) InitialRangeCount() int {
 	// The number of fixed ranges is determined by the pre-defined split points
 	// in SystemConfig.ComputeSplitKey. The early keyspace is split up in order
 	// to support separate zone configs for different parts of the system ranges.
-	// There are 4 pre-defined split points, so 5 fixed ranges.
-	const fixedRanges = 5
+	// When there are `n` StaticSplit points, there will be `n+1` ranges.
+	const fixedRanges = 7
 	return len(ms.descs) - ms.configs + fixedRanges
 }
