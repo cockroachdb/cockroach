@@ -146,14 +146,6 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfgExpected.ScanMaxIdleTime = time.Nanosecond * 100
-	if err := os.Setenv("COCKROACH_CONSISTENCY_CHECK_INTERVAL", "48h"); err != nil {
-		t.Fatal(err)
-	}
-	cfgExpected.ConsistencyCheckInterval = time.Hour * 48
-	if err := os.Setenv("COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE", "true"); err != nil {
-		t.Fatal(err)
-	}
-	cfgExpected.ConsistencyCheckPanicOnFailure = true
 
 	envutil.ClearEnvCache()
 	cfg.readEnvironmentVariables()
@@ -166,8 +158,6 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		"COCKROACH_METRICS_SAMPLE_INTERVAL",
 		"COCKROACH_SCAN_INTERVAL",
 		"COCKROACH_SCAN_MAX_IDLE_TIME",
-		"COCKROACH_CONSISTENCY_CHECK_INTERVAL",
-		"COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE",
 		"COCKROACH_TIME_UNTIL_STORE_DEAD",
 	} {
 		t.Run("invalid", func(t *testing.T) {

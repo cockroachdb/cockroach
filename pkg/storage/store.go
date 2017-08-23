@@ -120,14 +120,12 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 		Settings:   st,
 		AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
 		Clock:      clock,
-		CoalescedHeartbeatsInterval:    50 * time.Millisecond,
-		RaftHeartbeatIntervalTicks:     1,
-		ScanInterval:                   10 * time.Minute,
-		ConsistencyCheckInterval:       10 * time.Minute,
-		ConsistencyCheckPanicOnFailure: true,
-		MetricsSampleInterval:          metric.TestSampleInterval,
-		HistogramWindowInterval:        metric.TestSampleInterval,
-		EnableEpochRangeLeases:         true,
+		CoalescedHeartbeatsInterval: 50 * time.Millisecond,
+		RaftHeartbeatIntervalTicks:  1,
+		ScanInterval:                10 * time.Minute,
+		MetricsSampleInterval:       metric.TestSampleInterval,
+		HistogramWindowInterval:     metric.TestSampleInterval,
+		EnableEpochRangeLeases:      true,
 	}
 	sc.RaftElectionTimeoutTicks = 3
 	sc.RaftTickInterval = 100 * time.Millisecond
@@ -590,14 +588,6 @@ type StoreConfig struct {
 	// stores.
 	ScanMaxIdleTime time.Duration
 
-	// ConsistencyCheckInterval is the default time period in between consecutive
-	// consistency checks on a range.
-	ConsistencyCheckInterval time.Duration
-
-	// ConsistencyCheckPanicOnFailure causes the node to panic when it detects a
-	// replication consistency check failure.
-	ConsistencyCheckPanicOnFailure bool
-
 	// If LogRangeEvents is true, major changes to ranges will be logged into
 	// the range event log.
 	LogRangeEvents bool
@@ -775,7 +765,6 @@ func (sc *StoreConfig) Valid() bool {
 	return sc.Clock != nil && sc.Transport != nil &&
 		sc.RaftTickInterval != 0 && sc.RaftHeartbeatIntervalTicks > 0 &&
 		sc.RaftElectionTimeoutTicks > 0 && sc.ScanInterval >= 0 &&
-		sc.ConsistencyCheckInterval >= 0 &&
 		sc.AmbientCtx.Tracer != nil
 }
 

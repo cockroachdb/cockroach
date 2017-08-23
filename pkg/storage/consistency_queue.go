@@ -28,14 +28,14 @@ import (
 
 type consistencyQueue struct {
 	*baseQueue
-	interval       time.Duration
+	interval       func() time.Duration
 	replicaCountFn func() int
 }
 
 // newConsistencyQueue returns a new instance of consistencyQueue.
 func newConsistencyQueue(store *Store, gossip *gossip.Gossip) *consistencyQueue {
 	q := &consistencyQueue{
-		interval:       store.cfg.ConsistencyCheckInterval,
+		interval:       store.ClusterSettings().ConsistencyCheckInterval.Get,
 		replicaCountFn: store.ReplicaCount,
 	}
 	q.baseQueue = newBaseQueue(
@@ -57,13 +57,18 @@ func newConsistencyQueue(store *Store, gossip *gossip.Gossip) *consistencyQueue 
 func (q *consistencyQueue) shouldQueue(
 	ctx context.Context, now hlc.Timestamp, repl *Replica, _ config.SystemConfig,
 ) (bool, float64) {
+	interval := q.interval()
+	if interval <= 0 {
+		return false, 0
+	}
+
 	shouldQ, priority := true, float64(0)
 	if !repl.store.cfg.TestingKnobs.DisableLastProcessedCheck {
 		lpTS, err := repl.getQueueLastProcessed(ctx, q.name)
 		if err != nil {
 			log.ErrEventf(ctx, "consistency queue last processed timestamp: %s", err)
 		}
-		if shouldQ, priority = shouldQueueAgain(now, lpTS, q.interval); !shouldQ {
+		if shouldQ, priority = shouldQueueAgain(now, lpTS, interval); !shouldQ {
 			return false, 0
 		}
 	}
@@ -85,6 +90,9 @@ func (q *consistencyQueue) shouldQueue(
 func (q *consistencyQueue) process(
 	ctx context.Context, repl *Replica, _ config.SystemConfig,
 ) error {
+	if q.interval() <= 0 {
+		return nil
+	}
 	req := roachpb.CheckConsistencyRequest{}
 	if _, pErr := repl.CheckConsistency(ctx, req); pErr != nil {
 		log.Error(ctx, pErr.GoError())
@@ -103,7 +111,7 @@ func (q *consistencyQueue) timer(duration time.Duration) time.Duration {
 	if replicaCount == 0 {
 		return 0
 	}
-	replInterval := q.interval / time.Duration(replicaCount)
+	replInterval := q.interval() / time.Duration(replicaCount)
 	if replInterval < duration {
 		return 0
 	}
