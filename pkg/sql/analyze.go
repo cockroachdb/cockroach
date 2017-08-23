@@ -1649,10 +1649,12 @@ func (p *planner) analyzeExpr(
 	if sources == nil {
 		resolved = replaced
 	} else {
-		resolved, _, err = p.resolveNames(replaced, sources, iVarHelper)
+		var hasStar bool
+		resolved, _, hasStar, err = p.resolveNames(replaced, sources, iVarHelper)
 		if err != nil {
 			return nil, err
 		}
+		p.hasStar = p.hasStar || hasStar
 	}
 
 	// Type check.

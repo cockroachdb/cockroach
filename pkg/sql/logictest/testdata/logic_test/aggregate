@@ -431,8 +431,10 @@ SELECT COUNT(*), COUNT(k), COUNT(kv.v) FROM kv
 count(*)  count(k)  count(kv.v)
 6         6         5
 
-query error cannot use "kv\.\*" in this context
+query I
 SELECT COUNT(kv.*) FROM kv
+----
+6
 
 query III
 SELECT COUNT(DISTINCT k), COUNT(DISTINCT v), COUNT(DISTINCT (v)) FROM kv

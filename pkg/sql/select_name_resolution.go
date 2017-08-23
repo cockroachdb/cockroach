@@ -44,9 +44,20 @@ type nameResolutionVisitor struct {
 	// same data source, for example IndexedVars and calls to the
 	// random() function.
 	foundDependentVars bool
+	// foundStars is set to true if a star is expanded during name
+	// resolution, e.g. in SELECT (kv.*) FROM kv.
+	foundStars bool
 }
 
 var _ parser.Visitor = &nameResolutionVisitor{}
+
+func makeUntypedTuple(texprs []parser.TypedExpr) *parser.Tuple {
+	exprs := make(parser.Exprs, len(texprs))
+	for i, e := range texprs {
+		exprs[i] = e
+	}
+	return &parser.Tuple{Exprs: exprs}
+}
 
 func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNode parser.Expr) {
 	if v.err != nil {
@@ -56,8 +67,34 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 	switch t := expr.(type) {
 	case parser.UnqualifiedStar:
 		v.foundDependentVars = true
+
 	case *parser.AllColumnsSelector:
-		v.foundDependentVars = true
+		v.foundStars = true
+		// AllColumnsSelector at the top level of a SELECT clause are
+		// replaced when the select's renders are prepared. If we
+		// encounter one here during expression analysis, it's being used
+		// as an argument to an inner expression/function. In that case,
+		// treat it as a tuple of the expanded columns.
+		//
+		// Hence:
+		//    SELECT kv.* FROM kv                 -> SELECT k, v FROM kv
+		//    SELECT (kv.*) FROM kv               -> SELECT (k, v) FROM kv
+		//    SELECT COUNT(DISTINCT kv.*) FROM kv -> SELECT COUNT(DISTINCT (k, v)) FROM kv
+		//
+		_, exprs, err := v.sources[0].expandStar(t, v.iVarHelper)
+		if err != nil {
+			v.err = err
+			return false, expr
+		}
+		if len(exprs) > 0 {
+			// If the star expanded to more than one column, then there are
+			// dependent vars.
+			v.foundDependentVars = true
+		}
+		// We return an untyped tuple because name resolution occurs
+		// before type checking, and type checking will resolve the
+		// tuple's type.
+		return false, makeUntypedTuple(exprs)
 
 	case *parser.IndexedVar:
 		// If the indexed var is a standalone ordinal reference, ensure it
@@ -162,7 +199,7 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 
 func (*nameResolutionVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
 
-func (s *renderNode) resolveNames(expr parser.Expr) (parser.Expr, bool, error) {
+func (s *renderNode) resolveNames(expr parser.Expr) (parser.Expr, bool, bool, error) {
 	return s.planner.resolveNames(expr, s.sourceInfo, s.ivarHelper)
 }
 
@@ -171,11 +208,12 @@ func (s *renderNode) resolveNames(expr parser.Expr) (parser.Expr, bool, error) {
 // If anything that looks like a column reference (indexed vars, star,
 // etc) is encountered, or a function that may change value for every
 // row in a table, the 2nd return value is true.
+// If any star is expanded, the 3rd return value is true.
 func (p *planner) resolveNames(
 	expr parser.Expr, sources multiSourceInfo, ivarHelper parser.IndexedVarHelper,
-) (parser.Expr, bool, error) {
+) (parser.Expr, bool, bool, error) {
 	if expr == nil {
-		return nil, false, nil
+		return nil, false, false, nil
 	}
 	v := &p.nameResolutionVisitor
 	*v = nameResolutionVisitor{
@@ -193,5 +231,5 @@ func (p *planner) resolveNames(
 	}
 
 	expr, _ = parser.WalkExpr(v, expr)
-	return expr, v.foundDependentVars, v.err
+	return expr, v.foundDependentVars, v.foundStars, v.err
 }

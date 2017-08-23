@@ -110,9 +110,30 @@ func (p *planner) groupBy(
 			// below. We do however need to resolveNames so the
 			// AssertNoAggregationOrWindowing call below can find resolved
 			// FunctionDefs in the AST (instead of UnresolvedNames).
-			resolvedExpr, _, err := p.resolveNames(expr, r.sourceInfo, r.ivarHelper)
-			if err != nil {
-				return nil, nil, err
+
+			// While doing so, we must be careful not to expand top-level
+			// stars, because this is handled specially by
+			// computeRenderAllowingStars below.
+			skipResolve := false
+			if vName, ok := expr.(parser.VarName); ok {
+				v, err := vName.NormalizeVarName()
+				if err != nil {
+					return nil, nil, err
+				}
+				switch v.(type) {
+				case parser.UnqualifiedStar, *parser.AllColumnsSelector:
+					skipResolve = true
+				}
+			}
+
+			resolvedExpr := expr
+			if !skipResolve {
+				var hasStar bool
+				resolvedExpr, _, hasStar, err = p.resolveNames(expr, r.sourceInfo, r.ivarHelper)
+				if err != nil {
+					return nil, nil, err
+				}
+				p.hasStar = p.hasStar || hasStar
 			}
 			groupByExprs[i] = resolvedExpr
 		}
@@ -164,7 +185,7 @@ func (p *planner) groupBy(
 		if err != nil {
 			return nil, nil, err
 		}
-		r.isStar = r.isStar || hasStar
+		p.hasStar = p.hasStar || hasStar
 		colIdxs := r.addOrReuseRenders(cols, exprs, true /* reuseExistingRender */)
 		if !hasStar {
 			groupStrs[symbolicExprStr(g)] = colIdxs[0]
