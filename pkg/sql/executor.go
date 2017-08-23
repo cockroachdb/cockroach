@@ -16,6 +16,7 @@ package sql
 
 import (
 	"fmt"
+	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
@@ -239,6 +240,8 @@ type NodeInfo struct {
 	ClusterID    func() uuid.UUID
 	NodeID       *base.NodeIDContainer
 	Organization *settings.StringSetting
+	AdminURL     func() *url.URL
+	PGURL        func(*url.Userinfo) (*url.URL, error)
 }
 
 // An ExecutorConfig encompasses the auxiliary objects and configuration

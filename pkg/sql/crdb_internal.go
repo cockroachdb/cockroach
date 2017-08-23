@@ -17,6 +17,8 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	"net"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -40,6 +42,7 @@ var crdbInternal = virtualSchema{
 	name: crdbInternalName,
 	tables: []virtualSchemaTable{
 		crdbInternalBuildInfoTable,
+		crdbInternalRuntimeInfoTable,
 		crdbInternalTablesTable,
 		crdbInternalLeasesTable,
 		crdbInternalSchemaChangesTable,
@@ -89,6 +92,65 @@ CREATE TABLE crdb_internal.node_build_info (
 				parser.NewDString(v),
 			); err != nil {
 				return err
+			}
+		}
+		return nil
+	},
+}
+
+var crdbInternalRuntimeInfoTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.node_runtime_info (
+  node_id   INT NOT NULL,
+  component STRING NOT NULL,
+  field     STRING NOT NULL,
+  value     STRING NOT NULL
+);
+`,
+	populate: func(_ context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
+		if p.session.User != security.RootUser {
+			return errors.New("only root can access the node runtime information")
+		}
+
+		node := p.ExecCfg().NodeInfo
+
+		nodeID := parser.NewDInt(parser.DInt(int64(node.NodeID.Get())))
+		dbURL, err := node.PGURL(url.User(security.RootUser))
+		if err != nil {
+			return err
+		}
+
+		for _, item := range []struct {
+			component string
+			url       *url.URL
+		}{
+			{"DB", dbURL}, {"UI", node.AdminURL()},
+		} {
+			var user string
+			if item.url.User != nil {
+				user = item.url.User.String()
+			}
+			host, port, err := net.SplitHostPort(item.url.Host)
+			if err != nil {
+				return err
+			}
+			for _, kv := range [][2]string{
+				{"URL", item.url.String()},
+				{"Scheme", item.url.Scheme},
+				{"User", user},
+				{"Host", host},
+				{"Port", port},
+				{"Path", item.url.EscapedPath()},
+			} {
+				k, v := kv[0], kv[1]
+				if err := addRow(
+					nodeID,
+					parser.NewDString(item.component),
+					parser.NewDString(k),
+					parser.NewDString(v),
+				); err != nil {
+					return err
+				}
 			}
 		}
 		return nil
