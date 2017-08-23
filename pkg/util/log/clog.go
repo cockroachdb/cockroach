@@ -710,6 +710,7 @@ func (l *loggingT) putBuffer(b *buffer) {
 func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string) {
 	// TODO(tschottdorf): this is a pretty horrible critical section.
 	l.mu.Lock()
+	defer l.mu.Unlock()
 
 	// Set additional details in log entry.
 	now := time.Now()
@@ -747,7 +748,6 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 			if err := l.createFile(); err != nil {
 				// Make sure the message appears somewhere.
 				l.outputToStderr(entry, stacks)
-				l.mu.Unlock()
 				l.exit(err)
 				return
 			}
@@ -757,7 +757,8 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 		data := buf.Bytes()
 
 		if _, err := l.file.Write(data); err != nil {
-			panic(err)
+			l.exit(err)
+			return
 		}
 		if l.syncWrites {
 			_ = l.file.Flush()
@@ -767,11 +768,9 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 		l.putBuffer(buf)
 	}
 	exitFunc := l.exitFunc
-	l.mu.Unlock()
 	// Flush and exit on fatal logging.
 	if s == Severity_FATAL {
-		// If we got here via Exit rather than Fatal, print no stacks.
-		timeoutFlush(10 * time.Second)
+		timeoutFlushAll(10 * time.Second)
 		exitFunc(255) // C++ uses -1, which is silly because it's anded with 255 anyway.
 	}
 }
@@ -779,7 +778,7 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 func (l *loggingT) outputToStderr(entry Entry, stacks []byte) {
 	buf := l.processForStderr(entry, stacks)
 	if _, err := OrigStderr.Write(buf.Bytes()); err != nil {
-		panic(err)
+		l.exit(err)
 	}
 	l.putBuffer(buf)
 }
@@ -794,14 +793,14 @@ func (l *loggingT) processForFile(entry Entry, stacks []byte) *buffer {
 	return formatLogEntry(entry, stacks, nil)
 }
 
-// timeoutFlush calls Flush and returns when it completes or after timeout
+// timeoutFlushAll calls flushAll and returns when it completes or after timeout
 // elapses, whichever happens first.  This is needed because the hooks invoked
-// by Flush may deadlock when clog.Fatal is called from a hook that holds
-// a lock.
-func timeoutFlush(timeout time.Duration) {
+// by Flush may deadlock when clog.Fatal is called from a hook that holds a
+// lock. l.mu must be held by the caller.
+func timeoutFlushAll(timeout time.Duration) {
 	done := make(chan bool, 1)
 	go func() {
-		Flush() // calls logging.lockAndFlushAll()
+		logging.flushAll()
 		done <- true
 	}()
 	select {
@@ -836,21 +835,27 @@ func getStacks(all bool) []byte {
 // would make its use clumsier.
 var logExitFunc func(error)
 
-// exit is called if there is trouble creating or writing log files.
-// It flushes the logs and exits the program; there's no point in hanging around.
-// l.mu is held.
+// exit is called if there is trouble creating or writing log files, or writing
+// to stderr. It flushes the logs and exits the program; there's no point in
+// hanging around. l.mu is held.
 func (l *loggingT) exit(err error) {
-	fmt.Fprintf(OrigStderr, "log: exiting because of error: %s\n", err)
+	l.mu.AssertHeld()
+	// Either stderr or our log file is broken. Try writing the error to both
+	// streams in the hope that one still works or else the user will have no idea
+	// why we crashed.
+	for _, w := range []io.Writer{OrigStderr, l.file} {
+		if w == nil {
+			continue
+		}
+		fmt.Fprintf(w, "log: exiting because of error: %s\n", err)
+	}
 	// If logExitFunc is set, we do that instead of exiting.
 	if logExitFunc != nil {
 		logExitFunc(err)
 		return
 	}
 	l.flushAll()
-	l.mu.Lock()
-	exitFunc := l.exitFunc
-	l.mu.Unlock()
-	exitFunc(2)
+	l.exitFunc(2)
 }
 
 // syncBuffer joins a bufio.Writer to its underlying file, providing access to the
