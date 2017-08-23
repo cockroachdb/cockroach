@@ -16,10 +16,11 @@ package barecluster
 
 import (
 	"bytes"
-	"context"
 	"net"
 	"os/exec"
 	"testing"
+
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/pkg/errors"

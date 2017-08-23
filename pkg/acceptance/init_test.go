@@ -50,7 +50,7 @@ func TestInitModeCommand(t *testing.T) {
 	defer s.Close(t)
 
 	// TODO(tschottdorf): see above.
-	RunBare(t, func(t *testing.T) {
+	RunDocker(t, func(t *testing.T) {
 		runTestOnConfigs(t, testInitModeInner, useInitMode(cluster.INIT_COMMAND))
 	})
 }
@@ -75,7 +75,7 @@ func TestInitModeNone(t *testing.T) {
 	defer s.Close(t)
 
 	// TODO(tschottdorf): see above.
-	RunBare(t, func(t *testing.T) {
+	RunDocker(t, func(t *testing.T) {
 		runTestOnConfigs(t, testInitModeNoneInner, useInitMode(cluster.INIT_NONE))
 	})
 }
