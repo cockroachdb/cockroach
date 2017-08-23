@@ -13,6 +13,7 @@
 // permissions and limitations under the License.
 
 #include <algorithm>
+#include <mutex>
 #include <google/protobuf/stubs/stringprintf.h>
 #include <rocksdb/cache.h>
 #include <rocksdb/db.h>
@@ -57,6 +58,7 @@ char* __attribute__((weak)) prettyPrintKey(DBKey) { die_missing_symbol(__func__)
 #endif
 
 struct DBCache {
+  std::mutex mu;
   std::shared_ptr<rocksdb::Cache> rep;
 };
 
@@ -1512,9 +1514,6 @@ class TimeBoundTblPropCollectorFactory : public rocksdb::TablePropertiesCollecto
 
 rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   rocksdb::BlockBasedTableOptions table_options;
-  if (db_opts.cache != nullptr) {
-    table_options.block_cache = db_opts.cache->rep;
-  }
   // Pass false for use_blocked_base_builder creates a per file
   // (sstable) filter instead of a per-block filter. The per file
   // filter can be consulted before going to the index which saves an
@@ -1649,6 +1648,18 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   options.target_file_size_base = 4 << 20; // 4 MB
   options.target_file_size_multiplier = 2;
 
+  if (db_opts.cache != nullptr) {
+    table_options.block_cache = db_opts.cache->rep;
+
+    // Reserve 1 memtable worth of memory from the cache. Under high
+    // load situations we'll be using somewhat more than 1 memtable,
+    // but usually not significantly more unless there is an I/O
+    // throughput problem.
+    std::lock_guard<std::mutex> guard(db_opts.cache->mu);
+    const int64_t capacity = db_opts.cache->rep->GetCapacity();
+    const int64_t new_capacity = std::max<int64_t>(0, capacity - options.write_buffer_size);
+    db_opts.cache->rep->SetCapacity(new_capacity);
+  }
   return options;
 }
 
