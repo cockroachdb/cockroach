@@ -20,12 +20,9 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
 )
 
@@ -42,45 +39,28 @@ import (
 // (`::string::bytes`) and is an obvious area for improvement in the next
 // version.
 //
-// AS OF SYSTEM TIME is optional, but when set, uses the table definition and
-// data as of that the specified time.
+// To extract the fingerprints at some point in the past, the following
+// query can be used:
+//    SELECT * FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE foo] AS OF SYSTEM TIME xxx
 func (p *planner) ShowFingerprints(
 	ctx context.Context, n *parser.ShowFingerprints,
 ) (planNode, error) {
-	ts := p.session.execCfg.Clock.Now()
-	if n.AsOf.Expr != nil {
-		evalCtx := p.session.evalCtx()
-		var err error
-		ts, err = EvalAsOfTimestamp(&evalCtx, n.AsOf, ts)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err
 	}
 
-	var tableDesc *sqlbase.TableDescriptor
-	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		txn.SetFixedTimestamp(ts)
-
-		var err error
-		tableDesc, err = MustGetTableDesc(
-			ctx, txn, p.getVirtualTabler(), tn, false /*allowAdding*/)
-		return err
-	}); err != nil {
+	tableDesc, err := MustGetTableDesc(
+		ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/)
+	if err != nil {
 		return nil, err
 	}
 
 	if err := p.CheckPrivilege(tableDesc, privilege.SELECT); err != nil {
 		return nil, err
 	}
+
 	return &showFingerprintsNode{
-		n:         n,
-		tn:        tn,
-		ts:        ts,
 		tableDesc: tableDesc,
 		indexes:   tableDesc.AllNonDropIndexes(),
 	}, nil
@@ -89,10 +69,6 @@ func (p *planner) ShowFingerprints(
 type showFingerprintsNode struct {
 	optColumnsSlot
 
-	n *parser.ShowFingerprints
-
-	ts        hlc.Timestamp
-	tn        *parser.TableName
 	tableDesc *sqlbase.TableDescriptor
 	indexes   []sqlbase.IndexDescriptor
 
@@ -102,19 +78,16 @@ type showFingerprintsNode struct {
 }
 
 var showFingerprintsColumns = sqlbase.ResultColumns{
-	{
-		Name: "Index",
-		Typ:  parser.TypeString,
-	},
-	{
-		Name: "Fingerprint",
-		Typ:  parser.TypeString,
-	},
+	{Name: "index", Typ: parser.TypeString},
+	{Name: "fingerprint", Typ: parser.TypeString},
 }
 
-func (n *showFingerprintsNode) Start(params runParams) error { return nil }
-func (n *showFingerprintsNode) Values() parser.Datums        { return n.values }
-func (n *showFingerprintsNode) Close(_ context.Context)      {}
+func (n *showFingerprintsNode) Start(params runParams) error {
+	n.values = []parser.Datum{parser.DNull, parser.DNull}
+	return nil
+}
+func (n *showFingerprintsNode) Values() parser.Datums   { return n.values }
+func (n *showFingerprintsNode) Close(_ context.Context) {}
 func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	if n.rowIdx >= len(n.indexes) {
 		return false, nil
@@ -129,9 +102,9 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 		// if they're different types.
 		switch col.Type.SemanticType {
 		case sqlbase.ColumnType_BYTES:
-			cols = append(cols, fmt.Sprintf("%s:::bytes", parser.Name(col.Name).String()))
+			cols = append(cols, fmt.Sprintf("%s:::bytes", parser.Name(col.Name)))
 		default:
-			cols = append(cols, fmt.Sprintf("%s::string::bytes", parser.Name(col.Name).String()))
+			cols = append(cols, fmt.Sprintf("%s::string::bytes", parser.Name(col.Name)))
 		}
 	}
 
@@ -161,28 +134,15 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	//  sha265 => 1h6m
 	//  fnv64 (again) => 17m
 	//
-	// TODO(dan): If/when this ever loses its EXERIMENTAL prefix and gets
+	// TODO(dan): If/when this ever loses its EXPERIMENTAL prefix and gets
 	// exposed to users, consider adding a version to the fingerprint output.
 	sql := fmt.Sprintf(`SELECT
 	  XOR_AGG(FNV64(%s))::string AS fingerprint
-	  FROM %s.%s@{FORCE_INDEX=%s,NO_INDEX_JOIN}
-	`, strings.Join(cols, `,`), n.tn.DatabaseName, n.tn.TableName, parser.Name(index.Name))
+	  FROM [%d AS t]@{FORCE_INDEX=[%d],NO_INDEX_JOIN}
+	`, strings.Join(cols, `,`), n.tableDesc.ID, index.ID)
 
-	var fingerprintCols parser.Datums
-	if err := params.p.ExecCfg().DB.Txn(params.ctx, func(ctx context.Context, txn *client.Txn) error {
-		txn.SetFixedTimestamp(n.ts)
-
-		// Use internal planner directly instead of InternalExecutor because we
-		// need to set `avoidCachedDescriptors`.
-		p := makeInternalPlanner("SELECT", txn, security.RootUser, params.p.LeaseMgr().memMetrics)
-		defer finishInternalPlanner(p)
-		p.session.tables.leaseMgr = params.p.LeaseMgr()
-		p.avoidCachedDescriptors = true
-
-		var err error
-		fingerprintCols, err = p.QueryRow(ctx, sql)
-		return err
-	}); err != nil {
+	fingerprintCols, err := params.p.QueryRow(params.ctx, sql)
+	if err != nil {
 		return false, err
 	}
 
@@ -192,7 +152,8 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	}
 	fingerprint := fingerprintCols[0]
 
-	n.values = []parser.Datum{parser.NewDString(index.Name), fingerprint}
+	n.values[0] = parser.NewDString(index.Name)
+	n.values[1] = fingerprint
 	n.rowIdx++
 	return true, nil
 }
