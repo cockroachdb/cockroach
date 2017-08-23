@@ -2310,6 +2310,41 @@ func TestMVCCReverseScan(t *testing.T) {
 	}
 }
 
+// TestMVCCReverseScanFirstKeyInFuture verifies that when MVCCReverseScan scans
+// encounter a key with only future timestamps first, that it skips the key and
+// continues to scan in reverse. #17825 was caused by this not working correctly.
+func TestMVCCReverseScanFirstKeyInFuture(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	engine := createTestEngine()
+	defer engine.Close()
+
+	// The value at key2 will be at a lower timestamp than the ReverseScan, but
+	// the value at key3 will be at a larger timetamp. The ReverseScan should
+	// see key3 and ignore it because none of it versions are at a low enough
+	// timestamp to read. It should then continue scanning backwards and find a
+	// value at key2.
+	//
+	// Before fixing #17825, the MVCC version scan on key3 would fall out of the
+	// scan bounds and if it never found another valid key before reaching
+	// KeyMax, would stop the ReverseScan from continuing.
+	if err := MVCCPut(context.Background(), engine, nil, testKey2, hlc.Timestamp{WallTime: 1}, value2, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey3, hlc.Timestamp{WallTime: 3}, value3, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	kvs, _, _, err := MVCCReverseScan(context.Background(), engine, testKey1, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(kvs) != 1 ||
+		!bytes.Equal(kvs[0].Key, testKey2) ||
+		!bytes.Equal(kvs[0].Value.RawBytes, value2.RawBytes) {
+		t.Errorf("unexpected value: %v", kvs)
+	}
+}
+
 func TestMVCCResolveTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	engine := createTestEngine()
