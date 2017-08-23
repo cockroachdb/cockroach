@@ -140,7 +140,7 @@ CREATE TABLE crdb_internal.node_runtime_info (
 				{"User", user},
 				{"Host", host},
 				{"Port", port},
-				{"Path", item.url.EscapedPath()},
+				{"URI", item.url.RequestURI()},
 			} {
 				k, v := kv[0], kv[1]
 				if err := addRow(
