@@ -16,7 +16,6 @@ package distsqlrun
 
 import (
 	"container/heap"
-	"sort"
 
 	"golang.org/x/net/context"
 
@@ -31,7 +30,7 @@ import (
 type sortableRowContainer interface {
 	AddRow(context.Context, sqlbase.EncDatumRow) error
 	// Sort sorts the rows according to an ordering specified at initialization.
-	Sort()
+	Sort(context.Context)
 	// NewIterator returns a rowIterator that can be used to iterate over
 	// the rows.
 	NewIterator(context.Context) rowIterator
@@ -153,9 +152,10 @@ func (mc *memRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) 
 	return err
 }
 
-func (mc *memRowContainer) Sort() {
+func (mc *memRowContainer) Sort(ctx context.Context) {
 	mc.invertSorting = false
-	sort.Sort(mc)
+	cancelChecker := sqlbase.NewCancelChecker(ctx)
+	sqlbase.Sort(mc, cancelChecker)
 }
 
 // Push is part of heap.Interface.

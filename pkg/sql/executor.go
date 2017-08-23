@@ -1146,6 +1146,11 @@ func (e *Executor) execStmtsInCurrentTxn(
 			}
 		}
 		if err != nil {
+			// If error contains a context cancellation error, wrap it with a
+			// user-friendly query execution cancelled one.
+			if strings.Contains(err.Error(), "context canceled") {
+				err = errors.Wrapf(err, "query execution canceled")
+			}
 			// After an error happened, skip executing all the remaining statements
 			// in this batch.  This is Postgres behavior, and it makes sense as the
 			// protocol doesn't let you return results after an error.
@@ -1518,7 +1523,7 @@ func (e *Executor) execStmtInOpenTxn(
 	p.avoidCachedDescriptors = avoidCachedDescriptors
 	p.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 	p.stmt = &stmt
-	p.cancelChecker = makeCancelChecker(p.stmt)
+	p.cancelChecker = sqlbase.NewCancelChecker(p.stmt.queryMeta.ctx)
 
 	// constantMemAcc accounts for all constant folded values that are computed
 	// prior to any rows being computed.

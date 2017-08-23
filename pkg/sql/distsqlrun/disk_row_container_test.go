@@ -193,7 +193,7 @@ func TestDiskRowContainer(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				sortedRows.Sort()
+				sortedRows.Sort(ctx)
 
 				i := d.NewIterator(ctx)
 				defer i.Close()
