@@ -57,7 +57,9 @@ func runTestFlow(
 	if err != nil {
 		t.Fatal(err)
 	}
-	flow.Start(ctx, func() {})
+	if err := flow.Start(ctx, func() {}); err != nil {
+		t.Fatal(err)
+	}
 	flow.Wait()
 	flow.Cleanup(ctx)
 

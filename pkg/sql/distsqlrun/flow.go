@@ -132,6 +132,9 @@ type Flow struct {
 	// Cancel function for ctx. Call this to cancel the flow (safe to be called
 	// multiple times).
 	ctxCancel context.CancelFunc
+
+	// spec is the request that produced this flow. Only used for debugging.
+	spec *FlowSpec
 }
 
 func newFlow(flowCtx FlowCtx, flowReg *flowRegistry, syncFlowConsumer RowReceiver) *Flow {
@@ -283,6 +286,8 @@ func (f *Flow) makeProcessor(ps *ProcessorSpec, inputs []RowSource) (Processor, 
 }
 
 func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
+	f.spec = spec
+
 	// First step: setup the input synchronizers for all processors.
 	inputSyncs := make([][]RowSource, len(spec.Processors))
 	for pIdx, ps := range spec.Processors {
@@ -347,7 +352,12 @@ func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
 }
 
 // Start starts the flow (each processor runs in their own goroutine).
-func (f *Flow) Start(ctx context.Context, doneFn func()) {
+//
+// Generally if errors are encountered during the setup part, they're returned.
+// But if the flow is a synchronous one, then no error is returned; instead the
+// setup error is pushed to the syncFlowConsumer. In this case, a subsequent
+// call to f.Wait() will not block.
+func (f *Flow) Start(ctx context.Context, doneFn func()) error {
 	f.doneFn = doneFn
 	log.VEventf(
 		ctx, 1, "starting (%d processors, %d startables)", len(f.processors), len(f.startables),
@@ -358,18 +368,32 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) {
 
 	// Once we call RegisterFlow, the inbound streams become accessible; we must
 	// set up the WaitGroup counter before.
-	f.waitGroup.Add(len(f.inboundStreams) + len(f.processors))
+	// The counter will be further incremented below to account for the
+	// processors.
+	f.waitGroup.Add(len(f.inboundStreams))
 
-	f.flowRegistry.RegisterFlow(f.ctx, f.id, f, f.inboundStreams, flowStreamDefaultTimeout)
+	if err := f.flowRegistry.RegisterFlow(
+		f.ctx, f.id, f, f.inboundStreams, flowStreamDefaultTimeout,
+	); err != nil {
+		if f.syncFlowConsumer != nil {
+			// For sync flows, the error goes to the consumer.
+			f.syncFlowConsumer.Push(nil /* row */, ProducerMetadata{Err: err})
+			f.syncFlowConsumer.ProducerDone()
+			return nil
+		}
+		return err
+	}
 	if log.V(1) {
 		log.Infof(f.ctx, "registered flow %s", f.id.Short())
 	}
 	for _, s := range f.startables {
 		s.start(f.ctx, &f.waitGroup, f.ctxCancel)
 	}
+	f.waitGroup.Add(len(f.processors))
 	for _, p := range f.processors {
 		go p.Run(f.ctx, &f.waitGroup)
 	}
+	return nil
 }
 
 // Wait waits for all the goroutines for this flow to exit. If the context gets
