@@ -304,3 +304,17 @@ interdb                               CREATE TABLE interdb (
                                       CONSTRAINT "primary" PRIMARY KEY (x ASC),
                                       FAMILY "primary" (x)
 ) INTERLEAVE IN PARENT other.foo (x)
+
+statement ok
+CREATE TABLE t1 (id1 INT PRIMARY KEY, id2 INT, id3 INT);
+
+statement ok
+CREATE INDEX c on t1 (id2)
+   STORING (id1,id3)
+   INTERLEAVE in PARENT t1 (id2);
+
+statement ok
+DROP INDEX t1@c;
+
+statement ok
+DROP TABLE t1
