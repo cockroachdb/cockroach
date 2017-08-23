@@ -478,6 +478,10 @@ func (f *Farmer) Restart(ctx context.Context, i int) error {
 		cmd += " --join=" + strings.Join(hosts, ",")
 	}
 
+	// Redirect stdout/stderr to a file, or Cockroach will panic when the SSH
+	// session closes.
+	cmd += " 1> logs/cockroach.stdout 2> logs/cockroach.stderr"
+
 	c, err := f.getSSH(f.nodes[i].hostname, f.defaultKeyFile())
 	if err != nil {
 		return err
@@ -491,16 +495,13 @@ func (f *Farmer) Restart(ctx context.Context, i int) error {
 		}
 		defer s.Close()
 
-		var outBuf, errBuf bytes.Buffer
-		s.Stdout = &outBuf
-		s.Stderr = &errBuf
-
 		if err := s.Start(cmd); err != nil {
 			return errors.Wrap(err, cmd)
 		}
 		go func() {
 			err := s.Wait()
-			done <- errors.Wrapf(err, "failed: %s\nstdout:\n%s\nstderr:\n%s", cmd, outBuf.String(), errBuf.String())
+			const logMsg = `see logs/cockroach.stdout and logs/cockroach.stderr on the remote server for details`
+			done <- errors.Wrapf(err, "failed: %s\n\n(%s)", cmd, logMsg)
 		}()
 	}
 
