@@ -18,6 +18,21 @@ eexpect "255"
 eexpect ":/# "
 end_test
 
+start_test "Check that a broken stderr prints a message to the log files."
+send "$argv start -s=path=logs/db --insecure --logtostderr --verbosity=1 2>&1 | cat\r"
+eexpect "CockroachDB node starting"
+system "killall cat"
+eexpect ":/# "
+system "grep -F 'log: exiting because of error: write /dev/stderr: broken pipe' logs/db/logs/cockroach.log"
+end_test
+
+start_test "Check that a broken log file prints a message to stderr."
+send "$argv start -s=path=logs/db --log-dir=/dev/null --insecure --logtostderr\r"
+eexpect "log: exiting because of error: log: cannot create log: open"
+eexpect "not a directory"
+eexpect ":/# "
+end_test
+
 start_test "Check that a server started with only in-memory stores and no --log-dir automatically logs to stderr."
 send "$argv start --insecure --store=type=mem,size=1GiB\r"
 eexpect "CockroachDB node starting"

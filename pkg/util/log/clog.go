@@ -754,8 +754,8 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 			if err := l.createFile(); err != nil {
 				// Make sure the message appears somewhere.
 				l.outputToStderr(entry, stacks)
+				l.exitLocked(err)
 				l.mu.Unlock()
-				l.exit(err)
 				return
 			}
 		}
@@ -764,7 +764,9 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 		data := buf.Bytes()
 
 		if _, err := l.file.Write(data); err != nil {
-			panic(err)
+			l.exitLocked(err)
+			l.mu.Unlock()
+			return
 		}
 		if l.syncWrites {
 			_ = l.file.Flush()
@@ -786,7 +788,7 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 func (l *loggingT) outputToStderr(entry Entry, stacks []byte) {
 	buf := l.processForStderr(entry, stacks)
 	if _, err := OrigStderr.Write(buf.Bytes()); err != nil {
-		panic(err)
+		l.exitLocked(err)
 	}
 	l.putBuffer(buf)
 }
@@ -843,21 +845,27 @@ func getStacks(all bool) []byte {
 // would make its use clumsier.
 var logExitFunc func(error)
 
-// exit is called if there is trouble creating or writing log files.
-// It flushes the logs and exits the program; there's no point in hanging around.
-// l.mu is held.
-func (l *loggingT) exit(err error) {
-	fmt.Fprintf(OrigStderr, "log: exiting because of error: %s\n", err)
+// exitLocked is called if there is trouble creating or writing log files, or
+// writing to stderr. It flushes the logs and exits the program; there's no
+// point in hanging around. l.mu is held.
+func (l *loggingT) exitLocked(err error) {
+	l.mu.AssertHeld()
+	// Either stderr or our log file is broken. Try writing the error to both
+	// streams in the hope that one still works or else the user will have no idea
+	// why we crashed.
+	for _, w := range []io.Writer{OrigStderr, l.file} {
+		if w == nil {
+			continue
+		}
+		fmt.Fprintf(w, "log: exiting because of error: %s\n", err)
+	}
 	// If logExitFunc is set, we do that instead of exiting.
 	if logExitFunc != nil {
 		logExitFunc(err)
 		return
 	}
 	l.flushAll()
-	l.mu.Lock()
-	exitFunc := l.exitFunc
-	l.mu.Unlock()
-	exitFunc(2)
+	l.exitFunc(2)
 }
 
 // syncBuffer joins a bufio.Writer to its underlying file, providing access to the
@@ -879,13 +887,13 @@ func (sb *syncBuffer) Sync() error {
 func (sb *syncBuffer) Write(p []byte) (n int, err error) {
 	if sb.nbytes+int64(len(p)) >= atomic.LoadInt64(&LogFileMaxSize) {
 		if err := sb.rotateFile(timeutil.Now()); err != nil {
-			sb.logger.exit(err)
+			sb.logger.exitLocked(err)
 		}
 	}
 	n, err = sb.Writer.Write(p)
 	sb.nbytes += int64(n)
 	if err != nil {
-		sb.logger.exit(err)
+		sb.logger.exitLocked(err)
 	}
 	return
 }
