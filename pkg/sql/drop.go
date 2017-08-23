@@ -71,6 +71,11 @@ func (p *planner) DropDatabase(ctx context.Context, n *parser.DropDatabase) (pla
 		return nil, err
 	}
 
+	if len(tbNames) > 0 && p.session.SafeUpdates {
+		return nil, pgerror.NewDangerousStatementErrorf(
+			"database is not empty; DROP DATABASE will delete all contents recursively")
+	}
+
 	td := make([]*sqlbase.TableDescriptor, len(tbNames))
 	for i := range tbNames {
 		tbDesc, err := p.dropTableOrViewPrepare(ctx, &tbNames[i])

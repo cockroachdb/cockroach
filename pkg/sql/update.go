@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -226,6 +227,10 @@ func addOrMergeExpr(
 func (p *planner) Update(
 	ctx context.Context, n *parser.Update, desiredTypes []parser.Type,
 ) (planNode, error) {
+	if n.Where == nil && p.session.SafeUpdates {
+		return nil, pgerror.NewDangerousStatementErrorf("UPDATE without WHERE clause")
+	}
+
 	tracing.AnnotateTrace()
 
 	tn, err := p.getAliasedTableName(n.Table)

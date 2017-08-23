@@ -1,0 +1,17 @@
+statement ok
+CREATE TABLE foo(x INT)
+
+statement ok
+SET sql_safe_updates = true
+
+statement error rejected: UPDATE without WHERE clause
+UPDATE foo SET x = 3
+
+statement error rejected: DELETE without WHERE clause
+DELETE FROM foo
+
+statement error rejected: database is not empty
+DROP DATABASE test
+
+statement error rejected: ALTER TABLE DROP COLUMN
+ALTER TABLE foo DROP COLUMN x
