@@ -883,9 +883,15 @@ func (p *planner) removeInterleaveBackReference(
 		return nil
 	}
 	ancestor := idx.Interleave.Ancestors[len(idx.Interleave.Ancestors)-1]
-	t, err := sqlbase.GetTableDescFromID(ctx, p.txn, ancestor.TableID)
-	if err != nil {
-		return errors.Errorf("error resolving referenced table ID %d: %v", ancestor.TableID, err)
+	var t *sqlbase.TableDescriptor
+	if ancestor.TableID == tableDesc.ID {
+		t = tableDesc
+	} else {
+		lookup, err := sqlbase.GetTableDescFromID(ctx, p.txn, ancestor.TableID)
+		if err != nil {
+			return errors.Errorf("error resolving referenced table ID %d: %v", ancestor.TableID, err)
+		}
+		t = lookup
 	}
 	if t.Dropped() {
 		// The referenced table is being dropped. No need to modify it further.
@@ -900,7 +906,10 @@ func (p *planner) removeInterleaveBackReference(
 			targetIdx.InterleavedBy = append(targetIdx.InterleavedBy[:k], targetIdx.InterleavedBy[k+1:]...)
 		}
 	}
-	return p.saveNonmutationAndNotify(ctx, t)
+	if !(t == tableDesc) {
+		return p.saveNonmutationAndNotify(ctx, t)
+	}
+	return nil
 }
 
 func verifyDropTableMetadata(
