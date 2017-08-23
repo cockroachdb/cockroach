@@ -16,7 +16,6 @@ package base
 
 import (
 	"crypto/tls"
-	"fmt"
 	"net/http"
 	"net/url"
 	"sync"
@@ -158,8 +157,11 @@ func (cfg *Config) HTTPRequestScheme() string {
 }
 
 // AdminURL returns the URL for the admin UI.
-func (cfg *Config) AdminURL() string {
-	return fmt.Sprintf("%s://%s", cfg.HTTPRequestScheme(), cfg.HTTPAddr)
+func (cfg *Config) AdminURL() *url.URL {
+	return &url.URL{
+		Scheme: cfg.HTTPRequestScheme(),
+		Host:   cfg.HTTPAddr,
+	}
 }
 
 // GetClientCertPaths returns the paths to the client cert and key.

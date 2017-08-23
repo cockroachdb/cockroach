@@ -420,7 +420,7 @@ func (ts *TestServer) WriteSummaries() error {
 
 // AdminURL implements TestServerInterface.
 func (ts *TestServer) AdminURL() string {
-	return ts.Cfg.AdminURL()
+	return ts.Cfg.AdminURL().String()
 }
 
 // GetHTTPClient implements TestServerInterface.
