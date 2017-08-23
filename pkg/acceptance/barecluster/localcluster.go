@@ -597,7 +597,7 @@ func (n *Node) waitUntilLive() {
 
 		var uiStr string
 		if err := n.db.QueryRow(
-			"SELECT value FROM crdb_internal.node_runtime_info WHERE field='AdminURL'",
+			`SELECT value FROM crdb_internal.node_runtime_info WHERE component='UI' AND field = 'URL'`,
 		).Scan(&uiStr); err != nil {
 			log.Info(ctx, err)
 			break
