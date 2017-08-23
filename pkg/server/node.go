@@ -186,7 +186,6 @@ func bootstrapCluster(
 	cfg.ScanInterval = 10 * time.Minute
 	cfg.MetricsSampleInterval = time.Duration(math.MaxInt64)
 	cfg.HistogramWindowInterval = time.Duration(math.MaxInt64)
-	cfg.ConsistencyCheckInterval = 10 * time.Minute
 	tr := cfg.Settings.Tracer
 	defer tr.Close()
 	cfg.AmbientCtx.Tracer = tr

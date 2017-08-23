@@ -55,7 +55,6 @@ const (
 	defaultCacheSize                      = 512 << 20 // 512 MB
 	defaultSQLMemoryPoolSize              = 512 << 20 // 512 MB
 	defaultScanInterval                   = 10 * time.Minute
-	defaultConsistencyCheckInterval       = 24 * time.Hour
 	defaultScanMaxIdleTime                = 200 * time.Millisecond
 	defaultMetricsSampleInterval          = 10 * time.Second
 	defaultStorePath                      = "cockroach-data"
@@ -188,15 +187,6 @@ type Config struct {
 	// stores.
 	// Environment Variable: COCKROACH_SCAN_MAX_IDLE_TIME
 	ScanMaxIdleTime time.Duration
-
-	// ConsistencyCheckInterval determines the time between range consistency checks.
-	// Set to 0 to disable.
-	// Environment Variable: COCKROACH_CONSISTENCY_CHECK_INTERVAL
-	ConsistencyCheckInterval time.Duration
-
-	// ConsistencyCheckPanicOnFailure causes the node to panic when it detects a
-	// replication consistency check failure.
-	ConsistencyCheckPanicOnFailure bool
 
 	// TimeUntilStoreDead is the time after which if there is no new gossiped
 	// information about a store, it is considered dead.
@@ -379,7 +369,6 @@ func MakeConfig(st *cluster.Settings) Config {
 		SQLMemoryPoolSize:              defaultSQLMemoryPoolSize,
 		ScanInterval:                   defaultScanInterval,
 		ScanMaxIdleTime:                defaultScanMaxIdleTime,
-		ConsistencyCheckInterval:       defaultConsistencyCheckInterval,
 		MetricsSampleInterval:          defaultMetricsSampleInterval,
 		TimeUntilStoreDead:             st.TimeUntilStoreDead,
 		EventLogEnabled:                defaultEventLogEnabled,
@@ -406,7 +395,6 @@ func (cfg *Config) String() string {
 	fmt.Fprintln(w, "SQL memory pool size\t", humanizeutil.IBytes(cfg.SQLMemoryPoolSize))
 	fmt.Fprintln(w, "scan interval\t", cfg.ScanInterval)
 	fmt.Fprintln(w, "scan max idle time\t", cfg.ScanMaxIdleTime)
-	fmt.Fprintln(w, "consistency check interval\t", cfg.ConsistencyCheckInterval)
 	fmt.Fprintln(w, "metrics sample interval\t", cfg.MetricsSampleInterval)
 	fmt.Fprintln(w, "time until store dead\t", cfg.TimeUntilStoreDead)
 	fmt.Fprintln(w, "event log enabled\t", cfg.EventLogEnabled)
@@ -599,11 +587,9 @@ func (cfg *Config) RequireWebSession() bool {
 func (cfg *Config) readEnvironmentVariables() {
 	// cockroach-linearizable
 	cfg.Linearizable = envutil.EnvOrDefaultBool("COCKROACH_LINEARIZABLE", cfg.Linearizable)
-	cfg.ConsistencyCheckPanicOnFailure = envutil.EnvOrDefaultBool("COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE", cfg.ConsistencyCheckPanicOnFailure)
 	cfg.MetricsSampleInterval = envutil.EnvOrDefaultDuration("COCKROACH_METRICS_SAMPLE_INTERVAL", cfg.MetricsSampleInterval)
 	cfg.ScanInterval = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_INTERVAL", cfg.ScanInterval)
 	cfg.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MAX_IDLE_TIME", cfg.ScanMaxIdleTime)
-	cfg.ConsistencyCheckInterval = envutil.EnvOrDefaultDuration("COCKROACH_CONSISTENCY_CHECK_INTERVAL", cfg.ConsistencyCheckInterval)
 }
 
 // parseGossipBootstrapResolvers parses list of gossip bootstrap resolvers.
