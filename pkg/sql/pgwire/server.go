@@ -37,7 +37,7 @@ import (
 const (
 	// ErrSSLRequired is returned when a client attempts to connect to a
 	// secure server in cleartext.
-	ErrSSLRequired = "cleartext connections are not permitted"
+	ErrSSLRequired = "node is running secure mode, SSL connection required"
 
 	// ErrDraining is returned when a client attempts to connect to a server
 	// which is not accepting client connections.
