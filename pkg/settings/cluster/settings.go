@@ -218,6 +218,9 @@ type StorageSettings struct {
 	ImportBatchSize             *settings.ByteSizeSetting
 	AddSSTableEnabled           *settings.BoolSetting
 	MaxIntents                  *settings.IntSetting
+
+	ConsistencyCheckInterval       *settings.DurationSetting
+	ConsistencyCheckPanicOnFailure *settings.BoolSetting
 }
 
 // UISettings is the subset of ClusterSettings affecting the UI.
@@ -579,6 +582,17 @@ func MakeClusterSettings(minVersion, serverVersion roachpb.Version) *Settings {
 		"server.failed_reservation_timeout",
 		"the amount of time to consider the store throttled for up-replication after a failed reservation call",
 		5*time.Second,
+	)
+
+	s.ConsistencyCheckInterval = r.RegisterNonNegativeDurationSetting(
+		"server.consistency_check.interval",
+		"the time between range consistency checks; set to 0 to disable consistency checking",
+		24*time.Hour,
+	)
+	s.ConsistencyCheckPanicOnFailure = r.RegisterBoolSetting(
+		"server.consistency_check.panic_on_failure",
+		"causes the node to panic when it detects a range consistency check failure",
+		false,
 	)
 
 	s.DistSQLUseTempStorage = r.RegisterBoolSetting(
