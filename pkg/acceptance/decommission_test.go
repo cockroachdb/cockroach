@@ -18,6 +18,7 @@ import (
 	"regexp"
 	"strconv"
 	"testing"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -26,37 +27,39 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
 // TestDecommission starts up an >3 node cluster and decomissions and
 // recommissions nodes in various ways.
 func TestDecommission(t *testing.T) {
-	t.Skip("#17477")
-	s := log.Scope(t)
-	defer s.Close(t)
+	RunLocal(t, func(t *testing.T) {
+		s := log.Scope(t)
+		defer s.Close(t)
 
-	runTestOnConfigs(t, testDecommissionInner)
+		runTestOnConfigs(t, testDecommissionInner)
+	})
 }
 
 func decommission(
 	ctx context.Context, c cluster.Cluster, runNode int, targetNode roachpb.NodeID, verbs ...string,
 ) (string, error) {
-	args := []string{"node", verbs[0]}
-	if targetNode > 0 {
-		args = append(args, strconv.Itoa(int(targetNode)))
+	for {
+		args := append([]string{"node", verbs[0], strconv.Itoa(int(targetNode))}, verbs[1:]...)
+		o, _, err := c.ExecCLI(ctx, runNode, args)
+		if testutils.IsError(err, "ambiguous") {
+			continue
+		}
+		return o, err
 	}
-	args = append(args, verbs[1:]...)
-	o, _, err := c.ExecCLI(ctx, runNode, args)
-	return o, err
 }
 
 func testDecommissionInner(
 	ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig,
 ) {
-	SkipUnlessLocal(t) // hard-coded name of cockroach binary below
-
 	if c.NumNodes() < 4 {
 		// TODO(tschottdorf): or we invent a way to change the ZoneConfig in
 		// this test and test less ambitiously (or split up the tests).
@@ -91,7 +94,12 @@ func testDecommissionInner(
 	}
 
 	log.Info(ctx, "decommissioning first node from the second, polling the status manually")
-	for {
+	retryOpts := retry.Options{
+		InitialBackoff: time.Second,
+		MaxBackoff:     5 * time.Second,
+		Multiplier:     1,
+	}
+	for r := retry.Start(retryOpts); r.Next(); {
 		o, err := decommission(ctx, c, 1, idMap[0], "decommission", "--wait", "none")
 		if err != nil {
 			t.Fatal(err)
@@ -151,7 +159,9 @@ func testDecommissionInner(
 			return o, err
 		}()
 		if err != nil {
+			// TODO(tschottdorf): grep the process output for the string announcing success?
 			t.Logf("ignoring error on quit --decommission: %s", err)
+			log.Warningf(ctx, "ignoring error on quit --decommission: %s", err)
 		} else {
 			log.Infof(ctx, o)
 		}

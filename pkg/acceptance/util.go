@@ -39,6 +39,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/pkg/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/pkg/acceptance/terrafarm"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -144,6 +145,35 @@ func RunTests(m *testing.M) {
 	}()
 	os.Exit(m.Run())
 }
+
+// turns someTest#123 into someTest when invoked with ReplicaAllLiteralString.
+// This is useful because the go test harness automatically disambiguates
+// subtests in that way when they are invoked multiple times with the same name,
+// and we sometimes call RunDocker multiple times in tests.
+var reStripTestEnumeration = regexp.MustCompile(`#\d+$`)
+
+const (
+	bareTest   = "runMode=bare"
+	dockerTest = "runMode=docker"
+	farmerTest = "runMode=farmer"
+)
+
+// RunLocal runs the given acceptance test using a bare cluster.
+func RunLocal(t *testing.T, testee func(t *testing.T)) {
+	t.Run(bareTest, testee)
+}
+
+// RunDocker runs the given acceptance test using a Docker cluster.
+func RunDocker(t *testing.T, testee func(t *testing.T)) {
+	t.Run(dockerTest, testee)
+}
+
+// RunTerraform runs the given acceptance test using a terraform cluster.
+func RunTerraform(t *testing.T, testee func(t *testing.T)) {
+	t.Run(farmerTest, testee)
+}
+
+var _ = RunTerraform // silence unused warning
 
 // EphemeralStorageAccount returns the name of the storage account to use to
 // store data that should be periodically purged. It returns a storage account
@@ -414,7 +444,8 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 			c.AssertAndStop(ctx, t)
 		}
 	}()
-	if *flagRemote {
+
+	if *flagRemote { // force the test remote, no matter what run mode we think it should be run in
 		f := MakeFarmer(t, "", stopper)
 		c = f
 		if err := f.Resize(*flagNodes); err != nil {
@@ -427,13 +458,61 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 			t.Fatalf("cluster not ready in time: %s", err)
 		}
 	} else {
-		logDir := *flagLogDir
-		if logDir != "" {
-			logDir = filepath.Join(logDir, filepath.Clean(t.Name()))
+		parts := strings.Split(t.Name(), "/")
+		if len(parts) < 2 {
+			t.Fatal("must invoke RunLocal, RunDocker, or RunFarmer")
 		}
-		l := cluster.CreateLocal(ctx, cfg, logDir, stopper)
-		l.Start(ctx)
-		c = l
+
+		var runMode string
+		for _, part := range parts[1:] {
+			part = reStripTestEnumeration.ReplaceAllLiteralString(part, "")
+			switch part {
+			case bareTest:
+				fallthrough
+			case dockerTest:
+				fallthrough
+			case farmerTest:
+				if runMode != "" {
+					t.Fatalf("test has more than one run mode: %s and %s", runMode, part)
+				}
+				runMode = part
+			}
+		}
+
+		switch runMode {
+		case bareTest:
+			pwd, err := os.Getwd()
+			if err != nil {
+				t.Fatal(err)
+			}
+			dataDir, err := ioutil.TempDir(pwd, ".barecluster")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			clusterCfg := localcluster.ClusterConfig{
+				Ephemeral: true,
+				Binary:    "../../cockroach",
+				DataDir:   dataDir,
+				NumNodes:  int(cfg.Nodes[0].Count),
+			}
+			l := localcluster.New(clusterCfg)
+
+			l.Start()
+			c = &localcluster.LocalCluster{Cluster: l}
+
+		case dockerTest:
+			logDir := *flagLogDir
+			if logDir != "" {
+				logDir = filepath.Join(logDir, filepath.Clean(t.Name()))
+			}
+			l := cluster.CreateLocal(ctx, cfg, logDir, stopper)
+			l.Start(ctx)
+			c = l
+
+		default:
+			t.Fatalf("unable to run in mode %q, use either RunLocal, RunDocker, or RunFarmer", parts[1])
+		}
 	}
 
 	if cfg.InitMode != cluster.INIT_NONE {
@@ -560,27 +639,29 @@ const (
 func testDocker(
 	ctx context.Context, t *testing.T, num int32, name string, containerConfig container.Config,
 ) error {
-	SkipUnlessLocal(t)
-	cfg := cluster.TestConfig{
-		Name:     name,
-		Duration: *flagDuration,
-		Nodes:    []cluster.NodeConfig{{Count: num, Stores: []cluster.StoreConfig{{Count: 1}}}},
-	}
-	l := StartCluster(ctx, t, cfg).(*cluster.LocalCluster)
-	defer l.AssertAndStop(ctx, t)
+	var rErr error
+	RunDocker(t, func(t *testing.T) {
+		cfg := cluster.TestConfig{
+			Name:     name,
+			Duration: *flagDuration,
+			Nodes:    []cluster.NodeConfig{{Count: num, Stores: []cluster.StoreConfig{{Count: 1}}}},
+		}
+		l := StartCluster(ctx, t, cfg).(*cluster.DockerCluster)
+		defer l.AssertAndStop(ctx, t)
 
-	if len(l.Nodes) > 0 {
-		containerConfig.Env = append(containerConfig.Env, "PGHOST="+l.Hostname(0))
-	}
-	hostConfig := container.HostConfig{NetworkMode: "host"}
-	if err := l.OneShot(
-		ctx, postgresTestImage, types.ImagePullOptions{}, containerConfig, hostConfig, "docker-"+name,
-	); err != nil {
-		return err
-	}
-	// Clean up the log files if the run was successful.
-	l.Cleanup(ctx)
-	return nil
+		if len(l.Nodes) > 0 {
+			containerConfig.Env = append(containerConfig.Env, "PGHOST="+l.Hostname(0))
+		}
+		hostConfig := container.HostConfig{NetworkMode: "host"}
+		if err := l.OneShot(
+			ctx, postgresTestImage, types.ImagePullOptions{}, containerConfig, hostConfig, "docker-"+name,
+		); err != nil {
+			rErr = err
+		}
+		// Clean up the log files if the run was successful.
+		l.Cleanup(ctx)
+	})
+	return rErr
 }
 
 func testDockerSingleNode(

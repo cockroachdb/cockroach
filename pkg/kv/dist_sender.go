@@ -1209,7 +1209,7 @@ func (ds *DistSender) sendToReplicas(
 
 				if propagateError {
 					if ambiguousError != nil {
-						return nil, roachpb.NewAmbiguousResultError(fmt.Sprintf("error=%s", ambiguousError))
+						return nil, roachpb.NewAmbiguousResultError(fmt.Sprintf("error=%s [propagate]", ambiguousError))
 					}
 
 					// The error received is likely not specific to this
@@ -1223,7 +1223,7 @@ func (ds *DistSender) sendToReplicas(
 
 			if transport.IsExhausted() {
 				if ambiguousError != nil {
-					return nil, roachpb.NewAmbiguousResultError(fmt.Sprintf("error=%s", ambiguousError))
+					return nil, roachpb.NewAmbiguousResultError(fmt.Sprintf("error=%s [exhausted]", ambiguousError))
 				}
 
 				// TODO(bdarnell): The last error is not necessarily the best

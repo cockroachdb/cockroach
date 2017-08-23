@@ -310,6 +310,7 @@ func runDecommissionNodeImpl(
 		return err
 	}
 	minReplicaCount := int64(math.MaxInt64)
+	// The loop below, as written, requires unlimited retries.
 	opts := retry.Options{
 		InitialBackoff: 5 * time.Millisecond,
 		Multiplier:     2,
@@ -344,17 +345,17 @@ func runDecommissionNodeImpl(
 				fmt.Fprintln(os.Stdout, "Decommissioning finished. Please verify cluster health "+
 					"before removing the nodes.")
 			}
-			break
+			return nil
 		}
 		if wait == nodeDecommissionWaitNone {
-			break
+			return nil
 		}
 		if replicaCount < minReplicaCount {
 			minReplicaCount = replicaCount
 			r.Reset()
 		}
 	}
-	return nil
+	panic("unreachable!")
 }
 
 // decommissionResponseValueToRows converts DecommissionStatusResponse_Status to
