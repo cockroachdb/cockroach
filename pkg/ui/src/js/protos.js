@@ -8485,6 +8485,7 @@ export const cockroach = $root.cockroach = (() => {
                         case 1:
                         case 2:
                         case 3:
+                        case 4:
                             break;
                         }
                     return null;
@@ -8519,6 +8520,10 @@ export const cockroach = $root.cockroach = (() => {
                     case "SCHEMA_CHANGE":
                     case 3:
                         message.type = 3;
+                        break;
+                    case "IMPORT":
+                    case 4:
+                        message.type = 4;
                         break;
                     }
                     return message;
@@ -37979,6 +37984,463 @@ export const cockroach = $root.cockroach = (() => {
                 return RestoreDetails;
             })();
 
+            jobs.ImportDetails = (function() {
+
+                /**
+                 * Properties of an ImportDetails.
+                 * @typedef cockroach.sql.jobs.ImportDetails$Properties
+                 * @type {Object}
+                 * @property {Array.<cockroach.sql.jobs.ImportDetails.Table$Properties>} [tables] ImportDetails tables.
+                 */
+
+                /**
+                 * Constructs a new ImportDetails.
+                 * @exports cockroach.sql.jobs.ImportDetails
+                 * @constructor
+                 * @param {cockroach.sql.jobs.ImportDetails$Properties=} [properties] Properties to set
+                 */
+                function ImportDetails(properties) {
+                    this.tables = [];
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * ImportDetails tables.
+                 * @type {Array.<cockroach.sql.jobs.ImportDetails.Table$Properties>}
+                 */
+                ImportDetails.prototype.tables = $util.emptyArray;
+
+                /**
+                 * Creates a new ImportDetails instance using the specified properties.
+                 * @param {cockroach.sql.jobs.ImportDetails$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.jobs.ImportDetails} ImportDetails instance
+                 */
+                ImportDetails.create = function create(properties) {
+                    return new ImportDetails(properties);
+                };
+
+                /**
+                 * Encodes the specified ImportDetails message. Does not implicitly {@link cockroach.sql.jobs.ImportDetails.verify|verify} messages.
+                 * @param {cockroach.sql.jobs.ImportDetails$Properties} message ImportDetails message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                ImportDetails.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.tables != null && message.tables.length)
+                        for (let i = 0; i < message.tables.length; ++i)
+                            $root.cockroach.sql.jobs.ImportDetails.Table.encode(message.tables[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified ImportDetails message, length delimited. Does not implicitly {@link cockroach.sql.jobs.ImportDetails.verify|verify} messages.
+                 * @param {cockroach.sql.jobs.ImportDetails$Properties} message ImportDetails message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                ImportDetails.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes an ImportDetails message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.jobs.ImportDetails} ImportDetails
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                ImportDetails.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.sql.jobs.ImportDetails();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            if (!(message.tables && message.tables.length))
+                                message.tables = [];
+                            message.tables.push($root.cockroach.sql.jobs.ImportDetails.Table.decode(reader, reader.uint32()));
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes an ImportDetails message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.jobs.ImportDetails} ImportDetails
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                ImportDetails.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies an ImportDetails message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                ImportDetails.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.tables != null && message.hasOwnProperty("tables")) {
+                        if (!Array.isArray(message.tables))
+                            return "tables: array expected";
+                        for (let i = 0; i < message.tables.length; ++i) {
+                            let error = $root.cockroach.sql.jobs.ImportDetails.Table.verify(message.tables[i]);
+                            if (error)
+                                return "tables." + error;
+                        }
+                    }
+                    return null;
+                };
+
+                /**
+                 * Creates an ImportDetails message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.jobs.ImportDetails} ImportDetails
+                 */
+                ImportDetails.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.sql.jobs.ImportDetails)
+                        return object;
+                    let message = new $root.cockroach.sql.jobs.ImportDetails();
+                    if (object.tables) {
+                        if (!Array.isArray(object.tables))
+                            throw TypeError(".cockroach.sql.jobs.ImportDetails.tables: array expected");
+                        message.tables = [];
+                        for (let i = 0; i < object.tables.length; ++i) {
+                            if (typeof object.tables[i] !== "object")
+                                throw TypeError(".cockroach.sql.jobs.ImportDetails.tables: object expected");
+                            message.tables[i] = $root.cockroach.sql.jobs.ImportDetails.Table.fromObject(object.tables[i]);
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Creates an ImportDetails message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.jobs.ImportDetails.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.jobs.ImportDetails} ImportDetails
+                 */
+                ImportDetails.from = ImportDetails.fromObject;
+
+                /**
+                 * Creates a plain object from an ImportDetails message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.jobs.ImportDetails} message ImportDetails
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                ImportDetails.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.arrays || options.defaults)
+                        object.tables = [];
+                    if (message.tables && message.tables.length) {
+                        object.tables = [];
+                        for (let j = 0; j < message.tables.length; ++j)
+                            object.tables[j] = $root.cockroach.sql.jobs.ImportDetails.Table.toObject(message.tables[j], options);
+                    }
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this ImportDetails message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                ImportDetails.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this ImportDetails to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                ImportDetails.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                ImportDetails.Table = (function() {
+
+                    /**
+                     * Properties of a Table.
+                     * @typedef cockroach.sql.jobs.ImportDetails.Table$Properties
+                     * @type {Object}
+                     * @property {cockroach.sql.sqlbase.TableDescriptor$Properties} [desc] Table desc.
+                     * @property {Array.<string>} [uris] Table uris.
+                     * @property {cockroach.roachpb.CSVOptions$Properties} [options] Table options.
+                     * @property {string} [backup_path] Table backup_path.
+                     */
+
+                    /**
+                     * Constructs a new Table.
+                     * @exports cockroach.sql.jobs.ImportDetails.Table
+                     * @constructor
+                     * @param {cockroach.sql.jobs.ImportDetails.Table$Properties=} [properties] Properties to set
+                     */
+                    function Table(properties) {
+                        this.uris = [];
+                        if (properties)
+                            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * Table desc.
+                     * @type {(cockroach.sql.sqlbase.TableDescriptor$Properties|null)}
+                     */
+                    Table.prototype.desc = null;
+
+                    /**
+                     * Table uris.
+                     * @type {Array.<string>}
+                     */
+                    Table.prototype.uris = $util.emptyArray;
+
+                    /**
+                     * Table options.
+                     * @type {(cockroach.roachpb.CSVOptions$Properties|null)}
+                     */
+                    Table.prototype.options = null;
+
+                    /**
+                     * Table backup_path.
+                     * @type {string}
+                     */
+                    Table.prototype.backup_path = "";
+
+                    /**
+                     * Creates a new Table instance using the specified properties.
+                     * @param {cockroach.sql.jobs.ImportDetails.Table$Properties=} [properties] Properties to set
+                     * @returns {cockroach.sql.jobs.ImportDetails.Table} Table instance
+                     */
+                    Table.create = function create(properties) {
+                        return new Table(properties);
+                    };
+
+                    /**
+                     * Encodes the specified Table message. Does not implicitly {@link cockroach.sql.jobs.ImportDetails.Table.verify|verify} messages.
+                     * @param {cockroach.sql.jobs.ImportDetails.Table$Properties} message Table message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    Table.encode = function encode(message, writer) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (message.desc != null && message.hasOwnProperty("desc"))
+                            $root.cockroach.sql.sqlbase.TableDescriptor.encode(message.desc, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+                        if (message.uris != null && message.uris.length)
+                            for (let i = 0; i < message.uris.length; ++i)
+                                writer.uint32(/* id 2, wireType 2 =*/18).string(message.uris[i]);
+                        if (message.options != null && message.hasOwnProperty("options"))
+                            $root.cockroach.roachpb.CSVOptions.encode(message.options, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
+                        if (message.backup_path != null && message.hasOwnProperty("backup_path"))
+                            writer.uint32(/* id 4, wireType 2 =*/34).string(message.backup_path);
+                        return writer;
+                    };
+
+                    /**
+                     * Encodes the specified Table message, length delimited. Does not implicitly {@link cockroach.sql.jobs.ImportDetails.Table.verify|verify} messages.
+                     * @param {cockroach.sql.jobs.ImportDetails.Table$Properties} message Table message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    Table.encodeDelimited = function encodeDelimited(message, writer) {
+                        return this.encode(message, writer).ldelim();
+                    };
+
+                    /**
+                     * Decodes a Table message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.sql.jobs.ImportDetails.Table} Table
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    Table.decode = function decode(reader, length) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.sql.jobs.ImportDetails.Table();
+                        while (reader.pos < end) {
+                            let tag = reader.uint32();
+                            switch (tag >>> 3) {
+                            case 1:
+                                message.desc = $root.cockroach.sql.sqlbase.TableDescriptor.decode(reader, reader.uint32());
+                                break;
+                            case 2:
+                                if (!(message.uris && message.uris.length))
+                                    message.uris = [];
+                                message.uris.push(reader.string());
+                                break;
+                            case 3:
+                                message.options = $root.cockroach.roachpb.CSVOptions.decode(reader, reader.uint32());
+                                break;
+                            case 4:
+                                message.backup_path = reader.string();
+                                break;
+                            default:
+                                reader.skipType(tag & 7);
+                                break;
+                            }
+                        }
+                        return message;
+                    };
+
+                    /**
+                     * Decodes a Table message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.sql.jobs.ImportDetails.Table} Table
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    Table.decodeDelimited = function decodeDelimited(reader) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader(reader);
+                        return this.decode(reader, reader.uint32());
+                    };
+
+                    /**
+                     * Verifies a Table message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    Table.verify = function verify(message) {
+                        if (typeof message !== "object" || message === null)
+                            return "object expected";
+                        if (message.desc != null && message.hasOwnProperty("desc")) {
+                            let error = $root.cockroach.sql.sqlbase.TableDescriptor.verify(message.desc);
+                            if (error)
+                                return "desc." + error;
+                        }
+                        if (message.uris != null && message.hasOwnProperty("uris")) {
+                            if (!Array.isArray(message.uris))
+                                return "uris: array expected";
+                            for (let i = 0; i < message.uris.length; ++i)
+                                if (!$util.isString(message.uris[i]))
+                                    return "uris: string[] expected";
+                        }
+                        if (message.options != null && message.hasOwnProperty("options")) {
+                            let error = $root.cockroach.roachpb.CSVOptions.verify(message.options);
+                            if (error)
+                                return "options." + error;
+                        }
+                        if (message.backup_path != null && message.hasOwnProperty("backup_path"))
+                            if (!$util.isString(message.backup_path))
+                                return "backup_path: string expected";
+                        return null;
+                    };
+
+                    /**
+                     * Creates a Table message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.jobs.ImportDetails.Table} Table
+                     */
+                    Table.fromObject = function fromObject(object) {
+                        if (object instanceof $root.cockroach.sql.jobs.ImportDetails.Table)
+                            return object;
+                        let message = new $root.cockroach.sql.jobs.ImportDetails.Table();
+                        if (object.desc != null) {
+                            if (typeof object.desc !== "object")
+                                throw TypeError(".cockroach.sql.jobs.ImportDetails.Table.desc: object expected");
+                            message.desc = $root.cockroach.sql.sqlbase.TableDescriptor.fromObject(object.desc);
+                        }
+                        if (object.uris) {
+                            if (!Array.isArray(object.uris))
+                                throw TypeError(".cockroach.sql.jobs.ImportDetails.Table.uris: array expected");
+                            message.uris = [];
+                            for (let i = 0; i < object.uris.length; ++i)
+                                message.uris[i] = String(object.uris[i]);
+                        }
+                        if (object.options != null) {
+                            if (typeof object.options !== "object")
+                                throw TypeError(".cockroach.sql.jobs.ImportDetails.Table.options: object expected");
+                            message.options = $root.cockroach.roachpb.CSVOptions.fromObject(object.options);
+                        }
+                        if (object.backup_path != null)
+                            message.backup_path = String(object.backup_path);
+                        return message;
+                    };
+
+                    /**
+                     * Creates a Table message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.sql.jobs.ImportDetails.Table.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.jobs.ImportDetails.Table} Table
+                     */
+                    Table.from = Table.fromObject;
+
+                    /**
+                     * Creates a plain object from a Table message. Also converts values to other types if specified.
+                     * @param {cockroach.sql.jobs.ImportDetails.Table} message Table
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    Table.toObject = function toObject(message, options) {
+                        if (!options)
+                            options = {};
+                        let object = {};
+                        if (options.arrays || options.defaults)
+                            object.uris = [];
+                        if (options.defaults) {
+                            object.desc = null;
+                            object.options = null;
+                            object.backup_path = "";
+                        }
+                        if (message.desc != null && message.hasOwnProperty("desc"))
+                            object.desc = $root.cockroach.sql.sqlbase.TableDescriptor.toObject(message.desc, options);
+                        if (message.uris && message.uris.length) {
+                            object.uris = [];
+                            for (let j = 0; j < message.uris.length; ++j)
+                                object.uris[j] = message.uris[j];
+                        }
+                        if (message.options != null && message.hasOwnProperty("options"))
+                            object.options = $root.cockroach.roachpb.CSVOptions.toObject(message.options, options);
+                        if (message.backup_path != null && message.hasOwnProperty("backup_path"))
+                            object.backup_path = message.backup_path;
+                        return object;
+                    };
+
+                    /**
+                     * Creates a plain object from this Table message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    Table.prototype.toObject = function toObject(options) {
+                        return this.constructor.toObject(this, options);
+                    };
+
+                    /**
+                     * Converts this Table to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    Table.prototype.toJSON = function toJSON() {
+                        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                    };
+
+                    return Table;
+                })();
+
+                return ImportDetails;
+            })();
+
             jobs.ResumeSpanList = (function() {
 
                 /**
@@ -38413,6 +38875,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @property {cockroach.sql.jobs.BackupDetails$Properties} [backup] Payload backup.
                  * @property {cockroach.sql.jobs.RestoreDetails$Properties} [restore] Payload restore.
                  * @property {cockroach.sql.jobs.SchemaChangeDetails$Properties} [schemaChange] Payload schemaChange.
+                 * @property {cockroach.sql.jobs.ImportDetails$Properties} ["import"] Payload import.
                  */
 
                 /**
@@ -38501,6 +38964,12 @@ export const cockroach = $root.cockroach = (() => {
                  */
                 Payload.prototype.schemaChange = null;
 
+                /**
+                 * Payload import.
+                 * @type {(cockroach.sql.jobs.ImportDetails$Properties|null)}
+                 */
+                Payload.prototype["import"] = null;
+
                 // OneOf field names bound to virtual getters and setters
                 let $oneOfFields;
 
@@ -38510,7 +38979,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @type {string|undefined}
                  */
                 Object.defineProperty(Payload.prototype, "details", {
-                    get: $util.oneOfGetter($oneOfFields = ["backup", "restore", "schemaChange"]),
+                    get: $util.oneOfGetter($oneOfFields = ["backup", "restore", "schemaChange", "import"]),
                     set: $util.oneOfSetter($oneOfFields)
                 });
 
@@ -38560,6 +39029,8 @@ export const cockroach = $root.cockroach = (() => {
                         $root.cockroach.sql.jobs.RestoreDetails.encode(message.restore, writer.uint32(/* id 11, wireType 2 =*/90).fork()).ldelim();
                     if (message.schemaChange != null && message.hasOwnProperty("schemaChange"))
                         $root.cockroach.sql.jobs.SchemaChangeDetails.encode(message.schemaChange, writer.uint32(/* id 12, wireType 2 =*/98).fork()).ldelim();
+                    if (message["import"] != null && message.hasOwnProperty("import"))
+                        $root.cockroach.sql.jobs.ImportDetails.encode(message["import"], writer.uint32(/* id 13, wireType 2 =*/106).fork()).ldelim();
                     return writer;
                 };
 
@@ -38630,6 +39101,9 @@ export const cockroach = $root.cockroach = (() => {
                             break;
                         case 12:
                             message.schemaChange = $root.cockroach.sql.jobs.SchemaChangeDetails.decode(reader, reader.uint32());
+                            break;
+                        case 13:
+                            message["import"] = $root.cockroach.sql.jobs.ImportDetails.decode(reader, reader.uint32());
                             break;
                         default:
                             reader.skipType(tag & 7);
@@ -38716,6 +39190,14 @@ export const cockroach = $root.cockroach = (() => {
                         if (error)
                             return "schemaChange." + error;
                     }
+                    if (message["import"] != null && message.hasOwnProperty("import")) {
+                        if (properties.details === 1)
+                            return "details: multiple values";
+                        properties.details = 1;
+                        let error = $root.cockroach.sql.jobs.ImportDetails.verify(message["import"]);
+                        if (error)
+                            return "import." + error;
+                    }
                     return null;
                 };
 
@@ -38789,6 +39271,11 @@ export const cockroach = $root.cockroach = (() => {
                         if (typeof object.schemaChange !== "object")
                             throw TypeError(".cockroach.sql.jobs.Payload.schemaChange: object expected");
                         message.schemaChange = $root.cockroach.sql.jobs.SchemaChangeDetails.fromObject(object.schemaChange);
+                    }
+                    if (object["import"] != null) {
+                        if (typeof object["import"] !== "object")
+                            throw TypeError(".cockroach.sql.jobs.Payload.import: object expected");
+                        message["import"] = $root.cockroach.sql.jobs.ImportDetails.fromObject(object["import"]);
                     }
                     return message;
                 };
@@ -38881,6 +39368,11 @@ export const cockroach = $root.cockroach = (() => {
                         if (options.oneofs)
                             object.details = "schemaChange";
                     }
+                    if (message["import"] != null && message.hasOwnProperty("import")) {
+                        object["import"] = $root.cockroach.sql.jobs.ImportDetails.toObject(message["import"], options);
+                        if (options.oneofs)
+                            object.details = "import";
+                    }
                     return object;
                 };
 
@@ -38913,6 +39405,7 @@ export const cockroach = $root.cockroach = (() => {
              * @property {number} BACKUP=1 BACKUP value
              * @property {number} RESTORE=2 RESTORE value
              * @property {number} SCHEMA_CHANGE=3 SCHEMA_CHANGE value
+             * @property {number} IMPORT=4 IMPORT value
              */
             jobs.Type = (function() {
                 const valuesById = {}, values = Object.create(valuesById);
@@ -38920,10 +39413,5718 @@ export const cockroach = $root.cockroach = (() => {
                 values[valuesById[1] = "BACKUP"] = 1;
                 values[valuesById[2] = "RESTORE"] = 2;
                 values[valuesById[3] = "SCHEMA_CHANGE"] = 3;
+                values[valuesById[4] = "IMPORT"] = 4;
                 return values;
             })();
 
             return jobs;
+        })();
+
+        sql.sqlbase = (function() {
+
+            /**
+             * Namespace sqlbase.
+             * @exports cockroach.sql.sqlbase
+             * @namespace
+             */
+            const sqlbase = {};
+
+            sqlbase.ColumnType = (function() {
+
+                /**
+                 * Properties of a ColumnType.
+                 * @typedef cockroach.sql.sqlbase.ColumnType$Properties
+                 * @type {Object}
+                 * @property {cockroach.sql.sqlbase.ColumnType.SemanticType} [semantic_type] ColumnType semantic_type.
+                 * @property {number} [width] ColumnType width.
+                 * @property {number} [precision] ColumnType precision.
+                 * @property {Array.<number>} [array_dimensions] ColumnType array_dimensions.
+                 * @property {string} [locale] ColumnType locale.
+                 * @property {cockroach.sql.sqlbase.ColumnType.VisibleType} [visible_type] ColumnType visible_type.
+                 * @property {cockroach.sql.sqlbase.ColumnType.SemanticType} [array_contents] ColumnType array_contents.
+                 */
+
+                /**
+                 * Constructs a new ColumnType.
+                 * @exports cockroach.sql.sqlbase.ColumnType
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.ColumnType$Properties=} [properties] Properties to set
+                 */
+                function ColumnType(properties) {
+                    this.array_dimensions = [];
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * ColumnType semantic_type.
+                 * @type {cockroach.sql.sqlbase.ColumnType.SemanticType}
+                 */
+                ColumnType.prototype.semantic_type = 0;
+
+                /**
+                 * ColumnType width.
+                 * @type {number}
+                 */
+                ColumnType.prototype.width = 0;
+
+                /**
+                 * ColumnType precision.
+                 * @type {number}
+                 */
+                ColumnType.prototype.precision = 0;
+
+                /**
+                 * ColumnType array_dimensions.
+                 * @type {Array.<number>}
+                 */
+                ColumnType.prototype.array_dimensions = $util.emptyArray;
+
+                /**
+                 * ColumnType locale.
+                 * @type {string}
+                 */
+                ColumnType.prototype.locale = "";
+
+                /**
+                 * ColumnType visible_type.
+                 * @type {cockroach.sql.sqlbase.ColumnType.VisibleType}
+                 */
+                ColumnType.prototype.visible_type = 0;
+
+                /**
+                 * ColumnType array_contents.
+                 * @type {cockroach.sql.sqlbase.ColumnType.SemanticType}
+                 */
+                ColumnType.prototype.array_contents = 0;
+
+                /**
+                 * Creates a new ColumnType instance using the specified properties.
+                 * @param {cockroach.sql.sqlbase.ColumnType$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.sqlbase.ColumnType} ColumnType instance
+                 */
+                ColumnType.create = function create(properties) {
+                    return new ColumnType(properties);
+                };
+
+                /**
+                 * Encodes the specified ColumnType message. Does not implicitly {@link cockroach.sql.sqlbase.ColumnType.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.ColumnType$Properties} message ColumnType message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                ColumnType.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.semantic_type != null && message.hasOwnProperty("semantic_type"))
+                        writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.semantic_type);
+                    if (message.width != null && message.hasOwnProperty("width"))
+                        writer.uint32(/* id 2, wireType 0 =*/16).int32(message.width);
+                    if (message.precision != null && message.hasOwnProperty("precision"))
+                        writer.uint32(/* id 3, wireType 0 =*/24).int32(message.precision);
+                    if (message.array_dimensions != null && message.array_dimensions.length)
+                        for (let i = 0; i < message.array_dimensions.length; ++i)
+                            writer.uint32(/* id 4, wireType 0 =*/32).int32(message.array_dimensions[i]);
+                    if (message.locale != null && message.hasOwnProperty("locale"))
+                        writer.uint32(/* id 5, wireType 2 =*/42).string(message.locale);
+                    if (message.visible_type != null && message.hasOwnProperty("visible_type"))
+                        writer.uint32(/* id 6, wireType 0 =*/48).uint32(message.visible_type);
+                    if (message.array_contents != null && message.hasOwnProperty("array_contents"))
+                        writer.uint32(/* id 7, wireType 0 =*/56).uint32(message.array_contents);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified ColumnType message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.ColumnType.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.ColumnType$Properties} message ColumnType message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                ColumnType.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a ColumnType message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.sqlbase.ColumnType} ColumnType
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                ColumnType.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.sql.sqlbase.ColumnType();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.semantic_type = reader.uint32();
+                            break;
+                        case 2:
+                            message.width = reader.int32();
+                            break;
+                        case 3:
+                            message.precision = reader.int32();
+                            break;
+                        case 4:
+                            if (!(message.array_dimensions && message.array_dimensions.length))
+                                message.array_dimensions = [];
+                            if ((tag & 7) === 2) {
+                                let end2 = reader.uint32() + reader.pos;
+                                while (reader.pos < end2)
+                                    message.array_dimensions.push(reader.int32());
+                            } else
+                                message.array_dimensions.push(reader.int32());
+                            break;
+                        case 5:
+                            message.locale = reader.string();
+                            break;
+                        case 6:
+                            message.visible_type = reader.uint32();
+                            break;
+                        case 7:
+                            message.array_contents = reader.uint32();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a ColumnType message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.sqlbase.ColumnType} ColumnType
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                ColumnType.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a ColumnType message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                ColumnType.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.semantic_type != null && message.hasOwnProperty("semantic_type"))
+                        switch (message.semantic_type) {
+                        default:
+                            return "semantic_type: enum value expected";
+                        case 0:
+                        case 1:
+                        case 2:
+                        case 3:
+                        case 4:
+                        case 5:
+                        case 6:
+                        case 7:
+                        case 8:
+                        case 9:
+                        case 10:
+                        case 11:
+                        case 12:
+                        case 13:
+                        case 14:
+                        case 15:
+                        case 200:
+                            break;
+                        }
+                    if (message.width != null && message.hasOwnProperty("width"))
+                        if (!$util.isInteger(message.width))
+                            return "width: integer expected";
+                    if (message.precision != null && message.hasOwnProperty("precision"))
+                        if (!$util.isInteger(message.precision))
+                            return "precision: integer expected";
+                    if (message.array_dimensions != null && message.hasOwnProperty("array_dimensions")) {
+                        if (!Array.isArray(message.array_dimensions))
+                            return "array_dimensions: array expected";
+                        for (let i = 0; i < message.array_dimensions.length; ++i)
+                            if (!$util.isInteger(message.array_dimensions[i]))
+                                return "array_dimensions: integer[] expected";
+                    }
+                    if (message.locale != null && message.hasOwnProperty("locale"))
+                        if (!$util.isString(message.locale))
+                            return "locale: string expected";
+                    if (message.visible_type != null && message.hasOwnProperty("visible_type"))
+                        switch (message.visible_type) {
+                        default:
+                            return "visible_type: enum value expected";
+                        case 0:
+                        case 1:
+                        case 2:
+                        case 3:
+                        case 4:
+                        case 5:
+                        case 6:
+                            break;
+                        }
+                    if (message.array_contents != null && message.hasOwnProperty("array_contents"))
+                        switch (message.array_contents) {
+                        default:
+                            return "array_contents: enum value expected";
+                        case 0:
+                        case 1:
+                        case 2:
+                        case 3:
+                        case 4:
+                        case 5:
+                        case 6:
+                        case 7:
+                        case 8:
+                        case 9:
+                        case 10:
+                        case 11:
+                        case 12:
+                        case 13:
+                        case 14:
+                        case 15:
+                        case 200:
+                            break;
+                        }
+                    return null;
+                };
+
+                /**
+                 * Creates a ColumnType message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.ColumnType} ColumnType
+                 */
+                ColumnType.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.sql.sqlbase.ColumnType)
+                        return object;
+                    let message = new $root.cockroach.sql.sqlbase.ColumnType();
+                    switch (object.semantic_type) {
+                    case "BOOL":
+                    case 0:
+                        message.semantic_type = 0;
+                        break;
+                    case "INT":
+                    case 1:
+                        message.semantic_type = 1;
+                        break;
+                    case "FLOAT":
+                    case 2:
+                        message.semantic_type = 2;
+                        break;
+                    case "DECIMAL":
+                    case 3:
+                        message.semantic_type = 3;
+                        break;
+                    case "DATE":
+                    case 4:
+                        message.semantic_type = 4;
+                        break;
+                    case "TIMESTAMP":
+                    case 5:
+                        message.semantic_type = 5;
+                        break;
+                    case "INTERVAL":
+                    case 6:
+                        message.semantic_type = 6;
+                        break;
+                    case "STRING":
+                    case 7:
+                        message.semantic_type = 7;
+                        break;
+                    case "BYTES":
+                    case 8:
+                        message.semantic_type = 8;
+                        break;
+                    case "TIMESTAMPTZ":
+                    case 9:
+                        message.semantic_type = 9;
+                        break;
+                    case "COLLATEDSTRING":
+                    case 10:
+                        message.semantic_type = 10;
+                        break;
+                    case "NAME":
+                    case 11:
+                        message.semantic_type = 11;
+                        break;
+                    case "OID":
+                    case 12:
+                        message.semantic_type = 12;
+                        break;
+                    case "NULL":
+                    case 13:
+                        message.semantic_type = 13;
+                        break;
+                    case "UUID":
+                    case 14:
+                        message.semantic_type = 14;
+                        break;
+                    case "ARRAY":
+                    case 15:
+                        message.semantic_type = 15;
+                        break;
+                    case "INT2VECTOR":
+                    case 200:
+                        message.semantic_type = 200;
+                        break;
+                    }
+                    if (object.width != null)
+                        message.width = object.width | 0;
+                    if (object.precision != null)
+                        message.precision = object.precision | 0;
+                    if (object.array_dimensions) {
+                        if (!Array.isArray(object.array_dimensions))
+                            throw TypeError(".cockroach.sql.sqlbase.ColumnType.array_dimensions: array expected");
+                        message.array_dimensions = [];
+                        for (let i = 0; i < object.array_dimensions.length; ++i)
+                            message.array_dimensions[i] = object.array_dimensions[i] | 0;
+                    }
+                    if (object.locale != null)
+                        message.locale = String(object.locale);
+                    switch (object.visible_type) {
+                    case "NONE":
+                    case 0:
+                        message.visible_type = 0;
+                        break;
+                    case "INTEGER":
+                    case 1:
+                        message.visible_type = 1;
+                        break;
+                    case "SMALLINT":
+                    case 2:
+                        message.visible_type = 2;
+                        break;
+                    case "BIGINT":
+                    case 3:
+                        message.visible_type = 3;
+                        break;
+                    case "BIT":
+                    case 4:
+                        message.visible_type = 4;
+                        break;
+                    case "REAL":
+                    case 5:
+                        message.visible_type = 5;
+                        break;
+                    case "DOUBLE_PRECISON":
+                    case 6:
+                        message.visible_type = 6;
+                        break;
+                    }
+                    switch (object.array_contents) {
+                    case "BOOL":
+                    case 0:
+                        message.array_contents = 0;
+                        break;
+                    case "INT":
+                    case 1:
+                        message.array_contents = 1;
+                        break;
+                    case "FLOAT":
+                    case 2:
+                        message.array_contents = 2;
+                        break;
+                    case "DECIMAL":
+                    case 3:
+                        message.array_contents = 3;
+                        break;
+                    case "DATE":
+                    case 4:
+                        message.array_contents = 4;
+                        break;
+                    case "TIMESTAMP":
+                    case 5:
+                        message.array_contents = 5;
+                        break;
+                    case "INTERVAL":
+                    case 6:
+                        message.array_contents = 6;
+                        break;
+                    case "STRING":
+                    case 7:
+                        message.array_contents = 7;
+                        break;
+                    case "BYTES":
+                    case 8:
+                        message.array_contents = 8;
+                        break;
+                    case "TIMESTAMPTZ":
+                    case 9:
+                        message.array_contents = 9;
+                        break;
+                    case "COLLATEDSTRING":
+                    case 10:
+                        message.array_contents = 10;
+                        break;
+                    case "NAME":
+                    case 11:
+                        message.array_contents = 11;
+                        break;
+                    case "OID":
+                    case 12:
+                        message.array_contents = 12;
+                        break;
+                    case "NULL":
+                    case 13:
+                        message.array_contents = 13;
+                        break;
+                    case "UUID":
+                    case 14:
+                        message.array_contents = 14;
+                        break;
+                    case "ARRAY":
+                    case 15:
+                        message.array_contents = 15;
+                        break;
+                    case "INT2VECTOR":
+                    case 200:
+                        message.array_contents = 200;
+                        break;
+                    }
+                    return message;
+                };
+
+                /**
+                 * Creates a ColumnType message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.sqlbase.ColumnType.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.ColumnType} ColumnType
+                 */
+                ColumnType.from = ColumnType.fromObject;
+
+                /**
+                 * Creates a plain object from a ColumnType message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.sqlbase.ColumnType} message ColumnType
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                ColumnType.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.arrays || options.defaults)
+                        object.array_dimensions = [];
+                    if (options.defaults) {
+                        object.semantic_type = options.enums === String ? "BOOL" : 0;
+                        object.width = 0;
+                        object.precision = 0;
+                        object.locale = "";
+                        object.visible_type = options.enums === String ? "NONE" : 0;
+                        object.array_contents = options.enums === String ? "BOOL" : 0;
+                    }
+                    if (message.semantic_type != null && message.hasOwnProperty("semantic_type"))
+                        object.semantic_type = options.enums === String ? $root.cockroach.sql.sqlbase.ColumnType.SemanticType[message.semantic_type] : message.semantic_type;
+                    if (message.width != null && message.hasOwnProperty("width"))
+                        object.width = message.width;
+                    if (message.precision != null && message.hasOwnProperty("precision"))
+                        object.precision = message.precision;
+                    if (message.array_dimensions && message.array_dimensions.length) {
+                        object.array_dimensions = [];
+                        for (let j = 0; j < message.array_dimensions.length; ++j)
+                            object.array_dimensions[j] = message.array_dimensions[j];
+                    }
+                    if (message.locale != null && message.hasOwnProperty("locale"))
+                        object.locale = message.locale;
+                    if (message.visible_type != null && message.hasOwnProperty("visible_type"))
+                        object.visible_type = options.enums === String ? $root.cockroach.sql.sqlbase.ColumnType.VisibleType[message.visible_type] : message.visible_type;
+                    if (message.array_contents != null && message.hasOwnProperty("array_contents"))
+                        object.array_contents = options.enums === String ? $root.cockroach.sql.sqlbase.ColumnType.SemanticType[message.array_contents] : message.array_contents;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this ColumnType message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                ColumnType.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this ColumnType to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                ColumnType.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                /**
+                 * SemanticType enum.
+                 * @name SemanticType
+                 * @memberof cockroach.sql.sqlbase.ColumnType
+                 * @enum {number}
+                 * @property {number} BOOL=0 BOOL value
+                 * @property {number} INT=1 INT value
+                 * @property {number} FLOAT=2 FLOAT value
+                 * @property {number} DECIMAL=3 DECIMAL value
+                 * @property {number} DATE=4 DATE value
+                 * @property {number} TIMESTAMP=5 TIMESTAMP value
+                 * @property {number} INTERVAL=6 INTERVAL value
+                 * @property {number} STRING=7 STRING value
+                 * @property {number} BYTES=8 BYTES value
+                 * @property {number} TIMESTAMPTZ=9 TIMESTAMPTZ value
+                 * @property {number} COLLATEDSTRING=10 COLLATEDSTRING value
+                 * @property {number} NAME=11 NAME value
+                 * @property {number} OID=12 OID value
+                 * @property {number} NULL=13 NULL value
+                 * @property {number} UUID=14 UUID value
+                 * @property {number} ARRAY=15 ARRAY value
+                 * @property {number} INT2VECTOR=200 INT2VECTOR value
+                 */
+                ColumnType.SemanticType = (function() {
+                    const valuesById = {}, values = Object.create(valuesById);
+                    values[valuesById[0] = "BOOL"] = 0;
+                    values[valuesById[1] = "INT"] = 1;
+                    values[valuesById[2] = "FLOAT"] = 2;
+                    values[valuesById[3] = "DECIMAL"] = 3;
+                    values[valuesById[4] = "DATE"] = 4;
+                    values[valuesById[5] = "TIMESTAMP"] = 5;
+                    values[valuesById[6] = "INTERVAL"] = 6;
+                    values[valuesById[7] = "STRING"] = 7;
+                    values[valuesById[8] = "BYTES"] = 8;
+                    values[valuesById[9] = "TIMESTAMPTZ"] = 9;
+                    values[valuesById[10] = "COLLATEDSTRING"] = 10;
+                    values[valuesById[11] = "NAME"] = 11;
+                    values[valuesById[12] = "OID"] = 12;
+                    values[valuesById[13] = "NULL"] = 13;
+                    values[valuesById[14] = "UUID"] = 14;
+                    values[valuesById[15] = "ARRAY"] = 15;
+                    values[valuesById[200] = "INT2VECTOR"] = 200;
+                    return values;
+                })();
+
+                /**
+                 * VisibleType enum.
+                 * @name VisibleType
+                 * @memberof cockroach.sql.sqlbase.ColumnType
+                 * @enum {number}
+                 * @property {number} NONE=0 NONE value
+                 * @property {number} INTEGER=1 INTEGER value
+                 * @property {number} SMALLINT=2 SMALLINT value
+                 * @property {number} BIGINT=3 BIGINT value
+                 * @property {number} BIT=4 BIT value
+                 * @property {number} REAL=5 REAL value
+                 * @property {number} DOUBLE_PRECISON=6 DOUBLE_PRECISON value
+                 */
+                ColumnType.VisibleType = (function() {
+                    const valuesById = {}, values = Object.create(valuesById);
+                    values[valuesById[0] = "NONE"] = 0;
+                    values[valuesById[1] = "INTEGER"] = 1;
+                    values[valuesById[2] = "SMALLINT"] = 2;
+                    values[valuesById[3] = "BIGINT"] = 3;
+                    values[valuesById[4] = "BIT"] = 4;
+                    values[valuesById[5] = "REAL"] = 5;
+                    values[valuesById[6] = "DOUBLE_PRECISON"] = 6;
+                    return values;
+                })();
+
+                return ColumnType;
+            })();
+
+            /**
+             * ConstraintValidity enum.
+             * @name ConstraintValidity
+             * @memberof cockroach.sql.sqlbase
+             * @enum {number}
+             * @property {number} Validated=0 Validated value
+             * @property {number} Unvalidated=1 Unvalidated value
+             */
+            sqlbase.ConstraintValidity = (function() {
+                const valuesById = {}, values = Object.create(valuesById);
+                values[valuesById[0] = "Validated"] = 0;
+                values[valuesById[1] = "Unvalidated"] = 1;
+                return values;
+            })();
+
+            sqlbase.ForeignKeyReference = (function() {
+
+                /**
+                 * Properties of a ForeignKeyReference.
+                 * @typedef cockroach.sql.sqlbase.ForeignKeyReference$Properties
+                 * @type {Object}
+                 * @property {number} [table] ForeignKeyReference table.
+                 * @property {number} [index] ForeignKeyReference index.
+                 * @property {string} [name] ForeignKeyReference name.
+                 * @property {cockroach.sql.sqlbase.ConstraintValidity} [validity] ForeignKeyReference validity.
+                 * @property {number} [shared_prefix_len] ForeignKeyReference shared_prefix_len.
+                 */
+
+                /**
+                 * Constructs a new ForeignKeyReference.
+                 * @exports cockroach.sql.sqlbase.ForeignKeyReference
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.ForeignKeyReference$Properties=} [properties] Properties to set
+                 */
+                function ForeignKeyReference(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * ForeignKeyReference table.
+                 * @type {number}
+                 */
+                ForeignKeyReference.prototype.table = 0;
+
+                /**
+                 * ForeignKeyReference index.
+                 * @type {number}
+                 */
+                ForeignKeyReference.prototype.index = 0;
+
+                /**
+                 * ForeignKeyReference name.
+                 * @type {string}
+                 */
+                ForeignKeyReference.prototype.name = "";
+
+                /**
+                 * ForeignKeyReference validity.
+                 * @type {cockroach.sql.sqlbase.ConstraintValidity}
+                 */
+                ForeignKeyReference.prototype.validity = 0;
+
+                /**
+                 * ForeignKeyReference shared_prefix_len.
+                 * @type {number}
+                 */
+                ForeignKeyReference.prototype.shared_prefix_len = 0;
+
+                /**
+                 * Creates a new ForeignKeyReference instance using the specified properties.
+                 * @param {cockroach.sql.sqlbase.ForeignKeyReference$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.sqlbase.ForeignKeyReference} ForeignKeyReference instance
+                 */
+                ForeignKeyReference.create = function create(properties) {
+                    return new ForeignKeyReference(properties);
+                };
+
+                /**
+                 * Encodes the specified ForeignKeyReference message. Does not implicitly {@link cockroach.sql.sqlbase.ForeignKeyReference.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.ForeignKeyReference$Properties} message ForeignKeyReference message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                ForeignKeyReference.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.table != null && message.hasOwnProperty("table"))
+                        writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.table);
+                    if (message.index != null && message.hasOwnProperty("index"))
+                        writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.index);
+                    if (message.name != null && message.hasOwnProperty("name"))
+                        writer.uint32(/* id 3, wireType 2 =*/26).string(message.name);
+                    if (message.validity != null && message.hasOwnProperty("validity"))
+                        writer.uint32(/* id 4, wireType 0 =*/32).uint32(message.validity);
+                    if (message.shared_prefix_len != null && message.hasOwnProperty("shared_prefix_len"))
+                        writer.uint32(/* id 5, wireType 0 =*/40).int32(message.shared_prefix_len);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified ForeignKeyReference message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.ForeignKeyReference.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.ForeignKeyReference$Properties} message ForeignKeyReference message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                ForeignKeyReference.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a ForeignKeyReference message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.sqlbase.ForeignKeyReference} ForeignKeyReference
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                ForeignKeyReference.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.sql.sqlbase.ForeignKeyReference();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.table = reader.uint32();
+                            break;
+                        case 2:
+                            message.index = reader.uint32();
+                            break;
+                        case 3:
+                            message.name = reader.string();
+                            break;
+                        case 4:
+                            message.validity = reader.uint32();
+                            break;
+                        case 5:
+                            message.shared_prefix_len = reader.int32();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a ForeignKeyReference message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.sqlbase.ForeignKeyReference} ForeignKeyReference
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                ForeignKeyReference.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a ForeignKeyReference message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                ForeignKeyReference.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.table != null && message.hasOwnProperty("table"))
+                        if (!$util.isInteger(message.table))
+                            return "table: integer expected";
+                    if (message.index != null && message.hasOwnProperty("index"))
+                        if (!$util.isInteger(message.index))
+                            return "index: integer expected";
+                    if (message.name != null && message.hasOwnProperty("name"))
+                        if (!$util.isString(message.name))
+                            return "name: string expected";
+                    if (message.validity != null && message.hasOwnProperty("validity"))
+                        switch (message.validity) {
+                        default:
+                            return "validity: enum value expected";
+                        case 0:
+                        case 1:
+                            break;
+                        }
+                    if (message.shared_prefix_len != null && message.hasOwnProperty("shared_prefix_len"))
+                        if (!$util.isInteger(message.shared_prefix_len))
+                            return "shared_prefix_len: integer expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a ForeignKeyReference message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.ForeignKeyReference} ForeignKeyReference
+                 */
+                ForeignKeyReference.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.sql.sqlbase.ForeignKeyReference)
+                        return object;
+                    let message = new $root.cockroach.sql.sqlbase.ForeignKeyReference();
+                    if (object.table != null)
+                        message.table = object.table >>> 0;
+                    if (object.index != null)
+                        message.index = object.index >>> 0;
+                    if (object.name != null)
+                        message.name = String(object.name);
+                    switch (object.validity) {
+                    case "Validated":
+                    case 0:
+                        message.validity = 0;
+                        break;
+                    case "Unvalidated":
+                    case 1:
+                        message.validity = 1;
+                        break;
+                    }
+                    if (object.shared_prefix_len != null)
+                        message.shared_prefix_len = object.shared_prefix_len | 0;
+                    return message;
+                };
+
+                /**
+                 * Creates a ForeignKeyReference message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.sqlbase.ForeignKeyReference.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.ForeignKeyReference} ForeignKeyReference
+                 */
+                ForeignKeyReference.from = ForeignKeyReference.fromObject;
+
+                /**
+                 * Creates a plain object from a ForeignKeyReference message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.sqlbase.ForeignKeyReference} message ForeignKeyReference
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                ForeignKeyReference.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults) {
+                        object.table = 0;
+                        object.index = 0;
+                        object.name = "";
+                        object.validity = options.enums === String ? "Validated" : 0;
+                        object.shared_prefix_len = 0;
+                    }
+                    if (message.table != null && message.hasOwnProperty("table"))
+                        object.table = message.table;
+                    if (message.index != null && message.hasOwnProperty("index"))
+                        object.index = message.index;
+                    if (message.name != null && message.hasOwnProperty("name"))
+                        object.name = message.name;
+                    if (message.validity != null && message.hasOwnProperty("validity"))
+                        object.validity = options.enums === String ? $root.cockroach.sql.sqlbase.ConstraintValidity[message.validity] : message.validity;
+                    if (message.shared_prefix_len != null && message.hasOwnProperty("shared_prefix_len"))
+                        object.shared_prefix_len = message.shared_prefix_len;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this ForeignKeyReference message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                ForeignKeyReference.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this ForeignKeyReference to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                ForeignKeyReference.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return ForeignKeyReference;
+            })();
+
+            sqlbase.ColumnDescriptor = (function() {
+
+                /**
+                 * Properties of a ColumnDescriptor.
+                 * @typedef cockroach.sql.sqlbase.ColumnDescriptor$Properties
+                 * @type {Object}
+                 * @property {string} [name] ColumnDescriptor name.
+                 * @property {number} [id] ColumnDescriptor id.
+                 * @property {cockroach.sql.sqlbase.ColumnType$Properties} [type] ColumnDescriptor type.
+                 * @property {boolean} [nullable] ColumnDescriptor nullable.
+                 * @property {string} [default_expr] ColumnDescriptor default_expr.
+                 * @property {boolean} [hidden] ColumnDescriptor hidden.
+                 */
+
+                /**
+                 * Constructs a new ColumnDescriptor.
+                 * @exports cockroach.sql.sqlbase.ColumnDescriptor
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.ColumnDescriptor$Properties=} [properties] Properties to set
+                 */
+                function ColumnDescriptor(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * ColumnDescriptor name.
+                 * @type {string}
+                 */
+                ColumnDescriptor.prototype.name = "";
+
+                /**
+                 * ColumnDescriptor id.
+                 * @type {number}
+                 */
+                ColumnDescriptor.prototype.id = 0;
+
+                /**
+                 * ColumnDescriptor type.
+                 * @type {(cockroach.sql.sqlbase.ColumnType$Properties|null)}
+                 */
+                ColumnDescriptor.prototype.type = null;
+
+                /**
+                 * ColumnDescriptor nullable.
+                 * @type {boolean}
+                 */
+                ColumnDescriptor.prototype.nullable = false;
+
+                /**
+                 * ColumnDescriptor default_expr.
+                 * @type {string}
+                 */
+                ColumnDescriptor.prototype.default_expr = "";
+
+                /**
+                 * ColumnDescriptor hidden.
+                 * @type {boolean}
+                 */
+                ColumnDescriptor.prototype.hidden = false;
+
+                /**
+                 * Creates a new ColumnDescriptor instance using the specified properties.
+                 * @param {cockroach.sql.sqlbase.ColumnDescriptor$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.sqlbase.ColumnDescriptor} ColumnDescriptor instance
+                 */
+                ColumnDescriptor.create = function create(properties) {
+                    return new ColumnDescriptor(properties);
+                };
+
+                /**
+                 * Encodes the specified ColumnDescriptor message. Does not implicitly {@link cockroach.sql.sqlbase.ColumnDescriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.ColumnDescriptor$Properties} message ColumnDescriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                ColumnDescriptor.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.name != null && message.hasOwnProperty("name"))
+                        writer.uint32(/* id 1, wireType 2 =*/10).string(message.name);
+                    if (message.id != null && message.hasOwnProperty("id"))
+                        writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.id);
+                    if (message.type != null && message.hasOwnProperty("type"))
+                        $root.cockroach.sql.sqlbase.ColumnType.encode(message.type, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
+                    if (message.nullable != null && message.hasOwnProperty("nullable"))
+                        writer.uint32(/* id 4, wireType 0 =*/32).bool(message.nullable);
+                    if (message.default_expr != null && message.hasOwnProperty("default_expr"))
+                        writer.uint32(/* id 5, wireType 2 =*/42).string(message.default_expr);
+                    if (message.hidden != null && message.hasOwnProperty("hidden"))
+                        writer.uint32(/* id 6, wireType 0 =*/48).bool(message.hidden);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified ColumnDescriptor message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.ColumnDescriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.ColumnDescriptor$Properties} message ColumnDescriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                ColumnDescriptor.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a ColumnDescriptor message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.sqlbase.ColumnDescriptor} ColumnDescriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                ColumnDescriptor.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.sql.sqlbase.ColumnDescriptor();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.name = reader.string();
+                            break;
+                        case 2:
+                            message.id = reader.uint32();
+                            break;
+                        case 3:
+                            message.type = $root.cockroach.sql.sqlbase.ColumnType.decode(reader, reader.uint32());
+                            break;
+                        case 4:
+                            message.nullable = reader.bool();
+                            break;
+                        case 5:
+                            message.default_expr = reader.string();
+                            break;
+                        case 6:
+                            message.hidden = reader.bool();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a ColumnDescriptor message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.sqlbase.ColumnDescriptor} ColumnDescriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                ColumnDescriptor.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a ColumnDescriptor message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                ColumnDescriptor.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.name != null && message.hasOwnProperty("name"))
+                        if (!$util.isString(message.name))
+                            return "name: string expected";
+                    if (message.id != null && message.hasOwnProperty("id"))
+                        if (!$util.isInteger(message.id))
+                            return "id: integer expected";
+                    if (message.type != null && message.hasOwnProperty("type")) {
+                        let error = $root.cockroach.sql.sqlbase.ColumnType.verify(message.type);
+                        if (error)
+                            return "type." + error;
+                    }
+                    if (message.nullable != null && message.hasOwnProperty("nullable"))
+                        if (typeof message.nullable !== "boolean")
+                            return "nullable: boolean expected";
+                    if (message.default_expr != null && message.hasOwnProperty("default_expr"))
+                        if (!$util.isString(message.default_expr))
+                            return "default_expr: string expected";
+                    if (message.hidden != null && message.hasOwnProperty("hidden"))
+                        if (typeof message.hidden !== "boolean")
+                            return "hidden: boolean expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a ColumnDescriptor message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.ColumnDescriptor} ColumnDescriptor
+                 */
+                ColumnDescriptor.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.sql.sqlbase.ColumnDescriptor)
+                        return object;
+                    let message = new $root.cockroach.sql.sqlbase.ColumnDescriptor();
+                    if (object.name != null)
+                        message.name = String(object.name);
+                    if (object.id != null)
+                        message.id = object.id >>> 0;
+                    if (object.type != null) {
+                        if (typeof object.type !== "object")
+                            throw TypeError(".cockroach.sql.sqlbase.ColumnDescriptor.type: object expected");
+                        message.type = $root.cockroach.sql.sqlbase.ColumnType.fromObject(object.type);
+                    }
+                    if (object.nullable != null)
+                        message.nullable = Boolean(object.nullable);
+                    if (object.default_expr != null)
+                        message.default_expr = String(object.default_expr);
+                    if (object.hidden != null)
+                        message.hidden = Boolean(object.hidden);
+                    return message;
+                };
+
+                /**
+                 * Creates a ColumnDescriptor message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.sqlbase.ColumnDescriptor.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.ColumnDescriptor} ColumnDescriptor
+                 */
+                ColumnDescriptor.from = ColumnDescriptor.fromObject;
+
+                /**
+                 * Creates a plain object from a ColumnDescriptor message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.sqlbase.ColumnDescriptor} message ColumnDescriptor
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                ColumnDescriptor.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults) {
+                        object.name = "";
+                        object.id = 0;
+                        object.type = null;
+                        object.nullable = false;
+                        object.default_expr = "";
+                        object.hidden = false;
+                    }
+                    if (message.name != null && message.hasOwnProperty("name"))
+                        object.name = message.name;
+                    if (message.id != null && message.hasOwnProperty("id"))
+                        object.id = message.id;
+                    if (message.type != null && message.hasOwnProperty("type"))
+                        object.type = $root.cockroach.sql.sqlbase.ColumnType.toObject(message.type, options);
+                    if (message.nullable != null && message.hasOwnProperty("nullable"))
+                        object.nullable = message.nullable;
+                    if (message.default_expr != null && message.hasOwnProperty("default_expr"))
+                        object.default_expr = message.default_expr;
+                    if (message.hidden != null && message.hasOwnProperty("hidden"))
+                        object.hidden = message.hidden;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this ColumnDescriptor message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                ColumnDescriptor.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this ColumnDescriptor to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                ColumnDescriptor.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return ColumnDescriptor;
+            })();
+
+            sqlbase.ColumnFamilyDescriptor = (function() {
+
+                /**
+                 * Properties of a ColumnFamilyDescriptor.
+                 * @typedef cockroach.sql.sqlbase.ColumnFamilyDescriptor$Properties
+                 * @type {Object}
+                 * @property {string} [name] ColumnFamilyDescriptor name.
+                 * @property {number} [id] ColumnFamilyDescriptor id.
+                 * @property {Array.<string>} [column_names] ColumnFamilyDescriptor column_names.
+                 * @property {Array.<number>} [column_ids] ColumnFamilyDescriptor column_ids.
+                 * @property {number} [default_column_id] ColumnFamilyDescriptor default_column_id.
+                 */
+
+                /**
+                 * Constructs a new ColumnFamilyDescriptor.
+                 * @exports cockroach.sql.sqlbase.ColumnFamilyDescriptor
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.ColumnFamilyDescriptor$Properties=} [properties] Properties to set
+                 */
+                function ColumnFamilyDescriptor(properties) {
+                    this.column_names = [];
+                    this.column_ids = [];
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * ColumnFamilyDescriptor name.
+                 * @type {string}
+                 */
+                ColumnFamilyDescriptor.prototype.name = "";
+
+                /**
+                 * ColumnFamilyDescriptor id.
+                 * @type {number}
+                 */
+                ColumnFamilyDescriptor.prototype.id = 0;
+
+                /**
+                 * ColumnFamilyDescriptor column_names.
+                 * @type {Array.<string>}
+                 */
+                ColumnFamilyDescriptor.prototype.column_names = $util.emptyArray;
+
+                /**
+                 * ColumnFamilyDescriptor column_ids.
+                 * @type {Array.<number>}
+                 */
+                ColumnFamilyDescriptor.prototype.column_ids = $util.emptyArray;
+
+                /**
+                 * ColumnFamilyDescriptor default_column_id.
+                 * @type {number}
+                 */
+                ColumnFamilyDescriptor.prototype.default_column_id = 0;
+
+                /**
+                 * Creates a new ColumnFamilyDescriptor instance using the specified properties.
+                 * @param {cockroach.sql.sqlbase.ColumnFamilyDescriptor$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.sqlbase.ColumnFamilyDescriptor} ColumnFamilyDescriptor instance
+                 */
+                ColumnFamilyDescriptor.create = function create(properties) {
+                    return new ColumnFamilyDescriptor(properties);
+                };
+
+                /**
+                 * Encodes the specified ColumnFamilyDescriptor message. Does not implicitly {@link cockroach.sql.sqlbase.ColumnFamilyDescriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.ColumnFamilyDescriptor$Properties} message ColumnFamilyDescriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                ColumnFamilyDescriptor.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.name != null && message.hasOwnProperty("name"))
+                        writer.uint32(/* id 1, wireType 2 =*/10).string(message.name);
+                    if (message.id != null && message.hasOwnProperty("id"))
+                        writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.id);
+                    if (message.column_names != null && message.column_names.length)
+                        for (let i = 0; i < message.column_names.length; ++i)
+                            writer.uint32(/* id 3, wireType 2 =*/26).string(message.column_names[i]);
+                    if (message.column_ids != null && message.column_ids.length)
+                        for (let i = 0; i < message.column_ids.length; ++i)
+                            writer.uint32(/* id 4, wireType 0 =*/32).uint32(message.column_ids[i]);
+                    if (message.default_column_id != null && message.hasOwnProperty("default_column_id"))
+                        writer.uint32(/* id 5, wireType 0 =*/40).uint32(message.default_column_id);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified ColumnFamilyDescriptor message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.ColumnFamilyDescriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.ColumnFamilyDescriptor$Properties} message ColumnFamilyDescriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                ColumnFamilyDescriptor.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a ColumnFamilyDescriptor message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.sqlbase.ColumnFamilyDescriptor} ColumnFamilyDescriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                ColumnFamilyDescriptor.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.sql.sqlbase.ColumnFamilyDescriptor();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.name = reader.string();
+                            break;
+                        case 2:
+                            message.id = reader.uint32();
+                            break;
+                        case 3:
+                            if (!(message.column_names && message.column_names.length))
+                                message.column_names = [];
+                            message.column_names.push(reader.string());
+                            break;
+                        case 4:
+                            if (!(message.column_ids && message.column_ids.length))
+                                message.column_ids = [];
+                            if ((tag & 7) === 2) {
+                                let end2 = reader.uint32() + reader.pos;
+                                while (reader.pos < end2)
+                                    message.column_ids.push(reader.uint32());
+                            } else
+                                message.column_ids.push(reader.uint32());
+                            break;
+                        case 5:
+                            message.default_column_id = reader.uint32();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a ColumnFamilyDescriptor message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.sqlbase.ColumnFamilyDescriptor} ColumnFamilyDescriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                ColumnFamilyDescriptor.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a ColumnFamilyDescriptor message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                ColumnFamilyDescriptor.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.name != null && message.hasOwnProperty("name"))
+                        if (!$util.isString(message.name))
+                            return "name: string expected";
+                    if (message.id != null && message.hasOwnProperty("id"))
+                        if (!$util.isInteger(message.id))
+                            return "id: integer expected";
+                    if (message.column_names != null && message.hasOwnProperty("column_names")) {
+                        if (!Array.isArray(message.column_names))
+                            return "column_names: array expected";
+                        for (let i = 0; i < message.column_names.length; ++i)
+                            if (!$util.isString(message.column_names[i]))
+                                return "column_names: string[] expected";
+                    }
+                    if (message.column_ids != null && message.hasOwnProperty("column_ids")) {
+                        if (!Array.isArray(message.column_ids))
+                            return "column_ids: array expected";
+                        for (let i = 0; i < message.column_ids.length; ++i)
+                            if (!$util.isInteger(message.column_ids[i]))
+                                return "column_ids: integer[] expected";
+                    }
+                    if (message.default_column_id != null && message.hasOwnProperty("default_column_id"))
+                        if (!$util.isInteger(message.default_column_id))
+                            return "default_column_id: integer expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a ColumnFamilyDescriptor message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.ColumnFamilyDescriptor} ColumnFamilyDescriptor
+                 */
+                ColumnFamilyDescriptor.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.sql.sqlbase.ColumnFamilyDescriptor)
+                        return object;
+                    let message = new $root.cockroach.sql.sqlbase.ColumnFamilyDescriptor();
+                    if (object.name != null)
+                        message.name = String(object.name);
+                    if (object.id != null)
+                        message.id = object.id >>> 0;
+                    if (object.column_names) {
+                        if (!Array.isArray(object.column_names))
+                            throw TypeError(".cockroach.sql.sqlbase.ColumnFamilyDescriptor.column_names: array expected");
+                        message.column_names = [];
+                        for (let i = 0; i < object.column_names.length; ++i)
+                            message.column_names[i] = String(object.column_names[i]);
+                    }
+                    if (object.column_ids) {
+                        if (!Array.isArray(object.column_ids))
+                            throw TypeError(".cockroach.sql.sqlbase.ColumnFamilyDescriptor.column_ids: array expected");
+                        message.column_ids = [];
+                        for (let i = 0; i < object.column_ids.length; ++i)
+                            message.column_ids[i] = object.column_ids[i] >>> 0;
+                    }
+                    if (object.default_column_id != null)
+                        message.default_column_id = object.default_column_id >>> 0;
+                    return message;
+                };
+
+                /**
+                 * Creates a ColumnFamilyDescriptor message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.sqlbase.ColumnFamilyDescriptor.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.ColumnFamilyDescriptor} ColumnFamilyDescriptor
+                 */
+                ColumnFamilyDescriptor.from = ColumnFamilyDescriptor.fromObject;
+
+                /**
+                 * Creates a plain object from a ColumnFamilyDescriptor message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.sqlbase.ColumnFamilyDescriptor} message ColumnFamilyDescriptor
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                ColumnFamilyDescriptor.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.arrays || options.defaults) {
+                        object.column_names = [];
+                        object.column_ids = [];
+                    }
+                    if (options.defaults) {
+                        object.name = "";
+                        object.id = 0;
+                        object.default_column_id = 0;
+                    }
+                    if (message.name != null && message.hasOwnProperty("name"))
+                        object.name = message.name;
+                    if (message.id != null && message.hasOwnProperty("id"))
+                        object.id = message.id;
+                    if (message.column_names && message.column_names.length) {
+                        object.column_names = [];
+                        for (let j = 0; j < message.column_names.length; ++j)
+                            object.column_names[j] = message.column_names[j];
+                    }
+                    if (message.column_ids && message.column_ids.length) {
+                        object.column_ids = [];
+                        for (let j = 0; j < message.column_ids.length; ++j)
+                            object.column_ids[j] = message.column_ids[j];
+                    }
+                    if (message.default_column_id != null && message.hasOwnProperty("default_column_id"))
+                        object.default_column_id = message.default_column_id;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this ColumnFamilyDescriptor message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                ColumnFamilyDescriptor.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this ColumnFamilyDescriptor to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                ColumnFamilyDescriptor.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return ColumnFamilyDescriptor;
+            })();
+
+            sqlbase.InterleaveDescriptor = (function() {
+
+                /**
+                 * Properties of an InterleaveDescriptor.
+                 * @typedef cockroach.sql.sqlbase.InterleaveDescriptor$Properties
+                 * @type {Object}
+                 * @property {Array.<cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor$Properties>} [ancestors] InterleaveDescriptor ancestors.
+                 */
+
+                /**
+                 * Constructs a new InterleaveDescriptor.
+                 * @exports cockroach.sql.sqlbase.InterleaveDescriptor
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.InterleaveDescriptor$Properties=} [properties] Properties to set
+                 */
+                function InterleaveDescriptor(properties) {
+                    this.ancestors = [];
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * InterleaveDescriptor ancestors.
+                 * @type {Array.<cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor$Properties>}
+                 */
+                InterleaveDescriptor.prototype.ancestors = $util.emptyArray;
+
+                /**
+                 * Creates a new InterleaveDescriptor instance using the specified properties.
+                 * @param {cockroach.sql.sqlbase.InterleaveDescriptor$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.sqlbase.InterleaveDescriptor} InterleaveDescriptor instance
+                 */
+                InterleaveDescriptor.create = function create(properties) {
+                    return new InterleaveDescriptor(properties);
+                };
+
+                /**
+                 * Encodes the specified InterleaveDescriptor message. Does not implicitly {@link cockroach.sql.sqlbase.InterleaveDescriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.InterleaveDescriptor$Properties} message InterleaveDescriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                InterleaveDescriptor.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.ancestors != null && message.ancestors.length)
+                        for (let i = 0; i < message.ancestors.length; ++i)
+                            $root.cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor.encode(message.ancestors[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified InterleaveDescriptor message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.InterleaveDescriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.InterleaveDescriptor$Properties} message InterleaveDescriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                InterleaveDescriptor.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes an InterleaveDescriptor message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.sqlbase.InterleaveDescriptor} InterleaveDescriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                InterleaveDescriptor.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.sql.sqlbase.InterleaveDescriptor();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            if (!(message.ancestors && message.ancestors.length))
+                                message.ancestors = [];
+                            message.ancestors.push($root.cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor.decode(reader, reader.uint32()));
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes an InterleaveDescriptor message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.sqlbase.InterleaveDescriptor} InterleaveDescriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                InterleaveDescriptor.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies an InterleaveDescriptor message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                InterleaveDescriptor.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.ancestors != null && message.hasOwnProperty("ancestors")) {
+                        if (!Array.isArray(message.ancestors))
+                            return "ancestors: array expected";
+                        for (let i = 0; i < message.ancestors.length; ++i) {
+                            let error = $root.cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor.verify(message.ancestors[i]);
+                            if (error)
+                                return "ancestors." + error;
+                        }
+                    }
+                    return null;
+                };
+
+                /**
+                 * Creates an InterleaveDescriptor message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.InterleaveDescriptor} InterleaveDescriptor
+                 */
+                InterleaveDescriptor.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.sql.sqlbase.InterleaveDescriptor)
+                        return object;
+                    let message = new $root.cockroach.sql.sqlbase.InterleaveDescriptor();
+                    if (object.ancestors) {
+                        if (!Array.isArray(object.ancestors))
+                            throw TypeError(".cockroach.sql.sqlbase.InterleaveDescriptor.ancestors: array expected");
+                        message.ancestors = [];
+                        for (let i = 0; i < object.ancestors.length; ++i) {
+                            if (typeof object.ancestors[i] !== "object")
+                                throw TypeError(".cockroach.sql.sqlbase.InterleaveDescriptor.ancestors: object expected");
+                            message.ancestors[i] = $root.cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor.fromObject(object.ancestors[i]);
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Creates an InterleaveDescriptor message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.sqlbase.InterleaveDescriptor.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.InterleaveDescriptor} InterleaveDescriptor
+                 */
+                InterleaveDescriptor.from = InterleaveDescriptor.fromObject;
+
+                /**
+                 * Creates a plain object from an InterleaveDescriptor message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.sqlbase.InterleaveDescriptor} message InterleaveDescriptor
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                InterleaveDescriptor.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.arrays || options.defaults)
+                        object.ancestors = [];
+                    if (message.ancestors && message.ancestors.length) {
+                        object.ancestors = [];
+                        for (let j = 0; j < message.ancestors.length; ++j)
+                            object.ancestors[j] = $root.cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor.toObject(message.ancestors[j], options);
+                    }
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this InterleaveDescriptor message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                InterleaveDescriptor.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this InterleaveDescriptor to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                InterleaveDescriptor.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                InterleaveDescriptor.Ancestor = (function() {
+
+                    /**
+                     * Properties of an Ancestor.
+                     * @typedef cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor$Properties
+                     * @type {Object}
+                     * @property {number} [table_id] Ancestor table_id.
+                     * @property {number} [index_id] Ancestor index_id.
+                     * @property {number} [shared_prefix_len] Ancestor shared_prefix_len.
+                     */
+
+                    /**
+                     * Constructs a new Ancestor.
+                     * @exports cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor
+                     * @constructor
+                     * @param {cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor$Properties=} [properties] Properties to set
+                     */
+                    function Ancestor(properties) {
+                        if (properties)
+                            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * Ancestor table_id.
+                     * @type {number}
+                     */
+                    Ancestor.prototype.table_id = 0;
+
+                    /**
+                     * Ancestor index_id.
+                     * @type {number}
+                     */
+                    Ancestor.prototype.index_id = 0;
+
+                    /**
+                     * Ancestor shared_prefix_len.
+                     * @type {number}
+                     */
+                    Ancestor.prototype.shared_prefix_len = 0;
+
+                    /**
+                     * Creates a new Ancestor instance using the specified properties.
+                     * @param {cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor$Properties=} [properties] Properties to set
+                     * @returns {cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor} Ancestor instance
+                     */
+                    Ancestor.create = function create(properties) {
+                        return new Ancestor(properties);
+                    };
+
+                    /**
+                     * Encodes the specified Ancestor message. Does not implicitly {@link cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor.verify|verify} messages.
+                     * @param {cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor$Properties} message Ancestor message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    Ancestor.encode = function encode(message, writer) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (message.table_id != null && message.hasOwnProperty("table_id"))
+                            writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.table_id);
+                        if (message.index_id != null && message.hasOwnProperty("index_id"))
+                            writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.index_id);
+                        if (message.shared_prefix_len != null && message.hasOwnProperty("shared_prefix_len"))
+                            writer.uint32(/* id 3, wireType 0 =*/24).uint32(message.shared_prefix_len);
+                        return writer;
+                    };
+
+                    /**
+                     * Encodes the specified Ancestor message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor.verify|verify} messages.
+                     * @param {cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor$Properties} message Ancestor message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    Ancestor.encodeDelimited = function encodeDelimited(message, writer) {
+                        return this.encode(message, writer).ldelim();
+                    };
+
+                    /**
+                     * Decodes an Ancestor message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor} Ancestor
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    Ancestor.decode = function decode(reader, length) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor();
+                        while (reader.pos < end) {
+                            let tag = reader.uint32();
+                            switch (tag >>> 3) {
+                            case 1:
+                                message.table_id = reader.uint32();
+                                break;
+                            case 2:
+                                message.index_id = reader.uint32();
+                                break;
+                            case 3:
+                                message.shared_prefix_len = reader.uint32();
+                                break;
+                            default:
+                                reader.skipType(tag & 7);
+                                break;
+                            }
+                        }
+                        return message;
+                    };
+
+                    /**
+                     * Decodes an Ancestor message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor} Ancestor
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    Ancestor.decodeDelimited = function decodeDelimited(reader) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader(reader);
+                        return this.decode(reader, reader.uint32());
+                    };
+
+                    /**
+                     * Verifies an Ancestor message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    Ancestor.verify = function verify(message) {
+                        if (typeof message !== "object" || message === null)
+                            return "object expected";
+                        if (message.table_id != null && message.hasOwnProperty("table_id"))
+                            if (!$util.isInteger(message.table_id))
+                                return "table_id: integer expected";
+                        if (message.index_id != null && message.hasOwnProperty("index_id"))
+                            if (!$util.isInteger(message.index_id))
+                                return "index_id: integer expected";
+                        if (message.shared_prefix_len != null && message.hasOwnProperty("shared_prefix_len"))
+                            if (!$util.isInteger(message.shared_prefix_len))
+                                return "shared_prefix_len: integer expected";
+                        return null;
+                    };
+
+                    /**
+                     * Creates an Ancestor message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor} Ancestor
+                     */
+                    Ancestor.fromObject = function fromObject(object) {
+                        if (object instanceof $root.cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor)
+                            return object;
+                        let message = new $root.cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor();
+                        if (object.table_id != null)
+                            message.table_id = object.table_id >>> 0;
+                        if (object.index_id != null)
+                            message.index_id = object.index_id >>> 0;
+                        if (object.shared_prefix_len != null)
+                            message.shared_prefix_len = object.shared_prefix_len >>> 0;
+                        return message;
+                    };
+
+                    /**
+                     * Creates an Ancestor message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor} Ancestor
+                     */
+                    Ancestor.from = Ancestor.fromObject;
+
+                    /**
+                     * Creates a plain object from an Ancestor message. Also converts values to other types if specified.
+                     * @param {cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor} message Ancestor
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    Ancestor.toObject = function toObject(message, options) {
+                        if (!options)
+                            options = {};
+                        let object = {};
+                        if (options.defaults) {
+                            object.table_id = 0;
+                            object.index_id = 0;
+                            object.shared_prefix_len = 0;
+                        }
+                        if (message.table_id != null && message.hasOwnProperty("table_id"))
+                            object.table_id = message.table_id;
+                        if (message.index_id != null && message.hasOwnProperty("index_id"))
+                            object.index_id = message.index_id;
+                        if (message.shared_prefix_len != null && message.hasOwnProperty("shared_prefix_len"))
+                            object.shared_prefix_len = message.shared_prefix_len;
+                        return object;
+                    };
+
+                    /**
+                     * Creates a plain object from this Ancestor message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    Ancestor.prototype.toObject = function toObject(options) {
+                        return this.constructor.toObject(this, options);
+                    };
+
+                    /**
+                     * Converts this Ancestor to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    Ancestor.prototype.toJSON = function toJSON() {
+                        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                    };
+
+                    return Ancestor;
+                })();
+
+                return InterleaveDescriptor;
+            })();
+
+            sqlbase.IndexDescriptor = (function() {
+
+                /**
+                 * Properties of an IndexDescriptor.
+                 * @typedef cockroach.sql.sqlbase.IndexDescriptor$Properties
+                 * @type {Object}
+                 * @property {string} [name] IndexDescriptor name.
+                 * @property {number} [id] IndexDescriptor id.
+                 * @property {boolean} [unique] IndexDescriptor unique.
+                 * @property {Array.<string>} [column_names] IndexDescriptor column_names.
+                 * @property {Array.<cockroach.sql.sqlbase.IndexDescriptor.Direction>} [column_directions] IndexDescriptor column_directions.
+                 * @property {Array.<string>} [store_column_names] IndexDescriptor store_column_names.
+                 * @property {Array.<number>} [column_ids] IndexDescriptor column_ids.
+                 * @property {Array.<number>} [extra_column_ids] IndexDescriptor extra_column_ids.
+                 * @property {Array.<number>} [store_column_ids] IndexDescriptor store_column_ids.
+                 * @property {Array.<number>} [composite_column_ids] IndexDescriptor composite_column_ids.
+                 * @property {cockroach.sql.sqlbase.ForeignKeyReference$Properties} [foreign_key] IndexDescriptor foreign_key.
+                 * @property {Array.<cockroach.sql.sqlbase.ForeignKeyReference$Properties>} [referenced_by] IndexDescriptor referenced_by.
+                 * @property {cockroach.sql.sqlbase.InterleaveDescriptor$Properties} [interleave] IndexDescriptor interleave.
+                 * @property {Array.<cockroach.sql.sqlbase.ForeignKeyReference$Properties>} [interleaved_by] IndexDescriptor interleaved_by.
+                 */
+
+                /**
+                 * Constructs a new IndexDescriptor.
+                 * @exports cockroach.sql.sqlbase.IndexDescriptor
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.IndexDescriptor$Properties=} [properties] Properties to set
+                 */
+                function IndexDescriptor(properties) {
+                    this.column_names = [];
+                    this.column_directions = [];
+                    this.store_column_names = [];
+                    this.column_ids = [];
+                    this.extra_column_ids = [];
+                    this.store_column_ids = [];
+                    this.composite_column_ids = [];
+                    this.referenced_by = [];
+                    this.interleaved_by = [];
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * IndexDescriptor name.
+                 * @type {string}
+                 */
+                IndexDescriptor.prototype.name = "";
+
+                /**
+                 * IndexDescriptor id.
+                 * @type {number}
+                 */
+                IndexDescriptor.prototype.id = 0;
+
+                /**
+                 * IndexDescriptor unique.
+                 * @type {boolean}
+                 */
+                IndexDescriptor.prototype.unique = false;
+
+                /**
+                 * IndexDescriptor column_names.
+                 * @type {Array.<string>}
+                 */
+                IndexDescriptor.prototype.column_names = $util.emptyArray;
+
+                /**
+                 * IndexDescriptor column_directions.
+                 * @type {Array.<cockroach.sql.sqlbase.IndexDescriptor.Direction>}
+                 */
+                IndexDescriptor.prototype.column_directions = $util.emptyArray;
+
+                /**
+                 * IndexDescriptor store_column_names.
+                 * @type {Array.<string>}
+                 */
+                IndexDescriptor.prototype.store_column_names = $util.emptyArray;
+
+                /**
+                 * IndexDescriptor column_ids.
+                 * @type {Array.<number>}
+                 */
+                IndexDescriptor.prototype.column_ids = $util.emptyArray;
+
+                /**
+                 * IndexDescriptor extra_column_ids.
+                 * @type {Array.<number>}
+                 */
+                IndexDescriptor.prototype.extra_column_ids = $util.emptyArray;
+
+                /**
+                 * IndexDescriptor store_column_ids.
+                 * @type {Array.<number>}
+                 */
+                IndexDescriptor.prototype.store_column_ids = $util.emptyArray;
+
+                /**
+                 * IndexDescriptor composite_column_ids.
+                 * @type {Array.<number>}
+                 */
+                IndexDescriptor.prototype.composite_column_ids = $util.emptyArray;
+
+                /**
+                 * IndexDescriptor foreign_key.
+                 * @type {(cockroach.sql.sqlbase.ForeignKeyReference$Properties|null)}
+                 */
+                IndexDescriptor.prototype.foreign_key = null;
+
+                /**
+                 * IndexDescriptor referenced_by.
+                 * @type {Array.<cockroach.sql.sqlbase.ForeignKeyReference$Properties>}
+                 */
+                IndexDescriptor.prototype.referenced_by = $util.emptyArray;
+
+                /**
+                 * IndexDescriptor interleave.
+                 * @type {(cockroach.sql.sqlbase.InterleaveDescriptor$Properties|null)}
+                 */
+                IndexDescriptor.prototype.interleave = null;
+
+                /**
+                 * IndexDescriptor interleaved_by.
+                 * @type {Array.<cockroach.sql.sqlbase.ForeignKeyReference$Properties>}
+                 */
+                IndexDescriptor.prototype.interleaved_by = $util.emptyArray;
+
+                /**
+                 * Creates a new IndexDescriptor instance using the specified properties.
+                 * @param {cockroach.sql.sqlbase.IndexDescriptor$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.sqlbase.IndexDescriptor} IndexDescriptor instance
+                 */
+                IndexDescriptor.create = function create(properties) {
+                    return new IndexDescriptor(properties);
+                };
+
+                /**
+                 * Encodes the specified IndexDescriptor message. Does not implicitly {@link cockroach.sql.sqlbase.IndexDescriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.IndexDescriptor$Properties} message IndexDescriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                IndexDescriptor.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.name != null && message.hasOwnProperty("name"))
+                        writer.uint32(/* id 1, wireType 2 =*/10).string(message.name);
+                    if (message.id != null && message.hasOwnProperty("id"))
+                        writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.id);
+                    if (message.unique != null && message.hasOwnProperty("unique"))
+                        writer.uint32(/* id 3, wireType 0 =*/24).bool(message.unique);
+                    if (message.column_names != null && message.column_names.length)
+                        for (let i = 0; i < message.column_names.length; ++i)
+                            writer.uint32(/* id 4, wireType 2 =*/34).string(message.column_names[i]);
+                    if (message.store_column_names != null && message.store_column_names.length)
+                        for (let i = 0; i < message.store_column_names.length; ++i)
+                            writer.uint32(/* id 5, wireType 2 =*/42).string(message.store_column_names[i]);
+                    if (message.column_ids != null && message.column_ids.length)
+                        for (let i = 0; i < message.column_ids.length; ++i)
+                            writer.uint32(/* id 6, wireType 0 =*/48).uint32(message.column_ids[i]);
+                    if (message.extra_column_ids != null && message.extra_column_ids.length)
+                        for (let i = 0; i < message.extra_column_ids.length; ++i)
+                            writer.uint32(/* id 7, wireType 0 =*/56).uint32(message.extra_column_ids[i]);
+                    if (message.column_directions != null && message.column_directions.length)
+                        for (let i = 0; i < message.column_directions.length; ++i)
+                            writer.uint32(/* id 8, wireType 0 =*/64).uint32(message.column_directions[i]);
+                    if (message.foreign_key != null && message.hasOwnProperty("foreign_key"))
+                        $root.cockroach.sql.sqlbase.ForeignKeyReference.encode(message.foreign_key, writer.uint32(/* id 9, wireType 2 =*/74).fork()).ldelim();
+                    if (message.referenced_by != null && message.referenced_by.length)
+                        for (let i = 0; i < message.referenced_by.length; ++i)
+                            $root.cockroach.sql.sqlbase.ForeignKeyReference.encode(message.referenced_by[i], writer.uint32(/* id 10, wireType 2 =*/82).fork()).ldelim();
+                    if (message.interleave != null && message.hasOwnProperty("interleave"))
+                        $root.cockroach.sql.sqlbase.InterleaveDescriptor.encode(message.interleave, writer.uint32(/* id 11, wireType 2 =*/90).fork()).ldelim();
+                    if (message.interleaved_by != null && message.interleaved_by.length)
+                        for (let i = 0; i < message.interleaved_by.length; ++i)
+                            $root.cockroach.sql.sqlbase.ForeignKeyReference.encode(message.interleaved_by[i], writer.uint32(/* id 12, wireType 2 =*/98).fork()).ldelim();
+                    if (message.composite_column_ids != null && message.composite_column_ids.length)
+                        for (let i = 0; i < message.composite_column_ids.length; ++i)
+                            writer.uint32(/* id 13, wireType 0 =*/104).uint32(message.composite_column_ids[i]);
+                    if (message.store_column_ids != null && message.store_column_ids.length)
+                        for (let i = 0; i < message.store_column_ids.length; ++i)
+                            writer.uint32(/* id 14, wireType 0 =*/112).uint32(message.store_column_ids[i]);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified IndexDescriptor message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.IndexDescriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.IndexDescriptor$Properties} message IndexDescriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                IndexDescriptor.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes an IndexDescriptor message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.sqlbase.IndexDescriptor} IndexDescriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                IndexDescriptor.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.sql.sqlbase.IndexDescriptor();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.name = reader.string();
+                            break;
+                        case 2:
+                            message.id = reader.uint32();
+                            break;
+                        case 3:
+                            message.unique = reader.bool();
+                            break;
+                        case 4:
+                            if (!(message.column_names && message.column_names.length))
+                                message.column_names = [];
+                            message.column_names.push(reader.string());
+                            break;
+                        case 8:
+                            if (!(message.column_directions && message.column_directions.length))
+                                message.column_directions = [];
+                            if ((tag & 7) === 2) {
+                                let end2 = reader.uint32() + reader.pos;
+                                while (reader.pos < end2)
+                                    message.column_directions.push(reader.uint32());
+                            } else
+                                message.column_directions.push(reader.uint32());
+                            break;
+                        case 5:
+                            if (!(message.store_column_names && message.store_column_names.length))
+                                message.store_column_names = [];
+                            message.store_column_names.push(reader.string());
+                            break;
+                        case 6:
+                            if (!(message.column_ids && message.column_ids.length))
+                                message.column_ids = [];
+                            if ((tag & 7) === 2) {
+                                let end2 = reader.uint32() + reader.pos;
+                                while (reader.pos < end2)
+                                    message.column_ids.push(reader.uint32());
+                            } else
+                                message.column_ids.push(reader.uint32());
+                            break;
+                        case 7:
+                            if (!(message.extra_column_ids && message.extra_column_ids.length))
+                                message.extra_column_ids = [];
+                            if ((tag & 7) === 2) {
+                                let end2 = reader.uint32() + reader.pos;
+                                while (reader.pos < end2)
+                                    message.extra_column_ids.push(reader.uint32());
+                            } else
+                                message.extra_column_ids.push(reader.uint32());
+                            break;
+                        case 14:
+                            if (!(message.store_column_ids && message.store_column_ids.length))
+                                message.store_column_ids = [];
+                            if ((tag & 7) === 2) {
+                                let end2 = reader.uint32() + reader.pos;
+                                while (reader.pos < end2)
+                                    message.store_column_ids.push(reader.uint32());
+                            } else
+                                message.store_column_ids.push(reader.uint32());
+                            break;
+                        case 13:
+                            if (!(message.composite_column_ids && message.composite_column_ids.length))
+                                message.composite_column_ids = [];
+                            if ((tag & 7) === 2) {
+                                let end2 = reader.uint32() + reader.pos;
+                                while (reader.pos < end2)
+                                    message.composite_column_ids.push(reader.uint32());
+                            } else
+                                message.composite_column_ids.push(reader.uint32());
+                            break;
+                        case 9:
+                            message.foreign_key = $root.cockroach.sql.sqlbase.ForeignKeyReference.decode(reader, reader.uint32());
+                            break;
+                        case 10:
+                            if (!(message.referenced_by && message.referenced_by.length))
+                                message.referenced_by = [];
+                            message.referenced_by.push($root.cockroach.sql.sqlbase.ForeignKeyReference.decode(reader, reader.uint32()));
+                            break;
+                        case 11:
+                            message.interleave = $root.cockroach.sql.sqlbase.InterleaveDescriptor.decode(reader, reader.uint32());
+                            break;
+                        case 12:
+                            if (!(message.interleaved_by && message.interleaved_by.length))
+                                message.interleaved_by = [];
+                            message.interleaved_by.push($root.cockroach.sql.sqlbase.ForeignKeyReference.decode(reader, reader.uint32()));
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes an IndexDescriptor message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.sqlbase.IndexDescriptor} IndexDescriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                IndexDescriptor.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies an IndexDescriptor message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                IndexDescriptor.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.name != null && message.hasOwnProperty("name"))
+                        if (!$util.isString(message.name))
+                            return "name: string expected";
+                    if (message.id != null && message.hasOwnProperty("id"))
+                        if (!$util.isInteger(message.id))
+                            return "id: integer expected";
+                    if (message.unique != null && message.hasOwnProperty("unique"))
+                        if (typeof message.unique !== "boolean")
+                            return "unique: boolean expected";
+                    if (message.column_names != null && message.hasOwnProperty("column_names")) {
+                        if (!Array.isArray(message.column_names))
+                            return "column_names: array expected";
+                        for (let i = 0; i < message.column_names.length; ++i)
+                            if (!$util.isString(message.column_names[i]))
+                                return "column_names: string[] expected";
+                    }
+                    if (message.column_directions != null && message.hasOwnProperty("column_directions")) {
+                        if (!Array.isArray(message.column_directions))
+                            return "column_directions: array expected";
+                        for (let i = 0; i < message.column_directions.length; ++i)
+                            switch (message.column_directions[i]) {
+                            default:
+                                return "column_directions: enum value[] expected";
+                            case 0:
+                            case 1:
+                                break;
+                            }
+                    }
+                    if (message.store_column_names != null && message.hasOwnProperty("store_column_names")) {
+                        if (!Array.isArray(message.store_column_names))
+                            return "store_column_names: array expected";
+                        for (let i = 0; i < message.store_column_names.length; ++i)
+                            if (!$util.isString(message.store_column_names[i]))
+                                return "store_column_names: string[] expected";
+                    }
+                    if (message.column_ids != null && message.hasOwnProperty("column_ids")) {
+                        if (!Array.isArray(message.column_ids))
+                            return "column_ids: array expected";
+                        for (let i = 0; i < message.column_ids.length; ++i)
+                            if (!$util.isInteger(message.column_ids[i]))
+                                return "column_ids: integer[] expected";
+                    }
+                    if (message.extra_column_ids != null && message.hasOwnProperty("extra_column_ids")) {
+                        if (!Array.isArray(message.extra_column_ids))
+                            return "extra_column_ids: array expected";
+                        for (let i = 0; i < message.extra_column_ids.length; ++i)
+                            if (!$util.isInteger(message.extra_column_ids[i]))
+                                return "extra_column_ids: integer[] expected";
+                    }
+                    if (message.store_column_ids != null && message.hasOwnProperty("store_column_ids")) {
+                        if (!Array.isArray(message.store_column_ids))
+                            return "store_column_ids: array expected";
+                        for (let i = 0; i < message.store_column_ids.length; ++i)
+                            if (!$util.isInteger(message.store_column_ids[i]))
+                                return "store_column_ids: integer[] expected";
+                    }
+                    if (message.composite_column_ids != null && message.hasOwnProperty("composite_column_ids")) {
+                        if (!Array.isArray(message.composite_column_ids))
+                            return "composite_column_ids: array expected";
+                        for (let i = 0; i < message.composite_column_ids.length; ++i)
+                            if (!$util.isInteger(message.composite_column_ids[i]))
+                                return "composite_column_ids: integer[] expected";
+                    }
+                    if (message.foreign_key != null && message.hasOwnProperty("foreign_key")) {
+                        let error = $root.cockroach.sql.sqlbase.ForeignKeyReference.verify(message.foreign_key);
+                        if (error)
+                            return "foreign_key." + error;
+                    }
+                    if (message.referenced_by != null && message.hasOwnProperty("referenced_by")) {
+                        if (!Array.isArray(message.referenced_by))
+                            return "referenced_by: array expected";
+                        for (let i = 0; i < message.referenced_by.length; ++i) {
+                            let error = $root.cockroach.sql.sqlbase.ForeignKeyReference.verify(message.referenced_by[i]);
+                            if (error)
+                                return "referenced_by." + error;
+                        }
+                    }
+                    if (message.interleave != null && message.hasOwnProperty("interleave")) {
+                        let error = $root.cockroach.sql.sqlbase.InterleaveDescriptor.verify(message.interleave);
+                        if (error)
+                            return "interleave." + error;
+                    }
+                    if (message.interleaved_by != null && message.hasOwnProperty("interleaved_by")) {
+                        if (!Array.isArray(message.interleaved_by))
+                            return "interleaved_by: array expected";
+                        for (let i = 0; i < message.interleaved_by.length; ++i) {
+                            let error = $root.cockroach.sql.sqlbase.ForeignKeyReference.verify(message.interleaved_by[i]);
+                            if (error)
+                                return "interleaved_by." + error;
+                        }
+                    }
+                    return null;
+                };
+
+                /**
+                 * Creates an IndexDescriptor message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.IndexDescriptor} IndexDescriptor
+                 */
+                IndexDescriptor.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.sql.sqlbase.IndexDescriptor)
+                        return object;
+                    let message = new $root.cockroach.sql.sqlbase.IndexDescriptor();
+                    if (object.name != null)
+                        message.name = String(object.name);
+                    if (object.id != null)
+                        message.id = object.id >>> 0;
+                    if (object.unique != null)
+                        message.unique = Boolean(object.unique);
+                    if (object.column_names) {
+                        if (!Array.isArray(object.column_names))
+                            throw TypeError(".cockroach.sql.sqlbase.IndexDescriptor.column_names: array expected");
+                        message.column_names = [];
+                        for (let i = 0; i < object.column_names.length; ++i)
+                            message.column_names[i] = String(object.column_names[i]);
+                    }
+                    if (object.column_directions) {
+                        if (!Array.isArray(object.column_directions))
+                            throw TypeError(".cockroach.sql.sqlbase.IndexDescriptor.column_directions: array expected");
+                        message.column_directions = [];
+                        for (let i = 0; i < object.column_directions.length; ++i)
+                            switch (object.column_directions[i]) {
+                            default:
+                            case "ASC":
+                            case 0:
+                                message.column_directions[i] = 0;
+                                break;
+                            case "DESC":
+                            case 1:
+                                message.column_directions[i] = 1;
+                                break;
+                            }
+                    }
+                    if (object.store_column_names) {
+                        if (!Array.isArray(object.store_column_names))
+                            throw TypeError(".cockroach.sql.sqlbase.IndexDescriptor.store_column_names: array expected");
+                        message.store_column_names = [];
+                        for (let i = 0; i < object.store_column_names.length; ++i)
+                            message.store_column_names[i] = String(object.store_column_names[i]);
+                    }
+                    if (object.column_ids) {
+                        if (!Array.isArray(object.column_ids))
+                            throw TypeError(".cockroach.sql.sqlbase.IndexDescriptor.column_ids: array expected");
+                        message.column_ids = [];
+                        for (let i = 0; i < object.column_ids.length; ++i)
+                            message.column_ids[i] = object.column_ids[i] >>> 0;
+                    }
+                    if (object.extra_column_ids) {
+                        if (!Array.isArray(object.extra_column_ids))
+                            throw TypeError(".cockroach.sql.sqlbase.IndexDescriptor.extra_column_ids: array expected");
+                        message.extra_column_ids = [];
+                        for (let i = 0; i < object.extra_column_ids.length; ++i)
+                            message.extra_column_ids[i] = object.extra_column_ids[i] >>> 0;
+                    }
+                    if (object.store_column_ids) {
+                        if (!Array.isArray(object.store_column_ids))
+                            throw TypeError(".cockroach.sql.sqlbase.IndexDescriptor.store_column_ids: array expected");
+                        message.store_column_ids = [];
+                        for (let i = 0; i < object.store_column_ids.length; ++i)
+                            message.store_column_ids[i] = object.store_column_ids[i] >>> 0;
+                    }
+                    if (object.composite_column_ids) {
+                        if (!Array.isArray(object.composite_column_ids))
+                            throw TypeError(".cockroach.sql.sqlbase.IndexDescriptor.composite_column_ids: array expected");
+                        message.composite_column_ids = [];
+                        for (let i = 0; i < object.composite_column_ids.length; ++i)
+                            message.composite_column_ids[i] = object.composite_column_ids[i] >>> 0;
+                    }
+                    if (object.foreign_key != null) {
+                        if (typeof object.foreign_key !== "object")
+                            throw TypeError(".cockroach.sql.sqlbase.IndexDescriptor.foreign_key: object expected");
+                        message.foreign_key = $root.cockroach.sql.sqlbase.ForeignKeyReference.fromObject(object.foreign_key);
+                    }
+                    if (object.referenced_by) {
+                        if (!Array.isArray(object.referenced_by))
+                            throw TypeError(".cockroach.sql.sqlbase.IndexDescriptor.referenced_by: array expected");
+                        message.referenced_by = [];
+                        for (let i = 0; i < object.referenced_by.length; ++i) {
+                            if (typeof object.referenced_by[i] !== "object")
+                                throw TypeError(".cockroach.sql.sqlbase.IndexDescriptor.referenced_by: object expected");
+                            message.referenced_by[i] = $root.cockroach.sql.sqlbase.ForeignKeyReference.fromObject(object.referenced_by[i]);
+                        }
+                    }
+                    if (object.interleave != null) {
+                        if (typeof object.interleave !== "object")
+                            throw TypeError(".cockroach.sql.sqlbase.IndexDescriptor.interleave: object expected");
+                        message.interleave = $root.cockroach.sql.sqlbase.InterleaveDescriptor.fromObject(object.interleave);
+                    }
+                    if (object.interleaved_by) {
+                        if (!Array.isArray(object.interleaved_by))
+                            throw TypeError(".cockroach.sql.sqlbase.IndexDescriptor.interleaved_by: array expected");
+                        message.interleaved_by = [];
+                        for (let i = 0; i < object.interleaved_by.length; ++i) {
+                            if (typeof object.interleaved_by[i] !== "object")
+                                throw TypeError(".cockroach.sql.sqlbase.IndexDescriptor.interleaved_by: object expected");
+                            message.interleaved_by[i] = $root.cockroach.sql.sqlbase.ForeignKeyReference.fromObject(object.interleaved_by[i]);
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Creates an IndexDescriptor message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.sqlbase.IndexDescriptor.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.IndexDescriptor} IndexDescriptor
+                 */
+                IndexDescriptor.from = IndexDescriptor.fromObject;
+
+                /**
+                 * Creates a plain object from an IndexDescriptor message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.sqlbase.IndexDescriptor} message IndexDescriptor
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                IndexDescriptor.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.arrays || options.defaults) {
+                        object.column_names = [];
+                        object.store_column_names = [];
+                        object.column_ids = [];
+                        object.extra_column_ids = [];
+                        object.column_directions = [];
+                        object.referenced_by = [];
+                        object.interleaved_by = [];
+                        object.composite_column_ids = [];
+                        object.store_column_ids = [];
+                    }
+                    if (options.defaults) {
+                        object.name = "";
+                        object.id = 0;
+                        object.unique = false;
+                        object.foreign_key = null;
+                        object.interleave = null;
+                    }
+                    if (message.name != null && message.hasOwnProperty("name"))
+                        object.name = message.name;
+                    if (message.id != null && message.hasOwnProperty("id"))
+                        object.id = message.id;
+                    if (message.unique != null && message.hasOwnProperty("unique"))
+                        object.unique = message.unique;
+                    if (message.column_names && message.column_names.length) {
+                        object.column_names = [];
+                        for (let j = 0; j < message.column_names.length; ++j)
+                            object.column_names[j] = message.column_names[j];
+                    }
+                    if (message.store_column_names && message.store_column_names.length) {
+                        object.store_column_names = [];
+                        for (let j = 0; j < message.store_column_names.length; ++j)
+                            object.store_column_names[j] = message.store_column_names[j];
+                    }
+                    if (message.column_ids && message.column_ids.length) {
+                        object.column_ids = [];
+                        for (let j = 0; j < message.column_ids.length; ++j)
+                            object.column_ids[j] = message.column_ids[j];
+                    }
+                    if (message.extra_column_ids && message.extra_column_ids.length) {
+                        object.extra_column_ids = [];
+                        for (let j = 0; j < message.extra_column_ids.length; ++j)
+                            object.extra_column_ids[j] = message.extra_column_ids[j];
+                    }
+                    if (message.column_directions && message.column_directions.length) {
+                        object.column_directions = [];
+                        for (let j = 0; j < message.column_directions.length; ++j)
+                            object.column_directions[j] = options.enums === String ? $root.cockroach.sql.sqlbase.IndexDescriptor.Direction[message.column_directions[j]] : message.column_directions[j];
+                    }
+                    if (message.foreign_key != null && message.hasOwnProperty("foreign_key"))
+                        object.foreign_key = $root.cockroach.sql.sqlbase.ForeignKeyReference.toObject(message.foreign_key, options);
+                    if (message.referenced_by && message.referenced_by.length) {
+                        object.referenced_by = [];
+                        for (let j = 0; j < message.referenced_by.length; ++j)
+                            object.referenced_by[j] = $root.cockroach.sql.sqlbase.ForeignKeyReference.toObject(message.referenced_by[j], options);
+                    }
+                    if (message.interleave != null && message.hasOwnProperty("interleave"))
+                        object.interleave = $root.cockroach.sql.sqlbase.InterleaveDescriptor.toObject(message.interleave, options);
+                    if (message.interleaved_by && message.interleaved_by.length) {
+                        object.interleaved_by = [];
+                        for (let j = 0; j < message.interleaved_by.length; ++j)
+                            object.interleaved_by[j] = $root.cockroach.sql.sqlbase.ForeignKeyReference.toObject(message.interleaved_by[j], options);
+                    }
+                    if (message.composite_column_ids && message.composite_column_ids.length) {
+                        object.composite_column_ids = [];
+                        for (let j = 0; j < message.composite_column_ids.length; ++j)
+                            object.composite_column_ids[j] = message.composite_column_ids[j];
+                    }
+                    if (message.store_column_ids && message.store_column_ids.length) {
+                        object.store_column_ids = [];
+                        for (let j = 0; j < message.store_column_ids.length; ++j)
+                            object.store_column_ids[j] = message.store_column_ids[j];
+                    }
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this IndexDescriptor message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                IndexDescriptor.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this IndexDescriptor to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                IndexDescriptor.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                /**
+                 * Direction enum.
+                 * @name Direction
+                 * @memberof cockroach.sql.sqlbase.IndexDescriptor
+                 * @enum {number}
+                 * @property {number} ASC=0 ASC value
+                 * @property {number} DESC=1 DESC value
+                 */
+                IndexDescriptor.Direction = (function() {
+                    const valuesById = {}, values = Object.create(valuesById);
+                    values[valuesById[0] = "ASC"] = 0;
+                    values[valuesById[1] = "DESC"] = 1;
+                    return values;
+                })();
+
+                return IndexDescriptor;
+            })();
+
+            sqlbase.DescriptorMutation = (function() {
+
+                /**
+                 * Properties of a DescriptorMutation.
+                 * @typedef cockroach.sql.sqlbase.DescriptorMutation$Properties
+                 * @type {Object}
+                 * @property {cockroach.sql.sqlbase.ColumnDescriptor$Properties} [column] DescriptorMutation column.
+                 * @property {cockroach.sql.sqlbase.IndexDescriptor$Properties} [index] DescriptorMutation index.
+                 * @property {cockroach.sql.sqlbase.DescriptorMutation.State} [state] DescriptorMutation state.
+                 * @property {cockroach.sql.sqlbase.DescriptorMutation.Direction} [direction] DescriptorMutation direction.
+                 * @property {number} [mutation_id] DescriptorMutation mutation_id.
+                 */
+
+                /**
+                 * Constructs a new DescriptorMutation.
+                 * @exports cockroach.sql.sqlbase.DescriptorMutation
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.DescriptorMutation$Properties=} [properties] Properties to set
+                 */
+                function DescriptorMutation(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * DescriptorMutation column.
+                 * @type {(cockroach.sql.sqlbase.ColumnDescriptor$Properties|null)}
+                 */
+                DescriptorMutation.prototype.column = null;
+
+                /**
+                 * DescriptorMutation index.
+                 * @type {(cockroach.sql.sqlbase.IndexDescriptor$Properties|null)}
+                 */
+                DescriptorMutation.prototype.index = null;
+
+                /**
+                 * DescriptorMutation state.
+                 * @type {cockroach.sql.sqlbase.DescriptorMutation.State}
+                 */
+                DescriptorMutation.prototype.state = 0;
+
+                /**
+                 * DescriptorMutation direction.
+                 * @type {cockroach.sql.sqlbase.DescriptorMutation.Direction}
+                 */
+                DescriptorMutation.prototype.direction = 0;
+
+                /**
+                 * DescriptorMutation mutation_id.
+                 * @type {number}
+                 */
+                DescriptorMutation.prototype.mutation_id = 0;
+
+                // OneOf field names bound to virtual getters and setters
+                let $oneOfFields;
+
+                /**
+                 * DescriptorMutation descriptor.
+                 * @name cockroach.sql.sqlbase.DescriptorMutation#descriptor
+                 * @type {string|undefined}
+                 */
+                Object.defineProperty(DescriptorMutation.prototype, "descriptor", {
+                    get: $util.oneOfGetter($oneOfFields = ["column", "index"]),
+                    set: $util.oneOfSetter($oneOfFields)
+                });
+
+                /**
+                 * Creates a new DescriptorMutation instance using the specified properties.
+                 * @param {cockroach.sql.sqlbase.DescriptorMutation$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.sqlbase.DescriptorMutation} DescriptorMutation instance
+                 */
+                DescriptorMutation.create = function create(properties) {
+                    return new DescriptorMutation(properties);
+                };
+
+                /**
+                 * Encodes the specified DescriptorMutation message. Does not implicitly {@link cockroach.sql.sqlbase.DescriptorMutation.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.DescriptorMutation$Properties} message DescriptorMutation message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                DescriptorMutation.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.column != null && message.hasOwnProperty("column"))
+                        $root.cockroach.sql.sqlbase.ColumnDescriptor.encode(message.column, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+                    if (message.index != null && message.hasOwnProperty("index"))
+                        $root.cockroach.sql.sqlbase.IndexDescriptor.encode(message.index, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+                    if (message.state != null && message.hasOwnProperty("state"))
+                        writer.uint32(/* id 3, wireType 0 =*/24).uint32(message.state);
+                    if (message.direction != null && message.hasOwnProperty("direction"))
+                        writer.uint32(/* id 4, wireType 0 =*/32).uint32(message.direction);
+                    if (message.mutation_id != null && message.hasOwnProperty("mutation_id"))
+                        writer.uint32(/* id 5, wireType 0 =*/40).uint32(message.mutation_id);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified DescriptorMutation message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.DescriptorMutation.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.DescriptorMutation$Properties} message DescriptorMutation message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                DescriptorMutation.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a DescriptorMutation message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.sqlbase.DescriptorMutation} DescriptorMutation
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                DescriptorMutation.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.sql.sqlbase.DescriptorMutation();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.column = $root.cockroach.sql.sqlbase.ColumnDescriptor.decode(reader, reader.uint32());
+                            break;
+                        case 2:
+                            message.index = $root.cockroach.sql.sqlbase.IndexDescriptor.decode(reader, reader.uint32());
+                            break;
+                        case 3:
+                            message.state = reader.uint32();
+                            break;
+                        case 4:
+                            message.direction = reader.uint32();
+                            break;
+                        case 5:
+                            message.mutation_id = reader.uint32();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a DescriptorMutation message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.sqlbase.DescriptorMutation} DescriptorMutation
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                DescriptorMutation.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a DescriptorMutation message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                DescriptorMutation.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    let properties = {};
+                    if (message.column != null && message.hasOwnProperty("column")) {
+                        properties.descriptor = 1;
+                        let error = $root.cockroach.sql.sqlbase.ColumnDescriptor.verify(message.column);
+                        if (error)
+                            return "column." + error;
+                    }
+                    if (message.index != null && message.hasOwnProperty("index")) {
+                        if (properties.descriptor === 1)
+                            return "descriptor: multiple values";
+                        properties.descriptor = 1;
+                        let error = $root.cockroach.sql.sqlbase.IndexDescriptor.verify(message.index);
+                        if (error)
+                            return "index." + error;
+                    }
+                    if (message.state != null && message.hasOwnProperty("state"))
+                        switch (message.state) {
+                        default:
+                            return "state: enum value expected";
+                        case 0:
+                        case 1:
+                        case 2:
+                            break;
+                        }
+                    if (message.direction != null && message.hasOwnProperty("direction"))
+                        switch (message.direction) {
+                        default:
+                            return "direction: enum value expected";
+                        case 0:
+                        case 1:
+                        case 2:
+                            break;
+                        }
+                    if (message.mutation_id != null && message.hasOwnProperty("mutation_id"))
+                        if (!$util.isInteger(message.mutation_id))
+                            return "mutation_id: integer expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a DescriptorMutation message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.DescriptorMutation} DescriptorMutation
+                 */
+                DescriptorMutation.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.sql.sqlbase.DescriptorMutation)
+                        return object;
+                    let message = new $root.cockroach.sql.sqlbase.DescriptorMutation();
+                    if (object.column != null) {
+                        if (typeof object.column !== "object")
+                            throw TypeError(".cockroach.sql.sqlbase.DescriptorMutation.column: object expected");
+                        message.column = $root.cockroach.sql.sqlbase.ColumnDescriptor.fromObject(object.column);
+                    }
+                    if (object.index != null) {
+                        if (typeof object.index !== "object")
+                            throw TypeError(".cockroach.sql.sqlbase.DescriptorMutation.index: object expected");
+                        message.index = $root.cockroach.sql.sqlbase.IndexDescriptor.fromObject(object.index);
+                    }
+                    switch (object.state) {
+                    case "UNKNOWN":
+                    case 0:
+                        message.state = 0;
+                        break;
+                    case "DELETE_ONLY":
+                    case 1:
+                        message.state = 1;
+                        break;
+                    case "DELETE_AND_WRITE_ONLY":
+                    case 2:
+                        message.state = 2;
+                        break;
+                    }
+                    switch (object.direction) {
+                    case "NONE":
+                    case 0:
+                        message.direction = 0;
+                        break;
+                    case "ADD":
+                    case 1:
+                        message.direction = 1;
+                        break;
+                    case "DROP":
+                    case 2:
+                        message.direction = 2;
+                        break;
+                    }
+                    if (object.mutation_id != null)
+                        message.mutation_id = object.mutation_id >>> 0;
+                    return message;
+                };
+
+                /**
+                 * Creates a DescriptorMutation message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.sqlbase.DescriptorMutation.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.DescriptorMutation} DescriptorMutation
+                 */
+                DescriptorMutation.from = DescriptorMutation.fromObject;
+
+                /**
+                 * Creates a plain object from a DescriptorMutation message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.sqlbase.DescriptorMutation} message DescriptorMutation
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                DescriptorMutation.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults) {
+                        object.state = options.enums === String ? "UNKNOWN" : 0;
+                        object.direction = options.enums === String ? "NONE" : 0;
+                        object.mutation_id = 0;
+                    }
+                    if (message.column != null && message.hasOwnProperty("column")) {
+                        object.column = $root.cockroach.sql.sqlbase.ColumnDescriptor.toObject(message.column, options);
+                        if (options.oneofs)
+                            object.descriptor = "column";
+                    }
+                    if (message.index != null && message.hasOwnProperty("index")) {
+                        object.index = $root.cockroach.sql.sqlbase.IndexDescriptor.toObject(message.index, options);
+                        if (options.oneofs)
+                            object.descriptor = "index";
+                    }
+                    if (message.state != null && message.hasOwnProperty("state"))
+                        object.state = options.enums === String ? $root.cockroach.sql.sqlbase.DescriptorMutation.State[message.state] : message.state;
+                    if (message.direction != null && message.hasOwnProperty("direction"))
+                        object.direction = options.enums === String ? $root.cockroach.sql.sqlbase.DescriptorMutation.Direction[message.direction] : message.direction;
+                    if (message.mutation_id != null && message.hasOwnProperty("mutation_id"))
+                        object.mutation_id = message.mutation_id;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this DescriptorMutation message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                DescriptorMutation.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this DescriptorMutation to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                DescriptorMutation.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                /**
+                 * State enum.
+                 * @name State
+                 * @memberof cockroach.sql.sqlbase.DescriptorMutation
+                 * @enum {number}
+                 * @property {number} UNKNOWN=0 UNKNOWN value
+                 * @property {number} DELETE_ONLY=1 DELETE_ONLY value
+                 * @property {number} DELETE_AND_WRITE_ONLY=2 DELETE_AND_WRITE_ONLY value
+                 */
+                DescriptorMutation.State = (function() {
+                    const valuesById = {}, values = Object.create(valuesById);
+                    values[valuesById[0] = "UNKNOWN"] = 0;
+                    values[valuesById[1] = "DELETE_ONLY"] = 1;
+                    values[valuesById[2] = "DELETE_AND_WRITE_ONLY"] = 2;
+                    return values;
+                })();
+
+                /**
+                 * Direction enum.
+                 * @name Direction
+                 * @memberof cockroach.sql.sqlbase.DescriptorMutation
+                 * @enum {number}
+                 * @property {number} NONE=0 NONE value
+                 * @property {number} ADD=1 ADD value
+                 * @property {number} DROP=2 DROP value
+                 */
+                DescriptorMutation.Direction = (function() {
+                    const valuesById = {}, values = Object.create(valuesById);
+                    values[valuesById[0] = "NONE"] = 0;
+                    values[valuesById[1] = "ADD"] = 1;
+                    values[valuesById[2] = "DROP"] = 2;
+                    return values;
+                })();
+
+                return DescriptorMutation;
+            })();
+
+            sqlbase.TableDescriptor = (function() {
+
+                /**
+                 * Properties of a TableDescriptor.
+                 * @typedef cockroach.sql.sqlbase.TableDescriptor$Properties
+                 * @type {Object}
+                 * @property {string} [name] TableDescriptor name.
+                 * @property {number} [id] TableDescriptor id.
+                 * @property {number} [parent_id] TableDescriptor parent_id.
+                 * @property {number} [version] TableDescriptor version.
+                 * @property {boolean} [up_version] TableDescriptor up_version.
+                 * @property {cockroach.util.hlc.Timestamp$Properties} [modification_time] TableDescriptor modification_time.
+                 * @property {Array.<cockroach.sql.sqlbase.ColumnDescriptor$Properties>} [columns] TableDescriptor columns.
+                 * @property {number} [next_column_id] TableDescriptor next_column_id.
+                 * @property {Array.<cockroach.sql.sqlbase.ColumnFamilyDescriptor$Properties>} [families] TableDescriptor families.
+                 * @property {number} [next_family_id] TableDescriptor next_family_id.
+                 * @property {cockroach.sql.sqlbase.IndexDescriptor$Properties} [primary_index] TableDescriptor primary_index.
+                 * @property {Array.<cockroach.sql.sqlbase.IndexDescriptor$Properties>} [indexes] TableDescriptor indexes.
+                 * @property {number} [next_index_id] TableDescriptor next_index_id.
+                 * @property {cockroach.sql.sqlbase.PrivilegeDescriptor$Properties} [privileges] TableDescriptor privileges.
+                 * @property {Array.<cockroach.sql.sqlbase.DescriptorMutation$Properties>} [mutations] TableDescriptor mutations.
+                 * @property {cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease$Properties} [lease] TableDescriptor lease.
+                 * @property {number} [next_mutation_id] TableDescriptor next_mutation_id.
+                 * @property {number} [format_version] TableDescriptor format_version.
+                 * @property {cockroach.sql.sqlbase.TableDescriptor.State} [state] TableDescriptor state.
+                 * @property {Array.<cockroach.sql.sqlbase.TableDescriptor.CheckConstraint$Properties>} [checks] TableDescriptor checks.
+                 * @property {Array.<cockroach.sql.sqlbase.TableDescriptor.RenameInfo$Properties>} [renames] TableDescriptor renames.
+                 * @property {string} [view_query] TableDescriptor view_query.
+                 * @property {Array.<number>} [dependsOn] TableDescriptor dependsOn.
+                 * @property {Array.<cockroach.sql.sqlbase.TableDescriptor.Reference$Properties>} [dependedOnBy] TableDescriptor dependedOnBy.
+                 * @property {Array.<cockroach.sql.sqlbase.TableDescriptor.MutationJob$Properties>} [mutationJobs] TableDescriptor mutationJobs.
+                 */
+
+                /**
+                 * Constructs a new TableDescriptor.
+                 * @exports cockroach.sql.sqlbase.TableDescriptor
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.TableDescriptor$Properties=} [properties] Properties to set
+                 */
+                function TableDescriptor(properties) {
+                    this.columns = [];
+                    this.families = [];
+                    this.indexes = [];
+                    this.mutations = [];
+                    this.checks = [];
+                    this.renames = [];
+                    this.dependsOn = [];
+                    this.dependedOnBy = [];
+                    this.mutationJobs = [];
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * TableDescriptor name.
+                 * @type {string}
+                 */
+                TableDescriptor.prototype.name = "";
+
+                /**
+                 * TableDescriptor id.
+                 * @type {number}
+                 */
+                TableDescriptor.prototype.id = 0;
+
+                /**
+                 * TableDescriptor parent_id.
+                 * @type {number}
+                 */
+                TableDescriptor.prototype.parent_id = 0;
+
+                /**
+                 * TableDescriptor version.
+                 * @type {number}
+                 */
+                TableDescriptor.prototype.version = 0;
+
+                /**
+                 * TableDescriptor up_version.
+                 * @type {boolean}
+                 */
+                TableDescriptor.prototype.up_version = false;
+
+                /**
+                 * TableDescriptor modification_time.
+                 * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
+                 */
+                TableDescriptor.prototype.modification_time = null;
+
+                /**
+                 * TableDescriptor columns.
+                 * @type {Array.<cockroach.sql.sqlbase.ColumnDescriptor$Properties>}
+                 */
+                TableDescriptor.prototype.columns = $util.emptyArray;
+
+                /**
+                 * TableDescriptor next_column_id.
+                 * @type {number}
+                 */
+                TableDescriptor.prototype.next_column_id = 0;
+
+                /**
+                 * TableDescriptor families.
+                 * @type {Array.<cockroach.sql.sqlbase.ColumnFamilyDescriptor$Properties>}
+                 */
+                TableDescriptor.prototype.families = $util.emptyArray;
+
+                /**
+                 * TableDescriptor next_family_id.
+                 * @type {number}
+                 */
+                TableDescriptor.prototype.next_family_id = 0;
+
+                /**
+                 * TableDescriptor primary_index.
+                 * @type {(cockroach.sql.sqlbase.IndexDescriptor$Properties|null)}
+                 */
+                TableDescriptor.prototype.primary_index = null;
+
+                /**
+                 * TableDescriptor indexes.
+                 * @type {Array.<cockroach.sql.sqlbase.IndexDescriptor$Properties>}
+                 */
+                TableDescriptor.prototype.indexes = $util.emptyArray;
+
+                /**
+                 * TableDescriptor next_index_id.
+                 * @type {number}
+                 */
+                TableDescriptor.prototype.next_index_id = 0;
+
+                /**
+                 * TableDescriptor privileges.
+                 * @type {(cockroach.sql.sqlbase.PrivilegeDescriptor$Properties|null)}
+                 */
+                TableDescriptor.prototype.privileges = null;
+
+                /**
+                 * TableDescriptor mutations.
+                 * @type {Array.<cockroach.sql.sqlbase.DescriptorMutation$Properties>}
+                 */
+                TableDescriptor.prototype.mutations = $util.emptyArray;
+
+                /**
+                 * TableDescriptor lease.
+                 * @type {(cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease$Properties|null)}
+                 */
+                TableDescriptor.prototype.lease = null;
+
+                /**
+                 * TableDescriptor next_mutation_id.
+                 * @type {number}
+                 */
+                TableDescriptor.prototype.next_mutation_id = 0;
+
+                /**
+                 * TableDescriptor format_version.
+                 * @type {number}
+                 */
+                TableDescriptor.prototype.format_version = 0;
+
+                /**
+                 * TableDescriptor state.
+                 * @type {cockroach.sql.sqlbase.TableDescriptor.State}
+                 */
+                TableDescriptor.prototype.state = 0;
+
+                /**
+                 * TableDescriptor checks.
+                 * @type {Array.<cockroach.sql.sqlbase.TableDescriptor.CheckConstraint$Properties>}
+                 */
+                TableDescriptor.prototype.checks = $util.emptyArray;
+
+                /**
+                 * TableDescriptor renames.
+                 * @type {Array.<cockroach.sql.sqlbase.TableDescriptor.RenameInfo$Properties>}
+                 */
+                TableDescriptor.prototype.renames = $util.emptyArray;
+
+                /**
+                 * TableDescriptor view_query.
+                 * @type {string}
+                 */
+                TableDescriptor.prototype.view_query = "";
+
+                /**
+                 * TableDescriptor dependsOn.
+                 * @type {Array.<number>}
+                 */
+                TableDescriptor.prototype.dependsOn = $util.emptyArray;
+
+                /**
+                 * TableDescriptor dependedOnBy.
+                 * @type {Array.<cockroach.sql.sqlbase.TableDescriptor.Reference$Properties>}
+                 */
+                TableDescriptor.prototype.dependedOnBy = $util.emptyArray;
+
+                /**
+                 * TableDescriptor mutationJobs.
+                 * @type {Array.<cockroach.sql.sqlbase.TableDescriptor.MutationJob$Properties>}
+                 */
+                TableDescriptor.prototype.mutationJobs = $util.emptyArray;
+
+                /**
+                 * Creates a new TableDescriptor instance using the specified properties.
+                 * @param {cockroach.sql.sqlbase.TableDescriptor$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.sqlbase.TableDescriptor} TableDescriptor instance
+                 */
+                TableDescriptor.create = function create(properties) {
+                    return new TableDescriptor(properties);
+                };
+
+                /**
+                 * Encodes the specified TableDescriptor message. Does not implicitly {@link cockroach.sql.sqlbase.TableDescriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.TableDescriptor$Properties} message TableDescriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                TableDescriptor.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.name != null && message.hasOwnProperty("name"))
+                        writer.uint32(/* id 1, wireType 2 =*/10).string(message.name);
+                    if (message.id != null && message.hasOwnProperty("id"))
+                        writer.uint32(/* id 3, wireType 0 =*/24).uint32(message.id);
+                    if (message.parent_id != null && message.hasOwnProperty("parent_id"))
+                        writer.uint32(/* id 4, wireType 0 =*/32).uint32(message.parent_id);
+                    if (message.version != null && message.hasOwnProperty("version"))
+                        writer.uint32(/* id 5, wireType 0 =*/40).uint32(message.version);
+                    if (message.up_version != null && message.hasOwnProperty("up_version"))
+                        writer.uint32(/* id 6, wireType 0 =*/48).bool(message.up_version);
+                    if (message.modification_time != null && message.hasOwnProperty("modification_time"))
+                        $root.cockroach.util.hlc.Timestamp.encode(message.modification_time, writer.uint32(/* id 7, wireType 2 =*/58).fork()).ldelim();
+                    if (message.columns != null && message.columns.length)
+                        for (let i = 0; i < message.columns.length; ++i)
+                            $root.cockroach.sql.sqlbase.ColumnDescriptor.encode(message.columns[i], writer.uint32(/* id 8, wireType 2 =*/66).fork()).ldelim();
+                    if (message.next_column_id != null && message.hasOwnProperty("next_column_id"))
+                        writer.uint32(/* id 9, wireType 0 =*/72).uint32(message.next_column_id);
+                    if (message.primary_index != null && message.hasOwnProperty("primary_index"))
+                        $root.cockroach.sql.sqlbase.IndexDescriptor.encode(message.primary_index, writer.uint32(/* id 10, wireType 2 =*/82).fork()).ldelim();
+                    if (message.indexes != null && message.indexes.length)
+                        for (let i = 0; i < message.indexes.length; ++i)
+                            $root.cockroach.sql.sqlbase.IndexDescriptor.encode(message.indexes[i], writer.uint32(/* id 11, wireType 2 =*/90).fork()).ldelim();
+                    if (message.next_index_id != null && message.hasOwnProperty("next_index_id"))
+                        writer.uint32(/* id 12, wireType 0 =*/96).uint32(message.next_index_id);
+                    if (message.privileges != null && message.hasOwnProperty("privileges"))
+                        $root.cockroach.sql.sqlbase.PrivilegeDescriptor.encode(message.privileges, writer.uint32(/* id 13, wireType 2 =*/106).fork()).ldelim();
+                    if (message.mutations != null && message.mutations.length)
+                        for (let i = 0; i < message.mutations.length; ++i)
+                            $root.cockroach.sql.sqlbase.DescriptorMutation.encode(message.mutations[i], writer.uint32(/* id 14, wireType 2 =*/114).fork()).ldelim();
+                    if (message.lease != null && message.hasOwnProperty("lease"))
+                        $root.cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease.encode(message.lease, writer.uint32(/* id 15, wireType 2 =*/122).fork()).ldelim();
+                    if (message.next_mutation_id != null && message.hasOwnProperty("next_mutation_id"))
+                        writer.uint32(/* id 16, wireType 0 =*/128).uint32(message.next_mutation_id);
+                    if (message.format_version != null && message.hasOwnProperty("format_version"))
+                        writer.uint32(/* id 17, wireType 0 =*/136).uint32(message.format_version);
+                    if (message.state != null && message.hasOwnProperty("state"))
+                        writer.uint32(/* id 19, wireType 0 =*/152).uint32(message.state);
+                    if (message.checks != null && message.checks.length)
+                        for (let i = 0; i < message.checks.length; ++i)
+                            $root.cockroach.sql.sqlbase.TableDescriptor.CheckConstraint.encode(message.checks[i], writer.uint32(/* id 20, wireType 2 =*/162).fork()).ldelim();
+                    if (message.renames != null && message.renames.length)
+                        for (let i = 0; i < message.renames.length; ++i)
+                            $root.cockroach.sql.sqlbase.TableDescriptor.RenameInfo.encode(message.renames[i], writer.uint32(/* id 21, wireType 2 =*/170).fork()).ldelim();
+                    if (message.families != null && message.families.length)
+                        for (let i = 0; i < message.families.length; ++i)
+                            $root.cockroach.sql.sqlbase.ColumnFamilyDescriptor.encode(message.families[i], writer.uint32(/* id 22, wireType 2 =*/178).fork()).ldelim();
+                    if (message.next_family_id != null && message.hasOwnProperty("next_family_id"))
+                        writer.uint32(/* id 23, wireType 0 =*/184).uint32(message.next_family_id);
+                    if (message.view_query != null && message.hasOwnProperty("view_query"))
+                        writer.uint32(/* id 24, wireType 2 =*/194).string(message.view_query);
+                    if (message.dependsOn != null && message.dependsOn.length)
+                        for (let i = 0; i < message.dependsOn.length; ++i)
+                            writer.uint32(/* id 25, wireType 0 =*/200).uint32(message.dependsOn[i]);
+                    if (message.dependedOnBy != null && message.dependedOnBy.length)
+                        for (let i = 0; i < message.dependedOnBy.length; ++i)
+                            $root.cockroach.sql.sqlbase.TableDescriptor.Reference.encode(message.dependedOnBy[i], writer.uint32(/* id 26, wireType 2 =*/210).fork()).ldelim();
+                    if (message.mutationJobs != null && message.mutationJobs.length)
+                        for (let i = 0; i < message.mutationJobs.length; ++i)
+                            $root.cockroach.sql.sqlbase.TableDescriptor.MutationJob.encode(message.mutationJobs[i], writer.uint32(/* id 27, wireType 2 =*/218).fork()).ldelim();
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified TableDescriptor message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.TableDescriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.TableDescriptor$Properties} message TableDescriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                TableDescriptor.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a TableDescriptor message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.sqlbase.TableDescriptor} TableDescriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                TableDescriptor.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.sql.sqlbase.TableDescriptor();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.name = reader.string();
+                            break;
+                        case 3:
+                            message.id = reader.uint32();
+                            break;
+                        case 4:
+                            message.parent_id = reader.uint32();
+                            break;
+                        case 5:
+                            message.version = reader.uint32();
+                            break;
+                        case 6:
+                            message.up_version = reader.bool();
+                            break;
+                        case 7:
+                            message.modification_time = $root.cockroach.util.hlc.Timestamp.decode(reader, reader.uint32());
+                            break;
+                        case 8:
+                            if (!(message.columns && message.columns.length))
+                                message.columns = [];
+                            message.columns.push($root.cockroach.sql.sqlbase.ColumnDescriptor.decode(reader, reader.uint32()));
+                            break;
+                        case 9:
+                            message.next_column_id = reader.uint32();
+                            break;
+                        case 22:
+                            if (!(message.families && message.families.length))
+                                message.families = [];
+                            message.families.push($root.cockroach.sql.sqlbase.ColumnFamilyDescriptor.decode(reader, reader.uint32()));
+                            break;
+                        case 23:
+                            message.next_family_id = reader.uint32();
+                            break;
+                        case 10:
+                            message.primary_index = $root.cockroach.sql.sqlbase.IndexDescriptor.decode(reader, reader.uint32());
+                            break;
+                        case 11:
+                            if (!(message.indexes && message.indexes.length))
+                                message.indexes = [];
+                            message.indexes.push($root.cockroach.sql.sqlbase.IndexDescriptor.decode(reader, reader.uint32()));
+                            break;
+                        case 12:
+                            message.next_index_id = reader.uint32();
+                            break;
+                        case 13:
+                            message.privileges = $root.cockroach.sql.sqlbase.PrivilegeDescriptor.decode(reader, reader.uint32());
+                            break;
+                        case 14:
+                            if (!(message.mutations && message.mutations.length))
+                                message.mutations = [];
+                            message.mutations.push($root.cockroach.sql.sqlbase.DescriptorMutation.decode(reader, reader.uint32()));
+                            break;
+                        case 15:
+                            message.lease = $root.cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease.decode(reader, reader.uint32());
+                            break;
+                        case 16:
+                            message.next_mutation_id = reader.uint32();
+                            break;
+                        case 17:
+                            message.format_version = reader.uint32();
+                            break;
+                        case 19:
+                            message.state = reader.uint32();
+                            break;
+                        case 20:
+                            if (!(message.checks && message.checks.length))
+                                message.checks = [];
+                            message.checks.push($root.cockroach.sql.sqlbase.TableDescriptor.CheckConstraint.decode(reader, reader.uint32()));
+                            break;
+                        case 21:
+                            if (!(message.renames && message.renames.length))
+                                message.renames = [];
+                            message.renames.push($root.cockroach.sql.sqlbase.TableDescriptor.RenameInfo.decode(reader, reader.uint32()));
+                            break;
+                        case 24:
+                            message.view_query = reader.string();
+                            break;
+                        case 25:
+                            if (!(message.dependsOn && message.dependsOn.length))
+                                message.dependsOn = [];
+                            if ((tag & 7) === 2) {
+                                let end2 = reader.uint32() + reader.pos;
+                                while (reader.pos < end2)
+                                    message.dependsOn.push(reader.uint32());
+                            } else
+                                message.dependsOn.push(reader.uint32());
+                            break;
+                        case 26:
+                            if (!(message.dependedOnBy && message.dependedOnBy.length))
+                                message.dependedOnBy = [];
+                            message.dependedOnBy.push($root.cockroach.sql.sqlbase.TableDescriptor.Reference.decode(reader, reader.uint32()));
+                            break;
+                        case 27:
+                            if (!(message.mutationJobs && message.mutationJobs.length))
+                                message.mutationJobs = [];
+                            message.mutationJobs.push($root.cockroach.sql.sqlbase.TableDescriptor.MutationJob.decode(reader, reader.uint32()));
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a TableDescriptor message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.sqlbase.TableDescriptor} TableDescriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                TableDescriptor.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a TableDescriptor message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                TableDescriptor.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.name != null && message.hasOwnProperty("name"))
+                        if (!$util.isString(message.name))
+                            return "name: string expected";
+                    if (message.id != null && message.hasOwnProperty("id"))
+                        if (!$util.isInteger(message.id))
+                            return "id: integer expected";
+                    if (message.parent_id != null && message.hasOwnProperty("parent_id"))
+                        if (!$util.isInteger(message.parent_id))
+                            return "parent_id: integer expected";
+                    if (message.version != null && message.hasOwnProperty("version"))
+                        if (!$util.isInteger(message.version))
+                            return "version: integer expected";
+                    if (message.up_version != null && message.hasOwnProperty("up_version"))
+                        if (typeof message.up_version !== "boolean")
+                            return "up_version: boolean expected";
+                    if (message.modification_time != null && message.hasOwnProperty("modification_time")) {
+                        let error = $root.cockroach.util.hlc.Timestamp.verify(message.modification_time);
+                        if (error)
+                            return "modification_time." + error;
+                    }
+                    if (message.columns != null && message.hasOwnProperty("columns")) {
+                        if (!Array.isArray(message.columns))
+                            return "columns: array expected";
+                        for (let i = 0; i < message.columns.length; ++i) {
+                            let error = $root.cockroach.sql.sqlbase.ColumnDescriptor.verify(message.columns[i]);
+                            if (error)
+                                return "columns." + error;
+                        }
+                    }
+                    if (message.next_column_id != null && message.hasOwnProperty("next_column_id"))
+                        if (!$util.isInteger(message.next_column_id))
+                            return "next_column_id: integer expected";
+                    if (message.families != null && message.hasOwnProperty("families")) {
+                        if (!Array.isArray(message.families))
+                            return "families: array expected";
+                        for (let i = 0; i < message.families.length; ++i) {
+                            let error = $root.cockroach.sql.sqlbase.ColumnFamilyDescriptor.verify(message.families[i]);
+                            if (error)
+                                return "families." + error;
+                        }
+                    }
+                    if (message.next_family_id != null && message.hasOwnProperty("next_family_id"))
+                        if (!$util.isInteger(message.next_family_id))
+                            return "next_family_id: integer expected";
+                    if (message.primary_index != null && message.hasOwnProperty("primary_index")) {
+                        let error = $root.cockroach.sql.sqlbase.IndexDescriptor.verify(message.primary_index);
+                        if (error)
+                            return "primary_index." + error;
+                    }
+                    if (message.indexes != null && message.hasOwnProperty("indexes")) {
+                        if (!Array.isArray(message.indexes))
+                            return "indexes: array expected";
+                        for (let i = 0; i < message.indexes.length; ++i) {
+                            let error = $root.cockroach.sql.sqlbase.IndexDescriptor.verify(message.indexes[i]);
+                            if (error)
+                                return "indexes." + error;
+                        }
+                    }
+                    if (message.next_index_id != null && message.hasOwnProperty("next_index_id"))
+                        if (!$util.isInteger(message.next_index_id))
+                            return "next_index_id: integer expected";
+                    if (message.privileges != null && message.hasOwnProperty("privileges")) {
+                        let error = $root.cockroach.sql.sqlbase.PrivilegeDescriptor.verify(message.privileges);
+                        if (error)
+                            return "privileges." + error;
+                    }
+                    if (message.mutations != null && message.hasOwnProperty("mutations")) {
+                        if (!Array.isArray(message.mutations))
+                            return "mutations: array expected";
+                        for (let i = 0; i < message.mutations.length; ++i) {
+                            let error = $root.cockroach.sql.sqlbase.DescriptorMutation.verify(message.mutations[i]);
+                            if (error)
+                                return "mutations." + error;
+                        }
+                    }
+                    if (message.lease != null && message.hasOwnProperty("lease")) {
+                        let error = $root.cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease.verify(message.lease);
+                        if (error)
+                            return "lease." + error;
+                    }
+                    if (message.next_mutation_id != null && message.hasOwnProperty("next_mutation_id"))
+                        if (!$util.isInteger(message.next_mutation_id))
+                            return "next_mutation_id: integer expected";
+                    if (message.format_version != null && message.hasOwnProperty("format_version"))
+                        if (!$util.isInteger(message.format_version))
+                            return "format_version: integer expected";
+                    if (message.state != null && message.hasOwnProperty("state"))
+                        switch (message.state) {
+                        default:
+                            return "state: enum value expected";
+                        case 0:
+                        case 1:
+                        case 2:
+                            break;
+                        }
+                    if (message.checks != null && message.hasOwnProperty("checks")) {
+                        if (!Array.isArray(message.checks))
+                            return "checks: array expected";
+                        for (let i = 0; i < message.checks.length; ++i) {
+                            let error = $root.cockroach.sql.sqlbase.TableDescriptor.CheckConstraint.verify(message.checks[i]);
+                            if (error)
+                                return "checks." + error;
+                        }
+                    }
+                    if (message.renames != null && message.hasOwnProperty("renames")) {
+                        if (!Array.isArray(message.renames))
+                            return "renames: array expected";
+                        for (let i = 0; i < message.renames.length; ++i) {
+                            let error = $root.cockroach.sql.sqlbase.TableDescriptor.RenameInfo.verify(message.renames[i]);
+                            if (error)
+                                return "renames." + error;
+                        }
+                    }
+                    if (message.view_query != null && message.hasOwnProperty("view_query"))
+                        if (!$util.isString(message.view_query))
+                            return "view_query: string expected";
+                    if (message.dependsOn != null && message.hasOwnProperty("dependsOn")) {
+                        if (!Array.isArray(message.dependsOn))
+                            return "dependsOn: array expected";
+                        for (let i = 0; i < message.dependsOn.length; ++i)
+                            if (!$util.isInteger(message.dependsOn[i]))
+                                return "dependsOn: integer[] expected";
+                    }
+                    if (message.dependedOnBy != null && message.hasOwnProperty("dependedOnBy")) {
+                        if (!Array.isArray(message.dependedOnBy))
+                            return "dependedOnBy: array expected";
+                        for (let i = 0; i < message.dependedOnBy.length; ++i) {
+                            let error = $root.cockroach.sql.sqlbase.TableDescriptor.Reference.verify(message.dependedOnBy[i]);
+                            if (error)
+                                return "dependedOnBy." + error;
+                        }
+                    }
+                    if (message.mutationJobs != null && message.hasOwnProperty("mutationJobs")) {
+                        if (!Array.isArray(message.mutationJobs))
+                            return "mutationJobs: array expected";
+                        for (let i = 0; i < message.mutationJobs.length; ++i) {
+                            let error = $root.cockroach.sql.sqlbase.TableDescriptor.MutationJob.verify(message.mutationJobs[i]);
+                            if (error)
+                                return "mutationJobs." + error;
+                        }
+                    }
+                    return null;
+                };
+
+                /**
+                 * Creates a TableDescriptor message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.TableDescriptor} TableDescriptor
+                 */
+                TableDescriptor.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.sql.sqlbase.TableDescriptor)
+                        return object;
+                    let message = new $root.cockroach.sql.sqlbase.TableDescriptor();
+                    if (object.name != null)
+                        message.name = String(object.name);
+                    if (object.id != null)
+                        message.id = object.id >>> 0;
+                    if (object.parent_id != null)
+                        message.parent_id = object.parent_id >>> 0;
+                    if (object.version != null)
+                        message.version = object.version >>> 0;
+                    if (object.up_version != null)
+                        message.up_version = Boolean(object.up_version);
+                    if (object.modification_time != null) {
+                        if (typeof object.modification_time !== "object")
+                            throw TypeError(".cockroach.sql.sqlbase.TableDescriptor.modification_time: object expected");
+                        message.modification_time = $root.cockroach.util.hlc.Timestamp.fromObject(object.modification_time);
+                    }
+                    if (object.columns) {
+                        if (!Array.isArray(object.columns))
+                            throw TypeError(".cockroach.sql.sqlbase.TableDescriptor.columns: array expected");
+                        message.columns = [];
+                        for (let i = 0; i < object.columns.length; ++i) {
+                            if (typeof object.columns[i] !== "object")
+                                throw TypeError(".cockroach.sql.sqlbase.TableDescriptor.columns: object expected");
+                            message.columns[i] = $root.cockroach.sql.sqlbase.ColumnDescriptor.fromObject(object.columns[i]);
+                        }
+                    }
+                    if (object.next_column_id != null)
+                        message.next_column_id = object.next_column_id >>> 0;
+                    if (object.families) {
+                        if (!Array.isArray(object.families))
+                            throw TypeError(".cockroach.sql.sqlbase.TableDescriptor.families: array expected");
+                        message.families = [];
+                        for (let i = 0; i < object.families.length; ++i) {
+                            if (typeof object.families[i] !== "object")
+                                throw TypeError(".cockroach.sql.sqlbase.TableDescriptor.families: object expected");
+                            message.families[i] = $root.cockroach.sql.sqlbase.ColumnFamilyDescriptor.fromObject(object.families[i]);
+                        }
+                    }
+                    if (object.next_family_id != null)
+                        message.next_family_id = object.next_family_id >>> 0;
+                    if (object.primary_index != null) {
+                        if (typeof object.primary_index !== "object")
+                            throw TypeError(".cockroach.sql.sqlbase.TableDescriptor.primary_index: object expected");
+                        message.primary_index = $root.cockroach.sql.sqlbase.IndexDescriptor.fromObject(object.primary_index);
+                    }
+                    if (object.indexes) {
+                        if (!Array.isArray(object.indexes))
+                            throw TypeError(".cockroach.sql.sqlbase.TableDescriptor.indexes: array expected");
+                        message.indexes = [];
+                        for (let i = 0; i < object.indexes.length; ++i) {
+                            if (typeof object.indexes[i] !== "object")
+                                throw TypeError(".cockroach.sql.sqlbase.TableDescriptor.indexes: object expected");
+                            message.indexes[i] = $root.cockroach.sql.sqlbase.IndexDescriptor.fromObject(object.indexes[i]);
+                        }
+                    }
+                    if (object.next_index_id != null)
+                        message.next_index_id = object.next_index_id >>> 0;
+                    if (object.privileges != null) {
+                        if (typeof object.privileges !== "object")
+                            throw TypeError(".cockroach.sql.sqlbase.TableDescriptor.privileges: object expected");
+                        message.privileges = $root.cockroach.sql.sqlbase.PrivilegeDescriptor.fromObject(object.privileges);
+                    }
+                    if (object.mutations) {
+                        if (!Array.isArray(object.mutations))
+                            throw TypeError(".cockroach.sql.sqlbase.TableDescriptor.mutations: array expected");
+                        message.mutations = [];
+                        for (let i = 0; i < object.mutations.length; ++i) {
+                            if (typeof object.mutations[i] !== "object")
+                                throw TypeError(".cockroach.sql.sqlbase.TableDescriptor.mutations: object expected");
+                            message.mutations[i] = $root.cockroach.sql.sqlbase.DescriptorMutation.fromObject(object.mutations[i]);
+                        }
+                    }
+                    if (object.lease != null) {
+                        if (typeof object.lease !== "object")
+                            throw TypeError(".cockroach.sql.sqlbase.TableDescriptor.lease: object expected");
+                        message.lease = $root.cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease.fromObject(object.lease);
+                    }
+                    if (object.next_mutation_id != null)
+                        message.next_mutation_id = object.next_mutation_id >>> 0;
+                    if (object.format_version != null)
+                        message.format_version = object.format_version >>> 0;
+                    switch (object.state) {
+                    case "PUBLIC":
+                    case 0:
+                        message.state = 0;
+                        break;
+                    case "ADD":
+                    case 1:
+                        message.state = 1;
+                        break;
+                    case "DROP":
+                    case 2:
+                        message.state = 2;
+                        break;
+                    }
+                    if (object.checks) {
+                        if (!Array.isArray(object.checks))
+                            throw TypeError(".cockroach.sql.sqlbase.TableDescriptor.checks: array expected");
+                        message.checks = [];
+                        for (let i = 0; i < object.checks.length; ++i) {
+                            if (typeof object.checks[i] !== "object")
+                                throw TypeError(".cockroach.sql.sqlbase.TableDescriptor.checks: object expected");
+                            message.checks[i] = $root.cockroach.sql.sqlbase.TableDescriptor.CheckConstraint.fromObject(object.checks[i]);
+                        }
+                    }
+                    if (object.renames) {
+                        if (!Array.isArray(object.renames))
+                            throw TypeError(".cockroach.sql.sqlbase.TableDescriptor.renames: array expected");
+                        message.renames = [];
+                        for (let i = 0; i < object.renames.length; ++i) {
+                            if (typeof object.renames[i] !== "object")
+                                throw TypeError(".cockroach.sql.sqlbase.TableDescriptor.renames: object expected");
+                            message.renames[i] = $root.cockroach.sql.sqlbase.TableDescriptor.RenameInfo.fromObject(object.renames[i]);
+                        }
+                    }
+                    if (object.view_query != null)
+                        message.view_query = String(object.view_query);
+                    if (object.dependsOn) {
+                        if (!Array.isArray(object.dependsOn))
+                            throw TypeError(".cockroach.sql.sqlbase.TableDescriptor.dependsOn: array expected");
+                        message.dependsOn = [];
+                        for (let i = 0; i < object.dependsOn.length; ++i)
+                            message.dependsOn[i] = object.dependsOn[i] >>> 0;
+                    }
+                    if (object.dependedOnBy) {
+                        if (!Array.isArray(object.dependedOnBy))
+                            throw TypeError(".cockroach.sql.sqlbase.TableDescriptor.dependedOnBy: array expected");
+                        message.dependedOnBy = [];
+                        for (let i = 0; i < object.dependedOnBy.length; ++i) {
+                            if (typeof object.dependedOnBy[i] !== "object")
+                                throw TypeError(".cockroach.sql.sqlbase.TableDescriptor.dependedOnBy: object expected");
+                            message.dependedOnBy[i] = $root.cockroach.sql.sqlbase.TableDescriptor.Reference.fromObject(object.dependedOnBy[i]);
+                        }
+                    }
+                    if (object.mutationJobs) {
+                        if (!Array.isArray(object.mutationJobs))
+                            throw TypeError(".cockroach.sql.sqlbase.TableDescriptor.mutationJobs: array expected");
+                        message.mutationJobs = [];
+                        for (let i = 0; i < object.mutationJobs.length; ++i) {
+                            if (typeof object.mutationJobs[i] !== "object")
+                                throw TypeError(".cockroach.sql.sqlbase.TableDescriptor.mutationJobs: object expected");
+                            message.mutationJobs[i] = $root.cockroach.sql.sqlbase.TableDescriptor.MutationJob.fromObject(object.mutationJobs[i]);
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Creates a TableDescriptor message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.sqlbase.TableDescriptor.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.TableDescriptor} TableDescriptor
+                 */
+                TableDescriptor.from = TableDescriptor.fromObject;
+
+                /**
+                 * Creates a plain object from a TableDescriptor message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.sqlbase.TableDescriptor} message TableDescriptor
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                TableDescriptor.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.arrays || options.defaults) {
+                        object.columns = [];
+                        object.indexes = [];
+                        object.mutations = [];
+                        object.checks = [];
+                        object.renames = [];
+                        object.families = [];
+                        object.dependsOn = [];
+                        object.dependedOnBy = [];
+                        object.mutationJobs = [];
+                    }
+                    if (options.defaults) {
+                        object.name = "";
+                        object.id = 0;
+                        object.parent_id = 0;
+                        object.version = 0;
+                        object.up_version = false;
+                        object.modification_time = null;
+                        object.next_column_id = 0;
+                        object.primary_index = null;
+                        object.next_index_id = 0;
+                        object.privileges = null;
+                        object.lease = null;
+                        object.next_mutation_id = 0;
+                        object.format_version = 0;
+                        object.state = options.enums === String ? "PUBLIC" : 0;
+                        object.next_family_id = 0;
+                        object.view_query = "";
+                    }
+                    if (message.name != null && message.hasOwnProperty("name"))
+                        object.name = message.name;
+                    if (message.id != null && message.hasOwnProperty("id"))
+                        object.id = message.id;
+                    if (message.parent_id != null && message.hasOwnProperty("parent_id"))
+                        object.parent_id = message.parent_id;
+                    if (message.version != null && message.hasOwnProperty("version"))
+                        object.version = message.version;
+                    if (message.up_version != null && message.hasOwnProperty("up_version"))
+                        object.up_version = message.up_version;
+                    if (message.modification_time != null && message.hasOwnProperty("modification_time"))
+                        object.modification_time = $root.cockroach.util.hlc.Timestamp.toObject(message.modification_time, options);
+                    if (message.columns && message.columns.length) {
+                        object.columns = [];
+                        for (let j = 0; j < message.columns.length; ++j)
+                            object.columns[j] = $root.cockroach.sql.sqlbase.ColumnDescriptor.toObject(message.columns[j], options);
+                    }
+                    if (message.next_column_id != null && message.hasOwnProperty("next_column_id"))
+                        object.next_column_id = message.next_column_id;
+                    if (message.primary_index != null && message.hasOwnProperty("primary_index"))
+                        object.primary_index = $root.cockroach.sql.sqlbase.IndexDescriptor.toObject(message.primary_index, options);
+                    if (message.indexes && message.indexes.length) {
+                        object.indexes = [];
+                        for (let j = 0; j < message.indexes.length; ++j)
+                            object.indexes[j] = $root.cockroach.sql.sqlbase.IndexDescriptor.toObject(message.indexes[j], options);
+                    }
+                    if (message.next_index_id != null && message.hasOwnProperty("next_index_id"))
+                        object.next_index_id = message.next_index_id;
+                    if (message.privileges != null && message.hasOwnProperty("privileges"))
+                        object.privileges = $root.cockroach.sql.sqlbase.PrivilegeDescriptor.toObject(message.privileges, options);
+                    if (message.mutations && message.mutations.length) {
+                        object.mutations = [];
+                        for (let j = 0; j < message.mutations.length; ++j)
+                            object.mutations[j] = $root.cockroach.sql.sqlbase.DescriptorMutation.toObject(message.mutations[j], options);
+                    }
+                    if (message.lease != null && message.hasOwnProperty("lease"))
+                        object.lease = $root.cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease.toObject(message.lease, options);
+                    if (message.next_mutation_id != null && message.hasOwnProperty("next_mutation_id"))
+                        object.next_mutation_id = message.next_mutation_id;
+                    if (message.format_version != null && message.hasOwnProperty("format_version"))
+                        object.format_version = message.format_version;
+                    if (message.state != null && message.hasOwnProperty("state"))
+                        object.state = options.enums === String ? $root.cockroach.sql.sqlbase.TableDescriptor.State[message.state] : message.state;
+                    if (message.checks && message.checks.length) {
+                        object.checks = [];
+                        for (let j = 0; j < message.checks.length; ++j)
+                            object.checks[j] = $root.cockroach.sql.sqlbase.TableDescriptor.CheckConstraint.toObject(message.checks[j], options);
+                    }
+                    if (message.renames && message.renames.length) {
+                        object.renames = [];
+                        for (let j = 0; j < message.renames.length; ++j)
+                            object.renames[j] = $root.cockroach.sql.sqlbase.TableDescriptor.RenameInfo.toObject(message.renames[j], options);
+                    }
+                    if (message.families && message.families.length) {
+                        object.families = [];
+                        for (let j = 0; j < message.families.length; ++j)
+                            object.families[j] = $root.cockroach.sql.sqlbase.ColumnFamilyDescriptor.toObject(message.families[j], options);
+                    }
+                    if (message.next_family_id != null && message.hasOwnProperty("next_family_id"))
+                        object.next_family_id = message.next_family_id;
+                    if (message.view_query != null && message.hasOwnProperty("view_query"))
+                        object.view_query = message.view_query;
+                    if (message.dependsOn && message.dependsOn.length) {
+                        object.dependsOn = [];
+                        for (let j = 0; j < message.dependsOn.length; ++j)
+                            object.dependsOn[j] = message.dependsOn[j];
+                    }
+                    if (message.dependedOnBy && message.dependedOnBy.length) {
+                        object.dependedOnBy = [];
+                        for (let j = 0; j < message.dependedOnBy.length; ++j)
+                            object.dependedOnBy[j] = $root.cockroach.sql.sqlbase.TableDescriptor.Reference.toObject(message.dependedOnBy[j], options);
+                    }
+                    if (message.mutationJobs && message.mutationJobs.length) {
+                        object.mutationJobs = [];
+                        for (let j = 0; j < message.mutationJobs.length; ++j)
+                            object.mutationJobs[j] = $root.cockroach.sql.sqlbase.TableDescriptor.MutationJob.toObject(message.mutationJobs[j], options);
+                    }
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this TableDescriptor message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                TableDescriptor.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this TableDescriptor to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                TableDescriptor.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                TableDescriptor.SchemaChangeLease = (function() {
+
+                    /**
+                     * Properties of a SchemaChangeLease.
+                     * @typedef cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease$Properties
+                     * @type {Object}
+                     * @property {number} [node_id] SchemaChangeLease node_id.
+                     * @property {Long} [expiration_time] SchemaChangeLease expiration_time.
+                     */
+
+                    /**
+                     * Constructs a new SchemaChangeLease.
+                     * @exports cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease
+                     * @constructor
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease$Properties=} [properties] Properties to set
+                     */
+                    function SchemaChangeLease(properties) {
+                        if (properties)
+                            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * SchemaChangeLease node_id.
+                     * @type {number}
+                     */
+                    SchemaChangeLease.prototype.node_id = 0;
+
+                    /**
+                     * SchemaChangeLease expiration_time.
+                     * @type {Long}
+                     */
+                    SchemaChangeLease.prototype.expiration_time = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                    /**
+                     * Creates a new SchemaChangeLease instance using the specified properties.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease$Properties=} [properties] Properties to set
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease} SchemaChangeLease instance
+                     */
+                    SchemaChangeLease.create = function create(properties) {
+                        return new SchemaChangeLease(properties);
+                    };
+
+                    /**
+                     * Encodes the specified SchemaChangeLease message. Does not implicitly {@link cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease.verify|verify} messages.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease$Properties} message SchemaChangeLease message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    SchemaChangeLease.encode = function encode(message, writer) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (message.node_id != null && message.hasOwnProperty("node_id"))
+                            writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.node_id);
+                        if (message.expiration_time != null && message.hasOwnProperty("expiration_time"))
+                            writer.uint32(/* id 2, wireType 0 =*/16).int64(message.expiration_time);
+                        return writer;
+                    };
+
+                    /**
+                     * Encodes the specified SchemaChangeLease message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease.verify|verify} messages.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease$Properties} message SchemaChangeLease message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    SchemaChangeLease.encodeDelimited = function encodeDelimited(message, writer) {
+                        return this.encode(message, writer).ldelim();
+                    };
+
+                    /**
+                     * Decodes a SchemaChangeLease message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease} SchemaChangeLease
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    SchemaChangeLease.decode = function decode(reader, length) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease();
+                        while (reader.pos < end) {
+                            let tag = reader.uint32();
+                            switch (tag >>> 3) {
+                            case 1:
+                                message.node_id = reader.uint32();
+                                break;
+                            case 2:
+                                message.expiration_time = reader.int64();
+                                break;
+                            default:
+                                reader.skipType(tag & 7);
+                                break;
+                            }
+                        }
+                        return message;
+                    };
+
+                    /**
+                     * Decodes a SchemaChangeLease message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease} SchemaChangeLease
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    SchemaChangeLease.decodeDelimited = function decodeDelimited(reader) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader(reader);
+                        return this.decode(reader, reader.uint32());
+                    };
+
+                    /**
+                     * Verifies a SchemaChangeLease message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    SchemaChangeLease.verify = function verify(message) {
+                        if (typeof message !== "object" || message === null)
+                            return "object expected";
+                        if (message.node_id != null && message.hasOwnProperty("node_id"))
+                            if (!$util.isInteger(message.node_id))
+                                return "node_id: integer expected";
+                        if (message.expiration_time != null && message.hasOwnProperty("expiration_time"))
+                            if (!$util.isInteger(message.expiration_time) && !(message.expiration_time && $util.isInteger(message.expiration_time.low) && $util.isInteger(message.expiration_time.high)))
+                                return "expiration_time: integer|Long expected";
+                        return null;
+                    };
+
+                    /**
+                     * Creates a SchemaChangeLease message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease} SchemaChangeLease
+                     */
+                    SchemaChangeLease.fromObject = function fromObject(object) {
+                        if (object instanceof $root.cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease)
+                            return object;
+                        let message = new $root.cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease();
+                        if (object.node_id != null)
+                            message.node_id = object.node_id >>> 0;
+                        if (object.expiration_time != null)
+                            if ($util.Long)
+                                (message.expiration_time = $util.Long.fromValue(object.expiration_time)).unsigned = false;
+                            else if (typeof object.expiration_time === "string")
+                                message.expiration_time = parseInt(object.expiration_time, 10);
+                            else if (typeof object.expiration_time === "number")
+                                message.expiration_time = object.expiration_time;
+                            else if (typeof object.expiration_time === "object")
+                                message.expiration_time = new $util.LongBits(object.expiration_time.low >>> 0, object.expiration_time.high >>> 0).toNumber();
+                        return message;
+                    };
+
+                    /**
+                     * Creates a SchemaChangeLease message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease} SchemaChangeLease
+                     */
+                    SchemaChangeLease.from = SchemaChangeLease.fromObject;
+
+                    /**
+                     * Creates a plain object from a SchemaChangeLease message. Also converts values to other types if specified.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease} message SchemaChangeLease
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    SchemaChangeLease.toObject = function toObject(message, options) {
+                        if (!options)
+                            options = {};
+                        let object = {};
+                        if (options.defaults) {
+                            object.node_id = 0;
+                            if ($util.Long) {
+                                let long = new $util.Long(0, 0, false);
+                                object.expiration_time = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                            } else
+                                object.expiration_time = options.longs === String ? "0" : 0;
+                        }
+                        if (message.node_id != null && message.hasOwnProperty("node_id"))
+                            object.node_id = message.node_id;
+                        if (message.expiration_time != null && message.hasOwnProperty("expiration_time"))
+                            if (typeof message.expiration_time === "number")
+                                object.expiration_time = options.longs === String ? String(message.expiration_time) : message.expiration_time;
+                            else
+                                object.expiration_time = options.longs === String ? $util.Long.prototype.toString.call(message.expiration_time) : options.longs === Number ? new $util.LongBits(message.expiration_time.low >>> 0, message.expiration_time.high >>> 0).toNumber() : message.expiration_time;
+                        return object;
+                    };
+
+                    /**
+                     * Creates a plain object from this SchemaChangeLease message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    SchemaChangeLease.prototype.toObject = function toObject(options) {
+                        return this.constructor.toObject(this, options);
+                    };
+
+                    /**
+                     * Converts this SchemaChangeLease to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    SchemaChangeLease.prototype.toJSON = function toJSON() {
+                        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                    };
+
+                    return SchemaChangeLease;
+                })();
+
+                /**
+                 * State enum.
+                 * @name State
+                 * @memberof cockroach.sql.sqlbase.TableDescriptor
+                 * @enum {number}
+                 * @property {number} PUBLIC=0 PUBLIC value
+                 * @property {number} ADD=1 ADD value
+                 * @property {number} DROP=2 DROP value
+                 */
+                TableDescriptor.State = (function() {
+                    const valuesById = {}, values = Object.create(valuesById);
+                    values[valuesById[0] = "PUBLIC"] = 0;
+                    values[valuesById[1] = "ADD"] = 1;
+                    values[valuesById[2] = "DROP"] = 2;
+                    return values;
+                })();
+
+                TableDescriptor.CheckConstraint = (function() {
+
+                    /**
+                     * Properties of a CheckConstraint.
+                     * @typedef cockroach.sql.sqlbase.TableDescriptor.CheckConstraint$Properties
+                     * @type {Object}
+                     * @property {string} [expr] CheckConstraint expr.
+                     * @property {string} [name] CheckConstraint name.
+                     * @property {cockroach.sql.sqlbase.ConstraintValidity} [validity] CheckConstraint validity.
+                     */
+
+                    /**
+                     * Constructs a new CheckConstraint.
+                     * @exports cockroach.sql.sqlbase.TableDescriptor.CheckConstraint
+                     * @constructor
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.CheckConstraint$Properties=} [properties] Properties to set
+                     */
+                    function CheckConstraint(properties) {
+                        if (properties)
+                            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * CheckConstraint expr.
+                     * @type {string}
+                     */
+                    CheckConstraint.prototype.expr = "";
+
+                    /**
+                     * CheckConstraint name.
+                     * @type {string}
+                     */
+                    CheckConstraint.prototype.name = "";
+
+                    /**
+                     * CheckConstraint validity.
+                     * @type {cockroach.sql.sqlbase.ConstraintValidity}
+                     */
+                    CheckConstraint.prototype.validity = 0;
+
+                    /**
+                     * Creates a new CheckConstraint instance using the specified properties.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.CheckConstraint$Properties=} [properties] Properties to set
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.CheckConstraint} CheckConstraint instance
+                     */
+                    CheckConstraint.create = function create(properties) {
+                        return new CheckConstraint(properties);
+                    };
+
+                    /**
+                     * Encodes the specified CheckConstraint message. Does not implicitly {@link cockroach.sql.sqlbase.TableDescriptor.CheckConstraint.verify|verify} messages.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.CheckConstraint$Properties} message CheckConstraint message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    CheckConstraint.encode = function encode(message, writer) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (message.expr != null && message.hasOwnProperty("expr"))
+                            writer.uint32(/* id 1, wireType 2 =*/10).string(message.expr);
+                        if (message.name != null && message.hasOwnProperty("name"))
+                            writer.uint32(/* id 2, wireType 2 =*/18).string(message.name);
+                        if (message.validity != null && message.hasOwnProperty("validity"))
+                            writer.uint32(/* id 3, wireType 0 =*/24).uint32(message.validity);
+                        return writer;
+                    };
+
+                    /**
+                     * Encodes the specified CheckConstraint message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.TableDescriptor.CheckConstraint.verify|verify} messages.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.CheckConstraint$Properties} message CheckConstraint message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    CheckConstraint.encodeDelimited = function encodeDelimited(message, writer) {
+                        return this.encode(message, writer).ldelim();
+                    };
+
+                    /**
+                     * Decodes a CheckConstraint message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.CheckConstraint} CheckConstraint
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    CheckConstraint.decode = function decode(reader, length) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.sql.sqlbase.TableDescriptor.CheckConstraint();
+                        while (reader.pos < end) {
+                            let tag = reader.uint32();
+                            switch (tag >>> 3) {
+                            case 1:
+                                message.expr = reader.string();
+                                break;
+                            case 2:
+                                message.name = reader.string();
+                                break;
+                            case 3:
+                                message.validity = reader.uint32();
+                                break;
+                            default:
+                                reader.skipType(tag & 7);
+                                break;
+                            }
+                        }
+                        return message;
+                    };
+
+                    /**
+                     * Decodes a CheckConstraint message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.CheckConstraint} CheckConstraint
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    CheckConstraint.decodeDelimited = function decodeDelimited(reader) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader(reader);
+                        return this.decode(reader, reader.uint32());
+                    };
+
+                    /**
+                     * Verifies a CheckConstraint message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    CheckConstraint.verify = function verify(message) {
+                        if (typeof message !== "object" || message === null)
+                            return "object expected";
+                        if (message.expr != null && message.hasOwnProperty("expr"))
+                            if (!$util.isString(message.expr))
+                                return "expr: string expected";
+                        if (message.name != null && message.hasOwnProperty("name"))
+                            if (!$util.isString(message.name))
+                                return "name: string expected";
+                        if (message.validity != null && message.hasOwnProperty("validity"))
+                            switch (message.validity) {
+                            default:
+                                return "validity: enum value expected";
+                            case 0:
+                            case 1:
+                                break;
+                            }
+                        return null;
+                    };
+
+                    /**
+                     * Creates a CheckConstraint message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.CheckConstraint} CheckConstraint
+                     */
+                    CheckConstraint.fromObject = function fromObject(object) {
+                        if (object instanceof $root.cockroach.sql.sqlbase.TableDescriptor.CheckConstraint)
+                            return object;
+                        let message = new $root.cockroach.sql.sqlbase.TableDescriptor.CheckConstraint();
+                        if (object.expr != null)
+                            message.expr = String(object.expr);
+                        if (object.name != null)
+                            message.name = String(object.name);
+                        switch (object.validity) {
+                        case "Validated":
+                        case 0:
+                            message.validity = 0;
+                            break;
+                        case "Unvalidated":
+                        case 1:
+                            message.validity = 1;
+                            break;
+                        }
+                        return message;
+                    };
+
+                    /**
+                     * Creates a CheckConstraint message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.sql.sqlbase.TableDescriptor.CheckConstraint.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.CheckConstraint} CheckConstraint
+                     */
+                    CheckConstraint.from = CheckConstraint.fromObject;
+
+                    /**
+                     * Creates a plain object from a CheckConstraint message. Also converts values to other types if specified.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.CheckConstraint} message CheckConstraint
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    CheckConstraint.toObject = function toObject(message, options) {
+                        if (!options)
+                            options = {};
+                        let object = {};
+                        if (options.defaults) {
+                            object.expr = "";
+                            object.name = "";
+                            object.validity = options.enums === String ? "Validated" : 0;
+                        }
+                        if (message.expr != null && message.hasOwnProperty("expr"))
+                            object.expr = message.expr;
+                        if (message.name != null && message.hasOwnProperty("name"))
+                            object.name = message.name;
+                        if (message.validity != null && message.hasOwnProperty("validity"))
+                            object.validity = options.enums === String ? $root.cockroach.sql.sqlbase.ConstraintValidity[message.validity] : message.validity;
+                        return object;
+                    };
+
+                    /**
+                     * Creates a plain object from this CheckConstraint message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    CheckConstraint.prototype.toObject = function toObject(options) {
+                        return this.constructor.toObject(this, options);
+                    };
+
+                    /**
+                     * Converts this CheckConstraint to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    CheckConstraint.prototype.toJSON = function toJSON() {
+                        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                    };
+
+                    return CheckConstraint;
+                })();
+
+                TableDescriptor.RenameInfo = (function() {
+
+                    /**
+                     * Properties of a RenameInfo.
+                     * @typedef cockroach.sql.sqlbase.TableDescriptor.RenameInfo$Properties
+                     * @type {Object}
+                     * @property {number} [old_parent_id] RenameInfo old_parent_id.
+                     * @property {string} [old_name] RenameInfo old_name.
+                     */
+
+                    /**
+                     * Constructs a new RenameInfo.
+                     * @exports cockroach.sql.sqlbase.TableDescriptor.RenameInfo
+                     * @constructor
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.RenameInfo$Properties=} [properties] Properties to set
+                     */
+                    function RenameInfo(properties) {
+                        if (properties)
+                            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * RenameInfo old_parent_id.
+                     * @type {number}
+                     */
+                    RenameInfo.prototype.old_parent_id = 0;
+
+                    /**
+                     * RenameInfo old_name.
+                     * @type {string}
+                     */
+                    RenameInfo.prototype.old_name = "";
+
+                    /**
+                     * Creates a new RenameInfo instance using the specified properties.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.RenameInfo$Properties=} [properties] Properties to set
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.RenameInfo} RenameInfo instance
+                     */
+                    RenameInfo.create = function create(properties) {
+                        return new RenameInfo(properties);
+                    };
+
+                    /**
+                     * Encodes the specified RenameInfo message. Does not implicitly {@link cockroach.sql.sqlbase.TableDescriptor.RenameInfo.verify|verify} messages.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.RenameInfo$Properties} message RenameInfo message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    RenameInfo.encode = function encode(message, writer) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (message.old_parent_id != null && message.hasOwnProperty("old_parent_id"))
+                            writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.old_parent_id);
+                        if (message.old_name != null && message.hasOwnProperty("old_name"))
+                            writer.uint32(/* id 2, wireType 2 =*/18).string(message.old_name);
+                        return writer;
+                    };
+
+                    /**
+                     * Encodes the specified RenameInfo message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.TableDescriptor.RenameInfo.verify|verify} messages.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.RenameInfo$Properties} message RenameInfo message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    RenameInfo.encodeDelimited = function encodeDelimited(message, writer) {
+                        return this.encode(message, writer).ldelim();
+                    };
+
+                    /**
+                     * Decodes a RenameInfo message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.RenameInfo} RenameInfo
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    RenameInfo.decode = function decode(reader, length) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.sql.sqlbase.TableDescriptor.RenameInfo();
+                        while (reader.pos < end) {
+                            let tag = reader.uint32();
+                            switch (tag >>> 3) {
+                            case 1:
+                                message.old_parent_id = reader.uint32();
+                                break;
+                            case 2:
+                                message.old_name = reader.string();
+                                break;
+                            default:
+                                reader.skipType(tag & 7);
+                                break;
+                            }
+                        }
+                        return message;
+                    };
+
+                    /**
+                     * Decodes a RenameInfo message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.RenameInfo} RenameInfo
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    RenameInfo.decodeDelimited = function decodeDelimited(reader) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader(reader);
+                        return this.decode(reader, reader.uint32());
+                    };
+
+                    /**
+                     * Verifies a RenameInfo message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    RenameInfo.verify = function verify(message) {
+                        if (typeof message !== "object" || message === null)
+                            return "object expected";
+                        if (message.old_parent_id != null && message.hasOwnProperty("old_parent_id"))
+                            if (!$util.isInteger(message.old_parent_id))
+                                return "old_parent_id: integer expected";
+                        if (message.old_name != null && message.hasOwnProperty("old_name"))
+                            if (!$util.isString(message.old_name))
+                                return "old_name: string expected";
+                        return null;
+                    };
+
+                    /**
+                     * Creates a RenameInfo message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.RenameInfo} RenameInfo
+                     */
+                    RenameInfo.fromObject = function fromObject(object) {
+                        if (object instanceof $root.cockroach.sql.sqlbase.TableDescriptor.RenameInfo)
+                            return object;
+                        let message = new $root.cockroach.sql.sqlbase.TableDescriptor.RenameInfo();
+                        if (object.old_parent_id != null)
+                            message.old_parent_id = object.old_parent_id >>> 0;
+                        if (object.old_name != null)
+                            message.old_name = String(object.old_name);
+                        return message;
+                    };
+
+                    /**
+                     * Creates a RenameInfo message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.sql.sqlbase.TableDescriptor.RenameInfo.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.RenameInfo} RenameInfo
+                     */
+                    RenameInfo.from = RenameInfo.fromObject;
+
+                    /**
+                     * Creates a plain object from a RenameInfo message. Also converts values to other types if specified.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.RenameInfo} message RenameInfo
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    RenameInfo.toObject = function toObject(message, options) {
+                        if (!options)
+                            options = {};
+                        let object = {};
+                        if (options.defaults) {
+                            object.old_parent_id = 0;
+                            object.old_name = "";
+                        }
+                        if (message.old_parent_id != null && message.hasOwnProperty("old_parent_id"))
+                            object.old_parent_id = message.old_parent_id;
+                        if (message.old_name != null && message.hasOwnProperty("old_name"))
+                            object.old_name = message.old_name;
+                        return object;
+                    };
+
+                    /**
+                     * Creates a plain object from this RenameInfo message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    RenameInfo.prototype.toObject = function toObject(options) {
+                        return this.constructor.toObject(this, options);
+                    };
+
+                    /**
+                     * Converts this RenameInfo to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    RenameInfo.prototype.toJSON = function toJSON() {
+                        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                    };
+
+                    return RenameInfo;
+                })();
+
+                TableDescriptor.Reference = (function() {
+
+                    /**
+                     * Properties of a Reference.
+                     * @typedef cockroach.sql.sqlbase.TableDescriptor.Reference$Properties
+                     * @type {Object}
+                     * @property {number} [id] Reference id.
+                     * @property {number} [index_id] Reference index_id.
+                     * @property {Array.<number>} [column_ids] Reference column_ids.
+                     */
+
+                    /**
+                     * Constructs a new Reference.
+                     * @exports cockroach.sql.sqlbase.TableDescriptor.Reference
+                     * @constructor
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.Reference$Properties=} [properties] Properties to set
+                     */
+                    function Reference(properties) {
+                        this.column_ids = [];
+                        if (properties)
+                            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * Reference id.
+                     * @type {number}
+                     */
+                    Reference.prototype.id = 0;
+
+                    /**
+                     * Reference index_id.
+                     * @type {number}
+                     */
+                    Reference.prototype.index_id = 0;
+
+                    /**
+                     * Reference column_ids.
+                     * @type {Array.<number>}
+                     */
+                    Reference.prototype.column_ids = $util.emptyArray;
+
+                    /**
+                     * Creates a new Reference instance using the specified properties.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.Reference$Properties=} [properties] Properties to set
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.Reference} Reference instance
+                     */
+                    Reference.create = function create(properties) {
+                        return new Reference(properties);
+                    };
+
+                    /**
+                     * Encodes the specified Reference message. Does not implicitly {@link cockroach.sql.sqlbase.TableDescriptor.Reference.verify|verify} messages.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.Reference$Properties} message Reference message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    Reference.encode = function encode(message, writer) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (message.id != null && message.hasOwnProperty("id"))
+                            writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.id);
+                        if (message.index_id != null && message.hasOwnProperty("index_id"))
+                            writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.index_id);
+                        if (message.column_ids != null && message.column_ids.length)
+                            for (let i = 0; i < message.column_ids.length; ++i)
+                                writer.uint32(/* id 3, wireType 0 =*/24).uint32(message.column_ids[i]);
+                        return writer;
+                    };
+
+                    /**
+                     * Encodes the specified Reference message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.TableDescriptor.Reference.verify|verify} messages.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.Reference$Properties} message Reference message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    Reference.encodeDelimited = function encodeDelimited(message, writer) {
+                        return this.encode(message, writer).ldelim();
+                    };
+
+                    /**
+                     * Decodes a Reference message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.Reference} Reference
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    Reference.decode = function decode(reader, length) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.sql.sqlbase.TableDescriptor.Reference();
+                        while (reader.pos < end) {
+                            let tag = reader.uint32();
+                            switch (tag >>> 3) {
+                            case 1:
+                                message.id = reader.uint32();
+                                break;
+                            case 2:
+                                message.index_id = reader.uint32();
+                                break;
+                            case 3:
+                                if (!(message.column_ids && message.column_ids.length))
+                                    message.column_ids = [];
+                                if ((tag & 7) === 2) {
+                                    let end2 = reader.uint32() + reader.pos;
+                                    while (reader.pos < end2)
+                                        message.column_ids.push(reader.uint32());
+                                } else
+                                    message.column_ids.push(reader.uint32());
+                                break;
+                            default:
+                                reader.skipType(tag & 7);
+                                break;
+                            }
+                        }
+                        return message;
+                    };
+
+                    /**
+                     * Decodes a Reference message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.Reference} Reference
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    Reference.decodeDelimited = function decodeDelimited(reader) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader(reader);
+                        return this.decode(reader, reader.uint32());
+                    };
+
+                    /**
+                     * Verifies a Reference message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    Reference.verify = function verify(message) {
+                        if (typeof message !== "object" || message === null)
+                            return "object expected";
+                        if (message.id != null && message.hasOwnProperty("id"))
+                            if (!$util.isInteger(message.id))
+                                return "id: integer expected";
+                        if (message.index_id != null && message.hasOwnProperty("index_id"))
+                            if (!$util.isInteger(message.index_id))
+                                return "index_id: integer expected";
+                        if (message.column_ids != null && message.hasOwnProperty("column_ids")) {
+                            if (!Array.isArray(message.column_ids))
+                                return "column_ids: array expected";
+                            for (let i = 0; i < message.column_ids.length; ++i)
+                                if (!$util.isInteger(message.column_ids[i]))
+                                    return "column_ids: integer[] expected";
+                        }
+                        return null;
+                    };
+
+                    /**
+                     * Creates a Reference message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.Reference} Reference
+                     */
+                    Reference.fromObject = function fromObject(object) {
+                        if (object instanceof $root.cockroach.sql.sqlbase.TableDescriptor.Reference)
+                            return object;
+                        let message = new $root.cockroach.sql.sqlbase.TableDescriptor.Reference();
+                        if (object.id != null)
+                            message.id = object.id >>> 0;
+                        if (object.index_id != null)
+                            message.index_id = object.index_id >>> 0;
+                        if (object.column_ids) {
+                            if (!Array.isArray(object.column_ids))
+                                throw TypeError(".cockroach.sql.sqlbase.TableDescriptor.Reference.column_ids: array expected");
+                            message.column_ids = [];
+                            for (let i = 0; i < object.column_ids.length; ++i)
+                                message.column_ids[i] = object.column_ids[i] >>> 0;
+                        }
+                        return message;
+                    };
+
+                    /**
+                     * Creates a Reference message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.sql.sqlbase.TableDescriptor.Reference.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.Reference} Reference
+                     */
+                    Reference.from = Reference.fromObject;
+
+                    /**
+                     * Creates a plain object from a Reference message. Also converts values to other types if specified.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.Reference} message Reference
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    Reference.toObject = function toObject(message, options) {
+                        if (!options)
+                            options = {};
+                        let object = {};
+                        if (options.arrays || options.defaults)
+                            object.column_ids = [];
+                        if (options.defaults) {
+                            object.id = 0;
+                            object.index_id = 0;
+                        }
+                        if (message.id != null && message.hasOwnProperty("id"))
+                            object.id = message.id;
+                        if (message.index_id != null && message.hasOwnProperty("index_id"))
+                            object.index_id = message.index_id;
+                        if (message.column_ids && message.column_ids.length) {
+                            object.column_ids = [];
+                            for (let j = 0; j < message.column_ids.length; ++j)
+                                object.column_ids[j] = message.column_ids[j];
+                        }
+                        return object;
+                    };
+
+                    /**
+                     * Creates a plain object from this Reference message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    Reference.prototype.toObject = function toObject(options) {
+                        return this.constructor.toObject(this, options);
+                    };
+
+                    /**
+                     * Converts this Reference to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    Reference.prototype.toJSON = function toJSON() {
+                        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                    };
+
+                    return Reference;
+                })();
+
+                TableDescriptor.MutationJob = (function() {
+
+                    /**
+                     * Properties of a MutationJob.
+                     * @typedef cockroach.sql.sqlbase.TableDescriptor.MutationJob$Properties
+                     * @type {Object}
+                     * @property {number} [mutation_id] MutationJob mutation_id.
+                     * @property {Long} [job_id] MutationJob job_id.
+                     */
+
+                    /**
+                     * Constructs a new MutationJob.
+                     * @exports cockroach.sql.sqlbase.TableDescriptor.MutationJob
+                     * @constructor
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.MutationJob$Properties=} [properties] Properties to set
+                     */
+                    function MutationJob(properties) {
+                        if (properties)
+                            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * MutationJob mutation_id.
+                     * @type {number}
+                     */
+                    MutationJob.prototype.mutation_id = 0;
+
+                    /**
+                     * MutationJob job_id.
+                     * @type {Long}
+                     */
+                    MutationJob.prototype.job_id = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                    /**
+                     * Creates a new MutationJob instance using the specified properties.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.MutationJob$Properties=} [properties] Properties to set
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.MutationJob} MutationJob instance
+                     */
+                    MutationJob.create = function create(properties) {
+                        return new MutationJob(properties);
+                    };
+
+                    /**
+                     * Encodes the specified MutationJob message. Does not implicitly {@link cockroach.sql.sqlbase.TableDescriptor.MutationJob.verify|verify} messages.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.MutationJob$Properties} message MutationJob message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    MutationJob.encode = function encode(message, writer) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (message.mutation_id != null && message.hasOwnProperty("mutation_id"))
+                            writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.mutation_id);
+                        if (message.job_id != null && message.hasOwnProperty("job_id"))
+                            writer.uint32(/* id 2, wireType 0 =*/16).int64(message.job_id);
+                        return writer;
+                    };
+
+                    /**
+                     * Encodes the specified MutationJob message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.TableDescriptor.MutationJob.verify|verify} messages.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.MutationJob$Properties} message MutationJob message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    MutationJob.encodeDelimited = function encodeDelimited(message, writer) {
+                        return this.encode(message, writer).ldelim();
+                    };
+
+                    /**
+                     * Decodes a MutationJob message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.MutationJob} MutationJob
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    MutationJob.decode = function decode(reader, length) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.sql.sqlbase.TableDescriptor.MutationJob();
+                        while (reader.pos < end) {
+                            let tag = reader.uint32();
+                            switch (tag >>> 3) {
+                            case 1:
+                                message.mutation_id = reader.uint32();
+                                break;
+                            case 2:
+                                message.job_id = reader.int64();
+                                break;
+                            default:
+                                reader.skipType(tag & 7);
+                                break;
+                            }
+                        }
+                        return message;
+                    };
+
+                    /**
+                     * Decodes a MutationJob message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.MutationJob} MutationJob
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    MutationJob.decodeDelimited = function decodeDelimited(reader) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader(reader);
+                        return this.decode(reader, reader.uint32());
+                    };
+
+                    /**
+                     * Verifies a MutationJob message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    MutationJob.verify = function verify(message) {
+                        if (typeof message !== "object" || message === null)
+                            return "object expected";
+                        if (message.mutation_id != null && message.hasOwnProperty("mutation_id"))
+                            if (!$util.isInteger(message.mutation_id))
+                                return "mutation_id: integer expected";
+                        if (message.job_id != null && message.hasOwnProperty("job_id"))
+                            if (!$util.isInteger(message.job_id) && !(message.job_id && $util.isInteger(message.job_id.low) && $util.isInteger(message.job_id.high)))
+                                return "job_id: integer|Long expected";
+                        return null;
+                    };
+
+                    /**
+                     * Creates a MutationJob message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.MutationJob} MutationJob
+                     */
+                    MutationJob.fromObject = function fromObject(object) {
+                        if (object instanceof $root.cockroach.sql.sqlbase.TableDescriptor.MutationJob)
+                            return object;
+                        let message = new $root.cockroach.sql.sqlbase.TableDescriptor.MutationJob();
+                        if (object.mutation_id != null)
+                            message.mutation_id = object.mutation_id >>> 0;
+                        if (object.job_id != null)
+                            if ($util.Long)
+                                (message.job_id = $util.Long.fromValue(object.job_id)).unsigned = false;
+                            else if (typeof object.job_id === "string")
+                                message.job_id = parseInt(object.job_id, 10);
+                            else if (typeof object.job_id === "number")
+                                message.job_id = object.job_id;
+                            else if (typeof object.job_id === "object")
+                                message.job_id = new $util.LongBits(object.job_id.low >>> 0, object.job_id.high >>> 0).toNumber();
+                        return message;
+                    };
+
+                    /**
+                     * Creates a MutationJob message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.sql.sqlbase.TableDescriptor.MutationJob.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.MutationJob} MutationJob
+                     */
+                    MutationJob.from = MutationJob.fromObject;
+
+                    /**
+                     * Creates a plain object from a MutationJob message. Also converts values to other types if specified.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.MutationJob} message MutationJob
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    MutationJob.toObject = function toObject(message, options) {
+                        if (!options)
+                            options = {};
+                        let object = {};
+                        if (options.defaults) {
+                            object.mutation_id = 0;
+                            if ($util.Long) {
+                                let long = new $util.Long(0, 0, false);
+                                object.job_id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                            } else
+                                object.job_id = options.longs === String ? "0" : 0;
+                        }
+                        if (message.mutation_id != null && message.hasOwnProperty("mutation_id"))
+                            object.mutation_id = message.mutation_id;
+                        if (message.job_id != null && message.hasOwnProperty("job_id"))
+                            if (typeof message.job_id === "number")
+                                object.job_id = options.longs === String ? String(message.job_id) : message.job_id;
+                            else
+                                object.job_id = options.longs === String ? $util.Long.prototype.toString.call(message.job_id) : options.longs === Number ? new $util.LongBits(message.job_id.low >>> 0, message.job_id.high >>> 0).toNumber() : message.job_id;
+                        return object;
+                    };
+
+                    /**
+                     * Creates a plain object from this MutationJob message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    MutationJob.prototype.toObject = function toObject(options) {
+                        return this.constructor.toObject(this, options);
+                    };
+
+                    /**
+                     * Converts this MutationJob to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    MutationJob.prototype.toJSON = function toJSON() {
+                        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                    };
+
+                    return MutationJob;
+                })();
+
+                return TableDescriptor;
+            })();
+
+            sqlbase.DatabaseDescriptor = (function() {
+
+                /**
+                 * Properties of a DatabaseDescriptor.
+                 * @typedef cockroach.sql.sqlbase.DatabaseDescriptor$Properties
+                 * @type {Object}
+                 * @property {string} [name] DatabaseDescriptor name.
+                 * @property {number} [id] DatabaseDescriptor id.
+                 * @property {cockroach.sql.sqlbase.PrivilegeDescriptor$Properties} [privileges] DatabaseDescriptor privileges.
+                 */
+
+                /**
+                 * Constructs a new DatabaseDescriptor.
+                 * @exports cockroach.sql.sqlbase.DatabaseDescriptor
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.DatabaseDescriptor$Properties=} [properties] Properties to set
+                 */
+                function DatabaseDescriptor(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * DatabaseDescriptor name.
+                 * @type {string}
+                 */
+                DatabaseDescriptor.prototype.name = "";
+
+                /**
+                 * DatabaseDescriptor id.
+                 * @type {number}
+                 */
+                DatabaseDescriptor.prototype.id = 0;
+
+                /**
+                 * DatabaseDescriptor privileges.
+                 * @type {(cockroach.sql.sqlbase.PrivilegeDescriptor$Properties|null)}
+                 */
+                DatabaseDescriptor.prototype.privileges = null;
+
+                /**
+                 * Creates a new DatabaseDescriptor instance using the specified properties.
+                 * @param {cockroach.sql.sqlbase.DatabaseDescriptor$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.sqlbase.DatabaseDescriptor} DatabaseDescriptor instance
+                 */
+                DatabaseDescriptor.create = function create(properties) {
+                    return new DatabaseDescriptor(properties);
+                };
+
+                /**
+                 * Encodes the specified DatabaseDescriptor message. Does not implicitly {@link cockroach.sql.sqlbase.DatabaseDescriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.DatabaseDescriptor$Properties} message DatabaseDescriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                DatabaseDescriptor.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.name != null && message.hasOwnProperty("name"))
+                        writer.uint32(/* id 1, wireType 2 =*/10).string(message.name);
+                    if (message.id != null && message.hasOwnProperty("id"))
+                        writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.id);
+                    if (message.privileges != null && message.hasOwnProperty("privileges"))
+                        $root.cockroach.sql.sqlbase.PrivilegeDescriptor.encode(message.privileges, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified DatabaseDescriptor message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.DatabaseDescriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.DatabaseDescriptor$Properties} message DatabaseDescriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                DatabaseDescriptor.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a DatabaseDescriptor message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.sqlbase.DatabaseDescriptor} DatabaseDescriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                DatabaseDescriptor.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.sql.sqlbase.DatabaseDescriptor();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.name = reader.string();
+                            break;
+                        case 2:
+                            message.id = reader.uint32();
+                            break;
+                        case 3:
+                            message.privileges = $root.cockroach.sql.sqlbase.PrivilegeDescriptor.decode(reader, reader.uint32());
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a DatabaseDescriptor message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.sqlbase.DatabaseDescriptor} DatabaseDescriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                DatabaseDescriptor.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a DatabaseDescriptor message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                DatabaseDescriptor.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.name != null && message.hasOwnProperty("name"))
+                        if (!$util.isString(message.name))
+                            return "name: string expected";
+                    if (message.id != null && message.hasOwnProperty("id"))
+                        if (!$util.isInteger(message.id))
+                            return "id: integer expected";
+                    if (message.privileges != null && message.hasOwnProperty("privileges")) {
+                        let error = $root.cockroach.sql.sqlbase.PrivilegeDescriptor.verify(message.privileges);
+                        if (error)
+                            return "privileges." + error;
+                    }
+                    return null;
+                };
+
+                /**
+                 * Creates a DatabaseDescriptor message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.DatabaseDescriptor} DatabaseDescriptor
+                 */
+                DatabaseDescriptor.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.sql.sqlbase.DatabaseDescriptor)
+                        return object;
+                    let message = new $root.cockroach.sql.sqlbase.DatabaseDescriptor();
+                    if (object.name != null)
+                        message.name = String(object.name);
+                    if (object.id != null)
+                        message.id = object.id >>> 0;
+                    if (object.privileges != null) {
+                        if (typeof object.privileges !== "object")
+                            throw TypeError(".cockroach.sql.sqlbase.DatabaseDescriptor.privileges: object expected");
+                        message.privileges = $root.cockroach.sql.sqlbase.PrivilegeDescriptor.fromObject(object.privileges);
+                    }
+                    return message;
+                };
+
+                /**
+                 * Creates a DatabaseDescriptor message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.sqlbase.DatabaseDescriptor.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.DatabaseDescriptor} DatabaseDescriptor
+                 */
+                DatabaseDescriptor.from = DatabaseDescriptor.fromObject;
+
+                /**
+                 * Creates a plain object from a DatabaseDescriptor message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.sqlbase.DatabaseDescriptor} message DatabaseDescriptor
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                DatabaseDescriptor.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults) {
+                        object.name = "";
+                        object.id = 0;
+                        object.privileges = null;
+                    }
+                    if (message.name != null && message.hasOwnProperty("name"))
+                        object.name = message.name;
+                    if (message.id != null && message.hasOwnProperty("id"))
+                        object.id = message.id;
+                    if (message.privileges != null && message.hasOwnProperty("privileges"))
+                        object.privileges = $root.cockroach.sql.sqlbase.PrivilegeDescriptor.toObject(message.privileges, options);
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this DatabaseDescriptor message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                DatabaseDescriptor.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this DatabaseDescriptor to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                DatabaseDescriptor.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return DatabaseDescriptor;
+            })();
+
+            sqlbase.Descriptor = (function() {
+
+                /**
+                 * Properties of a Descriptor.
+                 * @typedef cockroach.sql.sqlbase.Descriptor$Properties
+                 * @type {Object}
+                 * @property {cockroach.sql.sqlbase.TableDescriptor$Properties} [table] Descriptor table.
+                 * @property {cockroach.sql.sqlbase.DatabaseDescriptor$Properties} [database] Descriptor database.
+                 */
+
+                /**
+                 * Constructs a new Descriptor.
+                 * @exports cockroach.sql.sqlbase.Descriptor
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.Descriptor$Properties=} [properties] Properties to set
+                 */
+                function Descriptor(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * Descriptor table.
+                 * @type {(cockroach.sql.sqlbase.TableDescriptor$Properties|null)}
+                 */
+                Descriptor.prototype.table = null;
+
+                /**
+                 * Descriptor database.
+                 * @type {(cockroach.sql.sqlbase.DatabaseDescriptor$Properties|null)}
+                 */
+                Descriptor.prototype.database = null;
+
+                // OneOf field names bound to virtual getters and setters
+                let $oneOfFields;
+
+                /**
+                 * Descriptor union.
+                 * @name cockroach.sql.sqlbase.Descriptor#union
+                 * @type {string|undefined}
+                 */
+                Object.defineProperty(Descriptor.prototype, "union", {
+                    get: $util.oneOfGetter($oneOfFields = ["table", "database"]),
+                    set: $util.oneOfSetter($oneOfFields)
+                });
+
+                /**
+                 * Creates a new Descriptor instance using the specified properties.
+                 * @param {cockroach.sql.sqlbase.Descriptor$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.sqlbase.Descriptor} Descriptor instance
+                 */
+                Descriptor.create = function create(properties) {
+                    return new Descriptor(properties);
+                };
+
+                /**
+                 * Encodes the specified Descriptor message. Does not implicitly {@link cockroach.sql.sqlbase.Descriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.Descriptor$Properties} message Descriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                Descriptor.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.table != null && message.hasOwnProperty("table"))
+                        $root.cockroach.sql.sqlbase.TableDescriptor.encode(message.table, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+                    if (message.database != null && message.hasOwnProperty("database"))
+                        $root.cockroach.sql.sqlbase.DatabaseDescriptor.encode(message.database, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified Descriptor message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.Descriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.Descriptor$Properties} message Descriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                Descriptor.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a Descriptor message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.sqlbase.Descriptor} Descriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                Descriptor.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.sql.sqlbase.Descriptor();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.table = $root.cockroach.sql.sqlbase.TableDescriptor.decode(reader, reader.uint32());
+                            break;
+                        case 2:
+                            message.database = $root.cockroach.sql.sqlbase.DatabaseDescriptor.decode(reader, reader.uint32());
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a Descriptor message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.sqlbase.Descriptor} Descriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                Descriptor.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a Descriptor message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                Descriptor.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    let properties = {};
+                    if (message.table != null && message.hasOwnProperty("table")) {
+                        properties.union = 1;
+                        let error = $root.cockroach.sql.sqlbase.TableDescriptor.verify(message.table);
+                        if (error)
+                            return "table." + error;
+                    }
+                    if (message.database != null && message.hasOwnProperty("database")) {
+                        if (properties.union === 1)
+                            return "union: multiple values";
+                        properties.union = 1;
+                        let error = $root.cockroach.sql.sqlbase.DatabaseDescriptor.verify(message.database);
+                        if (error)
+                            return "database." + error;
+                    }
+                    return null;
+                };
+
+                /**
+                 * Creates a Descriptor message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.Descriptor} Descriptor
+                 */
+                Descriptor.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.sql.sqlbase.Descriptor)
+                        return object;
+                    let message = new $root.cockroach.sql.sqlbase.Descriptor();
+                    if (object.table != null) {
+                        if (typeof object.table !== "object")
+                            throw TypeError(".cockroach.sql.sqlbase.Descriptor.table: object expected");
+                        message.table = $root.cockroach.sql.sqlbase.TableDescriptor.fromObject(object.table);
+                    }
+                    if (object.database != null) {
+                        if (typeof object.database !== "object")
+                            throw TypeError(".cockroach.sql.sqlbase.Descriptor.database: object expected");
+                        message.database = $root.cockroach.sql.sqlbase.DatabaseDescriptor.fromObject(object.database);
+                    }
+                    return message;
+                };
+
+                /**
+                 * Creates a Descriptor message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.sqlbase.Descriptor.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.Descriptor} Descriptor
+                 */
+                Descriptor.from = Descriptor.fromObject;
+
+                /**
+                 * Creates a plain object from a Descriptor message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.sqlbase.Descriptor} message Descriptor
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                Descriptor.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (message.table != null && message.hasOwnProperty("table")) {
+                        object.table = $root.cockroach.sql.sqlbase.TableDescriptor.toObject(message.table, options);
+                        if (options.oneofs)
+                            object.union = "table";
+                    }
+                    if (message.database != null && message.hasOwnProperty("database")) {
+                        object.database = $root.cockroach.sql.sqlbase.DatabaseDescriptor.toObject(message.database, options);
+                        if (options.oneofs)
+                            object.union = "database";
+                    }
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this Descriptor message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                Descriptor.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this Descriptor to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                Descriptor.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return Descriptor;
+            })();
+
+            sqlbase.UserPrivileges = (function() {
+
+                /**
+                 * Properties of a UserPrivileges.
+                 * @typedef cockroach.sql.sqlbase.UserPrivileges$Properties
+                 * @type {Object}
+                 * @property {string} [user] UserPrivileges user.
+                 * @property {number} [privileges] UserPrivileges privileges.
+                 */
+
+                /**
+                 * Constructs a new UserPrivileges.
+                 * @exports cockroach.sql.sqlbase.UserPrivileges
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.UserPrivileges$Properties=} [properties] Properties to set
+                 */
+                function UserPrivileges(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * UserPrivileges user.
+                 * @type {string}
+                 */
+                UserPrivileges.prototype.user = "";
+
+                /**
+                 * UserPrivileges privileges.
+                 * @type {number}
+                 */
+                UserPrivileges.prototype.privileges = 0;
+
+                /**
+                 * Creates a new UserPrivileges instance using the specified properties.
+                 * @param {cockroach.sql.sqlbase.UserPrivileges$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.sqlbase.UserPrivileges} UserPrivileges instance
+                 */
+                UserPrivileges.create = function create(properties) {
+                    return new UserPrivileges(properties);
+                };
+
+                /**
+                 * Encodes the specified UserPrivileges message. Does not implicitly {@link cockroach.sql.sqlbase.UserPrivileges.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.UserPrivileges$Properties} message UserPrivileges message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                UserPrivileges.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.user != null && message.hasOwnProperty("user"))
+                        writer.uint32(/* id 1, wireType 2 =*/10).string(message.user);
+                    if (message.privileges != null && message.hasOwnProperty("privileges"))
+                        writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.privileges);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified UserPrivileges message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.UserPrivileges.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.UserPrivileges$Properties} message UserPrivileges message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                UserPrivileges.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a UserPrivileges message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.sqlbase.UserPrivileges} UserPrivileges
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                UserPrivileges.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.sql.sqlbase.UserPrivileges();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.user = reader.string();
+                            break;
+                        case 2:
+                            message.privileges = reader.uint32();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a UserPrivileges message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.sqlbase.UserPrivileges} UserPrivileges
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                UserPrivileges.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a UserPrivileges message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                UserPrivileges.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.user != null && message.hasOwnProperty("user"))
+                        if (!$util.isString(message.user))
+                            return "user: string expected";
+                    if (message.privileges != null && message.hasOwnProperty("privileges"))
+                        if (!$util.isInteger(message.privileges))
+                            return "privileges: integer expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a UserPrivileges message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.UserPrivileges} UserPrivileges
+                 */
+                UserPrivileges.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.sql.sqlbase.UserPrivileges)
+                        return object;
+                    let message = new $root.cockroach.sql.sqlbase.UserPrivileges();
+                    if (object.user != null)
+                        message.user = String(object.user);
+                    if (object.privileges != null)
+                        message.privileges = object.privileges >>> 0;
+                    return message;
+                };
+
+                /**
+                 * Creates a UserPrivileges message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.sqlbase.UserPrivileges.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.UserPrivileges} UserPrivileges
+                 */
+                UserPrivileges.from = UserPrivileges.fromObject;
+
+                /**
+                 * Creates a plain object from a UserPrivileges message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.sqlbase.UserPrivileges} message UserPrivileges
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                UserPrivileges.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults) {
+                        object.user = "";
+                        object.privileges = 0;
+                    }
+                    if (message.user != null && message.hasOwnProperty("user"))
+                        object.user = message.user;
+                    if (message.privileges != null && message.hasOwnProperty("privileges"))
+                        object.privileges = message.privileges;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this UserPrivileges message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                UserPrivileges.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this UserPrivileges to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                UserPrivileges.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return UserPrivileges;
+            })();
+
+            sqlbase.PrivilegeDescriptor = (function() {
+
+                /**
+                 * Properties of a PrivilegeDescriptor.
+                 * @typedef cockroach.sql.sqlbase.PrivilegeDescriptor$Properties
+                 * @type {Object}
+                 * @property {Array.<cockroach.sql.sqlbase.UserPrivileges$Properties>} [users] PrivilegeDescriptor users.
+                 */
+
+                /**
+                 * Constructs a new PrivilegeDescriptor.
+                 * @exports cockroach.sql.sqlbase.PrivilegeDescriptor
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.PrivilegeDescriptor$Properties=} [properties] Properties to set
+                 */
+                function PrivilegeDescriptor(properties) {
+                    this.users = [];
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * PrivilegeDescriptor users.
+                 * @type {Array.<cockroach.sql.sqlbase.UserPrivileges$Properties>}
+                 */
+                PrivilegeDescriptor.prototype.users = $util.emptyArray;
+
+                /**
+                 * Creates a new PrivilegeDescriptor instance using the specified properties.
+                 * @param {cockroach.sql.sqlbase.PrivilegeDescriptor$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.sqlbase.PrivilegeDescriptor} PrivilegeDescriptor instance
+                 */
+                PrivilegeDescriptor.create = function create(properties) {
+                    return new PrivilegeDescriptor(properties);
+                };
+
+                /**
+                 * Encodes the specified PrivilegeDescriptor message. Does not implicitly {@link cockroach.sql.sqlbase.PrivilegeDescriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.PrivilegeDescriptor$Properties} message PrivilegeDescriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                PrivilegeDescriptor.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.users != null && message.users.length)
+                        for (let i = 0; i < message.users.length; ++i)
+                            $root.cockroach.sql.sqlbase.UserPrivileges.encode(message.users[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified PrivilegeDescriptor message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.PrivilegeDescriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.PrivilegeDescriptor$Properties} message PrivilegeDescriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                PrivilegeDescriptor.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a PrivilegeDescriptor message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.sqlbase.PrivilegeDescriptor} PrivilegeDescriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                PrivilegeDescriptor.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.sql.sqlbase.PrivilegeDescriptor();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            if (!(message.users && message.users.length))
+                                message.users = [];
+                            message.users.push($root.cockroach.sql.sqlbase.UserPrivileges.decode(reader, reader.uint32()));
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a PrivilegeDescriptor message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.sqlbase.PrivilegeDescriptor} PrivilegeDescriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                PrivilegeDescriptor.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a PrivilegeDescriptor message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                PrivilegeDescriptor.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.users != null && message.hasOwnProperty("users")) {
+                        if (!Array.isArray(message.users))
+                            return "users: array expected";
+                        for (let i = 0; i < message.users.length; ++i) {
+                            let error = $root.cockroach.sql.sqlbase.UserPrivileges.verify(message.users[i]);
+                            if (error)
+                                return "users." + error;
+                        }
+                    }
+                    return null;
+                };
+
+                /**
+                 * Creates a PrivilegeDescriptor message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.PrivilegeDescriptor} PrivilegeDescriptor
+                 */
+                PrivilegeDescriptor.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.sql.sqlbase.PrivilegeDescriptor)
+                        return object;
+                    let message = new $root.cockroach.sql.sqlbase.PrivilegeDescriptor();
+                    if (object.users) {
+                        if (!Array.isArray(object.users))
+                            throw TypeError(".cockroach.sql.sqlbase.PrivilegeDescriptor.users: array expected");
+                        message.users = [];
+                        for (let i = 0; i < object.users.length; ++i) {
+                            if (typeof object.users[i] !== "object")
+                                throw TypeError(".cockroach.sql.sqlbase.PrivilegeDescriptor.users: object expected");
+                            message.users[i] = $root.cockroach.sql.sqlbase.UserPrivileges.fromObject(object.users[i]);
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Creates a PrivilegeDescriptor message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.sqlbase.PrivilegeDescriptor.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.PrivilegeDescriptor} PrivilegeDescriptor
+                 */
+                PrivilegeDescriptor.from = PrivilegeDescriptor.fromObject;
+
+                /**
+                 * Creates a plain object from a PrivilegeDescriptor message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.sqlbase.PrivilegeDescriptor} message PrivilegeDescriptor
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                PrivilegeDescriptor.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.arrays || options.defaults)
+                        object.users = [];
+                    if (message.users && message.users.length) {
+                        object.users = [];
+                        for (let j = 0; j < message.users.length; ++j)
+                            object.users[j] = $root.cockroach.sql.sqlbase.UserPrivileges.toObject(message.users[j], options);
+                    }
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this PrivilegeDescriptor message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                PrivilegeDescriptor.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this PrivilegeDescriptor to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                PrivilegeDescriptor.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return PrivilegeDescriptor;
+            })();
+
+            return sqlbase;
         })();
 
         return sql;
