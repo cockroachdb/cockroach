@@ -56,7 +56,7 @@ func TestShowFingerprintsAsOfSystemTime(t *testing.T) {
 		t.Errorf("expected different fingerprints: %v vs %v", fprint1, fprint2)
 	}
 
-	fprint3Query := fmt.Sprintf(`%s AS OF SYSTEM TIME '%s'`, fprintQuery, ts)
+	fprint3Query := fmt.Sprintf(`SELECT * FROM [%s] AS OF SYSTEM TIME '%s'`, fprintQuery, ts)
 	sqlDB.CheckQueryResults(fprint3Query, fprint1)
 }
 
