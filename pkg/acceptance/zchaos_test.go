@@ -336,7 +336,11 @@ func TestClusterRecovery(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	runTestOnConfigs(t, testClusterRecoveryInner)
+	// TODO(tschottdorf): should run via RunLocal, but only if we manage to deal
+	// with the loss of Gossip connectivity due to ever-changing ports.
+	RunDocker(t, func(t *testing.T) {
+		runTestOnConfigs(t, testClusterRecoveryInner)
+	})
 }
 
 func testClusterRecoveryInner(
@@ -398,7 +402,9 @@ func TestNodeRestart(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	runTestOnConfigs(t, testNodeRestartInner)
+	RunLocal(t, func(t *testing.T) {
+		runTestOnConfigs(t, testNodeRestartInner)
+	})
 }
 
 func testNodeRestartInner(
