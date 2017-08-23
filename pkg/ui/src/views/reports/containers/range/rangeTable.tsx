@@ -335,7 +335,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
       }
       detailsByStoreID.set(info.source_store_id, {
         id: this.createContent(Print.ReplicaID(rangeID, RangeInfo.GetLocalReplica(info))),
-        keyRange: this.createContent(`${info.span.end_key} to ${info.span.end_key}`),
+        keyRange: this.createContent(`${info.span.start_key} to ${info.span.end_key}`),
         problems: this.contentProblems(info.problems),
         raftState: raftState,
         leaseHolder: this.createContent(
