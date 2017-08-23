@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/lib/pq"
 	"github.com/spf13/cobra"
 )
 
@@ -864,6 +865,14 @@ func (c *cliState) doRunStatement(nextState cliStateEnum) cliStateEnum {
 	c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(c.concatLines))
 	if c.exitErr != nil {
 		fmt.Fprintln(stderr, c.exitErr)
+		if pqErr, ok := c.exitErr.(*pq.Error); ok {
+			if pqErr.Detail != "" {
+				fmt.Fprintln(stderr, "DETAIL:", pqErr.Detail)
+			}
+			if pqErr.Hint != "" {
+				fmt.Fprintln(stderr, "HINT:", pqErr.Hint)
+			}
+		}
 		if c.errExit {
 			return cliStop
 		}
@@ -992,6 +1001,12 @@ func runTerm(cmd *cobra.Command, args []string) error {
 	// statements. Performs authentication.
 	if err := conn.ensureConn(); err != nil {
 		return err
+	}
+
+	if sqlCtx.safeUpdates {
+		if err := conn.Exec("SET sql_safe_updates = TRUE", nil); err != nil {
+			return err
+		}
 	}
 
 	if len(sqlCtx.execStmts) > 0 {

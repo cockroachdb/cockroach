@@ -127,6 +127,9 @@ type Session struct {
 	SearchPath parser.SearchPath
 	// User is the name of the user logged into the session.
 	User string
+	// SafeUpdates causes errors when the client
+	// sends syntax that may have unwanted side effects.
+	SafeUpdates bool
 
 	//
 	// Session parameters, non-user-configurable.

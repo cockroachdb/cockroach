@@ -15,6 +15,7 @@
 package pgerror
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
@@ -40,6 +41,27 @@ func NewErrorf(code string, format string, args ...interface{}) *Error {
 		Code:    code,
 		Source:  &srcCtx,
 	}
+}
+
+// NewDangerousStatementErrorf creates a new Error for "rejected dangerous statements".
+func NewDangerousStatementErrorf(format string, args ...interface{}) *Error {
+	var buf bytes.Buffer
+	buf.WriteString("rejected: ")
+	fmt.Fprintf(&buf, format, args...)
+	buf.WriteString(" (sql_safe_updates = true)")
+	return NewError(CodeWarningError, buf.String())
+}
+
+// SetHintf annotates an Error object with a hint.
+func (pg *Error) SetHintf(f string, args ...interface{}) *Error {
+	pg.Hint = fmt.Sprintf(f, args...)
+	return pg
+}
+
+// SetDetailf annotates an Error object with details.
+func (pg *Error) SetDetailf(f string, args ...interface{}) *Error {
+	pg.Detail = fmt.Sprintf(f, args...)
+	return pg
 }
 
 // AnnotateError adds a prefix to the message of an error, maintaining its pg
