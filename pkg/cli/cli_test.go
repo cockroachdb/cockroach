@@ -687,6 +687,8 @@ func Example_sql() {
 	// It must be possible to create the current database after the
 	// connection was established.
 	c.RunWithArgs([]string{"sql", "-d", "nonexistent", "-e", "create database nonexistent; create table foo(x int); select * from foo"})
+	// COPY should return an intelligible error message.
+	c.RunWithArgs([]string{"sql", "-e", "copy t.f from stdin"})
 
 	// Output:
 	// sql -e create database t; create table t.f (x int, y int); insert into t.f values (42, 69)
@@ -735,6 +737,8 @@ func Example_sql() {
 	// sql -d nonexistent -e create database nonexistent; create table foo(x int); select * from foo
 	// 0 rows
 	// x
+	// sql -e copy t.f from stdin
+	// woops! COPY has confused this client! Suggestion: use 'psql' for COPY
 }
 
 func Example_sql_format() {
