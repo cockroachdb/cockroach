@@ -194,9 +194,15 @@ func (dsp *distSQLPlanner) Run(
 	if err != nil {
 		return err
 	}
+	cancelFn := func() {
+		// Upon a query cancellation, push an error to the distSQLReceiver.
+		// This ensures that all processors on this node get a ConsumerClosed
+		// consumer status the next time they emit a row.
+		recv.Push(nil /* row */, distsqlrun.ProducerMetadata{Err: sqlbase.NewQueryCanceledError()})
+	}
 	// TODO(radu): this should go through the flow scheduler.
 	flow.Start(ctx, func() {})
-	flow.Wait()
+	flow.Wait(cancelFn)
 	flow.Cleanup(ctx)
 
 	return nil

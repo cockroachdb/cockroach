@@ -344,7 +344,7 @@ func (ds *ServerImpl) RunSyncFlow(stream DistSQL_RunSyncFlowServer) error {
 		defer ctxCancel()
 		mbox.start(ctx, &f.waitGroup, ctxCancel)
 		f.Start(ctx, func() {})
-		f.Wait()
+		f.Wait(func() {})
 		f.Cleanup(ctx)
 	}); err != nil {
 		return err

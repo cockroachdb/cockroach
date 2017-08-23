@@ -373,8 +373,8 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) {
 }
 
 // Wait waits for all the goroutines for this flow to exit. If the context gets
-// cancelled before all goroutines exit, it calls f.cancel().
-func (f *Flow) Wait() {
+// cancelled before all goroutines exit, it calls f.cancel() and cancelFn().
+func (f *Flow) Wait(cancelFn func()) {
 	waitChan := make(chan struct{})
 
 	go func() {
@@ -385,6 +385,7 @@ func (f *Flow) Wait() {
 	select {
 	case <-f.ctx.Done():
 		f.cancel()
+		cancelFn()
 		<-waitChan
 	case <-waitChan:
 		// Exit normally
@@ -424,9 +425,8 @@ func (f *Flow) RunSync(ctx context.Context) {
 }
 
 // cancel iterates through all unconnected streams of this flow and marks them cancelled.
-// It also closes the syncFlowConsumer, if it exists. This function is called in Wait()
-// after the associated context has been cancelled. In order to cancel a flow, call
-// f.ctxCancel() instead of this function.
+// This function is called in Wait() after the associated context has been cancelled.
+// In order to cancel a flow, call f.ctxCancel() instead of this function.
 //
 // For a detailed description of the distsql query cancellation mechanism,
 // read docs/RFCS/query_cancellation.md.
@@ -449,14 +449,6 @@ func (f *Flow) cancel() {
 			is.receiver.ProducerDone()
 			f.flowRegistry.finishInboundStreamLocked(f.id, streamID)
 		}
-	}
-
-	if f.syncFlowConsumer != nil {
-		// Push an error to the sync flow consumer. If this is a distSQLReceiver,
-		// it will call ConsumerClosed when it sees a non-nil error.
-		f.syncFlowConsumer.Push(
-			nil, /* row */
-			ProducerMetadata{Err: sqlbase.NewQueryCanceledError()})
 	}
 }
 

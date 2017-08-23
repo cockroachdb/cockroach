@@ -78,7 +78,7 @@ func (fs *flowScheduler) runFlowNow(ctx context.Context, f *Flow) {
 	// TODO(radu): we could replace the WaitGroup with a structure that keeps a
 	// refcount and automatically runs Cleanup() when the count reaches 0.
 	go func() {
-		f.Wait()
+		f.Wait(func() {})
 		f.Cleanup(ctx)
 	}()
 }

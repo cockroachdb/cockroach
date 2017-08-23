@@ -58,7 +58,7 @@ func runTestFlow(
 		t.Fatal(err)
 	}
 	flow.Start(ctx, func() {})
-	flow.Wait()
+	flow.Wait(func() {})
 	flow.Cleanup(ctx)
 
 	if !rowBuf.ProducerClosed {
