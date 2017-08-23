@@ -2592,9 +2592,6 @@ func (r *Replica) tryExecuteWriteBatch(
 	log.Event(ctx, "applied timestamp cache")
 
 	ch, tryAbandon, undoQuotaAcquisition, pErr := r.propose(ctx, lease, ba, endCmds, spans)
-	if pErr != nil {
-		return nil, pErr, proposalNoRetry
-	}
 	defer func() {
 		// NB: We may be double free-ing here, consider the following cases:
 		//  - The request was evaluated and the command resulted in an error, but a
@@ -2605,6 +2602,9 @@ func (r *Replica) tryExecuteWriteBatch(
 			undoQuotaAcquisition()
 		}
 	}()
+	if pErr != nil {
+		return nil, pErr, proposalNoRetry
+	}
 
 	// After the command is proposed to Raft, invoking endCmds.done is now the
 	// responsibility of processRaftCommand.
