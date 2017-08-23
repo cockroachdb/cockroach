@@ -65,7 +65,7 @@ func dockerIP() net.IP {
 type Container struct {
 	id      string
 	name    string
-	cluster *LocalCluster
+	cluster *DockerCluster
 }
 
 // Name returns the container's name.
@@ -73,7 +73,7 @@ func (c Container) Name() string {
 	return c.name
 }
 
-func hasImage(ctx context.Context, l *LocalCluster, ref string) bool {
+func hasImage(ctx context.Context, l *DockerCluster, ref string) bool {
 	name := strings.Split(ref, ":")[0]
 	images, err := l.client.ImageList(ctx, types.ImageListOptions{MatchName: name})
 	if err != nil {
@@ -96,7 +96,7 @@ func hasImage(ctx context.Context, l *LocalCluster, ref string) bool {
 }
 
 func pullImage(
-	ctx context.Context, l *LocalCluster, ref string, options types.ImagePullOptions,
+	ctx context.Context, l *DockerCluster, ref string, options types.ImagePullOptions,
 ) error {
 	// HACK: on CircleCI, docker pulls the image on the first access from an
 	// acceptance test even though that image is already present. So we first
@@ -128,7 +128,7 @@ func pullImage(
 // defined by l.createNetwork().
 func createContainer(
 	ctx context.Context,
-	l *LocalCluster,
+	l *DockerCluster,
 	containerConfig container.Config,
 	hostConfig container.HostConfig,
 	containerName string,

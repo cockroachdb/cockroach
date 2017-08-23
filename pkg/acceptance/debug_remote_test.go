@@ -30,15 +30,18 @@ import (
 func TestDebugRemote(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
+	// TODO(tschottdorf): with some love, this might run under RunLocal.
+	RunDocker(t, testDebugRemote)
+}
 
-	SkipUnlessLocal(t)
+func testDebugRemote(t *testing.T) {
 	cfg := cluster.TestConfig{
 		Name:     "TestDebugRemote",
 		Duration: *flagDuration,
 		Nodes:    []cluster.NodeConfig{{Count: 1, Stores: []cluster.StoreConfig{{Count: 1}}}},
 	}
 	ctx := context.Background()
-	l := StartCluster(ctx, t, cfg).(*cluster.LocalCluster)
+	l := StartCluster(ctx, t, cfg).(*cluster.DockerCluster)
 	defer l.AssertAndStop(ctx, t)
 
 	db, err := gosql.Open("postgres", l.PGUrl(ctx, 0))
