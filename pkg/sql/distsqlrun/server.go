@@ -343,7 +343,10 @@ func (ds *ServerImpl) RunSyncFlow(stream DistSQL_RunSyncFlowServer) error {
 		ctx, ctxCancel := context.WithCancel(ctx)
 		defer ctxCancel()
 		mbox.start(ctx, &f.waitGroup, ctxCancel)
-		f.Start(ctx, func() {})
+		if err := f.Start(ctx, func() {}); err != nil {
+			log.Fatalf(ctx, "unexpected error from syncFlow.Start(): %s "+
+				"The error should have gone to the consumer.", err)
+		}
 		f.Wait()
 		f.Cleanup(ctx)
 	}); err != nil {
@@ -361,7 +364,7 @@ func (ds *ServerImpl) SetupFlow(
 	// Note: the passed context will be canceled when this RPC completes, so we
 	// can't associate it with the flow.
 	ctx = ds.AnnotateCtx(context.Background())
-	ctx, f, err := ds.setupFlow(ctx, parentSpan, req, nil)
+	ctx, f, err := ds.setupFlow(ctx, parentSpan, req, nil /* syncFlowConsumer */)
 	if err == nil {
 		err = ds.flowScheduler.ScheduleFlow(ctx, f)
 	}

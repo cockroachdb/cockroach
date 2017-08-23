@@ -99,6 +99,10 @@ func (dsp *distSQLPlanner) initRunners() {
 //
 // Note that errors that happen while actually running the flow are reported to
 // recv, not returned by this function.
+// TODO(andrei): Some errors ocurring during the "starting" phase are also
+// reported to recv instead of being returned (see the flow.Start() call for the
+// local flow). Perhaps we should push all errors to recv and have this function
+// not return anything.
 func (dsp *distSQLPlanner) Run(
 	planCtx *planningCtx,
 	txn *client.Txn,
@@ -107,6 +111,10 @@ func (dsp *distSQLPlanner) Run(
 	evalCtx parser.EvalContext,
 ) error {
 	ctx := planCtx.ctx
+
+	if err := planCtx.sanityCheckAddresses(); err != nil {
+		return err
+	}
 
 	flows := plan.GenerateFlowSpecs()
 
@@ -195,7 +203,10 @@ func (dsp *distSQLPlanner) Run(
 		return err
 	}
 	// TODO(radu): this should go through the flow scheduler.
-	flow.Start(ctx, func() {})
+	if err := flow.Start(ctx, func() {}); err != nil {
+		log.Fatalf(ctx, "unexpected error from syncFlow.Start(): %s "+
+			"The error should have gone to the consumer.", err)
+	}
 	flow.Wait()
 	flow.Cleanup(ctx)
 
