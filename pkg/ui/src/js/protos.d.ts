@@ -20345,6 +20345,256 @@ export namespace cockroach {
                 }
             }
 
+            type ImportDetails$Properties = {
+                tables?: cockroach.sql.jobs.ImportDetails.Table$Properties[];
+            };
+
+            /**
+             * Constructs a new ImportDetails.
+             * @exports cockroach.sql.jobs.ImportDetails
+             * @constructor
+             * @param {cockroach.sql.jobs.ImportDetails$Properties=} [properties] Properties to set
+             */
+            class ImportDetails {
+
+                /**
+                 * Constructs a new ImportDetails.
+                 * @exports cockroach.sql.jobs.ImportDetails
+                 * @constructor
+                 * @param {cockroach.sql.jobs.ImportDetails$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.sql.jobs.ImportDetails$Properties);
+
+                /**
+                 * ImportDetails tables.
+                 * @type {Array.<cockroach.sql.jobs.ImportDetails.Table$Properties>}
+                 */
+                public tables: cockroach.sql.jobs.ImportDetails.Table$Properties[];
+
+                /**
+                 * Creates a new ImportDetails instance using the specified properties.
+                 * @param {cockroach.sql.jobs.ImportDetails$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.jobs.ImportDetails} ImportDetails instance
+                 */
+                public static create(properties?: cockroach.sql.jobs.ImportDetails$Properties): cockroach.sql.jobs.ImportDetails;
+
+                /**
+                 * Encodes the specified ImportDetails message. Does not implicitly {@link cockroach.sql.jobs.ImportDetails.verify|verify} messages.
+                 * @param {cockroach.sql.jobs.ImportDetails$Properties} message ImportDetails message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.sql.jobs.ImportDetails$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified ImportDetails message, length delimited. Does not implicitly {@link cockroach.sql.jobs.ImportDetails.verify|verify} messages.
+                 * @param {cockroach.sql.jobs.ImportDetails$Properties} message ImportDetails message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.sql.jobs.ImportDetails$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes an ImportDetails message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.jobs.ImportDetails} ImportDetails
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.sql.jobs.ImportDetails;
+
+                /**
+                 * Decodes an ImportDetails message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.jobs.ImportDetails} ImportDetails
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.sql.jobs.ImportDetails;
+
+                /**
+                 * Verifies an ImportDetails message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates an ImportDetails message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.jobs.ImportDetails} ImportDetails
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.sql.jobs.ImportDetails;
+
+                /**
+                 * Creates an ImportDetails message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.jobs.ImportDetails.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.jobs.ImportDetails} ImportDetails
+                 */
+                public static from(object: { [k: string]: any }): cockroach.sql.jobs.ImportDetails;
+
+                /**
+                 * Creates a plain object from an ImportDetails message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.jobs.ImportDetails} message ImportDetails
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.sql.jobs.ImportDetails, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this ImportDetails message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this ImportDetails to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            namespace ImportDetails {
+
+                type Table$Properties = {
+                    desc?: cockroach.sql.sqlbase.TableDescriptor$Properties;
+                    uris?: string[];
+                    options?: cockroach.roachpb.CSVOptions$Properties;
+                    backupPath?: string;
+                };
+
+                /**
+                 * Constructs a new Table.
+                 * @exports cockroach.sql.jobs.ImportDetails.Table
+                 * @constructor
+                 * @param {cockroach.sql.jobs.ImportDetails.Table$Properties=} [properties] Properties to set
+                 */
+                class Table {
+
+                    /**
+                     * Constructs a new Table.
+                     * @exports cockroach.sql.jobs.ImportDetails.Table
+                     * @constructor
+                     * @param {cockroach.sql.jobs.ImportDetails.Table$Properties=} [properties] Properties to set
+                     */
+                    constructor(properties?: cockroach.sql.jobs.ImportDetails.Table$Properties);
+
+                    /**
+                     * Table desc.
+                     * @type {(cockroach.sql.sqlbase.TableDescriptor$Properties|null)}
+                     */
+                    public desc: (cockroach.sql.sqlbase.TableDescriptor$Properties|null);
+
+                    /**
+                     * Table uris.
+                     * @type {Array.<string>}
+                     */
+                    public uris: string[];
+
+                    /**
+                     * Table options.
+                     * @type {(cockroach.roachpb.CSVOptions$Properties|null)}
+                     */
+                    public options: (cockroach.roachpb.CSVOptions$Properties|null);
+
+                    /**
+                     * Table backupPath.
+                     * @type {string}
+                     */
+                    public backupPath: string;
+
+                    /**
+                     * Creates a new Table instance using the specified properties.
+                     * @param {cockroach.sql.jobs.ImportDetails.Table$Properties=} [properties] Properties to set
+                     * @returns {cockroach.sql.jobs.ImportDetails.Table} Table instance
+                     */
+                    public static create(properties?: cockroach.sql.jobs.ImportDetails.Table$Properties): cockroach.sql.jobs.ImportDetails.Table;
+
+                    /**
+                     * Encodes the specified Table message. Does not implicitly {@link cockroach.sql.jobs.ImportDetails.Table.verify|verify} messages.
+                     * @param {cockroach.sql.jobs.ImportDetails.Table$Properties} message Table message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encode(message: cockroach.sql.jobs.ImportDetails.Table$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Encodes the specified Table message, length delimited. Does not implicitly {@link cockroach.sql.jobs.ImportDetails.Table.verify|verify} messages.
+                     * @param {cockroach.sql.jobs.ImportDetails.Table$Properties} message Table message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encodeDelimited(message: cockroach.sql.jobs.ImportDetails.Table$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Decodes a Table message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.sql.jobs.ImportDetails.Table} Table
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.sql.jobs.ImportDetails.Table;
+
+                    /**
+                     * Decodes a Table message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.sql.jobs.ImportDetails.Table} Table
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.sql.jobs.ImportDetails.Table;
+
+                    /**
+                     * Verifies a Table message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    public static verify(message: { [k: string]: any }): string;
+
+                    /**
+                     * Creates a Table message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.jobs.ImportDetails.Table} Table
+                     */
+                    public static fromObject(object: { [k: string]: any }): cockroach.sql.jobs.ImportDetails.Table;
+
+                    /**
+                     * Creates a Table message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.sql.jobs.ImportDetails.Table.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.jobs.ImportDetails.Table} Table
+                     */
+                    public static from(object: { [k: string]: any }): cockroach.sql.jobs.ImportDetails.Table;
+
+                    /**
+                     * Creates a plain object from a Table message. Also converts values to other types if specified.
+                     * @param {cockroach.sql.jobs.ImportDetails.Table} message Table
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public static toObject(message: cockroach.sql.jobs.ImportDetails.Table, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Creates a plain object from this Table message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Converts this Table to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    public toJSON(): { [k: string]: any };
+                }
+            }
+
             type ResumeSpanList$Properties = {
                 resume_spans?: cockroach.roachpb.Span$Properties[];
             };
@@ -20591,6 +20841,7 @@ export namespace cockroach {
                 backup?: cockroach.sql.jobs.BackupDetails$Properties;
                 restore?: cockroach.sql.jobs.RestoreDetails$Properties;
                 schemaChange?: cockroach.sql.jobs.SchemaChangeDetails$Properties;
+                "import"?: cockroach.sql.jobs.ImportDetails$Properties;
             };
 
             /**
@@ -20680,6 +20931,12 @@ export namespace cockroach {
                  * @type {(cockroach.sql.jobs.SchemaChangeDetails$Properties|null)}
                  */
                 public schemaChange: (cockroach.sql.jobs.SchemaChangeDetails$Properties|null);
+
+                /**
+                 * Payload import.
+                 * @type {(cockroach.sql.jobs.ImportDetails$Properties|null)}
+                 */
+                public ["import"]: (cockroach.sql.jobs.ImportDetails$Properties|null);
 
                 /**
                  * Payload details.
@@ -20784,12 +21041,2733 @@ export namespace cockroach {
              * @property {number} BACKUP=1 BACKUP value
              * @property {number} RESTORE=2 RESTORE value
              * @property {number} SCHEMA_CHANGE=3 SCHEMA_CHANGE value
+             * @property {number} IMPORT=4 IMPORT value
              */
             enum Type {
                 UNSPECIFIED = 0,
                 BACKUP = 1,
                 RESTORE = 2,
-                SCHEMA_CHANGE = 3
+                SCHEMA_CHANGE = 3,
+                IMPORT = 4
+            }
+        }
+
+        /**
+         * Namespace sqlbase.
+         * @exports cockroach.sql.sqlbase
+         * @namespace
+         */
+        namespace sqlbase {
+
+            type ColumnType$Properties = {
+                semantic_type?: cockroach.sql.sqlbase.ColumnType.SemanticType;
+                width?: number;
+                precision?: number;
+                array_dimensions?: number[];
+                locale?: string;
+                visible_type?: cockroach.sql.sqlbase.ColumnType.VisibleType;
+                array_contents?: cockroach.sql.sqlbase.ColumnType.SemanticType;
+            };
+
+            /**
+             * Constructs a new ColumnType.
+             * @exports cockroach.sql.sqlbase.ColumnType
+             * @constructor
+             * @param {cockroach.sql.sqlbase.ColumnType$Properties=} [properties] Properties to set
+             */
+            class ColumnType {
+
+                /**
+                 * Constructs a new ColumnType.
+                 * @exports cockroach.sql.sqlbase.ColumnType
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.ColumnType$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.sql.sqlbase.ColumnType$Properties);
+
+                /**
+                 * ColumnType semantic_type.
+                 * @type {cockroach.sql.sqlbase.ColumnType.SemanticType}
+                 */
+                public semantic_type: cockroach.sql.sqlbase.ColumnType.SemanticType;
+
+                /**
+                 * ColumnType width.
+                 * @type {number}
+                 */
+                public width: number;
+
+                /**
+                 * ColumnType precision.
+                 * @type {number}
+                 */
+                public precision: number;
+
+                /**
+                 * ColumnType array_dimensions.
+                 * @type {Array.<number>}
+                 */
+                public array_dimensions: number[];
+
+                /**
+                 * ColumnType locale.
+                 * @type {string}
+                 */
+                public locale: string;
+
+                /**
+                 * ColumnType visible_type.
+                 * @type {cockroach.sql.sqlbase.ColumnType.VisibleType}
+                 */
+                public visible_type: cockroach.sql.sqlbase.ColumnType.VisibleType;
+
+                /**
+                 * ColumnType array_contents.
+                 * @type {cockroach.sql.sqlbase.ColumnType.SemanticType}
+                 */
+                public array_contents: cockroach.sql.sqlbase.ColumnType.SemanticType;
+
+                /**
+                 * Creates a new ColumnType instance using the specified properties.
+                 * @param {cockroach.sql.sqlbase.ColumnType$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.sqlbase.ColumnType} ColumnType instance
+                 */
+                public static create(properties?: cockroach.sql.sqlbase.ColumnType$Properties): cockroach.sql.sqlbase.ColumnType;
+
+                /**
+                 * Encodes the specified ColumnType message. Does not implicitly {@link cockroach.sql.sqlbase.ColumnType.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.ColumnType$Properties} message ColumnType message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.sql.sqlbase.ColumnType$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified ColumnType message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.ColumnType.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.ColumnType$Properties} message ColumnType message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.sql.sqlbase.ColumnType$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a ColumnType message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.sqlbase.ColumnType} ColumnType
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.sql.sqlbase.ColumnType;
+
+                /**
+                 * Decodes a ColumnType message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.sqlbase.ColumnType} ColumnType
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.sql.sqlbase.ColumnType;
+
+                /**
+                 * Verifies a ColumnType message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a ColumnType message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.ColumnType} ColumnType
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.sql.sqlbase.ColumnType;
+
+                /**
+                 * Creates a ColumnType message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.sqlbase.ColumnType.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.ColumnType} ColumnType
+                 */
+                public static from(object: { [k: string]: any }): cockroach.sql.sqlbase.ColumnType;
+
+                /**
+                 * Creates a plain object from a ColumnType message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.sqlbase.ColumnType} message ColumnType
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.sql.sqlbase.ColumnType, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this ColumnType message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this ColumnType to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            namespace ColumnType {
+
+                /**
+                 * SemanticType enum.
+                 * @name SemanticType
+                 * @memberof cockroach.sql.sqlbase.ColumnType
+                 * @enum {number}
+                 * @property {number} BOOL=0 BOOL value
+                 * @property {number} INT=1 INT value
+                 * @property {number} FLOAT=2 FLOAT value
+                 * @property {number} DECIMAL=3 DECIMAL value
+                 * @property {number} DATE=4 DATE value
+                 * @property {number} TIMESTAMP=5 TIMESTAMP value
+                 * @property {number} INTERVAL=6 INTERVAL value
+                 * @property {number} STRING=7 STRING value
+                 * @property {number} BYTES=8 BYTES value
+                 * @property {number} TIMESTAMPTZ=9 TIMESTAMPTZ value
+                 * @property {number} COLLATEDSTRING=10 COLLATEDSTRING value
+                 * @property {number} NAME=11 NAME value
+                 * @property {number} OID=12 OID value
+                 * @property {number} NULL=13 NULL value
+                 * @property {number} UUID=14 UUID value
+                 * @property {number} ARRAY=15 ARRAY value
+                 * @property {number} INT2VECTOR=200 INT2VECTOR value
+                 */
+                enum SemanticType {
+                    BOOL = 0,
+                    INT = 1,
+                    FLOAT = 2,
+                    DECIMAL = 3,
+                    DATE = 4,
+                    TIMESTAMP = 5,
+                    INTERVAL = 6,
+                    STRING = 7,
+                    BYTES = 8,
+                    TIMESTAMPTZ = 9,
+                    COLLATEDSTRING = 10,
+                    NAME = 11,
+                    OID = 12,
+                    NULL = 13,
+                    UUID = 14,
+                    ARRAY = 15,
+                    INT2VECTOR = 200
+                }
+
+                /**
+                 * VisibleType enum.
+                 * @name VisibleType
+                 * @memberof cockroach.sql.sqlbase.ColumnType
+                 * @enum {number}
+                 * @property {number} NONE=0 NONE value
+                 * @property {number} INTEGER=1 INTEGER value
+                 * @property {number} SMALLINT=2 SMALLINT value
+                 * @property {number} BIGINT=3 BIGINT value
+                 * @property {number} BIT=4 BIT value
+                 * @property {number} REAL=5 REAL value
+                 * @property {number} DOUBLE_PRECISON=6 DOUBLE_PRECISON value
+                 */
+                enum VisibleType {
+                    NONE = 0,
+                    INTEGER = 1,
+                    SMALLINT = 2,
+                    BIGINT = 3,
+                    BIT = 4,
+                    REAL = 5,
+                    DOUBLE_PRECISON = 6
+                }
+            }
+
+            /**
+             * ConstraintValidity enum.
+             * @name ConstraintValidity
+             * @memberof cockroach.sql.sqlbase
+             * @enum {number}
+             * @property {number} Validated=0 Validated value
+             * @property {number} Unvalidated=1 Unvalidated value
+             */
+            enum ConstraintValidity {
+                Validated = 0,
+                Unvalidated = 1
+            }
+
+            type ForeignKeyReference$Properties = {
+                table?: number;
+                index?: number;
+                name?: string;
+                validity?: cockroach.sql.sqlbase.ConstraintValidity;
+                shared_prefix_len?: number;
+            };
+
+            /**
+             * Constructs a new ForeignKeyReference.
+             * @exports cockroach.sql.sqlbase.ForeignKeyReference
+             * @constructor
+             * @param {cockroach.sql.sqlbase.ForeignKeyReference$Properties=} [properties] Properties to set
+             */
+            class ForeignKeyReference {
+
+                /**
+                 * Constructs a new ForeignKeyReference.
+                 * @exports cockroach.sql.sqlbase.ForeignKeyReference
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.ForeignKeyReference$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.sql.sqlbase.ForeignKeyReference$Properties);
+
+                /**
+                 * ForeignKeyReference table.
+                 * @type {number}
+                 */
+                public table: number;
+
+                /**
+                 * ForeignKeyReference index.
+                 * @type {number}
+                 */
+                public index: number;
+
+                /**
+                 * ForeignKeyReference name.
+                 * @type {string}
+                 */
+                public name: string;
+
+                /**
+                 * ForeignKeyReference validity.
+                 * @type {cockroach.sql.sqlbase.ConstraintValidity}
+                 */
+                public validity: cockroach.sql.sqlbase.ConstraintValidity;
+
+                /**
+                 * ForeignKeyReference shared_prefix_len.
+                 * @type {number}
+                 */
+                public shared_prefix_len: number;
+
+                /**
+                 * Creates a new ForeignKeyReference instance using the specified properties.
+                 * @param {cockroach.sql.sqlbase.ForeignKeyReference$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.sqlbase.ForeignKeyReference} ForeignKeyReference instance
+                 */
+                public static create(properties?: cockroach.sql.sqlbase.ForeignKeyReference$Properties): cockroach.sql.sqlbase.ForeignKeyReference;
+
+                /**
+                 * Encodes the specified ForeignKeyReference message. Does not implicitly {@link cockroach.sql.sqlbase.ForeignKeyReference.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.ForeignKeyReference$Properties} message ForeignKeyReference message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.sql.sqlbase.ForeignKeyReference$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified ForeignKeyReference message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.ForeignKeyReference.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.ForeignKeyReference$Properties} message ForeignKeyReference message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.sql.sqlbase.ForeignKeyReference$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a ForeignKeyReference message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.sqlbase.ForeignKeyReference} ForeignKeyReference
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.sql.sqlbase.ForeignKeyReference;
+
+                /**
+                 * Decodes a ForeignKeyReference message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.sqlbase.ForeignKeyReference} ForeignKeyReference
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.sql.sqlbase.ForeignKeyReference;
+
+                /**
+                 * Verifies a ForeignKeyReference message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a ForeignKeyReference message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.ForeignKeyReference} ForeignKeyReference
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.sql.sqlbase.ForeignKeyReference;
+
+                /**
+                 * Creates a ForeignKeyReference message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.sqlbase.ForeignKeyReference.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.ForeignKeyReference} ForeignKeyReference
+                 */
+                public static from(object: { [k: string]: any }): cockroach.sql.sqlbase.ForeignKeyReference;
+
+                /**
+                 * Creates a plain object from a ForeignKeyReference message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.sqlbase.ForeignKeyReference} message ForeignKeyReference
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.sql.sqlbase.ForeignKeyReference, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this ForeignKeyReference message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this ForeignKeyReference to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            type ColumnDescriptor$Properties = {
+                name?: string;
+                id?: number;
+                type?: cockroach.sql.sqlbase.ColumnType$Properties;
+                nullable?: boolean;
+                default_expr?: string;
+                hidden?: boolean;
+            };
+
+            /**
+             * Constructs a new ColumnDescriptor.
+             * @exports cockroach.sql.sqlbase.ColumnDescriptor
+             * @constructor
+             * @param {cockroach.sql.sqlbase.ColumnDescriptor$Properties=} [properties] Properties to set
+             */
+            class ColumnDescriptor {
+
+                /**
+                 * Constructs a new ColumnDescriptor.
+                 * @exports cockroach.sql.sqlbase.ColumnDescriptor
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.ColumnDescriptor$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.sql.sqlbase.ColumnDescriptor$Properties);
+
+                /**
+                 * ColumnDescriptor name.
+                 * @type {string}
+                 */
+                public name: string;
+
+                /**
+                 * ColumnDescriptor id.
+                 * @type {number}
+                 */
+                public id: number;
+
+                /**
+                 * ColumnDescriptor type.
+                 * @type {(cockroach.sql.sqlbase.ColumnType$Properties|null)}
+                 */
+                public type: (cockroach.sql.sqlbase.ColumnType$Properties|null);
+
+                /**
+                 * ColumnDescriptor nullable.
+                 * @type {boolean}
+                 */
+                public nullable: boolean;
+
+                /**
+                 * ColumnDescriptor default_expr.
+                 * @type {string}
+                 */
+                public default_expr: string;
+
+                /**
+                 * ColumnDescriptor hidden.
+                 * @type {boolean}
+                 */
+                public hidden: boolean;
+
+                /**
+                 * Creates a new ColumnDescriptor instance using the specified properties.
+                 * @param {cockroach.sql.sqlbase.ColumnDescriptor$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.sqlbase.ColumnDescriptor} ColumnDescriptor instance
+                 */
+                public static create(properties?: cockroach.sql.sqlbase.ColumnDescriptor$Properties): cockroach.sql.sqlbase.ColumnDescriptor;
+
+                /**
+                 * Encodes the specified ColumnDescriptor message. Does not implicitly {@link cockroach.sql.sqlbase.ColumnDescriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.ColumnDescriptor$Properties} message ColumnDescriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.sql.sqlbase.ColumnDescriptor$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified ColumnDescriptor message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.ColumnDescriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.ColumnDescriptor$Properties} message ColumnDescriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.sql.sqlbase.ColumnDescriptor$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a ColumnDescriptor message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.sqlbase.ColumnDescriptor} ColumnDescriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.sql.sqlbase.ColumnDescriptor;
+
+                /**
+                 * Decodes a ColumnDescriptor message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.sqlbase.ColumnDescriptor} ColumnDescriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.sql.sqlbase.ColumnDescriptor;
+
+                /**
+                 * Verifies a ColumnDescriptor message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a ColumnDescriptor message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.ColumnDescriptor} ColumnDescriptor
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.sql.sqlbase.ColumnDescriptor;
+
+                /**
+                 * Creates a ColumnDescriptor message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.sqlbase.ColumnDescriptor.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.ColumnDescriptor} ColumnDescriptor
+                 */
+                public static from(object: { [k: string]: any }): cockroach.sql.sqlbase.ColumnDescriptor;
+
+                /**
+                 * Creates a plain object from a ColumnDescriptor message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.sqlbase.ColumnDescriptor} message ColumnDescriptor
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.sql.sqlbase.ColumnDescriptor, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this ColumnDescriptor message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this ColumnDescriptor to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            type ColumnFamilyDescriptor$Properties = {
+                name?: string;
+                id?: number;
+                column_names?: string[];
+                column_ids?: number[];
+                default_column_id?: number;
+            };
+
+            /**
+             * Constructs a new ColumnFamilyDescriptor.
+             * @exports cockroach.sql.sqlbase.ColumnFamilyDescriptor
+             * @constructor
+             * @param {cockroach.sql.sqlbase.ColumnFamilyDescriptor$Properties=} [properties] Properties to set
+             */
+            class ColumnFamilyDescriptor {
+
+                /**
+                 * Constructs a new ColumnFamilyDescriptor.
+                 * @exports cockroach.sql.sqlbase.ColumnFamilyDescriptor
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.ColumnFamilyDescriptor$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.sql.sqlbase.ColumnFamilyDescriptor$Properties);
+
+                /**
+                 * ColumnFamilyDescriptor name.
+                 * @type {string}
+                 */
+                public name: string;
+
+                /**
+                 * ColumnFamilyDescriptor id.
+                 * @type {number}
+                 */
+                public id: number;
+
+                /**
+                 * ColumnFamilyDescriptor column_names.
+                 * @type {Array.<string>}
+                 */
+                public column_names: string[];
+
+                /**
+                 * ColumnFamilyDescriptor column_ids.
+                 * @type {Array.<number>}
+                 */
+                public column_ids: number[];
+
+                /**
+                 * ColumnFamilyDescriptor default_column_id.
+                 * @type {number}
+                 */
+                public default_column_id: number;
+
+                /**
+                 * Creates a new ColumnFamilyDescriptor instance using the specified properties.
+                 * @param {cockroach.sql.sqlbase.ColumnFamilyDescriptor$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.sqlbase.ColumnFamilyDescriptor} ColumnFamilyDescriptor instance
+                 */
+                public static create(properties?: cockroach.sql.sqlbase.ColumnFamilyDescriptor$Properties): cockroach.sql.sqlbase.ColumnFamilyDescriptor;
+
+                /**
+                 * Encodes the specified ColumnFamilyDescriptor message. Does not implicitly {@link cockroach.sql.sqlbase.ColumnFamilyDescriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.ColumnFamilyDescriptor$Properties} message ColumnFamilyDescriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.sql.sqlbase.ColumnFamilyDescriptor$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified ColumnFamilyDescriptor message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.ColumnFamilyDescriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.ColumnFamilyDescriptor$Properties} message ColumnFamilyDescriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.sql.sqlbase.ColumnFamilyDescriptor$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a ColumnFamilyDescriptor message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.sqlbase.ColumnFamilyDescriptor} ColumnFamilyDescriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.sql.sqlbase.ColumnFamilyDescriptor;
+
+                /**
+                 * Decodes a ColumnFamilyDescriptor message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.sqlbase.ColumnFamilyDescriptor} ColumnFamilyDescriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.sql.sqlbase.ColumnFamilyDescriptor;
+
+                /**
+                 * Verifies a ColumnFamilyDescriptor message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a ColumnFamilyDescriptor message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.ColumnFamilyDescriptor} ColumnFamilyDescriptor
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.sql.sqlbase.ColumnFamilyDescriptor;
+
+                /**
+                 * Creates a ColumnFamilyDescriptor message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.sqlbase.ColumnFamilyDescriptor.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.ColumnFamilyDescriptor} ColumnFamilyDescriptor
+                 */
+                public static from(object: { [k: string]: any }): cockroach.sql.sqlbase.ColumnFamilyDescriptor;
+
+                /**
+                 * Creates a plain object from a ColumnFamilyDescriptor message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.sqlbase.ColumnFamilyDescriptor} message ColumnFamilyDescriptor
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.sql.sqlbase.ColumnFamilyDescriptor, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this ColumnFamilyDescriptor message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this ColumnFamilyDescriptor to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            type InterleaveDescriptor$Properties = {
+                ancestors?: cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor$Properties[];
+            };
+
+            /**
+             * Constructs a new InterleaveDescriptor.
+             * @exports cockroach.sql.sqlbase.InterleaveDescriptor
+             * @constructor
+             * @param {cockroach.sql.sqlbase.InterleaveDescriptor$Properties=} [properties] Properties to set
+             */
+            class InterleaveDescriptor {
+
+                /**
+                 * Constructs a new InterleaveDescriptor.
+                 * @exports cockroach.sql.sqlbase.InterleaveDescriptor
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.InterleaveDescriptor$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.sql.sqlbase.InterleaveDescriptor$Properties);
+
+                /**
+                 * InterleaveDescriptor ancestors.
+                 * @type {Array.<cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor$Properties>}
+                 */
+                public ancestors: cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor$Properties[];
+
+                /**
+                 * Creates a new InterleaveDescriptor instance using the specified properties.
+                 * @param {cockroach.sql.sqlbase.InterleaveDescriptor$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.sqlbase.InterleaveDescriptor} InterleaveDescriptor instance
+                 */
+                public static create(properties?: cockroach.sql.sqlbase.InterleaveDescriptor$Properties): cockroach.sql.sqlbase.InterleaveDescriptor;
+
+                /**
+                 * Encodes the specified InterleaveDescriptor message. Does not implicitly {@link cockroach.sql.sqlbase.InterleaveDescriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.InterleaveDescriptor$Properties} message InterleaveDescriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.sql.sqlbase.InterleaveDescriptor$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified InterleaveDescriptor message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.InterleaveDescriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.InterleaveDescriptor$Properties} message InterleaveDescriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.sql.sqlbase.InterleaveDescriptor$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes an InterleaveDescriptor message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.sqlbase.InterleaveDescriptor} InterleaveDescriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.sql.sqlbase.InterleaveDescriptor;
+
+                /**
+                 * Decodes an InterleaveDescriptor message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.sqlbase.InterleaveDescriptor} InterleaveDescriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.sql.sqlbase.InterleaveDescriptor;
+
+                /**
+                 * Verifies an InterleaveDescriptor message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates an InterleaveDescriptor message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.InterleaveDescriptor} InterleaveDescriptor
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.sql.sqlbase.InterleaveDescriptor;
+
+                /**
+                 * Creates an InterleaveDescriptor message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.sqlbase.InterleaveDescriptor.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.InterleaveDescriptor} InterleaveDescriptor
+                 */
+                public static from(object: { [k: string]: any }): cockroach.sql.sqlbase.InterleaveDescriptor;
+
+                /**
+                 * Creates a plain object from an InterleaveDescriptor message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.sqlbase.InterleaveDescriptor} message InterleaveDescriptor
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.sql.sqlbase.InterleaveDescriptor, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this InterleaveDescriptor message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this InterleaveDescriptor to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            namespace InterleaveDescriptor {
+
+                type Ancestor$Properties = {
+                    table_id?: number;
+                    index_id?: number;
+                    shared_prefix_len?: number;
+                };
+
+                /**
+                 * Constructs a new Ancestor.
+                 * @exports cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor$Properties=} [properties] Properties to set
+                 */
+                class Ancestor {
+
+                    /**
+                     * Constructs a new Ancestor.
+                     * @exports cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor
+                     * @constructor
+                     * @param {cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor$Properties=} [properties] Properties to set
+                     */
+                    constructor(properties?: cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor$Properties);
+
+                    /**
+                     * Ancestor table_id.
+                     * @type {number}
+                     */
+                    public table_id: number;
+
+                    /**
+                     * Ancestor index_id.
+                     * @type {number}
+                     */
+                    public index_id: number;
+
+                    /**
+                     * Ancestor shared_prefix_len.
+                     * @type {number}
+                     */
+                    public shared_prefix_len: number;
+
+                    /**
+                     * Creates a new Ancestor instance using the specified properties.
+                     * @param {cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor$Properties=} [properties] Properties to set
+                     * @returns {cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor} Ancestor instance
+                     */
+                    public static create(properties?: cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor$Properties): cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor;
+
+                    /**
+                     * Encodes the specified Ancestor message. Does not implicitly {@link cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor.verify|verify} messages.
+                     * @param {cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor$Properties} message Ancestor message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encode(message: cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Encodes the specified Ancestor message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor.verify|verify} messages.
+                     * @param {cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor$Properties} message Ancestor message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encodeDelimited(message: cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Decodes an Ancestor message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor} Ancestor
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor;
+
+                    /**
+                     * Decodes an Ancestor message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor} Ancestor
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor;
+
+                    /**
+                     * Verifies an Ancestor message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    public static verify(message: { [k: string]: any }): string;
+
+                    /**
+                     * Creates an Ancestor message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor} Ancestor
+                     */
+                    public static fromObject(object: { [k: string]: any }): cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor;
+
+                    /**
+                     * Creates an Ancestor message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor} Ancestor
+                     */
+                    public static from(object: { [k: string]: any }): cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor;
+
+                    /**
+                     * Creates a plain object from an Ancestor message. Also converts values to other types if specified.
+                     * @param {cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor} message Ancestor
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public static toObject(message: cockroach.sql.sqlbase.InterleaveDescriptor.Ancestor, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Creates a plain object from this Ancestor message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Converts this Ancestor to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    public toJSON(): { [k: string]: any };
+                }
+            }
+
+            type IndexDescriptor$Properties = {
+                name?: string;
+                id?: number;
+                unique?: boolean;
+                column_names?: string[];
+                column_directions?: cockroach.sql.sqlbase.IndexDescriptor.Direction[];
+                store_column_names?: string[];
+                column_ids?: number[];
+                extra_column_ids?: number[];
+                store_column_ids?: number[];
+                composite_column_ids?: number[];
+                foreign_key?: cockroach.sql.sqlbase.ForeignKeyReference$Properties;
+                referenced_by?: cockroach.sql.sqlbase.ForeignKeyReference$Properties[];
+                interleave?: cockroach.sql.sqlbase.InterleaveDescriptor$Properties;
+                interleaved_by?: cockroach.sql.sqlbase.ForeignKeyReference$Properties[];
+            };
+
+            /**
+             * Constructs a new IndexDescriptor.
+             * @exports cockroach.sql.sqlbase.IndexDescriptor
+             * @constructor
+             * @param {cockroach.sql.sqlbase.IndexDescriptor$Properties=} [properties] Properties to set
+             */
+            class IndexDescriptor {
+
+                /**
+                 * Constructs a new IndexDescriptor.
+                 * @exports cockroach.sql.sqlbase.IndexDescriptor
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.IndexDescriptor$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.sql.sqlbase.IndexDescriptor$Properties);
+
+                /**
+                 * IndexDescriptor name.
+                 * @type {string}
+                 */
+                public name: string;
+
+                /**
+                 * IndexDescriptor id.
+                 * @type {number}
+                 */
+                public id: number;
+
+                /**
+                 * IndexDescriptor unique.
+                 * @type {boolean}
+                 */
+                public unique: boolean;
+
+                /**
+                 * IndexDescriptor column_names.
+                 * @type {Array.<string>}
+                 */
+                public column_names: string[];
+
+                /**
+                 * IndexDescriptor column_directions.
+                 * @type {Array.<cockroach.sql.sqlbase.IndexDescriptor.Direction>}
+                 */
+                public column_directions: cockroach.sql.sqlbase.IndexDescriptor.Direction[];
+
+                /**
+                 * IndexDescriptor store_column_names.
+                 * @type {Array.<string>}
+                 */
+                public store_column_names: string[];
+
+                /**
+                 * IndexDescriptor column_ids.
+                 * @type {Array.<number>}
+                 */
+                public column_ids: number[];
+
+                /**
+                 * IndexDescriptor extra_column_ids.
+                 * @type {Array.<number>}
+                 */
+                public extra_column_ids: number[];
+
+                /**
+                 * IndexDescriptor store_column_ids.
+                 * @type {Array.<number>}
+                 */
+                public store_column_ids: number[];
+
+                /**
+                 * IndexDescriptor composite_column_ids.
+                 * @type {Array.<number>}
+                 */
+                public composite_column_ids: number[];
+
+                /**
+                 * IndexDescriptor foreign_key.
+                 * @type {(cockroach.sql.sqlbase.ForeignKeyReference$Properties|null)}
+                 */
+                public foreign_key: (cockroach.sql.sqlbase.ForeignKeyReference$Properties|null);
+
+                /**
+                 * IndexDescriptor referenced_by.
+                 * @type {Array.<cockroach.sql.sqlbase.ForeignKeyReference$Properties>}
+                 */
+                public referenced_by: cockroach.sql.sqlbase.ForeignKeyReference$Properties[];
+
+                /**
+                 * IndexDescriptor interleave.
+                 * @type {(cockroach.sql.sqlbase.InterleaveDescriptor$Properties|null)}
+                 */
+                public interleave: (cockroach.sql.sqlbase.InterleaveDescriptor$Properties|null);
+
+                /**
+                 * IndexDescriptor interleaved_by.
+                 * @type {Array.<cockroach.sql.sqlbase.ForeignKeyReference$Properties>}
+                 */
+                public interleaved_by: cockroach.sql.sqlbase.ForeignKeyReference$Properties[];
+
+                /**
+                 * Creates a new IndexDescriptor instance using the specified properties.
+                 * @param {cockroach.sql.sqlbase.IndexDescriptor$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.sqlbase.IndexDescriptor} IndexDescriptor instance
+                 */
+                public static create(properties?: cockroach.sql.sqlbase.IndexDescriptor$Properties): cockroach.sql.sqlbase.IndexDescriptor;
+
+                /**
+                 * Encodes the specified IndexDescriptor message. Does not implicitly {@link cockroach.sql.sqlbase.IndexDescriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.IndexDescriptor$Properties} message IndexDescriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.sql.sqlbase.IndexDescriptor$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified IndexDescriptor message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.IndexDescriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.IndexDescriptor$Properties} message IndexDescriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.sql.sqlbase.IndexDescriptor$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes an IndexDescriptor message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.sqlbase.IndexDescriptor} IndexDescriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.sql.sqlbase.IndexDescriptor;
+
+                /**
+                 * Decodes an IndexDescriptor message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.sqlbase.IndexDescriptor} IndexDescriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.sql.sqlbase.IndexDescriptor;
+
+                /**
+                 * Verifies an IndexDescriptor message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates an IndexDescriptor message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.IndexDescriptor} IndexDescriptor
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.sql.sqlbase.IndexDescriptor;
+
+                /**
+                 * Creates an IndexDescriptor message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.sqlbase.IndexDescriptor.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.IndexDescriptor} IndexDescriptor
+                 */
+                public static from(object: { [k: string]: any }): cockroach.sql.sqlbase.IndexDescriptor;
+
+                /**
+                 * Creates a plain object from an IndexDescriptor message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.sqlbase.IndexDescriptor} message IndexDescriptor
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.sql.sqlbase.IndexDescriptor, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this IndexDescriptor message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this IndexDescriptor to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            namespace IndexDescriptor {
+
+                /**
+                 * Direction enum.
+                 * @name Direction
+                 * @memberof cockroach.sql.sqlbase.IndexDescriptor
+                 * @enum {number}
+                 * @property {number} ASC=0 ASC value
+                 * @property {number} DESC=1 DESC value
+                 */
+                enum Direction {
+                    ASC = 0,
+                    DESC = 1
+                }
+            }
+
+            type DescriptorMutation$Properties = {
+                column?: cockroach.sql.sqlbase.ColumnDescriptor$Properties;
+                index?: cockroach.sql.sqlbase.IndexDescriptor$Properties;
+                state?: cockroach.sql.sqlbase.DescriptorMutation.State;
+                direction?: cockroach.sql.sqlbase.DescriptorMutation.Direction;
+                mutation_id?: number;
+            };
+
+            /**
+             * Constructs a new DescriptorMutation.
+             * @exports cockroach.sql.sqlbase.DescriptorMutation
+             * @constructor
+             * @param {cockroach.sql.sqlbase.DescriptorMutation$Properties=} [properties] Properties to set
+             */
+            class DescriptorMutation {
+
+                /**
+                 * Constructs a new DescriptorMutation.
+                 * @exports cockroach.sql.sqlbase.DescriptorMutation
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.DescriptorMutation$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.sql.sqlbase.DescriptorMutation$Properties);
+
+                /**
+                 * DescriptorMutation column.
+                 * @type {(cockroach.sql.sqlbase.ColumnDescriptor$Properties|null)}
+                 */
+                public column: (cockroach.sql.sqlbase.ColumnDescriptor$Properties|null);
+
+                /**
+                 * DescriptorMutation index.
+                 * @type {(cockroach.sql.sqlbase.IndexDescriptor$Properties|null)}
+                 */
+                public index: (cockroach.sql.sqlbase.IndexDescriptor$Properties|null);
+
+                /**
+                 * DescriptorMutation state.
+                 * @type {cockroach.sql.sqlbase.DescriptorMutation.State}
+                 */
+                public state: cockroach.sql.sqlbase.DescriptorMutation.State;
+
+                /**
+                 * DescriptorMutation direction.
+                 * @type {cockroach.sql.sqlbase.DescriptorMutation.Direction}
+                 */
+                public direction: cockroach.sql.sqlbase.DescriptorMutation.Direction;
+
+                /**
+                 * DescriptorMutation mutation_id.
+                 * @type {number}
+                 */
+                public mutation_id: number;
+
+                /**
+                 * DescriptorMutation descriptor.
+                 * @name cockroach.sql.sqlbase.DescriptorMutation#descriptor
+                 * @type {string|undefined}
+                 */
+                public descriptor?: string;
+
+                /**
+                 * Creates a new DescriptorMutation instance using the specified properties.
+                 * @param {cockroach.sql.sqlbase.DescriptorMutation$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.sqlbase.DescriptorMutation} DescriptorMutation instance
+                 */
+                public static create(properties?: cockroach.sql.sqlbase.DescriptorMutation$Properties): cockroach.sql.sqlbase.DescriptorMutation;
+
+                /**
+                 * Encodes the specified DescriptorMutation message. Does not implicitly {@link cockroach.sql.sqlbase.DescriptorMutation.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.DescriptorMutation$Properties} message DescriptorMutation message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.sql.sqlbase.DescriptorMutation$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified DescriptorMutation message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.DescriptorMutation.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.DescriptorMutation$Properties} message DescriptorMutation message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.sql.sqlbase.DescriptorMutation$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a DescriptorMutation message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.sqlbase.DescriptorMutation} DescriptorMutation
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.sql.sqlbase.DescriptorMutation;
+
+                /**
+                 * Decodes a DescriptorMutation message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.sqlbase.DescriptorMutation} DescriptorMutation
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.sql.sqlbase.DescriptorMutation;
+
+                /**
+                 * Verifies a DescriptorMutation message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a DescriptorMutation message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.DescriptorMutation} DescriptorMutation
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.sql.sqlbase.DescriptorMutation;
+
+                /**
+                 * Creates a DescriptorMutation message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.sqlbase.DescriptorMutation.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.DescriptorMutation} DescriptorMutation
+                 */
+                public static from(object: { [k: string]: any }): cockroach.sql.sqlbase.DescriptorMutation;
+
+                /**
+                 * Creates a plain object from a DescriptorMutation message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.sqlbase.DescriptorMutation} message DescriptorMutation
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.sql.sqlbase.DescriptorMutation, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this DescriptorMutation message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this DescriptorMutation to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            namespace DescriptorMutation {
+
+                /**
+                 * State enum.
+                 * @name State
+                 * @memberof cockroach.sql.sqlbase.DescriptorMutation
+                 * @enum {number}
+                 * @property {number} UNKNOWN=0 UNKNOWN value
+                 * @property {number} DELETE_ONLY=1 DELETE_ONLY value
+                 * @property {number} DELETE_AND_WRITE_ONLY=2 DELETE_AND_WRITE_ONLY value
+                 */
+                enum State {
+                    UNKNOWN = 0,
+                    DELETE_ONLY = 1,
+                    DELETE_AND_WRITE_ONLY = 2
+                }
+
+                /**
+                 * Direction enum.
+                 * @name Direction
+                 * @memberof cockroach.sql.sqlbase.DescriptorMutation
+                 * @enum {number}
+                 * @property {number} NONE=0 NONE value
+                 * @property {number} ADD=1 ADD value
+                 * @property {number} DROP=2 DROP value
+                 */
+                enum Direction {
+                    NONE = 0,
+                    ADD = 1,
+                    DROP = 2
+                }
+            }
+
+            type TableDescriptor$Properties = {
+                name?: string;
+                id?: number;
+                parent_id?: number;
+                version?: number;
+                up_version?: boolean;
+                modification_time?: cockroach.util.hlc.Timestamp$Properties;
+                columns?: cockroach.sql.sqlbase.ColumnDescriptor$Properties[];
+                next_column_id?: number;
+                families?: cockroach.sql.sqlbase.ColumnFamilyDescriptor$Properties[];
+                next_family_id?: number;
+                primary_index?: cockroach.sql.sqlbase.IndexDescriptor$Properties;
+                indexes?: cockroach.sql.sqlbase.IndexDescriptor$Properties[];
+                next_index_id?: number;
+                privileges?: cockroach.sql.sqlbase.PrivilegeDescriptor$Properties;
+                mutations?: cockroach.sql.sqlbase.DescriptorMutation$Properties[];
+                lease?: cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease$Properties;
+                next_mutation_id?: number;
+                format_version?: number;
+                state?: cockroach.sql.sqlbase.TableDescriptor.State;
+                checks?: cockroach.sql.sqlbase.TableDescriptor.CheckConstraint$Properties[];
+                renames?: cockroach.sql.sqlbase.TableDescriptor.RenameInfo$Properties[];
+                view_query?: string;
+                dependsOn?: number[];
+                dependedOnBy?: cockroach.sql.sqlbase.TableDescriptor.Reference$Properties[];
+                mutationJobs?: cockroach.sql.sqlbase.TableDescriptor.MutationJob$Properties[];
+            };
+
+            /**
+             * Constructs a new TableDescriptor.
+             * @exports cockroach.sql.sqlbase.TableDescriptor
+             * @constructor
+             * @param {cockroach.sql.sqlbase.TableDescriptor$Properties=} [properties] Properties to set
+             */
+            class TableDescriptor {
+
+                /**
+                 * Constructs a new TableDescriptor.
+                 * @exports cockroach.sql.sqlbase.TableDescriptor
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.TableDescriptor$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.sql.sqlbase.TableDescriptor$Properties);
+
+                /**
+                 * TableDescriptor name.
+                 * @type {string}
+                 */
+                public name: string;
+
+                /**
+                 * TableDescriptor id.
+                 * @type {number}
+                 */
+                public id: number;
+
+                /**
+                 * TableDescriptor parent_id.
+                 * @type {number}
+                 */
+                public parent_id: number;
+
+                /**
+                 * TableDescriptor version.
+                 * @type {number}
+                 */
+                public version: number;
+
+                /**
+                 * TableDescriptor up_version.
+                 * @type {boolean}
+                 */
+                public up_version: boolean;
+
+                /**
+                 * TableDescriptor modification_time.
+                 * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
+                 */
+                public modification_time: (cockroach.util.hlc.Timestamp$Properties|null);
+
+                /**
+                 * TableDescriptor columns.
+                 * @type {Array.<cockroach.sql.sqlbase.ColumnDescriptor$Properties>}
+                 */
+                public columns: cockroach.sql.sqlbase.ColumnDescriptor$Properties[];
+
+                /**
+                 * TableDescriptor next_column_id.
+                 * @type {number}
+                 */
+                public next_column_id: number;
+
+                /**
+                 * TableDescriptor families.
+                 * @type {Array.<cockroach.sql.sqlbase.ColumnFamilyDescriptor$Properties>}
+                 */
+                public families: cockroach.sql.sqlbase.ColumnFamilyDescriptor$Properties[];
+
+                /**
+                 * TableDescriptor next_family_id.
+                 * @type {number}
+                 */
+                public next_family_id: number;
+
+                /**
+                 * TableDescriptor primary_index.
+                 * @type {(cockroach.sql.sqlbase.IndexDescriptor$Properties|null)}
+                 */
+                public primary_index: (cockroach.sql.sqlbase.IndexDescriptor$Properties|null);
+
+                /**
+                 * TableDescriptor indexes.
+                 * @type {Array.<cockroach.sql.sqlbase.IndexDescriptor$Properties>}
+                 */
+                public indexes: cockroach.sql.sqlbase.IndexDescriptor$Properties[];
+
+                /**
+                 * TableDescriptor next_index_id.
+                 * @type {number}
+                 */
+                public next_index_id: number;
+
+                /**
+                 * TableDescriptor privileges.
+                 * @type {(cockroach.sql.sqlbase.PrivilegeDescriptor$Properties|null)}
+                 */
+                public privileges: (cockroach.sql.sqlbase.PrivilegeDescriptor$Properties|null);
+
+                /**
+                 * TableDescriptor mutations.
+                 * @type {Array.<cockroach.sql.sqlbase.DescriptorMutation$Properties>}
+                 */
+                public mutations: cockroach.sql.sqlbase.DescriptorMutation$Properties[];
+
+                /**
+                 * TableDescriptor lease.
+                 * @type {(cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease$Properties|null)}
+                 */
+                public lease: (cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease$Properties|null);
+
+                /**
+                 * TableDescriptor next_mutation_id.
+                 * @type {number}
+                 */
+                public next_mutation_id: number;
+
+                /**
+                 * TableDescriptor format_version.
+                 * @type {number}
+                 */
+                public format_version: number;
+
+                /**
+                 * TableDescriptor state.
+                 * @type {cockroach.sql.sqlbase.TableDescriptor.State}
+                 */
+                public state: cockroach.sql.sqlbase.TableDescriptor.State;
+
+                /**
+                 * TableDescriptor checks.
+                 * @type {Array.<cockroach.sql.sqlbase.TableDescriptor.CheckConstraint$Properties>}
+                 */
+                public checks: cockroach.sql.sqlbase.TableDescriptor.CheckConstraint$Properties[];
+
+                /**
+                 * TableDescriptor renames.
+                 * @type {Array.<cockroach.sql.sqlbase.TableDescriptor.RenameInfo$Properties>}
+                 */
+                public renames: cockroach.sql.sqlbase.TableDescriptor.RenameInfo$Properties[];
+
+                /**
+                 * TableDescriptor view_query.
+                 * @type {string}
+                 */
+                public view_query: string;
+
+                /**
+                 * TableDescriptor dependsOn.
+                 * @type {Array.<number>}
+                 */
+                public dependsOn: number[];
+
+                /**
+                 * TableDescriptor dependedOnBy.
+                 * @type {Array.<cockroach.sql.sqlbase.TableDescriptor.Reference$Properties>}
+                 */
+                public dependedOnBy: cockroach.sql.sqlbase.TableDescriptor.Reference$Properties[];
+
+                /**
+                 * TableDescriptor mutationJobs.
+                 * @type {Array.<cockroach.sql.sqlbase.TableDescriptor.MutationJob$Properties>}
+                 */
+                public mutationJobs: cockroach.sql.sqlbase.TableDescriptor.MutationJob$Properties[];
+
+                /**
+                 * Creates a new TableDescriptor instance using the specified properties.
+                 * @param {cockroach.sql.sqlbase.TableDescriptor$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.sqlbase.TableDescriptor} TableDescriptor instance
+                 */
+                public static create(properties?: cockroach.sql.sqlbase.TableDescriptor$Properties): cockroach.sql.sqlbase.TableDescriptor;
+
+                /**
+                 * Encodes the specified TableDescriptor message. Does not implicitly {@link cockroach.sql.sqlbase.TableDescriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.TableDescriptor$Properties} message TableDescriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.sql.sqlbase.TableDescriptor$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified TableDescriptor message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.TableDescriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.TableDescriptor$Properties} message TableDescriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.sql.sqlbase.TableDescriptor$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a TableDescriptor message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.sqlbase.TableDescriptor} TableDescriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.sql.sqlbase.TableDescriptor;
+
+                /**
+                 * Decodes a TableDescriptor message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.sqlbase.TableDescriptor} TableDescriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.sql.sqlbase.TableDescriptor;
+
+                /**
+                 * Verifies a TableDescriptor message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a TableDescriptor message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.TableDescriptor} TableDescriptor
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.sql.sqlbase.TableDescriptor;
+
+                /**
+                 * Creates a TableDescriptor message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.sqlbase.TableDescriptor.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.TableDescriptor} TableDescriptor
+                 */
+                public static from(object: { [k: string]: any }): cockroach.sql.sqlbase.TableDescriptor;
+
+                /**
+                 * Creates a plain object from a TableDescriptor message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.sqlbase.TableDescriptor} message TableDescriptor
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.sql.sqlbase.TableDescriptor, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this TableDescriptor message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this TableDescriptor to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            namespace TableDescriptor {
+
+                type SchemaChangeLease$Properties = {
+                    node_id?: number;
+                    expiration_time?: Long;
+                };
+
+                /**
+                 * Constructs a new SchemaChangeLease.
+                 * @exports cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease$Properties=} [properties] Properties to set
+                 */
+                class SchemaChangeLease {
+
+                    /**
+                     * Constructs a new SchemaChangeLease.
+                     * @exports cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease
+                     * @constructor
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease$Properties=} [properties] Properties to set
+                     */
+                    constructor(properties?: cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease$Properties);
+
+                    /**
+                     * SchemaChangeLease node_id.
+                     * @type {number}
+                     */
+                    public node_id: number;
+
+                    /**
+                     * SchemaChangeLease expiration_time.
+                     * @type {Long}
+                     */
+                    public expiration_time: Long;
+
+                    /**
+                     * Creates a new SchemaChangeLease instance using the specified properties.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease$Properties=} [properties] Properties to set
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease} SchemaChangeLease instance
+                     */
+                    public static create(properties?: cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease$Properties): cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease;
+
+                    /**
+                     * Encodes the specified SchemaChangeLease message. Does not implicitly {@link cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease.verify|verify} messages.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease$Properties} message SchemaChangeLease message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encode(message: cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Encodes the specified SchemaChangeLease message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease.verify|verify} messages.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease$Properties} message SchemaChangeLease message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encodeDelimited(message: cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Decodes a SchemaChangeLease message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease} SchemaChangeLease
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease;
+
+                    /**
+                     * Decodes a SchemaChangeLease message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease} SchemaChangeLease
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease;
+
+                    /**
+                     * Verifies a SchemaChangeLease message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    public static verify(message: { [k: string]: any }): string;
+
+                    /**
+                     * Creates a SchemaChangeLease message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease} SchemaChangeLease
+                     */
+                    public static fromObject(object: { [k: string]: any }): cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease;
+
+                    /**
+                     * Creates a SchemaChangeLease message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease} SchemaChangeLease
+                     */
+                    public static from(object: { [k: string]: any }): cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease;
+
+                    /**
+                     * Creates a plain object from a SchemaChangeLease message. Also converts values to other types if specified.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease} message SchemaChangeLease
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public static toObject(message: cockroach.sql.sqlbase.TableDescriptor.SchemaChangeLease, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Creates a plain object from this SchemaChangeLease message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Converts this SchemaChangeLease to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    public toJSON(): { [k: string]: any };
+                }
+
+                /**
+                 * State enum.
+                 * @name State
+                 * @memberof cockroach.sql.sqlbase.TableDescriptor
+                 * @enum {number}
+                 * @property {number} PUBLIC=0 PUBLIC value
+                 * @property {number} ADD=1 ADD value
+                 * @property {number} DROP=2 DROP value
+                 */
+                enum State {
+                    PUBLIC = 0,
+                    ADD = 1,
+                    DROP = 2
+                }
+
+                type CheckConstraint$Properties = {
+                    expr?: string;
+                    name?: string;
+                    validity?: cockroach.sql.sqlbase.ConstraintValidity;
+                };
+
+                /**
+                 * Constructs a new CheckConstraint.
+                 * @exports cockroach.sql.sqlbase.TableDescriptor.CheckConstraint
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.TableDescriptor.CheckConstraint$Properties=} [properties] Properties to set
+                 */
+                class CheckConstraint {
+
+                    /**
+                     * Constructs a new CheckConstraint.
+                     * @exports cockroach.sql.sqlbase.TableDescriptor.CheckConstraint
+                     * @constructor
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.CheckConstraint$Properties=} [properties] Properties to set
+                     */
+                    constructor(properties?: cockroach.sql.sqlbase.TableDescriptor.CheckConstraint$Properties);
+
+                    /**
+                     * CheckConstraint expr.
+                     * @type {string}
+                     */
+                    public expr: string;
+
+                    /**
+                     * CheckConstraint name.
+                     * @type {string}
+                     */
+                    public name: string;
+
+                    /**
+                     * CheckConstraint validity.
+                     * @type {cockroach.sql.sqlbase.ConstraintValidity}
+                     */
+                    public validity: cockroach.sql.sqlbase.ConstraintValidity;
+
+                    /**
+                     * Creates a new CheckConstraint instance using the specified properties.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.CheckConstraint$Properties=} [properties] Properties to set
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.CheckConstraint} CheckConstraint instance
+                     */
+                    public static create(properties?: cockroach.sql.sqlbase.TableDescriptor.CheckConstraint$Properties): cockroach.sql.sqlbase.TableDescriptor.CheckConstraint;
+
+                    /**
+                     * Encodes the specified CheckConstraint message. Does not implicitly {@link cockroach.sql.sqlbase.TableDescriptor.CheckConstraint.verify|verify} messages.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.CheckConstraint$Properties} message CheckConstraint message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encode(message: cockroach.sql.sqlbase.TableDescriptor.CheckConstraint$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Encodes the specified CheckConstraint message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.TableDescriptor.CheckConstraint.verify|verify} messages.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.CheckConstraint$Properties} message CheckConstraint message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encodeDelimited(message: cockroach.sql.sqlbase.TableDescriptor.CheckConstraint$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Decodes a CheckConstraint message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.CheckConstraint} CheckConstraint
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.sql.sqlbase.TableDescriptor.CheckConstraint;
+
+                    /**
+                     * Decodes a CheckConstraint message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.CheckConstraint} CheckConstraint
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.sql.sqlbase.TableDescriptor.CheckConstraint;
+
+                    /**
+                     * Verifies a CheckConstraint message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    public static verify(message: { [k: string]: any }): string;
+
+                    /**
+                     * Creates a CheckConstraint message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.CheckConstraint} CheckConstraint
+                     */
+                    public static fromObject(object: { [k: string]: any }): cockroach.sql.sqlbase.TableDescriptor.CheckConstraint;
+
+                    /**
+                     * Creates a CheckConstraint message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.sql.sqlbase.TableDescriptor.CheckConstraint.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.CheckConstraint} CheckConstraint
+                     */
+                    public static from(object: { [k: string]: any }): cockroach.sql.sqlbase.TableDescriptor.CheckConstraint;
+
+                    /**
+                     * Creates a plain object from a CheckConstraint message. Also converts values to other types if specified.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.CheckConstraint} message CheckConstraint
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public static toObject(message: cockroach.sql.sqlbase.TableDescriptor.CheckConstraint, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Creates a plain object from this CheckConstraint message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Converts this CheckConstraint to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    public toJSON(): { [k: string]: any };
+                }
+
+                type RenameInfo$Properties = {
+                    old_parent_id?: number;
+                    old_name?: string;
+                };
+
+                /**
+                 * Constructs a new RenameInfo.
+                 * @exports cockroach.sql.sqlbase.TableDescriptor.RenameInfo
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.TableDescriptor.RenameInfo$Properties=} [properties] Properties to set
+                 */
+                class RenameInfo {
+
+                    /**
+                     * Constructs a new RenameInfo.
+                     * @exports cockroach.sql.sqlbase.TableDescriptor.RenameInfo
+                     * @constructor
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.RenameInfo$Properties=} [properties] Properties to set
+                     */
+                    constructor(properties?: cockroach.sql.sqlbase.TableDescriptor.RenameInfo$Properties);
+
+                    /**
+                     * RenameInfo old_parent_id.
+                     * @type {number}
+                     */
+                    public old_parent_id: number;
+
+                    /**
+                     * RenameInfo old_name.
+                     * @type {string}
+                     */
+                    public old_name: string;
+
+                    /**
+                     * Creates a new RenameInfo instance using the specified properties.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.RenameInfo$Properties=} [properties] Properties to set
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.RenameInfo} RenameInfo instance
+                     */
+                    public static create(properties?: cockroach.sql.sqlbase.TableDescriptor.RenameInfo$Properties): cockroach.sql.sqlbase.TableDescriptor.RenameInfo;
+
+                    /**
+                     * Encodes the specified RenameInfo message. Does not implicitly {@link cockroach.sql.sqlbase.TableDescriptor.RenameInfo.verify|verify} messages.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.RenameInfo$Properties} message RenameInfo message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encode(message: cockroach.sql.sqlbase.TableDescriptor.RenameInfo$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Encodes the specified RenameInfo message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.TableDescriptor.RenameInfo.verify|verify} messages.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.RenameInfo$Properties} message RenameInfo message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encodeDelimited(message: cockroach.sql.sqlbase.TableDescriptor.RenameInfo$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Decodes a RenameInfo message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.RenameInfo} RenameInfo
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.sql.sqlbase.TableDescriptor.RenameInfo;
+
+                    /**
+                     * Decodes a RenameInfo message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.RenameInfo} RenameInfo
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.sql.sqlbase.TableDescriptor.RenameInfo;
+
+                    /**
+                     * Verifies a RenameInfo message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    public static verify(message: { [k: string]: any }): string;
+
+                    /**
+                     * Creates a RenameInfo message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.RenameInfo} RenameInfo
+                     */
+                    public static fromObject(object: { [k: string]: any }): cockroach.sql.sqlbase.TableDescriptor.RenameInfo;
+
+                    /**
+                     * Creates a RenameInfo message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.sql.sqlbase.TableDescriptor.RenameInfo.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.RenameInfo} RenameInfo
+                     */
+                    public static from(object: { [k: string]: any }): cockroach.sql.sqlbase.TableDescriptor.RenameInfo;
+
+                    /**
+                     * Creates a plain object from a RenameInfo message. Also converts values to other types if specified.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.RenameInfo} message RenameInfo
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public static toObject(message: cockroach.sql.sqlbase.TableDescriptor.RenameInfo, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Creates a plain object from this RenameInfo message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Converts this RenameInfo to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    public toJSON(): { [k: string]: any };
+                }
+
+                type Reference$Properties = {
+                    id?: number;
+                    index_id?: number;
+                    column_ids?: number[];
+                };
+
+                /**
+                 * Constructs a new Reference.
+                 * @exports cockroach.sql.sqlbase.TableDescriptor.Reference
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.TableDescriptor.Reference$Properties=} [properties] Properties to set
+                 */
+                class Reference {
+
+                    /**
+                     * Constructs a new Reference.
+                     * @exports cockroach.sql.sqlbase.TableDescriptor.Reference
+                     * @constructor
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.Reference$Properties=} [properties] Properties to set
+                     */
+                    constructor(properties?: cockroach.sql.sqlbase.TableDescriptor.Reference$Properties);
+
+                    /**
+                     * Reference id.
+                     * @type {number}
+                     */
+                    public id: number;
+
+                    /**
+                     * Reference index_id.
+                     * @type {number}
+                     */
+                    public index_id: number;
+
+                    /**
+                     * Reference column_ids.
+                     * @type {Array.<number>}
+                     */
+                    public column_ids: number[];
+
+                    /**
+                     * Creates a new Reference instance using the specified properties.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.Reference$Properties=} [properties] Properties to set
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.Reference} Reference instance
+                     */
+                    public static create(properties?: cockroach.sql.sqlbase.TableDescriptor.Reference$Properties): cockroach.sql.sqlbase.TableDescriptor.Reference;
+
+                    /**
+                     * Encodes the specified Reference message. Does not implicitly {@link cockroach.sql.sqlbase.TableDescriptor.Reference.verify|verify} messages.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.Reference$Properties} message Reference message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encode(message: cockroach.sql.sqlbase.TableDescriptor.Reference$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Encodes the specified Reference message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.TableDescriptor.Reference.verify|verify} messages.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.Reference$Properties} message Reference message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encodeDelimited(message: cockroach.sql.sqlbase.TableDescriptor.Reference$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Decodes a Reference message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.Reference} Reference
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.sql.sqlbase.TableDescriptor.Reference;
+
+                    /**
+                     * Decodes a Reference message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.Reference} Reference
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.sql.sqlbase.TableDescriptor.Reference;
+
+                    /**
+                     * Verifies a Reference message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    public static verify(message: { [k: string]: any }): string;
+
+                    /**
+                     * Creates a Reference message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.Reference} Reference
+                     */
+                    public static fromObject(object: { [k: string]: any }): cockroach.sql.sqlbase.TableDescriptor.Reference;
+
+                    /**
+                     * Creates a Reference message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.sql.sqlbase.TableDescriptor.Reference.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.Reference} Reference
+                     */
+                    public static from(object: { [k: string]: any }): cockroach.sql.sqlbase.TableDescriptor.Reference;
+
+                    /**
+                     * Creates a plain object from a Reference message. Also converts values to other types if specified.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.Reference} message Reference
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public static toObject(message: cockroach.sql.sqlbase.TableDescriptor.Reference, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Creates a plain object from this Reference message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Converts this Reference to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    public toJSON(): { [k: string]: any };
+                }
+
+                type MutationJob$Properties = {
+                    mutation_id?: number;
+                    job_id?: Long;
+                };
+
+                /**
+                 * Constructs a new MutationJob.
+                 * @exports cockroach.sql.sqlbase.TableDescriptor.MutationJob
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.TableDescriptor.MutationJob$Properties=} [properties] Properties to set
+                 */
+                class MutationJob {
+
+                    /**
+                     * Constructs a new MutationJob.
+                     * @exports cockroach.sql.sqlbase.TableDescriptor.MutationJob
+                     * @constructor
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.MutationJob$Properties=} [properties] Properties to set
+                     */
+                    constructor(properties?: cockroach.sql.sqlbase.TableDescriptor.MutationJob$Properties);
+
+                    /**
+                     * MutationJob mutation_id.
+                     * @type {number}
+                     */
+                    public mutation_id: number;
+
+                    /**
+                     * MutationJob job_id.
+                     * @type {Long}
+                     */
+                    public job_id: Long;
+
+                    /**
+                     * Creates a new MutationJob instance using the specified properties.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.MutationJob$Properties=} [properties] Properties to set
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.MutationJob} MutationJob instance
+                     */
+                    public static create(properties?: cockroach.sql.sqlbase.TableDescriptor.MutationJob$Properties): cockroach.sql.sqlbase.TableDescriptor.MutationJob;
+
+                    /**
+                     * Encodes the specified MutationJob message. Does not implicitly {@link cockroach.sql.sqlbase.TableDescriptor.MutationJob.verify|verify} messages.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.MutationJob$Properties} message MutationJob message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encode(message: cockroach.sql.sqlbase.TableDescriptor.MutationJob$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Encodes the specified MutationJob message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.TableDescriptor.MutationJob.verify|verify} messages.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.MutationJob$Properties} message MutationJob message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encodeDelimited(message: cockroach.sql.sqlbase.TableDescriptor.MutationJob$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Decodes a MutationJob message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.MutationJob} MutationJob
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.sql.sqlbase.TableDescriptor.MutationJob;
+
+                    /**
+                     * Decodes a MutationJob message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.MutationJob} MutationJob
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.sql.sqlbase.TableDescriptor.MutationJob;
+
+                    /**
+                     * Verifies a MutationJob message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    public static verify(message: { [k: string]: any }): string;
+
+                    /**
+                     * Creates a MutationJob message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.MutationJob} MutationJob
+                     */
+                    public static fromObject(object: { [k: string]: any }): cockroach.sql.sqlbase.TableDescriptor.MutationJob;
+
+                    /**
+                     * Creates a MutationJob message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.sql.sqlbase.TableDescriptor.MutationJob.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.sql.sqlbase.TableDescriptor.MutationJob} MutationJob
+                     */
+                    public static from(object: { [k: string]: any }): cockroach.sql.sqlbase.TableDescriptor.MutationJob;
+
+                    /**
+                     * Creates a plain object from a MutationJob message. Also converts values to other types if specified.
+                     * @param {cockroach.sql.sqlbase.TableDescriptor.MutationJob} message MutationJob
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public static toObject(message: cockroach.sql.sqlbase.TableDescriptor.MutationJob, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Creates a plain object from this MutationJob message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Converts this MutationJob to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    public toJSON(): { [k: string]: any };
+                }
+            }
+
+            type DatabaseDescriptor$Properties = {
+                name?: string;
+                id?: number;
+                privileges?: cockroach.sql.sqlbase.PrivilegeDescriptor$Properties;
+            };
+
+            /**
+             * Constructs a new DatabaseDescriptor.
+             * @exports cockroach.sql.sqlbase.DatabaseDescriptor
+             * @constructor
+             * @param {cockroach.sql.sqlbase.DatabaseDescriptor$Properties=} [properties] Properties to set
+             */
+            class DatabaseDescriptor {
+
+                /**
+                 * Constructs a new DatabaseDescriptor.
+                 * @exports cockroach.sql.sqlbase.DatabaseDescriptor
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.DatabaseDescriptor$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.sql.sqlbase.DatabaseDescriptor$Properties);
+
+                /**
+                 * DatabaseDescriptor name.
+                 * @type {string}
+                 */
+                public name: string;
+
+                /**
+                 * DatabaseDescriptor id.
+                 * @type {number}
+                 */
+                public id: number;
+
+                /**
+                 * DatabaseDescriptor privileges.
+                 * @type {(cockroach.sql.sqlbase.PrivilegeDescriptor$Properties|null)}
+                 */
+                public privileges: (cockroach.sql.sqlbase.PrivilegeDescriptor$Properties|null);
+
+                /**
+                 * Creates a new DatabaseDescriptor instance using the specified properties.
+                 * @param {cockroach.sql.sqlbase.DatabaseDescriptor$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.sqlbase.DatabaseDescriptor} DatabaseDescriptor instance
+                 */
+                public static create(properties?: cockroach.sql.sqlbase.DatabaseDescriptor$Properties): cockroach.sql.sqlbase.DatabaseDescriptor;
+
+                /**
+                 * Encodes the specified DatabaseDescriptor message. Does not implicitly {@link cockroach.sql.sqlbase.DatabaseDescriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.DatabaseDescriptor$Properties} message DatabaseDescriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.sql.sqlbase.DatabaseDescriptor$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified DatabaseDescriptor message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.DatabaseDescriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.DatabaseDescriptor$Properties} message DatabaseDescriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.sql.sqlbase.DatabaseDescriptor$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a DatabaseDescriptor message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.sqlbase.DatabaseDescriptor} DatabaseDescriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.sql.sqlbase.DatabaseDescriptor;
+
+                /**
+                 * Decodes a DatabaseDescriptor message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.sqlbase.DatabaseDescriptor} DatabaseDescriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.sql.sqlbase.DatabaseDescriptor;
+
+                /**
+                 * Verifies a DatabaseDescriptor message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a DatabaseDescriptor message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.DatabaseDescriptor} DatabaseDescriptor
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.sql.sqlbase.DatabaseDescriptor;
+
+                /**
+                 * Creates a DatabaseDescriptor message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.sqlbase.DatabaseDescriptor.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.DatabaseDescriptor} DatabaseDescriptor
+                 */
+                public static from(object: { [k: string]: any }): cockroach.sql.sqlbase.DatabaseDescriptor;
+
+                /**
+                 * Creates a plain object from a DatabaseDescriptor message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.sqlbase.DatabaseDescriptor} message DatabaseDescriptor
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.sql.sqlbase.DatabaseDescriptor, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this DatabaseDescriptor message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this DatabaseDescriptor to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            type Descriptor$Properties = {
+                table?: cockroach.sql.sqlbase.TableDescriptor$Properties;
+                database?: cockroach.sql.sqlbase.DatabaseDescriptor$Properties;
+            };
+
+            /**
+             * Constructs a new Descriptor.
+             * @exports cockroach.sql.sqlbase.Descriptor
+             * @constructor
+             * @param {cockroach.sql.sqlbase.Descriptor$Properties=} [properties] Properties to set
+             */
+            class Descriptor {
+
+                /**
+                 * Constructs a new Descriptor.
+                 * @exports cockroach.sql.sqlbase.Descriptor
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.Descriptor$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.sql.sqlbase.Descriptor$Properties);
+
+                /**
+                 * Descriptor table.
+                 * @type {(cockroach.sql.sqlbase.TableDescriptor$Properties|null)}
+                 */
+                public table: (cockroach.sql.sqlbase.TableDescriptor$Properties|null);
+
+                /**
+                 * Descriptor database.
+                 * @type {(cockroach.sql.sqlbase.DatabaseDescriptor$Properties|null)}
+                 */
+                public database: (cockroach.sql.sqlbase.DatabaseDescriptor$Properties|null);
+
+                /**
+                 * Descriptor union.
+                 * @name cockroach.sql.sqlbase.Descriptor#union
+                 * @type {string|undefined}
+                 */
+                public union?: string;
+
+                /**
+                 * Creates a new Descriptor instance using the specified properties.
+                 * @param {cockroach.sql.sqlbase.Descriptor$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.sqlbase.Descriptor} Descriptor instance
+                 */
+                public static create(properties?: cockroach.sql.sqlbase.Descriptor$Properties): cockroach.sql.sqlbase.Descriptor;
+
+                /**
+                 * Encodes the specified Descriptor message. Does not implicitly {@link cockroach.sql.sqlbase.Descriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.Descriptor$Properties} message Descriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.sql.sqlbase.Descriptor$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified Descriptor message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.Descriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.Descriptor$Properties} message Descriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.sql.sqlbase.Descriptor$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a Descriptor message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.sqlbase.Descriptor} Descriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.sql.sqlbase.Descriptor;
+
+                /**
+                 * Decodes a Descriptor message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.sqlbase.Descriptor} Descriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.sql.sqlbase.Descriptor;
+
+                /**
+                 * Verifies a Descriptor message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a Descriptor message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.Descriptor} Descriptor
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.sql.sqlbase.Descriptor;
+
+                /**
+                 * Creates a Descriptor message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.sqlbase.Descriptor.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.Descriptor} Descriptor
+                 */
+                public static from(object: { [k: string]: any }): cockroach.sql.sqlbase.Descriptor;
+
+                /**
+                 * Creates a plain object from a Descriptor message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.sqlbase.Descriptor} message Descriptor
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.sql.sqlbase.Descriptor, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this Descriptor message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this Descriptor to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            type UserPrivileges$Properties = {
+                user?: string;
+                privileges?: number;
+            };
+
+            /**
+             * Constructs a new UserPrivileges.
+             * @exports cockroach.sql.sqlbase.UserPrivileges
+             * @constructor
+             * @param {cockroach.sql.sqlbase.UserPrivileges$Properties=} [properties] Properties to set
+             */
+            class UserPrivileges {
+
+                /**
+                 * Constructs a new UserPrivileges.
+                 * @exports cockroach.sql.sqlbase.UserPrivileges
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.UserPrivileges$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.sql.sqlbase.UserPrivileges$Properties);
+
+                /**
+                 * UserPrivileges user.
+                 * @type {string}
+                 */
+                public user: string;
+
+                /**
+                 * UserPrivileges privileges.
+                 * @type {number}
+                 */
+                public privileges: number;
+
+                /**
+                 * Creates a new UserPrivileges instance using the specified properties.
+                 * @param {cockroach.sql.sqlbase.UserPrivileges$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.sqlbase.UserPrivileges} UserPrivileges instance
+                 */
+                public static create(properties?: cockroach.sql.sqlbase.UserPrivileges$Properties): cockroach.sql.sqlbase.UserPrivileges;
+
+                /**
+                 * Encodes the specified UserPrivileges message. Does not implicitly {@link cockroach.sql.sqlbase.UserPrivileges.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.UserPrivileges$Properties} message UserPrivileges message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.sql.sqlbase.UserPrivileges$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified UserPrivileges message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.UserPrivileges.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.UserPrivileges$Properties} message UserPrivileges message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.sql.sqlbase.UserPrivileges$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a UserPrivileges message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.sqlbase.UserPrivileges} UserPrivileges
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.sql.sqlbase.UserPrivileges;
+
+                /**
+                 * Decodes a UserPrivileges message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.sqlbase.UserPrivileges} UserPrivileges
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.sql.sqlbase.UserPrivileges;
+
+                /**
+                 * Verifies a UserPrivileges message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a UserPrivileges message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.UserPrivileges} UserPrivileges
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.sql.sqlbase.UserPrivileges;
+
+                /**
+                 * Creates a UserPrivileges message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.sqlbase.UserPrivileges.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.UserPrivileges} UserPrivileges
+                 */
+                public static from(object: { [k: string]: any }): cockroach.sql.sqlbase.UserPrivileges;
+
+                /**
+                 * Creates a plain object from a UserPrivileges message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.sqlbase.UserPrivileges} message UserPrivileges
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.sql.sqlbase.UserPrivileges, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this UserPrivileges message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this UserPrivileges to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            type PrivilegeDescriptor$Properties = {
+                users?: cockroach.sql.sqlbase.UserPrivileges$Properties[];
+            };
+
+            /**
+             * Constructs a new PrivilegeDescriptor.
+             * @exports cockroach.sql.sqlbase.PrivilegeDescriptor
+             * @constructor
+             * @param {cockroach.sql.sqlbase.PrivilegeDescriptor$Properties=} [properties] Properties to set
+             */
+            class PrivilegeDescriptor {
+
+                /**
+                 * Constructs a new PrivilegeDescriptor.
+                 * @exports cockroach.sql.sqlbase.PrivilegeDescriptor
+                 * @constructor
+                 * @param {cockroach.sql.sqlbase.PrivilegeDescriptor$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.sql.sqlbase.PrivilegeDescriptor$Properties);
+
+                /**
+                 * PrivilegeDescriptor users.
+                 * @type {Array.<cockroach.sql.sqlbase.UserPrivileges$Properties>}
+                 */
+                public users: cockroach.sql.sqlbase.UserPrivileges$Properties[];
+
+                /**
+                 * Creates a new PrivilegeDescriptor instance using the specified properties.
+                 * @param {cockroach.sql.sqlbase.PrivilegeDescriptor$Properties=} [properties] Properties to set
+                 * @returns {cockroach.sql.sqlbase.PrivilegeDescriptor} PrivilegeDescriptor instance
+                 */
+                public static create(properties?: cockroach.sql.sqlbase.PrivilegeDescriptor$Properties): cockroach.sql.sqlbase.PrivilegeDescriptor;
+
+                /**
+                 * Encodes the specified PrivilegeDescriptor message. Does not implicitly {@link cockroach.sql.sqlbase.PrivilegeDescriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.PrivilegeDescriptor$Properties} message PrivilegeDescriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.sql.sqlbase.PrivilegeDescriptor$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified PrivilegeDescriptor message, length delimited. Does not implicitly {@link cockroach.sql.sqlbase.PrivilegeDescriptor.verify|verify} messages.
+                 * @param {cockroach.sql.sqlbase.PrivilegeDescriptor$Properties} message PrivilegeDescriptor message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.sql.sqlbase.PrivilegeDescriptor$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a PrivilegeDescriptor message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.sql.sqlbase.PrivilegeDescriptor} PrivilegeDescriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.sql.sqlbase.PrivilegeDescriptor;
+
+                /**
+                 * Decodes a PrivilegeDescriptor message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.sql.sqlbase.PrivilegeDescriptor} PrivilegeDescriptor
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.sql.sqlbase.PrivilegeDescriptor;
+
+                /**
+                 * Verifies a PrivilegeDescriptor message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a PrivilegeDescriptor message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.PrivilegeDescriptor} PrivilegeDescriptor
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.sql.sqlbase.PrivilegeDescriptor;
+
+                /**
+                 * Creates a PrivilegeDescriptor message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.sql.sqlbase.PrivilegeDescriptor.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.sql.sqlbase.PrivilegeDescriptor} PrivilegeDescriptor
+                 */
+                public static from(object: { [k: string]: any }): cockroach.sql.sqlbase.PrivilegeDescriptor;
+
+                /**
+                 * Creates a plain object from a PrivilegeDescriptor message. Also converts values to other types if specified.
+                 * @param {cockroach.sql.sqlbase.PrivilegeDescriptor} message PrivilegeDescriptor
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.sql.sqlbase.PrivilegeDescriptor, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this PrivilegeDescriptor message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this PrivilegeDescriptor to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
             }
         }
     }

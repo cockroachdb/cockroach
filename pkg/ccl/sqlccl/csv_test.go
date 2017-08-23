@@ -492,6 +492,18 @@ func TestImportStmt(t *testing.T) {
 				return
 			}
 
+			var status, jobDesc string
+			// Look up the second-most-recent job -- most-recent is the restore job.
+			sqlDB.QueryRow(
+				`SELECT status, description FROM [SHOW JOBS] ORDER BY created DESC LIMIT 1 OFFSET 1`,
+			).Scan(&status, &jobDesc)
+			if expected, actual := "succeeded", status; expected != actual {
+				t.Fatalf("expected %v, got %v", expected, actual)
+			}
+			if expected, actual := "import t CSV conversion", jobDesc; expected != actual {
+				t.Fatalf("expected %v, got %v", expected, actual)
+			}
+
 			if expected, actual := expectedRows, restored.rows; expected != actual {
 				t.Fatalf("expected %d rows, got %d", expected, actual)
 			}
