@@ -16,8 +16,9 @@ syntax = "proto3";
 package cockroach.sql.jobs;
 option go_package = "jobs";
 
-import "cockroach/pkg/roachpb/data.proto";
 import "gogoproto/gogo.proto";
+import "cockroach/pkg/roachpb/data.proto";
+import "cockroach/pkg/sql/sqlbase/structured.proto";
 import "cockroach/pkg/util/hlc/timestamp.proto";
 
 message Lease {
@@ -54,6 +55,16 @@ message RestoreDetails {
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
   ];
   repeated string uris = 3 [(gogoproto.customname) = "URIs"];
+}
+
+message ImportDetails {
+  message Table {
+    sqlbase.TableDescriptor desc = 1;
+    repeated string uris = 2 [(gogoproto.customname) = "URIs"];
+    roachpb.CSVOptions options = 3;
+    string backup_path = 4;
+  }
+  repeated Table tables = 1 [(gogoproto.nullable) = false];
 }
 
 message ResumeSpanList {
@@ -93,6 +104,7 @@ message Payload {
     BackupDetails backup = 10;
     RestoreDetails restore = 11;
     SchemaChangeDetails schemaChange = 12;
+    ImportDetails import = 13;
   }
 }
 
@@ -104,4 +116,5 @@ enum Type {
   BACKUP = 1 [(gogoproto.enumvalue_customname) = "TypeBackup"];
   RESTORE = 2 [(gogoproto.enumvalue_customname) = "TypeRestore"];
   SCHEMA_CHANGE = 3 [(gogoproto.enumvalue_customname) = "TypeSchemaChange"];
+  IMPORT = 4 [(gogoproto.enumvalue_customname) = "TypeImport"];
 }

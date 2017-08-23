@@ -577,6 +577,8 @@ func (p *Payload) Type() Type {
 		return TypeRestore
 	case *Payload_SchemaChange:
 		return TypeSchemaChange
+	case *Payload_Import:
+		return TypeImport
 	default:
 		panic("Payload.Type called on a payload with an unknown details type")
 	}
@@ -597,6 +599,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_Restore{Restore: &d}
 	case SchemaChangeDetails:
 		return &Payload_SchemaChange{SchemaChange: &d}
+	case ImportDetails:
+		return &Payload_Import{Import: &d}
 	default:
 		panic(fmt.Sprintf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
@@ -616,6 +620,8 @@ func (p *Payload) UnwrapDetails() (Details, error) {
 		return *d.Restore, nil
 	case *Payload_SchemaChange:
 		return *d.SchemaChange, nil
+	case *Payload_Import:
+		return *d.Import, nil
 	default:
 		return nil, errors.Errorf("jobs.Payload: unsupported details type %T", d)
 	}

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -753,6 +754,28 @@ func importPlanHook(
 			return err
 		}
 
+		// NB: the post-conversion RESTORE will create and maintain its own job.
+		// This job is thus only for tracking the conversion, and will be Finished()
+		// before the restore starts.
+		job := p.ExecCfg().JobRegistry.NewJob(jobs.Record{
+			// TODO(dt): when we have convert-only SQL, put that here.
+			Description: fmt.Sprintf("import %s CSV conversion", tableDesc.Name),
+			Username:    p.User(),
+			Details: jobs.ImportDetails{
+				Tables: []jobs.ImportDetails_Table{{
+					Desc:       tableDesc,
+					URIs:       files,
+					BackupPath: temp,
+				}},
+			},
+		})
+		if err := job.Created(ctx, jobs.WithoutCancel); err != nil {
+			return err
+		}
+		if err := job.Started(ctx); err != nil {
+			return err
+		}
+
 		if distributed {
 			_, err = doDistributedCSVTransform(
 				ctx, files, p, tableDesc, temp,
@@ -770,6 +793,10 @@ func importPlanHook(
 				return err
 			}
 		}
+		if err := job.FinishedWith(ctx, err); err != nil {
+			return err
+		}
+
 		restore := &parser.Restore{
 			Targets: parser.TargetList{
 				Tables: []parser.TablePattern{&parser.AllTablesSelector{Database: csvDatabaseName}},
