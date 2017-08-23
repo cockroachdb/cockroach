@@ -15,10 +15,11 @@
 package sql
 
 import (
-	"golang.org/x/net/context"
+	"sync/atomic"
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -224,6 +225,11 @@ type distSQLReceiver struct {
 	// Once set, no more rows are accepted.
 	err error
 
+	// cancelled is 1 when this distSQLReceiver has been asynchronously set
+	// to cancelled. Upon the next Push(), err should be set to a non-nil
+	// value.
+	cancelled int32
+
 	row    parser.Datums
 	status distsqlrun.ConsumerStatus
 	alloc  sqlbase.DatumAlloc
@@ -257,6 +263,7 @@ type rowResultWriter interface {
 }
 
 var _ distsqlrun.RowReceiver = &distSQLReceiver{}
+var _ distsqlrun.CancellableRowReceiver = &distSQLReceiver{}
 
 // makeDistSQLReceiver creates a distSQLReceiver.
 //
@@ -325,6 +332,10 @@ func (r *distSQLReceiver) Push(
 		}
 		return r.status
 	}
+	if r.err == nil && atomic.LoadInt32(&r.cancelled) == 1 {
+		// Set the error to reflect query cancellation.
+		r.err = sqlbase.NewQueryCanceledError()
+	}
 	if r.err != nil {
 		// TODO(andrei): We should drain here.
 		return distsqlrun.ConsumerClosed
@@ -368,6 +379,11 @@ func (r *distSQLReceiver) ProducerDone() {
 		panic("double close")
 	}
 	r.closed = true
+}
+
+// SetCancelled is part of the CancellableRowReceiver interface.
+func (r *distSQLReceiver) SetCancelled() {
+	atomic.StoreInt32(&r.cancelled, 1)
 }
 
 // updateCaches takes information about some ranges that were mis-planned and
