@@ -445,13 +445,28 @@ func runQuery(
 	return sqlRowsToStrings(rows, showMoreChars)
 }
 
+// handleCopyError ensures the user is properly informed when they issue
+// a COPY statement somewhere in their input.
+func handleCopyError(conn *sqlConn, err error) error {
+	if !strings.HasPrefix(err.Error(), "pq: unknown response for simple query: 'G'") {
+		return err
+	}
+
+	// The COPY statement has hosed the connection by putting the
+	// protocol in a state that lib/pq cannot understand any more. Reset
+	// it.
+	conn.Close()
+	conn.reconnecting = true
+	return errors.New("woops! COPY has confused this client! Suggestion: use 'psql' for COPY")
+}
+
 // runQueryAndFormatResults takes a 'query' with optional 'parameters'.
 // It runs the sql query and writes output to 'w'.
 func runQueryAndFormatResults(conn *sqlConn, w io.Writer, fn queryFunc) error {
 	startTime := timeutil.Now()
 	rows, err := fn(conn)
 	if err != nil {
-		return err
+		return handleCopyError(conn, err)
 	}
 	defer func() {
 		_ = rows.Close()
