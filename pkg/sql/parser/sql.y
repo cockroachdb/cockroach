@@ -2407,10 +2407,10 @@ show_testing_stmt:
     /* SKIP DOC */
     $$.val = &ShowRanges{Index: $5.tableWithIdx()}
   }
-| SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE qualified_name opt_as_of_clause
+| SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE qualified_name
   {
     /* SKIP DOC */
-    $$.val = &ShowFingerprints{Table: $5.newNormalizableTableName(), AsOf: $6.asOfClause()}
+    $$.val = &ShowFingerprints{Table: $5.newNormalizableTableName()}
   }
 
 help_stmt:
