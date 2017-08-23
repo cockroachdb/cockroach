@@ -885,9 +885,7 @@ func newReadCSVProcessor(
 	flowCtx *distsqlrun.FlowCtx, spec distsqlrun.ReadCSVSpec, output distsqlrun.RowReceiver,
 ) (distsqlrun.Processor, error) {
 	cp := &readCSVProcessor{
-		comma:      spec.Comma,
-		comment:    spec.Comment,
-		nullif:     spec.Nullif,
+		csvOptions: spec.Options,
 		sampleSize: spec.SampleSize,
 		tableDesc:  spec.TableDesc,
 		uri:        spec.Uri,
@@ -900,9 +898,7 @@ func newReadCSVProcessor(
 }
 
 type readCSVProcessor struct {
-	comma      rune
-	comment    rune
-	nullif     *string
+	csvOptions roachpb.CSVOptions
 	sampleSize int32
 	tableDesc  sqlbase.TableDescriptor
 	uri        string
@@ -930,14 +926,15 @@ func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 	// Read CSV into CSV records
 	group.Go(func() error {
 		defer close(recordCh)
-		_, err := readCSV(gCtx, cp.comma, cp.comment, len(cp.tableDesc.VisibleColumns()), []string{cp.uri}, recordCh)
+		_, err := readCSV(gCtx, cp.csvOptions.Comma, cp.csvOptions.Comment,
+			len(cp.tableDesc.VisibleColumns()), []string{cp.uri}, recordCh)
 		return err
 	})
 	// Convert CSV records to KVs
 	group.Go(func() error {
 		defer close(kvCh)
 		return groupWorkers(gCtx, runtime.NumCPU(), func(ctx context.Context) error {
-			return convertRecord(ctx, recordCh, kvCh, cp.nullif, &cp.tableDesc)
+			return convertRecord(ctx, recordCh, kvCh, cp.csvOptions.Nullif, &cp.tableDesc)
 		})
 	})
 	// Sample KVs
