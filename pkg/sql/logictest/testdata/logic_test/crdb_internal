@@ -174,19 +174,19 @@ select crdb_internal.force_retry(interval '0s')
 query ITTT colnames
 select node_id, component, field, regexp_replace(regexp_replace(value, '^\d+$', '<port>'), e':\\d+', ':<port>') as value from crdb_internal.node_runtime_info
 ----
-node_id component field  value
-1       DB        URL    postgresql://root@127.0.0.1:<port>?sslcert=test_certs%2Fclient.root.crt&sslkey=test_certs%2Fclient.root.key&sslmode=verify-full&sslrootcert=test_certs%2Fca.crt
-1       DB        Scheme postgresql
-1       DB        User   root
-1       DB        Host   127.0.0.1
-1       DB        Port   <port>
-1       DB        Path   ·
-1       UI        URL    https://127.0.0.1:<port>
-1       UI        Scheme https
-1       UI        User   ·
-1       UI        Host   127.0.0.1
-1       UI        Port   <port>
-1       UI        Path   ·
+node_id  component  field   value
+1        DB         URL     postgresql://root@127.0.0.1:<port>?application_name=cockroach&sslcert=test_certs%2Fclient.root.crt&sslkey=test_certs%2Fclient.root.key&sslmode=verify-full&sslrootcert=test_certs%2Fca.crt
+1        DB         Scheme  postgresql
+1        DB         User    root
+1        DB         Host    127.0.0.1
+1        DB         Port    <port>
+1        DB         Path    ·
+1        UI         URL     https://127.0.0.1:<port>
+1        UI         Scheme  https
+1        UI         User    ·
+1        UI         Host    127.0.0.1
+1        UI         Port    <port>
+1        UI         Path    ·
 
 user testuser
 
