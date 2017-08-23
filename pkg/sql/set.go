@@ -15,7 +15,6 @@
 package sql
 
 import (
-	"bytes"
 	"fmt"
 	"strings"
 	"time"
@@ -32,254 +31,300 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// Set sets session variables.
+// setNode represents a SET SESSION statement.
+type setNode struct {
+	v sessionVar
+	// typedValues == nil means RESET.
+	typedValues []parser.TypedExpr
+}
+
+// SetVar sets session variables.
 // Privileges: None.
 //   Notes: postgres/mysql do not require privileges for session variables (some exceptions).
-func (p *planner) Set(ctx context.Context, n *parser.Set) (planNode, error) {
+func (p *planner) SetVar(ctx context.Context, n *parser.SetVar) (planNode, error) {
 	if n.Name == nil {
 		// A client has sent the reserved internal syntax SET ROW ...
 		// Reject it.
 		return nil, errors.New("invalid statement: SET ROW")
 	}
 
-	name := parser.AsStringWithFlags(n.Name, parser.FmtBareIdentifiers)
-	setMode := n.SetMode
+	name := strings.ToLower(parser.AsStringWithFlags(n.Name, parser.FmtBareIdentifiers))
 
-	if setMode == parser.SetModeClusterSetting {
-		return p.setClusterSetting(ctx, name, n.Values)
-	}
+	var typedValues []parser.TypedExpr
+	if len(n.Values) > 0 {
+		// SET var = DEFAULT is really a RESET in disguise.
+		if _, ok := n.Values[0].(parser.DefaultVal); !ok || len(n.Values) > 1 {
+			typedValues = make([]parser.TypedExpr, len(n.Values))
+			for i, expr := range n.Values {
+				// Special rule for SET: because SET doesn't apply in the context
+				// of a table, SET ... = IDENT really means SET ... = 'IDENT'.
+				if s, ok := expr.(parser.UnresolvedName); ok {
+					expr = parser.NewStrVal(parser.AsStringWithFlags(s, parser.FmtBareIdentifiers))
+				}
 
-	// By using VarName.String() here any variables that are keywords will
-	// be double quoted.
-	typedValues := make([]parser.TypedExpr, len(n.Values))
-	for i, expr := range n.Values {
-		typedValue, err := parser.TypeCheck(expr, nil, parser.TypeString)
-		if err != nil {
-			return nil, err
+				var dummyHelper parser.IndexedVarHelper
+				typedValue, err := p.analyzeExpr(
+					ctx, expr, nil, dummyHelper, parser.TypeString, false, "SET SESSION "+name)
+				if err != nil {
+					return nil, err
+				}
+				typedValues[i] = typedValue
+			}
 		}
-		typedValues[i] = typedValue
 	}
 
-	v, ok := varGen[strings.ToLower(name)]
+	v, ok := varGen[name]
 	if !ok {
 		return nil, fmt.Errorf("unknown variable: %q", name)
 	}
 
-	if len(n.Values) == 0 {
-		setMode = parser.SetModeReset
-	}
-
-	switch setMode {
-	case parser.SetModeAssign:
+	if typedValues != nil {
 		if v.Set == nil {
 			return nil, fmt.Errorf("variable \"%s\" cannot be changed", name)
 		}
-		if err := v.Set(ctx, p.session, typedValues); err != nil {
-			return nil, err
-		}
-	case parser.SetModeReset:
+	} else {
 		if v.Reset == nil {
 			return nil, fmt.Errorf("variable \"%s\" cannot be reset", name)
 		}
-		if err := v.Reset(p.session); err != nil {
-			return nil, err
-		}
 	}
 
-	return &emptyNode{}, nil
+	return &setNode{v: v, typedValues: typedValues}, nil
 }
 
-func (p *planner) setClusterSetting(
-	ctx context.Context, name string, v []parser.Expr,
+func (n *setNode) Start(params runParams) error {
+	if n.typedValues != nil {
+		return n.v.Set(params.ctx, params.p.session, n.typedValues)
+	}
+	return n.v.Reset(params.p.session)
+}
+
+func (n *setNode) Next(_ runParams) (bool, error) { return false, nil }
+func (n *setNode) Values() parser.Datums          { return nil }
+func (n *setNode) Close(_ context.Context)        {}
+
+// setClusterSettingNode represents a SET CLUSTER SETTING statement.
+type setClusterSettingNode struct {
+	name    string
+	setting settings.Setting
+	// if value is nil, the setting should be reset.
+	value parser.TypedExpr
+}
+
+// SetClusterSetting sets session variables.
+// Privileges: super user.
+func (p *planner) SetClusterSetting(
+	ctx context.Context, n *parser.SetClusterSetting,
 ) (planNode, error) {
 	if err := p.RequireSuperUser("SET CLUSTER SETTING"); err != nil {
 		return nil, err
 	}
+
+	name := strings.ToLower(parser.AsStringWithFlags(n.Name, parser.FmtBareIdentifiers))
 	r := p.session.execCfg.Settings.Registry
-	typ, ok := r.Lookup(name)
+	setting, ok := r.Lookup(name)
 	if !ok {
 		return nil, errors.Errorf("unknown cluster setting '%s'", name)
 	}
 
-	name = strings.ToLower(name)
-	ie := InternalExecutor{LeaseManager: p.LeaseMgr()}
+	var value parser.TypedExpr
+	if n.Value != nil {
+		// For DEFAULT, let the value reference be nil. That's a RESET in disguise.
+		if _, ok := n.Value.(parser.DefaultVal); !ok {
+			expr := n.Value
+			if s, ok := expr.(parser.UnresolvedName); ok {
+				// Special rule for SET: because SET doesn't apply in the context
+				// of a table, SET ... = IDENT really means SET ... = 'IDENT'.
+				expr = parser.NewStrVal(parser.AsStringWithFlags(s, parser.FmtBareIdentifiers))
+			}
 
-	var value string
-	switch len(v) {
-	case 0:
-		value = "DEFAULT"
-		if _, err := ie.ExecuteStatementInTransaction(
-			ctx, "update-setting", p.txn, "DELETE FROM system.settings WHERE name = $1", name,
-		); err != nil {
-			return nil, err
+			var requiredType parser.Type
+			switch setting.(type) {
+			case *settings.StringSetting, *settings.StateMachineSetting, *settings.ByteSizeSetting:
+				requiredType = parser.TypeString
+			case *settings.BoolSetting:
+				requiredType = parser.TypeBool
+			case *settings.IntSetting:
+				requiredType = parser.TypeInt
+			case *settings.FloatSetting:
+				requiredType = parser.TypeFloat
+			case *settings.EnumSetting:
+				requiredType = parser.TypeAny
+			case *settings.DurationSetting:
+				requiredType = parser.TypeInterval
+			default:
+				return nil, errors.Errorf("unsupported setting type %T", setting)
+			}
+
+			var dummyHelper parser.IndexedVarHelper
+			typed, err := p.analyzeExpr(
+				ctx, expr, nil, dummyHelper, requiredType, true, "SET CLUSTER SETTING "+name)
+			if err != nil {
+				return nil, err
+			}
+
+			value = typed
 		}
-	case 1:
-		var buf bytes.Buffer
-		v[0].Format(&buf, parser.FmtBareStrings)
-		value = buf.String()
-		// TODO(dt): validate and properly encode str according to type.
-		encoded, err := p.toSettingString(ctx, ie, name, typ, v[0])
-		if err != nil {
-			return nil, err
-		}
-		upsertQ := `UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, NOW(), $3)`
-		if _, err := ie.ExecuteStatementInTransaction(
-			ctx, "update-setting", p.txn, upsertQ, name, encoded, typ.Typ(),
-		); err != nil {
-			return nil, err
-		}
-	default:
-		return nil, errors.Errorf("SET %q requires a single value", name)
 	}
 
-	if err := MakeEventLogger(p.LeaseMgr()).InsertEventRecord(
-		ctx,
-		p.txn,
+	return &setClusterSettingNode{name: name, setting: setting, value: value}, nil
+}
+
+func (n *setClusterSettingNode) Start(params runParams) error {
+	ie := InternalExecutor{LeaseManager: params.p.LeaseMgr()}
+
+	var reportedValue string
+	if n.value == nil {
+		if _, err := ie.ExecuteStatementInTransaction(
+			params.ctx, "reset-setting", params.p.txn,
+			"DELETE FROM system.settings WHERE name = $1", n.name,
+		); err != nil {
+			return err
+		}
+		reportedValue = "DEFAULT"
+	} else {
+		// TODO(dt): validate and properly encode str according to type.
+		encoded, err := params.p.toSettingString(params.ctx, ie, n.name, n.setting, n.value)
+		if err != nil {
+			return err
+		}
+		if _, err := ie.ExecuteStatementInTransaction(
+			params.ctx, "update-setting", params.p.txn,
+			`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, NOW(), $3)`,
+			n.name, encoded, n.setting.Typ(),
+		); err != nil {
+			return err
+		}
+		reportedValue = parser.AsStringWithFlags(n.value, parser.FmtBareStrings)
+	}
+
+	return MakeEventLogger(params.p.LeaseMgr()).InsertEventRecord(
+		params.ctx,
+		params.p.txn,
 		EventLogSetClusterSetting,
 		0, /* no target */
-		int32(p.evalCtx.NodeID),
+		int32(params.p.evalCtx.NodeID),
 		struct {
 			SettingName string
 			Value       string
 			User        string
-		}{name, value, p.session.User},
-	); err != nil {
-		return nil, err
-	}
-
-	return &emptyNode{}, nil
+		}{n.name, reportedValue, params.p.session.User},
+	)
 }
 
+func (n *setClusterSettingNode) Next(_ runParams) (bool, error) { return false, nil }
+func (n *setClusterSettingNode) Values() parser.Datums          { return nil }
+func (n *setClusterSettingNode) Close(_ context.Context)        {}
+
 func (p *planner) toSettingString(
-	ctx context.Context, ie InternalExecutor, name string, setting settings.Setting, raw parser.Expr,
+	ctx context.Context,
+	ie InternalExecutor,
+	name string,
+	setting settings.Setting,
+	val parser.TypedExpr,
 ) (string, error) {
-	typeCheckAndParse := func(t parser.Type, f func(parser.Datum) (string, error)) (string, error) {
-		typed, err := parser.TypeCheckAndRequire(raw, nil, t, name)
-		if err != nil {
-			return "", err
-		}
-		d, err := typed.Eval(&p.evalCtx)
-		if err != nil {
-			return "", err
-		}
-		return f(d)
+	d, err := val.Eval(&p.evalCtx)
+	if err != nil {
+		return "", err
 	}
 
 	switch setting := setting.(type) {
 	case *settings.StringSetting:
-		return typeCheckAndParse(parser.TypeString, func(d parser.Datum) (string, error) {
-			if s, ok := d.(*parser.DString); ok {
-				if err := setting.Validate(string(*s)); err != nil {
-					return "", err
-				}
-				return string(*s), nil
+		if s, ok := d.(*parser.DString); ok {
+			if err := setting.Validate(string(*s)); err != nil {
+				return "", err
 			}
-			return "", errors.Errorf("cannot use %s %T value for string setting", d.ResolvedType(), d)
-		})
+			return string(*s), nil
+		}
+		return "", errors.Errorf("cannot use %s %T value for string setting", d.ResolvedType(), d)
 	case *settings.StateMachineSetting:
-		return typeCheckAndParse(parser.TypeString, func(d parser.Datum) (string, error) {
-			if s, ok := d.(*parser.DString); ok {
-				datums, err := ie.QueryRowInTransaction(
-					ctx, "retrieve-prev-setting", p.txn, "SELECT value FROM system.settings WHERE name = $1", name,
-				)
-				if err != nil {
-					return "", err
-				}
-				if len(datums) == 0 {
-					// There is a SQL migration which adds this value. If it
-					// hasn't run yet, we can't update the version as we don't
-					// have good enough information about the current cluster
-					// version.
-					return "", errors.New("no persisted cluster version found, please retry later")
-				}
-
-				dStr, ok := datums[0].(*parser.DString)
-				if !ok {
-					return "", errors.New("the existing value is not a string")
-				}
-				prevRawVal := []byte(string(*dStr))
-				newBytes, _, err := setting.Validate(prevRawVal, (*string)(s))
-				if err != nil {
-					return "", err
-				}
-
-				return string(newBytes), nil
+		if s, ok := d.(*parser.DString); ok {
+			datums, err := ie.QueryRowInTransaction(
+				ctx, "retrieve-prev-setting", p.txn, "SELECT value FROM system.settings WHERE name = $1", name,
+			)
+			if err != nil {
+				return "", err
 			}
-			return "", errors.Errorf("cannot use %s %T value for string setting", d.ResolvedType(), d)
-		})
+			if len(datums) == 0 {
+				// There is a SQL migration which adds this value. If it
+				// hasn't run yet, we can't update the version as we don't
+				// have good enough information about the current cluster
+				// version.
+				return "", errors.New("no persisted cluster version found, please retry later")
+			}
+
+			dStr, ok := datums[0].(*parser.DString)
+			if !ok {
+				return "", errors.New("the existing value is not a string")
+			}
+			prevRawVal := []byte(string(*dStr))
+			newBytes, _, err := setting.Validate(prevRawVal, (*string)(s))
+			if err != nil {
+				return "", err
+			}
+			return string(newBytes), nil
+		}
+		return "", errors.Errorf("cannot use %s %T value for string setting", d.ResolvedType(), d)
 	case *settings.BoolSetting:
-		return typeCheckAndParse(parser.TypeBool, func(d parser.Datum) (string, error) {
-			if b, ok := d.(*parser.DBool); ok {
-				return settings.EncodeBool(bool(*b)), nil
-			}
-			return "", errors.Errorf("cannot use %s %T value for bool setting", d.ResolvedType(), d)
-		})
+		if b, ok := d.(*parser.DBool); ok {
+			return settings.EncodeBool(bool(*b)), nil
+		}
+		return "", errors.Errorf("cannot use %s %T value for bool setting", d.ResolvedType(), d)
 	case *settings.IntSetting:
-		return typeCheckAndParse(parser.TypeInt, func(d parser.Datum) (string, error) {
-			if i, ok := d.(*parser.DInt); ok {
-				if err := setting.Validate(int64(*i)); err != nil {
-					return "", err
-				}
-				return settings.EncodeInt(int64(*i)), nil
+		if i, ok := d.(*parser.DInt); ok {
+			if err := setting.Validate(int64(*i)); err != nil {
+				return "", err
 			}
-			return "", errors.Errorf("cannot use %s %T value for int setting", d.ResolvedType(), d)
-		})
+			return settings.EncodeInt(int64(*i)), nil
+		}
+		return "", errors.Errorf("cannot use %s %T value for int setting", d.ResolvedType(), d)
 	case *settings.FloatSetting:
-		return typeCheckAndParse(parser.TypeFloat, func(d parser.Datum) (string, error) {
-			if f, ok := d.(*parser.DFloat); ok {
-				if err := setting.Validate(float64(*f)); err != nil {
-					return "", err
-				}
-				return settings.EncodeFloat(float64(*f)), nil
+		if f, ok := d.(*parser.DFloat); ok {
+			if err := setting.Validate(float64(*f)); err != nil {
+				return "", err
 			}
-			return "", errors.Errorf("cannot use %s %T value for float setting", d.ResolvedType(), d)
-		})
+			return settings.EncodeFloat(float64(*f)), nil
+		}
+		return "", errors.Errorf("cannot use %s %T value for float setting", d.ResolvedType(), d)
 	case *settings.EnumSetting:
-		return typeCheckAndParse(parser.TypeAny, func(d parser.Datum) (string, error) {
-			if i, intOK := d.(*parser.DInt); intOK {
-				v, ok := setting.ParseEnum(settings.EncodeInt(int64(*i)))
-				if ok {
-					return settings.EncodeInt(v), nil
-				}
-				return "", errors.Errorf("invalid integer value '%d' for enum setting", *i)
-			} else if s, ok := d.(*parser.DString); ok {
-				str := string(*s)
-				v, ok := setting.ParseEnum(str)
-				if ok {
-					return settings.EncodeInt(v), nil
-				}
-				return "", errors.Errorf("invalid string value '%s' for enum setting", str)
+		if i, intOK := d.(*parser.DInt); intOK {
+			v, ok := setting.ParseEnum(settings.EncodeInt(int64(*i)))
+			if ok {
+				return settings.EncodeInt(v), nil
 			}
-			return "", errors.Errorf("cannot use %s %T value for enum setting, must be int or string", d.ResolvedType(), d)
-		})
+			return "", errors.Errorf("invalid integer value '%d' for enum setting", *i)
+		} else if s, ok := d.(*parser.DString); ok {
+			str := string(*s)
+			v, ok := setting.ParseEnum(str)
+			if ok {
+				return settings.EncodeInt(v), nil
+			}
+			return "", errors.Errorf("invalid string value '%s' for enum setting", str)
+		}
+		return "", errors.Errorf("cannot use %s %T value for enum setting, must be int or string", d.ResolvedType(), d)
 	case *settings.ByteSizeSetting:
-		return typeCheckAndParse(parser.TypeString, func(d parser.Datum) (string, error) {
-			if s, ok := d.(*parser.DString); ok {
-				bytes, err := humanizeutil.ParseBytes(string(*s))
-				if err != nil {
-					return "", err
-				}
-				if err := setting.Validate(bytes); err != nil {
-					return "", err
-				}
-				return settings.EncodeInt(bytes), nil
+		if s, ok := d.(*parser.DString); ok {
+			bytes, err := humanizeutil.ParseBytes(string(*s))
+			if err != nil {
+				return "", err
 			}
-			return "", errors.Errorf("cannot use %s %T value for byte size setting", d.ResolvedType(), d)
-		})
+			if err := setting.Validate(bytes); err != nil {
+				return "", err
+			}
+			return settings.EncodeInt(bytes), nil
+		}
+		return "", errors.Errorf("cannot use %s %T value for byte size setting", d.ResolvedType(), d)
 	case *settings.DurationSetting:
-		return typeCheckAndParse(parser.TypeInterval, func(d parser.Datum) (string, error) {
-			if f, ok := d.(*parser.DInterval); ok {
-				if f.Duration.Months > 0 || f.Duration.Days > 0 {
-					return "", errors.Errorf("cannot use day or month specifiers: %s", d.String())
-				}
-				d := time.Duration(f.Duration.Nanos) * time.Nanosecond
-				if err := setting.Validate(d); err != nil {
-					return "", err
-				}
-				return settings.EncodeDuration(d), nil
+		if f, ok := d.(*parser.DInterval); ok {
+			if f.Duration.Months > 0 || f.Duration.Days > 0 {
+				return "", errors.Errorf("cannot use day or month specifiers: %s", d.String())
 			}
-			return "", errors.Errorf("cannot use %s %T value for duration setting", d.ResolvedType(), d)
-		})
+			d := time.Duration(f.Duration.Nanos) * time.Nanosecond
+			if err := setting.Validate(d); err != nil {
+				return "", err
+			}
+			return settings.EncodeDuration(d), nil
+		}
+		return "", errors.Errorf("cannot use %s %T value for duration setting", d.ResolvedType(), d)
 	default:
 		return "", errors.Errorf("unsupported setting type %T", setting)
 	}

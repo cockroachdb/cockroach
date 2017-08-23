@@ -395,14 +395,18 @@ func (p *planner) newPlan(
 		return p.Select(ctx, n, desiredTypes)
 	case *parser.SelectClause:
 		return p.SelectClause(ctx, n, nil, nil, desiredTypes, publicColumns)
-	case *parser.Set:
-		return p.Set(ctx, n)
+	case *parser.SetClusterSetting:
+		return p.SetClusterSetting(ctx, n)
+	case *parser.SetVar:
+		return p.SetVar(ctx, n)
 	case *parser.SetTransaction:
 		return p.SetTransaction(n)
 	case *parser.SetDefaultIsolation:
 		return p.SetDefaultIsolation(n)
-	case *parser.Show:
-		return p.Show(ctx, n)
+	case *parser.ShowClusterSetting:
+		return p.ShowClusterSetting(ctx, n)
+	case *parser.ShowVar:
+		return p.ShowVar(ctx, n)
 	case *parser.ShowColumns:
 		return p.ShowColumns(ctx, n)
 	case *parser.ShowConstraints:
@@ -475,8 +479,14 @@ func (p *planner) prepare(ctx context.Context, stmt parser.Statement) (planNode,
 		return p.Select(ctx, n, nil)
 	case *parser.SelectClause:
 		return p.SelectClause(ctx, n, nil, nil, nil, publicColumns)
-	case *parser.Show:
-		return p.Show(ctx, n)
+	case *parser.SetClusterSetting:
+		return p.SetClusterSetting(ctx, n)
+	case *parser.SetVar:
+		return p.SetVar(ctx, n)
+	case *parser.ShowClusterSetting:
+		return p.ShowClusterSetting(ctx, n)
+	case *parser.ShowVar:
+		return p.ShowVar(ctx, n)
 	case *parser.ShowCreateTable:
 		return p.ShowCreateTable(ctx, n)
 	case *parser.ShowCreateView:

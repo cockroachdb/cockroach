@@ -162,7 +162,7 @@ func parseExprs(exprs []string) (Exprs, error) {
 	if err != nil {
 		return nil, err
 	}
-	set, ok := stmt.(*Set)
+	set, ok := stmt.(*SetVar)
 	if !ok {
 		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "expected a SET statement, but found %T", stmt)
 	}
