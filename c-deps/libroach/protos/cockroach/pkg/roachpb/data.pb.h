@@ -41,6 +41,9 @@ extern AbortCacheEntryDefaultTypeInternal _AbortCacheEntry_default_instance_;
 class Attributes;
 class AttributesDefaultTypeInternal;
 extern AttributesDefaultTypeInternal _Attributes_default_instance_;
+class CSVOptions;
+class CSVOptionsDefaultTypeInternal;
+extern CSVOptionsDefaultTypeInternal _CSVOptions_default_instance_;
 class ChangeReplicasTrigger;
 class ChangeReplicasTriggerDefaultTypeInternal;
 extern ChangeReplicasTriggerDefaultTypeInternal _ChangeReplicasTrigger_default_instance_;
@@ -1867,6 +1870,121 @@ class AbortCacheEntry : public ::google::protobuf::MessageLite /* @@protoc_inser
   ::google::protobuf::internal::ArenaStringPtr key_;
   ::cockroach::util::hlc::Timestamp* timestamp_;
   ::google::protobuf::int32 priority_;
+  friend struct protobuf_cockroach_2fpkg_2froachpb_2fdata_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class CSVOptions : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.CSVOptions) */ {
+ public:
+  CSVOptions();
+  virtual ~CSVOptions();
+
+  CSVOptions(const CSVOptions& from);
+
+  inline CSVOptions& operator=(const CSVOptions& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::std::string& unknown_fields() const {
+    return _internal_metadata_.unknown_fields();
+  }
+
+  inline ::std::string* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields();
+  }
+
+  static const CSVOptions& default_instance();
+
+  static inline const CSVOptions* internal_default_instance() {
+    return reinterpret_cast<const CSVOptions*>(
+               &_CSVOptions_default_instance_);
+  }
+  static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
+    14;
+
+  void Swap(CSVOptions* other);
+
+  // implements Message ----------------------------------------------
+
+  inline CSVOptions* New() const PROTOBUF_FINAL { return New(NULL); }
+
+  CSVOptions* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    PROTOBUF_FINAL;
+  void CopyFrom(const CSVOptions& from);
+  void MergeFrom(const CSVOptions& from);
+  void Clear() PROTOBUF_FINAL;
+  bool IsInitialized() const PROTOBUF_FINAL;
+
+  size_t ByteSizeLong() const PROTOBUF_FINAL;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) PROTOBUF_FINAL;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const PROTOBUF_FINAL;
+  void DiscardUnknownFields();
+  int GetCachedSize() const PROTOBUF_FINAL { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(CSVOptions* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const PROTOBUF_FINAL;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  bool has_nullif() const;
+  void clear_nullif();
+  static const int kNullifFieldNumber = 3;
+  const ::std::string& nullif() const;
+  void set_nullif(const ::std::string& value);
+  #if LANG_CXX11
+  void set_nullif(::std::string&& value);
+  #endif
+  void set_nullif(const char* value);
+  void set_nullif(const char* value, size_t size);
+  ::std::string* mutable_nullif();
+  ::std::string* release_nullif();
+  void set_allocated_nullif(::std::string* nullif);
+
+  bool has_comma() const;
+  void clear_comma();
+  static const int kCommaFieldNumber = 1;
+  ::google::protobuf::int32 comma() const;
+  void set_comma(::google::protobuf::int32 value);
+
+  bool has_comment() const;
+  void clear_comment();
+  static const int kCommentFieldNumber = 2;
+  ::google::protobuf::int32 comment() const;
+  void set_comment(::google::protobuf::int32 value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.CSVOptions)
+ private:
+  void set_has_comma();
+  void clear_has_comma();
+  void set_has_comment();
+  void clear_has_comment();
+  void set_has_nullif();
+  void clear_has_nullif();
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::HasBits<1> _has_bits_;
+  mutable int _cached_size_;
+  ::google::protobuf::internal::ArenaStringPtr nullif_;
+  ::google::protobuf::int32 comma_;
+  ::google::protobuf::int32 comment_;
   friend struct protobuf_cockroach_2fpkg_2froachpb_2fdata_2eproto::TableStruct;
 };
 // ===================================================================
@@ -3858,7 +3976,121 @@ inline void AbortCacheEntry::set_priority(::google::protobuf::int32 value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.AbortCacheEntry.priority)
 }
 
+// -------------------------------------------------------------------
+
+// CSVOptions
+
+inline bool CSVOptions::has_comma() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void CSVOptions::set_has_comma() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void CSVOptions::clear_has_comma() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void CSVOptions::clear_comma() {
+  comma_ = 0;
+  clear_has_comma();
+}
+inline ::google::protobuf::int32 CSVOptions::comma() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.CSVOptions.comma)
+  return comma_;
+}
+inline void CSVOptions::set_comma(::google::protobuf::int32 value) {
+  set_has_comma();
+  comma_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.CSVOptions.comma)
+}
+
+inline bool CSVOptions::has_comment() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+inline void CSVOptions::set_has_comment() {
+  _has_bits_[0] |= 0x00000004u;
+}
+inline void CSVOptions::clear_has_comment() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+inline void CSVOptions::clear_comment() {
+  comment_ = 0;
+  clear_has_comment();
+}
+inline ::google::protobuf::int32 CSVOptions::comment() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.CSVOptions.comment)
+  return comment_;
+}
+inline void CSVOptions::set_comment(::google::protobuf::int32 value) {
+  set_has_comment();
+  comment_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.CSVOptions.comment)
+}
+
+inline bool CSVOptions::has_nullif() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void CSVOptions::set_has_nullif() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void CSVOptions::clear_has_nullif() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void CSVOptions::clear_nullif() {
+  nullif_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_nullif();
+}
+inline const ::std::string& CSVOptions::nullif() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.CSVOptions.nullif)
+  return nullif_.GetNoArena();
+}
+inline void CSVOptions::set_nullif(const ::std::string& value) {
+  set_has_nullif();
+  nullif_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.CSVOptions.nullif)
+}
+#if LANG_CXX11
+inline void CSVOptions::set_nullif(::std::string&& value) {
+  set_has_nullif();
+  nullif_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.CSVOptions.nullif)
+}
+#endif
+inline void CSVOptions::set_nullif(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  set_has_nullif();
+  nullif_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.CSVOptions.nullif)
+}
+inline void CSVOptions::set_nullif(const char* value, size_t size) {
+  set_has_nullif();
+  nullif_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.CSVOptions.nullif)
+}
+inline ::std::string* CSVOptions::mutable_nullif() {
+  set_has_nullif();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.CSVOptions.nullif)
+  return nullif_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* CSVOptions::release_nullif() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.CSVOptions.nullif)
+  clear_has_nullif();
+  return nullif_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void CSVOptions::set_allocated_nullif(::std::string* nullif) {
+  if (nullif != NULL) {
+    set_has_nullif();
+  } else {
+    clear_has_nullif();
+  }
+  nullif_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), nullif);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.CSVOptions.nullif)
+}
+
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
