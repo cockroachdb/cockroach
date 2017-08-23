@@ -1729,26 +1729,36 @@ func MVCCIterate(
 		}
 
 		if reverse {
-			if ok, err := iter.Valid(); err != nil {
+			valid, err := iter.Valid()
+			if err != nil {
 				return nil, err
-			} else if ok {
-				if buf.meta.IsInline() {
+			}
+
+			if buf.meta.IsInline() {
+				if valid {
 					// The current entry is an inline value. We can reach the previous
 					// entry using Prev() which is slightly faster than PrevKey().
+					//
+					// As usual, the iterator must be valid because an inline key should
+					// never result in a version scan that brings us to an invalid key.
 					iter.Prev()
-				} else {
-					// This is subtle: mvccGetInternal might already have advanced us to the
-					// next key in which case we have to reset our position.
-					if !iter.UnsafeKey().Key.Equal(metaKey.Key) {
-						iter.Seek(metaKey)
-						if ok, err := iter.Valid(); err != nil {
-							return nil, err
-						} else if ok {
-							iter.Prev()
-						}
-					} else {
-						iter.PrevKey()
+				}
+			} else {
+				// This is subtle: mvccGetInternal might already have advanced
+				// us to the next key in which case we have to reset our
+				// position. We also Seek when iter.Valid says that the iterator
+				// is invalid, because mvccGetInternal might have advanced us
+				// out of the valid range and we may even have reached KeyMax.
+				// In this case, we still want to continue scanning backwards.
+				if !valid || !iter.UnsafeKey().Key.Equal(metaKey.Key) {
+					iter.Seek(metaKey)
+					if ok, err := iter.Valid(); err != nil {
+						return nil, err
+					} else if ok {
+						iter.Prev()
 					}
+				} else {
+					iter.PrevKey()
 				}
 			}
 		} else {
