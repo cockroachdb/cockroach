@@ -2310,6 +2310,32 @@ func TestMVCCReverseScan(t *testing.T) {
 	}
 }
 
+// TestMVCCReverseScanFirstKeyInFuture verifies that when MVCCReverseScan scans
+// encounter a key with only future timestamps first, that it skips the key and
+// continues to scan in reverse. #17825 was caused by this not working correctly.
+func TestMVCCReverseScanFirstKeyInFuture(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	engine := createTestEngine()
+	defer engine.Close()
+
+	if err := MVCCPut(context.Background(), engine, nil, testKey2, hlc.Timestamp{WallTime: 1}, value2, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := MVCCPut(context.Background(), engine, nil, testKey3, hlc.Timestamp{WallTime: 3}, value3, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	kvs, _, _, err := MVCCReverseScan(context.Background(), engine, testKey1, testKey4, math.MaxInt64, hlc.Timestamp{WallTime: 2}, true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(kvs) != 1 ||
+		!bytes.Equal(kvs[0].Key, testKey2) ||
+		!bytes.Equal(kvs[0].Value.RawBytes, value2.RawBytes) {
+		t.Errorf("unexpected value: %v", kvs)
+	}
+}
+
 func TestMVCCResolveTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	engine := createTestEngine()

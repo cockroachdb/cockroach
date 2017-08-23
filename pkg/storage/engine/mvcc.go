@@ -1729,26 +1729,29 @@ func MVCCIterate(
 		}
 
 		if reverse {
-			if ok, err := iter.Valid(); err != nil {
+			if _, err := iter.Valid(); err != nil {
 				return nil, err
-			} else if ok {
-				if buf.meta.IsInline() {
-					// The current entry is an inline value. We can reach the previous
-					// entry using Prev() which is slightly faster than PrevKey().
-					iter.Prev()
-				} else {
-					// This is subtle: mvccGetInternal might already have advanced us to the
-					// next key in which case we have to reset our position.
-					if !iter.UnsafeKey().Key.Equal(metaKey.Key) {
-						iter.Seek(metaKey)
-						if ok, err := iter.Valid(); err != nil {
-							return nil, err
-						} else if ok {
-							iter.Prev()
-						}
-					} else {
-						iter.PrevKey()
+			}
+			// We ignore whether iter.Valid says that the iterator has moved
+			// past the end of the valid range or not. mvccGetInternal might
+			// have advanced us out of it, but we still want to continue
+			// scanning backwards.
+			if buf.meta.IsInline() {
+				// The current entry is an inline value. We can reach the previous
+				// entry using Prev() which is slightly faster than PrevKey().
+				iter.Prev()
+			} else {
+				// This is subtle: mvccGetInternal might already have advanced us to the
+				// next key in which case we have to reset our position.
+				if !iter.UnsafeKey().Key.Equal(metaKey.Key) {
+					iter.Seek(metaKey)
+					if ok, err := iter.Valid(); err != nil {
+						return nil, err
+					} else if ok {
+						iter.Prev()
 					}
+				} else {
+					iter.PrevKey()
 				}
 			}
 		} else {
