@@ -401,6 +401,16 @@ var StaticSplits = []struct {
 		SplitPoint: roachpb.RKey(keys.SystemPrefix),
 		SplitKey:   roachpb.RKey(keys.SystemPrefix),
 	},
+	// Start of node liveness span.
+	{
+		SplitPoint: roachpb.RKey(keys.NodeLivenessPrefix),
+		SplitKey:   roachpb.RKey(keys.NodeLivenessPrefix),
+	},
+	// End of node liveness span.
+	{
+		SplitPoint: roachpb.RKey(keys.NodeLivenessKeyMax),
+		SplitKey:   roachpb.RKey(keys.NodeLivenessKeyMax),
+	},
 	// Start of timeseries ranges (within system ranges)
 	{
 		SplitPoint: roachpb.RKey(keys.TimeseriesPrefix),

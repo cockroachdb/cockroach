@@ -390,39 +390,44 @@ func Example_ranges() {
 	c.Run("debug range ls")
 
 	// Output:
-	// debug range split ranges3
-	// debug range ls
-	// /Min-/System/"" [1]
-	// 	0: node-id=1 store-id=1
-	// /System/""-/System/tsd [2]
-	// 	0: node-id=1 store-id=1
-	// /System/tsd-/System/"tse" [3]
-	// 	0: node-id=1 store-id=1
-	// /System/"tse"-"ranges3" [4]
-	// 	0: node-id=1 store-id=1
-	// "ranges3"-/Table/SystemConfigSpan/Start [15]
-	// 	0: node-id=1 store-id=1
-	// /Table/SystemConfigSpan/Start-/Table/11 [5]
-	// 	0: node-id=1 store-id=1
-	// /Table/11-/Table/12 [6]
-	// 	0: node-id=1 store-id=1
-	// /Table/12-/Table/13 [7]
-	// 	0: node-id=1 store-id=1
-	// /Table/13-/Table/14 [8]
-	// 	0: node-id=1 store-id=1
-	// /Table/14-/Table/15 [9]
-	// 	0: node-id=1 store-id=1
-	// /Table/15-/Table/16 [10]
-	// 	0: node-id=1 store-id=1
-	// /Table/16-/Table/17 [11]
-	// 	0: node-id=1 store-id=1
-	// /Table/17-/Table/18 [12]
-	// 	0: node-id=1 store-id=1
-	// /Table/18-/Table/19 [13]
-	// 	0: node-id=1 store-id=1
-	// /Table/19-/Max [14]
-	// 	0: node-id=1 store-id=1
-	// 15 result(s)
+	//debug range split ranges3
+	//debug range ls
+	///Min-/System/"" [1]
+	//	0: node-id=1 store-id=1
+	///System/""-/System/NodeLiveness [2]
+	//	0: node-id=1 store-id=1
+	///System/NodeLiveness-/System/NodeLivenessMax [3]
+	//	0: node-id=1 store-id=1
+	///System/NodeLivenessMax-/System/tsd [4]
+	//	0: node-id=1 store-id=1
+	///System/tsd-/System/"tse" [5]
+	//	0: node-id=1 store-id=1
+	///System/"tse"-"ranges3" [6]
+	//	0: node-id=1 store-id=1
+	//"ranges3"-/Table/SystemConfigSpan/Start [17]
+	//	0: node-id=1 store-id=1
+	///Table/SystemConfigSpan/Start-/Table/11 [7]
+	//	0: node-id=1 store-id=1
+	///Table/11-/Table/12 [8]
+	//	0: node-id=1 store-id=1
+	///Table/12-/Table/13 [9]
+	//	0: node-id=1 store-id=1
+	///Table/13-/Table/14 [10]
+	//	0: node-id=1 store-id=1
+	///Table/14-/Table/15 [11]
+	//	0: node-id=1 store-id=1
+	///Table/15-/Table/16 [12]
+	//	0: node-id=1 store-id=1
+	///Table/16-/Table/17 [13]
+	//	0: node-id=1 store-id=1
+	///Table/17-/Table/18 [14]
+	//	0: node-id=1 store-id=1
+	///Table/18-/Table/19 [15]
+	//	0: node-id=1 store-id=1
+	///Table/19-/Max [16]
+	//	0: node-id=1 store-id=1
+	//17 result(s)
+
 }
 
 func Example_logging() {
@@ -472,20 +477,20 @@ func Example_max_results() {
 	c.Run("debug range ls --max-results=5")
 
 	// Output:
-	// debug range split max_results3
-	// debug range split max_results4
-	// debug range ls --max-results=5
-	// /Min-/System/"" [1]
-	// 	0: node-id=1 store-id=1
-	// /System/""-/System/tsd [2]
-	// 	0: node-id=1 store-id=1
-	// /System/tsd-/System/"tse" [3]
-	// 	0: node-id=1 store-id=1
-	// /System/"tse"-"max_results3" [4]
-	// 	0: node-id=1 store-id=1
-	// "max_results3"-"max_results4" [15]
-	// 	0: node-id=1 store-id=1
-	// 5 result(s)
+	//debug range split max_results3
+	//debug range split max_results4
+	//debug range ls --max-results=5
+	///Min-/System/"" [1]
+	//	0: node-id=1 store-id=1
+	///System/""-/System/NodeLiveness [2]
+	//	0: node-id=1 store-id=1
+	///System/NodeLiveness-/System/NodeLivenessMax [3]
+	//	0: node-id=1 store-id=1
+	///System/NodeLivenessMax-/System/tsd [4]
+	//	0: node-id=1 store-id=1
+	///System/tsd-/System/"tse" [5]
+	//	0: node-id=1 store-id=1
+	//5 result(s)
 }
 
 func Example_zone() {
@@ -1685,6 +1690,8 @@ writing ` + os.DevNull + `
   debug/nodes/1/ranges/12
   debug/nodes/1/ranges/13
   debug/nodes/1/ranges/14
+  debug/nodes/1/ranges/15
+  debug/nodes/1/ranges/16
   debug/schema/system@details
   debug/schema/system/descriptor
   debug/schema/system/eventlog

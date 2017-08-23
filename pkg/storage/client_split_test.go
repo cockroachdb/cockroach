@@ -966,6 +966,8 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		// range boundaries, but not at system table boundaries.
 		expKeys := []roachpb.Key{
 			testutils.MakeKey(keys.Meta2Prefix, keys.SystemPrefix),
+			testutils.MakeKey(keys.Meta2Prefix, keys.NodeLivenessPrefix),
+			testutils.MakeKey(keys.Meta2Prefix, keys.NodeLivenessKeyMax),
 			testutils.MakeKey(keys.Meta2Prefix, keys.TimeseriesPrefix),
 			testutils.MakeKey(keys.Meta2Prefix, keys.TimeseriesPrefix.PrefixEnd()),
 			testutils.MakeKey(keys.Meta2Prefix, keys.TableDataMin),
