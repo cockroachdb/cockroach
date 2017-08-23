@@ -19,6 +19,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -27,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/pkg/errors"
 )
 
 func newPlanNode() planNode {
@@ -52,19 +52,19 @@ func assertLenEventually(t *testing.T, pq *ParallelizeQueue, exp int) {
 	})
 }
 
-// waitAndAssertEmptyWithErr waits for the ParallelizeQueue to drain, then asserts
-// that the queue is empty. It returns the error produced by ParallelizeQueue.Wait.
-func waitAndAssertEmptyWithErr(t *testing.T, pq *ParallelizeQueue) error {
-	err := pq.Wait()
+// waitAndAssertEmptyWithErrs waits for the ParallelizeQueue to drain, then asserts
+// that the queue is empty. It returns the errors produced by ParallelizeQueue.Wait.
+func waitAndAssertEmptyWithErrs(t *testing.T, pq *ParallelizeQueue) []error {
+	errs := pq.Wait()
 	if l := pq.Len(); l != 0 {
 		t.Errorf("expected empty ParallelizeQueue, found %d plans remaining", l)
 	}
-	return err
+	return errs
 }
 
 func waitAndAssertEmpty(t *testing.T, pq *ParallelizeQueue) {
-	if err := waitAndAssertEmptyWithErr(t, pq); err != nil {
-		t.Fatalf("unexpected error waiting for ParallelizeQueue to drain: %v", err)
+	if errs := waitAndAssertEmptyWithErrs(t, pq); len(errs) > 0 {
+		t.Fatalf("unexpected errors waiting for ParallelizeQueue to drain: %v", errs)
 	}
 }
 
@@ -237,9 +237,9 @@ func TestParallelizeQueueError(t *testing.T) {
 	})
 	close(run3)
 
-	resErr := waitAndAssertEmptyWithErr(t, &pq)
-	if resErr != planErr {
-		t.Fatalf("expected plan1 to throw error %v, found %v", planErr, resErr)
+	resErrs := waitAndAssertEmptyWithErrs(t, &pq)
+	if len(resErrs) != 1 || resErrs[0] != planErr {
+		t.Fatalf("expected plan1 to throw error %v, found %v", planErr, resErrs)
 	}
 
 	exp := []int{3, 1}
@@ -270,7 +270,7 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		// We need this, because any signal from within plan1's execution could
 		// race with the beginning of plan2.
-		if pqErr := pq.Err(); pqErr == nil {
+		if pqErrs := pq.Errs(); len(pqErrs) == 0 {
 			return errors.Errorf("plan1 not yet run")
 		}
 		return nil
@@ -285,9 +285,9 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 
 	// Wait for the ParallelizeQueue to clear and assert that we see the
 	// correct error.
-	resErr := waitAndAssertEmptyWithErr(t, &pq)
-	if resErr != planErr {
-		t.Fatalf("expected plan1 to throw error %v, found %v", planErr, resErr)
+	resErrs := waitAndAssertEmptyWithErrs(t, &pq)
+	if len(resErrs) != 1 || resErrs[0] != planErr {
+		t.Fatalf("expected plan1 to throw error %v, found %v", planErr, resErrs)
 	}
 
 	pq.Add(ctx, plan3, func(plan planNode) error {

@@ -449,7 +449,7 @@ func (s *Session) Finish(e *Executor) {
 	// statement execution by the infrastructure added to support CancelRequest,
 	// we should try to actively drain this queue instead of passively waiting
 	// for it to drain.
-	_ = s.parallelizeQueue.Wait()
+	_ = s.synchronizeParallelStmts(s.context)
 
 	// If we're inside a txn, roll it back.
 	if s.TxnState.State().kvTxnIsOpen() {
@@ -498,7 +498,7 @@ func (s *Session) Finish(e *Executor) {
 func (s *Session) EmergencyClose() {
 	// Ensure that all in-flight statements are done, so that monitor
 	// traffic is stopped.
-	_ = s.parallelizeQueue.Wait()
+	_ = s.synchronizeParallelStmts(s.context)
 
 	// Release the leases - to ensure other sessions don't get stuck.
 	s.tables.releaseTables(s.context)
@@ -667,6 +667,54 @@ func (s *Session) setQueryExecutionMode(
 		lenSyncQueries := len(s.ActiveSyncQueries)
 		s.ActiveSyncQueries = s.ActiveSyncQueries[:lenSyncQueries-1]
 	}
+}
+
+// synchronizeParallelStmts waits for all statements in the parallelizeQueue to
+// finish. If errors are seen in the parallel batch, we attempt to turn these
+// errors into a single error we can send to the client. We do this by prioritizing
+// non-retryable errors over retryable errors.
+func (s *Session) synchronizeParallelStmts(ctx context.Context) error {
+	if errs := s.parallelizeQueue.Wait(); len(errs) > 0 {
+		s.TxnState.mu.Lock()
+		defer s.TxnState.mu.Unlock()
+
+		// Check that all errors are retryable. If any are not, return the
+		// first non-retryable error.
+		var retryErr *roachpb.HandledRetryableTxnError
+		for _, err := range errs {
+			switch t := err.(type) {
+			case *roachpb.HandledRetryableTxnError:
+				// Ignore retryable errors to previous incarnations of this transaction.
+				curTxn := s.TxnState.mu.txn.Proto()
+				errTxn := t.Transaction
+				if errTxn.ID == curTxn.ID && errTxn.Epoch == curTxn.Epoch {
+					retryErr = t
+				}
+			case *roachpb.UntrackedTxnError:
+				// Symptom of concurrent retry, ignore.
+			case *roachpb.TxnPrevAttemptError:
+				// Symptom of concurrent retry, ignore.
+			default:
+				return err
+			}
+		}
+
+		if retryErr == nil {
+			log.Fatalf(ctx, "found symptoms of a concurrent retry, but did "+
+				"not find the final retry error: %v", errs)
+		}
+
+		// If all errors are retryable, we return the one meant for the current
+		// incarnation of this transaction. Before doing so though, we need to bump
+		// the transaction epoch to invalidate any writes performed by any workers
+		// after the retry updated the txn's proto but before we synchronized (some
+		// of these writes might have been performed at the wrong epoch). Note
+		// that we don't need to lock the client.Txn because we're synchronized.
+		// See #17197.
+		s.TxnState.mu.txn.Proto().BumpEpoch()
+		return retryErr
+	}
+	return nil
 }
 
 // MaxSQLBytes is the maximum length in bytes of SQL statements serialized

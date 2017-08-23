@@ -15,6 +15,10 @@
 package storageutils
 
 import (
+	"fmt"
+
+	"golang.org/x/sync/singleflight"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -26,10 +30,15 @@ type raftCmdIDAndIndex struct {
 	Index int
 }
 
+func (r raftCmdIDAndIndex) String() string {
+	return fmt.Sprintf("%s/%d", r.IDKey, r.Index)
+}
+
 // ReplayProtectionFilterWrapper wraps a CommandFilter and assures protection
 // from Raft replays.
 type ReplayProtectionFilterWrapper struct {
 	syncutil.Mutex
+	inFlight          singleflight.Group
 	processedCommands map[raftCmdIDAndIndex]*roachpb.Error
 	filter            storagebase.ReplicaCommandFilter
 }
@@ -63,23 +72,31 @@ func shallowCloneErrorWithTxn(pErr *roachpb.Error) *roachpb.Error {
 
 // run executes the wrapped filter.
 func (c *ReplayProtectionFilterWrapper) run(args storagebase.FilterArgs) *roachpb.Error {
+	if !args.InRaftCmd() {
+		return c.filter(args)
+	}
+
 	mapKey := raftCmdIDAndIndex{args.CmdID, args.Index}
 
 	c.Lock()
-	defer c.Unlock()
-
-	if args.InRaftCmd() {
-		if pErr, ok := c.processedCommands[mapKey]; ok {
-			// We've detected a replay.
-			return shallowCloneErrorWithTxn(pErr)
-		}
+	if pErr, ok := c.processedCommands[mapKey]; ok {
+		c.Unlock()
+		return shallowCloneErrorWithTxn(pErr)
 	}
 
-	pErr := c.filter(args)
+	// We use the singleflight.Group to coalesce replayed raft commands onto the
+	// same filter call. This allows concurrent access to the filter for
+	// different raft commands.
+	resC := c.inFlight.DoChan(mapKey.String(), func() (interface{}, error) {
+		pErr := c.filter(args)
 
-	if args.InRaftCmd() {
+		c.Lock()
+		defer c.Unlock()
 		c.processedCommands[mapKey] = pErr
-	}
+		return pErr, nil
+	})
+	c.Unlock()
 
-	return shallowCloneErrorWithTxn(pErr)
+	res := <-resC
+	return shallowCloneErrorWithTxn(res.Val.(*roachpb.Error))
 }
