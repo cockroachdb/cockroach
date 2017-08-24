@@ -214,7 +214,7 @@ func (dsp *distSQLPlanner) Run(
 	return nil
 }
 
-// distSQLReceiver is a RowReceiver that sends results to a StatementResultWriter.
+// distSQLReceiver is a RowReceiver that writes results to a rowResultWriter.
 // This is where the DistSQL execution meets the SQL Session - the RowContainer
 // comes from a client Session.
 //
@@ -260,8 +260,8 @@ type distSQLReceiver struct {
 	updateClock func(observedTs hlc.Timestamp)
 }
 
-// rowResultWriter is a subset of StatementResultWriter for use in the
-// distSQLReceiver -- also implemented bufferedRowWriter as a one off.
+// rowResultWriter is a subset of StatementResult to be used with the
+// distSQLReceiver. It's implemented by RowResultWriter.
 type rowResultWriter interface {
 	// AddRow takes the passed in row and adds it to the current result.
 	AddRow(ctx context.Context, row parser.Datums) error
