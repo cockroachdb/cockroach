@@ -19,6 +19,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
 // IsolationLevel holds the isolation level for a transaction.
@@ -174,7 +176,7 @@ const RestartSavepointName string = "COCKROACH_RESTART"
 // appends sequence numbers to the savepoint name specified by the user.
 func ValidateRestartCheckpoint(savepoint string) error {
 	if !strings.HasPrefix(strings.ToUpper(savepoint), RestartSavepointName) {
-		return fmt.Errorf("SAVEPOINT not supported except for %s", RestartSavepointName)
+		return pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "SAVEPOINT not supported except for %s", RestartSavepointName)
 	}
 	return nil
 }
