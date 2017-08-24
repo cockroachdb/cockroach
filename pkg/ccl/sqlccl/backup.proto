@@ -38,7 +38,9 @@ message BackupDescriptor {
   util.hlc.Timestamp end_time = 2 [(gogoproto.nullable) = false];
   // Spans contains the spans requested for backup. The keyranges covered by
   // `files` may be a subset of this if there were ranges with no changes since
-  // the last backup.
+  // the last backup. For all tables in the backup descriptor, these spans must
+  // completely cover each table's span. For example, if a table with ID 51 were
+  // being backed up, then the span `/Table/5{1-2}` must be completely covered.
   repeated roachpb.Span spans = 3 [(gogoproto.nullable) = false];
   repeated File files = 4 [(gogoproto.nullable) = false];
   repeated sql.sqlbase.Descriptor descriptors = 5 [(gogoproto.nullable) = false];
