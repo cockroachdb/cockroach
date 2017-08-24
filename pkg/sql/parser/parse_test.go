@@ -838,6 +838,12 @@ func TestParse2(t *testing.T) {
 			`SELECT rtrim(b, a)`},
 		{`SELECT TRIM(a, b)`,
 			`SELECT btrim(a, b)`},
+		{`SELECT CURRENT_USER`,
+			`SELECT current_user()`},
+		{`SELECT SESSION_USER`,
+			`SELECT current_user()`},
+		{`SELECT USER`,
+			`SELECT current_user()`},
 		// Offset has an optional ROW/ROWS keyword.
 		{`SELECT a FROM t1 OFFSET a ROW`,
 			`SELECT a FROM t1 OFFSET a`},

@@ -1790,6 +1790,22 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
+	"current_user": {
+		Builtin{
+			Types:      ArgTypes{},
+			ReturnType: fixedReturnType(TypeString),
+			category:   categorySystemInfo,
+			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+				if len(ctx.User) == 0 {
+					return DNull, nil
+				}
+				return NewDString(ctx.User), nil
+			},
+			Info: "Returns the current user. This function is provided for " +
+				"compatibility with PostgreSQL.",
+		},
+	},
+
 	"crdb_internal.cluster_id": {
 		Builtin{
 			Types:      ArgTypes{},

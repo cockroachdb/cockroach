@@ -5307,9 +5307,23 @@ func_expr_common_subexpr:
   }
 | CURRENT_TIMESTAMP '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
 | CURRENT_ROLE { return unimplemented(sqllex, "current role") }
-| CURRENT_USER { return unimplemented(sqllex, "current user") }
-| SESSION_USER { return unimplemented(sqllex, "session user") }
-| USER { return unimplemented(sqllex, "user") }
+| CURRENT_USER
+  {
+    $$.val = &FuncExpr{Func: wrapFunction($1)}
+  }
+| CURRENT_USER '(' ')'
+  {
+    $$.val = &FuncExpr{Func: wrapFunction($1)}
+  }
+| CURRENT_USER '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
+| SESSION_USER
+  {
+    $$.val = &FuncExpr{Func: wrapFunction("current_user")}
+  }
+| USER
+  {
+    $$.val = &FuncExpr{Func: wrapFunction("current_user")}
+  }
 | CAST '(' a_expr AS cast_target ')'
   {
     $$.val = &CastExpr{Expr: $3.expr(), Type: $5.castTargetType(), syntaxMode: castExplicit}

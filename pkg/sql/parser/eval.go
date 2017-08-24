@@ -1844,6 +1844,8 @@ type EvalContext struct {
 	Location **time.Location
 	// Database is the database in the current Session.
 	Database string
+	// User is the user in the current Session.
+	User string
 	// SearchPath is the search path for databases used when encountering an
 	// unqualified table name. Names in the search path are normalized already.
 	// This must not be modified (this is shared from the session).
