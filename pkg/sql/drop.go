@@ -57,7 +57,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *parser.DropDatabase) (pla
 	if dbDesc == nil {
 		if n.IfExists {
 			// Noop.
-			return &emptyNode{}, nil
+			return &zeroNode{}, nil
 		}
 		return nil, sqlbase.NewUndefinedDatabaseError(string(n.Name))
 	}
@@ -464,7 +464,7 @@ func (p *planner) DropView(ctx context.Context, n *parser.DropView) (planNode, e
 	}
 
 	if len(td) == 0 {
-		return &emptyNode{}, nil
+		return &zeroNode{}, nil
 	}
 	return &dropViewNode{n: n, td: td}, nil
 }
@@ -583,7 +583,7 @@ func (p *planner) DropTable(ctx context.Context, n *parser.DropTable) (planNode,
 	}
 
 	if len(td) == 0 {
-		return &emptyNode{}, nil
+		return &zeroNode{}, nil
 	}
 	return &dropTableNode{n: n, td: td}, nil
 }

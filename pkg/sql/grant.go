@@ -67,7 +67,7 @@ func (p *planner) changePrivileges(
 	if err := p.txn.Run(ctx, b); err != nil {
 		return nil, err
 	}
-	return &emptyNode{}, nil
+	return &zeroNode{}, nil
 }
 
 // Grant adds privileges to users.

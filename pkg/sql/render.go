@@ -449,8 +449,8 @@ func (r *renderNode) rewriteSRFs(
 // A unary source is the special source used with empty FROM clauses:
 // a pseudo-table with zero columns and exactly one row.
 func isUnarySource(src planDataSource) bool {
-	e, ok := src.plan.(*emptyNode)
-	return ok && e.results && len(src.info.sourceColumns) == 0
+	_, ok := src.plan.(*unaryNode)
+	return ok && len(src.info.sourceColumns) == 0
 }
 
 func (r *renderNode) initWhere(ctx context.Context, whereExpr parser.Expr) (*filterNode, error) {

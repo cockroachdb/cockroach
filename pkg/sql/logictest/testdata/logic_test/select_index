@@ -191,7 +191,7 @@ query ITTT
 EXPLAIN SELECT * FROM t WHERE a > 1 AND a < 2
 ----
 0  render  ·  ·
-1  empty   ·  ·
+1  norows  ·  ·
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a = 1 AND 'a' < b AND 'c' > b]
@@ -311,7 +311,7 @@ query ITTT
 EXPLAIN SELECT * FROM t WHERE a = 1 AND false
 ----
 0  render  ·  ·
-1  empty   ·  ·
+1  norows  ·  ·
 
 # Make sure that mixed type comparison operations are not used
 # for selecting indexes.

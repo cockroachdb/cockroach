@@ -86,7 +86,7 @@ func (p *planner) Set(ctx context.Context, n *parser.Set) (planNode, error) {
 		}
 	}
 
-	return &emptyNode{}, nil
+	return &zeroNode{}, nil
 }
 
 func (p *planner) setClusterSetting(
@@ -147,7 +147,7 @@ func (p *planner) setClusterSetting(
 		return nil, err
 	}
 
-	return &emptyNode{}, nil
+	return &zeroNode{}, nil
 }
 
 func (p *planner) toSettingString(
@@ -317,7 +317,7 @@ func (p *planner) SetDefaultIsolation(n *parser.SetDefaultIsolation) (planNode, 
 	default:
 		return nil, fmt.Errorf("unsupported default isolation level: %s", n.Isolation)
 	}
-	return &emptyNode{}, nil
+	return &zeroNode{}, nil
 }
 
 func setTimeZone(_ context.Context, session *Session, values []parser.TypedExpr) error {

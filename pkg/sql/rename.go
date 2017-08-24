@@ -58,7 +58,7 @@ func (p *planner) RenameDatabase(ctx context.Context, n *parser.RenameDatabase) 
 
 	if n.Name == n.NewName {
 		// Noop.
-		return &emptyNode{}, nil
+		return &zeroNode{}, nil
 	}
 
 	// Check if any views depend on tables in the database. Because our views
@@ -102,7 +102,7 @@ func (p *planner) RenameDatabase(ctx context.Context, n *parser.RenameDatabase) 
 	if err := p.renameDatabase(ctx, dbDesc, string(n.NewName)); err != nil {
 		return nil, err
 	}
-	return &emptyNode{}, nil
+	return &zeroNode{}, nil
 }
 
 // RenameTable renames the table or view.
@@ -139,7 +139,7 @@ func (p *planner) RenameTable(ctx context.Context, n *parser.RenameTable) (planN
 		if tableDesc == nil {
 			if n.IfExists {
 				// Noop.
-				return &emptyNode{}, nil
+				return &zeroNode{}, nil
 			}
 			// Key does not exist, but we want it to: error out.
 			return nil, sqlbase.NewUndefinedRelationError(oldTn)
@@ -155,7 +155,7 @@ func (p *planner) RenameTable(ctx context.Context, n *parser.RenameTable) (planN
 		if tableDesc == nil {
 			if n.IfExists {
 				// Noop.
-				return &emptyNode{}, nil
+				return &zeroNode{}, nil
 			}
 			// Key does not exist, but we want it to: error out.
 			return nil, sqlbase.NewUndefinedRelationError(oldTn)
@@ -191,7 +191,7 @@ func (p *planner) RenameTable(ctx context.Context, n *parser.RenameTable) (planN
 	// oldTn and newTn are already normalized, so we can compare directly here.
 	if oldTn.Database() == newTn.Database() && oldTn.Table() == newTn.Table() {
 		// Noop.
-		return &emptyNode{}, nil
+		return &zeroNode{}, nil
 	}
 
 	tableDesc.SetName(newTn.Table())
@@ -247,7 +247,7 @@ func (p *planner) RenameTable(ctx context.Context, n *parser.RenameTable) (planN
 		return nil
 	})
 
-	return &emptyNode{}, nil
+	return &zeroNode{}, nil
 }
 
 // RenameIndex renames the index.
@@ -269,7 +269,7 @@ func (p *planner) RenameIndex(ctx context.Context, n *parser.RenameIndex) (planN
 	if err != nil {
 		if n.IfExists {
 			// Noop.
-			return &emptyNode{}, nil
+			return &zeroNode{}, nil
 		}
 		// Index does not exist, but we want it to: error out.
 		return nil, err
@@ -293,7 +293,7 @@ func (p *planner) RenameIndex(ctx context.Context, n *parser.RenameIndex) (planN
 
 	if n.Index.Index == n.NewName {
 		// Noop.
-		return &emptyNode{}, nil
+		return &zeroNode{}, nil
 	}
 
 	if _, _, err := tableDesc.FindIndexByName(string(n.NewName)); err == nil {
@@ -313,7 +313,7 @@ func (p *planner) RenameIndex(ctx context.Context, n *parser.RenameIndex) (planN
 		return nil, err
 	}
 	p.notifySchemaChange(tableDesc, sqlbase.InvalidMutationID)
-	return &emptyNode{}, nil
+	return &zeroNode{}, nil
 }
 
 // RenameColumn renames the column.
@@ -333,7 +333,7 @@ func (p *planner) RenameColumn(ctx context.Context, n *parser.RenameColumn) (pla
 	if tableDesc == nil {
 		if n.IfExists {
 			// Noop.
-			return &emptyNode{}, nil
+			return &zeroNode{}, nil
 		}
 		// Key does not exist, but we want it to: error out.
 		return nil, fmt.Errorf("table %q does not exist", tn.Table())
@@ -368,7 +368,7 @@ func (p *planner) RenameColumn(ctx context.Context, n *parser.RenameColumn) (pla
 
 	if n.Name == n.NewName {
 		// Noop.
-		return &emptyNode{}, nil
+		return &zeroNode{}, nil
 	}
 
 	if _, _, err := tableDesc.FindColumnByName(n.NewName); err == nil {
@@ -424,7 +424,7 @@ func (p *planner) RenameColumn(ctx context.Context, n *parser.RenameColumn) (pla
 		return nil, err
 	}
 	p.notifySchemaChange(tableDesc, sqlbase.InvalidMutationID)
-	return &emptyNode{}, nil
+	return &zeroNode{}, nil
 }
 
 // TODO(a-robinson): Support renaming objects depended on by views once we have
