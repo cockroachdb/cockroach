@@ -656,10 +656,16 @@ func (s *Session) setQueryExecutionMode(
 	queryID uint128.Uint128, isDistributed bool, isParallel bool,
 ) {
 	s.mu.Lock()
-	queryMeta := s.mu.ActiveQueries[queryID]
+	defer s.mu.Unlock()
+	queryMeta, ok := s.mu.ActiveQueries[queryID]
+	if !ok {
+		// Could be a statement that implements HiddenFromShowQueries.
+		// These statements have a query ID but do not have an entry
+		// in session.mu.ActiveQueries.
+		return
+	}
 	queryMeta.phase = executing
 	queryMeta.isDistributed = isDistributed
-	s.mu.Unlock()
 
 	if isParallel {
 		// We default to putting queries in ActiveSyncQueries. Since

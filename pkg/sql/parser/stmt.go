@@ -78,6 +78,14 @@ type HiddenFromStats interface {
 	hiddenFromStats()
 }
 
+// HiddenFromShowQueries is a pseudo-interface to be implemented
+// by statements that should not show up in SHOW QUERIES (and are hence
+// not cancellable using CANCEL QUERY either). Usually implemented by
+// statements that spawn jobs.
+type HiddenFromShowQueries interface {
+	hiddenFromShowQueries()
+}
+
 // IndependentFromParallelizedPriors is a pseudo-interface to be implemented
 // by statements which do not force parallel statement execution synchronization
 // when they run.
@@ -91,11 +99,15 @@ func (*AlterTable) StatementType() StatementType { return DDL }
 // StatementTag returns a short string identifying the type of statement.
 func (*AlterTable) StatementTag() string { return "ALTER TABLE" }
 
+func (*AlterTable) hiddenFromShowQueries() {}
+
 // StatementType implements the Statement interface.
 func (*Backup) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Backup) StatementTag() string { return "BACKUP" }
+
+func (*Backup) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
 func (*BeginTransaction) StatementType() StatementType { return Ack }
@@ -324,6 +336,8 @@ func (*Restore) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Restore) StatementTag() string { return "RESTORE" }
+
+func (*Restore) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
 func (*ResumeJob) StatementType() StatementType { return Ack }
