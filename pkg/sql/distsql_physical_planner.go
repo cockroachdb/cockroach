@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -362,6 +363,21 @@ type planningCtx struct {
 	// physicalPlan we generate with this context.
 	// Nodes that fail a health check have empty addresses.
 	nodeAddresses map[roachpb.NodeID]string
+}
+
+// sanityCheckAddresses returns an error if the same address is used by two
+// nodes.
+func (p *planningCtx) sanityCheckAddresses() error {
+	inverted := make(map[string]roachpb.NodeID)
+	for nodeID, addr := range p.nodeAddresses {
+		if otherNodeID, ok := inverted[addr]; ok {
+			return util.UnexpectedWithIssueErrorf(
+				12876,
+				"different nodes with the same address: %d and %d", nodeID, otherNodeID)
+		}
+		inverted[addr] = nodeID
+	}
+	return nil
 }
 
 // physicalPlan is a partial physical plan which corresponds to a planNode

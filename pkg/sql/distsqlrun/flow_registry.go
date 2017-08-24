@@ -21,6 +21,8 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -83,14 +85,23 @@ type flowEntry struct {
 // be registered. Multiple clients can wait concurrently for the same flow.
 type flowRegistry struct {
 	syncutil.Mutex
+
+	// nodeID is the ID of the current node. Used for debugging.
+	nodeID roachpb.NodeID
+
 	// All fields in the flowEntry's are protected by the flowRegistry mutex,
 	// except flow, whose methods can be called freely.
 	flows map[FlowID]*flowEntry
 }
 
-func makeFlowRegistry() *flowRegistry {
+// makeFlowRegistry creates a new flowRegistry.
+//
+// nodeID is the ID of the current node. Used for debugging; pass 0 if you don't
+// care.
+func makeFlowRegistry(nodeID roachpb.NodeID) *flowRegistry {
 	fr := &flowRegistry{
-		flows: make(map[FlowID]*flowEntry),
+		nodeID: nodeID,
+		flows:  make(map[FlowID]*flowEntry),
 	}
 	return fr
 }
@@ -130,18 +141,34 @@ func (fr *flowRegistry) releaseEntryLocked(id FlowID) {
 //
 // inboundStreams are all the remote streams that will be connected into this
 // flow. If any of them is not connected within timeout, errors are propagated.
+// The inboundStreams are expected to have been initialized with their
+// WaitGroups (the group should have been incremented). RegisterFlow takes
+// responsibility for calling Done() on that WaitGroup; this responsibility will
+// be forwarded forward by ConnectInboundStream. In case this method returns an
+// error, the WaitGroup will be decremented.
 func (fr *flowRegistry) RegisterFlow(
 	ctx context.Context,
 	id FlowID,
 	f *Flow,
 	inboundStreams map[StreamID]*inboundStreamInfo,
 	timeout time.Duration,
-) {
+) (retErr error) {
 	fr.Lock()
 	defer fr.Unlock()
+	defer func() {
+		if retErr != nil {
+			for _, stream := range inboundStreams {
+				stream.waitGroup.Done()
+			}
+		}
+	}()
 	entry := fr.getEntryLocked(id)
 	if entry.flow != nil {
-		panic("flow already registered")
+		return util.UnexpectedWithIssueErrorf(
+			12876,
+			"flow already registered: current node ID: %d flowID: %d.\n"+
+				"Current flow:%+v\nExisting flow:%+v",
+			fr.nodeID, f.spec, entry.flow.spec)
 	}
 	// Take a reference that will be removed by UnregisterFlow.
 	entry.refCount++
@@ -187,6 +214,7 @@ func (fr *flowRegistry) RegisterFlow(
 			}
 		})
 	}
+	return nil
 }
 
 // UnregisterFlow removes a flow from the registry. Any subsequent
