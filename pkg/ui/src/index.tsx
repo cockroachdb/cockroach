@@ -22,7 +22,9 @@ import {
   tableNameAttr, databaseNameAttr, nodeIDAttr, dashboardNameAttr, rangeIDAttr,
 } from "src/util/constants";
 
+import "src/redux/analytics";
 import { store, history } from "src/redux/state";
+
 import Layout from "src/views/app/containers/layout";
 
 import { DatabaseTablesList, DatabaseGrantsList } from "src/views/databases/containers/databases";
@@ -50,6 +52,15 @@ import Debug from "src/views/reports/containers/debug";
 
 import { alertDataSync } from "src/redux/alerts";
 
+// NOTE: If you are adding a new path to the router, and that path contains any
+// components that are personally identifying information, you MUST update the
+// redactions list in src/redux/analytics.ts.
+//
+// Examples of PII: Database names, Table names, IP addresses; Any value that
+// could identify a specific user.
+//
+// Serial numeric values, such as NodeIDs or Descriptor IDs, are not PII and do
+// not need to be redacted.
 ReactDOM.render(
   <Provider store={store}>
     <Router history={history}>
