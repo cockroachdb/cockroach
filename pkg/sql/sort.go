@@ -206,6 +206,9 @@ func (p *planner) orderBy(
 				continue
 			}
 
+			// ORDER BY (a, b) -> ORDER BY a, b
+			cols, exprs = flattenTuples(cols, exprs)
+
 			colIdxs := s.addOrReuseRenders(cols, exprs, true)
 			for i := 0; i < len(colIdxs)-1; i++ {
 				// If more than 1 column were expanded, turn them into sort columns too.
@@ -235,6 +238,54 @@ func (p *planner) orderBy(
 		return nil, nil
 	}
 	return &sortNode{p: p, columns: columns, ordering: ordering}, nil
+}
+
+// flattenTuples extracts the members of tuples into a list of columns.
+func flattenTuples(
+	cols sqlbase.ResultColumns, exprs []parser.TypedExpr,
+) (sqlbase.ResultColumns, []parser.TypedExpr) {
+	// We want to avoid allocating new slices unless strictly necessary.
+	var newExprs []parser.TypedExpr
+	var newCols sqlbase.ResultColumns
+	for i, e := range exprs {
+		if t, ok := e.(*parser.Tuple); ok {
+			if newExprs == nil {
+				// All right, it was necessary to allocate the slices after all.
+				newExprs = make([]parser.TypedExpr, i, len(exprs))
+				newCols = make(sqlbase.ResultColumns, i, len(cols))
+				copy(newExprs, exprs[:i])
+				copy(newCols, cols[:i])
+			}
+
+			newCols, newExprs = flattenTuple(t, newCols, newExprs)
+		} else if newExprs != nil {
+			newExprs = append(newExprs, e)
+			newCols = append(newCols, cols[i])
+		}
+	}
+	if newExprs != nil {
+		return newCols, newExprs
+	}
+	return cols, exprs
+}
+
+// flattenTuple extracts the members of one tuple into a list of columns.
+func flattenTuple(
+	t *parser.Tuple, cols sqlbase.ResultColumns, exprs []parser.TypedExpr,
+) (sqlbase.ResultColumns, []parser.TypedExpr) {
+	for _, e := range t.Exprs {
+		if eT, ok := e.(*parser.Tuple); ok {
+			cols, exprs = flattenTuple(eT, cols, exprs)
+		} else {
+			expr := e.(parser.TypedExpr)
+			exprs = append(exprs, expr)
+			cols = append(cols, sqlbase.ResultColumn{
+				Name: e.String(),
+				Typ:  expr.ResolvedType(),
+			})
+		}
+	}
+	return cols, exprs
 }
 
 // rewriteIndexOrderings rewrites an ORDER BY clause that uses the
