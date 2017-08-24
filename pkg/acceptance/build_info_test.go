@@ -31,7 +31,9 @@ func TestBuildInfo(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	runTestOnConfigs(t, testBuildInfoInner)
+	RunLocal(t, func(t *testing.T) {
+		runTestOnConfigs(t, testBuildInfoInner)
+	})
 }
 
 func testBuildInfoInner(
