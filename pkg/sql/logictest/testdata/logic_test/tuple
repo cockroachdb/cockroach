@@ -98,7 +98,7 @@ SELECT
 ----
 true NULL false NULL
 
-statement error pq: tuples \(1, 2\), \(1, 'hi'\) are not comparable at index 2: unsupported comparison operator: <int> > <string>
+statement error pq: tuples \(1, 2\), \(1, 'hi'\) are not comparable at index 2: unsupported comparison operator
 SELECT (1, 2) > (1, 'hi')
 
 statement error pq: expected tuple \(1, 2, 3\) to have a length of 2
@@ -143,7 +143,7 @@ SELECT (ROW(SQRT(100.0)), 'ab') = (ROW(POW(1, 10.0) + 9), 'a' || 'b')
 ----
 true
 
-query error pq: tuples \(\(1, 2\), 'equal'\), \(\(1, 'huh'\), 'equal'\) are not comparable at index 1: tuples \(1, 2\), \(1, 'huh'\) are not comparable at index 2: unsupported comparison operator: <int> = <string>
+query error pq: tuples \(\(1, 2\), 'equal'\), \(\(1, 'huh'\), 'equal'\) are not comparable at index 1: tuples \(1, 2\), \(1, 'huh'\) are not comparable at index 2: unsupported comparison operator
 SELECT ((1, 2), 'equal') = ((1, 'huh'), 'equal')
 
 # Issue #3568

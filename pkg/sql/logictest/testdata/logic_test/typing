@@ -74,16 +74,16 @@ SELECT * from s
 qwe
 startend
 
-statement error incompatible COALESCE expressions: expected 1 to be of type string, found type int
+statement error incompatible COALESCE expressions: could not parse 'foo' as type int
 INSERT INTO s VALUES (COALESCE(1, 'foo'))
 
-statement error incompatible COALESCE expressions: expected 'foo' to be of type int, found type string
+statement error incompatible COALESCE expressions: could not parse 'foo' as type int
 INSERT INTO i VALUES (COALESCE(1, 'foo'))
 
-query error incompatible COALESCE expressions: expected 'foo' to be of type int, found type string
+query error incompatible COALESCE expressions: could not parse 'foo' as type int
 SELECT COALESCE(1, 'foo')
 
-query error incompatible COALESCE expressions: expected 'foo' to be of type int, found type string
+query error incompatible COALESCE expressions: could not parse 'foo' as type int
 SELECT COALESCE(1::INT, 'foo')
 
 query R
@@ -117,15 +117,15 @@ SELECT GREATEST(-1, 1, 2.3, 123456789, 3 + 5, -(-4), ABS(-9.0))
 123456789
 
 statement ok
-CREATE TABLE untyped (b bool, d DATE, ts TIMESTAMP, tz TIMESTAMPTZ, i INTERVAL)
+CREATE TABLE untyped (b bool, n INT, f FLOAT, e DECIMAL, d DATE, ts TIMESTAMP, tz TIMESTAMPTZ, i INTERVAL)
 
 statement ok
-INSERT INTO untyped VALUES ('f', '2010-09-28', '2010-09-28 12:00:00.1', '2010-09-29 12:00:00.1', 'PT12H2M')
+INSERT INTO untyped VALUES ('f', '42', '4.2', '4.20', '2010-09-28', '2010-09-28 12:00:00.1', '2010-09-29 12:00:00.1', 'PT12H2M')
 
-query BTTTT
+query BIRRTTTT
 SELECT * FROM untyped
 ----
-false   2010-09-28 00:00:00 +0000 +0000   2010-09-28 12:00:00.1 +0000 +0000   2010-09-29 12:00:00.1 +0000 +0000   12h2m
+false   42   4.2    4.20    2010-09-28 00:00:00 +0000 +0000   2010-09-28 12:00:00.1 +0000 +0000   2010-09-29 12:00:00.1 +0000 +0000   12h2m
 
 # Issue #14527: support string literal coercion during overload resolution
 query T
