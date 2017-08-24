@@ -212,7 +212,7 @@ func TestGolangQueryArgs(t *testing.T) {
 	pinfo := &parser.PlaceholderInfo{}
 	for i, tcase := range testCases {
 		golangFillQueryArguments(pinfo, []interface{}{tcase.value})
-		output, valid := pinfo.Type("1")
+		output, valid := pinfo.Type("1", false)
 		if !valid {
 			t.Errorf("case %d failed: argument was invalid", i)
 			continue

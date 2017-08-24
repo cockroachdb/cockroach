@@ -801,7 +801,25 @@ func (expr *Placeholder) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, e
 	// when there are no available values for the placeholders yet, because
 	// during Execute all placeholders are replaced from the AST before type
 	// checking.
-	if typ, ok := ctx.Placeholders.Type(expr.Name); ok {
+	if typ, ok := ctx.Placeholders.Type(expr.Name, true); ok {
+		if !desired.Equivalent(typ) {
+			// This indicates there's a conflict between what the type system thinks
+			// the type for this position should be, and the actual type of the
+			// placeholder. This actual placeholder type could be either a type hint
+			// (from pgwire or from a SQL PREPARE), or the actual value type.
+			//
+			// To resolve this situation, we *override* the placeholder type with what
+			// the type system expects. Then, when the value is actually sent to us
+			// later, we cast the input value (whose type is the expected type) to the
+			// desired type here.
+			typ = desired
+		}
+		// We call SetType regardless of the above condition to inform the
+		// placeholder struct that this placeholder is locked to its type and cannot
+		// be overridden again.
+		if err := ctx.Placeholders.SetType(expr.Name, typ); err != nil {
+			return nil, err
+		}
 		expr.typ = typ
 		return expr, nil
 	}

@@ -459,7 +459,7 @@ func (e *Executor) getDatabaseCache() *databaseCache {
 // populate the missing types. The PreparedStatement is returned (or
 // nil if there are no results).
 func (e *Executor) Prepare(
-	stmt Statement, stmtStr string, session *Session, pinfo parser.PlaceholderTypes,
+	stmt Statement, stmtStr string, session *Session, placeholderHints parser.PlaceholderTypes,
 ) (res *PreparedStatement, err error) {
 	session.resetForBatch(e)
 	sessionEventf(session, "preparing: %s", stmtStr)
@@ -467,7 +467,7 @@ func (e *Executor) Prepare(
 	defer session.maybeRecover("preparing", stmtStr)
 
 	prepared := &PreparedStatement{
-		SQLTypes:    pinfo,
+		TypeHints:   placeholderHints,
 		portalNames: make(map[string]struct{}),
 	}
 
@@ -481,7 +481,7 @@ func (e *Executor) Prepare(
 	}
 
 	prepared.Statement = stmt.AST
-	if err := pinfo.ProcessPlaceholderAnnotations(stmt.AST); err != nil {
+	if err := placeholderHints.ProcessPlaceholderAnnotations(stmt.AST); err != nil {
 		return nil, err
 	}
 	protoTS, err := isAsOf(session, stmt.AST, e.cfg.Clock.Now())
@@ -509,7 +509,7 @@ func (e *Executor) Prepare(
 	}
 
 	planner := session.newPlanner(e, txn)
-	planner.semaCtx.Placeholders.SetTypes(pinfo)
+	planner.semaCtx.Placeholders.SetTypeHints(placeholderHints)
 	planner.evalCtx.PrepareOnly = true
 	planner.evalCtx.ActiveMemAcc = &prepared.constantAcc
 
@@ -539,6 +539,7 @@ func (e *Executor) Prepare(
 			return nil, err
 		}
 	}
+	prepared.Types = planner.semaCtx.Placeholders.Types
 	return prepared, nil
 }
 

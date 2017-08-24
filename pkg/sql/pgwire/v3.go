@@ -28,6 +28,8 @@ import (
 	"golang.org/x/net/context"
 
 	"bytes"
+	"io"
+
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -38,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"io"
 )
 
 //go:generate stringer -type=clientMessageType
@@ -639,12 +640,12 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		return c.sendError(err)
 	}
 	// Convert the inferred SQL types back to an array of pgwire Oids.
-	inTypes := make([]oid.Oid, 0, len(stmt.SQLTypes))
-	if len(stmt.SQLTypes) > maxPreparedStatementArgs {
+	inTypes := make([]oid.Oid, 0, len(stmt.TypeHints))
+	if len(stmt.TypeHints) > maxPreparedStatementArgs {
 		return c.sendError(pgerror.NewErrorf(pgerror.CodeProtocolViolationError,
-			"more than %d arguments to prepared statement: %d", maxPreparedStatementArgs, len(stmt.SQLTypes)))
+			"more than %d arguments to prepared statement: %d", maxPreparedStatementArgs, len(stmt.TypeHints)))
 	}
-	for k, t := range stmt.SQLTypes {
+	for k, t := range stmt.TypeHints {
 		i, err := strconv.Atoi(k)
 		if err != nil || i < 1 {
 			return c.sendInternalError(fmt.Sprintf("invalid placeholder name: $%s", k))
@@ -670,8 +671,7 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 	}
 	for i, t := range inTypes {
 		if t == 0 {
-			return c.sendInternalError(
-				fmt.Sprintf("could not determine data type of placeholder $%d", i+1))
+			return c.sendError(pgerror.NewErrorf(pgerror.CodeIndeterminateDatatypeError, "could not determine data type of placeholder $%d", i+1))
 		}
 	}
 	// Attach pgwire-specific metadata to the PreparedStatement.
@@ -907,8 +907,9 @@ func (c *v3Conn) handleExecute(buf *readBuffer) error {
 	stmt := portal.Stmt
 	portalMeta := portal.ProtocolMeta.(preparedPortalMeta)
 	pinfo := &parser.PlaceholderInfo{
-		Types:  stmt.SQLTypes,
-		Values: portal.Qargs,
+		TypeHints: stmt.TypeHints,
+		Types:     stmt.Types,
+		Values:    portal.Qargs,
 	}
 
 	tracing.AnnotateTrace()
