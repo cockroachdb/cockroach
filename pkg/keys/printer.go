@@ -394,7 +394,13 @@ func localRangeKeyPrint(key roachpb.Key) string {
 			}
 		}
 	}
-	fmt.Fprintf(&buf, "%s", decodeKeyPrint(key))
+
+	_, decodedKey, err := encoding.DecodeBytesAscending([]byte(key), nil)
+	if err != nil {
+		fmt.Fprintf(&buf, "%s", decodeKeyPrint(key))
+	} else {
+		fmt.Fprintf(&buf, "%s", roachpb.Key(decodedKey))
+	}
 
 	return buf.String()
 }
