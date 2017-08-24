@@ -88,7 +88,7 @@ pkg/acceptance/prepare.sh
 # TODO(cuongdo): give this a unique name, to allow multiple local runs of the
 # nightlies to execute simultaneously
 mkdir -p artifacts/acceptance
-export TMPDIR=$PWD/artifacts/acceptance
+export TMPDIR=/tmp
 
 TYPE=release-$(go env GOOS)
 case $TYPE in
