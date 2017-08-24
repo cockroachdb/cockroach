@@ -21,6 +21,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -66,7 +67,7 @@ func lookupStreamInfo(fr *flowRegistry, fid FlowID, sid StreamID) (inboundStream
 
 func TestFlowRegistry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	reg := makeFlowRegistry()
+	reg := makeFlowRegistry(roachpb.NodeID(0))
 
 	id1 := FlowID{uuid.MakeV4()}
 	f1 := &Flow{}
@@ -203,7 +204,7 @@ func TestFlowRegistry(t *testing.T) {
 // are propagated to their consumers and future attempts to connect them fail.
 func TestStreamConnectionTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	reg := makeFlowRegistry()
+	reg := makeFlowRegistry(roachpb.NodeID(0))
 
 	jiffy := time.Nanosecond
 
@@ -268,7 +269,7 @@ func TestStreamConnectionTimeout(t *testing.T) {
 func TestHandshake(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	reg := makeFlowRegistry()
+	reg := makeFlowRegistry(roachpb.NodeID(0))
 
 	tests := []struct {
 		name                   string
