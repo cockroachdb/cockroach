@@ -478,10 +478,6 @@ func (v *planVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
 func nodeName(plan planNode) string {
 	// Some nodes have custom names depending on attributes.
 	switch n := plan.(type) {
-	case *emptyNode:
-		if n.results {
-			return "nullrow"
-		}
 	case *sortNode:
 		if !n.needSort {
 			return "nosort"
@@ -525,12 +521,12 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&dropTableNode{}):        "drop table",
 	reflect.TypeOf(&dropViewNode{}):         "drop view",
 	reflect.TypeOf(&dropUserNode{}):         "drop user",
-	reflect.TypeOf(&emptyNode{}):            "empty",
 	reflect.TypeOf(&explainDistSQLNode{}):   "explain dist_sql",
 	reflect.TypeOf(&explainPlanNode{}):      "explain plan",
 	reflect.TypeOf(&traceNode{}):            "show trace for",
 	reflect.TypeOf(&filterNode{}):           "filter",
 	reflect.TypeOf(&groupNode{}):            "group",
+	reflect.TypeOf(&unaryNode{}):            "emptyrow",
 	reflect.TypeOf(&hookFnNode{}):           "plugin",
 	reflect.TypeOf(&indexJoinNode{}):        "index-join",
 	reflect.TypeOf(&insertNode{}):           "insert",
@@ -550,4 +546,5 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&valueGenerator{}):       "generator",
 	reflect.TypeOf(&valuesNode{}):           "values",
 	reflect.TypeOf(&windowNode{}):           "window",
+	reflect.TypeOf(&zeroNode{}):             "norows",
 }

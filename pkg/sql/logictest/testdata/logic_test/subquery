@@ -45,13 +45,13 @@ INSERT INTO abc VALUES (1, 2, 3), (4, 5, 6)
 query ITTT
 EXPLAIN ALTER TABLE abc SPLIT AT VALUES ((SELECT 42))
 ----
-0  split    ·           ·
-1  values   ·           ·
-1  ·        size        1 column, 1 row
-1  ·        subqueries  1
-2  limit    ·           ·
-3  render   ·           ·
-4  nullrow  ·           ·
+0  split     ·           ·
+1  values    ·           ·
+1  ·         size        1 column, 1 row
+1  ·         subqueries  1
+2  limit     ·           ·
+3  render    ·           ·
+4  emptyrow  ·           ·
 
 statement ok
 ALTER TABLE abc SPLIT AT VALUES ((SELECT 1))
@@ -78,14 +78,14 @@ SELECT (SELECT a FROM abc)
 query ITTT
 EXPLAIN SELECT EXISTS (SELECT a FROM abc)
 ----
-0  render   ·           ·
-0  ·        subqueries  1
-1  limit    ·           ·
-2  render   ·           ·
-3  scan     ·           ·
-3  ·        table       abc@primary
-3  ·        spans       ALL
-1  nullrow  ·           ·
+0  render    ·           ·
+0  ·         subqueries  1
+1  limit     ·           ·
+2  render    ·           ·
+3  scan      ·           ·
+3  ·         table       abc@primary
+3  ·         spans       ALL
+1  emptyrow  ·           ·
 
 query I
 SELECT (SELECT a FROM abc WHERE false)

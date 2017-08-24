@@ -319,7 +319,7 @@ func (p *planner) CopyData(ctx context.Context, n CopyDataBlock) (planNode, erro
 
 	// Only do work if we have lots of rows or this is the end.
 	if ln := len(cf.rows); ln == 0 || (ln < copyRowSize && !n.Done) {
-		return &emptyNode{}, nil
+		return &zeroNode{}, nil
 	}
 
 	vc := &parser.ValuesClause{Tuples: cf.rows}
