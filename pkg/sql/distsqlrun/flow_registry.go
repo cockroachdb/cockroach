@@ -21,6 +21,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -84,14 +85,23 @@ type flowEntry struct {
 // be registered. Multiple clients can wait concurrently for the same flow.
 type flowRegistry struct {
 	syncutil.Mutex
+
+	// nodeID is the ID of the current node. Used for debugging.
+	nodeID roachpb.NodeID
+
 	// All fields in the flowEntry's are protected by the flowRegistry mutex,
 	// except flow, whose methods can be called freely.
 	flows map[FlowID]*flowEntry
 }
 
-func makeFlowRegistry() *flowRegistry {
+// makeFlowRegistry creates a new flowRegistry.
+//
+// nodeID is the ID of the current node. Used for debugging; pass 0 if you don't
+// care.
+func makeFlowRegistry(nodeID roachpb.NodeID) *flowRegistry {
 	fr := &flowRegistry{
-		flows: make(map[FlowID]*flowEntry),
+		nodeID: nodeID,
+		flows:  make(map[FlowID]*flowEntry),
 	}
 	return fr
 }
@@ -156,8 +166,9 @@ func (fr *flowRegistry) RegisterFlow(
 	if entry.flow != nil {
 		return util.UnexpectedWithIssueErrorf(
 			12876,
-			"flow already registered: flowID: %d.\nCurrent flow:%+v\nExisting flow:%+v",
-			f.spec, entry.flow.spec)
+			"flow already registered: current node ID: %d flowID: %d.\n"+
+				"Current flow:%+v\nExisting flow:%+v",
+			fr.nodeID, f.spec, entry.flow.spec)
 	}
 	// Take a reference that will be removed by UnregisterFlow.
 	entry.refCount++

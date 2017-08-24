@@ -146,7 +146,7 @@ func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
 	ds := &ServerImpl{
 		ServerConfig:  cfg,
 		regexpCache:   parser.NewRegexpCache(512),
-		flowRegistry:  makeFlowRegistry(),
+		flowRegistry:  makeFlowRegistry(cfg.NodeID.Get()),
 		flowScheduler: newFlowScheduler(cfg.AmbientContext, cfg.Stopper, cfg.Metrics),
 		memMonitor: mon.MakeMonitor(
 			"distsql",

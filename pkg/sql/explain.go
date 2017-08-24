@@ -191,7 +191,7 @@ func (n *explainDistSQLNode) Start(params runParams) error {
 		return err
 	}
 	n.distSQLPlanner.FinalizePlan(&planCtx, &plan)
-	flows := plan.GenerateFlowSpecs()
+	flows := plan.GenerateFlowSpecs(params.p.evalCtx.NodeID)
 	planJSON, planURL, err := distsqlrun.GeneratePlanDiagramWithURL(flows)
 	if err != nil {
 		return err

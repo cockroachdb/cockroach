@@ -687,14 +687,18 @@ func (p *PhysicalPlan) PopulateEndpoints(nodeAddresses map[roachpb.NodeID]string
 
 // GenerateFlowSpecs takes a plan (with populated endpoints) and generates the
 // set of FlowSpecs (one per node involved in the plan).
-func (p *PhysicalPlan) GenerateFlowSpecs() map[roachpb.NodeID]distsqlrun.FlowSpec {
+//
+// gateway is the current node's NodeID.
+func (p *PhysicalPlan) GenerateFlowSpecs(
+	gateway roachpb.NodeID,
+) map[roachpb.NodeID]distsqlrun.FlowSpec {
 	flowID := distsqlrun.FlowID{UUID: uuid.MakeV4()}
 	flows := make(map[roachpb.NodeID]distsqlrun.FlowSpec)
 
 	for _, proc := range p.Processors {
 		flowSpec, ok := flows[proc.Node]
 		if !ok {
-			flowSpec = distsqlrun.FlowSpec{FlowID: flowID}
+			flowSpec = distsqlrun.FlowSpec{FlowID: flowID, Gateway: gateway}
 		}
 		flowSpec.Processors = append(flowSpec.Processors, proc.Spec)
 		flows[proc.Node] = flowSpec
