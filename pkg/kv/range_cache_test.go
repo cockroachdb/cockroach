@@ -235,10 +235,10 @@ func doLookupWithToken(
 	useReverseScan bool,
 	wg *sync.WaitGroup,
 ) (*roachpb.RangeDescriptor, *EvictionToken) {
-	r, returnToken, pErr := rc.lookupRangeDescriptorInternal(
+	r, returnToken, err := rc.lookupRangeDescriptorInternal(
 		ctx, roachpb.RKey(key), evictToken, useReverseScan, wg)
-	if pErr != nil {
-		t.Fatalf("Unexpected error from LookupRangeDescriptor: %s", pErr)
+	if err != nil {
+		t.Fatalf("Unexpected error from LookupRangeDescriptor: %s", err)
 	}
 	keyAddr, err := keys.Addr(roachpb.Key(key))
 	if err != nil {
@@ -401,6 +401,94 @@ func TestRangeCacheCoalescedRequests(t *testing.T) {
 	// Metadata 2 ranges aren't cached, metadata 1 range is.
 	pauseLookupResumeAndAssert("d", 1)
 	pauseLookupResumeAndAssert("fa", 0)
+}
+
+// TestRangeCacheContextCancellation tests the behavior that for an ongoing
+// RangeDescriptor lookup, if the context passed in gets cancelled the lookup
+// returns with an error indicating so. The result of the context cancellation
+// differs between requests that lead RangeLookup requests and requests that
+// coalesce onto existing RangeLookup requests.
+// - If the context of a RangeLookup request follower is cancelled, the follower
+//   will stop waiting on the inflight request, but will not have an effect on
+//   the inflight request.
+// - If the context of a RangeLookup request leader is cancelled, the lookup
+//   itself will also be cancelled. This means that any followers waiting on the
+//   inflight request will also see the context cancellation. This is ok, though,
+//   because DistSender will transparently retry the lookup.
+func TestRangeCacheContextCancellation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	db := initTestDescriptorDB(t)
+
+	// lookupAndWaitUntilJoin performs a RangeDescriptor lookup in a new
+	// goroutine and blocks until the request is added to the inflight request
+	// map. It returns a channel that transmits the error return value from the
+	// lookup.
+	lookupAndWaitUntilJoin := func(ctx context.Context, key roachpb.RKey) chan error {
+		errC := make(chan error)
+		var waitJoin sync.WaitGroup
+		waitJoin.Add(1)
+		go func() {
+			_, _, err := db.cache.lookupRangeDescriptorInternal(ctx, key, nil, false, &waitJoin)
+			errC <- err
+		}()
+		waitJoin.Wait()
+		return errC
+	}
+
+	expectContextCancellation := func(t *testing.T, c <-chan error) {
+		if err := <-c; err.Error() != context.Canceled.Error() {
+			t.Errorf("expected context cancellation error, found %v", err)
+		}
+	}
+	expectNoError := func(t *testing.T, c <-chan error) {
+		if err := <-c; err != nil {
+			t.Errorf("unexpected error, found %v", err)
+		}
+	}
+
+	// If a RangeDescriptor lookup joins an inflight RangeLookup, it can cancel
+	// its context to stop waiting on the range lookup. This context cancellation
+	// will not affect the "leader" of the inflight lookup or any other
+	// "followers" who are also waiting on the inflight request.
+	t.Run("Follower", func(t *testing.T) {
+		ctx1 := context.TODO() // leader
+		ctx2, cancel := context.WithCancel(context.TODO())
+		ctx3 := context.TODO()
+
+		db.pauseRangeLookups()
+		key1 := roachpb.RKey("aa")
+		errC1 := lookupAndWaitUntilJoin(ctx1, key1)
+		errC2 := lookupAndWaitUntilJoin(ctx2, key1)
+		errC3 := lookupAndWaitUntilJoin(ctx3, key1)
+
+		cancel()
+		expectContextCancellation(t, errC2)
+
+		db.resumeRangeLookups()
+		expectNoError(t, errC1)
+		expectNoError(t, errC3)
+	})
+
+	// If a RangeDescriptor lookup leads a RangeLookup because there are no
+	// inflight lookups when it misses the cache,  the it can cancel it context
+	// to cancel the range lookup. This context cancellation will be propagated
+	// to all "followers" who are also waiting on the inflight request.
+	t.Run("Leader", func(t *testing.T) {
+		ctx1, cancel := context.WithCancel(context.TODO()) // leader
+		ctx2 := context.TODO()
+		ctx3 := context.TODO()
+
+		db.pauseRangeLookups()
+		key2 := roachpb.RKey("zz")
+		errC1 := lookupAndWaitUntilJoin(ctx1, key2)
+		errC2 := lookupAndWaitUntilJoin(ctx2, key2)
+		errC3 := lookupAndWaitUntilJoin(ctx3, key2)
+
+		cancel()
+		expectContextCancellation(t, errC1)
+		expectContextCancellation(t, errC2)
+		expectContextCancellation(t, errC3)
+	})
 }
 
 // TestRangeCacheDetectSplit verifies that when the cache detects a split
