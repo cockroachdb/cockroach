@@ -194,7 +194,7 @@ func TestStreamingWireFailure(t *testing.T) {
 								}
 							}
 						},
-						AfterExecute: func(ctx context.Context, stmt string, resultWriter sql.StatementResultWriter, err error) {
+						AfterExecute: func(ctx context.Context, stmt string, resultWriter sql.StatementResult, err error) {
 							if strings.Contains(stmt, "generate_series") {
 								errChan <- err
 								close(errChan)
