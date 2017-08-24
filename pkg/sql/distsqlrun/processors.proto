@@ -411,6 +411,9 @@ message FlowSpec {
   optional bytes flow_id = 1 [(gogoproto.nullable) = false,
                               (gogoproto.customname) = "FlowID",
                               (gogoproto.customtype) = "FlowID"];
+  // The NodeID of the gateway that planned this Flow. Used for debugging.
+  optional int32 gateway = 3 [(gogoproto.nullable) = false,
+                              (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
 
   repeated ProcessorSpec processors = 2 [(gogoproto.nullable) = false];
 }
