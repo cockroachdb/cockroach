@@ -11,3 +11,5 @@ mkdir -p artifacts/acceptance
 export TMPDIR=$PWD/artifacts/acceptance
 
 make test PKG=./pkg/acceptance TESTTIMEOUT="${TESTTIMEOUT-30m}" TAGS=acceptance TESTFLAGS="${TESTFLAGS--v -nodes 4} -l $TMPDIR"
+# For the tests that don't use Docker.
+make build

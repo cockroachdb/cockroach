@@ -28,11 +28,9 @@ import (
 	"syscall"
 	"time"
 
-	"golang.org/x/net/context"
-
+	"github.com/cockroachdb/cockroach/pkg/acceptance/localcluster"
+	"github.com/cockroachdb/cockroach/pkg/acceptance/localcluster/tc"
 	"github.com/cockroachdb/cockroach/pkg/cli"
-	"github.com/cockroachdb/cockroach/pkg/cmd/internal/localcluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/internal/tc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -40,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 )
 
 var workers = flag.Int("w", 1, "number of workers; the i'th worker talks to node i%numNodes")
@@ -173,7 +172,7 @@ func (a *allocSim) runWithConfig(config Configuration) {
 }
 
 func (a *allocSim) setup() {
-	db := a.DB[0]
+	db := a.Nodes[0].DB()
 	if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS allocsim"); err != nil {
 		log.Fatal(context.Background(), err)
 	}
@@ -203,7 +202,7 @@ const insertStmt = `INSERT INTO allocsim.blocks (id, num, data) VALUES ($1, $2, 
 
 func (a *allocSim) worker(dbIdx, startNum, workers int) {
 	r, _ := randutil.NewPseudoRand()
-	db := a.DB[dbIdx%len(a.DB)]
+	db := a.Nodes[dbIdx%len(a.Nodes)].DB()
 	for num := startNum; true; num += workers {
 		now := timeutil.Now()
 		if _, err := db.Exec(insertStmt, r.Int63(), num, *blockSize); err != nil {
@@ -219,7 +218,7 @@ func (a *allocSim) roundRobinWorker(startNum, workers int) {
 	r, _ := randutil.NewPseudoRand()
 	for i := 0; ; i++ {
 		now := timeutil.Now()
-		if _, err := a.DB[i%len(a.DB)].Exec(insertStmt, r.Int63(), startNum+i*workers, *blockSize); err != nil {
+		if _, err := a.Nodes[i%len(a.Nodes)].DB().Exec(insertStmt, r.Int63(), startNum+i*workers, *blockSize); err != nil {
 			a.maybeLogError(err)
 		} else {
 			atomic.AddUint64(&a.stats.ops, 1)
@@ -420,6 +419,8 @@ func main() {
 		}
 	}
 
+	perNodeCfg := localcluster.MakePerNodeFixedPortsCfg(*numNodes)
+
 	// TODO(a-robinson): Automatically run github.com/tylertreat/comcast for
 	// simpler configs that just have a single latency between all nodes.
 	var separateAddrs bool
@@ -434,38 +435,36 @@ func main() {
 		}
 	}
 
-	c := localcluster.New(*numNodes, separateAddrs)
-	defer c.Close()
-
-	log.SetExitFunc(func(code int) {
-		c.Close()
-		os.Exit(code)
-	})
+	if separateAddrs {
+		for i := range perNodeCfg {
+			s := perNodeCfg[i]
+			s.Addr = fmt.Sprintf("127.0.0.%d", i)
+			perNodeCfg[i] = s
+		}
+	}
 
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
-	a := newAllocSim(c)
 
-	var perNodeArgs map[int][]string
-	var perNodeEnv map[int][]string
+	localities := make([]Locality, *numNodes)
 	if len(config.Localities) != 0 {
-		perNodeArgs = make(map[int][]string)
-		perNodeEnv = make(map[int][]string)
-		a.localities = make([]Locality, len(c.Nodes))
 		nodesPerLocality := make(map[string][]int)
 		var nodeIdx int
 		for _, locality := range config.Localities {
 			for i := 0; i < locality.NumNodes; i++ {
+				s := perNodeCfg[nodeIdx] // avoid map assignment problems
 				if locality.LocalityStr != "" {
-					perNodeArgs[nodeIdx] = []string{fmt.Sprintf("--locality=%s", locality.LocalityStr)}
+					s.ExtraArgs = []string{fmt.Sprintf("--locality=%s", locality.LocalityStr)}
 				} else {
-					perNodeArgs[nodeIdx] = []string{fmt.Sprintf("--locality=l=%s", locality.Name)}
+					s.ExtraArgs = []string{fmt.Sprintf("--locality=l=%s", locality.Name)}
 				}
 				if separateAddrs {
-					perNodeEnv[nodeIdx] = []string{fmt.Sprintf("COCKROACH_SOURCE_IP_ADDRESS=%s", c.IPAddr(nodeIdx))}
+					s.ExtraEnv = []string{fmt.Sprintf("COCKROACH_SOURCE_IP_ADDRESS=%s", s.Addr)}
 				}
-				a.localities[nodeIdx] = locality
+				localities[nodeIdx] = locality
 				nodesPerLocality[locality.Name] = append(nodesPerLocality[locality.Name], nodeIdx)
+
+				perNodeCfg[nodeIdx] = s
 				nodeIdx++
 			}
 		}
@@ -483,13 +482,13 @@ func main() {
 				}
 			}()
 		}
-		for _, locality := range a.localities {
+		for _, locality := range localities {
 			for _, outgoing := range locality.OutgoingLatencies {
 				if outgoing.Latency > 0 {
 					for _, srcNodeIdx := range nodesPerLocality[locality.Name] {
 						for _, dstNodeIdx := range nodesPerLocality[outgoing.Name] {
 							if err := tcController.AddLatency(
-								c.IPAddr(srcNodeIdx), c.IPAddr(dstNodeIdx), time.Duration(outgoing.Latency/2),
+								perNodeCfg[srcNodeIdx].Addr, perNodeCfg[dstNodeIdx].Addr, time.Duration(outgoing.Latency/2),
 							); err != nil {
 								log.Fatal(context.Background(), err)
 							}
@@ -499,6 +498,25 @@ func main() {
 			}
 		}
 	}
+
+	cfg := localcluster.ClusterConfig{
+		AllNodeArgs: append(flag.Args(), "--vmodule=allocator=3,allocator_scorer=3,replicate_queue=3"),
+		Binary:      os.Args[0],
+		NumNodes:    *numNodes,
+		DB:          "allocsim",
+		NumWorkers:  *workers,
+		PerNodeCfg:  perNodeCfg,
+		DataDir:     "cockroach-data-allocsim",
+	}
+
+	c := localcluster.New(cfg)
+	a := newAllocSim(c)
+	a.localities = localities
+
+	log.SetExitFunc(func(code int) {
+		c.Close()
+		os.Exit(code)
+	})
 
 	go func() {
 		var exitStatus int
@@ -514,10 +532,10 @@ func main() {
 		os.Exit(exitStatus)
 	}()
 
-	allNodeArgs := append(flag.Args(), "--vmodule=allocator=3,allocator_scorer=3,replicate_queue=3")
-	c.Start("allocsim", *workers, os.Args[0], allNodeArgs, perNodeArgs, perNodeEnv)
+	c.Start()
+	defer c.Close()
 	c.UpdateZoneConfig(1, 1<<20)
-	_, err := c.DB[0].Exec("SET CLUSTER SETTING kv.raft_log.synchronize = false;")
+	_, err := c.Nodes[0].DB().Exec("SET CLUSTER SETTING kv.raft_log.synchronize = false;")
 	if err != nil {
 		log.Fatal(context.Background(), err)
 	}

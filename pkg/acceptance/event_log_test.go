@@ -36,7 +36,9 @@ func TestEventLog(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	runTestOnConfigs(t, testEventLogInner)
+	RunLocal(t, func(t *testing.T) {
+		runTestOnConfigs(t, testEventLogInner)
+	})
 }
 
 func testEventLogInner(
