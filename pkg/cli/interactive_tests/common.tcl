@@ -35,7 +35,7 @@ proc report {text} {
     # Docker is obnoxious in that it doesn't support setting `umask`.
     # Also CockroachDB doesn't honor umask anyway.
     # So we simply come after the fact and adjust the permissions.
-    system "find logs -exec chmod a+rw '{}' \\;"
+    system "find logs -exec chmod a+rw '{}' \\; || true"
 }
 
 # Catch signals
