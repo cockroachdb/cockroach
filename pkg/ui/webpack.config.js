@@ -65,11 +65,15 @@ module.exports = {
       },
       { test: /\.html$/, loader: 'file-loader' },
 
-      // TODO(tamird,mrtracy,spencerkimball): remove this when all our code is
-      // written in TS.
+      // TODO(tamird,mrtracy,spencerkimball): Configure this to use an include
+      // list when all of our first-party code has been written in typescript.
       {
         test: /\.js$/,
-        exclude: /node_modules/,
+        // analytics-node is an es6 module and we must run it through babel. As
+        // of 8/25/2017 there appears to be no better way to run babel only on
+        // the specific packages in node_modules that actually use ES6.
+        // https://github.com/babel/babel-loader/issues/171
+        exclude: /node_modules\/(?!analytics-node)/,
         loader: 'babel-loader',
       },
 

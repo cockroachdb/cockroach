@@ -5,6 +5,7 @@
   "repository": "github.com/cockroachdb/cockroach",
   "license": "MIT",
   "dependencies": {
+    "@types/analytics-node": "^0.0.30",
     "@types/bytebuffer": "^5.0.33",
     "@types/chai": "^3.4.35",
     "@types/classnames": "^0.0.32",
@@ -30,8 +31,9 @@
     "@types/react-select": "^1.0.45",
     "@types/react-sticky": "^5.0.1",
     "@types/redux-thunk": "^2.1.0",
-    "@types/sinon": "^2.1.2",
+    "@types/sinon": "2.1.0",
     "@types/webcola": "^3.2.0",
+    "analytics-node": "^3.0.0",
     "babel-core": "^6.24.0",
     "babel-loader": "^6.4.1",
     "babel-preset-env": "^1.2.2",
