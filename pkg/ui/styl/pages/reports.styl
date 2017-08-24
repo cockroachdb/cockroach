@@ -35,28 +35,30 @@ $reports-table
     &--short
       max-width 1px
 
-.failure-table
-  @extend $reports-table
-
-  &__row
-    alternating-background white $table-border-color
-
-    &&--header
-      background-color $alert-color
-
-  &__cell
-    white-space normal
-    max-width none
-
 .problems-table
-  @extend $reports-table
+  margin 0 0 40px
+  display table
+  border-collapse collapse
+  border-spacing 0
   width 100%
 
   &__row
+    display table-row
     background-color white
 
   &__cell
+    padding 6px 12px
+    display table-cell
     white-space normal
+    border-width 1px 1px 0 0
+    border-color rgba(0, 0, 0, .1)
+    border-style solid
+
+.problems-link
+  color $link-color
+  text-decoration none
+  padding-right .5rem
+  display inline-block
 
 .node-filter-list
   list-style-position inside
