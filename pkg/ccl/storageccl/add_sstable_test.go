@@ -60,13 +60,13 @@ func TestDBAddSSTable(t *testing.T) {
 		}
 
 		// Key is before the range in the request span.
-		if err := db.ExperimentalAddSSTable(
+		if err := db.AddSSTable(
 			ctx, "d", "e", data,
 		); !testutils.IsError(err, "not in request range") {
 			t.Fatalf("expected request range error got: %+v", err)
 		}
 		// Key is after the range in the request span.
-		if err := db.ExperimentalAddSSTable(
+		if err := db.AddSSTable(
 			ctx, "a", "b", data,
 		); !testutils.IsError(err, "not in request range") {
 			t.Fatalf("expected request range error got: %+v", err)
@@ -75,7 +75,7 @@ func TestDBAddSSTable(t *testing.T) {
 		// Do an initial ingest.
 		ingestCtx, collect := testutils.MakeRecordCtx()
 		defer collect()
-		if err := db.ExperimentalAddSSTable(ingestCtx, "b", "c", data); err != nil {
+		if err := db.AddSSTable(ingestCtx, "b", "c", data); err != nil {
 			t.Fatalf("%+v", err)
 		}
 		if err := testutils.MatchInOrder(collect(),
@@ -102,7 +102,7 @@ func TestDBAddSSTable(t *testing.T) {
 			t.Fatalf("%+v", err)
 		}
 
-		if err := db.ExperimentalAddSSTable(ctx, "b", "c", data); err != nil {
+		if err := db.AddSSTable(ctx, "b", "c", data); err != nil {
 			t.Fatalf("%+v", err)
 		}
 		if r, err := db.Get(ctx, "bb"); err != nil {
@@ -125,7 +125,7 @@ func TestDBAddSSTable(t *testing.T) {
 			ingestCtx, collect := testutils.MakeRecordCtx()
 			defer collect()
 
-			if err := db.ExperimentalAddSSTable(ingestCtx, "b", "c", data); err != nil {
+			if err := db.AddSSTable(ingestCtx, "b", "c", data); err != nil {
 				t.Fatalf("%+v", err)
 			}
 			if err := testutils.MatchInOrder(collect(),
@@ -160,7 +160,7 @@ func TestDBAddSSTable(t *testing.T) {
 			t.Fatalf("%+v", err)
 		}
 
-		if err := db.ExperimentalAddSSTable(ctx, "b", "c", data); !testutils.IsError(err, "invalid checksum") {
+		if err := db.AddSSTable(ctx, "b", "c", data); !testutils.IsError(err, "invalid checksum") {
 			t.Fatalf("expected 'invalid checksum' error got: %+v", err)
 		}
 	}
