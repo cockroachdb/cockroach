@@ -185,6 +185,7 @@ EXPLAIN SHOW COLUMNS FROM foo
 0  ·       order     +ordinal_position
 1  render  ·         ·
 2  group   ·         ·
+2  ·       group by  @1-@5
 3  render  ·         ·
 4  join    ·         ·
 4  ·       type      left outer
