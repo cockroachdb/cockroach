@@ -193,6 +193,42 @@ EXPLAIN SELECT b FROM t ORDER BY a DESC, b DESC
 2  ·        table  t@primary
 2  ·        spans  ALL
 
+query ITTTTT
+EXPLAIN(METADATA) SELECT * FROM t ORDER BY (b, t.*)
+----
+0  sort  ·      ·            (a, b, c)  +b,+a,+b,+c
+0  ·     order  +b,+a,+b,+c  ·          ·
+1  scan  ·      ·            (a, b, c)  ·
+1  ·     table  t@primary    ·          ·
+1  ·     spans  ALL          ·          ·
+
+query ITTTTT
+EXPLAIN(METADATA) SELECT * FROM t ORDER BY (b, a), c
+----
+0  sort  ·      ·          (a, b, c)  +b,+a,+c
+0  ·     order  +b,+a,+c   ·          ·
+1  scan  ·      ·          (a, b, c)  ·
+1  ·     table  t@primary  ·          ·
+1  ·     spans  ALL        ·          ·
+
+query ITTTTT
+EXPLAIN(METADATA) SELECT * FROM t ORDER BY b, (a, c)
+----
+0  sort  ·      ·          (a, b, c)  +b,+a,+c
+0  ·     order  +b,+a,+c   ·          ·
+1  scan  ·      ·          (a, b, c)  ·
+1  ·     table  t@primary  ·          ·
+1  ·     spans  ALL        ·          ·
+
+query ITTTTT
+EXPLAIN(METADATA) SELECT * FROM t ORDER BY (b, (a, c))
+----
+0  sort  ·      ·          (a, b, c)  +b,+a,+c
+0  ·     order  +b,+a,+c   ·          ·
+1  scan  ·      ·          (a, b, c)  ·
+1  ·     table  t@primary  ·          ·
+1  ·     spans  ALL        ·          ·
+
 statement ok
 INSERT INTO t VALUES (4, 7), (5, 7)
 

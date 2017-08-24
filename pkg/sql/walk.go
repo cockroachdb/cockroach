@@ -266,6 +266,10 @@ func (v *planVisitor) visit(plan planNode) {
 		for i, agg := range n.funcs {
 			subplans = v.expr(name, "aggregate", i, agg.expr, subplans)
 		}
+		if v.observer.attr != nil && n.numGroupCols > 0 {
+			v.observer.attr(name, "group by", fmt.Sprintf("@1-@%d", n.numGroupCols))
+		}
+
 		v.visit(n.plan)
 
 	case *windowNode:

@@ -85,6 +85,7 @@ EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @1
 ----
 0  group   ·            ·                (m)                                     ·
 0  ·       aggregate 0  min(test.foo.a)  ·                                       ·
+0  ·       group by     @1-@1            ·                                       ·
 1  render  ·            ·                (a)                                     ·
 1  ·       render 0     test.foo.a       ·                                       ·
 2  scan    ·            ·                (a, b[omitted], rowid[hidden,omitted])  ·
@@ -96,6 +97,7 @@ EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @2
 ----
 0  group   ·            ·                (m)                            ·
 0  ·       aggregate 0  min(test.foo.a)  ·                              ·
+0  ·       group by     @1-@1            ·                              ·
 1  render  ·            ·                (b, a)                         ·
 1  ·       render 0     test.foo.b       ·                              ·
 1  ·       render 1     test.foo.a       ·                              ·

@@ -95,6 +95,7 @@ EXPLAIN (TYPES,NOEXPAND) SELECT 2*COUNT(k) as z, v FROM t WHERE v>123 GROUP BY v
 2  ·       aggregate 1  (count((k)[int]))[int]                                                     ·                                               ·
 2  ·       aggregate 2  (count((k)[int]))[int]                                                     ·                                               ·
 2  ·       aggregate 3  (v)[int]                                                                   ·                                               ·
+2  ·       group by     @1-@1                                                                      ·                                               ·
 3  render  ·            ·                                                                          (v int, k int)                                  ·
 3  ·       render 0     (v)[int]                                                                   ·                                               ·
 3  ·       render 1     (k)[int]                                                                   ·                                               ·
@@ -116,6 +117,7 @@ EXPLAIN (TYPES) SELECT 2*COUNT(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v
 2  ·       aggregate 1  (count((k)[int]))[int]                ·                                               ·
 2  ·       aggregate 2  (count((k)[int]))[int]                ·                                               ·
 2  ·       aggregate 3  (v)[int]                              ·                                               ·
+2  ·       group by     @1-@1                                 ·                                               ·
 3  render  ·            ·                                     (v int, k int)                                  ·
 3  ·       render 0     (v)[int]                              ·                                               ·
 3  ·       render 1     (k)[int]                              ·                                               ·
