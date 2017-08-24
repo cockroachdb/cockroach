@@ -85,8 +85,8 @@ export default function Debug() {
           <DebugTableLink name="All Problem Ranges" url="#/reports/problemranges" />
           <DebugTableLink
             name="Problem Ranges on a specific node"
-            url="#/reports/problemranges?node_id=local"
-            note="#/reports/problemranges?node_id=[node_id]"
+            url="#/reports/problemranges/local"
+            note="#/reports/problemranges/[node_id]"
           />
         </DebugTableRow>
         <DebugTableRow title="Ranges">

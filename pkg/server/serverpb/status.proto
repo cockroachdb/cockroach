@@ -388,41 +388,40 @@ message ProblemRangesRequest {
   string node_id = 1 [(gogoproto.customname) = "NodeID"];
 }
 
-message Failure {
-  int32 node_id = 1 [
-    (gogoproto.customname) = "NodeID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
-  ];
-  string error_message = 2;
-}
-
 message ProblemRangesResponse {
-  // If node_id is greater than 0, then this response is only representative of
-  // a single node's knowledge.
-  int32 node_id = 1 [
+  message NodeProblems {
+    string error_message = 1;
+    repeated int64 unavailable_range_ids = 2 [
+      (gogoproto.customname) = "UnavailableRangeIDs",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+    ];
+    repeated int64 raft_leader_not_lease_holder_range_ids = 3 [
+      (gogoproto.customname) = "RaftLeaderNotLeaseHolderRangeIDs",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+    ];
+    repeated int64 no_raft_leader_range_ids = 4 [
+      (gogoproto.customname) = "NoRaftLeaderRangeIDs",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+    ];
+    repeated int64 no_lease_range_ids = 5 [
+      (gogoproto.customname) = "NoLeaseRangeIDs",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+    ];
+    repeated int64 underreplicated_range_ids = 6 [
+      (gogoproto.customname) = "UnderreplicatedRangeIDs",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+    ];
+  }
+  reserved 1 to 7;
+  // NodeID is the node that submitted all the requests.
+  int32 node_id = 8 [
     (gogoproto.customname) = "NodeID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
   ];
-  repeated Failure failures = 2 [(gogoproto.nullable) = false];
-  repeated int64 unavailable_range_ids = 3 [
-    (gogoproto.customname) = "UnavailableRangeIDs",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
-  ];
-  repeated int64 raft_leader_not_lease_holder_range_ids = 4 [
-    (gogoproto.customname) = "RaftLeaderNotLeaseHolderRangeIDs",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
-  ];
-  repeated int64 no_raft_leader_range_ids = 5 [
-    (gogoproto.customname) = "NoRaftLeaderRangeIDs",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
-  ];
-  repeated int64 no_lease_range_ids = 6 [
-    (gogoproto.customname) = "NoLeaseRangeIDs",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
-  ];
-  repeated int64 underreplicated_range_ids = 7 [
-    (gogoproto.customname) = "UnderreplicatedRangeIDs",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  map<int32, NodeProblems> problems_by_node_id = 9 [
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
+    (gogoproto.customname) = "ProblemsByNodeID",
+    (gogoproto.nullable) = false
   ];
 }
 
