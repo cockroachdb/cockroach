@@ -29,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
@@ -544,4 +545,55 @@ func (s *azureStorage) Delete(_ context.Context, basename string) error {
 
 func (s *azureStorage) Close() error {
 	return nil
+}
+
+// MakeHTTPFileServer returns a handler for GET/PUT/DELETE requests in `path`.
+//
+// This implements the methods used by the HTTP exportStorage implementation,
+// for use in tests or in the standalone helper utility `files-server` command.
+func MakeHTTPFileServer(ctx context.Context, base string) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		localfile := filepath.Join(base, filepath.Clean(filepath.FromSlash(r.URL.Path)))
+
+		// NB: filepath.Join above calls filepath.Clean, which flattens `../`.
+		if !strings.HasPrefix(localfile, base) {
+			http.Error(w, "invalid path", 400)
+			return
+		}
+
+		if log.V(1) {
+			log.Infof(ctx, "%s %q (%q)", r.Method, r.URL.Path, localfile)
+		}
+
+		switch r.Method {
+		case "PUT":
+			if err := os.MkdirAll(filepath.Dir(localfile), 0700); err != nil {
+				log.Warning(ctx, errors.Wrap(err, "could not create parents for requested path"))
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			f, err := os.Create(localfile)
+			if err != nil {
+				log.Warning(ctx, errors.Wrap(err, "could not create requested path"))
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			defer f.Close()
+			if _, err := io.Copy(f, r.Body); err != nil {
+				log.Warning(ctx, errors.Wrap(err, "could not create requested path"))
+				http.Error(w, err.Error(), 500)
+				return
+			}
+		case "GET":
+			http.ServeFile(w, r, localfile)
+		case "DELETE":
+			if err := os.Remove(localfile); err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+		default:
+			http.Error(w, "unsupported method "+r.Method, 400)
+		}
+	})
 }
