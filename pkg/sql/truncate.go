@@ -113,7 +113,7 @@ func (p *planner) Truncate(ctx context.Context, n *parser.Truncate) (planNode, e
 		}
 	}
 
-	return &emptyNode{}, nil
+	return &zeroNode{}, nil
 }
 
 // truncateTable truncates the data of a table in a single transaction. It

@@ -20,21 +20,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
-// emptyNode is a planNode with no columns and either no rows (default) or a single row with empty
-// results (if results is initialized to true). The former is used for nodes that have no results
-// (e.g. a table for which the filtering condition has a contradiction), the latter is used by
-// select statements that have no table or where we detect the filtering condition throws away all
-// results.
-type emptyNode struct {
-	results bool
+// unaryNode is a planNode with no columns and a single row with empty results
+// which is used by select statements that have no table. It is used for its
+// property as the join identity.
+type unaryNode struct {
+	consumed bool
 }
 
-func (*emptyNode) Values() parser.Datums { return nil }
-func (*emptyNode) Start(runParams) error { return nil }
-func (*emptyNode) Close(context.Context) {}
+func (*unaryNode) Values() parser.Datums { return nil }
+func (*unaryNode) Start(runParams) error { return nil }
+func (*unaryNode) Close(context.Context) {}
 
-func (e *emptyNode) Next(runParams) (bool, error) {
-	r := e.results
-	e.results = false
+func (u *unaryNode) Next(runParams) (bool, error) {
+	r := !u.consumed
+	u.consumed = true
 	return r, nil
 }
