@@ -355,7 +355,7 @@ func (expr *StrVal) Format(buf *bytes.Buffer, f FmtFlags) {
 	if expr.bytesEsc {
 		encodeSQLBytes(buf, expr.s)
 	} else {
-		encodeSQLString(buf, expr.s)
+		encodeSQLStringWithFlags(buf, expr.s, f)
 	}
 }
 
