@@ -176,7 +176,11 @@ func (p *planner) groupBy(
 	// Add the group-by expressions.
 
 	// groupStrs maps a GROUP BY expression string to the index of the column in
-	// the underlying renderNode.
+	// the underlying renderNode. This is used as an optimization when analyzing
+	// the arguments of aggregate functions: if an argument is already grouped,
+	// and thus rendered, the rendered expression can be used as argument to
+	// the aggregate function directly; there is no need to add a render. See
+	// extractAggregatesVisitor below.
 	groupStrs := make(groupByStrMap, len(groupByExprs))
 	for _, g := range groupByExprs {
 		cols, exprs, hasStar, err := p.computeRenderAllowingStars(
@@ -186,12 +190,19 @@ func (p *planner) groupBy(
 			return nil, nil, err
 		}
 		p.hasStar = p.hasStar || hasStar
+
 		colIdxs := r.addOrReuseRenders(cols, exprs, true /* reuseExistingRender */)
-		if !hasStar {
+		if len(colIdxs) == 1 {
+			// We only remember the render if there is a 1:1 correspondence with
+			// the expression written after GROUP BY and the computed renders.
+			// This may not be true e.g. when there is a star expansion like
+			// GROUP BY kv.*.
 			groupStrs[symbolicExprStr(g)] = colIdxs[0]
-		} else {
-			// We use a special value to indicate a star (e.g. GROUP BY t.*).
-			groupStrs[symbolicExprStr(g)] = -1
+		}
+		// Also remember all the rendered sub-expressions, if there was an
+		// expansion. This enables reuse of all the actual grouping expressions.
+		for i, e := range exprs {
+			groupStrs[symbolicExprStr(e)] = colIdxs[i]
 		}
 	}
 	group.numGroupCols = len(r.render)
@@ -546,13 +557,6 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 	if groupIdx, ok := v.groupStrs[symbolicExprStr(expr)]; ok {
 		// This expression is in the GROUP BY; it is already being rendered by the
 		// renderNode.
-		if groupIdx == -1 {
-			// We use this special value to indicate a star GROUP BY.
-			// TODO(radu): to support this we need to store all the render indices in
-			// groupStrs, and create a tuple of IndexedVars. Also see #15750.
-			v.err = errors.New("star expressions not supported with grouping")
-			return false, expr
-		}
 		f := v.groupNode.newAggregateFuncHolder(
 			v.preRender.render[groupIdx], groupIdx, true /* ident */, parser.NewIdentAggregate,
 		)
