@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -50,12 +49,6 @@ func decommission(
 	for {
 		args := append([]string{"node", verbs[0], strconv.Itoa(int(targetNode))}, verbs[1:]...)
 		o, _, err := c.ExecCLI(ctx, runNode, args)
-		if testutils.IsError(err, "ambiguous") {
-			// TODO(tschottdorf): make the endpoint retry these internally.
-			// Luckily, {r,d}ecommissioning requests are idempotent.
-			log.Warningf(ctx, "retrying after ambiguous commit error: %s", err)
-			continue
-		}
 		return o, err
 	}
 }
