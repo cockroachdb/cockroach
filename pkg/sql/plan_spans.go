@@ -35,7 +35,8 @@ func collectSpans(ctx context.Context, plan planNode) (reads, writes roachpb.Spa
 	case
 		*valueGenerator,
 		*valuesNode,
-		*emptyNode:
+		*zeroNode,
+		*unaryNode:
 		return nil, nil, nil
 
 	case *scanNode:

@@ -196,7 +196,8 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *dropTableNode:
 	case *dropViewNode:
 	case *dropUserNode:
-	case *emptyNode:
+	case *zeroNode:
+	case *unaryNode:
 	case *hookFnNode:
 	case *valueGenerator:
 	case *showRangesNode:

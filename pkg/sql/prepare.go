@@ -372,7 +372,7 @@ func (p *planner) Deallocate(ctx context.Context, s *parser.Deallocate) (planNod
 				"prepared statement %q does not exist", s.Name)
 		}
 	}
-	return &emptyNode{}, nil
+	return &zeroNode{}, nil
 }
 
 // Execute creates a plan for an execute statement by substituting the plan for
