@@ -210,11 +210,10 @@ type Session struct {
 	// indicate to Finish() that the session is already closed.
 	emergencyShutdown bool
 
-	// ResultWriter is where the results of query/statement should be written
-	// to, including errors when they happen. This corresponds to a network
-	// connection (pgwire.v3conn) for client connections and a
+	// ResultsWriter is where query results are written to. It's set to a
+	// pgwire.v3conn for sessions opened for SQL client connections and a
 	// bufferedResultWriter for internal uses.
-	ResultWriter ResultWriter
+	ResultsWriter ResultsWriter
 
 	Tracing SessionTracing
 

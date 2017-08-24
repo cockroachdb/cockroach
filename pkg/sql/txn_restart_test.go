@@ -336,7 +336,7 @@ func (ta *TxnAborter) GetExecCount(stmt string) (int, bool) {
 }
 
 func (ta *TxnAborter) statementFilter(
-	ctx context.Context, stmt string, r sql.ResultWriter, err error,
+	ctx context.Context, stmt string, r sql.ResultsWriter, err error,
 ) error {
 	ta.mu.Lock()
 	ri, ok := ta.mu.stmtsToAbort[stmt]
@@ -1670,7 +1670,7 @@ func TestPushedTxnDetectionInFirstBatch(t *testing.T) {
 	var s serverutils.TestServerInterface
 	params, _ := createTestServerParams()
 	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
-		StatementFilter: func(ctx context.Context, stmt string, r sql.ResultWriter, err error) error {
+		StatementFilter: func(ctx context.Context, stmt string, r sql.ResultsWriter, err error) error {
 			if atomic.LoadInt64(&injectRead) == 0 {
 				return nil
 			}

@@ -16,6 +16,7 @@ package sql
 
 import (
 	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -36,36 +37,91 @@ func NewWireFailureError(err error) error {
 	return WireFailureError{err}
 }
 
-// ResultWriter is an interface which is used to store results from query
-// execution. Implementations could be buffered, immediately stream to the
-// client, or a bit of both. There are two implementations: v3conn and
-// bufferedWriter.
-type ResultWriter interface {
-	NewGroupResultWriter() GroupResultWriter
+// ResultsWriter the interface used to by the Executor to produce results for
+// query execution for a SQL client. The main implementater is v3Conn, which
+// streams the results on a SQL network connection. There's also bufferedWriter,
+// which buffers all results in memory.
+//
+// ResultsWriter is built with the SQL session model in mind: queries from a
+// given SQL client (which we'll call the consumer to not confuse it with
+// clients of this interface - the Executor) keep coming out of band and all of
+// their results (generally, datum tuples) are pushed to a single ResultsWriter.
+// The ResultsWriter needs to be made aware of which results pertain to which
+// statement, as implementations need to split results accordingly. The
+// ResultsWriter also supports the notion of a "results group": the
+// ResultsWriter sequentially goes through groups of results and the group is
+// the level at which a client can request for results to be dropped; a group
+// can be reset, meaning that the consumer will not receive any of them. Only
+// the current group can be reset; the client gives up the ability to reset a
+// group the moment it closes it.  This feature is used to support the automatic
+// retries that we do for SQL transactions - groups will correspond to
+// transactions and, when the Executor decides to automatically retry a
+// transaction, it will reset its group (as it can't automatically retry if any
+// results have been sent to the consumer).
+//
+// Example usage:
+//
+//  var rw ResultsWriter
+//  group := rw.NewResultsGroup()
+//  defer group.Close()
+//  sr := group.NewStatementResult()
+//  for each result row {
+//    if err := sr.AddRow(...); err != nil {
+//      // send err to the client in another way
+//    }
+//  }
+//  sr.CloseResult()
+//  group.Close()
+//
+type ResultsWriter interface {
+	// NewResultsGroup creates a new ResultGroup and indicates that future results
+	// are part of a new result group.
+	//
+	// A single group can be ongoing on a ResultsWriter at a time; it is illegal to
+	// create a new group before the previous one has been Close()d.
+	NewResultsGroup() ResultsGroup
+
 	// SetEmptyQuery is used to indicate that there are no statements to run.
 	// Empty queries are different than queries with no results.
 	SetEmptyQuery()
 }
 
-// GroupResultWriter provides an interface for a single transaction. Its methods
-// deal with automatic retries primarily.
-type GroupResultWriter interface {
-	NewStatementResultWriter() StatementResultWriter
-	// ResultsSentToClient returns true if this group has sent any results to the
-	// client in the current transaction.
+// ResultsGroup is used to produce a result group (see ResultsWriter).
+type ResultsGroup interface {
+	// Close should be called once all the results for a group have been produced
+	// (i.e. after all StatementResults have been closed). It informs the
+	// implementation that the results are not going to be reset any more, and
+	// thus can be sent to the client.
+	//
+	// Close has to be called before new groups are created.  It's illegal to call
+	// Close before CloseResult() has been called on all of the group's
+	// StatementResults.
+	Close()
+
+	// NewStatementResult creates a new StatementResult, indicating that future
+	// results are part of a new SQL query.
+	//
+	// A single StatementResult can be active on a ResultGroup at a time; it is
+	// illegal to create a new StatementResult before CloseResult() has been
+	// called on the previous one.
+	NewStatementResult() StatementResult
+
+	// ResultsSentToClient returns true if any results pertaining to this group
+	// have been sent to the consumer.
 	ResultsSentToClient() bool
-	// End should be called before new groups can be created.
-	End()
-	// Reset discards all the current buffered results (if any) when we attempt
-	// to automatically retry the current transaction.
-	Reset(ctx context.Context)
+
+	// Reset discards all the group's results. It is illegal to call Reset if any
+	// results have already been sent to the consumer; this can be tested with
+	// ResultsSentToClient().
+	Reset(context.Context)
 }
 
-// StatementResultWriter provides a writer interface for a single statement.
-type StatementResultWriter interface {
+// StatementResult is used to produce results for a single query (see
+// ResultsWriter).
+type StatementResult interface {
 	// BeginResult should be called prior to any of the other methods.
 	// TODO(andrei): remove BeginResult and SetColumns, and have
-	// NewStatementResultWriter take in a parser.Statement
+	// NewStatementResult() take in a parser.Statement
 	BeginResult(stmt parser.Statement)
 	// GetPGTag returns the PGTag of the statement passed into BeginResult.
 	PGTag() string
@@ -83,9 +139,12 @@ type StatementResultWriter interface {
 	// RowsAffected returns either the number of times AddRow was called, or the
 	// sum of all n passed into IncrementRowsAffected.
 	RowsAffected() int
-	// EndResult ends the current result. Cannot be called unless there's a
-	// corresponding BeginResult prior.
-	EndResult() error
+	// CloseResult ends the current result. The v3Conn will send control codes to
+	// the client informing it that the result for a statement is now complete.
+	//
+	// CloseResult cannot be called unless there's a corresponding BeginResult
+	// prior.
+	CloseResult() error
 }
 
 type bufferedWriter struct {
@@ -111,27 +170,27 @@ func (b *bufferedWriter) results() StatementResults {
 	return StatementResults{b.pastResults, len(b.pastResults) == 0}
 }
 
-// NewGroupResultWriter implements the ResultWriter interface.
-func (b *bufferedWriter) NewGroupResultWriter() GroupResultWriter {
+// NewResultsGroup is part of the ResultsWriter interface.
+func (b *bufferedWriter) NewResultsGroup() ResultsGroup {
 	return b
 }
 
-// SetEmptyQuery implements the ResultWriter interface.
+// SetEmptyQuery is part of the ResultsWriter interface.
 func (b *bufferedWriter) SetEmptyQuery() {
 }
 
-// SetEmptyQuery implements the GroupResultWriter interface.
-func (b *bufferedWriter) NewStatementResultWriter() StatementResultWriter {
+// SetEmptyQuery implements the ResultsGroup interface.
+func (b *bufferedWriter) NewStatementResult() StatementResult {
 	return b
 }
 
-// CanAutomaticallyRetry implements the GroupResultWriter interface.
+// CanAutomaticallyRetry implements the ResultsGroup interface.
 func (b *bufferedWriter) ResultsSentToClient() bool {
 	return false
 }
 
-// End implements the GroupResultWriter interface.
-func (b *bufferedWriter) End() {
+// Close implements the ResultsGroup interface.
+func (b *bufferedWriter) Close() {
 	if b.resultInProgress {
 		b.currentGroupResults = append(b.currentGroupResults, b.currentResult)
 		b.resultInProgress = false
@@ -141,7 +200,7 @@ func (b *bufferedWriter) End() {
 	b.resultInProgress = false
 }
 
-// Reset implements the GroupResultWriter interface.
+// Reset implements the ResultsGroup interface.
 func (b *bufferedWriter) Reset(ctx context.Context) {
 	if b.currentGroupResults != nil {
 		b.currentGroupResults.Close(ctx)
@@ -149,7 +208,7 @@ func (b *bufferedWriter) Reset(ctx context.Context) {
 	b.resultInProgress = false
 }
 
-// BeginResult implements the StatementResultWriter interface.
+// BeginResult implements the StatementResult interface.
 func (b *bufferedWriter) BeginResult(stmt parser.Statement) {
 	if b.resultInProgress {
 		panic("can't start new result before ending the previous")
@@ -158,12 +217,12 @@ func (b *bufferedWriter) BeginResult(stmt parser.Statement) {
 	b.currentResult = Result{PGTag: stmt.StatementTag(), Type: stmt.StatementType()}
 }
 
-// GetPGTag implements the StatementResultWriter interface.
+// GetPGTag implements the StatementResult interface.
 func (b *bufferedWriter) PGTag() string {
 	return b.currentResult.PGTag
 }
 
-// SetColumns implements the StatementResultWriter interface.
+// SetColumns implements the StatementResult interface.
 func (b *bufferedWriter) SetColumns(columns sqlbase.ResultColumns) {
 	if !b.resultInProgress {
 		panic("no result in progress")
@@ -177,7 +236,7 @@ func (b *bufferedWriter) SetColumns(columns sqlbase.ResultColumns) {
 	}
 }
 
-// RowsAffected implements the StatementResultWriter interface.
+// RowsAffected implements the StatementResult interface.
 func (b *bufferedWriter) RowsAffected() int {
 	if b.currentResult.Type == parser.Rows {
 		return b.currentResult.Rows.Len()
@@ -185,8 +244,8 @@ func (b *bufferedWriter) RowsAffected() int {
 	return b.currentResult.RowsAffected
 }
 
-// EndResult implements the StatementResultWriter interface.
-func (b *bufferedWriter) EndResult() error {
+// CloseResult implements the StatementResult interface.
+func (b *bufferedWriter) CloseResult() error {
 	if !b.resultInProgress {
 		panic("no result in progress")
 	}
@@ -195,12 +254,12 @@ func (b *bufferedWriter) EndResult() error {
 	return nil
 }
 
-// StatementType implements the StatementResultWriter interface.
+// StatementType implements the StatementResult interface.
 func (b *bufferedWriter) StatementType() parser.StatementType {
 	return b.currentResult.Type
 }
 
-// IncrementRowsAffected implements the StatementResultWriter interface.
+// IncrementRowsAffected implements the StatementResult interface.
 func (b *bufferedWriter) IncrementRowsAffected(n int) {
 	if !b.resultInProgress {
 		panic("no result in progress")
@@ -208,7 +267,7 @@ func (b *bufferedWriter) IncrementRowsAffected(n int) {
 	b.currentResult.RowsAffected += n
 }
 
-// AddRow implements the StatementResultWriter interface.
+// AddRow implements the StatementResult interface.
 func (b *bufferedWriter) AddRow(ctx context.Context, row parser.Datums) error {
 	if !b.resultInProgress {
 		panic("no result in progress")

@@ -199,7 +199,9 @@ type v3Conn struct {
 }
 
 type streamingState struct {
-	// Query state.
+
+	/* Current batch state */
+
 	// formatCodes is an array of which indicates whether each column of a row
 	// should be sent as binary or text format. If it is nil then we send as text.
 	formatCodes     []formatCode
@@ -208,7 +210,13 @@ type streamingState struct {
 	emptyQuery      bool
 	err             error
 
-	// Current transaction state.
+	// hasSentResults is set if any results in the current batch have been sent on
+	// the client connection. This is used to back the
+	// ResultGroup.ResultsSentToClient() interface.
+	// TODO(andrei): The bookkeeping for this member is currently broken - it's
+	// reset after every batch of statements even if a batch continues a previous
+	// txn (result group). This is coupled with the Executor creating a new group
+	// for every batch.
 	hasSentResults bool
 
 	// TODO(tso): this can theoretically be combined with v3conn.writeBuf.
@@ -216,11 +224,13 @@ type streamingState struct {
 	// bytes and write them to buf. We do this since we need to length prefix
 	// each message and this is icky to figure out ahead of time.
 	buf bytes.Buffer
+
 	// txnStartIdx is the start of the current transaction in the buf. We keep
 	// track of this so that we can reset the current transaction if we retry.
 	txnStartIdx int
 
-	// Current statement state.
+	/* Current statement state */
+
 	pgTag         string
 	columns       sqlbase.ResultColumns
 	statementType parser.StatementType
@@ -574,8 +584,10 @@ func (c *v3Conn) handleSimpleQuery(buf *readBuffer) error {
 	}
 
 	tracing.AnnotateTrace()
-	c.streamingState.reset(nil, true /* sendDescription */, 0)
-	c.session.ResultWriter = c
+	c.streamingState.reset(
+		nil /* formatCodes */, true /* sendDescription */, 0, /* limit */
+	)
+	c.session.ResultsWriter = c
 	if err := c.executor.ExecuteStatements(c.session, query, nil); err != nil {
 		if err := c.setError(err); err != nil {
 			return err
@@ -914,7 +926,7 @@ func (c *v3Conn) handleExecute(buf *readBuffer) error {
 
 	tracing.AnnotateTrace()
 	c.streamingState.reset(portalMeta.outFormats, false /* sendDescription */, int(limit))
-	c.session.ResultWriter = c
+	c.session.ResultsWriter = c
 	err = c.executor.ExecutePreparedStatement(c.session, stmt, pinfo)
 	if err != nil {
 		if err := c.setError(err); err != nil {
@@ -1104,45 +1116,45 @@ func (c *v3Conn) copyIn(ctx context.Context, columns []sqlbase.ResultColumn) (in
 	}
 }
 
-// NewGroupResultWriter implements the ResultWriter interface.
-func (c *v3Conn) NewGroupResultWriter() sql.GroupResultWriter {
+// NewResultsGroup is part of the ResultsWriter interface.
+func (c *v3Conn) NewResultsGroup() sql.ResultsGroup {
 	return c
 }
 
-// SetEmptyQuery implements the ResultWriter interface.
+// SetEmptyQuery is part of the ResultsWriter interface.
 func (c *v3Conn) SetEmptyQuery() {
 	c.streamingState.emptyQuery = true
 }
 
-// SetEmptyQuery implements the GroupResultWriter interface.
-func (c *v3Conn) NewStatementResultWriter() sql.StatementResultWriter {
+// SetEmptyQuery implements the ResultsGroup interface.
+func (c *v3Conn) NewStatementResult() sql.StatementResult {
 	return c
 }
 
-// ResultsSentToClient implements the GroupResultWriter interface.
+// ResultsSentToClient implements the ResultsGroup interface.
 func (c *v3Conn) ResultsSentToClient() bool {
 	return c.streamingState.hasSentResults
 }
 
-// End implements the GroupResultWriter interface.
-func (c *v3Conn) End() {
+// Close implements the ResultsGroup interface.
+func (c *v3Conn) Close() {
 	s := &c.streamingState
 	s.txnStartIdx = s.buf.Len()
 	s.emptyQuery = false
 	s.hasSentResults = false
 }
 
-// Reset implements the GroupResultWriter interface.
+// Reset implements the ResultsGroup interface.
 func (c *v3Conn) Reset(ctx context.Context) {
 	s := &c.streamingState
 	if s.hasSentResults {
-		panic("cannot reset if we've already sent results for this txn")
+		panic("cannot reset if we've already sent results for group")
 	}
 	s.emptyQuery = false
 	s.buf.Truncate(s.txnStartIdx)
 }
 
-// BeginResult implements the StatementResultWriter interface.
+// BeginResult implements the StatementResult interface.
 func (c *v3Conn) BeginResult(stmt parser.Statement) {
 	state := &c.streamingState
 	state.pgTag = stmt.StatementTag()
@@ -1151,23 +1163,24 @@ func (c *v3Conn) BeginResult(stmt parser.Statement) {
 	state.firstRow = true
 }
 
-// GetPGTag implements the StatementResultWriter interface.
+// GetPGTag implements the StatementResult interface.
 func (c *v3Conn) PGTag() string {
 	return c.streamingState.pgTag
 }
 
-// SetColumns implements the StatementResultWriter interface.
+// SetColumns implements the StatementResult interface.
 func (c *v3Conn) SetColumns(columns sqlbase.ResultColumns) {
 	c.streamingState.columns = columns
 }
 
-// RowsAffected implements the StatementResultWriter interface.
+// RowsAffected implements the StatementResult interface.
 func (c *v3Conn) RowsAffected() int {
 	return c.streamingState.rowsAffected
 }
 
-// EndResult implements the StatementResultWriter interface.
-func (c *v3Conn) EndResult() error {
+// CloseResult implements the StatementResult interface.
+// It sends a "command complete" server message.
+func (c *v3Conn) CloseResult() error {
 	state := &c.streamingState
 	if state.err != nil {
 		return state.err
@@ -1257,7 +1270,7 @@ func (c *v3Conn) setError(err error) error {
 	state.hasSentResults = true
 	state.err = err
 	state.buf.Truncate(state.txnStartIdx)
-	if err := c.flush(true); err != nil {
+	if err := c.flush(true /* forceSend */); err != nil {
 		return sql.NewWireFailureError(err)
 	}
 	if err := c.sendError(err); err != nil {
@@ -1266,17 +1279,17 @@ func (c *v3Conn) setError(err error) error {
 	return nil
 }
 
-// StatementType implements the StatementResultWriter interface.
+// StatementType implements the StatementResult interface.
 func (c *v3Conn) StatementType() parser.StatementType {
 	return c.streamingState.statementType
 }
 
-// IncrementRowsAffected implements the StatementResultWriter interface.
+// IncrementRowsAffected implements the StatementResult interface.
 func (c *v3Conn) IncrementRowsAffected(n int) {
 	c.streamingState.rowsAffected += n
 }
 
-// AddRow implements the StatementResultWriter interface.
+// AddRow implements the StatementResult interface.
 func (c *v3Conn) AddRow(ctx context.Context, row parser.Datums) error {
 	state := &c.streamingState
 	if state.err != nil {
@@ -1339,7 +1352,7 @@ func (c *v3Conn) done() error {
 		c.writeBuf.initMsg(serverMsgEmptyQuery)
 		err = c.writeBuf.finishMsg(c.wr)
 	} else if !state.hasSentResults {
-		err = c.sendCommandComplete(nil, c.wr)
+		err = c.sendCommandComplete(nil /* tag */, c.wr)
 	}
 
 	if err != nil {
