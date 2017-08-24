@@ -172,14 +172,12 @@ func (p *planner) propagateFilters(
 ) (newPlan planNode, remainingFilter parser.TypedExpr, err error) {
 	remainingFilter = extraFilter
 	switch n := plan.(type) {
-	case *emptyNode:
-		if !n.results {
-			// There is no row (by definition), so all filters
-			// are "already applied". Silently absorb any extra filter.
-			return plan, parser.DBoolTrue, nil
-		}
+	case *zeroNode:
+		// There is no row (by definition), so all filters
+		// are "already applied". Silently absorb any extra filter.
+		return plan, parser.DBoolTrue, nil
 		// TODO(knz): We could evaluate the filter here and set/reset
-		// n.results accordingly, assuming the filter is not "row
+		// this accordingly, assuming the filter is not "row
 		// dependent" (cf. resolveNames()).
 
 	case *filterNode:
@@ -326,6 +324,7 @@ func (p *planner) propagateFilters(
 	case *dropViewNode:
 	case *dropUserNode:
 	case *hookFnNode:
+	case *unaryNode:
 	case *valueGenerator:
 	case *valuesNode:
 	case *showRangesNode:

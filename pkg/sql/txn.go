@@ -33,12 +33,12 @@ func (p *planner) BeginTransaction(n *parser.BeginTransaction) (planNode, error)
 	// Enter the FirstBatch state.
 	p.session.TxnState.SetState(FirstBatch)
 
-	return &emptyNode{}, nil
+	return &zeroNode{}, nil
 }
 
 // SetTransaction sets a transaction's isolation level
 func (p *planner) SetTransaction(n *parser.SetTransaction) (planNode, error) {
-	return &emptyNode{}, p.setTransactionModes(n.Modes)
+	return &zeroNode{}, p.setTransactionModes(n.Modes)
 }
 
 func (p *planner) setTransactionModes(modes parser.TransactionModes) error {

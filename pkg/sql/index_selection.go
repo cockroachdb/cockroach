@@ -136,7 +136,7 @@ func (p *planner) selectIndex(
 		if len(exprs) == 1 && len(exprs[0]) == 1 {
 			if d, ok := exprs[0][0].(*parser.DBool); ok && bool(!*d) {
 				// The expression simplified to false.
-				return &emptyNode{}, nil
+				return &zeroNode{}, nil
 			}
 		}
 
@@ -218,7 +218,7 @@ func (p *planner) selectIndex(
 	}
 	if len(s.spans) == 0 {
 		// There are no spans to scan.
-		return &emptyNode{}, nil
+		return &zeroNode{}, nil
 	}
 
 	s.filter = applyIndexConstraints(&p.evalCtx, s.filter, c.constraints)
@@ -231,7 +231,7 @@ func (p *planner) selectIndex(
 			return nil, err
 		}
 		if s.filter == parser.DBoolFalse {
-			return &emptyNode{}, nil
+			return &zeroNode{}, nil
 		}
 		if s.filter == parser.DBoolTrue {
 			s.filter = nil

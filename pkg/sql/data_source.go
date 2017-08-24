@@ -243,7 +243,7 @@ func (p *planner) getSources(
 ) (planDataSource, error) {
 	switch len(sources) {
 	case 0:
-		plan := &emptyNode{results: true}
+		plan := &unaryNode{}
 		return planDataSource{
 			info: newSourceInfoForSingleTable(anonymousTable, planColumns(plan)),
 			plan: plan,
