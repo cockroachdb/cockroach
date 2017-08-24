@@ -68,6 +68,7 @@ EXPLAIN(EXPRS) SELECT MIN(y.x) FROM a x, a y GROUP BY x.*
 ----
 0  group   ·            ·
 0  ·       aggregate 0  min(x)
+0  ·       group by     @1-@2
 1  render  ·            ·
 1  ·       render 0     x
 1  ·       render 1     y
@@ -86,6 +87,7 @@ EXPLAIN(EXPRS) SELECT MIN(y.x) FROM a x, a y GROUP BY (1, (x.*))
 ----
 0  group   ·            ·
 0  ·       aggregate 0  min(x)
+0  ·       group by     @1-@1
 1  render  ·            ·
 1  ·       render 0     (1, (x, y))
 1  ·       render 1     x
@@ -104,6 +106,7 @@ EXPLAIN(EXPRS) SELECT MIN(y.x) FROM a x, a y GROUP BY (x.*)
 ----
 0  group   ·            ·
 0  ·       aggregate 0  min(x)
+0  ·       group by     @1-@2
 1  render  ·            ·
 1  ·       render 0     x
 1  ·       render 1     y
