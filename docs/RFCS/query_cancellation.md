@@ -208,7 +208,7 @@ to any other nodes are also cancelled (by grpc).
 - Producer processor to consumer: This is a special case only for those processors that
 do a lot of processing before emitting any rows (such as the sorter). These processors will check the
 local flow context for cancellation, and return an error to their consumer if it gets cancelled.
-- syncFlowConsumer special case: Since `syncFlowConsumer` does not have any streams that
+- syncFlowConsumer special case: Since `syncFlowConsumer` on the gateway node does not have any streams that
 cross node boundaries or call `FlowStream`, an error will be manually pushed to it
 upon a cancellation request on the gateway node, marking it as closed to all of its producers.
 
