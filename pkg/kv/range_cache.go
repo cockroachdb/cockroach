@@ -340,7 +340,13 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 	doneWg()
 
 	// Wait for the inflight request.
-	res := <-resC
+	var res singleflight.Result
+	select {
+	case res = <-resC:
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	}
+
 	if res.Shared {
 		log.Event(ctx, "looked up range descriptor with shared request")
 	} else {
