@@ -311,7 +311,7 @@ func (h *hashJoiner) bufferPhase(
 	ctx context.Context, useTempStorage bool, storedRows *hashRowContainer,
 ) (earlyExit bool, _ error) {
 	row, earlyExit, err := h.bufferPhaseImpl(ctx)
-	if pgErr, ok := err.(*pgerror.Error); earlyExit || !(ok && pgErr.Code == pgerror.CodeOutOfMemoryError) {
+	if pgErr, ok := pgerror.GetPGCause(err); earlyExit || !(ok && pgErr.Code == pgerror.CodeOutOfMemoryError) {
 		return earlyExit, err
 	}
 	if !useTempStorage {

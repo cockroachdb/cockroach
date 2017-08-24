@@ -64,7 +64,7 @@ func (ss *sortAllStrategy) Execute(ctx context.Context, s *sorter) error {
 	// than the COCKROACH_WORK_MEM was reached. We should distinguish between
 	// these cases and log the event to facilitate debugging of queries that
 	// may be slow for this reason.
-	if pgErr, ok := err.(*pgerror.Error); !(ok && pgErr.Code == pgerror.CodeOutOfMemoryError) {
+	if pgErr, ok := pgerror.GetPGCause(err); !(ok && pgErr.Code == pgerror.CodeOutOfMemoryError) {
 		return err
 	}
 	if !ss.useTempStorage {

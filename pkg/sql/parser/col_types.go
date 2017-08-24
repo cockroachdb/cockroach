@@ -535,7 +535,8 @@ func DatumTypeToColumnType(t Type) (ColumnType, error) {
 		return DatumTypeToColumnType(typ.Type)
 	}
 
-	return nil, errors.Errorf("value type %s cannot be used for table columns", t)
+	return nil, pgerror.NewErrorf(pgerror.CodeInvalidTableDefinitionError,
+		"value type %s cannot be used for table columns", t)
 }
 
 // CastTargetToDatumType produces a Type equivalent to the given
@@ -575,6 +576,6 @@ func CastTargetToDatumType(t CastTargetType) Type {
 	case *OidColType:
 		return oidColTypeToType(ct)
 	default:
-		panic(errors.Errorf("unexpected CastTarget %T", t))
+		panic(fmt.Sprintf("unexpected CastTarget %T", t))
 	}
 }
