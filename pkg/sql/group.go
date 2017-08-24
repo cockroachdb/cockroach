@@ -191,6 +191,9 @@ func (p *planner) groupBy(
 		}
 		p.hasStar = p.hasStar || hasStar
 
+		// GROUP BY (a, b) -> GROUP BY a, b
+		cols, exprs = flattenTuples(cols, exprs)
+
 		colIdxs := r.addOrReuseRenders(cols, exprs, true /* reuseExistingRender */)
 		if len(colIdxs) == 1 {
 			// We only remember the render if there is a 1:1 correspondence with
