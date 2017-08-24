@@ -424,9 +424,9 @@ func (f *Flow) RunSync(ctx context.Context) {
 }
 
 // cancel iterates through all unconnected streams of this flow and marks them cancelled.
-// It also closes the syncFlowConsumer, if it exists. This function is called in Wait()
-// after the associated context has been cancelled. In order to cancel a flow, call
-// f.ctxCancel() instead of this function.
+// If the syncFlowConsumer is of type CancellableRowReceiver, mark it as cancelled.
+// This function is called in Wait() after the associated context has been cancelled.
+// In order to cancel a flow, call f.ctxCancel() instead of this function.
 //
 // For a detailed description of the distsql query cancellation mechanism,
 // read docs/RFCS/query_cancellation.md.
@@ -452,11 +452,9 @@ func (f *Flow) cancel() {
 	}
 
 	if f.syncFlowConsumer != nil {
-		// Push an error to the sync flow consumer. If this is a distSQLReceiver,
-		// it will call ConsumerClosed when it sees a non-nil error.
-		f.syncFlowConsumer.Push(
-			nil, /* row */
-			ProducerMetadata{Err: sqlbase.NewQueryCanceledError()})
+		if recv, ok := f.syncFlowConsumer.(CancellableRowReceiver); ok {
+			recv.SetCancelled()
+		}
 	}
 }
 
