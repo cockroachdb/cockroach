@@ -34,7 +34,9 @@ func TestGossipPeerings(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	runTestOnConfigs(t, testGossipPeeringsInner)
+	RunLocal(t, func(t *testing.T) {
+		runTestOnConfigs(t, testGossipPeeringsInner)
+	})
 }
 
 func testGossipPeeringsInner(
@@ -85,9 +87,18 @@ func TestGossipRestart(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	// TODO(bram): #4559 Limit this test to only the relevant cases. No chaos
-	// agents should be required.
-	runTestOnConfigs(t, testGossipRestartInner)
+	// TODO(tschottdorf): at the time of writing, this can't run under RunLocal
+	// simply because that mode uses ephemeral ports, and so restarting a whole
+	// cluster leads to no node knowing where to reach any other node. To change
+	// this, we could introduce an RPC we can send to the cluster that gives it
+	// "hints" for its --join list after it has started. CI servers may cycle
+	// through ports rapidly, so we can't rely that our previous port is available
+	// when a node restarts.
+	RunDocker(t, func(t *testing.T) {
+		// TODO(bram): #4559 Limit this test to only the relevant cases. No chaos
+		// agents should be required.
+		runTestOnConfigs(t, testGossipRestartInner)
+	})
 }
 
 func testGossipRestartInner(
@@ -128,9 +139,9 @@ func testGossipRestartInner(
 		}
 
 		log.Infof(ctx, "restarting all nodes")
-		if _, ok := c.(*cluster.LocalCluster); ok {
+		if _, ok := c.(*cluster.DockerCluster); ok {
 			// It is not safe to call Restart in parallel when using
-			// cluster.LocalCluster because expected container shutdown events
+			// cluster.DockerCluster because expected container shutdown events
 			// may be reordered.
 			for i := 0; i < num; i++ {
 				if err := c.Restart(ctx, i); err != nil {

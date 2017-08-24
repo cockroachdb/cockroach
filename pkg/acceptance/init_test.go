@@ -38,14 +38,21 @@ func TestInitModeBootstrapNodeZero(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	runTestOnConfigs(t, testInitModeInner, useInitMode(cluster.INIT_BOOTSTRAP_NODE_ZERO))
+	// TODO(tschottdorf): give LocalCluster support for the init modes and we should be able
+	// to switch this to RunLocal. Ditto below.
+	RunDocker(t, func(t *testing.T) {
+		runTestOnConfigs(t, testInitModeInner, useInitMode(cluster.INIT_BOOTSTRAP_NODE_ZERO))
+	})
 }
 
 func TestInitModeCommand(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	runTestOnConfigs(t, testInitModeInner, useInitMode(cluster.INIT_COMMAND))
+	// TODO(tschottdorf): see above.
+	RunDocker(t, func(t *testing.T) {
+		runTestOnConfigs(t, testInitModeInner, useInitMode(cluster.INIT_COMMAND))
+	})
 }
 
 func testInitModeInner(
@@ -67,7 +74,10 @@ func TestInitModeNone(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	runTestOnConfigs(t, testInitModeNoneInner, useInitMode(cluster.INIT_NONE))
+	// TODO(tschottdorf): see above.
+	RunDocker(t, func(t *testing.T) {
+		runTestOnConfigs(t, testInitModeNoneInner, useInitMode(cluster.INIT_NONE))
+	})
 }
 
 func testInitModeNoneInner(
@@ -95,7 +105,7 @@ func testInitModeNoneInner(
 
 	// If we can, initialize the cluster and proceed.
 	// TODO(bdarnell): support RunInitCommand on the Cluster interface?
-	lc, ok := c.(*cluster.LocalCluster)
+	lc, ok := c.(*cluster.DockerCluster)
 	if !ok {
 		return
 	}

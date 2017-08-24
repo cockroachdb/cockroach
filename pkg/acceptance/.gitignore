@@ -1,6 +1,7 @@
 # Do not add environment-specific entries here (see the top-level .gitignore
 # for reasoning and alternatives).
-.localcluster.certs.*
-.cluster.certs.*
+.localcluster*
 *.backup
 *.tfstate
+# TODO(tschottdorf): looks unused. Removable?
+.cluster.certs.*
