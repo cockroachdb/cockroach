@@ -124,6 +124,7 @@ func doLocalCSVTransform(
 	recordCh := make(chan csvRecord, chanSize)
 	kvCh := make(chan roachpb.KeyValue, chanSize)
 	contentCh := make(chan sstContent)
+	walltime := timeutil.Now().UnixNano()
 	group.Go(func() error {
 		defer close(recordCh)
 		var err error
@@ -139,12 +140,12 @@ func doLocalCSVTransform(
 	group.Go(func() error {
 		defer close(contentCh)
 		var err error
-		kvCount, err = writeRocksDB(gCtx, kvCh, rocksdbDest, sstMaxSize, contentCh)
+		kvCount, err = writeRocksDB(gCtx, kvCh, rocksdbDest, sstMaxSize, contentCh, walltime)
 		return err
 	})
 	group.Go(func() error {
 		var err error
-		sstCount, err = makeBackup(gCtx, parentID, tableDesc, dest, contentCh)
+		sstCount, err = makeBackup(gCtx, parentID, tableDesc, dest, contentCh, walltime)
 		return err
 	})
 	return csvCount, kvCount, sstCount, group.Wait()
@@ -415,6 +416,7 @@ func writeRocksDB(
 	rocksdbDir string,
 	sstMaxSize int64,
 	contentCh chan<- sstContent,
+	walltime int64,
 ) (int64, error) {
 	const batchMaxSize = 1024 * 50
 
@@ -489,7 +491,6 @@ func writeRocksDB(
 
 	var kv engine.MVCCKeyValue
 	var firstKey, lastKey roachpb.Key
-	ts := timeutil.Now().UnixNano()
 	var count int64
 	for it.Seek(engine.MVCCKey{}); ; it.Next() {
 		if ok, err := it.Valid(); err != nil {
@@ -510,7 +511,7 @@ func writeRocksDB(
 		}
 
 		kv.Key = it.UnsafeKey()
-		kv.Key.Timestamp.WallTime = ts
+		kv.Key.Timestamp.WallTime = walltime
 		kv.Value = it.UnsafeValue()
 
 		if err := sst.Add(kv); err != nil {
@@ -546,9 +547,11 @@ func makeBackup(
 	tableDesc *sqlbase.TableDescriptor,
 	destDir string,
 	contentCh <-chan sstContent,
+	walltime int64,
 ) (int64, error) {
 	backupDesc := BackupDescriptor{
 		FormatVersion: BackupFormatInitialVersion,
+		EndTime:       hlc.Timestamp{WallTime: walltime},
 	}
 
 	conf, err := storageccl.ExportStorageConfFromURI(destDir)
@@ -599,12 +602,7 @@ func finalizeCSVBackup(
 	}
 
 	sort.Sort(backupFileDescriptors(backupDesc.Files))
-	backupDesc.Spans = []roachpb.Span{
-		{
-			Key:    backupDesc.Files[0].Span.Key,
-			EndKey: backupDesc.Files[len(backupDesc.Files)-1].Span.EndKey,
-		},
-	}
+	backupDesc.Spans = []roachpb.Span{tableDesc.TableSpan()}
 	backupDesc.Descriptors = []sqlbase.Descriptor{
 		*sqlbase.WrapDescriptor(&sqlbase.DatabaseDescriptor{
 			Name: csvDatabaseName,
@@ -840,6 +838,7 @@ func doDistributedCSVTransform(
 
 	backupDesc := BackupDescriptor{
 		FormatVersion: BackupFormatInitialVersion,
+		EndTime:       hlc.Timestamp{WallTime: walltime},
 	}
 	n := rows.Len()
 	for i := 0; i < n; i++ {
