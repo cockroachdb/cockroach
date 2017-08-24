@@ -93,7 +93,6 @@
 		SpanStatsRequest
 		SpanStatsResponse
 		ProblemRangesRequest
-		Failure
 		ProblemRangesResponse
 		RangeRequest
 		RangeResponse
