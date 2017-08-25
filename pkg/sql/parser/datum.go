@@ -207,7 +207,7 @@ func ParseDByte(s string) (*DBytes, error) {
 	if len(s) > 2 && (s[0] == '\\' && (s[1] == 'x' || s[1] == 'X')) {
 		hexstr, err := hex.DecodeString(s[2:])
 		if err != nil {
-			return NewDBytes(DBytes(s)), nil
+			return nil, makeParseError(s, TypeBytes, err)
 		}
 		return NewDBytes(DBytes(hexstr)), nil
 	}
