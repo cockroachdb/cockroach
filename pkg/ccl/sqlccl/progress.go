@@ -14,6 +14,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -59,8 +60,30 @@ func (jpl *jobProgressLogger) chunkFinished(ctx context.Context) error {
 	}
 	jpl.mu.Unlock()
 
-	if shouldLogProgress {
-		return jpl.job.Progressed(ctx, fraction, jpl.progressedFn)
+	if !shouldLogProgress {
+		return nil
 	}
-	return nil
+
+	// NB: This timeout is very important. If a progress update takes longer than
+	// progressTimeThreshold, another goroutine might come along and attempt to
+	// update the progress. Without a timeout, our update will contend with the
+	// new goroutine's update, which slows down both progress updates, leading to
+	// a self-reinforcing cycle where dozens of goroutines contend to update the
+	// progress of this job. A 15-node cluster with 60 such contending goroutines
+	// observed a progress update that took several minutes, for example. This
+	// contention inadvertently applies backpressure on the backup/restore
+	// coordinator and brings the job to a near halt.
+	//
+	// TODO(benesch): see if there's a cleaner way to handle this by refactoring
+	// the way backup and restore manage their progress-logging goroutines.
+	ctx, cancel := context.WithTimeout(ctx, progressTimeThreshold)
+	defer cancel()
+	err := jpl.job.Progressed(ctx, fraction, jpl.progressedFn)
+	// The context deadline error might come from a remote node, in which case
+	// err != context.DeadlineExceeded, so we check the error string instead.
+	if err != nil && err.Error() == context.DeadlineExceeded.Error() {
+		log.Warningf(ctx, "job %d: context deadline exceeded while updating progress", *jpl.job.ID())
+		return nil
+	}
+	return err
 }
