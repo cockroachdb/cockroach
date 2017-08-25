@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -876,6 +877,7 @@ func (b *RowResultWriter) AddRow(ctx context.Context, row parser.Datums) error {
 // flow setup worked out.
 func (l *DistLoader) LoadCSV(
 	ctx context.Context,
+	job *jobs.Job,
 	db *client.DB,
 	evalCtx parser.EvalContext,
 	thisNode roachpb.NodeID,
@@ -1017,6 +1019,10 @@ func (l *DistLoader) LoadCSV(
 		},
 	}
 
+	if err := job.Progressed(ctx, 1.0/3.0, jobs.Noop); err != nil {
+		log.Warningf(ctx, "failed to update job progress: %s", err)
+	}
+
 	// We have the split ranges. Now re-read the CSV files and route them to SST writers.
 
 	p = physicalPlan{}
@@ -1111,6 +1117,7 @@ func (l *DistLoader) LoadCSV(
 	if err != nil {
 		return err
 	}
+
 	// TODO(dan): We really don't need the txn for this flow, so remove it once
 	// Run works without one.
 	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
