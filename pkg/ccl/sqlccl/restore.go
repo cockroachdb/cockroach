@@ -675,8 +675,6 @@ func restore(
 			}
 		},
 	}
-	progressCtx, progressSpan := tracing.ChildSpan(restoreCtx, "progress-log")
-	defer tracing.FinishSpan(progressSpan)
 
 	// We're already limiting these on the server-side, but sending all the
 	// Import requests at once would fill up distsender/grpc/something and cause
@@ -766,6 +764,13 @@ func restore(
 		return nil
 	})
 
+	requestFinishedCh := make(chan struct{}, len(importSpans)) // enough buffer to never block
+	g.Go(func() error {
+		progressCtx, progressSpan := tracing.ChildSpan(gCtx, "progress-log")
+		defer tracing.FinishSpan(progressSpan)
+		return progressLogger.loop(progressCtx, requestFinishedCh)
+	})
+
 	var importIdx int
 	for ir := range importRequestsCh {
 		// Copy ir so we can use it in the goroutine below.
@@ -800,7 +805,8 @@ func restore(
 			}
 			mu.Unlock()
 
-			return progressLogger.chunkFinished(progressCtx)
+			requestFinishedCh <- struct{}{}
+			return nil
 		})
 	}
 
