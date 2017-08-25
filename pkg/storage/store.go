@@ -677,6 +677,9 @@ type StoreTestingKnobs struct {
 	// when initializing the Raft group. Note that this method is invoked
 	// with both Replica.raftMu and Replica.mu locked.
 	OnCampaign func(*Replica)
+	// OnCommandQueueAction is called when the BatchRequest performs an action
+	// on the CommandQueue.
+	OnCommandQueueAction func(*roachpb.BatchRequest, storagebase.CommandQueueAction)
 	// MaxOffset, if set, overrides the server clock's MaxOffset at server
 	// creation time.
 	// See also DisableMaxOffsetCheck.

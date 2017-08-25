@@ -1826,6 +1826,9 @@ func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry pr
 		ec.repl.store.tsCacheMu.Unlock()
 	}
 
+	if fn := ec.repl.store.cfg.TestingKnobs.OnCommandQueueAction; fn != nil {
+		fn(&ec.ba, storagebase.CommandQueueFinishExecuting)
+	}
 	ec.repl.removeCmdsFromCommandQueue(ec.cmds)
 }
 
@@ -2013,6 +2016,9 @@ func (r *Replica) beginCmds(
 		if prereqCount > 0 {
 			log.Eventf(ctx, "waiting for %d overlapping requests", prereqCount)
 		}
+		if fn := r.store.cfg.TestingKnobs.OnCommandQueueAction; fn != nil {
+			fn(ba, storagebase.CommandQueueWaitForPrereqs)
+		}
 
 		for _, accessCmds := range newCmds {
 			for _, newCmd := range accessCmds {
@@ -2104,6 +2110,9 @@ func (r *Replica) beginCmds(
 						// transfer transitive dependencies when they try to block on this command.
 						// New commands that would have established a dependency on this command
 						// will never see it, which is fine.
+						if fn := r.store.cfg.TestingKnobs.OnCommandQueueAction; fn != nil {
+							fn(ba, storagebase.CommandQueueCancellation)
+						}
 						r.removeCmdsFromCommandQueue(newCmds)
 						return nil, err
 					case <-r.store.stopper.ShouldQuiesce():
@@ -2113,12 +2122,18 @@ func (r *Replica) beginCmds(
 					}
 				}
 
-				// Set prereqs to nil so that the prereq slice and all referenced commands can be GCed.
+				// Set prereqs to nil so that the prereq slice and all referenced commands can be
+				// GCed. This also means that when we eventually close our pending channel, none
+				// of our dependencies will be migrated to commands that are waiting on us.
 				newCmd.prereqs = nil
 			}
 		}
+
 		if prereqCount > 0 {
 			log.Eventf(ctx, "waited %s for overlapping requests", timeutil.Since(beforeWait))
+		}
+		if fn := r.store.cfg.TestingKnobs.OnCommandQueueAction; fn != nil {
+			fn(ba, storagebase.CommandQueueBeginExecuting)
 		}
 	} else {
 		log.Event(ctx, "operation accepts inconsistent results")
