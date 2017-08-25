@@ -92,12 +92,13 @@ func LoadCSV(
 	dest = fmt.Sprintf("nodelocal://%s", dest)
 
 	return doLocalCSVTransform(
-		ctx, parentID, tableDesc, dest, dataFiles, comma, comment, nullif, sstMaxSize,
+		ctx, nil, parentID, tableDesc, dest, dataFiles, comma, comment, nullif, sstMaxSize,
 	)
 }
 
 func doLocalCSVTransform(
 	ctx context.Context,
+	job *jobs.Job,
 	parentID sqlbase.ID,
 	tableDesc *sqlbase.TableDescriptor,
 	dest string,
@@ -130,6 +131,11 @@ func doLocalCSVTransform(
 		defer close(recordCh)
 		var err error
 		csvCount, err = readCSV(gCtx, comma, comment, len(tableDesc.VisibleColumns()), dataFiles, recordCh)
+		if job != nil {
+			if err := job.Progressed(ctx, 1.0/3.0, jobs.Noop); err != nil {
+				log.Warningf(ctx, "failed to update job progress: %s", err)
+			}
+		}
 		return err
 	})
 	group.Go(func() error {
@@ -142,6 +148,11 @@ func doLocalCSVTransform(
 		defer close(contentCh)
 		var err error
 		kvCount, err = writeRocksDB(gCtx, kvCh, rocksdbDest, sstMaxSize, contentCh, walltime)
+		if job != nil {
+			if err := job.Progressed(ctx, 2.0/3.0, jobs.Noop); err != nil {
+				log.Warningf(ctx, "failed to update job progress: %s", err)
+			}
+		}
 		return err
 	})
 	group.Go(func() error {
@@ -778,7 +789,7 @@ func importPlanHook(
 
 		if distributed {
 			_, err = doDistributedCSVTransform(
-				ctx, files, p, tableDesc, temp,
+				ctx, job, files, p, tableDesc, temp,
 				comma, comment, nullif, walltime,
 			)
 			if err != nil {
@@ -786,7 +797,7 @@ func importPlanHook(
 			}
 		} else {
 			_, _, _, err = doLocalCSVTransform(
-				ctx, parentID, tableDesc, temp, files,
+				ctx, job, parentID, tableDesc, temp, files,
 				comma, comment, nullif, sstSize,
 			)
 			if err != nil {
@@ -812,6 +823,7 @@ func importPlanHook(
 
 func doDistributedCSVTransform(
 	ctx context.Context,
+	job *jobs.Job,
 	files []string,
 	p sql.PlanHookState,
 	tableDesc *sqlbase.TableDescriptor,
@@ -848,6 +860,7 @@ func doDistributedCSVTransform(
 
 	if err := p.DistLoader().LoadCSV(
 		ctx,
+		job,
 		p.ExecCfg().DB,
 		evalCtx,
 		p.ExecCfg().NodeID.Get(),
