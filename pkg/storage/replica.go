@@ -338,6 +338,10 @@ type Replica struct {
 		// The ID of the leader replica within the Raft group. Used to determine
 		// when the leadership changes.
 		leaderID roachpb.ReplicaID
+		// The time at which the most recently added replica for the range was added.
+		// Used to determine whether a replica is new enough that it might not have
+		// finished receiving/applying its first snapshot yet.
+		lastReplicaAdded time.Time
 
 		// The last seen replica descriptors from incoming Raft messages. These are
 		// stored so that the replica still knows the replica descriptors for itself
@@ -1454,8 +1458,35 @@ func (r *Replica) setDescWithoutProcessUpdate(desc *roachpb.RangeDescriptor) {
 			r.mu.state.Desc, desc)
 	}
 
+	prevMaxID := maxReplicaID(r.mu.state.Desc)
+	newMaxID := maxReplicaID(desc)
+	if newMaxID > prevMaxID {
+		r.mu.lastReplicaAdded = timeutil.Now()
+	}
+
 	r.rangeStr.store(r.mu.replicaID, desc)
 	r.mu.state.Desc = desc
+}
+
+func maxReplicaID(desc *roachpb.RangeDescriptor) roachpb.ReplicaID {
+	if desc == nil || !desc.IsInitialized() {
+		return 0
+	}
+	var maxID roachpb.ReplicaID
+	for _, repl := range desc.Replicas {
+		if repl.ReplicaID > maxID {
+			maxID = repl.ReplicaID
+		}
+	}
+	return maxID
+}
+
+// LastReplicaAdded returns the ID of the most recently added replica and the
+// time at which it was added.
+func (r *Replica) LastReplicaAdded() (roachpb.ReplicaID, time.Time) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return maxReplicaID(r.mu.state.Desc), r.mu.lastReplicaAdded
 }
 
 // GetReplicaDescriptor returns the replica for this range from the range
