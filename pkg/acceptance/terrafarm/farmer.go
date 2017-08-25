@@ -307,7 +307,7 @@ func (f *Farmer) Destroy(t testing.TB) error {
 	if (t.Failed() && f.KeepCluster == KeepClusterFailed) ||
 		f.KeepCluster == KeepClusterAlways {
 
-		t.Logf("not destroying; run:\n(cd %s && terraform destroy -force -state %[2]s && rm %[2]s)",
+		f.logf("not destroying; run:\n(cd %s && terraform destroy -force -state %[2]s && rm %[2]s)\n",
 			baseDir, f.StateFile)
 		return nil
 	}
