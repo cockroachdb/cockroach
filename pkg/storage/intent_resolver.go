@@ -229,6 +229,7 @@ func (ir *intentResolver) maybePushTransactions(
 			panic(fmt.Sprintf("have two PushTxn responses for %s", txn.ID))
 		}
 		pushedTxns[txn.ID] = txn
+		log.Eventf(ctx, "%s is now %s", txn.ID, txn.Status)
 	}
 
 	var resolveIntents []roachpb.Intent
