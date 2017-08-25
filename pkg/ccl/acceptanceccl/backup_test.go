@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/acceptance/terrafarm"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -289,10 +290,18 @@ func BenchmarkRestoreTPCH10(b *testing.B) {
 				b.Fatal(err)
 			}
 
-			if _, err := db.Exec(
-				`RESTORE tpch.* FROM $1`, getAzureBackupFixtureURI(b, "tpch10"),
-			); err != nil {
-				b.Fatal(err)
+			fn := func(ctx context.Context) error {
+				_, err := db.Exec(`RESTORE tpch.* FROM $1`, getAzureBackupFixtureURI(b, "tpch10"))
+				return err
+			}
+			b.ResetTimer()
+			jobID, status, err := jobs.RunAndWaitForTerminalState(ctx, db, fn)
+			b.StopTimer()
+			if err != nil {
+				b.Fatalf("%+v", err)
+			}
+			if status != jobs.StatusSucceeded {
+				b.Fatalf("job %d: expected %s got %s", jobID, jobs.StatusSucceeded, status)
 			}
 		})
 	}
@@ -315,18 +324,26 @@ func BenchmarkRestore2TB(b *testing.B) {
 
 	db, err := gosql.Open("postgres", bt.f.PGUrl(ctx, 0))
 	if err != nil {
-		b.Fatal(err)
+		b.Fatalf("%+v", err)
 	}
 	defer db.Close()
 
 	if _, err := db.Exec("CREATE DATABASE datablocks"); err != nil {
-		b.Fatal(err)
+		b.Fatalf("%+v", err)
 	}
 
-	if _, err := db.Exec(
-		`RESTORE datablocks.* FROM $1`, getAzureBackupFixtureURI(b, "2tb"),
-	); err != nil {
-		b.Fatal(err)
+	fn := func(ctx context.Context) error {
+		_, err := db.Exec(`RESTORE datablocks.* FROM $1`, getAzureBackupFixtureURI(b, "2tb"))
+		return err
+	}
+	b.ResetTimer()
+	jobID, status, err := jobs.RunAndWaitForTerminalState(ctx, db, fn)
+	b.StopTimer()
+	if err != nil {
+		b.Fatalf("%+v", err)
+	}
+	if status != jobs.StatusSucceeded {
+		b.Fatalf("job %d: expected %s got %s", jobID, jobs.StatusSucceeded, status)
 	}
 }
 
