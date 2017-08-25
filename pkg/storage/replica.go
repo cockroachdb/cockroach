@@ -338,6 +338,12 @@ type Replica struct {
 		// The ID of the leader replica within the Raft group. Used to determine
 		// when the leadership changes.
 		leaderID roachpb.ReplicaID
+		// The most recently added replica for the range and when it was added.
+		// Used to determine whether a replica is new enough that we shouldn't
+		// penalize it for being slightly behind. These field gets cleared out once
+		// we know that the replica has caught up.
+		lastReplicaAdded     roachpb.ReplicaID
+		lastReplicaAddedTime time.Time
 
 		// The last seen replica descriptors from incoming Raft messages. These are
 		// stored so that the replica still knows the replica descriptors for itself
@@ -992,6 +998,13 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			if progress.Match > 0 && progress.Match < minIndex {
 				minIndex = progress.Match
 			}
+			// If this is the most recently added replica and it has caught up, clear
+			// our state that was tracking it. This is unrelated to managing proposal
+			// quota, but this is a convenient place to do so.
+			if rep.ReplicaID == r.mu.lastReplicaAdded && progress.Match > status.Commit {
+				r.mu.lastReplicaAdded = 0
+				r.mu.lastReplicaAddedTime = time.Time{}
+			}
 		}
 	}
 
@@ -1454,8 +1467,35 @@ func (r *Replica) setDescWithoutProcessUpdate(desc *roachpb.RangeDescriptor) {
 			r.mu.state.Desc, desc)
 	}
 
+	newMaxID := maxReplicaID(desc)
+	if newMaxID > r.mu.lastReplicaAdded {
+		r.mu.lastReplicaAdded = newMaxID
+		r.mu.lastReplicaAddedTime = timeutil.Now()
+	}
+
 	r.rangeStr.store(r.mu.replicaID, desc)
 	r.mu.state.Desc = desc
+}
+
+func maxReplicaID(desc *roachpb.RangeDescriptor) roachpb.ReplicaID {
+	if desc == nil || !desc.IsInitialized() {
+		return 0
+	}
+	var maxID roachpb.ReplicaID
+	for _, repl := range desc.Replicas {
+		if repl.ReplicaID > maxID {
+			maxID = repl.ReplicaID
+		}
+	}
+	return maxID
+}
+
+// LastReplicaAdded returns the ID of the most recently added replica and the
+// time at which it was added.
+func (r *Replica) LastReplicaAdded() (roachpb.ReplicaID, time.Time) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.lastReplicaAdded, r.mu.lastReplicaAddedTime
 }
 
 // GetReplicaDescriptor returns the replica for this range from the range
