@@ -55,7 +55,7 @@ export default function(props: ClusterSummaryProps) {
   // Capacity math used in the summary status section.
   const { capacityAvailable, capacityUsed } = props.nodesSummary.nodeSums;
   const usableCapacity = capacityAvailable + capacityUsed;
-  const capacityPercent = usableCapacity !== 0 ? (capacityUsed / (usableCapacity * 100)) : 100;
+  const capacityPercent = usableCapacity !== 0 ? ((capacityUsed / usableCapacity) * 100) : 100;
 
   return (
     <div>
