@@ -91,7 +91,7 @@ const (
 	// RecommendedMaxOpenFiles is the recommended value for rocksDB's
 	// max_open_files option. If more file descriptors are available than the
 	// recommended number, than the default value is used.
-	RecommendedMaxOpenFiles = 10000
+	RecommendedMaxOpenFiles = 640000
 	// MinimumMaxOpenFiles is the minimum value that rocksDB's max_open_files
 	// option can be set to. While this should be set as high as possible, the
 	// minimum total for a single store node must be under 2048 for Windows
