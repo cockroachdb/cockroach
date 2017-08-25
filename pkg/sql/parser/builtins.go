@@ -1913,6 +1913,21 @@ var Builtins = map[string][]Builtin{
 			Info:     "This function is used only by CockroachDB's developers for testing purposes.",
 		},
 	},
+
+	"crdb_internal.set_vmodule": {
+		Builtin{
+			Types:      ArgTypes{{"vmodule_string", TypeString}},
+			ReturnType: fixedReturnType(TypeInt),
+			impure:     true,
+			privileged: true,
+			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+				return DZero, log.SetVModule(string(*args[0].(*DString)))
+			},
+			category: categorySystemInfo,
+			Info: "This function is used for internal debugging purposes. " +
+				"Incorrect use can severely impact performance.",
+		},
+	},
 }
 
 var substringImpls = []Builtin{
