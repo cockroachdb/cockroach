@@ -43,6 +43,14 @@ const (
 	// for rebalancing. It does not prevent transferring leases in order to allow
 	// a replica to be removed from a range.
 	minLeaseTransferInterval = time.Second
+
+	// newReplicaGracePeriod is the amount of time that we allow for a new
+	// replica's raft state to catch up to the leader's before we start
+	// considering it to be behind for the sake of rebalancing. We choose a
+	// large value here because snapshots of large replicas can take a while
+	// in high latency clusters, and not allowing enough of a cushion can
+	// make rebalance thrashing more likely (#17879).
+	newReplicaGracePeriod = 5 * time.Minute
 )
 
 var (
@@ -338,7 +346,13 @@ func (rq *replicateQueue) processOneChange(
 		if log.V(1) {
 			log.Infof(ctx, "removing a replica")
 		}
-		candidates := filterUnremovableReplicas(repl.RaftStatus(), desc.Replicas)
+		lastReplAdded, lastAddedTime := repl.LastReplicaAdded()
+		if timeutil.Since(lastAddedTime) < newReplicaGracePeriod {
+			lastReplAdded = 0
+		}
+		candidates := filterUnremovableReplicas(repl.RaftStatus(), desc.Replicas, lastReplAdded)
+		log.VEventf(ctx, 3, "filtered unremovable replicas from %v to get %v as candidates for removal",
+			desc.Replicas, candidates)
 		removeReplica, details, err := rq.allocator.RemoveTarget(ctx, zone.Constraints, candidates, rangeInfo)
 		if err != nil {
 			return false, err
@@ -530,7 +544,7 @@ func (rq *replicateQueue) transferLease(
 	checkTransferLeaseSource bool,
 	checkCandidateFullness bool,
 ) (bool, error) {
-	candidates := filterBehindReplicas(repl.RaftStatus(), desc.Replicas)
+	candidates := filterBehindReplicas(repl.RaftStatus(), desc.Replicas, 0 /* lastAddedRepl */)
 	if target := rq.allocator.TransferLeaseTarget(
 		ctx,
 		zone.Constraints,
