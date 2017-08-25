@@ -28,6 +28,8 @@ import (
 	"golang.org/x/net/context"
 
 	"bytes"
+	"io"
+
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -38,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"io"
 )
 
 //go:generate stringer -type=clientMessageType
