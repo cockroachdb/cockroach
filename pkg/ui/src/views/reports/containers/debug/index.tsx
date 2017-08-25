@@ -192,12 +192,6 @@ export default function Debug() {
           />
         </DebugTableRow>
       </DebugTable>
-      <h3>Change Logging Level (vmodule)</h3>
-      <em>Warning, changing the logging level can cause large performance problems.</em>
-      <p>get /debug/vmodule/&lt;your_vmodule_here&gt;</p>
-      <p>
-        For example, <code>*=1</code> or <code>raft=3,storage=2</code>. Empty string disables vmodule logging.
-      </p>
     </div>
   );
 }
