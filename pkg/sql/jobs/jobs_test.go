@@ -676,3 +676,103 @@ func TestJobLifecycle(t *testing.T) {
 		}
 	})
 }
+
+func TestRunAndWaitForTerminalState(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Intentionally share the server between subtests, so job records
+	// accumulate over time.
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	tests := []struct {
+		name   string
+		status jobs.Status
+		err    string
+		execFn func(context.Context) error
+	}{
+		{
+			"non-job execFn",
+			"", "no jobs found",
+			func(_ context.Context) error { return nil },
+		},
+		{
+			"pre-job error",
+			"", "exec failed before job was created.*pre-job error",
+			func(_ context.Context) error { return errors.New("pre-job error") },
+		},
+		{
+			"job succeeded",
+			jobs.StatusSucceeded, "",
+			func(_ context.Context) error {
+				registry := s.JobRegistry().(*jobs.Registry)
+				job := registry.NewJob(jobs.Record{Details: jobs.BackupDetails{}})
+				if err := job.Created(ctx, jobs.WithoutCancel); err != nil {
+					return err
+				}
+				return job.Succeeded(ctx)
+			},
+		},
+		{
+			"job failed",
+			jobs.StatusFailed, "in-job error",
+			func(_ context.Context) error {
+				registry := s.JobRegistry().(*jobs.Registry)
+				job := registry.NewJob(jobs.Record{Details: jobs.BackupDetails{}})
+				if err := job.Created(ctx, jobs.WithoutCancel); err != nil {
+					return err
+				}
+				err := errors.New("in-job error")
+				job.Failed(ctx, err)
+				return err
+			},
+		},
+		{
+			"job lease transfer then succeeded",
+			jobs.StatusSucceeded, "",
+			func(ctx context.Context) error {
+				var cancel func()
+				ctx, cancel = context.WithCancel(ctx)
+
+				registry := s.JobRegistry().(*jobs.Registry)
+				job := registry.NewJob(jobs.Record{Details: jobs.BackupDetails{}})
+				if err := job.Created(ctx, cancel); err != nil {
+					return err
+				}
+				if err := job.Succeeded(ctx); err != nil {
+					return err
+				}
+				return errors.New("lease transferred")
+			},
+		},
+		{
+			"job lease transfer then failed",
+			jobs.StatusFailed, "in-job error",
+			func(ctx context.Context) error {
+				var cancel func()
+				ctx, cancel = context.WithCancel(ctx)
+
+				registry := s.JobRegistry().(*jobs.Registry)
+				job := registry.NewJob(jobs.Record{Details: jobs.BackupDetails{}})
+				if err := job.Created(ctx, cancel); err != nil {
+					return err
+				}
+				job.Failed(ctx, errors.New("in-job error"))
+				return errors.New("lease transferred")
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, status, err := jobs.RunAndWaitForTerminalState(ctx, sqlDB, test.execFn)
+			if !testutils.IsError(err, test.err) {
+				t.Fatalf("got %v expected %v", err, test.err)
+			}
+			if status != test.status {
+				t.Fatalf("got [%s] expected [%s]", status, test.status)
+			}
+		})
+	}
+}

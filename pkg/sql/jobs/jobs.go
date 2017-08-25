@@ -15,6 +15,7 @@
 package jobs
 
 import (
+	gosql "database/sql"
 	"fmt"
 	"strings"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -642,4 +644,85 @@ func (t Type) String() string {
 	// simply swap underscores for spaces in the identifier for very SQL-esque
 	// names, like "BACKUP" and "SCHEMA CHANGE".
 	return strings.Replace(Type_name[int32(t)], "_", " ", -1)
+}
+
+// RunAndWaitForTerminalState runs a closure and potentially tracks its progress
+// using the system.jobs table.
+//
+// If the closure returns before a jobs entry is created, the closure's error is
+// passed back with no job information. Otherwise, the first jobs entry created
+// after the closure starts is polled until it enters a terminal state and that
+// job's id, status, and error are returned.
+//
+// TODO(dan): Return a *Job instead of just the id and status.
+//
+// TODO(dan): This assumes that the next entry to the jobs table was made by
+// this closure, but this assumption is quite racy. See if we can do something
+// better.
+func RunAndWaitForTerminalState(
+	ctx context.Context, sqlDB *gosql.DB, execFn func(context.Context) error,
+) (int64, Status, error) {
+	begin := timeutil.Now()
+
+	execErrCh := make(chan error, 1)
+	go func() {
+		err := execFn(ctx)
+		log.Warningf(ctx, "exec returned so attempting to track via jobs: err %+v", err)
+		execErrCh <- err
+	}()
+
+	var jobID int64
+	var execErr error
+	for r := retry.StartWithCtx(ctx, retry.Options{}); ; {
+		select {
+		case <-ctx.Done():
+			return 0, "", ctx.Err()
+		case execErr = <-execErrCh:
+			// The closure finished, try to fetch a job id one more time. Close
+			// and nil out execErrCh so it blocks from now on.
+			close(execErrCh)
+			execErrCh = nil
+		case <-r.NextCh(): // Fallthrough.
+		}
+		err := sqlDB.QueryRow(`SELECT id FROM system.jobs WHERE created > $1`, begin).Scan(&jobID)
+		if err == nil {
+			break
+		}
+		if execDone := execErrCh == nil; err == gosql.ErrNoRows && !execDone {
+			continue
+		}
+		if execErr != nil {
+			return 0, "", errors.Wrap(execErr, "exec failed before job was created")
+		}
+		return 0, "", errors.Wrap(err, "no jobs found")
+	}
+
+	for r := retry.StartWithCtx(ctx, retry.Options{}); ; {
+		select {
+		case <-ctx.Done():
+			return jobID, "", ctx.Err()
+		case execErr = <-execErrCh:
+			// The closure finished, this is a nice hint to wake up, but it only
+			// works once. Close and nil out execErrCh so it blocks from now on.
+			close(execErrCh)
+			execErrCh = nil
+		case <-r.NextCh(): // Fallthrough.
+		}
+
+		var status Status
+		var jobErr gosql.NullString
+		err := sqlDB.QueryRow(`SELECT status, error FROM [SHOW JOBS] WHERE id = $1`, jobID).Scan(
+			&status, &jobErr,
+		)
+		if err != nil {
+			return jobID, "", errors.Wrapf(err, "getting status of job %d", jobID)
+		}
+		if !status.Terminal() {
+			continue
+		}
+		if jobErr.Valid && len(jobErr.String) > 0 {
+			return jobID, status, errors.New(jobErr.String)
+		}
+		return jobID, status, nil
+	}
 }
