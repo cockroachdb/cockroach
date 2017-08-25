@@ -14,7 +14,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -38,29 +37,54 @@ type jobProgressLogger struct {
 	progressedFn  jobs.ProgressedFn
 
 	// The remaining fields are for internal use only.
-	mu struct {
-		syncutil.Mutex
-		completedChunks      int
-		lastReportedAt       time.Time
-		lastReportedFraction float32
-	}
+	completedChunks      int
+	lastReportedAt       time.Time
+	lastReportedFraction float32
 }
 
+// chunkFinished marks one chunk of the job as completed. If either the time or
+// fraction threshold has been reached, the progress update will be persisted to
+// system.jobs.
+//
+// NB: chunkFinished is not threadsafe. A previous implementation that was
+// threadsafe occasionally led to massive contention. One 2TB restore on a 15
+// node cluster, for example, had 60 goroutines attempting to update the
+// progress at once, causing massive contention on the row in system.jobs. This
+// inadvertently applied backpressure on the restore's import requests and
+// slowed the job to a crawl. If multiple threads need to update progress, use a
+// channel and a dedicated goroutine that calls loop.
 func (jpl *jobProgressLogger) chunkFinished(ctx context.Context) error {
-	jpl.mu.Lock()
-	jpl.mu.completedChunks++
-	fraction := float32(jpl.mu.completedChunks) / float32(jpl.totalChunks)
+	jpl.completedChunks++
+	fraction := float32(jpl.completedChunks) / float32(jpl.totalChunks)
 	fraction = fraction*(1-jpl.startFraction) + jpl.startFraction
-	shouldLogProgress := fraction-jpl.mu.lastReportedFraction > progressFractionThreshold ||
-		jpl.mu.lastReportedAt.Add(progressTimeThreshold).Before(timeutil.Now())
-	if shouldLogProgress {
-		jpl.mu.lastReportedAt = timeutil.Now()
-		jpl.mu.lastReportedFraction = fraction
+	shouldLogProgress := fraction-jpl.lastReportedFraction > progressFractionThreshold ||
+		jpl.lastReportedAt.Add(progressTimeThreshold).Before(timeutil.Now())
+	if !shouldLogProgress {
+		return nil
 	}
-	jpl.mu.Unlock()
+	jpl.lastReportedAt = timeutil.Now()
+	jpl.lastReportedFraction = fraction
+	return jpl.job.Progressed(ctx, fraction, jpl.progressedFn)
+}
 
-	if shouldLogProgress {
-		return jpl.job.Progressed(ctx, fraction, jpl.progressedFn)
+// loop calls chunkFinished for every message received over chunkCh. It exits
+// when chunkCh is closed, when totalChunks messages have been received, or when
+// the context is canceled.
+func (jpl *jobProgressLogger) loop(ctx context.Context, chunkCh <-chan struct{}) error {
+	for {
+		select {
+		case _, ok := <-chunkCh:
+			if !ok {
+				return nil
+			}
+			if err := jpl.chunkFinished(ctx); err != nil {
+				return err
+			}
+			if jpl.completedChunks == jpl.totalChunks {
+				return nil
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
-	return nil
 }

@@ -503,6 +503,12 @@ func backup(
 
 	header := roachpb.Header{Timestamp: backupDesc.EndTime}
 	g, gCtx := errgroup.WithContext(ctx)
+
+	requestFinishedCh := make(chan struct{}, len(spans)) // enough buffer to never block
+	g.Go(func() error {
+		return progressLogger.loop(gCtx, requestFinishedCh)
+	})
+
 	for i := range spans {
 		select {
 		case exportsSem <- struct{}{}:
@@ -543,9 +549,7 @@ func backup(
 			}
 			mu.Unlock()
 
-			if err := progressLogger.chunkFinished(ctx); err != nil {
-				return err
-			}
+			requestFinishedCh <- struct{}{}
 
 			if checkpointFiles != nil {
 				checkpointMu.Lock()
