@@ -405,7 +405,9 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ Type) (Datum, error) {
 		return NewDNameFromDString(&expr.resString), nil
 	case TypeBytes:
 		s, err := ParseDByte(expr.s)
-		expr.resBytes = *s
+		if err == nil {
+			expr.resBytes = *s
+		}
 		return &expr.resBytes, err
 	case TypeBool:
 		return ParseDBool(expr.s)
