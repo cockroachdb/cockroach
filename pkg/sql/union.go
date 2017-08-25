@@ -90,6 +90,7 @@ func (p *planner) UnionClause(
 		emitAll: emitAll,
 		emit:    emit,
 		scratch: make([]byte, 0),
+		columns: right.Columns(),
 	}
 	return node, nil
 }
@@ -135,9 +136,11 @@ type unionNode struct {
 	scratch     []byte
 	explain     explainMode
 	debugVals   debugValues
+	columns     sqlbase.ResultColumns
+	rightDone   bool
 }
 
-func (n *unionNode) Columns() sqlbase.ResultColumns { return n.left.Columns() }
+func (n *unionNode) Columns() sqlbase.ResultColumns { return n.columns }
 func (n *unionNode) Ordering() orderingInfo         { return orderingInfo{} }
 
 func (n *unionNode) Spans(ctx context.Context) (reads, writes roachpb.Spans, err error) {
@@ -153,13 +156,10 @@ func (n *unionNode) Spans(ctx context.Context) (reads, writes roachpb.Spans, err
 }
 
 func (n *unionNode) Values() parser.Datums {
-	if n.right != nil {
+	if !n.rightDone {
 		return n.right.Values()
 	}
-	if n.left != nil {
-		return n.left.Values()
-	}
-	return nil
+	return n.left.Values()
 }
 
 func (n *unionNode) MarkDebug(mode explainMode) {
@@ -210,7 +210,7 @@ func (n *unionNode) readRight(ctx context.Context) (bool, error) {
 	}
 
 	n.right.Close(ctx)
-	n.right = nil
+	n.rightDone = true
 	return n.readLeft(ctx)
 }
 
@@ -241,12 +241,7 @@ func (n *unionNode) readLeft(ctx context.Context) (bool, error) {
 			return true, nil
 		}
 	}
-	if err != nil {
-		return false, err
-	}
-	n.left.Close(ctx)
-	n.left = nil
-	return false, nil
+	return false, err
 }
 
 func (n *unionNode) Start(ctx context.Context) error {
@@ -257,24 +252,17 @@ func (n *unionNode) Start(ctx context.Context) error {
 }
 
 func (n *unionNode) Next(ctx context.Context) (bool, error) {
-	if n.right != nil {
+	if !n.rightDone {
 		return n.readRight(ctx)
 	}
-	if n.left != nil {
-		return n.readLeft(ctx)
-	}
-	return false, nil
+	return n.readLeft(ctx)
 }
 
 func (n *unionNode) Close(ctx context.Context) {
-	if n.right != nil {
+	if !n.rightDone {
 		n.right.Close(ctx)
-		n.right = nil
 	}
-	if n.left != nil {
-		n.left.Close(ctx)
-		n.left = nil
-	}
+	n.left.Close(ctx)
 }
 
 // unionNodeEmit represents the emitter logic for one of the six combinations of
