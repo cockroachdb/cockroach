@@ -14,7 +14,7 @@ system
 test
 
 statement ok
-DROP DATABASE "foo-bar"
+DROP DATABASE "foo-bar" CASCADE
 
 query T
 SHOW DATABASES
@@ -39,7 +39,7 @@ system
 test
 
 statement ok
-DROP DATABASE "foo bar"
+DROP DATABASE "foo bar" CASCADE
 
 query T
 SHOW DATABASES
@@ -101,7 +101,7 @@ GRANT ALL ON d2.v3 TO testuser
 user testuser
 
 statement error user testuser does not have DROP privilege on relation v4
-DROP DATABASE d1
+DROP DATABASE d1 CASCADE
 
 user root
 
@@ -138,7 +138,7 @@ system
 test
 
 statement ok
-DROP DATABASE d1
+DROP DATABASE d1 CASCADE
 
 query T
 SHOW DATABASES
@@ -167,7 +167,7 @@ SELECT * FROM d2.v1
 ----
 
 statement ok
-DROP DATABASE d2
+DROP DATABASE d2 CASCADE
 
 query T
 SHOW DATABASES
@@ -201,7 +201,7 @@ CREATE TABLE constraint_db.t2 (
 )
 
 statement ok
-DROP DATABASE constraint_db
+DROP DATABASE constraint_db CASCADE
 
 query T
 SHOW DATABASES

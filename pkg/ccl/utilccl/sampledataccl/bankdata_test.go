@@ -135,7 +135,7 @@ func TestToBackup(t *testing.T) {
 
 				t.Run("Restore", func(t *testing.T) {
 					sqlDB := sqlutils.MakeSQLRunner(t, db)
-					sqlDB.Exec(`DROP DATABASE IF EXISTS data`)
+					sqlDB.Exec(`DROP DATABASE IF EXISTS data CASCADE`)
 					sqlDB.Exec(`CREATE DATABASE data`)
 					sqlDB.Exec(`RESTORE data.* FROM $1`, `nodelocal://`+dir)
 

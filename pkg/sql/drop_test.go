@@ -122,7 +122,12 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
 	}
 
-	if _, err := sqlDB.Exec(`DROP DATABASE t`); err != nil {
+	if _, err := sqlDB.Exec(`DROP DATABASE t`); !testutils.IsError(err,
+		`database "t" is not empty`) {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`DROP DATABASE t CASCADE`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -256,7 +261,12 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
 	}
 
-	if _, err := sqlDB.Exec(`DROP DATABASE t`); err != nil {
+	if _, err := sqlDB.Exec(`DROP DATABASE t`); !testutils.IsError(err,
+		`database "t" is not empty`) {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`DROP DATABASE t CASCADE`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -310,7 +320,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 
 	if _, err := sqlDB.Exec(`
-DROP DATABASE t;
+DROP DATABASE t CASCADE;
 CREATE DATABASE t;
 `); err != nil {
 		t.Fatal(err)
