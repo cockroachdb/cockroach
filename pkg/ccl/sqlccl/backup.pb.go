@@ -49,7 +49,9 @@ type BackupDescriptor struct {
 	EndTime   cockroach_util_hlc.Timestamp `protobuf:"bytes,2,opt,name=end_time,json=endTime" json:"end_time"`
 	// Spans contains the spans requested for backup. The keyranges covered by
 	// `files` may be a subset of this if there were ranges with no changes since
-	// the last backup.
+	// the last backup. For all tables in the backup descriptor, these spans must
+	// completely cover each table's span. For example, if a table with ID 51 were
+	// being backed up, then the span `/Table/5{1-2}` must be completely covered.
 	Spans         []cockroach_roachpb1.Span                           `protobuf:"bytes,3,rep,name=spans" json:"spans"`
 	Files         []BackupDescriptor_File                             `protobuf:"bytes,4,rep,name=files" json:"files"`
 	Descriptors   []cockroach_sql_sqlbase1.Descriptor                 `protobuf:"bytes,5,rep,name=descriptors" json:"descriptors"`
