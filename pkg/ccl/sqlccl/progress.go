@@ -60,6 +60,19 @@ func (jpl *jobProgressLogger) chunkFinished(ctx context.Context) error {
 	jpl.mu.Unlock()
 
 	if shouldLogProgress {
+		// NB: This timeout is very important. If a progress update takes longer
+		// than progressTimeThreshold, another goroutine might come along and
+		// attempt to update the progress. Without a timeout, our update will
+		// contend with the new goroutine's update, which slows down both progress
+		// updates, leading to a self-reinforcing cycle where dozens of goroutines
+		// contend to update the progress of this job. A 15-node cluster with 60
+		// such contending goroutines observed a progress update that took several
+		// minutes, for example. This contention inadvertently applies backpressure
+		// on the backup/restore coordinator and brings the job to a near halt.
+		//
+		// TODO(benesch): see if there's a cleaner way to handle this by refactoring
+		// the way backup and restore manage their progress-logging goroutines.
+		ctx := context.WithTimeout(ctx, progressTimeThreshold)
 		return jpl.job.Progressed(ctx, fraction, jpl.progressedFn)
 	}
 	return nil
