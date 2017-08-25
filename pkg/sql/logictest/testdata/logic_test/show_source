@@ -72,7 +72,6 @@ server.consistency_check.interval                  24h0m0s        d     the time
 server.declined_reservation_timeout                1s             d     the amount of time to consider the store throttled for up-replication after a reservation was declined
 server.failed_reservation_timeout                  5s             d     the amount of time to consider the store throttled for up-replication after a failed reservation call
 server.remote_debugging.mode                       local          s     set to enable remote debugging, localhost-only or disable (any, local, off)
-server.remote_debugging.vmodule                    false          b     set to enable remote control over vmodule (this can severely impact performance)
 server.time_until_store_dead                       5m0s           d     the time after which if there is no new gossiped information about a store, it is considered dead
 server.web_session_timeout                         168h0m0s       d     the duration that a newly created web session will be valid
 sql.defaults.distsql                               0              e     Default distributed SQL execution mode [off = 0, auto = 1, on = 2]
