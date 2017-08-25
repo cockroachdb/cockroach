@@ -586,9 +586,9 @@ func (f *Farmer) Start(ctx context.Context, i int, name string) error {
 	switch name {
 	// TODO(tamird,petermattis): replace this with "kv".
 	case "block_writer":
-		cmd += fmt.Sprintf(" --tolerate-errors --min-block-bytes=8 --max-block-bytes=128 --benchmark-name %s %s", f.BenchmarkName, f.nodes[i].cockroachURL)
+		cmd += fmt.Sprintf(" --tolerate-errors --min-block-bytes=8 --max-block-bytes=128 --benchmark-name %s '%s'", f.BenchmarkName, f.nodes[i].cockroachURL)
 	case "photos":
-		cmd += fmt.Sprintf(" --users 1 --benchmark-name %s --db %s", f.BenchmarkName, f.nodes[i].photosURL)
+		cmd += fmt.Sprintf(" --users 1 --benchmark-name %s --db '%s'", f.BenchmarkName, f.nodes[i].photosURL)
 	}
 	cmd += fmt.Sprintf(" 1>logs/%[1]s.stdout 2>logs/%[1]s.stderr", name)
 	f.logf("+ node %d: %s\n", i, cmd)
