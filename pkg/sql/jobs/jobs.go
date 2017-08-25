@@ -15,10 +15,14 @@
 package jobs
 
 import (
+	gosql "database/sql"
 	"fmt"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"golang.org/x/net/context"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -491,6 +495,7 @@ func (j *Job) update(
 		return errors.New("Job: cannot update: job not created")
 	}
 
+	ctx, _ = context.WithTimeout(ctx, time.Second)
 	var payload *Payload
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		const selectStmt = "SELECT status, payload FROM system.jobs WHERE id = $1"
@@ -642,4 +647,92 @@ func (t Type) String() string {
 	// simply swap underscores for spaces in the identifier for very SQL-esque
 	// names, like "BACKUP" and "SCHEMA CHANGE".
 	return strings.Replace(Type_name[int32(t)], "_", " ", -1)
+}
+
+// RunAndWaitForTerminalState runs a closure and potentially tracks its progress
+// using the system.jobs table.
+//
+// If the closure returns before a jobs entry is created, the closure's error is
+// passed back with no job information. Otherwise, the first jobs entry created
+// after the closure starts is polled until it enters a terminal state and that
+// job's id, status, and error are returned.
+//
+// TODO(dan): Return a *Job instead of just the id and status.
+//
+// TODO(dan): This assumes that the next entry to the jobs table was made but
+// this closure, but this assumption is quite racy. See if we can do something
+// better.
+func RunAndWaitForTerminalState(
+	ctx context.Context, sqlDB *gosql.DB, execFn func(context.Context) error,
+) (int64, Status, error) {
+	boundWait := func(d time.Duration) time.Duration {
+		if d > time.Second {
+			return time.Second
+		}
+		return d
+	}
+
+	begin := timeutil.Now()
+
+	var execDone uint32
+	g, gCtx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		err := execFn(ctx)
+		log.Warningf(ctx, "exec returned so attempting to track via jobs: err %+v", err)
+		atomic.StoreUint32(&execDone, 1)
+		return err
+	})
+
+	var jobID int64
+	for wait := time.Nanosecond; ; wait = boundWait(2 * wait) {
+		select {
+		case <-ctx.Done():
+			return 0, "", ctx.Err()
+		case <-gCtx.Done():
+			// execDone will now be set. Let it fall through one more time.
+		case <-time.After(wait):
+		}
+		err := sqlDB.QueryRow(`SELECT id FROM system.jobs WHERE created > $1`, begin).Scan(&jobID)
+		if err == nil {
+			break
+		}
+		if err == gosql.ErrNoRows && atomic.LoadUint32(&execDone) == 0 {
+			continue
+		}
+		if err := g.Wait(); err != nil {
+			return 0, "", errors.Wrap(err, "exec failed before job was created")
+		}
+		return 0, "", errors.Wrap(err, "no jobs found")
+	}
+	log.Infof(ctx, "got job %d", jobID)
+
+	execDoneCh := gCtx.Done()
+	for wait := time.Nanosecond; ; wait = boundWait(2 * wait) {
+		select {
+		case <-ctx.Done():
+			return jobID, "", ctx.Err()
+		case <-execDoneCh:
+			// Exec just finished. This is a nice hint to wake up, but it only
+			// works once.
+			execDoneCh = nil
+		case <-time.After(wait): // No-op.
+		}
+
+		var status Status
+		var jobErr gosql.NullString
+		err := sqlDB.QueryRow(`SELECT status, error FROM crdb_internal.jobs WHERE id = $1`, jobID).Scan(
+			&status, &jobErr,
+		)
+		if err != nil {
+			return jobID, "", errors.Wrapf(err, "getting status of job %d", jobID)
+		}
+		if !status.Terminal() {
+			log.Infof(ctx, "job %d is %s: created %s ago", jobID, status, timeutil.Since(begin))
+			continue
+		}
+		if jobErr.Valid && len(jobErr.String) > 0 {
+			return jobID, status, errors.New(jobErr.String)
+		}
+		return jobID, status, nil
+	}
 }
