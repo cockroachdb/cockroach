@@ -287,8 +287,9 @@ func TestDistBackfill(t *testing.T) {
 func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	rangeCache := kv.NewRangeDescriptorCache(nil /* db */, 2<<10 /* size */)
-	leaseCache := kv.NewLeaseHolderCache(2 << 10 /* size */)
+	size := func() int64 { return 2 << 10 }
+	rangeCache := kv.NewRangeDescriptorCache(nil /* db */, size)
+	leaseCache := kv.NewLeaseHolderCache(size)
 	r, err := makeDistSQLReceiver(
 		context.TODO(), nil /* sink */, rangeCache, leaseCache, nil /* txn */, nil /* updateClock */)
 	if err != nil {
