@@ -2409,9 +2409,57 @@ func TestReplicaCommandQueueCancellationRandom(t *testing.T) {
 	}
 }
 
+func TestReplicaCommandQueueCancellation16266(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var instrs []cancelInstr
+	now := hlc.Timestamp{WallTime: cmdQCancelTestTimestamp}
+	txn := roachpb.MakeTransaction("txn", roachpb.Key("foobar"), 0, enginepb.SERIALIZABLE, now, 0)
+
+	pushBa := roachpb.BatchRequest{}
+	pushBa.Timestamp = now
+	pushBa.Add(&roachpb.PushTxnRequest{
+		Span: roachpb.Span{
+			Key: txn.Key,
+		},
+		PusheeTxn: txn.TxnMeta,
+		Now:       now,
+		PushType:  roachpb.PUSH_ABORT,
+		Force:     true,
+	})
+
+	endTxnBa := roachpb.BatchRequest{}
+	endTxnBa.Timestamp = now
+	endTxnBa.Txn = &txn
+	endTxnBa.Add(&roachpb.EndTransactionRequest{
+		Span: roachpb.Span{
+			Key: txn.Key,
+		},
+		Commit: true,
+	})
+
+	heartbearBa := roachpb.BatchRequest{}
+	heartbearBa.Timestamp = now
+	heartbearBa.Txn = &txn
+	heartbearBa.Add(&roachpb.HeartbeatTxnRequest{
+		Span: roachpb.Span{
+			Key: txn.Key,
+		},
+		Now: now,
+	})
+
+	ct := newCmdQCancelTest()
+	instrs = append(instrs, cancelInstr{reqOverride: &pushBa, cancel: false})
+	instrs = append(instrs, cancelInstr{reqOverride: &endTxnBa, cancel: false, expErr: "txn aborted"})
+	instrs = append(instrs, cancelInstr{reqOverride: &heartbearBa, cancel: false})
+	instrs = append(instrs, cancelInstr{reqOverride: &pushBa, cancel: false})
+	ct.RunWithoutInitialSpan(t, instrs)
+}
+
 type cancelInstr struct {
 	span   roachpb.Span
 	cancel bool
+	expErr string
 
 	reqOverride *roachpb.BatchRequest // overrides span when present
 }
@@ -2421,10 +2469,15 @@ func (ci cancelInstr) req() *roachpb.BatchRequest {
 		if s := ci.span; s.Key != nil || s.EndKey != nil {
 			panic(fmt.Sprintf("if overriding instr request, span must be empty; found %v", ci))
 		}
+		if req.Timestamp.WallTime != cmdQCancelTestTimestamp {
+			panic(fmt.Sprintf("BatchRequest should have WallTime %v; found %v",
+				cmdQCancelTestTimestamp, req.Timestamp.WallTime))
+		}
 		return req
 	}
 	// Default to a DeleteRangeRequest because it performs a single write over its Span.
 	ba := roachpb.BatchRequest{}
+	ba.Timestamp = hlc.Timestamp{WallTime: cmdQCancelTestTimestamp}
 	ba.Add(&roachpb.DeleteRangeRequest{Span: ci.span})
 	return &ba
 }
@@ -2448,6 +2501,7 @@ type testCmd struct {
 	prereqs map[int]struct{}
 	cancel  context.CancelFunc
 	done    <-chan *roachpb.Error
+	expErr  string
 }
 
 func newCmdQCancelTest() *cmdQCancelTest {
@@ -2471,7 +2525,7 @@ func (ct *cmdQCancelTest) letCmdsRun() {
 	close(ct.blockCmdBegin)
 }
 
-// letCmdsRun unblocks commands that are ready to exit the CommandQueue and finsh. It
+// letCmdsRun unblocks commands that are ready to exit the CommandQueue and finish. It
 // resets the block on cmds in the CommandQueue so that they don't immediately start
 // running.
 func (ct *cmdQCancelTest) letCmdsFinish() {
@@ -2479,13 +2533,18 @@ func (ct *cmdQCancelTest) letCmdsFinish() {
 	close(ct.blockCmdFinish)
 }
 
+// cmdQCancelTestTimestamp is the WallTime all BatchRequests in cmdQCancelTest
+// should use. This allows them to be identified and intercepted by the onCmdQAction
+// handler.
+const cmdQCancelTestTimestamp = 12345
+
 // onCmdQAction instruments CommandQueueActions, sending to different channels
 // depending on the action. The instrumentation is also used to block commands
 // at different stages of execution.
 func (ct *cmdQCancelTest) onCmdQAction(
 	ba *roachpb.BatchRequest, action storagebase.CommandQueueAction,
 ) {
-	if _, ok := ba.Requests[0].GetInner().(*roachpb.DeleteRangeRequest); ok {
+	if ba.Header.Timestamp.WallTime == cmdQCancelTestTimestamp {
 		switch action {
 		case storagebase.CommandQueueWaitForPrereqs:
 			ct.enteredCmdQ <- struct{}{}
@@ -2515,14 +2574,19 @@ func (ct *cmdQCancelTest) startInstr(
 	return done
 }
 
-func writeSpansOverlap(ss, ss2 *SpanSet) bool {
-	writes, writes2 := ss.spans[SpanReadWrite], ss2.spans[SpanReadWrite]
-	for scope, spans := range writes {
-		spans2 := writes2[scope]
-		for _, s := range spans {
-			for _, s2 := range spans2 {
-				if s.Overlaps(s2) {
-					return true
+func spanSetsOverlap(ss, ss2 *SpanSet) bool {
+	for ac1 := SpanAccess(0); ac1 < numSpanAccess; ac1++ {
+		for ac2 := SpanAccess(0); ac2 < numSpanAccess; ac2++ {
+			if ac1 == SpanReadOnly && ac2 == SpanReadOnly {
+				continue
+			}
+			for sc := spanScope(0); sc < numSpanScope; sc++ {
+				for _, s := range ss.spans[ac1][sc] {
+					for _, s2 := range ss2.spans[ac2][sc] {
+						if s.Overlaps(s2) {
+							return true
+						}
+					}
 				}
 			}
 		}
@@ -2557,11 +2621,9 @@ func (ct *cmdQCancelTest) insertCmds(t *testing.T, instrs []cancelInstr) {
 
 		// Determine the prereq set of each command, including all transitive
 		// dependencies. Add the new command to the cmds map.
-		//
-		// BEWARE: this will only look at write spans.
 		prereqs := make(map[int]struct{})
 		for j, prevCmd := range ct.cmds {
-			if writeSpansOverlap(spanSet, prevCmd.spanSet) {
+			if spanSetsOverlap(spanSet, prevCmd.spanSet) {
 				prereqs[j] = struct{}{}
 				for trans := range prevCmd.prereqs {
 					prereqs[trans] = struct{}{}
@@ -2577,6 +2639,7 @@ func (ct *cmdQCancelTest) insertCmds(t *testing.T, instrs []cancelInstr) {
 			prereqs: prereqs,
 			cancel:  cancel,
 			done:    cmdDone,
+			expErr:  instr.expErr,
 		}
 	}
 }
@@ -2641,9 +2704,17 @@ func (ct *cmdQCancelTest) runCmds(t *testing.T) {
 		// of a deadlock is what we're testing for.
 		ct.letCmdsFinish()
 		for _, running := range readyToRun {
-			if pErr := <-running.done; pErr != nil {
-				t.Fatal(pErr)
+			pErr := <-running.done
+			if running.expErr == "" {
+				if pErr != nil {
+					t.Fatal(pErr)
+				}
+			} else {
+				if !testutils.IsPError(pErr, running.expErr) {
+					t.Fatalf("expected error %q, found %v", running.expErr, pErr)
+				}
 			}
+
 		}
 	}
 }

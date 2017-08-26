@@ -84,7 +84,6 @@ type cmd struct {
 
 	prereqs   []*cmd
 	pending   chan struct{} // closed when complete
-	cancelled bool
 }
 
 // ID implements interval.Interface.

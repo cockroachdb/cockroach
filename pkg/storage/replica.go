@@ -2035,60 +2035,60 @@ func (r *Replica) beginCmds(
 					select {
 					case <-prereq.pending:
 						// Either the prerequisite command finished executing or it was cancelled.
-						// If the command finished cleanly, there's nothing for us to do except wait
-						// for the next prerequisite to finish. However, if the command was
-						// cancelled, we have to handle the cancellation here. This check does not
-						// need to be synchronized, because prereq.cancelled will only ever be set
-						// on the other side of the prereq.pending closing (see below), which the Go
-						// Memory Model promises is safe. Similarly, a command's prereqs will only
-						// ever be mutated on the other side of the prereq.pending closing.
-						if prereq.cancelled {
-							// Migrate transitive dependencies from cancelled prerequisite to
-							// current command. All prerequisites of the prerequisite that was just
-							// cancelled are now this command's direct prerequisites.
-							//
-							// While it may be possible that some of these transitive dependencies
-							// no longer overlap the current command, they are still required,
-							// because they themselves might be dependent on a command that overlaps
-							// both the current and prerequisite command.
-							//
-							// For instance, take the following dependency graph, where command 3
-							// was cancelled. We need to set command 2 as a prerequisite of command
-							// 4 even though they do not overlap because command 2 has a dependency
-							// on command 1, which does overlap command 4. We could try to catch
-							// this situation and set command 1 as a prerequisite of command 4
-							// directly, but this approach would require much more complexity and
-							// would need to traverse all the way up the dependency graph in the
-							// worst case.
-							//
-							//  cmd 1:   -------------
-							//                     |
-							//  cmd 2:           -----
-							//                     |
-							//  cmd 3:     xxxxxxxxxxx
-							//              |
-							//  cmd 4:   -----
-							//
-							// It is also be possible that some of the transitive dependencies are
-							// unnecessary and that we're being pessimistic here. An example case
-							// for this is shown in the following dependency graph, where a write
-							// separating two reads is cancelled. During the cancellation, command 3
-							// will take command 1 as it's prerequisite even though reads do not
-							// need to wait on other reads. We could be smarter here and detect
-							// these cases, but the pessimism does not affect correctness.
-							//
-							// cmd 1 [R]:   -----
-							//                |
-							// cmd 2 [W]:   xxxxx
-							//                |
-							// cmd 3 [R]:   -----
-							//
-							// The interaction between commands' timestamps and their resulting
-							// dependencies (see rules in command_queue.go) will work as expected
-							// with regard to properly transferring dependencies. This is because
-							// these timestamp rules all exhibit a transitive relationship.
-							newCmd.prereqs = append(newCmd.prereqs, prereq.prereqs...)
-						}
+						// If the command finished cleanly, there's nothing for us to do except
+						// wait for the next prerequisite to finish. Here, prereq.prereqs == nil
+						// so the append below will be a no-op.
+						//
+						// If the command was cancelled, we have to handle the cancellation here.
+						// We do this by migrating transitive dependencies from cancelled
+						// prerequisite to the current command. All prerequisites of the
+						// prerequisite that was just cancelled that were still pending at the time
+						// of cancellation are now this command's direct prerequisites. The append
+						// does not need to be synchronized, because prereq.prereqs will only ever
+						// be mutated on the other side of the prereq.pending closing (see below),
+						// which the Go Memory Model promises is safe.
+						//
+						// While it may be possible that some of these transitive dependencies
+						// no longer overlap the current command, they are still required,
+						// because they themselves might be dependent on a command that overlaps
+						// both the current and prerequisite command.
+						//
+						// For instance, take the following dependency graph, where command 3
+						// was cancelled. We need to set command 2 as a prerequisite of command
+						// 4 even though they do not overlap because command 2 has a dependency
+						// on command 1, which does overlap command 4. We could try to catch
+						// this situation and set command 1 as a prerequisite of command 4
+						// directly, but this approach would require much more complexity and
+						// would need to traverse all the way up the dependency graph in the
+						// worst case.
+						//
+						//  cmd 1:   -------------
+						//                     |
+						//  cmd 2:           -----
+						//                     |
+						//  cmd 3:     xxxxxxxxxxx
+						//              |
+						//  cmd 4:   -----
+						//
+						// It is also be possible that some of the transitive dependencies are
+						// unnecessary and that we're being pessimistic here. An example case
+						// for this is shown in the following dependency graph, where a write
+						// separating two reads is cancelled. During the cancellation, command 3
+						// will take command 1 as it's prerequisite even though reads do not
+						// need to wait on other reads. We could be smarter here and detect
+						// these cases, but the pessimism does not affect correctness.
+						//
+						// cmd 1 [R]:   -----
+						//                |
+						// cmd 2 [W]:   xxxxx
+						//                |
+						// cmd 3 [R]:   -----
+						//
+						// The interaction between commands' timestamps and their resulting
+						// dependencies (see rules in command_queue.go) will work as expected
+						// with regard to properly transferring dependencies. This is because
+						// these timestamp rules all exhibit a transitive relationship.
+						newCmd.prereqs = append(newCmd.prereqs, prereq.prereqs...)
 					case <-ctxDone:
 						err := ctx.Err()
 						errStr := fmt.Sprintf("%s while in command queue: %s", err, ba)
@@ -2104,7 +2104,6 @@ func (r *Replica) beginCmds(
 							newCmd.prereqs[j] = nil
 						}
 						newCmd.prereqs = newCmd.prereqs[i:]
-						newCmd.cancelled = true
 
 						// Remove the command from the command queue immediately. Dependents will
 						// transfer transitive dependencies when they try to block on this command.
