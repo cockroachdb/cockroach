@@ -34,12 +34,12 @@ type LeaseHolderCache struct {
 // NewLeaseHolderCache creates a new leaseHolderCache of the given size.
 // The underlying cache internally uses a hash map, so lookups
 // are cheap.
-func NewLeaseHolderCache(size int) *LeaseHolderCache {
+func NewLeaseHolderCache(size func() int64) *LeaseHolderCache {
 	return &LeaseHolderCache{
 		cache: cache.NewUnorderedCache(cache.Config{
 			Policy: cache.CacheLRU,
 			ShouldEvict: func(s int, key, value interface{}) bool {
-				return s > size
+				return int64(s) > size()
 			},
 		}),
 	}

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -40,10 +41,6 @@ const (
 	// The default maximum number of ranges to return from a range
 	// lookup.
 	defaultRangeLookupMaxRanges = 8
-	// The default size of the range lease holder cache.
-	defaultLeaseHolderCacheSize = 1 << 20
-	// The default size of the range descriptor cache.
-	defaultRangeDescriptorCacheSize = 1 << 20
 	// The default limit for asynchronous senders.
 	defaultSenderConcurrency = 500
 )
@@ -113,6 +110,7 @@ func (f firstRangeMissingError) Error() string {
 type DistSender struct {
 	log.AmbientContext
 
+	st *cluster.Settings
 	// nodeDescriptor, if set, holds the descriptor of the node the
 	// DistSender lives on. It should be accessed via getNodeDescriptor(),
 	// which tries to obtain the value from the Gossip network if the
@@ -145,23 +143,15 @@ var _ client.Sender = &DistSender{}
 type DistSenderConfig struct {
 	AmbientCtx log.AmbientContext
 
-	Clock                    *hlc.Clock
-	RangeDescriptorCacheSize int32
-	// RangeLookupMaxRanges sets how many ranges will be prefetched into the
-	// range descriptor cache when dispatching a range lookup request.
-	RangeLookupMaxRanges int32
-	LeaseHolderCacheSize int32
-	RPCRetryOptions      *retry.Options
+	Settings        *cluster.Settings
+	Clock           *hlc.Clock
+	RPCRetryOptions *retry.Options
 	// nodeDescriptor, if provided, is used to describe which node the DistSender
 	// lives on, for instance when deciding where to send RPCs.
 	// Usually it is filled in from the Gossip network on demand.
 	nodeDescriptor    *roachpb.NodeDescriptor
 	RPCContext        *rpc.Context
 	RangeDescriptorDB RangeDescriptorDB
-	// SenderConcurrency specifies the parallelization available when
-	// splitting batches into multiple requests when they span ranges.
-	// TODO(spencer): This is per-process. We should add a per-batch limit.
-	SenderConcurrency int32
 
 	TestingKnobs DistSenderTestingKnobs
 }
@@ -185,9 +175,13 @@ func (*DistSenderTestingKnobs) ModuleTestingKnobs() {}
 // defaults will be used.
 func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 	ds := &DistSender{
+		st:      cfg.Settings,
 		clock:   cfg.Clock,
 		gossip:  g,
 		metrics: makeDistSenderMetrics(),
+	}
+	if ds.st == nil {
+		ds.st = cluster.MakeTestingClusterSettings()
 	}
 
 	ds.AmbientContext = cfg.AmbientCtx
@@ -198,23 +192,13 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 	if cfg.nodeDescriptor != nil {
 		atomic.StorePointer(&ds.nodeDescriptor, unsafe.Pointer(cfg.nodeDescriptor))
 	}
-	rcSize := cfg.RangeDescriptorCacheSize
-	if rcSize <= 0 {
-		rcSize = defaultRangeDescriptorCacheSize
-	}
 	rdb := cfg.RangeDescriptorDB
 	if rdb == nil {
 		rdb = ds
 	}
-	ds.rangeCache = NewRangeDescriptorCache(rdb, int(rcSize))
-	lcSize := cfg.LeaseHolderCacheSize
-	if lcSize <= 0 {
-		lcSize = defaultLeaseHolderCacheSize
-	}
-	ds.leaseHolderCache = NewLeaseHolderCache(int(lcSize))
-	if cfg.RangeLookupMaxRanges <= 0 {
-		ds.rangeLookupMaxRanges = defaultRangeLookupMaxRanges
-	}
+	ds.rangeCache = NewRangeDescriptorCache(rdb, ds.st.RangeDescriptorCacheSize.Get)
+	ds.leaseHolderCache = NewLeaseHolderCache(ds.st.RangeDescriptorCacheSize.Get)
+	ds.rangeLookupMaxRanges = defaultRangeLookupMaxRanges
 	if tf := cfg.TestingKnobs.TransportFactory; tf != nil {
 		ds.transportFactory = tf
 	} else {
@@ -230,11 +214,7 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 			ds.rpcRetryOptions.Closer = ds.rpcContext.Stopper.ShouldQuiesce()
 		}
 	}
-	if cfg.SenderConcurrency != 0 {
-		ds.asyncSenderSem = make(chan struct{}, cfg.SenderConcurrency)
-	} else {
-		ds.asyncSenderSem = make(chan struct{}, defaultSenderConcurrency)
-	}
+	ds.asyncSenderSem = make(chan struct{}, defaultSenderConcurrency)
 
 	if g != nil {
 		ctx := ds.AnnotateCtx(context.Background())
