@@ -23,7 +23,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/synctest"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -985,8 +987,42 @@ func parseGossipValues(gossipInfo *gossip.InfoStatus) (string, error) {
 	return strings.Join(output, "\n"), nil
 }
 
+var debugSyncTestCmd = &cobra.Command{
+	Use:   "synctest [directory]",
+	Short: "Run a performance test for WAL sync speed",
+	Long: `
+`,
+	Hidden: true,
+	RunE:   MaybeDecorateGRPCError(runDebugSyncTest),
+}
+
+var syncTestOpts = synctest.Options{
+	Concurrency: 1,
+	Duration:    10 * time.Second,
+	LogOnly:     true,
+}
+
+func runDebugSyncTest(cmd *cobra.Command, args []string) error {
+	syncTestOpts.Dir = "./testdb"
+	if len(args) > 1 {
+		return fmt.Errorf("too many arguments")
+	}
+	if len(args) == 1 {
+		syncTestOpts.Dir = args[0]
+	}
+	return synctest.Run(syncTestOpts)
+}
+
 func init() {
 	debugCmd.AddCommand(debugCmds...)
+
+	f := debugSyncTestCmd.Flags()
+	f.IntVarP(&syncTestOpts.Concurrency, "concurrency", "c", syncTestOpts.Concurrency,
+		"number of concurrent writers")
+	f.DurationVarP(&syncTestOpts.Duration, "duration", "d", syncTestOpts.Duration,
+		"duration to run the test for")
+	f.BoolVarP(&syncTestOpts.LogOnly, "log-only", "l", syncTestOpts.LogOnly,
+		"only write to the WAL, not to sstables")
 }
 
 var debugCmds = []*cobra.Command{
@@ -1000,6 +1036,7 @@ var debugCmds = []*cobra.Command{
 	debugCompactCmd,
 	debugSSTablesCmd,
 	debugGossipValuesCmd,
+	debugSyncTestCmd,
 	debugEnvCmd,
 	debugZipCmd,
 }

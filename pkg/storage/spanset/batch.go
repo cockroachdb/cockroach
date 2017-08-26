@@ -288,6 +288,10 @@ func (s spanSetWriter) Put(key engine.MVCCKey, value []byte) error {
 	return s.w.Put(key, value)
 }
 
+func (s spanSetWriter) LogData(data []byte) error {
+	return s.w.LogData(data)
+}
+
 type spanSetReadWriter struct {
 	spanSetReader
 	spanSetWriter
