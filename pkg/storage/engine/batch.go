@@ -30,7 +30,7 @@ const (
 	BatchTypeDeletion BatchType = 0x0
 	BatchTypeValue              = 0x1
 	BatchTypeMerge              = 0x2
-	// BatchTypeLogData                              = 0x3
+	BatchTypeLogData            = 0x3
 	// BatchTypeColumnFamilyDeletion                 = 0x4
 	// BatchTypeColumnFamilyValue                    = 0x5
 	// BatchTypeColumnFamilyMerge                    = 0x6
@@ -239,6 +239,20 @@ func (b *RocksDBBatchBuilder) Clear(key MVCCKey) {
 	pos := len(b.repr)
 	b.encodeKey(key, 0)
 	b.repr[pos] = byte(BatchTypeDeletion)
+}
+
+// LogData adds a blob of log data to the batch. It will be written to the WAL,
+// but otherwise uninterpreted by RocksDB.
+func (b *RocksDBBatchBuilder) LogData(data []byte) {
+	b.maybeInit()
+	pos := len(b.repr)
+	b.grow(1 + maxVarintLen32 + len(data))
+	b.repr[pos] = byte(BatchTypeLogData)
+	pos++
+	n := putUvarint32(b.repr[pos:], uint32(len(data)))
+	b.repr = b.repr[:len(b.repr)-(maxVarintLen32-n)]
+	pos += n
+	copy(b.repr[pos:], data)
 }
 
 // ApplyRepr applies the mutations in repr to the current batch.
