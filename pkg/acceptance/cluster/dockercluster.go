@@ -95,7 +95,7 @@ func exists(path string) bool {
 	return true
 }
 
-func nodeStr(l *LocalCluster, i int) string {
+func nodeStr(l *DockerCluster, i int) string {
 	return fmt.Sprintf("roach-%s-%d", l.clusterID, i)
 }
 
@@ -129,10 +129,10 @@ type testNode struct {
 	stores  []testStore
 }
 
-// LocalCluster manages a local cockroach cluster running on docker. The
+// DockerCluster manages a local cockroach cluster running on docker. The
 // cluster is composed of a "volumes" container which manages the
 // persistent volumes used for certs and node data and N cockroach nodes.
-type LocalCluster struct {
+type DockerCluster struct {
 	client               client.APIClient
 	mu                   syncutil.Mutex // Protects the fields below
 	vols                 *Container
@@ -158,7 +158,7 @@ type LocalCluster struct {
 // supplied.
 func CreateLocal(
 	ctx context.Context, cfg TestConfig, logDir string, stopper *stop.Stopper,
-) *LocalCluster {
+) *DockerCluster {
 	select {
 	case <-stopper.ShouldStop():
 		// The stopper was already closed, exit early.
@@ -175,7 +175,7 @@ func CreateLocal(
 
 	clusterID := uuid.MakeV4()
 	clusterIDS := clusterID.Short()
-	// Only pass a nonzero logDir down to LocalCluster when instructed to keep
+	// Only pass a nonzero logDir down to DockerCluster when instructed to keep
 	// logs.
 	var uniqueLogDir string
 	logDirRemovable := false
@@ -191,7 +191,7 @@ func CreateLocal(
 		logDirRemovable = true
 		log.Infof(ctx, "local cluster log directory: %s", uniqueLogDir)
 	}
-	return &LocalCluster{
+	return &DockerCluster{
 		clusterID: clusterIDS,
 		client:    resilientDockerClient{APIClient: cli},
 		config:    cfg,
@@ -204,7 +204,7 @@ func CreateLocal(
 	}
 }
 
-func (l *LocalCluster) expectEvent(c *Container, msgs ...string) {
+func (l *DockerCluster) expectEvent(c *Container, msgs ...string) {
 	for index, ctr := range l.Nodes {
 		if c.id != ctr.id {
 			continue
@@ -224,7 +224,7 @@ func (l *LocalCluster) expectEvent(c *Container, msgs ...string) {
 // and die, after which it is removed. Not goroutine safe: only one OneShot
 // can be running at once.
 // Adds the same binds as the cluster containers (certs, binary, etc).
-func (l *LocalCluster) OneShot(
+func (l *DockerCluster) OneShot(
 	ctx context.Context,
 	ref string,
 	ipo types.ImagePullOptions,
@@ -261,7 +261,7 @@ func (l *LocalCluster) OneShot(
 // to tear down the cluster if a panic occurs while starting it. If the panic
 // was initiated by the stopper being closed (which panicOnStop notices) then
 // the process is exited with a failure code.
-func (l *LocalCluster) stopOnPanic(ctx context.Context) {
+func (l *DockerCluster) stopOnPanic(ctx context.Context) {
 	if r := recover(); r != nil {
 		l.stop(ctx)
 		if r != l {
@@ -275,7 +275,7 @@ func (l *LocalCluster) stopOnPanic(ctx context.Context) {
 // it has. This allows polling for whether to stop and avoids nasty locking
 // complications with trying to call Stop at arbitrary points such as in the
 // middle of creating a container.
-func (l *LocalCluster) panicOnStop() {
+func (l *DockerCluster) panicOnStop() {
 	if l.stopper == nil {
 		panic(l)
 	}
@@ -288,7 +288,7 @@ func (l *LocalCluster) panicOnStop() {
 	}
 }
 
-func (l *LocalCluster) createNetwork(ctx context.Context) {
+func (l *DockerCluster) createNetwork(ctx context.Context) {
 	l.panicOnStop()
 
 	l.networkName = fmt.Sprintf("%s-%s", networkPrefix, l.clusterID)
@@ -321,7 +321,7 @@ func (l *LocalCluster) createNetwork(ctx context.Context) {
 
 // create the volumes container that keeps all of the volumes used by
 // the cluster.
-func (l *LocalCluster) initCluster(ctx context.Context) {
+func (l *DockerCluster) initCluster(ctx context.Context) {
 	configJSON, err := json.Marshal(l.config)
 	maybePanic(err)
 	log.Infof(ctx, "Initializing Cluster %s:\n%s", l.config.Name, configJSON)
@@ -359,6 +359,9 @@ func (l *LocalCluster) initCluster(ctx context.Context) {
 	var nodeCount int
 	for _, nc := range l.config.Nodes {
 		for i := 0; i < int(nc.Count); i++ {
+			// FIXME(tschottdorf): this completely ignores the nodeCount. Really
+			// a TestConfig is a sequence of individual test clusters that need
+			// to be stood up. We can probably just rip this out.
 			newTestNode := &testNode{
 				config:  nc,
 				index:   nodeCount,
@@ -423,7 +426,7 @@ func cockroachEntrypoint() []string {
 
 // createRoach creates the docker container for a testNode. It may be called in
 // parallel to start many nodes at once, and thus should remain threadsafe.
-func (l *LocalCluster) createRoach(
+func (l *DockerCluster) createRoach(
 	ctx context.Context, node *testNode, vols *Container, env []string, cmd ...string,
 ) {
 	l.panicOnStop()
@@ -469,13 +472,13 @@ func (l *LocalCluster) createRoach(
 	maybePanic(err)
 }
 
-func (l *LocalCluster) createCACert() {
+func (l *DockerCluster) createCACert() {
 	maybePanic(security.CreateCAPair(
 		l.CertsDir, filepath.Join(l.CertsDir, security.EmbeddedCAKey),
 		keyLen, 96*time.Hour, false, false))
 }
 
-func (l *LocalCluster) createNodeCerts() {
+func (l *DockerCluster) createNodeCerts() {
 	nodes := []string{"localhost", dockerIP().String()}
 	for _, node := range l.Nodes {
 		nodes = append(nodes, node.nodeStr)
@@ -488,7 +491,7 @@ func (l *LocalCluster) createNodeCerts() {
 
 // startNode starts a Docker container to run testNode. It may be called in
 // parallel to start many nodes at once, and thus should remain threadsafe.
-func (l *LocalCluster) startNode(ctx context.Context, node *testNode) {
+func (l *DockerCluster) startNode(ctx context.Context, node *testNode) {
 	cmd := []string{
 		"start",
 		"--certs-dir=/certs/",
@@ -550,7 +553,7 @@ func (l *LocalCluster) startNode(ctx context.Context, node *testNode) {
 // RunInitCommand runs the `cockroach init` command. Normally called
 // automatically, but exposed for tests that use INIT_NONE. nodeIdx
 // may designate any node in the cluster as the target of the command.
-func (l *LocalCluster) RunInitCommand(ctx context.Context, nodeIdx int) {
+func (l *DockerCluster) RunInitCommand(ctx context.Context, nodeIdx int) {
 	containerConfig := container.Config{
 		Image:      *cockroachImage,
 		Entrypoint: cockroachEntrypoint(),
@@ -566,7 +569,7 @@ func (l *LocalCluster) RunInitCommand(ctx context.Context, nodeIdx int) {
 }
 
 // returns false is the event
-func (l *LocalCluster) processEvent(ctx context.Context, event events.Message) bool {
+func (l *DockerCluster) processEvent(ctx context.Context, event events.Message) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -614,7 +617,7 @@ func (l *LocalCluster) processEvent(ctx context.Context, event events.Message) b
 	return false
 }
 
-func (l *LocalCluster) monitor(ctx context.Context) {
+func (l *DockerCluster) monitor(ctx context.Context) {
 	if log.V(1) {
 		log.Infof(ctx, "events monitor starts")
 		defer log.Infof(ctx, "events monitor exits")
@@ -658,7 +661,7 @@ func (l *LocalCluster) monitor(ctx context.Context) {
 }
 
 // Start starts the cluster.
-func (l *LocalCluster) Start(ctx context.Context) {
+func (l *DockerCluster) Start(ctx context.Context) {
 	defer l.stopOnPanic(ctx)
 
 	l.mu.Lock()
@@ -694,7 +697,7 @@ func (l *LocalCluster) Start(ctx context.Context) {
 // expected to have been generated by the operations performed on the nodes in
 // the cluster (restart, kill, ...). In the event of a mismatch, the passed
 // Tester receives a fatal error.
-func (l *LocalCluster) Assert(ctx context.Context, t testing.TB) {
+func (l *DockerCluster) Assert(ctx context.Context, t testing.TB) {
 	const almostZero = 50 * time.Millisecond
 	filter := func(ch chan Event, wait time.Duration) *Event {
 		select {
@@ -727,13 +730,13 @@ func (l *LocalCluster) Assert(ctx context.Context, t testing.TB) {
 
 // AssertAndStop calls Assert and then stops the cluster. It is safe to stop
 // the cluster multiple times.
-func (l *LocalCluster) AssertAndStop(ctx context.Context, t testing.TB) {
+func (l *DockerCluster) AssertAndStop(ctx context.Context, t testing.TB) {
 	defer l.stop(ctx)
 	l.Assert(ctx, t)
 }
 
 // stop stops the cluster.
-func (l *LocalCluster) stop(ctx context.Context) {
+func (l *DockerCluster) stop(ctx context.Context) {
 	if *waitOnStop {
 		log.Infof(ctx, "waiting for interrupt")
 		<-l.stopper.ShouldStop()
@@ -802,7 +805,7 @@ func (l *LocalCluster) stop(ctx context.Context) {
 }
 
 // NewClient implements the Cluster interface.
-func (l *LocalCluster) NewClient(ctx context.Context, i int) (*roachClient.DB, error) {
+func (l *DockerCluster) NewClient(ctx context.Context, i int) (*roachClient.DB, error) {
 	clock := hlc.NewClock(hlc.UnixNano, 0)
 	rpcContext := rpc.NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, &base.Config{
 		User:        security.NodeUser,
@@ -816,7 +819,7 @@ func (l *LocalCluster) NewClient(ctx context.Context, i int) (*roachClient.DB, e
 }
 
 // InternalIP returns the IP address used for inter-node communication.
-func (l *LocalCluster) InternalIP(ctx context.Context, i int) net.IP {
+func (l *DockerCluster) InternalIP(ctx context.Context, i int) net.IP {
 	c := l.Nodes[i]
 	containerInfo, err := c.Inspect(ctx)
 	if err != nil {
@@ -826,7 +829,7 @@ func (l *LocalCluster) InternalIP(ctx context.Context, i int) net.IP {
 }
 
 // PGUrl returns a URL string for the given node postgres server.
-func (l *LocalCluster) PGUrl(ctx context.Context, i int) string {
+func (l *DockerCluster) PGUrl(ctx context.Context, i int) string {
 	certUser := security.RootUser
 	options := url.Values{}
 	options.Add("sslmode", "verify-full")
@@ -843,12 +846,12 @@ func (l *LocalCluster) PGUrl(ctx context.Context, i int) string {
 }
 
 // NumNodes returns the number of nodes in the cluster.
-func (l *LocalCluster) NumNodes() int {
+func (l *DockerCluster) NumNodes() int {
 	return len(l.Nodes)
 }
 
 // Kill kills the i-th node.
-func (l *LocalCluster) Kill(ctx context.Context, i int) error {
+func (l *DockerCluster) Kill(ctx context.Context, i int) error {
 	if err := l.Nodes[i].Kill(ctx); err != nil {
 		return errors.Wrapf(err, "failed to kill node %d", i)
 	}
@@ -856,7 +859,7 @@ func (l *LocalCluster) Kill(ctx context.Context, i int) error {
 }
 
 // Restart restarts the given node. If the node isn't running, this starts it.
-func (l *LocalCluster) Restart(ctx context.Context, i int) error {
+func (l *DockerCluster) Restart(ctx context.Context, i int) error {
 	// The default timeout is 10 seconds.
 	if err := l.Nodes[i].Restart(ctx, nil); err != nil {
 		return errors.Wrapf(err, "failed to restart node %d", i)
@@ -865,22 +868,22 @@ func (l *LocalCluster) Restart(ctx context.Context, i int) error {
 }
 
 // URL returns the base url.
-func (l *LocalCluster) URL(ctx context.Context, i int) string {
+func (l *DockerCluster) URL(ctx context.Context, i int) string {
 	return "https://" + l.Nodes[i].Addr(ctx, defaultHTTP).String()
 }
 
 // Addr returns the host and port from the node in the format HOST:PORT.
-func (l *LocalCluster) Addr(ctx context.Context, i int, port string) string {
+func (l *DockerCluster) Addr(ctx context.Context, i int, port string) string {
 	return l.Nodes[i].Addr(ctx, nat.Port(port+"/tcp")).String()
 }
 
 // Hostname implements the Cluster interface.
-func (l *LocalCluster) Hostname(i int) string {
+func (l *DockerCluster) Hostname(i int) string {
 	return l.Nodes[i].nodeStr
 }
 
-// ExecCLI runs ./cockroach <args>.
-func (l *LocalCluster) ExecCLI(ctx context.Context, i int, cmd []string) (string, string, error) {
+// ExecCLI runs ./cockroach <args> with sane defaults.
+func (l *DockerCluster) ExecCLI(ctx context.Context, i int, cmd []string) (string, string, error) {
 	cmd = append([]string{"--host", l.Hostname(i), "--certs-dir=/certs"}, cmd...)
 	cfg := types.ExecConfig{
 		User:         "root",
@@ -939,8 +942,8 @@ func ensureLogDirExists(logDir string) {
 }
 
 // Cleanup removes the log directory if it was initially created
-// by this LocalCluster.
-func (l *LocalCluster) Cleanup(ctx context.Context) {
+// by this DockerCluster.
+func (l *DockerCluster) Cleanup(ctx context.Context) {
 	if l.logDir != "" && l.logDirRemovable {
 		if err := os.RemoveAll(l.logDir); err != nil {
 			log.Warning(ctx, err)

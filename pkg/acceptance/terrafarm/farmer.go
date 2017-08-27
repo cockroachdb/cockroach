@@ -423,7 +423,7 @@ func (f *Farmer) AssertAndStop(ctx context.Context, t testing.TB) {
 	f.MustDestroy(t)
 }
 
-// ExecCLI runs ./cockroach <args>.
+// ExecCLI runs ./cockroach <args> with sane defaults.
 func (f *Farmer) ExecCLI(ctx context.Context, i int, cmd []string) (string, string, error) {
 	// TODO(tschottdorf): This doesn't handle escapes properly. May it never
 	// have to.
