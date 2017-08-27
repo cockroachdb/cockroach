@@ -1799,7 +1799,20 @@ func (e *Executor) execStmtInOpenTxn(
 		// statements outside of a transaction are run synchronously with mocked
 		// results, which has the same effect as running asynchronously but
 		// immediately blocking.
-		err = e.execStmtInParallel(stmt, p, res)
+		err = func() error {
+			plan, err := e.execStmtInParallel(stmt, p)
+			if err != nil {
+				return err
+			}
+			// Produce mocked out results for the query - the "zero value" of the
+			// statement's result type:
+			// - parser.Rows -> an empty set of rows
+			// - parser.RowsAffected -> zero rows affected
+			if err := initStatementResult(res, stmt, plan); err != nil {
+				return err
+			}
+			return res.CloseResult()
+		}()
 	} else {
 		p.autoCommit = txnState.implicitTxn && !e.cfg.TestingKnobs.DisableAutoCommit
 		err = e.execStmt(stmt, p, automaticRetryCount, res)
@@ -2178,18 +2191,20 @@ func (e *Executor) execStmt(
 	return res.CloseResult()
 }
 
-// execStmtInParallel executes the statement asynchronously and writes mocked
-// out results to res. These mocked out results will be the "zero value"
-// of the statement's result type:
-// - parser.Rows -> an empty set of rows
-// - parser.RowsAffected -> zero rows affected
+// execStmtInParallel executes a query asynchronously: the query will wait for
+// all other currently executing async queries which are not independent, and
+// then it will run.
+// Async queries don't produce results (apart from errors). This method returns
+// the query's plan which can be used by the caller to return mocked results
+// with the right schema to the client. Note that planning needs to be done
+// synchronously because it's needed by the query dependency analysis.
 //
 // TODO(nvanbenschoten): We do not currently support parallelizing distributed SQL
 // queries, so this method can only be used with classical SQL.
 // TODO(andrei): the mocking of results business should be done by the caller.
 func (e *Executor) execStmtInParallel(
-	stmt Statement, planner *planner, res StatementResult,
-) (retErr error) {
+	stmt Statement, planner *planner,
+) (plan planNode, retErr error) {
 	session := planner.session
 	ctx := session.Ctx()
 	params := runParams{
@@ -2199,12 +2214,7 @@ func (e *Executor) execStmtInParallel(
 
 	plan, err := planner.makePlan(ctx, stmt)
 	if err != nil {
-		return err
-	}
-
-	err = initStatementResult(res, stmt, plan)
-	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// This ensures we don't unintentionally clean up the queryMeta object when we
@@ -2237,10 +2247,10 @@ func (e *Executor) execStmtInParallel(
 		session.removeActiveQuery(stmt.queryID)
 		return err
 	}); err != nil {
-		return err
+		return nil, err
 	}
 
-	return res.CloseResult()
+	return plan, nil
 }
 
 // updateStmtCounts updates metrics for the number of times the different types of SQL
