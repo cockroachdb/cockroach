@@ -143,7 +143,7 @@ func (b *sstBatcher) Finish(ctx context.Context, db *client.DB) error {
 	for i := 0; ; i++ {
 		log.VEventf(ctx, 2, "sending AddSSTable [%s,%s)", start, end)
 		// TODO(dan): This will fail if the range has split.
-		err := db.ExperimentalAddSSTable(ctx, start, end, sstBytes)
+		err := db.AddSSTable(ctx, start, end, sstBytes)
 		if err == nil {
 			return nil
 		}
