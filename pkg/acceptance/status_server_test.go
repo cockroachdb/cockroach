@@ -106,7 +106,9 @@ func TestStatusServer(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	runTestOnConfigs(t, testStatusServerInner)
+	RunLocal(t, func(t *testing.T) {
+		runTestOnConfigs(t, testStatusServerInner)
+	})
 }
 
 func testStatusServerInner(

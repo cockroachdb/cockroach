@@ -344,17 +344,17 @@ func runDecommissionNodeImpl(
 				fmt.Fprintln(os.Stdout, "Decommissioning finished. Please verify cluster health "+
 					"before removing the nodes.")
 			}
-			break
+			return nil
 		}
 		if wait == nodeDecommissionWaitNone {
-			break
+			return nil
 		}
 		if replicaCount < minReplicaCount {
 			minReplicaCount = replicaCount
 			r.Reset()
 		}
 	}
-	return nil
+	return errors.New("maximum number of retries exceeded")
 }
 
 // decommissionResponseValueToRows converts DecommissionStatusResponse_Status to
