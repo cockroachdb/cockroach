@@ -82,9 +82,8 @@ type cmd struct {
 	expanded bool // have the children been added
 	children []cmd
 
-	prereqs   []*cmd
-	pending   chan struct{} // closed when complete
-	cancelled bool
+	prereqs []*cmd
+	pending chan struct{} // closed when complete
 }
 
 // ID implements interval.Interface.
@@ -131,6 +130,100 @@ func (c *cmd) String() string {
 		}
 	}
 	return buf.String()
+}
+
+// PendingPrereq returns the prerequisite command that should be waited on next,
+// or nil if the receiver has no more prerequisites to wait on.
+func (c *cmd) PendingPrereq() *cmd {
+	if len(c.prereqs) == 0 {
+		return nil
+	}
+	return c.prereqs[0]
+}
+
+// ResolvePendingPrereq removes the first prerequisite in the cmd's prereq
+// slice. While doing so, transfer any prerequisites of this prereq that were
+// still pending when this prereq was removed from the CommandQueue.
+//
+// cmd.PendingPrereq().pending must be closed for this call to be safe.
+func (c *cmd) ResolvePendingPrereq() {
+	pre := c.PendingPrereq()
+	if pre == nil {
+		panic("ResolvePendingPrereq with no pending prereq")
+	}
+
+	// Either the prerequisite command finished executing or it was cancelled.
+	// If the command finished cleanly, there's nothing for us to do except
+	// remove it from our list and wait for the next prerequisite to finish.
+	// Here, len(prereq.prereqs) == 0 so the append below will be a no-op.
+	// Removing the prereq from our own list is important so that it is not
+	// transferred to our dependents when we finish pending (either from
+	// completion or cancellation).
+	//
+	// If the prerequisite command was cancelled, we have to handle the
+	// cancellation here. We do this by migrating transitive dependencies from
+	// cancelled prerequisite to the current command. All prerequisites of the
+	// prerequisite that was just cancelled that were still pending at the time
+	// of cancellation are now this command's direct prerequisites. The append
+	// does not need to be synchronized, because prereq.prereqs will only ever
+	// be mutated on the other side of the prereq.pending closing, which the Go
+	// Memory Model promises is safe.
+	//
+	// While it may be possible that some of these transitive dependencies no
+	// longer overlap the current command, they are still required, because they
+	// themselves might be dependent on a command that overlaps both the current
+	// and prerequisite command.
+	//
+	// For instance, take the following dependency graph, where command 3 was
+	// cancelled. We need to set command 2 as a prerequisite of command 4 even
+	// though they do not overlap because command 2 has a dependency on command
+	// 1, which does overlap command 4. We could try to catch this situation and
+	// set command 1 as a prerequisite of command 4 directly, but this approach
+	// would require much more complexity and would need to traverse all the way
+	// up the dependency graph in the worst case.
+	//
+	//  cmd 1:   -------------
+	//                     |
+	//  cmd 2:           -----
+	//                     |
+	//  cmd 3:     xxxxxxxxxxx
+	//              |
+	//  cmd 4:   -----
+	//
+	// It is also be possible that some of the transitive dependencies are
+	// unnecessary and that we're being pessimistic here. An example case for
+	// this is shown in the following dependency graph, where a write separating
+	// two reads is cancelled. During the cancellation, command 3 will take
+	// command 1 as it's prerequisite even though reads do not need to wait on
+	// other reads. We could be smarter here and detect these cases, but the
+	// pessimism does not affect correctness.
+	//
+	// cmd 1 [R]:   -----
+	//                |
+	// cmd 2 [W]:   xxxxx
+	//                |
+	// cmd 3 [R]:   -----
+	//
+	// The interaction between commands' timestamps and their resulting
+	// dependencies (see rules in command_queue.go) will work as expected with
+	// regard to properly transferring dependencies. This is because these
+	// timestamp rules all exhibit a transitive relationship.
+	c.prereqs = append(c.prereqs, pre.prereqs...)
+
+	// Truncate the command's prerequisite list so that it no longer includes
+	// the first prerequisite. Before doing so, nil out prefix of slice to allow
+	// GC of the first command. This prevents us from leaking large chunks of
+	// the dependency graph.
+	c.prereqs[0] = nil
+	c.prereqs = c.prereqs[1:]
+
+	// Keep the prereq list in all child commands in-sync in case dependents
+	// have dependencies on the expanded child commands instead of the parent
+	// command. If we didn't keep them in-sync, cancellation may not properly
+	// transfer all dependencies.
+	for i := range c.children {
+		c.children[i].prereqs = c.prereqs
+	}
 }
 
 // NewCommandQueue returns a new command queue. The boolean specifies whether
@@ -579,6 +672,8 @@ func (cq *CommandQueue) add(
 			child.key = span.AsRange()
 			child.readOnly = readOnly
 			child.timestamp = timestamp
+			child.prereqs = prereqs
+
 			child.expanded = true
 		}
 	}
