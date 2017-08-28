@@ -16,7 +16,7 @@ CockroachDB Community License Agreement
      Agreement, the terms below have the following meanings.
 
     (a) "CockroachDB" shall mean the SQL database software provided by Cockroach
-        Labs, including both CockroachDB Community and CockroachDB Enterprise
+        Labs, including both CockroachDB Core and CockroachDB Enterprise
         editions, as defined below.
 
     (b) "CockroachDB Core" shall mean the open source version of
@@ -103,7 +103,7 @@ CockroachDB Community License Agreement
 
         for full terms.  CockroachDB Core is a no-cost, entry-level
         license and as such, contains the following disclaimers: NOTWITHSTANDING
-        ANYTHING TO THE CONTRARY HEREIN, COCKROACHDB COMMUNITY EDITION IS
+        ANYTHING TO THE CONTRARY HEREIN, COCKROACHDB CORE IS
         PROVIDED "AS IS" AND "AS AVAILABLE", AND ALL EXPRESS OR IMPLIED
         WARRANTIES ARE EXCLUDED AND DISCLAIMED, INCLUDING WITHOUT LIMITATION THE
         IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
