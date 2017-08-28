@@ -107,7 +107,7 @@ func TestStatusServer(t *testing.T) {
 	defer s.Close(t)
 
 	RunLocal(t, func(t *testing.T) {
-		runTestOnConfigs(t, testStatusServerInner)
+		runTestWithCluster(t, testStatusServerInner)
 	})
 }
 

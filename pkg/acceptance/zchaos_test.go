@@ -339,7 +339,7 @@ func TestClusterRecovery(t *testing.T) {
 	// TODO(tschottdorf): should run via RunLocal, but only if we manage to deal
 	// with the loss of Gossip connectivity due to ever-changing ports.
 	RunDocker(t, func(t *testing.T) {
-		runTestOnConfigs(t, testClusterRecoveryInner)
+		runTestWithCluster(t, testClusterRecoveryInner)
 	})
 }
 
@@ -399,11 +399,9 @@ func testClusterRecoveryInner(
 // than the one the client is connected to is being restarted periodically.
 // The test measures read/write performance in the presence of restarts.
 func TestNodeRestart(t *testing.T) {
-	s := log.Scope(t)
-	defer s.Close(t)
 
 	RunLocal(t, func(t *testing.T) {
-		runTestOnConfigs(t, testNodeRestartInner)
+		runTestWithCluster(t, testNodeRestartInner)
 	})
 }
 
