@@ -299,7 +299,7 @@ func TestImportStmt(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(t, tc.Conns[0])
+	conn := tc.Conns[0]
 
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
@@ -429,6 +429,7 @@ func TestImportStmt(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			sqlDB := sqlutils.MakeSQLRunner(t, conn)
 			sqlDB.Exec(fmt.Sprintf(`CREATE DATABASE csv%d`, i))
 			sqlDB.Exec(fmt.Sprintf(`SET DATABASE = csv%d`, i))
 
