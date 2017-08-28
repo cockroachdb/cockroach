@@ -19,6 +19,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -47,11 +48,30 @@ func singleKVSSTable(key engine.MVCCKey, value []byte) ([]byte, error) {
 
 func TestDBAddSSTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Run("store=in-memory", func(t *testing.T) {
+		s, _, db := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+		ctx := context.Background()
+		defer s.Stopper().Stop(ctx)
+		runTestDBAddSSTable(ctx, t, db)
+	})
+	t.Run("store=on-disk", func(t *testing.T) {
+		dir, dirCleanupFn := testutils.TempDir(t)
+		defer dirCleanupFn()
 
-	s, _, db := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
-	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
+		storeSpec := base.DefaultTestStoreSpec
+		storeSpec.InMemory = false
+		storeSpec.Path = dir
+		s, _, db := serverutils.StartServer(t, base.TestServerArgs{
+			Insecure:   true,
+			StoreSpecs: []base.StoreSpec{storeSpec},
+		})
+		ctx := context.Background()
+		defer s.Stopper().Stop(ctx)
+		runTestDBAddSSTable(ctx, t, db)
+	})
+}
 
+func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB) {
 	{
 		key := engine.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 2}}
 		data, err := singleKVSSTable(key, roachpb.MakeValueFromString("1").RawBytes)
