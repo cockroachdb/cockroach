@@ -2425,6 +2425,55 @@ func TestReplicaCommandQueueCancellationRandom(t *testing.T) {
 	}
 }
 
+func TestReplicaCommandQueueCancellation16266(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var instrs []cancelInstr
+	now := hlc.Timestamp{WallTime: cmdQCancelTestTimestamp}
+	txn := roachpb.MakeTransaction("txn", roachpb.Key("foobar"), 0, enginepb.SERIALIZABLE, now, 0)
+
+	// Used only to block the other requests. Not a necessary part of the
+	// scenerio. See the comment on RunWithoutInitialSpan.
+	heartbeatBa := roachpb.BatchRequest{}
+	heartbeatBa.Timestamp = now
+	heartbeatBa.Txn = &txn
+	heartbeatBa.Add(&roachpb.HeartbeatTxnRequest{
+		Span: roachpb.Span{
+			Key: txn.Key,
+		},
+		Now: now,
+	})
+
+	endTxnBa := roachpb.BatchRequest{}
+	endTxnBa.Timestamp = now
+	endTxnBa.Txn = &txn
+	endTxnBa.Add(&roachpb.EndTransactionRequest{
+		Span: roachpb.Span{
+			Key: txn.Key,
+		},
+		Commit: true,
+	})
+
+	pushBa := roachpb.BatchRequest{}
+	pushBa.Timestamp = now
+	pushBa.Add(&roachpb.PushTxnRequest{
+		Span: roachpb.Span{
+			Key: txn.Key,
+		},
+		PusheeTxn: txn.TxnMeta,
+		Now:       now,
+		PushType:  roachpb.PUSH_ABORT,
+		Force:     true,
+	})
+
+	ct := newCmdQCancelTest(t)
+	instrs = append(instrs, cancelInstr{reqOverride: &heartbeatBa, expErr: "record not present"})
+	instrs = append(instrs, cancelInstr{reqOverride: &endTxnBa, expErr: "does not exist"})
+	instrs = append(instrs, cancelInstr{reqOverride: &pushBa})
+	instrs = append(instrs, cancelInstr{reqOverride: &pushBa})
+	ct.RunWithoutInitialSpan(instrs, []int{2})
+}
+
 type cancelInstr struct {
 	span        roachpb.Span
 	reqOverride *roachpb.BatchRequest // overrides span when present
