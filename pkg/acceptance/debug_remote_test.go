@@ -39,7 +39,7 @@ func testDebugRemote(t *testing.T) {
 	cfg := cluster.TestConfig{
 		Name:     "TestDebugRemote",
 		Duration: *flagDuration,
-		Nodes:    []cluster.NodeConfig{{Stores: []cluster.StoreConfig{{Count: 1}}}},
+		Nodes:    []cluster.NodeConfig{{Stores: []cluster.StoreConfig{{}}}},
 	}
 	ctx := context.Background()
 	l := StartCluster(ctx, t, cfg).(*cluster.DockerCluster)
