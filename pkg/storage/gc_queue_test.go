@@ -398,11 +398,11 @@ func TestGCQueueProcess(t *testing.T) {
 		del bool
 		txn bool
 	}{
-		// For key1, we expect first value to GC.
+		// For key1, we expect first and second value to GC.
 		{key1, ts1, false, false},
 		{key1, ts2, false, false},
 		{key1, ts5, false, false},
-		// For key2, we expect values to GC, even though most recent is deletion.
+		// For key2, we expect first and second values to GC, even though most recent is deletion.
 		{key2, ts1, false, false},
 		{key2, ts2m1, false, false}, // use a value < the GC time to verify it's kept
 		{key2, ts5, true, false},
@@ -432,7 +432,7 @@ func TestGCQueueProcess(t *testing.T) {
 		{key10, ts3, true, false},
 		{key10, ts4, false, false},
 		{key10, ts5, false, false},
-		// For key11, we can't GC anything because ts1 isn't a delete.
+		// For key11, expect oldest value to GC.
 		{key11, ts1, false, false},
 		{key11, ts3, true, false},
 		{key11, ts4, true, false},
@@ -487,9 +487,7 @@ func TestGCQueueProcess(t *testing.T) {
 		ts  hlc.Timestamp
 	}{
 		{key1, ts5},
-		{key1, ts2},
 		{key2, ts5},
-		{key2, ts2m1},
 		{key3, hlc.Timestamp{}},
 		{key3, ts5},
 		{key3, ts2},
@@ -507,7 +505,6 @@ func TestGCQueueProcess(t *testing.T) {
 		{key11, ts5},
 		{key11, ts4},
 		{key11, ts3},
-		{key11, ts1},
 	}
 	// Read data directly from engine to avoid intent errors from MVCC.
 	kvs, err := engine.Scan(tc.store.Engine(), engine.MakeMVCCMetadataKey(key1),

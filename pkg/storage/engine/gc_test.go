@@ -30,6 +30,7 @@ func mvccVersionKey(key roachpb.Key, ts hlc.Timestamp) MVCCKey {
 var (
 	aKey  = roachpb.Key("a")
 	bKey  = roachpb.Key("b")
+	cKey  = roachpb.Key("c")
 	aKeys = []MVCCKey{
 		mvccVersionKey(aKey, hlc.Timestamp{WallTime: 2E9, Logical: 0}),
 		mvccVersionKey(aKey, hlc.Timestamp{WallTime: 1E9, Logical: 1}),
@@ -39,6 +40,11 @@ var (
 		mvccVersionKey(bKey, hlc.Timestamp{WallTime: 2E9, Logical: 0}),
 		mvccVersionKey(bKey, hlc.Timestamp{WallTime: 1E9, Logical: 0}),
 	}
+	cKeys = []MVCCKey{
+		mvccVersionKey(cKey, hlc.Timestamp{WallTime: 5E9, Logical: 0}),
+		mvccVersionKey(cKey, hlc.Timestamp{WallTime: 3E9, Logical: 0}),
+		mvccVersionKey(cKey, hlc.Timestamp{WallTime: 1E9, Logical: 0}),
+	}
 )
 
 // TestGarbageCollectorFilter verifies the filter policies for
@@ -47,6 +53,7 @@ func TestGarbageCollectorFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	gcA := MakeGarbageCollector(hlc.Timestamp{WallTime: 0, Logical: 0}, config.GCPolicy{TTLSeconds: 1})
 	gcB := MakeGarbageCollector(hlc.Timestamp{WallTime: 0, Logical: 0}, config.GCPolicy{TTLSeconds: 2})
+	gcC := MakeGarbageCollector(hlc.Timestamp{WallTime: 0, Logical: 0}, config.GCPolicy{TTLSeconds: 1})
 	n := []byte("data")
 	d := []byte(nil)
 	testData := []struct {
@@ -62,18 +69,19 @@ func TestGarbageCollectorFilter(t *testing.T) {
 		{gcB, hlc.Timestamp{WallTime: 0, Logical: 0}, bKeys, [][]byte{d, d}, hlc.Timestamp{}},
 		{gcA, hlc.Timestamp{WallTime: 1E9, Logical: 0}, aKeys, [][]byte{n, n, n}, hlc.Timestamp{}},
 		{gcB, hlc.Timestamp{WallTime: 1E9, Logical: 0}, bKeys, [][]byte{n, n}, hlc.Timestamp{}},
-		{gcA, hlc.Timestamp{WallTime: 2E9, Logical: 0}, aKeys, [][]byte{n, n, n}, hlc.Timestamp{}},
+		{gcA, hlc.Timestamp{WallTime: 2E9, Logical: 0}, aKeys, [][]byte{n, n, n}, hlc.Timestamp{WallTime: 1E9, Logical: 0}},
 		{gcA, hlc.Timestamp{WallTime: 2E9, Logical: 0}, aKeys, [][]byte{d, d, d}, hlc.Timestamp{WallTime: 1E9, Logical: 0}},
 		{gcB, hlc.Timestamp{WallTime: 2E9, Logical: 0}, bKeys, [][]byte{n, n}, hlc.Timestamp{}},
 		{gcA, hlc.Timestamp{WallTime: 3E9, Logical: 0}, aKeys, [][]byte{n, n, n}, hlc.Timestamp{WallTime: 1E9, Logical: 1}},
 		{gcA, hlc.Timestamp{WallTime: 3E9, Logical: 0}, aKeys, [][]byte{d, n, n}, hlc.Timestamp{WallTime: 2E9, Logical: 0}},
-		{gcB, hlc.Timestamp{WallTime: 3E9, Logical: 0}, bKeys, [][]byte{n, n}, hlc.Timestamp{}},
+		{gcB, hlc.Timestamp{WallTime: 3E9, Logical: 0}, bKeys, [][]byte{n, n}, hlc.Timestamp{WallTime: 1E9, Logical: 0}},
 		{gcA, hlc.Timestamp{WallTime: 4E9, Logical: 0}, aKeys, [][]byte{n, n, n}, hlc.Timestamp{WallTime: 1E9, Logical: 1}},
 		{gcB, hlc.Timestamp{WallTime: 4E9, Logical: 0}, bKeys, [][]byte{n, n}, hlc.Timestamp{WallTime: 1E9, Logical: 0}},
 		{gcB, hlc.Timestamp{WallTime: 4E9, Logical: 0}, bKeys, [][]byte{d, n}, hlc.Timestamp{WallTime: 2E9, Logical: 0}},
 		{gcA, hlc.Timestamp{WallTime: 5E9, Logical: 0}, aKeys, [][]byte{n, n, n}, hlc.Timestamp{WallTime: 1E9, Logical: 1}},
 		{gcB, hlc.Timestamp{WallTime: 5E9, Logical: 0}, bKeys, [][]byte{n, n}, hlc.Timestamp{WallTime: 1E9, Logical: 0}},
 		{gcB, hlc.Timestamp{WallTime: 5E9, Logical: 0}, bKeys, [][]byte{d, n}, hlc.Timestamp{WallTime: 2E9, Logical: 0}},
+		{gcC, hlc.Timestamp{WallTime: 4E9, Logical: 0}, cKeys, [][]byte{n, n, n}, hlc.Timestamp{WallTime: 3E9, Logical: 0}},
 	}
 	for i, test := range testData {
 		test.gc.Threshold = test.time
