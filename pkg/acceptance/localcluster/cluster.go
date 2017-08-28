@@ -76,7 +76,8 @@ type ClusterConfig struct {
 	Binary      string             // path to cockroach, defaults go <cockroach_repo>/cockroach
 	AllNodeArgs []string           // args to pass to ./cockroach on all nodes
 	NumNodes    int                // number of nodes in the cluster
-	DataDir     string             // nodes will use storage DataDir/<i>
+	DataDir     string             // node i will use storage DataDir/<i>
+	LogDir      string             // when empty, node i defaults to DataDir/<i>/logs
 	PerNodeCfg  map[int]NodeConfig // optional map of nodeIndex -> configuration
 	DB          string             // database to configure DB connection for
 	NumWorkers  int                // SetMaxOpenConns to use for DB connection
@@ -85,7 +86,9 @@ type ClusterConfig struct {
 // NodeConfig is a configuration for a node in a Cluster. Options with the zero
 // value are typically populated from the corresponding Cluster's ClusterConfig.
 type NodeConfig struct {
-	DataDir           string
+	Binary            string   // when specified, overrides the node's binary
+	DataDir           string   // when specified, overrides the node's data dir
+	LogDir            string   // when specified, overrides the node's log dir
 	Addr              string   // listening host, defaults to 127.0.0.1
 	ExtraArgs         []string // extra arguments for ./cockroach start
 	ExtraEnv          []string // environment variables in format key=value
@@ -155,8 +158,14 @@ func (c *Cluster) Start() {
 	chs := make([]<-chan error, len(c.Nodes))
 	for i := range c.Nodes {
 		cfg := c.cfg.PerNodeCfg[i] // zero value is ok
+		if cfg.Binary == "" {
+			cfg.Binary = c.cfg.Binary
+		}
 		if cfg.DataDir == "" {
 			cfg.DataDir = filepath.Join(c.cfg.DataDir, fmt.Sprintf("%d", i+1))
+		}
+		if cfg.LogDir == "" && c.cfg.LogDir != "" {
+			cfg.LogDir = filepath.Join(c.cfg.LogDir, fmt.Sprintf("%d", i+1))
 		}
 		if cfg.Addr == "" {
 			cfg.Addr = "127.0.0.1"
@@ -168,7 +177,7 @@ func (c *Cluster) Start() {
 			cfg.NumWorkers = c.cfg.NumWorkers
 		}
 		cfg.ExtraArgs = append(append([]string(nil), c.cfg.AllNodeArgs...), cfg.ExtraArgs...)
-		c.Nodes[i], chs[i] = c.makeNode(i, c.cfg.Binary, cfg)
+		c.Nodes[i], chs[i] = c.makeNode(i, cfg)
 		if i == 0 && cfg.RPCPort == 0 {
 			// The first node must know its RPCPort or we can't possibly tell
 			// the other nodes the correct one to go to.
@@ -232,13 +241,13 @@ func (c *Cluster) HTTPPort(nodeIdx int) string {
 	return c.Nodes[nodeIdx].HTTPPort()
 }
 
-func (c *Cluster) makeNode(nodeIdx int, binary string, cfg NodeConfig) (*Node, <-chan error) {
+func (c *Cluster) makeNode(nodeIdx int, cfg NodeConfig) (*Node, <-chan error) {
 	node := &Node{
 		cfg: cfg,
 	}
 
 	args := []string{
-		binary,
+		cfg.Binary,
 		"start",
 		"--insecure",
 		fmt.Sprintf("--host=%s", node.IPAddr()),
@@ -443,7 +452,10 @@ func (n *Node) Alive() bool {
 }
 
 func (n *Node) logDir() string {
-	return filepath.Join(n.cfg.DataDir, "logs")
+	if n.cfg.LogDir == "" {
+		return filepath.Join(n.cfg.DataDir, "logs")
+	}
+	return n.cfg.LogDir
 }
 
 func (n *Node) listeningURLFile() string {
