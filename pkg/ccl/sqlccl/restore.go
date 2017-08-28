@@ -857,7 +857,7 @@ func restorePlanHook(
 		return nil, nil, nil
 	}
 	if err := utilccl.CheckEnterpriseEnabled(
-		p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization.Get(), "RESTORE",
+		p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "RESTORE",
 	); err != nil {
 		return nil, nil, err
 	}

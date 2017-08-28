@@ -34,18 +34,18 @@ func (*ByteSizeSetting) Typ() string {
 	return "z"
 }
 
-func (b *ByteSizeSetting) String() string {
-	return humanizeutil.IBytes(b.Get())
+func (b *ByteSizeSetting) String(sv *Values) string {
+	return humanizeutil.IBytes(b.Get(sv))
 }
 
 // RegisterByteSizeSetting defines a new setting with type bytesize.
-func (r *Registry) RegisterByteSizeSetting(key, desc string, defaultValue int64) *ByteSizeSetting {
-	return r.RegisterValidatedByteSizeSetting(key, desc, defaultValue, nil)
+func RegisterByteSizeSetting(key, desc string, defaultValue int64) *ByteSizeSetting {
+	return RegisterValidatedByteSizeSetting(key, desc, defaultValue, nil)
 }
 
 // RegisterValidatedByteSizeSetting defines a new setting with type bytesize
 // with a validation function.
-func (r *Registry) RegisterValidatedByteSizeSetting(
+func RegisterValidatedByteSizeSetting(
 	key, desc string, defaultValue int64, validateFn func(int64) error,
 ) *ByteSizeSetting {
 	if validateFn != nil {
@@ -57,22 +57,6 @@ func (r *Registry) RegisterValidatedByteSizeSetting(
 		defaultValue: defaultValue,
 		validateFn:   validateFn,
 	}}
-	r.register(key, desc, setting)
+	register(key, desc, setting)
 	return setting
-}
-
-// TestingSetByteSize returns a mock bytesize setting for testing. See
-// TestingSetBool for more details.
-func TestingSetByteSize(s **ByteSizeSetting, v int64) func() {
-	saved := *s
-	*s = &ByteSizeSetting{IntSetting{v: v}}
-	return func() {
-		*s = saved
-	}
-}
-
-// OnChange registers a callback to be called when the setting changes.
-func (b *ByteSizeSetting) OnChange(fn func()) *ByteSizeSetting {
-	b.setOnChange(fn)
-	return b
 }

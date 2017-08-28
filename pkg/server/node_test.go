@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -106,13 +105,13 @@ func createTestNode(
 		active,
 		renewal,
 	)
+	storage.TimeUntilStoreDead.Override(&cfg.Settings.SV, 10*time.Millisecond)
 	cfg.StorePool = storage.NewStorePool(
 		cfg.AmbientCtx,
 		st,
 		cfg.Gossip,
 		cfg.Clock,
 		storage.MakeStorePoolNodeLivenessFunc(cfg.NodeLiveness),
-		settings.TestingDuration(time.Millisecond*10),
 		/* deterministic */ false,
 	)
 	metricsRecorder := status.NewMetricsRecorder(cfg.Clock, cfg.NodeLiveness,

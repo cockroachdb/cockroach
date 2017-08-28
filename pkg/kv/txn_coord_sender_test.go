@@ -1681,12 +1681,11 @@ func TestTooManyIntents(t *testing.T) {
 
 	st := s.Store.ClusterSettings()
 	st.Manual.Store(true)
-	maxIntents := st.MaxIntents
 
-	maxIntents.Override(3)
+	maxIntents.Override(&st.SV, 3)
 
 	txn := client.NewTxn(s.DB)
-	for i := 0; i < int(maxIntents.Get()); i++ {
+	for i := 0; i < int(maxIntents.Get(&st.SV)); i++ {
 		key := roachpb.Key(fmt.Sprintf("a%d", i))
 		if pErr := txn.Put(ctx, key, []byte("value")); pErr != nil {
 			t.Fatal(pErr)
@@ -1695,7 +1694,7 @@ func TestTooManyIntents(t *testing.T) {
 	// The request that puts us over the limit causes an error. Note
 	// that this is a best-effort detection after the intents are
 	// written.
-	key := roachpb.Key(fmt.Sprintf("a%d", maxIntents.Get()))
+	key := roachpb.Key(fmt.Sprintf("a%d", maxIntents.Get(&st.SV)))
 	if err := txn.Put(ctx, key, []byte("value")); !testutils.IsError(err,
 		"transaction is too large") {
 		t.Fatalf("did not get expected error: %v", err)
@@ -1711,12 +1710,11 @@ func TestTooManyIntentsAtCommit(t *testing.T) {
 
 	st := s.Store.ClusterSettings()
 	st.Manual.Store(true)
-	maxIntents := st.MaxIntents
-	maxIntents.Override(3)
+	maxIntents.Override(&st.SV, 3)
 
 	txn := client.NewTxn(s.DB)
 	b := txn.NewBatch()
-	for i := 0; i < 1+int(maxIntents.Get()); i++ {
+	for i := 0; i < 1+int(maxIntents.Get(&st.SV)); i++ {
 		key := roachpb.Key(fmt.Sprintf("a%d", i))
 		b.Put(key, []byte("value"))
 	}

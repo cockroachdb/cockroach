@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
@@ -74,6 +75,24 @@ const Version DistSQLVersion = 5
 // MinAcceptedVersion is the oldest version that the server is
 // compatible with; see above.
 const MinAcceptedVersion DistSQLVersion = 4
+
+var distSQLUseTempStorage = settings.RegisterBoolSetting(
+	"sql.defaults.distsql.tempstorage",
+	"set to true to enable use of disk for larger distributed sql queries",
+	true,
+)
+
+var distSQLUseTempStorageSorts = settings.RegisterBoolSetting(
+	"sql.defaults.distsql.tempstorage.sorts",
+	"set to true to enable use of disk for distributed sql sorts. sql.defaults.distsql.tempstorage must be true",
+	true,
+)
+
+var distSQLUseTempStorageJoins = settings.RegisterBoolSetting(
+	"sql.defaults.distsql.tempstorage.joins",
+	"set to true to enable use of disk for distributed sql joins. sql.defaults.distsql.tempstorage must be true",
+	true,
+)
 
 // workMemBytes specifies the maximum amount of memory in bytes a processor can
 // use. This limit is only observed if the use of temporary storage is enabled

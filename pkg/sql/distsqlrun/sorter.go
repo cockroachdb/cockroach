@@ -96,8 +96,8 @@ func (s *sorter) Run(ctx context.Context, wg *sync.WaitGroup) {
 	var sv memRowContainer
 	// Enable fall back to disk if the cluster setting is set or a memory limit
 	// has been set through testing.
-	useTempStorage := (s.flowCtx.Settings.DistSQLUseTempStorage.Get() &&
-		s.flowCtx.Settings.DistSQLUseTempStorageSorts.Get()) ||
+	st := s.flowCtx.Settings
+	useTempStorage := (distSQLUseTempStorage.Get(&st.SV) && distSQLUseTempStorageSorts.Get(&st.SV)) ||
 		s.testingKnobMemLimit > 0
 	rowContainerMon := s.flowCtx.EvalCtx.Mon
 	if s.matchLen == 0 && s.count == 0 && useTempStorage {

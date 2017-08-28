@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -41,8 +42,43 @@ const (
 	allocatorRandomCount = 2
 )
 
+// EnableStatsBasedRebalancing controls whether range rebalancing takes
+// additional variables such as write load and disk usage into account.
+// If disabled, rebalancing is done purely based on replica count.
+var EnableStatsBasedRebalancing = settings.RegisterBoolSetting(
+	"kv.allocator.stat_based_rebalancing.enabled",
+	"set to enable rebalancing of range replicas based on write load and disk usage",
+	false,
+)
+
+// rangeRebalanceThreshold is the minimum ratio of a store's range count to
+// the mean range count at which that store is considered overfull or underfull
+// of ranges.
+var rangeRebalanceThreshold = settings.RegisterNonNegativeFloatSetting(
+	"kv.allocator.range_rebalance_threshold",
+	"minimum fraction away from the mean a store's range count can be before it is considered overfull or underfull",
+	0.05,
+)
+
+// statRebalanceThreshold is the same as rangeRebalanceThreshold, but for
+// statistics other than range count. This should be larger than
+// rangeRebalanceThreshold because certain stats (like keys written per second)
+// are inherently less stable and thus we need to be a little more forgiving to
+// avoid thrashing.
+//
+// Note that there isn't a ton of science behind this number, but setting it
+// to .05 and .1 were shown to cause some instability in clusters without load
+// on them.
+//
+// TODO(a-robinson): Should disk usage be held to a higher standard than this?
+var statRebalanceThreshold = settings.RegisterNonNegativeFloatSetting(
+	"kv.allocator.stat_rebalance_threshold",
+	"minimum fraction away from the mean a store's stats (like disk usage or writes per second) can be before it is considered overfull or underfull",
+	0.20,
+)
+
 func statsBasedRebalancingEnabled(st *cluster.Settings) bool {
-	return st.EnableStatsBasedRebalancing.Get() && st.Version.IsActive(cluster.VersionStatsBasedRebalancing)
+	return EnableStatsBasedRebalancing.Get(&st.SV) && st.Version.IsActive(cluster.VersionStatsBasedRebalancing)
 }
 
 type balanceDimensions struct {
@@ -881,24 +917,24 @@ func rangeIsPoorFit(bd balanceDimensions) bool {
 
 func overfullRangeThreshold(st *cluster.Settings, mean float64) float64 {
 	if !statsBasedRebalancingEnabled(st) {
-		return mean * (1 + st.RangeRebalanceThreshold.Get())
+		return mean * (1 + rangeRebalanceThreshold.Get(&st.SV))
 	}
-	return math.Max(mean*(1+st.RangeRebalanceThreshold.Get()), mean+5)
+	return math.Max(mean*(1+rangeRebalanceThreshold.Get(&st.SV)), mean+5)
 }
 
 func underfullRangeThreshold(st *cluster.Settings, mean float64) float64 {
 	if !statsBasedRebalancingEnabled(st) {
-		return mean * (1 - st.RangeRebalanceThreshold.Get())
+		return mean * (1 - rangeRebalanceThreshold.Get(&st.SV))
 	}
-	return math.Min(mean*(1-st.RangeRebalanceThreshold.Get()), mean-5)
+	return math.Min(mean*(1-rangeRebalanceThreshold.Get(&st.SV)), mean-5)
 }
 
 func overfullStatThreshold(st *cluster.Settings, mean float64) float64 {
-	return mean * (1 + st.StatRebalanceThreshold.Get())
+	return mean * (1 + statRebalanceThreshold.Get(&st.SV))
 }
 
 func underfullStatThreshold(st *cluster.Settings, mean float64) float64 {
-	return mean * (1 - st.StatRebalanceThreshold.Get())
+	return mean * (1 - statRebalanceThreshold.Get(&st.SV))
 }
 
 func rebalanceFromConvergesOnMean(

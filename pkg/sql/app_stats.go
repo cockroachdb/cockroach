@@ -24,6 +24,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -52,6 +53,26 @@ type stmtStats struct {
 	data roachpb.StatementStatistics
 }
 
+// stmtStatsEnable determines whether to collect per-statement
+// statistics.
+var stmtStatsEnable = settings.RegisterBoolSetting(
+	"sql.metrics.statement_details.enabled", "collect per-statement query statistics", true,
+)
+
+// sqlStatsCollectionLatencyThreshold specifies the minimum amount of time
+// consumed by a SQL statement before it is collected for statistics reporting.
+var sqlStatsCollectionLatencyThreshold = settings.RegisterDurationSetting(
+	"sql.metrics.statement_details.threshold",
+	"minimum execution time to cause statistics to be collected",
+	0,
+)
+
+var dumpStmtStatsToLogBeforeReset = settings.RegisterBoolSetting(
+	"sql.metrics.statement_details.dump_to_logs",
+	"dump collected statement statistics to node logs when periodically cleared",
+	false,
+)
+
 func (s stmtKey) String() string {
 	return s.flags() + s.stmt
 }
@@ -75,11 +96,11 @@ func (a *appStats) recordStatement(
 	err error,
 	parseLat, planLat, runLat, svcLat, ovhLat float64,
 ) {
-	if a == nil || !a.st.StmtStatsEnable.Get() {
+	if a == nil || !stmtStatsEnable.Get(&a.st.SV) {
 		return
 	}
 
-	if t := a.st.SQLStatsCollectionLatencyThreshold.Get(); t > 0 && t.Seconds() >= svcLat {
+	if t := sqlStatsCollectionLatencyThreshold.Get(&a.st.SV); t > 0 && t.Seconds() >= svcLat {
 		return
 	}
 
@@ -194,7 +215,7 @@ func (s *sqlStats) resetStats(ctx context.Context) {
 		// TODO(knz/dt): instead of dumping the stats to the log, save
 		// them in a SQL table so they can be inspected by the DBA and/or
 		// the UI.
-		if a.st.DumpStmtStatsToLogBeforeReset.Get() {
+		if dumpStmtStatsToLogBeforeReset.Get(&a.st.SV) {
 			dumpStmtStats(ctx, appName, a.stmts)
 		}
 

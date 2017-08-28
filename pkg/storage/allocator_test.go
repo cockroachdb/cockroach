@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
@@ -648,7 +647,7 @@ func TestAllocatorRebalance(t *testing.T) {
 	defer stopper.Stop(context.Background())
 
 	st := a.storePool.st
-	st.EnableStatsBasedRebalancing.Override(false)
+	EnableStatsBasedRebalancing.Override(&st.SV, false)
 
 	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
 	ctx := context.Background()
@@ -693,7 +692,7 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
 
-	sp.st.EnableStatsBasedRebalancing.Override(false)
+	EnableStatsBasedRebalancing.Override(&sp.st.SV, false)
 
 	mockStorePool(sp,
 		[]roachpb.StoreID{1, 2, 3, 4, 5, 6},
@@ -789,7 +788,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 			for i := range stores {
 				stores[i].rangeCount = mean
 			}
-			surplus := int32(math.Ceil(float64(mean)*st.RangeRebalanceThreshold.Get() + 1))
+			surplus := int32(math.Ceil(float64(mean)*rangeRebalanceThreshold.Get(&st.SV) + 1))
 			stores[0].rangeCount += surplus
 			stores[0].shouldRebalanceFrom = true
 			for i := 1; i < len(stores); i++ {
@@ -810,7 +809,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 			// Subtract enough ranges from the first store to make it a suitable
 			// rebalance target. To maintain the specified mean, we then add that delta
 			// back to the rest of the replicas.
-			deficit := int32(math.Ceil(float64(mean)*st.RangeRebalanceThreshold.Get() + 1))
+			deficit := int32(math.Ceil(float64(mean)*rangeRebalanceThreshold.Get(&st.SV) + 1))
 			stores[0].rangeCount -= deficit
 			for i := 1; i < len(stores); i++ {
 				stores[i].rangeCount += int32(math.Ceil(float64(deficit) / float64(len(stores)-1)))
@@ -855,7 +854,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 			defer stopper.Stop(context.Background())
 
 			st := a.storePool.st
-			st.EnableStatsBasedRebalancing.Override(false)
+			EnableStatsBasedRebalancing.Override(&st.SV, false)
 
 			cluster := tc.cluster(st)
 
@@ -940,7 +939,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 	defer stopper.Stop(context.Background())
 
 	st := a.storePool.st
-	st.EnableStatsBasedRebalancing.Override(false)
+	EnableStatsBasedRebalancing.Override(&st.SV, false)
 
 	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
 	ctx := context.Background()
@@ -1322,7 +1321,7 @@ func TestLoadBasedLeaseRebalanceScore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	st := cluster.MakeTestingClusterSettings()
-	st.EnableLoadBasedLeaseRebalancing.Override(true)
+	enableLoadBasedLeaseRebalancing.Override(&st.SV, true)
 
 	remoteStore := roachpb.StoreDescriptor{
 		Node: roachpb.NodeDescriptor{
@@ -1497,7 +1496,7 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 	sg.GossipStores(stores, t)
 
 	st := a.storePool.st
-	st.EnableStatsBasedRebalancing.Override(false)
+	EnableStatsBasedRebalancing.Override(&st.SV, false)
 
 	// Repeat this test 10 times, it should always be either store 2 or 3.
 	for i := 0; i < 10; i++ {
@@ -2595,7 +2594,7 @@ func Example_rebalancing() {
 	defer stopper.Stop(context.TODO())
 
 	st := cluster.MakeTestingClusterSettings()
-	st.EnableStatsBasedRebalancing.Override(false)
+	EnableStatsBasedRebalancing.Override(&st.SV, false)
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 
@@ -2609,6 +2608,8 @@ func Example_rebalancing() {
 	)
 	server := rpc.NewServer(rpcContext) // never started
 	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry())
+
+	TimeUntilStoreDead.Override(&st.SV, TestTimeUntilStoreDeadOff)
 	// Deterministic must be set as this test is comparing the exact output
 	// after each rebalance.
 	sp := NewStorePool(
@@ -2617,7 +2618,6 @@ func Example_rebalancing() {
 		g,
 		clock,
 		newMockNodeLiveness(nodeStatusLive).nodeLivenessFunc,
-		settings.TestingDuration(TestTimeUntilStoreDeadOff),
 		/* deterministic */ true,
 	)
 	alloc := MakeAllocator(sp, func(string) (time.Duration, bool) {

@@ -22,8 +22,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+)
+
+var consistencyCheckInterval = settings.RegisterNonNegativeDurationSetting(
+	"server.consistency_check.interval",
+	"the time between range consistency checks; set to 0 to disable consistency checking",
+	24*time.Hour,
 )
 
 type consistencyQueue struct {
@@ -35,7 +42,9 @@ type consistencyQueue struct {
 // newConsistencyQueue returns a new instance of consistencyQueue.
 func newConsistencyQueue(store *Store, gossip *gossip.Gossip) *consistencyQueue {
 	q := &consistencyQueue{
-		interval:       store.ClusterSettings().ConsistencyCheckInterval.Get,
+		interval: func() time.Duration {
+			return consistencyCheckInterval.Get(&store.ClusterSettings().SV)
+		},
 		replicaCountFn: store.ReplicaCount,
 	}
 	q.baseQueue = newBaseQueue(
