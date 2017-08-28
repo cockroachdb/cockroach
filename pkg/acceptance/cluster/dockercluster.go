@@ -358,31 +358,26 @@ func (l *DockerCluster) initCluster(ctx context.Context) {
 	// Expand the cluster configuration into nodes and stores per node.
 	var nodeCount int
 	for _, nc := range l.config.Nodes {
-		for i := 0; i < int(nc.Count); i++ {
-			// FIXME(tschottdorf): this completely ignores the nodeCount. Really
-			// a TestConfig is a sequence of individual test clusters that need
-			// to be stood up. We can probably just rip this out.
-			newTestNode := &testNode{
-				config:  nc,
-				index:   nodeCount,
-				nodeStr: nodeStr(l, nodeCount),
-			}
-			nodeCount++
-			var storeCount int
-			for _, sc := range nc.Stores {
-				for j := 0; j < int(sc.Count); j++ {
-					vols[dataStr(nodeCount, storeCount)] = struct{}{}
-					newTestNode.stores = append(newTestNode.stores,
-						testStore{
-							config:  sc,
-							index:   j,
-							dataStr: dataStr(nodeCount, storeCount),
-						})
-					storeCount++
-				}
-			}
-			l.Nodes = append(l.Nodes, newTestNode)
+		newTestNode := &testNode{
+			config:  nc,
+			index:   nodeCount,
+			nodeStr: nodeStr(l, nodeCount),
 		}
+		nodeCount++
+		var storeCount int
+		for _, sc := range nc.Stores {
+			for j := 0; j < int(sc.Count); j++ {
+				vols[dataStr(nodeCount, storeCount)] = struct{}{}
+				newTestNode.stores = append(newTestNode.stores,
+					testStore{
+						config:  sc,
+						index:   j,
+						dataStr: dataStr(nodeCount, storeCount),
+					})
+				storeCount++
+			}
+		}
+		l.Nodes = append(l.Nodes, newTestNode)
 	}
 
 	if *cockroachImage == defaultImage {

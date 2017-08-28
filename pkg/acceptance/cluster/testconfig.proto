@@ -43,7 +43,6 @@ message StoreConfig {
 
 // NodeConfig holds the configuration of a collection of similar nodes.
 message NodeConfig {
-  optional int32 count = 1 [(gogoproto.nullable) = false];
   repeated StoreConfig stores = 2 [(gogoproto.nullable) = false];
 }
 
