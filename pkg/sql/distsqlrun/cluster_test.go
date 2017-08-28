@@ -85,7 +85,7 @@ func TestClusterFlow(t *testing.T) {
 	ctx := opentracing.ContextWithSpan(context.Background(), sp)
 	defer sp.Finish()
 
-	txnProto := roachpb.NewTransaction(
+	txnProto := roachpb.MakeTransaction(
 		"cluster-test",
 		nil, // baseKey
 		roachpb.NormalUserPriority,
@@ -116,7 +116,7 @@ func TestClusterFlow(t *testing.T) {
 
 	req1 := &SetupFlowRequest{
 		Version: Version,
-		Txn:     *txnProto,
+		Txn:     txnProto,
 		Flow: FlowSpec{
 			FlowID: fid,
 			Processors: []ProcessorSpec{{
@@ -137,7 +137,7 @@ func TestClusterFlow(t *testing.T) {
 
 	req2 := &SetupFlowRequest{
 		Version: Version,
-		Txn:     *txnProto,
+		Txn:     txnProto,
 		Flow: FlowSpec{
 			FlowID: fid,
 			Processors: []ProcessorSpec{{
@@ -158,7 +158,7 @@ func TestClusterFlow(t *testing.T) {
 
 	req3 := &SetupFlowRequest{
 		Version: Version,
-		Txn:     *txnProto,
+		Txn:     txnProto,
 		Flow: FlowSpec{
 			FlowID: fid,
 			Processors: []ProcessorSpec{
