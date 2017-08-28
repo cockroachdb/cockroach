@@ -36728,6 +36728,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @property {Long} [num_dropped] RangeInfo num_dropped.
                  * @property {Long} [raft_log_size] RangeInfo raft_log_size.
                  * @property {Long} [approximate_proposal_quota] RangeInfo approximate_proposal_quota.
+                 * @property {number} [unsatisfiable_allocation_requests] RangeInfo unsatisfiable_allocation_requests.
                  */
 
                 /**
@@ -36780,6 +36781,12 @@ export const cockroach = $root.cockroach = (() => {
                 RangeInfo.prototype.approximate_proposal_quota = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                 /**
+                 * RangeInfo unsatisfiable_allocation_requests.
+                 * @type {number}
+                 */
+                RangeInfo.prototype.unsatisfiable_allocation_requests = 0;
+
+                /**
                  * Creates a new RangeInfo instance using the specified properties.
                  * @param {cockroach.storage.storagebase.RangeInfo$Properties=} [properties] Properties to set
                  * @returns {cockroach.storage.storagebase.RangeInfo} RangeInfo instance
@@ -36809,6 +36816,8 @@ export const cockroach = $root.cockroach = (() => {
                         writer.uint32(/* id 6, wireType 0 =*/48).int64(message.raft_log_size);
                     if (message.approximate_proposal_quota != null && message.hasOwnProperty("approximate_proposal_quota"))
                         writer.uint32(/* id 7, wireType 0 =*/56).int64(message.approximate_proposal_quota);
+                    if (message.unsatisfiable_allocation_requests != null && message.hasOwnProperty("unsatisfiable_allocation_requests"))
+                        writer.uint32(/* id 8, wireType 0 =*/64).int32(message.unsatisfiable_allocation_requests);
                     return writer;
                 };
 
@@ -36854,6 +36863,9 @@ export const cockroach = $root.cockroach = (() => {
                             break;
                         case 7:
                             message.approximate_proposal_quota = reader.int64();
+                            break;
+                        case 8:
+                            message.unsatisfiable_allocation_requests = reader.int32();
                             break;
                         default:
                             reader.skipType(tag & 7);
@@ -36904,6 +36916,9 @@ export const cockroach = $root.cockroach = (() => {
                     if (message.approximate_proposal_quota != null && message.hasOwnProperty("approximate_proposal_quota"))
                         if (!$util.isInteger(message.approximate_proposal_quota) && !(message.approximate_proposal_quota && $util.isInteger(message.approximate_proposal_quota.low) && $util.isInteger(message.approximate_proposal_quota.high)))
                             return "approximate_proposal_quota: integer|Long expected";
+                    if (message.unsatisfiable_allocation_requests != null && message.hasOwnProperty("unsatisfiable_allocation_requests"))
+                        if (!$util.isInteger(message.unsatisfiable_allocation_requests))
+                            return "unsatisfiable_allocation_requests: integer expected";
                     return null;
                 };
 
@@ -36966,6 +36981,8 @@ export const cockroach = $root.cockroach = (() => {
                             message.approximate_proposal_quota = object.approximate_proposal_quota;
                         else if (typeof object.approximate_proposal_quota === "object")
                             message.approximate_proposal_quota = new $util.LongBits(object.approximate_proposal_quota.low >>> 0, object.approximate_proposal_quota.high >>> 0).toNumber();
+                    if (object.unsatisfiable_allocation_requests != null)
+                        message.unsatisfiable_allocation_requests = object.unsatisfiable_allocation_requests | 0;
                     return message;
                 };
 
@@ -37015,6 +37032,7 @@ export const cockroach = $root.cockroach = (() => {
                             object.approximate_proposal_quota = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
                         } else
                             object.approximate_proposal_quota = options.longs === String ? "0" : 0;
+                        object.unsatisfiable_allocation_requests = 0;
                     }
                     if (message.state != null && message.hasOwnProperty("state"))
                         object.state = $root.cockroach.storage.storagebase.ReplicaState.toObject(message.state, options);
@@ -37043,6 +37061,8 @@ export const cockroach = $root.cockroach = (() => {
                             object.approximate_proposal_quota = options.longs === String ? String(message.approximate_proposal_quota) : message.approximate_proposal_quota;
                         else
                             object.approximate_proposal_quota = options.longs === String ? $util.Long.prototype.toString.call(message.approximate_proposal_quota) : options.longs === Number ? new $util.LongBits(message.approximate_proposal_quota.low >>> 0, message.approximate_proposal_quota.high >>> 0).toNumber() : message.approximate_proposal_quota;
+                    if (message.unsatisfiable_allocation_requests != null && message.hasOwnProperty("unsatisfiable_allocation_requests"))
+                        object.unsatisfiable_allocation_requests = message.unsatisfiable_allocation_requests;
                     return object;
                 };
 

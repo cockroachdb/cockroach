@@ -100,4 +100,7 @@ message RangeInfo {
   int64 raft_log_size = 6;
   // Approximately the amount of quota available.
   int64 approximate_proposal_quota = 7;
+  // The number of failed uprelication attempts for this range. Resets upon a
+  // successful upreplication.
+  int32 unsatisfiable_allocation_requests = 8;
 }
