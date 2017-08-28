@@ -148,14 +148,14 @@ func RunTests(m *testing.M) {
 var reStripTestEnumeration = regexp.MustCompile(`#\d+$`)
 
 const (
-	bareTest   = "runMode=local"
+	localTest  = "runMode=local"
 	dockerTest = "runMode=docker"
 	farmerTest = "runMode=farmer"
 )
 
 // RunLocal runs the given acceptance test using a bare cluster.
 func RunLocal(t *testing.T, testee func(t *testing.T)) {
-	t.Run(bareTest, testee)
+	t.Run(localTest, testee)
 }
 
 // RunDocker runs the given acceptance test using a Docker cluster.
@@ -361,7 +361,7 @@ func readConfigFromFlags() cluster.TestConfig {
 	}
 	for i := 0; i < *flagNodes; i++ {
 		cfg.Nodes = append(cfg.Nodes, cluster.NodeConfig{
-			Stores: []cluster.StoreConfig{{Count: int32(*flagStores)}},
+			Stores: make([]cluster.StoreConfig, *flagStores),
 		})
 	}
 	return cfg
@@ -421,7 +421,7 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 		for _, part := range parts[1:] {
 			part = reStripTestEnumeration.ReplaceAllLiteralString(part, "")
 			switch part {
-			case bareTest:
+			case localTest:
 				fallthrough
 			case dockerTest:
 				fallthrough
@@ -434,7 +434,7 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 		}
 
 		switch runMode {
-		case bareTest:
+		case localTest:
 			pwd, err := os.Getwd()
 			if err != nil {
 				t.Fatal(err)
@@ -444,11 +444,32 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 				t.Fatal(err)
 			}
 
-			clusterCfg := localcluster.ClusterConfig{
-				Ephemeral: true,
-				DataDir:   dataDir,
-				NumNodes:  len(cfg.Nodes),
+			logDir := *flagLogDir
+			if logDir != "" {
+				logDir = filepath.Join(logDir, filepath.Clean(t.Name()))
 			}
+
+			perNodeCfg := map[int]localcluster.NodeConfig{}
+			for i := 0; i < len(cfg.Nodes); i++ {
+				// TODO(tschottdorf): handle Nodes[i].Stores properly.
+				if cfg.Nodes[i].Version != "" {
+					var err error
+					var nCfg localcluster.NodeConfig
+					nCfg.Binary, err = fetchAndCacheBinary(".localcluster_cache", cfg.Nodes[i].Version)
+					if err != nil {
+						t.Fatalf("unable to set up binary for v%s: %s", cfg.Nodes[i].Version, err)
+					}
+					perNodeCfg[i] = nCfg
+				}
+			}
+			clusterCfg := localcluster.ClusterConfig{
+				Ephemeral:  true,
+				DataDir:    dataDir,
+				LogDir:     logDir,
+				NumNodes:   len(cfg.Nodes),
+				PerNodeCfg: perNodeCfg,
+			}
+
 			l := localcluster.New(clusterCfg)
 
 			l.Start()
@@ -459,7 +480,7 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 			if logDir != "" {
 				logDir = filepath.Join(logDir, filepath.Clean(t.Name()))
 			}
-			l := cluster.CreateLocal(ctx, cfg, logDir, stopper)
+			l := cluster.CreateDocker(ctx, cfg, logDir, stopper)
 			l.Start(ctx)
 			c = l
 
@@ -592,7 +613,7 @@ func testDocker(
 			Duration: *flagDuration,
 		}
 		for i := 0; i < num; i++ {
-			cfg.Nodes = append(cfg.Nodes, cluster.NodeConfig{Stores: []cluster.StoreConfig{{Count: 1}}})
+			cfg.Nodes = append(cfg.Nodes, cluster.NodeConfig{Stores: []cluster.StoreConfig{{}}})
 		}
 		l := StartCluster(ctx, t, cfg).(*cluster.DockerCluster)
 		defer l.AssertAndStop(ctx, t)

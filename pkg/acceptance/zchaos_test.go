@@ -399,8 +399,6 @@ func testClusterRecoveryInner(
 // than the one the client is connected to is being restarted periodically.
 // The test measures read/write performance in the presence of restarts.
 func TestNodeRestart(t *testing.T) {
-	s := log.Scope(t)
-	defer s.Close(t)
 
 	RunLocal(t, func(t *testing.T) {
 		runTestWithCluster(t, testNodeRestartInner)
