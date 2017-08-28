@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -187,11 +186,6 @@ type Config struct {
 	// stores.
 	// Environment Variable: COCKROACH_SCAN_MAX_IDLE_TIME
 	ScanMaxIdleTime time.Duration
-
-	// TimeUntilStoreDead is the time after which if there is no new gossiped
-	// information about a store, it is considered dead.
-	// Environment Variable: COCKROACH_TIME_UNTIL_STORE_DEAD
-	TimeUntilStoreDead *settings.DurationSetting
 
 	// TestingKnobs is used for internal test controls only.
 	TestingKnobs base.TestingKnobs
@@ -370,7 +364,6 @@ func MakeConfig(st *cluster.Settings) Config {
 		ScanInterval:                   defaultScanInterval,
 		ScanMaxIdleTime:                defaultScanMaxIdleTime,
 		MetricsSampleInterval:          defaultMetricsSampleInterval,
-		TimeUntilStoreDead:             st.TimeUntilStoreDead,
 		EventLogEnabled:                defaultEventLogEnabled,
 		EnableWebSessionAuthentication: defaultEnableWebSessionAuthentication,
 		Stores: base.StoreSpecList{
@@ -396,7 +389,6 @@ func (cfg *Config) String() string {
 	fmt.Fprintln(w, "scan interval\t", cfg.ScanInterval)
 	fmt.Fprintln(w, "scan max idle time\t", cfg.ScanMaxIdleTime)
 	fmt.Fprintln(w, "metrics sample interval\t", cfg.MetricsSampleInterval)
-	fmt.Fprintln(w, "time until store dead\t", cfg.TimeUntilStoreDead)
 	fmt.Fprintln(w, "event log enabled\t", cfg.EventLogEnabled)
 	fmt.Fprintln(w, "linearizable\t", cfg.Linearizable)
 	if cfg.ListeningURLFile != "" {
@@ -507,7 +499,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				MaxSizeBytes:            sizeInBytes,
 				MaxOpenFiles:            openFileLimitPerStore,
 				WarnLargeBatchThreshold: 500 * time.Millisecond,
-				RocksDBSettings:         cfg.Settings.RocksDBSettings,
+				Settings:                cfg.Settings,
 			}
 
 			eng, err := engine.NewRocksDB(rocksDBConfig, cache)

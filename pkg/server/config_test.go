@@ -110,9 +110,6 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		if err := os.Unsetenv("COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE"); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.Unsetenv("COCKROACH_TIME_UNTIL_STORE_DEAD"); err != nil {
-			t.Fatal(err)
-		}
 		envutil.ClearEnvCache()
 	}
 	defer resetEnvVar()
@@ -158,7 +155,6 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		"COCKROACH_METRICS_SAMPLE_INTERVAL",
 		"COCKROACH_SCAN_INTERVAL",
 		"COCKROACH_SCAN_MAX_IDLE_TIME",
-		"COCKROACH_TIME_UNTIL_STORE_DEAD",
 	} {
 		t.Run("invalid", func(t *testing.T) {
 			if err := os.Setenv(envVar, "abcd"); err != nil {

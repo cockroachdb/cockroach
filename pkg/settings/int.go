@@ -15,8 +15,6 @@
 package settings
 
 import (
-	"sync/atomic"
-
 	"github.com/pkg/errors"
 )
 
@@ -26,19 +24,18 @@ import (
 type IntSetting struct {
 	common
 	defaultValue int64
-	v            int64
 	validateFn   func(int64) error
 }
 
 var _ Setting = &IntSetting{}
 
 // Get retrieves the int value in the setting.
-func (i *IntSetting) Get() int64 {
-	return atomic.LoadInt64(&i.v)
+func (i *IntSetting) Get(sv *Values) int64 {
+	return sv.getInt64(i.slotIdx)
 }
 
-func (i *IntSetting) String() string {
-	return EncodeInt(i.Get())
+func (i *IntSetting) String(sv *Values) string {
+	return EncodeInt(i.Get(sv))
 }
 
 // Typ returns the short (1 char) string denoting the type of setting.
@@ -58,34 +55,32 @@ func (i *IntSetting) Validate(v int64) error {
 
 // Override changes the setting without validation.
 // For testing usage only.
-func (i *IntSetting) Override(v int64) {
-	if atomic.SwapInt64(&i.v, v) != v {
-		i.changed()
-	}
+func (i *IntSetting) Override(sv *Values, v int64) {
+	sv.setInt64(i.slotIdx, v)
 }
 
-func (i *IntSetting) set(v int64) error {
+func (i *IntSetting) set(sv *Values, v int64) error {
 	if err := i.Validate(v); err != nil {
 		return err
 	}
-	i.Override(v)
+	i.Override(sv, v)
 	return nil
 }
 
-func (i *IntSetting) setToDefault() {
-	if err := i.set(i.defaultValue); err != nil {
+func (i *IntSetting) setToDefault(sv *Values) {
+	if err := i.set(sv, i.defaultValue); err != nil {
 		panic(err)
 	}
 }
 
 // RegisterIntSetting defines a new setting with type int.
-func (r *Registry) RegisterIntSetting(key, desc string, defaultValue int64) *IntSetting {
-	return r.RegisterValidatedIntSetting(key, desc, defaultValue, nil)
+func RegisterIntSetting(key, desc string, defaultValue int64) *IntSetting {
+	return RegisterValidatedIntSetting(key, desc, defaultValue, nil)
 }
 
 // RegisterValidatedIntSetting defines a new setting with type int with a
 // validation function.
-func (r *Registry) RegisterValidatedIntSetting(
+func RegisterValidatedIntSetting(
 	key, desc string, defaultValue int64, validateFn func(int64) error,
 ) *IntSetting {
 	if validateFn != nil {
@@ -97,22 +92,6 @@ func (r *Registry) RegisterValidatedIntSetting(
 		defaultValue: defaultValue,
 		validateFn:   validateFn,
 	}
-	r.register(key, desc, setting)
+	register(key, desc, setting)
 	return setting
-}
-
-// TestingSetInt returns a mock, unregistered int setting for testing. See
-// TestingSetBool for more details.
-func TestingSetInt(s **IntSetting, v int64) func() {
-	saved := *s
-	*s = &IntSetting{v: v}
-	return func() {
-		*s = saved
-	}
-}
-
-// OnChange registers a callback to be called when the setting changes.
-func (i *IntSetting) OnChange(fn func()) *IntSetting {
-	i.setOnChange(fn)
-	return i
 }

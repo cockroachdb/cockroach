@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -69,6 +70,19 @@ const (
 	updateMaxVersionsToReport = 3
 
 	updateCheckJitterSeconds = 120
+)
+
+// FIXME(tschottdorf): should be NonNegative?
+var diagnosticReportFrequency = settings.RegisterDurationSetting(
+	"diagnostics.reporting.interval",
+	"interval at which diagnostics data should be reported",
+	time.Hour,
+)
+
+var diagnosticsMetricsEnabled = settings.RegisterBoolSetting(
+	"diagnostics.reporting.report_metrics",
+	"enable collection and reporting diagnostic metrics to cockroach labs",
+	true,
 )
 
 // randomly shift `d` to be up to `jitterSec` shorter or longer.
@@ -211,13 +225,13 @@ func (s *Server) maybeReportDiagnostics(
 	// TODO(dt): we should allow tuning the reset and report intervals separately.
 	// Consider something like rand.Float() > resetFreq/reportFreq here to sample
 	// stat reset periods for reporting.
-	if s.st.DiagnosticsReportingEnabled.Get() && s.st.DiagnosticsMetricsEnabled.Get() {
+	if log.DiagnosticsReportingEnabled.Get(&s.st.SV) && diagnosticsMetricsEnabled.Get(&s.st.SV) {
 		s.reportDiagnostics(running)
 	}
 	s.sqlExecutor.ResetStatementStats(ctx)
 	s.sqlExecutor.ResetUnimplementedCounts()
 
-	return scheduled.Add(s.st.DiagnosticReportFrequency.Get())
+	return scheduled.Add(diagnosticReportFrequency.Get(&s.st.SV))
 }
 
 func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.DiagnosticReport {
