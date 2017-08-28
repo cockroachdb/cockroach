@@ -98,8 +98,11 @@ SELECT * FROM b.a
 3
 7
 
-statement ok
+statement error database "b" is not empty
 DROP DATABASE b
+
+statement ok
+DROP DATABASE b CASCADE
 
 statement error database "b" does not exist
 SELECT * FROM b.a
@@ -111,7 +114,11 @@ statement ok
 DROP DATABASE IF EXISTS b
 
 statement ok
-DROP DATABASE b2; DROP DATABASE b3; DROP DATABASE b4; DROP DATABASE b5; DROP DATABASE b6
+DROP DATABASE b2 CASCADE;
+  DROP DATABASE b3 CASCADE;
+  DROP DATABASE b4 CASCADE;
+  DROP DATABASE b5 CASCADE;
+  DROP DATABASE b6 CASCADE
 
 statement error empty database name
 DROP DATABASE ""
@@ -154,7 +161,7 @@ CREATE DATABASE privs
 user testuser
 
 statement error user testuser does not have DROP privilege on database privs
-DROP DATABASE privs
+DROP DATABASE privs CASCADE
 
 user root
 
@@ -164,4 +171,4 @@ GRANT DROP ON DATABASE privs TO testuser
 user testuser
 
 statement ok
-DROP DATABASE privs
+DROP DATABASE privs CASCADE
