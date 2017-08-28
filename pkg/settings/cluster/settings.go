@@ -728,7 +728,7 @@ func MakeClusterSettings(minVersion, serverVersion roachpb.Version) *Settings {
 	s.ImportBatchSize.Hide()
 
 	s.AddSSTableEnabled = r.RegisterBoolSetting(
-		"kv.import.experimental_addsstable.enabled",
+		"kv.import.addsstable.enabled",
 		"set to true to use the AddSSTable command in Import or false to use WriteBatch",
 		true,
 	)
