@@ -506,7 +506,7 @@ func MakeClusterSettings(minVersion, serverVersion roachpb.Version) *Settings {
 	s.EnableStatsBasedRebalancing = r.RegisterBoolSetting(
 		"kv.allocator.stat_based_rebalancing.enabled",
 		"set to enable rebalancing of range replicas based on write load and disk usage",
-		true)
+		false)
 
 	// rangeRebalanceThreshold is the minimum ratio of a store's range count to
 	// the mean range count at which that store is considered overfull or underfull
