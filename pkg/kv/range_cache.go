@@ -142,12 +142,12 @@ func makeLookupRequestKey(key roachpb.RKey, evictToken *EvictionToken, useRevers
 // NewRangeDescriptorCache returns a new RangeDescriptorCache which
 // uses the given RangeDescriptorDB as the underlying source of range
 // descriptors.
-func NewRangeDescriptorCache(db RangeDescriptorDB, size int) *RangeDescriptorCache {
+func NewRangeDescriptorCache(db RangeDescriptorDB, size func() int64) *RangeDescriptorCache {
 	rdc := &RangeDescriptorCache{db: db}
 	rdc.rangeCache.cache = cache.NewOrderedCache(cache.Config{
 		Policy: cache.CacheLRU,
 		ShouldEvict: func(n int, _, _ interface{}) bool {
-			return n > size
+			return int64(n) > size()
 		},
 	})
 	return rdc
