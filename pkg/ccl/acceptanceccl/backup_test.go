@@ -314,8 +314,11 @@ func BenchmarkRestore2TB(b *testing.B) {
 	}
 
 	bt := benchmarkTest{
-		b:      b,
-		nodes:  10,
+		b: b,
+		// TODO(dan): Switch this back to 10 machines when this test goes back
+		// to Azure. Each GCE machine disk is 375GB, so with our current need
+		// for 2x the restore size in disk space, 2tb unless we up this a bit.
+		nodes:  15,
 		prefix: "restore2tb",
 	}
 
@@ -361,11 +364,8 @@ func BenchmarkBackup2TB(b *testing.B) {
 	}
 
 	bt := benchmarkTest{
-		b: b,
-		// TODO(dan): Switch this back to 10 machines when this test goes back
-		// to Azure. Each GCE machine disk is 375GB, so with our current need
-		// for 2x the restore size in disk space, 2tb unless we up this a bit.
-		nodes:           15,
+		b:               b,
+		nodes:           10,
 		storeFixture:    acceptance.FixtureURL(bulkArchiveStoreFixture),
 		prefix:          "backup2tb",
 		skipClusterInit: true,
