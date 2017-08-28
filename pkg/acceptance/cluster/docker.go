@@ -27,9 +27,11 @@ import (
 	"strings"
 	"time"
 
+	distreference "github.com/docker/distribution/reference"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/api/types/reference"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/jsonmessage"
 	"github.com/docker/go-connections/nat"
@@ -74,15 +76,28 @@ func (c Container) Name() string {
 }
 
 func hasImage(ctx context.Context, l *DockerCluster, ref string) bool {
-	name := strings.Split(ref, ":")[0]
-	images, err := l.client.ImageList(ctx, types.ImageListOptions{MatchName: name})
+	distributionRef, err := distreference.ParseNamed(ref)
 	if err != nil {
 		log.Fatal(ctx, err)
 	}
+	path := distreference.Path(distributionRef)
+	// Correct for random docker stupidity:
+	//
+	// https://github.com/moby/moby/blob/7248742/registry/service.go#L207:L215
+	path = strings.TrimPrefix(path, "library/")
+	images, err := l.client.ImageList(ctx, types.ImageListOptions{
+		MatchName: path,
+		All:       true,
+	})
+	if err != nil {
+		log.Fatal(ctx, err)
+	}
+
+	wanted := fmt.Sprintf("%s:%s", path, reference.GetTagFromNamedRef(distributionRef))
 	for _, image := range images {
 		for _, repoTag := range image.RepoTags {
-			// The Image.RepoTags field contains strings of the form <repo>:<tag>.
-			if ref == repoTag {
+			// The Image.RepoTags field contains strings of the form <path>:<tag>.
+			if repoTag == wanted {
 				return true
 			}
 		}
@@ -118,7 +133,13 @@ func pullImage(
 	outFd := out.Fd()
 	isTerminal := isatty.IsTerminal(outFd)
 
-	return jsonmessage.DisplayJSONMessagesStream(rc, out, outFd, isTerminal, nil)
+	if err := jsonmessage.DisplayJSONMessagesStream(rc, out, outFd, isTerminal, nil); err != nil {
+		return err
+	}
+	if !hasImage(ctx, l, ref) {
+		return errors.Errorf("pulled image %s but still don't have it", ref)
+	}
+	return nil
 }
 
 // createContainer creates a new container using the specified
