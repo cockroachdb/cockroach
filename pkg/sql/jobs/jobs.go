@@ -717,13 +717,18 @@ func RunAndWaitForTerminalState(
 
 		var status Status
 		var jobErr gosql.NullString
-		err := sqlDB.QueryRow(`SELECT status, error FROM [SHOW JOBS] WHERE id = $1`, jobID).Scan(
-			&status, &jobErr,
+		var fractionCompleted float64
+		err := sqlDB.QueryRow(`SELECT status, error, fraction_completed FROM [SHOW JOBS] WHERE id = $1`, jobID).Scan(
+			&status, &jobErr, &fractionCompleted,
 		)
 		if err != nil {
 			return jobID, "", errors.Wrapf(err, "getting status of job %d", jobID)
 		}
 		if !status.Terminal() {
+			if log.V(1) {
+				log.Infof(ctx, "job %d: status=%s, progress=%0.3f, created %s ago",
+					jobID, status, fractionCompleted, timeutil.Since(begin))
+			}
 			continue
 		}
 		if jobErr.Valid && len(jobErr.String) > 0 {
