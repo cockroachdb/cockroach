@@ -288,33 +288,9 @@ N|N
 	}
 }
 
-func TestImportStmt(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	const (
-		nodes       = 3
-		numFiles    = nodes + 2
-		rowsPerFile = 1000
-	)
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
-
-	dir, cleanup := testutils.TempDir(t)
-	defer cleanup()
-	tablePath := filepath.Join(dir, "table")
-	if err := ioutil.WriteFile(tablePath, []byte(`
-		CREATE TABLE t (
-			a int primary key,
-			b string,
-			index (b),
-			index (a, b)
-		)
-	`), 0666); err != nil {
-		t.Fatal(err)
-	}
-	csvPath := filepath.Join(dir, "csv")
+// TODO(dt): switch to a helper in sampledataccl.
+func makeCSVData(t *testing.T, in string, numFiles, rowsPerFile int) ([]string, []string) {
+	csvPath := filepath.Join(in, "csv")
 	if err := os.Mkdir(csvPath, 0777); err != nil {
 		t.Fatal(err)
 	}
@@ -361,7 +337,37 @@ func TestImportStmt(t *testing.T) {
 		files = append(files, fmt.Sprintf(`'nodelocal://%s'`, path))
 		filesWithOpts = append(filesWithOpts, fmt.Sprintf(`'nodelocal://%s'`, pathWithOpts))
 	}
+	return files, filesWithOpts
+}
 
+func TestImportStmt(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const (
+		nodes       = 3
+		numFiles    = nodes + 2
+		rowsPerFile = 1000
+	)
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	tablePath := filepath.Join(dir, "table")
+	if err := ioutil.WriteFile(tablePath, []byte(`
+		CREATE TABLE t (
+			a int primary key,
+			b string,
+			index (b),
+			index (a, b)
+		)
+	`), 0666); err != nil {
+		t.Fatal(err)
+	}
+
+	files, filesWithOpts := makeCSVData(t, dir, numFiles, rowsPerFile)
 	expectedRows := numFiles * rowsPerFile
 
 	for i, tc := range []struct {
