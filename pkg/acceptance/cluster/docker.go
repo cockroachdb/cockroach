@@ -74,15 +74,27 @@ func (c Container) Name() string {
 }
 
 func hasImage(ctx context.Context, l *DockerCluster, ref string) bool {
-	name := strings.Split(ref, ":")[0]
-	images, err := l.client.ImageList(ctx, types.ImageListOptions{MatchName: name})
+	// At the time of writing, our incoming ref is something like:
+	//   docker.io/library/ubuntu:xenial-20170214
+	// and the repository we want is `ubuntu`.
+	parts := strings.Split(ref, ":")
+	if len(parts) != 2 {
+		panic(fmt.Sprintf("need a ref of the form repo:tag, found %s", ref))
+	}
+	repo, tag := filepath.Base(parts[0]), parts[1]
+	images, err := l.client.ImageList(ctx, types.ImageListOptions{
+		MatchName: repo,
+		All:       true,
+	})
 	if err != nil {
 		log.Fatal(ctx, err)
 	}
+
+	wanted := fmt.Sprintf("%s:%s", repo, tag)
 	for _, image := range images {
 		for _, repoTag := range image.RepoTags {
 			// The Image.RepoTags field contains strings of the form <repo>:<tag>.
-			if ref == repoTag {
+			if repoTag == wanted {
 				return true
 			}
 		}
@@ -118,7 +130,13 @@ func pullImage(
 	outFd := out.Fd()
 	isTerminal := isatty.IsTerminal(outFd)
 
-	return jsonmessage.DisplayJSONMessagesStream(rc, out, outFd, isTerminal, nil)
+	if err := jsonmessage.DisplayJSONMessagesStream(rc, out, outFd, isTerminal, nil); err != nil {
+		return err
+	}
+	if !hasImage(ctx, l, ref) {
+		return errors.Errorf("pulled image %s but still don't have it", ref)
+	}
+	return nil
 }
 
 // createContainer creates a new container using the specified
