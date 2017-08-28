@@ -289,7 +289,7 @@ N|N
 }
 
 // TODO(dt): switch to a helper in sampledataccl.
-func makeCSVData(t *testing.T, in string, numFiles, rowsPerFile int) ([]string, []string) {
+func makeCSVData(t testing.TB, in string, numFiles, rowsPerFile int) ([]string, []string) {
 	csvPath := filepath.Join(in, "csv")
 	if err := os.Mkdir(csvPath, 0777); err != nil {
 		t.Fatal(err)
@@ -507,4 +507,31 @@ func TestImportStmt(t *testing.T) {
 			}
 		})
 	}
+}
+
+func BenchmarkImport(b *testing.B) {
+	const (
+		nodes    = 3
+		numFiles = nodes + 2
+	)
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(b, nodes, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(b, tc.Conns[0])
+
+	dir, cleanup := testutils.TempDir(b)
+	defer cleanup()
+	files, _ := makeCSVData(b, dir, numFiles, b.N*100)
+	tmp := fmt.Sprintf("nodelocal://%s", filepath.Join(dir, b.Name()))
+
+	b.ResetTimer()
+
+	sqlDB.Exec(
+		fmt.Sprintf(
+			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b))
+			CSV DATA (%s) WITH temp = $1, distributed, transform_only`,
+			strings.Join(files, ","),
+		),
+		tmp,
+	)
 }
