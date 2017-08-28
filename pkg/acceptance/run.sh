@@ -10,6 +10,8 @@ set -euxo pipefail
 mkdir -p artifacts/acceptance
 export TMPDIR=$PWD/artifacts/acceptance
 
-make test PKG=./pkg/acceptance TESTTIMEOUT="${TESTTIMEOUT-30m}" TAGS=acceptance TESTFLAGS="${TESTFLAGS--v -nodes 4} -l $TMPDIR"
-# For the tests that don't use Docker.
+# Build the standard binary to ./cockroach for those tests that don't use
+# Docker.
+echo "Building local binary"
 make build
+make test PKG=./pkg/acceptance TESTTIMEOUT="${TESTTIMEOUT-30m}" TAGS=acceptance TESTFLAGS="${TESTFLAGS--v -nodes 4} -l $TMPDIR"
