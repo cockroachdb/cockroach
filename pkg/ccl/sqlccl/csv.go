@@ -46,12 +46,13 @@ import (
 )
 
 const (
-	importOptionComma       = "comma"
-	importOptionComment     = "comment"
-	importOptionDistributed = "distributed"
-	importOptionNullIf      = "nullif"
-	importOptionSSTSize     = "sstsize"
-	importOptionTemp        = "temp"
+	importOptionComma         = "comma"
+	importOptionComment       = "comment"
+	importOptionDistributed   = "distributed"
+	importOptionNullIf        = "nullif"
+	importOptionTransformOnly = "transform_only"
+	importOptionSSTSize       = "sstsize"
+	importOptionTemp          = "temp"
 )
 
 // LoadCSV converts CSV files into enterprise backup format.
@@ -807,6 +808,18 @@ func importPlanHook(
 		if err := job.FinishedWith(ctx, err); err != nil {
 			return err
 		}
+		if _, ok := opts[importOptionTransformOnly]; ok {
+			resultsCh <- parser.Datums{
+				parser.NewDInt(parser.DInt(*job.ID())),
+				parser.NewDString(string(jobs.StatusSucceeded)),
+				parser.NewDFloat(parser.DFloat(1.0)),
+				parser.NewDInt(parser.DInt(0)),
+				parser.NewDInt(parser.DInt(0)),
+				parser.NewDInt(parser.DInt(0)),
+				parser.NewDInt(parser.DInt(0)),
+			}
+			return nil
+		}
 
 		restore := &parser.Restore{
 			Targets: parser.TargetList{
@@ -816,6 +829,7 @@ func importPlanHook(
 		}
 		from := []string{temp}
 		opts = map[string]string{restoreOptIntoDB: targetDB}
+
 		return doRestorePlan(ctx, restore, p, from, opts, resultsCh)
 	}
 	return fn, restoreHeader, nil

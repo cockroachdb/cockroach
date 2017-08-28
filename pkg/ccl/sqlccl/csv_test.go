@@ -414,6 +414,13 @@ func TestImportStmt(t *testing.T) {
 			"",
 		},
 		{
+			"schema-in-query-transform-only",
+			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) WITH temp = $1, distributed, comma = '|', comment = '#', nullif='', transform_only`,
+			nil,
+			filesWithOpts,
+			"",
+		},
+		{
 			"missing-temp",
 			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s)`,
 			nil,
@@ -452,6 +459,24 @@ func TestImportStmt(t *testing.T) {
 				Description: "import t CSV conversion",
 			}); err != nil {
 				t.Fatal(err)
+			}
+
+			if strings.Contains(tc.query, "transform_only") {
+				if expected, actual := 0, restored.rows; expected != actual {
+					t.Fatalf("expected %d rows, got %d", expected, actual)
+				}
+				if err := sqlDB.DB.QueryRow(`SELECT count(*) FROM t`).Scan(&unused); !testutils.IsError(
+					err, "does not exist",
+				) {
+					t.Fatal(err)
+				}
+				if err := sqlDB.DB.QueryRow(
+					`RESTORE csv.* FROM $1 WITH into_db = $2`, backupPath, fmt.Sprintf(`csv%d`, i),
+				).Scan(
+					&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.sys, &restored.bytes,
+				); err != nil {
+					t.Fatal(err)
+				}
 			}
 
 			if expected, actual := expectedRows, restored.rows; expected != actual {
