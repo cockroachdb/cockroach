@@ -56,7 +56,8 @@ func (p *planner) ShowClusterSetting(
 			"TABLE crdb_internal.cluster_settings", nil, nil)
 	}
 
-	val, ok := p.session.execCfg.Settings.Registry.Lookup(name)
+	st := p.session.execCfg.Settings
+	val, ok := settings.Lookup(name)
 	if !ok {
 		return nil, errors.Errorf("unknown setting: %q", name)
 	}
@@ -84,9 +85,9 @@ func (p *planner) ShowClusterSetting(
 			d := parser.DNull
 			switch s := val.(type) {
 			case *settings.IntSetting:
-				d = parser.NewDInt(parser.DInt(s.Get()))
+				d = parser.NewDInt(parser.DInt(s.Get(&st.SV)))
 			case *settings.StringSetting:
-				d = parser.NewDString(s.String())
+				d = parser.NewDString(s.String(&st.SV))
 			case *settings.StateMachineSetting:
 				// Show consistent values for statemachine settings. This isn't necessary
 				// for correctness, but helpful for testability.
@@ -114,21 +115,21 @@ func (p *planner) ShowClusterSetting(
 				// value, and the corresponding sql migration that makes sure
 				// the above select finds something usually runs pretty quickly
 				// when the cluster is bootstrapped.
-				_, obj, err := s.Validate(prevRawVal, nil)
+				_, obj, err := s.Validate(&st.SV, prevRawVal, nil)
 				if err != nil {
 					return nil, errors.Errorf("unable to read existing value: %s", err)
 				}
 				d = parser.NewDString(obj.(fmt.Stringer).String())
 			case *settings.BoolSetting:
-				d = parser.MakeDBool(parser.DBool(s.Get()))
+				d = parser.MakeDBool(parser.DBool(s.Get(&st.SV)))
 			case *settings.FloatSetting:
-				d = parser.NewDFloat(parser.DFloat(s.Get()))
+				d = parser.NewDFloat(parser.DFloat(s.Get(&st.SV)))
 			case *settings.DurationSetting:
-				d = &parser.DInterval{Duration: duration.Duration{Nanos: s.Get().Nanoseconds()}}
+				d = &parser.DInterval{Duration: duration.Duration{Nanos: s.Get(&st.SV).Nanoseconds()}}
 			case *settings.EnumSetting:
-				d = parser.NewDInt(parser.DInt(s.Get()))
+				d = parser.NewDInt(parser.DInt(s.Get(&st.SV)))
 			case *settings.ByteSizeSetting:
-				d = parser.NewDString(s.String())
+				d = parser.NewDString(s.String(&st.SV))
 			}
 
 			v := p.newContainerValuesNode(columns, 0)

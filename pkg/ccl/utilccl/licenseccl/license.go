@@ -16,16 +16,8 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
-
-func init() {
-	cluster.ValidateEnterpriseLicense = func(s string) error {
-		_, err := Decode(s)
-		return err
-	}
-}
 
 // LicensePrefix is a prefix on license strings to make them easily recognized.
 const LicensePrefix = "crl-0-"

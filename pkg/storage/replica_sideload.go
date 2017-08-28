@@ -33,7 +33,7 @@ const bulkIOWriteLimiterLongWait = 500 * time.Millisecond
 
 func limitBulkIOWrite(ctx context.Context, st *cluster.Settings, cost int) {
 	// The limiter disallows anything greater than its burst (set to
-	// bulkIOWriteLimiterBurst), so cap the batch size if it would overflow.
+	// BulkIOWriteLimiterBurst), so cap the batch size if it would overflow.
 	//
 	// TODO(dan): This obviously means the limiter is no longer accounting for
 	// the full cost. I've tried calling WaitN in a loop to fully cover the

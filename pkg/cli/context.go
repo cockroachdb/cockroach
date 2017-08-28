@@ -63,8 +63,7 @@ var serverCfg = func() server.Config {
 	// /debug/requests handler.
 	server.ClusterSettings = st
 	// A similar singleton reference exists in the log package. See comment there.
-	f := log.ReportingSettings(st.ReportingSettings)
-	log.ReportingSettingsSingleton.Store(&f)
+	log.ReportingSettingsSingleton.Store(&st.SV)
 
 	return server.MakeConfig(st)
 }()

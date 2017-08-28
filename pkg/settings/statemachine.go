@@ -17,11 +17,10 @@ package settings
 import (
 	"bytes"
 	"fmt"
-	"sync/atomic"
 )
 
 // A TransformerFn encapsulates the logic of a StateMachineSetting.
-type TransformerFn func(old []byte, update *string) (finalV []byte, finalObj interface{}, _ error)
+type TransformerFn func(sv *Values, old []byte, update *string) (finalV []byte, finalObj interface{}, _ error)
 
 // A StateMachineSetting is a setting that keeps a state machine driven by user
 // input.
@@ -36,6 +35,7 @@ type TransformerFn func(old []byte, update *string) (finalV []byte, finalObj int
 // The state machine as well as its encoding are represented by the
 // TransformerFn backing this StateMachineSetting. It is a method that takes
 //
+// - the Values instance
 // - the known previous encoded value, if any (i.e. the current state)
 // - the update the user wants to make to the encoded struct (i.e. the desired
 //   transition)
@@ -56,21 +56,23 @@ type TransformerFn func(old []byte, update *string) (finalV []byte, finalObj int
 //   is carried out, and the new state and representation (or an error)
 //   returned.
 //
+// The opaque member of Values can be used to associate a higher-level object to
+// the Values instance (making it accessible to the function).
+//
 // Updates to the setting via an Updater validate the new state syntactically,
 // but not semantically. Users must call Validate with the authoritative
 // previous state, the suggested state transition, and then overwrite the state
 // machine with the result.
 type StateMachineSetting struct {
-	v           atomic.Value // []byte (marshalled state)
-	Transformer TransformerFn
+	transformer TransformerFn
 	common
 }
 
 var _ Setting = &StateMachineSetting{}
 
-func (s *StateMachineSetting) String() string {
-	encV := []byte(s.Get())
-	_, iface, err := s.Transformer(encV, nil)
+func (s *StateMachineSetting) String(sv *Values) string {
+	encV := []byte(s.Get(sv))
+	_, iface, err := s.transformer(sv, encV, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -83,10 +85,10 @@ func (*StateMachineSetting) Typ() string {
 }
 
 // Get retrieves the (encoded) value in the setting (or the encoded default).
-func (s *StateMachineSetting) Get() string {
-	encV := s.v.Load()
+func (s *StateMachineSetting) Get(sv *Values) string {
+	encV := sv.getGeneric(s.slotIdx)
 	if encV == nil {
-		defV, _, err := s.Transformer(nil, nil)
+		defV, _, err := s.transformer(sv, nil, nil)
 		if err != nil {
 			panic(err)
 		}
@@ -98,57 +100,39 @@ func (s *StateMachineSetting) Get() string {
 // Validate that the state machine accepts the user input. Returns new encoded
 // state, unencoded state, or an error. If no update is given, round trips
 // current state.
-func (s *StateMachineSetting) Validate(old []byte, update *string) ([]byte, interface{}, error) {
-	return s.Transformer(old, update)
+func (s *StateMachineSetting) Validate(
+	sv *Values, old []byte, update *string,
+) ([]byte, interface{}, error) {
+	return s.transformer(sv, old, update)
 }
 
-func (s *StateMachineSetting) set(finalEncodedV []byte) error {
-	if _, _, err := s.Transformer(finalEncodedV, nil); err != nil {
+func (s *StateMachineSetting) set(sv *Values, finalEncodedV []byte) error {
+	if _, _, err := s.transformer(sv, finalEncodedV, nil); err != nil {
 		return err
 	}
-	if bytes.Equal([]byte(s.Get()), finalEncodedV) {
+	if bytes.Equal([]byte(s.Get(sv)), finalEncodedV) {
 		return nil
 	}
-	s.v.Store(finalEncodedV)
-	s.changed()
+	sv.setGeneric(s.slotIdx, finalEncodedV)
 	return nil
 }
 
-func (s *StateMachineSetting) setToDefault() {
-	defV, _, err := s.Transformer(nil, nil)
+func (s *StateMachineSetting) setToDefault(sv *Values) {
+	defV, _, err := s.transformer(sv, nil, nil)
 	if err != nil {
 		panic(err)
 	}
-	if err := s.set(defV); err != nil {
+	if err := s.set(sv, defV); err != nil {
 		panic(err)
 	}
 }
 
 // RegisterStateMachineSetting registers a StateMachineSetting. See the comment
 // for StateMachineSetting for details.
-func (r *Registry) RegisterStateMachineSetting(
-	key, desc string, transformer TransformerFn,
-) *StateMachineSetting {
+func RegisterStateMachineSetting(key, desc string, transformer TransformerFn) *StateMachineSetting {
 	setting := &StateMachineSetting{
-		Transformer: transformer,
+		transformer: transformer,
 	}
-	r.register(key, desc, setting)
+	register(key, desc, setting)
 	return setting
-}
-
-// OnChange registers a callback to be called when the setting changes.
-func (s *StateMachineSetting) OnChange(fn func()) *StateMachineSetting {
-	s.setOnChange(fn)
-	return s
-}
-
-// TestingSetStatemachine returns a mock, unregistered string setting for testing. See
-// TestingSetBool for more details.
-func TestingSetStatemachine(s **StateMachineSetting, transformer TransformerFn) func() {
-	saved := *s
-	tmp := &StateMachineSetting{Transformer: transformer}
-	*s = tmp
-	return func() {
-		*s = saved
-	}
 }

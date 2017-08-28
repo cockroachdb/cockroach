@@ -715,11 +715,11 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		); err != nil {
 			t.Fatal(err)
 		}
-		wantedMode := cluster.DistSQLExecModeFromString(cfg.overrideDistSQLMode) // off => 0, etc
+		wantedMode := sql.DistSQLExecModeFromString(cfg.overrideDistSQLMode) // off => 0, etc
 		// Wait until all servers are aware of the setting.
 		testutils.SucceedsSoon(t.t, func() error {
 			for i := 0; i < t.cluster.NumServers(); i++ {
-				var m cluster.DistSQLExecMode
+				var m sql.DistSQLExecMode
 				err := t.cluster.ServerConn(i % t.cluster.NumServers()).QueryRow(
 					"SHOW CLUSTER SETTING sql.defaults.distsql",
 				).Scan(&m)

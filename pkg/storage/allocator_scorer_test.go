@@ -781,7 +781,7 @@ func TestBalanceScore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	st := cluster.MakeTestingClusterSettings()
-	st.EnableStatsBasedRebalancing.Override(true)
+	EnableStatsBasedRebalancing.Override(&st.SV, true)
 
 	storeList := StoreList{
 		candidateRanges:          stat{mean: 1000},
@@ -943,7 +943,7 @@ func TestRebalanceConvergesOnMean(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	st := cluster.MakeTestingClusterSettings()
-	st.EnableStatsBasedRebalancing.Override(true)
+	EnableStatsBasedRebalancing.Override(&st.SV, true)
 
 	const diskCapacity = 2000
 	storeList := StoreList{

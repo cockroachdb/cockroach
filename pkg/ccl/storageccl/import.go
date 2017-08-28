@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -38,20 +39,35 @@ var importRequestLimit = 1
 
 var importRequestLimiter = makeConcurrentRequestLimiter(importRequestLimit)
 
+var importBatchSize = settings.RegisterByteSizeSetting(
+	"kv.import.batch_size",
+	"",
+	63<<20,
+)
+
+// AddSSTableEnabled wraps "kv.import.experimental_addsstable.enabled".
+var AddSSTableEnabled = settings.RegisterBoolSetting(
+	"kv.import.experimental_addsstable.enabled",
+	"set to true to use the AddSSTable command in Import or false to use WriteBatch",
+	true,
+)
+
 // commandMetadataEstimate is an estimate of how much metadata Raft will add to
 // a WriteBatch or AddSSTable command. It is intentionally a vast overestimate
 // to avoid embedding intricate knowledge of the Raft encoding scheme here.
 const commandMetadataEstimate = 1 << 20 // 1 MB
 
 func init() {
+	importBatchSize.Hide()
+	AddSSTableEnabled.Hide()
 	storage.SetImportCmd(evalImport)
 
 	// Ensure that the user cannot set the maximum raft command size so low that
 	// more than half of an Import or AddSSTable command will be taken up by Raft
 	// metadata.
-	if commandMetadataEstimate > cluster.MaxCommandSizeFloor/2 {
+	if commandMetadataEstimate > storage.MaxCommandSizeFloor/2 {
 		panic(fmt.Sprintf("raft command size floor (%s) is too small for import commands",
-			humanizeutil.IBytes(cluster.MaxCommandSizeFloor)))
+			humanizeutil.IBytes(storage.MaxCommandSizeFloor)))
 	}
 }
 
@@ -59,9 +75,9 @@ func init() {
 // or AddSSTable request. It uses the ImportBatchSize setting directly unless
 // the specified value would exceed the maximum Raft command size, in which case
 // it returns the maximum batch size that will fit within a Raft command.
-func maxImportBatchSize(settings *cluster.Settings) int64 {
-	desiredSize := settings.ImportBatchSize.Get()
-	maxCommandSize := settings.MaxCommandSize.Get()
+func maxImportBatchSize(st *cluster.Settings) int64 {
+	desiredSize := importBatchSize.Get(&st.SV)
+	maxCommandSize := storage.MaxCommandSize.Get(&st.SV)
 	if desiredSize+commandMetadataEstimate > maxCommandSize {
 		return maxCommandSize - commandMetadataEstimate
 	}
@@ -270,7 +286,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 		if batcher != nil {
 			return errors.New("cannot overwrite a batcher")
 		}
-		if cArgs.EvalCtx.ClusterSettings().AddSSTableEnabled.Get() {
+		if AddSSTableEnabled.Get(&cArgs.EvalCtx.ClusterSettings().SV) {
 			sstWriter, err := engine.MakeRocksDBSstFileWriter()
 			if err != nil {
 				return errors.Wrapf(err, "making sstBatcher")

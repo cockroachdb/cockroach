@@ -8567,12 +8567,12 @@ func TestCommandTooLarge(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
-	tc.store.cfg.Settings.Manual.Store(true)
-	maxCommandSize := tc.store.cfg.Settings.MaxCommandSize
-	maxCommandSize.Override(1024)
+	st := tc.store.cfg.Settings
+	st.Manual.Store(true)
+	MaxCommandSize.Override(&st.SV, 1024)
 
 	args := putArgs(roachpb.Key("k"),
-		[]byte(strings.Repeat("a", int(maxCommandSize.Get()))))
+		[]byte(strings.Repeat("a", int(MaxCommandSize.Get(&st.SV)))))
 	if _, pErr := tc.SendWrapped(&args); !testutils.IsPError(pErr, "command is too large") {
 		t.Fatalf("did not get expected error: %v", pErr)
 	}

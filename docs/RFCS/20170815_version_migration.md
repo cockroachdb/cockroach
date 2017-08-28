@@ -466,31 +466,11 @@ func (ecv *ExposedClusterVersion) BootstrapVersion() ClusterVersion
 func (ecv *ExposedClusterVersion) IsActive(v roachpb.Version) bool
 ```
 
-The remaining complexity lies in how `version *settings.StateMachineSetting` is initialized:
-
-```go
-s.version = r.RegisterStateMachineSetting("version",
-		"set the active cluster version in the format '<major>.<minor>'.", // hide optional `-<unstable>`
-		versionTransformer(minVersion, serverVersion, func() ClusterVersion {
-			return *s.baseVersion.Load().(*ClusterVersion)
-		}),
-	)
-```
-
-where `versionTransformer` contains all of the update logic (mod reading from
-the table: we've updated the settings framework to use the table for all
-`StateMachineSettings`, of which this is the only instance at the time of
-writing):
-
-```go
-func versionTransformer(
-	minSupportedVersion, serverVersion roachpb.Version, defaultVersion func() ClusterVersion,
-) settings.TransformerFn {
-  // ...
-}
-```
-
-The returned `settings.TransformerFn` takes
+The remaining complexity lies in the transformer function for
+`version *settings.StateMachineSetting`. It contains all of the update logic
+(mod reading from the table: we've updated the settings framework to use the
+table for all `StateMachineSettings`, of which this is the only instance at the
+time of writing); `versionTransformer` takes
 
 - the previous encoded value (i.e. a marshalled `ClusterVersion`)
 - the desired transition, if any (for example "1.2").

@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -55,6 +56,11 @@ const (
 	// is caught up via a snapshot and never performs the ComputeChecksum
 	// operation.
 	collectChecksumTimeout = 5 * time.Second
+)
+
+var gcBatchSize = settings.RegisterIntSetting("kv.gc.batch_size",
+	"maximum number of keys in a batch for MVCC garbage collection",
+	100000,
 )
 
 // CommandArgs contains all the arguments to a command.
@@ -1481,8 +1487,10 @@ func evalGC(
 	}
 
 	// Garbage collect the specified keys by expiration timestamps.
-	err := engine.MVCCGarbageCollect(ctx, batch, cArgs.Stats, keys, h.Timestamp, cArgs.EvalCtx.ClusterSettings().GCBatchSize.Get())
-	if err != nil {
+	if err := engine.MVCCGarbageCollect(
+		ctx, batch, cArgs.Stats, keys, h.Timestamp,
+		gcBatchSize.Get(&cArgs.EvalCtx.ClusterSettings().SV),
+	); err != nil {
 		return EvalResult{}, err
 	}
 
