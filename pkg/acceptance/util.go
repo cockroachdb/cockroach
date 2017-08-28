@@ -79,7 +79,7 @@ func init() {
 	flag.Parse()
 }
 
-var flagDuration = flag.Duration("d", cluster.DefaultDuration, "duration to run the test")
+var flagDuration = flag.Duration("d", 5*time.Second, "for duration-limited tests, how long to run them for")
 var flagNodes = flag.Int("nodes", 4, "number of nodes")
 var flagStores = flag.Int("stores", 1, "number of stores to use for each node")
 var flagRemote = flag.Bool("remote", false, "run the test using terrafarm instead of docker")
@@ -355,16 +355,16 @@ func MakeFarmer(t testing.TB, prefix string, stopper *stop.Stopper) *terrafarm.F
 // readConfigFromFlags will convert the flags to a TestConfig for the purposes
 // of starting up a cluster.
 func readConfigFromFlags() cluster.TestConfig {
-	return cluster.TestConfig{
+	cfg := cluster.TestConfig{
 		Name:     fmt.Sprintf("AdHoc %dx%d", *flagNodes, *flagStores),
 		Duration: *flagDuration,
-		Nodes: []cluster.NodeConfig{
-			{
-				Count:  int32(*flagNodes),
-				Stores: []cluster.StoreConfig{{Count: int32(*flagStores)}},
-			},
-		},
 	}
+	for i := 0; i < *flagNodes; i++ {
+		cfg.Nodes = append(cfg.Nodes, cluster.NodeConfig{
+			Stores: []cluster.StoreConfig{{Count: int32(*flagStores)}},
+		})
+	}
+	return cfg
 }
 
 // runTestOnConfigs retrieves the full list of test configurations and runs the
@@ -447,7 +447,7 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 			clusterCfg := localcluster.ClusterConfig{
 				Ephemeral: true,
 				DataDir:   dataDir,
-				NumNodes:  int(cfg.Nodes[0].Count),
+				NumNodes:  len(cfg.Nodes),
 			}
 			l := localcluster.New(clusterCfg)
 
@@ -583,14 +583,16 @@ const (
 )
 
 func testDocker(
-	ctx context.Context, t *testing.T, num int32, name string, containerConfig container.Config,
+	ctx context.Context, t *testing.T, num int, name string, containerConfig container.Config,
 ) error {
 	var err error
 	RunDocker(t, func(t *testing.T) {
 		cfg := cluster.TestConfig{
 			Name:     name,
 			Duration: *flagDuration,
-			Nodes:    []cluster.NodeConfig{{Count: num, Stores: []cluster.StoreConfig{{Count: 1}}}},
+		}
+		for i := 0; i < num; i++ {
+			cfg.Nodes = append(cfg.Nodes, cluster.NodeConfig{Stores: []cluster.StoreConfig{{Count: 1}}})
 		}
 		l := StartCluster(ctx, t, cfg).(*cluster.DockerCluster)
 		defer l.AssertAndStop(ctx, t)
