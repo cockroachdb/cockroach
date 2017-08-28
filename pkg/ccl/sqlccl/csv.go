@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -91,12 +92,13 @@ func LoadCSV(
 	dest = fmt.Sprintf("nodelocal://%s", dest)
 
 	return doLocalCSVTransform(
-		ctx, parentID, tableDesc, dest, dataFiles, comma, comment, nullif, sstMaxSize,
+		ctx, nil, parentID, tableDesc, dest, dataFiles, comma, comment, nullif, sstMaxSize,
 	)
 }
 
 func doLocalCSVTransform(
 	ctx context.Context,
+	job *jobs.Job,
 	parentID sqlbase.ID,
 	tableDesc *sqlbase.TableDescriptor,
 	dest string,
@@ -129,6 +131,11 @@ func doLocalCSVTransform(
 		defer close(recordCh)
 		var err error
 		csvCount, err = readCSV(gCtx, comma, comment, len(tableDesc.VisibleColumns()), dataFiles, recordCh)
+		if job != nil {
+			if err := job.Progressed(ctx, 1.0/3.0, jobs.Noop); err != nil {
+				log.Warningf(ctx, "failed to update job progress: %s", err)
+			}
+		}
 		return err
 	})
 	group.Go(func() error {
@@ -141,6 +148,11 @@ func doLocalCSVTransform(
 		defer close(contentCh)
 		var err error
 		kvCount, err = writeRocksDB(gCtx, kvCh, rocksdbDest, sstMaxSize, contentCh, walltime)
+		if job != nil {
+			if err := job.Progressed(ctx, 2.0/3.0, jobs.Noop); err != nil {
+				log.Warningf(ctx, "failed to update job progress: %s", err)
+			}
+		}
 		return err
 	})
 	group.Go(func() error {
@@ -753,9 +765,31 @@ func importPlanHook(
 			return err
 		}
 
+		// NB: the post-conversion RESTORE will create and maintain its own job.
+		// This job is thus only for tracking the conversion, and will be Finished()
+		// before the restore starts.
+		job := p.ExecCfg().JobRegistry.NewJob(jobs.Record{
+			// TODO(dt): when we have convert-only SQL, put that here.
+			Description: fmt.Sprintf("import %s CSV conversion", tableDesc.Name),
+			Username:    p.User(),
+			Details: jobs.ImportDetails{
+				Tables: []jobs.ImportDetails_Table{{
+					Desc:       tableDesc,
+					URIs:       files,
+					BackupPath: temp,
+				}},
+			},
+		})
+		if err := job.Created(ctx, jobs.WithoutCancel); err != nil {
+			return err
+		}
+		if err := job.Started(ctx); err != nil {
+			return err
+		}
+
 		if distributed {
 			_, err = doDistributedCSVTransform(
-				ctx, files, p, tableDesc, temp,
+				ctx, job, files, p, tableDesc, temp,
 				comma, comment, nullif, walltime,
 			)
 			if err != nil {
@@ -763,13 +797,17 @@ func importPlanHook(
 			}
 		} else {
 			_, _, _, err = doLocalCSVTransform(
-				ctx, parentID, tableDesc, temp, files,
+				ctx, job, parentID, tableDesc, temp, files,
 				comma, comment, nullif, sstSize,
 			)
 			if err != nil {
 				return err
 			}
 		}
+		if err := job.FinishedWith(ctx, err); err != nil {
+			return err
+		}
+
 		restore := &parser.Restore{
 			Targets: parser.TargetList{
 				Tables: []parser.TablePattern{&parser.AllTablesSelector{Database: csvDatabaseName}},
@@ -785,6 +823,7 @@ func importPlanHook(
 
 func doDistributedCSVTransform(
 	ctx context.Context,
+	job *jobs.Job,
 	files []string,
 	p sql.PlanHookState,
 	tableDesc *sqlbase.TableDescriptor,
@@ -821,6 +860,7 @@ func doDistributedCSVTransform(
 
 	if err := p.DistLoader().LoadCSV(
 		ctx,
+		job,
 		p.ExecCfg().DB,
 		evalCtx,
 		p.ExecCfg().NodeID.Get(),
@@ -885,9 +925,7 @@ func newReadCSVProcessor(
 	flowCtx *distsqlrun.FlowCtx, spec distsqlrun.ReadCSVSpec, output distsqlrun.RowReceiver,
 ) (distsqlrun.Processor, error) {
 	cp := &readCSVProcessor{
-		comma:      spec.Comma,
-		comment:    spec.Comment,
-		nullif:     spec.Nullif,
+		csvOptions: spec.Options,
 		sampleSize: spec.SampleSize,
 		tableDesc:  spec.TableDesc,
 		uri:        spec.Uri,
@@ -900,9 +938,7 @@ func newReadCSVProcessor(
 }
 
 type readCSVProcessor struct {
-	comma      rune
-	comment    rune
-	nullif     *string
+	csvOptions roachpb.CSVOptions
 	sampleSize int32
 	tableDesc  sqlbase.TableDescriptor
 	uri        string
@@ -930,14 +966,15 @@ func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 	// Read CSV into CSV records
 	group.Go(func() error {
 		defer close(recordCh)
-		_, err := readCSV(gCtx, cp.comma, cp.comment, len(cp.tableDesc.VisibleColumns()), []string{cp.uri}, recordCh)
+		_, err := readCSV(gCtx, cp.csvOptions.Comma, cp.csvOptions.Comment,
+			len(cp.tableDesc.VisibleColumns()), []string{cp.uri}, recordCh)
 		return err
 	})
 	// Convert CSV records to KVs
 	group.Go(func() error {
 		defer close(kvCh)
 		return groupWorkers(gCtx, runtime.NumCPU(), func(ctx context.Context) error {
-			return convertRecord(ctx, recordCh, kvCh, cp.nullif, &cp.tableDesc)
+			return convertRecord(ctx, recordCh, kvCh, cp.csvOptions.Nullif, &cp.tableDesc)
 		})
 	})
 	// Sample KVs

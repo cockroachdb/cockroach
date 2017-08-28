@@ -6,13 +6,11 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/LICENSE
 
-package sqlccl
+package sqlccl_test
 
 import (
-	"bytes"
 	"fmt"
 	"io/ioutil"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,7 +19,9 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -72,7 +72,7 @@ func TestLoadCSV(t *testing.T) {
 	}
 
 	null := ""
-	if _, _, _, err := LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, &null, testSSTMaxSize); err != nil {
+	if _, _, _, err := sqlccl.LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, &null, testSSTMaxSize); err != nil {
 		t.Fatal(err)
 	}
 
@@ -138,7 +138,7 @@ func TestLoadCSVUniqueDuplicate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, _, err := LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, nil /* nullif */, testSSTMaxSize)
+	_, _, _, err := sqlccl.LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, nil /* nullif */, testSSTMaxSize)
 	if !testutils.IsError(err, "duplicate key") {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestLoadCSVPrimaryDuplicate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, _, err := LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, nil /* nullif */, testSSTMaxSize)
+	_, _, _, err := sqlccl.LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, nil /* nullif */, testSSTMaxSize)
 	if !testutils.IsError(err, "duplicate key") {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -218,13 +218,13 @@ func TestLoadCSVPrimaryDuplicateSSTBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, _, err := LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, nil /* nullif */, sstMaxSize)
+	_, _, _, err := sqlccl.LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, nil /* nullif */, sstMaxSize)
 	if !testutils.IsError(err, "duplicate key") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
-// TestLoadCSVOptions tests LoadCSV with the comma, comment, and nullif
+// TestLoadCSVOptions tests sqlccl.LoadCSV with the comma, comment, and nullif
 // options set.
 func TestLoadCSVOptions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -273,7 +273,7 @@ N|N
 		t.Fatal(err)
 	}
 	null := "N"
-	csv, kv, sst, err := LoadCSV(ctx, tablePath, []string{dataPath}, tmp, '|' /* comma */, '#' /* comment */, &null /* nullif */, 500)
+	csv, kv, sst, err := sqlccl.LoadCSV(ctx, tablePath, []string{dataPath}, tmp, '|' /* comma */, '#' /* comment */, &null /* nullif */, 500)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,51 +285,6 @@ N|N
 	}
 	if sst != 2 {
 		t.Fatalf("created %d SSTs, expected %d", sst, 2)
-	}
-}
-
-func TestSampleRate(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	const (
-		numRows = 10000
-		keySize = 100
-		valSize = 50
-	)
-
-	tests := []struct {
-		sampleSize float64
-		expected   int
-	}{
-		{0, numRows},
-		{100, numRows},
-		{1000, 1448},
-		{10000, 126},
-		{100000, 13},
-		{1000000, 1},
-	}
-	kv := roachpb.KeyValue{
-		Key:   bytes.Repeat([]byte("0"), keySize),
-		Value: roachpb.Value{RawBytes: bytes.Repeat([]byte("0"), valSize)},
-	}
-
-	for _, tc := range tests {
-		t.Run(fmt.Sprint(tc.sampleSize), func(t *testing.T) {
-			sr := sampleRate{
-				rnd:        rand.New(rand.NewSource(0)),
-				sampleSize: tc.sampleSize,
-			}
-
-			var sampled int
-			for i := 0; i < numRows; i++ {
-				if sr.sample(kv) {
-					sampled++
-				}
-			}
-			if sampled != tc.expected {
-				t.Fatalf("got %d, expected %d", sampled, tc.expected)
-			}
-		})
 	}
 }
 
@@ -490,6 +445,13 @@ func TestImportStmt(t *testing.T) {
 					t.Fatal(err)
 				}
 				return
+			}
+
+			if err := verifySystemJob(sqlDB, 0, jobs.TypeImport, jobs.Record{
+				Username:    security.RootUser,
+				Description: "import t CSV conversion",
+			}); err != nil {
+				t.Fatal(err)
 			}
 
 			if expected, actual := expectedRows, restored.rows; expected != actual {
