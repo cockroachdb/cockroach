@@ -93,9 +93,6 @@ var flagCwd = flag.String("cwd", func() string {
 }(), "directory to run terraform from")
 var flagKeyName = flag.String("key-name", "", "name of key for remote cluster")
 var flagLogDir = flag.String("l", "", "the directory to store log files, relative to the test source")
-var flagTestConfigs = flag.Bool("test-configs", false, "instead of using the passed in configuration, use the default "+
-	"cluster configurations for each test. This overrides the nodes, stores and duration flags and will run the test "+
-	"against a collection of pre-specified cluster configurations.")
 var flagConfig = flag.String("config", "", "a json TestConfig proto, see testconfig.proto")
 
 // Terrafarm flags.
@@ -375,16 +372,11 @@ func readConfigFromFlags() cluster.TestConfig {
 // getConfigs returns a list of test configs based on the passed in flags.
 func getConfigs(t *testing.T) []cluster.TestConfig {
 	// If a config not supplied, just read the flags.
-	if (flagConfig == nil || len(*flagConfig) == 0) &&
-		(flagTestConfigs == nil || !*flagTestConfigs) {
+	if flagConfig == nil || len(*flagConfig) == 0 {
 		return []cluster.TestConfig{readConfigFromFlags()}
 	}
 
 	var configs []cluster.TestConfig
-	if flagTestConfigs != nil && *flagTestConfigs {
-		configs = append(configs, cluster.DefaultConfigs()...)
-	}
-
 	if flagConfig != nil && len(*flagConfig) > 0 {
 		// Read the passed in config from the command line.
 		var config cluster.TestConfig
