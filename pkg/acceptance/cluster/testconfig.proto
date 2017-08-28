@@ -37,12 +37,12 @@ enum InitMode {
 
 // StoreConfig holds the configuration of a collection of similar stores.
 message StoreConfig {
-  optional int32 count = 1 [(gogoproto.nullable) = false];
   optional int32 max_ranges = 2 [(gogoproto.nullable) = false];
 }
 
 // NodeConfig holds the configuration of a collection of similar nodes.
 message NodeConfig {
+  optional string version = 1 [(gogoproto.nullable) = false];
   repeated StoreConfig stores = 2 [(gogoproto.nullable) = false];
 }
 
