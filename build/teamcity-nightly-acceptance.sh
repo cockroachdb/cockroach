@@ -66,7 +66,7 @@ case $TESTNAME in
   BenchmarkRestoreBig|BenchmarkRestoreTPCH10/numNodes=1|BenchmarkRestoreTPCH10/numNodes=3|BenchmarkRestoreTPCH10/numNodes=10|BenchmarkRestore2TB|BenchmarkBackup2TB)
     PKG=./pkg/ccl/acceptanceccl
     TESTTIMEOUT=2h
-    COCKROACH_EXTRA_FLAGS+=' -tf.cockroach-env=COCKROACH_PREEMPTIVE_SNAPSHOT_RATE=8388608 -tf.storage-location=westus'
+    COCKROACH_EXTRA_FLAGS+=" -tf.cockroach-env=COCKROACH_PREEMPTIVE_SNAPSHOT_RATE=8388608 -tf.storage-location=westus -cwd=$PWD/pkg/acceptance/terraform/gce"
     ;;
   *)
     echo "unknown test name $TESTNAME"
