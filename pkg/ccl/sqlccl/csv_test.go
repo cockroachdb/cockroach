@@ -414,6 +414,13 @@ func TestImportStmt(t *testing.T) {
 			"",
 		},
 		{
+			"schema-in-query-skip-load",
+			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) WITH temp = $1, distributed, comma = '|', comment = '#', nullif='', skip_load`,
+			nil,
+			filesWithOpts,
+			"",
+		},
+		{
 			"missing-temp",
 			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s)`,
 			nil,
@@ -452,6 +459,12 @@ func TestImportStmt(t *testing.T) {
 				Description: "import t CSV conversion",
 			}); err != nil {
 				t.Fatal(err)
+			}
+
+			if strings.Contains(tc.query, "transform_only") {
+				sqlDB.Exec(
+					`RESTORE csv.* FROM %s WITH into_db = %s`, backupPath, fmt.Sprintf(`csv%d`, i),
+				)
 			}
 
 			if expected, actual := expectedRows, restored.rows; expected != actual {
