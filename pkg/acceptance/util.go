@@ -16,7 +16,6 @@ package acceptance
 
 import (
 	gosql "database/sql"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"go/build"
@@ -93,7 +92,6 @@ var flagCwd = flag.String("cwd", func() string {
 }(), "directory to run terraform from")
 var flagKeyName = flag.String("key-name", "", "name of key for remote cluster")
 var flagLogDir = flag.String("l", "", "the directory to store log files, relative to the test source")
-var flagConfig = flag.String("config", "", "a json TestConfig proto, see testconfig.proto")
 
 // Terrafarm flags.
 var flagTFReuseCluster = flag.String("reuse", "",
@@ -369,37 +367,6 @@ func readConfigFromFlags() cluster.TestConfig {
 	}
 }
 
-// getConfigs returns a list of test configs based on the passed in flags.
-func getConfigs(t *testing.T) []cluster.TestConfig {
-	// If a config not supplied, just read the flags.
-	if flagConfig == nil || len(*flagConfig) == 0 {
-		return []cluster.TestConfig{readConfigFromFlags()}
-	}
-
-	var configs []cluster.TestConfig
-	if flagConfig != nil && len(*flagConfig) > 0 {
-		// Read the passed in config from the command line.
-		var config cluster.TestConfig
-		if err := json.Unmarshal([]byte(*flagConfig), &config); err != nil {
-			t.Error(err)
-		}
-		configs = append(configs, config)
-	}
-
-	// Override duration in all configs if the flags are set.
-	for i := 0; i < len(configs); i++ {
-		// Override values.
-		if flagDuration != nil && *flagDuration != cluster.DefaultDuration {
-			configs[i].Duration = *flagDuration
-		}
-		// Set missing defaults.
-		if configs[i].Duration == 0 {
-			configs[i].Duration = cluster.DefaultDuration
-		}
-	}
-	return configs
-}
-
 // runTestOnConfigs retrieves the full list of test configurations and runs the
 // passed in test against each on serially. If any options are specified, they may mutate
 // the test config before it runs.
@@ -408,22 +375,17 @@ func runTestOnConfigs(
 	testFunc func(context.Context, *testing.T, cluster.Cluster, cluster.TestConfig),
 	options ...func(*cluster.TestConfig),
 ) {
-	cfgs := getConfigs(t)
-	if len(cfgs) == 0 {
-		t.Fatal("no config defined so most tests won't run")
-	}
+	cfg := readConfigFromFlags()
 	ctx := context.Background()
-	for _, cfg := range cfgs {
-		for _, opt := range options {
-			opt(&cfg)
-		}
-		func() {
-			cluster := StartCluster(ctx, t, cfg)
-			log.Infof(ctx, "cluster started successfully")
-			defer cluster.AssertAndStop(ctx, t)
-			testFunc(ctx, t, cluster, cfg)
-		}()
+
+	for _, opt := range options {
+		opt(&cfg)
 	}
+
+	cluster := StartCluster(ctx, t, cfg)
+	log.Infof(ctx, "cluster started successfully")
+	defer cluster.AssertAndStop(ctx, t)
+	testFunc(ctx, t, cluster, cfg)
 }
 
 // StartCluster starts a cluster from the relevant flags. All test clusters
