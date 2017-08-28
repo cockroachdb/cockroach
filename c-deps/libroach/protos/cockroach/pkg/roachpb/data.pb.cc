@@ -44,6 +44,8 @@ class LeaseDefaultTypeInternal : public ::google::protobuf::internal::Explicitly
 } _Lease_default_instance_;
 class AbortCacheEntryDefaultTypeInternal : public ::google::protobuf::internal::ExplicitlyConstructed<AbortCacheEntry> {
 } _AbortCacheEntry_default_instance_;
+class CSVOptionsDefaultTypeInternal : public ::google::protobuf::internal::ExplicitlyConstructed<CSVOptions> {
+} _CSVOptions_default_instance_;
 
 namespace protobuf_cockroach_2fpkg_2froachpb_2fdata_2eproto {
 
@@ -58,6 +60,7 @@ PROTOBUF_CONSTEXPR_VAR ::google::protobuf::internal::AuxillaryParseTableField
 };
 PROTOBUF_CONSTEXPR_VAR ::google::protobuf::internal::ParseTable const
     TableStruct::schema[] = {
+  { NULL, NULL, 0, -1, -1, false },
   { NULL, NULL, 0, -1, -1, false },
   { NULL, NULL, 0, -1, -1, false },
   { NULL, NULL, 0, -1, -1, false },
@@ -90,6 +93,7 @@ void TableStruct::Shutdown() {
   _Intent_default_instance_.Shutdown();
   _Lease_default_instance_.Shutdown();
   _AbortCacheEntry_default_instance_.Shutdown();
+  _CSVOptions_default_instance_.Shutdown();
 }
 
 void TableStruct::InitDefaultsImpl() {
@@ -113,6 +117,7 @@ void TableStruct::InitDefaultsImpl() {
   _Intent_default_instance_.DefaultConstruct();
   _Lease_default_instance_.DefaultConstruct();
   _AbortCacheEntry_default_instance_.DefaultConstruct();
+  _CSVOptions_default_instance_.DefaultConstruct();
   _Value_default_instance_.get_mutable()->timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
   _KeyValue_default_instance_.get_mutable()->value_ = const_cast< ::cockroach::roachpb::Value*>(
@@ -6349,6 +6354,388 @@ void AbortCacheEntry::set_priority(::google::protobuf::int32 value) {
   set_has_priority();
   priority_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.AbortCacheEntry.priority)
+}
+
+#endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
+
+// ===================================================================
+
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int CSVOptions::kCommaFieldNumber;
+const int CSVOptions::kCommentFieldNumber;
+const int CSVOptions::kNullifFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+CSVOptions::CSVOptions()
+  : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
+  if (GOOGLE_PREDICT_TRUE(this != internal_default_instance())) {
+    protobuf_cockroach_2fpkg_2froachpb_2fdata_2eproto::InitDefaults();
+  }
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.CSVOptions)
+}
+CSVOptions::CSVOptions(const CSVOptions& from)
+  : ::google::protobuf::MessageLite(),
+      _internal_metadata_(NULL),
+      _has_bits_(from._has_bits_),
+      _cached_size_(0) {
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  nullif_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (from.has_nullif()) {
+    nullif_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.nullif_);
+  }
+  ::memcpy(&comma_, &from.comma_,
+    reinterpret_cast<char*>(&comment_) -
+    reinterpret_cast<char*>(&comma_) + sizeof(comment_));
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.CSVOptions)
+}
+
+void CSVOptions::SharedCtor() {
+  _cached_size_ = 0;
+  nullif_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  ::memset(&comma_, 0, reinterpret_cast<char*>(&comment_) -
+    reinterpret_cast<char*>(&comma_) + sizeof(comment_));
+}
+
+CSVOptions::~CSVOptions() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.CSVOptions)
+  SharedDtor();
+}
+
+void CSVOptions::SharedDtor() {
+  nullif_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+
+void CSVOptions::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
+const CSVOptions& CSVOptions::default_instance() {
+  protobuf_cockroach_2fpkg_2froachpb_2fdata_2eproto::InitDefaults();
+  return *internal_default_instance();
+}
+
+CSVOptions* CSVOptions::New(::google::protobuf::Arena* arena) const {
+  CSVOptions* n = new CSVOptions;
+  if (arena != NULL) {
+    arena->Own(n);
+  }
+  return n;
+}
+
+void CSVOptions::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.roachpb.CSVOptions)
+  if (has_nullif()) {
+    GOOGLE_DCHECK(!nullif_.IsDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited()));
+    (*nullif_.UnsafeRawStringPointer())->clear();
+  }
+  if (_has_bits_[0 / 32] & 6u) {
+    ::memset(&comma_, 0, reinterpret_cast<char*>(&comment_) -
+      reinterpret_cast<char*>(&comma_) + sizeof(comment_));
+  }
+  _has_bits_.Clear();
+  _internal_metadata_.Clear();
+}
+
+bool CSVOptions::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  ::google::protobuf::io::LazyStringOutputStream unknown_fields_string(
+      ::google::protobuf::NewPermanentCallback(&_internal_metadata_,
+          &::google::protobuf::internal::InternalMetadataWithArenaLite::
+              mutable_unknown_fields));
+  ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
+      &unknown_fields_string, false);
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.CSVOptions)
+  for (;;) {
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      case 1: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(8u)) {
+          set_has_comma();
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &comma_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 2: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(16u)) {
+          set_has_comment();
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &comment_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 3: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(26u)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_nullif()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0 ||
+            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormatLite::SkipField(
+            input, tag, &unknown_fields_stream));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.CSVOptions)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.CSVOptions)
+  return false;
+#undef DO_
+}
+
+void CSVOptions::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.CSVOptions)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = _has_bits_[0];
+  if (cached_has_bits & 0x00000002u) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(1, this->comma(), output);
+  }
+
+  if (cached_has_bits & 0x00000004u) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(2, this->comment(), output);
+  }
+
+  if (cached_has_bits & 0x00000001u) {
+    ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
+      3, this->nullif(), output);
+  }
+
+  output->WriteRaw(unknown_fields().data(),
+                   static_cast<int>(unknown_fields().size()));
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.CSVOptions)
+}
+
+size_t CSVOptions::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.CSVOptions)
+  size_t total_size = 0;
+
+  total_size += unknown_fields().size();
+
+  if (_has_bits_[0 / 32] & 7u) {
+    if (has_nullif()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::StringSize(
+          this->nullif());
+    }
+
+    if (has_comma()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int32Size(
+          this->comma());
+    }
+
+    if (has_comment()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int32Size(
+          this->comment());
+    }
+
+  }
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = cached_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  return total_size;
+}
+
+void CSVOptions::CheckTypeAndMergeFrom(
+    const ::google::protobuf::MessageLite& from) {
+  MergeFrom(*::google::protobuf::down_cast<const CSVOptions*>(&from));
+}
+
+void CSVOptions::MergeFrom(const CSVOptions& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.CSVOptions)
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = from._has_bits_[0];
+  if (cached_has_bits & 7u) {
+    if (cached_has_bits & 0x00000001u) {
+      set_has_nullif();
+      nullif_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.nullif_);
+    }
+    if (cached_has_bits & 0x00000002u) {
+      comma_ = from.comma_;
+    }
+    if (cached_has_bits & 0x00000004u) {
+      comment_ = from.comment_;
+    }
+    _has_bits_[0] |= cached_has_bits;
+  }
+}
+
+void CSVOptions::CopyFrom(const CSVOptions& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.roachpb.CSVOptions)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool CSVOptions::IsInitialized() const {
+  return true;
+}
+
+void CSVOptions::Swap(CSVOptions* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void CSVOptions::InternalSwap(CSVOptions* other) {
+  nullif_.Swap(&other->nullif_);
+  std::swap(comma_, other->comma_);
+  std::swap(comment_, other->comment_);
+  std::swap(_has_bits_[0], other->_has_bits_[0]);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+  std::swap(_cached_size_, other->_cached_size_);
+}
+
+::std::string CSVOptions::GetTypeName() const {
+  return "cockroach.roachpb.CSVOptions";
+}
+
+#if PROTOBUF_INLINE_NOT_IN_HEADERS
+// CSVOptions
+
+bool CSVOptions::has_comma() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+void CSVOptions::set_has_comma() {
+  _has_bits_[0] |= 0x00000002u;
+}
+void CSVOptions::clear_has_comma() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+void CSVOptions::clear_comma() {
+  comma_ = 0;
+  clear_has_comma();
+}
+::google::protobuf::int32 CSVOptions::comma() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.CSVOptions.comma)
+  return comma_;
+}
+void CSVOptions::set_comma(::google::protobuf::int32 value) {
+  set_has_comma();
+  comma_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.CSVOptions.comma)
+}
+
+bool CSVOptions::has_comment() const {
+  return (_has_bits_[0] & 0x00000004u) != 0;
+}
+void CSVOptions::set_has_comment() {
+  _has_bits_[0] |= 0x00000004u;
+}
+void CSVOptions::clear_has_comment() {
+  _has_bits_[0] &= ~0x00000004u;
+}
+void CSVOptions::clear_comment() {
+  comment_ = 0;
+  clear_has_comment();
+}
+::google::protobuf::int32 CSVOptions::comment() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.CSVOptions.comment)
+  return comment_;
+}
+void CSVOptions::set_comment(::google::protobuf::int32 value) {
+  set_has_comment();
+  comment_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.CSVOptions.comment)
+}
+
+bool CSVOptions::has_nullif() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+void CSVOptions::set_has_nullif() {
+  _has_bits_[0] |= 0x00000001u;
+}
+void CSVOptions::clear_has_nullif() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+void CSVOptions::clear_nullif() {
+  nullif_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_nullif();
+}
+const ::std::string& CSVOptions::nullif() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.CSVOptions.nullif)
+  return nullif_.GetNoArena();
+}
+void CSVOptions::set_nullif(const ::std::string& value) {
+  set_has_nullif();
+  nullif_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.CSVOptions.nullif)
+}
+#if LANG_CXX11
+void CSVOptions::set_nullif(::std::string&& value) {
+  set_has_nullif();
+  nullif_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.CSVOptions.nullif)
+}
+#endif
+void CSVOptions::set_nullif(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  set_has_nullif();
+  nullif_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.CSVOptions.nullif)
+}
+void CSVOptions::set_nullif(const char* value, size_t size) {
+  set_has_nullif();
+  nullif_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.CSVOptions.nullif)
+}
+::std::string* CSVOptions::mutable_nullif() {
+  set_has_nullif();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.CSVOptions.nullif)
+  return nullif_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+::std::string* CSVOptions::release_nullif() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.CSVOptions.nullif)
+  clear_has_nullif();
+  return nullif_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+void CSVOptions::set_allocated_nullif(::std::string* nullif) {
+  if (nullif != NULL) {
+    set_has_nullif();
+  } else {
+    clear_has_nullif();
+  }
+  nullif_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), nullif);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.CSVOptions.nullif)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

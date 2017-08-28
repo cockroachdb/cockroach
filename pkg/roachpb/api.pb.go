@@ -113,6 +113,7 @@
 		Intent
 		Lease
 		AbortCacheEntry
+		CSVOptions
 		NotLeaseHolderError
 		NodeUnavailableError
 		RangeNotFoundError
