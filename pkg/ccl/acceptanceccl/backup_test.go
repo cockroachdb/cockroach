@@ -140,6 +140,7 @@ func (bt *benchmarkTest) Start(ctx context.Context) {
 	sqlDB.Exec(`SET CLUSTER SETTING cluster.organization = "Cockroach Labs - Production Testing"`)
 	sqlDB.Exec(fmt.Sprintf(`SET CLUSTER SETTING enterprise.license = "%s"`, licenseKey))
 	sqlDB.Exec(`SET CLUSTER SETTING trace.debug.enable = 'true'`)
+	sqlDB.Exec(`SET CLUSTER SETTING server.remote_debugging.mode = 'any'`)
 	// On Azure, if we don't limit our disk throughput, we'll quickly cause node
 	// liveness failures. This limit was determined experimentally on
 	// Standard_D3_v2 instances.
@@ -328,12 +329,19 @@ func BenchmarkRestore2TB(b *testing.B) {
 	}
 	defer db.Close()
 
+	// We're currently pinning this test to be run on GCE via
+	// teamcity-nightly-acceptance.sh. Effectively remove the setting for GCE,
+	// which doesn't seem to need it.
+	if _, err := db.Exec(`SET CLUSTER SETTING kv.bulk_io_write.max_rate = '1GB'`); err != nil {
+		b.Fatalf("%+v", err)
+	}
+
 	if _, err := db.Exec("CREATE DATABASE datablocks"); err != nil {
 		b.Fatalf("%+v", err)
 	}
 
 	fn := func(ctx context.Context) error {
-		_, err := db.Exec(`RESTORE datablocks.* FROM $1`, getAzureBackupFixtureURI(b, "2tb"))
+		_, err := db.Exec(`RESTORE datablocks.* FROM $1`, `gs://cockroach-test/2t-backup`)
 		return err
 	}
 	b.ResetTimer()
@@ -353,8 +361,11 @@ func BenchmarkBackup2TB(b *testing.B) {
 	}
 
 	bt := benchmarkTest{
-		b:               b,
-		nodes:           10,
+		b: b,
+		// TODO(dan): Switch this back to 10 machines when this test goes back
+		// to Azure. Each GCE machine disk is 375GB, so with our current need
+		// for 2x the restore size in disk space, 2tb unless we up this a bit.
+		nodes:           15,
 		storeFixture:    acceptance.FixtureURL(bulkArchiveStoreFixture),
 		prefix:          "backup2tb",
 		skipClusterInit: true,
