@@ -85,14 +85,10 @@ const (
 	// RocksDB default is 4KB. This sets it to 32KB.
 	defaultBlockSize = 32 << 10
 
-	// DefaultMaxOpenFiles is the default value for rocksDB's max_open_files
-	// option.
-	DefaultMaxOpenFiles = -1
-	// RecommendedMaxOpenFiles is the recommended value for rocksDB's
-	// max_open_files option. If more file descriptors are available than the
-	// recommended number, than the default value is used.
+	// RecommendedMaxOpenFiles is the recommended value for RocksDB's
+	// max_open_files option.
 	RecommendedMaxOpenFiles = 10000
-	// MinimumMaxOpenFiles is the minimum value that rocksDB's max_open_files
+	// MinimumMaxOpenFiles is the minimum value that RocksDB's max_open_files
 	// option can be set to. While this should be set as high as possible, the
 	// minimum total for a single store node must be under 2048 for Windows
 	// compatibility. See:
@@ -297,7 +293,7 @@ type RocksDBConfig struct {
 	MaxSizeBytes int64
 	// MaxOpenFiles controls the maximum number of file descriptors RocksDB
 	// creates. If MaxOpenFiles is zero, this is set to DefaultMaxOpenFiles.
-	MaxOpenFiles int
+	MaxOpenFiles uint64
 	// WarnLargeBatchThreshold controls if a log message is printed when a
 	// WriteBatch takes longer than WarnLargeBatchThreshold. If it is set to
 	// zero, no log messages are ever printed.
@@ -428,7 +424,7 @@ func (r *RocksDB) open() error {
 
 	blockSize := envutil.EnvOrDefaultBytes("COCKROACH_ROCKSDB_BLOCK_SIZE", defaultBlockSize)
 	walTTL := envutil.EnvOrDefaultDuration("COCKROACH_ROCKSDB_WAL_TTL", 0).Seconds()
-	maxOpenFiles := DefaultMaxOpenFiles
+	maxOpenFiles := uint64(RecommendedMaxOpenFiles)
 	if r.cfg.MaxOpenFiles != 0 {
 		maxOpenFiles = r.cfg.MaxOpenFiles
 	}
