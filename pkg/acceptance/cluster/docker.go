@@ -75,10 +75,10 @@ func (c Container) Name() string {
 	return c.name
 }
 
-func hasImage(ctx context.Context, l *DockerCluster, ref string) bool {
+func hasImage(ctx context.Context, l *DockerCluster, ref string) error {
 	distributionRef, err := distreference.ParseNamed(ref)
 	if err != nil {
-		log.Fatal(ctx, err)
+		return err
 	}
 	path := distreference.Path(distributionRef)
 	// Correct for random docker stupidity:
@@ -90,7 +90,7 @@ func hasImage(ctx context.Context, l *DockerCluster, ref string) bool {
 		All:       true,
 	})
 	if err != nil {
-		log.Fatal(ctx, err)
+		return err
 	}
 
 	wanted := fmt.Sprintf("%s:%s", path, reference.GetTagFromNamedRef(distributionRef))
@@ -98,16 +98,17 @@ func hasImage(ctx context.Context, l *DockerCluster, ref string) bool {
 		for _, repoTag := range image.RepoTags {
 			// The Image.RepoTags field contains strings of the form <path>:<tag>.
 			if repoTag == wanted {
-				return true
+				return nil
 			}
 		}
 	}
+	var imageList []string
 	for _, image := range images {
 		for _, tag := range image.RepoTags {
-			log.Infof(ctx, "ImageList %s %s", tag, image.ID)
+			imageList = append(imageList, "%s %s", tag, image.ID)
 		}
 	}
-	return false
+	return errors.Errorf("%s not found in:\n%s", strings.Join(imageList, "\n"))
 }
 
 func pullImage(
@@ -116,7 +117,7 @@ func pullImage(
 	// HACK: on CircleCI, docker pulls the image on the first access from an
 	// acceptance test even though that image is already present. So we first
 	// check to see if our image is present in order to avoid this slowness.
-	if hasImage(ctx, l, ref) {
+	if hasImage(ctx, l, ref) == nil {
 		log.Infof(ctx, "ImagePull %s already exists", ref)
 		return nil
 	}
@@ -136,8 +137,8 @@ func pullImage(
 	if err := jsonmessage.DisplayJSONMessagesStream(rc, out, outFd, isTerminal, nil); err != nil {
 		return err
 	}
-	if !hasImage(ctx, l, ref) {
-		return errors.Errorf("pulled image %s but still don't have it", ref)
+	if err := hasImage(ctx, l, ref); err != nil {
+		return errors.Wrapf(err, "pulled image %s but still don't have it", ref)
 	}
 	return nil
 }
