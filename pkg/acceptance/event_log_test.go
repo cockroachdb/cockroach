@@ -37,7 +37,7 @@ func TestEventLog(t *testing.T) {
 	defer s.Close(t)
 
 	RunLocal(t, func(t *testing.T) {
-		runTestOnConfigs(t, testEventLogInner)
+		runTestWithCluster(t, testEventLogInner)
 	})
 }
 

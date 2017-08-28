@@ -367,10 +367,10 @@ func readConfigFromFlags() cluster.TestConfig {
 	return cfg
 }
 
-// runTestOnConfigs retrieves the full list of test configurations and runs the
-// passed in test against each on serially. If any options are specified, they may mutate
-// the test config before it runs.
-func runTestOnConfigs(
+// runTestWithCluster runs the passed in test against the configuration
+// specified by the flags. If any options are specified, they may mutate the
+// test config before it runs.
+func runTestWithCluster(
 	t *testing.T,
 	testFunc func(context.Context, *testing.T, cluster.Cluster, cluster.TestConfig),
 	options ...func(*cluster.TestConfig),
