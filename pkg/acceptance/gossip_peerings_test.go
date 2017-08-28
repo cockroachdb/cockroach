@@ -35,7 +35,7 @@ func TestGossipPeerings(t *testing.T) {
 	defer s.Close(t)
 
 	RunLocal(t, func(t *testing.T) {
-		runTestOnConfigs(t, testGossipPeeringsInner)
+		runTestWithCluster(t, testGossipPeeringsInner)
 	})
 }
 
@@ -97,7 +97,7 @@ func TestGossipRestart(t *testing.T) {
 	RunDocker(t, func(t *testing.T) {
 		// TODO(bram): #4559 Limit this test to only the relevant cases. No chaos
 		// agents should be required.
-		runTestOnConfigs(t, testGossipRestartInner)
+		runTestWithCluster(t, testGossipRestartInner)
 	})
 }
 
