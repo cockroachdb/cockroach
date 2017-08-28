@@ -1513,24 +1513,6 @@ class TimeBoundTblPropCollectorFactory : public rocksdb::TablePropertiesCollecto
 };
 
 rocksdb::Options DBMakeOptions(DBOptions db_opts) {
-  rocksdb::BlockBasedTableOptions table_options;
-  // Pass false for use_blocked_base_builder creates a per file
-  // (sstable) filter instead of a per-block filter. The per file
-  // filter can be consulted before going to the index which saves an
-  // index lookup. The cost is an 4-bytes per key in memory during
-  // compactions, which seems a small price to pay.
-  table_options.filter_policy.reset(
-      rocksdb::NewBloomFilterPolicy(10, false /* !block_based */));
-  table_options.format_version = 2;
-
-  // Increasing block_size decreases memory usage at the cost of
-  // increased read amplification.
-  table_options.block_size = db_opts.block_size;
-  // Disable whole_key_filtering which adds a bloom filter entry for
-  // the "whole key", doubling the size of our bloom filters. This is
-  // used to speed up Get operations which we don't use.
-  table_options.whole_key_filtering = false;
-
   // Use the rocksdb options builder to configure the base options
   // using our memtable budget.
   rocksdb::Options options;
@@ -1549,7 +1531,6 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   options.merge_operator.reset(new DBMergeOperator);
   options.prefix_extractor.reset(new DBPrefixExtractor);
   options.statistics = rocksdb::CreateDBStatistics();
-  options.table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
   options.max_open_files = db_opts.max_open_files;
   options.compaction_pri = rocksdb::kMinOverlappingRatio;
   // Periodically sync the WAL to smooth out writes. Not performing
@@ -1648,6 +1629,7 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   options.target_file_size_base = 4 << 20; // 4 MB
   options.target_file_size_multiplier = 2;
 
+  rocksdb::BlockBasedTableOptions table_options;
   if (db_opts.cache != nullptr) {
     table_options.block_cache = db_opts.cache->rep;
 
@@ -1660,6 +1642,24 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
     const int64_t new_capacity = std::max<int64_t>(0, capacity - options.write_buffer_size);
     db_opts.cache->rep->SetCapacity(new_capacity);
   }
+
+  // Pass false for use_blocked_base_builder creates a per file
+  // (sstable) filter instead of a per-block filter. The per file
+  // filter can be consulted before going to the index which saves an
+  // index lookup. The cost is an 4-bytes per key in memory during
+  // compactions, which seems a small price to pay.
+  table_options.filter_policy.reset(
+      rocksdb::NewBloomFilterPolicy(10, false /* !block_based */));
+  table_options.format_version = 2;
+
+  // Increasing block_size decreases memory usage at the cost of
+  // increased read amplification.
+  table_options.block_size = db_opts.block_size;
+  // Disable whole_key_filtering which adds a bloom filter entry for
+  // the "whole key", doubling the size of our bloom filters. This is
+  // used to speed up Get operations which we don't use.
+  table_options.whole_key_filtering = false;
+  options.table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
   return options;
 }
 
