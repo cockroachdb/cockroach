@@ -70,7 +70,7 @@ func TestImportOutOfOrder(t *testing.T) {
 	}
 }
 
-func BenchmarkImport(b *testing.B) {
+func BenchmarkLoad(b *testing.B) {
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
