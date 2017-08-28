@@ -380,6 +380,10 @@ func (s *span) SetBaggageItem(restrictedKey, value string) opentracing.Span {
 }
 
 func (s *span) setBaggageItemLocked(restrictedKey, value string) opentracing.Span {
+	if oldVal, ok := s.mu.Baggage[restrictedKey]; ok && oldVal == value {
+		// No-op.
+		return s
+	}
 	if s.mu.Baggage == nil {
 		s.mu.Baggage = make(map[string]string)
 	}

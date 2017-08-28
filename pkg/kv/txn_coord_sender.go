@@ -330,10 +330,8 @@ func (tc *TxnCoordSender) Send(
 		txnID := ba.Txn.ID
 
 		// Associate the txnID with the trace. We need to do this after the
-		// maybeBeginTxn call. We set both a baggage item and a tag because only
-		// tags show up in the Lightstep UI.
+		// maybeBeginTxn call.
 		txnIDStr := txnID.String()
-		sp.SetTag("txnID", txnIDStr)
 		sp.SetBaggageItem("txnID", txnIDStr)
 
 		var et *roachpb.EndTransactionRequest
