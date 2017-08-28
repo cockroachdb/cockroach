@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
@@ -933,20 +934,19 @@ func (s *adminServer) Settings(
 	ctx context.Context, req *serverpb.SettingsRequest,
 ) (*serverpb.SettingsResponse, error) {
 	keys := req.Keys
-	r := s.server.st.Registry
 	if len(keys) == 0 {
-		keys = r.Keys()
+		keys = settings.Keys()
 	}
 
 	resp := serverpb.SettingsResponse{KeyValues: make(map[string]serverpb.SettingsResponse_Value)}
 	for _, k := range keys {
-		v, ok := r.Lookup(k)
+		v, ok := settings.Lookup(k)
 		if !ok {
 			continue
 		}
 		resp.KeyValues[k] = serverpb.SettingsResponse_Value{
 			Type:        v.Typ(),
-			Value:       v.String(),
+			Value:       v.String(&s.server.st.SV),
 			Description: v.Description(),
 		}
 	}

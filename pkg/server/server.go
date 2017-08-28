@@ -245,7 +245,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.gossip,
 		s.clock,
 		storage.MakeStorePoolNodeLivenessFunc(s.nodeLiveness),
-		s.cfg.TimeUntilStoreDead,
 		/* deterministic */ false,
 	)
 
@@ -387,11 +386,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	nodeInfo := sql.NodeInfo{
-		AdminURL:     cfg.AdminURL,
-		PGURL:        cfg.PGURL,
-		ClusterID:    s.ClusterID,
-		NodeID:       &s.nodeIDContainer,
-		Organization: s.st.ClusterOrganization,
+		AdminURL:  cfg.AdminURL,
+		PGURL:     cfg.PGURL,
+		ClusterID: s.ClusterID,
+		NodeID:    &s.nodeIDContainer,
 	}
 
 	// Set up Executor
@@ -523,7 +521,7 @@ func inspectEngines(
 // The passed context can be used to trace the server startup. The context
 // should represent the general startup operation.
 func (s *Server) Start(ctx context.Context) error {
-	if s.st.Registry == nil {
+	if !s.st.Initialized {
 		return errors.New("must pass initialized ClusterSettings")
 	}
 	ctx = s.AnnotateCtx(ctx)

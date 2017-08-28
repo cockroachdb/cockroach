@@ -22,6 +22,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	otlog "github.com/opentracing/opentracing-go/log"
 )
@@ -151,8 +152,8 @@ func addStructured(ctx context.Context, s Severity, depth int, format string, ar
 
 		// We load the ReportingSettings from the a global singleton in this
 		// call path. See the singleton's comment for a rationale.
-		if reportingSettings, ok := (ReportingSettingsSingleton.Load()).(*ReportingSettings); ok {
-			sendCrashReport(ctx, *reportingSettings, reportable, depth+1)
+		if sv, ok := (ReportingSettingsSingleton.Load()).(*settings.Values); ok {
+			sendCrashReport(ctx, sv, reportable, depth+1)
 		}
 	}
 	// MakeMessage already added the tags when forming msg, we don't want

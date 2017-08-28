@@ -21,27 +21,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-type dummyReportingSettings struct {
-	diagnosticsReportingEnabled, crashReportsEnabled bool
-}
-
-func (d dummyReportingSettings) HasDiagnosticsReportingEnabled() bool {
-	return d.diagnosticsReportingEnabled
-}
-func (d dummyReportingSettings) HasCrashReportsEnabled() bool {
-	return d.crashReportsEnabled
-}
-
 func TestMain(m *testing.M) {
 	randutil.SeedForTests()
 	security.SetAssetLoader(securitytest.EmbeddedAssets)
 	serverutils.InitTestServerFactory(server.TestServerFactory)
-	f := log.ReportingSettings(dummyReportingSettings{})
-	log.ReportingSettingsSingleton.Store(&f)
+
+	// MakeTestingClusterSettings initializes log.ReportingSettings to this
+	// instance of setting values.
+	st := cluster.MakeTestingClusterSettings()
+	log.DiagnosticsReportingEnabled.Override(&st.SV, false)
+	log.CrashReports.Override(&st.SV, false)
+
 	os.Exit(m.Run())
 }

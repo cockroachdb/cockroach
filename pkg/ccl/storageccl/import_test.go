@@ -111,7 +111,7 @@ func TestImport(t *testing.T) {
 	t.Run("WriteBatch", func(t *testing.T) {
 		disableSSTable := func(st *cluster.Settings) {
 			st.Manual.Store(true)
-			st.AddSSTableEnabled.Override(false)
+			AddSSTableEnabled.Override(&st.SV, false)
 		}
 		t.Run("batch=default", func(t *testing.T) {
 			runTestImport(t, disableSSTable)
@@ -121,7 +121,7 @@ func TestImport(t *testing.T) {
 			// the threshold to force it.
 			init := func(st *cluster.Settings) {
 				st.Manual.Store(true)
-				st.ImportBatchSize.Override(1)
+				importBatchSize.Override(&st.SV, 1)
 			}
 			runTestImport(t, init)
 		})
@@ -129,7 +129,7 @@ func TestImport(t *testing.T) {
 	t.Run("AddSSTable", func(t *testing.T) {
 		enableSSTable := func(st *cluster.Settings) {
 			st.Manual.Store(true)
-			st.AddSSTableEnabled.Override(true)
+			AddSSTableEnabled.Override(&st.SV, true)
 		}
 		t.Run("batch=default", func(t *testing.T) {
 			runTestImport(t, enableSSTable)
@@ -139,7 +139,7 @@ func TestImport(t *testing.T) {
 			// the threshold to force it.
 			init := func(st *cluster.Settings) {
 				enableSSTable(st)
-				st.ImportBatchSize.Override(1)
+				importBatchSize.Override(&st.SV, 1)
 			}
 			runTestImport(t, init)
 		})

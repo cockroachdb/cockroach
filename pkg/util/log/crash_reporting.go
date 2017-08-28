@@ -27,35 +27,61 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 )
 
-// ReportingSettings avoids a dependency on pkg/settings/cluster.
-type ReportingSettings interface {
-	HasDiagnosticsReportingEnabled() bool
-	HasCrashReportsEnabled() bool
-}
+// DiagnosticsReportingEnabled wraps "diagnostics.reporting.enabled".
+//
+// "diagnostics.reporting.enabled" enables reporting of metrics related to a
+// node's storage (number, size and health of ranges) back to CockroachDB.
+// Collecting this data from production clusters helps us understand and improve
+// how our storage systems behave in real-world use cases.
+//
+// Note: while the setting itself is actually defined with a default value of
+// `false`, it is usually automatically set to `true` when a cluster is created
+// (or is migrated from a earlier beta version). This can be prevented with the
+// env var COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING.
+//
+// Doing this, rather than just using a default of `true`, means that a node
+// will not errantly send a report using a default before loading settings.
+var DiagnosticsReportingEnabled = settings.RegisterBoolSetting(
+	"diagnostics.reporting.enabled",
+	"enable reporting diagnostic metrics to cockroach labs",
+	false,
+)
 
-// ReportingSettingsSingleton is a global that holds the ReportingSettings of an
-// active instance of cluster.Settings. In a regular running node, there is
-// exactly one such instance. In multi-node testing, there may be many, and so
-// it is not clear which one will win out, but that is acceptable.
+// CrashReports wraps "diagnostics.reporting.send_crash_reports".
+var CrashReports = settings.RegisterBoolSetting(
+	"diagnostics.reporting.send_crash_reports",
+	"send crash and panic reports",
+	true,
+)
+
+// TODO(dt): this should be split from the report interval.
+// var statsResetFrequency = settings.RegisterDurationSetting(
+// 	"sql.metrics.statement_details.reset_interval",
+// 	"interval at which the collected statement statistics should be reset",
+// 	time.Hour,
+// )
+
+// ReportingSettingsSingleton is a global that holds a reference to the
+// setting.Values of an active instance of cluster.Settings. In a regular
+// running node, there is exactly one such instance. In multi-node testing,
+// there may be many, and so it is not clear which one will win out, but that is
+// acceptable.
 //
 // The global is a compromise to free callers of log.Fatal{,f} from having to
 // provide their cluster's settings on every call.
-//
-// NB: We have to store a pointer to the ReportSettings interface or we trigger
-// assertions inside of atomic.Value since we pass two types here (one from
-// cluster.Settings, one dummy one in tests).
-var ReportingSettingsSingleton atomic.Value // stores *ReportingSettings
+var ReportingSettingsSingleton atomic.Value // stores *setting.Values
 
 // RecoverAndReportPanic can be invoked on goroutines that run with
 // stderr redirected to logs to ensure the user gets informed on the
 // real stderr a panic has occurred.
-func RecoverAndReportPanic(ctx context.Context, st ReportingSettings) {
+func RecoverAndReportPanic(ctx context.Context, sv *settings.Values) {
 	if r := recover(); r != nil {
-		ReportPanic(ctx, st, r, 1)
+		ReportPanic(ctx, sv, r, 1)
 		panic(r)
 	}
 }
@@ -78,7 +104,7 @@ func format(r interface{}) string {
 }
 
 // ReportPanic reports a panic has occurred on the real stderr.
-func ReportPanic(ctx context.Context, st ReportingSettings, r interface{}, depth int) {
+func ReportPanic(ctx context.Context, sv *settings.Values, r interface{}, depth int) {
 	Shout(ctx, Severity_ERROR, "a panic has occurred!")
 
 	// TODO(dt,knz,sql-team): we need to audit all sprintf'ing of values into the
@@ -98,7 +124,7 @@ func ReportPanic(ctx context.Context, st ReportingSettings, r interface{}, depth
 		file, line, _ := caller.Lookup(depth + 3)
 		reportable = fmt.Sprintf("%s %s:%d", format(r), filepath.Base(file), line)
 	}
-	sendCrashReport(ctx, st, reportable, depth+3)
+	sendCrashReport(ctx, sv, reportable, depth+3)
 
 	// Ensure that the logs are flushed before letting a panic
 	// terminate the server.
@@ -147,14 +173,10 @@ func SetupCrashReporter(ctx context.Context, cmd string) {
 
 var crdbPaths = []string{"github.com/cockroachdb/cockroach"}
 
-func sendCrashReport(ctx context.Context, st ReportingSettings, r interface{}, depth int) {
-	if !st.HasDiagnosticsReportingEnabled() || !st.HasCrashReportsEnabled() {
+func sendCrashReport(ctx context.Context, sv *settings.Values, r interface{}, depth int) {
+	if !DiagnosticsReportingEnabled.Get(sv) || !CrashReports.Get(sv) {
 		return // disabled via settings.
 	}
-	// FIXME(tschottdorf): this particular method would benefit from globals
-	// mirroring the server settings. Callers coming through log.Fatal will
-	// pass a nil ReportingSettings above, which is pretty bad. OTOH, perhaps
-	// they should just pass ReportingSettings directly through log.Fatal.
 
 	if raven.DefaultClient == nil {
 		return // disabled via empty URL env var.

@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -98,13 +97,14 @@ func createTestStorePool(
 	server := rpc.NewServer(rpcContext) // never started
 	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry())
 	mnl := newMockNodeLiveness(defaultNodeStatus)
+
+	TimeUntilStoreDead.Override(&st.SV, timeUntilStoreDeadValue)
 	storePool := NewStorePool(
 		log.AmbientContext{Tracer: st.Tracer},
 		st,
 		g,
 		clock,
 		mnl.nodeLivenessFunc,
-		settings.TestingDuration(timeUntilStoreDeadValue),
 		deterministic,
 	)
 	return stopper, g, mc, storePool, mnl
@@ -466,14 +466,11 @@ func TestStorePoolThrottle(t *testing.T) {
 		TestTimeUntilStoreDead, false /* deterministic */, nodeStatusDead)
 	defer stopper.Stop(context.TODO())
 
-	declinedReservationsTimeout := sp.st.DeclinedReservationsTimeout
-	failedReservationsTimeout := sp.st.FailedReservationsTimeout
-
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(uniqueStore, t)
 
 	{
-		expected := sp.clock.Now().GoTime().Add(declinedReservationsTimeout.Get())
+		expected := sp.clock.Now().GoTime().Add(declinedReservationsTimeout.Get(&sp.st.SV))
 		sp.throttle(throttleDeclined, 1)
 
 		sp.detailsMu.Lock()
@@ -486,7 +483,7 @@ func TestStorePoolThrottle(t *testing.T) {
 	}
 
 	{
-		expected := sp.clock.Now().GoTime().Add(failedReservationsTimeout.Get())
+		expected := sp.clock.Now().GoTime().Add(failedReservationsTimeout.Get(&sp.st.SV))
 		sp.throttle(throttleFailed, 1)
 
 		sp.detailsMu.Lock()

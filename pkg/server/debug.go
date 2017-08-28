@@ -23,7 +23,9 @@ import (
 
 	"golang.org/x/net/trace"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/pkg/errors"
 	"github.com/rcrowley/go-metrics"
 	"github.com/rcrowley/go-metrics/exp"
 
@@ -39,6 +41,32 @@ const debugEndpoint = "/debug/"
 // We use the default http mux for the debug endpoint (as pprof and net/trace
 // register to that via import, and go-metrics registers to that via exp.Exp())
 var debugServeMux = http.DefaultServeMux
+
+// DebugRemoteMode controls who can access /debug/requests.
+type DebugRemoteMode string
+
+const (
+	// DebugRemoteOff disallows access to /debug/requests.
+	DebugRemoteOff DebugRemoteMode = "off"
+	// DebugRemoteLocal allows only host-local access to /debug/requests.
+	DebugRemoteLocal DebugRemoteMode = "local"
+	// DebugRemoteAny allows all access to /debug/requests.
+	DebugRemoteAny DebugRemoteMode = "any"
+)
+
+var debugRemote = settings.RegisterValidatedStringSetting(
+	"server.remote_debugging.mode",
+	"set to enable remote debugging, localhost-only or disable (any, local, off)",
+	"local",
+	func(s string) error {
+		switch DebugRemoteMode(strings.ToLower(s)) {
+		case DebugRemoteOff, DebugRemoteLocal, DebugRemoteAny:
+			return nil
+		default:
+			return errors.Errorf("invalid mode: '%s'", s)
+		}
+	},
+)
 
 // authorizedHandler is a middleware http handler that checks that the caller
 // is authorized to access the handler.
@@ -73,10 +101,10 @@ var ClusterSettings *cluster.Settings
 // authRequest restricts access to /debug/*.
 func authRequest(r *http.Request) (allow, sensitive bool) {
 	allow, sensitive = traceAuthRequest(r)
-	switch cluster.DebugRemoteMode(strings.ToLower(ClusterSettings.DebugRemote.Get())) {
-	case cluster.DebugRemoteAny:
+	switch DebugRemoteMode(strings.ToLower(debugRemote.Get(&ClusterSettings.SV))) {
+	case DebugRemoteAny:
 		allow = true
-	case cluster.DebugRemoteLocal:
+	case DebugRemoteLocal:
 		break
 	default:
 		allow = false

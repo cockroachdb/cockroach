@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -95,8 +96,8 @@ func (p *planner) setClusterSetting(
 	if err := p.RequireSuperUser("SET CLUSTER SETTING"); err != nil {
 		return nil, err
 	}
-	r := p.session.execCfg.Settings.Registry
-	typ, ok := r.Lookup(name)
+	st := p.session.execCfg.Settings
+	typ, ok := settings.Lookup(name)
 	if !ok {
 		return nil, errors.Errorf("unknown cluster setting '%s'", name)
 	}
@@ -118,7 +119,7 @@ func (p *planner) setClusterSetting(
 		v[0].Format(&buf, parser.FmtBareStrings)
 		value = buf.String()
 		// TODO(dt): validate and properly encode str according to type.
-		encoded, err := p.toSettingString(ctx, ie, name, typ, v[0])
+		encoded, err := p.toSettingString(ctx, ie, st, name, typ, v[0])
 		if err != nil {
 			return nil, err
 		}
@@ -151,7 +152,12 @@ func (p *planner) setClusterSetting(
 }
 
 func (p *planner) toSettingString(
-	ctx context.Context, ie InternalExecutor, name string, setting settings.Setting, raw parser.Expr,
+	ctx context.Context,
+	ie InternalExecutor,
+	st *cluster.Settings,
+	name string,
+	setting settings.Setting,
+	raw parser.Expr,
 ) (string, error) {
 	typeCheckAndParse := func(t parser.Type, f func(parser.Datum) (string, error)) (string, error) {
 		typed, err := parser.TypeCheckAndRequire(raw, nil, t, name)
@@ -198,7 +204,7 @@ func (p *planner) toSettingString(
 					return "", errors.New("the existing value is not a string")
 				}
 				prevRawVal := []byte(string(*dStr))
-				newBytes, _, err := setting.Validate(prevRawVal, (*string)(s))
+				newBytes, _, err := setting.Validate(&st.SV, prevRawVal, (*string)(s))
 				if err != nil {
 					return "", err
 				}

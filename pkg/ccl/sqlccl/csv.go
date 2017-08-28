@@ -436,10 +436,10 @@ func writeRocksDB(
 	cache := engine.NewRocksDBCache(0)
 	defer cache.Release()
 	r, err := engine.NewRocksDB(engine.RocksDBConfig{
-		RocksDBSettings: cluster.MakeTestingClusterSettings().RocksDBSettings,
-		Dir:             rocksdbDir,
-		MaxSizeBytes:    0,
-		MaxOpenFiles:    1024,
+		Settings:     cluster.MakeTestingClusterSettings(),
+		Dir:          rocksdbDir,
+		MaxSizeBytes: 0,
+		MaxOpenFiles: 1024,
 	}, cache)
 	if err != nil {
 		return 0, errors.Wrap(err, "create rocksdb instance")

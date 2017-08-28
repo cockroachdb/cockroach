@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -38,7 +39,22 @@ var importRequestLimit = runtime.NumCPU()
 
 var importRequestLimiter = makeConcurrentRequestLimiter(importRequestLimit)
 
+var importBatchSize = settings.RegisterByteSizeSetting(
+	"kv.import.batch_size",
+	"",
+	2<<20,
+)
+
+// AddSSTableEnabled wraps "kv.import.experimental_addsstable.enabled".
+var AddSSTableEnabled = settings.RegisterBoolSetting(
+	"kv.import.experimental_addsstable.enabled",
+	"set to true to use the AddSSTable command in Import or false to use WriteBatch",
+	true,
+)
+
 func init() {
+	importBatchSize.Hide()
+	AddSSTableEnabled.Hide()
 	storage.SetImportCmd(evalImport)
 }
 
@@ -244,7 +260,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 		if batcher != nil {
 			return errors.New("cannot overwrite a batcher")
 		}
-		if cArgs.EvalCtx.ClusterSettings().AddSSTableEnabled.Get() {
+		if AddSSTableEnabled.Get(&cArgs.EvalCtx.ClusterSettings().SV) {
 			sstWriter, err := engine.MakeRocksDBSstFileWriter()
 			if err != nil {
 				return errors.Wrapf(err, "making sstBatcher")
@@ -312,7 +328,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 			return nil, errors.Wrapf(err, "adding to batch: %s -> %s", key, value.PrettyPrint())
 		}
 
-		if size := batcher.Size(); size > cArgs.EvalCtx.ClusterSettings().ImportBatchSize.Get() {
+		if size := batcher.Size(); size > importBatchSize.Get(&cArgs.EvalCtx.ClusterSettings().SV) {
 			finishBatcher := batcher
 			batcher = nil
 			log.Eventf(gCtx, "triggering finish of batch of size %s", humanizeutil.IBytes(size))

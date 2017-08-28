@@ -12,10 +12,26 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
+
+// cluster.ValidateEnterpriseLicense,
+var enterpriseLicense = settings.RegisterValidatedStringSetting(
+	"enterprise.license",
+	"the encoded cluster license",
+	"",
+	func(s string) error {
+		_, err := licenseccl.Decode(s)
+		return err
+	},
+)
+
+func init() {
+	enterpriseLicense.Hide()
+}
 
 var testingEnterpriseEnabled = false
 
@@ -44,7 +60,7 @@ func checkEnterpriseEnabledAt(
 	var lic *licenseccl.License
 	// FIXME(tschottdorf): see whether it makes sense to cache the decoded
 	// license.
-	if str := st.EnterpriseLicense.Get(); str != "" {
+	if str := enterpriseLicense.Get(&st.SV); str != "" {
 		var err error
 		if lic, err = licenseccl.Decode(str); err != nil {
 			return err

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -74,15 +75,14 @@ CREATE TABLE crdb_internal.node_build_info (
 );
 `,
 	populate: func(_ context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
-		node := p.ExecCfg().NodeInfo
-
-		nodeID := parser.NewDInt(parser.DInt(int64(node.NodeID.Get())))
+		execCfg := p.ExecCfg()
+		nodeID := parser.NewDInt(parser.DInt(int64(execCfg.NodeID.Get())))
 
 		info := build.GetInfo()
 		for k, v := range map[string]string{
 			"Name":         "CockroachDB",
-			"ClusterID":    node.ClusterID().String(),
-			"Organization": node.Organization.Get(),
+			"ClusterID":    execCfg.ClusterID().String(),
+			"Organization": execCfg.Organization(),
 			"Build":        info.Short(),
 			"Version":      info.Tag,
 		} {
@@ -576,12 +576,11 @@ CREATE TABLE crdb_internal.cluster_settings (
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
-		r := p.session.execCfg.Settings.Registry
-		for _, k := range r.Keys() {
-			setting, _ := r.Lookup(k)
+		for _, k := range settings.Keys() {
+			setting, _ := settings.Lookup(k)
 			if err := addRow(
 				parser.NewDString(k),
-				parser.NewDString(setting.String()),
+				parser.NewDString(setting.String(&p.session.execCfg.Settings.SV)),
 				parser.NewDString(setting.Typ()),
 				parser.NewDString(setting.Description()),
 			); err != nil {

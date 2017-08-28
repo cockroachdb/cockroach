@@ -48,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -666,13 +665,13 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 }
 
 func (m *multiTestContext) populateStorePool(idx int, nodeLiveness *storage.NodeLiveness) {
+	storage.TimeUntilStoreDead.Override(&m.storeConfig.Settings.SV, m.timeUntilStoreDead)
 	m.storePools[idx] = storage.NewStorePool(
 		log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer},
 		m.storeConfig.Settings,
 		m.gossips[idx],
 		m.clock,
 		storage.MakeStorePoolNodeLivenessFunc(nodeLiveness),
-		settings.TestingDuration(m.timeUntilStoreDead),
 		/* deterministic */ false,
 	)
 }

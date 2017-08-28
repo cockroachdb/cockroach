@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
@@ -43,6 +44,12 @@ const (
 	// secretLength is the number of random bytes generated for session secrets.
 	secretLength      = 16
 	sessionCookieName = "session"
+)
+
+var webSessionTimeout = settings.RegisterNonNegativeDurationSetting(
+	"server.web_session_timeout",
+	"the duration that a newly created web session will be valid",
+	7*24*time.Hour,
 )
 
 type authenticationServer struct {
@@ -252,7 +259,7 @@ func (s *authenticationServer) newAuthSession(
 
 	hasher := sha256.New()
 	hashedSecret := hasher.Sum(secret)
-	expiration := s.server.clock.PhysicalTime().Add(s.server.st.WebSessionTimeout.Get())
+	expiration := s.server.clock.PhysicalTime().Add(webSessionTimeout.Get(&s.server.st.SV))
 
 	insertSessionStmt := `
 INSERT INTO system.web_sessions ("hashedSecret", username, "expiresAt")

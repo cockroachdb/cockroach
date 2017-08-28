@@ -35,6 +35,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -59,6 +60,12 @@ import (
 // #include <stdlib.h>
 // #include <libroach.h>
 import "C"
+
+var minWALSyncInterval = settings.RegisterDurationSetting(
+	"rocksdb.min_wal_sync_interval",
+	"minimum duration between syncs of the RocksDB WAL",
+	0*time.Millisecond,
+)
 
 //export rocksDBLog
 func rocksDBLog(s *C.char, n C.int) {
@@ -288,7 +295,6 @@ func (c RocksDBCache) Release() {
 // RocksDBConfig holds all configuration parameters and knobs used in setting
 // up a new RocksDB instance.
 type RocksDBConfig struct {
-	cluster.RocksDBSettings
 	Attrs roachpb.Attributes
 	// Dir is the data directory for this store.
 	Dir string
@@ -302,6 +308,8 @@ type RocksDBConfig struct {
 	// WriteBatch takes longer than WarnLargeBatchThreshold. If it is set to
 	// zero, no log messages are ever printed.
 	WarnLargeBatchThreshold time.Duration
+	// Settings instance for cluster-wide knobs.
+	Settings *cluster.Settings
 }
 
 // RocksDB is a wrapper around a RocksDB database instance.
@@ -339,8 +347,8 @@ func NewRocksDB(cfg RocksDBConfig, cache RocksDBCache) (*RocksDB, error) {
 	if cfg.Dir == "" {
 		return nil, errors.New("dir must be non-empty")
 	}
-	if cfg.MinWALSyncInterval == nil {
-		panic("MinWALSyncInterval must be set")
+	if cfg.Settings == nil {
+		panic("Settings must be set")
 	}
 
 	r := &RocksDB{
@@ -365,9 +373,9 @@ func newMemRocksDB(
 	st := cluster.MakeClusterSettings(cluster.BinaryServerVersion, cluster.BinaryServerVersion)
 	r := &RocksDB{
 		cfg: RocksDBConfig{
-			RocksDBSettings: st.RocksDBSettings,
-			Attrs:           attrs,
-			MaxSizeBytes:    MaxSizeBytes,
+			Settings:     st,
+			Attrs:        attrs,
+			MaxSizeBytes: MaxSizeBytes,
 		},
 		// dir: empty dir == "mem" RocksDB instance.
 		cache: cache.ref(),
@@ -477,7 +485,7 @@ func (r *RocksDB) syncLoop() {
 			return
 		}
 
-		min := r.cfg.MinWALSyncInterval.Get()
+		min := minWALSyncInterval.Get(&r.cfg.Settings.SV)
 		if delta := timeutil.Since(lastSync); delta < min {
 			s.Unlock()
 			time.Sleep(min - delta)
