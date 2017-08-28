@@ -82,6 +82,9 @@ func (gc GarbageCollector) Filter(keys []MVCCKey, values [][]byte) hlc.Timestamp
 			// higher timestamps immediately preceding this one, since they're above
 			// gc.expiration and are needed for correctness; see #6227.
 			delTS = key.Timestamp
+		} else if i > 0 {
+			// It is not the latest key, so we are free to GC it
+			delTS = key.Timestamp
 		} else if i+1 < len(keys) {
 			// Otherwise mark the previous timestamp for deletion (since it won't ever
 			// be returned for reads at gc.expiration and up).
