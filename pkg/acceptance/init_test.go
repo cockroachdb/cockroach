@@ -27,7 +27,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// useInitMode is an option for runTestOnConfigs.
+// useInitMode is an option for runTestWithCluster.
 func useInitMode(mode cluster.InitMode) func(*cluster.TestConfig) {
 	return func(cfg *cluster.TestConfig) {
 		cfg.InitMode = mode
@@ -41,7 +41,7 @@ func TestInitModeBootstrapNodeZero(t *testing.T) {
 	// TODO(tschottdorf): give LocalCluster support for the init modes and we should be able
 	// to switch this to RunLocal. Ditto below.
 	RunDocker(t, func(t *testing.T) {
-		runTestOnConfigs(t, testInitModeInner, useInitMode(cluster.INIT_BOOTSTRAP_NODE_ZERO))
+		runTestWithCluster(t, testInitModeInner, useInitMode(cluster.INIT_BOOTSTRAP_NODE_ZERO))
 	})
 }
 
@@ -51,7 +51,7 @@ func TestInitModeCommand(t *testing.T) {
 
 	// TODO(tschottdorf): see above.
 	RunDocker(t, func(t *testing.T) {
-		runTestOnConfigs(t, testInitModeInner, useInitMode(cluster.INIT_COMMAND))
+		runTestWithCluster(t, testInitModeInner, useInitMode(cluster.INIT_COMMAND))
 	})
 }
 
@@ -76,7 +76,7 @@ func TestInitModeNone(t *testing.T) {
 
 	// TODO(tschottdorf): see above.
 	RunDocker(t, func(t *testing.T) {
-		runTestOnConfigs(t, testInitModeNoneInner, useInitMode(cluster.INIT_NONE))
+		runTestWithCluster(t, testInitModeNoneInner, useInitMode(cluster.INIT_NONE))
 	})
 }
 

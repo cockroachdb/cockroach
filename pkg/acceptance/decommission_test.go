@@ -39,7 +39,7 @@ func TestDecommission(t *testing.T) {
 		s := log.Scope(t)
 		defer s.Close(t)
 
-		runTestOnConfigs(t, testDecommissionInner)
+		runTestWithCluster(t, testDecommissionInner)
 	})
 }
 
