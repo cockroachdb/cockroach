@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -2339,36 +2340,47 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Run every permutation of command cancellation as a separate subtest
 			// for the current instruction configuration.
-			var permuteInstrs func(pre, post []cancelInstr)
-			permuteInstrs = func(pre, post []cancelInstr) {
-				if len(post) == 0 {
+			var permuteCancellation func(cancelCmds []bool, left int)
+			permuteCancellation = func(cancelCmds []bool, left int) {
+				if left == 0 {
+					var cancelOrder []int
+
 					// Create a name for this permutation.
 					// C = cancel
 					// R = run
 					var permName bytes.Buffer
-					for _, instr := range pre {
-						if instr.cancel {
+					for i, cancel := range cancelCmds {
+						if cancel {
 							permName.WriteByte('C')
+							cancelOrder = append(cancelOrder, i)
 						} else {
 							permName.WriteByte('R')
 						}
 					}
 
 					t.Run(permName.String(), func(t *testing.T) {
-						ct := newCmdQCancelTest(t)
-						ct.Run(pre)
+						t.Run("Forward", func(t *testing.T) {
+							ct := newCmdQCancelTest(t)
+							ct.Run(tc.instrs, cancelOrder)
+						})
+						if len(cancelOrder) > 1 {
+							t.Run("Reverse", func(t *testing.T) {
+								ct := newCmdQCancelTest(t)
+								reverse := make([]int, len(cancelOrder))
+								for i, cancel := range cancelOrder {
+									reverse[len(reverse)-1-i] = cancel
+								}
+								ct.Run(tc.instrs, reverse)
+							})
+						}
 					})
 					return
 				}
 
-				instr := post[0]
-				rest := post[1:]
-				instr.cancel = false
-				permuteInstrs(append(pre, instr), rest)
-				instr.cancel = true
-				permuteInstrs(append(pre, instr), rest)
+				permuteCancellation(append(cancelCmds, false), left-1)
+				permuteCancellation(append(cancelCmds, true), left-1)
 			}
-			permuteInstrs(nil, tc.instrs)
+			permuteCancellation(nil, len(tc.instrs))
 		})
 	}
 }
@@ -2393,6 +2405,7 @@ func TestReplicaCommandQueueCancellationRandom(t *testing.T) {
 	for i := 0; i < trials; i++ {
 		commandCount := randutil.RandIntInRange(rng, 0, 25)
 		instrs := make([]cancelInstr, commandCount)
+		var cancelOrder []int
 		for j := range instrs {
 			startKey := randKey()
 			endKey := randKey()
@@ -2400,21 +2413,22 @@ func TestReplicaCommandQueueCancellationRandom(t *testing.T) {
 				endKey = startKey.Next()
 			}
 			instrs[j] = cancelInstr{
-				span:   roachpb.Span{Key: startKey, EndKey: endKey},
-				cancel: randBool(),
+				span: roachpb.Span{Key: startKey, EndKey: endKey},
+			}
+			if randBool() {
+				cancelOrder = append(cancelOrder, j)
 			}
 		}
+		shuffle.Shuffle(sort.IntSlice(cancelOrder))
 		ct := newCmdQCancelTest(t)
-		ct.Run(instrs)
+		ct.Run(instrs, cancelOrder)
 	}
 }
 
 type cancelInstr struct {
-	span   roachpb.Span
-	cancel bool
-	expErr string
-
+	span        roachpb.Span
 	reqOverride *roachpb.BatchRequest // overrides span when present
+	expErr      string
 }
 
 func (ci cancelInstr) req() *roachpb.BatchRequest {
@@ -2577,17 +2591,9 @@ func spanSetsOverlap(ss, ss2 *SpanSet) bool {
 // insertCmds inserts each command into the CommandQueue, populating the cmds map
 // while doing so.
 func (ct *cmdQCancelTest) insertCmds(instrs []cancelInstr) {
-	if instrs[0].cancel {
-		ct.Fatalf("the first cancelInstr cannot be cancelled")
-	}
-
 	for i, instr := range instrs {
-		// Create a new context for each instruction. Ignore the cancel function
-		// if we don't want to cancel the cmd.
+		// Create a new context for each instruction with a cancel function.
 		ctx, cancel := context.WithCancel(context.Background())
-		if !instr.cancel {
-			cancel = nil
-		}
 
 		ba := instr.req()
 		spanSet, err := collectSpans(roachpb.RangeDescriptor{}, ba)
@@ -2628,39 +2634,44 @@ func (ct *cmdQCancelTest) insertCmds(instrs []cancelInstr) {
 	}
 }
 
-// cancelCmds cancels all testCmds that need to be cancelled in a
-// non-deterministic order.
-func (ct *cmdQCancelTest) cancelCmds() {
-	perm := rand.Perm(len(ct.cmds))
-	for _, idx := range perm {
-		cmd := ct.cmds[idx]
-		if cancel := cmd.cancel; cancel != nil {
-			// Cancel the context on each cmd that should be cancelled.
-			cancel()
+// cancelCmds cancels all testCmds that need to be cancelled, in the provided
+// order.
+func (ct *cmdQCancelTest) cancelCmds(cancelOrder []int) {
+	for _, cancelID := range cancelOrder {
+		if cancelID == 0 {
+			ct.Fatalf("the first cancelInstr cannot be cancelled")
+		}
 
-			// If either of these deadlocks, the command was never cancelled and may have
-			// unexpectedly begun executing. Indeed, the absence of such a deadlock is
-			// what's being tested here.
-			select {
-			case <-ct.cancelledCmd:
-			case <-time.After(cmdQCancelTestDeadlockTimeout):
-				ct.Fatalf("command %d never left CommandQueue after cancellation", idx)
-			}
-			select {
-			case pErr := <-cmd.done:
-				if ctxCancelErr := context.Canceled; !testutils.IsPError(pErr, ctxCancelErr.Error()) {
-					ct.Fatalf("expected error %v for cmd %d, found %v", ctxCancelErr, idx, pErr)
-				}
-			case <-time.After(cmdQCancelTestDeadlockTimeout):
-				ct.Fatalf("command %d never returned to client after cancellation", idx)
-			}
+		cmd, ok := ct.cmds[cancelID]
+		if !ok {
+			ct.Fatalf("command %d not found", cancelID)
+		}
 
-			// Remove the command from the cmds map and delete it from the
-			// prereq sets of all pending cmds.
-			delete(ct.cmds, idx)
-			for _, cmd := range ct.cmds {
-				delete(cmd.prereqs, idx)
+		// Cancel the context on each cmd that should be cancelled.
+		cmd.cancel()
+
+		// If either of these deadlocks, the command was never cancelled and may have
+		// unexpectedly begun executing. Indeed, the absence of such a deadlock is
+		// what's being tested here.
+		select {
+		case <-ct.cancelledCmd:
+		case <-time.After(cmdQCancelTestDeadlockTimeout):
+			ct.Fatalf("command %d never left CommandQueue after cancellation", cancelID)
+		}
+		select {
+		case pErr := <-cmd.done:
+			if ctxCancelErr := context.Canceled; !testutils.IsPError(pErr, ctxCancelErr.Error()) {
+				ct.Fatalf("expected error %v for cmd %d, found %v", ctxCancelErr, cancelID, pErr)
 			}
+		case <-time.After(cmdQCancelTestDeadlockTimeout):
+			ct.Fatalf("command %d never returned to client after cancellation", cancelID)
+		}
+
+		// Remove the command from the cmds map and delete it from the
+		// prereq sets of all pending cmds.
+		delete(ct.cmds, cancelID)
+		for _, cmd := range ct.cmds {
+			delete(cmd.prereqs, cancelID)
 		}
 	}
 }
@@ -2727,28 +2738,35 @@ func (ct *cmdQCancelTest) runCmds() {
 	}
 }
 
-// Run runs the cmdQCancelTest with the provided cancelInstrs.
-func (ct *cmdQCancelTest) Run(instrs []cancelInstr) {
+// Run runs the cmdQCancelTest with the provided cancelInstrs. Commands will be
+// cancelled in the order provided.
+func (ct *cmdQCancelTest) Run(instrs []cancelInstr, cancelOrder []int) {
 	// Create an initial span that will block all others until we're ready to
 	// begin monitoring. This initial span cannot be cancelled before exiting
 	// the prereq wait period.
 	initial := cancelInstr{
-		span:   roachpb.Span{Key: keys.SystemMax, EndKey: keys.TableDataMin},
-		cancel: false,
+		span: roachpb.Span{Key: keys.SystemMax, EndKey: keys.TableDataMin},
 	}
 
-	ct.RunWithoutInitialSpan(append([]cancelInstr{initial}, instrs...))
+	// Update the cancel order to account for the new instr.
+	newCancelOrder := make([]int, len(cancelOrder))
+	for i, cancelID := range cancelOrder {
+		newCancelOrder[i] = cancelID + 1
+	}
+
+	ct.RunWithoutInitialSpan(append([]cancelInstr{initial}, instrs...), newCancelOrder)
 }
 
 // RunWithoutInitialSpan runs the cmdQCancelTest with the provided cancelInstrs.
-// The first cancelInstrs should be a prereq of all other instructions and cannot be
-// cancelled. Use ct.Run to assure this.
-func (ct *cmdQCancelTest) RunWithoutInitialSpan(instrs []cancelInstr) {
+// Commands will be cancelled in the order provided. The first cancelInstrs
+// should be a prereq of all other instructions and cannot be cancelled. Use
+// ct.Run to assure this.
+func (ct *cmdQCancelTest) RunWithoutInitialSpan(instrs []cancelInstr, cancelOrder []int) {
 	defer ct.s.Stop(context.Background())
 	ct.tc.StartWithStoreConfig(ct, ct.s, ct.tsc)
 
 	ct.insertCmds(instrs)
-	ct.cancelCmds()
+	ct.cancelCmds(cancelOrder)
 	ct.runCmds()
 }
 
