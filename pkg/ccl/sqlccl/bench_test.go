@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/sampledataccl"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -70,20 +69,11 @@ func BenchmarkClusterBackup(b *testing.B) {
 }
 
 func BenchmarkClusterRestore(b *testing.B) {
-	b.Run("AddSSTable", func(b *testing.B) {
-		runBenchmarkClusterRestore(b, enableAddSSTable)
-	})
-	b.Run("WriteBatch", func(b *testing.B) {
-		runBenchmarkClusterRestore(b, disableAddSSTable)
-	})
-}
-
-func runBenchmarkClusterRestore(b *testing.B, init func(*cluster.Settings)) {
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
 
-	_, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0, init)
+	_, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0, initNone)
 	defer cleanup()
 	sqlDB.Exec(`DROP TABLE data.bank`)
 

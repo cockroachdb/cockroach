@@ -224,26 +224,6 @@ func TestBackupRestoreLocal(t *testing.T) {
 	backupAndRestore(ctx, t, sqlDB, dir, numAccounts)
 }
 
-func enableAddSSTable(st *cluster.Settings) {
-	st.Manual.Store(true)
-	st.AddSSTableEnabled.Override(true)
-}
-
-func disableAddSSTable(st *cluster.Settings) {
-	st.Manual.Store(true)
-	st.AddSSTableEnabled.Override(false)
-}
-
-func TestBackupRestoreAddSSTable(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	const numAccounts = 1000
-	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, enableAddSSTable)
-	defer cleanupFn()
-
-	backupAndRestore(ctx, t, sqlDB, dir, numAccounts)
-}
-
 func TestBackupRestoreEmpty(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
