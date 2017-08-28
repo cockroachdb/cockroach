@@ -46,12 +46,13 @@ import (
 )
 
 const (
-	importOptionComma       = "comma"
-	importOptionComment     = "comment"
-	importOptionDistributed = "distributed"
-	importOptionNullIf      = "nullif"
-	importOptionSSTSize     = "sstsize"
-	importOptionTemp        = "temp"
+	importOptionComma         = "comma"
+	importOptionComment       = "comment"
+	importOptionDistributed   = "distributed"
+	importOptionNullIf        = "nullif"
+	importOptionTransformOnly = "transform_only"
+	importOptionSSTSize       = "sstsize"
+	importOptionTemp          = "temp"
 )
 
 // LoadCSV converts CSV files into enterprise backup format.
@@ -684,16 +685,26 @@ func importPlanHook(
 			return err
 		}
 
-		var targetDB string
-		if override, ok := opts[restoreOptIntoDB]; !ok {
-			if session := p.EvalContext().Database; session != "" {
-				targetDB = session
-			} else {
-				return errors.Errorf("must specify target database with %q option", restoreOptIntoDB)
+		transformOnly := false
+		if override, ok := opts[importOptionTransformOnly]; ok {
+			if override != "" {
+				return errors.Errorf("option '%s' does not take a value", importOptionTransformOnly)
 			}
-		} else {
-			targetDB = override
-			// TODO(dt): verify db exists
+			transformOnly = true
+		}
+
+		var targetDB string
+		if !transformOnly {
+			if override, ok := opts[restoreOptIntoDB]; !ok {
+				if session := p.EvalContext().Database; session != "" {
+					targetDB = session
+				} else {
+					return errors.Errorf("must specify target database with %q option", restoreOptIntoDB)
+				}
+			} else {
+				targetDB = override
+				// TODO(dt): verify db exists
+			}
 		}
 
 		var comma rune
@@ -807,6 +818,18 @@ func importPlanHook(
 		if err := job.FinishedWith(ctx, err); err != nil {
 			return err
 		}
+		if transformOnly {
+			resultsCh <- parser.Datums{
+				parser.NewDInt(parser.DInt(*job.ID())),
+				parser.NewDString(string(jobs.StatusSucceeded)),
+				parser.NewDFloat(parser.DFloat(1.0)),
+				parser.NewDInt(parser.DInt(0)),
+				parser.NewDInt(parser.DInt(0)),
+				parser.NewDInt(parser.DInt(0)),
+				parser.NewDInt(parser.DInt(0)),
+			}
+			return nil
+		}
 
 		restore := &parser.Restore{
 			Targets: parser.TargetList{
@@ -816,6 +839,7 @@ func importPlanHook(
 		}
 		from := []string{temp}
 		opts = map[string]string{restoreOptIntoDB: targetDB}
+
 		return doRestorePlan(ctx, restore, p, from, opts, resultsCh)
 	}
 	return fn, restoreHeader, nil
