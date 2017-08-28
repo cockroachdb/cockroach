@@ -218,6 +218,7 @@ type StorageSettings struct {
 	ImportBatchSize             *settings.ByteSizeSetting
 	AddSSTableEnabled           *settings.BoolSetting
 	MaxIntents                  *settings.IntSetting
+	RangeDescriptorCacheSize    *settings.IntSetting
 
 	ConsistencyCheckInterval *settings.DurationSetting
 }
@@ -466,6 +467,11 @@ func MakeClusterSettings(minVersion, serverVersion roachpb.Version) *Settings {
 	s.MaxIntents = r.RegisterIntSetting(
 		"kv.transaction.max_intents",
 		"maximum number of write intents allowed for a KV transaction", 100000)
+
+	s.RangeDescriptorCacheSize = r.RegisterIntSetting(
+		"kv.range_descriptor_cache.size",
+		"maximum number of entries in the range descriptor and leaseholder caches",
+		1e6)
 
 	s.MinWALSyncInterval = r.RegisterDurationSetting(
 		"rocksdb.min_wal_sync_interval",

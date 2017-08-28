@@ -208,6 +208,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	retryOpts.Closer = s.stopper.ShouldQuiesce()
 	distSenderCfg := kv.DistSenderConfig{
 		AmbientCtx:      s.cfg.AmbientCtx,
+		Settings:        st,
 		Clock:           s.clock,
 		RPCContext:      s.rpcContext,
 		RPCRetryOptions: &retryOpts,

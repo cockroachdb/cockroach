@@ -23,10 +23,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
+func staticSize(size int64) func() int64 {
+	return func() int64 {
+		return size
+	}
+}
+
 func TestLeaseHolderCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.TODO()
-	lc := NewLeaseHolderCache(3)
+	lc := NewLeaseHolderCache(staticSize(3))
 	if repDesc, ok := lc.Lookup(ctx, 12); ok {
 		t.Errorf("lookup of missing key returned: %+v", repDesc)
 	}
