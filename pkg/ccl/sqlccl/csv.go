@@ -685,16 +685,26 @@ func importPlanHook(
 			return err
 		}
 
-		var targetDB string
-		if override, ok := opts[restoreOptIntoDB]; !ok {
-			if session := p.EvalContext().Database; session != "" {
-				targetDB = session
-			} else {
-				return errors.Errorf("must specify target database with %q option", restoreOptIntoDB)
+		transformOnly := false
+		if override, ok := opts[importOptionTransformOnly]; ok {
+			if override != "" {
+				return errors.Errorf("option '%s' does not take a value", importOptionTransformOnly)
 			}
-		} else {
-			targetDB = override
-			// TODO(dt): verify db exists
+			transformOnly = true
+		}
+
+		var targetDB string
+		if !transformOnly {
+			if override, ok := opts[restoreOptIntoDB]; !ok {
+				if session := p.EvalContext().Database; session != "" {
+					targetDB = session
+				} else {
+					return errors.Errorf("must specify target database with %q option", restoreOptIntoDB)
+				}
+			} else {
+				targetDB = override
+				// TODO(dt): verify db exists
+			}
 		}
 
 		var comma rune
@@ -808,7 +818,7 @@ func importPlanHook(
 		if err := job.FinishedWith(ctx, err); err != nil {
 			return err
 		}
-		if _, ok := opts[importOptionTransformOnly]; ok {
+		if transformOnly {
 			resultsCh <- parser.Datums{
 				parser.NewDInt(parser.DInt(*job.ID())),
 				parser.NewDString(string(jobs.StatusSucceeded)),
