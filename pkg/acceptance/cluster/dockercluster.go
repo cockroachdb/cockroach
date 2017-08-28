@@ -152,11 +152,11 @@ type DockerCluster struct {
 	logDirRemovable      bool   // if true, the log directory can be removed after use
 }
 
-// CreateLocal creates a new local cockroach cluster. The stopper is used to
+// CreateDocker creates a Docker-based cockroach cluster. The stopper is used to
 // gracefully shutdown the channel (e.g. when a signal arrives). The cluster
 // must be started before being used and keeps logs in the specified logDir, if
 // supplied.
-func CreateLocal(
+func CreateDocker(
 	ctx context.Context, cfg TestConfig, logDir string, stopper *stop.Stopper,
 ) *DockerCluster {
 	select {
@@ -356,26 +356,20 @@ func (l *DockerCluster) initCluster(ctx context.Context) {
 	l.Nodes = []*testNode{}
 	vols := map[string]struct{}{}
 	// Expand the cluster configuration into nodes and stores per node.
-	var nodeCount int
-	for _, nc := range l.config.Nodes {
+	for i, nc := range l.config.Nodes {
 		newTestNode := &testNode{
 			config:  nc,
-			index:   nodeCount,
-			nodeStr: nodeStr(l, nodeCount),
+			index:   i,
+			nodeStr: nodeStr(l, i),
 		}
-		nodeCount++
-		var storeCount int
-		for _, sc := range nc.Stores {
-			for j := 0; j < int(sc.Count); j++ {
-				vols[dataStr(nodeCount, storeCount)] = struct{}{}
-				newTestNode.stores = append(newTestNode.stores,
-					testStore{
-						config:  sc,
-						index:   j,
-						dataStr: dataStr(nodeCount, storeCount),
-					})
-				storeCount++
-			}
+		for j, sc := range nc.Stores {
+			vols[dataStr(i, j)] = struct{}{}
+			newTestNode.stores = append(newTestNode.stores,
+				testStore{
+					config:  sc,
+					index:   j,
+					dataStr: dataStr(i, j),
+				})
 		}
 		l.Nodes = append(l.Nodes, newTestNode)
 	}
