@@ -38,6 +38,27 @@ import (
 	"github.com/pkg/errors"
 )
 
+func TestMaxImportBatchSize(t *testing.T) {
+	testCases := []struct {
+		importBatchSize int64
+		maxCommandSize  int64
+		expected        int64
+	}{
+		{importBatchSize: 2 << 20, maxCommandSize: 64 << 20, expected: 2 << 20},
+		{importBatchSize: 128 << 20, maxCommandSize: 64 << 20, expected: 63 << 20},
+		{importBatchSize: 64 << 20, maxCommandSize: 64 << 20, expected: 63 << 20},
+		{importBatchSize: 63 << 20, maxCommandSize: 64 << 20, expected: 63 << 20},
+	}
+	for i, testCase := range testCases {
+		settings := cluster.MakeTestingClusterSettings()
+		settings.ImportBatchSize.Override(testCase.importBatchSize)
+		settings.MaxCommandSize.Override(testCase.maxCommandSize)
+		if e, a := maxImportBatchSize(settings), testCase.expected; e != a {
+			t.Errorf("%d: expected max batch size %d, but got %d", i, e, a)
+		}
+	}
+}
+
 func slurpSSTablesLatestKey(
 	t *testing.T, dir string, paths []string, kr prefixRewriter,
 ) []engine.MVCCKeyValue {

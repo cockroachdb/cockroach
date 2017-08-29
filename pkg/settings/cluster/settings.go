@@ -724,7 +724,7 @@ func MakeClusterSettings(minVersion, serverVersion roachpb.Version) *Settings {
 		true,
 	)
 
-	s.ImportBatchSize = r.RegisterByteSizeSetting("kv.import.batch_size", "", 2<<20)
+	s.ImportBatchSize = r.RegisterByteSizeSetting("kv.import.batch_size", "", 63<<20)
 	s.ImportBatchSize.Hide()
 
 	s.AddSSTableEnabled = r.RegisterBoolSetting(
