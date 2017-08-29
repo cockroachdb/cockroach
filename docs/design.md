@@ -1062,7 +1062,7 @@ database which is stored in the replicated key-value map.
 
 Time series are stored at Store granularity and allow the admin dashboard
 to efficiently gain visibility into a universe of information at the Cluster,
-Node or Store level. A [periodic background process](RFCS/time_series_culling.md)
+Node or Store level. A [periodic background process](RFCS/20160901_time_series_culling.md)
 culls older timeseries data, downsampling and eventually discarding it.
 
 # Key-prefix Accounting and Zones
@@ -1205,7 +1205,7 @@ PostgreSQL, although it also diverges in significant ways:
   and SERIALIZABLE.  The other traditional SQL isolation levels are
   internally mapped to either SNAPSHOT or SERIALIZABLE.
 
-- CockroachDB implements its own [SQL type system](RFCS/typing.md)
+- CockroachDB implements its own [SQL type system](RFCS/20160203_typing.md)
   which only supports a limited form of implicit coercions between
   types compared to PostgreSQL. The rationale is to keep the
   implementation simple and efficient, capitalizing on the observation
@@ -1301,7 +1301,7 @@ the indexed row.
 Dist-SQL is a new execution framework being developed as of Q3 2016 with the
 goal of distributing the processing of SQL queries.
 See the [Distributed SQL
-RFC](RFCS/distributed_sql.md)
+RFC](RFCS/20160421_distributed_sql.md)
 for a detailed design of the subsystem; this section will serve as a summary.
 
 Distributing the processing is desirable for multiple reasons:
@@ -1416,7 +1416,7 @@ matched by a guarantee), we insert a **sorting aggregator**.
 
 Logical plans are transformed into physical plans in a *physical planning
 phase*. See the [corresponding
-section](RFCS/distributed_sql.md#from-logical-to-physical) of the Distributed SQL RFC
+section](RFCS/20160421_distributed_sql.md#from-logical-to-physical) of the Distributed SQL RFC
 for details.  To summarize, each aggregator is planned as one or more
 *processors*, which we distribute starting from the data layout - `TABLE
 READER`s have multiple instances, split according to the ranges - each instance
