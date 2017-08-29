@@ -110,7 +110,7 @@ endif
 # rebuilt on the first successful `make` invocation after the Makefile changes.
 include $(REPO_ROOT)/build/variables.mk
 $(foreach v,$(filter-out $(strip $(VALID_VARS)),$(.VARIABLES)),\
-	$(if $(findstring command line,$(origin $v)),$(error Variable `$v' is not recognized by this Makefile)))
+	$(if $(findstring command line,$(origin $v)),$(error Variable '$v' is not recognized by this Makefile)))
 -include $(REPO_ROOT)/customenv.mk
 
 # Tell Make to delete the target if its recipe fails. Otherwise, if a recipe
