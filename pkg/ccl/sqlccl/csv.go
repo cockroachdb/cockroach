@@ -1177,8 +1177,8 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 			} else if !ok {
 				break
 			}
-			kv.Key.Key = iter.Key()
-			kv.Value = iter.Value()
+			kv.Key.Key = iter.UnsafeKey()
+			kv.Value = iter.UnsafeValue()
 			if firstKey == nil {
 				firstKey = iter.Key()
 			}
@@ -1186,7 +1186,7 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 				return errors.Wrapf(err, errSSTCreationMaybeDuplicateTemplate, kv.Key.Key)
 			}
 		}
-		lastKey := kv.Key.Key.Next()
+		lastKey := append([]byte(nil), kv.Key.Key.Next()...)
 		data, err := sst.Finish()
 		if err != nil {
 			return err
