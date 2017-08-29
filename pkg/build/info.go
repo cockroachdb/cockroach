@@ -41,7 +41,8 @@ const TimeFormat = "2006/01/02 15:04:05"
 var (
 	// These variables are initialized via the linker -X flag in the
 	// top-level Makefile when compiling release binaries.
-	tag         = "unknown" // Tag of this build (git describe)
+	tag         = "unknown" // Tag of this build (git describe --exact-match)
+	baseBranch  = "unknown" // Base branch of this build (git describe)
 	utcTime     string      // Build time in UTC (year/month/day hour:min:sec)
 	rev         string      // SHA-1 of this build (git rev-parse)
 	cgoCompiler = C.GoString(C.compilerVersion())
@@ -54,6 +55,15 @@ var (
 // IsRelease returns true if the binary was produced by a "release" build.
 func IsRelease() bool {
 	return strings.HasPrefix(typ, "release")
+}
+
+// VersionPrefix returns the version prefix of the current build.
+func VersionPrefix() string {
+	if baseBranch == "unknown" {
+		return "dev"
+	}
+	prefix := strings.SplitN(baseBranch, "-", 2)[0]
+	return strings.Join(strings.SplitN(prefix, ".", 3)[:2], ".")
 }
 
 func init() {

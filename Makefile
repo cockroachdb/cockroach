@@ -165,7 +165,8 @@ $(COCKROACH) build buildoss go-install: override LINKFLAGS += $(VERLINKFLAGS)
 VERLINKFLAGS = \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
-	-X "github.com/cockroachdb/cockroach/pkg/build.rev=$(shell cat .buildinfo/rev)"
+	-X "github.com/cockroachdb/cockroach/pkg/build.rev=$(shell cat .buildinfo/rev)" \
+	-X "github.com/cockroachdb/cockroach/pkg/build.baseBranch=$(shell cat .buildinfo/basebranch)"
 
 # Note: We pass `-v` to `go build` and `go test -i` so that warnings
 # from the linker aren't suppressed. The usage of `-v` also shows when
@@ -174,7 +175,7 @@ VERLINKFLAGS = \
 .PHONY: build buildoss install
 build: ## Build the CockroachDB binary.
 buildoss: ## Build the CockroachDB binary without any CCL-licensed code.
-$(COCKROACH) build buildoss go-install: $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) .buildinfo/tag .buildinfo/rev
+$(COCKROACH) build buildoss go-install: $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) .buildinfo/tag .buildinfo/rev .buildinfo/basebranch
 	 $(XGO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 
 .PHONY: install
@@ -346,7 +347,7 @@ $(ARCHIVE): $(ARCHIVE).tmp
 # instead of scripts/ls-files.sh once Git v2.11 is widely deployed.
 .INTERMEDIATE: $(ARCHIVE).tmp
 $(ARCHIVE).tmp: ARCHIVE_BASE = cockroach-$(shell cat .buildinfo/tag)
-$(ARCHIVE).tmp: .buildinfo/tag .buildinfo/rev
+$(ARCHIVE).tmp: .buildinfo/tag .buildinfo/rev .buildinfo/basebranch
 	scripts/ls-files.sh | $(TAR) -cf $@ -T - $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach/, $^
 	(cd build/archive/contents && $(TAR) -rf ../../../$@ $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/, *)
 
@@ -365,6 +366,9 @@ $(ARCHIVE).tmp: .buildinfo/tag .buildinfo/rev
 	@{ git describe --tags --exact-match 2> /dev/null || git rev-parse --short HEAD; } | tr -d \\n > $@
 	@git diff --quiet HEAD || echo -dirty >> $@
 
+.buildinfo/basebranch: | .buildinfo
+	@git describe --tags |tr -d \\n > $@
+
 .buildinfo/rev: | .buildinfo
 	@git rev-parse HEAD > $@
 
@@ -373,4 +377,5 @@ ifneq ($(GIT_DIR),)
 # to keep it up-to-date.
 .buildinfo/tag: .ALWAYS_REBUILD
 .buildinfo/rev: .ALWAYS_REBUILD
+.buildinfo/basebranch: .ALWAYS_REBUILD
 endif
