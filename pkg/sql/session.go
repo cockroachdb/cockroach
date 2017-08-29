@@ -798,16 +798,23 @@ const (
 	// queries.
 	NoTxn TxnStateEnum = iota
 
-	// A txn is in scope, and we're currently executing statements from the first
-	// batch of statements using the transaction. If BEGIN was the last (or the
-	// only) statement in a batch, that batch doesn't count (the next batch will
-	// be considered the first one). The first batch of statements can be
-	// automatically retried in case of retryable errors since there's been no
-	// client logic relying on reads performed in the transaction.
+	// A txn is in scope, and, even though we might have executed some statements
+	// in it as part of a previous batch of statements, we're still able to do
+	// automatic retries. In principle we can only do automatic retries on the
+	// first batch of statements in a transaction, but there are exceptions: for
+	// example, is we get a batch with "BEGIN; SET TRANSACTION ISOLATION LEVEL
+	// foo; SAVEPOINT cockroach_restart;" followed by a 2nd batch, we can
+	// automatically retry the 2nd batch even through the statements in the first
+	// batch will not be executed again and their results have already been sent
+	// to the clients. We can do this because some statements are special in that
+	// all their executions generate exactly the same results. It is at the
+	// beginning of this 2nd batch that the FirstBatch state is useful: automatic
+	// retries are enabled or disabled for the continuation of a previous
+	// transaction based on we're in FirstBatch or not.
 	//
-	// A BEGIN statement makes the transaction enter this state (from a previous
-	// NoTxn state). The end of the first batch of statements, if executed
-	// successfully, will move the state to Open.
+	// A BEGIN statement makes the transaction from NoTxn to FirstBatch. As soon
+	// as we execute a statement that's not special in the way described above, we
+	// transition to Open.
 	//
 	// TODO(andrei): It'd be cool if exiting this state would be based not on
 	// batches sent by the client, but results being sent by the server to the
