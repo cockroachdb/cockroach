@@ -1516,16 +1516,24 @@ drop_index_stmt:
 
 // %Help: DROP DATABASE - remove a database
 // %Category: DDL
-// %Text: DROP DATABASE [IF EXISTS] <databasename>
+// %Text: DROP DATABASE [IF EXISTS] <databasename> [CASCADE | RESTRICT]
 // %SeeAlso: https://www.cockroachlabs.com/docs/drop-database.html
 drop_database_stmt:
-  DROP DATABASE name
+  DROP DATABASE name opt_drop_behavior
   {
-    $$.val = &DropDatabase{Name: Name($3), IfExists: false}
+    $$.val = &DropDatabase{
+      Name: Name($3),
+      IfExists: false,
+      DropBehavior: $4.dropBehavior(),
+    }
   }
-| DROP DATABASE IF EXISTS name
+| DROP DATABASE IF EXISTS name opt_drop_behavior
   {
-    $$.val = &DropDatabase{Name: Name($5), IfExists: true}
+    $$.val = &DropDatabase{
+      Name: Name($5),
+      IfExists: true,
+      DropBehavior: $6.dropBehavior(),
+    }
   }
 | DROP DATABASE error // SHOW HELP: DROP DATABASE
 

@@ -1138,7 +1138,7 @@ func TestPGPreparedExec(t *testing.T) {
 			},
 		},
 		{
-			"DROP DATABASE d",
+			"DROP DATABASE d CASCADE",
 			[]preparedExecTest{
 				baseTest,
 			},

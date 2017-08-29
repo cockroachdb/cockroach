@@ -25,7 +25,7 @@ end_test
 start_test "Check that an incomplete last statement in interactive mode is not executed."
 send "$argv sql\r"
 eexpect root@
-send "drop database if exists t; create database t; create table t.foo(x int);\r"
+send "drop database if exists t cascade; create database t; create table t.foo(x int);\r"
 eexpect "CREATE TABLE"
 eexpect root@
 send "insert into t.foo(x) values (42)\r"
