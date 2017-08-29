@@ -1888,12 +1888,15 @@ func TestShowBackup(t *testing.T) {
 	sqlDB.Exec(`BACKUP data.bank TO $1`, dir)
 
 	var unused driver.Value
-	var start, end time.Time
+	var start, end *time.Time
 	var dataSize uint64
 	sqlDB.QueryRow(`SELECT * FROM [SHOW BACKUP $1] WHERE "table" = 'bank'`, dir).Scan(
 		&unused, &unused, &start, &end, &dataSize,
 	)
-	if !now.After(start) || !end.After(now) {
+	if start != nil {
+		t.Errorf("expected null start time on full backup, got %v", *start)
+	}
+	if !(*end).After(now) {
 		t.Errorf("expected now (%s) to be in (%s, %s)", now, start, end)
 	}
 	if dataSize <= 0 {
