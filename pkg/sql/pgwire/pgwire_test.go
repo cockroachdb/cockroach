@@ -658,6 +658,12 @@ func TestPGPreparedQuery(t *testing.T) {
 		"SELECT $1[2] LIKE 'b'": {
 			baseTest.SetArgs(pq.Array([]string{"a", "b", "c"})).Results(true),
 		},
+		"SET application_name = $1": {
+			baseTest.SetArgs("hello world"),
+		},
+		"SET CLUSTER SETTING cluster.organization = $1": {
+			baseTest.SetArgs("hello world"),
+		},
 		"SHOW DATABASE": {
 			baseTest.Results(""),
 		},

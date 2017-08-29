@@ -40,7 +40,7 @@ func init() {
 	testingPlanHook := func(
 		stmt parser.Statement, state sql.PlanHookState,
 	) (func(context.Context, chan<- parser.Datums) error, sqlbase.ResultColumns, error) {
-		show, ok := stmt.(*parser.Show)
+		show, ok := stmt.(*parser.ShowVar)
 		if !ok || show.Name != "planhook" {
 			return nil, nil, nil
 		}

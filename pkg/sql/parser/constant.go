@@ -323,6 +323,11 @@ type StrVal struct {
 	resBytes  DBytes
 }
 
+// NewStrVal constructs a StrVal instance.
+func NewStrVal(s string) *StrVal {
+	return &StrVal{s: s}
+}
+
 // Format implements the NodeFormatter interface.
 func (expr *StrVal) Format(buf *bytes.Buffer, f FmtFlags) {
 	if expr.bytesEsc {
