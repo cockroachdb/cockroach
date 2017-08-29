@@ -1262,6 +1262,11 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
+			LeftType:  TypeINet,
+			RightType: TypeINet,
+			fn:        cmpOpScalarEQFn,
+		},
+		CmpOp{
 			LeftType:  TypeOid,
 			RightType: TypeOid,
 			fn:        cmpOpScalarEQFn,
@@ -1397,6 +1402,11 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
+			LeftType:  TypeINet,
+			RightType: TypeINet,
+			fn:        cmpOpScalarLTFn,
+		},
+		CmpOp{
 			LeftType:  TypeTuple,
 			RightType: TypeTuple,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
@@ -1527,6 +1537,11 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
+			LeftType:  TypeINet,
+			RightType: TypeINet,
+			fn:        cmpOpScalarLEFn,
+		},
+		CmpOp{
 			LeftType:  TypeTuple,
 			RightType: TypeTuple,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
@@ -1548,6 +1563,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeEvalTupleIn(TypeTimestampTZ),
 		makeEvalTupleIn(TypeInterval),
 		makeEvalTupleIn(TypeUUID),
+		makeEvalTupleIn(TypeINet),
 		makeEvalTupleIn(TypeTuple),
 		makeEvalTupleIn(TypeOid),
 	},
@@ -2395,6 +2411,8 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			s = t.ValueAsString()
 		case *DUuid:
 			s = t.UUID.String()
+		case *DIPAddr:
+			s = t.String()
 		case *DString:
 			s = string(*t)
 		case *DCollatedString:
@@ -2448,6 +2466,16 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		case *DBytes:
 			return ParseDUuidFromBytes([]byte(*t))
 		case *DUuid:
+			return d, nil
+		}
+
+	case *IPAddrColType:
+		switch t := d.(type) {
+		case *DString:
+			return ParseDIPAddrFromINetString(string(*t))
+		case *DCollatedString:
+			return ParseDIPAddrFromINetString(t.Contents)
+		case *DIPAddr:
 			return d, nil
 		}
 
@@ -3004,6 +3032,11 @@ func (t *DBytes) Eval(_ *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (t *DUuid) Eval(_ *EvalContext) (Datum, error) {
+	return t, nil
+}
+
+// Eval implements the TypedExpr interface.
+func (t *DIPAddr) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 

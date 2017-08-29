@@ -101,3 +101,26 @@ func TestAdd(t *testing.T) {
 		}
 	}
 }
+
+func TestEqual(t *testing.T) {
+	testData := []struct {
+		u1       Uint128
+		u2       Uint128
+		expected bool
+	}{
+		{Uint128{0, 0}, Uint128{0, 1}, false},
+		{Uint128{1, 0}, Uint128{0, 1}, false},
+		{Uint128{18446744073709551615, 18446744073709551614}, Uint128{18446744073709551615, 18446744073709551615}, false},
+		{Uint128{0, 1}, Uint128{0, 1}, true},
+		{Uint128{0, 0}, Uint128{0, 0}, true},
+		{Uint128{314, 0}, Uint128{314, 0}, true},
+		{Uint128{18446744073709551615, 18446744073709551615}, Uint128{18446744073709551615, 18446744073709551615}, true},
+	}
+
+	for _, test := range testData {
+
+		if actual := test.u1.Equal(test.u2); actual != test.expected {
+			t.Errorf("expected: %v.Equal(%v) expected %v but got %v", test.u1, test.u2, test.expected, actual)
+		}
+	}
+}

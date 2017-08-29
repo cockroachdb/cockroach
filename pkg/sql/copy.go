@@ -185,6 +185,7 @@ func (n *copyNode) addRow(ctx context.Context, line []byte) error {
 		case parser.TypeBytes,
 			parser.TypeDate,
 			parser.TypeInterval,
+			parser.TypeINet,
 			parser.TypeString,
 			parser.TypeTimestamp,
 			parser.TypeTimestampTZ,

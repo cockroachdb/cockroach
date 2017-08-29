@@ -122,6 +122,7 @@ var keywords = map[string]int{
 	"INCREMENTAL":               INCREMENTAL,
 	"INDEX":                     INDEX,
 	"INDEXES":                   INDEXES,
+	"INET":                      INET,
 	"INITIALLY":                 INITIALLY,
 	"INNER":                     INNER,
 	"INSERT":                    INSERT,

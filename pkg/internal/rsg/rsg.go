@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg/yacc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -239,6 +240,11 @@ func (r *RSG) GenerateRandomArg(typ parser.Type) string {
 	case parser.TypeUUID:
 		u := uuid.MakeV4()
 		v = fmt.Sprintf(`'%s'`, u)
+	case parser.TypeINet:
+		r.lock.Lock()
+		ipAddr := ipaddr.RandIPAddr(r.src)
+		r.lock.Unlock()
+		v = fmt.Sprintf(`'%s'`, ipAddr)
 	case parser.TypeOid,
 		parser.TypeRegClass,
 		parser.TypeRegNamespace,

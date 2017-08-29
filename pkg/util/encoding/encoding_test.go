@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -896,6 +897,10 @@ func (rd randData) duration() duration.Duration {
 	}
 }
 
+func (rd randData) ipAddr() ipaddr.IPAddr {
+	return ipaddr.RandIPAddr(rd.Rand)
+}
+
 func BenchmarkEncodeUint32(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 
@@ -1561,6 +1566,9 @@ func randValueEncode(rd randData, buf []byte, colID uint32, typ Type) ([]byte, i
 	case Duration:
 		x := rd.duration()
 		return EncodeDurationValue(buf, colID, x), x, true
+	case IPAddr:
+		x := rd.ipAddr()
+		return EncodeIPAddrValue(buf, colID, x), x, true
 	default:
 		return buf, nil, false
 	}
@@ -1710,6 +1718,8 @@ func TestValueEncodingRand(t *testing.T) {
 			buf, decoded, err = DecodeTimeValue(buf)
 		case Duration:
 			buf, decoded, err = DecodeDurationValue(buf)
+		case IPAddr:
+			buf, decoded, err = DecodeIPAddrValue(buf)
 		default:
 			err = errors.Errorf("unknown type %s", typ)
 		}
@@ -1726,6 +1736,12 @@ func TestValueEncodingRand(t *testing.T) {
 			d := decoded.(apd.Decimal)
 			val := value.(apd.Decimal)
 			if d.Cmp(&val) != 0 {
+				t.Fatalf("seed %d: %s got %v expected %v", seed, typ, decoded, value)
+			}
+		case IPAddr:
+			d := decoded.(ipaddr.IPAddr)
+			val := value.(ipaddr.IPAddr)
+			if !d.Equal(&val) {
 				t.Fatalf("seed %d: %s got %v expected %v", seed, typ, decoded, value)
 			}
 		default:
@@ -1777,7 +1793,16 @@ func TestUpperBoundValueEncodingSize(t *testing.T) {
 
 func TestPrettyPrintValueEncoded(t *testing.T) {
 	uuidStr := "63616665-6630-3064-6465-616462656562"
-	u, _ := uuid.FromString(uuidStr)
+	u, err := uuid.FromString(uuidStr)
+	if err != nil {
+		t.Fatalf("Bad test case. Attempted uuid.FromString(%q) got err: %d", uuidStr, err)
+	}
+	ip := "192.168.0.1/10"
+	var ipAddr ipaddr.IPAddr
+	err = ipaddr.ParseINet(ip, &ipAddr)
+	if err != nil {
+		t.Fatalf("Bad test case. Attempted ipaddr.ParseINet(%q) got err: %d", ip, err)
+	}
 	tests := []struct {
 		buf      []byte
 		expected string
@@ -1794,6 +1819,7 @@ func TestPrettyPrintValueEncoded(t *testing.T) {
 			duration.Duration{Months: 1, Days: 2, Nanos: 3}), "1mon2d3ns"},
 		{EncodeBytesValue(nil, NoColumnID, []byte{0x1, 0x2, 0xF, 0xFF}), "01020fff"},
 		{EncodeBytesValue(nil, NoColumnID, []byte("foo")), "foo"},
+		{EncodeIPAddrValue(nil, NoColumnID, ipAddr), ip},
 		{EncodeUUIDValue(nil, NoColumnID, u), uuidStr},
 	}
 	for i, test := range tests {
@@ -1969,6 +1995,40 @@ func BenchmarkDecodeTimeValue(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if _, _, err := DecodeTimeValue(vals[i%len(vals)]); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkEncodeIPAddrValue(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+	rd := randData{rng}
+
+	vals := make([]ipaddr.IPAddr, 10000)
+	for i := range vals {
+		vals[i] = rd.ipAddr()
+	}
+
+	buf := make([]byte, 0, 1000)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = EncodeIPAddrValue(buf, NoColumnID, vals[i%len(vals)])
+	}
+}
+
+func BenchmarkDecodeIPAddrValue(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+	rd := randData{rng}
+
+	vals := make([][]byte, 10000)
+	for i := range vals {
+		vals[i] = EncodeIPAddrValue(nil, uint32(rng.Intn(100)), rd.ipAddr())
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, _, err := DecodeIPAddrValue(vals[i%len(vals)]); err != nil {
 			b.Fatal(err)
 		}
 	}
