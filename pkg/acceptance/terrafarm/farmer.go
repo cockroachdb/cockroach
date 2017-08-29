@@ -478,6 +478,18 @@ func (f *Farmer) Restart(ctx context.Context, i int) error {
 		cmd += " --join=" + strings.Join(hosts, ",")
 	}
 
+	// Redirect stdout/stderr to a file, or Cockroach will panic when the SSH
+	// session closes. Most logging from this command will go to files, but
+	// stderr is occasionally used: log.Shout (for example) will try to write to
+	// stderr and is used in panic handling, which obviously shouldn't itself be
+	// panicing.
+	//
+	// It's also nice to have stderr and stdout collected on the cluster
+	// machines regardless of whether the acceptance test's network connection
+	// drops. This is frequently helpful when iterating on the large
+	// backup/restore tests with the -tf.keep-cluster=always option.
+	cmd += " 1> logs/cockroach.stdout 2> logs/cockroach.stderr"
+
 	c, err := f.getSSH(f.nodes[i].hostname, f.defaultKeyFile())
 	if err != nil {
 		return err
@@ -491,16 +503,12 @@ func (f *Farmer) Restart(ctx context.Context, i int) error {
 		}
 		defer s.Close()
 
-		var outBuf, errBuf bytes.Buffer
-		s.Stdout = &outBuf
-		s.Stderr = &errBuf
-
 		if err := s.Start(cmd); err != nil {
 			return errors.Wrap(err, cmd)
 		}
 		go func() {
 			err := s.Wait()
-			done <- errors.Wrapf(err, "failed: %s\nstdout:\n%s\nstderr:\n%s", cmd, outBuf.String(), errBuf.String())
+			done <- errors.Wrapf(err, "failed: %s", cmd)
 		}()
 	}
 
