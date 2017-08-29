@@ -286,6 +286,7 @@ func (rq *replicateQueue) processOneChange(
 			true, /* relaxConstraints */
 		)
 		if err != nil {
+			repl.incUnsatisfiableAllocationRequestCount()
 			return false, err
 		}
 		newReplica := roachpb.ReplicationTarget{
@@ -321,6 +322,7 @@ func (rq *replicateQueue) processOneChange(
 				true, /* relaxConstraints */
 			)
 			if err != nil {
+				repl.incUnsatisfiableAllocationRequestCount()
 				// Does not seem possible to go to the next odd replica state. Return an
 				// error so that the operation gets queued into the purgatory.
 				return false, errors.Wrap(err, "avoid up-replicating to fragile quorum")
@@ -340,8 +342,11 @@ func (rq *replicateQueue) processOneChange(
 			ReasonRangeUnderReplicated,
 			details,
 		); err != nil {
+			repl.incUnsatisfiableAllocationRequestCount()
 			return false, err
 		}
+		repl.resetUnsatisfiableAllocationRequestCount()
+
 	case AllocatorRemove:
 		if log.V(1) {
 			log.Infof(ctx, "removing a replica")

@@ -57,6 +57,11 @@ const rangeTableDisplayList: RangeTableRow[] = [
   { variable: "droppedCommands", display: "Dropped Commands", compareToLeader: false },
   { variable: "truncatedIndex", display: "Truncated Index", compareToLeader: true },
   { variable: "truncatedTerm", display: "Truncated Term", compareToLeader: true },
+  {
+    variable: "unsatisfiableAllocationRequests",
+    display: "Unsatisfiable Allocation Requests",
+    compareToLeader: false,
+  },
   { variable: "mvccLastUpdate", display: "MVCC Last Update", compareToLeader: true },
   { variable: "mvccIntentAge", display: "MVCC Intent Age", compareToLeader: true },
   { variable: "mvccGGBytesAge", display: "MVCC GG Bytes Age", compareToLeader: true },
@@ -153,7 +158,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     return {
       value: results,
       title: results,
-      className: results.length > 0 ? ["range-table__cell--problems"] : [],
+      className: results.length > 0 ? ["range-table__cell--warning"] : [],
     };
   }
 
@@ -363,10 +368,14 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         pendingCommands: this.createContent(info.state.num_pending),
         droppedCommands: this.createContent(
           info.state.num_dropped,
-          FixLong(info.state.num_dropped).greaterThan(0) ? "range-table__cell--dropped-commands" : "",
+          FixLong(info.state.num_dropped).greaterThan(0) ? "range-table__cell--warning" : "",
         ),
         truncatedIndex: this.createContent(info.state.state.truncated_state.index),
         truncatedTerm: this.createContent(info.state.state.truncated_state.term),
+        unsatisfiableAllocationRequests: this.createContent(
+          info.state.unsatisfiable_allocation_requests,
+          info.state.unsatisfiable_allocation_requests > 0 ? "range-table__cell--warning" : "",
+        ),
         mvccLastUpdate: this.contentNanos(mvcc.last_update_nanos),
         mvccIntentAge: this.contentDuration(mvcc.intent_age),
         mvccGGBytesAge: this.contentDuration(mvcc.gc_bytes_age),
