@@ -327,6 +327,8 @@ func init() {
 func TestDumpRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/17969")
+
 	c := newCLITest(cliTestParams{t: t})
 	defer c.cleanup()
 
