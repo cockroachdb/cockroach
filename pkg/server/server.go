@@ -812,6 +812,22 @@ func (s *Server) Start(ctx context.Context) error {
 		return errors.Wrap(err, "inspecting engines")
 	}
 
+	defer time.AfterFunc(30*time.Second, func() {
+		serverVersion := s.cfg.Settings.Version.ServerVersion
+		// Setting this to 0 so that the version will only be a stable release
+		// and the docs link will exist.
+		serverVersion.Unstable = 0
+		msg := `The server appears to be unable to contact the other nodes in the cluster. Please try
+						- starting the other nodes, if you haven't already
+						- double-checking that the '--join' and '--host' flags are set up correctly
+		  			- not using the '--background' flag.
+
+						If problems persist, please see https://www.cockroachlabs.com/docs/v` + serverVersion.String() + `/cluster-setup-troubleshooting.html.`
+
+		log.Shout(context.Background(), log.Severity_WARNING,
+			msg)
+	}).Stop()
+
 	// Now that we have a monotonic HLC wrt previous incarnations of the process,
 	// init all the replicas. At this point *some* store has been bootstrapped or
 	// we're joining an existing cluster for the first time.
