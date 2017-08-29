@@ -26,7 +26,7 @@ testcmd="cd jepsen/cockroachdb && set -eo pipefail && \
    --ssh-private-key ~/.ssh/id_rsa \
    --nodes-file ~/nodes \
    --os ubuntu \
-   --time-limit 180 \
+   --time-limit 360 \
    --concurrency 30 \
    --recovery-time 25 \
    --test-count 1 \
@@ -40,12 +40,12 @@ exitcode=0
 # we are unable to kill (or worse, could stomp on another run).
 SCRIPT_PID=$$
 
-# Although we run tests of 3 minutes each, we use a timeout
+# Although we run tests of 6 minutes each, we use a timeout
 # much larger than that; this is because Jepsen for some tests
 # (e.g. register) runs a potentially long analysis after the test
 # itself has completed, before determining whether the test has
 # succeeded or note.
-if timeout 15m ssh "${SSH_OPTIONS[@]}" "ubuntu@${controller}" "${testcmd}" \
+if timeout 20m ssh "${SSH_OPTIONS[@]}" "ubuntu@${controller}" "${testcmd}" \
         | (set +x; i=1; IFS='
 ';
            # The following loop displays a TC message every 10 seconds
