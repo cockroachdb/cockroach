@@ -24,7 +24,7 @@ statement error database "information_schema" already exists
 CREATE DATABASE information_schema
 
 statement ok
-DROP DATABASE other_db
+DROP DATABASE other_db CASCADE
 
 
 # Verify information_schema tables handle mutation statements correctly.
@@ -196,7 +196,7 @@ def           system              NULL                        NULL
 def           test                NULL                        NULL
 
 statement ok
-DROP DATABASE other_db
+DROP DATABASE other_db CASCADE
 
 ## information_schema.tables
 
@@ -464,7 +464,7 @@ def            other_db      xyz         BASE TABLE  6
 user root
 
 statement ok
-DROP DATABASE other_db
+DROP DATABASE other_db CASCADE
 
 statement ok
 SET DATABASE = test
@@ -523,7 +523,7 @@ def                 constraint_db      t1_a_key         constraint_db  t1       
 def                 constraint_db      fk               constraint_db  t2          FOREIGN KEY
 
 statement ok
-DROP DATABASE constraint_db
+DROP DATABASE constraint_db CASCADE
 
 ## information_schema.columns
 
@@ -720,7 +720,7 @@ def                 constraint_column  fk               def            constrain
 def                 constraint_column  fk               def            constraint_column  t3          b            2                 2
 
 statement ok
-DROP DATABASE constraint_column
+DROP DATABASE constraint_column CASCADE
 
 ## information_schema.schema_privileges
 
@@ -889,8 +889,7 @@ is_updatable  is_insertable_into  is_trigger_updatable  is_trigger_deletable  is
 NULL          NULL                NULL                  NULL                  NULL
 
 statement ok
-DROP DATABASE other_db
-
+DROP DATABASE other_db CASCADE
 
 #Verify  information_schema.user_privileges
 

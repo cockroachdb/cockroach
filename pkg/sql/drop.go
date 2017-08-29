@@ -71,9 +71,10 @@ func (p *planner) DropDatabase(ctx context.Context, n *parser.DropDatabase) (pla
 		return nil, err
 	}
 
-	if len(tbNames) > 0 && p.session.SafeUpdates {
-		return nil, pgerror.NewDangerousStatementErrorf(
-			"database is not empty; DROP DATABASE will delete all contents recursively")
+	if len(tbNames) > 0 && n.DropBehavior != parser.DropCascade {
+		return nil, pgerror.NewErrorf(pgerror.CodeDependentObjectsStillExistError,
+			"database %q is not empty and CASCADE was not specified",
+			parser.ErrString(parser.Name(dbDesc.Name)))
 	}
 
 	td := make([]*sqlbase.TableDescriptor, len(tbNames))
@@ -146,17 +147,18 @@ func (p *planner) accumulateDependentTables(
 }
 
 func (n *dropDatabaseNode) Start(params runParams) error {
-	tbNameStrings := make([]string, 0, len(n.td))
 	ctx := params.ctx
+	p := params.p
+	tbNameStrings := make([]string, 0, len(n.td))
 	for _, tbDesc := range n.td {
 		if tbDesc.IsView() {
-			cascadedViews, err := params.p.dropViewImpl(ctx, tbDesc, parser.DropCascade)
+			cascadedViews, err := p.dropViewImpl(ctx, tbDesc, parser.DropCascade)
 			if err != nil {
 				return err
 			}
 			tbNameStrings = append(tbNameStrings, cascadedViews...)
 		} else {
-			cascadedViews, err := params.p.dropTableImpl(ctx, tbDesc)
+			cascadedViews, err := p.dropTableImpl(ctx, tbDesc)
 			if err != nil {
 				return err
 			}
@@ -168,7 +170,7 @@ func (n *dropDatabaseNode) Start(params runParams) error {
 	zoneKey, nameKey, descKey := getKeysForDatabaseDescriptor(n.dbDesc)
 
 	b := &client.Batch{}
-	if params.p.session.Tracing.KVTracingEnabled() {
+	if p.session.Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "Del %s", descKey)
 		log.VEventf(ctx, 2, "Del %s", nameKey)
 		log.VEventf(ctx, 2, "Del %s", zoneKey)
@@ -178,7 +180,7 @@ func (n *dropDatabaseNode) Start(params runParams) error {
 	// Delete the zone config entry for this database.
 	b.Del(zoneKey)
 
-	params.p.session.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
+	p.session.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
 		for _, key := range [...]roachpb.Key{descKey, nameKey, zoneKey} {
 			if err := expectDeleted(systemConfig, key); err != nil {
 				return err
@@ -187,26 +189,26 @@ func (n *dropDatabaseNode) Start(params runParams) error {
 		return nil
 	})
 
-	params.p.session.tables.addUncommittedDatabase(n.dbDesc.Name, n.dbDesc.ID, true /*dropped*/)
+	p.session.tables.addUncommittedDatabase(n.dbDesc.Name, n.dbDesc.ID, true /*dropped*/)
 
-	if err := params.p.txn.Run(ctx, b); err != nil {
+	if err := p.txn.Run(ctx, b); err != nil {
 		return err
 	}
 
 	// Log Drop Database event. This is an auditable log event and is recorded
 	// in the same transaction as the table descriptor update.
-	if err := MakeEventLogger(params.p.LeaseMgr()).InsertEventRecord(
+	if err := MakeEventLogger(p.LeaseMgr()).InsertEventRecord(
 		ctx,
-		params.p.txn,
+		p.txn,
 		EventLogDropDatabase,
 		int32(n.dbDesc.ID),
-		int32(params.p.evalCtx.NodeID),
+		int32(p.evalCtx.NodeID),
 		struct {
 			DatabaseName          string
 			Statement             string
 			User                  string
 			DroppedTablesAndViews []string
-		}{n.n.Name.String(), n.n.String(), params.p.session.User, tbNameStrings},
+		}{n.n.Name.String(), n.n.String(), p.session.User, tbNameStrings},
 	); err != nil {
 		return err
 	}

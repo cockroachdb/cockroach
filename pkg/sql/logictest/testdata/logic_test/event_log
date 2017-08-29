@@ -270,13 +270,13 @@ CREATE TABLE eventlogtest.anothertesttable (id int PRIMARY KEY)
 ##################
 
 statement ok
-DROP DATABASE eventlogtest
+DROP DATABASE eventlogtest CASCADE
 
 statement ok
-DROP DATABASE IF EXISTS othereventlogtest
+DROP DATABASE IF EXISTS othereventlogtest CASCADE
 
 statement ok
-DROP DATABASE IF EXISTS othereventlogtest
+DROP DATABASE IF EXISTS othereventlogtest CASCADE
 
 # verify contents of drop event
 ##################

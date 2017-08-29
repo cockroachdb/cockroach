@@ -178,6 +178,8 @@ func TestParse(t *testing.T) {
 
 		{`DROP DATABASE a`},
 		{`DROP DATABASE IF EXISTS a`},
+		{`DROP DATABASE a CASCADE`},
+		{`DROP DATABASE a RESTRICT`},
 		{`DROP TABLE a`},
 		{`DROP TABLE a.b`},
 		{`DROP TABLE a, b`},

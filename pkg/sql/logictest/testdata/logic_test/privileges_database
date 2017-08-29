@@ -39,7 +39,7 @@ statement error only root is allowed to CREATE DATABASE
 CREATE DATABASE b
 
 statement error user testuser does not have DROP privilege on database a
-DROP DATABASE a
+DROP DATABASE a CASCADE
 
 statement ok
 SHOW DATABASES
@@ -74,7 +74,7 @@ statement error only root is allowed to CREATE DATABASE
 CREATE DATABASE b
 
 statement error user testuser does not have DROP privilege on database a
-DROP DATABASE a
+DROP DATABASE a CASCADE
 
 statement ok
 SHOW DATABASES
@@ -130,7 +130,7 @@ statement ok
 REVOKE ALL ON DATABASE a FROM bar
 
 statement error user testuser does not have DROP privilege on relation t
-DROP DATABASE a
+DROP DATABASE a CASCADE
 
 user root
 
@@ -140,4 +140,4 @@ GRANT DROP ON TABLE a.t TO testuser
 user testuser
 
 statement ok
-DROP DATABASE a
+DROP DATABASE a CASCADE
