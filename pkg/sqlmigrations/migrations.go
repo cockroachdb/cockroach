@@ -342,7 +342,7 @@ func eventlogUniqueIDDefault(ctx context.Context, r runner) error {
 	var err error
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
 		var res sql.StatementResults
-		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, alterStmt, nil, 1)
+		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, alterStmt, nil /* pinfo */, 1 /* expectedNumResults */)
 		if err == nil {
 			res.Close(ctx)
 			break

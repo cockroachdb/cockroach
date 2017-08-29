@@ -538,7 +538,7 @@ statement ok
 COMMIT
 
 # RestartWait state
-# The SELECT 1 is necessary to move the txn out of the FirstBatch state,
+# The SELECT 1 is necessary to move the txn out of the AutoRetry state,
 # otherwise the next statement is automatically retried on the server.
 statement ok
 BEGIN TRANSACTION; SAVEPOINT cockroach_restart; SELECT 1
@@ -583,7 +583,7 @@ ROLLBACK
 
 # Automatic retries for the first batch even when that first batch comes after
 # the BEGIN and the BEGIN also has special statements that don't move the txn
-# state out of the "FirstBatch" state.
+# state out of the "AutoRetry" state.
 statement ok
 BEGIN TRANSACTION; SAVEPOINT cockroach_restart; SET TRANSACTION PRIORITY HIGH; SET TRANSACTION ISOLATION LEVEL SNAPSHOT;
 
@@ -806,7 +806,7 @@ BEGIN ISOLATION LEVEL SERIALIZABLE, ISOLATION LEVEL SERIALIZABLE
 
 # Retryable error in a txn that hasn't performed any KV operations. It used to
 # not work.
-# The SELECT 1 is necessary to take the session out of the FirstBatch state,
+# The SELECT 1 is necessary to take the session out of the AutoRetry state,
 # otherwise the statement below would be retries automatically.
 statement ok
 BEGIN; SELECT 1
