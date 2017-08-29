@@ -1171,22 +1171,23 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 			return err
 		}
 		defer sst.Close()
+		var lastKey []byte
 		for iter.Rewind(); ; iter.Next() {
 			if ok, err := iter.Valid(); err != nil {
 				return err
 			} else if !ok {
 				break
 			}
-			kv.Key.Key = iter.Key()
-			kv.Value = iter.Value()
+			kv.Key.Key = iter.UnsafeKey()
+			kv.Value = iter.UnsafeValue()
 			if firstKey == nil {
 				firstKey = iter.Key()
 			}
 			if err := sst.Add(kv); err != nil {
 				return errors.Wrapf(err, errSSTCreationMaybeDuplicateTemplate, kv.Key.Key)
 			}
+			lastKey = append(lastKey[:0], kv.Key.Key.Next()...)
 		}
-		lastKey := kv.Key.Key.Next()
 		data, err := sst.Finish()
 		if err != nil {
 			return err
