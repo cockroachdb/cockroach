@@ -136,8 +136,10 @@ type RocksDBMapIterator struct {
 // engine.
 type RocksDBMap struct {
 	// TODO(asubiotto): Add memory accounting.
-	prefix []byte
-	store  Engine
+	prefix          []byte
+	store           Engine
+	allowDuplicates bool
+	rowID           int64
 }
 
 var _ SortedDiskMapBatchWriter = &RocksDBMapBatchWriter{}
@@ -158,8 +160,25 @@ func generateTempStorageID() uint64 {
 // the underlying store. The RocksDBMap instance will have a keyspace prefixed
 // by a unique prefix.
 func NewRocksDBMap(e Engine) *RocksDBMap {
+	return newRocksDBMap(e, false)
+}
+
+// NewRocksDBStore creates a new RocksDBMap with the passed in Engine as the
+// underlying store. The RocksDBMap instance will have a keyspace prefixed
+// by a unique prefix. Unlike NewRocksDBMap, Puts with identical keys will
+// write multiple entries (instead of overwriting previous entries) that
+// will be returned during iteration.
+func NewRocksDBStore(e Engine) *RocksDBMap {
+	return newRocksDBMap(e, true)
+}
+
+func newRocksDBMap(e Engine, allowDuplicates bool) *RocksDBMap {
 	prefix := generateTempStorageID()
-	return &RocksDBMap{prefix: encoding.EncodeUvarintAscending([]byte(nil), prefix), store: e}
+	return &RocksDBMap{
+		prefix:          encoding.EncodeUvarintAscending([]byte(nil), prefix),
+		store:           e,
+		allowDuplicates: allowDuplicates,
+	}
 }
 
 // makeKey appends k to the RocksDBMap's prefix to keep the key local to this
@@ -176,13 +195,28 @@ func (r *RocksDBMap) makeKey(k []byte) MVCCKey {
 	return mvccKey
 }
 
+// makePutKey makes a key appropriate for a Put operation. It is like makeKey
+// except it respects allowDuplicates, which uses the MVCC timestamp field
+// to assign a unique rowID so duplicate keys don't overwrite each other.
+func (r *RocksDBMap) makePutKey(k []byte) MVCCKey {
+	mvccKey := r.makeKey(k)
+	if r.allowDuplicates {
+		r.rowID++
+		mvccKey.Timestamp.WallTime = r.rowID
+	}
+	return mvccKey
+}
+
 // Put implements the SortedDiskMap interface.
 func (r *RocksDBMap) Put(k []byte, v []byte) error {
-	return r.store.Put(r.makeKey(k), v)
+	return r.store.Put(r.makePutKey(k), v)
 }
 
 // Get implements the SortedDiskMap interface.
 func (r *RocksDBMap) Get(k []byte) ([]byte, error) {
+	if r.allowDuplicates {
+		return nil, errors.New("Get not supported if allowDuplicates is true")
+	}
 	return r.store.Get(r.makeKey(k))
 }
 
@@ -201,9 +235,13 @@ func (r *RocksDBMap) NewBatchWriter() SortedDiskMapBatchWriter {
 
 // NewBatchWriterCapacity implements the SortedDiskMap interface.
 func (r *RocksDBMap) NewBatchWriterCapacity(capacityBytes int) SortedDiskMapBatchWriter {
+	makeKey := r.makeKey
+	if r.allowDuplicates {
+		makeKey = r.makePutKey
+	}
 	return &RocksDBMapBatchWriter{
 		capacity: capacityBytes,
-		makeKey:  r.makeKey,
+		makeKey:  makeKey,
 		batch:    r.store.NewWriteOnlyBatch(),
 		store:    r.store,
 	}
