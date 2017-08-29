@@ -25,18 +25,25 @@ import (
 	"fmt"
 )
 
-// Show represents a SHOW statement.
-type Show struct {
-	Name           string
-	ClusterSetting bool
+// ShowVar represents a SHOW statement.
+type ShowVar struct {
+	Name string
 }
 
 // Format implements the NodeFormatter interface.
-func (node *Show) Format(buf *bytes.Buffer, f FmtFlags) {
+func (node *ShowVar) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("SHOW ")
-	if node.ClusterSetting {
-		buf.WriteString("CLUSTER SETTING ")
-	}
+	buf.WriteString(node.Name)
+}
+
+// ShowClusterSetting represents a SHOW CLUSTER SETTING statement.
+type ShowClusterSetting struct {
+	Name string
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowClusterSetting) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("SHOW CLUSTER SETTING ")
 	buf.WriteString(node.Name)
 }
 

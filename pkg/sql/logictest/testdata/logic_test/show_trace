@@ -18,7 +18,7 @@ SELECT span, message, operation FROM [SHOW TRACE FOR SESSION] WHERE message NOT 
 (2,0)  === SPAN START: sql txn implicit ===  sql txn implicit
 (2,0)  executing 1/1: SELECT 2               sql txn implicit
 (3,0)  === SPAN START: sql txn implicit ===  sql txn implicit
-(3,0)  executing 1/1: SET tracing = 'off'    sql txn implicit
+(3,0)  executing 1/1: SET tracing = off      sql txn implicit
 
 # Same, with SHOW TRACE FOR.
 # This also tests that sub-spans are reported properly.

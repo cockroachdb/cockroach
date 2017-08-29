@@ -219,6 +219,7 @@ func newQueryNotSupportedErrorf(format string, args ...interface{}) error {
 }
 
 var mutationsNotSupportedError = newQueryNotSupportedError("mutations not supported")
+var setNotSupportedError = newQueryNotSupportedError("SET / SET CLUSTER SETTING should never distribute")
 
 // checkSupportForNode returns a distRecommendation (as described above) or an
 // error if the plan subtree is not supported by DistSQL.
@@ -349,6 +350,10 @@ func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 	case *insertNode, *updateNode, *deleteNode:
 		// This is a potential hot path.
 		return 0, mutationsNotSupportedError
+
+	case *setNode, *setClusterSettingNode:
+		// SET statements are never distributed.
+		return 0, setNotSupportedError
 
 	default:
 		return 0, newQueryNotSupportedErrorf("unsupported node %T", node)

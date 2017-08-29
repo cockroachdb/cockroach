@@ -40,7 +40,7 @@ var expectedHelpStrings = []string{
 	"PAUSE JOB",
 	"PREPARE",
 	"RELEASE",
-	"RESET",
+	"RESET CLUSTER SETTING",
 	"RESET",
 	"RESTORE",
 	"RESUME JOB",

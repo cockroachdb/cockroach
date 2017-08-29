@@ -1005,14 +1005,14 @@ func (stmt *SelectClause) WalkStmt(v Visitor) Statement {
 }
 
 // CopyNode makes a copy of this Statement without recursing in any child Statements.
-func (stmt *Set) CopyNode() *Set {
+func (stmt *SetVar) CopyNode() *SetVar {
 	stmtCopy := *stmt
 	stmtCopy.Values = append(Exprs(nil), stmt.Values...)
 	return &stmtCopy
 }
 
 // WalkStmt is part of the WalkableStmt interface.
-func (stmt *Set) WalkStmt(v Visitor) Statement {
+func (stmt *SetVar) WalkStmt(v Visitor) Statement {
 	ret := stmt
 	for i, expr := range stmt.Values {
 		e, changed := WalkExpr(v, expr)
@@ -1021,6 +1021,25 @@ func (stmt *Set) WalkStmt(v Visitor) Statement {
 				ret = stmt.CopyNode()
 			}
 			ret.Values[i] = e
+		}
+	}
+	return ret
+}
+
+// CopyNode makes a copy of this Statement without recursing in any child Statements.
+func (stmt *SetClusterSetting) CopyNode() *SetClusterSetting {
+	stmtCopy := *stmt
+	return &stmtCopy
+}
+
+// WalkStmt is part of the WalkableStmt interface.
+func (stmt *SetClusterSetting) WalkStmt(v Visitor) Statement {
+	ret := stmt
+	if stmt.Value != nil {
+		e, changed := WalkExpr(v, stmt.Value)
+		if changed {
+			ret = stmt.CopyNode()
+			ret.Value = e
 		}
 	}
 	return ret
@@ -1098,7 +1117,8 @@ var _ WalkableStmt = &ParenSelect{}
 var _ WalkableStmt = &Restore{}
 var _ WalkableStmt = &Select{}
 var _ WalkableStmt = &SelectClause{}
-var _ WalkableStmt = &Set{}
+var _ WalkableStmt = &SetClusterSetting{}
+var _ WalkableStmt = &SetVar{}
 var _ WalkableStmt = &Update{}
 var _ WalkableStmt = &ValuesClause{}
 

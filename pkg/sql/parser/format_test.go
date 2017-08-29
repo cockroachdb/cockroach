@@ -93,9 +93,9 @@ func TestFormatStatement(t *testing.T) {
 			`CREATE DATABASE foo TEMPLATE = 'bar{baz}'`},
 
 		{`SET "time zone" = UTC`, FmtSimple,
-			`SET "time zone" = 'utc'`},
+			`SET "time zone" = utc`},
 		{`SET "time zone" = UTC`, FmtBareIdentifiers,
-			`SET time zone = 'utc'`},
+			`SET time zone = utc`},
 		{`SET "time zone" = UTC`, FmtBareStrings,
 			`SET "time zone" = utc`},
 	}
