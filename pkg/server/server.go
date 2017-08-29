@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -743,6 +744,23 @@ func (s *Server) Start(ctx context.Context) error {
 		return errors.Wrap(err, "failed to create engines")
 	}
 	s.stopper.AddCloser(&s.engines)
+
+	statusFiles := [][2]string{
+		{".advertise-addr", unresolvedAdvertAddr.String()},
+		{".http-addr", unresolvedHTTPAddr.String()},
+		{".listen-addr", unresolvedListenAddr.String()},
+	}
+	for _, storeSpec := range s.cfg.Stores.Specs {
+		if storeSpec.InMemory {
+			continue
+		}
+		for _, pair := range statusFiles {
+			file := filepath.Join(storeSpec.Path, pair[0])
+			if err := ioutil.WriteFile(file, []byte(pair[1]), 0644); err != nil {
+				return errors.Wrapf(err, "failed to write %s", file)
+			}
+		}
+	}
 
 	if bootstrappedEngines, _, _, err := inspectEngines(ctx, s.engines, s.cfg.Settings.Version.MinSupportedVersion, s.cfg.Settings.Version.ServerVersion); err != nil {
 		return errors.Wrap(err, "inspecting engines")
