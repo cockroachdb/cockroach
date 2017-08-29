@@ -152,7 +152,7 @@ type DockerCluster struct {
 	logDirRemovable      bool   // if true, the log directory can be removed after use
 }
 
-// CreateDocker creates a new local cockroach cluster. The stopper is used to
+// CreateDocker creates a Docker-based cockroach cluster. The stopper is used to
 // gracefully shutdown the channel (e.g. when a signal arrives). The cluster
 // must be started before being used and keeps logs in the specified logDir, if
 // supplied.

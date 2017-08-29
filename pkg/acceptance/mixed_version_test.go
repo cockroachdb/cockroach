@@ -30,10 +30,12 @@ func TestMixedVersion(t *testing.T) {
 
 	ctx := context.Background()
 	cfg := readConfigFromFlags()
-	testMixedVersion(ctx, t, cfg)
+	RunLocal(t, func(t *testing.T) {
+		testMixedVersionHarness(ctx, t, cfg)
+	})
 }
 
-func testMixedVersion(
+func testMixedVersionHarness(
 	ctx context.Context, t *testing.T, cfg cluster.TestConfig,
 ) {
 	for i := range cfg.Nodes {
@@ -44,50 +46,46 @@ func testMixedVersion(
 			// test in this run.
 		}
 	}
-	RunLocal(t, func(t *testing.T) {
-		c := StartCluster(ctx, t, cfg)
-		defer c.AssertAndStop(ctx, t)
 
-		var dbs []*gosql.DB
+	c := StartCluster(ctx, t, cfg)
+	defer c.AssertAndStop(ctx, t)
 
-		// Verify that the nodes are *really* at the versions configured. This
-		// tests the CI harness.
-		for i := 0; i < c.NumNodes(); i++ {
-			db, err := gosql.Open("postgres", c.PGUrl(ctx, i))
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer db.Close()
-			dbs = append(dbs, db)
-
-			expVersion := cfg.Nodes[i].Version
-			var version string
-			// 'Version' for 1.1, 'Tag' in 1.0.x.
-			if err := db.QueryRow(
-				`SELECT value FROM crdb_internal.node_build_info where field IN ('Version' , 'Tag')`,
-			).Scan(&version); err != nil {
-				t.Fatal(err)
-			}
-			// Strip leading `v` and compare (if expVersion = "", we'll accept anything).
-			if version != expVersion && expVersion != "" {
-				t.Fatalf("created node at v%s, but it is %s", expVersion, version)
-			}
-
-			// Similarly, should see the bootstrap version (the version of the
-			// first node) from the settings. The first node itself is skipped;
-			// it doesn't know about this setting.
-
-			if i == 0 {
-				continue
-			}
-
-			if err := db.QueryRow("SHOW CLUSTER SETTING version").Scan(&version); err != nil {
-				t.Fatal(err)
-			}
-			const exp = "1.0" // no leading `v` here
-			if version != exp {
-				t.Fatalf("%d: node running at %s, not %s", i, version, exp)
-			}
+	// Verify that the nodes are *really* at the versions configured. This
+	// tests the CI harness.
+	for i := 0; i < c.NumNodes(); i++ {
+		db, err := gosql.Open("postgres", c.PGUrl(ctx, i))
+		if err != nil {
+			t.Fatal(err)
 		}
-	})
+		defer db.Close()
+
+		expVersion := cfg.Nodes[i].Version
+		var version string
+		// 'Version' for 1.1, 'Tag' in 1.0.x.
+		if err := db.QueryRow(
+			`SELECT value FROM crdb_internal.node_build_info where field IN ('Version' , 'Tag')`,
+		).Scan(&version); err != nil {
+			t.Fatal(err)
+		}
+		// Strip leading `v` and compare (if expVersion = "", we'll accept anything).
+		if version != expVersion && expVersion != "" {
+			t.Fatalf("created node at v%s, but it is %s", expVersion, version)
+		}
+
+		// Similarly, should see the bootstrap version (the version of the
+		// first node) from the settings. The first node itself is skipped;
+		// it doesn't know about this setting.
+
+		if i == 0 {
+			continue
+		}
+
+		if err := db.QueryRow("SHOW CLUSTER SETTING version").Scan(&version); err != nil {
+			t.Fatal(err)
+		}
+		const exp = "1.0" // no leading `v` here
+		if version != exp {
+			t.Fatalf("%d: node running at %s, not %s", i, version, exp)
+		}
+	}
 }
