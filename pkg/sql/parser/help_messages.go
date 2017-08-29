@@ -327,48 +327,48 @@ Plan options:
 		SeeAlso: `https://www.cockroachlabs.com/docs/explain.html
 `,
 	},
-	//line sql.y: 1648
+	//line sql.y: 1654
 	`PREPARE`: {
 		ShortDescription: `prepare a statement for later execution`,
-		//line sql.y: 1649
+		//line sql.y: 1655
 		Category: hMisc,
-		//line sql.y: 1650
+		//line sql.y: 1656
 		Text: `PREPARE <name> [ ( <types...> ) ] AS <query>
 `,
-		//line sql.y: 1651
+		//line sql.y: 1657
 		SeeAlso: `EXECUTE, DEALLOCATE, DISCARD
 `,
 	},
-	//line sql.y: 1673
+	//line sql.y: 1679
 	`EXECUTE`: {
 		ShortDescription: `execute a statement prepared previously`,
-		//line sql.y: 1674
+		//line sql.y: 1680
 		Category: hMisc,
-		//line sql.y: 1675
+		//line sql.y: 1681
 		Text: `EXECUTE <name> [ ( <exprs...> ) ]
 `,
-		//line sql.y: 1676
+		//line sql.y: 1682
 		SeeAlso: `PREPARE, DEALLOCATE, DISCARD
 `,
 	},
-	//line sql.y: 1699
+	//line sql.y: 1705
 	`DEALLOCATE`: {
 		ShortDescription: `remove a prepared statement`,
-		//line sql.y: 1700
+		//line sql.y: 1706
 		Category: hMisc,
-		//line sql.y: 1701
+		//line sql.y: 1707
 		Text: `DEALLOCATE [PREPARE] { <name> | ALL }
 `,
-		//line sql.y: 1702
+		//line sql.y: 1708
 		SeeAlso: `PREPARE, EXECUTE, DISCARD
 `,
 	},
-	//line sql.y: 1722
+	//line sql.y: 1728
 	`GRANT`: {
 		ShortDescription: `define access privileges`,
-		//line sql.y: 1723
+		//line sql.y: 1729
 		Category: hPriv,
-		//line sql.y: 1724
+		//line sql.y: 1730
 		Text: `
 GRANT {ALL | <privileges...> } ON <targets...> TO <grantees...>
 
@@ -380,16 +380,16 @@ Targets:
   [TABLE] [<databasename> .] { <tablename> | * } [, ...]
 
 `,
-		//line sql.y: 1734
+		//line sql.y: 1740
 		SeeAlso: `REVOKE, https://www.cockroachlabs.com/docs/grant.html
 `,
 	},
-	//line sql.y: 1742
+	//line sql.y: 1748
 	`REVOKE`: {
 		ShortDescription: `remove access privileges`,
-		//line sql.y: 1743
+		//line sql.y: 1749
 		Category: hPriv,
-		//line sql.y: 1744
+		//line sql.y: 1750
 		Text: `
 REVOKE {ALL | <privileges...> } ON <targets...> FROM <grantees...>
 
@@ -401,58 +401,58 @@ Targets:
   [TABLE] [<databasename> .] { <tablename> | * } [, ...]
 
 `,
-		//line sql.y: 1754
+		//line sql.y: 1760
 		SeeAlso: `GRANT, https://www.cockroachlabs.com/docs/revoke.html
 `,
 	},
-	//line sql.y: 1837
+	//line sql.y: 1843
 	`RESET`: {
 		ShortDescription: `reset a session variable to its default value`,
-		//line sql.y: 1838
+		//line sql.y: 1844
 		Category: hCfg,
-		//line sql.y: 1839
+		//line sql.y: 1845
 		Text: `RESET [SESSION] <var>
 `,
-		//line sql.y: 1840
+		//line sql.y: 1846
 		SeeAlso: `https://www.cockroachlabs.com/docs/set-vars.html
 `,
 	},
-	//line sql.y: 1870
+	//line sql.y: 1876
 	`SET CLUSTER SETTING`: {
 		ShortDescription: `change a cluster setting`,
-		//line sql.y: 1871
+		//line sql.y: 1877
 		Category: hCfg,
-		//line sql.y: 1872
+		//line sql.y: 1878
 		Text: `SET CLUSTER SETTING <var> { TO | = } <value>
 `,
-		//line sql.y: 1873
+		//line sql.y: 1879
 		SeeAlso: `SHOW CLUSTER SETTING, SET SESSION,
 https://www.cockroachlabs.com/docs/cluster-settings.html
 `,
 	},
-	//line sql.y: 1891
+	//line sql.y: 1897
 	`SET SESSION`: {
 		ShortDescription: `change a session variable`,
-		//line sql.y: 1892
+		//line sql.y: 1898
 		Category: hCfg,
-		//line sql.y: 1893
+		//line sql.y: 1899
 		Text: `
 SET [SESSION] <var> { TO | = } <values...>
 SET [SESSION] TIME ZONE <tz>
 SET [SESSION] CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL { SNAPSHOT | SERIALIZABLE }
 
 `,
-		//line sql.y: 1898
+		//line sql.y: 1904
 		SeeAlso: `SHOW SESSION, RESET, DISCARD, SHOW, SET CLUSTER SETTING, SET TRANSACTION,
 https://www.cockroachlabs.com/docs/set-vars.html
 `,
 	},
-	//line sql.y: 1915
+	//line sql.y: 1921
 	`SET TRANSACTION`: {
 		ShortDescription: `configure the transaction settings`,
-		//line sql.y: 1916
+		//line sql.y: 1922
 		Category: hTxn,
-		//line sql.y: 1917
+		//line sql.y: 1923
 		Text: `
 SET [SESSION] TRANSACTION <txnparameters...>
 
@@ -461,245 +461,245 @@ Transaction parameters:
    PRIORITY { LOW | NORMAL | HIGH }
 
 `,
-		//line sql.y: 1924
+		//line sql.y: 1930
 		SeeAlso: `SHOW TRANSACTION, SET SESSION,
 https://www.cockroachlabs.com/docs/set-transaction.html
 `,
 	},
-	//line sql.y: 2099
+	//line sql.y: 2105
 	`SHOW`: {
-		//line sql.y: 2100
+		//line sql.y: 2106
 		Category: hGroup,
-		//line sql.y: 2101
+		//line sql.y: 2107
 		Text: `
 SHOW SESSION, SHOW CLUSTER SETTING, SHOW DATABASES, SHOW TABLES, SHOW COLUMNS, SHOW INDEXES,
 SHOW CONSTRAINTS, SHOW CREATE TABLE, SHOW CREATE VIEW, SHOW USERS, SHOW TRANSACTION, SHOW BACKUP,
 SHOW JOBS, SHOW QUERIES, SHOW SESSIONS, SHOW TRACE
 `,
 	},
-	//line sql.y: 2126
+	//line sql.y: 2132
 	`SHOW SESSION`: {
 		ShortDescription: `display session variables`,
-		//line sql.y: 2127
+		//line sql.y: 2133
 		Category: hCfg,
-		//line sql.y: 2128
+		//line sql.y: 2134
 		Text: `SHOW [SESSION] { <var> | ALL }
 `,
-		//line sql.y: 2129
+		//line sql.y: 2135
 		SeeAlso: `https://www.cockroachlabs.com/docs/show-vars.html
 `,
 	},
-	//line sql.y: 2150
+	//line sql.y: 2156
 	`SHOW BACKUP`: {
 		ShortDescription: `list backup contents`,
-		//line sql.y: 2151
+		//line sql.y: 2157
 		Category: hCCL,
-		//line sql.y: 2152
+		//line sql.y: 2158
 		Text: `SHOW BACKUP <location>
 `,
-		//line sql.y: 2153
+		//line sql.y: 2159
 		SeeAlso: `https://www.cockroachlabs.com/docs/show-backup.html
 `,
 	},
-	//line sql.y: 2161
+	//line sql.y: 2167
 	`SHOW CLUSTER SETTING`: {
 		ShortDescription: `display cluster settings`,
-		//line sql.y: 2162
+		//line sql.y: 2168
 		Category: hCfg,
-		//line sql.y: 2163
+		//line sql.y: 2169
 		Text: `
 SHOW CLUSTER SETTING <var>
 SHOW ALL CLUSTER SETTINGS
 `,
-		//line sql.y: 2166
+		//line sql.y: 2172
 		SeeAlso: `https://www.cockroachlabs.com/docs/cluster-settings.html
 `,
 	},
-	//line sql.y: 2183
+	//line sql.y: 2189
 	`SHOW COLUMNS`: {
 		ShortDescription: `list columns in relation`,
-		//line sql.y: 2184
+		//line sql.y: 2190
 		Category: hDDL,
-		//line sql.y: 2185
+		//line sql.y: 2191
 		Text: `SHOW COLUMNS FROM <tablename>
 `,
-		//line sql.y: 2186
+		//line sql.y: 2192
 		SeeAlso: `https://www.cockroachlabs.com/docs/show-columns.html
 `,
 	},
-	//line sql.y: 2194
+	//line sql.y: 2200
 	`SHOW DATABASES`: {
 		ShortDescription: `list databases`,
-		//line sql.y: 2195
+		//line sql.y: 2201
 		Category: hDDL,
-		//line sql.y: 2196
+		//line sql.y: 2202
 		Text: `SHOW DATABASES
 `,
-		//line sql.y: 2197
+		//line sql.y: 2203
 		SeeAlso: `https://www.cockroachlabs.com/docs/show-databases.html
 `,
 	},
-	//line sql.y: 2205
+	//line sql.y: 2211
 	`SHOW GRANTS`: {
 		ShortDescription: `list grants`,
-		//line sql.y: 2206
+		//line sql.y: 2212
 		Category: hPriv,
-		//line sql.y: 2207
+		//line sql.y: 2213
 		Text: `SHOW GRANTS [ON <targets...>] [FOR <users...>]
 `,
-		//line sql.y: 2208
+		//line sql.y: 2214
 		SeeAlso: `https://www.cockroachlabs.com/docs/show-grants.html
 `,
 	},
-	//line sql.y: 2216
+	//line sql.y: 2222
 	`SHOW INDEXES`: {
 		ShortDescription: `list indexes`,
-		//line sql.y: 2217
+		//line sql.y: 2223
 		Category: hDDL,
-		//line sql.y: 2218
+		//line sql.y: 2224
 		Text: `SHOW INDEXES FROM <tablename>
 `,
-		//line sql.y: 2219
+		//line sql.y: 2225
 		SeeAlso: `https://www.cockroachlabs.com/docs/show-indexes.html
 `,
 	},
-	//line sql.y: 2237
+	//line sql.y: 2243
 	`SHOW CONSTRAINTS`: {
 		ShortDescription: `list constraints`,
-		//line sql.y: 2238
+		//line sql.y: 2244
 		Category: hDDL,
-		//line sql.y: 2239
+		//line sql.y: 2245
 		Text: `SHOW CONSTRAINTS FROM <tablename>
 `,
-		//line sql.y: 2240
+		//line sql.y: 2246
 		SeeAlso: `https://www.cockroachlabs.com/docs/show-constraints.html
 `,
 	},
-	//line sql.y: 2253
+	//line sql.y: 2259
 	`SHOW QUERIES`: {
 		ShortDescription: `list running queries`,
-		//line sql.y: 2254
+		//line sql.y: 2260
 		Category: hMisc,
-		//line sql.y: 2255
+		//line sql.y: 2261
 		Text: `SHOW [CLUSTER | LOCAL] QUERIES
 `,
-		//line sql.y: 2256
+		//line sql.y: 2262
 		SeeAlso: `CANCEL QUERY
 `,
 	},
-	//line sql.y: 2272
+	//line sql.y: 2278
 	`SHOW JOBS`: {
 		ShortDescription: `list background jobs`,
-		//line sql.y: 2273
+		//line sql.y: 2279
 		Category: hMisc,
-		//line sql.y: 2274
+		//line sql.y: 2280
 		Text: `SHOW JOBS
 `,
-		//line sql.y: 2275
+		//line sql.y: 2281
 		SeeAlso: `CANCEL JOB, PAUSE JOB, RESUME JOB
 `,
 	},
-	//line sql.y: 2283
+	//line sql.y: 2289
 	`SHOW TRACE`: {
 		ShortDescription: `display an execution trace`,
-		//line sql.y: 2284
+		//line sql.y: 2290
 		Category: hMisc,
-		//line sql.y: 2285
+		//line sql.y: 2291
 		Text: `
 SHOW [KV] TRACE FOR SESSION
 SHOW [KV] TRACE FOR <statement>
 `,
-		//line sql.y: 2288
+		//line sql.y: 2294
 		SeeAlso: `EXPLAIN
 `,
 	},
-	//line sql.y: 2309
+	//line sql.y: 2315
 	`SHOW SESSIONS`: {
 		ShortDescription: `list open client sessions`,
-		//line sql.y: 2310
+		//line sql.y: 2316
 		Category: hMisc,
-		//line sql.y: 2311
+		//line sql.y: 2317
 		Text: `SHOW [CLUSTER | LOCAL] SESSIONS
 `,
 	},
-	//line sql.y: 2327
+	//line sql.y: 2333
 	`SHOW TABLES`: {
 		ShortDescription: `list tables`,
-		//line sql.y: 2328
+		//line sql.y: 2334
 		Category: hDDL,
-		//line sql.y: 2329
+		//line sql.y: 2335
 		Text: `SHOW TABLES [FROM <databasename>]
 `,
-		//line sql.y: 2330
+		//line sql.y: 2336
 		SeeAlso: `https://www.cockroachlabs.com/docs/show-tables.html
 `,
 	},
-	//line sql.y: 2342
+	//line sql.y: 2348
 	`SHOW TRANSACTION`: {
 		ShortDescription: `display current transaction properties`,
-		//line sql.y: 2343
+		//line sql.y: 2349
 		Category: hCfg,
-		//line sql.y: 2344
+		//line sql.y: 2350
 		Text: `SHOW TRANSACTION {ISOLATION LEVEL | PRIORITY | STATUS}
 `,
-		//line sql.y: 2345
+		//line sql.y: 2351
 		SeeAlso: `https://www.cockroachlabs.com/docs/show-transaction.html
 `,
 	},
-	//line sql.y: 2364
+	//line sql.y: 2370
 	`SHOW CREATE TABLE`: {
 		ShortDescription: `display the CREATE TABLE statement for a table`,
-		//line sql.y: 2365
+		//line sql.y: 2371
 		Category: hDDL,
-		//line sql.y: 2366
+		//line sql.y: 2372
 		Text: `SHOW CREATE TABLE <tablename>
 `,
-		//line sql.y: 2367
+		//line sql.y: 2373
 		SeeAlso: `https://www.cockroachlabs.com/docs/show-create-table.html
 `,
 	},
-	//line sql.y: 2375
+	//line sql.y: 2381
 	`SHOW CREATE VIEW`: {
 		ShortDescription: `display the CREATE VIEW statement for a view`,
-		//line sql.y: 2376
+		//line sql.y: 2382
 		Category: hDDL,
-		//line sql.y: 2377
+		//line sql.y: 2383
 		Text: `SHOW CREATE VIEW <viewname>
 `,
-		//line sql.y: 2378
+		//line sql.y: 2384
 		SeeAlso: `https://www.cockroachlabs.com/docs/show-create-view.html
 `,
 	},
-	//line sql.y: 2386
+	//line sql.y: 2392
 	`SHOW USERS`: {
 		ShortDescription: `list defined users`,
-		//line sql.y: 2387
+		//line sql.y: 2393
 		Category: hPriv,
-		//line sql.y: 2388
+		//line sql.y: 2394
 		Text: `SHOW USERS
 `,
-		//line sql.y: 2389
+		//line sql.y: 2395
 		SeeAlso: `CREATE USER, DROP USER, https://www.cockroachlabs.com/docs/show-users.html
 `,
 	},
-	//line sql.y: 2441
+	//line sql.y: 2447
 	`PAUSE JOB`: {
 		ShortDescription: `pause a background job`,
-		//line sql.y: 2442
+		//line sql.y: 2448
 		Category: hMisc,
-		//line sql.y: 2443
+		//line sql.y: 2449
 		Text: `PAUSE JOB <jobid>
 `,
-		//line sql.y: 2444
+		//line sql.y: 2450
 		SeeAlso: `SHOW JOBS, CANCEL JOB, RESUME JOB
 `,
 	},
-	//line sql.y: 2452
+	//line sql.y: 2458
 	`CREATE TABLE`: {
 		ShortDescription: `create a new table`,
-		//line sql.y: 2453
+		//line sql.y: 2459
 		Category: hDDL,
-		//line sql.y: 2454
+		//line sql.y: 2460
 		Text: `
 CREATE TABLE [IF NOT EXISTS] <tablename> ( <elements...> ) [<interleave>]
 CREATE TABLE [IF NOT EXISTS] <tablename> [( <colnames...> )] AS <source>
@@ -727,54 +727,54 @@ Interleave clause:
    INTERLEAVE IN PARENT <tablename> ( <colnames...> ) [CASCADE | RESTRICT]
 
 `,
-		//line sql.y: 2480
+		//line sql.y: 2486
 		SeeAlso: `SHOW TABLES, CREATE VIEW, SHOW CREATE TABLE,
 https://www.cockroachlabs.com/docs/create-table.html
 https://www.cockroachlabs.com/docs/create-table-as.html
 `,
 	},
-	//line sql.y: 2814
+	//line sql.y: 2820
 	`TRUNCATE`: {
 		ShortDescription: `empty one or more tables`,
-		//line sql.y: 2815
+		//line sql.y: 2821
 		Category: hDML,
-		//line sql.y: 2816
+		//line sql.y: 2822
 		Text: `TRUNCATE [TABLE] <tablename> [, ...] [CASCADE | RESTRICT]
 `,
-		//line sql.y: 2817
+		//line sql.y: 2823
 		SeeAlso: `https://www.cockroachlabs.com/docs/truncate.html
 `,
 	},
-	//line sql.y: 2825
+	//line sql.y: 2831
 	`CREATE USER`: {
 		ShortDescription: `define a new user`,
-		//line sql.y: 2826
+		//line sql.y: 2832
 		Category: hPriv,
-		//line sql.y: 2827
+		//line sql.y: 2833
 		Text: `CREATE USER <name> [ [WITH] PASSWORD <passwd> ]
 `,
-		//line sql.y: 2828
+		//line sql.y: 2834
 		SeeAlso: `DROP USER, SHOW USERS, https://www.cockroachlabs.com/docs/create-user.html
 `,
 	},
-	//line sql.y: 2846
+	//line sql.y: 2852
 	`CREATE VIEW`: {
 		ShortDescription: `create a new view`,
-		//line sql.y: 2847
+		//line sql.y: 2853
 		Category: hDDL,
-		//line sql.y: 2848
+		//line sql.y: 2854
 		Text: `CREATE VIEW <viewname> [( <colnames...> )] AS <source>
 `,
-		//line sql.y: 2849
+		//line sql.y: 2855
 		SeeAlso: `CREATE TABLE, SHOW CREATE VIEW, https://www.cockroachlabs.com/docs/create-view.html
 `,
 	},
-	//line sql.y: 2863
+	//line sql.y: 2869
 	`CREATE INDEX`: {
 		ShortDescription: `create a new index`,
-		//line sql.y: 2864
+		//line sql.y: 2870
 		Category: hDDL,
-		//line sql.y: 2865
+		//line sql.y: 2871
 		Text: `
 CREATE [UNIQUE] INDEX [IF NOT EXISTS] [<idxname>]
        ON <tablename> ( <colname> [ASC | DESC] [, ...] )
@@ -784,53 +784,53 @@ Interleave clause:
    INTERLEAVE IN PARENT <tablename> ( <colnames...> ) [CASCADE | RESTRICT]
 
 `,
-		//line sql.y: 2873
+		//line sql.y: 2879
 		SeeAlso: `CREATE TABLE, SHOW INDEXES, SHOW CREATE INDEX,
 https://www.cockroachlabs.com/docs/create-index.html
 `,
 	},
-	//line sql.y: 3012
+	//line sql.y: 3018
 	`RELEASE`: {
 		ShortDescription: `complete a retryable block`,
-		//line sql.y: 3013
+		//line sql.y: 3019
 		Category: hTxn,
-		//line sql.y: 3014
+		//line sql.y: 3020
 		Text: `RELEASE [SAVEPOINT] cockroach_restart
 `,
-		//line sql.y: 3015
+		//line sql.y: 3021
 		SeeAlso: `SAVEPOINT, https://www.cockroachlabs.com/docs/savepoint.html
 `,
 	},
-	//line sql.y: 3023
+	//line sql.y: 3029
 	`RESUME JOB`: {
 		ShortDescription: `resume a background job`,
-		//line sql.y: 3024
+		//line sql.y: 3030
 		Category: hMisc,
-		//line sql.y: 3025
+		//line sql.y: 3031
 		Text: `RESUME JOB <jobid>
 `,
-		//line sql.y: 3026
+		//line sql.y: 3032
 		SeeAlso: `SHOW JOBS, CANCEL JOB, PAUSE JOB
 `,
 	},
-	//line sql.y: 3034
+	//line sql.y: 3040
 	`SAVEPOINT`: {
 		ShortDescription: `start a retryable block`,
-		//line sql.y: 3035
+		//line sql.y: 3041
 		Category: hTxn,
-		//line sql.y: 3036
+		//line sql.y: 3042
 		Text: `SAVEPOINT cockroach_restart
 `,
-		//line sql.y: 3037
+		//line sql.y: 3043
 		SeeAlso: `RELEASE, https://www.cockroachlabs.com/docs/savepoint.html
 `,
 	},
-	//line sql.y: 3051
+	//line sql.y: 3057
 	`BEGIN`: {
 		ShortDescription: `start a transaction`,
-		//line sql.y: 3052
+		//line sql.y: 3058
 		Category: hTxn,
-		//line sql.y: 3053
+		//line sql.y: 3059
 		Text: `
 BEGIN [TRANSACTION] [ <txnparameter> [[,] ...] ]
 START TRANSACTION [ <txnparameter> [[,] ...] ]
@@ -840,97 +840,97 @@ Transaction parameters:
    PRIORITY { LOW | NORMAL | HIGH }
 
 `,
-		//line sql.y: 3061
+		//line sql.y: 3067
 		SeeAlso: `COMMIT, ROLLBACK, https://www.cockroachlabs.com/docs/begin-transaction.html
 `,
 	},
-	//line sql.y: 3074
+	//line sql.y: 3080
 	`COMMIT`: {
 		ShortDescription: `commit the current transaction`,
-		//line sql.y: 3075
+		//line sql.y: 3081
 		Category: hTxn,
-		//line sql.y: 3076
+		//line sql.y: 3082
 		Text: `
 COMMIT [TRANSACTION]
 END [TRANSACTION]
 `,
-		//line sql.y: 3079
+		//line sql.y: 3085
 		SeeAlso: `BEGIN, ROLLBACK, https://www.cockroachlabs.com/docs/commit-transaction.html
 `,
 	},
-	//line sql.y: 3092
+	//line sql.y: 3098
 	`ROLLBACK`: {
 		ShortDescription: `abort the current transaction`,
-		//line sql.y: 3093
+		//line sql.y: 3099
 		Category: hTxn,
-		//line sql.y: 3094
+		//line sql.y: 3100
 		Text: `ROLLBACK [TRANSACTION] [TO [SAVEPOINT] cockroach_restart]
 `,
-		//line sql.y: 3095
+		//line sql.y: 3101
 		SeeAlso: `BEGIN, COMMIT, SAVEPOINT, https://www.cockroachlabs.com/docs/rollback-transaction.html
 `,
 	},
-	//line sql.y: 3209
+	//line sql.y: 3215
 	`CREATE DATABASE`: {
 		ShortDescription: `create a new database`,
-		//line sql.y: 3210
+		//line sql.y: 3216
 		Category: hDDL,
-		//line sql.y: 3211
+		//line sql.y: 3217
 		Text: `CREATE DATABASE [IF NOT EXISTS] <name>
 `,
-		//line sql.y: 3212
+		//line sql.y: 3218
 		SeeAlso: `https://www.cockroachlabs.com/docs/create-database.html
 `,
 	},
-	//line sql.y: 3281
+	//line sql.y: 3287
 	`INSERT`: {
 		ShortDescription: `create new rows in a table`,
-		//line sql.y: 3282
+		//line sql.y: 3288
 		Category: hDML,
-		//line sql.y: 3283
+		//line sql.y: 3289
 		Text: `
 INSERT INTO <tablename> [[AS] <name>] [( <colnames...> )]
        <selectclause>
        [ON CONFLICT [( <colnames...> )] {DO UPDATE SET ... [WHERE <expr>] | DO NOTHING}]
        [RETURNING <exprs...>]
 `,
-		//line sql.y: 3288
+		//line sql.y: 3294
 		SeeAlso: `UPSERT, UPDATE, DELETE, https://www.cockroachlabs.com/docs/insert.html
 `,
 	},
-	//line sql.y: 3305
+	//line sql.y: 3311
 	`UPSERT`: {
 		ShortDescription: `create or replace rows in a table`,
-		//line sql.y: 3306
+		//line sql.y: 3312
 		Category: hDML,
-		//line sql.y: 3307
+		//line sql.y: 3313
 		Text: `
 UPSERT INTO <tablename> [AS <name>] [( <colnames...> )]
        <selectclause>
        [RETURNING <exprs...>]
 `,
-		//line sql.y: 3311
+		//line sql.y: 3317
 		SeeAlso: `INSERT, UPDATE, DELETE, https://www.cockroachlabs.com/docs/upsert.html
 `,
 	},
-	//line sql.y: 3387
+	//line sql.y: 3393
 	`UPDATE`: {
 		ShortDescription: `update rows of a table`,
-		//line sql.y: 3388
+		//line sql.y: 3394
 		Category: hDML,
-		//line sql.y: 3389
+		//line sql.y: 3395
 		Text: `UPDATE <tablename> [[AS] <name>] SET ... [WHERE <expr>] [RETURNING <exprs...>]
 `,
-		//line sql.y: 3390
+		//line sql.y: 3396
 		SeeAlso: `INSERT, UPSERT, DELETE, https://www.cockroachlabs.com/docs/update.html
 `,
 	},
-	//line sql.y: 3558
+	//line sql.y: 3564
 	`<SELECTCLAUSE>`: {
 		ShortDescription: `access tabular data`,
-		//line sql.y: 3559
+		//line sql.y: 3565
 		Category: hDML,
-		//line sql.y: 3560
+		//line sql.y: 3566
 		Text: `
 Select clause:
   TABLE <tablename>
@@ -938,12 +938,12 @@ Select clause:
   SELECT ... [ { INTERSECT | UNION | EXCEPT } [ ALL | DISTINCT ] <selectclause> ]
 `,
 	},
-	//line sql.y: 3571
+	//line sql.y: 3577
 	`SELECT`: {
 		ShortDescription: `retrieve rows from a data source and compute a result`,
-		//line sql.y: 3572
+		//line sql.y: 3578
 		Category: hDML,
-		//line sql.y: 3573
+		//line sql.y: 3579
 		Text: `
 SELECT [DISTINCT]
        { <expr> [[AS] <name>] | [ [<dbname>.] <tablename>. ] * } [, ...]
@@ -957,40 +957,40 @@ SELECT [DISTINCT]
        [ LIMIT { <expr> | ALL } ]
        [ OFFSET <expr> [ ROW | ROWS ] ]
 `,
-		//line sql.y: 3585
+		//line sql.y: 3591
 		SeeAlso: `https://www.cockroachlabs.com/docs/select.html
 `,
 	},
-	//line sql.y: 3645
+	//line sql.y: 3651
 	`TABLE`: {
 		ShortDescription: `select an entire table`,
-		//line sql.y: 3646
+		//line sql.y: 3652
 		Category: hDML,
-		//line sql.y: 3647
+		//line sql.y: 3653
 		Text: `TABLE <tablename>
 `,
-		//line sql.y: 3648
+		//line sql.y: 3654
 		SeeAlso: `SELECT, VALUES, https://www.cockroachlabs.com/docs/table-expressions.html
 `,
 	},
-	//line sql.y: 3887
+	//line sql.y: 3893
 	`VALUES`: {
 		ShortDescription: `select a given set of values`,
-		//line sql.y: 3888
+		//line sql.y: 3894
 		Category: hDML,
-		//line sql.y: 3889
+		//line sql.y: 3895
 		Text: `VALUES ( <exprs...> ) [, ...]
 `,
-		//line sql.y: 3890
+		//line sql.y: 3896
 		SeeAlso: `SELECT, TABLE, https://www.cockroachlabs.com/docs/table-expressions.html
 `,
 	},
-	//line sql.y: 3995
+	//line sql.y: 4001
 	`<SOURCE>`: {
 		ShortDescription: `define a data source for SELECT`,
-		//line sql.y: 3996
+		//line sql.y: 4002
 		Category: hDML,
-		//line sql.y: 3997
+		//line sql.y: 4003
 		Text: `
 Data sources:
   <tablename> [ @ { <idxname> | <indexhint> } ]
@@ -1010,7 +1010,7 @@ Index hints:
   '{' NO_INDEX_JOIN [, ...] '}'
 
 `,
-		//line sql.y: 4015
+		//line sql.y: 4021
 		SeeAlso: `https://www.cockroachlabs.com/docs/table-expressions.html
 `,
 	},
