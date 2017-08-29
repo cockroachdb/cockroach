@@ -1142,6 +1142,30 @@ func TestPGPreparedExec(t *testing.T) {
 				baseTest,
 			},
 		},
+		{
+			"CANCEL JOB $1",
+			[]preparedExecTest{
+				baseTest.SetArgs(123).Error("pq: job with ID 123 does not exist"),
+			},
+		},
+		{
+			"RESUME JOB $1",
+			[]preparedExecTest{
+				baseTest.SetArgs(123).Error("pq: job with ID 123 does not exist"),
+			},
+		},
+		{
+			"PAUSE JOB $1",
+			[]preparedExecTest{
+				baseTest.SetArgs(123).Error("pq: job with ID 123 does not exist"),
+			},
+		},
+		{
+			"CANCEL QUERY $1",
+			[]preparedExecTest{
+				baseTest.SetArgs("01").Error("pq: could not cancel query 00000000000000000000000000000001: query ID 00000000000000000000000000000001 not found"),
+			},
+		},
 		// An empty string is valid in postgres.
 		{
 			"",

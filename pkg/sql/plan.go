@@ -463,6 +463,10 @@ func (p *planner) prepare(ctx context.Context, stmt parser.Statement) (planNode,
 	}
 
 	switch n := stmt.(type) {
+	case *parser.CancelQuery:
+		return p.CancelQuery(ctx, n)
+	case *parser.CancelJob:
+		return p.CancelJob(ctx, n)
 	case *parser.Delete:
 		return p.Delete(ctx, n, nil)
 	case *parser.Explain:
@@ -471,6 +475,10 @@ func (p *planner) prepare(ctx context.Context, stmt parser.Statement) (planNode,
 		return p.Help(ctx, n)
 	case *parser.Insert:
 		return p.Insert(ctx, n, nil)
+	case *parser.PauseJob:
+		return p.PauseJob(ctx, n)
+	case *parser.ResumeJob:
+		return p.ResumeJob(ctx, n)
 	case *parser.Select:
 		return p.Select(ctx, n, nil)
 	case *parser.SelectClause:
