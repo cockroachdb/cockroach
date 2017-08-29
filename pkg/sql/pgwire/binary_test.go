@@ -230,3 +230,14 @@ func TestBinaryUuid(t *testing.T) {
 		return u
 	})
 }
+
+func TestBinaryInet(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testBinaryDatumType(t, "inet", func(val string) parser.Datum {
+		ipAddr, err := parser.ParseDIPAddrFromINetString(val)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ipAddr
+	})
+}
