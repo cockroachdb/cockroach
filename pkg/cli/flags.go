@@ -329,7 +329,7 @@ func init() {
 	boolFlag(zf, &zoneCtx.zoneDisableReplication, cliflags.ZoneDisableReplication, false)
 
 	varFlag(sqlShellCmd.Flags(), &sqlCtx.execStmts, cliflags.Execute)
-	boolFlag(sqlShellCmd.Flags(), &sqlCtx.safeUpdates, cliflags.SafeUpdates, false)
+	boolFlag(sqlShellCmd.Flags(), &sqlCtx.unsafeUpdates, cliflags.UnsafeUpdates, false)
 
 	varFlag(dumpCmd.Flags(), &dumpCtx.dumpMode, cliflags.DumpMode)
 	stringFlag(dumpCmd.Flags(), &dumpCtx.asOf, cliflags.DumpTime, "")

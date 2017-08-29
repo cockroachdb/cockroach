@@ -139,9 +139,9 @@ var sqlCtx = struct {
 	// execStmts is a list of statements to execute.
 	execStmts statementsValue
 
-	// safeUpdates indicates whether to not set
-	// reject_dangerous_statements in the CLI shell.
-	safeUpdates bool
+	// unsafeUpdates indicates whether to unset
+	// sql_safe_updates in the CLI shell.
+	unsafeUpdates bool
 }{cliContext: &cliCtx}
 
 // dumpCtx captures the command-line parameters of the `sql` command.
