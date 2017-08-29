@@ -41169,6 +41169,7 @@ export const cockroach = $root.cockroach = (() => {
                         case 13:
                         case 14:
                         case 15:
+                        case 16:
                         case 200:
                             break;
                         }
@@ -41221,6 +41222,7 @@ export const cockroach = $root.cockroach = (() => {
                         case 13:
                         case 14:
                         case 15:
+                        case 16:
                         case 200:
                             break;
                         }
@@ -41300,6 +41302,10 @@ export const cockroach = $root.cockroach = (() => {
                     case "ARRAY":
                     case 15:
                         message.semantic_type = 15;
+                        break;
+                    case "INET":
+                    case 16:
+                        message.semantic_type = 16;
                         break;
                     case "INT2VECTOR":
                     case 200:
@@ -41414,6 +41420,10 @@ export const cockroach = $root.cockroach = (() => {
                     case 15:
                         message.array_contents = 15;
                         break;
+                    case "INET":
+                    case 16:
+                        message.array_contents = 16;
+                        break;
                     case "INT2VECTOR":
                     case 200:
                         message.array_contents = 200;
@@ -41509,6 +41519,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @property {number} NULL=13 NULL value
                  * @property {number} UUID=14 UUID value
                  * @property {number} ARRAY=15 ARRAY value
+                 * @property {number} INET=16 INET value
                  * @property {number} INT2VECTOR=200 INT2VECTOR value
                  */
                 ColumnType.SemanticType = (function() {
@@ -41529,6 +41540,7 @@ export const cockroach = $root.cockroach = (() => {
                     values[valuesById[13] = "NULL"] = 13;
                     values[valuesById[14] = "UUID"] = 14;
                     values[valuesById[15] = "ARRAY"] = 15;
+                    values[valuesById[16] = "INET"] = 16;
                     values[valuesById[200] = "INT2VECTOR"] = 200;
                     return values;
                 })();

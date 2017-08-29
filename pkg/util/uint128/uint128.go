@@ -39,6 +39,25 @@ func (u Uint128) String() string {
 	return hex.EncodeToString(u.GetBytes())
 }
 
+// Equal returns whether or not the Uint128 are equivalent.
+func (u Uint128) Equal(o Uint128) bool {
+	return u.Hi == o.Hi && u.Lo == o.Lo
+}
+
+// Compare compares the two Uint128.
+func (u Uint128) Compare(o Uint128) int {
+	if u.Hi > o.Hi {
+		return 1
+	} else if u.Hi < o.Hi {
+		return -1
+	} else if u.Lo > o.Lo {
+		return 1
+	} else if u.Lo < o.Lo {
+		return -1
+	}
+	return 0
+}
+
 // Add returns a new Uint128 incremented by n.
 func (u Uint128) Add(n uint64) Uint128 {
 	lo := u.Lo + n
