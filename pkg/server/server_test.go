@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -531,6 +532,57 @@ func TestListenURLFileCreation(t *testing.T) {
 
 	if s.ServingAddr() != u.Host {
 		t.Fatalf("expected URL %s to match host %s", u, s.ServingAddr())
+	}
+}
+func TestListenerFileCreation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	dir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+
+	s, err := serverutils.StartServerRaw(base.TestServerArgs{
+		StoreSpecs: []base.StoreSpec{{
+			Path: dir,
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Stopper().Stop(context.TODO())
+
+	files, err := filepath.Glob(filepath.Join(dir, ".*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	li := listenerInfo{
+		advertise: s.ServingAddr(),
+		http:      s.HTTPAddr(),
+		listen:    s.Addr(),
+	}
+	expectedFiles := li.Iter()
+
+	for _, file := range files {
+		base := filepath.Base(file)
+		expVal, ok := expectedFiles[base]
+		if !ok {
+			t.Fatalf("unexpected file %s", file)
+		}
+		delete(expectedFiles, base)
+
+		data, err := ioutil.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		addr := string(data)
+
+		if addr != expVal {
+			t.Fatalf("expected %s %s to match host %s", base, addr, expVal)
+		}
+	}
+
+	for f := range expectedFiles {
+		t.Errorf("never saw expected file %s", f)
 	}
 }
 

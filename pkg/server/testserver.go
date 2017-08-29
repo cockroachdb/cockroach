@@ -413,6 +413,16 @@ func (ts *TestServer) ServingAddr() string {
 	return ts.cfg.AdvertiseAddr
 }
 
+// HTTPAddr returns the server's HTTP address. Should be used by clients.
+func (ts *TestServer) HTTPAddr() string {
+	return ts.cfg.HTTPAddr
+}
+
+// Addr returns the server's listening address.
+func (ts *TestServer) Addr() string {
+	return ts.cfg.Addr
+}
+
 // WriteSummaries implements TestServerInterface.
 func (ts *TestServer) WriteSummaries() error {
 	return ts.node.writeSummaries(context.TODO())

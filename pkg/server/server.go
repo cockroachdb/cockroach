@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -515,6 +516,18 @@ func inspectEngines(
 	return bootstrappedEngines, emptyEngines, cv, nil
 }
 
+type listenerInfo struct {
+	advertise, http, listen string
+}
+
+func (li listenerInfo) Iter() map[string]string {
+	return map[string]string{
+		".advertise-addr": li.advertise,
+		".http-addr":      li.http,
+		".listen-addr":    li.listen,
+	}
+}
+
 // Start starts the server on the specified port, starts gossip and initializes
 // the node using the engines from the server's context.
 //
@@ -741,6 +754,24 @@ func (s *Server) Start(ctx context.Context) error {
 		return errors.Wrap(err, "failed to create engines")
 	}
 	s.stopper.AddCloser(&s.engines)
+
+	listenerFiles := listenerInfo{
+		advertise: unresolvedAdvertAddr.String(),
+		http:      unresolvedHTTPAddr.String(),
+		listen:    unresolvedListenAddr.String(),
+	}.Iter()
+
+	for _, storeSpec := range s.cfg.Stores.Specs {
+		if storeSpec.InMemory {
+			continue
+		}
+		for base, val := range listenerFiles {
+			file := filepath.Join(storeSpec.Path, base)
+			if err := ioutil.WriteFile(file, []byte(val), 0644); err != nil {
+				return errors.Wrapf(err, "failed to write %s", file)
+			}
+		}
+	}
 
 	if bootstrappedEngines, _, _, err := inspectEngines(ctx, s.engines, s.cfg.Settings.Version.MinSupportedVersion, s.cfg.Settings.Version.ServerVersion); err != nil {
 		return errors.Wrap(err, "inspecting engines")
