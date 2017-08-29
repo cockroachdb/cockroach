@@ -22,6 +22,7 @@ import (
 	gosql "database/sql"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/pkg/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -85,5 +86,47 @@ func testMixedVersionHarness(ctx context.Context, t *testing.T, cfg cluster.Test
 		if version != exp {
 			t.Fatalf("%d: node running at %s, not %s", i, version, exp)
 		}
+	}
+
+	for i := 0; i < c.NumNodes(); i++ {
+		if err := c.Kill(ctx, i); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	lc := c.(*localcluster.LocalCluster)
+
+	var chs []<-chan error
+	// Restart the nodes asynchronously and in a way that doesn't start the
+	// first node (at v1.0.5 first) (this is due to technical limitations in
+	// v1.0.5 and the test harness). See (*LocalCluster).StartAsync() for
+	// details.
+	for i := c.NumNodes() - 1; i >= 0; i-- {
+		chs = append(chs, lc.RestartAsync(ctx, i))
+	}
+
+	for _, ch := range chs {
+		if err := <-ch; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	db, err := gosql.Open("postgres", c.PGUrl(ctx, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM system.settings WHERE name = 'version';").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+
+	// Since there are nodes at >1.0 in the cluster, a migration that populates
+	// the version setting should have run.
+	//
+	// NB: we could do this check before the restart as well. The new nodes
+	// won't declare startup complete until migrations have run. But putting
+	// it here also checks that the cluster still "works" after the restart.
+	if count < 1 {
+		t.Fatal("initial cluster version was not migrated in")
 	}
 }
