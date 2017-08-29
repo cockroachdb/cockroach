@@ -26,6 +26,9 @@ type Uint128 struct {
 	Hi, Lo uint64
 }
 
+// Uint128len is the byte size of the Uint128
+const Uint128len int = 16
+
 // GetBytes returns a big-endian byte representation.
 func (u Uint128) GetBytes() []byte {
 	buf := make([]byte, 16)
@@ -34,9 +37,36 @@ func (u Uint128) GetBytes() []byte {
 	return buf
 }
 
+// AppendBytes appends the big-endian byte representation to a buffer.
+func (u Uint128) AppendBytes(buf []byte) []byte {
+	var tmp [16]byte
+	binary.BigEndian.PutUint64(tmp[:8], u.Hi)
+	binary.BigEndian.PutUint64(tmp[8:], u.Lo)
+	return append(buf, tmp[:]...)
+}
+
 // String returns a hexadecimal string representation.
 func (u Uint128) String() string {
 	return hex.EncodeToString(u.GetBytes())
+}
+
+// Equal returns whether or not the Uint128 are equivalent.
+func (u Uint128) Equal(o Uint128) bool {
+	return u.Hi == o.Hi && u.Lo == o.Lo
+}
+
+// Compare compares the two Uint128.
+func (u Uint128) Compare(o Uint128) int {
+	if u.Hi > o.Hi {
+		return 1
+	} else if u.Hi < o.Hi {
+		return -1
+	} else if u.Lo > o.Lo {
+		return 1
+	} else if u.Lo < o.Lo {
+		return -1
+	}
+	return 0
 }
 
 // Add returns a new Uint128 incremented by n.

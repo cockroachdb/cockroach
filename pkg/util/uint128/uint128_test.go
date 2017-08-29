@@ -101,3 +101,55 @@ func TestAdd(t *testing.T) {
 		}
 	}
 }
+
+func TestEqual(t *testing.T) {
+	testData := []struct {
+		u1       Uint128
+		u2       Uint128
+		expected bool
+	}{
+		{Uint128{0, 0}, Uint128{0, 1}, false},
+		{Uint128{1, 0}, Uint128{0, 1}, false},
+		{Uint128{18446744073709551615, 18446744073709551614}, Uint128{18446744073709551615, 18446744073709551615}, false},
+		{Uint128{0, 1}, Uint128{0, 1}, true},
+		{Uint128{0, 0}, Uint128{0, 0}, true},
+		{Uint128{314, 0}, Uint128{314, 0}, true},
+		{Uint128{18446744073709551615, 18446744073709551615}, Uint128{18446744073709551615, 18446744073709551615}, true},
+	}
+
+	for _, test := range testData {
+
+		if actual := test.u1.Equal(test.u2); actual != test.expected {
+			t.Errorf("expected: %v.Equal(%v) expected %v but got %v", test.u1, test.u2, test.expected, actual)
+		}
+	}
+}
+
+func TestAppendBytes(t *testing.T) {
+	u := Uint128{18446744073709551615, 314}
+
+	// Test a buffer with enough capacity
+	b := make([]byte, 0, 16)
+	b = u.AppendBytes(b)
+	if !bytes.Equal(b, u.GetBytes()) {
+		t.Errorf("AppendBytes value is incorrect. actual=%v expected=%v", b, u.GetBytes())
+	}
+
+	// Test a buffer without enough capacity
+	b = make([]byte, 0)
+	b = u.AppendBytes(b)
+	if !bytes.Equal(b, u.GetBytes()) {
+		t.Errorf("AppendBytes value is incorrect when slice had no capacity. actual=%v expected=%v", b, u.GetBytes())
+	}
+
+	// Test a buffer with existing bytes
+	existingBytes := []byte{0x31, 0x41, 0x59}
+	b = append([]byte(nil), existingBytes...)
+	b = u.AppendBytes(b)
+	if !bytes.Equal(b[len(existingBytes):], u.GetBytes()) {
+		t.Errorf("AppendBytes value is incorrect when slice had existing bytes. actual=%v expected=%v", b[len(existingBytes):], u.GetBytes())
+	} else if !bytes.Equal(b[:len(existingBytes)], existingBytes) {
+		t.Errorf("AppendBytes incorrectly modified existing bytes. actual=%v expected=%v", b[:len(existingBytes)], existingBytes)
+	}
+
+}
