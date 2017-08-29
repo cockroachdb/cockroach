@@ -197,11 +197,11 @@ func (p *planner) propagateFilters(
 
 	case *joinNode:
 		switch n.joinType {
-		case joinTypeInner:
+		case joinTypeInner, joinTypeLeftOuter, joinTypeRightOuter:
 			return p.addJoinFilter(ctx, n, extraFilter)
 		default:
-			// Outer joins not supported; simply trigger filter optimization in the sub-nodes.
-			// TODO(knz): support outer joins.
+			// There's nothing we can do for full outer joins; simply
+			// trigger filter optimization in the sub-nodes.
 			var err error
 			if n.left.plan, err = p.triggerFilterPropagation(ctx, n.left.plan); err == nil {
 				n.right.plan, err = p.triggerFilterPropagation(ctx, n.right.plan)
@@ -710,8 +710,49 @@ func (p *planner) addJoinFilter(
 			n, leftBegin, rightBegin, initialPred,
 		)
 		// There is no remainder filter: everything has been absorbed.
+
+	case joinTypeLeftOuter:
+		// We transform:
+		//   SELECT * FROM
+		//          l LEFT OUTER JOIN r ON (onLeft AND onRight AND onCombined)
+		//   WHERE (filterLeft AND filterRight AND filterCombined)
+		// to:
+		//   SELECT * FROM
+		//          (SELECT * FROM l WHERE filterLeft)
+		//          LEFT OUTER JOIN
+		//          (SELECT * from r WHERE onRight)
+		//          ON (onLeft AND onCombined)
+		//   WHERE (filterRight AND filterCombined)
+
+		// Extract filterLeft towards propagation on the left.
+		// filterRemainder = filterRight AND filterCombined.
+		propagateLeft, filterRemainder = splitJoinFilterLeft(n, leftBegin, rightBegin, extraFilter)
+		// Extract onRight towards propagation on the right.
+		// onRemainder = onLeft AND onCombined.
+		propagateRight, onRemainder = splitJoinFilterRight(n, leftBegin, rightBegin, n.pred.onCond)
+
+	case joinTypeRightOuter:
+		// We transform:
+		//   SELECT * FROM
+		//          l RIGHT OUTER JOIN r ON (onLeft AND onRight AND onCombined)
+		//   WHERE (filterLeft AND filterRight AND filterCombined)
+		// to:
+		//   SELECT * FROM
+		//          (SELECT * FROM l WHERE onLeft)
+		//          RIGHT OUTER JOIN
+		//          (SELECT * from r WHERE filterRight)
+		//          ON (onRight AND onCombined)
+		//   WHERE (filterLeft AND filterCombined)
+
+		// Extract filterRight towards propagation on the right.
+		// filterRemainder = filterLeft AND filterCombined.
+		propagateRight, filterRemainder = splitJoinFilterRight(n, leftBegin, rightBegin, extraFilter)
+		// Extract onLeft towards propagation on the left.
+		// onRemainder = onRight AND onCombined.
+		propagateLeft, onRemainder = splitJoinFilterLeft(n, leftBegin, rightBegin, n.pred.onCond)
+
 	default:
-		// Nothing to see here yet.
+		// Unreachable.
 	}
 
 	// Step 3: propagate the left and right predicates to the left and
