@@ -9,9 +9,12 @@
 package sqlccl
 
 import (
+	"math"
 	"runtime"
 	"sort"
+	"sync/atomic"
 
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
@@ -517,6 +520,136 @@ rangeLoop:
 	return requestEntries, maxEndTime, nil
 }
 
+// splitAndScatter creates new ranges for importSpans and scatters replicas and
+// leaseholders to be as evenly balanced as possible. It does this with some
+// amount of parallelism but also staying as close to the order in importSpans
+// as possible (the more out of order, the more work is done if a RESTORE job
+// loses its lease and has to be restarted).
+//
+// At a high level, this is accomplished by splitting and scattering large
+// "chunks" from the front of importEntries in one goroutine, each of which are
+// in turn passed to one of many worker goroutines that split and scatter the
+// individual entries.
+//
+// importEntries are sent to readyForImportCh as they are scattered, so letting
+// that channel send block can be used for backpressure on the splits and
+// scatters.
+//
+// TODO(dan): This logic is largely tuned by running BenchmarkRestore2TB. See if
+// there's some way to test it without running an O(hour) long benchmark.
+func splitAndScatter(
+	restoreCtx context.Context,
+	db *client.DB,
+	kr *storageccl.KeyRewriter,
+	numClusterNodes int,
+	importSpans []importEntry,
+	readyForImportCh chan<- importEntry,
+) error {
+	var span opentracing.Span
+	ctx, span := tracing.ChildSpan(restoreCtx, "presplit-scatter")
+	defer tracing.FinishSpan(span)
+
+	var g *errgroup.Group
+	g, ctx = errgroup.WithContext(ctx)
+
+	// TODO(dan): This not super principled. I just wanted something that wasn't
+	// a constant and grew slower than linear with the length of importSpans. It
+	// seems to be working well for BenchmarkRestore2TB but worth revisiting.
+	chunkSize := int(math.Sqrt(float64(len(importSpans))))
+	importSpanChunks := make([][]importEntry, 0, len(importSpans)/chunkSize)
+	for start := 0; start < len(importSpans); {
+		importSpanChunk := importSpans[start:]
+		end := start + chunkSize
+		if end < len(importSpans) {
+			importSpanChunk = importSpans[start:end]
+		}
+		importSpanChunks = append(importSpanChunks, importSpanChunk)
+		start = end
+	}
+
+	importSpanChunksCh := make(chan []importEntry)
+	g.Go(func() error {
+		defer close(importSpanChunksCh)
+		for idx, importSpanChunk := range importSpanChunks {
+			// TODO(dan): The structure between this and the below are very
+			// similar. Dedup.
+			chunkSpan, err := kr.RewriteSpan(roachpb.Span{
+				Key:    importSpanChunk[0].Key,
+				EndKey: importSpanChunk[len(importSpanChunk)-1].EndKey,
+			})
+			if err != nil {
+				return err
+			}
+
+			// TODO(dan): Really, this should be splitting the Key of the first
+			// entry in the _next_ chunk.
+			log.VEventf(restoreCtx, 1, "presplitting chunk %d of %d", idx, len(importSpanChunks))
+			if err := db.AdminSplit(ctx, chunkSpan.Key, chunkSpan.Key); err != nil {
+				return err
+			}
+
+			log.VEventf(restoreCtx, 1, "scattering chunk %d of %d", idx, len(importSpanChunks))
+			scatterReq := &roachpb.AdminScatterRequest{Span: chunkSpan}
+			if _, pErr := client.SendWrapped(ctx, db.GetSender(), scatterReq); pErr != nil {
+				// TODO(dan): Unfortunately, Scatter is still too unreliable to
+				// fail the RESTORE when Scatter fails. I'm uncomfortable that
+				// this could break entirely and not start failing the tests,
+				// but on the bright side, it doesn't affect correctness, only
+				// throughput.
+				log.Errorf(ctx, "failed to scatter chunk %d: %s", idx, pErr.GoError())
+			}
+
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case importSpanChunksCh <- importSpanChunk:
+			}
+		}
+		return nil
+	})
+
+	// TODO(dan): This tries to cover for a bad scatter by having 2 * the number
+	// of nodes in the cluster. Is it necessary?
+	splitScatterWorkers := numClusterNodes * 2
+	var splitScatterStarted uint64 // Only access using atomic.
+	for worker := 0; worker < splitScatterWorkers; worker++ {
+		g.Go(func() error {
+			for importSpanChunk := range importSpanChunksCh {
+				for _, importSpan := range importSpanChunk {
+					idx := atomic.AddUint64(&splitScatterStarted, 1)
+
+					newSpan, err := kr.RewriteSpan(importSpan.Span)
+					if err != nil {
+						return err
+					}
+
+					// TODO(dan): Really, this should be splitting the Key of
+					// the _next_ entry.
+					log.VEventf(restoreCtx, 1, "presplitting %d of %d", idx, len(importSpans))
+					if err := db.AdminSplit(ctx, newSpan.Key, newSpan.Key); err != nil {
+						return err
+					}
+
+					log.VEventf(restoreCtx, 1, "scattering %d of %d", idx, len(importSpans))
+					scatterReq := &roachpb.AdminScatterRequest{Span: newSpan}
+					if _, pErr := client.SendWrapped(ctx, db.GetSender(), scatterReq); pErr != nil {
+						// TODO(dan): Unfortunately, Scatter is still too unreliable to
+						// fail the RESTORE when Scatter fails. I'm uncomfortable that
+						// this could break entirely and not start failing the tests,
+						// but on the bright side, it doesn't affect correctness, only
+						// throughput.
+						log.Errorf(ctx, "failed to scatter %d: %s", idx, pErr.GoError())
+					}
+					readyForImportCh <- importSpan
+				}
+			}
+			return nil
+		})
+	}
+
+	return g.Wait()
+}
+
 // Write the new descriptors. First the ID -> TableDescriptor for the new table,
 // then flip (or initialize) the name -> ID entry so any new queries will use
 // the new one. The tables are assigned the permissions of their parent database
@@ -688,72 +821,28 @@ func restore(
 	// that's wrong.
 	//
 	// TODO(dan): Make this limiting per node.
-	//
-	// TODO(dan): See if there's some better solution than rate-limiting #14798.
-	maxConcurrentImports := clusterNodeCount(gossip) * runtime.NumCPU()
+	numClusterNodes := clusterNodeCount(gossip)
+	maxConcurrentImports := numClusterNodes * runtime.NumCPU()
 	importsSem := make(chan struct{}, maxConcurrentImports)
 
-	log.Eventf(restoreCtx, "commencing import of data with concurrency %d", maxConcurrentImports)
-	tBegin := timeutil.Now()
+	g, gCtx := errgroup.WithContext(restoreCtx)
 
-	// We're about to start off one goroutine that serially presplits & scatters
-	// each import span. Once split and scattered, the span is submitted to
-	// importRequestsCh to indicate it's ready for Import. Since import is so
+	// The Import (and resulting AddSSTable) requests made below run on
+	// leaseholders, so presplit and scatter the ranges to balance the work
+	// among many nodes.
+	//
+	// We're about to start off some goroutines that presplit & scatter each
+	// import span. Once split and scattered, the span is submitted to
+	// readyForImportCh to indicate it's ready for Import. Since import is so
 	// much slower, we buffer the channel to keep the split/scatter work from
 	// getting too far ahead. This both naturally rate limits the split/scatters
 	// and bounds the number of empty ranges crated if the RESTORE fails (or is
 	// cancelled).
 	const presplitLeadLimit = 10
-	importRequestsCh := make(chan *roachpb.ImportRequest, presplitLeadLimit)
-
-	g, gCtx := errgroup.WithContext(restoreCtx)
+	readyForImportCh := make(chan importEntry, presplitLeadLimit)
 	g.Go(func() error {
-		splitScatterCtx, splitScatterSpan := tracing.ChildSpan(gCtx, "presplit-scatter")
-		defer tracing.FinishSpan(splitScatterSpan)
-		defer close(importRequestsCh)
-
-		// The Import (and resulting AddSSTable) requests made below run on
-		// leaseholders, so presplit and scatter the ranges to balance the work
-		// among many nodes.
-		for i, importSpan := range importSpans {
-			newSpan, err := kr.RewriteSpan(importSpan.Span)
-			if err != nil {
-				return err
-			}
-
-			log.VEventf(restoreCtx, 1, "presplitting %d of %d", i+1, len(importSpans))
-			if err := db.AdminSplit(splitScatterCtx, newSpan.Key, newSpan.Key); err != nil {
-				return err
-			}
-
-			log.VEventf(restoreCtx, 1, "scattering %d of %d", i+1, len(importSpans))
-			scatterReq := &roachpb.AdminScatterRequest{Span: newSpan}
-			if _, pErr := client.SendWrapped(splitScatterCtx, db.GetSender(), scatterReq); pErr != nil {
-				// TODO(dan): Unfortunately, Scatter is still too unreliable to
-				// fail the RESTORE when Scatter fails. I'm uncomfortable that
-				// this could break entirely and not start failing the tests,
-				// but on the bright side, it doesn't affect correctness, only
-				// throughput.
-				log.Errorf(restoreCtx, "failed to scatter %d: %s", i, pErr.GoError())
-			}
-
-			importReq := &roachpb.ImportRequest{
-				// Import is a point request because we don't want DistSender to split
-				// it. Assume (but don't require) the entire post-rewrite span is on the
-				// same range.
-				Span:     roachpb.Span{Key: newSpan.Key},
-				DataSpan: importSpan.Span,
-				Files:    importSpan.files,
-				Rekeys:   rekeys,
-			}
-			select {
-			case <-gCtx.Done():
-				return gCtx.Err()
-			case importRequestsCh <- importReq:
-			}
-		}
-
-		return nil
+		defer close(readyForImportCh)
+		return splitAndScatter(gCtx, db, kr, numClusterNodes, importSpans, readyForImportCh)
 	})
 
 	requestFinishedCh := make(chan struct{}, len(importSpans)) // enough buffer to never block
@@ -763,10 +852,24 @@ func restore(
 		return progressLogger.loop(progressCtx, requestFinishedCh)
 	})
 
+	log.Eventf(restoreCtx, "commencing import of data with concurrency %d", maxConcurrentImports)
+	tBegin := timeutil.Now()
 	var importIdx int
-	for ir := range importRequestsCh {
-		// Copy ir so we can use it in the goroutine below.
-		importRequest := ir
+	for readyForImportSpan := range readyForImportCh {
+		newSpan, err := kr.RewriteSpan(readyForImportSpan.Span)
+		if err != nil {
+			return failed, err
+		}
+
+		importRequest := &roachpb.ImportRequest{
+			// Import is a point request because we don't want DistSender to split
+			// it. Assume (but don't require) the entire post-rewrite span is on the
+			// same range.
+			Span:     roachpb.Span{Key: newSpan.Key},
+			DataSpan: readyForImportSpan.Span,
+			Files:    readyForImportSpan.files,
+			Rekeys:   rekeys,
+		}
 
 		importCtx, importSpan := tracing.ChildSpan(gCtx, "import")
 		idx := importIdx
