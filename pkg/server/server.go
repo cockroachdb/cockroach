@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -737,6 +738,21 @@ func (s *Server) Start(ctx context.Context) error {
 	filtered := s.cfg.FilterGossipBootstrapResolvers(ctx, unresolvedListenAddr, unresolvedAdvertAddr)
 	s.gossip.Start(unresolvedAdvertAddr, filtered)
 	log.Event(ctx, "started gossip")
+
+	statusFiles := [][2]string{
+		{".advertise-addr", unresolvedAdvertAddr.String()},
+		{".http-addr", unresolvedHTTPAddr.String()},
+		{".listen-addr", unresolvedListenAddr.String()},
+	}
+	for _, storeSpec := range s.cfg.Stores.Specs {
+		for _, pair := range statusFiles {
+			_ = os.MkdirAll(storeSpec.Path, 0755)
+			file := filepath.Join(storeSpec.Path, pair[0])
+			if err := ioutil.WriteFile(file, []byte(pair[1]), 0644); err != nil {
+				return errors.Wrapf(err, "failed to write %s", file)
+			}
+		}
+	}
 
 	s.engines, err = s.cfg.CreateEngines(ctx)
 	if err != nil {
