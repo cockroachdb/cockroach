@@ -11,7 +11,6 @@ package storageccl
 import (
 	"bytes"
 	"io/ioutil"
-	"runtime"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -30,11 +29,12 @@ import (
 
 // importRequestLimit is the number of Import requests that can run at once.
 // Each downloads a file from cloud storage to a temp file, iterates it, and
-// sends AddSSTable requests to batch insert it. Import and the resulting
-// AddSSTable calls are mostly cpu-bound at this point so allow NumCPU of them
-// to be running concurrently, which will hopefully hit the sweet spot between
-// maximizing throughput and minimizing thrashing.
-var importRequestLimit = runtime.NumCPU()
+// sends AddSSTable requests (usually just one) to batch insert it. The
+// resulting AddSSTable requests are expected to be about the size of a range,
+// but the kv.import.batch_size setting imposes a hard limit of 128MB. This
+// request has the potential to clog gRPC, so we only allow one per node at a
+// time.
+var importRequestLimit = 1
 
 var importRequestLimiter = makeConcurrentRequestLimiter(importRequestLimit)
 
