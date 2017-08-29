@@ -1189,7 +1189,7 @@ func getTransactionState(txnState *txnState) string {
 
 // runShowTransactionState returns the state of current transaction.
 func runShowTransactionState(session *Session, statementResultWriter StatementResultWriter) error {
-	statementResultWriter.BeginResult((*parser.Show)(nil))
+	statementResultWriter.BeginResult((*parser.ShowTransactionStatus)(nil))
 	statementResultWriter.SetColumns(sqlbase.ResultColumns{{Name: "TRANSACTION STATUS", Typ: parser.TypeString}})
 
 	state := getTransactionState(&session.TxnState)
@@ -1776,8 +1776,8 @@ func (e *Executor) shouldUseDistSQL(planner *planner, plan planNode) (bool, erro
 	}
 
 	if err != nil {
-		// If the distSQLMode is ALWAYS, any unsupported statement is an error.
-		if distSQLMode == cluster.DistSQLAlways {
+		// If the distSQLMode is ALWAYS, reject anything but SET.
+		if distSQLMode == cluster.DistSQLAlways && err != setNotSupportedError {
 			return false, err
 		}
 		// Don't use distSQL for this request.

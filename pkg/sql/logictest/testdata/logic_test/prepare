@@ -262,3 +262,26 @@ EXECUTE wrongTypeImpossibleCast('3')
 
 statement error could not parse 'crabgas' as type int
 EXECUTE wrongTypeImpossibleCast('crabgas')
+
+# Ensure that SET / SET CLUSTER SETTING know about placeholders
+statement
+PREPARE setp(string) AS SET application_name = $1
+
+query T
+SET application_name = 'foo'; SHOW application_name
+----
+foo
+
+query T
+EXECUTE setp('hello'); SHOW application_name
+----
+hello
+
+# Note: we can't check the result of SET CLUSTER SETTING synchronously
+# because it doesn't propagate immediately.
+
+statement
+PREPARE sets(string) AS SET CLUSTER SETTING cluster.organization = $1
+
+statement
+EXECUTE sets('hello')

@@ -536,7 +536,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <Statement> import_stmt
 %type <Statement> pause_stmt
 %type <Statement> release_stmt
-%type <Statement> reset_stmt
+%type <Statement> reset_stmt reset_session_stmt reset_csetting_stmt
 %type <Statement> resume_stmt
 %type <Statement> restore_stmt
 %type <Statement> revoke_stmt
@@ -629,7 +629,6 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 
 %type <IsolationLevel> iso_level
 %type <UserPriority> user_priority
-%type <empty> opt_default
 
 %type <TableDefs> opt_table_elem_list table_elem_list
 %type <*InterleaveDef> opt_interleave
@@ -747,13 +746,12 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <empty> opt_varying
 
 %type <*NumVal>  signed_iconst
-%type <Expr>  opt_boolean_or_string
+%type <Expr>  var_value
 %type <Exprs> var_list
 %type <UnresolvedName> var_name
 %type <str>   unrestricted_name type_function_name
 %type <str>   non_reserved_word
 %type <str>   non_reserved_word_or_sconst
-%type <Expr>  var_value
 %type <Expr>  zone_value
 %type <Expr> string_or_placeholder
 %type <Expr> string_or_placeholder_list
@@ -906,7 +904,7 @@ stmt:
     $$.val = $1.slct()
   }
 | release_stmt     // EXTEND WITH HELP: RELEASE
-| reset_stmt       // EXTEND WITH HELP: RESET
+| reset_stmt       // help texts in sub-rule
 | set_stmt         // help texts in sub-rule
 | show_stmt        // help texts in sub-rule
 | transaction_stmt // help texts in sub-rule
@@ -1622,6 +1620,9 @@ preparable_stmt:
 | insert_stmt // EXTEND WITH HELP: INSERT
 | update_stmt // EXTEND WITH HELP: UPDATE
 | upsert_stmt // EXTEND WITH HELP: UPSERT
+| set_session_stmt  // EXTEND WITH HELP: SET SESSION
+| set_csetting_stmt // EXTEND WITH HELP: SET CLUSTER SETTING
+| reset_stmt  // help texts in sub-rule
 
 explainable_stmt:
   preparable_stmt
@@ -1834,27 +1835,42 @@ grantee_list:
     $$.val = append($1.nameList(), Name($3))
   }
 
+reset_stmt:
+  reset_session_stmt  // EXTEND WITH HELP: RESET
+| reset_csetting_stmt // EXTEND WITH HELP: RESET CLUSTER SETTING
+
 // %Help: RESET - reset a session variable to its default value
 // %Category: Cfg
 // %Text: RESET [SESSION] <var>
-// %SeeAlso: https://www.cockroachlabs.com/docs/set-vars.html
-reset_stmt:
+// %SeeAlso: RESET CLUSTER SETTING, https://www.cockroachlabs.com/docs/set-vars.html
+reset_session_stmt:
   RESET session_var
   {
-    $$.val = &Set{Name: UnresolvedName{Name($2)}, SetMode: SetModeReset}
+    $$.val = &SetVar{Name: UnresolvedName{Name($2)}, Values:Exprs{DefaultVal{}}}
   }
 | RESET SESSION session_var
   {
-    $$.val = &Set{Name: UnresolvedName{Name($3)}, SetMode: SetModeReset}
+    $$.val = &SetVar{Name: UnresolvedName{Name($3)}, Values:Exprs{DefaultVal{}}}
   }
-| RESET error { return helpWith(sqllex, "RESET" ) }
+| RESET error // SHOW HELP: RESET
+
+// %Help: RESET CLUSTER SETTING - reset a cluster setting to its default value
+// %Category: Cfg
+// %Text: RESET CLUSTER SETTING <var>
+// %SeeAlso: SET CLUSTER SETTING, RESET
+reset_csetting_stmt:
+  RESET CLUSTER SETTING var_name
+  {
+    $$.val = &SetClusterSetting{Name: $4.unresolvedName(), Value:DefaultVal{}}
+  }
+| RESET CLUSTER error // SHOW HELP: RESET CLUSTER SETTING
 
 // USE is the MSSQL/MySQL equivalent of SET DATABASE. Alias it for convenience.
 use_stmt:
   USE var_value
   {
     /* SKIP DOC */
-    $$.val = &Set{Name: UnresolvedName{Name("database")}, Values: Exprs{$2.expr()}}
+    $$.val = &SetVar{Name: UnresolvedName{Name("database")}, Values: Exprs{$2.expr()}}
   }
 | USE error // SHOW HELP: SET SESSION
 
@@ -1870,13 +1886,16 @@ set_stmt:
 // %Help: SET CLUSTER SETTING - change a cluster setting
 // %Category: Cfg
 // %Text: SET CLUSTER SETTING <var> { TO | = } <value>
-// %SeeAlso: SHOW CLUSTER SETTING, SET SESSION,
+// %SeeAlso: SHOW CLUSTER SETTING, RESET CLUSTER SETTING, SET SESSION,
 // https://www.cockroachlabs.com/docs/cluster-settings.html
 set_csetting_stmt:
-  SET CLUSTER SETTING generic_set
+  SET CLUSTER SETTING var_name '=' var_value
   {
-    $$.val = $4.stmt()
-    $$.val.(*Set).SetMode = SetModeClusterSetting
+    $$.val = &SetClusterSetting{Name: $4.unresolvedName(), Value: $6.expr()}
+  }
+| SET CLUSTER SETTING var_name TO var_value
+  {
+    $$.val = &SetClusterSetting{Name: $4.unresolvedName(), Value: $6.expr()}
   }
 | SET CLUSTER error // SHOW HELP: SET CLUSTER SETTING
 
@@ -1885,7 +1904,7 @@ set_exprs_internal:
      It cannot be used by clients. */
   SET ROW '(' expr_list ')'
   {
-    $$.val = &Set{Values: $4.exprs()}
+    $$.val = &SetVar{Values: $4.exprs()}
   }
 
 // %Help: SET SESSION - change a session variable
@@ -1938,19 +1957,11 @@ set_transaction_stmt:
 generic_set:
   var_name TO var_list
   {
-    $$.val = &Set{Name: $1.unresolvedName(), Values: $3.exprs()}
+    $$.val = &SetVar{Name: $1.unresolvedName(), Values: $3.exprs()}
   }
 | var_name '=' var_list
   {
-    $$.val = &Set{Name: $1.unresolvedName(), Values: $3.exprs()}
-  }
-| var_name TO DEFAULT
-  {
-    $$.val = &Set{Name: $1.unresolvedName()}
-  }
-| var_name '=' DEFAULT
-  {
-    $$.val = &Set{Name: $1.unresolvedName()}
+    $$.val = &SetVar{Name: $1.unresolvedName(), Values: $3.exprs()}
   }
 
 set_rest_more:
@@ -1960,7 +1971,7 @@ set_rest_more:
 | TIME ZONE zone_value
   {
     /* SKIP DOC */
-    $$.val = &Set{Name: UnresolvedName{Name("time zone")}, Values: Exprs{$3.expr()}}
+    $$.val = &SetVar{Name: UnresolvedName{Name("time zone")}, Values: Exprs{$3.expr()}}
   }
 | var_name FROM CURRENT { return unimplemented(sqllex, "set from current") }
 | set_names
@@ -1972,22 +1983,23 @@ set_names:
   NAMES var_value
   {
     /* SKIP DOC */
-    $$.val = &Set{Name: UnresolvedName{Name("client_encoding")}, Values: Exprs{$2.expr()}}
+    $$.val = &SetVar{Name: UnresolvedName{Name("client_encoding")}, Values: Exprs{$2.expr()}}
   }
-| NAMES opt_default
+| NAMES
   {
     /* SKIP DOC */
-    $$.val = &Set{Name: UnresolvedName{Name("client_encoding")}, SetMode: SetModeReset}
+    $$.val = &SetVar{Name: UnresolvedName{Name("client_encoding")}, Values: Exprs{DefaultVal{}}}
   }
-
-opt_default:
-  DEFAULT
-  { }
-| /* EMPTY */
-  { }
 
 var_name:
   any_name
+
+var_value:
+  ctext_expr
+| ON
+  {
+    $$.val = UnresolvedName{Name($1)}
+  }
 
 var_list:
   var_value
@@ -1997,14 +2009,6 @@ var_list:
 | var_list ',' var_value
   {
     $$.val = append($1.exprs(), $3.expr())
-  }
-
-var_value:
-  opt_boolean_or_string
-| numeric_only
-| PLACEHOLDER
-  {
-    $$.val = NewPlaceholder($1)
   }
 
 iso_level:
@@ -2043,27 +2047,6 @@ user_priority:
     $$.val = High
   }
 
-opt_boolean_or_string:
-  TRUE
-  {
-    $$.val = MakeDBool(true)
-  }
-| FALSE
-  {
-    $$.val = MakeDBool(false)
-  }
-| ON
-  {
-    $$.val = &StrVal{s: $1}
-  }
-  // OFF is also accepted as a boolean value, but is handled by the
-  // non_reserved_word rule. The action for booleans and strings is the same,
-  // so we don't need to distinguish them here.
-| non_reserved_word_or_sconst
-  {
-    $$.val = &StrVal{s: $1}
-  }
-
 // Timezone values can be:
 // - a string such as 'pst8pdt'
 // - an identifier such as "pst8pdt"
@@ -2085,7 +2068,7 @@ zone_value:
 | numeric_only
 | DEFAULT
   {
-    $$.val = &StrVal{s: $1}
+    $$.val = DefaultVal{}
   }
 | LOCAL
   {
@@ -2128,8 +2111,8 @@ show_stmt:
 // %Text: SHOW [SESSION] { <var> | ALL }
 // %SeeAlso: https://www.cockroachlabs.com/docs/show-vars.html
 show_session_stmt:
-  SHOW session_var         { $$.val = &Show{Name: $2} }
-| SHOW SESSION session_var { $$.val = &Show{Name: $3} }
+  SHOW session_var         { $$.val = &ShowVar{Name: $2} }
+| SHOW SESSION session_var { $$.val = &ShowVar{Name: $3} }
 | SHOW SESSION error // SHOW HELP: SHOW SESSION
 
 session_var:
@@ -2167,16 +2150,16 @@ show_backup_stmt:
 show_csettings_stmt:
   SHOW CLUSTER SETTING any_name
   {
-    $$.val = &Show{Name: AsStringWithFlags($4.unresolvedName(), FmtBareIdentifiers), ClusterSetting: true}
+    $$.val = &ShowClusterSetting{Name: AsStringWithFlags($4.unresolvedName(), FmtBareIdentifiers)}
   }
 | SHOW CLUSTER SETTING ALL
   {
-    $$.val = &Show{Name: "all", ClusterSetting: true}
+    $$.val = &ShowClusterSetting{Name: "all"}
   }
 | SHOW CLUSTER error // SHOW HELP: SHOW CLUSTER SETTING
 | SHOW ALL CLUSTER SETTINGS
   {
-    $$.val = &Show{Name: "all", ClusterSetting: true}
+    $$.val = &ShowClusterSetting{Name: "all"}
   }
 | SHOW ALL CLUSTER error // SHOW HELP: SHOW CLUSTER SETTING
 
@@ -2347,12 +2330,12 @@ show_transaction_stmt:
   SHOW TRANSACTION ISOLATION LEVEL
   {
     /* SKIP DOC */
-    $$.val = &Show{Name: "TRANSACTION ISOLATION LEVEL"}
+    $$.val = &ShowVar{Name: "TRANSACTION ISOLATION LEVEL"}
   }
 | SHOW TRANSACTION PRIORITY
   {
     /* SKIP DOC */
-    $$.val = &Show{Name: "TRANSACTION PRIORITY"}
+    $$.val = &ShowVar{Name: "TRANSACTION PRIORITY"}
   }
 | SHOW TRANSACTION STATUS
   {

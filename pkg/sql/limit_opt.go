@@ -180,6 +180,8 @@ func applyLimit(plan planNode, numRows int64, soft bool) {
 	case *unaryNode:
 	case *hookFnNode:
 	case *valueGenerator:
+	case *setNode:
+	case *setClusterSettingNode:
 	case *showRangesNode:
 	case *showFingerprintsNode:
 	case *scatterNode:

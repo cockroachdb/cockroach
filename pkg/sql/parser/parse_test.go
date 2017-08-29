@@ -574,6 +574,7 @@ func TestParse(t *testing.T) {
 		{`SET a = '3'`},
 		{`SET a = 3.0`},
 		{`SET a = $1`},
+		{`SET a = off`},
 		{`SET TRANSACTION READ ONLY`},
 		{`SET TRANSACTION READ WRITE`},
 		{`SET TRANSACTION ISOLATION LEVEL SNAPSHOT`},
@@ -589,7 +590,7 @@ func TestParse(t *testing.T) {
 		{`SET CLUSTER SETTING a = '3'`},
 		{`SET CLUSTER SETTING a = 3.0`},
 		{`SET CLUSTER SETTING a = $1`},
-		{`RESET a`},
+		{`SET CLUSTER SETTING a = off`},
 
 		{`SELECT * FROM (VALUES (1, 2)) AS foo`},
 		{`SELECT * FROM (VALUES (1, 2)) AS foo (a, b)`},
@@ -891,7 +892,7 @@ func TestParse2(t *testing.T) {
 		{`SET TIME ZONE -7.3`,
 			`SET "time zone" = -7.3`},
 		{`SET TIME ZONE DEFAULT`,
-			`SET "time zone" = 'default'`},
+			`SET "time zone" = DEFAULT`},
 		{`SET TIME ZONE LOCAL`,
 			`SET "time zone" = 'local'`},
 		{`SET TIME ZONE pst8pdt`,
@@ -902,6 +903,12 @@ func TestParse2(t *testing.T) {
 			`SET "time zone" = '-7h'`},
 		{`SET TIME ZONE INTERVAL '-7h0m5s' HOUR TO MINUTE`,
 			`SET "time zone" = '-6h-59m'`},
+		{`SET CLUSTER SETTING a = on`,
+			`SET CLUSTER SETTING a = "on"`},
+		{`SET a = on`,
+			`SET a = "on"`},
+		{`SET a = default`,
+			`SET a = DEFAULT`},
 
 		// Special substring syntax
 		{`SELECT SUBSTRING('RoacH' from 2 for 3)`,
@@ -1003,16 +1010,19 @@ func TestParse2(t *testing.T) {
 		{`SHOW SESSIONS`, `SHOW CLUSTER SESSIONS`},
 		{`SHOW QUERIES`, `SHOW CLUSTER QUERIES`},
 
-		{`USE foo`, `SET database = 'foo'`},
+		{`USE foo`, `SET database = foo`},
 
-		{`SET NAMES foo`, `SET client_encoding = 'foo'`},
+		{`SET NAMES foo`, `SET client_encoding = foo`},
 		{`SET NAMES 'foo'`, `SET client_encoding = 'foo'`},
-		{`SET NAMES DEFAULT`, `RESET client_encoding`},
-		{`SET NAMES`, `RESET client_encoding`},
+		{`SET NAMES DEFAULT`, `SET client_encoding = DEFAULT`},
+		{`SET NAMES`, `SET client_encoding = DEFAULT`},
 
 		{`SHOW NAMES`, `SHOW client_encoding`},
 
-		{`RESET NAMES`, `RESET client_encoding`},
+		{`RESET a`, `SET a = DEFAULT`},
+		{`RESET CLUSTER SETTING a`, `SET CLUSTER SETTING a = DEFAULT`},
+
+		{`RESET NAMES`, `SET client_encoding = DEFAULT`},
 	}
 	for _, d := range testData {
 		stmts, err := Parse(d.sql)
@@ -1061,16 +1071,6 @@ SELECT2 1
 		{`SELECT 1 FROM (t)`, `syntax error at or near ")"
 SELECT 1 FROM (t)
                 ^
-`},
-		{`SET a = 1, b = 2`, `syntax error at or near "="
-SET a = 1, b = 2
-             ^
-`},
-		{`SET a = 1,
-b = 2`, `syntax error at or near "="
-SET a = 1,
-b = 2
-  ^
 `},
 		{`SET TIME ZONE INTERVAL 'foobar'`, `could not parse 'foobar' as type interval: interval: missing unit at position 0: "foobar" at or near "EOF"
 SET TIME ZONE INTERVAL 'foobar'
