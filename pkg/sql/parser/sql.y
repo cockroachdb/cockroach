@@ -950,7 +950,7 @@ alter_stmt:
 //   REFERENCES <tablename> [( <colnames...> )]
 //   COLLATE <collationname>
 //
-// %SeeAlso: https://www.cockroachlabs.com/docs/alter-table.html
+// %SeeAlso: WEBDOCS/alter-table.html
 alter_table_stmt:
   alter_onetable_stmt
 | alter_split_stmt
@@ -965,7 +965,7 @@ alter_table_stmt:
 // %Category: DDL
 // %Text:
 // ALTER VIEW [IF EXISTS] <name> RENAME TO <newname>
-// %SeeAlso: https://www.cockroachlabs.com/docs/alter-view.html
+// %SeeAlso: WEBDOCS/alter-view.html
 alter_view_stmt:
   alter_rename_view_stmt
 // ALTER VIEW has its error help token here because the ALTER VIEW
@@ -976,7 +976,7 @@ alter_view_stmt:
 // %Category: DDL
 // %Text:
 // ALTER DATABASE <name> RENAME TO <newname>
-// %SeeAlso: https://www.cockroachlabs.com/docs/alter-database.html
+// %SeeAlso: WEBDOCS/alter-database.html
 alter_database_stmt:
   alter_rename_database_stmt
 // ALTER DATABASE has its error help token here because the ALTER DATABASE
@@ -993,7 +993,7 @@ alter_database_stmt:
 //   ALTER INDEX ... SPLIT AT <selectclause>
 //   ALTER INDEX ... SCATTER [ FROM ( <exprs...> ) TO ( <exprs...> ) ]
 //
-// %SeeAlso: https://www.cockroachlabs.com/docs/alter-index.html
+// %SeeAlso: WEBDOCS/alter-index.html
 alter_index_stmt:
   alter_split_index_stmt
 | alter_testing_relocate_index_stmt
@@ -1222,7 +1222,7 @@ alter_using:
 //    INTO_DB
 //    SKIP_MISSING_FOREIGN_KEYS
 //
-// %SeeAlso: RESTORE, https://www.cockroachlabs.com/docs/backup.html
+// %SeeAlso: RESTORE, WEBDOCS/backup.html
 backup_stmt:
   BACKUP targets TO string_or_placeholder opt_as_of_clause opt_incremental opt_with_options
   {
@@ -1248,7 +1248,7 @@ backup_stmt:
 //    INTO_DB
 //    SKIP_MISSING_FOREIGN_KEYS
 //
-// %SeeAlso: BACKUP, https://www.cockroachlabs.com/docs/restore.html
+// %SeeAlso: BACKUP, WEBDOCS/restore.html
 restore_stmt:
   RESTORE targets FROM string_or_placeholder_list opt_as_of_clause opt_with_options
   {
@@ -1426,7 +1426,7 @@ create_stmt:
 // %Help: DELETE - delete rows from a table
 // %Category: DML
 // %Text: DELETE FROM <tablename> [WHERE <expr>] [RETURNING <exprs...>]
-// %SeeAlso: https://www.cockroachlabs.com/docs/delete.html
+// %SeeAlso: WEBDOCS/delete.html
 delete_stmt:
   opt_with_clause DELETE FROM relation_expr_opt_alias where_clause returning_clause
   {
@@ -1462,7 +1462,7 @@ drop_stmt:
 // %Help: DROP VIEW - remove a view
 // %Category: DDL
 // %Text: DROP VIEW [IF EXISTS] <tablename> [, ...] [CASCADE | RESTRICT]
-// %SeeAlso: https://www.cockroachlabs.com/docs/drop-index.html
+// %SeeAlso: WEBDOCS/drop-index.html
 drop_view_stmt:
   DROP VIEW table_name_list opt_drop_behavior
   {
@@ -1477,7 +1477,7 @@ drop_view_stmt:
 // %Help: DROP TABLE - remove a table
 // %Category: DDL
 // %Text: DROP TABLE [IF EXISTS] <tablename> [, ...] [CASCADE | RESTRICT]
-// %SeeAlso: https://www.cockroachlabs.com/docs/drop-table.html
+// %SeeAlso: WEBDOCS/drop-table.html
 drop_table_stmt:
   DROP TABLE table_name_list opt_drop_behavior
   {
@@ -1492,7 +1492,7 @@ drop_table_stmt:
 // %Help: DROP INDEX - remove an index
 // %Category: DDL
 // %Text: DROP INDEX [IF EXISTS] <idxname> [, ...] [CASCADE | RESTRICT]
-// %SeeAlso: https://www.cockroachlabs.com/docs/drop-index.html
+// %SeeAlso: WEBDOCS/drop-index.html
 drop_index_stmt:
   DROP INDEX table_name_with_index_list opt_drop_behavior
   {
@@ -1515,7 +1515,7 @@ drop_index_stmt:
 // %Help: DROP DATABASE - remove a database
 // %Category: DDL
 // %Text: DROP DATABASE [IF EXISTS] <databasename> [CASCADE | RESTRICT]
-// %SeeAlso: https://www.cockroachlabs.com/docs/drop-database.html
+// %SeeAlso: WEBDOCS/drop-database.html
 drop_database_stmt:
   DROP DATABASE name opt_drop_behavior
   {
@@ -1593,7 +1593,7 @@ attrs:
 // Plan options:
 //     TYPES, EXPRS, METADATA, QUALIFY, INDENT, VERBOSE, DIST_SQL
 //
-// %SeeAlso: https://www.cockroachlabs.com/docs/explain.html
+// %SeeAlso: WEBDOCS/explain.html
 explain_stmt:
   EXPLAIN explainable_stmt
   {
@@ -1738,7 +1738,7 @@ deallocate_stmt:
 //   DATABASE <databasename> [, ...]
 //   [TABLE] [<databasename> .] { <tablename> | * } [, ...]
 //
-// %SeeAlso: REVOKE, https://www.cockroachlabs.com/docs/grant.html
+// %SeeAlso: REVOKE, WEBDOCS/grant.html
 grant_stmt:
   GRANT privileges ON targets TO grantee_list
   {
@@ -1758,7 +1758,7 @@ grant_stmt:
 //   DATABASE <databasename> [, <databasename>]...
 //   [TABLE] [<databasename> .] { <tablename> | * } [, ...]
 //
-// %SeeAlso: GRANT, https://www.cockroachlabs.com/docs/revoke.html
+// %SeeAlso: GRANT, WEBDOCS/revoke.html
 revoke_stmt:
   REVOKE privileges ON targets FROM grantee_list
   {
@@ -1848,7 +1848,7 @@ reset_stmt:
 // %Help: RESET - reset a session variable to its default value
 // %Category: Cfg
 // %Text: RESET [SESSION] <var>
-// %SeeAlso: RESET CLUSTER SETTING, https://www.cockroachlabs.com/docs/set-vars.html
+// %SeeAlso: RESET CLUSTER SETTING, WEBDOCS/set-vars.html
 reset_session_stmt:
   RESET session_var
   {
@@ -1893,7 +1893,7 @@ set_stmt:
 // %Category: Cfg
 // %Text: SET CLUSTER SETTING <var> { TO | = } <value>
 // %SeeAlso: SHOW CLUSTER SETTING, RESET CLUSTER SETTING, SET SESSION,
-// https://www.cockroachlabs.com/docs/cluster-settings.html
+// WEBDOCS/cluster-settings.html
 set_csetting_stmt:
   SET CLUSTER SETTING var_name '=' var_value
   {
@@ -1921,7 +1921,7 @@ set_exprs_internal:
 // SET [SESSION] CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL { SNAPSHOT | SERIALIZABLE }
 //
 // %SeeAlso: SHOW SESSION, RESET, DISCARD, SHOW, SET CLUSTER SETTING, SET TRANSACTION,
-// https://www.cockroachlabs.com/docs/set-vars.html
+// WEBDOCS/set-vars.html
 set_session_stmt:
   SET SESSION set_rest_more
   {
@@ -1947,7 +1947,7 @@ set_session_stmt:
 //    PRIORITY { LOW | NORMAL | HIGH }
 //
 // %SeeAlso: SHOW TRANSACTION, SET SESSION,
-// https://www.cockroachlabs.com/docs/set-transaction.html
+// WEBDOCS/set-transaction.html
 set_transaction_stmt:
   SET TRANSACTION transaction_mode_list
   {
@@ -2115,7 +2115,7 @@ show_stmt:
 // %Help: SHOW SESSION - display session variables
 // %Category: Cfg
 // %Text: SHOW [SESSION] { <var> | ALL }
-// %SeeAlso: https://www.cockroachlabs.com/docs/show-vars.html
+// %SeeAlso: WEBDOCS/show-vars.html
 show_session_stmt:
   SHOW session_var         { $$.val = &ShowVar{Name: $2} }
 | SHOW SESSION session_var { $$.val = &ShowVar{Name: $3} }
@@ -2139,7 +2139,7 @@ session_var:
 // %Help: SHOW BACKUP - list backup contents
 // %Category: CCL
 // %Text: SHOW BACKUP <location>
-// %SeeAlso: https://www.cockroachlabs.com/docs/show-backup.html
+// %SeeAlso: WEBDOCS/show-backup.html
 show_backup_stmt:
   SHOW BACKUP string_or_placeholder
   {
@@ -2152,7 +2152,7 @@ show_backup_stmt:
 // %Text:
 // SHOW CLUSTER SETTING <var>
 // SHOW ALL CLUSTER SETTINGS
-// %SeeAlso: https://www.cockroachlabs.com/docs/cluster-settings.html
+// %SeeAlso: WEBDOCS/cluster-settings.html
 show_csettings_stmt:
   SHOW CLUSTER SETTING any_name
   {
@@ -2172,7 +2172,7 @@ show_csettings_stmt:
 // %Help: SHOW COLUMNS - list columns in relation
 // %Category: DDL
 // %Text: SHOW COLUMNS FROM <tablename>
-// %SeeAlso: https://www.cockroachlabs.com/docs/show-columns.html
+// %SeeAlso: WEBDOCS/show-columns.html
 show_columns_stmt:
   SHOW COLUMNS FROM var_name
   {
@@ -2183,7 +2183,7 @@ show_columns_stmt:
 // %Help: SHOW DATABASES - list databases
 // %Category: DDL
 // %Text: SHOW DATABASES
-// %SeeAlso: https://www.cockroachlabs.com/docs/show-databases.html
+// %SeeAlso: WEBDOCS/show-databases.html
 show_databases_stmt:
   SHOW DATABASES
   {
@@ -2194,7 +2194,7 @@ show_databases_stmt:
 // %Help: SHOW GRANTS - list grants
 // %Category: Priv
 // %Text: SHOW GRANTS [ON <targets...>] [FOR <users...>]
-// %SeeAlso: https://www.cockroachlabs.com/docs/show-grants.html
+// %SeeAlso: WEBDOCS/show-grants.html
 show_grants_stmt:
   SHOW GRANTS on_privilege_target_clause for_grantee_clause
   {
@@ -2205,7 +2205,7 @@ show_grants_stmt:
 // %Help: SHOW INDEXES - list indexes
 // %Category: DDL
 // %Text: SHOW INDEXES FROM <tablename>
-// %SeeAlso: https://www.cockroachlabs.com/docs/show-indexes.html
+// %SeeAlso: WEBDOCS/show-index.html
 show_indexes_stmt:
   SHOW INDEX FROM var_name
   {
@@ -2226,7 +2226,7 @@ show_indexes_stmt:
 // %Help: SHOW CONSTRAINTS - list constraints
 // %Category: DDL
 // %Text: SHOW CONSTRAINTS FROM <tablename>
-// %SeeAlso: https://www.cockroachlabs.com/docs/show-constraints.html
+// %SeeAlso: WEBDOCS/show-constraints.html
 show_constraints_stmt:
   SHOW CONSTRAINT FROM var_name
   {
@@ -2316,7 +2316,7 @@ show_sessions_stmt:
 // %Help: SHOW TABLES - list tables
 // %Category: DDL
 // %Text: SHOW TABLES [FROM <databasename>]
-// %SeeAlso: https://www.cockroachlabs.com/docs/show-tables.html
+// %SeeAlso: WEBDOCS/show-tables.html
 show_tables_stmt:
   SHOW TABLES FROM name
   {
@@ -2331,7 +2331,7 @@ show_tables_stmt:
 // %Help: SHOW TRANSACTION - display current transaction properties
 // %Category: Cfg
 // %Text: SHOW TRANSACTION {ISOLATION LEVEL | PRIORITY | STATUS}
-// %SeeAlso: https://www.cockroachlabs.com/docs/show-transaction.html
+// %SeeAlso: WEBDOCS/show-transaction.html
 show_transaction_stmt:
   SHOW TRANSACTION ISOLATION LEVEL
   {
@@ -2353,7 +2353,7 @@ show_transaction_stmt:
 // %Help: SHOW CREATE TABLE - display the CREATE TABLE statement for a table
 // %Category: DDL
 // %Text: SHOW CREATE TABLE <tablename>
-// %SeeAlso: https://www.cockroachlabs.com/docs/show-create-table.html
+// %SeeAlso: WEBDOCS/show-create-table.html
 show_create_table_stmt:
   SHOW CREATE TABLE var_name
   {
@@ -2364,7 +2364,7 @@ show_create_table_stmt:
 // %Help: SHOW CREATE VIEW - display the CREATE VIEW statement for a view
 // %Category: DDL
 // %Text: SHOW CREATE VIEW <viewname>
-// %SeeAlso: https://www.cockroachlabs.com/docs/show-create-view.html
+// %SeeAlso: WEBDOCS/show-create-view.html
 show_create_view_stmt:
   SHOW CREATE VIEW var_name
   {
@@ -2375,7 +2375,7 @@ show_create_view_stmt:
 // %Help: SHOW USERS - list defined users
 // %Category: Priv
 // %Text: SHOW USERS
-// %SeeAlso: CREATE USER, DROP USER, https://www.cockroachlabs.com/docs/show-users.html
+// %SeeAlso: CREATE USER, DROP USER, WEBDOCS/show-users.html
 show_users_stmt:
   SHOW USERS
   {
@@ -2467,8 +2467,8 @@ pause_stmt:
 //    INTERLEAVE IN PARENT <tablename> ( <colnames...> ) [CASCADE | RESTRICT]
 //
 // %SeeAlso: SHOW TABLES, CREATE VIEW, SHOW CREATE TABLE,
-// https://www.cockroachlabs.com/docs/create-table.html
-// https://www.cockroachlabs.com/docs/create-table-as.html
+// WEBDOCS/create-table.html
+// WEBDOCS/create-table-as.html
 create_table_stmt:
   CREATE TABLE any_name '(' opt_table_elem_list ')' opt_interleave
   {
@@ -2803,7 +2803,7 @@ numeric_only:
 // %Help: TRUNCATE - empty one or more tables
 // %Category: DML
 // %Text: TRUNCATE [TABLE] <tablename> [, ...] [CASCADE | RESTRICT]
-// %SeeAlso: https://www.cockroachlabs.com/docs/truncate.html
+// %SeeAlso: WEBDOCS/truncate.html
 truncate_stmt:
   TRUNCATE opt_table relation_expr_list opt_drop_behavior
   {
@@ -2814,7 +2814,7 @@ truncate_stmt:
 // %Help: CREATE USER - define a new user
 // %Category: Priv
 // %Text: CREATE USER <name> [ [WITH] PASSWORD <passwd> ]
-// %SeeAlso: DROP USER, SHOW USERS, https://www.cockroachlabs.com/docs/create-user.html
+// %SeeAlso: DROP USER, SHOW USERS, WEBDOCS/create-user.html
 create_user_stmt:
   CREATE USER name opt_password
   {
@@ -2835,7 +2835,7 @@ opt_password:
 // %Help: CREATE VIEW - create a new view
 // %Category: DDL
 // %Text: CREATE VIEW <viewname> [( <colnames...> )] AS <source>
-// %SeeAlso: CREATE TABLE, SHOW CREATE VIEW, https://www.cockroachlabs.com/docs/create-view.html
+// %SeeAlso: CREATE TABLE, SHOW CREATE VIEW, WEBDOCS/create-view.html
 create_view_stmt:
   CREATE VIEW any_name opt_column_list AS select_stmt
   {
@@ -2860,7 +2860,7 @@ create_view_stmt:
 //    INTERLEAVE IN PARENT <tablename> ( <colnames...> ) [CASCADE | RESTRICT]
 //
 // %SeeAlso: CREATE TABLE, SHOW INDEXES, SHOW CREATE INDEX,
-// https://www.cockroachlabs.com/docs/create-index.html
+// WEBDOCS/create-index.html
 create_index_stmt:
   CREATE opt_unique INDEX opt_name ON qualified_name '(' index_params ')' opt_storing opt_interleave
   {
@@ -3001,7 +3001,7 @@ opt_set_data:
 // %Help: RELEASE - complete a retryable block
 // %Category: Txn
 // %Text: RELEASE [SAVEPOINT] cockroach_restart
-// %SeeAlso: SAVEPOINT, https://www.cockroachlabs.com/docs/savepoint.html
+// %SeeAlso: SAVEPOINT, WEBDOCS/savepoint.html
 release_stmt:
   RELEASE savepoint_name
   {
@@ -3023,7 +3023,7 @@ resume_stmt:
 // %Help: SAVEPOINT - start a retryable block
 // %Category: Txn
 // %Text: SAVEPOINT cockroach_restart
-// %SeeAlso: RELEASE, https://www.cockroachlabs.com/docs/savepoint.html
+// %SeeAlso: RELEASE, WEBDOCS/savepoint.html
 savepoint_stmt:
   SAVEPOINT name
   {
@@ -3047,7 +3047,7 @@ transaction_stmt:
 //    ISOLATION LEVEL { SNAPSHOT | SERIALIZABLE }
 //    PRIORITY { LOW | NORMAL | HIGH }
 //
-// %SeeAlso: COMMIT, ROLLBACK, https://www.cockroachlabs.com/docs/begin-transaction.html
+// %SeeAlso: COMMIT, ROLLBACK, WEBDOCS/begin-transaction.html
 begin_stmt:
   BEGIN opt_transaction begin_transaction
   {
@@ -3065,7 +3065,7 @@ begin_stmt:
 // %Text:
 // COMMIT [TRANSACTION]
 // END [TRANSACTION]
-// %SeeAlso: BEGIN, ROLLBACK, https://www.cockroachlabs.com/docs/commit-transaction.html
+// %SeeAlso: BEGIN, ROLLBACK, WEBDOCS/commit-transaction.html
 commit_stmt:
   COMMIT opt_transaction
   {
@@ -3081,7 +3081,7 @@ commit_stmt:
 // %Help: ROLLBACK - abort the current transaction
 // %Category: Txn
 // %Text: ROLLBACK [TRANSACTION] [TO [SAVEPOINT] cockroach_restart]
-// %SeeAlso: BEGIN, COMMIT, SAVEPOINT, https://www.cockroachlabs.com/docs/rollback-transaction.html
+// %SeeAlso: BEGIN, COMMIT, SAVEPOINT, WEBDOCS/rollback-transaction.html
 rollback_stmt:
   ROLLBACK opt_to_savepoint
   {
@@ -3198,7 +3198,7 @@ transaction_read_mode:
 // %Help: CREATE DATABASE - create a new database
 // %Category: DDL
 // %Text: CREATE DATABASE [IF NOT EXISTS] <name>
-// %SeeAlso: https://www.cockroachlabs.com/docs/create-database.html
+// %SeeAlso: WEBDOCS/create-database.html
 create_database_stmt:
   CREATE DATABASE name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
   {
@@ -3274,7 +3274,7 @@ opt_equal:
 //        <selectclause>
 //        [ON CONFLICT [( <colnames...> )] {DO UPDATE SET ... [WHERE <expr>] | DO NOTHING}]
 //        [RETURNING <exprs...>]
-// %SeeAlso: UPSERT, UPDATE, DELETE, https://www.cockroachlabs.com/docs/insert.html
+// %SeeAlso: UPSERT, UPDATE, DELETE, WEBDOCS/insert.html
 insert_stmt:
   opt_with_clause INSERT INTO insert_target insert_rest returning_clause
   {
@@ -3297,7 +3297,7 @@ insert_stmt:
 // UPSERT INTO <tablename> [AS <name>] [( <colnames...> )]
 //        <selectclause>
 //        [RETURNING <exprs...>]
-// %SeeAlso: INSERT, UPDATE, DELETE, https://www.cockroachlabs.com/docs/upsert.html
+// %SeeAlso: INSERT, UPDATE, DELETE, WEBDOCS/upsert.html
 upsert_stmt:
   opt_with_clause UPSERT INTO insert_target insert_rest returning_clause
   {
@@ -3376,7 +3376,7 @@ returning_clause:
 // %Help: UPDATE - update rows of a table
 // %Category: DML
 // %Text: UPDATE <tablename> [[AS] <name>] SET ... [WHERE <expr>] [RETURNING <exprs...>]
-// %SeeAlso: INSERT, UPSERT, DELETE, https://www.cockroachlabs.com/docs/update.html
+// %SeeAlso: INSERT, UPSERT, DELETE, WEBDOCS/update.html
 update_stmt:
   opt_with_clause UPDATE relation_expr_opt_alias
     SET set_clause_list update_from_clause where_clause returning_clause
@@ -3571,7 +3571,7 @@ simple_select:
 //        [ ORDER BY <expr> [ ASC | DESC ] [, ...] ]
 //        [ LIMIT { <expr> | ALL } ]
 //        [ OFFSET <expr> [ ROW | ROWS ] ]
-// %SeeAlso: https://www.cockroachlabs.com/docs/select.html
+// %SeeAlso: WEBDOCS/select.html
 simple_select_clause:
   SELECT opt_all_clause target_list
     from_clause where_clause
@@ -3634,7 +3634,7 @@ set_operation:
 // %Help: TABLE - select an entire table
 // %Category: DML
 // %Text: TABLE <tablename>
-// %SeeAlso: SELECT, VALUES, https://www.cockroachlabs.com/docs/table-expressions.html
+// %SeeAlso: SELECT, VALUES, WEBDOCS/table-expressions.html
 table_clause:
   TABLE table_ref
   {
@@ -3876,7 +3876,7 @@ having_clause:
 // %Help: VALUES - select a given set of values
 // %Category: DML
 // %Text: VALUES ( <exprs...> ) [, ...]
-// %SeeAlso: SELECT, TABLE, https://www.cockroachlabs.com/docs/table-expressions.html
+// %SeeAlso: SELECT, TABLE, WEBDOCS/table-expressions.html
 values_clause:
   VALUES ctext_row %prec UMINUS
   {
@@ -4001,7 +4001,7 @@ opt_index_hints:
 //   '{' FORCE_INDEX = <idxname> [, ...] '}'
 //   '{' NO_INDEX_JOIN [, ...] '}'
 //
-// %SeeAlso: https://www.cockroachlabs.com/docs/table-expressions.html
+// %SeeAlso: WEBDOCS/table-expressions.html
 table_ref:
   '[' ICONST opt_tableref_col_list alias_clause ']' opt_index_hints opt_ordinality opt_alias_clause
   {
