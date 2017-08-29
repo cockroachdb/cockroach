@@ -1754,7 +1754,7 @@ func (e *Executor) shouldUseDistSQL(planner *planner, plan planNode) (bool, erro
 		return false, nil
 	}
 	// Don't try to run empty nodes (e.g. SET commands) with distSQL.
-	if _, ok := plan.(*emptyNode); ok {
+	if _, ok := plan.(*zeroNode); ok {
 		return false, nil
 	}
 

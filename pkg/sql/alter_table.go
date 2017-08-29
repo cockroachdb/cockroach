@@ -48,7 +48,7 @@ func (p *planner) AlterTable(ctx context.Context, n *parser.AlterTable) (planNod
 	}
 	if tableDesc == nil {
 		if n.IfExists {
-			return &emptyNode{}, nil
+			return &zeroNode{}, nil
 		}
 		return nil, sqlbase.NewUndefinedRelationError(tn)
 	}

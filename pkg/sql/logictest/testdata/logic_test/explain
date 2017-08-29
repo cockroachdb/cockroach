@@ -1,25 +1,25 @@
 # LogicTest: default distsql
 
 query ITTT colnames
-EXPLAIN (PLAN) SELECT 1
+EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE FALSE
 ----
 Level  Type     Field  Description
 0      render   ·      ·
-1      nullrow  ·      ·
+1      norows   ·      ·
 
 query ITTTTT colnames
-EXPLAIN (PLAN,METADATA) SELECT 1
+EXPLAIN (PLAN, METADATA) SELECT 1
 ----
-Level  Type     Field  Description  Columns  Ordering
-0      render   ·      ·            ("1")    ="1"
-1      nullrow  ·      ·            ()       ·
+Level  Type      Field  Description  Columns  Ordering
+0      render    ·      ·            ("1")    ="1"
+1      emptyrow  ·      ·            ()       ·
 
 query ITTTTT colnames
 EXPLAIN (METADATA,PLAN) SELECT 1
 ----
 Level  Type     Field  Description  Columns  Ordering
 0      render   ·      ·            ("1")    ="1"
-1      nullrow  ·      ·            ()       ·
+1      emptyrow ·      ·            ()       ·
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT 1]
@@ -33,7 +33,7 @@ EXPLAIN (TYPES) SELECT 1
 Level  Type     Field     Description  Columns    Ordering
 0      render   ·         ·            ("1" int)  ="1"
 0      ·        render 0  (1)[int]     ·          ·
-1      nullrow  ·         ·            ()         ·
+1      emptyrow ·         ·            ()         ·
 
 statement error cannot set EXPLAIN mode more than once
 EXPLAIN (PLAN,PLAN) SELECT 1
@@ -56,7 +56,7 @@ EXPLAIN (METADATA) SHOW TRACE FOR SELECT 1
 4  render          ·      ·             ("timestamp", message, context, operation, span, txn_idx, span_idx, message_idx)  ·
 5  show trace for  ·      ·             (txn_idx, span_idx, message_idx, "timestamp", duration, operation, message)       ·
 6  render          ·      ·             ("1")                                                                             ="1"
-7  nullrow         ·      ·             ()                                                                                ·
+7  emptyrow        ·      ·             ()                                                                                ·
 
 # Ensure that all relevant statement types can be explained
 query ITTT
