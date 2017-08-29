@@ -39,7 +39,7 @@ const typeOptions = [
   { value: jobType.UNSPECIFIED.toString(), label: "All" },
   { value: jobType.BACKUP.toString(), label: "Backups" },
   { value: jobType.RESTORE.toString(), label: "Restores" },
-  { value: jobType.SCHEMA_CHANGE.toString(), label: "Schema changes" },
+  { value: jobType.SCHEMA_CHANGE.toString(), label: "Schema Changes" },
 ];
 
 const typeSetting = new LocalSetting<AdminUIState, number>(
@@ -57,7 +57,7 @@ const showSetting = new LocalSetting<AdminUIState, string>(
 
 // Moment cannot render durations (moment/moment#1048). Hack it ourselves.
 const formatDuration = (d: moment.Duration) =>
-  [d.asHours().toFixed(0), d.minutes(), d.seconds()]
+  [Math.floor(d.asHours()).toFixed(0), d.minutes(), d.seconds()]
     .map(c => ("0" + c).slice(-2))
     .join(":");
 
@@ -152,6 +152,7 @@ interface JobsTableProps {
   setType: (value: JobType) => void;
   refreshJobs: typeof refreshJobs;
   jobs: Job[];
+  jobsValid: boolean;
 }
 
 class JobsTable extends React.Component<JobsTableProps, {}> {
@@ -239,7 +240,9 @@ const mapStateToProps = (state: AdminUIState) => {
   const key = jobsKey(status, type, parseInt(show, 10));
   const jobs = state.cachedData.jobs[key];
   return {
-    sort, status, show, type, jobs: jobs && jobs.data && jobs.data.jobs,
+    sort, status, show, type,
+    jobs: jobs && jobs.data && jobs.data.jobs,
+    jobsValid: jobs && jobs.valid,
   };
 };
 
