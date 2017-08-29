@@ -210,13 +210,9 @@ type streamingState struct {
 	emptyQuery      bool
 	err             error
 
-	// hasSentResults is set if any results in the current batch have been sent on
-	// the client connection. This is used to back the
-	// ResultGroup.ResultsSentToClient() interface.
-	// TODO(andrei): The bookkeeping for this member is currently broken - it's
-	// reset after every batch of statements even if a batch continues a previous
-	// txn (result group). This is coupled with the Executor creating a new group
-	// for every batch.
+	// hasSentResults is set if any results have been sent on the client
+	// connection since the last time Close() or Flush() were called. This is used
+	// to back the ResultGroup.ResultsSentToClient() interface.
 	hasSentResults bool
 
 	// TODO(tso): this can theoretically be combined with v3conn.writeBuf.
@@ -454,7 +450,7 @@ func (c *v3Conn) serve(ctx context.Context, draining func() bool, reserved mon.B
 				// We send status "InFailedTransaction" also for state RestartWait
 				// because GO's lib/pq freaks out if we invent a new status.
 				txnStatus = 'E'
-			case sql.Open, sql.FirstBatch:
+			case sql.Open, sql.AutoRetry:
 				txnStatus = 'T'
 			case sql.NoTxn:
 				// We're not in a txn (i.e. the last txn was committed).
@@ -1138,8 +1134,12 @@ func (c *v3Conn) ResultsSentToClient() bool {
 
 // Close implements the ResultsGroup interface.
 func (c *v3Conn) Close() {
+	// TODO(andrei): should we flush here?
+
 	s := &c.streamingState
 	s.txnStartIdx = s.buf.Len()
+	// TODO(andrei): emptyQuery is a per-statement field. It shouldn't be set in a
+	// per-group method.
 	s.emptyQuery = false
 	s.hasSentResults = false
 }
@@ -1152,6 +1152,16 @@ func (c *v3Conn) Reset(ctx context.Context) {
 	}
 	s.emptyQuery = false
 	s.buf.Truncate(s.txnStartIdx)
+}
+
+// Flush implements the ResultsGroup interface.
+func (c *v3Conn) Flush(ctx context.Context) error {
+	if err := c.flush(true /* forceSend */); err != nil {
+		return err
+	}
+	// hasSentResults is relative to the Flush() point, so we reset it here.
+	c.streamingState.hasSentResults = false
+	return nil
 }
 
 // BeginResult implements the StatementResult interface.

@@ -586,7 +586,7 @@ BEGIN;
 		t.Fatal(err)
 	}
 
-	// Run a batch of statements to move the txn out of the FirstBatch state,
+	// Run a batch of statements to move the txn out of the AutoRetry state,
 	// otherwise the INSERT below would be automatically retried.
 	if _, err := sqlDB.Exec("SELECT 1"); err != nil {
 		t.Fatal(err)
@@ -1142,7 +1142,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	if _, err := tx.Exec("SAVEPOINT cockroach_restart"); err != nil {
 		t.Fatal(err)
 	}
-	// Run a batch of statements to move the txn out of the FirstBatch state,
+	// Run a batch of statements to move the txn out of the AutoRetry state,
 	// otherwise the INSERT below would be automatically retried.
 	if _, err := tx.Exec("SELECT 1"); err != nil {
 		t.Fatal(err)
@@ -1180,7 +1180,7 @@ func TestUnexpectedStatementInRestartWait(t *testing.T) {
 	if _, err := tx.Exec("SAVEPOINT cockroach_restart"); err != nil {
 		t.Fatal(err)
 	}
-	// Run a batch of statements to move the txn out of the FirstBatch state,
+	// Run a batch of statements to move the txn out of the AutoRetry state,
 	// otherwise the SELECT below would be automatically retried.
 	if _, err := tx.Exec("SELECT 1"); err != nil {
 		t.Fatal(err)
@@ -1547,7 +1547,7 @@ func TestDistSQLRetryableError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Run a batch of statements to move the txn out of the "FirstBatch" state.
+	// Run a batch of statements to move the txn out of the "AutoRetry" state.
 	if _, err := txn.Exec("SELECT 1"); err != nil {
 		t.Fatal(err)
 	}
@@ -1699,13 +1699,13 @@ CREATE TABLE t.test (k INT PRIMARY KEY);
 
 	// Two tests, one where the txn is pushed while the transaction can still be
 	// retried, one where it's pushed too late for auto-retries.
-	// moveOutOfFirstBatch dictates whether we move the transaction from state
-	// FirstBatch to Open before starting the batch of statements that will
-	// encounter the push. When moveOutOfFirstBatch is set, we expect to get a
+	// moveOutOfAutoRetry dictates whether we move the transaction from state
+	// AutoRetry to Open before starting the batch of statements that will
+	// encounter the push. When moveOutOfAutoRetry is set, we expect to get a
 	// retriable error at commit time. When it's not, we expect to see no error
 	// because the transaction is retried automatically.
-	for i, moveOutOfFirstBatch := range []bool{false, true} {
-		t.Run(fmt.Sprintf("%t", moveOutOfFirstBatch),
+	for i, moveOutOfAutoRetry := range []bool{false, true} {
+		t.Run(fmt.Sprintf("%t", moveOutOfAutoRetry),
 			func(t *testing.T) {
 				// Start our transaction and get a timestamp.
 				tx, err := sqlDB.Begin()
@@ -1713,7 +1713,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY);
 					t.Fatal(err)
 				}
 
-				if moveOutOfFirstBatch {
+				if moveOutOfAutoRetry {
 					if _, err := tx.Exec(`SELECT 1`); err != nil {
 						t.Fatal(err)
 					}
@@ -1738,7 +1738,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY);
 				}
 
 				err = tx.Commit()
-				if moveOutOfFirstBatch {
+				if moveOutOfAutoRetry {
 					if !isRetryableErr(err) {
 						t.Fatalf("expected retryable error, got: %v", err)
 					}
