@@ -160,7 +160,7 @@ $(COCKROACH) build go-install: $(C_LIBS_CCL)
 $(COCKROACH) build buildoss: BUILDMODE = build -i -o $(COCKROACH)
 
 # The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
-$(COCKROACH) build buildoss go-install: override LINKFLAGS += \
+$(COCKROACH) build buildoss go-install check test testshort testrace bench: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.rev=$(shell cat .buildinfo/rev)"
