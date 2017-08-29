@@ -10,8 +10,8 @@ package storageccl
 
 import (
 	"bytes"
+	"fmt"
 	"io/ioutil"
-	"runtime"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -30,16 +31,41 @@ import (
 
 // importRequestLimit is the number of Import requests that can run at once.
 // Each downloads a file from cloud storage to a temp file, iterates it, and
-// sends AddSSTable requests to batch insert it. Import and the resulting
-// AddSSTable calls are mostly cpu-bound at this point so allow NumCPU of them
-// to be running concurrently, which will hopefully hit the sweet spot between
-// maximizing throughput and minimizing thrashing.
-var importRequestLimit = runtime.NumCPU()
+// sends AddSSTable requests (usually just one) to batch insert it. The
+// AddSSTable requests are large enough to clog gRPC, so we only allow one per
+// node at a time.
+var importRequestLimit = 1
 
 var importRequestLimiter = makeConcurrentRequestLimiter(importRequestLimit)
 
+// commandMetadataEstimate is an estimate of how much metadata Raft will add to
+// a WriteBatch or AddSSTable command. It is intentionally a vast overestimate
+// to avoid embedding intricate knowledge of the Raft encoding scheme here.
+const commandMetadataEstimate = 1 << 20 // 1 MB
+
 func init() {
 	storage.SetImportCmd(evalImport)
+
+	// Ensure that the user cannot set the maximum raft command size so low that
+	// more than half of an Import or AddSSTable command will be taken up by Raft
+	// metadata.
+	if commandMetadataEstimate > cluster.MaxCommandSizeFloor/2 {
+		panic(fmt.Sprintf("raft command size floor (%s) is too small for import commands",
+			humanizeutil.IBytes(cluster.MaxCommandSizeFloor)))
+	}
+}
+
+// maxImportBatchSize determines the maximum size of the payload in a WriteBatch
+// or AddSSTable request. It uses the ImportBatchSize setting directly unless
+// the specified value would exceed the maximum Raft command size, in which case
+// it returns the maximum batch size that will fit within a Raft command.
+func maxImportBatchSize(settings *cluster.Settings) int64 {
+	desiredSize := settings.ImportBatchSize.Get()
+	maxCommandSize := settings.MaxCommandSize.Get()
+	if desiredSize+commandMetadataEstimate > maxCommandSize {
+		return maxCommandSize - commandMetadataEstimate
+	}
+	return desiredSize
 }
 
 type importBatcher interface {
@@ -312,7 +338,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 			return nil, errors.Wrapf(err, "adding to batch: %s -> %s", key, value.PrettyPrint())
 		}
 
-		if size := batcher.Size(); size > cArgs.EvalCtx.ClusterSettings().ImportBatchSize.Get() {
+		if size := batcher.Size(); size > maxImportBatchSize(cArgs.EvalCtx.ClusterSettings()) {
 			finishBatcher := batcher
 			batcher = nil
 			log.Eventf(gCtx, "triggering finish of batch of size %s", humanizeutil.IBytes(size))
