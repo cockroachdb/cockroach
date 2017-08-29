@@ -1140,6 +1140,8 @@ func (c *v3Conn) ResultsSentToClient() bool {
 func (c *v3Conn) Close() {
 	s := &c.streamingState
 	s.txnStartIdx = s.buf.Len()
+	// TODO(andrei): emptyQuery is a per-statement field. It shouldn't be set in a
+	// per-group method.
 	s.emptyQuery = false
 	s.hasSentResults = false
 }
@@ -1152,6 +1154,13 @@ func (c *v3Conn) Reset(ctx context.Context) {
 	}
 	s.emptyQuery = false
 	s.buf.Truncate(s.txnStartIdx)
+}
+
+// Flush implements the ResultsGroup interface.
+func (c *v3Conn) Flush(ctx context.Context) {
+	s := &c.streamingState
+	s.txnStartIdx = s.buf.Len()
+	s.hasSentResults = false
 }
 
 // BeginResult implements the StatementResult interface.

@@ -289,8 +289,8 @@ type ExecutorTestingKnobs struct {
 	// for the new metadata to back-propagate through gossip.
 	WaitForGossipUpdate bool
 
-	// CheckStmtStringChange causes Executor.execStmtsInCurrentTxn to verify
-	// that executed statements are not modified during execution.
+	// CheckStmtStringChange causes Executor.execStmtGroup to verify that executed
+	// statements are not modified during execution.
 	CheckStmtStringChange bool
 
 	// StatementFilter can be used to trap execution of SQL statements and
@@ -728,7 +728,8 @@ func (e *Executor) execRequest(
 	return e.execParsed(session, stmts, pinfo, copymsg)
 }
 
-// execParsed returns query execution errors and communication errors.
+// execParsed executes a batch of statements received as a unit from the client
+// and returns query execution errors and communication errors.
 func (e *Executor) execParsed(
 	session *Session, stmts StatementList, pinfo *parser.PlaceholderInfo, copymsg copyMsg,
 ) error {
@@ -741,14 +742,26 @@ func (e *Executor) execParsed(
 		return nil
 	}
 
+	// txnState.autoRetry tracks whether the current transaction can be retried
+	// automatically. There are two cases:
+	// - If the transaction has been started in the current batch, then it can be
+	// retried (at least the prefix of the transaction that's part of the current
+	// batch can; if the txn is split then then future statements might not be
+	// auto-retriable; see below).
+	// - If the transaction has been started in the previous batch, then whether
+	// or not it can be automatically retried depends on the state that the
+	// previous batch has left the txn in: if it left it in FirstBatch, then we
+	// can automatically retry it (by definition; that's what the FirstBatch state
+	// means). If it left it in any other state (e.g. Open), then we cannot.
+	//
+	// Note that txnState.autoRetry will be overwritten every time a txn starts
+	// (in txnState.resetForNewSQLTxn()).
+	txnState.autoRetry = txnState.State() == FirstBatch
+
 	for len(stmts) > 0 {
 		// Each iteration consumes a transaction's worth of statements. Any error
 		// that is encountered resets stmts.
 
-		// TODO(andrei): NewResultsGroup() should only be called if inTxn == false.
-		// Also, we're currently not always closing this txnResults, which is
-		// against the contract.
-		txnResults := resultWriter.NewResultsGroup()
 		inTxn := txnState.State() != NoTxn
 		execOpt := client.TxnExecOptions{}
 		// Figure out the statements out of which we're going to try to consume
@@ -758,9 +771,9 @@ func (e *Executor) execParsed(
 		// If protoTS is set, the transaction proto sets its Orig and Max timestamps
 		// to it each retry.
 		var protoTS *hlc.Timestamp
-		// We can AutoRetry the next batch of statements if we're in a clean state
-		// (i.e. the next statements we're going to see are the first statements in
-		// a transaction).
+		// If we're not in a transaction, then the next statement is part of a new
+		// transaction (implicit txn or explicit txn). We do the corresponding state
+		// reset.
 		if !inTxn {
 			// Detect implicit transactions - they need to be autocommitted.
 			if _, isBegin := stmts[0].AST.(*parser.BeginTransaction); !isBegin {
@@ -789,11 +802,17 @@ func (e *Executor) execParsed(
 				session.DefaultIsolationLevel,
 				roachpb.NormalUserPriority,
 			)
-		} else {
-			// If we are in a txn, the first batch get auto-retried.
-			txnState.autoRetry = txnState.State() == FirstBatch
 		}
-		execOpt.AutoRetry = txnState.autoRetry
+		// Decide if the txn.Exec() call will auto-retry the statement group that
+		// we're about to execute. This is dictated by txnState.autoRetry, with a
+		// caveat that's expected to be non-consequential: if we're in state
+		// FirstBatch, we don't want to auto-retry - the FirstBatch statements don't
+		// encounter retriable errors.  If we're in state FirstBatch, then the group
+		// of statements we execute will be done once we transition to Open, and at
+		// that point the next group will run with auto-retries. If we're in every
+		// other state then Open, then again retriable errors don't apply.
+		execOpt.AutoRetry = txnState.state == Open && txnState.autoRetry
+
 		if txnState.State() == NoTxn {
 			panic("we failed to initialize a txn")
 		}
@@ -818,11 +837,11 @@ func (e *Executor) execParsed(
 			}
 
 			// Some results may have been produced by a previous attempt.
-			txnResults.Reset(session.Ctx())
+			txnState.txnResults.Reset(session.Ctx())
 			var err error
 			remainingStmts, err = runTxnAttempt(
 				e, session, stmtsToExec, pinfo, origState, opt,
-				!inTxn /* txnPrefix */, avoidCachedDescriptors, automaticRetryCount, txnResults)
+				!inTxn /* txnPrefix */, avoidCachedDescriptors, automaticRetryCount, txnState.txnResults)
 
 			// TODO(andrei): Until #7881 fixed.
 			if err == nil && txnState.State() == Aborted {
@@ -903,7 +922,6 @@ func (e *Executor) execParsed(
 		// If we're no longer in a transaction, finish the trace.
 		if txnState.State() == NoTxn {
 			txnState.finishSQLTxn(session)
-			txnResults.Close()
 		}
 
 		// Verify that the metadata callback fails, if one was set. This is
@@ -1013,7 +1031,7 @@ func runTxnAttempt(
 		session.TxnState.commitSeen = false
 	}
 
-	remainingStmts, err := e.execStmtsInCurrentTxn(
+	remainingStmts, err := e.execStmtGroup(
 		session, stmts, pinfo,
 		txnPrefix, avoidCachedDescriptors, automaticRetryCount, txnResults)
 
@@ -1023,12 +1041,21 @@ func runTxnAttempt(
 	return remainingStmts, err
 }
 
-// execStmtsInCurrentTxn consumes a prefix of stmts, namely the
-// statements belonging to a single SQL transaction. It executes in
-// the session's current transaction, which is assumed to exist.
+// execStmtGroup consumes and executes a prefix of stmts:
+//   - if we're in state FirstBatch, the group consists of all "FirstBatch"
+//   statements - i.e. the statements whose execution leaves the state in
+//   FirstBatch because their results are not subject to change on retry. The
+//   group stops at the FirstStatement without this property, at the moment when
+//   the state is advanced from FirstBatch->Open (this state transition happens
+//   _before_ a statement is executed, not after).
+//   - if we're in state Open, the group consists of all the statements in SQL
+//   transaction, until a COMMIT/ROLLBACK or an execution error.
 //
-// COMMIT/ROLLBACK statements can end the current transaction. If that happens,
-// this method returns, and the remaining statements are returned.
+// The group is executed in the session's current transaction, which is assumed
+// to exist.
+//
+// The method returns the remaining statements - the suffix of stmts that hasn't
+// been executed, if any.
 //
 // If an error occurs while executing a statement, the SQL txn will be
 // considered aborted and subsequent statements will be discarded (they will
@@ -1051,14 +1078,14 @@ func runTxnAttempt(
 // txnResults: used to pass query results to the caller.
 //
 // Returns:
-//  - the statements that haven't been executed because the transaction has
-//    been committed or rolled back. In returning an error, this will be nil.
+//  - the statements that haven't been executed. If returning an error, this
+//    will be nil.
 //  - the error encountered while executing statements, if any. If an error
 //    occurred, it corresponds to the last result returned. Subsequent statements
 //    have not been executed. Note that usually the error is not reflected in
 //    this last result; the caller is responsible copying it into the result
 //    after converting it adequately.
-func (e *Executor) execStmtsInCurrentTxn(
+func (e *Executor) execStmtGroup(
 	session *Session,
 	stmts StatementList,
 	pinfo *parser.PlaceholderInfo,
@@ -1073,6 +1100,20 @@ func (e *Executor) execStmtsInCurrentTxn(
 	}
 
 	for i, stmt := range stmts {
+		// Check if the group is done because the new statement requires a
+		// transition from FirstBatch->Open.
+		if txnState.State() == FirstBatch && !canStayInFirstBatchState(stmt) {
+			// Flush the results accumulated in FirstBatch. We want possible future
+			// Reset()s to not discard them since we're not going to retry the
+			// statements.
+			txnState.txnResults.Flush(session.Ctx())
+			txnState.SetState(Open)
+			// Return the remaining statements to be executed as a different group.
+			// Note that the remaining statements include the current one (i.e.
+			// index i - stmt), since we stopped short of executing it.
+			return stmts[i:], nil
+		}
+
 		if log.V(2) || e.cfg.Settings.LogStatementsExecuteEnabled.Get() ||
 			log.HasSpanOrEvent(session.Ctx()) {
 			log.VEventf(session.Ctx(), 2, "executing %d/%d: %s", i+1, len(stmts), stmt)
@@ -1430,13 +1471,6 @@ func (e *Executor) execStmtInOpenTxn(
 				// client.Txn.
 				roachpb.Transaction{},
 			)
-		} else if txnState.State() == FirstBatch &&
-			!canStayInFirstBatchState(stmt) && !resultsSentToClient() {
-			// Transition from FirstBatch to Open except in the case of special
-			// statements that don't return results to the client. This transition
-			// does not affect the current batch - future statements in it will still
-			// be retried automatically.
-			txnState.SetState(Open)
 		}
 	}()
 

@@ -106,13 +106,34 @@ type ResultsGroup interface {
 	// called on the previous one.
 	NewStatementResult() StatementResult
 
+	// Flush informs the ResultsGroup that the caller relinquishes the capability
+	// to Reset() the results that have been already been accumulated on this
+	// group. This means that future Reset() calls will only reset up to the
+	// current point in the stream - only future results will be discarded. This
+	// is used to ensure that some results are always sent to the client even if
+	// further statements are retried automatically; it supports the statements
+	// run in the FirstBatch state: these statements are not executed again when
+	// doing an automatic retry, and so their results shouldn't be reset.
+	//
+	// It is illegal to call this while any StatementResults on this group are
+	// open.
+	Flush(context.Context)
+
 	// ResultsSentToClient returns true if any results pertaining to this group
-	// have been sent to the consumer.
+	// beyond the last Flush() point have been sent to the consumer.
+	// Remember that the implementation is free to buffer or send results to the
+	// client whenever it pleases. This method checks to see if the implementation
+	// has in fact sent anything so far.
+	//
+	// TODO(andrei): add a note about the synchronous nature of the implementation
+	// imposed by this interface.
 	ResultsSentToClient() bool
 
-	// Reset discards all the group's results. It is illegal to call Reset if any
-	// results have already been sent to the consumer; this can be tested with
-	// ResultsSentToClient().
+	// Reset discards all the accumulated results from the last Flush() call
+	// onwards (or from the moment the group was created if Flush() was never
+	// called).
+	// It is illegal to call Reset if any results have already been sent to the
+	// consumer; this can be tested with ResultsSentToClient().
 	Reset(context.Context)
 }
 
@@ -191,6 +212,8 @@ func (b *bufferedWriter) ResultsSentToClient() bool {
 
 // Close implements the ResultsGroup interface.
 func (b *bufferedWriter) Close() {
+	// TODO(andrei): The work that's duplicated from CloseResult() should not be
+	// performed by this method.
 	if b.resultInProgress {
 		b.currentGroupResults = append(b.currentGroupResults, b.currentResult)
 		b.resultInProgress = false
@@ -198,6 +221,15 @@ func (b *bufferedWriter) Close() {
 	b.pastResults = append(b.pastResults, b.currentGroupResults...)
 	b.currentGroupResults = nil
 	b.resultInProgress = false
+}
+
+// Flush implements the ResultsGroup interface.
+func (b *bufferedWriter) Flush(context.Context) {
+	if b.resultInProgress {
+		panic("can't flush while a StatementResult is in progress")
+	}
+	b.pastResults = append(b.pastResults, b.currentGroupResults...)
+	b.currentGroupResults = nil
 }
 
 // Reset implements the ResultsGroup interface.

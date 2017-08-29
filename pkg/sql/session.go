@@ -866,6 +866,10 @@ type txnState struct {
 		txn *client.Txn
 	}
 
+	// If we're in a SQL txn, txnResults is the ResultsGroup that statements in
+	// this transaction should write results to.
+	txnResults ResultsGroup
+
 	// Ctx is the context for everything running in this SQL txn.
 	Ctx context.Context
 
@@ -882,9 +886,16 @@ type txnState struct {
 	// errors. The txn will enter a RestartWait state in case of such errors.
 	retryIntent bool
 
-	// The transaction will be retried in case of retriable error. The retry will be
-	// automatic (done by Txn.Exec()). This field behaves the same as retryIntent,
-	// except it's reset in between client round trips.
+	// autoRetry dictates whether retriable errors encountered by statement
+	// execution trigger automatic retries of the transaction's statements
+	// (technically a group of the transaction's statements, those executed in the
+	// Open state - as opposed to those executed in the FirstBatch state, which
+	// are not retried).
+	// autoRetry is only meaningful while a transaction is open.
+	//
+	// The automatic retry will be done by Txn.Exec().
+	//
+	// See also retryIntent.
 	autoRetry bool
 
 	// A COMMIT statement has been processed. Useful for allowing the txn to
@@ -960,8 +971,8 @@ func (ts *txnState) resetForNewSQLTxn(
 	ts.autoRetry = true
 	ts.commitSeen = false
 	ts.sqlTimestamp = sqlTimestamp
-
 	ts.implicitTxn = implicitTxn
+	ts.txnResults = s.ResultsWriter.NewResultsGroup()
 
 	// Create a context for this transaction. It will include a
 	// root span that will contain everything executed as part of the
@@ -1013,7 +1024,12 @@ func (ts *txnState) resetForNewSQLTxn(
 
 	ts.sp = sp
 	ts.Ctx, ts.cancel = context.WithCancel(ctx)
-	ts.SetState(FirstBatch)
+	if implicitTxn {
+		// Implicit transactions don't deal with the FirstBatch state.
+		ts.SetState(Open)
+	} else {
+		ts.SetState(FirstBatch)
+	}
 	s.Tracing.onNewSQLTxn(ts.sp)
 
 	ts.mon.Start(ctx, &s.mon, mon.BoundAccount{})
@@ -1060,8 +1076,9 @@ func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
 	ts.mu.Unlock()
 }
 
-// finishSQLTxn closes the root span for the current SQL txn.  This needs to be
-// called before resetForNewSQLTxn() is called for starting another SQL txn.
+// finishSQLTxn finalizes a transaction's results and closes the root span for
+// the current SQL txn. This needs to be called before resetForNewSQLTxn() is
+// called for starting another SQL txn.
 func (ts *txnState) finishSQLTxn(s *Session) {
 	ts.mon.Stop(ts.Ctx)
 	if ts.cancel != nil {
@@ -1071,6 +1088,10 @@ func (ts *txnState) finishSQLTxn(s *Session) {
 	if ts.sp == nil {
 		panic("No span in context? Was resetForNewSQLTxn() called previously?")
 	}
+
+	// Finalize the transaction's results.
+	ts.txnResults.Close()
+
 	sampledFor7881 := (ts.sp.BaggageItem(keyFor7881Sample) != "")
 	ts.sp.Finish()
 	if err := s.Tracing.onFinishSQLTxn(ts.sp); err != nil {
