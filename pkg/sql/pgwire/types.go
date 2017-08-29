@@ -23,10 +23,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/lib/pq"
@@ -705,12 +707,29 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 	// Types with identical text/binary handling.
 	switch id {
 	case oid.T_text, oid.T_varchar:
+		if err := validateStringBytes(b); err != nil {
+			return nil, err
+		}
 		return parser.NewDString(string(b)), nil
 	case oid.T_name:
+		if err := validateStringBytes(b); err != nil {
+			return nil, err
+		}
 		return parser.NewDName(string(b)), nil
 	default:
 		return nil, errors.Errorf("unsupported OID %v with format code %s", id, code)
 	}
+}
+
+var invalidUTF8Error = pgerror.NewErrorf(pgerror.CodeCharacterNotInRepertoireError, "invalid UTF-8 sequence")
+
+// Values which are going to be converted to strings (STRING and NAME) need to
+// be valid UTF-8 for us to accept them.
+func validateStringBytes(b []byte) error {
+	if !utf8.Valid(b) {
+		return invalidUTF8Error
+	}
+	return nil
 }
 
 func decodeBinaryArray(b []byte, code formatCode) (parser.Datum, error) {

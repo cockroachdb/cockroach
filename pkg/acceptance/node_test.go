@@ -47,20 +47,60 @@ const config = {
 
 const client = new pg.Client(config);
 
+// Assert that the given error is not null and matches the given regex.
+function isError(err, expected) {
+  if (!err) return false;
+  return expected.test(err.toString());
+}
+
+function testSelect(client) {
+  return new Promise(resolve => {
+    client.query("SELECT 1 as first, 2+$1 as second, ARRAY['\"','',''] as third", [%v], function (err, results) {
+      if (err) throw err;
+
+      assert.deepEqual(results.rows, [{
+        first: 1,
+        second: 5,
+        third: ['"', '', '']
+      }]);
+
+      resolve();
+    });
+  });
+}
+
+function testSendInvalidUTF8(client) {
+  return new Promise(resolve => {
+    client.query({
+      text: 'SELECT $1::STRING',
+      values: [new Buffer([167])]
+    }, function (err, results) {
+      if (!isError(err, /invalid UTF-8 sequence/)) throw new Error('expected error, got ' + err.toString());
+      resolve();
+    });
+  });
+}
+
+function runTests(client, ...tests) {
+  if (tests.length === 0) {
+    return Promise.resolve();
+  } else {
+    return tests[0](client).then(() => runTests(client, ...tests.slice(1)));
+  }
+}
+
 client.connect(function (err) {
   if (err) throw err;
 
-  client.query("SELECT 1 as first, 2+$1 as second, ARRAY['\"','',''] as third", [%v], function (err, results) {
-    if (err) throw err;
-
-    assert.deepEqual(results.rows, [{
-      first: 1,
-      second: 5,
-      third: ['"', '', '']
-    }]);
+  runTests(client,
+    testSendInvalidUTF8,
+    testSelect
+  ).then(result => {
     client.end(function (err) {
       if (err) throw err;
     });
+  }).catch(err => {
+    throw err;
   });
 });
 `
