@@ -53,8 +53,14 @@ type TestServerInterface interface {
 	// NodeID returns the ID of this node within its cluster.
 	NodeID() roachpb.NodeID
 
-	// ServingAddr returns the server's address.
+	// ServingAddr returns the server's advertised address.
 	ServingAddr() string
+
+	// HTTPAddr returns the server's http address.
+	HTTPAddr() string
+
+	// Addr returns the server's address.
+	Addr() string
 
 	// KVClient() returns a *client.DB instance for talking to this KV server,
 	// as an interface{}.
