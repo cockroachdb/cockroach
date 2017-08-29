@@ -91,6 +91,8 @@ var (
 	TypeInterval Type = tInterval{}
 	// TypeUUID is the type of a DUuid. Can be compared with ==.
 	TypeUUID Type = tUUID{}
+	// TypeINet is the type of a DIPNet. Can be compared with ==.
+	TypeINet Type = tINet{}
 	// TypeTuple is the type family of a DTuple. CANNOT be compared with ==.
 	TypeTuple Type = TTuple(nil)
 	// TypeArray is the type family of a DArray. CANNOT be compared with ==.
@@ -142,6 +144,7 @@ var (
 		TypeTimestampTZ,
 		TypeInterval,
 		TypeUUID,
+		TypeINet,
 		TypeOid,
 	}
 )
@@ -186,6 +189,7 @@ var OidToType = map[oid.Oid]Type{
 	oid.T_timestamp:    TypeTimestamp,
 	oid.T_timestamptz:  TypeTimestampTZ,
 	oid.T_uuid:         TypeUUID,
+	oid.T_inet:         TypeINet,
 	oid.T_varchar:      typeVarChar,
 }
 
@@ -392,6 +396,16 @@ func (tUUID) Size() (uintptr, bool)       { return unsafe.Sizeof(DUuid{}), fixed
 func (tUUID) Oid() oid.Oid                { return oid.T_uuid }
 func (tUUID) SQLName() string             { return "uuid" }
 func (tUUID) IsAmbiguous() bool           { return false }
+
+type tINet struct{}
+
+func (tINet) String() string              { return "inet" }
+func (tINet) Equivalent(other Type) bool  { return UnwrapType(other) == TypeINet || other == TypeAny }
+func (tINet) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeINet }
+func (tINet) Size() (uintptr, bool)       { return unsafe.Sizeof(DIPNet{}), fixedSize }
+func (tINet) Oid() oid.Oid                { return oid.T_inet }
+func (tINet) SQLName() string             { return "inet" }
+func (tINet) IsAmbiguous() bool           { return false }
 
 // TTuple is the type of a DTuple.
 type TTuple []Type

@@ -121,6 +121,17 @@ func TestDatumOrdering(t *testing.T) {
 			`'00000000-0000-0001-0000-000000000000'`, `'00000000-0000-0000-0000-000000000000'`,
 			`'ffffffff-ffff-ffff-ffff-ffffffffffff'`},
 
+		// INETs
+		// FIXME(joey): The "correct" tests are commented out due to uncertainty,
+		// see datum.go:DIPNet.Prev
+		{`'0.0.0.0'::inet`, noPrev, noNext, `'0.0.0.0/1'`, `'ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff'`},
+		// {`'0.0.0.0'::inet`, noPrev, `'0.0.0.1'::inet`, `'0.0.0.0/1'`, `'ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/128'`},
+		{`'127.0.0.1'::inet`, noPrev, noNext, `'0.0.0.0/1'`, `'ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff'`},
+		// {`'127.0.0.1'::inet`, `'127.0.0.0'::inet`, `'127.0.0.2'::inet`, `'0.0.0.0/1'`, `'ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/128'`},
+		{`'192.168.0.1/20'::inet`, noPrev, noNext, `'0.0.0.0/1'`, `'ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff'`},
+		{`'::ffff:1.2.3.4'::inet`, noPrev, noNext, `'0.0.0.0/1'`, `'ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff'`},
+		// {`'::ffff:1.2.3.4'::inet`, `'::ffff:1.2.3.3'::inet`, `'::ffff:1.2.3.5'::inet`, `'0.0.0.0/1'`, `'ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/128'`},
+
 		// NULL
 		{`NULL`, valIsMin, valIsMax, `NULL`, `NULL`},
 

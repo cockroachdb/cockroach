@@ -1078,13 +1078,14 @@ var (
 	decimalCastTypes = []Type{TypeNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeCollatedString,
 		TypeTimestamp, TypeTimestampTZ, TypeDate, TypeInterval}
 	stringCastTypes = []Type{TypeNull, TypeBool, TypeInt, TypeFloat, TypeDecimal, TypeString, TypeCollatedString,
-		TypeBytes, TypeTimestamp, TypeTimestampTZ, TypeInterval, TypeUUID, TypeDate, TypeOid}
+		TypeBytes, TypeTimestamp, TypeTimestampTZ, TypeInterval, TypeUUID, TypeDate, TypeOid, TypeINet}
 	bytesCastTypes     = []Type{TypeNull, TypeString, TypeCollatedString, TypeBytes, TypeUUID}
 	dateCastTypes      = []Type{TypeNull, TypeString, TypeCollatedString, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInt}
 	timestampCastTypes = []Type{TypeNull, TypeString, TypeCollatedString, TypeDate, TypeTimestamp, TypeTimestampTZ, TypeInt}
 	intervalCastTypes  = []Type{TypeNull, TypeString, TypeCollatedString, TypeInt, TypeInterval}
 	oidCastTypes       = []Type{TypeNull, TypeString, TypeCollatedString, TypeInt, TypeOid}
 	uuidCastTypes      = []Type{TypeNull, TypeString, TypeCollatedString, TypeBytes, TypeUUID}
+	inetCastTypes      = []Type{TypeNull, TypeString, TypeCollatedString, TypeINet}
 )
 
 // validCastTypes returns a set of types that can be cast into the provided type.
@@ -1110,6 +1111,8 @@ func validCastTypes(t Type) []Type {
 		return intervalCastTypes
 	case TypeUUID:
 		return uuidCastTypes
+	case TypeINet:
+		return inetCastTypes
 	case TypeOid, TypeRegClass, TypeRegNamespace, TypeRegProc, TypeRegProcedure, TypeRegType:
 		return oidCastTypes
 	default:
@@ -1224,6 +1227,7 @@ func (node *DFloat) String() string           { return AsString(node) }
 func (node *DInt) String() string             { return AsString(node) }
 func (node *DInterval) String() string        { return AsString(node) }
 func (node *DUuid) String() string            { return AsString(node) }
+func (node *DIPNet) String() string           { return AsString(node) }
 func (node *DString) String() string          { return AsString(node) }
 func (node *DCollatedString) String() string  { return AsString(node) }
 func (node *DTimestamp) String() string       { return AsString(node) }

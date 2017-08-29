@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 	"math/rand"
+	"net"
 	"time"
 	"unicode"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipnet"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -95,6 +97,20 @@ func RandDatum(rng *rand.Rand, typ ColumnType, null bool) parser.Datum {
 		}}
 	case ColumnType_UUID:
 		return parser.NewDUuid(parser.DUuid{UUID: uuid.MakeV4()})
+	case ColumnType_INET:
+		var ipNet ipnet.IPNet
+		if rng.Intn(2) == 0 {
+			ipNet.Family = ipnet.IPv4Family
+			ipNet.IP = net.IPv4(byte(rng.Intn(256)), byte(rng.Intn(256)), byte(rng.Intn(256)), byte(rng.Intn(256)))
+			ipNet.Mask = net.CIDRMask(rng.Intn(32)+1, 32)
+		} else {
+			ipNet.Family = ipnet.IPv6Family
+			for i := 0; i < net.IPv6len; i++ {
+				ipNet.IP = append(ipNet.IP, byte(rng.Intn(256)))
+			}
+			ipNet.Mask = net.CIDRMask(rng.Intn(128)+1, 128)
+		}
+		return parser.NewDIPNet(parser.DIPNet{IPNet: ipNet})
 	case ColumnType_STRING:
 		// Generate a random ASCII string.
 		p := make([]byte, rng.Intn(10))

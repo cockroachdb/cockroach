@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"math"
 	"math/rand"
+	"net"
 	"regexp"
 	"testing"
 	"time"
@@ -26,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipnet"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -896,6 +898,38 @@ func (rd randData) duration() duration.Duration {
 	}
 }
 
+func (rd randData) ipNet() ipnet.IPNet {
+	var family int
+	if val := rd.Intn(2); val == 0 {
+		family = ipnet.IPv4Family
+	} else {
+		family = ipnet.IPv6Family
+	}
+
+	if family == ipnet.IPv4Family {
+		return ipnet.IPNet{
+			Family: ipnet.IPv4Family,
+			IPNet: net.IPNet{
+				IP:   net.IPv4(byte(rd.Intn(256)), byte(rd.Intn(256)), byte(rd.Intn(256)), byte(rd.Intn(256))),
+				Mask: net.CIDRMask(rd.Intn(32)+1, 32),
+			},
+		}
+	}
+
+	ip := make([]byte, 16)
+	for i := 0; i < 16; i++ {
+		ip[i] = byte(rd.Intn(256))
+	}
+
+	return ipnet.IPNet{
+		Family: ipnet.IPv6Family,
+		IPNet: net.IPNet{
+			IP:   ip,
+			Mask: net.CIDRMask(rd.Intn(128)+1, 128),
+		},
+	}
+}
+
 func BenchmarkEncodeUint32(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 
@@ -1561,6 +1595,9 @@ func randValueEncode(rd randData, buf []byte, colID uint32, typ Type) ([]byte, i
 	case Duration:
 		x := rd.duration()
 		return EncodeDurationValue(buf, colID, x), x, true
+	case IPNet:
+		x := rd.ipNet()
+		return EncodeIPNetValue(buf, colID, x), x, true
 	default:
 		return buf, nil, false
 	}
@@ -1710,6 +1747,8 @@ func TestValueEncodingRand(t *testing.T) {
 			buf, decoded, err = DecodeTimeValue(buf)
 		case Duration:
 			buf, decoded, err = DecodeDurationValue(buf)
+		case IPNet:
+			buf, decoded, err = DecodeIPNetValue(buf)
 		default:
 			err = errors.Errorf("unknown type %s", typ)
 		}
@@ -1726,6 +1765,12 @@ func TestValueEncodingRand(t *testing.T) {
 			d := decoded.(apd.Decimal)
 			val := value.(apd.Decimal)
 			if d.Cmp(&val) != 0 {
+				t.Fatalf("seed %d: %s got %v expected %v", seed, typ, decoded, value)
+			}
+		case IPNet:
+			d := decoded.(ipnet.IPNet)
+			val := value.(ipnet.IPNet)
+			if !d.Equal(&val) {
 				t.Fatalf("seed %d: %s got %v expected %v", seed, typ, decoded, value)
 			}
 		default:
@@ -1778,6 +1823,8 @@ func TestUpperBoundValueEncodingSize(t *testing.T) {
 func TestPrettyPrintValueEncoded(t *testing.T) {
 	uuidStr := "63616665-6630-3064-6465-616462656562"
 	u, _ := uuid.FromString(uuidStr)
+	ip := "192.168.0.1/10"
+	ipNet, _ := ipnet.ParseINet(ip)
 	tests := []struct {
 		buf      []byte
 		expected string
@@ -1794,6 +1841,7 @@ func TestPrettyPrintValueEncoded(t *testing.T) {
 			duration.Duration{Months: 1, Days: 2, Nanos: 3}), "1mon2d3ns"},
 		{EncodeBytesValue(nil, NoColumnID, []byte{0x1, 0x2, 0xF, 0xFF}), "01020fff"},
 		{EncodeBytesValue(nil, NoColumnID, []byte("foo")), "foo"},
+		{EncodeIPNetValue(nil, NoColumnID, *ipNet), ip},
 		{EncodeUUIDValue(nil, NoColumnID, u), uuidStr},
 	}
 	for i, test := range tests {

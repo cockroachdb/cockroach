@@ -2106,6 +2106,9 @@ func checkResultType(typ parser.Type) error {
 	case parser.TypeTimestampTZ:
 	case parser.TypeInterval:
 	case parser.TypeUUID:
+	case parser.TypeINet:
+		// TODO(joey): CIDR col
+	// case parser.TypeCIDR:
 	case parser.TypeNameArray:
 	case parser.TypeOid:
 	case parser.TypeRegClass:

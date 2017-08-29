@@ -105,6 +105,7 @@ var defaultVals = map[string][]string{
 	"timestamp":   timestampInputs,
 	"timestamptz": timestampInputs,
 	"date":        dateInputs,
+	"inet":        inetInputs,
 }
 
 var decimalInputs = []string{
@@ -176,6 +177,27 @@ var dateInputs = []string{
 	"9999-01-08",
 	"1999-12-30",
 	"1996-02-29",
+}
+
+var inetInputs = []string{
+	"192.168.0.1",
+	"111::fff/120",
+	"127.0.0.1/10",
+	"192.168.1.2",
+	"192.168.1.2/16",
+	"192.168.1.2.",
+	"192.168.1.2./10",
+	"2001:4f8:3:ba::/64",
+	"2001:4f8:3:ba:2e0:81ff:fe22:d1f1/128",
+	"::ffff:1.2.3.1/120",
+	"::ffff:1.2.3.1/128",
+	"::ffff:1.2.3.1/128",
+	"::ffff:1.2.3.1/20",
+	"::ffff:1.2.3.1/120",
+	"::1",
+	"192/10",
+	"192.168/23",
+	"192.168./10",
 }
 
 func makeEncodingFunc(typName string) generateEnc {

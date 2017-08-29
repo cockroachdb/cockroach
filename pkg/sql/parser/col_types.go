@@ -48,6 +48,7 @@ func (*TimestampColType) columnType()      {}
 func (*TimestampTZColType) columnType()    {}
 func (*IntervalColType) columnType()       {}
 func (*UUIDColType) columnType()           {}
+func (*IPNetColType) columnType()          {}
 func (*StringColType) columnType()         {}
 func (*NameColType) columnType()           {}
 func (*BytesColType) columnType()          {}
@@ -66,6 +67,7 @@ func (*TimestampColType) castTargetType()      {}
 func (*TimestampTZColType) castTargetType()    {}
 func (*IntervalColType) castTargetType()       {}
 func (*UUIDColType) castTargetType()           {}
+func (*IPNetColType) castTargetType()          {}
 func (*StringColType) castTargetType()         {}
 func (*NameColType) castTargetType()           {}
 func (*BytesColType) castTargetType()          {}
@@ -295,6 +297,23 @@ func (node *UUIDColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("UUID")
 }
 
+// Pre-allocated immutable ip column types.
+var (
+	ipnetColTypeINet = &IPNetColType{Name: "INET"}
+	// TODO(joey): CIDR col
+	// ipColTypeCIDR = &IPNetColType{Name: "CIDR"}
+)
+
+// IPNetColType represents a INET or CIDR type.
+type IPNetColType struct {
+	Name string
+}
+
+// Format implements the NodeFormatter interface.
+func (node *IPNetColType) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString(node.Name)
+}
+
 // Pre-allocated immutable string column types.
 var (
 	stringColTypeChar    = &StringColType{Name: "CHAR"}
@@ -476,6 +495,7 @@ func (node *TimestampColType) String() string      { return AsString(node) }
 func (node *TimestampTZColType) String() string    { return AsString(node) }
 func (node *IntervalColType) String() string       { return AsString(node) }
 func (node *UUIDColType) String() string           { return AsString(node) }
+func (node *IPNetColType) String() string          { return AsString(node) }
 func (node *StringColType) String() string         { return AsString(node) }
 func (node *NameColType) String() string           { return AsString(node) }
 func (node *BytesColType) String() string          { return AsString(node) }
@@ -505,6 +525,11 @@ func DatumTypeToColumnType(t Type) (ColumnType, error) {
 		return intervalColTypeInterval, nil
 	case TypeUUID:
 		return uuidColTypeUUID, nil
+	case TypeINet:
+		return ipnetColTypeINet, nil
+	// TODO(joey): CIDR col
+	// case TypeCIDR:
+	// 	return ipnetColTypeCIDR, nil
 	case TypeDate:
 		return dateColTypeDate, nil
 	case TypeString:
@@ -567,6 +592,9 @@ func CastTargetToDatumType(t CastTargetType) Type {
 		return TypeInterval
 	case *UUIDColType:
 		return TypeUUID
+	case *IPNetColType:
+		// TODO(joey): CIDR col
+		return TypeINet
 	case *CollatedStringColType:
 		return TCollatedString{Locale: ct.Locale}
 	case *ArrayColType:

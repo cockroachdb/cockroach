@@ -5,20 +5,20 @@ package encoding
 import "fmt"
 
 const (
-	_Type_name_0 = "UnknownNullNotNullIntFloatDecimalBytesBytesDescTimeDurationTrueFalseUUIDArray"
+	_Type_name_0 = "UnknownNullNotNullIntFloatDecimalBytesBytesDescTimeDurationTrueFalseUUIDArrayIPNet"
 	_Type_name_1 = "SentinelType"
 )
 
 var (
-	_Type_index_0 = [...]uint8{0, 7, 11, 18, 21, 26, 33, 38, 47, 51, 59, 63, 68, 72, 77}
+	_Type_index_0 = [...]uint8{0, 7, 11, 18, 21, 26, 33, 38, 47, 51, 59, 63, 68, 72, 77, 82}
 	_Type_index_1 = [...]uint8{0, 12}
 )
 
 func (i Type) String() string {
 	switch {
-	case 0 <= i && i <= 13:
+	case 0 <= i && i <= 14:
 		return _Type_name_0[_Type_index_0[i]:_Type_index_0[i+1]]
-	case i == 15:
+	case i == 16:
 		return _Type_name_1
 	default:
 		return fmt.Sprintf("Type(%d)", i)

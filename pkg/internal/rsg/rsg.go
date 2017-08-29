@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"net"
 	"strings"
 	"time"
 
@@ -238,6 +239,10 @@ func (r *RSG) GenerateRandomArg(typ parser.Type) string {
 		v = fmt.Sprintf(`'%s'`, &parser.DInterval{Duration: d})
 	case parser.TypeUUID:
 		u := uuid.MakeV4()
+		v = fmt.Sprintf(`'%s'`, u)
+	case parser.TypeINet:
+		// TODO(joey): Also randomly generate IPv6
+		u := net.IPv4(byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)))
 		v = fmt.Sprintf(`'%s'`, u)
 	case parser.TypeOid,
 		parser.TypeRegClass,

@@ -77,7 +77,7 @@ func testBinaryDatumType(t *testing.T, typ string, datumConstructor func(val str
 			} else if datum, err := decodeOidDatum(oid, formatBinary, got[4:]); err != nil {
 				t.Fatalf("unable to decode %v: %s", got[4:], err)
 			} else if d.Compare(evalCtx, datum) != 0 {
-				t.Errorf("expected %s, got %s", d, datum)
+				t.Errorf("expected %#v, got %#v", d, datum)
 			}
 		}()
 	}
@@ -224,6 +224,18 @@ func TestBinaryUuid(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testBinaryDatumType(t, "uuid", func(val string) parser.Datum {
 		u, err := parser.ParseDUuidFromString(val)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return u
+	})
+}
+
+// inet needs binary encoding/decoding
+func TestBinaryInet(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testBinaryDatumType(t, "inet", func(val string) parser.Datum {
+		u, err := parser.ParseDIPNetFromINetString(val)
 		if err != nil {
 			t.Fatal(err)
 		}
