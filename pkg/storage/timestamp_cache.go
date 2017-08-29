@@ -58,7 +58,7 @@ type cacheRequest struct {
 	reads     []roachpb.Span
 	writes    []roachpb.Span
 	txn       roachpb.Span
-	txnID     *uuid.UUID
+	txnID     uuid.UUID
 	timestamp hlc.Timestamp
 	// Used to distinguish requests with identical timestamps. For actual
 	// requests, the uniqueID value is >0. When probing the btree for requests
@@ -93,33 +93,29 @@ func (cr *cacheRequest) size() uint64 {
 	var n uint64
 	for i := range cr.reads {
 		s := &cr.reads[i]
-		n += cacheEntrySize(interval.Comparable(s.Key), interval.Comparable(s.EndKey), cr.txnID)
+		n += cacheEntrySize(interval.Comparable(s.Key), interval.Comparable(s.EndKey))
 	}
 	for i := range cr.writes {
 		s := &cr.writes[i]
-		n += cacheEntrySize(interval.Comparable(s.Key), interval.Comparable(s.EndKey), cr.txnID)
+		n += cacheEntrySize(interval.Comparable(s.Key), interval.Comparable(s.EndKey))
 	}
 	if cr.txn.Key != nil {
-		n += cacheEntrySize(interval.Comparable(cr.txn.Key), nil, nil)
+		n += cacheEntrySize(interval.Comparable(cr.txn.Key), nil)
 	}
 	return n
 }
 
+var zeroTxnID uuid.UUID
+
 var cacheEntryOverhead = uint64(unsafe.Sizeof(cache.IntervalKey{}) +
 	unsafe.Sizeof(cacheValue{}) + unsafe.Sizeof(cache.Entry{}))
 
-func cacheEntrySize(start, end interval.Comparable, txnID *uuid.UUID) uint64 {
+func cacheEntrySize(start, end interval.Comparable) uint64 {
 	n := uint64(cap(start))
 	if end != nil && len(start) > 0 && len(end) > 0 && &end[0] != &start[0] {
 		// If the end key exists and is not sharing memory with the start key,
 		// account for its memory usage.
 		n += uint64(cap(end))
-	}
-	if txnID != nil {
-		// Every entry which references the txn ID is charged for its memory. This
-		// results in counting that memory multiple times with the result that the
-		// cache might not be using as much memory as we've configured it for.
-		n += uint64(unsafe.Sizeof(*txnID))
 	}
 	n += cacheEntryOverhead
 	return n
@@ -170,7 +166,7 @@ var lowWaterTxnIDMarker = func() *uuid.UUID {
 // A cacheValue combines the timestamp with an optional txn ID.
 type cacheValue struct {
 	timestamp hlc.Timestamp
-	txnID     *uuid.UUID // Nil for no transaction
+	txnID     uuid.UUID // zeroTxnID for no transaction
 }
 
 func makeCacheEntry(key cache.IntervalKey, value cacheValue) *cache.Entry {
@@ -201,8 +197,7 @@ func newTimestampCache(clock *hlc.Clock) *timestampCache {
 
 	onEvicted := func(k, v interface{}) {
 		ck := k.(*cache.IntervalKey)
-		cv := v.(*cacheValue)
-		reqSize := cacheEntrySize(ck.Start, ck.End, cv.txnID)
+		reqSize := cacheEntrySize(ck.Start, ck.End)
 		if tc.bytes < reqSize {
 			panic(fmt.Sprintf("bad reqSize: %d < %d", tc.bytes, reqSize))
 		}
@@ -250,17 +245,20 @@ func (tc *timestampCache) add(
 			tcache = tc.rCache
 		}
 
+		if txnID == nil {
+			txnID = &zeroTxnID
+		}
+
 		addRange := func(r interval.Range) {
-			value := cacheValue{timestamp: timestamp, txnID: txnID}
+			value := cacheValue{timestamp: timestamp, txnID: *txnID}
 			key := tcache.MakeKey(r.Start, r.End)
 			entry := makeCacheEntry(key, value)
-			tc.bytes += cacheEntrySize(r.Start, r.End, txnID)
+			tc.bytes += cacheEntrySize(r.Start, r.End)
 			tcache.AddEntry(entry)
 		}
 		addEntryAfter := func(entry, after *cache.Entry) {
 			ck := entry.Key.(*cache.IntervalKey)
-			cv := entry.Value.(*cacheValue)
-			tc.bytes += cacheEntrySize(ck.Start, ck.End, cv.txnID)
+			tc.bytes += cacheEntrySize(ck.Start, ck.End)
 			tcache.AddEntryAfter(entry, after)
 		}
 
@@ -282,7 +280,7 @@ func (tc *timestampCache) add(
 			// change the size of the entry. To capture all of these modifications we
 			// compute the current size of the entry and then use the new size at the
 			// end of this iteration to update TimestampCache.bytes.
-			oldSize := cacheEntrySize(key.Start, key.End, cv.txnID)
+			oldSize := cacheEntrySize(key.Start, key.End)
 			if cv.timestamp.Less(timestamp) {
 				// The existing interval has a timestamp less than the new
 				// interval. Compare interval ranges to determine how to
@@ -296,7 +294,7 @@ func (tc *timestampCache) add(
 					//
 					// New: ------------
 					// Old:
-					*cv = cacheValue{timestamp: timestamp, txnID: txnID}
+					*cv = cacheValue{timestamp: timestamp, txnID: *txnID}
 					tcache.MoveToEnd(entry)
 					return
 				case sCmp <= 0 && eCmp >= 0:
@@ -393,8 +391,7 @@ func (tc *timestampCache) add(
 				default:
 					panic(fmt.Sprintf("no overlap between %v and %v", key.Range, r))
 				}
-			} else if (cv.txnID == nil && txnID == nil) ||
-				(cv.txnID != nil && txnID != nil && *cv.txnID == *txnID) {
+			} else if cv.txnID == *txnID {
 				// The existing interval has a timestamp equal to the new
 				// interval, and the same transaction ID.
 				switch {
@@ -452,8 +449,8 @@ func (tc *timestampCache) add(
 					// New:
 					// Nil: ============
 					// Old:
-					cv.txnID = nil
-					tc.bytes += cacheEntrySize(key.Start, key.End, cv.txnID) - oldSize
+					cv.txnID = zeroTxnID
+					tc.bytes += cacheEntrySize(key.Start, key.End) - oldSize
 					return
 				case sCmp == 0 && eCmp > 0:
 					// New contains old, left-aligned. Clear ownership of the
@@ -465,7 +462,7 @@ func (tc *timestampCache) add(
 					// New:           --
 					// Nil: ==========
 					// Old:
-					cv.txnID = nil
+					cv.txnID = zeroTxnID
 					r.Start = key.End
 				case sCmp < 0 && eCmp == 0:
 					// New contains old, right-aligned. Clear ownership of the
@@ -477,7 +474,7 @@ func (tc *timestampCache) add(
 					// New: --
 					// Nil:   ==========
 					// Old:
-					cv.txnID = nil
+					cv.txnID = zeroTxnID
 					r.End = key.Start
 				case sCmp < 0 && eCmp > 0:
 					// New contains old; split into three segments with the
@@ -489,10 +486,10 @@ func (tc *timestampCache) add(
 					// New: --        --
 					// Nil:   ========
 					// Old:
-					cv.txnID = nil
+					cv.txnID = zeroTxnID
 
 					newKey := tcache.MakeKey(r.Start, key.Start)
-					newEntry := makeCacheEntry(newKey, cacheValue{timestamp: timestamp, txnID: txnID})
+					newEntry := makeCacheEntry(newKey, cacheValue{timestamp: timestamp, txnID: *txnID})
 					addEntryAfter(newEntry, entry)
 					r.Start = key.End
 				case sCmp > 0 && eCmp < 0:
@@ -505,7 +502,7 @@ func (tc *timestampCache) add(
 					// New:
 					// Nil:     ====
 					// Old: ----    ----
-					txnID = nil
+					*txnID = zeroTxnID
 					oldEnd := key.End
 					key.End = r.Start
 
@@ -522,7 +519,7 @@ func (tc *timestampCache) add(
 					// New:
 					// Nil:     ========
 					// Old: ----
-					txnID = nil
+					*txnID = zeroTxnID
 					key.End = r.Start
 				case sCmp == 0:
 					// Old contains new, left-aligned; truncate old start and
@@ -533,7 +530,7 @@ func (tc *timestampCache) add(
 					// New:
 					// Nil: ========
 					// Old:         ----
-					txnID = nil
+					*txnID = zeroTxnID
 					key.Start = r.End
 				case eCmp > 0:
 					// Left partial overlap; truncate old end and split new into
@@ -548,7 +545,7 @@ func (tc *timestampCache) add(
 					key.End, r.Start = r.Start, key.End
 
 					newKey := tcache.MakeKey(key.End, r.Start)
-					newCV := cacheValue{timestamp: cv.timestamp, txnID: nil}
+					newCV := cacheValue{timestamp: cv.timestamp}
 					newEntry := makeCacheEntry(newKey, newCV)
 					addEntryAfter(newEntry, entry)
 				case sCmp < 0:
@@ -564,14 +561,14 @@ func (tc *timestampCache) add(
 					key.Start, r.End = r.End, key.Start
 
 					newKey := tcache.MakeKey(r.End, key.Start)
-					newCV := cacheValue{timestamp: cv.timestamp, txnID: nil}
+					newCV := cacheValue{timestamp: cv.timestamp}
 					newEntry := makeCacheEntry(newKey, newCV)
 					addEntryAfter(newEntry, entry)
 				default:
 					panic(fmt.Sprintf("no overlap between %v and %v", key.Range, r))
 				}
 			}
-			tc.bytes += cacheEntrySize(key.Start, key.End, cv.txnID) - oldSize
+			tc.bytes += cacheEntrySize(key.Start, key.End) - oldSize
 		}
 		addRange(r)
 	}
@@ -659,17 +656,17 @@ func (tc *timestampCache) ExpandRequests(timestamp hlc.Timestamp, span roachpb.R
 		tc.bytes -= reqSize
 		for i := range req.reads {
 			sp := &req.reads[i]
-			tc.add(sp.Key, sp.EndKey, req.timestamp, req.txnID, true /* readTSCache */)
+			tc.add(sp.Key, sp.EndKey, req.timestamp, &req.txnID, true /* readTSCache */)
 		}
 		for i := range req.writes {
 			sp := &req.writes[i]
-			tc.add(sp.Key, sp.EndKey, req.timestamp, req.txnID, false /* !readTSCache */)
+			tc.add(sp.Key, sp.EndKey, req.timestamp, &req.txnID, false /* !readTSCache */)
 		}
 		if req.txn.Key != nil {
 			// Make the transaction key from the request key. We're guaranteed
 			// req.txnID != nil because we only hit this code path for
 			// EndTransactionRequests.
-			key := keys.TransactionKey(req.txn.Key, *req.txnID)
+			key := keys.TransactionKey(req.txn.Key, req.txnID)
 			// We set txnID=nil because we want hits for same txn ID.
 			tc.add(key, nil, req.timestamp, nil, false /* !readTSCache */)
 		}
@@ -718,13 +715,17 @@ func (tc *timestampCache) getMax(
 		if maxTS.Less(ce.timestamp) {
 			ok = true
 			maxTS = ce.timestamp
-			maxTxnID = ce.txnID
+			if ce.txnID == zeroTxnID {
+				maxTxnID = nil
+			} else {
+				maxTxnID = &ce.txnID
+			}
 		} else if maxTS == ce.timestamp && maxTxnID != nil &&
-			(ce.txnID == nil || *maxTxnID != *ce.txnID) {
+			(ce.txnID == zeroTxnID || *maxTxnID != ce.txnID) {
 			maxTxnID = nil
 		}
 	}
-	if maxTxnID == lowWaterTxnIDMarker {
+	if maxTxnID != nil && *maxTxnID == *lowWaterTxnIDMarker {
 		ok = false
 	}
 	return maxTS, maxTxnID, ok
