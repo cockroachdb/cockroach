@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -100,10 +101,16 @@ var syncRaftLog = settings.RegisterBoolSetting(
 	"set to true to synchronize on Raft log writes to persistent storage",
 	true)
 
-var maxCommandSize = settings.RegisterByteSizeSetting(
+var maxCommandSize = settings.RegisterValidatedByteSizeSetting(
 	"kv.raft.command.max_size",
 	"maximum size of a raft command",
-	64<<20)
+	64<<20,
+	func(size int64) error {
+		if floor := int64(4 << 20 /* 4MB */); size < floor {
+			return fmt.Errorf("max_size must be greater than %s", humanizeutil.IBytes(floor))
+		}
+		return nil
+	})
 
 // raftInitialLog{Index,Term} are the starting points for the raft log. We
 // bootstrap the raft membership by synthesizing a snapshot as if there were
