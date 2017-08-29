@@ -17,8 +17,7 @@ package engine
 import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"golang.org/x/net/context"
+	"sort"
 )
 
 // GarbageCollector GCs MVCC key/values using a zone-specific GC
@@ -62,32 +61,28 @@ func (gc GarbageCollector) Filter(keys []MVCCKey, values [][]byte) hlc.Timestamp
 		return hlc.Timestamp{}
 	}
 
-	// Loop over values. All should be MVCC versions.
-	var i int
-	var key MVCCKey
-	var delTS hlc.Timestamp
-	for i, key = range keys {
-		if !key.IsValue() {
-			log.Errorf(context.TODO(), "unexpected MVCC metadata encountered: %q", key)
-			return hlc.Timestamp{}
-		}
-		if gc.Threshold.Less(key.Timestamp) {
-			continue
-		}
-		// Now key.Timestamp is <= gc.expiration, but the key-value pair is still
-		// "visible" at timestamp gc.expiration (and up to the next version).
-		if deleted := len(values[i]) == 0; deleted {
-			// We don't have to keep a delete visible (since GCing it does not change
-			// the outcome of the read). Note however that we can't touch deletes at
-			// higher timestamps immediately preceding this one, since they're above
-			// gc.expiration and are needed for correctness; see #6227.
-			delTS = key.Timestamp
-		} else if i+1 < len(keys) {
-			// Otherwise mark the previous timestamp for deletion (since it won't ever
-			// be returned for reads at gc.expiration and up).
-			delTS = keys[i+1].Timestamp
-		}
-		break
+	// find the first expired key index using binary search
+	i := sort.Search(len(keys), func(i int) bool { return !gc.Threshold.Less(keys[i].Timestamp) })
+
+	if i == len(keys) {
+		return hlc.Timestamp{}
 	}
+
+	var delTS hlc.Timestamp
+
+	// Now keys[i].Timestamp is <= gc.expiration, but the key-value pair is still
+	// "visible" at timestamp gc.expiration (and up to the next version).
+	if deleted := len(values[i]) == 0; deleted {
+		// We don't have to keep a delete visible (since GCing it does not change
+		// the outcome of the read). Note however that we can't touch deletes at
+		// higher timestamps immediately preceding this one, since they're above
+		// gc.expiration and are needed for correctness; see #6227.
+		delTS = keys[i].Timestamp
+	} else if i+1 < len(keys) {
+		// Otherwise mark the previous timestamp for deletion (since it won't ever
+		// be returned for reads at gc.expiration and up).
+		delTS = keys[i+1].Timestamp
+	}
+
 	return delTS
 }
