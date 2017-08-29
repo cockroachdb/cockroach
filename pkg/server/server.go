@@ -73,6 +73,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	runtime "runtime"
 )
 
 var (
@@ -810,6 +811,21 @@ func (s *Server) Start(ctx context.Context) error {
 	bootstrappedEngines, emptyEngines, cv, err := inspectEngines(ctx, s.engines, s.cfg.Settings.Version.MinSupportedVersion, s.cfg.Settings.Version.ServerVersion)
 	if err != nil {
 		return errors.Wrap(err, "inspecting engines")
+	}
+
+	if runtime.GOOS != "windows" {
+		defer time.AfterFunc(30*time.Second, func() {
+			dashIndex := strings.LastIndex(s.cfg.Settings.Version.ServerVersion.String(), "-")
+			version := s.cfg.Settings.Version.ServerVersion.String()[0:dashIndex]
+			msg := "The server appears to be unable to contact the other nodes in the cluster. Please try\n" +
+				"- starting the other nodes, if you haven't already\n" +
+				"- double-checking that the `--join` and `--host` flags are set up correctly\n" +
+				"- not using the `--background` flag.\n" +
+				"If problems persist, please see https://www.cockroachlabs.com/docs/v" + version + "/cluster-setup-troubleshooting.html."
+
+			log.Shout(context.Background(), log.Severity_WARNING,
+				msg)
+		}).Stop()
 	}
 
 	// Now that we have a monotonic HLC wrt previous incarnations of the process,
