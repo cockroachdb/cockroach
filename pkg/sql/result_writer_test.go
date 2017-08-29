@@ -12,14 +12,18 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sql_test
+package sql
 
 import (
 	"database/sql/driver"
+	"math"
+	"net/url"
+	"strings"
+	"testing"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -29,17 +33,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/lib/pq"
 	"golang.org/x/net/context"
-	"net/url"
-	"strings"
-	"testing"
 )
 
-func withExecutor(
-	test func(e *sql.Executor, s *sql.Session, evalCtx *parser.EvalContext), t *testing.T,
-) {
+func withExecutor(test func(e *Executor, s *Session, evalCtx *parser.EvalContext), t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
-	ts := s.(*server.TestServer)
 
 	ac := log.AmbientContext{Tracer: tracing.NewTracer()}
 	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
@@ -48,9 +46,9 @@ func withExecutor(
 	evalCtx := parser.NewTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 
-	e := ts.Executor().(*sql.Executor)
-	session := sql.NewSession(
-		ctx, sql.SessionArgs{User: security.RootUser}, e, nil, &sql.MemoryMetrics{})
+	e := s.Executor().(*Executor)
+	session := NewSession(
+		ctx, SessionArgs{User: security.RootUser}, e, nil, &MemoryMetrics{})
 	session.StartUnlimitedMonitor()
 	defer session.Finish(e)
 
@@ -59,7 +57,7 @@ func withExecutor(
 
 func TestBufferedWriterBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	withExecutor(func(e *sql.Executor, s *sql.Session, evalCtx *parser.EvalContext) {
+	withExecutor(func(e *Executor, s *Session, evalCtx *parser.EvalContext) {
 		query := "SELECT 1; SELECT * FROM generate_series(1,100)"
 		res, err := e.ExecuteStatementsBuffered(s, query, nil, 2)
 		if err != nil {
@@ -113,7 +111,7 @@ func TestBufferedWriterBasic(t *testing.T) {
 
 func TestBufferedWriterError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	withExecutor(func(e *sql.Executor, s *sql.Session, evalCtx *parser.EvalContext) {
+	withExecutor(func(e *Executor, s *Session, evalCtx *parser.EvalContext) {
 		query := "SELECT 1; SELECT 1/(100-x) FROM generate_series(1,100) AS t(x)"
 		res, err := e.ExecuteStatementsBuffered(s, query, nil, 2)
 		if err == nil {
@@ -125,7 +123,7 @@ func TestBufferedWriterError(t *testing.T) {
 
 func TestBufferedWriterIncrementAffected(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	withExecutor(func(e *sql.Executor, s *sql.Session, evalCtx *parser.EvalContext) {
+	withExecutor(func(e *Executor, s *Session, evalCtx *parser.EvalContext) {
 		res, err := e.ExecuteStatementsBuffered(s, "CREATE DATABASE test; CREATE TABLE test.t (i INT)", nil, 2)
 		if err != nil {
 			t.Fatal("expected no error got", err)
@@ -159,7 +157,7 @@ func TestBufferedWriterIncrementAffected(t *testing.T) {
 
 func TestBufferedWriterRetries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	withExecutor(func(e *sql.Executor, s *sql.Session, evalCtx *parser.EvalContext) {
+	withExecutor(func(e *Executor, s *Session, evalCtx *parser.EvalContext) {
 		query := "SELECT 1; SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL)"
 		res, err := e.ExecuteStatementsBuffered(s, query, nil, 2)
 		if err != nil {
@@ -170,6 +168,42 @@ func TestBufferedWriterRetries(t *testing.T) {
 			t.Fatal("expected non-empty results")
 		}
 	}, t)
+}
+
+func TestBufferedWriterReset(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.TODO()
+
+	memMon := mon.MakeMonitor(
+		"test",
+		mon.MemoryResource,
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		-1,            /* increment: use default block size */
+		math.MaxInt64, /* noteworthy */
+	)
+	memMon.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	defer memMon.Stop(ctx)
+	acc := memMon.MakeBoundAccount()
+
+	writer := newBufferedWriter(acc)
+	gw := writer.NewGroupResultWriter().(*bufferedWriter)
+	sw := gw.NewStatementResultWriter()
+	sw.BeginResult((*parser.Select)(nil))
+	sw.SetColumns(sqlbase.ResultColumns{{Name: "test", Typ: parser.TypeString}})
+	if err := sw.AddRow(ctx, parser.Datums{parser.DNull}); err != nil {
+		t.Fatal(err)
+	}
+	if err := sw.EndResult(); err != nil {
+		t.Fatal(err)
+	}
+	if numRes := len(gw.currentGroupResults); numRes != 1 {
+		t.Fatalf("expected 1 result, got %d", numRes)
+	}
+	gw.Reset(ctx)
+	if numRes := len(gw.currentGroupResults); numRes != 0 {
+		t.Fatalf("expected no results after reset, got %d", numRes)
+	}
 }
 
 func TestStreamingWireFailure(t *testing.T) {
@@ -186,7 +220,7 @@ func TestStreamingWireFailure(t *testing.T) {
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
-					SQLExecutor: &sql.ExecutorTestingKnobs{
+					SQLExecutor: &ExecutorTestingKnobs{
 						BeforeExecute: func(ctx context.Context, stmt string, isDistributed bool) {
 							if strings.Contains(stmt, "generate_series") {
 								if err := conn.Close(); err != nil {
@@ -194,7 +228,7 @@ func TestStreamingWireFailure(t *testing.T) {
 								}
 							}
 						},
-						AfterExecute: func(ctx context.Context, stmt string, resultWriter sql.StatementResultWriter, err error) {
+						AfterExecute: func(ctx context.Context, stmt string, resultWriter StatementResultWriter, err error) {
 							if strings.Contains(stmt, "generate_series") {
 								errChan <- err
 								close(errChan)
@@ -223,7 +257,7 @@ func TestStreamingWireFailure(t *testing.T) {
 		t.Fatal("expected error got none")
 	}
 	err = <-errChan
-	_, ok := err.(sql.WireFailureError)
+	_, ok := err.(WireFailureError)
 	if !ok {
 		t.Fatal("expected wirefailure error got", err)
 	}
