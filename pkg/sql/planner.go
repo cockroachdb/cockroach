@@ -357,9 +357,9 @@ func (p *planner) TypeAsString(e parser.Expr, op string) (func() (string, error)
 	return fn, nil
 }
 
-// TypeAsString enforces (not hints) that the given expression typechecks as a
-// string and returns a function that can be called to get the string value
-// during (planNode).Start.
+// TypeAsStringOpts enforces (not hints) that the given expressions
+// typecheck as strings, and returns a function that can be called to
+// get the string value during (planNode).Start.
 func (p *planner) TypeAsStringOpts(
 	opts parser.KVOptions,
 ) (func() (map[string]string, error), error) {
