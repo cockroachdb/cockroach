@@ -30,6 +30,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipnet"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -859,6 +860,9 @@ const (
 	False
 	UUID
 	Array
+	IPNet
+	// Do not change SentinelType from 15. This value is specifically used for bit
+	// manipulation in EncodeValueTag.
 	SentinelType Type = 15 // Used in the Value encoding.
 )
 
@@ -1296,6 +1300,19 @@ func EncodeUntaggedUUIDValue(appendTo []byte, u uuid.UUID) []byte {
 	return append(appendTo, u.GetBytes()...)
 }
 
+// EncodeIPNetValue encodes a net.IPNet value with its value tag, appends it to
+// the supplied buffer, and returns the final buffer.
+func EncodeIPNetValue(appendTo []byte, colID uint32, u ipnet.IPNet) []byte {
+	appendTo = EncodeValueTag(appendTo, colID, IPNet)
+	return EncodeUntaggedIPNetValue(appendTo, u)
+}
+
+// EncodeUntaggedIPNetValue encodes a net.IPNet value, appends it to the supplied buffer,
+// and returns the final buffer.
+func EncodeUntaggedIPNetValue(appendTo []byte, u ipnet.IPNet) []byte {
+	return u.ToBuffer(appendTo)
+}
+
 // DecodeValueTag decodes a value encoded by EncodeValueTag, used as a prefix in
 // each of the other EncodeFooValue methods.
 //
@@ -1328,6 +1345,7 @@ func DecodeValueTag(b []byte) (typeOffset int, dataOffset int, colID uint32, typ
 		return 0, 0, 0, Unknown, err
 	}
 	colID = uint32(tag >> 4)
+
 	typ = Type(tag & 0xf)
 	typeOffset = n - 1
 	dataOffset = n
@@ -1504,6 +1522,21 @@ func DecodeUntaggedUUIDValue(b []byte) (remaining []byte, u uuid.UUID, err error
 	return b[uuidValueEncodedLength:], u, nil
 }
 
+// DecodeIPNetValue decodes a value encoded by EncodeIPNetValue.
+func DecodeIPNetValue(b []byte) (remaining []byte, u ipnet.IPNet, err error) {
+	b, err = decodeValueTypeAssert(b, IPNet)
+	if err != nil {
+		return b, u, err
+	}
+	return DecodeUntaggedIPNetValue(b)
+}
+
+// DecodeUntaggedIPNetValue decodes a value encoded by EncodeUntaggedIPNetValue.
+func DecodeUntaggedIPNetValue(b []byte) (remaining []byte, u ipnet.IPNet, err error) {
+	remaining, err = u.FromBuffer(b)
+	return remaining, u, err
+}
+
 func decodeValueTypeAssert(b []byte, expected Type) ([]byte, error) {
 	_, dataOffset, _, typ, err := DecodeValueTag(b)
 	if err != nil {
@@ -1561,6 +1594,17 @@ func PeekValueLength(b []byte) (typeOffset int, length int, err error) {
 		return typeOffset, dataOffset + n, err
 	case UUID:
 		return typeOffset, dataOffset + uuidValueEncodedLength, err
+	case IPNet:
+		family := ipnet.IPFamily(b[0])
+		var size int
+		if family == ipnet.IPv4Family {
+			size = ipnet.IPv4Size
+		} else if family == ipnet.IPv6Family {
+			size = ipnet.IPv6Size
+		} else {
+			return 0, 0, errors.Errorf("IPNet has wrong family size: got %d", family)
+		}
+		return typeOffset, dataOffset + size, err
 	default:
 		return 0, 0, errors.Errorf("unknown type %s", typ)
 	}
@@ -1669,6 +1713,13 @@ func PrettyPrintValueEncoded(b []byte) ([]byte, string, error) {
 			return b, "", err
 		}
 		return b, u.String(), nil
+	case IPNet:
+		var ipNet ipnet.IPNet
+		b, ipNet, err = DecodeIPNetValue(b)
+		if err != nil {
+			return b, "", err
+		}
+		return b, ipNet.String(), nil
 	default:
 		return b, "", errors.Errorf("unknown type %s", typ)
 	}

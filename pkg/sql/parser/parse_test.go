@@ -99,6 +99,7 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b SMALLSERIAL)`},
 		{`CREATE TABLE a (b BIGSERIAL)`},
 		{`CREATE TABLE a (b UUID)`},
+		{`CREATE TABLE a (b INET)`},
 		{`CREATE TABLE a (b INT NULL)`},
 		{`CREATE TABLE a (b INT CONSTRAINT maybe NULL)`},
 		{`CREATE TABLE a (b INT NOT NULL)`},
@@ -434,6 +435,9 @@ func TestParse(t *testing.T) {
 		{`SELECT TIMESTAMP 'foo'`},
 		{`SELECT TIMESTAMP WITH TIME ZONE 'foo'`},
 		{`SELECT CHAR 'foo'`},
+
+		{`SELECT '192.168.0.1':::INET`},
+		{`SELECT '192.168.0.1'::INET`},
 
 		{`SELECT 'a' AS "12345"`},
 		{`SELECT 'a' AS clnm`},

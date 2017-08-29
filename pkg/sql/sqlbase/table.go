@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/ipnet"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -141,6 +142,7 @@ func MakeColumnDefDescs(
 	case *parser.TimestampTZColType:
 	case *parser.IntervalColType:
 	case *parser.UUIDColType:
+	case *parser.IPNetColType:
 	case *parser.StringColType:
 		col.Type.Width = int32(t.N)
 	case *parser.NameColType:
@@ -544,6 +546,12 @@ func EncodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 			return encoding.EncodeBytesAscending(b, t.GetBytes()), nil
 		}
 		return encoding.EncodeBytesDescending(b, t.GetBytes()), nil
+	case *parser.DIPNet:
+		data := t.ToBuffer(nil)
+		if dir == encoding.Ascending {
+			return encoding.EncodeBytesAscending(b, data), nil
+		}
+		return encoding.EncodeBytesDescending(b, data), nil
 	case *parser.DTuple:
 		for _, datum := range t.D {
 			var err error
@@ -610,6 +618,8 @@ func EncodeTableValue(
 		return encoding.EncodeDurationValue(appendTo, uint32(colID), t.Duration), nil
 	case *parser.DUuid:
 		return encoding.EncodeUUIDValue(appendTo, uint32(colID), t.UUID), nil
+	case *parser.DIPNet:
+		return encoding.EncodeIPNetValue(appendTo, uint32(colID), t.IPNet), nil
 	case *parser.DArray:
 		a, err := encodeArray(t, scratch)
 		if err != nil {
@@ -917,6 +927,7 @@ type DatumAlloc struct {
 	dtimestampTzAlloc []parser.DTimestampTZ
 	dintervalAlloc    []parser.DInterval
 	duuidAlloc        []parser.DUuid
+	dipnetAlloc       []parser.DIPNet
 	doidAlloc         []parser.DOid
 	scratch           []byte
 	env               parser.CollationEnvironment
@@ -1040,6 +1051,18 @@ func (a *DatumAlloc) NewDUuid(v parser.DUuid) *parser.DUuid {
 	buf := &a.duuidAlloc
 	if len(*buf) == 0 {
 		*buf = make([]parser.DUuid, datumAllocSize)
+	}
+	r := &(*buf)[0]
+	*r = v
+	*buf = (*buf)[1:]
+	return r
+}
+
+// NewDIPNet allocates a DIPNet.
+func (a *DatumAlloc) NewDIPNet(v parser.DIPNet) *parser.DIPNet {
+	buf := &a.dipnetAlloc
+	if len(*buf) == 0 {
+		*buf = make([]parser.DIPNet, datumAllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -1176,6 +1199,19 @@ func DecodeTableKey(
 		}
 		u, err := uuid.FromBytes(r)
 		return a.NewDUuid(parser.DUuid{UUID: u}), rkey, err
+	case parser.TypeINet:
+		var r []byte
+		if dir == encoding.Ascending {
+			rkey, r, err = encoding.DecodeBytesAscending(key, nil)
+		} else {
+			rkey, r, err = encoding.DecodeBytesDescending(key, nil)
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+		var ipNet ipnet.IPNet
+		_, err := ipNet.FromBuffer(r)
+		return a.NewDIPNet(parser.DIPNet{IPNet: ipNet}), rkey, err
 	case parser.TypeOid:
 		var i int64
 		if dir == encoding.Ascending {
@@ -1360,6 +1396,9 @@ func decodeUntaggedDatum(a *DatumAlloc, t parser.Type, buf []byte) (parser.Datum
 	case parser.TypeUUID:
 		b, data, err := encoding.DecodeUntaggedUUIDValue(buf)
 		return a.NewDUuid(parser.DUuid{UUID: data}), b, err
+	case parser.TypeINet:
+		b, data, err := encoding.DecodeUntaggedIPNetValue(buf)
+		return a.NewDIPNet(parser.DIPNet{IPNet: data}), b, err
 	case parser.TypeOid:
 		b, data, err := encoding.DecodeUntaggedIntValue(buf)
 		return a.NewDOid(parser.MakeDOid(parser.DInt(data))), b, err
@@ -1605,6 +1644,12 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 			r.SetBytes(v.GetBytes())
 			return r, nil
 		}
+	case ColumnType_INET:
+		if v, ok := val.(*parser.DIPNet); ok {
+			data := v.ToBuffer(nil)
+			r.SetBytes(data)
+			return r, nil
+		}
 	case ColumnType_ARRAY:
 		if v, ok := val.(*parser.DArray); ok {
 			if err := checkElementType(v.ParamTyp, col.Type); err != nil {
@@ -1730,6 +1775,8 @@ func parserTypeToEncodingType(t parser.Type) (encoding.Type, error) {
 		return encoding.True, nil
 	case parser.TypeUUID:
 		return encoding.UUID, nil
+	case parser.TypeINet:
+		return encoding.IPNet, nil
 	default:
 		if t.FamilyEqual(parser.TypeCollatedString) {
 			return encoding.Bytes, nil
@@ -1766,6 +1813,8 @@ func encodeArrayElement(b []byte, d parser.Datum) ([]byte, error) {
 		return encoding.EncodeUntaggedDurationValue(b, t.Duration), nil
 	case *parser.DUuid:
 		return encoding.EncodeUntaggedUUIDValue(b, t.UUID), nil
+	case *parser.DIPNet:
+		return encoding.EncodeUntaggedIPNetValue(b, t.IPNet), nil
 	case *parser.DOid:
 		return encoding.EncodeUntaggedIntValue(b, int64(t.DInt)), nil
 	case *parser.DCollatedString:
@@ -1862,6 +1911,17 @@ func UnmarshalColumnValue(
 			return nil, err
 		}
 		return a.NewDUuid(parser.DUuid{UUID: u}), nil
+	case ColumnType_INET:
+		v, err := value.GetBytes()
+		if err != nil {
+			return nil, err
+		}
+		var ipNet ipnet.IPNet
+		_, err = ipNet.FromBuffer(v)
+		if err != nil {
+			return nil, err
+		}
+		return a.NewDIPNet(parser.DIPNet{IPNet: ipNet}), nil
 	case ColumnType_NAME:
 		v, err := value.GetBytes()
 		if err != nil {

@@ -4,23 +4,13 @@ package encoding
 
 import "fmt"
 
-const (
-	_Type_name_0 = "UnknownNullNotNullIntFloatDecimalBytesBytesDescTimeDurationTrueFalseUUIDArray"
-	_Type_name_1 = "SentinelType"
-)
+const _Type_name = "UnknownNullNotNullIntFloatDecimalBytesBytesDescTimeDurationTrueFalseUUIDArrayIPNetSentinelType"
 
-var (
-	_Type_index_0 = [...]uint8{0, 7, 11, 18, 21, 26, 33, 38, 47, 51, 59, 63, 68, 72, 77}
-	_Type_index_1 = [...]uint8{0, 12}
-)
+var _Type_index = [...]uint8{0, 7, 11, 18, 21, 26, 33, 38, 47, 51, 59, 63, 68, 72, 77, 82, 94}
 
 func (i Type) String() string {
-	switch {
-	case 0 <= i && i <= 13:
-		return _Type_name_0[_Type_index_0[i]:_Type_index_0[i+1]]
-	case i == 15:
-		return _Type_name_1
-	default:
+	if i < 0 || i >= Type(len(_Type_index)-1) {
 		return fmt.Sprintf("Type(%d)", i)
 	}
+	return _Type_name[_Type_index[i]:_Type_index[i+1]]
 }
