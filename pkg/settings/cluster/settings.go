@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
@@ -44,6 +45,10 @@ var ValidateEnterpriseLicense = func(s string) error {
 
 // BulkIOWriteLimiterBurst is the burst for the BulkIOWriteLimiter cluster setting.
 const BulkIOWriteLimiterBurst = 2 * 1024 * 1024 // 2MB
+
+// MaxCommandSizeFloor is the minimum allowed value for the MaxCommandSize
+// cluster setting.
+const MaxCommandSizeFloor = 4 << 20 // 4MB
 
 // DebugRemoteMode controls who can access /debug/requests.
 type DebugRemoteMode string
@@ -537,10 +542,16 @@ func MakeClusterSettings(minVersion, serverVersion roachpb.Version) *Settings {
 		"set to true to synchronize on Raft log writes to persistent storage",
 		true)
 
-	s.MaxCommandSize = r.RegisterByteSizeSetting(
+	s.MaxCommandSize = r.RegisterValidatedByteSizeSetting(
 		"kv.raft.command.max_size",
 		"maximum size of a raft command",
-		64<<20)
+		64<<20,
+		func(size int64) error {
+			if size < MaxCommandSizeFloor {
+				return fmt.Errorf("max_size must be greater than %s", humanizeutil.IBytes(MaxCommandSizeFloor))
+			}
+			return nil
+		})
 
 	// gcBatchSize controls the amount of work done in a single pass of
 	// MVCC GC. Setting this too high may block the range for too long
