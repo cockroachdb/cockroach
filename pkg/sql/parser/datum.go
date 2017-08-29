@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"net"
 	"regexp"
 	"sort"
 	"strconv"
@@ -37,6 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -232,6 +235,17 @@ func ParseDUuidFromBytes(b []byte) (*DUuid, error) {
 		return nil, makeParseError(string(b), TypeUUID, err)
 	}
 	return NewDUuid(DUuid{uv}), nil
+}
+
+// ParseDIPAddrFromINetString parses and returns the *DIPAddr Datum value
+// represented by the provided input INet string, or an error.
+func ParseDIPAddrFromINetString(s string) (*DIPAddr, error) {
+	var d DIPAddr
+	err := ipaddr.ParseINet(s, &d.IPAddr)
+	if err != nil {
+		return nil, err
+	}
+	return &d, nil
 }
 
 // GetBool gets DBool or an error (also treats NULL as false, not an error).
@@ -1096,6 +1110,143 @@ func (d *DUuid) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // Size implements the Datum interface.
 func (d *DUuid) Size() uintptr {
+	return unsafe.Sizeof(*d)
+}
+
+// DIPAddr is the IPAddr Datum.
+type DIPAddr struct {
+	ipaddr.IPAddr
+}
+
+// NewDIPAddr is a helper routine to create a *DIPAddr initialized from its
+// argument.
+func NewDIPAddr(d DIPAddr) *DIPAddr {
+	return &d
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (*DIPAddr) ResolvedType() Type {
+	return TypeINet
+}
+
+// Compare implements the Datum interface.
+func (d *DIPAddr) Compare(ctx *EvalContext, other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
+	v, ok := other.(*DIPAddr)
+	if !ok {
+		panic(makeUnsupportedComparisonMessage(d, other))
+	}
+
+	return d.IPAddr.Compare(&v.IPAddr)
+}
+
+func (d DIPAddr) equal(other *DIPAddr) bool {
+	return d.IPAddr.Equal(&other.IPAddr)
+}
+
+// Prev implements the Datum interface.
+func (d *DIPAddr) Prev() (Datum, bool) {
+	// We will do one of the following to get the Prev IPAddr:
+	//	- Decrement IP address if we won't underflow the IP.
+	//	- Decrement mask and set the IP to max in family if we will underflow.
+	//	- Jump down from IPv6 to IPv4 if we will underflow both IP and mask.
+	if d.Family == ipaddr.IPv6family && d.Addr.Equal(dIPv6min) {
+		if d.Mask == 0 {
+			// Jump down IP family.
+			return dMaxIPv4Addr, true
+		}
+		// Decrease mask size, wrap IPv6 IP address.
+		return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv6family, Addr: dIPv6max, Mask: d.Mask - 1}}), true
+	} else if d.Family == ipaddr.IPv4family && d.Addr.Equal(dIPv4min) {
+		// Decrease mask size, wrap IPv4 IP address.
+		return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv4family, Addr: dIPv4max, Mask: d.Mask - 1}}), true
+	}
+	// Decrement IP address.
+	return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: d.Family, Addr: d.Addr.Sub(1), Mask: d.Mask}}), true
+}
+
+// Next implements the Datum interface.
+func (d *DIPAddr) Next() (Datum, bool) {
+	// We will do one of a few things to get the Next IP address:
+	//	- Increment IP address if we won't overflow the IP.
+	//	- Increment mask and set the IP to min in family if we will overflow.
+	//	- Jump up from IPv4 to IPv6 if we will overflow both IP and mask.
+	if d.Family == ipaddr.IPv4family && d.Addr.Equal(dIPv4max) {
+		if d.Mask == 32 {
+			// Jump up IP family.
+			return dMinIPv6Addr, true
+		}
+		// Increase mask size, wrap IPv4 IP address.
+		return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv4family, Addr: dIPv4min, Mask: d.Mask + 1}}), true
+	} else if d.Family == ipaddr.IPv6family && d.Addr.Equal(dIPv6max) {
+		// Increase mask size, wrap IPv6 IP address.
+		return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv6family, Addr: dIPv6min, Mask: d.Mask + 1}}), true
+	}
+	// Increment IP address.
+	return NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: d.Family, Addr: d.Addr.Add(1), Mask: d.Mask}}), true
+}
+
+// IsMax implements the Datum interface.
+func (d *DIPAddr) IsMax() bool {
+	return d.equal(dMaxIPAddr)
+}
+
+// IsMin implements the Datum interface.
+func (d *DIPAddr) IsMin() bool {
+	return d.equal(dMinIPAddr)
+}
+
+// dIPv4 and dIPv6 min and maxes use ParseIP because the actual byte constant is
+// no equal to solely zeros or ones. For IPv4 there is a 0xffff prefix. Without
+// this prefix this makes IP arithmetic invalid.
+var dIPv4min = ipaddr.Addr(uint128.FromBytes([]byte(net.ParseIP("0.0.0.0"))))
+var dIPv4max = ipaddr.Addr(uint128.FromBytes([]byte(net.ParseIP("255.255.255.255"))))
+var dIPv6min = ipaddr.Addr(uint128.FromBytes([]byte(net.ParseIP("::"))))
+var dIPv6max = ipaddr.Addr(uint128.FromBytes([]byte(net.ParseIP("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"))))
+
+// dMaxIPv4Addr and dMinIPv6Addr are used as global constants to prevent extra
+// heap extra allocation
+var dMaxIPv4Addr = NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv4family, Addr: dIPv4max, Mask: 32}})
+var dMinIPv6Addr = NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv6family, Addr: dIPv6min, Mask: 0}})
+
+// dMinIPAddr and dMaxIPAddr are used as the DIPAddr global min and max.
+var dMinIPAddr = NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv4family, Addr: dIPv4min, Mask: 0}})
+var dMaxIPAddr = NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv6family, Addr: dIPv6max, Mask: 128}})
+
+// min implements the Datum interface.
+func (*DIPAddr) min() (Datum, bool) {
+	return dMinIPAddr, true
+}
+
+// max implements the Datum interface.
+func (*DIPAddr) max() (Datum, bool) {
+	return dMaxIPAddr, true
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (*DIPAddr) AmbiguousFormat() bool {
+	// FIXME(joey): CIDR col. This probably will be ambigious between IPNet and
+	// CIDR. It may also be specific to the properties of the IPNet. All CIDR are
+	// equal to their INET cast, but casting INET to CIDR truncates data.
+	return false
+}
+
+// Format implements the NodeFormatter interface.
+func (d *DIPAddr) Format(buf *bytes.Buffer, f FmtFlags) {
+	if !f.bareStrings {
+		buf.WriteByte('\'')
+	}
+	buf.WriteString(d.IPAddr.String())
+	if !f.bareStrings {
+		buf.WriteByte('\'')
+	}
+}
+
+// Size implements the Datum interface.
+func (d *DIPAddr) Size() uintptr {
 	return unsafe.Sizeof(*d)
 }
 

@@ -22099,6 +22099,7 @@ export namespace cockroach {
                  * @property {number} NULL=13 NULL value
                  * @property {number} UUID=14 UUID value
                  * @property {number} ARRAY=15 ARRAY value
+                 * @property {number} INET=16 INET value
                  * @property {number} INT2VECTOR=200 INT2VECTOR value
                  */
                 enum SemanticType {
@@ -22118,6 +22119,7 @@ export namespace cockroach {
                     NULL = 13,
                     UUID = 14,
                     ARRAY = 15,
+                    INET = 16,
                     INT2VECTOR = 200
                 }
 
