@@ -350,8 +350,9 @@ var (
 		TypeTimestampTZ,
 		TypeInterval,
 		TypeUUID,
+		TypeINet,
 	}
-	strValAvailBytesString = []Type{TypeBytes, TypeString, TypeUUID}
+	strValAvailBytesString = []Type{TypeBytes, TypeString, TypeUUID, TypeINet}
 	strValAvailBytes       = []Type{TypeBytes, TypeUUID}
 )
 
@@ -424,6 +425,8 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ Type) (Datum, error) {
 		return ParseDDecimal(expr.s)
 	case TypeDate:
 		return ParseDDate(expr.s, ctx.getLocation())
+	case TypeINet:
+		return ParseDIPAddrFromINetString(expr.s)
 	case TypeTimestamp:
 		return ParseDTimestamp(expr.s, time.Microsecond)
 	case TypeTimestampTZ:

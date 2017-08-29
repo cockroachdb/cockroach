@@ -54,6 +54,7 @@ func TestCopyNullInfNaN(t *testing.T) {
 			o BOOL NULL,
 			e DECIMAL NULL,
 			u UUID NULL,
+			ip INET NULL,
 			tz TIMESTAMP WITH TIME ZONE NULL
 		);
 	`); err != nil {
@@ -145,6 +146,7 @@ func TestCopyRandom(t *testing.T) {
 			s STRING,
 			b BYTES,
 			u UUID,
+			ip INET,
 			tz TIMESTAMP WITH TIME ZONE
 		);
 	`); err != nil {
@@ -156,7 +158,7 @@ func TestCopyRandom(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stmt, err := txn.Prepare(pq.CopyInSchema("d", "t", "id", "n", "o", "i", "f", "e", "t", "s", "b", "u", "tz"))
+	stmt, err := txn.Prepare(pq.CopyInSchema("d", "t", "id", "n", "o", "i", "f", "e", "t", "s", "b", "u", "ip", "tz"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,6 +173,7 @@ func TestCopyRandom(t *testing.T) {
 		sqlbase.ColumnType_STRING,
 		sqlbase.ColumnType_BYTES,
 		sqlbase.ColumnType_UUID,
+		sqlbase.ColumnType_INET,
 		sqlbase.ColumnType_TIMESTAMPTZ,
 	}
 
