@@ -73,6 +73,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	runtime "runtime"
 )
 
 var (
@@ -810,6 +811,17 @@ func (s *Server) Start(ctx context.Context) error {
 	bootstrappedEngines, emptyEngines, cv, err := inspectEngines(ctx, s.engines, s.cfg.Settings.Version.MinSupportedVersion, s.cfg.Settings.Version.ServerVersion)
 	if err != nil {
 		return errors.Wrap(err, "inspecting engines")
+	}
+	if runtime.GOOS != "windows" {
+		timer := time.NewTimer(time.Second * 30)
+		go func() {
+			<-timer.C
+			log.Shout(context.Background(), log.Severity_WARNING,
+				"Server is timing out while waiting for other nodes in the cluster.\n\n"+
+					"Please restart the other nodes without waiting for this one to finish. \n"+
+					"One way to do this is by appending & to your command instead of using --background. \n")
+		}()
+		defer timer.Stop()
 	}
 
 	// Now that we have a monotonic HLC wrt previous incarnations of the process,
