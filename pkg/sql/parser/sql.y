@@ -396,7 +396,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 
 %token <str>   HAVING HELP HIGH HOUR
 
-%token <str>   IMPORT INCREMENTAL IF IFNULL ILIKE IN INTERLEAVE
+%token <str>   IMPORT INCREMENTAL IF IFNULL ILIKE IN INET INTERLEAVE
 %token <str>   INDEX INDEXES INITIALLY
 %token <str>   INNER INSERT INT INT2VECTOR INT2 INT4 INT8 INT64 INTEGER
 %token <str>   INTERSECT INTERVAL INTO IS ISOLATION
@@ -4369,6 +4369,10 @@ simple_typename:
   {
     $$.val = uuidColTypeUUID
   }
+| INET
+  {
+    $$.val = ipnetColTypeINet
+  }
 | BIGSERIAL
   {
     $$.val = intColTypeBigSerial
@@ -6401,6 +6405,7 @@ col_name_keyword:
 | GROUPING
 | IF
 | IFNULL
+| INET
 | INT
 | INT2
 | INT4
