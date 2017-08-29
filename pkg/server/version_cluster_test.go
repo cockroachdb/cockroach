@@ -15,7 +15,6 @@
 package server_test
 
 import (
-	"fmt"
 	"os"
 	"testing"
 
@@ -67,10 +66,7 @@ func (th *testClusterWithHelpers) getVersionFromSetting(i int) *cluster.ExposedC
 }
 
 func (th *testClusterWithHelpers) setVersion(i int, version string) error {
-	// TODO(tschottdorf):
-	// https://github.com/cockroachdb/cockroach/issues/17563 required before
-	// we can avoid Sprintf.
-	_, err := th.ServerConn(i).Exec(fmt.Sprintf("SET CLUSTER SETTING version = '%s'", version))
+	_, err := th.ServerConn(i).Exec("SET CLUSTER SETTING version = $1", version)
 	return err
 }
 

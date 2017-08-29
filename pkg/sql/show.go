@@ -46,7 +46,11 @@ func checkTableExists(ctx context.Context, p *planner, tn *parser.TableName) err
 	return nil
 }
 
-func (p *planner) showClusterSetting(ctx context.Context, name string) (planNode, error) {
+func (p *planner) ShowClusterSetting(
+	ctx context.Context, n *parser.ShowClusterSetting,
+) (planNode, error) {
+	name := strings.ToLower(n.Name)
+
 	if name == "all" {
 		return p.delegateQuery(ctx, "SHOW CLUSTER SETTINGS",
 			"TABLE crdb_internal.cluster_settings", nil, nil)
@@ -138,13 +142,9 @@ func (p *planner) showClusterSetting(ctx context.Context, name string) (planNode
 }
 
 // Show a session-local variable name.
-func (p *planner) Show(ctx context.Context, n *parser.Show) (planNode, error) {
+func (p *planner) ShowVar(ctx context.Context, n *parser.ShowVar) (planNode, error) {
 	origName := n.Name
 	name := strings.ToLower(n.Name)
-
-	if n.ClusterSetting {
-		return p.showClusterSetting(ctx, name)
-	}
 
 	if name == "all" {
 		return p.delegateQuery(ctx, "SHOW SESSION ALL", "TABLE crdb_internal.session_variables",
@@ -641,7 +641,7 @@ func (p *planner) ShowTables(ctx context.Context, n *parser.ShowTables) (planNod
 // This statement is usually handled as a special case in Executor,
 // but for FROM [SHOW TRANSACTION STATUS] we will arrive here too.
 func (p *planner) ShowTransactionStatus(ctx context.Context) (planNode, error) {
-	return p.Show(ctx, &parser.Show{Name: "transaction status"})
+	return p.ShowVar(ctx, &parser.ShowVar{Name: "transaction status"})
 }
 
 // ShowUsers returns all the users.
