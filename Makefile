@@ -160,7 +160,9 @@ $(COCKROACH) build go-install: $(C_LIBS_CCL)
 $(COCKROACH) build buildoss: BUILDMODE = build -i -o $(COCKROACH)
 
 # The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
-$(COCKROACH) build buildoss go-install: override LINKFLAGS += \
+$(COCKROACH) build buildoss go-install: override LINKFLAGS += $(VERLINKFLAGS)
+
+VERLINKFLAGS = \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.rev=$(shell cat .buildinfo/rev)"
@@ -222,7 +224,7 @@ bench: TESTTIMEOUT := $(BENCHTIMEOUT)
 
 .PHONY: check test testshort testrace testlogic bench
 check test testshort testrace bench: gotestdashi
-	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
+	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS) $(VERLINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
 # Run make testlogic to run all of the logic tests. Specify test files to run
 # with make testlogic FILES="foo bar".
