@@ -117,10 +117,7 @@ func MakePerNodeFixedPortsCfg(numNodes int) map[int]NodeConfig {
 // operations, access to the underlying nodes and per-node KV and SQL clients.
 type Cluster struct {
 	cfg     ClusterConfig
-	rpcCtx  *rpc.Context
 	Nodes   []*Node
-	Clients []*client.DB
-	Status  []serverpb.StatusClient
 	stopper *stop.Stopper
 	started time.Time
 }
@@ -132,9 +129,6 @@ func New(cfg ClusterConfig) *Cluster {
 	}
 	return &Cluster{
 		cfg:     cfg,
-		Nodes:   make([]*Node, cfg.NumNodes),
-		Clients: make([]*client.DB, cfg.NumNodes),
-		Status:  make([]serverpb.StatusClient, cfg.NumNodes),
 		stopper: stop.NewStopper(),
 	}
 }
@@ -148,15 +142,8 @@ func (c *Cluster) Start() {
 	ctx := context.Background()
 	c.started = timeutil.Now()
 
-	baseCtx := &base.Config{
-		User:     security.NodeUser,
-		Insecure: true,
-	}
-	c.rpcCtx = rpc.NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, baseCtx,
-		hlc.NewClock(hlc.UnixNano, 0), c.stopper)
-
-	chs := make([]<-chan error, len(c.Nodes))
-	for i := range c.Nodes {
+	chs := make([]<-chan error, c.cfg.NumNodes)
+	for i := 0; i < c.cfg.NumNodes; i++ {
 		cfg := c.cfg.PerNodeCfg[i] // zero value is ok
 		if cfg.Binary == "" {
 			cfg.Binary = c.cfg.Binary
@@ -177,7 +164,9 @@ func (c *Cluster) Start() {
 			cfg.NumWorkers = c.cfg.NumWorkers
 		}
 		cfg.ExtraArgs = append(append([]string(nil), c.cfg.AllNodeArgs...), cfg.ExtraArgs...)
-		c.Nodes[i], chs[i] = c.makeNode(i, cfg)
+		var node *Node
+		node, chs[i] = c.makeNode(i, cfg)
+		c.Nodes = append(c.Nodes, node)
 		if i == 0 && cfg.RPCPort == 0 {
 			// The first node must know its RPCPort or we can't possibly tell
 			// the other nodes the correct one to go to.
@@ -197,13 +186,8 @@ func (c *Cluster) Start() {
 
 	for i := range chs {
 		if err := <-chs[i]; err != nil {
-			log.Fatalf(ctx, "node %d: %s", i, err)
+			log.Fatalf(ctx, "node %d: %s", i+1, err)
 		}
-	}
-
-	for i := range c.Nodes {
-		c.Clients[i] = c.makeClient(i)
-		c.Status[i] = c.makeStatus(i)
 	}
 
 	log.Infof(context.Background(), "started %.3fs", timeutil.Since(c.started).Seconds())
@@ -221,14 +205,20 @@ func (c *Cluster) Close() {
 	}
 }
 
+func (c *Cluster) joins() []string {
+	var joins []string
+	for _, node := range c.Nodes {
+		advertAddr := node.advertiseAddr()
+		if advertAddr != "" {
+			joins = append(joins, advertAddr)
+		}
+	}
+	return joins
+}
+
 // IPAddr returns the IP address of the specified node.
 func (c *Cluster) IPAddr(nodeIdx int) string {
 	return c.Nodes[nodeIdx].IPAddr()
-}
-
-// RPCAddr returns the RPC address of the specified node.
-func (c *Cluster) RPCAddr(nodeIdx int) string {
-	return net.JoinHostPort(c.IPAddr(nodeIdx), c.RPCPort(nodeIdx))
 }
 
 // RPCPort returns the RPC port of the specified node. Returns zero if unknown.
@@ -242,8 +232,17 @@ func (c *Cluster) HTTPPort(nodeIdx int) string {
 }
 
 func (c *Cluster) makeNode(nodeIdx int, cfg NodeConfig) (*Node, <-chan error) {
+
+	baseCtx := &base.Config{
+		User:     security.NodeUser,
+		Insecure: true,
+	}
+	rpcCtx := rpc.NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, baseCtx,
+		hlc.NewClock(hlc.UnixNano, 0), c.stopper)
+
 	node := &Node{
-		cfg: cfg,
+		cfg:    cfg,
+		rpcCtx: rpcCtx,
 	}
 
 	args := []string{
@@ -258,33 +257,20 @@ func (c *Cluster) makeNode(nodeIdx int, cfg NodeConfig) (*Node, <-chan error) {
 		fmt.Sprintf("--cache=256MiB"),
 	}
 
-	if nodeIdx > 0 {
-		args = append(args, fmt.Sprintf("--join=%s", c.RPCAddr(0)))
-	}
 	node.cfg.ExtraArgs = append(args, cfg.ExtraArgs...)
 
 	if err := os.MkdirAll(node.logDir(), 0755); err != nil {
 		log.Fatal(context.Background(), err)
 	}
 
-	ch := node.StartAsync()
+	joins := c.joins()
+	if nodeIdx > 0 && len(joins) == 0 {
+		ch := make(chan error, 1)
+		ch <- errors.Errorf("node %d started without join flags", nodeIdx+1)
+		return node, ch
+	}
+	ch := node.StartAsync(joins...)
 	return node, ch
-}
-
-func (c *Cluster) makeClient(nodeIdx int) *client.DB {
-	conn, err := c.rpcCtx.GRPCDial(c.RPCAddr(nodeIdx))
-	if err != nil {
-		log.Fatalf(context.Background(), "failed to initialize KV client: %s", err)
-	}
-	return client.NewDB(client.NewSender(conn), c.rpcCtx.LocalClock)
-}
-
-func (c *Cluster) makeStatus(nodeIdx int) serverpb.StatusClient {
-	conn, err := c.rpcCtx.GRPCDial(c.RPCAddr(nodeIdx))
-	if err != nil {
-		log.Fatalf(context.Background(), "failed to initialize status client: %s", err)
-	}
-	return serverpb.NewStatusClient(conn)
 }
 
 // waitForFullReplication waits for the cluster to be fully replicated.
@@ -304,8 +290,13 @@ func (c *Cluster) waitForFullReplication() {
 	log.Infof(context.Background(), "replicated %.3fs", timeutil.Since(c.started).Seconds())
 }
 
+// Client returns a *client.DB for the node with the given index.
+func (c *Cluster) Client(idx int) *client.DB {
+	return c.Nodes[idx].Client()
+}
+
 func (c *Cluster) isReplicated() (bool, string) {
-	db := c.Clients[0]
+	db := c.Client(0)
 	rows, err := db.Scan(context.Background(), keys.Meta2Prefix, keys.Meta2Prefix.PrefixEnd(), 100000)
 	if err != nil {
 		if IsUnavailableError(err) {
@@ -359,7 +350,7 @@ func (c *Cluster) UpdateZoneConfig(rangeMinBytes, rangeMaxBytes int64) {
 
 // Split splits the range containing the split key at the specified split key.
 func (c *Cluster) Split(nodeIdx int, splitKey roachpb.Key) error {
-	return c.Clients[nodeIdx].AdminSplit(context.Background(), splitKey, splitKey)
+	return c.Client(nodeIdx).AdminSplit(context.Background(), splitKey, splitKey)
 }
 
 // TransferLease transfers the lease for the range containing key to a random
@@ -380,7 +371,7 @@ func (c *Cluster) TransferLease(nodeIdx int, r *rand.Rand, key roachpb.Key) (boo
 			break
 		}
 	}
-	if err := c.Clients[nodeIdx].AdminTransferLease(context.Background(), key, target); err != nil {
+	if err := c.Client(nodeIdx).AdminTransferLease(context.Background(), key, target); err != nil {
 		return false, errors.Errorf("%s: transfer lease: %s", key, err)
 	}
 	return true, nil
@@ -393,7 +384,7 @@ func (c *Cluster) lookupRange(nodeIdx int, key roachpb.Key) (*roachpb.RangeDescr
 		},
 		MaxRanges: 1,
 	}
-	sender := c.Clients[nodeIdx].GetSender()
+	sender := c.Client(nodeIdx).GetSender()
 	resp, pErr := client.SendWrapped(context.Background(), sender, req)
 	if pErr != nil {
 		return nil, errors.Errorf("%s: lookup range: %s", key, pErr)
@@ -414,19 +405,32 @@ func (c *Cluster) RandNode(f func(int) int) int {
 // Node holds the state for a single node in a local cluster and provides
 // methods for starting, pausing, resuming and stopping the node.
 type Node struct {
-	cfg NodeConfig
+	cfg    NodeConfig
+	rpcCtx *rpc.Context
 
 	syncutil.Mutex
 	cmd                      *exec.Cmd
 	rpcPort, httpPort, pgURL string
 	db                       *gosql.DB
+	client                   *client.DB
+	statusClient             serverpb.StatusClient
 }
 
-// RPCPort returns the RPC + Posgres port.
+// RPCPort returns the RPC + Postgres port.
 func (n *Node) RPCPort() string {
 	n.Lock()
 	defer n.Unlock()
 	return n.rpcPort
+}
+
+// RPCAddr returns the RPC + Postgres address, or an empty string if it is not known
+// (for instance since the node is down).
+func (n *Node) RPCAddr() string {
+	port := n.RPCPort()
+	if port == "" || port == "0" {
+		return ""
+	}
+	return net.JoinHostPort(n.IPAddr(), port)
 }
 
 // HTTPPort returns the ui port (may be empty until known).
@@ -451,6 +455,40 @@ func (n *Node) Alive() bool {
 	return n.cmd != nil
 }
 
+// Client returns a *client.DB set up to talk to this node.
+func (n *Node) Client() *client.DB {
+	n.Lock()
+	existingClient := n.client
+	n.Unlock()
+
+	if existingClient != nil {
+		return existingClient
+	}
+
+	conn, err := n.rpcCtx.GRPCDial(n.RPCAddr())
+	if err != nil {
+		log.Fatalf(context.Background(), "failed to initialize KV client: %s", err)
+	}
+	return client.NewDB(client.NewSender(conn), n.rpcCtx.LocalClock)
+}
+
+// StatusClient returns a StatusClient set up to talk to this node.
+func (n *Node) StatusClient() serverpb.StatusClient {
+	n.Lock()
+	existingClient := n.statusClient
+	n.Unlock()
+
+	if existingClient != nil {
+		return existingClient
+	}
+
+	conn, err := n.rpcCtx.GRPCDial(n.RPCAddr())
+	if err != nil {
+		log.Fatalf(context.Background(), "failed to initialize status client: %s", err)
+	}
+	return serverpb.NewStatusClient(conn)
+}
+
 func (n *Node) logDir() string {
 	if n.cfg.LogDir == "" {
 		return filepath.Join(n.cfg.DataDir, "logs")
@@ -463,17 +501,28 @@ func (n *Node) listeningURLFile() string {
 }
 
 // Start starts a node.
-func (n *Node) Start() {
-	if err := <-n.StartAsync(); err != nil {
+func (n *Node) Start(joins ...string) {
+	if err := <-n.StartAsync(joins...); err != nil {
 		log.Fatal(context.Background(), err)
 	}
+}
+
+func (n *Node) setNotRunningLocked() {
+	_ = os.Remove(n.listeningURLFile())
+	_ = os.Remove(n.advertiseAddrFile())
+	n.db = nil
+	n.client = nil
+	n.statusClient = nil
+	n.cmd = nil
+	n.rpcPort = ""
+	n.httpPort = ""
 }
 
 // StartAsync starts a node asynchronously. It returns a channel that receives either
 // an error, or, once the node has started up and is fully functional, `nil`.
 //
 // StartAsync is a no-op if the node is already running.
-func (n *Node) StartAsync() <-chan error {
+func (n *Node) StartAsync(joins ...string) <-chan error {
 	n.Lock()
 	defer n.Unlock()
 
@@ -483,9 +532,13 @@ func (n *Node) StartAsync() <-chan error {
 		return ch
 	}
 
-	_ = os.Remove(n.listeningURLFile())
+	n.setNotRunningLocked()
 
-	n.cmd = exec.Command(n.cfg.ExtraArgs[0], n.cfg.ExtraArgs[1:]...)
+	args := append([]string(nil), n.cfg.ExtraArgs[1:]...)
+	for _, join := range joins {
+		args = append(args, "--join", join)
+	}
+	n.cmd = exec.Command(n.cfg.ExtraArgs[0], args...)
 	n.cmd.Env = os.Environ()
 	n.cmd.Env = append(n.cmd.Env, n.cfg.ExtraEnv...)
 
@@ -545,16 +598,56 @@ func (n *Node) StartAsync() <-chan error {
 		log.Infof(ctx, "process %d: %s", cmd.Process.Pid, cmd.ProcessState)
 
 		n.Lock()
-		n.cmd = nil
+		n.setNotRunningLocked()
 		n.Unlock()
 	}(n.cmd)
 
+	isServing := make(chan struct{})
 	go func() {
 		n.waitUntilLive()
+		close(isServing)
 		ch <- nil
 	}()
 
-	return ch
+	// This blocking loop in the sync path is counter-intuitive but is essential
+	// in allowing restarts of whole clusters. Roughly the following happens:
+	//
+	// 1. The whole cluster gets killed.
+	// 2. A node restarts.
+	// 3. It will *block* here until it has written down the file which contains
+	//    enough information to link other nodes.
+	// 4. When restarting other nodes, and `.joins()` is passed in, these nodes
+	//    can connect (at least) to the first node.
+	// 5. the cluster can become healthy after restart.
+	//
+	// If we didn't block here, we'd start all nodes up with join addresses that
+	// don't make any sense, and the cluster would likely not become connected.
+	//
+	// An additional difficulty is that older versions (pre 1.1) don't write
+	// this file. That's why we let *every* node do this (you could try to make
+	// only the first one wait, but if that one is 1.0, bad luck).
+	// Short-circuiting the wait in the case that the listening URL file is
+	// written (i.e. isServing closes) makes restarts work with 1.0 servers for
+	// the most part.
+	n.Unlock()
+	for {
+		if gossipAddr := n.advertiseAddr(); gossipAddr != "" {
+			_, port, err := net.SplitHostPort(gossipAddr)
+			if err != nil {
+				continue
+			}
+			n.Lock()
+			n.rpcPort = port
+			return ch
+		}
+		select {
+		case <-isServing:
+			n.Lock()
+			return ch
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
 }
 
 func portFromURL(rawURL string) (string, *url.URL, error) {
@@ -578,6 +671,26 @@ func makeDB(url string, numWorkers int, dbName string) *gosql.DB {
 	conn.SetMaxOpenConns(numWorkers)
 	conn.SetMaxIdleConns(numWorkers)
 	return conn
+}
+
+func (n *Node) advertiseAddrFile() string {
+	return filepath.Join(n.cfg.DataDir, ".advertise-addr")
+}
+
+func (n *Node) advertiseAddr() (s string) {
+	c, err := ioutil.ReadFile(n.advertiseAddrFile())
+	if err != nil {
+		if !os.IsNotExist(err) {
+			panic(err)
+		}
+		// The below is part of the workaround for nodes at v1.0 which don't
+		// write the file above, explained in more detail in StartAsync().
+		if port := n.RPCPort(); port != "" {
+			return net.JoinHostPort(n.IPAddr(), n.RPCPort())
+		}
+		return ""
+	}
+	return string(c)
 }
 
 func (n *Node) waitUntilLive() {
@@ -627,20 +740,22 @@ func (n *Node) waitUntilLive() {
 		n.db = makeDB(n.pgURL, n.cfg.NumWorkers, n.cfg.DB)
 		n.Unlock()
 
-		var uiStr string
-		if err := n.db.QueryRow(
-			`SELECT value FROM crdb_internal.node_runtime_info WHERE component='UI' AND field = 'URL'`,
-		).Scan(&uiStr); err != nil {
-			log.Info(ctx, err)
-			break
-		}
+		{
+			var uiStr string
+			if err := n.db.QueryRow(
+				`SELECT value FROM crdb_internal.node_runtime_info WHERE component='UI' AND field = 'URL'`,
+			).Scan(&uiStr); err != nil {
+				log.Info(ctx, err)
+				break
+			}
 
-		n.Lock()
-		n.httpPort, uiURL, err = portFromURL(uiStr)
-		n.Unlock()
-		if err != nil {
-			log.Info(ctx, err)
-			// TODO(tschottdorf): see above.
+			n.Lock()
+			n.httpPort, uiURL, err = portFromURL(uiStr)
+			n.Unlock()
+			if err != nil {
+				log.Info(ctx, err)
+				// TODO(tschottdorf): see above.
+			}
 		}
 		break
 	}

@@ -43,7 +43,7 @@ func (b *LocalCluster) NumNodes() int {
 
 // NewClient implements cluster.Cluster.
 func (b *LocalCluster) NewClient(ctx context.Context, i int) (*client.DB, error) {
-	return b.Clients[i], nil
+	return b.Client(i), nil
 }
 
 // PGUrl implements cluster.Cluster.
@@ -91,11 +91,16 @@ func (b *LocalCluster) Kill(ctx context.Context, i int) error {
 	return nil
 }
 
+// RestartAsync restarts the node. The returned channel receives an error or,
+// once the node is successfully connected to the cluster and serving, nil.
+func (b *LocalCluster) RestartAsync(ctx context.Context, i int) <-chan error {
+	b.Nodes[i].Kill()
+	return b.Nodes[i].StartAsync(b.joins()...)
+}
+
 // Restart implements cluster.Cluster.
 func (b *LocalCluster) Restart(ctx context.Context, i int) error {
-	b.Nodes[i].Kill()
-	b.Nodes[i].Start()
-	return nil
+	return <-b.RestartAsync(ctx, i)
 }
 
 // URL implements cluster.Cluster.
