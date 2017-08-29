@@ -858,13 +858,17 @@ func showBackupPlanHook(
 			}
 			descSizes[sqlbase.ID(tableID)] += file.DataSize
 		}
+		start := parser.DNull
+		if desc.StartTime.WallTime != 0 {
+			start = parser.MakeDTimestamp(time.Unix(0, desc.StartTime.WallTime), time.Nanosecond)
+		}
 		for _, descriptor := range desc.Descriptors {
 			if table := descriptor.GetTable(); table != nil {
 				dbName := descs[table.ParentID]
 				resultsCh <- parser.Datums{
 					parser.NewDString(dbName),
 					parser.NewDString(table.Name),
-					parser.MakeDTimestamp(time.Unix(0, desc.StartTime.WallTime), time.Nanosecond),
+					start,
 					parser.MakeDTimestamp(time.Unix(0, desc.EndTime.WallTime), time.Nanosecond),
 					parser.NewDInt(parser.DInt(descSizes[table.ID])),
 				}

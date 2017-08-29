@@ -1879,22 +1879,51 @@ func TestBackupRestorePermissions(t *testing.T) {
 func TestShowBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const numAccounts = 1
+	const numAccounts = 11
 	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 
-	now := timeutil.Now()
+	full, inc := dir+"/full", dir+"/inc"
 
-	sqlDB.Exec(`BACKUP data.bank TO $1`, dir)
+	beforeFull := timeutil.Now()
+	sqlDB.Exec(`BACKUP data.bank TO $1`, full)
 
 	var unused driver.Value
-	var start, end time.Time
+	var start, end *time.Time
 	var dataSize uint64
-	sqlDB.QueryRow(`SELECT * FROM [SHOW BACKUP $1] WHERE "table" = 'bank'`, dir).Scan(
+	sqlDB.QueryRow(`SELECT * FROM [SHOW BACKUP $1] WHERE "table" = 'bank'`, full).Scan(
 		&unused, &unused, &start, &end, &dataSize,
 	)
-	if !now.After(start) || !end.After(now) {
-		t.Errorf("expected now (%s) to be in (%s, %s)", now, start, end)
+	if start != nil {
+		t.Errorf("expected null start time on full backup, got %v", *start)
+	}
+	if !(*end).After(beforeFull) {
+		t.Errorf("expected now (%s) to be in (%s, %s)", beforeFull, start, end)
+	}
+	if dataSize <= 0 {
+		t.Errorf("expected dataSize to be >0 got : %d", dataSize)
+	}
+
+	// Mess with half the rows.
+	if a, err := sqlDB.Exec(
+		`UPDATE data.bank SET id = -1 * id WHERE id > $1`, numAccounts/2,
+	).RowsAffected(); err != nil {
+		t.Fatal(err)
+	} else if a != numAccounts/2 {
+		t.Fatalf("expected to update %d rows, got %d", numAccounts/2, a)
+	}
+
+	beforeInc := timeutil.Now()
+	sqlDB.Exec(`BACKUP data.bank TO $1 INCREMENTAL FROM $2`, inc, full)
+
+	sqlDB.QueryRow(`SELECT * FROM [SHOW BACKUP $1] WHERE "table" = 'bank'`, inc).Scan(
+		&unused, &unused, &start, &end, &dataSize,
+	)
+	if start == nil {
+		t.Errorf("expected start time on inc backup, got %v", *start)
+	}
+	if !(*end).After(beforeInc) {
+		t.Errorf("expected now (%s) to be in (%s, %s)", beforeInc, start, end)
 	}
 	if dataSize <= 0 {
 		t.Errorf("expected dataSize to be >0 got : %d", dataSize)
