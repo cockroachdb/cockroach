@@ -169,6 +169,12 @@ type writeBuffer struct {
 	bytecount *metric.Counter
 }
 
+// Write implements the io.Write interface.
+func (b *writeBuffer) Write(p []byte) (int, error) {
+	b.write(p)
+	return len(p), b.err
+}
+
 func (b *writeBuffer) writeByte(c byte) {
 	if b.err == nil {
 		b.err = b.wrapped.WriteByte(c)

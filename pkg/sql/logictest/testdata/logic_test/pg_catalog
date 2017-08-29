@@ -674,6 +674,7 @@ oid   typname       typnamespace  typowner  typlen  typbyval  typtype
 26    oid           1782195457    NULL      8       true      b
 700   float4        1782195457    NULL      8       true      b
 701   float8        1782195457    NULL      8       true      b
+869   inet          1782195457    NULL      24      true      b
 1005  _int2         1782195457    NULL      -1      false     b
 1007  _int4         1782195457    NULL      -1      false     b
 1009  _text         1782195457    NULL      -1      false     b
@@ -710,6 +711,7 @@ oid   typname       typcategory  typispreferred  typisdefined  typdelim  typreli
 26    oid           N            false           true          ,         0         0        0
 700   float4        N            false           true          ,         0         0        0
 701   float8        N            false           true          ,         0         0        0
+869   inet          I            false           true          ,         0         0        0
 1005  _int2         A            false           true          ,         0         21       0
 1007  _int4         A            false           true          ,         0         23       0
 1009  _text         A            false           true          ,         0         25       0
@@ -746,6 +748,7 @@ oid   typname       typinput        typoutput        typreceive        typsend  
 26    oid           oidin           oidout           oidrecv           oidsend           0         0          0
 700   float4        float4in        float4out        float4recv        float4send        0         0          0
 701   float8        float8in        float8out        float8recv        float8send        0         0          0
+869   inet          inetin          inetout          inetrecv          inetsend          0         0          0
 1005  _int2         array_in        array_out        array_recv        array_send        0         0          0
 1007  _int4         array_in        array_out        array_recv        array_send        0         0          0
 1009  _text         array_in        array_out        array_recv        array_send        0         0          0
@@ -782,6 +785,7 @@ oid   typname       typalign  typstorage  typnotnull  typbasetype  typtypmod
 26    oid           NULL      NULL        false       0            -1
 700   float4        NULL      NULL        false       0            -1
 701   float8        NULL      NULL        false       0            -1
+869   inet          NULL      NULL        false       0            -1
 1005  _int2         NULL      NULL        false       0            -1
 1007  _int4         NULL      NULL        false       0            -1
 1009  _text         NULL      NULL        false       0            -1
@@ -818,6 +822,7 @@ oid   typname       typndims  typcollation  typdefaultbin  typdefault  typacl
 26    oid           0         0             NULL           NULL        NULL
 700   float4        0         0             NULL           NULL        NULL
 701   float8        0         0             NULL           NULL        NULL
+869   inet          0         0             NULL           NULL        NULL
 1005  _int2         0         0             NULL           NULL        NULL
 1007  _int4         0         0             NULL           NULL        NULL
 1009  _text         0         1661428263    NULL           NULL        NULL
