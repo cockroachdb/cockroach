@@ -69,6 +69,8 @@ func TestRowContainer(t *testing.T) {
 						}
 					}
 				}
+				rc.Close(context.Background())
+				m.Stop(context.Background())
 			}
 		}
 	}

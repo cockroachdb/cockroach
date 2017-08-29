@@ -166,7 +166,7 @@ func (mc *memRowContainer) Pop() interface{} { panic("unimplemented") }
 
 // MaybeReplaceMax replaces the maximum element with the given row, if it is smaller.
 // Assumes InitMaxHeap was called.
-func (mc *memRowContainer) MaybeReplaceMax(row sqlbase.EncDatumRow) error {
+func (mc *memRowContainer) MaybeReplaceMax(ctx context.Context, row sqlbase.EncDatumRow) error {
 	max := mc.At(0)
 	cmp, err := row.CompareToDatums(&mc.datumAlloc, mc.ordering, mc.evalCtx, max)
 	if err != nil {
@@ -178,7 +178,10 @@ func (mc *memRowContainer) MaybeReplaceMax(row sqlbase.EncDatumRow) error {
 			if err := row[i].EnsureDecoded(&mc.datumAlloc); err != nil {
 				return err
 			}
-			max[i] = row[i].Datum
+			mc.scratchRow[i] = row[i].Datum
+		}
+		if err := mc.Replace(ctx, 0, mc.scratchRow); err != nil {
+			return err
 		}
 		heap.Fix(mc, 0)
 	}

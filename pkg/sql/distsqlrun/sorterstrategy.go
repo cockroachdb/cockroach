@@ -215,7 +215,7 @@ func (ss *sortTopKStrategy) Execute(ctx context.Context, s *sorter) error {
 			}
 			// Replace the max value if the new row is smaller, maintaining the
 			// max-heap.
-			if err := ss.rows.MaybeReplaceMax(row); err != nil {
+			if err := ss.rows.MaybeReplaceMax(ctx, row); err != nil {
 				return err
 			}
 		}
