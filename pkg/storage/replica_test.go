@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -2256,11 +2257,6 @@ func TestReplicaCommandQueueInconsistent(t *testing.T) {
 	// Success.
 }
 
-type cancellationTestInstruction struct {
-	span   roachpb.Span
-	cancel bool
-}
-
 // TestReplicaCommandQueueCancellation verifies that commands which are
 // waiting on the command queue do not execute or deadlock if their context
 // is cancelled, and that commands dependent on cancelled commands execute
@@ -2288,19 +2284,19 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 
 	testCases := []struct {
 		name   string
-		instrs []cancellationTestInstruction
+		instrs []cancelInstr
 	}{
 		//  -----      -----     -----      xxxxx
 		//    |    ->    |    &    |    ->    |    etc.
 		//  -----      xxxxx     -----      -----
-		{name: "SingleDependency", instrs: []cancellationTestInstruction{
+		{name: "SingleDependency", instrs: []cancelInstr{
 			{span: spanAF},
 			{span: spanAF},
 		}},
 		//  --------      xxxxxxxx      --------      xxxxxxxx     --------      --------
 		//   |    |   ->   |    |    &   |    |   ->   |    |   &   |    |   ->   |    |   etc.
 		//  ---  ---      ---  ---      ---  ---      xxx  xxx     ---  ---      xxx  xxx
-		{name: "MultipleDependencies", instrs: []cancellationTestInstruction{
+		{name: "MultipleDependencies", instrs: []cancelInstr{
 			{span: spanAF},
 			{span: spanAC},
 			{span: spanDF},
@@ -2310,7 +2306,7 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 		//  -----  ->  xxxxx   &   -----  ->  xxxxx   &   -----  ->  xxxxx  etc.
 		//    |          |           |          |           |          |
 		//  -----      -----       -----      -----       -----      xxxxx
-		{name: "DependencyChain", instrs: []cancellationTestInstruction{
+		{name: "DependencyChain", instrs: []cancelInstr{
 			{span: spanAF},
 			{span: spanAF},
 			{span: spanAF},
@@ -2320,7 +2316,7 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 		//  -----------  ->  xxxxxxxxxxx  &  -----------  ->  -----------  etc.
 		//       |                |               |                |
 		//      ---              ---             ---              xxx
-		{name: "SplitDependencyChain", instrs: []cancellationTestInstruction{
+		{name: "SplitDependencyChain", instrs: []cancelInstr{
 			{span: spanAB},
 			{span: spanEF},
 			{span: spanAF},
@@ -2333,7 +2329,7 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 		//    ---------          xxxxxxxxx         ---------          ---------
 		//     |                  |                 |                  |
 		//  -----              -----             -----              xxxxx
-		{name: "NonOverlappingDependencyChain", instrs: []cancellationTestInstruction{
+		{name: "NonOverlappingDependencyChain", instrs: []cancelInstr{
 			{span: spanAF},
 			{span: spanDF},
 			{span: spanBE},
@@ -2344,35 +2340,47 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Run every permutation of command cancellation as a separate subtest
 			// for the current instruction configuration.
-			var permuteTestInstrs func(pre, post []cancellationTestInstruction)
-			permuteTestInstrs = func(pre, post []cancellationTestInstruction) {
-				if len(post) == 0 {
+			var permuteCancellation func(cancelCmds []bool, left int)
+			permuteCancellation = func(cancelCmds []bool, left int) {
+				if left == 0 {
+					var cancelOrder []int
+
 					// Create a name for this permutation.
 					// C = cancel
 					// R = run
 					var permName bytes.Buffer
-					for _, instr := range pre {
-						if instr.cancel {
+					for i, cancel := range cancelCmds {
+						if cancel {
 							permName.WriteByte('C')
+							cancelOrder = append(cancelOrder, i)
 						} else {
 							permName.WriteByte('R')
 						}
 					}
 
 					t.Run(permName.String(), func(t *testing.T) {
-						testReplicaCommandQueueCancellationInstrs(t, pre)
+						t.Run("Forward", func(t *testing.T) {
+							ct := newCmdQCancelTest(t)
+							ct.Run(tc.instrs, cancelOrder)
+						})
+						if len(cancelOrder) > 1 {
+							t.Run("Reverse", func(t *testing.T) {
+								ct := newCmdQCancelTest(t)
+								reverse := make([]int, len(cancelOrder))
+								for i, cancel := range cancelOrder {
+									reverse[len(reverse)-1-i] = cancel
+								}
+								ct.Run(tc.instrs, reverse)
+							})
+						}
 					})
 					return
 				}
 
-				instr := post[0]
-				rest := post[1:]
-				instr.cancel = false
-				permuteTestInstrs(append(pre, instr), rest)
-				instr.cancel = true
-				permuteTestInstrs(append(pre, instr), rest)
+				permuteCancellation(append(cancelCmds, false), left-1)
+				permuteCancellation(append(cancelCmds, true), left-1)
 			}
-			permuteTestInstrs(nil, tc.instrs)
+			permuteCancellation(nil, len(tc.instrs))
 		})
 	}
 }
@@ -2396,141 +2404,555 @@ func TestReplicaCommandQueueCancellationRandom(t *testing.T) {
 	const trials = 25
 	for i := 0; i < trials; i++ {
 		commandCount := randutil.RandIntInRange(rng, 0, 25)
-		instructions := make([]cancellationTestInstruction, commandCount)
-		for j := range instructions {
+		instrs := make([]cancelInstr, commandCount)
+		var cancelOrder []int
+		for j := range instrs {
 			startKey := randKey()
 			endKey := randKey()
 			if startKey.Compare(endKey) >= 0 {
 				endKey = startKey.Next()
 			}
-			instructions[j] = cancellationTestInstruction{
-				span:   roachpb.Span{Key: startKey, EndKey: endKey},
-				cancel: randBool(),
+			instrs[j] = cancelInstr{
+				span: roachpb.Span{Key: startKey, EndKey: endKey},
+			}
+			if randBool() {
+				cancelOrder = append(cancelOrder, j)
 			}
 		}
-		testReplicaCommandQueueCancellationInstrs(t, instructions)
+		shuffle.Shuffle(sort.IntSlice(cancelOrder))
+		ct := newCmdQCancelTest(t)
+		ct.Run(instrs, cancelOrder)
 	}
 }
 
-func testReplicaCommandQueueCancellationInstrs(t *testing.T, instrs []cancellationTestInstruction) {
-	// Intercept DeleteRangeRequests and block them.
-	blockingDone := make(chan struct{})
+// TestReplicaCommandQueueCancellationLocal tests various cancellation scenerios
+// surrounding EndTxnReqs, PushTxnReqs, and HeartbeatTxnReqs. One of these
+// scenerios was the cause of #16266.
+func TestReplicaCommandQueueCancellationLocal(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 
-	tc := testContext{}
-	tsc := TestStoreConfig(nil)
-	tsc.TestingKnobs.TestingEvalFilter =
-		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-			if _, ok := filterArgs.Req.(*roachpb.DeleteRangeRequest); ok {
-				<-blockingDone
-			}
-			return nil
+	now := hlc.Timestamp{WallTime: cmdQCancelTestTimestamp}
+	txn := roachpb.MakeTransaction("txn", roachpb.Key("foobar"), 0, enginepb.SERIALIZABLE, now, 0)
+	intentKey := roachpb.Key("baz")
+
+	newBa := func(withTxn bool) *roachpb.BatchRequest {
+		ba := roachpb.BatchRequest{}
+		ba.Timestamp = now
+		if withTxn {
+			ba.Txn = &txn
 		}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	tc.StartWithStoreConfig(t, stopper, tsc)
+		return &ba
+	}
 
-	// startBlockingCmd will create a goroutine to send a read-write request
-	// over the given span. It returns a channel that will be given the result
-	// of the request when it completes.
-	startBlockingCmd := func(ctx context.Context, span roachpb.Span) <-chan *roachpb.Error {
-		done := make(chan *roachpb.Error)
+	// Used only to block the other requests. Not a necessary part of the
+	// scenerio. See the comment on RunWithoutInitialSpan.
+	heartbeatBa := newBa(true /* withTxn */)
+	heartbeatBa.Add(&roachpb.HeartbeatTxnRequest{
+		Span: roachpb.Span{
+			Key: txn.Key,
+		},
+		Now: now,
+	})
 
-		if err := stopper.RunAsyncTask(context.Background(), "test", func(_ context.Context) {
-			ba := roachpb.BatchRequest{}
-			ba.Add(&roachpb.DeleteRangeRequest{
-				Span: span,
+	endTxnBa := newBa(true /* withTxn */)
+	endTxnBa.Add(&roachpb.EndTransactionRequest{
+		Span: roachpb.Span{
+			Key: txn.Key,
+		},
+		Commit: true,
+		IntentSpans: []roachpb.Span{
+			{Key: intentKey},
+		},
+	})
+
+	splitBa := newBa(true /* withTxn */)
+	splitBa.Add(&roachpb.EndTransactionRequest{
+		Span: roachpb.Span{
+			Key: txn.Key,
+		},
+		Commit: true,
+		IntentSpans: []roachpb.Span{
+			{Key: intentKey},
+		},
+		InternalCommitTrigger: &roachpb.InternalCommitTrigger{
+			SplitTrigger: &roachpb.SplitTrigger{
+				LeftDesc: roachpb.RangeDescriptor{
+					RangeID:  100,
+					StartKey: roachpb.RKey("a"),
+					EndKey:   roachpb.RKey("m"),
+				},
+				RightDesc: roachpb.RangeDescriptor{
+					RangeID:  101,
+					StartKey: roachpb.RKey("n"),
+					EndKey:   roachpb.RKey("z"),
+				},
+			},
+		},
+	})
+
+	pushBa := newBa(false /* withTxn */)
+	pushBa.Add(&roachpb.PushTxnRequest{
+		Span: roachpb.Span{
+			Key: txn.Key,
+		},
+		PusheeTxn: txn.TxnMeta,
+		Now:       now,
+		PushType:  roachpb.PUSH_ABORT,
+		Force:     true,
+	})
+
+	resolveIntentBa := newBa(false /* withTxn */)
+	resolveIntentBa.Add(&roachpb.ResolveIntentRequest{
+		Span: roachpb.Span{
+			Key: intentKey,
+		},
+		IntentTxn: txn.TxnMeta,
+		Status:    roachpb.PENDING,
+	})
+
+	getKeyBa := newBa(true /* withTxn */)
+	getKeyBa.Add(&roachpb.GetRequest{
+		Span: roachpb.Span{
+			Key: intentKey,
+		},
+	})
+
+	putKeyBa := newBa(true /* withTxn */)
+	putKeyBa.Add(&roachpb.PutRequest{
+		Span: roachpb.Span{
+			Key: intentKey,
+		},
+		Value: roachpb.MakeValueFromBytes([]byte("val")),
+	})
+
+	t.Run("16266", func(t *testing.T) {
+		instrs := []cancelInstr{
+			{reqOverride: heartbeatBa, expErr: "record not present"},
+			{reqOverride: endTxnBa, expErr: "does not exist"},
+			{reqOverride: pushBa},
+			{reqOverride: pushBa},
+		}
+
+		ct := newCmdQCancelTest(t)
+		ct.RunWithoutInitialSpan(instrs, []int{2})
+	})
+	t.Run("CancelEndTxn", func(t *testing.T) {
+		instrs := []cancelInstr{
+			{reqOverride: heartbeatBa, expErr: "record not present"},
+			{reqOverride: endTxnBa, expErr: "does not exist"},
+			{reqOverride: pushBa},
+			{reqOverride: heartbeatBa, expErr: "record not present"},
+			{reqOverride: resolveIntentBa},
+			{reqOverride: pushBa},
+		}
+
+		for _, cancelOrder := range [][]int{
+			{1, 2},
+			{2, 1},
+		} {
+			t.Run(fmt.Sprint(cancelOrder), func(t *testing.T) {
+				ct := newCmdQCancelTest(t)
+				ct.RunWithoutInitialSpan(instrs, cancelOrder)
 			})
-			_, pErr := tc.Sender().Send(ctx, ba)
-			done <- pErr
-		}); err != nil {
-			t.Fatal(err)
+		}
+	})
+	t.Run("CancelResolveIntent", func(t *testing.T) {
+		instrs := []cancelInstr{
+			{reqOverride: resolveIntentBa},
+			{reqOverride: getKeyBa},
+			{reqOverride: putKeyBa},
+			{reqOverride: resolveIntentBa},
+			{reqOverride: putKeyBa, expErr: "retry txn"},
+			{reqOverride: getKeyBa},
+			{reqOverride: putKeyBa, expErr: "retry txn"},
+			{reqOverride: resolveIntentBa},
+			{reqOverride: pushBa},
 		}
 
-		return done
-	}
-
-	// We always add an initial instruction that will block all commands to
-	// prevent leading cancelled commands from immediately executing. This is
-	// used to build up a dependency configuration in the CommandQueue before
-	// cancelling some instructions and releasing the gate (the blockingDone chan)
-	// to let the others through.
-	initial := cancellationTestInstruction{
-		span:   roachpb.Span{Key: keys.SystemMax, EndKey: keys.TableDataMin},
-		cancel: false,
-	}
-	instrs = append([]cancellationTestInstruction{initial}, instrs...)
-
-	type cancellation struct {
-		cancel context.CancelFunc
-		done   <-chan *roachpb.Error
-	}
-	var cancellations []cancellation
-	var completions []<-chan *roachpb.Error
-
-	for i, instruction := range instrs {
-		if !instruction.span.Overlaps(initial.span) {
-			t.Fatalf("all instruction spans should overlap the initial span; found %v",
-				instruction.span)
+		for _, cancelOrder := range [][]int{
+			{3, 4},
+			{4, 3},
+			{6, 3},
+			{6, 5, 4, 3, 2},
+			{2, 3, 4, 5, 6},
+			{2, 6, 3, 5, 4},
+		} {
+			t.Run(fmt.Sprint(cancelOrder), func(t *testing.T) {
+				ct := newCmdQCancelTest(t)
+				ct.RunWithoutInitialSpan(instrs, cancelOrder)
+			})
+		}
+	})
+	t.Run("CancelSplit", func(t *testing.T) {
+		instrs := []cancelInstr{
+			{reqOverride: resolveIntentBa},
+			{reqOverride: getKeyBa},
+			{reqOverride: putKeyBa},
+			{reqOverride: splitBa},
+			{reqOverride: putKeyBa, expErr: "retry txn"},
+			{reqOverride: getKeyBa},
+			{reqOverride: endTxnBa, expErr: "does not exist"},
+			{reqOverride: resolveIntentBa},
 		}
 
-		// Send a command for the instruction with a new context.
+		for _, cancelOrder := range [][]int{
+			{3},
+			{3, 6},
+			{6, 3},
+			{1, 3, 5, 6},
+			{5, 1, 6, 3},
+		} {
+			t.Run(fmt.Sprint(cancelOrder), func(t *testing.T) {
+				ct := newCmdQCancelTest(t)
+				ct.RunWithoutInitialSpan(instrs, cancelOrder)
+			})
+		}
+	})
+}
+
+type cancelInstr struct {
+	span        roachpb.Span
+	reqOverride *roachpb.BatchRequest // overrides span when present
+	expErr      string
+}
+
+func (ci cancelInstr) req() *roachpb.BatchRequest {
+	if req := ci.reqOverride; req != nil {
+		if s := ci.span; s.Key != nil || s.EndKey != nil {
+			panic(fmt.Sprintf("if overriding instr request, span must be empty; found %v", ci))
+		}
+		if req.Timestamp.WallTime != cmdQCancelTestTimestamp {
+			panic(fmt.Sprintf("BatchRequest should have WallTime %v; found %v",
+				cmdQCancelTestTimestamp, req.Timestamp.WallTime))
+		}
+		return req
+	}
+	// Default to a DeleteRangeRequest because it performs a single write over its Span.
+	ba := roachpb.BatchRequest{}
+	ba.Timestamp = hlc.Timestamp{WallTime: cmdQCancelTestTimestamp}
+	ba.Add(&roachpb.DeleteRangeRequest{Span: ci.span})
+	return &ba
+}
+
+type cmdQCancelTest struct {
+	testing.TB
+	s   *stop.Stopper
+	tc  testContext
+	tsc StoreConfig
+
+	// the following channels intercept requests and block them.
+	blockCmdBegin, blockCmdFinish chan struct{}
+	// the following channels track CommandQueueActions.
+	enteredCmdQ, cancelledCmd, startingCmd chan struct{}
+
+	cmds map[int]*testCmd
+}
+
+type testCmd struct {
+	id      int
+	spanSet *SpanSet
+	prereqs map[int]struct{}
+	cancel  context.CancelFunc
+	done    <-chan *roachpb.Error
+	expErr  string
+}
+
+func newCmdQCancelTest(t *testing.T) *cmdQCancelTest {
+	ct := &cmdQCancelTest{
+		TB:            t,
+		s:             stop.NewStopper(),
+		tsc:           TestStoreConfig(nil),
+		blockCmdBegin: make(chan struct{}),
+		enteredCmdQ:   make(chan struct{}),
+		cancelledCmd:  make(chan struct{}),
+		startingCmd:   make(chan struct{}),
+		cmds:          make(map[int]*testCmd),
+	}
+	ct.tsc.TestingKnobs.OnCommandQueueAction = ct.onCmdQAction
+	return ct
+}
+
+// letCmdsRun unblocks commands in the CommandQueue that are ready to run. They
+// will then be blocked when they try to exit the CommandQueue.
+func (ct *cmdQCancelTest) letCmdsRun() {
+	ct.blockCmdFinish = make(chan struct{})
+	close(ct.blockCmdBegin)
+}
+
+// letCmdsFinish unblocks commands that are ready to exit the CommandQueue and
+// finish. It resets the block on cmds in the CommandQueue so that they don't
+// immediately start running.
+func (ct *cmdQCancelTest) letCmdsFinish() {
+	ct.blockCmdBegin = make(chan struct{})
+	close(ct.blockCmdFinish)
+}
+
+const (
+	// cmdQCancelTestTimestamp is the WallTime all BatchRequests in
+	// cmdQCancelTest should use. This allows them to be identified and
+	// intercepted by the onCmdQAction handler.
+	cmdQCancelTestTimestamp = 12345
+	// cmdQCancelTestDeadlockTimeout is the timeout used in cmdQCancelTest to
+	// determine that a deadlock has occurred.
+	cmdQCancelTestDeadlockTimeout = 500 * time.Millisecond
+)
+
+// onCmdQAction instruments CommandQueueActions, sending to different channels
+// depending on the action. The instrumentation is also used to block commands
+// at different stages of execution.
+func (ct *cmdQCancelTest) onCmdQAction(
+	ba *roachpb.BatchRequest, action storagebase.CommandQueueAction,
+) {
+	if ba.Header.Timestamp.WallTime == cmdQCancelTestTimestamp {
+		quiesce := ct.s.ShouldQuiesce()
+		switch action {
+		case storagebase.CommandQueueWaitForPrereqs:
+			select {
+			case ct.enteredCmdQ <- struct{}{}:
+			case <-quiesce:
+			}
+		case storagebase.CommandQueueCancellation:
+			select {
+			case ct.cancelledCmd <- struct{}{}:
+			case <-quiesce:
+			}
+		case storagebase.CommandQueueBeginExecuting:
+			select {
+			case <-ct.blockCmdBegin:
+			case <-quiesce:
+			}
+			select {
+			case ct.startingCmd <- struct{}{}:
+			case <-quiesce:
+			}
+		case storagebase.CommandQueueFinishExecuting:
+			select {
+			case <-ct.blockCmdFinish:
+			case <-quiesce:
+			}
+		}
+	}
+}
+
+// startInstr will create a goroutine to send the BatchRequest. It returns a
+// channel that will be given the result of the request when it completes.
+func (ct *cmdQCancelTest) startInstr(
+	ctx context.Context, ba *roachpb.BatchRequest,
+) <-chan *roachpb.Error {
+	done := make(chan *roachpb.Error)
+	if err := ct.s.RunAsyncTask(context.Background(), "test", func(_ context.Context) {
+		_, pErr := ct.tc.Sender().Send(ctx, *ba)
+		select {
+		case done <- pErr:
+		case <-ct.s.ShouldQuiesce():
+		}
+	}); err != nil {
+		ct.Fatal(err)
+	}
+	return done
+}
+
+func spanSetsOverlap(ss, ss2 *SpanSet) bool {
+	for ac1 := SpanAccess(0); ac1 < numSpanAccess; ac1++ {
+		for ac2 := SpanAccess(0); ac2 < numSpanAccess; ac2++ {
+			if ac1 == SpanReadOnly && ac2 == SpanReadOnly {
+				// Reads ignore other reads.
+				continue
+			}
+			for sc := spanScope(0); sc < numSpanScope; sc++ {
+				for _, s := range ss.spans[ac1][sc] {
+					for _, s2 := range ss2.spans[ac2][sc] {
+						if s.Overlaps(s2) {
+							return true
+						}
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+// insertCmds inserts each command into the CommandQueue, populating the cmds map
+// while doing so.
+func (ct *cmdQCancelTest) insertCmds(instrs []cancelInstr) {
+	for i, instr := range instrs {
+		// Create a new context for each instruction with a cancel function.
 		ctx, cancel := context.WithCancel(context.Background())
-		cmdDone := startBlockingCmd(ctx, instruction.span)
 
-		// Wait until the new command is in the command queue.
-		testutils.SucceedsSoon(t, func() error {
-			tc.repl.cmdQMu.Lock()
-			l := tc.repl.cmdQMu.queues[spanGlobal].treeSize()
-			tc.repl.cmdQMu.Unlock()
-			if e := i + 1; l != e {
-				return errors.Errorf("%d of %d commands in the command queue", l, e)
+		ba := instr.req()
+		spanSet, err := collectSpans(roachpb.RangeDescriptor{}, ba)
+		if err != nil {
+			ct.Fatal(err)
+		}
+
+		// Start command and wait until the new command is in the command queue.
+		cmdDone := ct.startInstr(ctx, ba)
+		select {
+		case <-ct.enteredCmdQ:
+		case <-time.After(cmdQCancelTestDeadlockTimeout):
+			ct.Fatalf("request %v never entered CommandQueue", ba)
+		}
+
+		// Determine the prereq set of each command, including all transitive
+		// dependencies. Add the new command to the cmds map.
+		prereqs := make(map[int]struct{})
+		for j, prevCmd := range ct.cmds {
+			if spanSetsOverlap(spanSet, prevCmd.spanSet) {
+				prereqs[j] = struct{}{}
+				for trans := range prevCmd.prereqs {
+					prereqs[trans] = struct{}{}
+				}
+			} else if j == 0 {
+				ct.Fatalf("all instruction spans should overlap the initial span; found %v",
+					instr.span)
 			}
-			return nil
-		})
-
-		// Maintain a handle to check when the command completes, as well as
-		// a cancellation function for commands that should be cancelled.
-		if instruction.cancel {
-			cancellations = append(cancellations, cancellation{
-				cancel: cancel,
-				done:   cmdDone,
-			})
-		} else {
-			completions = append(completions, cmdDone)
+		}
+		ct.cmds[i] = &testCmd{
+			id:      i,
+			spanSet: spanSet,
+			prereqs: prereqs,
+			cancel:  cancel,
+			done:    cmdDone,
+			expErr:  instr.expErr,
 		}
 	}
+}
 
-	// Cancel all commands that should be cancelled, in a non-deterministic order.
-	perm := rand.Perm(len(cancellations))
-	for _, idx := range perm {
-		cancellation := cancellations[idx]
-		cancellation.cancel()
+// cancelCmds cancels all testCmds that need to be cancelled, in the provided
+// order.
+func (ct *cmdQCancelTest) cancelCmds(cancelOrder []int) {
+	for _, cancelID := range cancelOrder {
+		if cancelID == 0 {
+			ct.Fatalf("the first cancelInstr cannot be cancelled")
+		}
 
-		// If this deadlocks, the command has unexpectedly begun executing and was
-		// trapped in the command filter. Indeed, the absence of such a deadlock is
+		cmd, ok := ct.cmds[cancelID]
+		if !ok {
+			ct.Fatalf("command %d not found", cancelID)
+		}
+
+		// Cancel the context on each cmd that should be cancelled.
+		cmd.cancel()
+
+		// If either of these deadlocks, the command was never cancelled and may have
+		// unexpectedly begun executing. Indeed, the absence of such a deadlock is
 		// what's being tested here.
-		if pErr := <-cancellation.done; !testutils.IsPError(pErr, context.Canceled.Error()) {
-			t.Fatal(pErr)
+		select {
+		case <-ct.cancelledCmd:
+		case <-time.After(cmdQCancelTestDeadlockTimeout):
+			ct.Fatalf("command %d never left CommandQueue after cancellation", cancelID)
+		}
+		select {
+		case pErr := <-cmd.done:
+			if ctxCancelErr := context.Canceled; !testutils.IsPError(pErr, ctxCancelErr.Error()) {
+				ct.Fatalf("expected error %v for cmd %d, found %v", ctxCancelErr, cancelID, pErr)
+			}
+		case <-time.After(cmdQCancelTestDeadlockTimeout):
+			ct.Fatalf("command %d never returned to client after cancellation", cancelID)
+		}
+
+		// Remove the command from the cmds map and delete it from the
+		// prereq sets of all pending cmds.
+		delete(ct.cmds, cancelID)
+		for _, cmd := range ct.cmds {
+			delete(cmd.prereqs, cancelID)
 		}
 	}
+}
 
-	// Release all remaining commands and allow them to complete, this time in-order.
-	// If this deadlocks, it is a sign that a dependency on a cancelled command was
-	// not correctly handled.
-	close(blockingDone)
-	for _, done := range completions {
-		if pErr := <-done; pErr != nil {
-			t.Fatal(pErr)
+// runCmds runs all testCmds that were not cancelled.
+func (ct *cmdQCancelTest) runCmds() {
+	for len(ct.cmds) > 0 {
+		// Determine the commands we expect to be ready to run. Remove these
+		// from the cmds map and from the prereq sets of all cmds still pending.
+		var readyToRun []*testCmd
+		for i, cmd := range ct.cmds {
+			if len(cmd.prereqs) == 0 {
+				readyToRun = append(readyToRun, cmd)
+				delete(ct.cmds, i)
+			}
+		}
+
+		readyLen := len(readyToRun)
+		if readyLen == 0 {
+			ct.Fatal("found no commands ready to run")
+		}
+		for _, cmd := range ct.cmds {
+			for _, ready := range readyToRun {
+				delete(cmd.prereqs, ready.id)
+			}
+		}
+
+		// We should see exactly this many commands begin executing. If we see
+		// fewer or more we'll deadlock, which is what we're testing for.
+		ct.letCmdsRun()
+		for i := range readyToRun {
+			select {
+			case <-ct.startingCmd:
+			case <-time.After(cmdQCancelTestDeadlockTimeout):
+				ct.Fatalf("expected %d commands to begin running together, saw %d", readyLen, i)
+			}
+		}
+		select {
+		case <-ct.startingCmd:
+			ct.Fatalf("expected %d commands to begin running together, saw extra", readyLen)
+		case <-time.After(cmdQCancelTestDeadlockTimeout / 10):
+		}
+
+		// We should see exactly this many command finish. Again, the absence
+		// of a deadlock is what we're testing for.
+		ct.letCmdsFinish()
+		for _, running := range readyToRun {
+			select {
+			case pErr := <-running.done:
+				if running.expErr == "" {
+					if pErr != nil {
+						ct.Fatalf("expected no error for cmd %d, found %v", running.id, pErr)
+					}
+				} else {
+					if !testutils.IsPError(pErr, running.expErr) {
+						ct.Fatalf("expected error %q for cmd %d, found %v",
+							running.expErr, running.id, pErr)
+					}
+				}
+			case <-time.After(cmdQCancelTestDeadlockTimeout):
+				ct.Fatalf("command %d never returned to client", running.id)
+			}
 		}
 	}
+}
 
-	// Assert that the command queue is empty and that both successful and cancelled
-	// commands were cleaned up.
-	tc.repl.cmdQMu.Lock()
-	defer tc.repl.cmdQMu.Unlock()
-	if l := tc.repl.cmdQMu.queues[spanGlobal].treeSize(); l != 0 {
-		t.Fatalf("expected command queue to be empty, found %d remaining commands", l)
+// Run runs the cmdQCancelTest with the provided cancelInstrs. Commands will be
+// cancelled in the order provided.
+func (ct *cmdQCancelTest) Run(instrs []cancelInstr, cancelOrder []int) {
+	// Create an initial span that will block all others until we're ready to
+	// begin monitoring. This initial span cannot be cancelled before exiting
+	// the prereq wait period.
+	initial := cancelInstr{
+		span: roachpb.Span{Key: keys.SystemMax, EndKey: keys.TableDataMin},
 	}
+
+	// Update the cancel order to account for the new instr.
+	newCancelOrder := make([]int, len(cancelOrder))
+	for i, cancelID := range cancelOrder {
+		newCancelOrder[i] = cancelID + 1
+	}
+
+	ct.RunWithoutInitialSpan(append([]cancelInstr{initial}, instrs...), newCancelOrder)
+}
+
+// RunWithoutInitialSpan runs the cmdQCancelTest with the provided cancelInstrs.
+// Commands will be cancelled in the order provided. The first cancelInstrs
+// should be a prereq of all other instructions and cannot be cancelled. Use
+// ct.Run to assure this.
+func (ct *cmdQCancelTest) RunWithoutInitialSpan(instrs []cancelInstr, cancelOrder []int) {
+	defer ct.s.Stop(context.Background())
+	ct.tc.StartWithStoreConfig(ct, ct.s, ct.tsc)
+
+	ct.insertCmds(instrs)
+	ct.cancelCmds(cancelOrder)
+	ct.runCmds()
 }
 
 // TestReplicaCommandQueueSelfOverlap verifies that self-overlapping
