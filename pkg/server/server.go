@@ -812,6 +812,16 @@ func (s *Server) Start(ctx context.Context) error {
 		return errors.Wrap(err, "inspecting engines")
 	}
 
+	timer := time.NewTimer(time.Second * 10)
+	go func() {
+		<-timer.C
+		log.Shout(context.Background(), log.Severity_WARNING,
+			"Server is timing out while waiting for the leader for range 1.\n\n"+
+				"- Did you restart a single node of a multinode cluster with --background?\n"+
+				"- Please restart without --background with & at the end instead.")
+	}()
+	defer timer.Stop()
+
 	// Now that we have a monotonic HLC wrt previous incarnations of the process,
 	// init all the replicas. At this point *some* store has been bootstrapped or
 	// we're joining an existing cluster for the first time.
