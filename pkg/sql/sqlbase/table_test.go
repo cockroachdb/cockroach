@@ -16,6 +16,7 @@ package sqlbase
 
 import (
 	"bytes"
+	"math/rand"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -362,5 +364,27 @@ func BenchmarkArrayEncoding(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = encodeArray(&ary, nil)
+	}
+}
+
+func TestMarshalColumnValue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	rng := rand.New(rand.NewSource(0))
+	for kind := range ColumnType_SemanticType_name {
+		kind := ColumnType_SemanticType(kind)
+		if kind == ColumnType_INT2VECTOR {
+			continue
+		}
+		typ := ColumnType{SemanticType: kind}
+		if kind == ColumnType_COLLATEDSTRING {
+			typ.Locale = RandCollationLocale(rng)
+		}
+		col := ColumnDescriptor{ID: ColumnID(kind + 1), Type: typ}
+
+		val := RandDatum(rng, typ, false)
+		_, err := MarshalColumnValue(col, val)
+		if err != nil {
+			t.Errorf("unexpected error with column type %v: %v", typ, err)
+		}
 	}
 }

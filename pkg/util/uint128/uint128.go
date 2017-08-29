@@ -17,6 +17,7 @@ package uint128
 import (
 	"encoding/binary"
 	"encoding/hex"
+	"math"
 
 	"github.com/pkg/errors"
 )
@@ -25,6 +26,15 @@ import (
 type Uint128 struct {
 	Hi, Lo uint64
 }
+
+// Uint128len is the byte size of the Uint128
+const Uint128len int = 16
+
+// MinUint128 is the minimum Uint128 value
+var MinUint128 = FromInts(0, 0)
+
+// MaxUint128 is the maximum Uint128 value
+var MaxUint128 = FromInts(math.MaxUint64, math.MaxUint64)
 
 // GetBytes returns a big-endian byte representation.
 func (u Uint128) GetBytes() []byte {
