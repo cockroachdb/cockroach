@@ -323,25 +323,30 @@ func (nl *NodeLiveness) StartHeartbeat(
 		incrementEpoch := true
 		for {
 			if !nl.pauseHeartbeat.Load().(bool) {
-				ctx, sp := ambient.AnnotateCtxWithSpan(context.Background(), "heartbeat")
-				// Retry heartbeat in the event the conditional put fails.
-				for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-					liveness, err := nl.Self()
-					if err != nil && err != ErrNoLivenessRecord {
-						log.Errorf(ctx, "unexpected error getting liveness: %v", err)
-					}
-					if err := nl.heartbeatInternal(ctx, liveness, incrementEpoch); err != nil {
-						if err == errSkippedHeartbeat {
-							log.Infof(ctx, "%s; retrying", err)
-							continue
+				func() {
+					ctx, cancel := context.WithTimeout(context.Background(), nl.heartbeatInterval/2)
+					ctx, sp := ambient.AnnotateCtxWithSpan(ctx, "heartbeat")
+					defer cancel()
+					defer sp.Finish()
+
+					// Retry heartbeat in the event the conditional put fails.
+					for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+						liveness, err := nl.Self()
+						if err != nil && err != ErrNoLivenessRecord {
+							log.Errorf(ctx, "unexpected error getting liveness: %v", err)
 						}
-						log.Warningf(ctx, "failed node liveness heartbeat: %v", err)
-					} else {
-						incrementEpoch = false // don't increment epoch after first heartbeat
+						if err := nl.heartbeatInternal(ctx, liveness, incrementEpoch); err != nil {
+							if err == errSkippedHeartbeat {
+								log.Infof(ctx, "%s; retrying", err)
+								continue
+							}
+							log.Warningf(ctx, "failed node liveness heartbeat: %v", err)
+						} else {
+							incrementEpoch = false // don't increment epoch after first heartbeat
+						}
+						break
 					}
-					break
-				}
-				sp.Finish()
+				}()
 			}
 			select {
 			case <-ticker.C:
