@@ -1,0 +1,282 @@
+# LogicTest: default parallel-stmts distsql
+
+# Basic IPv4 tests
+
+query T
+SELECT '192.168.1.2/24':::INET;
+----
+192.168.1.2/24
+
+query T
+SELECT '192.168.1.2/32':::INET;
+----
+192.168.1.2
+
+query T
+SELECT '192.168.1.2':::INET;
+----
+192.168.1.2
+
+query T
+SELECT '192.168.1.2/24':::INET;
+----
+192.168.1.2/24
+
+query T
+SELECT '0.0.0.0':::INET;
+----
+0.0.0.0
+
+# Basic IPv6 tests
+
+query T
+SELECT '::ffff:192.168.1.2':::INET;
+----
+::ffff:192.168.1.2
+
+query T
+SELECT '::ffff:192.168.1.2/120':::INET;
+----
+::ffff:192.168.1.2/120
+
+query T
+SELECT '::ffff':::INET;
+----
+::ffff
+
+query T
+SELECT '2001:4f8:3:ba:2e0:81ff:fe22:d1f1/120':::INET;
+----
+2001:4f8:3:ba:2e0:81ff:fe22:d1f1/120
+
+query T
+SELECT '2001:4f8:3:ba:2e0:81ff:fe22:d1f1':::INET;
+----
+2001:4f8:3:ba:2e0:81ff:fe22:d1f1
+
+# Test casting
+
+query T
+SELECT '192.168.1.2/24'::INET;
+----
+192.168.1.2/24
+
+
+query T
+SELECT '192.168.1.200/10':::INET
+----
+192.168.1.200/10
+
+# Test for less than 4 octets with mask
+
+query T
+SELECT '192.168.1/10':::INET
+----
+192.168.1.0/10
+
+query T
+SELECT '192.168/10':::INET
+----
+192.168.0.0/10
+
+query T
+SELECT '192/10':::INET
+----
+192.0.0.0/10
+
+# Test for preservation of masked bits
+
+query T
+SELECT '255/10':::INET
+----
+255.0.0.0/10
+
+# Test that less than 4 octets requires a mask
+
+statement error could not parse
+SELECT '192':::INET
+
+statement error could not parse
+SELECT '19.0':::INET
+
+# Test that the mask can't be larger than the provided octet bits
+
+statement error could not parse
+SELECT '19.0/32':::INET
+
+statement error could not parse
+SELECT '19/32':::INET
+
+statement error could not parse
+SELECT '19/16':::INET
+
+query T
+SELECT '19/15':::INET
+----
+19.0.0.0/15
+
+# Misc tests
+
+statement error could not parse
+SELECT '192.168/24/1':::INET
+
+statement error could not parse
+SELECT '':::INET
+
+statement error could not parse
+SELECT '0':::INET
+
+query T
+SELECT '0.0.0.0':::INET
+----
+0.0.0.0
+
+# Testing equivilance
+
+query B
+SELECT '::ffff:192.168.0.1/24'::INET = '::ffff:192.168.0.1/24'::INET
+----
+true
+
+query B
+SELECT '::ffff:192.168.0.1/24'::INET = '::ffff:192.168.0.1/25'::INET
+----
+false
+
+query B
+SELECT '::ffff:192.168.0.1/24'::INET = '::ffff:192.168.0.1'::INET
+----
+false
+
+query B
+SELECT '::ffff:192.168.0.1'::INET = '::ffff:192.168.0.1'::INET
+----
+true
+
+# Ensure IPv4-mapped IPv6 is not equal to its mapped IPv4
+
+query B
+SELECT '::ffff:192.168.0.1'::INET = '192.168.0.1'::INET
+----
+false
+
+query B
+SELECT '192.168.0.1'::INET = '192.168.0.1'::INET
+----
+true
+
+query B
+SELECT '192.168.0.1/0'::INET = '192.168.0.1'::INET
+----
+false
+
+query B
+SELECT '192.168.0.1/0'::INET = '192.168.0.1/0'::INET
+----
+true
+
+query B
+SELECT '192.168.0.1/0'::INET = '192.168.0.1/0'::INET
+----
+true
+
+# Testing basic comparisons
+
+query B
+SELECT '192.168.0.2/24'::INET < '192.168.0.1/25'::INET
+----
+true
+
+query B
+SELECT '1.2.3.4':::INET < '1.2.3.5':::INET
+----
+true
+
+query B
+SELECT '192.168.0.1/0'::INET > '192.168.0.1/0'::INET
+----
+false
+
+query B
+SELECT '192.168.0.0'::INET > '192.168.0.1/0'::INET
+----
+true
+
+query B
+SELECT '::ffff:1.2.3.4':::INET > '1.2.3.4':::INET
+----
+true
+
+# Edge case: postgres compatibility
+
+query T
+SELECT '0.0.0.0.':::INET
+----
+0.0.0.0
+
+statement error could not parse
+SELECT '.0.0.0.0.':::INET
+
+statement error could not parse
+SELECT '0.0.0.0.0':::INET
+
+# Test storage round-trip
+
+statement ok
+CREATE TABLE u (ip inet PRIMARY KEY,
+                ip2 inet)
+
+statement ok
+INSERT INTO u VALUES ('192.168.0.1', '192.168.0.1')
+
+statement error duplicate key value
+INSERT INTO u VALUES ('192.168.0.1', '192.168.0.2')
+
+statement ok
+INSERT INTO u VALUES ('192.168.0.2', '192.168.0.2')
+
+statement ok
+INSERT INTO u VALUES ('192.168.0.5/24', '192.168.0.5')
+
+statement ok
+INSERT INTO u VALUES ('192.168.0.1/31', '192.168.0.1')
+
+statement ok
+INSERT INTO u VALUES ('192.168.0.0', '192.168.0.1')
+
+statement ok
+INSERT INTO u VALUES ('192.0.0.0', '127.0.0.1')
+
+statement ok
+INSERT INTO u (ip) VALUES ('::1')
+
+statement ok
+INSERT INTO u (ip) VALUES ('::ffff:1.2.3.4')
+
+query TT
+SELECT * FROM u ORDER BY ip
+----
+192.168.0.5/24  192.168.0.5
+192.168.0.1/31  192.168.0.1
+192.0.0.0       127.0.0.1
+192.168.0.0     192.168.0.1
+192.168.0.1     192.168.0.1
+192.168.0.2     192.168.0.2
+::1             NULL
+::ffff:1.2.3.4  NULL
+
+statement ok
+CREATE TABLE arrays (ips INET[])
+
+statement ok
+INSERT INTO arrays VALUES
+    (ARRAY[]),
+    (ARRAY['192.168.0.1/10', '::1']),
+    (ARRAY['192.168.0.1', '192.168.0.1/10', '::1', '::ffff:1.2.3.4'])
+
+query T
+SELECT * FROM arrays
+----
+{}
+{'192.168.0.1/10','::1'}
+{'192.168.0.1','192.168.0.1/10','::1','::ffff:1.2.3.4'}

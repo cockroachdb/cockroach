@@ -20,6 +20,7 @@ import (
 	"encoding/hex"
 	"math"
 	"math/big"
+	"net"
 	"strconv"
 	"strings"
 	"time"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/lib/pq"
 	"github.com/lib/pq/oid"
@@ -137,6 +139,9 @@ func (b *writeBuffer) writeTextDatum(
 
 	case *parser.DUuid:
 		b.writeLengthPrefixedString(v.UUID.String())
+
+	case *parser.DIPAddr:
+		b.writeLengthPrefixedString(v.IPAddr.String())
 
 	case *parser.DString:
 		b.writeLengthPrefixedString(string(*v))
@@ -311,6 +316,37 @@ func (b *writeBuffer) writeBinaryDatum(
 		b.putInt32(16)
 		b.write(v.GetBytes())
 
+	case *parser.DIPAddr:
+		// We calculate the Postgres binary format for an IPAddr. For the spec see,
+		// https://github.com/postgres/postgres/blob/81c5e46c490e2426db243eada186995da5bb0ba7/src/backend/utils/adt/network.c#L144
+		ones, _ := v.IPAddr.Mask.Size()
+		// The pgBinary encoding is as follows:
+		//	The int32 length of the following bytes.
+		//	The family byte.
+		// 	The mask size byte.
+		// 	A 0 byte for is_cidr. It's ignored on the postgres frontend.
+		// 	The length of our IP bytes.
+		//  The IP bytes.
+		const pgIPAddrBinaryHeaderSize = 4
+		if v.IPAddr.Family == ipaddr.IPv4Family {
+			b.putInt32(net.IPv4len + pgIPAddrBinaryHeaderSize)
+			b.writeByte(pgBinaryIPv4Family)
+			b.writeByte(byte(ones))
+			b.writeByte(0)
+			b.writeByte(byte(net.IPv4len))
+			// Ensure IPv4 byte slice is only len(4).
+			b.write(v.IPAddr.IP.To4())
+		} else if v.IPAddr.Family == ipaddr.IPv6Family {
+			b.putInt32(net.IPv6len + pgIPAddrBinaryHeaderSize)
+			b.writeByte(pgBinaryIPv6Family)
+			b.writeByte(byte(ones))
+			b.writeByte(0)
+			b.writeByte(byte(net.IPv6len))
+			b.write(v.IPAddr.IP)
+		} else {
+			b.setError(errors.Errorf("error encoding inet to pgBinary: %v", v.IPAddr))
+		}
+
 	case *parser.DString:
 		b.writeLengthPrefixedString(string(*v))
 
@@ -432,6 +468,50 @@ func pgBinaryToDate(i int32) *parser.DDate {
 	return parser.NewDDate(parser.DDate(daysSinceEpoch))
 }
 
+const (
+	// pgBinaryIPv4Family is the pgwire constant for IPv4. It is defined as
+	// AF_INET.
+	pgBinaryIPv4Family byte = 2
+	// pgBinaryIPv6Family is the pgwire constant for IPv4. It is defined as
+	// AF_NET + 1.
+	pgBinaryIPv6Family byte = 3
+)
+
+// pgBinaryToIPAddr takes an IPAddr and interprets it as the Postgres binary
+// format. See https://github.com/postgres/postgres/blob/81c5e46c490e2426db243eada186995da5bb0ba7/src/backend/utils/adt/network.c#L144
+// for the binary spec.
+func pgBinaryToIPAddr(b []byte) (ipaddr.IPAddr, error) {
+	maskOnes := int(b[1])
+	familyByte := b[0]
+
+	var family ipaddr.IPFamily
+	var mask net.IPMask
+	if familyByte == pgBinaryIPv4Family {
+		family = ipaddr.IPv4Family
+		mask = net.CIDRMask(maskOnes, 32)
+	} else if familyByte == pgBinaryIPv6Family {
+		family = ipaddr.IPv6Family
+		mask = net.CIDRMask(maskOnes, 128)
+	} else {
+		return ipaddr.IPAddr{}, errors.Errorf("unknown family received: %d", familyByte)
+	}
+
+	// Get the IP length and IP bytes.
+	ipLength := int(b[3])
+	ip := make([]byte, ipLength)
+	for i := 0; i < ipLength; i++ {
+		ip[i] = b[4+i]
+	}
+
+	return ipaddr.IPAddr{
+		Family: family,
+		IPNet: net.IPNet{
+			IP:   ip,
+			Mask: mask,
+		},
+	}, nil
+}
+
 // decodeOidDatum decodes bytes with specified Oid and format code into
 // a datum.
 func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error) {
@@ -515,6 +595,12 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			d, err := parser.ParseDUuidFromString(string(b))
 			if err != nil {
 				return nil, errors.Errorf("could not parse string %q as uuid", b)
+			}
+			return d, nil
+		case oid.T_inet:
+			d, err := parser.ParseDIPAddrFromINetString(string(b))
+			if err != nil {
+				return nil, errors.Errorf("could not parse string %q as inet", b)
 			}
 			return d, nil
 		case oid.T__int2, oid.T__int4, oid.T__int8:
@@ -697,6 +783,12 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 				return nil, err
 			}
 			return u, nil
+		case oid.T_inet:
+			ipAddr, err := pgBinaryToIPAddr(b)
+			if err != nil {
+				return nil, err
+			}
+			return parser.NewDIPAddr(parser.DIPAddr{IPAddr: ipAddr}), nil
 		case oid.T__int2, oid.T__int4, oid.T__int8, oid.T__text, oid.T__name:
 			return decodeBinaryArray(b, code)
 		}

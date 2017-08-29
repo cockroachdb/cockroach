@@ -1534,6 +1534,7 @@ var datumToTypeCategory = map[reflect.Type]*parser.DString{
 	reflect.TypeOf(parser.TypeTable):       typCategoryPseudo,
 	reflect.TypeOf(parser.TypeOid):         typCategoryNumeric,
 	reflect.TypeOf(parser.TypeUUID):        typCategoryUserDefined,
+	reflect.TypeOf(parser.TypeINet):        typCategoryNetworkAddr,
 }
 
 func typCategory(typ parser.Type) parser.Datum {
