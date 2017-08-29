@@ -218,7 +218,11 @@ func (a *allocSim) roundRobinWorker(startNum, workers int) {
 	r, _ := randutil.NewPseudoRand()
 	for i := 0; ; i++ {
 		now := timeutil.Now()
-		if _, err := a.Nodes[i%len(a.Nodes)].DB().Exec(insertStmt, r.Int63(), startNum+i*workers, *blockSize); err != nil {
+		db := a.Nodes[i%len(a.Nodes)].DB()
+		if db == nil {
+			continue // nodes are shutting down
+		}
+		if _, err := db.Exec(insertStmt, r.Int63(), startNum+i*workers, *blockSize); err != nil {
 			a.maybeLogError(err)
 		} else {
 			atomic.AddUint64(&a.stats.ops, 1)
@@ -238,11 +242,16 @@ func (a *allocSim) rangeInfo() allocStats {
 	// Retrieve the metrics for each node and extract the replica and leaseholder
 	// counts.
 	var wg sync.WaitGroup
-	wg.Add(len(a.Status))
-	for i := range a.Status {
+	wg.Add(len(a.Nodes))
+	for i := 0; i < len(a.Nodes); i++ {
 		go func(i int) {
 			defer wg.Done()
-			resp, err := a.Status[i].Metrics(context.Background(), &serverpb.MetricsRequest{
+			status := a.Nodes[i].StatusClient()
+			if status == nil {
+				// Cluster is shutting down.
+				return
+			}
+			resp, err := status.Metrics(context.Background(), &serverpb.MetricsRequest{
 				NodeId: fmt.Sprintf("local"),
 			})
 			if err != nil {

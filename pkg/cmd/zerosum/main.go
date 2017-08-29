@@ -171,6 +171,10 @@ func (z *zeroSum) worker() {
 		}
 
 		db := z.Nodes[z.RandNode(r.Intn)].DB()
+		if db == nil {
+			// Node is currently offline.
+			continue
+		}
 		err := crdb.ExecuteTx(db, func(tx *gosql.Tx) error {
 			rows, err := tx.Query(`SELECT id, balance FROM accounts WHERE id IN ($1, $2)`, from, to)
 			if err != nil {
@@ -292,7 +296,7 @@ func (z *zeroSum) check(d time.Duration) {
 	for {
 		time.Sleep(d)
 
-		client := z.Clients[z.RandNode(rand.Intn)]
+		client := z.Client(z.RandNode(rand.Intn))
 		if err := client.CheckConsistency(context.Background(), keys.LocalMax, keys.MaxKey, false); err != nil {
 			z.maybeLogError(err)
 		}
@@ -327,7 +331,7 @@ func (z *zeroSum) verify(d time.Duration) {
 
 func (z *zeroSum) rangeInfo() (int, []int) {
 	replicas := make([]int, len(z.Nodes))
-	client := z.Clients[z.RandNode(rand.Intn)]
+	client := z.Client(z.RandNode(rand.Intn))
 	rows, err := client.Scan(context.Background(), keys.Meta2Prefix, keys.Meta2Prefix.PrefixEnd(), 0)
 	if err != nil {
 		z.maybeLogError(err)
