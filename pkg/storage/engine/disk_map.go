@@ -59,6 +59,13 @@ type SortedDiskMapIterator interface {
 	// after the next call to Seek(), Rewind(), or Next().
 	Value() []byte
 
+	// UnsafeKey returns the same value as Key, but the memory is invalidated on
+	// the next call to {Next,Prev,Seek,SeekReverse,Close}.
+	UnsafeKey() []byte
+	// UnsafeValue returns the same value as Value, but the memory is
+	// invalidated on the next call to {Next,Prev,Seek,SeekReverse,Close}.
+	UnsafeValue() []byte
+
 	// Close frees up resources held by the iterator.
 	Close()
 }
@@ -248,6 +255,16 @@ func (i *RocksDBMapIterator) Key() []byte {
 // Value implements the SortedDiskMapIterator interface.
 func (i *RocksDBMapIterator) Value() []byte {
 	return i.iter.Value()
+}
+
+// UnsafeKey implements the SortedDiskMapIterator interface.
+func (i *RocksDBMapIterator) UnsafeKey() []byte {
+	return i.iter.UnsafeKey().Key[len(i.prefix):]
+}
+
+// UnsafeValue implements the SortedDiskMapIterator interface.
+func (i *RocksDBMapIterator) UnsafeValue() []byte {
+	return i.iter.UnsafeValue()
 }
 
 // Close implements the SortedDiskMapIterator interface.
