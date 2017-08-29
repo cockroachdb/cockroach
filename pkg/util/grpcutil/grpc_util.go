@@ -25,6 +25,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/transport"
 )
 
@@ -60,4 +61,26 @@ func IsClosedConnection(err error) bool {
 		return true
 	}
 	return netutil.IsClosedConnection(err)
+}
+
+// RequestDidNotStart returns true if the given error from gRPC
+// means that the request definitely could not have started on the
+// remote server.
+//
+// This method currently depends on implementation details, matching
+// on the text of an error message that is known to only be used
+// in this case in the version of gRPC that we use today. We will
+// need to watch for changes here in future versions of gRPC.
+// TODO(bdarnell): Replace this with a cleaner mechanism when/if
+// https://github.com/grpc/grpc-go/issues/1443 is resolved.
+func RequestDidNotStart(err error) bool {
+	s, ok := status.FromError(err)
+	if !ok {
+		// This is a non-gRPC error; assume nothing.
+		return false
+	}
+	if s.Code() == codes.Unavailable && s.Message() == "grpc: the connection is unavailable" {
+		return true
+	}
+	return false
 }
