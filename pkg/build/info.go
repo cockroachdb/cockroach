@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	version "github.com/hashicorp/go-version"
 )
 
 // const char* compilerVersion() {
@@ -41,7 +42,8 @@ const TimeFormat = "2006/01/02 15:04:05"
 var (
 	// These variables are initialized via the linker -X flag in the
 	// top-level Makefile when compiling release binaries.
-	tag         = "unknown" // Tag of this build (git describe)
+	tag         = "unknown" // Tag of this build (git describe --exact-match)
+	baseBranch  = "unknown" // Base branch of this build (git describe)
 	utcTime     string      // Build time in UTC (year/month/day hour:min:sec)
 	rev         string      // SHA-1 of this build (git rev-parse)
 	cgoCompiler = C.GoString(C.compilerVersion())
@@ -54,6 +56,16 @@ var (
 // IsRelease returns true if the binary was produced by a "release" build.
 func IsRelease() bool {
 	return strings.HasPrefix(typ, "release")
+}
+
+// VersionPrefix returns the version prefix of the current build.
+func VersionPrefix() string {
+	v, err := version.NewVersion(baseBranch)
+	if err != nil {
+		return "dev"
+	}
+	semVer := v.Segments()[:2]
+	return fmt.Sprintf("v%d.%d", semVer[0], semVer[1])
 }
 
 func init() {
