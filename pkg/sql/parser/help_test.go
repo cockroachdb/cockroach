@@ -15,11 +15,25 @@
 package parser
 
 import (
+	"bytes"
 	"regexp"
 	"strings"
 	"testing"
 	"unicode"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/urlcheck/lib/urlcheck"
 )
+
+func TestHelpURLs(t *testing.T) {
+	var buf bytes.Buffer
+	for key, body := range HelpMessages {
+		msg := HelpMessage{Command: key, HelpMessageBody: body}
+		buf.WriteString(msg.String())
+	}
+	if err := urlcheck.Check(&buf); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestHelpMessagesDefined(t *testing.T) {
 	var emptyBody HelpMessageBody

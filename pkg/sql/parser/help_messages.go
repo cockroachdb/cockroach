@@ -42,7 +42,7 @@ Column qualifiers:
 
 `,
 		//line sql.y: 953
-		SeeAlso: `https://www.cockroachlabs.com/docs/alter-table.html
+		SeeAlso: `WEBDOCS/alter-table.html
 `,
 	},
 	//line sql.y: 964
@@ -55,7 +55,7 @@ Column qualifiers:
 ALTER VIEW [IF EXISTS] <name> RENAME TO <newname>
 `,
 		//line sql.y: 968
-		SeeAlso: `https://www.cockroachlabs.com/docs/alter-view.html
+		SeeAlso: `WEBDOCS/alter-view.html
 `,
 	},
 	//line sql.y: 975
@@ -68,7 +68,7 @@ ALTER VIEW [IF EXISTS] <name> RENAME TO <newname>
 ALTER DATABASE <name> RENAME TO <newname>
 `,
 		//line sql.y: 979
-		SeeAlso: `https://www.cockroachlabs.com/docs/alter-database.html
+		SeeAlso: `WEBDOCS/alter-database.html
 `,
 	},
 	//line sql.y: 986
@@ -87,7 +87,7 @@ Commands:
 
 `,
 		//line sql.y: 996
-		SeeAlso: `https://www.cockroachlabs.com/docs/alter-index.html
+		SeeAlso: `WEBDOCS/alter-index.html
 `,
 	},
 	//line sql.y: 1206
@@ -115,7 +115,7 @@ Options:
 
 `,
 		//line sql.y: 1225
-		SeeAlso: `RESTORE, https://www.cockroachlabs.com/docs/backup.html
+		SeeAlso: `RESTORE, WEBDOCS/backup.html
 `,
 	},
 	//line sql.y: 1233
@@ -142,7 +142,7 @@ Options:
 
 `,
 		//line sql.y: 1251
-		SeeAlso: `BACKUP, https://www.cockroachlabs.com/docs/restore.html
+		SeeAlso: `BACKUP, WEBDOCS/restore.html
 `,
 	},
 	//line sql.y: 1265
@@ -225,7 +225,7 @@ CREATE USER, CREATE VIEW
 		Text: `DELETE FROM <tablename> [WHERE <expr>] [RETURNING <exprs...>]
 `,
 		//line sql.y: 1429
-		SeeAlso: `https://www.cockroachlabs.com/docs/delete.html
+		SeeAlso: `WEBDOCS/delete.html
 `,
 	},
 	//line sql.y: 1437
@@ -254,7 +254,7 @@ CREATE USER, CREATE VIEW
 		Text: `DROP VIEW [IF EXISTS] <tablename> [, ...] [CASCADE | RESTRICT]
 `,
 		//line sql.y: 1465
-		SeeAlso: `https://www.cockroachlabs.com/docs/drop-index.html
+		SeeAlso: `WEBDOCS/drop-index.html
 `,
 	},
 	//line sql.y: 1477
@@ -266,7 +266,7 @@ CREATE USER, CREATE VIEW
 		Text: `DROP TABLE [IF EXISTS] <tablename> [, ...] [CASCADE | RESTRICT]
 `,
 		//line sql.y: 1480
-		SeeAlso: `https://www.cockroachlabs.com/docs/drop-table.html
+		SeeAlso: `WEBDOCS/drop-table.html
 `,
 	},
 	//line sql.y: 1492
@@ -278,7 +278,7 @@ CREATE USER, CREATE VIEW
 		Text: `DROP INDEX [IF EXISTS] <idxname> [, ...] [CASCADE | RESTRICT]
 `,
 		//line sql.y: 1495
-		SeeAlso: `https://www.cockroachlabs.com/docs/drop-index.html
+		SeeAlso: `WEBDOCS/drop-index.html
 `,
 	},
 	//line sql.y: 1515
@@ -290,7 +290,7 @@ CREATE USER, CREATE VIEW
 		Text: `DROP DATABASE [IF EXISTS] <databasename> [CASCADE | RESTRICT]
 `,
 		//line sql.y: 1518
-		SeeAlso: `https://www.cockroachlabs.com/docs/drop-database.html
+		SeeAlso: `WEBDOCS/drop-database.html
 `,
 	},
 	//line sql.y: 1538
@@ -324,7 +324,7 @@ Plan options:
 
 `,
 		//line sql.y: 1596
-		SeeAlso: `https://www.cockroachlabs.com/docs/explain.html
+		SeeAlso: `WEBDOCS/explain.html
 `,
 	},
 	//line sql.y: 1655
@@ -381,7 +381,7 @@ Targets:
 
 `,
 		//line sql.y: 1741
-		SeeAlso: `REVOKE, https://www.cockroachlabs.com/docs/grant.html
+		SeeAlso: `REVOKE, WEBDOCS/grant.html
 `,
 	},
 	//line sql.y: 1749
@@ -402,7 +402,7 @@ Targets:
 
 `,
 		//line sql.y: 1761
-		SeeAlso: `GRANT, https://www.cockroachlabs.com/docs/revoke.html
+		SeeAlso: `GRANT, WEBDOCS/revoke.html
 `,
 	},
 	//line sql.y: 1848
@@ -414,7 +414,7 @@ Targets:
 		Text: `RESET [SESSION] <var>
 `,
 		//line sql.y: 1851
-		SeeAlso: `RESET CLUSTER SETTING, https://www.cockroachlabs.com/docs/set-vars.html
+		SeeAlso: `RESET CLUSTER SETTING, WEBDOCS/set-vars.html
 `,
 	},
 	//line sql.y: 1863
@@ -439,7 +439,7 @@ Targets:
 `,
 		//line sql.y: 1895
 		SeeAlso: `SHOW CLUSTER SETTING, RESET CLUSTER SETTING, SET SESSION,
-https://www.cockroachlabs.com/docs/cluster-settings.html
+WEBDOCS/cluster-settings.html
 `,
 	},
 	//line sql.y: 1916
@@ -456,7 +456,7 @@ SET [SESSION] CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL { SNAPSHOT | SERIAL
 `,
 		//line sql.y: 1923
 		SeeAlso: `SHOW SESSION, RESET, DISCARD, SHOW, SET CLUSTER SETTING, SET TRANSACTION,
-https://www.cockroachlabs.com/docs/set-vars.html
+WEBDOCS/set-vars.html
 `,
 	},
 	//line sql.y: 1940
@@ -475,7 +475,7 @@ Transaction parameters:
 `,
 		//line sql.y: 1949
 		SeeAlso: `SHOW TRANSACTION, SET SESSION,
-https://www.cockroachlabs.com/docs/set-transaction.html
+WEBDOCS/set-transaction.html
 `,
 	},
 	//line sql.y: 2088
@@ -498,7 +498,7 @@ SHOW JOBS, SHOW QUERIES, SHOW SESSIONS, SHOW TRACE
 		Text: `SHOW [SESSION] { <var> | ALL }
 `,
 		//line sql.y: 2118
-		SeeAlso: `https://www.cockroachlabs.com/docs/show-vars.html
+		SeeAlso: `WEBDOCS/show-vars.html
 `,
 	},
 	//line sql.y: 2139
@@ -510,7 +510,7 @@ SHOW JOBS, SHOW QUERIES, SHOW SESSIONS, SHOW TRACE
 		Text: `SHOW BACKUP <location>
 `,
 		//line sql.y: 2142
-		SeeAlso: `https://www.cockroachlabs.com/docs/show-backup.html
+		SeeAlso: `WEBDOCS/show-backup.html
 `,
 	},
 	//line sql.y: 2150
@@ -524,7 +524,7 @@ SHOW CLUSTER SETTING <var>
 SHOW ALL CLUSTER SETTINGS
 `,
 		//line sql.y: 2155
-		SeeAlso: `https://www.cockroachlabs.com/docs/cluster-settings.html
+		SeeAlso: `WEBDOCS/cluster-settings.html
 `,
 	},
 	//line sql.y: 2172
@@ -536,7 +536,7 @@ SHOW ALL CLUSTER SETTINGS
 		Text: `SHOW COLUMNS FROM <tablename>
 `,
 		//line sql.y: 2175
-		SeeAlso: `https://www.cockroachlabs.com/docs/show-columns.html
+		SeeAlso: `WEBDOCS/show-columns.html
 `,
 	},
 	//line sql.y: 2183
@@ -548,7 +548,7 @@ SHOW ALL CLUSTER SETTINGS
 		Text: `SHOW DATABASES
 `,
 		//line sql.y: 2186
-		SeeAlso: `https://www.cockroachlabs.com/docs/show-databases.html
+		SeeAlso: `WEBDOCS/show-databases.html
 `,
 	},
 	//line sql.y: 2194
@@ -560,7 +560,7 @@ SHOW ALL CLUSTER SETTINGS
 		Text: `SHOW GRANTS [ON <targets...>] [FOR <users...>]
 `,
 		//line sql.y: 2197
-		SeeAlso: `https://www.cockroachlabs.com/docs/show-grants.html
+		SeeAlso: `WEBDOCS/show-grants.html
 `,
 	},
 	//line sql.y: 2205
@@ -572,7 +572,7 @@ SHOW ALL CLUSTER SETTINGS
 		Text: `SHOW INDEXES FROM <tablename>
 `,
 		//line sql.y: 2208
-		SeeAlso: `https://www.cockroachlabs.com/docs/show-indexes.html
+		SeeAlso: `WEBDOCS/show-index.html
 `,
 	},
 	//line sql.y: 2226
@@ -584,7 +584,7 @@ SHOW ALL CLUSTER SETTINGS
 		Text: `SHOW CONSTRAINTS FROM <tablename>
 `,
 		//line sql.y: 2229
-		SeeAlso: `https://www.cockroachlabs.com/docs/show-constraints.html
+		SeeAlso: `WEBDOCS/show-constraints.html
 `,
 	},
 	//line sql.y: 2242
@@ -643,7 +643,7 @@ SHOW [KV] TRACE FOR <statement>
 		Text: `SHOW TABLES [FROM <databasename>]
 `,
 		//line sql.y: 2319
-		SeeAlso: `https://www.cockroachlabs.com/docs/show-tables.html
+		SeeAlso: `WEBDOCS/show-tables.html
 `,
 	},
 	//line sql.y: 2331
@@ -655,7 +655,7 @@ SHOW [KV] TRACE FOR <statement>
 		Text: `SHOW TRANSACTION {ISOLATION LEVEL | PRIORITY | STATUS}
 `,
 		//line sql.y: 2334
-		SeeAlso: `https://www.cockroachlabs.com/docs/show-transaction.html
+		SeeAlso: `WEBDOCS/show-transaction.html
 `,
 	},
 	//line sql.y: 2353
@@ -667,7 +667,7 @@ SHOW [KV] TRACE FOR <statement>
 		Text: `SHOW CREATE TABLE <tablename>
 `,
 		//line sql.y: 2356
-		SeeAlso: `https://www.cockroachlabs.com/docs/show-create-table.html
+		SeeAlso: `WEBDOCS/show-create-table.html
 `,
 	},
 	//line sql.y: 2364
@@ -679,7 +679,7 @@ SHOW [KV] TRACE FOR <statement>
 		Text: `SHOW CREATE VIEW <viewname>
 `,
 		//line sql.y: 2367
-		SeeAlso: `https://www.cockroachlabs.com/docs/show-create-view.html
+		SeeAlso: `WEBDOCS/show-create-view.html
 `,
 	},
 	//line sql.y: 2375
@@ -691,7 +691,7 @@ SHOW [KV] TRACE FOR <statement>
 		Text: `SHOW USERS
 `,
 		//line sql.y: 2378
-		SeeAlso: `CREATE USER, DROP USER, https://www.cockroachlabs.com/docs/show-users.html
+		SeeAlso: `CREATE USER, DROP USER, WEBDOCS/show-users.html
 `,
 	},
 	//line sql.y: 2430
@@ -741,8 +741,8 @@ Interleave clause:
 `,
 		//line sql.y: 2469
 		SeeAlso: `SHOW TABLES, CREATE VIEW, SHOW CREATE TABLE,
-https://www.cockroachlabs.com/docs/create-table.html
-https://www.cockroachlabs.com/docs/create-table-as.html
+WEBDOCS/create-table.html
+WEBDOCS/create-table-as.html
 `,
 	},
 	//line sql.y: 2803
@@ -754,7 +754,7 @@ https://www.cockroachlabs.com/docs/create-table-as.html
 		Text: `TRUNCATE [TABLE] <tablename> [, ...] [CASCADE | RESTRICT]
 `,
 		//line sql.y: 2806
-		SeeAlso: `https://www.cockroachlabs.com/docs/truncate.html
+		SeeAlso: `WEBDOCS/truncate.html
 `,
 	},
 	//line sql.y: 2814
@@ -766,7 +766,7 @@ https://www.cockroachlabs.com/docs/create-table-as.html
 		Text: `CREATE USER <name> [ [WITH] PASSWORD <passwd> ]
 `,
 		//line sql.y: 2817
-		SeeAlso: `DROP USER, SHOW USERS, https://www.cockroachlabs.com/docs/create-user.html
+		SeeAlso: `DROP USER, SHOW USERS, WEBDOCS/create-user.html
 `,
 	},
 	//line sql.y: 2835
@@ -778,7 +778,7 @@ https://www.cockroachlabs.com/docs/create-table-as.html
 		Text: `CREATE VIEW <viewname> [( <colnames...> )] AS <source>
 `,
 		//line sql.y: 2838
-		SeeAlso: `CREATE TABLE, SHOW CREATE VIEW, https://www.cockroachlabs.com/docs/create-view.html
+		SeeAlso: `CREATE TABLE, SHOW CREATE VIEW, WEBDOCS/create-view.html
 `,
 	},
 	//line sql.y: 2852
@@ -798,7 +798,7 @@ Interleave clause:
 `,
 		//line sql.y: 2862
 		SeeAlso: `CREATE TABLE, SHOW INDEXES, SHOW CREATE INDEX,
-https://www.cockroachlabs.com/docs/create-index.html
+WEBDOCS/create-index.html
 `,
 	},
 	//line sql.y: 3001
@@ -810,7 +810,7 @@ https://www.cockroachlabs.com/docs/create-index.html
 		Text: `RELEASE [SAVEPOINT] cockroach_restart
 `,
 		//line sql.y: 3004
-		SeeAlso: `SAVEPOINT, https://www.cockroachlabs.com/docs/savepoint.html
+		SeeAlso: `SAVEPOINT, WEBDOCS/savepoint.html
 `,
 	},
 	//line sql.y: 3012
@@ -834,7 +834,7 @@ https://www.cockroachlabs.com/docs/create-index.html
 		Text: `SAVEPOINT cockroach_restart
 `,
 		//line sql.y: 3026
-		SeeAlso: `RELEASE, https://www.cockroachlabs.com/docs/savepoint.html
+		SeeAlso: `RELEASE, WEBDOCS/savepoint.html
 `,
 	},
 	//line sql.y: 3040
@@ -853,7 +853,7 @@ Transaction parameters:
 
 `,
 		//line sql.y: 3050
-		SeeAlso: `COMMIT, ROLLBACK, https://www.cockroachlabs.com/docs/begin-transaction.html
+		SeeAlso: `COMMIT, ROLLBACK, WEBDOCS/begin-transaction.html
 `,
 	},
 	//line sql.y: 3063
@@ -867,7 +867,7 @@ COMMIT [TRANSACTION]
 END [TRANSACTION]
 `,
 		//line sql.y: 3068
-		SeeAlso: `BEGIN, ROLLBACK, https://www.cockroachlabs.com/docs/commit-transaction.html
+		SeeAlso: `BEGIN, ROLLBACK, WEBDOCS/commit-transaction.html
 `,
 	},
 	//line sql.y: 3081
@@ -879,7 +879,7 @@ END [TRANSACTION]
 		Text: `ROLLBACK [TRANSACTION] [TO [SAVEPOINT] cockroach_restart]
 `,
 		//line sql.y: 3084
-		SeeAlso: `BEGIN, COMMIT, SAVEPOINT, https://www.cockroachlabs.com/docs/rollback-transaction.html
+		SeeAlso: `BEGIN, COMMIT, SAVEPOINT, WEBDOCS/rollback-transaction.html
 `,
 	},
 	//line sql.y: 3198
@@ -891,7 +891,7 @@ END [TRANSACTION]
 		Text: `CREATE DATABASE [IF NOT EXISTS] <name>
 `,
 		//line sql.y: 3201
-		SeeAlso: `https://www.cockroachlabs.com/docs/create-database.html
+		SeeAlso: `WEBDOCS/create-database.html
 `,
 	},
 	//line sql.y: 3270
@@ -907,7 +907,7 @@ INSERT INTO <tablename> [[AS] <name>] [( <colnames...> )]
        [RETURNING <exprs...>]
 `,
 		//line sql.y: 3277
-		SeeAlso: `UPSERT, UPDATE, DELETE, https://www.cockroachlabs.com/docs/insert.html
+		SeeAlso: `UPSERT, UPDATE, DELETE, WEBDOCS/insert.html
 `,
 	},
 	//line sql.y: 3294
@@ -922,7 +922,7 @@ UPSERT INTO <tablename> [AS <name>] [( <colnames...> )]
        [RETURNING <exprs...>]
 `,
 		//line sql.y: 3300
-		SeeAlso: `INSERT, UPDATE, DELETE, https://www.cockroachlabs.com/docs/upsert.html
+		SeeAlso: `INSERT, UPDATE, DELETE, WEBDOCS/upsert.html
 `,
 	},
 	//line sql.y: 3376
@@ -934,7 +934,7 @@ UPSERT INTO <tablename> [AS <name>] [( <colnames...> )]
 		Text: `UPDATE <tablename> [[AS] <name>] SET ... [WHERE <expr>] [RETURNING <exprs...>]
 `,
 		//line sql.y: 3379
-		SeeAlso: `INSERT, UPSERT, DELETE, https://www.cockroachlabs.com/docs/update.html
+		SeeAlso: `INSERT, UPSERT, DELETE, WEBDOCS/update.html
 `,
 	},
 	//line sql.y: 3547
@@ -970,7 +970,7 @@ SELECT [DISTINCT]
        [ OFFSET <expr> [ ROW | ROWS ] ]
 `,
 		//line sql.y: 3574
-		SeeAlso: `https://www.cockroachlabs.com/docs/select.html
+		SeeAlso: `WEBDOCS/select.html
 `,
 	},
 	//line sql.y: 3634
@@ -982,7 +982,7 @@ SELECT [DISTINCT]
 		Text: `TABLE <tablename>
 `,
 		//line sql.y: 3637
-		SeeAlso: `SELECT, VALUES, https://www.cockroachlabs.com/docs/table-expressions.html
+		SeeAlso: `SELECT, VALUES, WEBDOCS/table-expressions.html
 `,
 	},
 	//line sql.y: 3876
@@ -994,7 +994,7 @@ SELECT [DISTINCT]
 		Text: `VALUES ( <exprs...> ) [, ...]
 `,
 		//line sql.y: 3879
-		SeeAlso: `SELECT, TABLE, https://www.cockroachlabs.com/docs/table-expressions.html
+		SeeAlso: `SELECT, TABLE, WEBDOCS/table-expressions.html
 `,
 	},
 	//line sql.y: 3984
@@ -1023,7 +1023,7 @@ Index hints:
 
 `,
 		//line sql.y: 4004
-		SeeAlso: `https://www.cockroachlabs.com/docs/table-expressions.html
+		SeeAlso: `WEBDOCS/table-expressions.html
 `,
 	},
 }
