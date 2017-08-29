@@ -1875,7 +1875,9 @@ func makeCacheRequest(
 	cr := cacheRequest{
 		span:      span,
 		timestamp: ba.Timestamp,
-		txnID:     ba.GetTxnID(),
+	}
+	if ba.Txn != nil {
+		cr.txnID = ba.Txn.ID
 	}
 
 	for i, union := range ba.Requests {
@@ -2240,7 +2242,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.
 			// key to look for an entry which would indicate this transaction
 			// has already been finalized, in which case this is a replay.
 			if _, ok := args.(*roachpb.BeginTransactionRequest); ok {
-				key := keys.TransactionKey(header.Key, *ba.GetTxnID())
+				key := keys.TransactionKey(header.Key, ba.Txn.ID)
 				wTS, _, wOK := r.store.tsCacheMu.cache.GetMaxWrite(key, nil)
 				if wOK {
 					return bumped, roachpb.NewError(roachpb.NewTransactionReplayError())

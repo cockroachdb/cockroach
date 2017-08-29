@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/rlmcpherson/s3gof3r"
@@ -83,15 +82,6 @@ const (
 	consultsTSCache // mutating commands which write data at a timestamp
 	updatesTSCache  // commands which read data at a timestamp
 )
-
-// GetTxnID returns the transaction ID if the header has a transaction
-// or nil otherwise.
-func (h Header) GetTxnID() *uuid.UUID {
-	if h.Txn == nil {
-		return nil
-	}
-	return &h.Txn.ID
-}
 
 // IsReadOnly returns true iff the request is read-only.
 func IsReadOnly(args Request) bool {
