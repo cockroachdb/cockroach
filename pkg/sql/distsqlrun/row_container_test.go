@@ -75,7 +75,7 @@ func TestRowContainerReplaceMax(t *testing.T) {
 	mc.InitMaxHeap()
 	// Replace some of the rows with large rows.
 	for i := 0; i < 1000; i++ {
-		err := mc.MaybeReplaceMax(makeRow(rng.Intn(10000), rng.Intn(100)))
+		err := mc.MaybeReplaceMax(ctx, makeRow(rng.Intn(10000), rng.Intn(100)))
 		if err != nil {
 			t.Fatal(err)
 		}
