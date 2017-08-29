@@ -249,6 +249,7 @@ func TestStyle(t *testing.T) {
 		if err := stream.ForEach(stream.Sequence(
 			filter,
 			stream.GrepNot(`^rpc/context(_test)?\.go\b`),
+			stream.GrepNot(`^util/grpcutil/`),
 		), func(s string) {
 			t.Errorf(`%s <- forbidden; use "rpc.NewServer" instead`, s)
 		}); err != nil {

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -1140,9 +1141,10 @@ func (ds *DistSender) sendToReplicas(
 
 		case call := <-done:
 			if err := call.Err; err != nil {
-				// All connection errors may mean that the request succeeded
-				// on the remote server, but we were unable to receive the
-				// reply. Set the ambiguous commit flag.
+				// For most connection errors, we cannot tell whether or not
+				// the request may have succeeded on the remote server, so we
+				// set the ambiguous commit flag (exceptions are captured in
+				// the grpcutil.RequestDidNotStart function).
 				//
 				// We retry ambiguous commit batches to avoid returning the
 				// unrecoverable AmbiguousResultError. This is safe because
@@ -1153,7 +1155,7 @@ func (ds *DistSender) sendToReplicas(
 				// leader). If the original attempt merely timed out or was
 				// lost, then the batch will succeed and we can be assured the
 				// commit was applied just once.
-				if haveCommit {
+				if haveCommit && !grpcutil.RequestDidNotStart(err) {
 					ambiguousError = err
 				}
 				log.ErrEventf(ctx, "RPC error: %s", err)
