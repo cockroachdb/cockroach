@@ -43,24 +43,27 @@ CREATE TABLE playground (
     equip_id integer NOT NULL,
     type character varying(50) NOT NULL,
     color character varying(25) NOT NULL,
-    location character varying(25),
-    install_date date
+		location character varying(25),
+    install_date date,
+		ip inet
 );
 
-COPY playground (equip_id, type, color, location, install_date) FROM stdin;
-1	slide	blue	south	2014-04-28
-2	swing	yellow	northwest	2010-08-16
+COPY playground (equip_id, type, color, location, install_date, ip) FROM stdin;
+1	slide	blue	south	2014-04-28 192.168.0.1
+2	swing	yellow	northwest	2010-08-16 ffff::ffff:12
 \.
 EOF
 # psql does not report failures properly in its exit code, so we check
 # that the value was inserted explicitly.
 psql -d testdb -c "SELECT * FROM playground"  | grep blue
+psql -d testdb -c "SELECT * FROM playground"  | grep 192.168.0.1
 
 # Test lack of newlines at EOF with no slash-dot.
-echo 'COPY playground (equip_id, type, color, location, install_date) FROM stdin;' > import.sql
-echo -n -e '3\trope\tgreen\teast\t2015-01-02' >> import.sql
+echo 'COPY playground (equip_id, type, color, location, install_date, ip) FROM stdin;' > import.sql
+echo -n -e '3\trope\tgreen\teast\t2015-01-02\t127.0.0.1' >> import.sql
 psql -d testdb < import.sql
 psql -d testdb -c "SELECT * FROM playground"  | grep green
+psql -d testdb -c "SELECT * FROM playground"  | grep 127.0.0.1
 
 # Test lack of newlines at EOF with slash-dot.
 echo 'COPY playground (equip_id, type, color, location, install_date) FROM stdin;' > import.sql
