@@ -86,4 +86,12 @@ func testMixedVersionHarness(ctx context.Context, t *testing.T, cfg cluster.Test
 			t.Fatalf("%d: node running at %s, not %s", i, version, exp)
 		}
 	}
+
+	for i := 0; i < c.NumNodes(); i++ {
+		c.Kill(ctx, i)
+	}
+
+	for i := 0; i < c.NumNodes(); i++ {
+		c.Restart(ctx, i)
+	}
 }

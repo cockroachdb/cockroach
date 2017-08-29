@@ -422,7 +422,7 @@ type Node struct {
 	db                       *gosql.DB
 }
 
-// RPCPort returns the RPC + Posgres port.
+// RPCPort returns the RPC + Postgres port.
 func (n *Node) RPCPort() string {
 	n.Lock()
 	defer n.Unlock()
