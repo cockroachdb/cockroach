@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"net"
 	"regexp"
 	"sort"
 	"strconv"
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipnet"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -232,6 +234,17 @@ func ParseDUuidFromBytes(b []byte) (*DUuid, error) {
 		return nil, makeParseError(string(b), TypeUUID, err)
 	}
 	return NewDUuid(DUuid{uv}), nil
+}
+
+// ParseDIPNetFromINetString parses and returns the *DIPNet Datum value
+// represented by the provided input INet string, or an error.
+func ParseDIPNetFromINetString(s string) (*DIPNet, error) {
+	var d DIPNet
+	err := ipnet.ParseINet(s, &d.IPNet)
+	if err != nil {
+		return nil, err
+	}
+	return NewDIPNet(d), nil
 }
 
 // GetBool gets DBool or an error (also treats NULL as false, not an error).
@@ -1081,6 +1094,149 @@ func (d *DUuid) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // Size implements the Datum interface.
 func (d *DUuid) Size() uintptr {
+	return unsafe.Sizeof(*d)
+}
+
+// DIPNet is the IPNet Datum.
+type DIPNet struct {
+	ipnet.IPNet
+}
+
+// NewDIPNet is a helper routine to create a *DIPNet initialized from its
+// argument.
+func NewDIPNet(d DIPNet) *DIPNet {
+	return &d
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (*DIPNet) ResolvedType() Type {
+	return TypeINet
+}
+
+// Compare implements the Datum interface.
+func (d *DIPNet) Compare(ctx *EvalContext, other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
+	v, ok := other.(*DIPNet)
+	if !ok {
+		panic(makeUnsupportedComparisonMessage(d, other))
+	}
+
+	return d.IPNet.Compare(&v.IPNet)
+}
+
+func (d DIPNet) equal(other *DIPNet) bool {
+	return d.IPNet.Equal(&other.IPNet)
+}
+
+// Prev implements the Datum interface.
+func (d *DIPNet) Prev() (Datum, bool) {
+	// We will do one of the following to get the Prev IPNet:
+	//	- Decrement IP value if we won't underflow the IP.
+	//	- Decrement mask and set the IP to max in family if we will underflow.
+	//	- Jump down from IPv6 to IPv4 if we will underflow both IP and mask.
+	ones, _ := d.IPNet.Mask.Size()
+	if d.Family == ipnet.IPv6Family && d.IP.Equal(minIPv6) {
+		if ones == 0 {
+			// Jump down IP family.
+			return NewDIPNet(DIPNet{ipnet.IPNet{Family: ipnet.IPv4Family, IPNet: net.IPNet{IP: maxIPv4, Mask: net.CIDRMask(32, 32)}}}), true
+		}
+		// Decrease mask size, wrap IPv6 IP value.
+		return NewDIPNet(DIPNet{ipnet.IPNet{Family: ipnet.IPv6Family, IPNet: net.IPNet{IP: maxIPv6, Mask: net.CIDRMask(ones-1, 128)}}}), true
+	} else if d.Family == ipnet.IPv4Family && d.IP.Equal(minIPv4) {
+		// Decrease mask size, wrap IPv4 IP value.
+		return NewDIPNet(DIPNet{ipnet.IPNet{Family: ipnet.IPv4Family, IPNet: net.IPNet{IP: maxIPv4, Mask: net.CIDRMask(ones-1, 32)}}}), true
+	}
+	// Decrement IP.
+	newIP := make([]byte, len(d.IP))
+	copy(newIP, d.IP)
+	for i := len(newIP) - 1; i >= 0; i-- {
+		if newIP[i] == 0 {
+			newIP[i] = 255
+		} else {
+			newIP[i]--
+			break
+		}
+	}
+	return NewDIPNet(DIPNet{ipnet.IPNet{Family: d.Family, IPNet: net.IPNet{IP: newIP, Mask: d.Mask}}}), true
+}
+
+// Next implements the Datum interface.
+func (d *DIPNet) Next() (Datum, bool) {
+	// We will do one of a few things to get the Next IPNet:
+	//	- Increment IP value if we won't overflow the IP.
+	//	- Increment mask and set the IP to min in family if we will overflow.
+	//	- Jump up from IPv4 to IPv6 if we will overflow both IP and mask.
+	ones, _ := d.IPNet.Mask.Size()
+	if d.Family == ipnet.IPv4Family && d.IP.Equal(maxIPv4) {
+		if ones == 32 {
+			// Jump up IP family.
+			return NewDIPNet(DIPNet{ipnet.IPNet{Family: ipnet.IPv6Family, IPNet: net.IPNet{IP: minIPv6, Mask: net.CIDRMask(0, 128)}}}), true
+		}
+		// Increase mask size, wrap IPv4 IP value.
+		return NewDIPNet(DIPNet{ipnet.IPNet{Family: ipnet.IPv4Family, IPNet: net.IPNet{IP: minIPv4, Mask: net.CIDRMask(ones+1, 32)}}}), true
+	} else if d.Family == ipnet.IPv6Family && d.IP.Equal(maxIPv6) {
+		// Increase mask size, wrap IPv6 IP value.
+		return NewDIPNet(DIPNet{ipnet.IPNet{Family: ipnet.IPv6Family, IPNet: net.IPNet{IP: minIPv6, Mask: net.CIDRMask(ones+1, 128)}}}), true
+	}
+	// Increment IP.
+	newIP := make([]byte, len(d.IP))
+	copy(newIP, d.IP)
+	for i := len(newIP) - 1; i >= 0; i-- {
+		if newIP[i] == 255 {
+			newIP[i] = 0
+		} else {
+			newIP[i]++
+			break
+		}
+	}
+	return NewDIPNet(DIPNet{ipnet.IPNet{Family: d.Family, IPNet: net.IPNet{IP: newIP, Mask: d.Mask}}}), true
+}
+
+// IsMax implements the Datum interface.
+func (d *DIPNet) IsMax() bool {
+	return d.equal(dMaxIPNet)
+}
+
+// IsMin implements the Datum interface.
+func (d *DIPNet) IsMin() bool {
+	return d.equal(dMinIPNet)
+}
+
+var minIPv4 = net.IPv4(0, 0, 0, 0)
+var maxIPv4 = net.IPv4(255, 255, 255, 255)
+var minIPv6 = net.ParseIP("::0")
+var maxIPv6 = net.ParseIP("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff")
+var dMinIPNet = NewDIPNet(DIPNet{ipnet.IPNet{Family: ipnet.IPv4Family, IPNet: net.IPNet{IP: minIPv4, Mask: net.CIDRMask(0, 32)}}})
+var dMaxIPNet = NewDIPNet(DIPNet{ipnet.IPNet{Family: ipnet.IPv6Family, IPNet: net.IPNet{IP: maxIPv6, Mask: net.CIDRMask(128, 128)}}})
+
+// min implements the Datum interface.
+func (*DIPNet) min() (Datum, bool) {
+	return dMinIPNet, true
+}
+
+// max implements the Datum interface.
+func (*DIPNet) max() (Datum, bool) {
+	return dMaxIPNet, true
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (*DIPNet) AmbiguousFormat() bool {
+	// FIXME(joey): CIDR col. This probably will be ambigious between IPNet and
+	// CIDR. It may also be specific to the properties of the IPNet. All CIDR are
+	// equal to their INET cast, but casting INET to CIDR truncates data.
+	return false
+}
+
+// Format implements the NodeFormatter interface.
+func (d *DIPNet) Format(buf *bytes.Buffer, f FmtFlags) {
+	encodeSQLString(buf, d.IPNet.String())
+}
+
+// Size implements the Datum interface.
+func (d *DIPNet) Size() uintptr {
 	return unsafe.Sizeof(*d)
 }
 

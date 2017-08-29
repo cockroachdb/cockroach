@@ -77,6 +77,7 @@ var reservedKeywords = map[string]struct{}{
 	"ILIKE":             {},
 	"IN":                {},
 	"INDEX":             {},
+	"INET":              {},
 	"INITIALLY":         {},
 	"INNER":             {},
 	"INT":               {},
