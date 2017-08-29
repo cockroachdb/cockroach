@@ -308,8 +308,8 @@ type ExecutorTestingKnobs struct {
 	// for the new metadata to back-propagate through gossip.
 	WaitForGossipUpdate bool
 
-	// CheckStmtStringChange causes Executor.execStmtsInCurrentTxn to verify
-	// that executed statements are not modified during execution.
+	// CheckStmtStringChange causes Executor.execStmtGroup to verify that executed
+	// statements are not modified during execution.
 	CheckStmtStringChange bool
 
 	// StatementFilter can be used to trap execution of SQL statements and
@@ -747,7 +747,8 @@ func (e *Executor) execRequest(
 	return e.execParsed(session, stmts, pinfo, copymsg)
 }
 
-// execParsed returns query execution errors and communication errors.
+// execParsed executes a batch of statements received as a unit from the client
+// and returns query execution errors and communication errors.
 func (e *Executor) execParsed(
 	session *Session, stmts StatementList, pinfo *parser.PlaceholderInfo, copymsg copyMsg,
 ) error {
@@ -764,10 +765,6 @@ func (e *Executor) execParsed(
 		// Each iteration consumes a transaction's worth of statements. Any error
 		// that is encountered resets stmts.
 
-		// TODO(andrei): NewResultsGroup() should only be called if inTxn == false.
-		// Also, we're currently not always closing this txnResults, which is
-		// against the contract.
-		txnResults := resultWriter.NewResultsGroup()
 		inTxn := txnState.State() != NoTxn
 		execOpt := client.TxnExecOptions{}
 		// Figure out the statements out of which we're going to try to consume
@@ -777,9 +774,9 @@ func (e *Executor) execParsed(
 		// If protoTS is set, the transaction proto sets its Orig and Max timestamps
 		// to it each retry.
 		var protoTS *hlc.Timestamp
-		// We can AutoRetry the next batch of statements if we're in a clean state
-		// (i.e. the next statements we're going to see are the first statements in
-		// a transaction).
+		// If we're not in a transaction, then the next statement is part of a new
+		// transaction (implicit txn or explicit txn). We do the corresponding state
+		// reset.
 		if !inTxn {
 			// Detect implicit transactions - they need to be autocommitted.
 			if _, isBegin := stmts[0].AST.(*parser.BeginTransaction); !isBegin {
@@ -808,11 +805,9 @@ func (e *Executor) execParsed(
 				session.DefaultIsolationLevel,
 				roachpb.NormalUserPriority,
 			)
-		} else {
-			// If we are in a txn, the first batch get auto-retried.
-			txnState.autoRetry = txnState.State() == FirstBatch
 		}
-		execOpt.AutoRetry = txnState.autoRetry
+		execOpt.AutoRetry = txnState.State() == AutoRetry
+
 		if txnState.State() == NoTxn {
 			panic("we failed to initialize a txn")
 		}
@@ -837,11 +832,11 @@ func (e *Executor) execParsed(
 			}
 
 			// Some results may have been produced by a previous attempt.
-			txnResults.Reset(session.Ctx())
+			txnState.txnResults.Reset(session.Ctx())
 			var err error
 			remainingStmts, err = runTxnAttempt(
-				e, session, stmtsToExec, pinfo, origState, opt,
-				!inTxn /* txnPrefix */, avoidCachedDescriptors, automaticRetryCount, txnResults)
+				e, session, stmtsToExec, pinfo, origState,
+				!inTxn /* txnPrefix */, avoidCachedDescriptors, automaticRetryCount, txnState.txnResults)
 
 			// TODO(andrei): Until #7881 fixed.
 			if err == nil && txnState.State() == Aborted {
@@ -863,9 +858,8 @@ func (e *Executor) execParsed(
 		// This is where the magic happens - we ask db to run a KV txn and possibly retry it.
 		txn := txnState.mu.txn // this might be nil if the txn was already aborted.
 		err := txn.Exec(session.Ctx(), execOpt, txnClosure)
-
 		if err != nil && (log.V(2) || logStatementsExecuteEnabled.Get(&e.cfg.Settings.SV)) {
-			log.Infof(session.Ctx(), "execParsed: error: %v", err)
+			log.Infof(session.Ctx(), "execParsed: error: %v. state: %s", err, txnState.State())
 		}
 
 		// Update the Err field of the last result if the error was coming from
@@ -922,7 +916,6 @@ func (e *Executor) execParsed(
 		// If we're no longer in a transaction, finish the trace.
 		if txnState.State() == NoTxn {
 			txnState.finishSQLTxn(session)
-			txnResults.Close()
 		}
 
 		// Verify that the metadata callback fails, if one was set. This is
@@ -1003,24 +996,38 @@ func countRowsAffected(runParams runParams, p planNode) (int, error) {
 	return count, err
 }
 
-// runTxnAttempt is used in the closure we pass to txn.Exec(). It
-// will be called possibly multiple times (if opt.AutoRetry is set).
+// runTxnAttempt is used in the closure we pass to txn.Exec(). It will be called
+// possibly multiple times with the same set to statements.
+// It takes in a batch of statements and executes a prefix of them corresponding
+// to one transaction. More technically, it runs them one by one until either:
+// - a statement returns an error
+// - the end of the the batch is reached
+// - a statement transition the state to a non-"open" one, meaning that we're
+// not in a transaction any more (or we are in a transaction but in an error
+// state, although this also triggers the error condition above).
 //
-// txnPrefix: set if the statements represent the first batch of statements in a
-// 	txn. Used to trap nested BEGINs.
-// txnResults: used to pass query results to the caller.
+// This method may transition the state from AutoRetry to Open if the end of the
+// batch is reached.
+//
+// Args:
+// txnPrefix: set if the start of the batch corresponds to the start of the
+// current transaction. Used to trap nested BEGINs.
+// txnResults: used to push query results.
+//
+// It returns all the statements that were not executed.
 func runTxnAttempt(
 	e *Executor,
 	session *Session,
 	stmts StatementList,
 	pinfo *parser.PlaceholderInfo,
 	origState TxnStateEnum,
-	opt *client.TxnExecOptions,
 	txnPrefix bool,
 	avoidCachedDescriptors bool,
 	automaticRetryCount int,
 	txnResults ResultsGroup,
 ) (StatementList, error) {
+
+	txnState := &session.TxnState
 
 	// Ignore the state that might have been set by a previous try of this
 	// closure. By putting these modifications to txnState behind the
@@ -1028,173 +1035,191 @@ func runTxnAttempt(
 	// statements are still executing and reading from the state. This
 	// means that no synchronization is necessary to prevent data races.
 	if automaticRetryCount > 0 {
-		session.TxnState.SetState(origState)
-		session.TxnState.commitSeen = false
+		txnState.SetState(origState)
+		txnState.commitSeen = false
 	}
 
-	remainingStmts, err := e.execStmtsInCurrentTxn(
-		session, stmts, pinfo,
-		txnPrefix, avoidCachedDescriptors, automaticRetryCount, txnResults)
+	// Keep track of whether we've seen any statement that will force us to
+	// transition from AutoRetry to Open at the end of the batch (assuming we are
+	// currently in AutoRetry and we get to the end of the batch, both of which
+	// may not hold).
+	encounteredNonAutoRetryStmt := false
+	var i int
+	var stmt Statement
+	for i, stmt = range stmts {
+		encounteredNonAutoRetryStmt = encounteredNonAutoRetryStmt || !canStayInAutoRetryState(stmt)
 
-	if opt.AutoCommit && len(remainingStmts) > 0 {
-		panic("implicit txn failed to execute all stmts")
-	}
-	return remainingStmts, err
-}
-
-// execStmtsInCurrentTxn consumes a prefix of stmts, namely the
-// statements belonging to a single SQL transaction. It executes in
-// the session's current transaction, which is assumed to exist.
-//
-// COMMIT/ROLLBACK statements can end the current transaction. If that happens,
-// this method returns, and the remaining statements are returned.
-//
-// If an error occurs while executing a statement, the SQL txn will be
-// considered aborted and subsequent statements will be discarded (they will
-// not be executed, they will not be returned for future execution, they will
-// not generate results). Note that this also includes COMMIT/ROLLBACK
-// statements. Further note that errTransactionAborted is no exception -
-// encountering it will discard subsequent statements. This means that, to
-// recover from an aborted txn, a COMMIT/ROLLBACK statement needs to be the
-// first one in stmts.
-//
-// Args:
-// session: the session to execute the statement in.
-// stmts: the semicolon-separated list of statements to execute.
-// pinfo: the placeholders to use in the statements.
-// txnPrefix: set if the statements represent the first batch of statements in a
-// 	txn. Used to trap nested BEGINs.
-// avoidCachedDescriptors: set if the statement execution should avoid
-//  using cached descriptors.
-// automaticRetryCount: increases with each retry; 0 for the first attempt.
-// txnResults: used to pass query results to the caller.
-//
-// Returns:
-//  - the statements that haven't been executed because the transaction has
-//    been committed or rolled back. In returning an error, this will be nil.
-//  - the error encountered while executing statements, if any. If an error
-//    occurred, it corresponds to the last result returned. Subsequent statements
-//    have not been executed. Note that usually the error is not reflected in
-//    this last result; the caller is responsible copying it into the result
-//    after converting it adequately.
-func (e *Executor) execStmtsInCurrentTxn(
-	session *Session,
-	stmts StatementList,
-	pinfo *parser.PlaceholderInfo,
-	txnPrefix bool,
-	avoidCachedDescriptors bool,
-	automaticRetryCount int,
-	txnResults ResultsGroup,
-) (StatementList, error) {
-	txnState := &session.TxnState
-	if txnState.State() == NoTxn {
-		panic("execStmtsInCurrentTransaction called outside of a txn")
-	}
-
-	for i, stmt := range stmts {
 		if log.V(2) || logStatementsExecuteEnabled.Get(&e.cfg.Settings.SV) ||
 			log.HasSpanOrEvent(session.Ctx()) {
 			log.VEventf(session.Ctx(), 2, "executing %d/%d: %s", i+1, len(stmts), stmt)
 		}
 
-		queryID := e.generateQueryID()
-
-		queryMeta := &queryMeta{
-			start: session.phaseTimes[sessionEndParse],
-			stmt:  stmt.AST,
-			phase: preparing,
-		}
-
-		stmt.queryID = queryID
-		stmt.queryMeta = queryMeta
-
-		// Cancelling a query cancels its transaction's context. Copy reference to
-		// txn context and its cancellation function here.
-		//
-		// TODO(itsbilal): Ideally we'd like to fork off a context for each individual
-		// statement. But the heartbeat loop in TxnCoordSender currently assumes that the context of the
-		// first operation in a txn batch lasts at least as long as the transaction itself. Once that
-		// sender is able to distinguish between statement and transaction contexts, queryMeta could
-		// move to per-statement contexts.
-		queryMeta.ctx = txnState.Ctx
-		queryMeta.ctxCancel = txnState.cancel
-
-		// Ignore statements that spawn jobs from SHOW QUERIES and from being cancellable
-		// using CANCEL QUERY. Jobs have their own run control statements (CANCEL JOB,
-		// PAUSE JOB, etc). We implement this ignore by not registering queryMeta in
-		// session.mu.ActiveQueries.
-		if _, ok := stmt.AST.(parser.HiddenFromShowQueries); !ok {
-			// For parallel/async queries, we deregister queryMeta from these registries
-			// after execution finishes in the parallelizeQueue. For all other
-			// (synchronous) queries, we deregister these in session.FinishPlan when
-			// all results have been sent. We cannot deregister asynchronous queries in
-			// session.FinishPlan because they may still be executing at that instant.
-			session.addActiveQuery(queryID, queryMeta)
-		}
-
-		var stmtStrBefore string
-		// TODO(nvanbenschoten): Constant literals can change their representation (1.0000 -> 1) when type checking,
-		// so we need to reconsider how this works.
-		if (e.cfg.TestingKnobs.CheckStmtStringChange && false) ||
-			(e.cfg.TestingKnobs.StatementFilter != nil) {
-			// We do "statement string change" if a StatementFilter is installed,
-			// because the StatementFilter relies on the textual representation of
-			// statements to not change from what the client sends.
-			stmtStrBefore = stmt.String()
-		}
-
+		// Create a StatementResult to receive the results of the statement that
+		// we're about to run. e.execStmt() will take ownership and close the
+		// result.
 		stmtResult := txnResults.NewStatementResult()
-		var err error
-		// Run SHOW TRANSACTION STATUS in a separate code path so it is
-		// always guaranteed to execute regardless of the current transaction state.
-		if _, ok := stmt.AST.(*parser.ShowTransactionStatus); ok {
-			err = runShowTransactionState(session, stmtResult)
-		} else {
-			switch txnState.State() {
-			case Open, FirstBatch:
-				err = e.execStmtInOpenTxn(
-					session, stmt, pinfo, txnPrefix && (i == 0), /* firstInTxn */
-					avoidCachedDescriptors, automaticRetryCount, stmtResult,
-					txnResults.ResultsSentToClient)
-			case Aborted, RestartWait:
-				err = e.execStmtInAbortedTxn(session, stmt, txnResults)
-			case CommitWait:
-				err = e.execStmtInCommitWaitTxn(session, stmt, stmtResult)
-			default:
-				panic(fmt.Sprintf("unexpected txn state: %s", txnState.State()))
-			}
-			if (e.cfg.TestingKnobs.CheckStmtStringChange && false) ||
-				(e.cfg.TestingKnobs.StatementFilter != nil) {
-				if after := stmt.String(); after != stmtStrBefore {
-					panic(fmt.Sprintf("statement changed after exec; before:\n    %s\nafter:\n    %s",
-						stmtStrBefore, after))
-				}
-			}
-		}
-		if filter := e.cfg.TestingKnobs.StatementFilter; filter != nil {
-			if err := filter(session.Ctx(), stmt.String(), session.ResultsWriter, err); err != nil {
-				return nil, err
-			}
-		}
-		if err != nil {
-			// If error contains a context cancellation error, wrap it with a
-			// user-friendly query execution cancelled one.
-			if strings.Contains(err.Error(), "context canceled") {
-				err = errors.Wrapf(err, "query execution canceled")
-			}
-			// After an error happened, skip executing all the remaining statements
-			// in this batch.  This is Postgres behavior, and it makes sense as the
-			// protocol doesn't let you return results after an error.
+		if err := e.execSingleStatement(
+			session, stmt, pinfo,
+			txnPrefix && i == 0, /* firstInTxn */
+			avoidCachedDescriptors, automaticRetryCount, stmtResult,
+		); err != nil {
 			return nil, err
 		}
-		if txnState.State() == NoTxn {
-			// If the transaction is done, return the remaining statements to
-			// be executed as a different group.
-			return stmts[i+1:], nil
+
+		// If the transaction is done, stop executing more statements.
+		if !txnState.TxnIsOpen() {
+			break
 		}
 	}
-	// If we got here, we've managed to consume all statements and we're still in a txn.
-	return nil, nil
+
+	// Flush the results accumulated in AutoRetry. We want possible future
+	// Reset()s to not discard them since we're not going to retry the
+	// statements. We also want future ResultsSentToClient() calls to return
+	// false.
+	if err := txnState.txnResults.Flush(session.Ctx()); err != nil {
+		txnState.updateStateAndCleanupOnErr(err, e)
+		return nil, err
+	}
+
+	// If we're still in AutoRetry but we've seen statements that would need to be
+	// retried if we'd later want to retry the transaction, we transition to Open.
+	// Automatic retries are not possible beyond this point.
+	if txnState.State() == AutoRetry && encounteredNonAutoRetryStmt {
+		txnState.SetState(Open)
+	}
+	// Return the statements that weren't executed in the current txn, so they can
+	// be executed in the context of other transactions. The set can be empty if
+	// we executed everything that was passed in.
+	return stmts[i+1:], nil
+}
+
+// execSingleStatement executes one statement by dispatching according to the
+// current state.
+//
+// If an error occurs while executing the statement, the SQL txn will be
+// considered aborted and subsequent statements will be discarded (they will not
+// be executed, they will not be returned for future execution, they will not
+// generate results). Note that this also includes COMMIT/ROLLBACK statements.
+// Further note that errTransactionAborted is no exception - encountering it
+// will discard subsequent statements. This means that, to recover from an
+// aborted txn, a COMMIT/ROLLBACK statement needs to be the first one in stmts.
+//
+// Args:
+// session:    The session to execute the statement in.
+// stmt: 		   The statement to execute.
+// pinfo:      The placeholders to use in the statements.
+// firstInTxn: Set if the statements represents the first statement in a txn.
+//             Used to trap nested BEGINs.
+// avoidCachedDescriptors: Set if the statement execution should avoid
+//                         using cached descriptors.
+// automaticRetryCount: Increases with each retry; 0 for the first attempt.
+// res: Used to pass query results to the caller.
+//
+// Returns the error encountered while executing the query, if any.
+func (e *Executor) execSingleStatement(
+	session *Session,
+	stmt Statement,
+	pinfo *parser.PlaceholderInfo,
+	firstInTxn bool,
+	avoidCachedDescriptors bool,
+	automaticRetryCount int,
+	res StatementResult,
+) error {
+	txnState := &session.TxnState
+	if txnState.State() == NoTxn {
+		panic("execStmt called outside of a txn")
+	}
+
+	queryID := e.generateQueryID()
+
+	queryMeta := &queryMeta{
+		start: session.phaseTimes[sessionEndParse],
+		stmt:  stmt.AST,
+		phase: preparing,
+	}
+
+	stmt.queryID = queryID
+	stmt.queryMeta = queryMeta
+
+	// Cancelling a query cancels its transaction's context. Copy reference to
+	// txn context and its cancellation function here.
+	//
+	// TODO(itsbilal): Ideally we'd like to fork off a context for each individual
+	// statement. But the heartbeat loop in TxnCoordSender currently assumes that the context of the
+	// first operation in a txn batch lasts at least as long as the transaction itself. Once that
+	// sender is able to distinguish between statement and transaction contexts, queryMeta could
+	// move to per-statement contexts.
+	queryMeta.ctx = txnState.Ctx
+	queryMeta.ctxCancel = txnState.cancel
+
+	// Ignore statements that spawn jobs from SHOW QUERIES and from being cancellable
+	// using CANCEL QUERY. Jobs have their own run control statements (CANCEL JOB,
+	// PAUSE JOB, etc). We implement this ignore by not registering queryMeta in
+	// session.mu.ActiveQueries.
+	if _, ok := stmt.AST.(parser.HiddenFromShowQueries); !ok {
+		// For parallel/async queries, we deregister queryMeta from these registries
+		// after execution finishes in the parallelizeQueue. For all other
+		// (synchronous) queries, we deregister these in session.FinishPlan when
+		// all results have been sent. We cannot deregister asynchronous queries in
+		// session.FinishPlan because they may still be executing at that instant.
+		session.addActiveQuery(queryID, queryMeta)
+	}
+
+	var stmtStrBefore string
+	// TODO(nvanbenschoten): Constant literals can change their representation (1.0000 -> 1) when type checking,
+	// so we need to reconsider how this works.
+	if (e.cfg.TestingKnobs.CheckStmtStringChange && false) ||
+		(e.cfg.TestingKnobs.StatementFilter != nil) {
+		// We do "statement string change" if a StatementFilter is installed,
+		// because the StatementFilter relies on the textual representation of
+		// statements to not change from what the client sends.
+		stmtStrBefore = stmt.String()
+	}
+
+	var err error
+	// Run SHOW TRANSACTION STATUS in a separate code path so it is
+	// always guaranteed to execute regardless of the current transaction state.
+	if _, ok := stmt.AST.(*parser.ShowTransactionStatus); ok {
+		err = runShowTransactionState(session, res)
+	} else {
+		switch txnState.State() {
+		case Open, AutoRetry:
+			err = e.execStmtInOpenTxn(
+				session, stmt, pinfo, firstInTxn,
+				avoidCachedDescriptors, automaticRetryCount, res)
+		case Aborted, RestartWait:
+			err = e.execStmtInAbortedTxn(session, stmt, res)
+		case CommitWait:
+			err = e.execStmtInCommitWaitTxn(session, stmt, res)
+		default:
+			panic(fmt.Sprintf("unexpected txn state: %s", txnState.State()))
+		}
+
+		if (e.cfg.TestingKnobs.CheckStmtStringChange && false) ||
+			(e.cfg.TestingKnobs.StatementFilter != nil) {
+			if after := stmt.String(); after != stmtStrBefore {
+				panic(fmt.Sprintf("statement changed after exec; before:\n    %s\nafter:\n    %s",
+					stmtStrBefore, after))
+			}
+		}
+	}
+	if filter := e.cfg.TestingKnobs.StatementFilter; filter != nil {
+		if err := filter(session.Ctx(), stmt.String(), session.ResultsWriter, err); err != nil {
+			return err
+		}
+	}
+	if err != nil {
+		// If error contains a context cancellation error, wrap it with a
+		// user-friendly query execution cancelled one.
+		if strings.Contains(err.Error(), "context canceled") {
+			err = errors.Wrapf(err, "query execution canceled")
+		}
+		// After an error happened, skip executing all the remaining statements
+		// in this batch.  This is Postgres behavior, and it makes sense as the
+		// protocol doesn't let you return results after an error.
+		return err
+	}
+	return nil
 }
 
 // getTransactionState retrieves a text representation of the given state.
@@ -1203,9 +1228,9 @@ func getTransactionState(txnState *txnState) string {
 	if txnState.implicitTxn {
 		state = NoTxn
 	}
-	// For the purposes of representing the states to client, make the FirstBatch
+	// For the purposes of representing the states to client, make the AutoRetry
 	// state look like Open.
-	if state == FirstBatch {
+	if state == AutoRetry {
 		state = Open
 	}
 	return state.String()
@@ -1229,9 +1254,8 @@ func runShowTransactionState(session *Session, res StatementResult) error {
 // - ROLLBACK TO SAVEPOINT / SAVEPOINT: reopens the current transaction,
 //   allowing it to be retried.
 func (e *Executor) execStmtInAbortedTxn(
-	session *Session, stmt Statement, txnResults ResultsGroup,
+	session *Session, stmt Statement, res StatementResult,
 ) error {
-	res := txnResults.NewStatementResult()
 	txnState := &session.TxnState
 	if txnState.State() != Aborted && txnState.State() != RestartWait {
 		panic("execStmtInAbortedTxn called outside of an aborted txn")
@@ -1280,8 +1304,8 @@ func (e *Executor) execStmtInAbortedTxn(
 			return err
 		}
 		if txnState.State() == RestartWait {
-			// Reset the state to FirstBatch. We're in an "open" txn again.
-			txnState.SetState(FirstBatch)
+			// Reset the state to AutoRetry. We're in an "open" txn again.
+			txnState.SetState(AutoRetry)
 		} else {
 			// We accept ROLLBACK TO SAVEPOINT even after non-retryable errors to make
 			// it easy for client libraries that want to indiscriminately issue
@@ -1292,7 +1316,6 @@ func (e *Executor) execStmtInAbortedTxn(
 			// same sql timestamp and isolation as the current one.
 			curTs, curIso, curPri := txnState.sqlTimestamp, txnState.isolation, txnState.priority
 			txnState.finishSQLTxn(session)
-			txnResults.Close()
 			txnState.resetForNewSQLTxn(
 				e, session,
 				false /* implicitTxn */, true, /* retryIntent */
@@ -1359,8 +1382,7 @@ func sessionEventf(session *Session, format string, args ...interface{}) {
 // Results are written to res.
 //
 // The current transaction might be committed/rolled back when this returns.
-// It might also transition to the aborted or RestartWait state, and it
-// might transition from FirstBatch to Open.
+// It might also transition to the aborted or RestartWait state.
 //
 // Args:
 // session: the session to execute the statement in.
@@ -1372,11 +1394,6 @@ func sessionEventf(session *Session, format string, args ...interface{}) {
 //  using cached descriptors.
 // automaticRetryCount: increases with each retry; 0 for the first attempt.
 // res: the writer to send results to.
-// resultsSentToClient: a function used to query the module that communicates
-// with the client about whether results have been sent to the client up to a
-// point in time. Used to decide on some state transitions. TODO(andrei): the
-// presence of this param suggests that the state transition business might
-// belong better one level up from this method.
 func (e *Executor) execStmtInOpenTxn(
 	session *Session,
 	stmt Statement,
@@ -1385,7 +1402,6 @@ func (e *Executor) execStmtInOpenTxn(
 	avoidCachedDescriptors bool,
 	automaticRetryCount int,
 	res StatementResult,
-	resultsSentToClient func() bool,
 ) (err error) {
 	txnState := &session.TxnState
 	if !txnState.TxnIsOpen() {
@@ -1412,7 +1428,7 @@ func (e *Executor) execStmtInOpenTxn(
 				// txn in the Aborted state; we transition back to NoTxn.
 				txnState.resetStateAndTxn(NoTxn)
 			}
-		} else if txnState.autoRetry && txnState.isSerializableRestart() {
+		} else if txnState.State() == AutoRetry && txnState.isSerializableRestart() {
 			// If we just ran a statement synchronously, then the parallel queue
 			// would have been synchronized first, so this would be a no-op.
 			// However, if we just ran a statement asynchronously, then the
@@ -1449,13 +1465,6 @@ func (e *Executor) execStmtInOpenTxn(
 				// client.Txn.
 				roachpb.Transaction{},
 			)
-		} else if txnState.State() == FirstBatch &&
-			!canStayInFirstBatchState(stmt) && !resultsSentToClient() {
-			// Transition from FirstBatch to Open except in the case of special
-			// statements that don't return results to the client. This transition
-			// does not affect the current batch - future statements in it will still
-			// be retried automatically.
-			txnState.SetState(Open)
 		}
 	}()
 
@@ -1526,9 +1535,16 @@ func (e *Executor) execStmtInOpenTxn(
 			err := fmt.Errorf("SAVEPOINT %s has not been used", parser.RestartSavepointName)
 			return err
 		}
+
+		res.BeginResult((*parser.Savepoint)(nil))
+		if err := res.CloseResult(); err != nil {
+			return err
+		}
+
+		// Move the state to AutoRetry; we're morally beginning a new transaction.
+		txnState.SetState(AutoRetry)
 		// If commands have already been sent through the transaction,
-		// restart the client txn's proto to increment the epoch. The SQL
-		// txn's state is already set to OPEN.
+		// restart the client txn's proto to increment the epoch.
 		if txnState.mu.txn.CommandCount() > 0 {
 			// TODO(andrei): Should the timestamp below be e.cfg.Clock.Now(), so that
 			// the transaction gets a new timestamp?
@@ -1538,8 +1554,7 @@ func (e *Executor) execStmtInOpenTxn(
 		if err != nil {
 			return err
 		}
-		res.BeginResult((*parser.Savepoint)(nil))
-		return res.CloseResult()
+		return nil
 
 	case *parser.Prepare:
 		// This must be handled here instead of the common path below
@@ -2242,20 +2257,26 @@ func isRollbackToSavepoint(stmt Statement) bool {
 	return isSet
 }
 
-// canStayInFirstBatchState returns true if the statement can leave the
-// transaction in the FirstBatch state (as opposed to transitioning it to Open).
+// canStayInAutoRetryState returns true if the statement, by itself, should not
+// cause the session to transition from AutoRetry>Open at the end of the
+// statement's batch. In other words, if the state was AutoRetry at a certain
+// time, and afterwards only statements recognized by this method run until the
+// end of a batch, then the end of the batch shouldn't perform the
+// AutoRetry->Open transition that ends of batches usually perform.
 //
-// Only statements that affect the transaction state in such a way such that a
-// restart would not destroy the state can currently be added here; we don't
-// replay past batches in case of a restart. So, for example, RETURNING NOTHING
-// statements can't be put here without adding some replay capability.
-// TODO(andrei): support RETURNING NOTHING statements.
-func canStayInFirstBatchState(stmt Statement) bool {
+// Statements in this category may not be executed again in case of an automatic
+// retry, so they need to have two properties:
+// 1) They can only affect the transaction state in such a way that a
+// restart would not destroy the statement's effect. So, for example, RETURNING
+// NOTHING statements can't be put here without adding some replay capability.
+// 2) The results and side-effects they produce must not depend on any previous
+// statements ran in the transaction.
+func canStayInAutoRetryState(stmt Statement) bool {
 	return isBegin(stmt) ||
 		isSavepoint(stmt) ||
 		isSetTransaction(stmt) ||
 		// ROLLBACK TO SAVEPOINT does its own state transitions; if it leaves the
-		// transaction in the FirstBatch state, don't mess with it.
+		// transaction in the AutoRetriable state, don't mess with it.
 		isRollbackToSavepoint(stmt)
 }
 

@@ -160,7 +160,7 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Run a batch of statements to move the txn out of the FirstBatch state,
+	// Run a batch of statements to move the txn out of the AutoRetry state,
 	// otherwise the INSERT below would be automatically retried.
 	if _, err := txn.Exec("SELECT 1"); err != nil {
 		t.Fatal(err)
