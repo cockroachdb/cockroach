@@ -50,9 +50,15 @@ import (
 
 // Context defaults.
 const (
-	defaultCGroupMemPath                  = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
-	defaultCacheSize                      = 512 << 20 // 512 MB
-	defaultSQLMemoryPoolSize              = 512 << 20 // 512 MB
+	defaultCGroupMemPath = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
+	// DefaultCacheSize is the default size of the RocksDB cache. We default the
+	// cache size and SQL memory pool size to 128 MiB. Larger values might
+	// provide significantly better performance, but we're not sure what type of
+	// system we're running on (development or production or some shared
+	// environment). Production users should almost certainly override these
+	// settings and we'll warn in the logs about doing so.
+	DefaultCacheSize                      = 128 << 20 // 128 MB
+	defaultSQLMemoryPoolSize              = 128 << 20 // 128 MB
 	defaultScanInterval                   = 10 * time.Minute
 	defaultScanMaxIdleTime                = 200 * time.Millisecond
 	defaultMetricsSampleInterval          = 10 * time.Second
@@ -359,7 +365,7 @@ func MakeConfig(st *cluster.Settings) Config {
 		Config:                         new(base.Config),
 		MaxOffset:                      MaxOffsetType(base.DefaultMaxClockOffset),
 		Settings:                       st,
-		CacheSize:                      defaultCacheSize,
+		CacheSize:                      DefaultCacheSize,
 		SQLMemoryPoolSize:              defaultSQLMemoryPoolSize,
 		ScanInterval:                   defaultScanInterval,
 		ScanMaxIdleTime:                defaultScanMaxIdleTime,

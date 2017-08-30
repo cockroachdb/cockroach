@@ -70,7 +70,7 @@ func parseRangeID(arg string) (roachpb.RangeID, error) {
 }
 
 func openStore(cmd *cobra.Command, dir string, stopper *stop.Stopper) (*engine.RocksDB, error) {
-	cache := engine.NewRocksDBCache(512 << 20)
+	cache := engine.NewRocksDBCache(server.DefaultCacheSize)
 	defer cache.Release()
 	maxOpenFiles, err := server.SetOpenFileLimitForOneStore()
 	if err != nil {
