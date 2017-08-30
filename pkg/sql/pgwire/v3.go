@@ -830,7 +830,7 @@ func (c *v3Conn) handleBind(ctx context.Context, buf *readBuffer) error {
 		}
 		d, err := decodeOidDatum(t, qArgFormatCodes[i], b)
 		if err != nil {
-			return c.sendInternalError(fmt.Sprintf("error in argument for $%d: %s", i+1, err))
+			return c.sendError(errors.Wrapf(err, "error in argument for $%d", i+1))
 		}
 		qargs[k] = d
 	}
