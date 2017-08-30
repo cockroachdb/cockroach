@@ -224,7 +224,7 @@ func TestLoadCSVPrimaryDuplicateSSTBoundary(t *testing.T) {
 	}
 }
 
-// TestLoadCSVOptions tests sqlccl.LoadCSV with the comma, comment, and nullif
+// TestLoadCSVOptions tests sqlccl.LoadCSV with the delimiter, comment, and nullif
 // options set.
 func TestLoadCSVOptions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -393,7 +393,7 @@ func TestImportStmt(t *testing.T) {
 		},
 		{
 			"schema-in-query-opts",
-			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) WITH temp = $1, comma = '|', comment = '#', nullif=''`,
+			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) WITH temp = $1, delimiter = '|', comment = '#', nullif=''`,
 			nil,
 			filesWithOpts,
 			"",
@@ -414,14 +414,14 @@ func TestImportStmt(t *testing.T) {
 		},
 		{
 			"schema-in-query-dist-opts",
-			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) WITH temp = $1, distributed, comma = '|', comment = '#', nullif=''`,
+			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) WITH temp = $1, distributed, delimiter = '|', comment = '#', nullif=''`,
 			nil,
 			filesWithOpts,
 			"",
 		},
 		{
 			"schema-in-query-transform-only",
-			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) WITH temp = $1, distributed, comma = '|', comment = '#', nullif='', transform_only`,
+			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) WITH temp = $1, distributed, delimiter = '|', comment = '#', nullif='', transform_only`,
 			nil,
 			filesWithOpts,
 			"",
