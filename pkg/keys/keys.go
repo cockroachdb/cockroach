@@ -59,12 +59,6 @@ func StoreLastUpKey() roachpb.Key {
 	return MakeStoreKey(localStoreLastUpSuffix, nil)
 }
 
-// StoreSyncKey returns a store-local key used on for emulating `DB::SyncWAL` on
-// Windows. See `db.cc:DBSyncWAL` for details.
-func StoreSyncKey() roachpb.Key {
-	return MakeStoreKey(localStoreSyncSuffix, nil)
-}
-
 // NodeLivenessKey returns the key for the node liveness record.
 func NodeLivenessKey(nodeID roachpb.NodeID) roachpb.Key {
 	key := make(roachpb.Key, 0, len(NodeLivenessPrefix)+9)
