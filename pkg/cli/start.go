@@ -510,26 +510,20 @@ func runStart(cmd *cobra.Command, args []string) error {
 	return returnErr
 }
 
-func maybeWarnMemorySettings() {
-	if cacheSizeValue.IsSet() && sqlSizeValue.IsSet() {
+func maybeWarnCacheSize() {
+	if cacheSizeValue.IsSet() {
 		return
 	}
 
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "memory usage and performance\n\n")
-	if !cacheSizeValue.IsSet() {
-		fmt.Fprintf(&buf, "  Using the default setting for --cache (%s).\n", cacheSizeValue)
-	}
-	if !sqlSizeValue.IsSet() {
-		fmt.Fprintf(&buf, "  Using the default setting for --max-sql-memory (%s).\n\n", sqlSizeValue)
-	}
-	fmt.Fprintf(&buf, "  A significantly larger values is usually needed for good performance. If you\n")
-	fmt.Fprintf(&buf, "  have a dedicated server a reasonable value is 25%% of physical memory")
+	fmt.Fprintf(&buf, "Using the default setting for --cache (%s).\n", cacheSizeValue)
+	fmt.Fprintf(&buf, "  A significantly larger value is usually needed for good performance.\n")
+	fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is 25%% of physical memory")
 	if size, err := server.GetTotalMemory(context.Background()); err == nil {
 		fmt.Fprintf(&buf, " (%s)", humanizeutil.IBytes(size/4))
 	}
 	fmt.Fprintf(&buf, ".")
-	log.Shout(context.Background(), log.Severity_WARNING, buf.String())
+	log.Warning(context.Background(), buf.String())
 }
 
 // setupAndInitializeLoggingAndProfiling does what it says on the label.
@@ -612,7 +606,7 @@ func setupAndInitializeLoggingAndProfiling(ctx context.Context) (*stop.Stopper, 
 				"Check out how to secure your cluster: https://www.cockroachlabs.com/docs/stable/secure-a-cluster.html")
 	}
 
-	maybeWarnMemorySettings()
+	maybeWarnCacheSize()
 
 	// We log build information to stdout (for the short summary), but also
 	// to stderr to coincide with the full logs.
