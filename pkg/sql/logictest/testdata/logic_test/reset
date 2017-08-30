@@ -1,3 +1,5 @@
+# LogicTest: default
+
 statement error unknown variable: "foo"
 RESET FOO
 

@@ -1,3 +1,5 @@
+# LogicTest: default
+
 query T colnames
 SELECT * FROM [SHOW client_encoding]
 ----
@@ -207,11 +209,11 @@ SELECT * FROM [SHOW CREATE TABLE system.descriptor]
 ----
 Table              CreateTable
 system.descriptor  CREATE TABLE descriptor (
-		   id INT NOT NULL,
-		   descriptor BYTES NULL,
-		   CONSTRAINT "primary" PRIMARY KEY (id ASC),
-		   FAMILY "primary" (id),
-		   FAMILY fam_2_descriptor (descriptor)
+  id INT NOT NULL,
+  descriptor BYTES NULL,
+  CONSTRAINT "primary" PRIMARY KEY (id ASC),
+  FAMILY "primary" (id),
+  FAMILY fam_2_descriptor (descriptor)
 )
 
 

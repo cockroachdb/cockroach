@@ -1,3 +1,5 @@
+# LogicTest: default distsql
+
 statement ok
 CREATE TABLE test_kv(k INT PRIMARY KEY, v INT, w DECIMAL);
   CREATE UNIQUE INDEX test_v_idx ON test_kv(v);

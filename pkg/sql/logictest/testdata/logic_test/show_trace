@@ -1,3 +1,5 @@
+# LogicTest: default
+
 # Prepare a trace to be inspected below.
 
 statement ok
