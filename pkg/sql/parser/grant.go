@@ -50,6 +50,33 @@ func (tl TargetList) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
+// NormalizeTablesWithDatabase normalizes all patterns and qualifies TableNames
+// with the provided db name if non-empty.
+func (tl TargetList) NormalizeTablesWithDatabase(db string) error {
+	for i, pattern := range tl.Tables {
+		var err error
+		pattern, err = pattern.NormalizeTablePattern()
+		if err != nil {
+			return err
+		}
+
+		if db != "" {
+			switch p := pattern.(type) {
+			case *TableName:
+				if err := p.QualifyWithDatabase(db); err != nil {
+					return err
+				}
+			case *AllTablesSelector:
+				if err := p.QualifyWithDatabase(db); err != nil {
+					return err
+				}
+			}
+		}
+		tl.Tables[i] = pattern
+	}
+	return nil
+}
+
 // Format implements the NodeFormatter interface.
 func (node *Grant) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("GRANT ")
