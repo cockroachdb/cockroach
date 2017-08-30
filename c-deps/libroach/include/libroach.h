@@ -273,8 +273,8 @@ DBStatus DBSstFileWriterOpen(DBSstFileWriter* fw);
 // Adds a kv entry to the sstable being built. An error is returned if it is
 // not greater than any previously added entry (according to the comparator
 // configured during writer creation). `Open` must have been called. `Close`
-// cannot have been called.
-DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val);
+// cannot have been called. The updated file size is stored in `file_size`.
+DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val, uint64_t* file_size);
 
 // Finalizes the writer and stores the constructed file's contents in *data. At
 // least one kv entry must have been added. May only be called once.

@@ -530,7 +530,7 @@ func writeRocksDB(
 		if err := sst.Add(kv); err != nil {
 			return 0, errors.Wrapf(err, errSSTCreationMaybeDuplicateTemplate, kv.Key.Key)
 		}
-		if sst.DataSize > sstMaxSize {
+		if sst.FileSize() > sstMaxSize {
 			if err := writeSST(firstKey, kv.Key.Key.Next()); err != nil {
 				return 0, err
 			}

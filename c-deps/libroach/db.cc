@@ -2484,11 +2484,12 @@ DBStatus DBSstFileWriterOpen(DBSstFileWriter* fw) {
   return kSuccess;
 }
 
-DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val) {
+DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val, uint64_t* file_size) {
   rocksdb::Status status = fw->rep.Add(EncodeKey(key), ToSlice(val));
   if (!status.ok()) {
     return ToDBStatus(status);
   }
+  *file_size = fw->rep.FileSize();
   return kSuccess;
 }
 
