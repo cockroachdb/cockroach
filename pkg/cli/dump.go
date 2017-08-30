@@ -410,7 +410,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 	// pk holds the last values of the fetched primary keys
 	var pk []driver.Value
 	q := fmt.Sprintf(bs, "")
-	inserts := make([][]string, 0, insertRows)
+	inserts := make([]string, 0, insertRows)
 	for {
 		rows, err := conn.Query(q, pk)
 		if err != nil {
@@ -432,39 +432,48 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 			}
 			pk = vals[:md.numIndexCols]
 			vals = vals[md.numIndexCols:]
-			ivals := make([]string, len(vals))
+			var ivals bytes.Buffer
 			// Values need to be correctly encoded for INSERT statements in a text file.
 			for si, sv := range vals {
+				if si > 0 {
+					fmt.Fprint(&ivals, ", ")
+				}
+				var d parser.Datum
 				switch t := sv.(type) {
 				case nil:
-					ivals[si] = "NULL"
+					d = parser.DNull
 				case bool:
-					ivals[si] = parser.MakeDBool(parser.DBool(t)).String()
+					d = parser.MakeDBool(parser.DBool(t))
 				case int64:
-					ivals[si] = parser.NewDInt(parser.DInt(t)).String()
+					d = parser.NewDInt(parser.DInt(t))
 				case float64:
-					ivals[si] = parser.NewDFloat(parser.DFloat(t)).String()
+					d = parser.NewDFloat(parser.DFloat(t))
 				case string:
-					ivals[si] = parser.NewDString(t).String()
+					d = parser.NewDString(t)
 				case []byte:
 					switch ct := md.columnTypes[cols[si]]; ct {
 					case "INTERVAL":
-						ivals[si] = fmt.Sprintf("'%s'", t)
+						d, err = parser.ParseDInterval(string(t))
+						if err != nil {
+							panic(err)
+						}
 					case "BYTES":
-						ivals[si] = parser.NewDBytes(parser.DBytes(t)).String()
+						d = parser.NewDBytes(parser.DBytes(t))
 					default:
 						// STRING and DECIMAL types can have optional length
 						// suffixes, so only examine the prefix of the type.
 						if strings.HasPrefix(md.columnTypes[cols[si]], "STRING") {
-							ivals[si] = parser.NewDString(string(t)).String()
+							d = parser.NewDString(string(t))
 						} else if strings.HasPrefix(md.columnTypes[cols[si]], "DECIMAL") {
-							ivals[si] = string(t)
+							d, err = parser.ParseDDecimal(string(t))
+							if err != nil {
+								panic(err)
+							}
 						} else {
 							panic(errors.Errorf("unknown []byte type: %s, %v: %s", t, cols[si], md.columnTypes[cols[si]]))
 						}
 					}
 				case time.Time:
-					var d parser.Datum
 					ct := md.columnTypes[cols[si]]
 					switch ct {
 					case "DATE":
@@ -476,12 +485,12 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 					default:
 						panic(errors.Errorf("unknown timestamp type: %s, %v: %s", t, cols[si], md.columnTypes[cols[si]]))
 					}
-					ivals[si] = d.String()
 				default:
 					panic(errors.Errorf("unknown field type: %T (%s)", t, cols[si]))
 				}
+				d.Format(&ivals, parser.FmtParsable)
 			}
-			inserts = append(inserts, ivals)
+			inserts = append(inserts, ivals.String())
 			i++
 			if len(inserts) == cap(inserts) {
 				writeInserts(w, md, inserts)
@@ -510,20 +519,13 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 	return nil
 }
 
-func writeInserts(w io.Writer, md tableMetadata, inserts [][]string) {
+func writeInserts(w io.Writer, md tableMetadata, inserts []string) {
 	fmt.Fprintf(w, "\nINSERT INTO %s (%s) VALUES", md.name.TableName, md.columnNames)
 	for idx, values := range inserts {
 		if idx > 0 {
 			fmt.Fprint(w, ",")
 		}
-		fmt.Fprint(w, "\n\t(")
-		for vi, v := range values {
-			if vi > 0 {
-				fmt.Fprint(w, ", ")
-			}
-			fmt.Fprint(w, v)
-		}
-		fmt.Fprint(w, ")")
+		fmt.Fprintf(w, "\n\t(%s)", values)
 	}
 	fmt.Fprintln(w, ";")
 }
