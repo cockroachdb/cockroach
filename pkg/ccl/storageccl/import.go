@@ -211,19 +211,6 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 		return nil, errors.Wrap(err, "make key rewriter")
 	}
 
-	var importStart, importEnd roachpb.Key
-	{
-		var ok bool
-		importStart, ok, _ = kr.RewriteKey(append([]byte(nil), args.DataSpan.Key...))
-		if !ok {
-			return nil, errors.Errorf("could not rewrite span start key: %s", importStart)
-		}
-		importEnd, ok, _ = kr.RewriteKey(append([]byte(nil), args.DataSpan.EndKey...))
-		if !ok {
-			return nil, errors.Errorf("could not rewrite span end key: %s", importEnd)
-		}
-	}
-
 	if err := importRequestLimiter.beginLimitedRequest(ctx); err != nil {
 		return nil, err
 	}
