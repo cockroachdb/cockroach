@@ -977,6 +977,9 @@ func (cp *readCSVProcessor) OutputTypes() []sqlbase.ColumnType {
 }
 
 func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
+	ctx, span := tracing.ChildSpan(ctx, "readCSVProcessor")
+	defer tracing.FinishSpan(span)
+
 	if wg != nil {
 		defer wg.Done()
 	}
@@ -989,6 +992,8 @@ func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 	// Read CSV into CSV records
 	group.Go(func() error {
+		gCtx, span := tracing.ChildSpan(gCtx, "readCSVProcessor-readCSV")
+		defer tracing.FinishSpan(span)
 		defer close(recordCh)
 		_, err := readCSV(gCtx, cp.csvOptions.Comma, cp.csvOptions.Comment,
 			len(cp.tableDesc.VisibleColumns()), []string{cp.uri}, recordCh)
@@ -996,6 +1001,9 @@ func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 	})
 	// Convert CSV records to KVs
 	group.Go(func() error {
+		gCtx, span := tracing.ChildSpan(gCtx, "readCSVProcessor-convert")
+		defer tracing.FinishSpan(span)
+
 		defer close(kvCh)
 		return groupWorkers(gCtx, runtime.NumCPU(), func(ctx context.Context) error {
 			return convertRecord(ctx, recordCh, kvCh, cp.csvOptions.Nullif, &cp.tableDesc)
@@ -1003,6 +1011,9 @@ func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 	})
 	// Sample KVs
 	group.Go(func() error {
+		gCtx, span := tracing.ChildSpan(gCtx, "readCSVProcessor-samplekvs")
+		defer tracing.FinishSpan(span)
+
 		defer close(sampleCh)
 		var fn sampleFunc
 		if cp.sampleSize == 0 {
@@ -1032,6 +1043,9 @@ func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 	})
 	// Send sampled KVs to dist sql
 	group.Go(func() error {
+		gCtx, span := tracing.ChildSpan(gCtx, "readCSVProcessor-sendkvs")
+		defer tracing.FinishSpan(span)
+
 		for row := range sampleCh {
 			cs, err := cp.out.EmitRow(gCtx, row)
 			if err != nil {
@@ -1115,6 +1129,9 @@ func (sp *sstWriter) OutputTypes() []sqlbase.ColumnType {
 }
 
 func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
+	ctx, span := tracing.ChildSpan(ctx, "sstWriter")
+	defer tracing.FinishSpan(span)
+
 	if wg != nil {
 		defer wg.Done()
 	}
