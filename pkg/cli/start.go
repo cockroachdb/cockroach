@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
+	"strconv"
 	"strings"
 	"syscall"
 	"text/tabwriter"
@@ -47,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -75,21 +77,6 @@ uninitialized, specify the --join flag to point to any healthy node
 `,
 	Example: `  cockroach start --insecure --store=attrs=ssd,path=/mnt/ssd1 [--join=host:port,[host:port]]`,
 	RunE:    MaybeShoutError(MaybeDecorateGRPCError(runStart)),
-}
-
-func setDefaultSizeParameters(ctx *server.Config) {
-	if size, err := server.GetTotalMemory(context.Background()); err == nil {
-		// Default the cache size to 1/4 of total memory. A larger cache size
-		// doesn't necessarily improve performance as this is memory that is
-		// dedicated to uncompressed blocks in RocksDB. A larger value here will
-		// compete with the OS buffer cache which holds compressed blocks.
-		ctx.CacheSize = size / 4
-
-		// Default the SQL memory pool size to 1/4 of total memory. Again
-		// we do not want to allow too much lest this will pressure
-		// against OS buffers and decrease overall client throughput.
-		ctx.SQLMemoryPoolSize = size / 4
-	}
 }
 
 // maxSizePerProfile is the maximum total size in bytes for profiles per
@@ -275,6 +262,51 @@ func initBlockProfile() {
 // error. For most errors 1 is appropriate, but a signal termination
 // can change this.
 var ErrorCode = 1
+
+type bytesOrPercentageValue struct {
+	val  *int64
+	bval *humanizeutil.BytesValue
+}
+
+func newBytesOrPercentageValue(v *int64) *bytesOrPercentageValue {
+	return &bytesOrPercentageValue{
+		val:  v,
+		bval: humanizeutil.NewBytesValue(v),
+	}
+}
+
+func (b *bytesOrPercentageValue) Set(s string) error {
+	if strings.HasSuffix(s, "%") {
+		percent, err := strconv.Atoi(s[:len(s)-1])
+		if err != nil {
+			return err
+		}
+		if percent < 0 || percent > 99 {
+			return fmt.Errorf("percentage out of range")
+		}
+		size, err := server.GetTotalMemory(context.Background())
+		if err != nil {
+			return err
+		}
+		s = fmt.Sprint((size * int64(percent)) / 100)
+	}
+	return b.bval.Set(s)
+}
+
+func (b *bytesOrPercentageValue) Type() string {
+	return b.bval.Type()
+}
+
+func (b *bytesOrPercentageValue) String() string {
+	return b.bval.String()
+}
+
+func (b *bytesOrPercentageValue) IsSet() bool {
+	return b.bval.IsSet()
+}
+
+var cacheSizeValue = newBytesOrPercentageValue(&serverCfg.CacheSize)
+var sqlSizeValue = newBytesOrPercentageValue(&serverCfg.SQLMemoryPoolSize)
 
 // runStart starts the cockroach node using --store as the list of
 // storage devices ("stores") on this machine and --join as the list
@@ -521,6 +553,23 @@ func runStart(cmd *cobra.Command, args []string) error {
 	return returnErr
 }
 
+func maybeWarnCacheSize() {
+	if cacheSizeValue.IsSet() {
+		return
+	}
+
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "Using the default setting for --cache (%s).\n", cacheSizeValue)
+	fmt.Fprintf(&buf, "  A significantly larger value is usually needed for good performance.\n")
+	if size, err := server.GetTotalMemory(context.Background()); err == nil {
+		fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is --cache=25%% (%s).",
+			humanizeutil.IBytes(size/4))
+	} else {
+		fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is 25%% of physical memory.")
+	}
+	log.Warning(context.Background(), buf.String())
+}
+
 // setupAndInitializeLoggingAndProfiling does what it says on the label.
 // Prior to this however it determines suitable defaults for the
 // logging output directory and the verbosity level of stderr logging.
@@ -600,6 +649,8 @@ func setupAndInitializeLoggingAndProfiling(ctx context.Context) (*stop.Stopper, 
 				"- There is no network encryption nor authentication, and thus no confidentiality.\n\n"+
 				"Check out how to secure your cluster: https://www.cockroachlabs.com/docs/stable/secure-a-cluster.html")
 	}
+
+	maybeWarnCacheSize()
 
 	// We log build information to stdout (for the short summary), but also
 	// to stderr to coincide with the full logs.
