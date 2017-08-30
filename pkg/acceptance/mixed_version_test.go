@@ -22,6 +22,7 @@ import (
 	gosql "database/sql"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/pkg/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -37,6 +38,20 @@ func TestMixedVersion(t *testing.T) {
 }
 
 func testMixedVersionHarness(ctx context.Context, t *testing.T, cfg cluster.TestConfig) {
+	// TODO(tschottdorf): this test is flaky when run with four (or more) nodes.
+	// I'm not 100% sure why, but the node started first may sometimes not be
+	// able to connect to Gossip. That node is special in that it gets started
+	// without join flags, but even though it is passed as a peer to all of the
+	// other nodes, either none of them bothers to actually use it, or the node
+	// does not profit from incoming connections sufficiently. For some reason,
+	// it works with three nodes (I've done dozens of iterations; with four nodes
+	// it usually craps out after only a handful).
+	//
+	// See https://github.com/cockroachdb/cockroach/issues/18027.
+	if len(cfg.Nodes) > 3 {
+		cfg.Nodes = cfg.Nodes[:3]
+	}
+
 	for i := range cfg.Nodes {
 		// Leave the field blank for all but the first node so that the use the
 		// version we're testing in this run.
@@ -85,5 +100,47 @@ func testMixedVersionHarness(ctx context.Context, t *testing.T, cfg cluster.Test
 		if version != exp {
 			t.Fatalf("%d: node running at %s, not %s", i, version, exp)
 		}
+	}
+
+	for i := 0; i < c.NumNodes(); i++ {
+		if err := c.Kill(ctx, i); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	lc := c.(*localcluster.LocalCluster)
+
+	var chs []<-chan error
+	// Restart the nodes asynchronously and in a way that doesn't start the
+	// first node (at v1.0.5 first) (this is due to technical limitations in
+	// v1.0.5 and the test harness). See (*LocalCluster).StartAsync() for
+	// details.
+	for i := c.NumNodes() - 1; i >= 0; i-- {
+		chs = append(chs, lc.RestartAsync(ctx, i))
+	}
+
+	for _, ch := range chs {
+		if err := <-ch; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	db, err := gosql.Open("postgres", c.PGUrl(ctx, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM system.settings WHERE name = 'version';").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+
+	// Since there are nodes at >1.0 in the cluster, a migration that populates
+	// the version setting should have run.
+	//
+	// NB: we could do this check before the restart as well. The new nodes
+	// won't declare startup complete until migrations have run. But putting
+	// it here also checks that the cluster still "works" after the restart.
+	if count < 1 {
+		t.Fatal("initial cluster version was not migrated in")
 	}
 }

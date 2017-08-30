@@ -22,6 +22,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/pkg/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -87,17 +88,18 @@ func TestGossipRestart(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	// TODO(tschottdorf): at the time of writing, this can't run under RunLocal
-	// simply because that mode uses ephemeral ports, and so restarting a whole
-	// cluster leads to no node knowing where to reach any other node. To change
-	// this, we could introduce an RPC we can send to the cluster that gives it
-	// "hints" for its --join list after it has started. CI servers may cycle
-	// through ports rapidly, so we can't rely that our previous port is available
-	// when a node restarts.
-	RunDocker(t, func(t *testing.T) {
-		// TODO(bram): #4559 Limit this test to only the relevant cases. No chaos
-		// agents should be required.
-		runTestWithCluster(t, testGossipRestartInner)
+	ctx := context.Background()
+	cfg := readConfigFromFlags()
+	RunLocal(t, func(t *testing.T) {
+		// TODO(tschottdorf): https://github.com/cockroachdb/cockroach/issues/18027.
+		// When that is addressed, use the standard runner again.
+		if len(cfg.Nodes) > 3 {
+			cfg.Nodes = cfg.Nodes[:3]
+		}
+		c := StartCluster(ctx, t, cfg)
+		defer c.AssertAndStop(ctx, t)
+
+		testGossipRestartInner(ctx, t, c, cfg)
 	})
 }
 
@@ -139,24 +141,15 @@ func testGossipRestartInner(
 		}
 
 		log.Infof(ctx, "restarting all nodes")
-		if _, ok := c.(*cluster.DockerCluster); ok {
-			// It is not safe to call Restart in parallel when using
-			// cluster.DockerCluster because expected container shutdown events
-			// may be reordered.
-			for i := 0; i < num; i++ {
-				if err := c.Restart(ctx, i); err != nil {
-					t.Errorf("error restarting node %d: %s", i, err)
-				}
-			}
-		} else {
-			ch := make(chan error)
-			for i := 0; i < num; i++ {
-				go func(i int) { ch <- c.Restart(ctx, i) }(i)
-			}
-			for i := 0; i < num; i++ {
-				if err := <-ch; err != nil {
-					t.Errorf("error restarting node %d: %s", i, err)
-				}
+		var chs []<-chan error
+		for i := 0; i < num; i++ {
+			// We need to restart asynchronously because the local cluster nodes
+			// like to wait until they are ready to serve.
+			chs = append(chs, c.(*localcluster.LocalCluster).RestartAsync(ctx, i))
+		}
+		for i, ch := range chs {
+			if err := <-ch; err != nil {
+				t.Errorf("error restarting node %d: %s", i, err)
 			}
 		}
 		if t.Failed() {
