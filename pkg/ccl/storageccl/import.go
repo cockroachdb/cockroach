@@ -42,7 +42,7 @@ var importRequestLimiter = makeConcurrentRequestLimiter(importRequestLimit)
 var importBatchSize = settings.RegisterByteSizeSetting(
 	"kv.import.batch_size",
 	"",
-	63<<20,
+	32<<20,
 )
 
 // AddSSTableEnabled wraps "kv.import.experimental_addsstable.enabled".
