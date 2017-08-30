@@ -36,7 +36,7 @@ func TestTimestampCache(t *testing.T) {
 	tc.lowWater = hlc.Timestamp{WallTime: baseTS}
 
 	// First simulate a read of just "a" at time 50.
-	tc.add(roachpb.Key("a"), nil, hlc.Timestamp{WallTime: 50}, zeroTxnID, true)
+	tc.add(roachpb.Key("a"), nil, hlc.Timestamp{WallTime: 50}, uuid.UUID{}, true)
 	// Although we added "a" at time 50, the internal cache should still
 	// be empty because the t=50 < baseTS.
 	if tc.rCache.Len() > 0 {
@@ -61,7 +61,7 @@ func TestTimestampCache(t *testing.T) {
 
 	// Sim a read of "b"-"c" at a time above the low-water mark.
 	ts := clock.Now()
-	tc.add(roachpb.Key("b"), roachpb.Key("c"), ts, zeroTxnID, true)
+	tc.add(roachpb.Key("b"), roachpb.Key("c"), ts, uuid.UUID{}, true)
 
 	// Verify all permutations of direct and range access.
 	if rTS, _, ok := tc.GetMaxRead(roachpb.Key("b"), nil); rTS != ts || !ok {
@@ -113,11 +113,11 @@ func TestTimestampCacheEviction(t *testing.T) {
 	// Increment time to the low water mark + 1.
 	manual.Increment(1)
 	aTS := clock.Now()
-	tc.add(roachpb.Key("a"), nil, aTS, zeroTxnID, true)
+	tc.add(roachpb.Key("a"), nil, aTS, uuid.UUID{}, true)
 
 	// Increment time by the MinTSCacheWindow and add another key.
 	manual.Increment(MinTSCacheWindow.Nanoseconds())
-	tc.add(roachpb.Key("b"), nil, clock.Now(), zeroTxnID, true)
+	tc.add(roachpb.Key("b"), nil, clock.Now(), uuid.UUID{}, true)
 
 	// Verify looking up key "c" returns the new low water mark ("a"'s timestamp).
 	if rTS, _, ok := tc.GetMaxRead(roachpb.Key("c"), nil); rTS != aTS || ok {
@@ -138,7 +138,7 @@ func TestTimestampCacheNoEviction(t *testing.T) {
 	// Increment time to the low water mark + 1.
 	manual.Increment(1)
 	aTS := clock.Now()
-	tc.add(roachpb.Key("a"), nil, aTS, zeroTxnID, true)
+	tc.add(roachpb.Key("a"), nil, aTS, uuid.UUID{}, true)
 	tc.AddRequest(cacheRequest{
 		reads:     []roachpb.Span{{Key: roachpb.Key("c")}},
 		timestamp: aTS,
@@ -146,7 +146,7 @@ func TestTimestampCacheNoEviction(t *testing.T) {
 
 	// Increment time by the MinTSCacheWindow and add another key.
 	manual.Increment(MinTSCacheWindow.Nanoseconds())
-	tc.add(roachpb.Key("b"), nil, clock.Now(), zeroTxnID, true)
+	tc.add(roachpb.Key("b"), nil, clock.Now(), uuid.UUID{}, true)
 	tc.AddRequest(cacheRequest{
 		reads:     []roachpb.Span{{Key: roachpb.Key("d")}},
 		timestamp: clock.Now(),
@@ -224,14 +224,14 @@ func assertTS(
 	}
 }
 
-// zeroIfSimul returns zeroTxnID if this test involves multiple transactions
+// zeroIfSimul returns a zero UUID if this test involves multiple transactions
 // with the same timestamp (i.e. the timestamps in txns are identical but the
 // transaction ids are not), and the given txnID if they are not. This is
 // because timestampCache.GetMaxRead must not return a transaction ID when two
 // different transactions have the same timestamp.
 func zeroIfSimul(txns []txnState, txnID uuid.UUID) uuid.UUID {
 	if txns[0].ts == txns[1].ts && txns[0].id != txns[1].id {
-		return zeroTxnID
+		return uuid.UUID{}
 	}
 	return txnID
 }
@@ -313,7 +313,7 @@ var layeredIntervalTestCase3 = layeredIntervalTestCase{
 
 		assertTS(t, tc, roachpb.Key("a"), nil, acTx.ts, acTx.id)
 		assertTS(t, tc, roachpb.Key("b"), nil, bcTx.ts, zeroIfSimul(txns, bcTx.id))
-		assertTS(t, tc, roachpb.Key("c"), nil, tc.lowWater, zeroTxnID)
+		assertTS(t, tc, roachpb.Key("c"), nil, tc.lowWater, uuid.UUID{})
 		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("c"), bcTx.ts, zeroIfSimul(txns, bcTx.id))
 		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("b"), acTx.ts, acTx.id)
 		assertTS(t, tc, roachpb.Key("b"), roachpb.Key("c"), bcTx.ts, zeroIfSimul(txns, bcTx.id))
@@ -337,7 +337,7 @@ var layeredIntervalTestCase4 = layeredIntervalTestCase{
 
 		assertTS(t, tc, roachpb.Key("a"), nil, abTx.ts, zeroIfSimul(txns, abTx.id))
 		assertTS(t, tc, roachpb.Key("b"), nil, acTx.ts, acTx.id)
-		assertTS(t, tc, roachpb.Key("c"), nil, tc.lowWater, zeroTxnID)
+		assertTS(t, tc, roachpb.Key("c"), nil, tc.lowWater, uuid.UUID{})
 		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("c"), abTx.ts, zeroIfSimul(txns, abTx.id))
 		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("b"), abTx.ts, zeroIfSimul(txns, abTx.id))
 		assertTS(t, tc, roachpb.Key("b"), roachpb.Key("c"), acTx.ts, acTx.id)
@@ -456,7 +456,7 @@ func TestTimestampCacheClear(t *testing.T) {
 	key := roachpb.Key("a")
 
 	ts := clock.Now()
-	tc.add(key, nil, ts, zeroTxnID, true)
+	tc.add(key, nil, ts, uuid.UUID{}, true)
 
 	manual.Increment(5000000)
 
@@ -484,7 +484,7 @@ func TestTimestampCacheReadVsWrite(t *testing.T) {
 
 	// Add read-only non-txn entry at current time.
 	ts1 := clock.Now()
-	tc.add(roachpb.Key("a"), roachpb.Key("b"), ts1, zeroTxnID, true)
+	tc.add(roachpb.Key("a"), roachpb.Key("b"), ts1, uuid.UUID{}, true)
 
 	// Add two successive txn entries; one read-only and one read-write.
 	txn1ID := uuid.MakeV4()
@@ -535,7 +535,7 @@ func TestTimestampCacheEqualTimestamps(t *testing.T) {
 	// can proceed here.
 	if ts, txn, _ := tc.GetMaxRead(roachpb.Key("a"), roachpb.Key("c")); ts != ts1 {
 		t.Errorf("expected 'a'-'c' to have timestamp %s, but found %s", ts1, ts)
-	} else if txn != zeroTxnID {
+	} else if txn != (uuid.UUID{}) {
 		t.Errorf("expected 'a'-'c' to have zero txn id, but found %s", txn)
 	}
 }
@@ -549,15 +549,15 @@ func BenchmarkTimestampCacheInsertion(b *testing.B) {
 		tc.Clear(clock.Now())
 
 		cdTS := clock.Now()
-		tc.add(roachpb.Key("c"), roachpb.Key("d"), cdTS, zeroTxnID, true)
+		tc.add(roachpb.Key("c"), roachpb.Key("d"), cdTS, uuid.UUID{}, true)
 
 		beTS := clock.Now()
-		tc.add(roachpb.Key("b"), roachpb.Key("e"), beTS, zeroTxnID, true)
+		tc.add(roachpb.Key("b"), roachpb.Key("e"), beTS, uuid.UUID{}, true)
 
 		adTS := clock.Now()
-		tc.add(roachpb.Key("a"), roachpb.Key("d"), adTS, zeroTxnID, true)
+		tc.add(roachpb.Key("a"), roachpb.Key("d"), adTS, uuid.UUID{}, true)
 
 		cfTS := clock.Now()
-		tc.add(roachpb.Key("c"), roachpb.Key("f"), cfTS, zeroTxnID, true)
+		tc.add(roachpb.Key("c"), roachpb.Key("f"), cfTS, uuid.UUID{}, true)
 	}
 }
