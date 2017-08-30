@@ -26,6 +26,7 @@ import "bytes"
 type Delete struct {
 	Table     TableExpr
 	Where     *Where
+	Limit     *Limit
 	Returning ReturningClause
 }
 
@@ -34,5 +35,6 @@ func (node *Delete) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("DELETE FROM ")
 	FormatNode(buf, f, node.Table)
 	FormatNode(buf, f, node.Where)
+	FormatNode(buf, f, node.Limit)
 	FormatNode(buf, f, node.Returning)
 }

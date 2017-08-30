@@ -173,3 +173,54 @@ CREATE TABLE indexed (id int primary key, value int, other int, index (value))
 
 statement ok
 DELETE FROM indexed WHERE value = 5
+
+# Check DELETE with LIMIT clause (MySQL extension)
+
+query ITTT
+EXPLAIN DELETE FROM unindexed WHERE v = 5 LIMIT 10
+----
+0  delete  ·      ·
+0  ·       from   unindexed
+1  limit   ·      ·
+2  render  ·      ·
+3  scan    ·      ·
+3  ·       table  unindexed@primary
+3  ·       spans  ALL
+
+query ITTT
+EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10
+----
+0  delete  ·      ·
+0  ·       from   indexed
+1  limit   ·      ·
+2  render  ·      ·
+3  scan    ·      ·
+3  ·       table  indexed@indexed_value_idx
+3  ·       spans  /5-/6
+3  ·       limit  10
+
+query ITTT
+EXPLAIN DELETE FROM indexed LIMIT 10
+----
+0  delete  ·      ·
+0  ·       from   indexed
+1  limit   ·      ·
+2  render  ·      ·
+3  scan    ·      ·
+3  ·       table  indexed@primary
+3  ·       spans  ALL
+3  ·       limit  10
+
+query ITTT
+EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10 RETURNING id
+----
+0  delete      ·      ·
+0  ·           from   indexed
+1  limit       ·      ·
+2  index-join  ·      ·
+3  scan        ·      ·
+3  ·           table  indexed@indexed_value_idx
+3  ·           spans  /5-/6
+3  ·           limit  10
+3  scan        ·      ·
+3  ·           table  indexed@primary

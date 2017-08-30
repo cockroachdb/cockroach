@@ -678,7 +678,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 
 %type <empty> opt_set_data
 
-%type <*Limit> limit_clause offset_clause
+%type <*Limit> limit_clause offset_clause opt_limit_clause
 %type <Expr>  select_limit_value
 %type <Expr> opt_select_fetch_first_value
 %type <empty> row_or_rows
@@ -1425,12 +1425,19 @@ create_stmt:
 
 // %Help: DELETE - delete rows from a table
 // %Category: DML
-// %Text: DELETE FROM <tablename> [WHERE <expr>] [RETURNING <exprs...>]
+// %Text: DELETE FROM <tablename> [WHERE <expr>]
+//               [LIMIT <expr>]
+//               [RETURNING <exprs...>]
 // %SeeAlso: WEBDOCS/delete.html
 delete_stmt:
-  opt_with_clause DELETE FROM relation_expr_opt_alias where_clause returning_clause
+  opt_with_clause DELETE FROM relation_expr_opt_alias where_clause opt_limit_clause returning_clause
   {
-    $$.val = &Delete{Table: $4.tblExpr(), Where: newWhere(astWhere, $5.expr()), Returning: $6.retClause()}
+    $$.val = &Delete{
+               Table: $4.tblExpr(),
+	       Where: newWhere(astWhere, $5.expr()),
+	       Limit: $6.limit(),
+	       Returning: $7.retClause(),
+             }
   }
 | opt_with_clause DELETE error // SHOW HELP: DELETE
 
@@ -3764,6 +3771,10 @@ select_limit:
   }
 | limit_clause
 | offset_clause
+
+opt_limit_clause:
+  limit_clause
+| /* EMPTY */ { $$.val = (*Limit)(nil) }
 
 limit_clause:
   LIMIT select_limit_value
