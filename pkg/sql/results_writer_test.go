@@ -21,6 +21,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lib/pq"
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
@@ -31,8 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/lib/pq"
-	"golang.org/x/net/context"
 )
 
 func withExecutor(test func(e *Executor, s *Session, evalCtx *parser.EvalContext), t *testing.T) {
@@ -206,59 +207,80 @@ func TestBufferedWriterReset(t *testing.T) {
 	}
 }
 
+// Test that, if a communication error is encountered during streaming of
+// results, the statement will return a StreamingWireFailure error. That's
+// important because pgwire recognizes that error.
 func TestStreamingWireFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// query's result set is large enough to cause a flush midway through execution.
-	const query = "SELECT * FROM generate_series(1,20000)"
+	// This test uses libpq because it needs to control when a network connection
+	// is closed. The Go sql package doesn't easily let you do that.
+
+	// We're going to run a query and kill the network connection while it's
+	// running. The query needs to have a large enough set of results such that
+	// a) they overflow the results buffer and cause them to actually be sent over
+	// the network as they are produced, giving the server an opportunity to find
+	// out that the network connection dropped.
+	// b) beyond the point above, it takes a little while for
+	// the server to actually find out that the network has been closed after the
+	// client has closed it. That's why this query is much larger than would be
+	// needed just for a).
+	//
+	// TODO(andrei): It's unfortunate that the server finds out about the status
+	// of network connection every now and then, when it wants to flush some
+	// results - for one it forces this test in using this big hammer of
+	// generating tons and tons of results. What we'd like is for the server to
+	// figure out the status of the connection concurrently with the query
+	// execution - then this test would be able to wait for the server to figure
+	// out that the connection is toast and then unblock the query.
+	const query = "SELECT * FROM generate_series(1, 200000)"
 
 	var conn driver.Conn
-	errChan := make(chan error, 1)
+	serverErrChan := make(chan error)
 
-	tc := serverutils.StartTestCluster(t, 2,
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-			ServerArgs: base.TestServerArgs{
-				Knobs: base.TestingKnobs{
-					SQLExecutor: &ExecutorTestingKnobs{
-						BeforeExecute: func(ctx context.Context, stmt string, isDistributed bool) {
-							if strings.Contains(stmt, "generate_series") {
-								if err := conn.Close(); err != nil {
-									t.Fatal("unexpected error", err)
-								}
+	var ts serverutils.TestServerInterface
+	ts, _, _ = serverutils.StartServer(t,
+		base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLExecutor: &ExecutorTestingKnobs{
+					BeforeExecute: func(ctx context.Context, stmt string, isDistributed bool) {
+						if strings.Contains(stmt, "generate_series") {
+							if err := conn.Close(); err != nil {
+								t.Error(err)
 							}
-						},
-						AfterExecute: func(ctx context.Context, stmt string, resultWriter StatementResult, err error) {
-							if strings.Contains(stmt, "generate_series") {
-								errChan <- err
-								close(errChan)
-							}
-						},
+						}
+					},
+					// We use an AfterExecute filter to get access to the server-side
+					// execution error. The client will be disconnected by the time this
+					// runs.
+					AfterExecute: func(ctx context.Context, stmt string, resultWriter StatementResult, err error) {
+						if strings.Contains(stmt, "generate_series") {
+							serverErrChan <- err
+						}
 					},
 				},
 			},
 		})
-	defer tc.Stopper().Stop(context.TODO())
+	defer ts.Stopper().Stop(context.TODO())
 
-	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, tc.Server(0).ServingAddr(), "StartServer", url.User(security.RootUser))
-	defer cleanupGoDB()
-
-	conn, err := pq.Open(pgURL.String())
+	pgURL, cleanup := sqlutils.PGUrl(
+		t, ts.ServingAddr(), "StartServer", url.User(security.RootUser))
+	defer cleanup()
+	var err error
+	conn, err = pq.Open(pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}
-	prepare, err := conn.Prepare(query)
-	if err != nil {
-		t.Fatal(err)
+	execer := conn.(driver.Execer)
+
+	// The BeforeExecute filter will kill the connection (form the client side) in
+	// the middle of the query. Therefor, the client expects a ErrBadConn, and the
+	// server expects a WireFailureError.
+	if _, err := execer.Exec(query, nil); err != driver.ErrBadConn {
+		t.Fatalf("expected ErrBadConn, got: %v", err)
 	}
-	_, err = prepare.Exec(nil)
-	if err == nil {
-		t.Fatal("expected error got none")
-	}
-	err = <-errChan
-	_, ok := err.(WireFailureError)
-	if !ok {
-		t.Fatal("expected wirefailure error got", err)
+	serverErr := <-serverErrChan
+	if _, ok := serverErr.(WireFailureError); !ok {
+		t.Fatalf("expected WireFailureError, got %v ", err)
 	}
 }
