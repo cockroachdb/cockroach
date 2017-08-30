@@ -77,7 +77,7 @@ case ${1-} in
     fi
 
     # shellcheck disable=SC2029
-    ssh "${USER}@${FQDN}" "echo '* * * * * /home/radu/bootstrap/autoshutdown.cron.sh 10 az vm deallocate --resource-group \"${RG}\" --name \"${NAME}\"' | crontab -"
+    ssh "${USER}@${FQDN}" "echo '* * * * * /home/${USER}/bootstrap/autoshutdown.cron.sh 10 az vm deallocate --resource-group \"${RG}\" --name \"${NAME}\"' | crontab -"
 
     echo "VM now running at ${FQDN}"
     ;;
