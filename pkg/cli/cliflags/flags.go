@@ -95,7 +95,8 @@ accept requests.`,
 Total size in bytes available for use to store temporary data for SQL
 clients, including prepared queries and intermediate data rows during
 query execution. Size suffixes are supported (e.g. 1GB and 1GiB). If
-left unspecified, defaults to 128MiB.`,
+left unspecified, defaults to 128MiB. A percentage of physical memory
+can also be specified (e.g. 25%).`,
 	}
 
 	Cache = FlagInfo{
@@ -103,7 +104,8 @@ left unspecified, defaults to 128MiB.`,
 		Description: `
 Total size in bytes for caches, shared evenly if there are multiple
 storage devices. Size suffixes are supported (e.g. 1GB and 1GiB).
-If left unspecified, defaults to 128MiB.`,
+If left unspecified, defaults to 128MiB. A percentage of physical memory
+can also be specified (e.g. 25%).`,
 	}
 
 	ClientHost = FlagInfo{

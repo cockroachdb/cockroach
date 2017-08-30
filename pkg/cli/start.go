@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
+	"strconv"
 	"strings"
 	"syscall"
 	"text/tabwriter"
@@ -262,8 +263,50 @@ func initBlockProfile() {
 // can change this.
 var ErrorCode = 1
 
-var cacheSizeValue = humanizeutil.NewBytesValue(&serverCfg.CacheSize)
-var sqlSizeValue = humanizeutil.NewBytesValue(&serverCfg.SQLMemoryPoolSize)
+type bytesOrPercentageValue struct {
+	val  *int64
+	bval *humanizeutil.BytesValue
+}
+
+func newBytesOrPercentageValue(v *int64) *bytesOrPercentageValue {
+	return &bytesOrPercentageValue{
+		val:  v,
+		bval: humanizeutil.NewBytesValue(v),
+	}
+}
+
+func (b *bytesOrPercentageValue) Set(s string) error {
+	if strings.HasSuffix(s, "%") {
+		percent, err := strconv.Atoi(s[:len(s)-1])
+		if err != nil {
+			return err
+		}
+		if percent < 0 || percent > 99 {
+			return fmt.Errorf("percentage out of range")
+		}
+		size, err := server.GetTotalMemory(context.Background())
+		if err != nil {
+			return err
+		}
+		s = fmt.Sprint((size * int64(percent)) / 100)
+	}
+	return b.bval.Set(s)
+}
+
+func (b *bytesOrPercentageValue) Type() string {
+	return b.bval.Type()
+}
+
+func (b *bytesOrPercentageValue) String() string {
+	return b.bval.String()
+}
+
+func (b *bytesOrPercentageValue) IsSet() bool {
+	return b.bval.IsSet()
+}
+
+var cacheSizeValue = newBytesOrPercentageValue(&serverCfg.CacheSize)
+var sqlSizeValue = newBytesOrPercentageValue(&serverCfg.SQLMemoryPoolSize)
 
 // runStart starts the cockroach node using --store as the list of
 // storage devices ("stores") on this machine and --join as the list
@@ -518,11 +561,12 @@ func maybeWarnCacheSize() {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "Using the default setting for --cache (%s).\n", cacheSizeValue)
 	fmt.Fprintf(&buf, "  A significantly larger value is usually needed for good performance.\n")
-	fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is 25%% of physical memory")
 	if size, err := server.GetTotalMemory(context.Background()); err == nil {
-		fmt.Fprintf(&buf, " (%s)", humanizeutil.IBytes(size/4))
+		fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is --cache=25%% (%s).",
+			humanizeutil.IBytes(size/4))
+	} else {
+		fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is 25%% of physical memory.")
 	}
-	fmt.Fprintf(&buf, ".")
 	log.Warning(context.Background(), buf.String())
 }
 
