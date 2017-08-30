@@ -48,9 +48,11 @@ const config = {
 const client = new pg.Client(config);
 
 // Assert that the given error is not null and matches the given regex.
-function isError(err, expected) {
-  if (!err) return false;
-  return expected.test(err.toString());
+function isError(err, expected, pgCode) {
+  if (!err) return new Error('expected non-null error');
+  if (pgCode && err.code !== pgCode) return new Error('expected error to have code ' + pgCode + ', got ' + err.code);
+  if (!expected.test(err.toString())) return new Error('expected error message to match ' + expected.toString() + ', but was ' + err.toString());
+  return null;
 }
 
 function testSelect(client) {
@@ -75,7 +77,8 @@ function testSendInvalidUTF8(client) {
       text: 'SELECT $1::STRING',
       values: [new Buffer([167])]
     }, function (err, results) {
-      if (!isError(err, /invalid UTF-8 sequence/)) throw new Error('expected error, got ' + err.toString());
+      let validationError = isError(err, /invalid UTF-8 sequence/, '22021');
+      if (validationError) throw validationError;
       resolve();
     });
   });
