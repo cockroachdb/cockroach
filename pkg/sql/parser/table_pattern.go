@@ -42,9 +42,16 @@ type TablePattern interface {
 	NormalizeTablePattern() (TablePattern, error)
 }
 
+// DatabaseQualifiable identifiers can be qualifed with a database name.
+type DatabaseQualifiable interface {
+	QualifyWithDatabase(database string) error
+}
+
 var _ TablePattern = UnresolvedName{}
 var _ TablePattern = &TableName{}
 var _ TablePattern = &AllTablesSelector{}
+var _ DatabaseQualifiable = &AllTablesSelector{}
+var _ DatabaseQualifiable = &TableName{}
 
 // NormalizeTablePattern resolves an UnresolvedName to either a
 // TableName or AllTablesSelector.

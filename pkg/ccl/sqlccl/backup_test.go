@@ -424,12 +424,13 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	// superset of the full BACKUP syntax, we'll cover everything by verifying the
 	// incremental backup below.
 	sqlDB.Exec(`BACKUP DATABASE data TO $1`, fullDir)
+	sqlDB.Exec(`SET DATABASE = data`)
 
-	sqlDB.Exec(`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2`, incDir, fullDir)
+	sqlDB.Exec(`BACKUP bank TO $1 INCREMENTAL FROM $2`, incDir, fullDir)
 	if err := verifySystemJob(sqlDB, 1, jobs.TypeBackup, jobs.Record{
 		Username: security.RootUser,
 		Description: fmt.Sprintf(
-			`BACKUP DATABASE data TO '%s' INCREMENTAL FROM '%s'`,
+			`BACKUP data.bank TO '%s' INCREMENTAL FROM '%s'`,
 			sanitizedIncDir, sanitizedFullDir,
 		),
 		DescriptorIDs: sqlbase.IDs{

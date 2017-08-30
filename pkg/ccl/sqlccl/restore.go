@@ -61,15 +61,14 @@ func loadBackupDescs(ctx context.Context, uris []string) ([]BackupDescriptor, er
 }
 
 func selectTargets(
-	backupDescs []BackupDescriptor, targets parser.TargetList,
+	p sql.PlanHookState, backupDescs []BackupDescriptor, targets parser.TargetList,
 ) ([]sqlbase.Descriptor, error) {
 	if len(targets.Databases) > 0 {
 		return nil, errors.Errorf("RESTORE DATABASE is not yet supported " +
 			"(but you can use 'RESTORE somedb.*' to restore all backed up tables for a given DB).")
 	}
 
-	// TODO(dan): Plumb the session database down.
-	sessionDatabase := ""
+	sessionDatabase := p.EvalContext().Database
 	lastBackupDesc := backupDescs[len(backupDescs)-1]
 	sqlDescs, err := descriptorsMatchingTargets(sessionDatabase, lastBackupDesc.Descriptors, targets)
 	if err != nil {
@@ -559,7 +558,7 @@ func restoreTableDescs(
 }
 
 func restoreJobDescription(restore *parser.Restore, from []string) (string, error) {
-	r := parser.Restore{
+	r := &parser.Restore{
 		AsOf:    restore.AsOf,
 		Options: restore.Options,
 		Targets: restore.Targets,
@@ -574,7 +573,7 @@ func restoreJobDescription(restore *parser.Restore, from []string) (string, erro
 		r.From[i] = parser.NewDString(sf)
 	}
 
-	return r.String(), nil
+	return parser.AsStringWithFlags(r, parser.FmtSimpleQualified), nil
 }
 
 // restore imports a SQL table (or tables) from sets of non-overlapping sstable
@@ -902,11 +901,14 @@ func doRestorePlan(
 	opts map[string]string,
 	resultsCh chan<- parser.Datums,
 ) error {
+	if err := restoreStmt.Targets.NormalizeTablesWithDatabase(p.EvalContext().Database); err != nil {
+		return err
+	}
 	backupDescs, err := loadBackupDescs(ctx, from)
 	if err != nil {
 		return err
 	}
-	sqlDescs, err := selectTargets(backupDescs, restoreStmt.Targets)
+	sqlDescs, err := selectTargets(p, backupDescs, restoreStmt.Targets)
 	if err != nil {
 		return err
 	}
