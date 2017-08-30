@@ -64,6 +64,7 @@ func LoadCSV(
 	comma, comment rune,
 	nullif *string,
 	sstMaxSize int64,
+	tempDir string,
 ) (csvCount, kvCount, sstCount int64, err error) {
 	if table == "" {
 		return 0, 0, 0, errors.New("no table specified")
@@ -92,8 +93,31 @@ func LoadCSV(
 	// TODO(mjibson): allow users to optionally specify a full URI to an export store.
 	dest = fmt.Sprintf("nodelocal://%s", dest)
 
+	rocksdbDir, err := ioutil.TempDir(tempDir, "cockroach-csv-rocksdb")
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	defer func() {
+		if err := os.RemoveAll(rocksdbDir); err != nil {
+			log.Infof(ctx, "could not remove temp directory %s: %s", rocksdbDir, err)
+		}
+	}()
+
+	cache := engine.NewRocksDBCache(0)
+	defer cache.Release()
+	r, err := engine.NewRocksDB(engine.RocksDBConfig{
+		Settings:     cluster.MakeTestingClusterSettings(),
+		Dir:          rocksdbDir,
+		MaxSizeBytes: 0,
+		MaxOpenFiles: 1024,
+	}, cache)
+	if err != nil {
+		return 0, 0, 0, errors.Wrap(err, "create rocksdb instance")
+	}
+	defer r.Close()
+
 	return doLocalCSVTransform(
-		ctx, nil, parentID, tableDesc, dest, dataFiles, comma, comment, nullif, sstMaxSize,
+		ctx, nil, parentID, tableDesc, dest, dataFiles, comma, comment, nullif, sstMaxSize, r,
 	)
 }
 
@@ -107,21 +131,11 @@ func doLocalCSVTransform(
 	comma, comment rune,
 	nullif *string,
 	sstMaxSize int64,
+	tempEngine engine.Engine,
 ) (csvCount, kvCount, sstCount int64, err error) {
-
 	// Some channels are buffered because reads happen in bursts, so having lots
 	// of pre-computed data improves overall performance.
 	const chanSize = 10000
-
-	rocksdbDest, err := ioutil.TempDir("", "cockroach-csv-rocksdb")
-	if err != nil {
-		return 0, 0, 0, err
-	}
-	defer func() {
-		if err := os.RemoveAll(rocksdbDest); err != nil {
-			log.Infof(ctx, "could not remove temp directory %s: %s", rocksdbDest, err)
-		}
-	}()
 
 	group, gCtx := errgroup.WithContext(ctx)
 	recordCh := make(chan csvRecord, chanSize)
@@ -148,7 +162,7 @@ func doLocalCSVTransform(
 	group.Go(func() error {
 		defer close(contentCh)
 		var err error
-		kvCount, err = writeRocksDB(gCtx, kvCh, rocksdbDest, sstMaxSize, contentCh, walltime)
+		kvCount, err = writeRocksDB(gCtx, kvCh, tempEngine, sstMaxSize, contentCh, walltime)
 		if job != nil {
 			if err := job.Progressed(ctx, 2.0/3.0, jobs.Noop); err != nil {
 				log.Warningf(ctx, "failed to update job progress: %s", err)
@@ -426,53 +440,22 @@ const errSSTCreationMaybeDuplicateTemplate = "SST creation error at %s; this can
 func writeRocksDB(
 	ctx context.Context,
 	kvCh <-chan roachpb.KeyValue,
-	rocksdbDir string,
+	tempEngine engine.Engine,
 	sstMaxSize int64,
 	contentCh chan<- sstContent,
 	walltime int64,
 ) (int64, error) {
-	const batchMaxSize = 1024 * 50
-
-	cache := engine.NewRocksDBCache(0)
-	defer cache.Release()
-	r, err := engine.NewRocksDB(engine.RocksDBConfig{
-		Settings:     cluster.MakeTestingClusterSettings(),
-		Dir:          rocksdbDir,
-		MaxSizeBytes: 0,
-		MaxOpenFiles: 1024,
-	}, cache)
-	if err != nil {
-		return 0, errors.Wrap(err, "create rocksdb instance")
-	}
-	defer r.Close()
-	b := r.NewBatch()
-	var mk engine.MVCCKey
+	store := engine.NewRocksDBMultiMap(tempEngine)
+	writer := store.NewBatchWriter()
 	for kv := range kvCh {
-		mk.Key = kv.Key
-
-		// We need to detect duplicate primary/unique keys. This means we can't
-		// call .Put with the same keys, because it will overwrite a previous
-		// key. Calling .Get before each .Put is very slow. Instead, give each key
-		// a unique timestamp. When we iterate in order, this timestamp will be set
-		// to a static value, which will cause duplicate keys to error during sst.Add.
-		mk.Timestamp.WallTime++
-
-		if err := b.Put(mk, kv.Value.RawBytes); err != nil {
-			return 0, err
-		}
-		if len(b.Repr()) > batchMaxSize {
-			if err := b.Commit(false /* sync */); err != nil {
-				return 0, err
-			}
-			b = r.NewBatch()
-		}
-	}
-	if len(b.Repr()) > 0 {
-		if err := b.Commit(false /* sync */); err != nil {
+		if err := writer.Put(kv.Key, kv.Value.RawBytes); err != nil {
 			return 0, err
 		}
 	}
-	it := r.NewIterator(false /* prefix */)
+	if err := writer.Close(ctx); err != nil {
+		return 0, err
+	}
+	it := store.NewIterator()
 	defer it.Close()
 	sst, err := engine.MakeRocksDBSstFileWriter()
 	if err != nil {
@@ -503,9 +486,10 @@ func writeRocksDB(
 	}
 
 	var kv engine.MVCCKeyValue
+	kv.Key.Timestamp.WallTime = timeutil.Now().UnixNano()
 	var firstKey, lastKey roachpb.Key
 	var count int64
-	for it.Seek(engine.MVCCKey{}); ; it.Next() {
+	for it.Rewind(); ; it.Next() {
 		if ok, err := it.Valid(); err != nil {
 			return 0, err
 		} else if !ok {
@@ -515,7 +499,7 @@ func writeRocksDB(
 
 		// Save the first key for the span.
 		if firstKey == nil {
-			firstKey = append([]byte(nil), it.UnsafeKey().Key...)
+			firstKey = it.Key()
 
 			// Ensure the first key doesn't match the last key of the previous SST.
 			if firstKey.Equal(lastKey) {
@@ -523,7 +507,7 @@ func writeRocksDB(
 			}
 		}
 
-		kv.Key = it.UnsafeKey()
+		kv.Key.Key = it.UnsafeKey()
 		kv.Key.Timestamp.WallTime = walltime
 		kv.Value = it.UnsafeValue()
 
@@ -810,6 +794,7 @@ func importPlanHook(
 			_, _, _, err = doLocalCSVTransform(
 				ctx, job, parentID, tableDesc, temp, files,
 				comma, comment, nullif, sstSize,
+				p.ExecCfg().DistSQLSrv.TempStorage,
 			)
 			if err != nil {
 				return err
@@ -1127,7 +1112,7 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 		// NewRocksDBMap to write the rows, then fetch them in order using an iterator.
 		input := distsqlrun.MakeNoMetadataRowSource(sp.input, sp.output)
 		alloc := &sqlbase.DatumAlloc{}
-		store := engine.NewRocksDBMap(sp.tempStorage)
+		store := engine.NewRocksDBMultiMap(sp.tempStorage)
 		defer store.Close(ctx)
 		batch := store.NewBatchWriter()
 		var key, val []byte
