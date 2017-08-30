@@ -262,7 +262,7 @@ func splitAndFilterSpans(
 func backupJobDescription(
 	backup *parser.Backup, to string, incrementalFrom []string,
 ) (string, error) {
-	b := parser.Backup{
+	b := &parser.Backup{
 		AsOf:    backup.AsOf,
 		Options: backup.Options,
 		Targets: backup.Targets,
@@ -281,8 +281,7 @@ func backupJobDescription(
 		}
 		b.IncrementalFrom = append(b.IncrementalFrom, parser.NewDString(sanitizedFrom))
 	}
-
-	return b.String(), nil
+	return parser.AsStringWithFlags(b, parser.FmtSimpleQualified), nil
 }
 
 // clusterNodeCount returns the approximate number of nodes in the cluster.
@@ -352,8 +351,7 @@ func makeBackupDescriptor(
 		}
 	}
 
-	// TODO(dan): Plumb the session database down.
-	sessionDatabase := ""
+	sessionDatabase := p.EvalContext().Database
 	if sqlDescs, err = descriptorsMatchingTargets(sessionDatabase, sqlDescs, targets); err != nil {
 		return BackupDescriptor{}, err
 	}
@@ -627,10 +625,15 @@ func backupPlanHook(
 		{Name: "system_records", Typ: parser.TypeInt},
 		{Name: "bytes", Typ: parser.TypeInt},
 	}
+
 	fn := func(ctx context.Context, resultsCh chan<- parser.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
+
+		if err := backupStmt.Targets.NormalizeTablesWithDatabase(p.EvalContext().Database); err != nil {
+			return err
+		}
 
 		to, err := toFn()
 		if err != nil {
