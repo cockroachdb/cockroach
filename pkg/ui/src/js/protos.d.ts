@@ -3111,6 +3111,7 @@ export namespace cockroach {
 
             type ClusterResponse$Properties = {
                 cluster_id?: string;
+                reporting_enabled?: boolean;
             };
 
             /**
@@ -3134,6 +3135,12 @@ export namespace cockroach {
                  * @type {string}
                  */
                 public cluster_id: string;
+
+                /**
+                 * ClusterResponse reporting_enabled.
+                 * @type {boolean}
+                 */
+                public reporting_enabled: boolean;
 
                 /**
                  * Creates a new ClusterResponse instance using the specified properties.
