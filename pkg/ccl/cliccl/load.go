@@ -9,6 +9,8 @@
 package cliccl
 
 import (
+	"os"
+
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"
@@ -38,8 +40,8 @@ comment are ignored. Fields are considered null if equal to nullif
 The backup's tables are created in the "csv" database.
 
 It requires approximately 2x the size of the data files of free disk
-space. An intermediate copy will be stored in the OS temp directory,
-and the final copy in the dest directory.
+space. An intermediate copy will be stored in the location specified
+by the --tempdir argument, and the final copy in the dest directory.
 
 For example, if there were a file at /data/names containing:
 
@@ -64,6 +66,7 @@ Then the file could be converted and saved to /data/backup with:
 	flags.StringVar(&csvNullIf, "nullif", "", "if specified, the value of NULL; can specify the empty string")
 	flags.StringVar(&csvComma, "delimiter", "", "if specified, the CSV delimiter instead of a comma")
 	flags.StringVar(&csvComment, "comment", "", "if specified, allows comment lines starting with this character")
+	flags.StringVar(&csvTempDir, "tempdir", os.TempDir(), "directory to store intermediate temp files")
 
 	loadCmds := &cobra.Command{
 		Use:   "load [command]",
@@ -84,6 +87,7 @@ var (
 	csvDest      string
 	csvNullIf    string
 	csvTableName string
+	csvTempDir   string
 )
 
 func runLoadCSV(cmd *cobra.Command, args []string) error {
@@ -125,6 +129,7 @@ func runLoadCSV(cmd *cobra.Command, args []string) error {
 		comment,
 		nullIf,
 		sstMaxSize,
+		csvTempDir,
 	)
 	if err != nil {
 		return err

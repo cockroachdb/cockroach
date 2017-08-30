@@ -220,6 +220,88 @@ func TestRocksDBMapSandbox(t *testing.T) {
 	})
 }
 
+// TestRocksDBStore tests that the allowDuplicates setting allows duplicate
+// keys to be put.
+func TestRocksDBStore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	tempEngine, err := NewTempEngine(ctx, base.DefaultTestStoreSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tempEngine.Close()
+
+	var (
+		v1 = []byte("v1")
+		v2 = []byte("v2")
+		k1 = []byte("k1")
+	)
+
+	tests := []struct {
+		allowDuplicates bool
+		// expect is a map containing the expected number of found values for key k1.
+		expect map[string]int
+	}{
+		{
+			true,
+			map[string]int{
+				string(v1): 4,
+				string(v2): 2,
+			},
+		},
+		{
+			false,
+			map[string]int{
+				string(v1): 1,
+				// v1 is the final Put, so it should overwrite the previous v2.
+				string(v2): 0,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("AllowDuplicates=%v", tc.allowDuplicates), func(t *testing.T) {
+			fn := NewRocksDBMap
+			if tc.allowDuplicates {
+				fn = NewRocksDBMultiMap
+			}
+			diskStore := fn(tempEngine)
+			defer diskStore.Close(ctx)
+
+			batchWriter := diskStore.NewBatchWriter()
+			_ = diskStore.Put(k1, v1)
+			_ = diskStore.Put(k1, v1)
+			_ = diskStore.Put(k1, v2)
+			_ = batchWriter.Put(k1, v2)
+			_ = batchWriter.Put(k1, v1)
+			_ = batchWriter.Put(k1, v1)
+			if err := batchWriter.Close(ctx); err != nil {
+				t.Fatal(err)
+			}
+
+			i := diskStore.NewIterator()
+			defer i.Close()
+
+			for i.Rewind(); ; i.Next() {
+				if ok, err := i.Valid(); err != nil {
+					t.Fatal(err)
+				} else if !ok {
+					break
+				}
+				if !bytes.Equal(i.Key(), k1) {
+					t.Fatalf("unexpected key: %s", i.Key())
+				}
+				tc.expect[string(i.Value())]--
+			}
+			for k, v := range tc.expect {
+				if v != 0 {
+					t.Errorf("expected 0, got %d for %s", v, k)
+				}
+			}
+		})
+	}
+}
+
 func BenchmarkRocksDBMapWrite(b *testing.B) {
 	dir, err := ioutil.TempDir("", "BenchmarkRocksDBMapWrite")
 	if err != nil {
