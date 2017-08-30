@@ -27,7 +27,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
+	"sync/atomic"
 	"text/tabwriter"
 	"time"
 
@@ -117,9 +119,16 @@ func MakePerNodeFixedPortsCfg(numNodes int) map[int]NodeConfig {
 // operations, access to the underlying nodes and per-node KV and SQL clients.
 type Cluster struct {
 	cfg     ClusterConfig
+	seq     *seqGen
 	Nodes   []*Node
 	stopper *stop.Stopper
 	started time.Time
+}
+
+type seqGen int32
+
+func (s *seqGen) Next() int32 {
+	return atomic.AddInt32((*int32)(s), 1)
 }
 
 // New creates a Cluster with the given configuration.
@@ -129,6 +138,7 @@ func New(cfg ClusterConfig) *Cluster {
 	}
 	return &Cluster{
 		cfg:     cfg,
+		seq:     new(seqGen),
 		stopper: stop.NewStopper(),
 	}
 }
@@ -205,14 +215,41 @@ func (c *Cluster) Close() {
 }
 
 func (c *Cluster) joins() []string {
-	var joins []string
+	type addrAndSeq struct {
+		addr string
+		seq  int32
+	}
+
+	var joins []addrAndSeq
 	for _, node := range c.Nodes {
 		advertAddr := node.advertiseAddr()
 		if advertAddr != "" {
-			joins = append(joins, advertAddr)
+			joins = append(joins, addrAndSeq{
+				addr: advertAddr,
+				seq:  atomic.LoadInt32(&node.startSeq),
+			})
 		}
 	}
-	return joins
+	sort.Slice(joins, func(i, j int) bool {
+		return joins[i].seq < joins[j].seq
+	})
+
+	if len(joins) == 0 {
+		return nil
+	}
+
+	// Return the node with the smallest startSeq, i.e. the node that was
+	// started first. This is the node that might have no --join flag set, and
+	// we must point the other nodes at it, and *only* at it (or the other nodes
+	// may connect sufficiently and never bother to talk to this node).
+	//
+	// See https://github.com/cockroachdb/cockroach/issues/18027 and note that this
+	// code is just an unsubstantiated claim. We have observed similar problems with
+	// this code. Likely what's described above is only a theoretical problem, but
+	// it's good to avoid those problems too.
+	//
+	// TODO(tschottdorf): revisit after #18027 above closes.
+	return []string{joins[0].addr}
 }
 
 // IPAddr returns the IP address of the specified node.
@@ -241,6 +278,7 @@ func (c *Cluster) makeNode(ctx context.Context, nodeIdx int, cfg NodeConfig) (*N
 	node := &Node{
 		cfg:    cfg,
 		rpcCtx: rpcCtx,
+		seq:    c.seq,
 	}
 
 	args := []string{
@@ -405,6 +443,9 @@ func (c *Cluster) RandNode(f func(int) int) int {
 type Node struct {
 	cfg    NodeConfig
 	rpcCtx *rpc.Context
+	seq    *seqGen
+
+	startSeq int32 // updated atomically on start
 
 	syncutil.Mutex
 	cmd                      *exec.Cmd
@@ -514,6 +555,7 @@ func (n *Node) setNotRunningLocked() {
 	n.cmd = nil
 	n.rpcPort = ""
 	n.httpPort = ""
+	atomic.StoreInt32(&n.startSeq, 0)
 }
 
 func (n *Node) startAsyncInnerLocked(ctx context.Context, joins ...string) error {
@@ -526,6 +568,8 @@ func (n *Node) startAsyncInnerLocked(ctx context.Context, joins ...string) error
 	n.cmd = exec.Command(n.cfg.ExtraArgs[0], args...)
 	n.cmd.Env = os.Environ()
 	n.cmd.Env = append(n.cmd.Env, n.cfg.ExtraEnv...)
+
+	atomic.StoreInt32(&n.startSeq, n.seq.Next())
 
 	_ = os.MkdirAll(n.logDir(), 0755)
 
