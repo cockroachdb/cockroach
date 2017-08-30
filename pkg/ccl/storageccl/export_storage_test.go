@@ -187,7 +187,12 @@ func TestPutLocal(t *testing.T) {
 	p, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
 
-	testExportStore(t, fmt.Sprintf("nodelocal://%s", p), false)
+	dest, err := MakeLocalStorageURI(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testExportStore(t, dest, false)
 }
 
 func TestPutHttp(t *testing.T) {

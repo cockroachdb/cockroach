@@ -93,6 +93,9 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 		conf.Provider = roachpb.ExportStorageProvider_Http
 		conf.HttpPath.BaseUri = path
 	case "nodelocal":
+		if uri.Host != "" {
+			return conf, errors.Errorf("nodelocal does not support hosts: %s", path)
+		}
 		conf.Provider = roachpb.ExportStorageProvider_LocalFile
 		conf.LocalFile.Path = uri.Path
 	default:
@@ -164,6 +167,16 @@ type localFileStorage struct {
 }
 
 var _ ExportStorage = &localFileStorage{}
+
+// MakeLocalStorageURI converts a local path (absolute or relative) to a
+// valid nodelocal URI.
+func MakeLocalStorageURI(path string) (string, error) {
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("nodelocal://%s", path), nil
+}
 
 func makeLocalStorage(base string) (ExportStorage, error) {
 	if base == "" {
