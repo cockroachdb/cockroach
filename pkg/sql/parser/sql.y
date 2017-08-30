@@ -1430,13 +1430,14 @@ create_stmt:
 //               [RETURNING <exprs...>]
 // %SeeAlso: WEBDOCS/delete.html
 delete_stmt:
-  opt_with_clause DELETE FROM relation_expr_opt_alias where_clause opt_limit_clause returning_clause
+  opt_with_clause DELETE FROM relation_expr_opt_alias where_clause opt_sort_clause opt_limit_clause returning_clause
   {
     $$.val = &Delete{
       Table: $4.tblExpr(),
       Where: newWhere(astWhere, $5.expr()),
-      Limit: $6.limit(),
-      Returning: $7.retClause(),
+      OrderBy: $6.orderBy(),
+      Limit: $7.limit(),
+      Returning: $8.retClause(),
     }
   }
 | opt_with_clause DELETE error // SHOW HELP: DELETE
