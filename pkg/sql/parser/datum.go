@@ -529,11 +529,18 @@ func (*DFloat) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DFloat) Format(buf *bytes.Buffer, f FmtFlags) {
 	fl := float64(*d)
+	quote := f.disambiguateDatumTypes && (math.IsNaN(fl) || math.IsInf(fl, 0))
+	if quote {
+		buf.WriteByte('\'')
+	}
 	if _, frac := math.Modf(fl); frac == 0 && -1000000 < *d && *d < 1000000 {
 		// d is a small whole number. Ensure it is printed using a decimal point.
 		fmt.Fprintf(buf, "%.1f", fl)
 	} else {
 		fmt.Fprintf(buf, "%g", fl)
+	}
+	if quote {
+		buf.WriteByte('\'')
 	}
 }
 
@@ -656,7 +663,7 @@ func (d *DDecimal) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 	buf.WriteString(d.Decimal.String())
 	if quote {
-		buf.WriteString(`'::DECIMAL`)
+		buf.WriteByte('\'')
 	}
 }
 
