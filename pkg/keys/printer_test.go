@@ -47,7 +47,6 @@ func TestPrettyPrint(t *testing.T) {
 		{StoreIdentKey(), "/Local/Store/storeIdent"},
 		{StoreGossipKey(), "/Local/Store/gossipBootstrap"},
 		{StoreClusterVersionKey(), "/Local/Store/clusterVersion"},
-		{StoreSyncKey(), "/Local/Store/sync"},
 
 		{AbortCacheKey(roachpb.RangeID(1000001), txnID), fmt.Sprintf(`/Local/RangeID/1000001/r/AbortCache/%q`, txnID)},
 		{RaftTombstoneKey(roachpb.RangeID(1000001)), "/Local/RangeID/1000001/r/RaftTombstone"},
