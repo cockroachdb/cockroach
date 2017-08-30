@@ -72,7 +72,7 @@ func TestLoadCSV(t *testing.T) {
 	}
 
 	null := ""
-	if _, _, _, err := sqlccl.LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, &null, testSSTMaxSize); err != nil {
+	if _, _, _, err := sqlccl.LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, &null, testSSTMaxSize, tmp); err != nil {
 		t.Fatal(err)
 	}
 
@@ -138,7 +138,7 @@ func TestLoadCSVUniqueDuplicate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, _, err := sqlccl.LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, nil /* nullif */, testSSTMaxSize)
+	_, _, _, err := sqlccl.LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, nil /* nullif */, testSSTMaxSize, tmp)
 	if !testutils.IsError(err, "duplicate key") {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestLoadCSVPrimaryDuplicate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, _, err := sqlccl.LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, nil /* nullif */, testSSTMaxSize)
+	_, _, _, err := sqlccl.LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, nil /* nullif */, testSSTMaxSize, tmp)
 	if !testutils.IsError(err, "duplicate key") {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -218,7 +218,7 @@ func TestLoadCSVPrimaryDuplicateSSTBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, _, err := sqlccl.LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, nil /* nullif */, sstMaxSize)
+	_, _, _, err := sqlccl.LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, nil /* nullif */, sstMaxSize, tmp)
 	if !testutils.IsError(err, "duplicate key") {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -273,7 +273,7 @@ N|N
 		t.Fatal(err)
 	}
 	null := "N"
-	csv, kv, sst, err := sqlccl.LoadCSV(ctx, tablePath, []string{dataPath}, tmp, '|' /* comma */, '#' /* comment */, &null /* nullif */, 500)
+	csv, kv, sst, err := sqlccl.LoadCSV(ctx, tablePath, []string{dataPath}, tmp, '|' /* comma */, '#' /* comment */, &null /* nullif */, 500, tmp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,13 +289,13 @@ N|N
 }
 
 // TODO(dt): switch to a helper in sampledataccl.
-func makeCSVData(t testing.TB, in string, numFiles, rowsPerFile int) ([]string, []string) {
+func makeCSVData(
+	t testing.TB, in string, numFiles, rowsPerFile int,
+) (files []string, filesWithOpts []string, filesWithDups []string) {
 	csvPath := filepath.Join(in, "csv")
 	if err := os.Mkdir(csvPath, 0777); err != nil {
 		t.Fatal(err)
 	}
-	var files []string
-	var filesWithOpts []string
 	for fn := 0; fn < numFiles; fn++ {
 		path := filepath.Join(csvPath, fmt.Sprintf("data-%d", fn))
 		f, err := os.Create(path)
@@ -307,9 +307,17 @@ func makeCSVData(t testing.TB, in string, numFiles, rowsPerFile int) ([]string, 
 		if err != nil {
 			t.Fatal(err)
 		}
+		pathDup := filepath.Join(csvPath, fmt.Sprintf("data-%d-dup", fn))
+		fDup, err := os.Create(pathDup)
+		if err != nil {
+			t.Fatal(err)
+		}
 		for i := 0; i < rowsPerFile; i++ {
 			x := fn*rowsPerFile + i
 			if _, err := fmt.Fprintf(f, "%d,%c\n", x, 'A'+x%26); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := fmt.Fprintf(fDup, "1,%c\n", 'A'+x%26); err != nil {
 				t.Fatal(err)
 			}
 
@@ -336,8 +344,9 @@ func makeCSVData(t testing.TB, in string, numFiles, rowsPerFile int) ([]string, 
 		}
 		files = append(files, fmt.Sprintf(`'nodelocal://%s'`, path))
 		filesWithOpts = append(filesWithOpts, fmt.Sprintf(`'nodelocal://%s'`, pathWithOpts))
+		filesWithDups = append(filesWithDups, fmt.Sprintf(`'nodelocal://%s'`, pathDup))
 	}
-	return files, filesWithOpts
+	return files, filesWithOpts, filesWithDups
 }
 
 func TestImportStmt(t *testing.T) {
@@ -367,7 +376,7 @@ func TestImportStmt(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	files, filesWithOpts := makeCSVData(t, dir, numFiles, rowsPerFile)
+	files, filesWithOpts, dups := makeCSVData(t, dir, numFiles, rowsPerFile)
 	expectedRows := numFiles * rowsPerFile
 
 	for i, tc := range []struct {
@@ -432,6 +441,13 @@ func TestImportStmt(t *testing.T) {
 			nil,
 			files,
 			"must provide a temporary storage location",
+		},
+		{
+			"primary-key-dup",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, distributed`,
+			[]interface{}{fmt.Sprintf("nodelocal://%s", tablePath)},
+			dups,
+			"primary or unique index has duplicate keys",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -521,7 +537,7 @@ func BenchmarkImport(b *testing.B) {
 
 	dir, cleanup := testutils.TempDir(b)
 	defer cleanup()
-	files, _ := makeCSVData(b, dir, numFiles, b.N*100)
+	files, _, _ := makeCSVData(b, dir, numFiles, b.N*100)
 	tmp := fmt.Sprintf("nodelocal://%s", filepath.Join(dir, b.Name()))
 
 	b.ResetTimer()
