@@ -170,7 +170,7 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 
 			l := localcluster.New(clusterCfg)
 
-			l.Start()
+			l.Start(ctx)
 			c = &localcluster.LocalCluster{Cluster: l}
 
 		case dockerTest:
