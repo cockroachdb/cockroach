@@ -190,20 +190,32 @@ EXPLAIN DELETE FROM unindexed WHERE v = 5 LIMIT 10
 3  ·       table  unindexed@primary
 3  ·       spans  ALL
 
+query ITTT
+EXPLAIN DELETE FROM unindexed WHERE v = 5 ORDER BY v RETURNING v
+----
+0  delete  ·      ·
+0  ·       from   unindexed
+1  sort    ·      ·
+1  ·       order  +v
+2  scan    ·      ·
+2  ·       table  unindexed@primary
+2  ·       spans  ALL
+
 query I
-SELECT COUNT(*) FROM [DELETE FROM unindexed LIMIT 2 RETURNING v]
+DELETE FROM unindexed ORDER BY v LIMIT 2 RETURNING v
 ----
 2
+4
 
 query I
-SELECT COUNT(*) FROM [DELETE FROM unindexed LIMIT 1 RETURNING v]
+DELETE FROM unindexed ORDER BY v LIMIT 1 RETURNING v
 ----
-1
+6
 
 query I
-SELECT COUNT(*) FROM [DELETE FROM unindexed LIMIT 5 RETURNING v]
+DELETE FROM unindexed ORDER BY v LIMIT 5 RETURNING v
 ----
-1
+8
 
 query ITTT
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10
