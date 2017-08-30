@@ -78,12 +78,12 @@ func TestDumpRow(t *testing.T) {
 		's'
 	);
 	INSERT INTO d.t VALUES (DEFAULT);
-	INSERT INTO d.t (f) VALUES (
-		CAST('+Inf' AS FLOAT)
+	INSERT INTO d.t (f, e) VALUES (
+		CAST('+Inf' AS FLOAT), CAST('+Inf' AS DECIMAL)
 	), (
-		CAST('-Inf' AS FLOAT)
+		CAST('-Inf' AS FLOAT), CAST('-Inf' AS DECIMAL)
 	), (
-		CAST('NaN' AS FLOAT)
+		CAST('NaN' AS FLOAT), CAST('NaN' AS DECIMAL)
 	);
 `
 
@@ -118,9 +118,9 @@ CREATE TABLE t (
 INSERT INTO t (i, f, s, b, d, t, n, o, e, tz, e1, e2, s1) VALUES
 	(1, 2.3, 'striiing', b'a1b2c3', '2016-03-26', '2016-01-25 10:10:10+00:00', '2h30m30s', true, 1.2345, '2016-01-25 10:10:10+00:00', 3, 4.5, 's'),
 	(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-	(NULL, +Inf, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-	(NULL, -Inf, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-	(NULL, NaN, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+	(NULL, '+Inf', NULL, NULL, NULL, NULL, NULL, NULL, 'Infinity', NULL, NULL, NULL, NULL),
+	(NULL, '-Inf', NULL, NULL, NULL, NULL, NULL, NULL, '-Infinity', NULL, NULL, NULL, NULL),
+	(NULL, 'NaN', NULL, NULL, NULL, NULL, NULL, NULL, 'NaN', NULL, NULL, NULL, NULL);
 `
 
 	if string(out) != expect {
