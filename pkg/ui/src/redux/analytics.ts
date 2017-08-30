@@ -3,7 +3,10 @@ import { Location } from "history";
 import _ from "lodash";
 import { Store } from "redux";
 
+import * as protos from "src/js/protos";
 import { store, history, AdminUIState } from "src/redux/state";
+
+type ClusterResponse = protos.cockroach.server.serverpb.ClusterResponse$Properties;
 
 /**
  * List of current redactions needed for pages tracked by the Admin UI.
@@ -45,13 +48,6 @@ export class AnalyticsSync {
      private queuedPages: Location[] = [];
 
      /**
-      * AnalyticsSync can be called from different places in the code without
-      * needing to check if the individual cluster has enabled analytics.
-      * Instead,
-      */
-     private enableAnalytics = false;
-
-     /**
       * Construct a new AnalyticsSync object.
       * @param analytics Underlying interface to push to the analytics service.
       * @param store The redux store for the Admin UI.
@@ -66,37 +62,36 @@ export class AnalyticsSync {
     ) {}
 
     /**
-     * setEnabled can be used to enable analytics pushing. By default, a newly
-     * initialized AnalyticsSync is not enabled.
-     */
-    setEnabled(enabled: boolean) {
-        this.enableAnalytics = enabled;
-    }
-
-    /**
      * page should be called whenever the user moves to a new page in the
      * application.
      * @param location The location (URL information) of the page.
      */
     page(location: Location) {
-        if (!this.enableAnalytics) {
-            return;
-        }
-
         // If the cluster ID is not yet available, queue the location to be
         // pushed later.
-        const id = this.getCluster();
-        if (id === null) {
+        const cluster = this.getCluster();
+        if (cluster === null) {
             this.queuedPages.push(location);
             return;
         }
 
+        const { cluster_id, reporting_enabled } = cluster;
+
+        // A cluster setting determines if diagnostic reporting is enabled. If
+        // it is not explicitly enabled, do nothing.
+        if (!reporting_enabled) {
+            if (this.queuedPages.length > 0) {
+                this.queuedPages = [];
+            }
+            return;
+        }
+
         // If there are any queued pages, push them.
-        _.each(this.queuedPages, (l) => this.pushPage(id, l));
+        _.each(this.queuedPages, (l) => this.pushPage(cluster_id, l));
         this.queuedPages = [];
 
         // Push the page that was just accessed.
-        this.pushPage(id, location);
+        this.pushPage(cluster_id, location);
     }
 
     /**
@@ -104,7 +99,7 @@ export class AnalyticsSync {
      * has not yet been fetched. We can depend on the alertdatasync component
      * to eventually retrieve this without having to request it ourselves.
      */
-    private getCluster(): string | null {
+    private getCluster(): ClusterResponse | null {
         const state = this.store.getState();
 
         // Do nothing if cluster ID has not been loaded.
@@ -113,7 +108,7 @@ export class AnalyticsSync {
             return null;
         }
 
-        return cluster.data.cluster_id;
+        return cluster.data;
     }
 
     /**
@@ -143,13 +138,8 @@ export class AnalyticsSync {
 // Create a global instance of AnalyticsSync which can be used from various
 // packages. If enabled, this instance will push to segment using the following
 // analytics key.
-const analyticsInstance = new Analytics("5Vbp8WMYDmZTfCwE0uiUqEdAcTiZWFDb", { flushAt: 1 });
+const analyticsInstance = new Analytics("5Vbp8WMYDmZTfCwE0uiUqEdAcTiZWFDb");
 export const analytics = new AnalyticsSync(analyticsInstance, store, defaultRedactions);
-
-// Temporary placeholder; this logic should be based on the server-side setting
-// "diagnostics.reporting.enabled". A mechanism to pass this value to the UI
-// must be added before enabling tracking. For now, it is disabled.
-analytics.setEnabled(false);
 
 // Attach a listener to the history object which will track a 'page' event
 // whenever the user navigates to a new path.
