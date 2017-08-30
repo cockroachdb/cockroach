@@ -184,15 +184,21 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 	}
 
 	// Concurrently, rename the table.
-	threadDone := make(chan interface{})
+	threadDone := make(chan error)
 	go func() {
 		// The ALTER will commit and signal the main thread through `renamed`, but
 		// the schema changer will remain blocked by the lease on the "t" version
 		// held by the txn started above.
-		if _, err := db.Exec("ALTER TABLE test.t RENAME TO test.t2"); err != nil {
-			panic(err)
+		_, err := db.Exec("ALTER TABLE test.t RENAME TO test.t2")
+		threadDone <- err
+	}()
+	defer func() {
+		close(renameUnblocked)
+		// Block until the thread doing the rename has finished, so the test can clean
+		// up. It needed to wait for the transaction to release its lease.
+		if err := <-threadDone; err != nil {
+			t.Fatal(err)
 		}
-		close(threadDone)
 	}()
 
 	// Block until the LeaseManager has processed the gossip update.
@@ -229,11 +235,6 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 		err, `relation "test.t" does not exist`) {
 		t.Fatal(err)
 	}
-	close(renameUnblocked)
-
-	// Block until the thread doing the rename has finished, so the test can clean
-	// up. It needed to wait for the transaction to release its lease.
-	<-threadDone
 }
 
 // Test that a txn doing a rename can use the new name immediately.
