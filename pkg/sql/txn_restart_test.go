@@ -1658,11 +1658,12 @@ func TestRollbackToSavepointFromUnusualStates(t *testing.T) {
 }
 
 // Test that a serializable txn that has pushed its timestamp is detected and
-// retried automatically while the SQL txn is in state FirstBatch. It also tests
-// that, once the SQL txn has moved out of FirstBatch, the pushed timestamp is
-// no longer detected - the txn is left alone to run until completion and lay
-// down its intents, and only finds out that it can't commit at COMMIT time.
-func TestPushedTxnDetectionInFirstBatch(t *testing.T) {
+// retried automatically while the SQL txn can still be retried automatically.
+// It also tests that, once the SQL txn can no longer be retried automatically,
+// the pushed timestamp is no longer detected - the txn is left alone to run
+// until completion and lay down its intents, and only finds out that it can't
+// commit at COMMIT time.
+func TestPushedTxnDetection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const marker = "marker"
 	var injectRead int64
@@ -1696,8 +1697,13 @@ CREATE TABLE t.test (k INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 
-	// Two tests, one where the txn is pushed while in FirstBatch, one where it's
-	// pushed after the txn transitioned from FirstBatch to Open.
+	// Two tests, one where the txn is pushed while the transaction can still be
+	// retried, one where it's pushed too late for auto-retries.
+	// moveOutOfFirstBatch dictates whether we move the transaction from state
+	// FirstBatch to Open before starting the batch of statements that will
+	// encounter the push. When moveOutOfFirstBatch is set, we expect to get a
+	// retriable error at commit time. When it's not, we expect to see no error
+	// because the transaction is retried automatically.
 	for i, moveOutOfFirstBatch := range []bool{false, true} {
 		t.Run(fmt.Sprintf("%t", moveOutOfFirstBatch),
 			func(t *testing.T) {
