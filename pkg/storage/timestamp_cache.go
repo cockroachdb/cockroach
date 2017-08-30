@@ -103,8 +103,6 @@ func (cr *cacheRequest) size() uint64 {
 	return n
 }
 
-var zeroTxnID uuid.UUID
-
 var cacheEntryOverhead = uint64(unsafe.Sizeof(cache.IntervalKey{}) +
 	unsafe.Sizeof(cacheValue{}) + unsafe.Sizeof(cache.Entry{}))
 
@@ -164,7 +162,7 @@ var lowWaterTxnIDMarker = func() uuid.UUID {
 // A cacheValue combines the timestamp with an optional txn ID.
 type cacheValue struct {
 	timestamp hlc.Timestamp
-	txnID     uuid.UUID // zeroTxnID for no transaction
+	txnID     uuid.UUID // zero for no transaction
 }
 
 func makeCacheEntry(key cache.IntervalKey, value cacheValue) *cache.Entry {
@@ -443,7 +441,7 @@ func (tc *timestampCache) add(
 					// New:
 					// Nil: ============
 					// Old:
-					cv.txnID = zeroTxnID
+					cv.txnID = uuid.UUID{}
 					tc.bytes += cacheEntrySize(key.Start, key.End) - oldSize
 					return
 				case sCmp == 0 && eCmp > 0:
@@ -456,7 +454,7 @@ func (tc *timestampCache) add(
 					// New:           --
 					// Nil: ==========
 					// Old:
-					cv.txnID = zeroTxnID
+					cv.txnID = uuid.UUID{}
 					r.Start = key.End
 				case sCmp < 0 && eCmp == 0:
 					// New contains old, right-aligned. Clear ownership of the
@@ -468,7 +466,7 @@ func (tc *timestampCache) add(
 					// New: --
 					// Nil:   ==========
 					// Old:
-					cv.txnID = zeroTxnID
+					cv.txnID = uuid.UUID{}
 					r.End = key.Start
 				case sCmp < 0 && eCmp > 0:
 					// New contains old; split into three segments with the
@@ -480,7 +478,7 @@ func (tc *timestampCache) add(
 					// New: --        --
 					// Nil:   ========
 					// Old:
-					cv.txnID = zeroTxnID
+					cv.txnID = uuid.UUID{}
 
 					newKey := tcache.MakeKey(r.Start, key.Start)
 					newEntry := makeCacheEntry(newKey, cacheValue{timestamp: timestamp, txnID: txnID})
@@ -496,7 +494,7 @@ func (tc *timestampCache) add(
 					// New:
 					// Nil:     ====
 					// Old: ----    ----
-					txnID = zeroTxnID
+					txnID = uuid.UUID{}
 					oldEnd := key.End
 					key.End = r.Start
 
@@ -513,7 +511,7 @@ func (tc *timestampCache) add(
 					// New:
 					// Nil:     ========
 					// Old: ----
-					txnID = zeroTxnID
+					txnID = uuid.UUID{}
 					key.End = r.Start
 				case sCmp == 0:
 					// Old contains new, left-aligned; truncate old start and
@@ -524,7 +522,7 @@ func (tc *timestampCache) add(
 					// New:
 					// Nil: ========
 					// Old:         ----
-					txnID = zeroTxnID
+					txnID = uuid.UUID{}
 					key.Start = r.End
 				case eCmp > 0:
 					// Left partial overlap; truncate old end and split new into
@@ -662,7 +660,7 @@ func (tc *timestampCache) ExpandRequests(timestamp hlc.Timestamp, span roachpb.R
 			// EndTransactionRequests.
 			key := keys.TransactionKey(req.txn.Key, req.txnID)
 			// We set txnID=nil because we want hits for same txn ID.
-			tc.add(key, nil, req.timestamp, zeroTxnID, false /* !readTSCache */)
+			tc.add(key, nil, req.timestamp, uuid.UUID{}, false /* !readTSCache */)
 		}
 	}
 }
@@ -711,7 +709,7 @@ func (tc *timestampCache) getMax(
 			maxTS = ce.timestamp
 			maxTxnID = ce.txnID
 		} else if maxTS == ce.timestamp && maxTxnID != ce.txnID {
-			maxTxnID = zeroTxnID
+			maxTxnID = uuid.UUID{}
 		}
 	}
 	if maxTxnID == lowWaterTxnIDMarker {
