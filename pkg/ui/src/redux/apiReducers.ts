@@ -34,7 +34,7 @@ function rollupStoreMetrics(res: api.NodesResponseMessage): NodeStatus$Propertie
 export const nodesReducerObj = new CachedDataReducer((req: api.NodesRequestMessage, timeout?: moment.Duration) => api.getNodes(req, timeout).then(rollupStoreMetrics), "nodes", moment.duration(10, "s"));
 export const refreshNodes = nodesReducerObj.refresh;
 
-const raftReducerObj = new CachedDataReducer(api.raftDebug, "raft");
+const raftReducerObj = new CachedDataReducer(api.raftDebug, "raft", moment.duration(10, "s"));
 export const refreshRaft = raftReducerObj.refresh;
 
 export const versionReducerObj = new CachedDataReducer(versionCheck, "version");
@@ -82,13 +82,13 @@ export const queryToID = (req: api.QueryPlanRequestMessage): string => req.query
 const queryPlanReducerObj = new CachedDataReducer(api.getQueryPlan, "queryPlan");
 export const refreshQueryPlan = queryPlanReducerObj.refresh;
 
-const problemRangesReducerObj = new CachedDataReducer(api.getProblemRanges, "problemRanges");
+const problemRangesReducerObj = new CachedDataReducer(api.getProblemRanges, "problemRanges", moment.duration(10, "s"));
 export const refreshProblemRanges = problemRangesReducerObj.refresh;
 
-const certificatesReducerObj = new CachedDataReducer(api.getCertificates, "certificates");
+const certificatesReducerObj = new CachedDataReducer(api.getCertificates, "certificates", moment.duration(10, "s"));
 export const refreshCertificates = certificatesReducerObj.refresh;
 
-const rangeReducerObj = new CachedDataReducer(api.getRange, "range");
+const rangeReducerObj = new CachedDataReducer(api.getRange, "range", moment.duration(10, "s"));
 export const refreshRange = rangeReducerObj.refresh;
 
 export interface APIReducersState {

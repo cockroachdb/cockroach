@@ -330,6 +330,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
       const leaseHolder = localReplica.replica_id === lease.replica.replica_id;
       const mvcc = info.state.state.stats;
       const raftState = this.contentRaftState(info.raft_state.state);
+      const vote = FixLong(info.raft_state.hard_state.vote);
       if (raftState.value[0] === "dormant") {
         dormantStoreIDs.add(info.source_store_id);
       }
@@ -346,35 +347,35 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         leaseEpoch: epoch ? this.createContent(lease.epoch) : rangeTableEmptyContent,
         leaseStart: this.contentTimestamp(lease.start),
         leaseExpiration: epoch ? rangeTableEmptyContent : this.contentTimestamp(lease.expiration),
-        leaseAppliedIndex: this.createContent(info.state.state.lease_applied_index),
+        leaseAppliedIndex: this.createContent(FixLong(info.state.state.lease_applied_index)),
         raftLeader: this.createContent(
-          info.raft_state.lead,
+          FixLong(info.raft_state.lead),
           raftLeader ? "range-table__cell--raftstate-leader" : "range-table__cell--raftstate-follower",
         ),
-        vote: this.createContent(info.raft_state.hard_state.vote),
-        term: this.createContent(info.raft_state.hard_state.term),
-        applied: this.createContent(info.raft_state.applied),
-        commit: this.createContent(info.raft_state.hard_state.commit),
-        lastIndex: this.createContent(info.state.lastIndex),
-        logSize: this.createContent(info.state.raft_log_size),
+        vote: this.createContent(vote.greaterThan(0) ? vote : "-"),
+        term: this.createContent(FixLong(info.raft_state.hard_state.term)),
+        applied: this.createContent(FixLong(info.raft_state.applied)),
+        commit: this.createContent(FixLong(info.raft_state.hard_state.commit)),
+        lastIndex: this.createContent(FixLong(info.state.lastIndex)),
+        logSize: this.createContent(FixLong(info.state.raft_log_size)),
         leaseHolderQPS: leaseHolder ? this.createContent(info.stats.queries_per_second.toFixed(4)) : rangeTableEmptyContent,
         keysWrittenPS: this.createContent(info.stats.writes_per_second.toFixed(4)),
-        approxProposalQuota: raftLeader ? this.createContent(info.state.approximate_proposal_quota) : rangeTableEmptyContent,
-        pendingCommands: this.createContent(info.state.num_pending),
+        approxProposalQuota: raftLeader ? this.createContent(FixLong(info.state.approximate_proposal_quota)) : rangeTableEmptyContent,
+        pendingCommands: this.createContent(FixLong(info.state.num_pending)),
         droppedCommands: this.createContent(
-          info.state.num_dropped,
+          FixLong(info.state.num_dropped),
           FixLong(info.state.num_dropped).greaterThan(0) ? "range-table__cell--dropped-commands" : "",
         ),
-        truncatedIndex: this.createContent(info.state.state.truncated_state.index),
-        truncatedTerm: this.createContent(info.state.state.truncated_state.term),
-        mvccLastUpdate: this.contentNanos(mvcc.last_update_nanos),
-        mvccIntentAge: this.contentDuration(mvcc.intent_age),
-        mvccGGBytesAge: this.contentDuration(mvcc.gc_bytes_age),
-        mvccLiveBytesCount: this.contentMVCC(mvcc.live_bytes, mvcc.live_count),
-        mvccKeyBytesCount: this.contentMVCC(mvcc.key_bytes, mvcc.key_count),
-        mvccValueBytesCount: this.contentMVCC(mvcc.val_bytes, mvcc.val_count),
-        mvccIntentBytesCount: this.contentMVCC(mvcc.intent_bytes, mvcc.intent_count),
-        mvccSystemBytesCount: this.contentMVCC(mvcc.sys_bytes, mvcc.sys_count),
+        truncatedIndex: this.createContent(FixLong(info.state.state.truncated_state.index)),
+        truncatedTerm: this.createContent(FixLong(info.state.state.truncated_state.term)),
+        mvccLastUpdate: this.contentNanos(FixLong(mvcc.last_update_nanos)),
+        mvccIntentAge: this.contentDuration(FixLong(mvcc.intent_age)),
+        mvccGGBytesAge: this.contentDuration(FixLong(mvcc.gc_bytes_age)),
+        mvccLiveBytesCount: this.contentMVCC(FixLong(mvcc.live_bytes), FixLong(mvcc.live_count)),
+        mvccKeyBytesCount: this.contentMVCC(FixLong(mvcc.key_bytes), FixLong(mvcc.key_count)),
+        mvccValueBytesCount: this.contentMVCC(FixLong(mvcc.val_bytes), FixLong(mvcc.val_count)),
+        mvccIntentBytesCount: this.contentMVCC(FixLong(mvcc.intent_bytes), FixLong(mvcc.intent_count)),
+        mvccSystemBytesCount: this.contentMVCC(FixLong(mvcc.sys_bytes), FixLong(mvcc.sys_count)),
       });
     });
 

@@ -102,7 +102,7 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
             {
               _.map(log.events, (event, key) => (
                 <tr key={key} className="log-table__row">
-                  <td className="log-table__cell">{Print.Timestamp(event.timestamp)}</td>
+                  <td className="log-table__cell log-table__cell--date">{Print.Timestamp(event.timestamp)}</td>
                   <td className="log-table__cell">s{event.store_id}</td>
                   <td className="log-table__cell">{printLogEventType(event.event_type)}</td>
                   <td className="log-table__cell">{this.renderRangeID(event.range_id)}</td>
