@@ -2545,3 +2545,100 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
 	}
 }
+
+// Test TRUNCATE during a column backfill.
+func TestTruncateWhileColumnBackfill(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	backfillNotification := make(chan struct{})
+	backfillCount := int64(0)
+	params, _ := createTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		// Runs schema changes asynchronously.
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+				tscc.ClearSchemaChangers()
+			},
+			AsyncExecQuickly: true,
+		},
+		DistSQL: &distsqlrun.TestingKnobs{
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+				switch atomic.LoadInt64(&backfillCount) {
+				case 3:
+					// Notify in the middle of a backfill.
+					if backfillNotification != nil {
+						close(backfillNotification)
+						backfillNotification = nil
+					}
+					// Never complete the backfill.
+					return context.DeadlineExceeded
+				default:
+					atomic.AddInt64(&backfillCount, 1)
+				}
+				return nil
+			},
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bulk insert.
+	const maxValue = 5000
+	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	notify := backfillNotification
+
+	if _, err := sqlDB.Exec("ALTER TABLE t.test ADD COLUMN x DECIMAL NOT NULL DEFAULT (DECIMAL '1.4')"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that an outstanding schema change exists.
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	for _, m := range tableDesc.Mutations {
+		if col := m.GetColumn(); col == nil || col.Name != "x" {
+			t.Fatal("No outstanding schema change")
+		}
+	}
+
+	// Run TRUNCATE.
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		<-notify
+		if _, err := sqlDB.Exec("TRUNCATE TABLE t.test"); err != nil {
+			t.Error(err)
+		}
+		wg.Done()
+	}()
+	wg.Wait()
+
+	// The new table is truncated.
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+	tableEnd := tablePrefix.PrefixEnd()
+	if kvs, err := kvDB.Scan(context.TODO(), tablePrefix, tableEnd, 0); err != nil {
+		t.Fatal(err)
+	} else if e := 0; len(kvs) != e {
+		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
+	}
+
+	// Col "x"" is public.
+	if num := len(tableDesc.Mutations); num > 0 {
+		t.Fatalf("%d outstanding mutation", num)
+	}
+	for _, col := range tableDesc.Columns {
+		if col.Name == "x" {
+			return
+		}
+	}
+	t.Fatal("cannot find column x")
+}
