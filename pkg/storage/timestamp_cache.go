@@ -20,14 +20,12 @@ import (
 	"unsafe"
 
 	"github.com/google/btree"
-	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -105,8 +103,6 @@ func (cr *cacheRequest) size() uint64 {
 	return n
 }
 
-var zeroTxnID uuid.UUID
-
 var cacheEntryOverhead = uint64(unsafe.Sizeof(cache.IntervalKey{}) +
 	unsafe.Sizeof(cacheValue{}) + unsafe.Sizeof(cache.Entry{}))
 
@@ -153,20 +149,20 @@ type timestampCache struct {
 // timestamp cache for a range. Also see timestampCache.getMax where this txn
 // ID is checked in order to return whether the max read/write timestamp came
 // from a regular entry or one of these low water mark entries.
-var lowWaterTxnIDMarker = func() *uuid.UUID {
+var lowWaterTxnIDMarker = func() uuid.UUID {
 	// The specific txn ID used here isn't important. We use something that is a)
 	// non-zero and b) obvious.
 	u, err := uuid.FromString("11111111-1111-1111-1111-111111111111")
 	if err != nil {
-		log.Fatal(context.Background(), err)
+		panic(err)
 	}
-	return &u
+	return u
 }()
 
 // A cacheValue combines the timestamp with an optional txn ID.
 type cacheValue struct {
 	timestamp hlc.Timestamp
-	txnID     uuid.UUID // zeroTxnID for no transaction
+	txnID     uuid.UUID // zero for no transaction
 }
 
 func makeCacheEntry(key cache.IntervalKey, value cacheValue) *cache.Entry {
@@ -229,7 +225,7 @@ func (tc *timestampCache) len() int {
 // whether the command adding this timestamp should update the read
 // timestamp; false to update the write timestamp cache.
 func (tc *timestampCache) add(
-	start, end roachpb.Key, timestamp hlc.Timestamp, txnID *uuid.UUID, readTSCache bool,
+	start, end roachpb.Key, timestamp hlc.Timestamp, txnID uuid.UUID, readTSCache bool,
 ) {
 	// This gives us a memory-efficient end key if end is empty.
 	if len(end) == 0 {
@@ -245,12 +241,8 @@ func (tc *timestampCache) add(
 			tcache = tc.rCache
 		}
 
-		if txnID == nil {
-			txnID = &zeroTxnID
-		}
-
 		addRange := func(r interval.Range) {
-			value := cacheValue{timestamp: timestamp, txnID: *txnID}
+			value := cacheValue{timestamp: timestamp, txnID: txnID}
 			key := tcache.MakeKey(r.Start, r.End)
 			entry := makeCacheEntry(key, value)
 			tc.bytes += cacheEntrySize(r.Start, r.End)
@@ -294,7 +286,7 @@ func (tc *timestampCache) add(
 					//
 					// New: ------------
 					// Old:
-					*cv = cacheValue{timestamp: timestamp, txnID: *txnID}
+					*cv = cacheValue{timestamp: timestamp, txnID: txnID}
 					tcache.MoveToEnd(entry)
 					return
 				case sCmp <= 0 && eCmp >= 0:
@@ -391,7 +383,7 @@ func (tc *timestampCache) add(
 				default:
 					panic(fmt.Sprintf("no overlap between %v and %v", key.Range, r))
 				}
-			} else if cv.txnID == *txnID {
+			} else if cv.txnID == txnID {
 				// The existing interval has a timestamp equal to the new
 				// interval, and the same transaction ID.
 				switch {
@@ -449,7 +441,7 @@ func (tc *timestampCache) add(
 					// New:
 					// Nil: ============
 					// Old:
-					cv.txnID = zeroTxnID
+					cv.txnID = uuid.UUID{}
 					tc.bytes += cacheEntrySize(key.Start, key.End) - oldSize
 					return
 				case sCmp == 0 && eCmp > 0:
@@ -462,7 +454,7 @@ func (tc *timestampCache) add(
 					// New:           --
 					// Nil: ==========
 					// Old:
-					cv.txnID = zeroTxnID
+					cv.txnID = uuid.UUID{}
 					r.Start = key.End
 				case sCmp < 0 && eCmp == 0:
 					// New contains old, right-aligned. Clear ownership of the
@@ -474,7 +466,7 @@ func (tc *timestampCache) add(
 					// New: --
 					// Nil:   ==========
 					// Old:
-					cv.txnID = zeroTxnID
+					cv.txnID = uuid.UUID{}
 					r.End = key.Start
 				case sCmp < 0 && eCmp > 0:
 					// New contains old; split into three segments with the
@@ -486,10 +478,10 @@ func (tc *timestampCache) add(
 					// New: --        --
 					// Nil:   ========
 					// Old:
-					cv.txnID = zeroTxnID
+					cv.txnID = uuid.UUID{}
 
 					newKey := tcache.MakeKey(r.Start, key.Start)
-					newEntry := makeCacheEntry(newKey, cacheValue{timestamp: timestamp, txnID: *txnID})
+					newEntry := makeCacheEntry(newKey, cacheValue{timestamp: timestamp, txnID: txnID})
 					addEntryAfter(newEntry, entry)
 					r.Start = key.End
 				case sCmp > 0 && eCmp < 0:
@@ -502,7 +494,7 @@ func (tc *timestampCache) add(
 					// New:
 					// Nil:     ====
 					// Old: ----    ----
-					*txnID = zeroTxnID
+					txnID = uuid.UUID{}
 					oldEnd := key.End
 					key.End = r.Start
 
@@ -519,7 +511,7 @@ func (tc *timestampCache) add(
 					// New:
 					// Nil:     ========
 					// Old: ----
-					*txnID = zeroTxnID
+					txnID = uuid.UUID{}
 					key.End = r.Start
 				case sCmp == 0:
 					// Old contains new, left-aligned; truncate old start and
@@ -530,7 +522,7 @@ func (tc *timestampCache) add(
 					// New:
 					// Nil: ========
 					// Old:         ----
-					*txnID = zeroTxnID
+					txnID = uuid.UUID{}
 					key.Start = r.End
 				case eCmp > 0:
 					// Left partial overlap; truncate old end and split new into
@@ -656,11 +648,11 @@ func (tc *timestampCache) ExpandRequests(timestamp hlc.Timestamp, span roachpb.R
 		tc.bytes -= reqSize
 		for i := range req.reads {
 			sp := &req.reads[i]
-			tc.add(sp.Key, sp.EndKey, req.timestamp, &req.txnID, true /* readTSCache */)
+			tc.add(sp.Key, sp.EndKey, req.timestamp, req.txnID, true /* readTSCache */)
 		}
 		for i := range req.writes {
 			sp := &req.writes[i]
-			tc.add(sp.Key, sp.EndKey, req.timestamp, &req.txnID, false /* !readTSCache */)
+			tc.add(sp.Key, sp.EndKey, req.timestamp, req.txnID, false /* !readTSCache */)
 		}
 		if req.txn.Key != nil {
 			// Make the transaction key from the request key. We're guaranteed
@@ -668,7 +660,7 @@ func (tc *timestampCache) ExpandRequests(timestamp hlc.Timestamp, span roachpb.R
 			// EndTransactionRequests.
 			key := keys.TransactionKey(req.txn.Key, req.txnID)
 			// We set txnID=nil because we want hits for same txn ID.
-			tc.add(key, nil, req.timestamp, nil, false /* !readTSCache */)
+			tc.add(key, nil, req.timestamp, uuid.UUID{}, false /* !readTSCache */)
 		}
 	}
 }
@@ -681,7 +673,7 @@ func (tc *timestampCache) ExpandRequests(timestamp hlc.Timestamp, span roachpb.R
 // the read timestamps. Also returns an "ok" bool, indicating whether
 // an explicit match of the interval was found in the cache (as
 // opposed to using the low-water mark).
-func (tc *timestampCache) GetMaxRead(start, end roachpb.Key) (hlc.Timestamp, *uuid.UUID, bool) {
+func (tc *timestampCache) GetMaxRead(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID, bool) {
 	return tc.getMax(start, end, true)
 }
 
@@ -693,19 +685,19 @@ func (tc *timestampCache) GetMaxRead(start, end roachpb.Key) (hlc.Timestamp, *uu
 // the write timestamps. Also returns an "ok" bool, indicating whether
 // an explicit match of the interval was found in the cache (as
 // opposed to using the low-water mark).
-func (tc *timestampCache) GetMaxWrite(start, end roachpb.Key) (hlc.Timestamp, *uuid.UUID, bool) {
+func (tc *timestampCache) GetMaxWrite(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID, bool) {
 	return tc.getMax(start, end, false)
 }
 
 func (tc *timestampCache) getMax(
 	start, end roachpb.Key, readTSCache bool,
-) (hlc.Timestamp, *uuid.UUID, bool) {
+) (hlc.Timestamp, uuid.UUID, bool) {
 	if len(end) == 0 {
 		end = start.Next()
 	}
 	var ok bool
 	maxTS := tc.lowWater
-	var maxTxnID *uuid.UUID
+	var maxTxnID uuid.UUID
 	cache := tc.wCache
 	if readTSCache {
 		cache = tc.rCache
@@ -715,17 +707,12 @@ func (tc *timestampCache) getMax(
 		if maxTS.Less(ce.timestamp) {
 			ok = true
 			maxTS = ce.timestamp
-			if ce.txnID == zeroTxnID {
-				maxTxnID = nil
-			} else {
-				maxTxnID = &ce.txnID
-			}
-		} else if maxTS == ce.timestamp && maxTxnID != nil &&
-			(ce.txnID == zeroTxnID || *maxTxnID != ce.txnID) {
-			maxTxnID = nil
+			maxTxnID = ce.txnID
+		} else if maxTS == ce.timestamp && maxTxnID != ce.txnID {
+			maxTxnID = uuid.UUID{}
 		}
 	}
-	if maxTxnID != nil && *maxTxnID == *lowWaterTxnIDMarker {
+	if maxTxnID == lowWaterTxnIDMarker {
 		ok = false
 	}
 	return maxTS, maxTxnID, ok
