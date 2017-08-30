@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -95,6 +96,29 @@ var defaultProposalQuota = raftLogMaxSize / 4
 // resolved synchronously with EndTransaction). Certain tests become
 // simpler with this being turned off.
 var txnAutoGC = true
+
+var syncRaftLog = settings.RegisterBoolSetting(
+	"kv.raft_log.synchronize",
+	"set to true to synchronize on Raft log writes to persistent storage",
+	true,
+)
+
+// MaxCommandSizeFloor is the minimum allowed value for the MaxCommandSize
+// cluster setting.
+const MaxCommandSizeFloor = 4 << 20 // 4MB
+
+// MaxCommandSize wraps "kv.raft.command.max_size".
+var MaxCommandSize = settings.RegisterValidatedByteSizeSetting(
+	"kv.raft.command.max_size",
+	"maximum size of a raft command",
+	64<<20,
+	func(size int64) error {
+		if size < MaxCommandSizeFloor {
+			return fmt.Errorf("max_size must be greater than %s", humanizeutil.IBytes(MaxCommandSizeFloor))
+		}
+		return nil
+	},
+)
 
 // raftInitialLog{Index,Term} are the starting points for the raft log. We
 // bootstrap the raft membership by synthesizing a snapshot as if there were
@@ -2864,12 +2888,14 @@ func (r *Replica) propose(
 	// TODO(irfansharif): This int cast indicates that if someone configures a
 	// very large max proposal size, there is weird overflow behavior and it
 	// will not work the way it should.
-	if proposal.command.Size() > int(r.store.cfg.Settings.MaxCommandSize.Get()) {
+	if proposal.command.Size() > int(MaxCommandSize.Get(&r.store.cfg.Settings.SV)) {
 		// Once a command is written to the raft log, it must be loaded
 		// into memory and replayed on all replicas. If a command is
 		// too big, stop it here.
-		return nil, nil, noop, roachpb.NewError(errors.Errorf("command is too large: %d bytes (max: %d)",
-			proposal.command.Size(), r.store.cfg.Settings.MaxCommandSize.Get()))
+		return nil, nil, noop, roachpb.NewError(errors.Errorf(
+			"command is too large: %d bytes (max: %d)",
+			proposal.command.Size(), MaxCommandSize.Get(&r.store.cfg.Settings.SV),
+		))
 	}
 
 	if err := r.maybeAcquireProposalQuota(ctx, int64(proposal.command.Size())); err != nil {
@@ -3277,7 +3303,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// were not persisted to disk, it wouldn't be a problem because raft does not
 	// infer the that entries are persisted on the node that sends a snapshot.
 	start := timeutil.Now()
-	if err := batch.Commit(r.store.cfg.Settings.SyncRaftLog.Get() && rd.MustSync); err != nil {
+	if err := batch.Commit(syncRaftLog.Get(&r.store.cfg.Settings.SV) && rd.MustSync); err != nil {
 		return stats, err
 	}
 	elapsed := timeutil.Since(start)

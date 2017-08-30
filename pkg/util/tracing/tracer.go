@@ -28,7 +28,9 @@ import (
 	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
@@ -52,6 +54,24 @@ const (
 	fieldNameSpanID  = prefixTracerState + "spanid"
 	// fieldNameShadow is the name of the shadow tracer.
 	fieldNameShadowType = prefixTracerState + "shadowtype"
+)
+
+var enableNetTrace = settings.RegisterBoolSetting(
+	"trace.debug.enable",
+	"if set, traces for recent requests can be seen in the /debug page",
+	false,
+)
+
+var lightstepToken = settings.RegisterStringSetting(
+	"trace.lightstep.token",
+	"if set, traces go to Lightstep using this token",
+	envutil.EnvOrDefaultString("COCKROACH_TEST_LIGHTSTEP_TOKEN", ""),
+)
+
+var zipkinCollector = settings.RegisterStringSetting(
+	"trace.zipkin.collector",
+	"if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'); ignored if trace.lightstep.token is set.",
+	envutil.EnvOrDefaultString("COCKROACH_TEST_ZIPKIN_COLLECTOR", ""),
 )
 
 // Tracer is our own custom implementation of opentracing.Tracer. It supports:
@@ -93,7 +113,7 @@ type Tracer struct {
 var _ opentracing.Tracer = &Tracer{}
 
 // NewTracer creates a Tracer. It initially tries to run with minimal overhead
-// and collects essentially nothing; use Reconfigure() to enable various tracing
+// and collects essentially nothing; use Configure() to enable various tracing
 // backends.
 func NewTracer() *Tracer {
 	t := &Tracer{}
@@ -101,34 +121,30 @@ func NewTracer() *Tracer {
 	return t
 }
 
-// ReconfigurationOptions is an interface that avoids a dependency on pkg/settings/cluster.
-// The underlying implementation is usually a cluster.ClusterSetting.TracingOptions.
-type ReconfigurationOptions interface {
-	EnableNetTrace() bool
-	LightstepToken() string
-	ZipkinAddr() string
-}
-
-// Reconfigure reconfigures the tracer with the given debug/requests switch,
-// lightstep token, and zipkin collector address. Empty values disable the
-// respective functionality.
-func (t *Tracer) Reconfigure(o ReconfigurationOptions) {
-	if lsToken := o.LightstepToken(); lsToken != "" {
-		t.setShadowTracer(createLightStepTracer(lsToken))
-	} else if zipkinAddr := o.ZipkinAddr(); zipkinAddr != "" {
-		t.setShadowTracer(createZipkinTracer(zipkinAddr))
-	} else {
-		t.setShadowTracer(nil, nil)
+// Configure sets up the Tracer according to the cluster settings (and keeps
+// it updated if they change).
+func (t *Tracer) Configure(sv *settings.Values) {
+	reconfigure := func() {
+		if lsToken := lightstepToken.Get(sv); lsToken != "" {
+			t.setShadowTracer(createLightStepTracer(lsToken))
+		} else if zipkinAddr := zipkinCollector.Get(sv); zipkinAddr != "" {
+			t.setShadowTracer(createZipkinTracer(zipkinAddr))
+		} else {
+			t.setShadowTracer(nil, nil)
+		}
+		var nt int32
+		if enableNetTrace.Get(sv) {
+			nt = 1
+		}
+		atomic.StoreInt32(&t._useNetTrace, nt)
 	}
-	var nt int32
-	if o.EnableNetTrace() {
-		nt = 1
-	}
-	atomic.StoreInt32(&t._useNetTrace, nt)
-}
 
-// FIXME(tschottdorf): remove this once it's used.
-var _ = (*Tracer)(nil).Reconfigure
+	reconfigure()
+
+	enableNetTrace.SetOnChange(sv, reconfigure)
+	lightstepToken.SetOnChange(sv, reconfigure)
+	zipkinCollector.SetOnChange(sv, reconfigure)
+}
 
 func (t *Tracer) useNetTrace() bool {
 	return atomic.LoadInt32(&t._useNetTrace) != 0

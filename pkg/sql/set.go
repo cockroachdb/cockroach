@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -114,6 +115,7 @@ func (n *setNode) Close(_ context.Context)        {}
 // setClusterSettingNode represents a SET CLUSTER SETTING statement.
 type setClusterSettingNode struct {
 	name    string
+	st      *cluster.Settings
 	setting settings.Setting
 	// If value is nil, the setting should be reset.
 	value parser.TypedExpr
@@ -129,8 +131,8 @@ func (p *planner) SetClusterSetting(
 	}
 
 	name := strings.ToLower(parser.AsStringWithFlags(n.Name, parser.FmtBareIdentifiers))
-	r := p.session.execCfg.Settings.Registry
-	setting, ok := r.Lookup(name)
+	st := p.session.execCfg.Settings
+	setting, ok := settings.Lookup(name)
 	if !ok {
 		return nil, errors.Errorf("unknown cluster setting '%s'", name)
 	}
@@ -175,7 +177,7 @@ func (p *planner) SetClusterSetting(
 		}
 	}
 
-	return &setClusterSettingNode{name: name, setting: setting, value: value}, nil
+	return &setClusterSettingNode{name: name, st: st, setting: setting, value: value}, nil
 }
 
 func (n *setClusterSettingNode) Start(params runParams) error {
@@ -192,7 +194,7 @@ func (n *setClusterSettingNode) Start(params runParams) error {
 		reportedValue = "DEFAULT"
 	} else {
 		// TODO(dt): validate and properly encode str according to type.
-		encoded, err := params.p.toSettingString(params.ctx, ie, n.name, n.setting, n.value)
+		encoded, err := params.p.toSettingString(params.ctx, ie, n.st, n.name, n.setting, n.value)
 		if err != nil {
 			return err
 		}
@@ -227,6 +229,7 @@ func (n *setClusterSettingNode) Close(_ context.Context)        {}
 func (p *planner) toSettingString(
 	ctx context.Context,
 	ie InternalExecutor,
+	st *cluster.Settings,
 	name string,
 	setting settings.Setting,
 	val parser.TypedExpr,
@@ -266,7 +269,7 @@ func (p *planner) toSettingString(
 				return "", errors.New("the existing value is not a string")
 			}
 			prevRawVal := []byte(string(*dStr))
-			newBytes, _, err := setting.Validate(prevRawVal, (*string)(s))
+			newBytes, _, err := setting.Validate(&st.SV, prevRawVal, (*string)(s))
 			if err != nil {
 				return "", err
 			}

@@ -45,11 +45,11 @@ func NewTempEngine(ctx context.Context, storeCfg base.StoreSpec) (Engine, error)
 	st := cluster.MakeClusterSettings(cluster.BinaryServerVersion, cluster.BinaryServerVersion)
 
 	rocksDBCfg := RocksDBConfig{
-		RocksDBSettings: st.RocksDBSettings,
-		Attrs:           roachpb.Attributes{},
-		Dir:             storeCfg.Path,
-		MaxSizeBytes:    0,   // TODO(arjun): Revisit this.
-		MaxOpenFiles:    128, // TODO(arjun): Revisit this.
+		Settings:     st,
+		Attrs:        roachpb.Attributes{},
+		Dir:          storeCfg.Path,
+		MaxSizeBytes: 0,   // TODO(arjun): Revisit this.
+		MaxOpenFiles: 128, // TODO(arjun): Revisit this.
 	}
 	rocksDBCache := NewRocksDBCache(0)
 	rocksdb, err := NewRocksDB(rocksDBCfg, rocksDBCache)
