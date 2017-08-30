@@ -96,7 +96,9 @@ ReactDOM.render(
         <Route path="clusterviz" component={ ClusterViz } />
         <Route path="debug" component={ Debug } />
         <Route path="reports">
-          <Route path="problemranges" component={ ProblemRanges } />
+          <Route path="problemranges" component={ ProblemRanges }>
+            <Route path={`:${nodeIDAttr}`} component={ ProblemRanges }/>
+          </Route>
           <Route path="network" component={ Network } />
           <Route path="nodes" component={ Nodes } />
           <Route path={`certificates/:${nodeIDAttr}`} component={ Certificates } />
