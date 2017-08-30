@@ -261,8 +261,8 @@ func openRocksDBWithVersion(t *testing.T, hasVersionFile bool, ver Version) erro
 
 	rocksdb, err := NewRocksDB(
 		RocksDBConfig{
-			RocksDBSettings: cluster.MakeTestingClusterSettings().RocksDBSettings,
-			Dir:             dir,
+			Settings: cluster.MakeTestingClusterSettings(),
+			Dir:      dir,
 		},
 		RocksDBCache{},
 	)
@@ -388,8 +388,8 @@ func TestConcurrentBatch(t *testing.T) {
 
 	db, err := NewRocksDB(
 		RocksDBConfig{
-			RocksDBSettings: cluster.MakeTestingClusterSettings().RocksDBSettings,
-			Dir:             dir,
+			Settings: cluster.MakeTestingClusterSettings(),
+			Dir:      dir,
 		},
 		RocksDBCache{},
 	)
@@ -577,8 +577,8 @@ func TestRocksDBTimeBound(t *testing.T) {
 
 	rocksdb, err := NewRocksDB(
 		RocksDBConfig{
-			RocksDBSettings: cluster.MakeTestingClusterSettings().RocksDBSettings,
-			Dir:             dir,
+			Settings: cluster.MakeTestingClusterSettings(),
+			Dir:      dir,
 		},
 		RocksDBCache{},
 	)

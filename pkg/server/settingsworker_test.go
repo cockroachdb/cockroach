@@ -39,44 +39,32 @@ const durationKey = "testing.duration"
 const byteSizeKey = "testing.bytesize"
 const enumKey = "testing.enum"
 
-func register(
-	r settings.Registry,
-) (
-	*settings.StringSetting,
-	*settings.IntSetting,
-	*settings.DurationSetting,
-	*settings.ByteSizeSetting,
-	*settings.EnumSetting,
-) {
-	var strA = r.RegisterValidatedStringSetting(strKey, "", "<default>", func(v string) error {
-		if len(v) > 15 {
-			return errors.Errorf("can't set %s to string longer than 15: %s", strKey, v)
-		}
-		return nil
-	})
-	var intA = r.RegisterValidatedIntSetting(intKey, "", 1, func(v int64) error {
-		if v < 0 {
-			return errors.Errorf("can't set %s to a negative value: %d", intKey, v)
-		}
-		return nil
+var strA = settings.RegisterValidatedStringSetting(strKey, "", "<default>", func(v string) error {
+	if len(v) > 15 {
+		return errors.Errorf("can't set %s to string longer than 15: %s", strKey, v)
+	}
+	return nil
+})
+var intA = settings.RegisterValidatedIntSetting(intKey, "", 1, func(v int64) error {
+	if v < 0 {
+		return errors.Errorf("can't set %s to a negative value: %d", intKey, v)
+	}
+	return nil
 
-	})
-	var durationA = r.RegisterValidatedDurationSetting(durationKey, "", time.Minute, func(v time.Duration) error {
-		if v < 0 {
-			return errors.Errorf("can't set %s to a negative duration: %s", durationKey, v)
-		}
-		return nil
-	})
-	var byteSizeA = r.RegisterValidatedByteSizeSetting(byteSizeKey, "", 1024*1024, func(v int64) error {
-		if v < 0 {
-			return errors.Errorf("can't set %s to a negative value: %d", byteSizeKey, v)
-		}
-		return nil
-	})
-	var enumA = r.RegisterEnumSetting(enumKey, "", "foo", map[int64]string{1: "foo", 2: "bar"})
-
-	return strA, intA, durationA, byteSizeA, enumA
-}
+})
+var durationA = settings.RegisterValidatedDurationSetting(durationKey, "", time.Minute, func(v time.Duration) error {
+	if v < 0 {
+		return errors.Errorf("can't set %s to a negative duration: %s", durationKey, v)
+	}
+	return nil
+})
+var byteSizeA = settings.RegisterValidatedByteSizeSetting(byteSizeKey, "", 1024*1024, func(v int64) error {
+	if v < 0 {
+		return errors.Errorf("can't set %s to a negative value: %d", byteSizeKey, v)
+	}
+	return nil
+})
+var enumA = settings.RegisterEnumSetting(enumKey, "", "foo", map[int64]string{1: "foo", 2: "bar"})
 
 func TestSettingsRefresh(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -84,8 +72,6 @@ func TestSettingsRefresh(t *testing.T) {
 	// Set up some additional cluster settings to play around with. Note that we
 	// need to do this before starting the server, or there will be data races.
 	st := cluster.MakeTestingClusterSettings()
-	r := st.Registry
-	strA, intA, durationA, byteSizeA, _ := register(r)
 	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
 	defer s.Stopper().Stop(context.TODO())
 
@@ -95,10 +81,10 @@ func TestSettingsRefresh(t *testing.T) {
 		VALUES ($1, $2, NOW(), $3)`
 	deleteQ := "DELETE FROM system.settings WHERE name = $1"
 
-	if expected, actual := "<default>", strA.Get(); expected != actual {
+	if expected, actual := "<default>", strA.Get(&st.SV); expected != actual {
 		t.Fatalf("expected %v, got %v", expected, actual)
 	}
-	if expected, actual := int64(1), intA.Get(); expected != actual {
+	if expected, actual := int64(1), intA.Get(&st.SV); expected != actual {
 		t.Fatalf("expected %v, got %v", expected, actual)
 	}
 
@@ -107,10 +93,10 @@ func TestSettingsRefresh(t *testing.T) {
 	db.Exec(insertQ, intKey, settings.EncodeInt(2), "i")
 	// Wait until we observe the gossip-driven update propagating to cache.
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := "foo", strA.Get(); expected != actual {
+		if expected, actual := "foo", strA.Get(&st.SV); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := int64(2), intA.Get(); expected != actual {
+		if expected, actual := int64(2), intA.Get(&st.SV); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
@@ -119,7 +105,7 @@ func TestSettingsRefresh(t *testing.T) {
 	// Setting to empty also works.
 	db.Exec(insertQ, strKey, "", "s")
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := "", strA.Get(); expected != actual {
+		if expected, actual := "", strA.Get(&st.SV); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
@@ -130,10 +116,10 @@ func TestSettingsRefresh(t *testing.T) {
 	db.Exec(insertQ, strKey, "qux", "s")
 
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := "qux", strA.Get(); expected != actual {
+		if expected, actual := "qux", strA.Get(&st.SV); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := int64(2), intA.Get(); expected != actual {
+		if expected, actual := int64(2), intA.Get(&st.SV); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
@@ -145,10 +131,10 @@ func TestSettingsRefresh(t *testing.T) {
 	db.Exec(insertQ, strKey, "after-invalid", "s")
 
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := int64(2), intA.Get(); expected != actual {
+		if expected, actual := int64(2), intA.Get(&st.SV); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := "after-invalid", strA.Get(); expected != actual {
+		if expected, actual := "after-invalid", strA.Get(&st.SV); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
@@ -159,36 +145,36 @@ func TestSettingsRefresh(t *testing.T) {
 	db.Exec(insertQ, strKey, "after-mistype", "s")
 
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := int64(2), intA.Get(); expected != actual {
+		if expected, actual := int64(2), intA.Get(&st.SV); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := "after-mistype", strA.Get(); expected != actual {
+		if expected, actual := "after-mistype", strA.Get(&st.SV); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
 	})
 
 	// An invalid value doesn't revert a previous set or block other changes.
-	prevStrA := strA.Get()
-	prevIntA := intA.Get()
-	prevDurationA := durationA.Get()
-	prevByteSizeA := byteSizeA.Get()
+	prevStrA := strA.Get(&st.SV)
+	prevIntA := intA.Get(&st.SV)
+	prevDurationA := durationA.Get(&st.SV)
+	prevByteSizeA := byteSizeA.Get(&st.SV)
 	db.Exec(insertQ, strKey, "this is too big for this setting", "s")
 	db.Exec(insertQ, intKey, settings.EncodeInt(-1), "i")
 	db.Exec(insertQ, durationKey, settings.EncodeDuration(-time.Minute), "d")
 	db.Exec(insertQ, byteSizeKey, settings.EncodeInt(-1), "z")
 
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := prevStrA, strA.Get(); expected != actual {
+		if expected, actual := prevStrA, strA.Get(&st.SV); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := prevIntA, intA.Get(); expected != actual {
+		if expected, actual := prevIntA, intA.Get(&st.SV); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := prevDurationA, durationA.Get(); expected != actual {
+		if expected, actual := prevDurationA, durationA.Get(&st.SV); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := prevByteSizeA, byteSizeA.Get(); expected != actual {
+		if expected, actual := prevByteSizeA, byteSizeA.Get(&st.SV); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
@@ -197,7 +183,7 @@ func TestSettingsRefresh(t *testing.T) {
 	// Deleting a value reverts to default.
 	db.Exec(deleteQ, strKey)
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := "<default>", strA.Get(); expected != actual {
+		if expected, actual := "<default>", strA.Get(&st.SV); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
@@ -210,8 +196,6 @@ func TestSettingsSetAndShow(t *testing.T) {
 	// Set up some additional cluster settings to play around with. Note that we
 	// need to do this before starting the server, or there will be data races.
 	st := cluster.MakeTestingClusterSettings()
-	r := st.Registry
-	_, _, durationA, byteSizeA, enumA := register(r)
 	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
 	defer s.Stopper().Stop(context.TODO())
 
@@ -239,7 +223,7 @@ func TestSettingsSetAndShow(t *testing.T) {
 
 	db.Exec(fmt.Sprintf(setQ, durationKey, "'2h'"))
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := time.Hour*2, durationA.Get(); expected != actual {
+		if expected, actual := time.Hour*2, durationA.Get(&st.SV); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := "2h", db.QueryStr(fmt.Sprintf(showQ, durationKey))[0][0]; expected != actual {
@@ -250,7 +234,7 @@ func TestSettingsSetAndShow(t *testing.T) {
 
 	db.Exec(fmt.Sprintf(setQ, byteSizeKey, "'1500MB'"))
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := int64(1500000000), byteSizeA.Get(); expected != actual {
+		if expected, actual := int64(1500000000), byteSizeA.Get(&st.SV); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := "1.4 GiB", db.QueryStr(fmt.Sprintf(showQ, byteSizeKey))[0][0]; expected != actual {
@@ -275,7 +259,7 @@ func TestSettingsSetAndShow(t *testing.T) {
 
 	db.Exec(fmt.Sprintf(setQ, enumKey, "2"))
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := int64(2), enumA.Get(); expected != actual {
+		if expected, actual := int64(2), enumA.Get(&st.SV); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := "2", db.QueryStr(fmt.Sprintf(showQ, enumKey))[0][0]; expected != actual {
@@ -286,7 +270,7 @@ func TestSettingsSetAndShow(t *testing.T) {
 
 	db.Exec(fmt.Sprintf(setQ, enumKey, "'foo'"))
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := int64(1), enumA.Get(); expected != actual {
+		if expected, actual := int64(1), enumA.Get(&st.SV); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		if expected, actual := "1", db.QueryStr(fmt.Sprintf(showQ, enumKey))[0][0]; expected != actual {
@@ -329,10 +313,7 @@ func TestSettingsShowAll(t *testing.T) {
 	// Set up some additional cluster settings to play around with. Note that we
 	// need to do this before starting the server, or there will be data races.
 	st := cluster.MakeTestingClusterSettings()
-	r := st.Registry
 
-	// Make sure strKey and intKey are defined as they are checked below.
-	register(r)
 	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
 	defer s.Stopper().Stop(context.TODO())
 

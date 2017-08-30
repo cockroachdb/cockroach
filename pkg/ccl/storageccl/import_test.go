@@ -52,10 +52,10 @@ func TestMaxImportBatchSize(t *testing.T) {
 		{importBatchSize: 63 << 20, maxCommandSize: 64 << 20, expected: 63 << 20},
 	}
 	for i, testCase := range testCases {
-		settings := cluster.MakeTestingClusterSettings()
-		settings.ImportBatchSize.Override(testCase.importBatchSize)
-		settings.MaxCommandSize.Override(testCase.maxCommandSize)
-		if e, a := maxImportBatchSize(settings), testCase.expected; e != a {
+		st := cluster.MakeTestingClusterSettings()
+		importBatchSize.Override(&st.SV, testCase.importBatchSize)
+		storage.MaxCommandSize.Override(&st.SV, testCase.maxCommandSize)
+		if e, a := maxImportBatchSize(st), testCase.expected; e != a {
 			t.Errorf("%d: expected max batch size %d, but got %d", i, e, a)
 		}
 	}
@@ -134,7 +134,7 @@ func TestImport(t *testing.T) {
 	t.Run("WriteBatch", func(t *testing.T) {
 		disableSSTable := func(st *cluster.Settings) {
 			st.Manual.Store(true)
-			st.AddSSTableEnabled.Override(false)
+			AddSSTableEnabled.Override(&st.SV, false)
 		}
 		t.Run("batch=default", func(t *testing.T) {
 			runTestImport(t, disableSSTable)
@@ -144,7 +144,7 @@ func TestImport(t *testing.T) {
 			// the threshold to force it.
 			init := func(st *cluster.Settings) {
 				st.Manual.Store(true)
-				st.ImportBatchSize.Override(1)
+				importBatchSize.Override(&st.SV, 1)
 			}
 			runTestImport(t, init)
 		})
@@ -152,7 +152,7 @@ func TestImport(t *testing.T) {
 	t.Run("AddSSTable", func(t *testing.T) {
 		enableSSTable := func(st *cluster.Settings) {
 			st.Manual.Store(true)
-			st.AddSSTableEnabled.Override(true)
+			AddSSTableEnabled.Override(&st.SV, true)
 		}
 		t.Run("batch=default", func(t *testing.T) {
 			runTestImport(t, enableSSTable)
@@ -162,7 +162,7 @@ func TestImport(t *testing.T) {
 			// the threshold to force it.
 			init := func(st *cluster.Settings) {
 				enableSSTable(st)
-				st.ImportBatchSize.Override(1)
+				importBatchSize.Override(&st.SV, 1)
 			}
 			runTestImport(t, init)
 		})

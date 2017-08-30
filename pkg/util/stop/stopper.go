@@ -25,6 +25,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -176,8 +177,8 @@ func (s *Stopper) Recover(ctx context.Context) {
 		}
 		// FIXME(tschottdorf): should find a way to plumb ReportingSettings here.
 		// Certainly the Stopper could hold them.
-		if reportingSettings, ok := (log.ReportingSettingsSingleton.Load()).(*log.ReportingSettings); ok {
-			log.ReportPanic(ctx, *reportingSettings, r, 1)
+		if sv, ok := (log.ReportingSettingsSingleton.Load()).(*settings.Values); ok {
+			log.ReportPanic(ctx, sv, r, 1)
 		}
 		panic(r)
 	}

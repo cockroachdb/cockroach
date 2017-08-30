@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -68,6 +69,12 @@ var (
 	metaSlowDistSenderRequests = metric.Metadata{
 		Name: "requests.slow.distsender",
 		Help: "Number of requests that have been stuck for a long time in the dist sender"}
+)
+
+var rangeDescriptorCacheSize = settings.RegisterIntSetting(
+	"kv.range_descriptor_cache.size",
+	"maximum number of entries in the range descriptor and leaseholder caches",
+	1e6,
 )
 
 // DistSenderMetrics is the set of metrics for a given distributed sender.
@@ -197,8 +204,11 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 	if rdb == nil {
 		rdb = ds
 	}
-	ds.rangeCache = NewRangeDescriptorCache(rdb, ds.st.RangeDescriptorCacheSize.Get)
-	ds.leaseHolderCache = NewLeaseHolderCache(ds.st.RangeDescriptorCacheSize.Get)
+	getRangeDescCacheSize := func() int64 {
+		return rangeDescriptorCacheSize.Get(&ds.st.SV)
+	}
+	ds.rangeCache = NewRangeDescriptorCache(rdb, getRangeDescCacheSize)
+	ds.leaseHolderCache = NewLeaseHolderCache(getRangeDescCacheSize)
 	ds.rangeLookupMaxRanges = defaultRangeLookupMaxRanges
 	if tf := cfg.TestingKnobs.TransportFactory; tf != nil {
 		ds.transportFactory = tf

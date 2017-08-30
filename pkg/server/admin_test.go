@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
@@ -835,16 +836,16 @@ func TestAdminAPISettings(t *testing.T) {
 	// Any bool that defaults to true will work here.
 	const settingKey = "diagnostics.reporting.report_metrics"
 	st := s.ClusterSettings()
-	allKeys := st.Keys()
+	allKeys := settings.Keys()
 
 	checkSetting := func(t *testing.T, k string, v serverpb.SettingsResponse_Value) {
-		ref, ok := st.Lookup(k)
+		ref, ok := settings.Lookup(k)
 		if !ok {
 			t.Fatalf("%s: not found after initial lookup", k)
 		}
 		typ := ref.Typ()
 
-		if ref.String() != v.Value {
+		if ref.String(&st.SV) != v.Value {
 			t.Errorf("%s: expected value %s, got %s", k, ref, v.Value)
 		}
 

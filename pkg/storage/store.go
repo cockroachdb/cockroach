@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -3237,14 +3238,25 @@ type SnapshotStorePool interface {
 	throttle(reason throttleReason, toStoreID roachpb.StoreID)
 }
 
+var rebalanceSnapshotRate = settings.RegisterByteSizeSetting(
+	"kv.snapshot_rebalance.max_rate",
+	"the rate limit (bytes/sec) to use for rebalance snapshots",
+	envutil.EnvOrDefaultBytes("COCKROACH_PREEMPTIVE_SNAPSHOT_RATE", 2<<20),
+)
+var recoverySnapshotRate = settings.RegisterByteSizeSetting(
+	"kv.snapshot_recovery.max_rate",
+	"the rate limit (bytes/sec) to use for recovery snapshots",
+	envutil.EnvOrDefaultBytes("COCKROACH_RAFT_SNAPSHOT_RATE", 8<<20),
+)
+
 func snapshotRateLimit(
 	st *cluster.Settings, priority SnapshotRequest_Priority,
 ) (rate.Limit, error) {
 	switch priority {
 	case SnapshotRequest_RECOVERY:
-		return rate.Limit(st.RecoverySnapshotRate.Get()), nil
+		return rate.Limit(recoverySnapshotRate.Get(&st.SV)), nil
 	case SnapshotRequest_REBALANCE:
-		return rate.Limit(st.RebalanceSnapshotRate.Get()), nil
+		return rate.Limit(rebalanceSnapshotRate.Get(&st.SV)), nil
 	default:
 		return 0, errors.Errorf("unknown snapshot priority: %s", priority)
 	}

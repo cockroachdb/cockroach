@@ -89,8 +89,8 @@ func TestMVCCIterateIncremental(t *testing.T) {
 	ctx := context.Background()
 	e, err := engine.NewRocksDB(
 		engine.RocksDBConfig{
-			RocksDBSettings: cluster.MakeTestingClusterSettings().RocksDBSettings,
-			Dir:             dir,
+			Settings: cluster.MakeTestingClusterSettings(),
+			Dir:      dir,
 		},
 		engine.RocksDBCache{},
 	)

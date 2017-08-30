@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -41,6 +42,18 @@ const (
 	statusLogInterval = 5 * time.Second
 	opTxnCoordSender  = "txn coordinator"
 	opHeartbeatLoop   = "heartbeat"
+)
+
+// maxIntents is the limit for the number of intents that can be
+// written in a single transaction. All intents used by a transaction
+// must be included in the EndTransactionRequest, and processing a
+// large EndTransactionRequest currently consumes a large amount of
+// memory. Limit the number of intents to keep this from causing the
+// server to run out of memory.
+var maxIntents = settings.RegisterIntSetting(
+	"kv.transaction.max_intents",
+	"maximum number of write intents allowed for a KV transaction",
+	100000,
 )
 
 // txnMetadata holds information about an ongoing transaction, as
@@ -402,7 +415,7 @@ func (tc *TxnCoordSender) Send(
 				// in the client.
 				return roachpb.NewErrorf("cannot commit a read-only transaction")
 			}
-			if int64(len(et.IntentSpans)) > tc.st.MaxIntents.Get() {
+			if int64(len(et.IntentSpans)) > maxIntents.Get(&tc.st.SV) {
 				// This check prevents us from sending a very large command to
 				// the server that would consume a lot of memory at evaluation
 				// time.
@@ -905,7 +918,7 @@ func (tc *TxnCoordSender) updateState(
 			})
 		})
 
-		if int64(len(keys)) > tc.st.MaxIntents.Get() {
+		if int64(len(keys)) > maxIntents.Get(&tc.st.SV) {
 			// This check comes after the new intents have already been
 			// written, but allows us to exit early from transactions that
 			// have gotten too large to ever commit because of the other

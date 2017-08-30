@@ -686,7 +686,7 @@ func TestHashJoinerDrain(t *testing.T) {
 	// Since the use of external storage overrides h.initialBufferSize, disable
 	// it for this test.
 	settings := cluster.MakeTestingClusterSettings()
-	settings.DistSQLSettings.DistSQLUseTempStorage.Override(false)
+	distSQLUseTempStorage.Override(&settings.SV, false)
 	flowCtx := FlowCtx{Settings: settings, EvalCtx: evalCtx}
 
 	post := PostProcessSpec{Projection: true, OutputColumns: outCols}

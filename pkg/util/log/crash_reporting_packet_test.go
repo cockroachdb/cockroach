@@ -49,7 +49,7 @@ func TestCrashReportingPacket(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	// Enable all crash-reporting settings.
-	st.DiagnosticsReportingEnabled.Override(true)
+	log.DiagnosticsReportingEnabled.Override(&st.SV, true)
 
 	defer log.TestingSetCrashReportingURL("https://ignored:ignored@ignored/ignored")()
 
@@ -74,13 +74,13 @@ func TestCrashReportingPacket(t *testing.T) {
 
 	func() {
 		defer expectPanic("before server start")
-		defer log.RecoverAndReportPanic(ctx, st)
+		defer log.RecoverAndReportPanic(ctx, &st.SV)
 		panic("oh te noes!")
 	}()
 
 	func() {
 		defer expectPanic("after server start")
-		defer log.RecoverAndReportPanic(ctx, st)
+		defer log.RecoverAndReportPanic(ctx, &st.SV)
 		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 		s.Stopper().Stop(ctx)
 		panic("oh te noes!")

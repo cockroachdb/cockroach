@@ -134,7 +134,7 @@ states:
 
 Regardless of which state the dead node has, it cannot set its `Draining` flag
 because it is dead. Instead, its leases will expire and will be taken by other
-nodes. After `COCKROACH_TIME_UNTIL_STORE_DEAD` elapses, the replicas of its
+nodes. After `server.time_until_store_dead` elapses, the replicas of its
 ranges will actively be rebalanced. Wait for the replica count to reach 0 as for
 live nodes.
 
@@ -147,13 +147,13 @@ decommissioning process.
 No changes required. The existing CockroachDB process, described below, is
 sufficient.
 
-During a temporary removal, `COCKROACH_TIME_UNTIL_STORE_DEAD` could be updated
+During a temporary removal, `server.time_until_store_dead` could be updated
 to to the length of the downtime to avoid unnecessary movement of ranges.
 However, it is difficult to predict the length of downtime. This is an
 optimization which could be implemented later.
 
 After a node is detected as unavailable for more than
-`COCKROACH_TIME_UNTIL_STORE_DEAD` (an env variable with default: 5 minutes), the
+`server.time_until_store_dead` (an env variable with default: 5 minutes), the
 node is marked as incommunicado and the cluster decides that the node may not be
 coming back and moves the data elsewhere. Its leases would have been transferred
 to other nodes as soon as they expired without being renewed. Ranges are
@@ -211,7 +211,7 @@ be nice to proactively detect this but the effort required is disproportionate
 compared to the gain.
 
 Recently dead nodes may cause decommissioning to hang until
-`COCKROACH_TIME_UNTIL_STORE_DEAD` elapses.
+`server.time_until_store_dead` elapses.
 
 Recommissioning, i.e. undoing a decommission, requires node restart. We could
 avoid this: if the node is live, the coordinating process can directly tell it

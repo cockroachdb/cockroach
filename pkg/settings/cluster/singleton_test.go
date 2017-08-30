@@ -17,6 +17,7 @@ package cluster
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -25,12 +26,16 @@ func TestCrashReportingSingletonSetting(t *testing.T) {
 
 	for _, hasDiagnosticsReportingEnabled := range []bool{false, true} {
 		for _, hasCrashReportsEnabled := range []bool{false, true} {
-			st.ReportingSettings.DiagnosticsReportingEnabled.Override(hasDiagnosticsReportingEnabled)
-			st.ReportingSettings.CrashReports.Override(hasCrashReportsEnabled)
-			s := *log.ReportingSettingsSingleton.Load().(*log.ReportingSettings)
+			log.DiagnosticsReportingEnabled.Override(&st.SV, hasDiagnosticsReportingEnabled)
+			log.CrashReports.Override(&st.SV, hasCrashReportsEnabled)
 
-			act, exp :=
-				s.HasDiagnosticsReportingEnabled(), st.ReportingSettings.HasDiagnosticsReportingEnabled()
+			s := log.ReportingSettingsSingleton.Load().(*settings.Values)
+			if s != &st.SV {
+				t.Fatalf("incorrect singleton")
+			}
+
+			act := log.DiagnosticsReportingEnabled.Get(s)
+			exp := hasDiagnosticsReportingEnabled
 			if act != exp {
 				t.Fatalf("(%t, %t): actual %t != expected %t",
 					hasDiagnosticsReportingEnabled, hasCrashReportsEnabled, act, exp)
