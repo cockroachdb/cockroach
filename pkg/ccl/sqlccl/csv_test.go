@@ -64,6 +64,20 @@ func TestLoadCSV(t *testing.T) {
 	tablePath := filepath.Join(tmp, tableName)
 	dataPath := filepath.Join(tmp, csvName)
 
+	// Make tablePath and dataPath relative to ensure relative directories work.
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tablePath, err = filepath.Rel(cwd, tablePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dataPath, err = filepath.Rel(cwd, dataPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	if err := ioutil.WriteFile(tablePath, []byte(tableCreate), 0666); err != nil {
 		t.Fatal(err)
 	}
