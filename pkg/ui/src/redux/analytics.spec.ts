@@ -29,15 +29,16 @@ describe("analytics listener", function() {
       } as any;
     });
 
-    const setClusterID = function () {
+    const setClusterID = function (enabled = true) {
       store.dispatch(clusterReducerObj.receiveData(
         new protos.cockroach.server.serverpb.ClusterResponse({
           cluster_id: clusterID,
+          reporting_enabled: enabled,
         }),
       ));
     };
 
-    it("does nothing if analytics is not enabled.", function () {
+    it("does nothing if cluster info is not available", function () {
       const sync = new AnalyticsSync(analytics, store, []);
 
       sync.page({
@@ -47,9 +48,9 @@ describe("analytics listener", function() {
       assert.isTrue(pageSpy.notCalled);
     });
 
-    it("does nothing if cluster ID is not available.", function () {
+    it("does nothing if reporting is not explicitly enabled", function () {
       const sync = new AnalyticsSync(analytics, store, []);
-      sync.setEnabled(true);
+      setClusterID(false);
 
       sync.page({
         pathname: "/test/path",
@@ -59,9 +60,8 @@ describe("analytics listener", function() {
     });
 
     it("correctly calls segment on a page call", function () {
-      setClusterID();
       const sync = new AnalyticsSync(analytics, store, []);
-      sync.setEnabled(true);
+      setClusterID();
 
       sync.page({
         pathname: "/test/path",
@@ -79,7 +79,6 @@ describe("analytics listener", function() {
 
     it("correctly queues calls before cluster ID is available", function () {
       const sync = new AnalyticsSync(analytics, store, []);
-      sync.setEnabled(true);
 
       sync.page({
         pathname: "/test/path",
@@ -117,7 +116,6 @@ describe("analytics listener", function() {
           replace: "/test/[redacted]/path",
         },
       ]);
-      sync.setEnabled(true);
 
       sync.page({
         pathname: "/test/username/path",

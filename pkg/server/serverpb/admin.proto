@@ -298,7 +298,10 @@ message ClusterRequest {
 
 // ClusterResponse contains metadata for the cluster.
 message ClusterResponse {
+  // The unique ID used to identify this cluster.
   string cluster_id = 1 [(gogoproto.customname) = "ClusterID"];
+  // True if diagnostics reporting is enabled for the cluster.
+  bool reporting_enabled = 2;
 }
 
 enum DrainMode {

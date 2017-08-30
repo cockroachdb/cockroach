@@ -5565,6 +5565,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @typedef cockroach.server.serverpb.ClusterResponse$Properties
                  * @type {Object}
                  * @property {string} [cluster_id] ClusterResponse cluster_id.
+                 * @property {boolean} [reporting_enabled] ClusterResponse reporting_enabled.
                  */
 
                 /**
@@ -5587,6 +5588,12 @@ export const cockroach = $root.cockroach = (() => {
                 ClusterResponse.prototype.cluster_id = "";
 
                 /**
+                 * ClusterResponse reporting_enabled.
+                 * @type {boolean}
+                 */
+                ClusterResponse.prototype.reporting_enabled = false;
+
+                /**
                  * Creates a new ClusterResponse instance using the specified properties.
                  * @param {cockroach.server.serverpb.ClusterResponse$Properties=} [properties] Properties to set
                  * @returns {cockroach.server.serverpb.ClusterResponse} ClusterResponse instance
@@ -5606,6 +5613,8 @@ export const cockroach = $root.cockroach = (() => {
                         writer = $Writer.create();
                     if (message.cluster_id != null && message.hasOwnProperty("cluster_id"))
                         writer.uint32(/* id 1, wireType 2 =*/10).string(message.cluster_id);
+                    if (message.reporting_enabled != null && message.hasOwnProperty("reporting_enabled"))
+                        writer.uint32(/* id 2, wireType 0 =*/16).bool(message.reporting_enabled);
                     return writer;
                 };
 
@@ -5636,6 +5645,9 @@ export const cockroach = $root.cockroach = (() => {
                         switch (tag >>> 3) {
                         case 1:
                             message.cluster_id = reader.string();
+                            break;
+                        case 2:
+                            message.reporting_enabled = reader.bool();
                             break;
                         default:
                             reader.skipType(tag & 7);
@@ -5669,6 +5681,9 @@ export const cockroach = $root.cockroach = (() => {
                     if (message.cluster_id != null && message.hasOwnProperty("cluster_id"))
                         if (!$util.isString(message.cluster_id))
                             return "cluster_id: string expected";
+                    if (message.reporting_enabled != null && message.hasOwnProperty("reporting_enabled"))
+                        if (typeof message.reporting_enabled !== "boolean")
+                            return "reporting_enabled: boolean expected";
                     return null;
                 };
 
@@ -5683,6 +5698,8 @@ export const cockroach = $root.cockroach = (() => {
                     let message = new $root.cockroach.server.serverpb.ClusterResponse();
                     if (object.cluster_id != null)
                         message.cluster_id = String(object.cluster_id);
+                    if (object.reporting_enabled != null)
+                        message.reporting_enabled = Boolean(object.reporting_enabled);
                     return message;
                 };
 
@@ -5705,10 +5722,14 @@ export const cockroach = $root.cockroach = (() => {
                     if (!options)
                         options = {};
                     let object = {};
-                    if (options.defaults)
+                    if (options.defaults) {
                         object.cluster_id = "";
+                        object.reporting_enabled = false;
+                    }
                     if (message.cluster_id != null && message.hasOwnProperty("cluster_id"))
                         object.cluster_id = message.cluster_id;
+                    if (message.reporting_enabled != null && message.hasOwnProperty("reporting_enabled"))
+                        object.reporting_enabled = message.reporting_enabled;
                     return object;
                 };
 
