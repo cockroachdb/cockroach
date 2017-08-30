@@ -188,3 +188,23 @@ func (kr *KeyRewriter) RewriteKey(key []byte) ([]byte, bool, error) {
 	key = append(prefix, k...)
 	return key, true, nil
 }
+
+// RewriteSpan returns a new span with both Key and EndKey rewritten using
+// RewriteKey. An error is returned if either was not matched for rewrite.
+func (kr *KeyRewriter) RewriteSpan(span roachpb.Span) (roachpb.Span, error) {
+	newKey, ok, err := kr.RewriteKey(append([]byte(nil), span.Key...))
+	if err != nil {
+		return roachpb.Span{}, errors.Wrapf(err, "could not rewrite key: %s", span.Key)
+	}
+	if !ok {
+		return roachpb.Span{}, errors.Errorf("could not rewrite key: %s", span.Key)
+	}
+	newEndKey, ok, err := kr.RewriteKey(append([]byte(nil), span.EndKey...))
+	if err != nil {
+		return roachpb.Span{}, errors.Wrapf(err, "could not rewrite key: %s", span.EndKey)
+	}
+	if !ok {
+		return roachpb.Span{}, errors.Errorf("could not rewrite key: %s", span.EndKey)
+	}
+	return roachpb.Span{Key: newKey, EndKey: newEndKey}, nil
+}

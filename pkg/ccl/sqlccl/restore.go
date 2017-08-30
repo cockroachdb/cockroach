@@ -716,17 +716,9 @@ func restore(
 		// leaseholders, so presplit and scatter the ranges to balance the work
 		// among many nodes.
 		for i, importSpan := range importSpans {
-			var newSpan roachpb.Span
-			{
-				var ok bool
-				newSpan.Key, ok, _ = kr.RewriteKey(append([]byte(nil), importSpan.Key...))
-				if !ok {
-					return errors.Errorf("could not rewrite key: %s", importSpan.Key)
-				}
-				newSpan.EndKey, ok, _ = kr.RewriteKey(append([]byte(nil), importSpan.EndKey...))
-				if !ok {
-					return errors.Errorf("could not rewrite key: %s", importSpan.EndKey)
-				}
+			newSpan, err := kr.RewriteSpan(importSpan.Span)
+			if err != nil {
+				return err
 			}
 
 			log.VEventf(restoreCtx, 1, "presplitting %d of %d", i+1, len(importSpans))
