@@ -164,6 +164,10 @@ func TestFormatExpr(t *testing.T) {
 			`now() - '2003-01-01 00:00:00+00:00'`},
 		{`now() - timestamp '2003-01-01'`, FmtParsable,
 			`now() - '2003-01-01 00:00:00+00:00':::TIMESTAMP`},
+		{`'+Inf':::DECIMAL + '-Inf':::DECIMAL + 'NaN':::DECIMAL`, FmtParsable,
+			`('Infinity':::DECIMAL + '-Infinity':::DECIMAL) + 'NaN':::DECIMAL`},
+		{`'+Inf':::FLOAT + '-Inf':::FLOAT + 'NaN':::FLOAT`, FmtParsable,
+			`('+Inf':::FLOAT + '-Inf':::FLOAT) + 'NaN':::FLOAT`},
 
 		{`(123:::INT, 123:::DECIMAL)`, FmtCheckEquivalence,
 			`(123:::INT, 123:::DECIMAL)`},

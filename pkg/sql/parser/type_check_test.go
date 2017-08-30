@@ -104,15 +104,15 @@ func TestTypeCheck(t *testing.T) {
 		{`1:::DECIMAL + $1`, `1:::DECIMAL + $1:::DECIMAL`},
 		{`$1:::INT`, `$1:::INT`},
 
-		// These outputs, while bizarre looking, are correct and expected.
-		// The first cast is caused by ReType in normalize.go. The type annotation
-		// is caused by the call to Serialize, which formats the output using the
-		// Parseable formatter which inserts type annotations at the end of all
-		// well-typed atums. And the final cast is caused by the test itself.
-		{`'NaN'::decimal`, `'NaN'::DECIMAL:::DECIMAL::DECIMAL`},
-		{`'-NaN'::decimal`, `'NaN'::DECIMAL:::DECIMAL::DECIMAL`},
-		{`'Inf'::decimal`, `'Infinity'::DECIMAL:::DECIMAL::DECIMAL`},
-		{`'-Inf'::decimal`, `'-Infinity'::DECIMAL:::DECIMAL::DECIMAL`},
+		// These outputs, while bizarre looking, are correct and expected. The
+		// type annotation is caused by the call to Serialize, which formats the
+		// output using the Parseable formatter which inserts type annotations
+		// at the end of all well-typed datums. And the second cast is caused by
+		// the test itself.
+		{`'NaN'::decimal`, `'NaN':::DECIMAL::DECIMAL`},
+		{`'-NaN'::decimal`, `'NaN':::DECIMAL::DECIMAL`},
+		{`'Inf'::decimal`, `'Infinity':::DECIMAL::DECIMAL`},
+		{`'-Inf'::decimal`, `'-Infinity':::DECIMAL::DECIMAL`},
 	}
 	for _, d := range testData {
 		expr, err := ParseExpr(d.expr)
@@ -135,10 +135,10 @@ func TestTypeCheckNormalize(t *testing.T) {
 		expr     string
 		expected string
 	}{
-		{`'NaN'::decimal`, `'NaN'::DECIMAL:::DECIMAL`},
-		{`'-NaN'::decimal`, `'NaN'::DECIMAL:::DECIMAL`},
-		{`'Inf'::decimal`, `'Infinity'::DECIMAL:::DECIMAL`},
-		{`'-Inf'::decimal`, `'-Infinity'::DECIMAL:::DECIMAL`},
+		{`'NaN'::decimal`, `'NaN':::DECIMAL`},
+		{`'-NaN'::decimal`, `'NaN':::DECIMAL`},
+		{`'Inf'::decimal`, `'Infinity':::DECIMAL`},
+		{`'-Inf'::decimal`, `'-Infinity':::DECIMAL`},
 	}
 	for _, d := range testData {
 		t.Run(d.expr, func(t *testing.T) {
