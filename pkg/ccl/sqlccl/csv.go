@@ -46,7 +46,7 @@ import (
 )
 
 const (
-	importOptionComma         = "comma"
+	importOptionDelimiter     = "delimiter"
 	importOptionComment       = "comment"
 	importOptionDistributed   = "distributed"
 	importOptionNullIf        = "nullif"
@@ -708,7 +708,7 @@ func importPlanHook(
 		}
 
 		var comma rune
-		if override, ok := opts[importOptionComma]; ok {
+		if override, ok := opts[importOptionDelimiter]; ok {
 			comma, err = util.GetSingleRune(override)
 			if err != nil {
 				return errors.Wrap(err, "invalid comma value")
