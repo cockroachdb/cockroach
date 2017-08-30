@@ -88,10 +88,18 @@ func TestGossipRestart(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
+	ctx := context.Background()
+	cfg := readConfigFromFlags()
 	RunLocal(t, func(t *testing.T) {
-		// TODO(bram): #4559 Limit this test to only the relevant cases. No chaos
-		// agents should be required.
-		runTestWithCluster(t, testGossipRestartInner)
+		// TODO(tschottdorf): https://github.com/cockroachdb/cockroach/issues/18027.
+		// When that is addressed, use the standard runner again.
+		if len(cfg.Nodes) > 3 {
+			cfg.Nodes = cfg.Nodes[:3]
+		}
+		c := StartCluster(ctx, t, cfg)
+		defer c.AssertAndStop(ctx, t)
+
+		testGossipRestartInner(ctx, t, c, cfg)
 	})
 }
 
