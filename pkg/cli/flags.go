@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 )
@@ -247,12 +246,8 @@ func init() {
 		varFlag(f, &serverCfg.JoinList, cliflags.Join)
 
 		// Engine flags.
-		setDefaultSizeParameters(&serverCfg)
-		cacheSize := humanizeutil.NewBytesValue(&serverCfg.CacheSize)
-		varFlag(f, cacheSize, cliflags.Cache)
-
-		sqlSize := humanizeutil.NewBytesValue(&serverCfg.SQLMemoryPoolSize)
-		varFlag(f, sqlSize, cliflags.SQLMem)
+		varFlag(f, cacheSizeValue, cliflags.Cache)
+		varFlag(f, sqlSizeValue, cliflags.SQLMem)
 	}
 
 	for _, cmd := range certCmds {

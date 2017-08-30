@@ -44,7 +44,7 @@ send "ulimit -v [ expr {2*$vmem+400} ]\r"
 eexpect ":/# "
 
 # Start a server with this limit set. The server will now run in the foreground.
-send "$argv start --insecure --no-redirect-stderr -s=path=logs/db \r"
+send "$argv start --insecure --max-sql-memory=25% --no-redirect-stderr -s=path=logs/db \r"
 eexpect "restarted pre-existing node"
 sleep 1
 
