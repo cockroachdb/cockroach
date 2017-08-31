@@ -660,13 +660,16 @@ func (a *intSumAggregate) Add(_ context.Context, datum Datum) error {
 		// result of the addition does not overflow.  However since Go
 		// does not provide checked addition, we have to check for the
 		// overflow explicitly.
-		if !a.large &&
-			((t < 0 && a.intSum < math.MinInt64-t) ||
-				(t > 0 && a.intSum > math.MaxInt64-t)) {
-			// And overflow was detected; go to large integers, but keep the
-			// sum computed so far.
-			a.large = true
-			a.decSum.SetCoefficient(a.intSum)
+		if !a.large {
+			r, ok := addWithOverflow(a.intSum, t)
+			if ok {
+				a.intSum = r
+			} else {
+				// And overflow was detected; go to large integers, but keep the
+				// sum computed so far.
+				a.large = true
+				a.decSum.SetCoefficient(a.intSum)
+			}
 		}
 
 		if a.large {
@@ -675,8 +678,6 @@ func (a *intSumAggregate) Add(_ context.Context, datum Datum) error {
 			if err != nil {
 				return err
 			}
-		} else {
-			a.intSum += t
 		}
 	}
 	a.seenNonNull = true
