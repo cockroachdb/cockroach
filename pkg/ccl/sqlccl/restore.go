@@ -639,7 +639,12 @@ func splitAndScatter(
 						// throughput.
 						log.Errorf(ctx, "failed to scatter %d: %s", idx, pErr.GoError())
 					}
-					readyForImportCh <- importSpan
+
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case readyForImportCh <- importSpan:
+					}
 				}
 			}
 			return nil
@@ -772,7 +777,9 @@ func restore(
 		return failed, errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
 	}
 
-	restoreCtx, cancel := context.WithCancel(restoreCtx)
+	var cancel func()
+	restoreCtx, cancel = context.WithCancel(restoreCtx)
+	defer cancel()
 	if err := job.Created(restoreCtx, cancel); err != nil {
 		return failed, err
 	}
