@@ -90,8 +90,8 @@ func TestCrashReportingPacket(t *testing.T) {
 		serverID *regexp.Regexp
 		tagCount int
 	}{
-		{regexp.MustCompile(`^$`), 5},
-		{regexp.MustCompile(`^[a-z0-9]{8}-1$`), 8},
+		{regexp.MustCompile(`^$`), 6},
+		{regexp.MustCompile(`^[a-z0-9]{8}-1$`), 9},
 	}
 
 	if e, a := len(expectations), len(packets); e != a {

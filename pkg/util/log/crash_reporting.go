@@ -32,31 +32,37 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 )
 
-// DiagnosticsReportingEnabled wraps "diagnostics.reporting.enabled".
-//
-// "diagnostics.reporting.enabled" enables reporting of metrics related to a
-// node's storage (number, size and health of ranges) back to CockroachDB.
-// Collecting this data from production clusters helps us understand and improve
-// how our storage systems behave in real-world use cases.
-//
-// Note: while the setting itself is actually defined with a default value of
-// `false`, it is usually automatically set to `true` when a cluster is created
-// (or is migrated from a earlier beta version). This can be prevented with the
-// env var COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING.
-//
-// Doing this, rather than just using a default of `true`, means that a node
-// will not errantly send a report using a default before loading settings.
-var DiagnosticsReportingEnabled = settings.RegisterBoolSetting(
-	"diagnostics.reporting.enabled",
-	"enable reporting diagnostic metrics to cockroach labs",
-	false,
-)
+var (
+	// DiagnosticsReportingEnabled wraps "diagnostics.reporting.enabled".
+	//
+	// "diagnostics.reporting.enabled" enables reporting of metrics related to a
+	// node's storage (number, size and health of ranges) back to CockroachDB.
+	// Collecting this data from production clusters helps us understand and improve
+	// how our storage systems behave in real-world use cases.
+	//
+	// Note: while the setting itself is actually defined with a default value of
+	// `false`, it is usually automatically set to `true` when a cluster is created
+	// (or is migrated from a earlier beta version). This can be prevented with the
+	// env var COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING.
+	//
+	// Doing this, rather than just using a default of `true`, means that a node
+	// will not errantly send a report using a default before loading settings.
+	DiagnosticsReportingEnabled = settings.RegisterBoolSetting(
+		"diagnostics.reporting.enabled",
+		"enable reporting diagnostic metrics to cockroach labs",
+		false,
+	)
 
-// CrashReports wraps "diagnostics.reporting.send_crash_reports".
-var CrashReports = settings.RegisterBoolSetting(
-	"diagnostics.reporting.send_crash_reports",
-	"send crash and panic reports",
-	true,
+	// CrashReports wraps "diagnostics.reporting.send_crash_reports".
+	CrashReports = settings.RegisterBoolSetting(
+		"diagnostics.reporting.send_crash_reports",
+		"send crash and panic reports",
+		true,
+	)
+
+	// startTime records when the process started so that crash reports can
+	// include the server's uptime as an extra tag.
+	startTime = time.Now()
 )
 
 // TODO(dt): this should be split from the report interval.
@@ -176,6 +182,27 @@ var crdbPaths = []string{
 	"github.com/coreos/etcd/raft",
 }
 
+func uptimeTag(now time.Time) string {
+	uptime := now.Sub(startTime)
+	switch {
+	case uptime < 1*time.Second:
+		return "<1s"
+	case uptime < 10*time.Second:
+		return "<10s"
+	case uptime < 1*time.Minute:
+		return "<1m"
+	case uptime < 10*time.Minute:
+		return "<10m"
+	case uptime < 1*time.Hour:
+		return "<1h"
+	case uptime < 10*time.Hour:
+		return "<10h"
+	default:
+		daysUp := int(uptime / (24 * time.Hour))
+		return fmt.Sprintf("<%dd", daysUp+1)
+	}
+}
+
 func sendCrashReport(ctx context.Context, sv *settings.Values, r interface{}, depth int) {
 	if !DiagnosticsReportingEnabled.Get(sv) || !CrashReports.Get(sv) {
 		return // disabled via settings.
@@ -202,7 +229,10 @@ func sendCrashReport(ctx context.Context, sv *settings.Values, r interface{}, de
 	// Otherwise, raven.Client.Capture will see an empty ServerName field and
 	// automatically fill in the machine's hostname.
 	packet.ServerName = "<redacted>"
-	eventID, ch := raven.DefaultClient.Capture(packet, nil /* tags */)
+	tags := map[string]string{
+		"uptime": uptimeTag(time.Now()),
+	}
+	eventID, ch := raven.DefaultClient.Capture(packet, tags)
 	select {
 	case <-ch:
 		Shout(ctx, Severity_ERROR, "Reported as error "+eventID)
