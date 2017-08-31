@@ -171,7 +171,10 @@ func SetupCrashReporter(ctx context.Context, cmd string) {
 	})
 }
 
-var crdbPaths = []string{"github.com/cockroachdb/cockroach"}
+var crdbPaths = []string{
+	"github.com/cockroachdb/cockroach",
+	"github.com/coreos/etcd/raft",
+}
 
 func sendCrashReport(ctx context.Context, sv *settings.Values, r interface{}, depth int) {
 	if !DiagnosticsReportingEnabled.Get(sv) || !CrashReports.Get(sv) {
