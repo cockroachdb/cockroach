@@ -382,12 +382,6 @@ SHOW TRANSACTION STATUS
 ----
 Open
 
-query TTTT colnames
-HELP LEAST
-----
-function  signature                      category    details
-least     (anyelement...) -> anyelement  Comparison  Returns the element with the lowest value.
-
 statement error duplicate key value \(k\)=\(4\) violates unique constraint "primary"
 COMMIT
 

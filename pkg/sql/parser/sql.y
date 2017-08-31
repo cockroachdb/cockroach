@@ -525,7 +525,6 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <Statement> drop_view_stmt
 
 %type <Statement> explain_stmt
-%type <Statement> help_stmt
 %type <Statement> prepare_stmt
 %type <Statement> preparable_stmt
 %type <Statement> explainable_stmt
@@ -890,7 +889,6 @@ stmt:
 | execute_stmt    // EXTEND WITH HELP: EXECUTE
 | explain_stmt    // EXTEND WITH HELP: EXPLAIN
 | grant_stmt      // EXTEND WITH HELP: GRANT
-| help_stmt
 | insert_stmt     // EXTEND WITH HELP: INSERT
 | import_stmt     // EXTEND WITH HELP: IMPORT
 | pause_stmt      // EXTEND WITH HELP: PAUSE JOB
@@ -1595,7 +1593,7 @@ attrs:
 //
 // Explainable statements:
 //     SELECT, CREATE, DROP, ALTER, INSERT, UPSERT, UPDATE, DELETE,
-//     SHOW, HELP, EXPLAIN, EXECUTE
+//     SHOW, EXPLAIN, EXECUTE
 //
 // Plan options:
 //     TYPES, EXPRS, METADATA, QUALIFY, INDENT, VERBOSE, DIST_SQL
@@ -1644,7 +1642,6 @@ explainable_stmt:
 | drop_stmt    // help texts in sub-rule
 | execute_stmt // EXTEND WITH HELP: EXECUTE
 | explain_stmt { /* SKIP DOC */ }
-| help_stmt
 
 explain_option_list:
   explain_option_name
@@ -2405,12 +2402,6 @@ show_testing_stmt:
   {
     /* SKIP DOC */
     $$.val = &ShowFingerprints{Table: $5.newNormalizableTableName()}
-  }
-
-help_stmt:
-  HELP unrestricted_name
-  {
-    $$.val = &Help{Name: Name($2)}
   }
 
 on_privilege_target_clause:
@@ -6229,7 +6220,6 @@ unreserved_keyword:
 | FOLLOWING
 | FORCE_INDEX
 | GRANTS
-| HELP
 | HIGH
 | HOUR
 | IMPORT

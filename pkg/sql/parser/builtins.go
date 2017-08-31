@@ -29,6 +29,7 @@ import (
 	"net"
 	"regexp"
 	"regexp/syntax"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -255,6 +256,8 @@ func init() {
 		Builtins[uname] = def
 		funDefs[uname] = funDefs[name]
 	}
+
+	sort.Strings(AllBuiltinNames)
 }
 
 var digitNames = []string{"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"}

@@ -182,6 +182,8 @@ Type:
   \unset NAME       unset a flag.
   \show             during a multi-line statement or transaction, show the SQL entered so far.
   \? or "help"      print this help.
+  \h [NAME]         help on syntax of SQL commands.
+  \hf [NAME]        help on SQL built-in functions.
 
 More documentation about our SQL dialect and the CLI shell is available online:
 https://www.cockroachlabs.com/docs/stable/sql-statements.html
@@ -332,6 +334,47 @@ func isEndOfStatement(fullStmt string) (isEmpty, isEnd bool) {
 		last = t
 	})
 	return isEmpty, last == ';'
+}
+
+// handleHelp prints SQL help.
+func (c *cliState) handleHelp(cmd []string, nextState, errState cliStateEnum) cliStateEnum {
+	cmdrest := strings.TrimSpace(strings.Join(cmd, " "))
+	command := strings.ToUpper(cmdrest)
+	if command == "" {
+		fmt.Print(parser.AllHelp)
+	} else {
+		if h, ok := parser.HelpMessages[command]; ok {
+			msg := parser.HelpMessage{Command: command, HelpMessageBody: h}
+			msg.Format(os.Stdout)
+			fmt.Println()
+		} else {
+			fmt.Fprintf(stderr,
+				"no help available for %q.\nTry \\h with no argument to see available help.\n", cmdrest)
+			return errState
+		}
+	}
+	return nextState
+}
+
+// handleFunctionHelp prints help about built-in functions.
+func (c *cliState) handleFunctionHelp(cmd []string, nextState, errState cliStateEnum) cliStateEnum {
+	funcName := strings.TrimSpace(strings.Join(cmd, " "))
+	if funcName == "" {
+		for _, f := range parser.AllBuiltinNames {
+			fmt.Println(f)
+		}
+		fmt.Println()
+	} else {
+		_, err := parser.Parse(fmt.Sprintf("select %s(?", funcName))
+		pgerr, ok := pgerror.GetPGCause(err)
+		if !ok || !strings.HasPrefix(pgerr.Hint, "help:") {
+			fmt.Fprintf(stderr,
+				"no help available for %q.\nTry \\hf with no argument to see available help.\n", funcName)
+			return errState
+		}
+		fmt.Println(pgerr.Hint[6:])
+	}
+	return nextState
 }
 
 // execSyscmd executes system commands.
@@ -717,6 +760,12 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 
 	case `\|`:
 		return c.pipeSyscmd(c.lastInputLine, nextState, errState)
+
+	case `\h`:
+		return c.handleHelp(cmd[1:], loopState, errState)
+
+	case `\hf`:
+		return c.handleFunctionHelp(cmd[1:], loopState, errState)
 
 	default:
 		if strings.HasPrefix(cmd[0], `\d`) {

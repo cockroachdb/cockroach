@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"text/tabwriter"
 
@@ -152,7 +153,7 @@ type HelpMessageBody struct {
 
 // HelpMessages is the registry of all help messages, keyed by the
 // top-level statement that they document. The key is intended for use
-// via a (subsequent) \h client-side command.
+// via the \h client-side command.
 var HelpMessages = func(h map[string]HelpMessageBody) map[string]HelpMessageBody {
 	appendSeeAlso := func(newItem, prevItems string) string {
 		// "See also" items start with no indentation, and then use two
@@ -195,4 +196,38 @@ var HelpMessages = func(h map[string]HelpMessageBody) map[string]HelpMessageBody
 		h[k] = m
 	}
 	return h
+}(helpMessages)
+
+// AllHelp contains an overview of all statements with help messages.
+// For example, displayed in the CLI shell with \h without additional parameters.
+var AllHelp = func(h map[string]HelpMessageBody) string {
+	// Aggregate the help items.
+	cmds := make(map[string][]string)
+	for c, details := range h {
+		if details.Category == "" {
+			continue
+		}
+		cmds[details.Category] = append(cmds[details.Category], c)
+	}
+
+	// Ensure the result is deterministic.
+	var categories []string
+	for c, l := range cmds {
+		categories = append(categories, c)
+		sort.Strings(l)
+	}
+	sort.Strings(categories)
+
+	// Compile the final help index.
+	var buf bytes.Buffer
+	w := tabwriter.NewWriter(&buf, 0, 0, 1, ' ', 0)
+	for _, cat := range categories {
+		fmt.Fprintf(w, "%s:\n", strings.Title(cat))
+		for _, item := range cmds[cat] {
+			fmt.Fprintf(w, "\t\t%s\t%s\n", item, h[item].ShortDescription)
+		}
+		fmt.Fprintln(w)
+	}
+	_ = w.Flush()
+	return buf.String()
 }(helpMessages)
