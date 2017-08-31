@@ -2724,15 +2724,15 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 
 	op := expr.Operator
 	if op.hasSubOperator() {
-		// Branch to different helper comparison functions
-		// depending on whether a subquery or an array follows
 		var datums Datums
+		// Right is either a tuple or an array of Datums.
 		if tuple, ok := AsDTuple(right); ok {
 			datums = tuple.D
 		} else if array, ok := AsDArray(right); ok {
 			datums = array.Array
+		} else {
+			return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled right expression %s", right)
 		}
-		// Type checking in parser ensures rightType is either TypeTuple or TypeArray
 		return evalDatumsCmp(ctx, op, expr.SubOperator, expr.fn, left, datums)
 	}
 
