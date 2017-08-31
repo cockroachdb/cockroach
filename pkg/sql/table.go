@@ -767,7 +767,7 @@ func (p *planner) findTableContainingIndex(
 		result = tn
 	}
 	if result == nil {
-		return nil, fmt.Errorf("index %q does not exist", idxName)
+		return nil, fmt.Errorf("index %q not in any of the tables %v", idxName, tns)
 	}
 	return result, nil
 }
