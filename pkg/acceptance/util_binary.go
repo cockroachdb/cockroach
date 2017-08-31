@@ -109,7 +109,7 @@ func fetchAndCacheBinary(ctx context.Context, destDir, version string) (string, 
 				continue
 			}
 			if _, err := io.Copy(destFile, tarReader); err != nil {
-				return "", errors.Wrapf(err, "while downloading %s to %s", u, destFileName)
+				return "", errors.Wrapf(err, "while downloading %s to %s", &u, destFileName)
 			}
 		default:
 			return "", errors.Errorf("unknown tar header %+v", header)
