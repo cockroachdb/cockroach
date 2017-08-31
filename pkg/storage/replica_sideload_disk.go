@@ -32,25 +32,30 @@ import (
 var _ sideloadStorage = &diskSideloadStorage{}
 
 type diskSideloadStorage struct {
-	st  *cluster.Settings
-	dir string
+	st         *cluster.Settings
+	dir        string
+	dirCreated bool
 }
 
 func newDiskSideloadStorage(
 	st *cluster.Settings, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID, baseDir string,
 ) (sideloadStorage, error) {
 	ss := &diskSideloadStorage{
-		dir: filepath.Join(baseDir, fmt.Sprintf("%d.%d", rangeID, replicaID)),
-		st:  st,
-	}
-	if err := ss.createDir(); err != nil {
-		return nil, err
+		dir: filepath.Join(
+			baseDir,
+			"sideloading",
+			fmt.Sprintf("%d", rangeID%1000), // sharding
+			fmt.Sprintf("%d.%d", rangeID, replicaID),
+		),
+		st: st,
 	}
 	return ss, nil
 }
 
 func (ss *diskSideloadStorage) createDir() error {
-	return os.MkdirAll(ss.dir, 0755)
+	err := os.MkdirAll(ss.dir, 0755)
+	ss.dirCreated = ss.dirCreated || err == nil
+	return err
 }
 
 func (ss *diskSideloadStorage) PutIfNotExists(
@@ -114,10 +119,14 @@ func (ss *diskSideloadStorage) purgeFile(ctx context.Context, filename string) e
 }
 
 func (ss *diskSideloadStorage) Clear(_ context.Context) error {
-	return os.RemoveAll(ss.dir)
+	err := os.RemoveAll(ss.dir)
+	ss.dirCreated = ss.dirCreated && err != nil
+	return err
 }
 
 func (ss *diskSideloadStorage) TruncateTo(ctx context.Context, index uint64) error {
+	// TODO(tschottdorf): if we end up removing *all* files, we could also
+	// remove the directory.
 	matches, err := filepath.Glob(filepath.Join(ss.dir, "i*.t*"))
 	if err != nil {
 		return err
