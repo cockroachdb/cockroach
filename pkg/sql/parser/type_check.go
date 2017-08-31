@@ -953,7 +953,7 @@ func typeCheckComparisonOpWithSubOperator(
 
 		typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, TypeAny, sameTypeExprs...)
 		if err != nil {
-			sigWithErr := fmt.Sprintf(compExprsWithSubOpFmt, left, op, subOp, right, err)
+			sigWithErr := fmt.Sprintf(compExprsWithSubOpFmt, left, subOp, op, right, err)
 			return nil, nil, CmpOp{},
 				pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sigWithErr)
 		}
@@ -995,7 +995,8 @@ func typeCheckComparisonOpWithSubOperator(
 		}
 		cmpTypeLeft = leftTyped.ResolvedType()
 
-		// We then type the right expression desiring an array of the left's type.
+		// Try to type the right expression as an Array of the left's type.
+		// If right is an sql.subquery Expr, it should already be typed
 		rightTyped, err = right.TypeCheck(ctx, TArray{cmpTypeLeft})
 		if err != nil {
 			return nil, nil, CmpOp{}, err
@@ -1006,14 +1007,20 @@ func typeCheckComparisonOpWithSubOperator(
 			return leftTyped, rightTyped, CmpOp{}, nil
 		}
 
-		rightArr, ok := UnwrapType(rightReturn).(TArray)
-		if !ok {
+		rightUnwrapped := UnwrapType(rightReturn)
+		switch rightUnwrapped.(type) {
+		case TArray:
+			cmpTypeRight = rightUnwrapped.(TArray).Typ
+		case TTuple:
+			// Subqueries are expected to return 1 column of values
+			// (see planner.analyzeExpr in analyze.go)
+			cmpTypeRight = rightUnwrapped.(TTuple)[0]
+		default:
 			sigWithErr := fmt.Sprintf(compExprsWithSubOpFmt, left, subOp, op, right,
-				fmt.Sprintf("op %s array requires array on right side", op))
+				fmt.Sprintf("op %s <right> requires array or subquery on right side", op))
 			return nil, nil, CmpOp{},
 				pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sigWithErr)
 		}
-		cmpTypeRight = rightArr.Typ
 	}
 
 	fn, ok := ops.lookupImpl(cmpTypeLeft, cmpTypeRight)

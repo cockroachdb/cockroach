@@ -1,0 +1,219 @@
+# LogicTest: default parallel-stmts distsql
+
+statement ok
+CREATE TABLE abc (a INT, b INT, C INT)
+
+statement ok
+INSERT INTO abc VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300)
+
+# ANY/SOME with arrays.
+
+query B
+SELECT 1 = ANY(ARRAY[1, 2])
+----
+true
+
+query B
+SELECT 1 = SOME(ARRAY[1, 2])
+----
+true
+
+query B
+SELECT 1 = ANY(ARRAY[3, 4])
+----
+false
+
+query B
+SELECT 1 < ANY(ARRAY[0, 5])
+----
+true
+
+query B
+SELECT 1 < ANY(ARRAY[0, 1])
+----
+false
+
+query B
+SELECT 1 = ANY(ARRAY[1.0, 1.1])
+----
+true
+
+query B
+SELECT 1 < ANY(ARRAY[1.0, 1.1])
+----
+true
+
+query B
+SELECT 1 = ANY(ARRAY[1,2] || 3)
+----
+true
+
+query B
+SELECT 1 = ANY(ARRAY[2,3] || 1)
+----
+true
+
+query B
+SELECT 1 = ANY(ARRAY[2,3] || 4)
+----
+false
+
+query III
+SELECT * FROM abc WHERE a = ANY(ARRAY[1,3]) ORDER BY a
+----
+1 10 100
+3 30 300
+
+query III
+SELECT * FROM abc WHERE a = ANY(ARRAY[4, 5])
+----
+
+query error unsupported comparison operator: 1 = ANY \(ARRAY\['foo', 'bar'\]\)
+SELECT 1 = ANY(ARRAY['foo', 'bar'])
+
+# ANY/SOME with subqueries.
+
+query B
+SELECT 1 = ANY(SELECT * FROM generate_series(1,3))
+----
+true
+
+query B
+SELECT 1 = ANY(SELECT * FROM generate_series(2,4))
+----
+false
+
+query B
+SELECT 1 < ANY(SELECT * FROM generate_series(1,3))
+----
+true
+
+query B
+SELECT 1 < ANY(SELECT * FROM generate_series(0,1))
+----
+false
+
+query B
+SELECT 1 = ANY(SELECT * FROM unnest(ARRAY[1.0, 1.1]))
+----
+true
+
+query B
+SELECT 1 < ANY(SELECT * FROM unnest(ARRAY[1.0, 1.1]))
+----
+true
+
+query B
+SELECT 1 = ANY(SELECT * FROM unnest(ARRAY[1.0001, 2]))
+----
+false
+
+query III
+SELECT * FROM abc WHERE a = ANY(SELECT a FROM abc WHERE b = 10)
+----
+1 10 100
+
+query III
+SELECT * FROM abc WHERE a < ANY(SELECT a FROM abc WHERE b = 30) ORDER BY a
+----
+1 10 100
+2 20 200
+
+query III
+SELECT * FROM abc WHERE a > ANY(SELECT a FROM abc WHERE b = 30)
+----
+
+query error unsupported comparison operator: <int> = ANY <string\[\]>
+SELECT 1 = ANY(SELECT * FROM unnest(ARRAY['foo', 'bar']))
+
+# ALL with arrays.
+
+query B
+SELECT 1 = ALL(ARRAY[1, 1, 1.0])
+----
+true
+
+query B
+SELECT 1 = ALL(ARRAY[1, 1.001, 1.0])
+----
+false
+
+query B
+SELECT 5 > ALL(ARRAY[1, 2, 3])
+----
+true
+
+query B
+SELECT 5 > ALL(ARRAY[6, 7, 8])
+----
+false
+
+query B
+SELECT 5 > ALL(ARRAY[4, 6, 7])
+----
+false
+
+query B
+SELECT 5 > ALL(ARRAY[1, 2] || 3)
+----
+true
+
+query B
+SELECT 5 > ALL(ARRAY[6, 7] || 8)
+----
+false
+
+query III
+SELECT * FROM abc WHERE a > ALL(ARRAY[0, 1]) ORDER BY a
+----
+2 20 200
+3 30 300
+
+query III
+SELECT * FROM abc WHERE a > ALL(ARRAY[1, 4])
+----
+
+query error unsupported comparison operator: 1 = ALL \(ARRAY\['foo', 'bar'\]\)
+SELECT 1 = ALL(ARRAY['foo', 'bar'])
+
+# ALL with subqueries.
+
+query B
+SELECT 1 = ALL(SELECT * FROM unnest(ARRAY[1,1,1]))
+----
+true
+
+query B
+SELECT 1 = ALL(SELECT * FROM unnest(ARRAY[1,2,3]))
+----
+false
+
+query B
+SELECT 1 < ALL(SELECT * FROM generate_series(2,5))
+----
+true
+
+query B
+SELECT 1 < ALL(SELECT * FROM generate_series(1,3))
+----
+false
+
+query III
+SELECT * FROM abc WHERE a < ALL(SELECT b FROM abc) ORDER BY a
+----
+1 10 100
+2 20 200
+3 30 300
+
+query III
+SELECT * FROM abc WHERE a < ALL(SELECT a FROM abc WHERE a >= 2)
+----
+1 10 100
+
+query III
+SELECT * FROM abc WHERE a < ALL(SELECT a FROM abc)
+----
+
+query error unsupported comparison operator: <int> = ALL <string\[\]>
+SELECT 1 = ALL(SELECT * FROM unnest(ARRAY['foo', 'bar']))
+
