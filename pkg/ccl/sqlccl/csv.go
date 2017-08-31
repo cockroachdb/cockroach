@@ -962,6 +962,9 @@ func (cp *readCSVProcessor) OutputTypes() []sqlbase.ColumnType {
 }
 
 func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
+	ctx, span := tracing.ChildSpan(ctx, "readCSVProcessor")
+	defer tracing.FinishSpan(span)
+
 	if wg != nil {
 		defer wg.Done()
 	}
@@ -974,20 +977,28 @@ func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 	// Read CSV into CSV records
 	group.Go(func() error {
+		sCtx, span := tracing.ChildSpan(gCtx, "readcsv")
+		defer tracing.FinishSpan(span)
 		defer close(recordCh)
-		_, err := readCSV(gCtx, cp.csvOptions.Comma, cp.csvOptions.Comment,
+		_, err := readCSV(sCtx, cp.csvOptions.Comma, cp.csvOptions.Comment,
 			len(cp.tableDesc.VisibleColumns()), []string{cp.uri}, recordCh)
 		return err
 	})
 	// Convert CSV records to KVs
 	group.Go(func() error {
+		sCtx, span := tracing.ChildSpan(gCtx, "convertcsv")
+		defer tracing.FinishSpan(span)
+
 		defer close(kvCh)
-		return groupWorkers(gCtx, runtime.NumCPU(), func(ctx context.Context) error {
+		return groupWorkers(sCtx, runtime.NumCPU(), func(ctx context.Context) error {
 			return convertRecord(ctx, recordCh, kvCh, cp.csvOptions.Nullif, &cp.tableDesc)
 		})
 	})
 	// Sample KVs
 	group.Go(func() error {
+		sCtx, span := tracing.ChildSpan(gCtx, "samplecsv")
+		defer tracing.FinishSpan(span)
+
 		defer close(sampleCh)
 		var fn sampleFunc
 		if cp.sampleSize == 0 {
@@ -1008,7 +1019,7 @@ func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 				}
 				select {
 				case <-done:
-					return gCtx.Err()
+					return sCtx.Err()
 				case sampleCh <- row:
 				}
 			}
@@ -1017,8 +1028,11 @@ func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 	})
 	// Send sampled KVs to dist sql
 	group.Go(func() error {
+		sCtx, span := tracing.ChildSpan(gCtx, "sendcsvkv")
+		defer tracing.FinishSpan(span)
+
 		for row := range sampleCh {
-			cs, err := cp.out.EmitRow(gCtx, row)
+			cs, err := cp.out.EmitRow(sCtx, row)
 			if err != nil {
 				return err
 			}
@@ -1100,6 +1114,9 @@ func (sp *sstWriter) OutputTypes() []sqlbase.ColumnType {
 }
 
 func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
+	ctx, span := tracing.ChildSpan(ctx, "sstWriter")
+	defer tracing.FinishSpan(span)
+
 	if wg != nil {
 		defer wg.Done()
 	}
