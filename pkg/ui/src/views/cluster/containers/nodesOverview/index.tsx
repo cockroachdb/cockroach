@@ -150,7 +150,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
  * NotLiveNodeListProps are the properties of NotLiveNodeList.
  */
 interface NotLiveNodeListProps extends NodeCategoryListProps {
-  title: string;
+  status: LivenessStatus.DECOMMISSIONED | LivenessStatus.DEAD;
 }
 
 /**
@@ -159,14 +159,16 @@ interface NotLiveNodeListProps extends NodeCategoryListProps {
  */
 class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
   render() {
-    const { title, statuses, nodesSummary, sortSetting } = this.props;
+    const { status, statuses, nodesSummary, sortSetting } = this.props;
     if (!statuses || statuses.length === 0) {
       return null;
     }
 
+    const statusName = _.capitalize(LivenessStatus[status]);
+
     return <div>
       <section className="header header--subsection">
-        {title}
+        {`${statusName} Nodes`}
       </section>
       <section className="section">
         <NodeSortedTable
@@ -202,16 +204,20 @@ class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
               // construct the full BEM class in the table component itself.
               className: "sort-table__cell--link",
             },
-            // Down since - displays the time that the node started.
+            // Down/decommissioned since - displays how long the node has been
+            // considered dead.
             {
-              title: "Downtime",
+              title: `${statusName} Since`,
               cell: (ns) => {
                 const liveness = nodesSummary.livenessByNodeID[ns.desc.node_id];
                 const deadTime = liveness.expiration.wall_time;
                 const deadMoment = LongToMoment(deadTime);
-                return moment.duration(deadMoment.diff(moment())).humanize();
+                return `${moment.duration(deadMoment.diff(moment())).humanize()} ago`;
               },
-              sort: (ns) => ns.started_at,
+              sort: (ns) => {
+                const liveness = nodesSummary.livenessByNodeID[ns.desc.node_id];
+                return liveness.expiration.wall_time;
+              },
             },
           ]} />
       </section>
@@ -272,8 +278,8 @@ const DeadNodesConnected = connect(
   (state: AdminUIState) => {
     const statuses = partitionedStatuses(state);
     return {
-      title: "Dead Nodes",
       sortSetting: deadNodesSortSetting.selector(state),
+      status: LivenessStatus.DEAD,
       statuses: statuses.dead,
       nodesSummary: nodesSummarySelector(state),
     };
@@ -291,8 +297,8 @@ const DecommissionedNodesConnected = connect(
   (state: AdminUIState) => {
     const statuses = partitionedStatuses(state);
     return {
-      title: "Decommissioned Nodes",
       sortSetting: decommissionedNodesSortSetting.selector(state),
+      status: LivenessStatus.DECOMMISSIONED,
       statuses: statuses.decommissioned,
       nodesSummary: nodesSummarySelector(state),
     };
