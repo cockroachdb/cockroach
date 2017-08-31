@@ -1094,11 +1094,11 @@ SELECT2 1
 SELECT 1 FROM (t)
                 ^
 HINT: try \h <SOURCE>`},
-		{`SET TIME ZONE INTERVAL 'foobar'`, `could not parse 'foobar' as type interval: interval: missing unit at position 0: "foobar" at or near "EOF"
+		{`SET TIME ZONE INTERVAL 'foobar'`, `could not parse "foobar" as type interval: interval: missing unit at position 0: "foobar" at or near "EOF"
 SET TIME ZONE INTERVAL 'foobar'
                                ^
 `},
-		{`SELECT INTERVAL 'foo'`, `could not parse 'foo' as type interval: interval: missing unit at position 0: "foo" at or near "EOF"
+		{`SELECT INTERVAL 'foo'`, `could not parse "foo" as type interval: interval: missing unit at position 0: "foo" at or near "EOF"
 SELECT INTERVAL 'foo'
                      ^
 `},

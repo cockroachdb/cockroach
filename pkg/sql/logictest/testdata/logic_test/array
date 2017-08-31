@@ -137,7 +137,7 @@ SELECT ARRAY['a', 'b', 'c'][4][2]
 query error incompatible ARRAY subscript type: decimal
 SELECT ARRAY['a', 'b', 'c'][3.5]
 
-query error could not parse 'abc' as type int
+query error could not parse "abc" as type int
 SELECT ARRAY['a', 'b', 'c']['abc']
 
 query error cannot subscript type int because it is not an array
@@ -353,10 +353,10 @@ a  CREATE TABLE a (
      FAMILY "primary" (b, rowid)
    )
 
-statement error could not parse 'foo' as type int
+statement error could not parse "foo" as type int
 INSERT INTO a VALUES (ARRAY['foo'])
 
-statement error could not parse 'foo' as type int
+statement error could not parse "foo" as type int
 INSERT INTO a VALUES (ARRAY[1, 'foo'])
 
 statement ok
