@@ -319,6 +319,17 @@ func (o binOpOverload) lookupImpl(left, right Type) (BinOp, bool) {
 	return BinOp{}, false
 }
 
+// addWithOverflow returns a+b. If ok is false, a+b overflowed.
+func addWithOverflow(a, b int64) (r int64, ok bool) {
+	if b > 0 && a > math.MaxInt64-b {
+		return 0, false
+	}
+	if b < 0 && a < math.MinInt64-b {
+		return 0, false
+	}
+	return a + b, true
+}
+
 // BinOps contains the binary operations indexed by operation type.
 var BinOps = map[BinaryOperator]binOpOverload{
 	Bitand: {
@@ -361,13 +372,11 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: TypeInt,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				a, b := MustBeDInt(left), MustBeDInt(right)
-				if b > 0 && a > math.MaxInt64-b {
+				r, ok := addWithOverflow(int64(a), int64(b))
+				if !ok {
 					return nil, errIntOutOfRange
 				}
-				if b < 0 && a < math.MinInt64-b {
-					return nil, errIntOutOfRange
-				}
-				return NewDInt(a + b), nil
+				return NewDInt(DInt(r)), nil
 			},
 		},
 		BinOp{
