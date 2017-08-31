@@ -286,7 +286,8 @@ func (n *alterTableNode) Start(params runParams) error {
 				if containsThisColumn {
 					if containsOnlyThisColumn || t.DropBehavior == parser.DropCascade {
 						if err := params.p.dropIndexByName(
-							params.ctx, parser.Name(idx.Name), n.tableDesc, false, t.DropBehavior, n.n.String(),
+							params.ctx, parser.Name(idx.Name), n.tableDesc, false, t.DropBehavior,
+							parser.AsStringWithFlags(n.n, parser.FmtSimpleQualified),
 						); err != nil {
 							return err
 						}
@@ -451,7 +452,8 @@ func (n *alterTableNode) Start(params runParams) error {
 	mutationID := sqlbase.InvalidMutationID
 	var err error
 	if addedMutations {
-		mutationID, err = params.p.createSchemaChangeJob(params.ctx, n.tableDesc, parser.AsString(n.n))
+		mutationID, err = params.p.createSchemaChangeJob(params.ctx, n.tableDesc,
+			parser.AsStringWithFlags(n.n, parser.FmtSimpleQualified))
 	} else {
 		err = n.tableDesc.SetUpVersion()
 	}
