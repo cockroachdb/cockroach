@@ -194,7 +194,10 @@ func (l *localFileStorage) WriteFile(
 	}
 	defer f.Close()
 	_, err = io.Copy(f, content)
-	return errors.Wrapf(err, "writing to local export file %q", p)
+	if err != nil {
+		return errors.Wrapf(err, "writing to local export file %q", p)
+	}
+	return f.Sync()
 }
 
 func (l *localFileStorage) ReadFile(_ context.Context, basename string) (io.ReadCloser, error) {
