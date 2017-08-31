@@ -69,13 +69,17 @@ func LoadCSV(
 	if table == "" {
 		return 0, 0, 0, errors.New("no table specified")
 	}
+	table, err = storageccl.MakeLocalStorageURI(table)
+	if err != nil {
+		return 0, 0, 0, err
+	}
 	if dest == "" {
 		return 0, 0, 0, errors.New("no destination specified")
 	}
 	if len(dataFiles) == 0 {
 		dataFiles = []string{fmt.Sprintf("%s.dat", table)}
 	}
-	createTable, err := readCreateTableFromStore(ctx, fmt.Sprintf("nodelocal://%s", table))
+	createTable, err := readCreateTableFromStore(ctx, table)
 	if err != nil {
 		return 0, 0, 0, err
 	}
@@ -88,10 +92,16 @@ func LoadCSV(
 	}
 
 	for i, f := range dataFiles {
-		dataFiles[i] = fmt.Sprintf("nodelocal://%s", f)
+		dataFiles[i], err = storageccl.MakeLocalStorageURI(f)
+		if err != nil {
+			return 0, 0, 0, err
+		}
 	}
 	// TODO(mjibson): allow users to optionally specify a full URI to an export store.
-	dest = fmt.Sprintf("nodelocal://%s", dest)
+	dest, err = storageccl.MakeLocalStorageURI(dest)
+	if err != nil {
+		return 0, 0, 0, err
+	}
 
 	rocksdbDir, err := ioutil.TempDir(tempDir, "cockroach-csv-rocksdb")
 	if err != nil {
