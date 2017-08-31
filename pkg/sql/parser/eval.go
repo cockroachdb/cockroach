@@ -1722,18 +1722,24 @@ func makeEvalTupleIn(typ Type) CmpOp {
 	}
 }
 
-// evalArrayCmp evaluates the array comparison using the provided sub-operator type
-// and its CmpOp with the left Datum and the right array of Datums.
+// evalDatumsCmp evaluates Datums (slice of Datum) using the provided
+// sub-operator type and its CmpOp with the left Datum.
 //
-// For example, given 1 < ANY (ARRAY[1, 2, 3]), evalArrayCmp would be called with:
-//   evalArrayCmp(ctx, LT, CmpOp(LT, leftType, rightParamType), leftDatum, rightArray).
-func evalArrayCmp(
-	ctx *EvalContext, subOp ComparisonOperator, fn CmpOp, left Datum, right *DArray, all bool,
+// For example, given 1 < ANY (SELECT * FROM GENERATE_SERIES(1,3))
+// (right is a DTuple), evalTupleCmp would be called with:
+//   evalDatumsCmp(ctx, LT, Any, CmpOp(LT, leftType, rightParamType), leftDatum, rightTuple.D).
+// Similarly, given 1 < ANY (ARRAY[1, 2, 3]) (right is a DArray),
+// evalArrayCmp would be called with:
+//   evalDatumsCmp(ctx, LT, Any, CmpOp(LT, leftType, rightParamType), leftDatum, rightArray.Array).
+func evalDatumsCmp(
+	ctx *EvalContext, op, subOp ComparisonOperator, fn CmpOp, left Datum, right Datums,
 ) (Datum, error) {
-	allTrue := true
-	anyTrue := false
+	// ALL operation
+	all := op == All
+	// ANY/SOME operation
+	any := !all
 	sawNull := false
-	for _, elem := range right.Array {
+	for _, elem := range right {
 		if elem == DNull {
 			sawNull = true
 			continue
@@ -1750,36 +1756,27 @@ func evalArrayCmp(
 		}
 		b := d.(*DBool)
 		res := *b != DBool(not)
-		if res {
-			anyTrue = true
-		} else {
-			allTrue = false
+		if res && any {
+			// There exists "any" comparison that is true under ANY, return true
+			return DBoolTrue, nil
+		} else if !res && all {
+			// There exists a comparison that is false under ALL, return false
+			return DBoolFalse, nil
 		}
+	}
+
+	if sawNull {
+		// If the right-hand Datums contains any null elements and no false
+		// comparison result is obtained, the result will be null.
+		return DNull, nil
 	}
 
 	if all {
-		if !allTrue {
-			return DBoolFalse, nil
-		}
-		if sawNull {
-			// If the right-hand array contains any null elements and no false
-			// comparison result is obtained, the result of ALL will be null.
-			return DNull, nil
-		}
-		// allTrue && !sawNull
+		// !sawNull
 		return DBoolTrue, nil
 	}
 
-	// !all
-	if anyTrue {
-		return DBoolTrue, nil
-	}
-	if sawNull {
-		// If the right-hand array contains any null elements and no true
-		// comparison result is obtained, the result of ANY will be null.
-		return DNull, nil
-	}
-	// !anyTrue && !sawNull
+	// any && !sawNull
 	return DBoolFalse, nil
 }
 
@@ -2725,7 +2722,16 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 
 	op := expr.Operator
 	if op.hasSubOperator() {
-		return evalArrayCmp(ctx, expr.SubOperator, expr.fn, left, MustBeDArray(right), op == All)
+		// Branch to different helper comparison functions
+		// depending on whether a subquery or an array follows
+		var datums Datums
+		if tuple, ok := AsDTuple(right); ok {
+			datums = tuple.D
+		} else if array, ok := AsDArray(right); ok {
+			datums = array.Array
+		}
+		// Type checking in parser ensures rightType is either TypeTuple or TypeArray
+		return evalDatumsCmp(ctx, op, expr.SubOperator, expr.fn, left, datums)
 	}
 
 	_, newLeft, newRight, _, not := foldComparisonExpr(op, left, right)
@@ -3093,7 +3099,7 @@ func evalComparison(ctx *EvalContext, op ComparisonOperator, left, right Datum) 
 }
 
 // foldComparisonExpr folds a given comparison operation and its expressions
-// into an equivalent operation that will hit in the cmpOps map, returning
+// into an equivalent operation that will hit in the CmpOps map, returning
 // this new operation, along with potentially flipped operands and "flipped"
 // and "not" flags.
 func foldComparisonExpr(
