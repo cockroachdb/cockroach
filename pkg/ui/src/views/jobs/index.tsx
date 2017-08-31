@@ -119,15 +119,20 @@ const JobsSortedTable = SortedTable as new () => SortedTable<Job>;
 
 const jobsTableColumns: ColumnDescriptor<Job>[] = [
   {
-    title: "User",
-    cell: job => job.username,
-    sort: job => job.username,
+    title: "ID",
+    cell: job => String(job.id),
+    sort: job => job.id,
   },
   {
     title: "Description",
     cell: job => job.description,
     sort: job => job.description,
     className: "jobs-table__cell--description",
+  },
+  {
+    title: "User",
+    cell: job => job.username,
+    sort: job => job.username,
   },
   {
     title: "Creation Time",
