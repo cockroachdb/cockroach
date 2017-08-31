@@ -890,7 +890,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 
 	if _, err := sqlDB.Exec(`
 	   ALTER TABLE t.test ADD COLUMN p DECIMAL NOT NULL DEFAULT (DECIMAL '1-3');
-	   `); !testutils.IsError(err, `could not parse '1-3' as type decimal`) {
+	   `); !testutils.IsError(err, `could not parse "1-3" as type decimal`) {
 		t.Fatalf("got err=%s", err)
 	}
 

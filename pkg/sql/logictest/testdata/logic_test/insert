@@ -323,19 +323,19 @@ CREATE TABLE kv4 (
   float FLOAT
 )
 
-statement error could not parse 'a' as type int
+statement error could not parse "a" as type int
 INSERT INTO kv4 (int) VALUES ('a')
 
 statement ok
 INSERT INTO kv4 (int) VALUES (1)
 
-statement error could not parse 'a' as type int
+statement error could not parse "a" as type int
 INSERT INTO kv4 (int, bit) VALUES (2, 'a')
 
 statement ok
 INSERT INTO kv4 (int, bit) VALUES (2, 1)
 
-statement error could not parse 'a' as type bool
+statement error could not parse "a" as type bool
 INSERT INTO kv4 (int, bool) VALUES (3, 'a')
 
 statement ok

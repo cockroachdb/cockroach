@@ -252,7 +252,7 @@ func TestSettingsSetAndShow(t *testing.T) {
 	})
 
 	if _, err := db.DB.Exec(fmt.Sprintf(setQ, intKey, "'a-str'")); !testutils.IsError(
-		err, `could not parse 'a-str' as type int`,
+		err, `could not parse "a-str" as type int`,
 	) {
 		t.Fatal(err)
 	}

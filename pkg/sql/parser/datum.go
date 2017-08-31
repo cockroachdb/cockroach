@@ -183,7 +183,7 @@ func makeParseError(s string, typ Type, err error) error {
 		suffix = fmt.Sprintf(": %v", err)
 	}
 	return pgerror.NewErrorf(
-		pgerror.CodeInvalidTextRepresentationError, "could not parse '%s' as type %s%s", s, typ, suffix)
+		pgerror.CodeInvalidTextRepresentationError, "could not parse %q as type %s%s", s, typ, suffix)
 }
 
 func makeUnsupportedComparisonMessage(d1, d2 Datum) string {
