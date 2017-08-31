@@ -338,6 +338,7 @@ query T
 select name from system.settings where name != 'sql.defaults.distsql' order by name
 ----
 diagnostics.reporting.enabled
+trace.debug.enable
 version
 
 statement ok
@@ -347,7 +348,8 @@ query TT
 select name, value from system.settings where name != 'version' AND name != 'sql.defaults.distsql' order by name
 ----
 diagnostics.reporting.enabled  true
-somesetting   somevalue
+somesetting                    somevalue
+trace.debug.enable             false
 
 user testuser
 
