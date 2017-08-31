@@ -42,7 +42,7 @@ func docsURL(pageName string) string { return docsURLBase + "/" + pageName }
 // String implements the fmt.String interface.
 func (h *HelpMessage) String() string {
 	var buf bytes.Buffer
-	fmt.Fprint(&buf, "help: ")
+	buf.WriteString("help:\n")
 	h.Format(&buf)
 	return buf.String()
 }

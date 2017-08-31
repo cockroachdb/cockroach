@@ -23,6 +23,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 )
@@ -1391,8 +1392,16 @@ SELECT 1 + ANY ARRAY[1, 2, 3]
 	}
 	for _, d := range testData {
 		_, err := Parse(d.sql)
-		if err == nil || err.Error() != d.expected {
-			t.Errorf("%s: expected\n%s, but found\n%v", d.sql, d.expected, err)
+		if err == nil {
+			t.Errorf("expected error, got nil")
+			continue
+		}
+		msg := err.Error()
+		if pgerr, ok := pgerror.GetPGCause(err); ok {
+			msg += strings.TrimPrefix(pgerr.Detail, "source SQL:") + "\n"
+		}
+		if msg != d.expected {
+			t.Errorf("%s: expected\n%s, but found\n%v", d.sql, d.expected, msg)
 		}
 	}
 }
