@@ -102,7 +102,18 @@ func testSideloadingSideloadedStorage(
 		t.Fatal(err)
 	}
 	_, isInMem := ss.(*inMemSideloadStorage) // some things don't make sense for inMem
-	_ = isInMem
+
+	assertCreated := func(isCreated bool) {
+		if isInMem {
+			return
+		}
+		if is := ss.(*diskSideloadStorage).dirCreated; is != isCreated {
+			t.Fatalf("assertion failed: expected dirCreated=%t, got %t", isCreated, is)
+		}
+	}
+
+	assertCreated(false)
+
 	const (
 		lowTerm = 1
 		highTerm
@@ -115,6 +126,8 @@ func testSideloadingSideloadedStorage(
 	if err := ss.PutIfNotExists(ctx, 1, highTerm, file(1)); err != nil {
 		t.Fatal(err)
 	}
+
+	assertCreated(true)
 
 	if c, err := ss.Get(ctx, 1, highTerm); err != nil {
 		t.Fatal(err)
@@ -137,6 +150,8 @@ func testSideloadingSideloadedStorage(
 	if err := ss.Clear(ctx); err != nil {
 		t.Fatal(err)
 	}
+
+	assertCreated(false)
 
 	for n, test := range []struct {
 		fun func() error
@@ -175,6 +190,7 @@ func testSideloadingSideloadedStorage(
 		if err := ss.Clear(ctx); err != nil {
 			t.Fatalf("%d: %s", n, err)
 		}
+		assertCreated(false)
 	}
 
 	// Write some payloads at various indexes. Note that this tests PutIfNotExists
@@ -186,6 +202,8 @@ func testSideloadingSideloadedStorage(
 			t.Fatalf("%d: %s", i, err)
 		}
 	}
+
+	assertCreated(true)
 
 	// Write some more payloads, overlapping, at the past term.
 	pastPayloads := append([]uint64{81}, payloads...)
@@ -210,6 +228,7 @@ func testSideloadingSideloadedStorage(
 		if err != nil {
 			t.Fatal(err)
 		}
+		assertCreated(false)
 	}
 
 	// Just a sanity check that for the overlapping terms, we see both entries.
@@ -221,6 +240,7 @@ func testSideloadingSideloadedStorage(
 			t.Fatalf("got %q, wanted %q", c, exp)
 		}
 	}
+	assertCreated(false) // Get() doesn't recreated nor check
 
 	for n := range payloads {
 		// Truncate indexes <= payloads[n] (payloads is sorted in increasing order).
@@ -243,6 +263,19 @@ func testSideloadingSideloadedStorage(
 			}
 		}
 	}
+
+	if err := ss.Clear(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	assertCreated(false)
+
+	// Sanity check that we can call TruncateTo without the directory existing.
+	if err := ss.TruncateTo(ctx, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	assertCreated(false)
 }
 
 func TestRaftSSTableSideloadingInline(t *testing.T) {
