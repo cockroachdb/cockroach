@@ -94,10 +94,16 @@ func TestAmbiguousCommit(t *testing.T) {
 								interceptDone := make(chan kv.BatchCall)
 								transport.SendNext(ctx, interceptDone)
 								call := <-interceptDone
-								if pErr := call.Reply.Error; pErr.Equal(translateToRPCError) {
+								// During shutdown, we may get responses that
+								// have call.Err set and all we have to do is
+								// not crash on those.
+								//
+								// For the rest, compare and perhaps inject an
+								// RPC error ourselves.
+								if call.Err == nil && call.Reply.Error.Equal(translateToRPCError) {
 									// Translate the injected error into an RPC
 									// error to simulate an ambiguous result.
-									done <- kv.BatchCall{Err: pErr.GoError()}
+									done <- kv.BatchCall{Err: call.Reply.Error.GoError()}
 								} else {
 									// Either the call succeeded or we got a non-
 									// sentinel error; let normal machinery do its
