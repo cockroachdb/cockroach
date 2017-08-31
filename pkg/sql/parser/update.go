@@ -27,6 +27,8 @@ type Update struct {
 	Table     TableExpr
 	Exprs     UpdateExprs
 	Where     *Where
+	OrderBy   OrderBy
+	Limit     *Limit
 	Returning ReturningClause
 }
 
@@ -37,6 +39,8 @@ func (node *Update) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(" SET ")
 	FormatNode(buf, f, node.Exprs)
 	FormatNode(buf, f, node.Where)
+	FormatNode(buf, f, node.OrderBy)
+	FormatNode(buf, f, node.Limit)
 	FormatNode(buf, f, node.Returning)
 }
 

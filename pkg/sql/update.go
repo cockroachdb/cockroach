@@ -289,8 +289,13 @@ func (p *planner) Update(
 
 	tracing.AnnotateTrace()
 
-	// We construct a query containing the columns being updated, and then later merge the values
-	// they are being updated with into that renderNode to ideally reuse some of the queries.
+	// We construct a query containing the columns being updated, and
+	// then later merge the values they are being updated with into that
+	// renderNode to ideally reuse some of the queries.
+	//
+	// We cannot process the LIMIT and/or ORDER BY clauses here, if any,
+	// because the renderNode will first need to be extended with
+	// additional columns below.
 	rows, err := p.SelectClause(ctx, &parser.SelectClause{
 		Exprs: sqlbase.ColumnsSelectors(ru.FetchCols),
 		From:  &parser.From{Tables: []parser.TableExpr{n.Table}},
@@ -306,6 +311,7 @@ func (p *planner) Update(
 	// currentUpdateIdx is the index of the first column descriptor in updateCols
 	// that is assigned to by the current setExpr.
 	currentUpdateIdx := 0
+
 	render := rows.(*renderNode)
 
 	for _, setExpr := range setExprs {
@@ -366,14 +372,31 @@ func (p *planner) Update(
 		}
 	}
 
+	// If a LIMIT and/or ORDER BY clauses have been specified, add them here.
+	if n.OrderBy != nil {
+		sort, err := p.orderBy(ctx, n.OrderBy, render)
+		if err != nil {
+			return nil, err
+		}
+		sort.plan = render
+		rows = sort
+	}
+	if n.Limit != nil {
+		limitPlan, err := p.Limit(ctx, n.Limit)
+		if err != nil {
+			return nil, err
+		}
+		limitPlan.plan = rows
+		rows = limitPlan
+	}
+
 	// Placeholders have their types populated in the above Select if they are part
 	// of an expression ("SET a = 2 + $1") in the type check step where those
 	// types are inferred. For the simpler case ("SET a = $1"), populate them
 	// using checkColumnType. This step also verifies that the expression
 	// types match the column types.
-	sel := rows.(*renderNode)
 	for _, sourceSlot := range sourceSlots {
-		if err := sourceSlot.checkColumnTypes(sel.render, &p.semaCtx.Placeholders); err != nil {
+		if err := sourceSlot.checkColumnTypes(render.render, &p.semaCtx.Placeholders); err != nil {
 			return nil, err
 		}
 	}

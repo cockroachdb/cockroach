@@ -935,18 +935,24 @@ UPSERT INTO <tablename> [AS <name>] [( <colnames...> )]
 		//line sql.y: 3387
 		Category: hDML,
 		//line sql.y: 3388
-		Text: `UPDATE <tablename> [[AS] <name>] SET ... [WHERE <expr>] [RETURNING <exprs...>]
+		Text: `
+UPDATE <tablename> [[AS] <name>]
+       SET ...
+       [ WHERE <expr> ]
+       [ ORDER BY <expr> [ ASC } DESC ] [, ...] ]
+       [ LIMIT <expr> ]
+       [ RETURNING <exprs...> ]
 `,
-		//line sql.y: 3389
+		//line sql.y: 3395
 		SeeAlso: `INSERT, UPSERT, DELETE, WEBDOCS/update.html
 `,
 	},
-	//line sql.y: 3557
+	//line sql.y: 3571
 	`<SELECTCLAUSE>`: {
 		ShortDescription: `access tabular data`,
-		//line sql.y: 3558
+		//line sql.y: 3572
 		Category: hDML,
-		//line sql.y: 3559
+		//line sql.y: 3573
 		Text: `
 Select clause:
   TABLE <tablename>
@@ -954,12 +960,12 @@ Select clause:
   SELECT ... [ { INTERSECT | UNION | EXCEPT } [ ALL | DISTINCT ] <selectclause> ]
 `,
 	},
-	//line sql.y: 3570
+	//line sql.y: 3584
 	`SELECT`: {
 		ShortDescription: `retrieve rows from a data source and compute a result`,
-		//line sql.y: 3571
+		//line sql.y: 3585
 		Category: hDML,
-		//line sql.y: 3572
+		//line sql.y: 3586
 		Text: `
 SELECT [DISTINCT]
        { <expr> [[AS] <name>] | [ [<dbname>.] <tablename>. ] * } [, ...]
@@ -973,40 +979,40 @@ SELECT [DISTINCT]
        [ LIMIT { <expr> | ALL } ]
        [ OFFSET <expr> [ ROW | ROWS ] ]
 `,
-		//line sql.y: 3584
+		//line sql.y: 3598
 		SeeAlso: `WEBDOCS/select.html
 `,
 	},
-	//line sql.y: 3644
+	//line sql.y: 3658
 	`TABLE`: {
 		ShortDescription: `select an entire table`,
-		//line sql.y: 3645
+		//line sql.y: 3659
 		Category: hDML,
-		//line sql.y: 3646
+		//line sql.y: 3660
 		Text: `TABLE <tablename>
 `,
-		//line sql.y: 3647
+		//line sql.y: 3661
 		SeeAlso: `SELECT, VALUES, WEBDOCS/table-expressions.html
 `,
 	},
-	//line sql.y: 3890
+	//line sql.y: 3904
 	`VALUES`: {
 		ShortDescription: `select a given set of values`,
-		//line sql.y: 3891
+		//line sql.y: 3905
 		Category: hDML,
-		//line sql.y: 3892
+		//line sql.y: 3906
 		Text: `VALUES ( <exprs...> ) [, ...]
 `,
-		//line sql.y: 3893
+		//line sql.y: 3907
 		SeeAlso: `SELECT, TABLE, WEBDOCS/table-expressions.html
 `,
 	},
-	//line sql.y: 3998
+	//line sql.y: 4012
 	`<SOURCE>`: {
 		ShortDescription: `define a data source for SELECT`,
-		//line sql.y: 3999
+		//line sql.y: 4013
 		Category: hDML,
-		//line sql.y: 4000
+		//line sql.y: 4014
 		Text: `
 Data sources:
   <tablename> [ @ { <idxname> | <indexhint> } ]
@@ -1026,7 +1032,7 @@ Index hints:
   '{' NO_INDEX_JOIN [, ...] '}'
 
 `,
-		//line sql.y: 4018
+		//line sql.y: 4032
 		SeeAlso: `WEBDOCS/table-expressions.html
 `,
 	},

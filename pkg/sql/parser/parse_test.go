@@ -644,6 +644,8 @@ func TestParse(t *testing.T) {
 		{`UPDATE a SET (b, c) = (3, DEFAULT)`},
 		{`UPDATE a SET (b, c) = (SELECT 3, 4)`},
 		{`UPDATE a SET b = 3 WHERE a = b`},
+		{`UPDATE a SET x = 3 WHERE a = b LIMIT c`},
+		{`UPDATE a SET x = 3 WHERE a = b ORDER BY c LIMIT d`},
 		{`UPDATE a SET b = 3 WHERE a = b RETURNING a`},
 		{`UPDATE a SET b = 3 WHERE a = b RETURNING 1, 2`},
 		{`UPDATE a SET b = 3 WHERE a = b RETURNING a, a + b`},

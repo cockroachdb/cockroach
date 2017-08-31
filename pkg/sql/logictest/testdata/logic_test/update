@@ -432,3 +432,43 @@ SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM pks WHERE k1 = 2]
 fetched: /pks/primary/2/2 -> NULL
 fetched: /pks/primary/2/2/v -> 3
 output row: [2 2 3]
+
+query ITTT
+EXPLAIN UPDATE kv SET v = v * 2 WHERE k < 4 LIMIT 10
+----
+0  update  ·      ·
+0  ·       table  kv
+0  ·       set    v
+1  limit   ·      ·
+2  render  ·      ·
+3  scan    ·      ·
+3  ·       table  kv@primary
+3  ·       spans  /#-/4
+3  ·       limit  10
+
+query ITTT
+EXPLAIN UPDATE kv SET v = v * 2 WHERE k < 4 ORDER BY v RETURNING v
+----
+0  update  ·      ·
+0  ·       table  kv
+0  ·       set    v
+1  sort    ·      ·
+1  ·       order  +v
+2  render  ·      ·
+3  scan    ·      ·
+3  ·       table  kv@primary
+3  ·       spans  /#-/4
+
+query II
+UPDATE kv SET v = v * 2 ORDER BY v DESC RETURNING k, v
+----
+7  30
+3  24
+5  22
+1  20
+
+query II
+UPDATE kv SET v = v * 2 WHERE k < 6 ORDER BY v DESC LIMIT 2 RETURNING k, v
+----
+3  48
+5  44
