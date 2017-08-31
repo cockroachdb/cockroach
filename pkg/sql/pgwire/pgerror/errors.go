@@ -86,19 +86,27 @@ func GetPGCause(err error) (*Error, bool) {
 // and a link to the passed issue. Recorded as "#<issue>" in tracking.
 func UnimplementedWithIssueErrorf(issue int, msg string, args ...interface{}) error {
 	feature := fmt.Sprintf("#%d", issue)
-	if len(args) > 0 {
-		msg = fmt.Sprintf(msg, args...)
-	}
-	msg = fmt.Sprintf(
-		"unimplemented: %s (see issue https://github.com/cockroachdb/cockroach/issues/%d)", msg, issue,
-	)
-	return Unimplemented(feature, msg)
+	var buf bytes.Buffer
+	buf.WriteString("unimplemented: ")
+	fmt.Fprintf(&buf, msg, args...)
+	return Unimplemented(
+		feature, buf.String(),
+	).SetHintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
+}
+
+// UnimplementedWithIssueError constructs an error with the given message
+// and a link to the passed issue. Recorded as "#<issue>" in tracking.
+func UnimplementedWithIssueError(issue int, msg string) error {
+	feature := fmt.Sprintf("#%d", issue)
+	return Unimplemented(
+		feature, "unimplemented: "+msg,
+	).SetHintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
 }
 
 // Unimplemented constructs an unimplemented feature error.
 //
 // `feature` is used for tracking, and is not included when the error printed.
-func Unimplemented(feature, msg string) error {
+func Unimplemented(feature, msg string) *Error {
 	err := NewError(CodeFeatureNotSupportedError, msg)
 	err.InternalCommand = feature
 	return err
