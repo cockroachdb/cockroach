@@ -1161,7 +1161,7 @@ func (n *createViewNode) makeViewTableDesc(
 			columnTableDef.Name = columnNames[i]
 		}
 		// We pass an empty search path here because there are no names to resolve.
-		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, nil, evalCtx)
+		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, parser.SearchPath{}, evalCtx)
 		if err != nil {
 			return desc, err
 		}
@@ -1197,7 +1197,7 @@ func makeTableDescIfAs(
 			columnTableDef.Name = p.AsColumnNames[i]
 		}
 		// We pass an empty search path here because we do not have any expressions to resolve.
-		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, nil, evalCtx)
+		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, parser.SearchPath{}, evalCtx)
 		if err != nil {
 			return desc, err
 		}

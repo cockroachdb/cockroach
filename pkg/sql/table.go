@@ -697,7 +697,8 @@ func (p *planner) searchAndQualifyDatabase(ctx context.Context, tn *parser.Table
 
 	// Not found using the current session's database, so try
 	// the search path instead.
-	for _, database := range p.session.SearchPath {
+	iter := p.session.SearchPath.Iter()
+	for database, ok := iter(); ok; database, ok = iter() {
 		t.DatabaseName = parser.Name(database)
 		desc, err := descFunc(ctx, p.txn, p.getVirtualTabler(), &t)
 		if err != nil && !sqlbase.IsUndefinedRelationError(err) && !sqlbase.IsUndefinedDatabaseError(err) {

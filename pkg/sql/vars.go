@@ -244,30 +244,18 @@ var varGen = map[string]sessionVar{
 	`search_path`: {
 		Set: func(_ context.Context, session *Session, values []parser.TypedExpr) error {
 			// https://www.postgresql.org/docs/9.6/static/runtime-config-client.html
-			newSearchPath := make(parser.SearchPath, len(values))
-			foundPgCatalog := false
+			paths := make([]string, len(values))
 			for i, v := range values {
 				s, err := datumAsString(session, "search_path", v)
 				if err != nil {
 					return err
 				}
-				if s == pgCatalogName {
-					foundPgCatalog = true
-				}
-				newSearchPath[i] = s
+				paths[i] = s
 			}
-			if !foundPgCatalog {
-				// "The system catalog schema, pg_catalog, is always searched,
-				// whether it is mentioned in the path or not. If it is
-				// mentioned in the path then it will be searched in the
-				// specified order. If pg_catalog is not in the path then it
-				// will be searched before searching any of the path items."
-				newSearchPath = append([]string{"pg_catalog"}, newSearchPath...)
-			}
-			session.SearchPath = newSearchPath
+			session.SearchPath = parser.MakeSearchPath(paths)
 			return nil
 		},
-		Get: func(session *Session) string { return strings.Join(session.SearchPath, ", ") },
+		Get: func(session *Session) string { return session.SearchPath.String() },
 		Reset: func(session *Session) error {
 			session.SearchPath = sqlbase.DefaultSearchPath
 			return nil

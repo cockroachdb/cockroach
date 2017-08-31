@@ -1250,6 +1250,22 @@ SELECT CURRENT_SCHEMAS(false)
 ----
 {"test"}
 
+statement ok
+SET SEARCH_PATH=test,pg_catalog
+
+query T
+SELECT CURRENT_SCHEMAS(true)
+----
+{"test","pg_catalog"}
+
+query T
+SELECT CURRENT_SCHEMAS(false)
+----
+{"test","pg_catalog"}
+
+statement ok
+RESET SEARCH_PATH
+
 query error pq: unknown signature: current_schemas()
 SELECT CURRENT_SCHEMAS()
 
