@@ -250,7 +250,7 @@ func makeCSVTableDescriptor(
 		ctx,
 		nil, /* txn */
 		sql.NilVirtualTabler,
-		nil, /* SearchPath */
+		parser.SearchPath{},
 		create,
 		parentID,
 		tableID,
