@@ -65,6 +65,10 @@ const rangeTableDisplayList: RangeTableRow[] = [
   { variable: "mvccValueBytesCount", display: "MVCC Value Bytes/Count", compareToLeader: true },
   { variable: "mvccIntentBytesCount", display: "MVCC Intent Bytes/Count", compareToLeader: true },
   { variable: "mvccSystemBytesCount", display: "MVCC System Bytes/Count", compareToLeader: true },
+  { variable: "commandQueueWrites", display: "CQ Writes Local/Global", compareToLeader: false },
+  { variable: "commandQueueReads", display: "CQ Reads Local/Global", compareToLeader: false },
+  { variable: "commandQueueMaxOverlapsSeen", display: "CQ Max Overlaps Local/Global", compareToLeader: false },
+  { variable: "commandQueueTreeSize", display: "CQ Tree Size Local/Global", compareToLeader: false },
 ];
 
 const rangeTableEmptyContent: RangeTableCellContent = {
@@ -108,7 +112,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
   }
 
   contentMVCC(bytes: Long, count: Long): RangeTableCellContent {
-    return this.createContent(`${bytes.toString()} bytes / ${count.toString()}`);
+    return this.createContent(`${bytes.toString()} bytes / ${count.toString()} count`);
   }
 
   createContent(value: string | Long | number, className: string = null): RangeTableCellContent {
@@ -121,6 +125,21 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
       value: [value.toString()],
       className: [className],
     };
+  }
+
+  contentCommandQueue(
+    local: Long | number, global: Long | number, isRaftLeader: boolean,
+  ): RangeTableCellContent {
+    if (isRaftLeader) {
+      return this.createContent(`${local.toString()} local / ${global.toString()} global`);
+    }
+    if (local.toString() === "0" && global.toString() === "0") {
+      return rangeTableEmptyContent;
+    }
+    return this.createContent(
+      `${local.toString()} local / ${global.toString()} global`,
+      "range-table__cell--warning",
+    );
   }
 
   contentTimestamp(timestamp: protos.cockroach.util.hlc.Timestamp$Properties): RangeTableCellContent {
@@ -153,7 +172,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     return {
       value: results,
       title: results,
-      className: results.length > 0 ? ["range-table__cell--problems"] : [],
+      className: results.length > 0 ? ["range-table__cell--warning"] : [],
     };
   }
 
@@ -364,7 +383,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         pendingCommands: this.createContent(FixLong(info.state.num_pending)),
         droppedCommands: this.createContent(
           FixLong(info.state.num_dropped),
-          FixLong(info.state.num_dropped).greaterThan(0) ? "range-table__cell--dropped-commands" : "",
+          FixLong(info.state.num_dropped).greaterThan(0) ? "range-table__cell--warning" : "",
         ),
         truncatedIndex: this.createContent(FixLong(info.state.state.truncated_state.index)),
         truncatedTerm: this.createContent(FixLong(info.state.state.truncated_state.term)),
@@ -376,6 +395,26 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         mvccValueBytesCount: this.contentMVCC(FixLong(mvcc.val_bytes), FixLong(mvcc.val_count)),
         mvccIntentBytesCount: this.contentMVCC(FixLong(mvcc.intent_bytes), FixLong(mvcc.intent_count)),
         mvccSystemBytesCount: this.contentMVCC(FixLong(mvcc.sys_bytes), FixLong(mvcc.sys_count)),
+        commandQueueWrites: this.contentCommandQueue(
+          FixLong(info.command_queue_metrics_local.write_commands),
+          FixLong(info.command_queue_metrics_global.write_commands),
+          raftLeader,
+        ),
+        commandQueueReads: this.contentCommandQueue(
+          FixLong(info.command_queue_metrics_local.read_commands),
+          FixLong(info.command_queue_metrics_global.read_commands),
+          raftLeader,
+        ),
+        commandQueueMaxOverlapsSeen: this.contentCommandQueue(
+          FixLong(info.command_queue_metrics_local.max_overlaps_seen),
+          FixLong(info.command_queue_metrics_global.max_overlaps_seen),
+          raftLeader,
+        ),
+        commandQueueTreeSize: this.contentCommandQueue(
+          info.command_queue_metrics_local.tree_size,
+          info.command_queue_metrics_global.tree_size,
+          raftLeader,
+        ),
       });
     });
 

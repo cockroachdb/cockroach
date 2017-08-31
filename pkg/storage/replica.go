@@ -1663,7 +1663,6 @@ func (r *Replica) State() storagebase.RangeInfo {
 	if r.mu.proposalQuota != nil {
 		ri.ApproximateProposalQuota = r.mu.proposalQuota.approximateQuota()
 	}
-
 	return ri
 }
 
@@ -5308,11 +5307,13 @@ type ReplicaMetrics struct {
 	Quiescent   bool
 	// Is this the replica which collects per-range metrics? This is done either
 	// on the leader or, if there is no leader, on the largest live replica ID.
-	RangeCounter    bool
-	Unavailable     bool
-	Underreplicated bool
-	BehindCount     int64
-	SelfBehindCount int64
+	RangeCounter              bool
+	Unavailable               bool
+	Underreplicated           bool
+	BehindCount               int64
+	SelfBehindCount           int64
+	CommandQueueMetricsLocal  CommandQueueMetrics
+	CommandQueueMetricsGlobal CommandQueueMetrics
 }
 
 // Metrics returns the current metrics for the replica.
@@ -5330,8 +5331,25 @@ func (r *Replica) Metrics(
 	selfBehindCount := r.getEstimatedBehindCountRLocked(raftStatus)
 	r.mu.RUnlock()
 
-	return calcReplicaMetrics(ctx, now, cfg, livenessMap, desc,
-		raftStatus, status, r.store.StoreID(), quiescent, selfBehindCount)
+	r.cmdQMu.Lock()
+	commandQueueMetricsLocal := r.cmdQMu.queues[spanLocal].metrics()
+	commandQueueMetricsGlobal := r.cmdQMu.queues[spanGlobal].metrics()
+	r.cmdQMu.Unlock()
+
+	return calcReplicaMetrics(
+		ctx,
+		now,
+		cfg,
+		livenessMap,
+		desc,
+		raftStatus,
+		status,
+		r.store.StoreID(),
+		quiescent,
+		selfBehindCount,
+		commandQueueMetricsLocal,
+		commandQueueMetricsGlobal,
+	)
 }
 
 func isRaftLeader(raftStatus *raft.Status) bool {
@@ -5354,6 +5372,8 @@ func calcReplicaMetrics(
 	storeID roachpb.StoreID,
 	quiescent bool,
 	selfBehindCount int64,
+	commandQueueMetricsLocal CommandQueueMetrics,
+	commandQueueMetricsGlobal CommandQueueMetrics,
 ) ReplicaMetrics {
 	var m ReplicaMetrics
 
@@ -5404,6 +5424,9 @@ func calcReplicaMetrics(
 			m.Underreplicated = true
 		}
 	}
+
+	m.CommandQueueMetricsLocal = commandQueueMetricsLocal
+	m.CommandQueueMetricsGlobal = commandQueueMetricsGlobal
 
 	return m
 }

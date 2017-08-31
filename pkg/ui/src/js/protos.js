@@ -13782,6 +13782,283 @@ export const cockroach = $root.cockroach = (() => {
                 return PrettySpan;
             })();
 
+            serverpb.CommandQueueMetrics = (function() {
+
+                /**
+                 * Properties of a CommandQueueMetrics.
+                 * @typedef cockroach.server.serverpb.CommandQueueMetrics$Properties
+                 * @type {Object}
+                 * @property {Long} [write_commands] CommandQueueMetrics write_commands.
+                 * @property {Long} [read_commands] CommandQueueMetrics read_commands.
+                 * @property {Long} [max_overlaps_seen] CommandQueueMetrics max_overlaps_seen.
+                 * @property {number} [tree_size] CommandQueueMetrics tree_size.
+                 */
+
+                /**
+                 * Constructs a new CommandQueueMetrics.
+                 * @exports cockroach.server.serverpb.CommandQueueMetrics
+                 * @constructor
+                 * @param {cockroach.server.serverpb.CommandQueueMetrics$Properties=} [properties] Properties to set
+                 */
+                function CommandQueueMetrics(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * CommandQueueMetrics write_commands.
+                 * @type {Long}
+                 */
+                CommandQueueMetrics.prototype.write_commands = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                /**
+                 * CommandQueueMetrics read_commands.
+                 * @type {Long}
+                 */
+                CommandQueueMetrics.prototype.read_commands = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                /**
+                 * CommandQueueMetrics max_overlaps_seen.
+                 * @type {Long}
+                 */
+                CommandQueueMetrics.prototype.max_overlaps_seen = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                /**
+                 * CommandQueueMetrics tree_size.
+                 * @type {number}
+                 */
+                CommandQueueMetrics.prototype.tree_size = 0;
+
+                /**
+                 * Creates a new CommandQueueMetrics instance using the specified properties.
+                 * @param {cockroach.server.serverpb.CommandQueueMetrics$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.CommandQueueMetrics} CommandQueueMetrics instance
+                 */
+                CommandQueueMetrics.create = function create(properties) {
+                    return new CommandQueueMetrics(properties);
+                };
+
+                /**
+                 * Encodes the specified CommandQueueMetrics message. Does not implicitly {@link cockroach.server.serverpb.CommandQueueMetrics.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CommandQueueMetrics$Properties} message CommandQueueMetrics message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                CommandQueueMetrics.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.write_commands != null && message.hasOwnProperty("write_commands"))
+                        writer.uint32(/* id 1, wireType 0 =*/8).int64(message.write_commands);
+                    if (message.read_commands != null && message.hasOwnProperty("read_commands"))
+                        writer.uint32(/* id 2, wireType 0 =*/16).int64(message.read_commands);
+                    if (message.max_overlaps_seen != null && message.hasOwnProperty("max_overlaps_seen"))
+                        writer.uint32(/* id 3, wireType 0 =*/24).int64(message.max_overlaps_seen);
+                    if (message.tree_size != null && message.hasOwnProperty("tree_size"))
+                        writer.uint32(/* id 4, wireType 0 =*/32).int32(message.tree_size);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified CommandQueueMetrics message, length delimited. Does not implicitly {@link cockroach.server.serverpb.CommandQueueMetrics.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CommandQueueMetrics$Properties} message CommandQueueMetrics message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                CommandQueueMetrics.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a CommandQueueMetrics message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.CommandQueueMetrics} CommandQueueMetrics
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                CommandQueueMetrics.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.CommandQueueMetrics();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.write_commands = reader.int64();
+                            break;
+                        case 2:
+                            message.read_commands = reader.int64();
+                            break;
+                        case 3:
+                            message.max_overlaps_seen = reader.int64();
+                            break;
+                        case 4:
+                            message.tree_size = reader.int32();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a CommandQueueMetrics message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.CommandQueueMetrics} CommandQueueMetrics
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                CommandQueueMetrics.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a CommandQueueMetrics message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                CommandQueueMetrics.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.write_commands != null && message.hasOwnProperty("write_commands"))
+                        if (!$util.isInteger(message.write_commands) && !(message.write_commands && $util.isInteger(message.write_commands.low) && $util.isInteger(message.write_commands.high)))
+                            return "write_commands: integer|Long expected";
+                    if (message.read_commands != null && message.hasOwnProperty("read_commands"))
+                        if (!$util.isInteger(message.read_commands) && !(message.read_commands && $util.isInteger(message.read_commands.low) && $util.isInteger(message.read_commands.high)))
+                            return "read_commands: integer|Long expected";
+                    if (message.max_overlaps_seen != null && message.hasOwnProperty("max_overlaps_seen"))
+                        if (!$util.isInteger(message.max_overlaps_seen) && !(message.max_overlaps_seen && $util.isInteger(message.max_overlaps_seen.low) && $util.isInteger(message.max_overlaps_seen.high)))
+                            return "max_overlaps_seen: integer|Long expected";
+                    if (message.tree_size != null && message.hasOwnProperty("tree_size"))
+                        if (!$util.isInteger(message.tree_size))
+                            return "tree_size: integer expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a CommandQueueMetrics message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CommandQueueMetrics} CommandQueueMetrics
+                 */
+                CommandQueueMetrics.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.CommandQueueMetrics)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.CommandQueueMetrics();
+                    if (object.write_commands != null)
+                        if ($util.Long)
+                            (message.write_commands = $util.Long.fromValue(object.write_commands)).unsigned = false;
+                        else if (typeof object.write_commands === "string")
+                            message.write_commands = parseInt(object.write_commands, 10);
+                        else if (typeof object.write_commands === "number")
+                            message.write_commands = object.write_commands;
+                        else if (typeof object.write_commands === "object")
+                            message.write_commands = new $util.LongBits(object.write_commands.low >>> 0, object.write_commands.high >>> 0).toNumber();
+                    if (object.read_commands != null)
+                        if ($util.Long)
+                            (message.read_commands = $util.Long.fromValue(object.read_commands)).unsigned = false;
+                        else if (typeof object.read_commands === "string")
+                            message.read_commands = parseInt(object.read_commands, 10);
+                        else if (typeof object.read_commands === "number")
+                            message.read_commands = object.read_commands;
+                        else if (typeof object.read_commands === "object")
+                            message.read_commands = new $util.LongBits(object.read_commands.low >>> 0, object.read_commands.high >>> 0).toNumber();
+                    if (object.max_overlaps_seen != null)
+                        if ($util.Long)
+                            (message.max_overlaps_seen = $util.Long.fromValue(object.max_overlaps_seen)).unsigned = false;
+                        else if (typeof object.max_overlaps_seen === "string")
+                            message.max_overlaps_seen = parseInt(object.max_overlaps_seen, 10);
+                        else if (typeof object.max_overlaps_seen === "number")
+                            message.max_overlaps_seen = object.max_overlaps_seen;
+                        else if (typeof object.max_overlaps_seen === "object")
+                            message.max_overlaps_seen = new $util.LongBits(object.max_overlaps_seen.low >>> 0, object.max_overlaps_seen.high >>> 0).toNumber();
+                    if (object.tree_size != null)
+                        message.tree_size = object.tree_size | 0;
+                    return message;
+                };
+
+                /**
+                 * Creates a CommandQueueMetrics message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.CommandQueueMetrics.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CommandQueueMetrics} CommandQueueMetrics
+                 */
+                CommandQueueMetrics.from = CommandQueueMetrics.fromObject;
+
+                /**
+                 * Creates a plain object from a CommandQueueMetrics message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.CommandQueueMetrics} message CommandQueueMetrics
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                CommandQueueMetrics.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults) {
+                        if ($util.Long) {
+                            let long = new $util.Long(0, 0, false);
+                            object.write_commands = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                        } else
+                            object.write_commands = options.longs === String ? "0" : 0;
+                        if ($util.Long) {
+                            let long = new $util.Long(0, 0, false);
+                            object.read_commands = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                        } else
+                            object.read_commands = options.longs === String ? "0" : 0;
+                        if ($util.Long) {
+                            let long = new $util.Long(0, 0, false);
+                            object.max_overlaps_seen = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                        } else
+                            object.max_overlaps_seen = options.longs === String ? "0" : 0;
+                        object.tree_size = 0;
+                    }
+                    if (message.write_commands != null && message.hasOwnProperty("write_commands"))
+                        if (typeof message.write_commands === "number")
+                            object.write_commands = options.longs === String ? String(message.write_commands) : message.write_commands;
+                        else
+                            object.write_commands = options.longs === String ? $util.Long.prototype.toString.call(message.write_commands) : options.longs === Number ? new $util.LongBits(message.write_commands.low >>> 0, message.write_commands.high >>> 0).toNumber() : message.write_commands;
+                    if (message.read_commands != null && message.hasOwnProperty("read_commands"))
+                        if (typeof message.read_commands === "number")
+                            object.read_commands = options.longs === String ? String(message.read_commands) : message.read_commands;
+                        else
+                            object.read_commands = options.longs === String ? $util.Long.prototype.toString.call(message.read_commands) : options.longs === Number ? new $util.LongBits(message.read_commands.low >>> 0, message.read_commands.high >>> 0).toNumber() : message.read_commands;
+                    if (message.max_overlaps_seen != null && message.hasOwnProperty("max_overlaps_seen"))
+                        if (typeof message.max_overlaps_seen === "number")
+                            object.max_overlaps_seen = options.longs === String ? String(message.max_overlaps_seen) : message.max_overlaps_seen;
+                        else
+                            object.max_overlaps_seen = options.longs === String ? $util.Long.prototype.toString.call(message.max_overlaps_seen) : options.longs === Number ? new $util.LongBits(message.max_overlaps_seen.low >>> 0, message.max_overlaps_seen.high >>> 0).toNumber() : message.max_overlaps_seen;
+                    if (message.tree_size != null && message.hasOwnProperty("tree_size"))
+                        object.tree_size = message.tree_size;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this CommandQueueMetrics message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                CommandQueueMetrics.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this CommandQueueMetrics to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                CommandQueueMetrics.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return CommandQueueMetrics;
+            })();
+
             serverpb.RangeInfo = (function() {
 
                 /**
@@ -13797,6 +14074,8 @@ export const cockroach = $root.cockroach = (() => {
                  * @property {Array.<cockroach.roachpb.Lease$Properties>} [lease_history] RangeInfo lease_history.
                  * @property {cockroach.server.serverpb.RangeProblems$Properties} [problems] RangeInfo problems.
                  * @property {cockroach.server.serverpb.RangeStatistics$Properties} [stats] RangeInfo stats.
+                 * @property {cockroach.server.serverpb.CommandQueueMetrics$Properties} [command_queue_metrics_local] RangeInfo command_queue_metrics_local.
+                 * @property {cockroach.server.serverpb.CommandQueueMetrics$Properties} [command_queue_metrics_global] RangeInfo command_queue_metrics_global.
                  */
 
                 /**
@@ -13868,6 +14147,18 @@ export const cockroach = $root.cockroach = (() => {
                 RangeInfo.prototype.stats = null;
 
                 /**
+                 * RangeInfo command_queue_metrics_local.
+                 * @type {(cockroach.server.serverpb.CommandQueueMetrics$Properties|null)}
+                 */
+                RangeInfo.prototype.command_queue_metrics_local = null;
+
+                /**
+                 * RangeInfo command_queue_metrics_global.
+                 * @type {(cockroach.server.serverpb.CommandQueueMetrics$Properties|null)}
+                 */
+                RangeInfo.prototype.command_queue_metrics_global = null;
+
+                /**
                  * Creates a new RangeInfo instance using the specified properties.
                  * @param {cockroach.server.serverpb.RangeInfo$Properties=} [properties] Properties to set
                  * @returns {cockroach.server.serverpb.RangeInfo} RangeInfo instance
@@ -13904,6 +14195,10 @@ export const cockroach = $root.cockroach = (() => {
                         $root.cockroach.server.serverpb.RangeProblems.encode(message.problems, writer.uint32(/* id 9, wireType 2 =*/74).fork()).ldelim();
                     if (message.stats != null && message.hasOwnProperty("stats"))
                         $root.cockroach.server.serverpb.RangeStatistics.encode(message.stats, writer.uint32(/* id 10, wireType 2 =*/82).fork()).ldelim();
+                    if (message.command_queue_metrics_local != null && message.hasOwnProperty("command_queue_metrics_local"))
+                        $root.cockroach.server.serverpb.CommandQueueMetrics.encode(message.command_queue_metrics_local, writer.uint32(/* id 11, wireType 2 =*/90).fork()).ldelim();
+                    if (message.command_queue_metrics_global != null && message.hasOwnProperty("command_queue_metrics_global"))
+                        $root.cockroach.server.serverpb.CommandQueueMetrics.encode(message.command_queue_metrics_global, writer.uint32(/* id 12, wireType 2 =*/98).fork()).ldelim();
                     return writer;
                 };
 
@@ -13960,6 +14255,12 @@ export const cockroach = $root.cockroach = (() => {
                             break;
                         case 10:
                             message.stats = $root.cockroach.server.serverpb.RangeStatistics.decode(reader, reader.uint32());
+                            break;
+                        case 11:
+                            message.command_queue_metrics_local = $root.cockroach.server.serverpb.CommandQueueMetrics.decode(reader, reader.uint32());
+                            break;
+                        case 12:
+                            message.command_queue_metrics_global = $root.cockroach.server.serverpb.CommandQueueMetrics.decode(reader, reader.uint32());
                             break;
                         default:
                             reader.skipType(tag & 7);
@@ -14033,6 +14334,16 @@ export const cockroach = $root.cockroach = (() => {
                         if (error)
                             return "stats." + error;
                     }
+                    if (message.command_queue_metrics_local != null && message.hasOwnProperty("command_queue_metrics_local")) {
+                        let error = $root.cockroach.server.serverpb.CommandQueueMetrics.verify(message.command_queue_metrics_local);
+                        if (error)
+                            return "command_queue_metrics_local." + error;
+                    }
+                    if (message.command_queue_metrics_global != null && message.hasOwnProperty("command_queue_metrics_global")) {
+                        let error = $root.cockroach.server.serverpb.CommandQueueMetrics.verify(message.command_queue_metrics_global);
+                        if (error)
+                            return "command_queue_metrics_global." + error;
+                    }
                     return null;
                 };
 
@@ -14086,6 +14397,16 @@ export const cockroach = $root.cockroach = (() => {
                             throw TypeError(".cockroach.server.serverpb.RangeInfo.stats: object expected");
                         message.stats = $root.cockroach.server.serverpb.RangeStatistics.fromObject(object.stats);
                     }
+                    if (object.command_queue_metrics_local != null) {
+                        if (typeof object.command_queue_metrics_local !== "object")
+                            throw TypeError(".cockroach.server.serverpb.RangeInfo.command_queue_metrics_local: object expected");
+                        message.command_queue_metrics_local = $root.cockroach.server.serverpb.CommandQueueMetrics.fromObject(object.command_queue_metrics_local);
+                    }
+                    if (object.command_queue_metrics_global != null) {
+                        if (typeof object.command_queue_metrics_global !== "object")
+                            throw TypeError(".cockroach.server.serverpb.RangeInfo.command_queue_metrics_global: object expected");
+                        message.command_queue_metrics_global = $root.cockroach.server.serverpb.CommandQueueMetrics.fromObject(object.command_queue_metrics_global);
+                    }
                     return message;
                 };
 
@@ -14119,6 +14440,8 @@ export const cockroach = $root.cockroach = (() => {
                         object.error_message = "";
                         object.problems = null;
                         object.stats = null;
+                        object.command_queue_metrics_local = null;
+                        object.command_queue_metrics_global = null;
                     }
                     if (message.span != null && message.hasOwnProperty("span"))
                         object.span = $root.cockroach.server.serverpb.PrettySpan.toObject(message.span, options);
@@ -14141,6 +14464,10 @@ export const cockroach = $root.cockroach = (() => {
                         object.problems = $root.cockroach.server.serverpb.RangeProblems.toObject(message.problems, options);
                     if (message.stats != null && message.hasOwnProperty("stats"))
                         object.stats = $root.cockroach.server.serverpb.RangeStatistics.toObject(message.stats, options);
+                    if (message.command_queue_metrics_local != null && message.hasOwnProperty("command_queue_metrics_local"))
+                        object.command_queue_metrics_local = $root.cockroach.server.serverpb.CommandQueueMetrics.toObject(message.command_queue_metrics_local, options);
+                    if (message.command_queue_metrics_global != null && message.hasOwnProperty("command_queue_metrics_global"))
+                        object.command_queue_metrics_global = $root.cockroach.server.serverpb.CommandQueueMetrics.toObject(message.command_queue_metrics_global, options);
                     return object;
                 };
 

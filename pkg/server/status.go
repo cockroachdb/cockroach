@@ -775,6 +775,8 @@ func (s *statusServer) Ranges(
 				Underreplicated:      metrics.Leader && metrics.Underreplicated,
 				NoLease:              metrics.Leader && !metrics.LeaseValid && !metrics.Quiescent,
 			},
+			CommandQueueMetricsLocal:  serverpb.CommandQueueMetrics(metrics.CommandQueueMetricsLocal),
+			CommandQueueMetricsGlobal: serverpb.CommandQueueMetrics(metrics.CommandQueueMetricsGlobal),
 		}
 	}
 
