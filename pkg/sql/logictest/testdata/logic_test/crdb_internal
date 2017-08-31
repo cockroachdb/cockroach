@@ -68,10 +68,10 @@ Version
 
 
 # The validity of the rows in this table are tested elsewhere; we merely assert the columns.
-query ITTTTTTTTTRT colnames
+query ITTTTTTTTTRTI colnames
 SELECT * FROM crdb_internal.jobs WHERE false
 ----
-id  type  description  username  descriptor_ids  status  created  started  finished  modified  fraction_completed  error
+id  type  description  username  descriptor_ids  status  created  started  finished  modified  fraction_completed  error  coordinator_id
 
 query IITTITTT colnames
 SELECT * FROM crdb_internal.schema_changes WHERE table_id < 0
