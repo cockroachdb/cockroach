@@ -190,8 +190,9 @@ func (s *seriesValueGenerator) Next() (bool, error) {
 		return false, nil
 	}
 	s.value = s.start
-	s.start += s.step
-	return true, nil
+	var ok bool
+	s.start, ok = addWithOverflow(s.start, s.step)
+	return ok, nil
 }
 
 // Values implements the ValueGenerator interface.
