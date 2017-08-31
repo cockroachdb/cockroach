@@ -19,11 +19,17 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
+
+func newValuesListLenErr(exp, got int) error {
+	return errors.Errorf("VALUES lists must all be the same length, expected %d columns, found %d",
+		exp, got)
+}
 
 type valuesNode struct {
 	n        *parser.ValuesClause
@@ -75,7 +81,7 @@ func (p *planner) ValuesClause(
 
 	for num, tuple := range n.Tuples {
 		if a, e := len(tuple.Exprs), numCols; a != e {
-			return nil, fmt.Errorf("VALUES lists must all be the same length, %d for %d", a, e)
+			return nil, newValuesListLenErr(e, a)
 		}
 
 		// Chop off prefix of tupleBuf and limit its capacity.
