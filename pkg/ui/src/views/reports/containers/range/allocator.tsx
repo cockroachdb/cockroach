@@ -6,11 +6,23 @@ import Print from "src/views/reports/containers/range/print";
 
 interface AllocatorOutputProps {
   allocatorRangeResponse: protos.cockroach.server.serverpb.AllocatorRangeResponse;
+  lastError: Error;
 }
 
 export default class AllocatorOutput extends React.Component<AllocatorOutputProps, {}> {
   render() {
-    const { allocatorRangeResponse } = this.props;
+    const { allocatorRangeResponse, lastError } = this.props;
+    console.log(lastError);
+
+    if (!_.isNil(lastError)) {
+      return (
+        <div>
+          <h2>Simulated Allocator Output</h2>
+          {lastError.toString()}
+        </div>
+      );
+    }
+
     if (_.isEmpty(allocatorRangeResponse) || _.isEmpty(allocatorRangeResponse.dry_run)) {
       return (
         <div>
@@ -23,17 +35,17 @@ export default class AllocatorOutput extends React.Component<AllocatorOutputProp
     return (
       <div>
         <h2>Simulated Allocator Output (from n{allocatorRangeResponse.node_id.toString()})</h2>
-        <table className="log-table">
+        <table className="allocator-table">
           <tbody>
-            <tr className="log-table__row log-table__row--header">
-              <th className="log-table__cell log-table__cell--header">Timestamp</th>
-              <th className="log-table__cell log-table__cell--header">Message</th>
+            <tr className="allocator-table__row allocator-table__row--header">
+              <th className="allocator-table__cell allocator-table__cell--header">Timestamp</th>
+              <th className="allocator-table__cell allocator-table__cell--header">Message</th>
             </tr>
             {
               _.map(allocatorRangeResponse.dry_run.events, (event, key) => (
-                <tr key={key} className="log-table__row">
-                  <td className="log-table__cell">{Print.Timestamp(event.time)}</td>
-                  <td className="log-table__cell">{event.message}</td>
+                <tr key={key} className="allocator-table__row">
+                  <td className="allocator-table__cell allocator-table__cell--date">{Print.Timestamp(event.time)}</td>
+                  <td className="allocator-table__cell">{event.message}</td>
                 </tr>
               ))
             }

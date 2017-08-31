@@ -22,6 +22,7 @@ interface RangeOwnProps {
   range: protos.cockroach.server.serverpb.RangeResponse;
   allocatorRange: protos.cockroach.server.serverpb.AllocatorRangeResponse;
   lastError: Error;
+  lastAllocatorError: Error;
   refreshRange: typeof refreshRange;
   refreshAllocatorRange: typeof refreshAllocatorRange;
 }
@@ -72,6 +73,7 @@ class Range extends React.Component<RangeProps, {}> {
   render() {
     const rangeID = this.props.params[rangeIDAttr];
     const { range, allocatorRange } = this.props;
+    console.log(this.props.lastAllocatorError);
 
     // A bunch of quick error cases.
     if (!_.isNil(this.props.lastError)) {
@@ -140,7 +142,7 @@ class Range extends React.Component<RangeProps, {}> {
         <RangeTable infos={infos} replicas={replicas} />
         <LeaseTable info={_.head(infos)} />
         <LogTable rangeID={responseRangeID} log={range.range_log} />
-        <AllocatorOutput allocatorRangeResponse={allocatorRange} />
+        <AllocatorOutput allocatorRangeResponse={allocatorRange} lastError={this.props.lastAllocatorError} />
         <ConnectionsTable rangeResponse={range} />
       </div>
     );
@@ -152,6 +154,7 @@ function mapStateToProps(state: AdminUIState) {
     range: state.cachedData.range.data,
     allocatorRange: state.cachedData.allocatorRange.data,
     lastError: state.cachedData.range.lastError,
+    lastAllocatorError: state.cachedData.allocatorRange.lastError,
   };
 }
 
