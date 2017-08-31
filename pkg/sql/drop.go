@@ -272,7 +272,8 @@ func (n *dropIndexNode) Start(params runParams) error {
 		}
 
 		if err := params.p.dropIndexByName(
-			ctx, index.idxName, tableDesc, n.n.IfExists, n.n.DropBehavior, n.n.String(),
+			ctx, index.idxName, tableDesc, n.n.IfExists, n.n.DropBehavior,
+			parser.AsStringWithFlags(n.n, parser.FmtSimpleQualified),
 		); err != nil {
 			return err
 		}
@@ -286,7 +287,7 @@ func (p *planner) dropIndexByName(
 	tableDesc *sqlbase.TableDescriptor,
 	ifExists bool,
 	behavior parser.DropBehavior,
-	stmt string,
+	jobDesc string,
 ) error {
 	idx, dropped, err := tableDesc.FindIndexByName(string(idxName))
 	if err != nil {
@@ -372,7 +373,7 @@ func (p *planner) dropIndexByName(
 	if err := tableDesc.Validate(ctx, p.txn); err != nil {
 		return err
 	}
-	mutationID, err := p.createSchemaChangeJob(ctx, tableDesc, stmt)
+	mutationID, err := p.createSchemaChangeJob(ctx, tableDesc, jobDesc)
 	if err != nil {
 		return err
 	}
@@ -395,7 +396,7 @@ func (p *planner) dropIndexByName(
 			User                string
 			MutationID          uint32
 			CascadeDroppedViews []string
-		}{tableDesc.Name, string(idxName), stmt, p.session.User, uint32(mutationID),
+		}{tableDesc.Name, string(idxName), jobDesc, p.session.User, uint32(mutationID),
 			droppedViews},
 	); err != nil {
 		return err

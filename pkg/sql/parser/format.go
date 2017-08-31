@@ -49,6 +49,8 @@ type fmtFlags struct {
 	disambiguateDatumTypes bool
 	// If false, passwords are replaced by *****.
 	showPasswords bool
+	// if true, always prints qualified names even if originally omitted.
+	alwaysQualify bool
 }
 
 // FmtFlags enables conditional formatting in the pretty-printer.
@@ -101,6 +103,10 @@ var FmtHideConstants FmtFlags = &fmtFlags{hideConstants: true}
 // any name but function names.
 // TODO(knz): temporary until a better solution is found for #13968
 var FmtAnonymize FmtFlags = &fmtFlags{anonymize: true}
+
+// FmtSimpleQualified instructs the pretty-printer to produce
+// a straightforward representation that qualifies table names.
+var FmtSimpleQualified FmtFlags = &fmtFlags{alwaysQualify: true}
 
 // FmtReformatTableNames returns FmtFlags that instructs the pretty-printer
 // to substitute the printing of table names using the provided function.

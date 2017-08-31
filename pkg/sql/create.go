@@ -184,7 +184,8 @@ func (n *createIndexNode) Start(params runParams) error {
 		}
 	}
 
-	mutationID, err := params.p.createSchemaChangeJob(params.ctx, n.tableDesc, parser.AsString(n.n))
+	mutationID, err := params.p.createSchemaChangeJob(params.ctx, n.tableDesc,
+		parser.AsStringWithFlags(n.n, parser.FmtSimpleQualified))
 	if err != nil {
 		return err
 	}
