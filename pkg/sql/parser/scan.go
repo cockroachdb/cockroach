@@ -151,10 +151,14 @@ func (s *Scanner) UnimplementedWithIssue(issue int) {
 // syntax error.
 func (s *Scanner) SetHelp(msg HelpMessage) {
 	if s.lastTok.id == HELPTOKEN {
-		s.lastError.unimplementedFeature = ""
-		s.lastError.msg = "help token in input"
-		s.lastError.hint = msg.String()
+		s.populateHelpMsg(msg.String())
 	}
+}
+
+func (s *Scanner) populateHelpMsg(msg string) {
+	s.lastError.unimplementedFeature = ""
+	s.lastError.msg = "help token in input"
+	s.lastError.hint = msg
 }
 
 func (s *Scanner) Error(e string) {

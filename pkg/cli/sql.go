@@ -333,7 +333,7 @@ func isEndOfStatement(fullStmt string) (isEmpty, isEnd bool) {
 		isEmpty = false
 		last = t
 	})
-	return isEmpty, last == ';'
+	return isEmpty, last == ';' || last == parser.HELPTOKEN
 }
 
 // handleHelp prints SQL help.
@@ -829,8 +829,19 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 	// From here on, client-side syntax checking is enabled.
 	parsedStmts, err := parser.Parse(c.concatLines)
 	if err != nil {
-		_ = c.invalidSyntax(0, "statement ignored: %v", err)
-		maybeShowErrorDetails(stderr, err, false)
+		if pgErr, ok := pgerror.GetPGCause(err); ok &&
+			err.Error() == "help token in input" &&
+			strings.HasPrefix(pgErr.Hint, "help:") {
+			fmt.Println(pgErr.Hint[6:])
+		} else {
+			_ = c.invalidSyntax(0, "statement ignored: %v", err)
+			maybeShowErrorDetails(stderr, err, false)
+
+			// Stop here if exiterr is set.
+			if c.errExit {
+				return cliStop
+			}
+		}
 
 		// Even on failure, add the last (erroneous) lines as-is to the
 		// history, so that the user can recall them later to fix them.
@@ -838,12 +849,7 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 			c.addHistory(c.partialLines[i])
 		}
 
-		// Stop here if exiterr is set.
-		if c.errExit {
-			return cliStop
-		}
-
-		// Otherwise, remove the erroneous lines from the buffered input,
+		// Remove the erroneous lines from the buffered input,
 		// then try again.
 		c.partialLines = c.partialLines[:c.partialStmtsLen]
 		if len(c.partialLines) == 0 {
