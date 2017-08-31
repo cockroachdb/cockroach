@@ -100,22 +100,22 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
       <b>Filters</b>
       <label>
         <input type="checkbox" checked={this.state.showState}
-          onChange={() => this.setState({showState: !this.state.showState})} />
+          onChange={() => this.setState({ showState: !this.state.showState })} />
         State
       </label>
       <label>
         <input type="checkbox" checked={this.state.showReplicas}
-          onChange={() => this.setState({showReplicas: !this.state.showReplicas})} />
+          onChange={() => this.setState({ showReplicas: !this.state.showReplicas })} />
         Replicas
       </label>
       <label>
         <input type="checkbox" checked={this.state.showPending}
-          onChange={() => this.setState({showPending: !this.state.showPending})} />
+          onChange={() => this.setState({ showPending: !this.state.showPending })} />
         Pending
       </label>
       <label>
         <input type="checkbox" checked={this.state.showOnlyErrors}
-          onChange={() => this.setState({showOnlyErrors: !this.state.showOnlyErrors})} />
+          onChange={() => this.setState({ showOnlyErrors: !this.state.showOnlyErrors })} />
         Only Error Ranges
       </label>
     </div>;
@@ -142,7 +142,7 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
         return node.node_id;
       }).uniq().sort().value();
 
-      const nodeIDIndex: {[nodeID: number]: number} = {};
+      const nodeIDIndex: { [nodeID: number]: number } = {};
       const columns = [<th key={-1}>Range</th>];
       nodeIDs.forEach((id, i) => {
         nodeIDIndex[id] = i + 1;
@@ -168,23 +168,23 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
         const hasErrors = range.errors.length > 0;
         const rangeErrors = <ul>{_.map(range.errors, (error, j) => {
           return <li key={j}>{error.message}</li>;
-          })}</ul>;
+        })}</ul>;
         const row = [<td key="row{i}">
-            <Link className="debug-link" to={`#/reports/range/${range.range_id.toString()}`}>
-              r{range.range_id.toString()}
-            </Link>
-            {
-              (hasErrors) ? (
-                <span style={{position: "relative"}}>
-                  <ToolTipWrapper text={rangeErrors}>
-                    <div className="viz-info-icon">
-                      <div className="icon-warning" />
-                    </div>
-                  </ToolTipWrapper>
-                </span>
-              ) : ""
-            }
-          </td>];
+          <Link className="debug-link" to={`/reports/range/${range.range_id.toString()}`}>
+            r{range.range_id.toString()}
+          </Link>
+          {
+            (hasErrors) ? (
+              <span style={{ position: "relative" }}>
+                <ToolTipWrapper text={rangeErrors}>
+                  <div className="viz-info-icon">
+                    <div className="icon-warning" />
+                  </div>
+                </ToolTipWrapper>
+              </span>
+            ) : ""
+          }
+        </td>];
         rows[i] = row;
 
         // Render each replica into a cell
@@ -192,8 +192,8 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
           const nodeRange = node.range;
           const replicaLocations = nodeRange.state.state.desc.replicas.map(
             (replica) => "(Node " + replica.node_id.toString() +
-                         " Store " + replica.store_id.toString() +
-                         " ReplicaID " + replica.replica_id.toString() + ")",
+              " Store " + replica.store_id.toString() +
+              " ReplicaID " + replica.replica_id.toString() + ")",
           );
           const display = (l?: Long): string => {
             if (l) {
@@ -246,10 +246,10 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
       }
     }
     return <div className="section table">
-      { this.props.children }
+      {this.props.children}
       <div className="stats-table">
-        { this.renderErrors(errors) }
-        { content }
+        {this.renderErrors(errors)}
+        {content}
       </div>
     </div>;
   }
@@ -261,7 +261,7 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
     return <div className="section">
       {errors.map((err: string, i: number) => {
         return <div key={i}>Error: {err}</div>;
-      }) }
+      })}
     </div>;
   }
 }
