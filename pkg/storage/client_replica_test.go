@@ -1508,6 +1508,8 @@ func TestDrainRangeRejection(t *testing.T) {
 func TestSystemZoneConfigs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/17375")
+
 	if testing.Short() {
 		t.Skip("short flag")
 	}
