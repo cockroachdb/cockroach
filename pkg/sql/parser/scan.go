@@ -152,6 +152,12 @@ func (s *Scanner) UnimplementedWithIssue(issue int) {
 func (s *Scanner) SetHelp(msg HelpMessage) {
 	if s.lastTok.id == HELPTOKEN {
 		s.populateHelpMsg(msg.String())
+	} else {
+		if msg.Command != "" {
+			s.lastError.hint = `try \h ` + msg.Command
+		} else {
+			s.lastError.hint = `try \hf ` + msg.Function
+		}
 	}
 }
 
