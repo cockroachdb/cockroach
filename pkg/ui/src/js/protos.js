@@ -33455,7 +33455,6 @@ export const cockroach = $root.cockroach = (() => {
                  * @property {string} [program] FileDetails program.
                  * @property {string} [host] FileDetails host.
                  * @property {string} [user_name] FileDetails user_name.
-                 * @property {cockroach.util.log.Severity} [severity] FileDetails severity.
                  * @property {Long} [time] FileDetails time.
                  * @property {Long} [pid] FileDetails pid.
                  */
@@ -33490,12 +33489,6 @@ export const cockroach = $root.cockroach = (() => {
                  * @type {string}
                  */
                 FileDetails.prototype.user_name = "";
-
-                /**
-                 * FileDetails severity.
-                 * @type {cockroach.util.log.Severity}
-                 */
-                FileDetails.prototype.severity = 0;
 
                 /**
                  * FileDetails time.
@@ -33533,8 +33526,6 @@ export const cockroach = $root.cockroach = (() => {
                         writer.uint32(/* id 2, wireType 2 =*/18).string(message.host);
                     if (message.user_name != null && message.hasOwnProperty("user_name"))
                         writer.uint32(/* id 3, wireType 2 =*/26).string(message.user_name);
-                    if (message.severity != null && message.hasOwnProperty("severity"))
-                        writer.uint32(/* id 4, wireType 0 =*/32).uint32(message.severity);
                     if (message.time != null && message.hasOwnProperty("time"))
                         writer.uint32(/* id 5, wireType 0 =*/40).int64(message.time);
                     if (message.pid != null && message.hasOwnProperty("pid"))
@@ -33575,9 +33566,6 @@ export const cockroach = $root.cockroach = (() => {
                             break;
                         case 3:
                             message.user_name = reader.string();
-                            break;
-                        case 4:
-                            message.severity = reader.uint32();
                             break;
                         case 5:
                             message.time = reader.int64();
@@ -33623,19 +33611,6 @@ export const cockroach = $root.cockroach = (() => {
                     if (message.user_name != null && message.hasOwnProperty("user_name"))
                         if (!$util.isString(message.user_name))
                             return "user_name: string expected";
-                    if (message.severity != null && message.hasOwnProperty("severity"))
-                        switch (message.severity) {
-                        default:
-                            return "severity: enum value expected";
-                        case 0:
-                        case 1:
-                        case 2:
-                        case 3:
-                        case 4:
-                        case 5:
-                        case 6:
-                            break;
-                        }
                     if (message.time != null && message.hasOwnProperty("time"))
                         if (!$util.isInteger(message.time) && !(message.time && $util.isInteger(message.time.low) && $util.isInteger(message.time.high)))
                             return "time: integer|Long expected";
@@ -33660,36 +33635,6 @@ export const cockroach = $root.cockroach = (() => {
                         message.host = String(object.host);
                     if (object.user_name != null)
                         message.user_name = String(object.user_name);
-                    switch (object.severity) {
-                    case "UNKNOWN":
-                    case 0:
-                        message.severity = 0;
-                        break;
-                    case "INFO":
-                    case 1:
-                        message.severity = 1;
-                        break;
-                    case "WARNING":
-                    case 2:
-                        message.severity = 2;
-                        break;
-                    case "ERROR":
-                    case 3:
-                        message.severity = 3;
-                        break;
-                    case "FATAL":
-                    case 4:
-                        message.severity = 4;
-                        break;
-                    case "NONE":
-                    case 5:
-                        message.severity = 5;
-                        break;
-                    case "DEFAULT":
-                    case 6:
-                        message.severity = 6;
-                        break;
-                    }
                     if (object.time != null)
                         if ($util.Long)
                             (message.time = $util.Long.fromValue(object.time)).unsigned = false;
@@ -33734,7 +33679,6 @@ export const cockroach = $root.cockroach = (() => {
                         object.program = "";
                         object.host = "";
                         object.user_name = "";
-                        object.severity = options.enums === String ? "UNKNOWN" : 0;
                         if ($util.Long) {
                             let long = new $util.Long(0, 0, false);
                             object.time = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
@@ -33752,8 +33696,6 @@ export const cockroach = $root.cockroach = (() => {
                         object.host = message.host;
                     if (message.user_name != null && message.hasOwnProperty("user_name"))
                         object.user_name = message.user_name;
-                    if (message.severity != null && message.hasOwnProperty("severity"))
-                        object.severity = options.enums === String ? $root.cockroach.util.log.Severity[message.severity] : message.severity;
                     if (message.time != null && message.hasOwnProperty("time"))
                         if (typeof message.time === "number")
                             object.time = options.longs === String ? String(message.time) : message.time;

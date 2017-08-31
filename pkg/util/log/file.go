@@ -197,7 +197,6 @@ func parseLogFilename(filename string) (FileDetails, error) {
 		Program:  matches[1],
 		Host:     matches[2],
 		UserName: matches[3],
-		Severity: Severity_INFO,
 		Time:     time.UnixNano(),
 		PID:      pid,
 	}, nil
