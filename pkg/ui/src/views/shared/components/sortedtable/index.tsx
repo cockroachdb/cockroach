@@ -105,7 +105,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, {}> {
         return {
           title: cd.title,
           cell: (index) => cd.cell(sorted[index]),
-          sortKey: cd.sort ? ii  : undefined,
+          sortKey: cd.sort ? ii : undefined,
           rollup: rollups[ii],
           className: cd.className,
         };
@@ -123,12 +123,15 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, {}> {
   render() {
     const { data, sortSetting, onChangeSortSetting } = this.props;
     if (data) {
-      return <SortableTable count={data.length}
-                            sortSetting={sortSetting}
-                            onChangeSortSetting={onChangeSortSetting}
-                            columns={this.columns(this.props)}
-                            rowClass={this.rowClass(this.props)}
-                            className={this.props.className} />;
+      return (
+        <SortableTable count={data.length}
+          sortSetting={sortSetting}
+          onChangeSortSetting={onChangeSortSetting}
+          columns={this.columns(this.props)}
+          rowClass={this.rowClass(this.props)}
+          className={this.props.className}
+        />
+      );
     }
     return <div>No results.</div>;
   }

@@ -1,3 +1,8 @@
+// tslint:disable-next-line:no-var-requires
+const spinner = require<string>("assets/spinner.gif");
+// tslint:disable-next-line:no-var-requires
+const noResults = require<string>("assets/noresults.svg");
+
 import _ from "lodash";
 import moment from "moment";
 import { Line } from "rc-progress";
@@ -10,6 +15,7 @@ import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import { TimestampToMoment } from "src/util/convert";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
+import Loading from "src/views/shared/components/loading";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
@@ -61,7 +67,7 @@ const formatDuration = (d: moment.Duration) =>
     .map(c => ("0" + c).slice(-2))
     .join(":");
 
-class JobStatusCell extends React.Component<{job: Job}, {}> {
+class JobStatusCell extends React.Component<{ job: Job }, {}> {
   is(...statuses: string[]) {
     return statuses.indexOf(this.props.job.status) !== -1;
   }
@@ -96,10 +102,10 @@ class JobStatusCell extends React.Component<{job: Job}, {}> {
   }
 
   render() {
-      return <div>
-        {this.renderProgress()}
-        <span className="jobs-table__duration">{this.renderDuration()}</span>
-      </div>;
+    return <div>
+      {this.renderProgress()}
+      <span className="jobs-table__duration">{this.renderDuration()}</span>
+    </div>;
   }
 }
 
@@ -189,45 +195,50 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
   }
 
   render() {
-    return <div>
-      <PageConfig>
-        <PageConfigItem>
-          <Dropdown
-            title="Status"
-            options={statusOptions}
-            selected={this.props.status}
-            onChange={this.onStatusSelected}
-          />
-        </PageConfigItem>
-        <PageConfigItem>
-          <Dropdown
-            title="Type"
-            options={typeOptions}
-            selected={this.props.type.toString()}
-            onChange={this.onTypeSelected}
-          />
-        </PageConfigItem>
-        <PageConfigItem>
-          <Dropdown
-            title="Show"
-            options={showOptions}
-            selected={this.props.show}
-            onChange={this.onShowSelected}
-          />
-        </PageConfigItem>
-      </PageConfig>
-      <section className="section">
-        <div className="content">
-          <JobsSortedTable
-            data={this.props.jobs && this.props.jobs.length > 0 && this.props.jobs}
-            sortSetting={this.props.sort}
-            onChangeSortSetting={this.props.setSort}
-            className="jobs-table"
-            rowClass={job => "jobs-table__row--" + job.status}
-            columns={jobsTableColumns}
-          />
-        </div>
-      </section>
+    const data = this.props.jobs && this.props.jobs.length > 0 && this.props.jobs;
+    return <div className="jobs-page">
+      <div>
+        <PageConfig>
+          <PageConfigItem>
+            <Dropdown
+              title="Status"
+              options={statusOptions}
+              selected={this.props.status}
+              onChange={this.onStatusSelected}
+            />
+          </PageConfigItem>
+          <PageConfigItem>
+            <Dropdown
+              title="Type"
+              options={typeOptions}
+              selected={this.props.type.toString()}
+              onChange={this.onTypeSelected}
+            />
+          </PageConfigItem>
+          <PageConfigItem>
+            <Dropdown
+              title="Show"
+              options={showOptions}
+              selected={this.props.show}
+              onChange={this.onShowSelected}
+            />
+          </PageConfigItem>
+        </PageConfig>
+      </div>
+      <Loading loading={_.isNil(this.props.jobs)} className="loading-image loading-image__spinner" image={spinner}>
+        <Loading loading={_.isEmpty(data)} className="loading-image" image={noResults}>
+          <section className="section">
+            <JobsSortedTable
+              data={data}
+              sortSetting={this.props.sort}
+              onChangeSortSetting={this.props.setSort}
+              className="jobs-table"
+              rowClass={job => "jobs-table__row--" + job.status}
+              columns={jobsTableColumns}
+            />
+          </section>
+        </Loading>
+      </Loading>
     </div>;
   }
 }
