@@ -556,6 +556,30 @@ func endsWithIncompleteTxn(stmts parser.StatementList) bool {
 
 var cmdHistFile = envutil.EnvOrDefaultString("COCKROACH_SQL_CLI_HISTORY", ".cockroachdb_history")
 
+// Do implements the readline.AutoCompleter interface.
+func (c *cliState) Do(line []rune, pos int) (newLine [][]rune, length int) {
+	var p parser.Parser
+	sql := string(line)
+	if !strings.HasSuffix(sql, "?") {
+		fmt.Fprintf(c.ins.Stdout(),
+			"\ntab completion not supported; append '?' and press tab for contextual help\n\n%s", sql)
+		return nil, 0
+	}
+
+	_, err := p.Parse(sql)
+	if err != nil {
+		if pgErr, ok := pgerror.GetPGCause(err); ok &&
+			err.Error() == "help token in input" &&
+			strings.HasPrefix(pgErr.Hint, "help:") {
+			fmt.Fprintf(c.ins.Stdout(), "\nSuggestion:\n%s\n", pgErr.Hint[6:])
+		} else {
+			fmt.Fprintf(c.ins.Stdout(), "\n%v\n", err)
+			maybeShowErrorDetails(c.ins.Stdout(), err, false)
+		}
+	}
+	return nil, 0
+}
+
 func (c *cliState) doStart(nextState cliStateEnum) cliStateEnum {
 	// Common initialization.
 	c.partialLines = []string{}
@@ -577,6 +601,7 @@ func (c *cliState) doStart(nextState cliStateEnum) cliStateEnum {
 			cfg := c.ins.Config.Clone()
 			cfg.HistoryFile = histFile
 			cfg.HistorySearchFold = true
+			cfg.AutoComplete = c
 			c.ins.SetConfig(cfg)
 		}
 
