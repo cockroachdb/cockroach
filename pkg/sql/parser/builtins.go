@@ -1385,8 +1385,12 @@ var Builtins = map[string][]Builtin{
 			Types:      ArgTypes{{"input", TypeFloat}, {"decimal_accuracy", TypeInt}},
 			ReturnType: fixedReturnType(TypeFloat),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				f := float64(*args[0].(*DFloat))
+				if math.IsInf(f, 0) || math.IsNaN(f) {
+					return args[0], nil
+				}
 				var x apd.Decimal
-				if _, err := x.SetFloat64(float64(*args[0].(*DFloat))); err != nil {
+				if _, err := x.SetFloat64(f); err != nil {
 					return nil, err
 				}
 

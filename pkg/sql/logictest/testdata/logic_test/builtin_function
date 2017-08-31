@@ -758,6 +758,23 @@ SELECT round(123.456::decimal, -1), round(123.456::decimal, -2), round(123.456::
 ----
 1.2E+2  1E+2  0E+3  0E+200
 
+query RRRR
+SELECT round('nan'::decimal), round('nan'::decimal, 1), round('nan'::float), round('nan'::float, 1)
+----
+NaN NaN NaN NaN
+
+# Match postgres float round for inf.
+query RRRR
+SELECT round('inf'::float), round('inf'::float, 1), round('-inf'::float), round('-inf'::float, 1)
+----
++Inf  +Inf  -Inf  -Inf
+
+# But decimal round (which isn't supported at all in postgres because
+# postgres doesn't support NaN or Inf for its decimals) conforms to
+# the GDA spec.
+query error invalid operation
+SELECT round('inf'::decimal)
+
 query error invalid operation
 SELECT round(1::decimal, 3000)
 
