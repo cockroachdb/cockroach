@@ -1961,3 +1961,83 @@ func TestBackupAzureAccountName(t *testing.T) {
 		t.Fatalf("unexpected error %v", err)
 	}
 }
+
+// If an operator issues a bad query or if a deploy contains a bug that corrupts
+// data, it should be possible to return to a previous point in time before the
+// badness. For cases when the last good timestamp is within the gc threshold,
+// see the subtests for two ways this can work.
+func TestPointInTimeRecovery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1000
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
+	defer cleanupFn()
+
+	fullBackupDir := filepath.Join(dir, "full")
+	sqlDB.Exec(`BACKUP data.* TO $1`, fullBackupDir)
+
+	sqlDB.Exec(`UPDATE data.bank SET balance = 2`)
+
+	incBackupDir := filepath.Join(dir, "inc")
+	sqlDB.Exec(`BACKUP data.* TO $1 INCREMENTAL FROM $2`, incBackupDir, fullBackupDir)
+
+	var beforeBadThingTs string
+	sqlDB.Exec(`UPDATE data.bank SET balance = 3`)
+	sqlDB.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&beforeBadThingTs)
+
+	// Something bad happens.
+	sqlDB.Exec(`UPDATE data.bank SET balance = 4`)
+
+	beforeBadThingData := sqlDB.QueryStr(
+		fmt.Sprintf(`SELECT * FROM data.bank AS OF SYSTEM TIME '%s' ORDER BY id`, beforeBadThingTs),
+	)
+
+	// If no previous BACKUPs have been taken, a new one can be taken using `AS
+	// OF SYSTEM TIME` with a timestamp before the badness started. This can
+	// then be RESTORE'd into a temporary database. The operator can manually
+	// reconcile the current data with the restored data before finally
+	// RENAME-ing the table into the final location.
+	t.Run("recovery=new-backup", func(t *testing.T) {
+		sqlDB = sqlutils.MakeSQLRunner(t, sqlDB.DB)
+		recoveryDir := filepath.Join(dir, "new-backup")
+		sqlDB.Exec(
+			fmt.Sprintf(`BACKUP data.* TO $1 AS OF SYSTEM TIME '%s'`, beforeBadThingTs),
+			recoveryDir,
+		)
+		sqlDB.Exec(`CREATE DATABASE newbackup`)
+		sqlDB.Exec(`RESTORE data.* FROM $1 WITH into_db=newbackup`, recoveryDir)
+
+		// Some manual reconciliation of the data in data.bank and
+		// newbackup.bank could be done here by the operator.
+
+		sqlDB.Exec(`DROP TABLE data.bank`)
+		sqlDB.Exec(`ALTER TABLE newbackup.bank RENAME TO data.bank`)
+		sqlDB.Exec(`DROP DATABASE newbackup`)
+		sqlDB.CheckQueryResults(`SELECT * FROM data.bank ORDER BY id`, beforeBadThingData)
+	})
+
+	// If there is a recent BACKUP (either full or incremental), then it will
+	// likely be faster to make a BACKUP that is incremental from it and RESTORE
+	// using that. Everything else works the same as above.
+	t.Run("recovery=inc-backup", func(t *testing.T) {
+		sqlDB = sqlutils.MakeSQLRunner(t, sqlDB.DB)
+		recoveryDir := filepath.Join(dir, "inc-backup")
+		sqlDB.Exec(
+			fmt.Sprintf(`BACKUP data.* TO $1 AS OF SYSTEM TIME '%s' INCREMENTAL FROM $2, $3`, beforeBadThingTs),
+			recoveryDir, fullBackupDir, incBackupDir,
+		)
+		sqlDB.Exec(`CREATE DATABASE incbackup`)
+		sqlDB.Exec(
+			`RESTORE data.* FROM $1, $2, $3 WITH into_db=incbackup`,
+			fullBackupDir, incBackupDir, recoveryDir,
+		)
+
+		// Some manual reconciliation of the data in data.bank and
+		// incbackup.bank could be done here by the operator.
+
+		sqlDB.Exec(`DROP TABLE data.bank`)
+		sqlDB.Exec(`ALTER TABLE incbackup.bank RENAME TO data.bank`)
+		sqlDB.Exec(`DROP DATABASE incbackup`)
+		sqlDB.CheckQueryResults(`SELECT * FROM data.bank ORDER BY id`, beforeBadThingData)
+	})
+}
