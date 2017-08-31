@@ -24,9 +24,9 @@ hierarchy looks like this:
   * **store-dumps/** — gzipped tarballs of raw stores (i.e., `cockroach-data`
                        directories), used to test allocator rebalancing and
                        backups without manually inserting gigabytes of data.
-    * **1node-10gb-262ranges/**
+    * **1node-17gb-841ranges/** - source: `RESTORE` of `tpch10`
     * **1node-108gb-2065ranges/**
-    * **3nodes-10g-262ranges/**
+    * **3nodes-17gb-841ranges/** - source: `RESTORE` of `tpch10`
     * **6nodes-56gb-1038ranges/**
     * **10nodes-2tb-50000ranges/**
   * **csvs/** — huge CSVs used to test distributed CSV import (`IMPORT...`).
