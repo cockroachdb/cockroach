@@ -1578,6 +1578,13 @@ func TestAsOfSystemTimeOnRestoredData(t *testing.T) {
 	defer cleanupFn()
 	sqlDB.Exec(`DROP TABLE data.bank`)
 
+	// backupRestoreTestSetup sets nodelocal:// on dir, so strip it off.
+	url, err := url.Parse(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir = url.Path
+
 	const numAccounts = 10
 	bankData := sampledataccl.BankRows(numAccounts)
 	backup, err := sampledataccl.ToBackup(t, bankData, filepath.Join(dir, "backup"))
@@ -1587,7 +1594,7 @@ func TestAsOfSystemTimeOnRestoredData(t *testing.T) {
 
 	var beforeTs string
 	sqlDB.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&beforeTs)
-	sqlDB.Exec(`RESTORE data.* FROM $1`, backup.BaseDir)
+	sqlDB.Exec(`RESTORE data.* FROM $1`, fmt.Sprintf("nodelocal://%s", backup.BaseDir))
 	var afterTs string
 	sqlDB.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&afterTs)
 
