@@ -7606,6 +7606,140 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
+            type CommandQueueMetrics$Properties = {
+                write_commands?: Long;
+                read_commands?: Long;
+                max_overlaps_seen?: Long;
+                tree_size?: number;
+            };
+
+            /**
+             * Constructs a new CommandQueueMetrics.
+             * @exports cockroach.server.serverpb.CommandQueueMetrics
+             * @constructor
+             * @param {cockroach.server.serverpb.CommandQueueMetrics$Properties=} [properties] Properties to set
+             */
+            class CommandQueueMetrics {
+
+                /**
+                 * Constructs a new CommandQueueMetrics.
+                 * @exports cockroach.server.serverpb.CommandQueueMetrics
+                 * @constructor
+                 * @param {cockroach.server.serverpb.CommandQueueMetrics$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.CommandQueueMetrics$Properties);
+
+                /**
+                 * CommandQueueMetrics write_commands.
+                 * @type {Long}
+                 */
+                public write_commands: Long;
+
+                /**
+                 * CommandQueueMetrics read_commands.
+                 * @type {Long}
+                 */
+                public read_commands: Long;
+
+                /**
+                 * CommandQueueMetrics max_overlaps_seen.
+                 * @type {Long}
+                 */
+                public max_overlaps_seen: Long;
+
+                /**
+                 * CommandQueueMetrics tree_size.
+                 * @type {number}
+                 */
+                public tree_size: number;
+
+                /**
+                 * Creates a new CommandQueueMetrics instance using the specified properties.
+                 * @param {cockroach.server.serverpb.CommandQueueMetrics$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.CommandQueueMetrics} CommandQueueMetrics instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.CommandQueueMetrics$Properties): cockroach.server.serverpb.CommandQueueMetrics;
+
+                /**
+                 * Encodes the specified CommandQueueMetrics message. Does not implicitly {@link cockroach.server.serverpb.CommandQueueMetrics.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CommandQueueMetrics$Properties} message CommandQueueMetrics message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.CommandQueueMetrics$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified CommandQueueMetrics message, length delimited. Does not implicitly {@link cockroach.server.serverpb.CommandQueueMetrics.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CommandQueueMetrics$Properties} message CommandQueueMetrics message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.CommandQueueMetrics$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a CommandQueueMetrics message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.CommandQueueMetrics} CommandQueueMetrics
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.CommandQueueMetrics;
+
+                /**
+                 * Decodes a CommandQueueMetrics message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.CommandQueueMetrics} CommandQueueMetrics
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.CommandQueueMetrics;
+
+                /**
+                 * Verifies a CommandQueueMetrics message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a CommandQueueMetrics message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CommandQueueMetrics} CommandQueueMetrics
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.CommandQueueMetrics;
+
+                /**
+                 * Creates a CommandQueueMetrics message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.CommandQueueMetrics.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CommandQueueMetrics} CommandQueueMetrics
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.CommandQueueMetrics;
+
+                /**
+                 * Creates a plain object from a CommandQueueMetrics message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.CommandQueueMetrics} message CommandQueueMetrics
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.CommandQueueMetrics, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this CommandQueueMetrics message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this CommandQueueMetrics to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
             type RangeInfo$Properties = {
                 span?: cockroach.server.serverpb.PrettySpan$Properties;
                 raft_state?: cockroach.server.serverpb.RaftState$Properties;
@@ -7616,6 +7750,8 @@ export namespace cockroach {
                 lease_history?: cockroach.roachpb.Lease$Properties[];
                 problems?: cockroach.server.serverpb.RangeProblems$Properties;
                 stats?: cockroach.server.serverpb.RangeStatistics$Properties;
+                cmd_q_local?: cockroach.server.serverpb.CommandQueueMetrics$Properties;
+                cmd_q_global?: cockroach.server.serverpb.CommandQueueMetrics$Properties;
             };
 
             /**
@@ -7687,6 +7823,18 @@ export namespace cockroach {
                  * @type {(cockroach.server.serverpb.RangeStatistics$Properties|null)}
                  */
                 public stats: (cockroach.server.serverpb.RangeStatistics$Properties|null);
+
+                /**
+                 * RangeInfo cmd_q_local.
+                 * @type {(cockroach.server.serverpb.CommandQueueMetrics$Properties|null)}
+                 */
+                public cmd_q_local: (cockroach.server.serverpb.CommandQueueMetrics$Properties|null);
+
+                /**
+                 * RangeInfo cmd_q_global.
+                 * @type {(cockroach.server.serverpb.CommandQueueMetrics$Properties|null)}
+                 */
+                public cmd_q_global: (cockroach.server.serverpb.CommandQueueMetrics$Properties|null);
 
                 /**
                  * Creates a new RangeInfo instance using the specified properties.

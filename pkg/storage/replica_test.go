@@ -8409,7 +8409,7 @@ func TestReplicaMetrics(t *testing.T) {
 			metrics := calcReplicaMetrics(
 				context.Background(), hlc.Timestamp{}, config.SystemConfig{},
 				c.liveness, &c.desc, c.raftStatus, LeaseStatus{},
-				c.storeID, c.expected.Quiescent, int64(i+1))
+				c.storeID, c.expected.Quiescent, int64(i+1), CommandQueueMetrics{}, CommandQueueMetrics{})
 			if c.expected != metrics {
 				t.Fatalf("unexpected metrics:\n%s", pretty.Diff(c.expected, metrics))
 			}

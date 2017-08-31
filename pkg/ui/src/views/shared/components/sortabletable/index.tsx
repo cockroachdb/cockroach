@@ -65,14 +65,14 @@ interface TableProps {
  */
 export class SortableTable extends React.Component<TableProps, {}> {
   static defaultProps: TableProps = {
-      count: 0,
-      columns: [],
-      sortSetting: {
-        sortKey: null,
-        ascending: false,
-      },
-      onChangeSortSetting: (_ss) => {},
-      rowClass: (_rowIndex) => "",
+    count: 0,
+    columns: [],
+    sortSetting: {
+      sortKey: null,
+      ascending: false,
+    },
+    onChangeSortSetting: (_ss) => { },
+    rowClass: (_rowIndex) => "",
   };
 
   clickSort(clickedSortKey: any) {
@@ -100,7 +100,7 @@ export class SortableTable extends React.Component<TableProps, {}> {
     const { sortSetting, columns } = this.props;
 
     return <table className={classNames("sort-table", this.props.className)}>
-     <thead>
+      <thead>
         <tr className="sort-table__row sort-table__row--header">
           {_.map(columns, (c: SortableColumn, colIndex: number) => {
             const classes = ["sort-table__cell"];
@@ -125,15 +125,20 @@ export class SortableTable extends React.Component<TableProps, {}> {
       </thead>
       <tbody>
         {_.times(this.props.count, (rowIndex) => {
-          const classes = classNames("sort-table__row", "sort-table__row--body",
-            this.props.rowClass(rowIndex));
-          return <tr key={rowIndex} className={classes}>
-            {
-              _.map(columns, (c: SortableColumn, colIndex: number) => {
-                return <td className={classNames("sort-table__cell", c.className)} key={colIndex}>{c.cell(rowIndex)}</td>;
-              })
-            }
-            </tr>;
+          const classes = classNames(
+            "sort-table__row",
+            "sort-table__row--body",
+            this.props.rowClass(rowIndex),
+          );
+          return (
+            <tr key={rowIndex} className={classes}>
+              {
+                _.map(columns, (c: SortableColumn, colIndex: number) => {
+                  return <td className={classNames("sort-table__cell", c.className)} key={colIndex}>{c.cell(rowIndex)}</td>;
+                })
+              }
+            </tr>
+          );
         })}
       </tbody>
     </table>;
