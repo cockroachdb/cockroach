@@ -92,7 +92,7 @@ type sideloadStorage interface {
 // The passed-in slice is not mutated.
 func (r *Replica) maybeSideloadEntriesRaftMuLocked(
 	ctx context.Context, entriesToAppend []raftpb.Entry,
-) ([]raftpb.Entry, error) {
+) (_ []raftpb.Entry, sideloadedEntriesSize int64, _ error) {
 	// TODO(tschottdorf): allocating this closure could be expensive. If so make
 	// it a method on Replica.
 	maybeRaftCommand := func(cmdID storagebase.CmdIDKey) (storagebase.RaftCommand, bool) {
@@ -118,7 +118,7 @@ func maybeSideloadEntriesImpl(
 	entriesToAppend []raftpb.Entry,
 	sideloaded sideloadStorage,
 	maybeRaftCommand func(storagebase.CmdIDKey) (storagebase.RaftCommand, bool),
-) ([]raftpb.Entry, error) {
+) (_ []raftpb.Entry, sideloadedEntriesSize int64, _ error) {
 
 	cow := false
 	for i := range entriesToAppend {
@@ -153,7 +153,7 @@ func maybeSideloadEntriesImpl(
 				// have to unmarshal it.
 				log.Event(ctx, "proposal not already in memory; unmarshaling")
 				if err := strippedCmd.Unmarshal(data); err != nil {
-					return nil, err
+					return nil, 0, err
 				}
 			}
 
@@ -173,18 +173,19 @@ func maybeSideloadEntriesImpl(
 				var err error
 				data, err = strippedCmd.Marshal()
 				if err != nil {
-					return nil, errors.Wrap(err, "while marshalling stripped sideloaded command")
+					return nil, 0, errors.Wrap(err, "while marshalling stripped sideloaded command")
 				}
 			}
 
 			ent.Data = encodeRaftCommandV2(cmdID, data)
 			log.Eventf(ctx, "writing payload at index=%d term=%d", ent.Index, ent.Term)
 			if err = sideloaded.PutIfNotExists(ctx, ent.Index, ent.Term, dataToSideload); err != nil {
-				return nil, err
+				return nil, 0, err
 			}
+			sideloadedEntriesSize += int64(len(dataToSideload))
 		}
 	}
-	return entriesToAppend, nil
+	return entriesToAppend, sideloadedEntriesSize, nil
 }
 
 func sniffSideloadedRaftCommand(data []byte) (sideloaded bool) {
