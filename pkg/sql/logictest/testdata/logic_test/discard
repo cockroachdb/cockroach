@@ -6,7 +6,7 @@ SET SEARCH_PATH = foo
 query T
 SHOW SEARCH_PATH
 ----
-pg_catalog, foo
+foo
 
 statement ok
 DISCARD ALL
@@ -14,7 +14,7 @@ DISCARD ALL
 query T
 SHOW SEARCH_PATH
 ----
-pg_catalog
+·
 
 query T
 SET "time zone" = 'Europe/Amsterdam'; SHOW TIME ZONE

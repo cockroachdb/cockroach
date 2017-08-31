@@ -280,7 +280,7 @@ func (ds *ServerImpl) setupFlow(
 	evalCtx := parser.EvalContext{
 		Location:     &location,
 		Database:     req.EvalContext.Database,
-		SearchPath:   parser.SearchPath(req.EvalContext.SearchPath),
+		SearchPath:   parser.MakeSearchPath(req.EvalContext.SearchPath),
 		ClusterID:    ds.ServerConfig.ClusterID,
 		NodeID:       nodeID,
 		ReCache:      ds.regexpCache,
