@@ -368,8 +368,6 @@ func (p *planner) newPlan(
 		return p.Explain(ctx, n)
 	case *parser.Grant:
 		return p.Grant(ctx, n)
-	case *parser.Help:
-		return p.Help(ctx, n)
 	case *parser.Insert:
 		return p.Insert(ctx, n, desiredTypes)
 	case *parser.ParenSelect:
@@ -476,8 +474,6 @@ func (p *planner) prepare(ctx context.Context, stmt parser.Statement) (planNode,
 		return p.Delete(ctx, n, nil)
 	case *parser.Explain:
 		return p.Explain(ctx, n)
-	case *parser.Help:
-		return p.Help(ctx, n)
 	case *parser.Insert:
 		return p.Insert(ctx, n, nil)
 	case *parser.PauseJob:

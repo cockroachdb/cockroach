@@ -225,9 +225,6 @@ func TestParse(t *testing.T) {
 		{`SELECT * FROM [EXPLAIN SELECT 1]`},
 		{`SELECT * FROM [SHOW TRANSACTION STATUS]`},
 
-		{`HELP count`},
-		{`HELP "varchar"`},
-
 		{`SHOW barfoo`},
 		{`SHOW database`},
 		{`SHOW TIME ZONE`},
