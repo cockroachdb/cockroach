@@ -135,11 +135,11 @@ func doLocalCSVTransform(
 ) (csvCount, kvCount, sstCount int64, err error) {
 	// Some channels are buffered because reads happen in bursts, so having lots
 	// of pre-computed data improves overall performance.
-	const chanSize = 10000
+	chanSize := 10 * runtime.NumCPU()
 
 	group, gCtx := errgroup.WithContext(ctx)
-	recordCh := make(chan csvRecord, chanSize)
-	kvCh := make(chan roachpb.KeyValue, chanSize)
+	recordCh := make(chan csvRecordBatch, chanSize)
+	kvCh := make(chan []roachpb.KeyValue, chanSize)
 	contentCh := make(chan sstContent)
 	walltime := timeutil.Now().UnixNano()
 	group.Go(func() error {
@@ -273,7 +273,7 @@ func readCSV(
 	comma, comment rune,
 	expectedCols int,
 	dataFiles []string,
-	recordCh chan<- csvRecord,
+	recordCh chan<- csvRecordBatch,
 ) (int64, error) {
 	expectedColsExtra := expectedCols + 1
 	done := ctx.Done()
@@ -306,32 +306,47 @@ func readCSV(
 			cr.FieldsPerRecord = -1
 			cr.LazyQuotes = true
 			cr.Comment = comment
-			for i := 1; ; i++ {
-				record, err := cr.Read()
-				if err == io.EOF {
+
+			const batchSize = 1000
+
+			i := 1
+			for {
+				b := csvRecordBatch{
+					file:      dataFile,
+					rowOffset: i,
+					r:         make([][]string, 0, batchSize),
+				}
+				for {
+					record, err := cr.Read()
+					if err == io.EOF {
+						break
+					}
+					i++
+					if err != nil {
+						return errors.Wrapf(err, "row %d: reading CSV record", i)
+					}
+					if len(record) == expectedCols {
+						// Expected number of columns.
+					} else if len(record) == expectedColsExtra && record[expectedCols] == "" {
+						// Line has the optional trailing comma, ignore the empty field.
+						record = record[:expectedCols]
+					} else {
+						return errors.Errorf("row %d: expected %d fields, got %d", i, expectedCols, len(record))
+					}
+					b.r = append(b.r, record)
+					if len(b.r) >= batchSize {
+						break
+					}
+				}
+
+				if len(b.r) == 0 {
 					break
-				}
-				if err != nil {
-					return errors.Wrapf(err, "row %d: reading CSV record", i)
-				}
-				if len(record) == expectedCols {
-					// Expected number of columns.
-				} else if len(record) == expectedColsExtra && record[expectedCols] == "" {
-					// Line has the optional trailing comma, ignore the empty field.
-					record = record[:expectedCols]
-				} else {
-					return errors.Errorf("row %d: expected %d fields, got %d", i, expectedCols, len(record))
-				}
-				cr := csvRecord{
-					r:    record,
-					file: dataFile,
-					row:  i,
 				}
 				select {
 				case <-done:
 					return ctx.Err()
-				case recordCh <- cr:
-					count++
+				case recordCh <- b:
+					count += int64(len(b.r))
 				}
 			}
 			return nil
@@ -343,17 +358,17 @@ func readCSV(
 	return count, nil
 }
 
-type csvRecord struct {
-	r    []string
-	file string
-	row  int
+type csvRecordBatch struct {
+	r         [][]string
+	file      string
+	rowOffset int
 }
 
 // convertRecord converts CSV records KV pairs and sends them on the kvCh chan.
 func convertRecord(
 	ctx context.Context,
-	recordCh <-chan csvRecord,
-	kvCh chan<- roachpb.KeyValue,
+	recordCh <-chan csvRecordBatch,
+	kvCh chan<- []roachpb.KeyValue,
 	nullif *string,
 	tableDesc *sqlbase.TableDescriptor,
 ) error {
@@ -389,38 +404,44 @@ func convertRecord(
 	}
 
 	datums := make([]parser.Datum, len(visibleCols))
-	var insertErr error
 	for record := range recordCh {
-		for i, r := range record.r {
-			if nullif != nil && r == *nullif {
-				datums[i] = parser.DNull
-			} else {
-				datums[i], err = parser.ParseStringAs(visibleCols[i].Type.ToDatumType(), r, time.UTC)
-				if err != nil {
-					return errors.Wrapf(err, "%s: row %d: parse %q as %s", record.file, record.row, visibleCols[i].Name, visibleCols[i].Type.SQLString())
+		kvs := make([]roachpb.KeyValue, 0, len(record.r)*len(cols))
+		for rowNum, r := range record.r {
+			for i, v := range r {
+				if nullif != nil && v == *nullif {
+					datums[i] = parser.DNull
+				} else {
+					datums[i], err = parser.ParseStringAs(visibleCols[i].Type.ToDatumType(), v, time.UTC)
+					if err != nil {
+						return errors.Wrapf(err, "%s: row %d: parse %q as %s",
+							record.file, record.rowOffset+rowNum, visibleCols[i].Name, visibleCols[i].Type.SQLString())
+					}
+				}
+				if idx, ok := keyDatumIdx[visibleCols[i].ID]; ok {
+					keyDatums[idx] = sqlbase.DatumToEncDatum(visibleCols[i].Type, datums[i])
 				}
 			}
-			if idx, ok := keyDatumIdx[visibleCols[i].ID]; ok {
-				keyDatums[idx] = sqlbase.DatumToEncDatum(visibleCols[i].Type, datums[i])
+
+			row, err := sql.GenerateInsertRow(defaultExprs, ri.InsertColIDtoRowIndex, cols, evalCtx, tableDesc, datums)
+			if err != nil {
+				return errors.Wrapf(err, "generate insert row: %s: row %d", record.file, record.rowOffset+rowNum)
+			}
+
+			if err := ri.InsertRow(ctx,
+				inserter(func(kv roachpb.KeyValue) { kvs = append(kvs, kv) }),
+				row,
+				true /* ignoreConflicts */, false, /* traceKV */
+			); err != nil {
+				return errors.Wrapf(err, "insert row: %s: row %d", record.file, record.rowOffset+rowNum)
 			}
 		}
 
-		row, err := sql.GenerateInsertRow(defaultExprs, ri.InsertColIDtoRowIndex, cols, evalCtx, tableDesc, datums)
-		if err != nil {
-			return errors.Wrapf(err, "generate insert row: %s: row %d", record.file, record.row)
-		}
-		insertErr = nil
-		if err := ri.InsertRow(ctx, inserter(func(kv roachpb.KeyValue) {
-			select {
-			case kvCh <- kv:
-			case <-done:
-				insertErr = ctx.Err()
+		select {
+		case kvCh <- kvs:
+		case <-done:
+			if err := ctx.Err(); err != nil {
+				return err
 			}
-		}), row, true /* ignoreConflicts */, false /* traceKV */); err != nil {
-			return errors.Wrapf(err, "insert row: %s: row %d", record.file, record.row)
-		}
-		if insertErr != nil {
-			return insertErr
 		}
 	}
 	return nil
@@ -439,7 +460,7 @@ const errSSTCreationMaybeDuplicateTemplate = "SST creation error at %s; this can
 // and sent on contents. It returns the number of KV pairs created.
 func writeRocksDB(
 	ctx context.Context,
-	kvCh <-chan roachpb.KeyValue,
+	kvCh <-chan []roachpb.KeyValue,
 	tempEngine engine.Engine,
 	sstMaxSize int64,
 	contentCh chan<- sstContent,
@@ -447,9 +468,11 @@ func writeRocksDB(
 ) (int64, error) {
 	store := engine.NewRocksDBMultiMap(tempEngine)
 	writer := store.NewBatchWriter()
-	for kv := range kvCh {
-		if err := writer.Put(kv.Key, kv.Value.RawBytes); err != nil {
-			return 0, err
+	for b := range kvCh {
+		for _, kv := range b {
+			if err := writer.Put(kv.Key, kv.Value.RawBytes); err != nil {
+				return 0, err
+			}
 		}
 	}
 	if err := writer.Close(ctx); err != nil {
@@ -966,11 +989,13 @@ func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 		defer wg.Done()
 	}
 
+	chanSize := 1000
+
 	group, gCtx := errgroup.WithContext(ctx)
 	done := gCtx.Done()
-	recordCh := make(chan csvRecord)
-	kvCh := make(chan roachpb.KeyValue)
-	sampleCh := make(chan sqlbase.EncDatumRow)
+	recordCh := make(chan csvRecordBatch, chanSize)
+	kvCh := make(chan []roachpb.KeyValue, chanSize)
+	sampleCh := make(chan sqlbase.EncDatumRow, chanSize)
 
 	// Read CSV into CSV records
 	group.Go(func() error {
@@ -1000,16 +1025,18 @@ func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 			fn = sr.sample
 		}
 		typeBytes := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}
-		for kv := range kvCh {
-			if fn(kv) {
-				row := sqlbase.EncDatumRow{
-					sqlbase.DatumToEncDatum(typeBytes, parser.NewDBytes(parser.DBytes(kv.Key))),
-					sqlbase.DatumToEncDatum(typeBytes, parser.NewDBytes(parser.DBytes(kv.Value.RawBytes))),
-				}
-				select {
-				case <-done:
-					return gCtx.Err()
-				case sampleCh <- row:
+		for b := range kvCh {
+			for _, kv := range b {
+				if fn(kv) {
+					row := sqlbase.EncDatumRow{
+						sqlbase.DatumToEncDatum(typeBytes, parser.NewDBytes(parser.DBytes(kv.Key))),
+						sqlbase.DatumToEncDatum(typeBytes, parser.NewDBytes(parser.DBytes(kv.Value.RawBytes))),
+					}
+					select {
+					case <-done:
+						return gCtx.Err()
+					case sampleCh <- row:
+					}
 				}
 			}
 		}
