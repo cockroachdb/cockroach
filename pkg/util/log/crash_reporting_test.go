@@ -16,6 +16,7 @@ package log
 
 import (
 	"testing"
+	"time"
 )
 
 func TestCrashReportingFormatSave(t *testing.T) {
@@ -40,4 +41,37 @@ func TestingSetCrashReportingURL(url string) func() {
 	oldCrashReportURL := crashReportURL
 	crashReportURL = url
 	return func() { crashReportURL = oldCrashReportURL }
+}
+
+func TestUptimeTag(t *testing.T) {
+	startTime = time.Unix(0, 0)
+	testCases := []struct {
+		crashTime time.Time
+		expected  string
+	}{
+		{time.Unix(0, 0), "<1s"},
+		{time.Unix(0, 0), "<1s"},
+		{time.Unix(1, 0), "<10s"},
+		{time.Unix(9, 0), "<10s"},
+		{time.Unix(10, 0), "<1m"},
+		{time.Unix(59, 0), "<1m"},
+		{time.Unix(60, 0), "<10m"},
+		{time.Unix(9*60, 0), "<10m"},
+		{time.Unix(10*60, 0), "<1h"},
+		{time.Unix(59*60, 0), "<1h"},
+		{time.Unix(60*60, 0), "<10h"},
+		{time.Unix(9*60*60, 0), "<10h"},
+		{time.Unix(10*60*60, 0), "<1d"},
+		{time.Unix(23*60*60, 0), "<1d"},
+		{time.Unix(24*60*60, 0), "<2d"},
+		{time.Unix(47*60*60, 0), "<2d"},
+		{time.Unix(119*60*60, 0), "<5d"},
+		{time.Unix(10*24*60*60, 0), "<11d"},
+		{time.Unix(365*24*60*60, 0), "<366d"},
+	}
+	for _, tc := range testCases {
+		if a, e := uptimeTag(tc.crashTime), tc.expected; a != e {
+			t.Errorf("uptimeTag(%v) got %v, want %v)", tc.crashTime, a, e)
+		}
+	}
 }
