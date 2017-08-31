@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/kr/pretty"
 )
 
@@ -93,12 +94,12 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB) {
 		}
 
 		// Do an initial ingest.
-		ingestCtx, collect := testutils.MakeRecordCtx()
-		defer collect()
+		ingestCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "test-recording")
+		defer cancel()
 		if err := db.AddSSTable(ingestCtx, "b", "c", data); err != nil {
 			t.Fatalf("%+v", err)
 		}
-		if err := testutils.MatchInOrder(collect(),
+		if err := testutils.MatchInOrder(tracing.FormatRecordedSpans(collect()),
 			"evaluating AddSSTable",
 			"sideloadable proposal detected",
 			"ingested SSTable at index",
@@ -142,13 +143,13 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB) {
 		}
 
 		for i := 0; i < 2; i++ {
-			ingestCtx, collect := testutils.MakeRecordCtx()
-			defer collect()
+			ingestCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "test-recording")
+			defer cancel()
 
 			if err := db.AddSSTable(ingestCtx, "b", "c", data); err != nil {
 				t.Fatalf("%+v", err)
 			}
-			if err := testutils.MatchInOrder(collect(),
+			if err := testutils.MatchInOrder(tracing.FormatRecordedSpans(collect()),
 				"evaluating AddSSTable",
 				"target key range not empty, will merge existing data with sstable",
 				"sideloadable proposal detected",

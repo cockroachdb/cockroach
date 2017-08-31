@@ -708,3 +708,28 @@ func matchesWithoutFileLine(msg string, expected string) bool {
 	groups := regexp.MustCompile(`^(event: ).*:[0-9]* (.*)$`).FindStringSubmatch(msg)
 	return len(groups) == 3 && fmt.Sprintf("event: %s", groups[2]) == expected
 }
+
+// ContextWithRecordingSpan returns a context with an embedded trace span which
+// returns its contents when getRecording is called and must be stopped by
+// calling the cancel method when done with the context. Note that to convert
+// the recorded spans into text, you can use FormatRecordedSpans.
+func ContextWithRecordingSpan(
+	ctx context.Context, opName string,
+) (retCtx context.Context, getRecording func() []RecordedSpan, cancel func()) {
+	tr := NewTracer()
+	sp := tr.StartSpan(opName, Recordable)
+	StartRecording(sp, SingleNodeRecording)
+	ctx, cancelCtx := context.WithCancel(ctx)
+	ctx = opentracing.ContextWithSpan(ctx, sp)
+
+	getRecording = func() []RecordedSpan {
+		return GetRecording(sp)
+	}
+	cancel = func() {
+		cancelCtx()
+		StopRecording(sp)
+		sp.Finish()
+		tr.Close()
+	}
+	return ctx, getRecording, cancel
+}
