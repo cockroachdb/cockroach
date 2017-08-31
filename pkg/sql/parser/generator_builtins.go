@@ -155,6 +155,7 @@ func makeGeneratorBuiltinWithReturnType(
 // with integer bounds.
 type seriesValueGenerator struct {
 	value, start, stop, step int64
+	nextOK                   bool
 }
 
 var errStepCannotBeZero = errors.New("step cannot be 0")
@@ -169,7 +170,13 @@ func makeSeriesGenerator(_ *EvalContext, args Datums) (ValueGenerator, error) {
 	if step == 0 {
 		return nil, errStepCannotBeZero
 	}
-	return &seriesValueGenerator{start, start, stop, step}, nil
+	return &seriesValueGenerator{
+		value:  start,
+		start:  start,
+		stop:   stop,
+		step:   step,
+		nextOK: true,
+	}, nil
 }
 
 // ColumnTypes implements the ValueGenerator interface.
@@ -183,6 +190,9 @@ func (s *seriesValueGenerator) Close() {}
 
 // Next implements the ValueGenerator interface.
 func (s *seriesValueGenerator) Next() (bool, error) {
+	if !s.nextOK {
+		return false, nil
+	}
 	if s.step < 0 && (s.start < s.stop) {
 		return false, nil
 	}
@@ -190,7 +200,7 @@ func (s *seriesValueGenerator) Next() (bool, error) {
 		return false, nil
 	}
 	s.value = s.start
-	s.start += s.step
+	s.start, s.nextOK = addWithOverflow(s.start, s.step)
 	return true, nil
 }
 

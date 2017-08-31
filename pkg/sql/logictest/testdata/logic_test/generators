@@ -234,3 +234,11 @@ SELECT * from generate_series(1, (select * from generate_series(1, 0)))
 query T
 SELECT unnest((select current_schemas((select isnan((select round(3.4, (select generate_series(1, 0)))))))));
 ----
+
+# Regression for #18021.
+query I
+SELECT GENERATE_SERIES(9223372036854775807::int, -9223372036854775807::int, -9223372036854775807::int)
+----
+9223372036854775807
+0
+-9223372036854775807
