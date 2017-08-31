@@ -32,6 +32,7 @@ import (
 	"github.com/chzyer/readline"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/lib/pq"
@@ -780,6 +781,7 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 	parsedStmts, err := parser.Parse(c.concatLines)
 	if err != nil {
 		_ = c.invalidSyntax(0, "statement ignored: %v", err)
+		maybeShowErrorDetails(stderr, err, false)
 
 		// Even on failure, add the last (erroneous) lines as-is to the
 		// history, so that the user can recall them later to fix them.
@@ -865,19 +867,37 @@ func (c *cliState) doRunStatement(nextState cliStateEnum) cliStateEnum {
 	c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(c.concatLines))
 	if c.exitErr != nil {
 		fmt.Fprintln(stderr, c.exitErr)
-		if pqErr, ok := c.exitErr.(*pq.Error); ok {
-			if pqErr.Detail != "" {
-				fmt.Fprintln(stderr, "DETAIL:", pqErr.Detail)
-			}
-			if pqErr.Hint != "" {
-				fmt.Fprintln(stderr, "HINT:", pqErr.Hint)
-			}
-		}
+		maybeShowErrorDetails(stderr, c.exitErr, false)
 		if c.errExit {
 			return cliStop
 		}
 	}
 	return nextState
+}
+
+// maybeShowErrorDetails displays the pg "Detail" and "Hint" fields
+// embedded in the error, if any, to the user. If printNewline is set,
+// a newline character is printed before anything else.
+func maybeShowErrorDetails(w io.Writer, err error, printNewline bool) {
+	var hint, detail string
+	if pqErr, ok := err.(*pq.Error); ok {
+		hint, detail = pqErr.Hint, pqErr.Detail
+	} else if pgErr, ok := pgerror.GetPGCause(err); ok {
+		hint, detail = pgErr.Hint, pgErr.Detail
+	}
+	if detail != "" {
+		if printNewline {
+			fmt.Fprintln(w)
+			printNewline = false
+		}
+		fmt.Fprintln(w, "DETAIL:", detail)
+	}
+	if hint != "" {
+		if printNewline {
+			fmt.Fprintln(w)
+		}
+		fmt.Fprintln(w, "HINT:", hint)
+	}
 }
 
 func (c *cliState) doDecidePath() cliStateEnum {
@@ -975,7 +995,11 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 func runStatements(conn *sqlConn, stmts []string) error {
 	for _, stmt := range stmts {
 		if err := runQueryAndFormatResults(conn, os.Stdout, makeQuery(stmt)); err != nil {
-			return err
+			// Expand the details and hints so that they are printed to the user.
+			var buf bytes.Buffer
+			buf.WriteString(err.Error())
+			maybeShowErrorDetails(&buf, err, true)
+			return errors.New(buf.String())
 		}
 	}
 	return nil
