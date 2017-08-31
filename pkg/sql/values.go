@@ -25,6 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
+func newValuesListLenErr(len1, len2 int) error {
+	return fmt.Errorf("VALUES lists must all be the same length, %d for %d", len1, len2)
+}
+
 type valuesNode struct {
 	n        *parser.ValuesClause
 	p        *planner
@@ -75,7 +79,7 @@ func (p *planner) ValuesClause(
 
 	for num, tuple := range n.Tuples {
 		if a, e := len(tuple.Exprs), numCols; a != e {
-			return nil, fmt.Errorf("VALUES lists must all be the same length, %d for %d", a, e)
+			return nil, newValuesListLenErr(a, e)
 		}
 
 		// Chop off prefix of tupleBuf and limit its capacity.

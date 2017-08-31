@@ -370,7 +370,10 @@ CREATE TABLE kv5 (
 )
 
 statement ok
-INSERT INTO kv5 VALUES('a', NULL)
+INSERT INTO kv5 VALUES ('a', NULL)
+
+statement error VALUES lists must all be the same length
+INSERT INTO kv5 VALUES ('b'), ('c', DEFAULT)
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv5@a]

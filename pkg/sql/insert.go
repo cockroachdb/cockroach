@@ -108,7 +108,9 @@ func (p *planner) Insert(
 		}
 	}
 	// Number of columns expecting an input. This doesn't include the
-	// columns receiving a default value.
+	// columns receiving a default value except in the case where the
+	// insert source is a ValuesClause, which is handled below with
+	// fillDefaults and its addedCols return value.
 	numInputColumns := len(cols)
 
 	cols, defaultExprs, err :=
@@ -126,7 +128,15 @@ func (p *planner) Insert(
 			return nil, err
 		}
 		if values != nil {
-			src = fillDefaults(defaultExprs, cols, values)
+			var addedCols int
+			src, addedCols, err = fillDefaults(defaultExprs, cols, values)
+			if err != nil {
+				return nil, err
+			}
+			// If we added any columns for DEFAULT expressions at the end of each
+			// tuple, we expect to see extra columns come up from the data source
+			// planNode. Account for that here.
+			numInputColumns += addedCols
 		}
 		insertRows = src
 	}
@@ -411,8 +421,9 @@ func GenerateInsertRow(
 ) (parser.Datums, error) {
 	// The values for the row may be shorter than the number of columns being
 	// inserted into. Generate default values for those columns using the
-	// default expressions.
-
+	// default expressions. This will not happen if the row tuple was produced
+	// by a ValuesClause, because all default expressions will have been populated
+	// already by fillDefaults.
 	if len(rowVals) < len(insertCols) {
 		// It's not cool to append to the slice returned by a node; make a copy.
 		oldVals := rowVals
@@ -535,35 +546,72 @@ func getDefaultValuesClause(
 	return &parser.ValuesClause{Tuples: []*parser.Tuple{{Exprs: row}}}
 }
 
+// fillDefaults populates default expressions in the provided ValuesClause,
+// returning a new ValuesClause with expressions for all columns in cols. Each
+// default value in the Tuples will be replaced with either the corresponding
+// column's default expressions if one exists, or NULL if one does not. There
+// are two parts of a Tuple that fillDefaults will populate:
+// - DefaultVal exprs (`VALUES (1, 2, DEFAULT)`) will be replaced by their
+//   column's default expression (or NULL).
+// - If tuples contain fewer elements than the number of columns, the missing
+//   columns will be added with their default expressions (or NULL).
+//
+// The function returns a ValuesClause with defaults filled, along with the
+// number of elements added to each Tuple in the ValuesClause. This will be
+// the same for each Tuple.
 func fillDefaults(
 	defaultExprs []parser.TypedExpr, cols []sqlbase.ColumnDescriptor, values *parser.ValuesClause,
-) *parser.ValuesClause {
+) (*parser.ValuesClause, int, error) {
 	ret := values
-	for tIdx, tuple := range values.Tuples {
+	copyValues := func() {
+		if ret == values {
+			ret = &parser.ValuesClause{Tuples: append([]*parser.Tuple(nil), values.Tuples...)}
+		}
+	}
+
+	defaultExpr := func(idx int) parser.Expr {
+		if defaultExprs == nil || idx >= len(defaultExprs) {
+			// The case where idx is too large for defaultExprs will be
+			// transformed into an error by the check on the number of
+			// columns in Insert().
+			return parser.DNull
+		}
+		return defaultExprs[idx]
+	}
+
+	numColsOrig := len(ret.Tuples[0].Exprs)
+	for tIdx, tuple := range ret.Tuples {
+		if a, e := len(tuple.Exprs), numColsOrig; a != e {
+			return nil, 0, newValuesListLenErr(a, e)
+		}
+
 		tupleCopied := false
+		copyTuple := func() {
+			if !tupleCopied {
+				copyValues()
+				tuple = &parser.Tuple{Exprs: append([]parser.Expr(nil), tuple.Exprs...)}
+				ret.Tuples[tIdx] = tuple
+				tupleCopied = true
+			}
+		}
+
 		for eIdx, val := range tuple.Exprs {
 			switch val.(type) {
 			case parser.DefaultVal:
-				if !tupleCopied {
-					if ret == values {
-						ret = &parser.ValuesClause{Tuples: append([]*parser.Tuple(nil), values.Tuples...)}
-					}
-					ret.Tuples[tIdx] =
-						&parser.Tuple{Exprs: append([]parser.Expr(nil), tuple.Exprs...)}
-					tupleCopied = true
-				}
-				if defaultExprs == nil || eIdx >= len(defaultExprs) {
-					// The case where eIdx is too large for defaultExprs will be
-					// transformed into an error by the check on the number of
-					// columns in Insert().
-					ret.Tuples[tIdx].Exprs[eIdx] = parser.DNull
-				} else {
-					ret.Tuples[tIdx].Exprs[eIdx] = defaultExprs[eIdx]
-				}
+				copyTuple()
+				tuple.Exprs[eIdx] = defaultExpr(eIdx)
 			}
 		}
+
+		// The values for the row may be shorter than the number of columns being
+		// inserted into. Populate default expressions for those columns.
+		for i := len(tuple.Exprs); i < len(cols); i++ {
+			copyTuple()
+			tuple.Exprs = append(tuple.Exprs, defaultExpr(len(tuple.Exprs)))
+		}
 	}
-	return ret
+	numColsFinal := len(ret.Tuples[0].Exprs)
+	return ret, numColsFinal - numColsOrig, nil
 }
 
 func (n *insertNode) Values() parser.Datums {
