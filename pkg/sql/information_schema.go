@@ -28,7 +28,7 @@ import (
 
 const (
 	informationSchemaName = "information_schema"
-	pgCatalogName         = "pg_catalog"
+	pgCatalogName         = parser.PgCatalogName
 )
 
 var informationSchema = virtualSchema{

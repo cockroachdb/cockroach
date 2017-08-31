@@ -148,7 +148,7 @@ func Load(
 			// only uses txn for resolving FKs and interleaved tables, neither of which
 			// are present here.
 			var txn *client.Txn
-			desc, err := sql.MakeTableDesc(ctx, txn, sql.NilVirtualTabler, nil, s, dbDesc.ID, 0 /* table ID */, ts, privs, affected, dbDesc.Name, &evalCtx)
+			desc, err := sql.MakeTableDesc(ctx, txn, sql.NilVirtualTabler, parser.SearchPath{}, s, dbDesc.ID, 0 /* table ID */, ts, privs, affected, dbDesc.Name, &evalCtx)
 			if err != nil {
 				return BackupDescriptor{}, errors.Wrap(err, "make table desc")
 			}
