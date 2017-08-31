@@ -66,6 +66,7 @@
 		RangeProblems
 		RangeStatistics
 		PrettySpan
+		CommandQueueMetrics
 		RangeInfo
 		RangesRequest
 		RangesResponse

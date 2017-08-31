@@ -780,3 +780,24 @@ func (cq *CommandQueue) nextID() int64 {
 func (cq *CommandQueue) treeSize() int {
 	return cq.reads.Len() + cq.writes.Len()
 }
+
+// CommandQueueMetrics holds the metrics for a the command queue that are
+// included in range metrics.
+// TODO(bram): replace this struct with serverpb.CommandQueueMetrics. This
+// will require moveing all protos out of storage into storagebase that are
+// referenced in serverpb to prevent an import cycle.
+type CommandQueueMetrics struct {
+	WriteCommands   int64
+	ReadCommands    int64
+	MaxOverlapsSeen int64
+	TreeSize        int32
+}
+
+func (cq *CommandQueue) metrics() CommandQueueMetrics {
+	return CommandQueueMetrics{
+		WriteCommands:   cq.localMetrics.writeCommands,
+		ReadCommands:    cq.localMetrics.readCommands,
+		MaxOverlapsSeen: cq.localMetrics.maxOverlapsSeen,
+		TreeSize:        int32(cq.treeSize()),
+	}
+}
