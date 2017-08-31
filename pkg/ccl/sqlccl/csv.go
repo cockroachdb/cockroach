@@ -792,27 +792,25 @@ func importPlanHook(
 			return err
 		}
 
+		var importErr error
 		if distributed {
-			_, err = doDistributedCSVTransform(
+			_, importErr = doDistributedCSVTransform(
 				ctx, job, files, p, tableDesc, temp,
 				comma, comment, nullif, walltime,
 			)
-			if err != nil {
-				return err
-			}
 		} else {
-			_, _, _, err = doLocalCSVTransform(
+			_, _, _, importErr = doLocalCSVTransform(
 				ctx, job, parentID, tableDesc, temp, files,
 				comma, comment, nullif, sstSize,
 				p.ExecCfg().DistSQLSrv.TempStorage,
 				walltime,
 			)
-			if err != nil {
-				return err
-			}
 		}
-		if err := job.FinishedWith(ctx, err); err != nil {
+		if err := job.FinishedWith(ctx, importErr); err != nil {
 			return err
+		}
+		if importErr != nil {
+			return importErr
 		}
 		if transformOnly {
 			resultsCh <- parser.Datums{
