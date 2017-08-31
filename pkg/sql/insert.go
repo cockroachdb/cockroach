@@ -156,7 +156,13 @@ func (p *planner) Insert(
 	}
 
 	if expressions := len(planColumns(rows)); expressions > numInputColumns {
-		return nil, fmt.Errorf("INSERT error: table %s has %d columns but %d values were supplied", n.Table, numInputColumns, expressions)
+		return nil, fmt.Errorf("INSERT has more expressions than target columns, %d expressions for %d targets",
+			expressions, numInputColumns)
+	} else if n.Columns != nil && expressions < numInputColumns {
+		// if n.Columns == nil then we'll populate the missing targets with
+		// default expressions.
+		return nil, fmt.Errorf("INSERT has more target columns than expressions, %d expressions for %d targets",
+			expressions, numInputColumns)
 	}
 
 	fkTables := sqlbase.TablesNeededForFKs(*en.tableDesc, sqlbase.CheckInserts)

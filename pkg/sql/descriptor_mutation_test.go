@@ -229,7 +229,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k),
 			} else {
 				_, err = sqlDB.Exec(`INSERT INTO t.test VALUES ('b', 'y', 'i')`)
 			}
-			if !testutils.IsError(err, "INSERT error: table t.test has 2 columns but 3 values were supplied") {
+			if !testutils.IsError(err, "INSERT has more expressions than target columns") {
 				t.Fatal(err)
 			}
 
@@ -290,7 +290,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k),
 			// Updating column "i" for a row fails.
 			if useUpsert {
 				_, err := sqlDB.Exec(`UPSERT INTO t.test VALUES ('a', 'u', 'u')`)
-				if !testutils.IsError(err, `table t.test has 2 columns but 3 values were supplied`) {
+				if !testutils.IsError(err, `INSERT has more expressions than target columns`) {
 					t.Fatal(err)
 				}
 			} else {
@@ -622,7 +622,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v), FAMIL
 
 				// Updating column "i" for a row fails.
 				if useUpsert {
-					if _, err := sqlDB.Exec(`UPSERT INTO t.test VALUES ('a', 'u', 'u')`); !testutils.IsError(err, `table t.test has 2 columns but 3 values were supplied`) {
+					if _, err := sqlDB.Exec(`UPSERT INTO t.test VALUES ('a', 'u', 'u')`); !testutils.IsError(err, `INSERT has more expressions than target columns`) {
 						t.Error(err)
 					}
 				} else {
