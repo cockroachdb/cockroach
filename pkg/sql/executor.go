@@ -63,8 +63,8 @@ var logStatementsExecuteEnabled = settings.RegisterBoolSetting(
 	false,
 )
 
-// clusterOrganization is the organization name.
-var clusterOrganization = settings.RegisterStringSetting(
+// ClusterOrganization is the organization name.
+var ClusterOrganization = settings.RegisterStringSetting(
 	"cluster.organization",
 	"organization name",
 	"",
@@ -289,7 +289,7 @@ type ExecutorConfig struct {
 
 // Organization returns the value of cluster.organization.
 func (ec *ExecutorConfig) Organization() string {
-	return clusterOrganization.Get(&ec.Settings.SV)
+	return ClusterOrganization.Get(&ec.Settings.SV)
 }
 
 var _ base.ModuleTestingKnobs = &ExecutorTestingKnobs{}
