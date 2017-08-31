@@ -1336,10 +1336,11 @@ func (c *v3Conn) done() error {
 
 	var err error
 	if state.emptyQuery {
+		// Generally a commandComplete message is written by each statement as it
+		// finishes writing its results. Except in this emptyQuery case, where the
+		// protocol mandates a particular response.
 		c.writeBuf.initMsg(serverMsgEmptyQuery)
 		err = c.writeBuf.finishMsg(c.wr)
-	} else if !state.hasSentResults {
-		err = c.sendCommandComplete(nil, c.wr)
 	}
 
 	if err != nil {
