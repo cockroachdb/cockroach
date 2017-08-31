@@ -1,5 +1,5 @@
 - Feature Name: Version Migration
-- Status: in-progress
+- Status: completed
 - Start Date: 2017-07-10
 - Authors: Spencer Kimball, Tobias Schottdorf
 - RFC PR: [#16977](https://github.com/cockroachdb/cockroach/pull/16977), [#17216](https://github.com/cockroachdb/cockroach/pull/17216), [#17411](https://github.com/cockroachdb/cockroach/pull/17411), [#17694](https://github.com/cockroachdb/cockroach/pull/17694)
