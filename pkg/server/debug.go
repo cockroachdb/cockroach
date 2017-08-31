@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	// Register the net/trace endpoint with http.DefaultServeMux.
 
@@ -25,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 	"github.com/rcrowley/go-metrics"
 	"github.com/rcrowley/go-metrics/exp"
@@ -37,6 +39,8 @@ import (
 // debugEndpoint is the prefix of golang's standard debug functionality
 // for access to exported vars and pprof tools.
 const debugEndpoint = "/debug/"
+
+const debugLogSpyEndpoint = "/debug/logspy"
 
 // We use the default http mux for the debug endpoint (as pprof and net/trace
 // register to that via import, and go-metrics registers to that via exp.Exp())
@@ -148,6 +152,35 @@ func init() {
   </body>
 </html>
 `)
+	})
+
+	debugServeMux.HandleFunc(debugLogSpyEndpoint, func(w http.ResponseWriter, r *http.Request) {
+		// The explicit header is necessary or (at least Chrome) will try to
+		// download a gzipped file (Content-type comes back application/x-gzip).
+		w.Header().Add("Content-type", "text/plain") // FIXME(tschottdorf): check this is correct
+
+		ch := make(chan struct{})
+		go func() {
+			time.Sleep(5 * time.Second)
+			close(ch)
+		}()
+
+		entries := make(chan log.Entry, 100)
+
+		log.Intercept(func(finished bool, entry log.Entry) (wantMore bool) {
+			select {
+			case <-ch:
+				close(entries)
+				return false
+			default:
+				entries <- entry
+				return true
+			}
+		})
+
+		for entry := range entries {
+			fmt.Fprintln(w, entry.Message)
+		}
 	})
 
 	// This registers a superset of the variables exposed through the /debug/vars endpoint
