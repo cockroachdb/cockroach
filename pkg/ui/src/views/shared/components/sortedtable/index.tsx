@@ -1,3 +1,8 @@
+// tslint:disable-next-line:no-var-requires
+const spinner = require<string>("assets/spinner.gif");
+// tslint:disable-next-line:no-var-requires
+const noResults = require<string>("assets/noresults.svg");
+
 import React from "react";
 import _ from "lodash";
 import { createSelector } from "reselect";
@@ -45,7 +50,12 @@ interface SortedTableProps<T> {
   className?: string;
   // A function that returns the class to apply to a given row.
   rowClass?: (obj: T) => string;
+  // If loading is true a spinner is shown instead of the graph.
+  loading?: boolean;
 }
+
+const spinnerImage = { background: `url(${spinner}) center center no-repeat` };
+const noResultsImage = { background: `url(${noResults}) center center no-repeat` };
 
 /**
  * SortedTable displays data rows in a table which can be sorted by the values
@@ -105,7 +115,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, {}> {
         return {
           title: cd.title,
           cell: (index) => cd.cell(sorted[index]),
-          sortKey: cd.sort ? ii  : undefined,
+          sortKey: cd.sort ? ii : undefined,
           rollup: rollups[ii],
           className: cd.className,
         };
@@ -121,15 +131,19 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, {}> {
   );
 
   render() {
-    const { data, sortSetting, onChangeSortSetting } = this.props;
+    const { data, sortSetting, onChangeSortSetting, loading } = this.props;
+    if (!_.isNil(loading) && loading) {
+      return <div className="sorted-table-section" style={spinnerImage} />;
+    }
     if (data) {
       return <SortableTable count={data.length}
-                            sortSetting={sortSetting}
-                            onChangeSortSetting={onChangeSortSetting}
-                            columns={this.columns(this.props)}
-                            rowClass={this.rowClass(this.props)}
-                            className={this.props.className} />;
+        sortSetting={sortSetting}
+        onChangeSortSetting={onChangeSortSetting}
+        columns={this.columns(this.props)}
+        rowClass={this.rowClass(this.props)}
+        className={this.props.className}
+        loading={this.props.loading} />;
     }
-    return <div>No results.</div>;
+    return <div className="sorted-table-section" style={noResultsImage} />;
   }
 }

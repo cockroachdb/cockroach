@@ -189,7 +189,7 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
   }
 
   render() {
-    return <div>
+    return <div className="jobs-page">
       <PageConfig>
         <PageConfigItem>
           <Dropdown
@@ -216,8 +216,8 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
           />
         </PageConfigItem>
       </PageConfig>
-      <section className="section">
-        <div className="content">
+      <section className="section jobs-section">
+        <div className="jobs-content">
           <JobsSortedTable
             data={this.props.jobs && this.props.jobs.length > 0 && this.props.jobs}
             sortSetting={this.props.sort}
@@ -225,6 +225,7 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
             className="jobs-table"
             rowClass={job => "jobs-table__row--" + job.status}
             columns={jobsTableColumns}
+            loading={_.isNil(this.props.jobs)}
           />
         </div>
       </section>

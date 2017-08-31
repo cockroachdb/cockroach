@@ -1,3 +1,6 @@
+// tslint:disable-next-line:no-var-requires
+const spinner = require<string>("assets/spinner.gif");
+
 import React from "react";
 import _ from "lodash";
 import classNames from "classnames";
@@ -52,7 +55,11 @@ interface TableProps {
   className?: string;
   // A function that returns the class to apply to a given row.
   rowClass?: (rowIndex: number) => string;
+  // If loading is true a spinner is shown instead of the graph.
+  loading?: boolean;
 }
+
+const spinnerImage = { background: `url(${spinner}) center center no-repeat` };
 
 /**
  * SortableTable is designed to display tabular data where the data set can be
@@ -65,14 +72,14 @@ interface TableProps {
  */
 export class SortableTable extends React.Component<TableProps, {}> {
   static defaultProps: TableProps = {
-      count: 0,
-      columns: [],
-      sortSetting: {
-        sortKey: null,
-        ascending: false,
-      },
-      onChangeSortSetting: (_ss) => {},
-      rowClass: (_rowIndex) => "",
+    count: 0,
+    columns: [],
+    sortSetting: {
+      sortKey: null,
+      ascending: false,
+    },
+    onChangeSortSetting: (_ss) => { },
+    rowClass: (_rowIndex) => "",
   };
 
   clickSort(clickedSortKey: any) {
@@ -97,10 +104,13 @@ export class SortableTable extends React.Component<TableProps, {}> {
   }
 
   render() {
-    const { sortSetting, columns } = this.props;
+    const { sortSetting, columns, loading } = this.props;
+    if (!_.isNil(loading) && loading) {
+      return <div className="sorted-table-section" style={spinnerImage} />;
+    }
 
     return <table className={classNames("sort-table", this.props.className)}>
-     <thead>
+      <thead>
         <tr className="sort-table__row sort-table__row--header">
           {_.map(columns, (c: SortableColumn, colIndex: number) => {
             const classes = ["sort-table__cell"];
@@ -125,15 +135,18 @@ export class SortableTable extends React.Component<TableProps, {}> {
       </thead>
       <tbody>
         {_.times(this.props.count, (rowIndex) => {
-          const classes = classNames("sort-table__row", "sort-table__row--body",
-            this.props.rowClass(rowIndex));
+          const classes = classNames(
+            "sort-table__row",
+            "sort-table__row--body",
+            this.props.rowClass(rowIndex),
+          );
           return <tr key={rowIndex} className={classes}>
             {
               _.map(columns, (c: SortableColumn, colIndex: number) => {
                 return <td className={classNames("sort-table__cell", c.className)} key={colIndex}>{c.cell(rowIndex)}</td>;
               })
             }
-            </tr>;
+          </tr>;
         })}
       </tbody>
     </table>;
