@@ -5566,6 +5566,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @type {Object}
                  * @property {string} [cluster_id] ClusterResponse cluster_id.
                  * @property {boolean} [reporting_enabled] ClusterResponse reporting_enabled.
+                 * @property {boolean} [enterprise_enabled] ClusterResponse enterprise_enabled.
                  */
 
                 /**
@@ -5594,6 +5595,12 @@ export const cockroach = $root.cockroach = (() => {
                 ClusterResponse.prototype.reporting_enabled = false;
 
                 /**
+                 * ClusterResponse enterprise_enabled.
+                 * @type {boolean}
+                 */
+                ClusterResponse.prototype.enterprise_enabled = false;
+
+                /**
                  * Creates a new ClusterResponse instance using the specified properties.
                  * @param {cockroach.server.serverpb.ClusterResponse$Properties=} [properties] Properties to set
                  * @returns {cockroach.server.serverpb.ClusterResponse} ClusterResponse instance
@@ -5615,6 +5622,8 @@ export const cockroach = $root.cockroach = (() => {
                         writer.uint32(/* id 1, wireType 2 =*/10).string(message.cluster_id);
                     if (message.reporting_enabled != null && message.hasOwnProperty("reporting_enabled"))
                         writer.uint32(/* id 2, wireType 0 =*/16).bool(message.reporting_enabled);
+                    if (message.enterprise_enabled != null && message.hasOwnProperty("enterprise_enabled"))
+                        writer.uint32(/* id 3, wireType 0 =*/24).bool(message.enterprise_enabled);
                     return writer;
                 };
 
@@ -5648,6 +5657,9 @@ export const cockroach = $root.cockroach = (() => {
                             break;
                         case 2:
                             message.reporting_enabled = reader.bool();
+                            break;
+                        case 3:
+                            message.enterprise_enabled = reader.bool();
                             break;
                         default:
                             reader.skipType(tag & 7);
@@ -5684,6 +5696,9 @@ export const cockroach = $root.cockroach = (() => {
                     if (message.reporting_enabled != null && message.hasOwnProperty("reporting_enabled"))
                         if (typeof message.reporting_enabled !== "boolean")
                             return "reporting_enabled: boolean expected";
+                    if (message.enterprise_enabled != null && message.hasOwnProperty("enterprise_enabled"))
+                        if (typeof message.enterprise_enabled !== "boolean")
+                            return "enterprise_enabled: boolean expected";
                     return null;
                 };
 
@@ -5700,6 +5715,8 @@ export const cockroach = $root.cockroach = (() => {
                         message.cluster_id = String(object.cluster_id);
                     if (object.reporting_enabled != null)
                         message.reporting_enabled = Boolean(object.reporting_enabled);
+                    if (object.enterprise_enabled != null)
+                        message.enterprise_enabled = Boolean(object.enterprise_enabled);
                     return message;
                 };
 
@@ -5725,11 +5742,14 @@ export const cockroach = $root.cockroach = (() => {
                     if (options.defaults) {
                         object.cluster_id = "";
                         object.reporting_enabled = false;
+                        object.enterprise_enabled = false;
                     }
                     if (message.cluster_id != null && message.hasOwnProperty("cluster_id"))
                         object.cluster_id = message.cluster_id;
                     if (message.reporting_enabled != null && message.hasOwnProperty("reporting_enabled"))
                         object.reporting_enabled = message.reporting_enabled;
+                    if (message.enterprise_enabled != null && message.hasOwnProperty("enterprise_enabled"))
+                        object.enterprise_enabled = message.enterprise_enabled;
                     return object;
                 };
 
