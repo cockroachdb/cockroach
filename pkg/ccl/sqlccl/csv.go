@@ -85,8 +85,9 @@ func LoadCSV(
 	}
 
 	var parentID = defaultCSVParentID
+	walltime := timeutil.Now().UnixNano()
 
-	tableDesc, err := makeCSVTableDescriptor(ctx, createTable, parentID, defaultCSVTableID)
+	tableDesc, err := makeCSVTableDescriptor(ctx, createTable, parentID, defaultCSVTableID, walltime)
 	if err != nil {
 		return 0, 0, 0, err
 	}
@@ -127,7 +128,7 @@ func LoadCSV(
 	defer r.Close()
 
 	return doLocalCSVTransform(
-		ctx, nil, parentID, tableDesc, dest, dataFiles, comma, comment, nullif, sstMaxSize, r,
+		ctx, nil, parentID, tableDesc, dest, dataFiles, comma, comment, nullif, sstMaxSize, r, walltime,
 	)
 }
 
@@ -142,6 +143,7 @@ func doLocalCSVTransform(
 	nullif *string,
 	sstMaxSize int64,
 	tempEngine engine.Engine,
+	walltime int64,
 ) (csvCount, kvCount, sstCount int64, err error) {
 	// Some channels are buffered because reads happen in bursts, so having lots
 	// of pre-computed data improves overall performance.
@@ -151,7 +153,6 @@ func doLocalCSVTransform(
 	recordCh := make(chan csvRecord, chanSize)
 	kvCh := make(chan roachpb.KeyValue, chanSize)
 	contentCh := make(chan sstContent)
-	walltime := timeutil.Now().UnixNano()
 	group.Go(func() error {
 		defer close(recordCh)
 		var err error
@@ -223,7 +224,7 @@ func readCreateTableFromStore(ctx context.Context, filename string) (*parser.Cre
 }
 
 func makeCSVTableDescriptor(
-	ctx context.Context, create *parser.CreateTable, parentID, tableID sqlbase.ID,
+	ctx context.Context, create *parser.CreateTable, parentID, tableID sqlbase.ID, walltime int64,
 ) (*sqlbase.TableDescriptor, error) {
 	if create.IfNotExists {
 		return nil, errors.New("unsupported IF NOT EXISTS")
@@ -235,7 +236,6 @@ func makeCSVTableDescriptor(
 		return nil, errors.New("CREATE AS not supported")
 	}
 	// TODO(mjibson): error on FKs
-	// TODO(mjibson): pass in an appropriate creation time #17526
 	tableDesc, err := sql.MakeTableDesc(
 		ctx,
 		nil, /* txn */
@@ -244,7 +244,7 @@ func makeCSVTableDescriptor(
 		create,
 		parentID,
 		tableID,
-		hlc.Timestamp{},
+		hlc.Timestamp{WallTime: walltime},
 		sqlbase.NewDefaultPrivilegeDescriptor(),
 		nil, /* affected */
 		"",  /* sessionDB */
@@ -765,7 +765,7 @@ func importPlanHook(
 		}
 
 		parentID := defaultCSVParentID
-		tableDesc, err := makeCSVTableDescriptor(ctx, create, parentID, defaultCSVTableID)
+		tableDesc, err := makeCSVTableDescriptor(ctx, create, parentID, defaultCSVTableID, walltime)
 		if err != nil {
 			return err
 		}
@@ -805,6 +805,7 @@ func importPlanHook(
 				ctx, job, parentID, tableDesc, temp, files,
 				comma, comment, nullif, sstSize,
 				p.ExecCfg().DistSQLSrv.TempStorage,
+				walltime,
 			)
 			if err != nil {
 				return err
