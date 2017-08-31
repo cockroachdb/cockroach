@@ -37,7 +37,7 @@ type SemaContext struct {
 	// SearchPath indicates where to search for unqualified function
 	// names. The path elements must be normalized via Name.Normalize()
 	// already.
-	SearchPath []string
+	SearchPath SearchPath
 
 	// privileged, if true, enables "unsafe" builtins, e.g. those
 	// from the crdb_internal namespace. Must be set only for

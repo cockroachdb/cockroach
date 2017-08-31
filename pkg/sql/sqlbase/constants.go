@@ -17,4 +17,4 @@ package sqlbase
 import "github.com/cockroachdb/cockroach/pkg/sql/parser"
 
 // DefaultSearchPath is the search path used by virgin sessions.
-var DefaultSearchPath = parser.SearchPath{"pg_catalog"}
+var DefaultSearchPath = parser.SearchPath{}

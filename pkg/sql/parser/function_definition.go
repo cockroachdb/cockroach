@@ -61,10 +61,6 @@ func (fd *FunctionDefinition) Format(buf *bytes.Buffer, f FmtFlags) {
 
 func (fd *FunctionDefinition) String() string { return AsString(fd) }
 
-// SearchPath represents a list of namespaces to search builtins in.
-// The names must be normalized (as per Name.Normalize) already.
-type SearchPath []string
-
 // ResolveFunction transforms an UnresolvedName to a FunctionDefinition.
 func (n UnresolvedName) ResolveFunction(searchPath SearchPath) (*FunctionDefinition, error) {
 	fn, err := n.normalizeFunctionName()
@@ -108,7 +104,8 @@ func (n UnresolvedName) ResolveFunction(searchPath SearchPath) (*FunctionDefinit
 		if prefix == "" {
 			// The function wasn't qualified, so we must search for it via
 			// the search path first.
-			for _, alt := range searchPath {
+			iter := searchPath.Iter()
+			for alt, ok := iter(); ok; alt, ok = iter() {
 				fullName = alt + "." + smallName
 				if def, ok = funDefs[fullName]; ok {
 					found = true
