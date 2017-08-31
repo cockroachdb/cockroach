@@ -290,14 +290,14 @@ var Builtins = map[string][]Builtin{
 			return nil, err
 		}
 		return NewDString(strings.ToLower(s)), nil
-	}, TypeString, "Converts all characters in `val`to their lower-case equivalents.")},
+	}, TypeString, "Converts all characters in `val` to their lower-case equivalents.")},
 
 	"upper": {stringBuiltin1(func(evalCtx *EvalContext, s string) (Datum, error) {
 		if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(s))); err != nil {
 			return nil, err
 		}
 		return NewDString(strings.ToUpper(s)), nil
-	}, TypeString, "Converts all characters in `val`to their to their upper-case equivalents.")},
+	}, TypeString, "Converts all characters in `val` to their to their upper-case equivalents.")},
 
 	"substr":    substringImpls,
 	"substring": substringImpls,
