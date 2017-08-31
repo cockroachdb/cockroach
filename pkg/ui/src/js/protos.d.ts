@@ -18219,7 +18219,6 @@ export namespace cockroach {
                 program?: string;
                 host?: string;
                 user_name?: string;
-                severity?: cockroach.util.log.Severity;
                 time?: Long;
                 pid?: Long;
             };
@@ -18257,12 +18256,6 @@ export namespace cockroach {
                  * @type {string}
                  */
                 public user_name: string;
-
-                /**
-                 * FileDetails severity.
-                 * @type {cockroach.util.log.Severity}
-                 */
-                public severity: cockroach.util.log.Severity;
 
                 /**
                  * FileDetails time.
