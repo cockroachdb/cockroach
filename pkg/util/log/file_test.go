@@ -55,8 +55,7 @@ func TestSelectFiles(t *testing.T) {
 		testfile := FileInfo{
 			Name: name,
 			Details: FileDetails{
-				Severity: Severity_INFO,
-				Time:     fileTime.UnixNano(),
+				Time: fileTime.UnixNano(),
 			},
 		}
 		testFiles = append(testFiles, testfile)
