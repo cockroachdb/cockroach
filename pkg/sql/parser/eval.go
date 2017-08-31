@@ -1734,10 +1734,9 @@ func makeEvalTupleIn(typ Type) CmpOp {
 func evalDatumsCmp(
 	ctx *EvalContext, op, subOp ComparisonOperator, fn CmpOp, left Datum, right Datums,
 ) (Datum, error) {
-	// ALL operation
 	all := op == All
-	// ANY/SOME operation
-	any := !all
+	allTrue := true
+	anyTrue := false
 	sawNull := false
 	for _, elem := range right {
 		if elem == DNull {
@@ -1756,27 +1755,36 @@ func evalDatumsCmp(
 		}
 		b := d.(*DBool)
 		res := *b != DBool(not)
-		if res && any {
-			// There exists "any" comparison that is true under ANY, return true
-			return DBoolTrue, nil
-		} else if !res && all {
-			// There exists a comparison that is false under ALL, return false
-			return DBoolFalse, nil
+		if res {
+			anyTrue = true
+		} else {
+			allTrue = false
 		}
 	}
 
-	if sawNull {
-		// If the right-hand Datums contains any null elements and no false
-		// comparison result is obtained, the result will be null.
-		return DNull, nil
-	}
-
 	if all {
-		// !sawNull
+		if !allTrue {
+			return DBoolFalse, nil
+		}
+		if sawNull {
+			// If the right-hand array contains any null elements and no false
+			// comparison result is obtained, the result of ALL will be null.
+			return DNull, nil
+		}
+		// allTrue && !sawNull
 		return DBoolTrue, nil
 	}
 
-	// any && !sawNull
+	// !all
+	if anyTrue {
+		return DBoolTrue, nil
+	}
+	if sawNull {
+		// If the right-hand array contains any null elements and no true
+		// comparison result is obtained, the result of ANY will be null.
+		return DNull, nil
+	}
+	// !anyTrue && !sawNull
 	return DBoolFalse, nil
 }
 
