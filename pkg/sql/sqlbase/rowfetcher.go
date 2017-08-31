@@ -585,7 +585,8 @@ func (rf *RowFetcher) finalizeRow() {
 	for i := range rf.cols {
 		if rf.neededCols.Contains(uint32(rf.cols[i].ID)) && rf.row[i].IsUnset() {
 			if !rf.cols[i].Nullable {
-				panic("Non-nullable column with no value!")
+				panic(fmt.Sprintf("Non-nullable column \"%s:%s\" with no value!",
+					rf.desc.Name, rf.cols[i].Name))
 			}
 			rf.row[i] = EncDatum{
 				Type:  rf.cols[i].Type,
