@@ -41,8 +41,13 @@ func newDiskSideloadStorage(
 	st *cluster.Settings, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID, baseDir string,
 ) (sideloadStorage, error) {
 	ss := &diskSideloadStorage{
-		dir: filepath.Join(baseDir, fmt.Sprintf("%d.%d", rangeID, replicaID)),
-		st:  st,
+		dir: filepath.Join(
+			baseDir,
+			"sideloading",
+			fmt.Sprintf("%d", rangeID%1000), // sharding
+			fmt.Sprintf("%d.%d", rangeID, replicaID),
+		),
+		st: st,
 	}
 	return ss, nil
 }
@@ -120,6 +125,8 @@ func (ss *diskSideloadStorage) Clear(_ context.Context) error {
 }
 
 func (ss *diskSideloadStorage) TruncateTo(ctx context.Context, index uint64) error {
+	// TODO(tschottdorf): if we end up removing *all* files, we could also
+	// remove the directory.
 	matches, err := filepath.Glob(filepath.Join(ss.dir, "i*.t*"))
 	if err != nil {
 		return err
