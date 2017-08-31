@@ -7,6 +7,13 @@ start_server $argv
 spawn $argv sql
 eexpect root@
 
+start_test "Check that a syntax error can make suggestions."
+send "select * from;\r"
+eexpect "syntax error"
+eexpect "HINT: try \\\\h <SOURCE>"
+eexpect root@
+end_test
+
 start_test "Check that a standalone '?' prints all help."
 send "?\r"
 eexpect "TRUNCATE"
