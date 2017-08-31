@@ -387,11 +387,14 @@ SELECT v, k FROM kv5@a
 ----
 NULL a
 
-statement ok
-CREATE TABLE boom (id INT PRIMARY KEY)
+statement error INSERT has more expressions than target columns, 3 expressions for 2 targets
+INSERT INTO kv VALUES ('a', 'b', 'c')
 
-statement error INSERT error: table boom has \d+ columns but \d+ values were supplied
-INSERT INTO boom VALUES(1,2)
+statement error INSERT has more expressions than target columns, 2 expressions for 1 targets
+INSERT INTO kv (k) VALUES ('a', 'b')
+
+statement error INSERT has more target columns than expressions, 1 expressions for 2 targets
+INSERT INTO kv5 (k, v) VALUES ('a')
 
 statement ok
 CREATE TABLE return (a INT DEFAULT 3, b INT)
@@ -563,7 +566,7 @@ INSERT INTO blindcput values (1, 1), (2, 2), (3, 3), (4, 4), (1, 5)
 statement ok
 CREATE TABLE nocols()
 
-statement error INSERT error: table nocols has \d+ columns but \d+ values were supplied
+statement error INSERT has more expressions than target columns, 2 expressions for 0 targets
 INSERT INTO nocols VALUES (true, default)
 
 statement error compound types not supported yet: "kv.k"

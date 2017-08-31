@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -108,9 +109,7 @@ func (p *planner) Insert(
 		}
 	}
 	// Number of columns expecting an input. This doesn't include the
-	// columns receiving a default value except in the case where the
-	// insert source is a ValuesClause, which is handled below with
-	// fillDefaults and its addedCols return value.
+	// columns receiving a default value.
 	numInputColumns := len(cols)
 
 	cols, defaultExprs, err :=
@@ -128,15 +127,18 @@ func (p *planner) Insert(
 			return nil, err
 		}
 		if values != nil {
-			var addedCols int
-			src, addedCols, err = fillDefaults(defaultExprs, cols, values)
+			if len(values.Tuples) > 0 {
+				// Check to make sure the values clause doesn't have too many or
+				// too few expressions in each tuple.
+				numExprs := len(values.Tuples[0].Exprs)
+				if err := checkNumExprs(numExprs, numInputColumns, n.Columns != nil); err != nil {
+					return nil, err
+				}
+			}
+			src, err = fillDefaults(defaultExprs, cols, values)
 			if err != nil {
 				return nil, err
 			}
-			// If we added any columns for DEFAULT expressions at the end of each
-			// tuple, we expect to see extra columns come up from the data source
-			// planNode. Account for that here.
-			numInputColumns += addedCols
 		}
 		insertRows = src
 	}
@@ -155,8 +157,13 @@ func (p *planner) Insert(
 		return nil, err
 	}
 
-	if expressions := len(planColumns(rows)); expressions > numInputColumns {
-		return nil, fmt.Errorf("INSERT error: table %s has %d columns but %d values were supplied", n.Table, numInputColumns, expressions)
+	if _, ok := insertRows.(*parser.ValuesClause); !ok {
+		// If the insert source was not a VALUES clause, then we have not
+		// already verified the expression length.
+		numExprs := len(planColumns(rows))
+		if err := checkNumExprs(numExprs, numInputColumns, n.Columns != nil); err != nil {
+			return nil, err
+		}
 	}
 
 	fkTables := sqlbase.TablesNeededForFKs(*en.tableDesc, sqlbase.CheckInserts)
@@ -556,12 +563,10 @@ func getDefaultValuesClause(
 // - If tuples contain fewer elements than the number of columns, the missing
 //   columns will be added with their default expressions (or NULL).
 //
-// The function returns a ValuesClause with defaults filled, along with the
-// number of elements added to each Tuple in the ValuesClause. This will be
-// the same for each Tuple.
+// The function returns a ValuesClause with defaults filled or an error.
 func fillDefaults(
 	defaultExprs []parser.TypedExpr, cols []sqlbase.ColumnDescriptor, values *parser.ValuesClause,
-) (*parser.ValuesClause, int, error) {
+) (*parser.ValuesClause, error) {
 	ret := values
 	copyValues := func() {
 		if ret == values {
@@ -582,7 +587,7 @@ func fillDefaults(
 	numColsOrig := len(ret.Tuples[0].Exprs)
 	for tIdx, tuple := range ret.Tuples {
 		if a, e := len(tuple.Exprs), numColsOrig; a != e {
-			return nil, 0, newValuesListLenErr(e, a)
+			return nil, newValuesListLenErr(e, a)
 		}
 
 		tupleCopied := false
@@ -610,8 +615,23 @@ func fillDefaults(
 			tuple.Exprs = append(tuple.Exprs, defaultExpr(len(tuple.Exprs)))
 		}
 	}
-	numColsFinal := len(ret.Tuples[0].Exprs)
-	return ret, numColsFinal - numColsOrig, nil
+	return ret, nil
+}
+
+func checkNumExprs(numExprs, numCols int, specifiedTargets bool) error {
+	// It is ok to be missing exprs if !specifiedTargets, because the missing
+	// columns will be filled in by DEFAULT expressions.
+	extraExprs := numExprs > numCols
+	missingExprs := specifiedTargets && numExprs < numCols
+	if extraExprs || missingExprs {
+		more, less := "expressions", "target columns"
+		if missingExprs {
+			more, less = less, more
+		}
+		return errors.Errorf("INSERT has more %s than %s, %d expressions for %d targets",
+			more, less, numExprs, numCols)
+	}
+	return nil
 }
 
 func (n *insertNode) Values() parser.Datums {
