@@ -83,6 +83,10 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:   "populate initial version cluster setting table entry",
 		workFn: populateVersionSetting,
 	},
+	{
+		name:   "persist trace.debug.enable = 'false'",
+		workFn: disableNetTrace,
+	},
 }
 
 // migrationDescriptor describes a single migration hook that's used to modify
@@ -384,14 +388,7 @@ func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescript
 
 var reportingOptOut = envutil.EnvOrDefaultBool("COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", false)
 
-func optInToDiagnosticsStatReporting(ctx context.Context, r runner) error {
-	const setStmt = "SET CLUSTER SETTING diagnostics.reporting.enabled = true"
-
-	// We're opting-out of the automatic opt-in. See discussion in updates.go.
-	if reportingOptOut {
-		return nil
-	}
-
+func runStmtAsRootWithRetry(ctx context.Context, r runner, stmt string) error {
 	// System tables can only be modified by a privileged internal user.
 	session := r.newRootSession(ctx)
 	defer session.Finish(r.sqlExecutor)
@@ -401,14 +398,26 @@ func optInToDiagnosticsStatReporting(ctx context.Context, r runner) error {
 	var err error
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
 		var res sql.StatementResults
-		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, setStmt, nil, 1)
+		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, stmt, nil, 1)
 		if err == nil {
 			res.Close(ctx)
 			break
 		}
-		log.Warningf(ctx, "failed attempt to update setting: %v", err)
+		log.Warningf(ctx, "failed to run %s: %v", stmt, err)
 	}
 	return err
+}
+
+func optInToDiagnosticsStatReporting(ctx context.Context, r runner) error {
+	// We're opting-out of the automatic opt-in. See discussion in updates.go.
+	if reportingOptOut {
+		return nil
+	}
+	return runStmtAsRootWithRetry(ctx, r, `SET CLUSTER SETTING diagnostics.reporting.enabled = true`)
+}
+
+func disableNetTrace(ctx context.Context, r runner) error {
+	return runStmtAsRootWithRetry(ctx, r, `SET CLUSTER SETTING trace.debug.enable = false`)
 }
 
 func populateVersionSetting(ctx context.Context, r runner) error {
