@@ -150,6 +150,13 @@ message PrettySpan {
   string end_key = 2;
 }
 
+message CommandQueueMetrics {
+  int64 write_commands = 1;
+  int64 read_commands = 2;
+  int64 max_overlaps_seen = 3;
+  int32 tree_size = 4;
+}
+
 message RangeInfo {
   PrettySpan span = 1 [(gogoproto.nullable) = false];
   RaftState raft_state = 2 [(gogoproto.nullable) = false];
@@ -166,6 +173,8 @@ message RangeInfo {
   repeated roachpb.Lease lease_history = 8 [(gogoproto.nullable) = false];
   RangeProblems problems = 9 [(gogoproto.nullable) = false];
   RangeStatistics stats = 10 [(gogoproto.nullable) = false];
+  CommandQueueMetrics cmd_q_local = 11 [(gogoproto.nullable) = false];
+  CommandQueueMetrics cmd_q_global = 12 [(gogoproto.nullable) = false];
 }
 
 message RangesRequest {

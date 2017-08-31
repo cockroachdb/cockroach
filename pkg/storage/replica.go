@@ -1663,7 +1663,6 @@ func (r *Replica) State() storagebase.RangeInfo {
 	if r.mu.proposalQuota != nil {
 		ri.ApproximateProposalQuota = r.mu.proposalQuota.approximateQuota()
 	}
-
 	return ri
 }
 
@@ -5308,11 +5307,13 @@ type ReplicaMetrics struct {
 	Quiescent   bool
 	// Is this the replica which collects per-range metrics? This is done either
 	// on the leader or, if there is no leader, on the largest live replica ID.
-	RangeCounter    bool
-	Unavailable     bool
-	Underreplicated bool
-	BehindCount     int64
-	SelfBehindCount int64
+	RangeCounter      bool
+	Unavailable       bool
+	Underreplicated   bool
+	BehindCount       int64
+	SelfBehindCount   int64
+	CmdQMetricsLocal  CommandQueueMetrics
+	CmdQMetricsGlobal CommandQueueMetrics
 }
 
 // Metrics returns the current metrics for the replica.
@@ -5328,10 +5329,26 @@ func (r *Replica) Metrics(
 	quiescent := r.mu.quiescent || r.mu.internalRaftGroup == nil
 	desc := r.mu.state.Desc
 	selfBehindCount := r.getEstimatedBehindCountRLocked(raftStatus)
+	r.cmdQMu.Lock()
+	cmdQMetricsLocal := r.cmdQMu.queues[spanLocal].metrics()
+	cmdQMetricsGlobal := r.cmdQMu.queues[spanGlobal].metrics()
+	r.cmdQMu.Unlock()
 	r.mu.RUnlock()
 
-	return calcReplicaMetrics(ctx, now, cfg, livenessMap, desc,
-		raftStatus, status, r.store.StoreID(), quiescent, selfBehindCount)
+	return calcReplicaMetrics(
+		ctx,
+		now,
+		cfg,
+		livenessMap,
+		desc,
+		raftStatus,
+		status,
+		r.store.StoreID(),
+		quiescent,
+		selfBehindCount,
+		cmdQMetricsLocal,
+		cmdQMetricsGlobal,
+	)
 }
 
 func isRaftLeader(raftStatus *raft.Status) bool {
@@ -5354,6 +5371,8 @@ func calcReplicaMetrics(
 	storeID roachpb.StoreID,
 	quiescent bool,
 	selfBehindCount int64,
+	cmdQMetricsLocal CommandQueueMetrics,
+	cmdQMetricsGlobal CommandQueueMetrics,
 ) ReplicaMetrics {
 	var m ReplicaMetrics
 
@@ -5404,6 +5423,9 @@ func calcReplicaMetrics(
 			m.Underreplicated = true
 		}
 	}
+
+	m.CmdQMetricsLocal = cmdQMetricsLocal
+	m.CmdQMetricsGlobal = cmdQMetricsGlobal
 
 	return m
 }
