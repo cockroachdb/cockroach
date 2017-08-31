@@ -1270,6 +1270,10 @@ func (e *Executor) execStmtInAbortedTxn(
 			return err
 		}
 
+		statementResultWriter.BeginResult((*parser.RollbackToSavepoint)(nil))
+		if err := statementResultWriter.EndResult(); err != nil {
+			return err
+		}
 		if txnState.State() == RestartWait {
 			// Reset the state to FirstBatch. We're in an "open" txn again.
 			txnState.SetState(FirstBatch)
@@ -1529,7 +1533,11 @@ func (e *Executor) execStmtInOpenTxn(
 	case *parser.Prepare:
 		// This must be handled here instead of the common path below
 		// because we need to use the Executor reference.
-		return e.PrepareStmt(session, s)
+		if err := e.PrepareStmt(session, s); err != nil {
+			return err
+		}
+		statementResultWriter.BeginResult((*parser.Prepare)(nil))
+		return statementResultWriter.EndResult()
 
 	case *parser.Execute:
 		// Substitute the placeholder information and actual statement with that of
