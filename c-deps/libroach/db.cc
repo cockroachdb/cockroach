@@ -203,7 +203,6 @@ struct DBIterator {
 // kKeyLocalRangePrefix are the mvcc-encoded prefixes.
 const rocksdb::Slice kKeyLocalRangeIDPrefix("\x01i", 2);
 const rocksdb::Slice kKeyLocalMax("\x02", 1);
-const rocksdb::Slice kKeyLocalStoreSync("\x01ssync\x00", 7);
 
 const DBStatus kSuccess = { NULL, 0 };
 
@@ -1703,23 +1702,25 @@ DBStatus DBFlush(DBEngine* db) {
 }
 
 DBStatus DBSyncWAL(DBEngine* db) {
-  #ifdef _WIN32
-    // On Windows, DB::SyncWAL() is not implemented due to fact that
-    // `WinWritableFile` is not thread safe. To get around that, the only other
-    // methods that can be used to ensure that a sync is triggered is to either
-    // flush the memtables or perform a write with `WriteOptions.sync=true`. See
-    // https://github.com/facebook/rocksdb/wiki/RocksDB-FAQ for more details.
-    // Please also see #17442 for more discussion on the topic.
+#ifdef _WIN32
+  // On Windows, DB::SyncWAL() is not implemented due to fact that
+  // `WinWritableFile` is not thread safe. To get around that, the only other
+  // methods that can be used to ensure that a sync is triggered is to either
+  // flush the memtables or perform a write with `WriteOptions.sync=true`. See
+  // https://github.com/facebook/rocksdb/wiki/RocksDB-FAQ for more details.
+  // Please also see #17442 for more discussion on the topic.
 
-    // So in order to force a sync, we issue a write to a single store local key
-    // with `sync=true`. The key used for this has been set aside for just this
-    // purpose.
-    rocksdb::WriteOptions options;
-    options.sync = true;
-    return ToDBStatus(db->rep->Put(options, kKeyLocalStoreSync, ""));
-  #else
-    return ToDBStatus(db->rep->SyncWAL());
-  #endif
+  // In order to force a sync we issue a write-batch containing
+  // LogData with 'sync=true'. The LogData forces a write to the WAL
+  // but otherwise doesn't add anything to the memtable or sstables.
+  rocksdb::WriteBatch batch;
+  batch.PutLogData("");
+  rocksdb::WriteOptions options;
+  options.sync = true;
+  return ToDBStatus(db->rep->Write(options, &batch));
+#else
+  return ToDBStatus(db->rep->SyncWAL());
+#endif
 }
 
 DBStatus DBCompact(DBEngine* db) {
