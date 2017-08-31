@@ -464,6 +464,7 @@ func TestStyle(t *testing.T) {
 				"VEvent:2",
 				"VEventf:2",
 				"UnimplementedWithIssueErrorf:1",
+				"Wrapf:1",
 			}, ","),
 			".",
 		)

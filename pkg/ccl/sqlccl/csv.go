@@ -337,7 +337,7 @@ func readCSV(
 			return nil
 		}()
 		if err != nil {
-			return 0, errors.Wrapf(err, dataFile)
+			return 0, errors.Wrap(err, dataFile)
 		}
 	}
 	return count, nil
