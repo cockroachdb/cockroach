@@ -1003,7 +1003,7 @@ func runTerm(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if sqlCtx.safeUpdates {
+	if !sqlCtx.unsafeUpdates {
 		if err := conn.Exec("SET sql_safe_updates = TRUE", nil); err != nil {
 			return err
 		}

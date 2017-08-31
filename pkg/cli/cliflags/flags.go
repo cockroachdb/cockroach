@@ -153,11 +153,13 @@ with a non-zero status code and further statements are not executed. The
 results of each SQL statement are printed on the standard output.`,
 	}
 
-	SafeUpdates = FlagInfo{
-		Name: "safe-updates",
+	UnsafeUpdates = FlagInfo{
+		Name: "unsafe-updates",
 		Description: `
-Disallow SQL statements that may have undesired side effects. For example
-a DELETE or UPDATE without a WHERE clause. This helps prevent accidents.`,
+Allow SQL statements that may have undesired side effects. For example
+a DELETE or UPDATE without a WHERE clause. By default, such statements
+are rejected to prevent accidents. This can also be overridden in a
+session with SET sql_safe_updates = FALSE.`,
 	}
 
 	TableDisplayFormat = FlagInfo{
