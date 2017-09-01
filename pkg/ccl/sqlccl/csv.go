@@ -55,6 +55,11 @@ const (
 	importOptionTemp          = "temp"
 )
 
+var valuelessImportOptions = map[string]bool{
+	importOptionTransformOnly: true,
+	importOptionDistributed:   true,
+}
+
 // LoadCSV converts CSV files into enterprise backup format.
 func LoadCSV(
 	ctx context.Context,
@@ -624,6 +629,46 @@ func finalizeCSVBackup(
 	return es.WriteFile(ctx, BackupDescriptorName, bytes.NewReader(descBuf))
 }
 
+func importJobDescription(
+	orig *parser.Import, defs parser.TableDefs, files []string, opts map[string]string,
+) (string, error) {
+	stmt := *orig
+	stmt.CreateFile = nil
+	stmt.CreateDefs = defs
+	stmt.Files = nil
+	for _, file := range files {
+		clean, err := storageccl.SanitizeExportStorageURI(file)
+		if err != nil {
+			return "", err
+		}
+		stmt.Files = append(stmt.Files, parser.NewDString(clean))
+	}
+	stmt.Options = nil
+	hasTransformOnly := false
+	for k, v := range opts {
+		if k == importOptionTemp {
+			clean, err := storageccl.SanitizeExportStorageURI(v)
+			if err != nil {
+				return "", err
+			}
+			v = clean
+		}
+		if k == importOptionTransformOnly {
+			hasTransformOnly = true
+		}
+		opt := parser.KVOption{Key: parser.Name(k)}
+		if !valuelessImportOptions[k] {
+			opt.Value = parser.NewDString(v)
+		}
+		stmt.Options = append(stmt.Options, opt)
+	}
+	if !hasTransformOnly {
+		stmt.Options = append(stmt.Options, parser.KVOption{Key: importOptionTransformOnly})
+	}
+	sort.Slice(stmt.Options, func(i, j int) bool { return stmt.Options[i].Key < stmt.Options[j].Key })
+	return parser.AsStringWithFlags(&stmt, parser.FmtSimpleQualified), nil
+}
+
 func importPlanHook(
 	stmt parser.Statement, p sql.PlanHookState,
 ) (func(context.Context, chan<- parser.Datums) error, sqlbase.ResultColumns, error) {
@@ -770,12 +815,16 @@ func importPlanHook(
 			return err
 		}
 
+		jobDesc, err := importJobDescription(importStmt, create.Defs, files, opts)
+		if err != nil {
+			return err
+		}
+
 		// NB: the post-conversion RESTORE will create and maintain its own job.
 		// This job is thus only for tracking the conversion, and will be Finished()
 		// before the restore starts.
 		job := p.ExecCfg().JobRegistry.NewJob(jobs.Record{
-			// TODO(dt): when we have convert-only SQL, put that here.
-			Description: fmt.Sprintf("import %s CSV conversion", tableDesc.Name),
+			Description: jobDesc,
 			Username:    p.User(),
 			Details: jobs.ImportDetails{
 				Tables: []jobs.ImportDetails_Table{{
