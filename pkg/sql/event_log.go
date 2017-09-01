@@ -65,6 +65,12 @@ const (
 	// EventLogNodeRestart is recorded when an existing node rejoins the cluster
 	// after being offline.
 	EventLogNodeRestart EventLogType = "node_restart"
+	// EventLogNodeDecommissioned is recorded when a node is marked as
+	// decommissioning.
+	EventLogNodeDecommissioned EventLogType = "node_decommissioned"
+	// EventLogNodeRecommissioned is recorded when a decommissioned node is
+	// recommissioned.
+	EventLogNodeRecommissioned EventLogType = "node_recommissioned"
 
 	// EventLogSetClusterSetting is recorded when a cluster setting is changed.
 	EventLogSetClusterSetting EventLogType = "set_cluster_setting"
