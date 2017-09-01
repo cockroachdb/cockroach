@@ -168,7 +168,9 @@ type explainDistSQLNode struct {
 	done bool
 }
 
-func (*explainDistSQLNode) Close(context.Context) {}
+func (n *explainDistSQLNode) Close(ctx context.Context) {
+	n.plan.Close(ctx)
+}
 
 var explainDistSQLColumns = sqlbase.ResultColumns{
 	{Name: "Automatic", Typ: parser.TypeBool},
