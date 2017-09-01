@@ -691,6 +691,8 @@ func Example_sql() {
 	c.RunWithArgs([]string{"sql", "-d", "nonexistent", "-e", "create database nonexistent; create table foo(x int); select * from foo"})
 	// COPY should return an intelligible error message.
 	c.RunWithArgs([]string{"sql", "-e", "copy t.f from stdin"})
+	// --echo-sql should print out the SQL statements.
+	c.RunWithArgs([]string{"user", "ls", "--echo-sql"})
 
 	// Output:
 	// sql -e show application_name
@@ -747,6 +749,10 @@ func Example_sql() {
 	// x
 	// sql -e copy t.f from stdin
 	// woops! COPY has confused this client! Suggestion: use 'psql' for COPY
+	// user ls --echo-sql
+	// > SELECT username FROM system.users
+	// 0 rows
+	// username
 }
 
 func Example_sql_format() {

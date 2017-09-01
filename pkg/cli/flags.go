@@ -47,6 +47,7 @@ func InitCLIDefaults() {
 	cliCtx.showTimes = false
 	dumpCtx.dumpMode = dumpBoth
 	dumpCtx.asOf = ""
+	sqlCtx.echo = false
 }
 
 const usageIndentation = 8
@@ -335,6 +336,7 @@ func init() {
 	sqlCmds = append(sqlCmds, userCmds...)
 	for _, cmd := range sqlCmds {
 		f := cmd.PersistentFlags()
+		boolFlag(f, &sqlCtx.echo, cliflags.EchoSQL, false)
 		stringFlag(f, &sqlConnURL, cliflags.URL, "")
 		stringFlag(f, &sqlConnUser, cliflags.User, security.RootUser)
 
