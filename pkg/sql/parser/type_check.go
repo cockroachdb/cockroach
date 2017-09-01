@@ -942,7 +942,8 @@ func typeCheckComparisonOpWithSubOperator(
 	foldedOp, _, _, _, _ := foldComparisonExpr(subOp, nil, nil)
 	ops := CmpOps[foldedOp]
 
-	var cmpTypeLeft, cmpTypeRight Type
+	var cmpTypeLeft Type
+	var cmpTypesRight []Type
 	var leftTyped, rightTyped TypedExpr
 	if array, isConstructor := StripParens(right).(*Array); isConstructor {
 		// If the right expression is an (optionally nested) array constructor, we
@@ -979,7 +980,7 @@ func typeCheckComparisonOpWithSubOperator(
 			break
 		}
 		rightTyped = right.(TypedExpr)
-		cmpTypeRight = retType
+		cmpTypesRight = append(cmpTypesRight, retType)
 
 		// Return early without looking up a CmpOp if the comparison type is TypeNull.
 		if retType == TypeNull {
@@ -995,7 +996,7 @@ func typeCheckComparisonOpWithSubOperator(
 		}
 		cmpTypeLeft = leftTyped.ResolvedType()
 
-		// Try to type the right expression as an Array of the left's type.
+		// Try to type the right expression as an array of the left's type.
 		// If right is an sql.subquery Expr, it should already be typed.
 		rightTyped, err = right.TypeCheck(ctx, TArray{cmpTypeLeft})
 		if err != nil {
@@ -1007,29 +1008,34 @@ func typeCheckComparisonOpWithSubOperator(
 			return leftTyped, rightTyped, CmpOp{}, nil
 		}
 
-		UnwrapType(rightReturn)
 		switch rightUnwrapped := UnwrapType(rightReturn).(type) {
 		case TArray:
-			cmpTypeRight = rightUnwrapped.Typ
+			cmpTypesRight = append(cmpTypesRight, rightUnwrapped.Typ)
 		case TTuple:
-			// Subqueries are expected to return 1 column of values
-			// (see planner.analyzeExpr in analyze.go).
-			cmpTypeRight = rightUnwrapped[0]
+			cmpTypesRight = append(cmpTypesRight, rightUnwrapped...)
 		default:
 			sigWithErr := fmt.Sprintf(compExprsWithSubOpFmt, left, subOp, op, right,
-				fmt.Sprintf("op %s <right> requires array or subquery on right side", op))
-			return nil, nil, CmpOp{},
-				pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sigWithErr)
+				fmt.Sprintf("op %s <right> requires array, tuple or subquery on right side", op))
+			return nil, nil, CmpOp{}, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sigWithErr)
 		}
 	}
 
-	fn, ok := ops.lookupImpl(cmpTypeLeft, cmpTypeRight)
-	if !ok {
-		sig := fmt.Sprintf(compSignatureWithSubOpFmt, cmpTypeLeft, subOp, op, TArray{cmpTypeRight})
-		return nil, nil, CmpOp{},
-			pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sig)
+	if len(cmpTypesRight) == 0 {
+		return nil, nil, CmpOp{}, compError(cmpTypeLeft, rightTyped.ResolvedType(), subOp, op)
+	}
+	var fn CmpOp
+	var ok bool
+	for _, cmpTypeRight := range cmpTypesRight {
+		if fn, ok = ops.lookupImpl(cmpTypeLeft, cmpTypeRight); !ok {
+			return nil, nil, CmpOp{}, compError(cmpTypeLeft, rightTyped.ResolvedType(), subOp, op)
+		}
 	}
 	return leftTyped, rightTyped, fn, nil
+}
+
+func compError(leftType, rightType Type, subOp, op ComparisonOperator) *pgerror.Error {
+	sig := fmt.Sprintf(compSignatureWithSubOpFmt, leftType, subOp, op, rightType)
+	return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sig)
 }
 
 func typeCheckComparisonOp(
