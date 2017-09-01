@@ -203,9 +203,17 @@ func (j *Job) Progressed(
 }
 
 func isControllable(p *Payload, op string) error {
-	if p.Type() == TypeSchemaChange {
+	switch typ := p.Type(); typ {
+	case TypeSchemaChange:
 		return pgerror.UnimplementedWithIssueErrorf(
 			16018, "schema change jobs do not support %s", op)
+	case TypeImport:
+		return pgerror.UnimplementedWithIssueErrorf(
+			18139, "import jobs do not support %s", op)
+	case TypeBackup:
+	case TypeRestore:
+	default:
+		return fmt.Errorf("%s jobs do not support %s", strings.ToLower(typ.String()), op)
 	}
 	if p.Lease == nil {
 		return fmt.Errorf("job created by node without %s support", op)
