@@ -43,41 +43,45 @@ class DatabaseSummaryGrants extends DatabaseSummaryBase {
 
     const numTables = tableInfos && tableInfos.length || 0;
 
-    return <div className="database-summary l-columns">
-      <div className="database-summary-title">
-        { dbID }
-      </div>
-      <div className="l-columns__left">
-        <div className="database-summary-table sql-table">
-        {
-          (numTables === 0) ? "" :
-          <DatabaseGrantsSortedTable
-              data={grants}
-              sortSetting={sortSetting}
-              onChangeSortSetting={(setting) => this.props.setSort(setting) }
-              columns={[
-                {
-                    title: "User",
-                    cell: (grant) => grant.user,
-                    sort: (grant) => grant.user,
-                },
-                {
-                    title: "Grants",
-                    cell: (grant) => grant.privileges.join(", "),
-                },
-              ]}/>
-        }
+    return (
+      <div className="database-summary">
+        <div className="database-summary-title">
+          <h2>{dbID}</h2>
+        </div>
+        <div className="l-columns">
+          <div className="l-columns__left">
+            <div className="database-summary-table sql-table">
+              {
+                (numTables === 0) ? "" :
+                  <DatabaseGrantsSortedTable
+                    data={grants}
+                    sortSetting={sortSetting}
+                    onChangeSortSetting={(setting) => this.props.setSort(setting)}
+                    columns={[
+                      {
+                        title: "User",
+                        cell: (grant) => grant.user,
+                        sort: (grant) => grant.user,
+                      },
+                      {
+                        title: "Grants",
+                        cell: (grant) => grant.privileges.join(", "),
+                      },
+                    ]} />
+              }
+            </div>
+          </div>
+          <div className="l-columns__right">
+            <SummaryBar>
+              <SummaryHeadlineStat
+                title="Total Users"
+                tooltip="Total users that have been granted permissions on this table."
+                value={this.totalUsers()} />
+            </SummaryBar>
+          </div>
         </div>
       </div>
-      <div className="l-columns__right">
-        <SummaryBar>
-          <SummaryHeadlineStat
-            title="Total Users"
-            tooltip="Total users that have been granted permissions on this table."
-            value={ this.totalUsers() }/>
-        </SummaryBar>
-      </div>
-    </div>;
+    );
   }
 }
 

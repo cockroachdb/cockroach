@@ -67,8 +67,8 @@ class Logs extends React.Component<LogProps & RouterState, {}> {
         <section className="section parent-link">
           <Link to="/cluster/nodes">&lt; Back to Node List</Link>
         </section>
-        <div className="header header--subsection">
-          Logs Node { this.props.params[nodeIDAttr] } / { nodeAddress }
+        <div className="section section--heading">
+          <h2>Logs Node { this.props.params[nodeIDAttr] } / { nodeAddress }</h2>
         </div>
         <section className="section">
           { content }

@@ -207,8 +207,8 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
       <section className="section parent-link">
         <Link to="/cluster">&lt; Back to Cluster</Link>
       </section>
-      <section className="header header--subsection">
-        Events
+      <section className="section section--heading">
+        <h2>Events</h2>
       </section>
       <section className="section l-columns">
         <div className="l-columns__left events-table">
