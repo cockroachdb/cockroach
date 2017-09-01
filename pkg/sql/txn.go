@@ -23,15 +23,13 @@ import (
 
 // BeginTransaction starts a new transaction.
 func (p *planner) BeginTransaction(n *parser.BeginTransaction) (planNode, error) {
-	if p.txn == nil {
-		return nil, errors.Errorf("the server should have already created a transaction")
+	if p.session.TxnState.State() != AutoRetry || p.txn == nil {
+		return nil, errors.Errorf("the server should have already created a transaction. "+
+			"state: %s", p.session.TxnState.State())
 	}
 	if err := p.setTransactionModes(n.Modes); err != nil {
 		return nil, err
 	}
-
-	// Enter the FirstBatch state.
-	p.session.TxnState.SetState(FirstBatch)
 
 	return &zeroNode{}, nil
 }

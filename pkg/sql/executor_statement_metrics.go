@@ -73,7 +73,7 @@ func (e *Executor) recordStatementSummary(
 	stmt Statement,
 	distSQLUsed bool,
 	automaticRetryCount int,
-	resultWriter StatementResultWriter,
+	resultWriter StatementResult,
 	err error,
 ) {
 	phaseTimes := &planner.phaseTimes

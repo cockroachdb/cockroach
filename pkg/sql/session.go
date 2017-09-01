@@ -290,11 +290,10 @@ type Session struct {
 	// indicate to Finish() that the session is already closed.
 	emergencyShutdown bool
 
-	// ResultWriter is where the results of query/statement should be written
-	// to, including errors when they happen. This corresponds to a network
-	// connection (pgwire.v3conn) for client connections and a
+	// ResultsWriter is where query results are written to. It's set to a
+	// pgwire.v3conn for sessions opened for SQL client connections and a
 	// bufferedResultWriter for internal uses.
-	ResultWriter ResultWriter
+	ResultsWriter ResultsWriter
 
 	Tracing SessionTracing
 
@@ -880,22 +879,32 @@ const (
 	// queries.
 	NoTxn TxnStateEnum = iota
 
-	// A txn is in scope, and we're currently executing statements from the first
-	// batch of statements using the transaction. If BEGIN was the last (or the
-	// only) statement in a batch, that batch doesn't count (the next batch will
-	// be considered the first one). The first batch of statements can be
-	// automatically retried in case of retryable errors since there's been no
-	// client logic relying on reads performed in the transaction.
+	// Like Open, a txn is in scope. The difference is that, while in the
+	// AutoRetry state, a retriable error will be handled by an automatic
+	// transaction retry, whereas we can't do that in Open. There's a caveat -
+	// even if we're in AutoRetry, we can't do automatic retries if any
+	// results for statements in the current transaction have already been
+	// delivered to the client.
+	// In principle, we can do automatic retries for the first batch of statements
+	// in a transaction. There is an extension to the rule, though: for
+	// example, is we get a batch with "BEGIN; SET TRANSACTION ISOLATION LEVEL
+	// foo; SAVEPOINT cockroach_restart;" followed by a 2nd batch, we can
+	// automatically retry the 2nd batch even though the statements in the first
+	// batch will not be executed again and their results have already been sent
+	// to the clients. We can do this because some statements are special in that
+	// their execution always generates exactly the same results to the consumer
+	// (i.e. the SQL client).
 	//
-	// A BEGIN statement makes the transaction enter this state (from a previous
-	// NoTxn state). The end of the first batch of statements, if executed
-	// successfully, will move the state to Open.
-	//
-	// TODO(andrei): It'd be cool if exiting this state would be based not on
-	// batches sent by the client, but results being sent by the server to the
-	// client (i.e. the client can send 100 batches but, if we haven't sent it any
-	// results yet, we know that we can still retry them all).
-	FirstBatch
+	// TODO(andrei): This state shouldn't exist; the decision about whether we can
+	// retry automatically or not should be entirely dynamic, based on which
+	// results we've delivered to the client already. It should have nothing to do
+	// with the client's batching of statements. For example, the client can send
+	// 100 batches but, if we haven't sent it any results yet, we should still be
+	// able to retry them all). Currently the splitting into batches is relevant
+	// because we don't keep track of statements from previous batches, so we
+	// would not be capable of retrying them even if we knew that no results have
+	// been delivered.
+	AutoRetry
 
 	// A txn is in scope.
 	Open
@@ -913,7 +922,7 @@ const (
 
 // Some states mean that a client.Txn is open, others don't.
 func (s TxnStateEnum) kvTxnIsOpen() bool {
-	return s == Open || s == FirstBatch || s == RestartWait
+	return s == Open || s == AutoRetry || s == RestartWait
 }
 
 // txnState contains state associated with an ongoing SQL txn.
@@ -927,7 +936,7 @@ type txnState struct {
 	//
 	// NOTE: Only state updates that are inconsequential to statement execution
 	// are allowed concurrently with the execution of the parallizeQueue (e.g.
-	// Open->FirstBatch).
+	// Open->AutoRetry).
 	state TxnStateEnum
 
 	// Mutable fields accessed from goroutines not synchronized by this txn's session,
@@ -940,6 +949,10 @@ type txnState struct {
 
 		txn *client.Txn
 	}
+
+	// If we're in a SQL txn, txnResults is the ResultsGroup that statements in
+	// this transaction should write results to.
+	txnResults ResultsGroup
 
 	// Ctx is the context for everything running in this SQL txn.
 	Ctx context.Context
@@ -956,11 +969,6 @@ type txnState struct {
 	// If set, the user declared the intention to retry the txn in case of retriable
 	// errors. The txn will enter a RestartWait state in case of such errors.
 	retryIntent bool
-
-	// The transaction will be retried in case of retriable error. The retry will be
-	// automatic (done by Txn.Exec()). This field behaves the same as retryIntent,
-	// except it's reset in between client round trips.
-	autoRetry bool
 
 	// A COMMIT statement has been processed. Useful for allowing the txn to
 	// survive retriable errors if it will be auto-retried (BEGIN; ... COMMIT; in
@@ -1002,7 +1010,7 @@ func (ts *txnState) SetState(val TxnStateEnum) {
 // TxnIsOpen returns true if we are presently inside a SQL txn, and the txn is
 // not in an error state.
 func (ts *txnState) TxnIsOpen() bool {
-	return ts.State() == Open || ts.State() == FirstBatch
+	return ts.State() == Open || ts.State() == AutoRetry
 }
 
 // resetForNewSQLTxn (re)initializes the txnState for a new transaction.
@@ -1025,18 +1033,18 @@ func (ts *txnState) resetForNewSQLTxn(
 	isolation enginepb.IsolationType,
 	priority roachpb.UserPriority,
 ) {
-	if ts.sp != nil {
-		panic(fmt.Sprintf("txnState.reset() called on ts with active span. How come "+
-			"finishSQLTxn() wasn't called previously? ts: %+v", ts))
+	if ts.sp != nil || ts.txnResults != nil {
+		log.Fatalf(s.Ctx(),
+			"txnState.reset() called on ts with active span or active txnResults. "+
+				"How come finishSQLTxn() wasn't called previously? ts: %+v", ts)
 	}
 
 	ts.retryIntent = retryIntent
 	// Reset state vars to defaults.
-	ts.autoRetry = true
 	ts.commitSeen = false
 	ts.sqlTimestamp = sqlTimestamp
-
 	ts.implicitTxn = implicitTxn
+	ts.txnResults = s.ResultsWriter.NewResultsGroup()
 
 	// Create a context for this transaction. It will include a
 	// root span that will contain everything executed as part of the
@@ -1089,7 +1097,7 @@ func (ts *txnState) resetForNewSQLTxn(
 
 	ts.sp = sp
 	ts.Ctx, ts.cancel = context.WithCancel(ctx)
-	ts.SetState(FirstBatch)
+	ts.SetState(AutoRetry)
 	s.Tracing.onNewSQLTxn(ts.sp)
 
 	ts.mon.Start(ctx, &s.mon, mon.BoundAccount{})
@@ -1116,7 +1124,7 @@ func (ts *txnState) resetForNewSQLTxn(
 // willBeRetried returns true if the SQL transaction is going to be retried
 // because of err.
 func (ts *txnState) willBeRetried() bool {
-	return ts.autoRetry || ts.retryIntent
+	return ts.State() == AutoRetry || ts.retryIntent
 }
 
 // resetStateAndTxn moves the txnState into a specified state, as a result of
@@ -1136,8 +1144,9 @@ func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
 	ts.mu.Unlock()
 }
 
-// finishSQLTxn closes the root span for the current SQL txn.  This needs to be
-// called before resetForNewSQLTxn() is called for starting another SQL txn.
+// finishSQLTxn finalizes a transaction's results and closes the root span for
+// the current SQL txn. This needs to be called before resetForNewSQLTxn() is
+// called for starting another SQL txn.
 func (ts *txnState) finishSQLTxn(s *Session) {
 	ts.mon.Stop(ts.Ctx)
 	if ts.cancel != nil {
@@ -1147,6 +1156,11 @@ func (ts *txnState) finishSQLTxn(s *Session) {
 	if ts.sp == nil {
 		panic("No span in context? Was resetForNewSQLTxn() called previously?")
 	}
+
+	// Finalize the transaction's results.
+	ts.txnResults.Close()
+	ts.txnResults = nil
+
 	sampledFor7881 := (ts.sp.BaggageItem(keyFor7881Sample) != "")
 	ts.sp.Finish()
 	if err := s.Tracing.onFinishSQLTxn(ts.sp); err != nil {

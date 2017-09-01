@@ -187,14 +187,14 @@ func TestBufferedWriterReset(t *testing.T) {
 	acc := memMon.MakeBoundAccount()
 
 	writer := newBufferedWriter(acc)
-	gw := writer.NewGroupResultWriter().(*bufferedWriter)
-	sw := gw.NewStatementResultWriter()
+	gw := writer.NewResultsGroup().(*bufferedWriter)
+	sw := gw.NewStatementResult()
 	sw.BeginResult((*parser.Select)(nil))
 	sw.SetColumns(sqlbase.ResultColumns{{Name: "test", Typ: parser.TypeString}})
 	if err := sw.AddRow(ctx, parser.Datums{parser.DNull}); err != nil {
 		t.Fatal(err)
 	}
-	if err := sw.EndResult(); err != nil {
+	if err := sw.CloseResult(); err != nil {
 		t.Fatal(err)
 	}
 	if numRes := len(gw.currentGroupResults); numRes != 1 {
@@ -228,7 +228,7 @@ func TestStreamingWireFailure(t *testing.T) {
 								}
 							}
 						},
-						AfterExecute: func(ctx context.Context, stmt string, resultWriter StatementResultWriter, err error) {
+						AfterExecute: func(ctx context.Context, stmt string, resultWriter StatementResult, err error) {
 							if strings.Contains(stmt, "generate_series") {
 								errChan <- err
 								close(errChan)
