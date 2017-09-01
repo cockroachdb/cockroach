@@ -85,7 +85,8 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
     if (!problemRanges) {
       return (
         <div className="section">
-          <h1>Loading cluster status...</h1>
+          <h1>Problem Ranges Report</h1>
+          <h2>Loading cluster status...</h2>
         </div>
       );
     }
@@ -114,7 +115,8 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
     if (validIDs.length === 0) {
       return (
         <div className="section">
-          <h1>{titleText}</h1>
+          <h1>Problem Ranges Report</h1>
+          <h2>{titleText}</h2>
           <ConnectionsTable problemRanges={problemRanges} />
         </div>
       );
@@ -123,7 +125,8 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
     const problems = _.values(problemRanges.problems_by_node_id);
     return (
       <div className="section">
-        <h1>{titleText}</h1>
+        <h1>Problem Ranges Report</h1>
+        <h2>{titleText}</h2>
         <ProblemRangeList
           name="Unavailable"
           problems={problems}
