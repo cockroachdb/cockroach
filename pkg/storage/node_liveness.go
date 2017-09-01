@@ -193,23 +193,25 @@ func (nl *NodeLiveness) SetDraining(ctx context.Context, drain bool) {
 }
 
 // SetDecommissioning runs a best-effort attempt of marking the the liveness
-// record as decommissioning.
+// record as decommissioning. It returns whether the function committed a
+// transaction that updated the liveness record.
 func (nl *NodeLiveness) SetDecommissioning(
 	ctx context.Context, nodeID roachpb.NodeID, decommission bool,
-) error {
+) (changeCommitted bool, err error) {
 	ctx = nl.ambientCtx.AnnotateCtx(ctx)
 	for {
-		liveness, err := nl.GetLiveness(nodeID) // need new liveness in each iteration
+		oldLiveness, err := nl.GetLiveness(nodeID) // need new liveness in each iteration
 		if err != nil {
-			return errors.Wrap(err, "unable to get liveness")
+			return false, errors.Wrap(err, "unable to get liveness")
 		}
-		if err := nl.setDecommissioningInternal(ctx, nodeID, liveness, decommission); err != nil {
+		changeCommitted, err := nl.setDecommissioningInternal(ctx, nodeID, oldLiveness, decommission)
+		if err != nil {
 			if errors.Cause(err) == errChangeDecommissioningFailed {
 				continue // expected when epoch incremented
 			}
-			return err
+			return false, err
 		}
-		return nil
+		return changeCommitted, nil
 	}
 }
 
@@ -254,7 +256,7 @@ func (nl *NodeLiveness) setDrainingInternal(
 
 func (nl *NodeLiveness) setDecommissioningInternal(
 	ctx context.Context, nodeID roachpb.NodeID, liveness *Liveness, decommission bool,
-) error {
+) (changeCommitted bool, err error) {
 	// Allow only one attempt to set the decommissioning field at a time if it is this node.
 	if nodeID == nl.gossip.NodeID.Get() {
 		sem := nl.sem(nodeID)
@@ -264,7 +266,7 @@ func (nl *NodeLiveness) setDecommissioningInternal(
 				<-sem
 			}()
 		case <-ctx.Done():
-			return ctx.Err()
+			return false, ctx.Err()
 		}
 	}
 
@@ -276,12 +278,17 @@ func (nl *NodeLiveness) setDecommissioningInternal(
 		newLiveness = *liveness
 	}
 	newLiveness.Decommissioning = decommission
-	return nl.updateLiveness(ctx, &newLiveness, liveness, func(actual Liveness) error {
+	var conditionFailed bool
+	if err := nl.updateLiveness(ctx, &newLiveness, liveness, func(actual Liveness) error {
+		conditionFailed = true
 		if actual.Decommissioning == newLiveness.Decommissioning {
 			return nil
 		}
 		return errChangeDecommissioningFailed
-	})
+	}); err != nil {
+		return false, err
+	}
+	return !conditionFailed && liveness.Decommissioning != decommission, nil
 }
 
 // GetLivenessThreshold returns the maximum duration between heartbeats

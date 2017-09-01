@@ -734,12 +734,12 @@ func testNodeLivenessSetDecommissioning(t *testing.T, decommissionNodeIdx int) {
 
 	// Verify success on failed update of a liveness record that already has the
 	// given decommissioning setting.
-	if err := callerNodeLiveness.SetDecommissioningInternal(ctx, nodeID, &storage.Liveness{}, false); err != nil {
+	if _, err := callerNodeLiveness.SetDecommissioningInternal(ctx, nodeID, &storage.Liveness{}, false); err != nil {
 		t.Fatal(err)
 	}
 
 	// Set a node to decommissioning state.
-	if err := callerNodeLiveness.SetDecommissioning(ctx, nodeID, true); err != nil {
+	if _, err := callerNodeLiveness.SetDecommissioning(ctx, nodeID, true); err != nil {
 		t.Fatal(err)
 	}
 	verifyNodeIsDecommissioning(t, mtc, nodeID)
