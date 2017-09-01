@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -126,7 +127,18 @@ func (p *planner) Insert(
 			return nil, err
 		}
 		if values != nil {
-			src = fillDefaults(defaultExprs, cols, values)
+			if len(values.Tuples) > 0 {
+				// Check to make sure the values clause doesn't have too many or
+				// too few expressions in each tuple.
+				numExprs := len(values.Tuples[0].Exprs)
+				if err := checkNumExprs(numExprs, numInputColumns, n.Columns != nil); err != nil {
+					return nil, err
+				}
+			}
+			src, err = fillDefaults(defaultExprs, cols, values)
+			if err != nil {
+				return nil, err
+			}
 		}
 		insertRows = src
 	}
@@ -145,8 +157,13 @@ func (p *planner) Insert(
 		return nil, err
 	}
 
-	if expressions := len(planColumns(rows)); expressions > numInputColumns {
-		return nil, fmt.Errorf("INSERT error: table %s has %d columns but %d values were supplied", n.Table, numInputColumns, expressions)
+	if _, ok := insertRows.(*parser.ValuesClause); !ok {
+		// If the insert source was not a VALUES clause, then we have not
+		// already verified the expression length.
+		numExprs := len(planColumns(rows))
+		if err := checkNumExprs(numExprs, numInputColumns, n.Columns != nil); err != nil {
+			return nil, err
+		}
 	}
 
 	fkTables := sqlbase.TablesNeededForFKs(*en.tableDesc, sqlbase.CheckInserts)
@@ -411,8 +428,9 @@ func GenerateInsertRow(
 ) (parser.Datums, error) {
 	// The values for the row may be shorter than the number of columns being
 	// inserted into. Generate default values for those columns using the
-	// default expressions.
-
+	// default expressions. This will not happen if the row tuple was produced
+	// by a ValuesClause, because all default expressions will have been populated
+	// already by fillDefaults.
 	if len(rowVals) < len(insertCols) {
 		// It's not cool to append to the slice returned by a node; make a copy.
 		oldVals := rowVals
@@ -535,35 +553,85 @@ func getDefaultValuesClause(
 	return &parser.ValuesClause{Tuples: []*parser.Tuple{{Exprs: row}}}
 }
 
+// fillDefaults populates default expressions in the provided ValuesClause,
+// returning a new ValuesClause with expressions for all columns in cols. Each
+// default value in the Tuples will be replaced with either the corresponding
+// column's default expressions if one exists, or NULL if one does not. There
+// are two parts of a Tuple that fillDefaults will populate:
+// - DefaultVal exprs (`VALUES (1, 2, DEFAULT)`) will be replaced by their
+//   column's default expression (or NULL).
+// - If tuples contain fewer elements than the number of columns, the missing
+//   columns will be added with their default expressions (or NULL).
+//
+// The function returns a ValuesClause with defaults filled or an error.
 func fillDefaults(
 	defaultExprs []parser.TypedExpr, cols []sqlbase.ColumnDescriptor, values *parser.ValuesClause,
-) *parser.ValuesClause {
+) (*parser.ValuesClause, error) {
 	ret := values
-	for tIdx, tuple := range values.Tuples {
+	copyValues := func() {
+		if ret == values {
+			ret = &parser.ValuesClause{Tuples: append([]*parser.Tuple(nil), values.Tuples...)}
+		}
+	}
+
+	defaultExpr := func(idx int) parser.Expr {
+		if defaultExprs == nil || idx >= len(defaultExprs) {
+			// The case where idx is too large for defaultExprs will be
+			// transformed into an error by the check on the number of
+			// columns in Insert().
+			return parser.DNull
+		}
+		return defaultExprs[idx]
+	}
+
+	numColsOrig := len(ret.Tuples[0].Exprs)
+	for tIdx, tuple := range ret.Tuples {
+		if a, e := len(tuple.Exprs), numColsOrig; a != e {
+			return nil, newValuesListLenErr(e, a)
+		}
+
 		tupleCopied := false
+		copyTuple := func() {
+			if !tupleCopied {
+				copyValues()
+				tuple = &parser.Tuple{Exprs: append([]parser.Expr(nil), tuple.Exprs...)}
+				ret.Tuples[tIdx] = tuple
+				tupleCopied = true
+			}
+		}
+
 		for eIdx, val := range tuple.Exprs {
 			switch val.(type) {
 			case parser.DefaultVal:
-				if !tupleCopied {
-					if ret == values {
-						ret = &parser.ValuesClause{Tuples: append([]*parser.Tuple(nil), values.Tuples...)}
-					}
-					ret.Tuples[tIdx] =
-						&parser.Tuple{Exprs: append([]parser.Expr(nil), tuple.Exprs...)}
-					tupleCopied = true
-				}
-				if defaultExprs == nil || eIdx >= len(defaultExprs) {
-					// The case where eIdx is too large for defaultExprs will be
-					// transformed into an error by the check on the number of
-					// columns in Insert().
-					ret.Tuples[tIdx].Exprs[eIdx] = parser.DNull
-				} else {
-					ret.Tuples[tIdx].Exprs[eIdx] = defaultExprs[eIdx]
-				}
+				copyTuple()
+				tuple.Exprs[eIdx] = defaultExpr(eIdx)
 			}
 		}
+
+		// The values for the row may be shorter than the number of columns being
+		// inserted into. Populate default expressions for those columns.
+		for i := len(tuple.Exprs); i < len(cols); i++ {
+			copyTuple()
+			tuple.Exprs = append(tuple.Exprs, defaultExpr(len(tuple.Exprs)))
+		}
 	}
-	return ret
+	return ret, nil
+}
+
+func checkNumExprs(numExprs, numCols int, specifiedTargets bool) error {
+	// It is ok to be missing exprs if !specifiedTargets, because the missing
+	// columns will be filled in by DEFAULT expressions.
+	extraExprs := numExprs > numCols
+	missingExprs := specifiedTargets && numExprs < numCols
+	if extraExprs || missingExprs {
+		more, less := "expressions", "target columns"
+		if missingExprs {
+			more, less = less, more
+		}
+		return errors.Errorf("INSERT has more %s than %s, %d expressions for %d targets",
+			more, less, numExprs, numCols)
+	}
+	return nil
 }
 
 func (n *insertNode) Values() parser.Datums {
@@ -574,4 +642,8 @@ func (n *insertNode) Values() parser.Datums {
 	row := n.run.rowsUpserted.At(0)
 	n.run.rowsUpserted.PopFirst()
 	return row
+}
+
+func (n *insertNode) isUpsert() bool {
+	return n.n.OnConflict != nil
 }

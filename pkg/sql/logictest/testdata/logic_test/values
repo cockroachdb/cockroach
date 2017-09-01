@@ -7,7 +7,7 @@ column1 column2 column3
 1       2       3
 4       5       6
 
-query error VALUES lists must all be the same length
+query error VALUES lists must all be the same length, expected 1 columns, found 2
 VALUES (1), (2, 3)
 
 query I

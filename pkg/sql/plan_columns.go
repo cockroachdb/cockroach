@@ -25,7 +25,7 @@ var noColumns = make(sqlbase.ResultColumns, 0)
 //
 // The length of the returned slice is guaranteed to be equal to the
 // length of the tuple returned by the planNode's Values() method
-// during local exeecution.
+// during local execution.
 //
 // The returned slice is *not* mutable. To modify the result column
 // set, implement a separate recursion (e.g. needed_columns.go) or use

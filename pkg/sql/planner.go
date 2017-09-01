@@ -94,6 +94,9 @@ type planner struct {
 	// logical plan construction. This is used by CREATE VIEW until
 	// #10028 is addressed.
 	hasStar bool
+	// hasSubqueries collects whether any subqueries expansion has
+	// occurred during logical plan construction.
+	hasSubqueries bool
 
 	// Avoid allocations by embedding commonly used objects and visitors.
 	parser                parser.Parser
@@ -264,24 +267,15 @@ func (p *planner) queryRows(
 		ctx: ctx,
 		p:   p,
 	}
-	if next, err := plan.Next(params); err != nil || !next {
-		return nil, err
-	}
-
 	var rows []parser.Datums
-	for {
-		if values := plan.Values(); values != nil {
+	if err = forEachRow(params, plan, func(values parser.Datums) error {
+		if values != nil {
 			valCopy := append(parser.Datums(nil), values...)
 			rows = append(rows, valCopy)
 		}
-
-		next, err := plan.Next(params)
-		if err != nil {
-			return nil, err
-		}
-		if !next {
-			break
-		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	return rows, nil
 }

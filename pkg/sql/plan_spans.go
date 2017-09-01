@@ -17,9 +17,9 @@ package sql
 import (
 	"fmt"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
 
@@ -30,7 +30,7 @@ import (
 // set are disjoint. It is an error for a planNode to touch any span outside
 // those that it reports from this method, but a planNode is not required to
 // touch all spans that it reports.
-func collectSpans(ctx context.Context, plan planNode) (reads, writes roachpb.Spans, err error) {
+func collectSpans(params runParams, plan planNode) (reads, writes roachpb.Spans, err error) {
 	switch n := plan.(type) {
 	case
 		*valueGenerator,
@@ -43,52 +43,157 @@ func collectSpans(ctx context.Context, plan planNode) (reads, writes roachpb.Spa
 		return n.spans, nil, nil
 
 	case *updateNode:
-		return n.run.collectSpans(ctx)
+		return editNodeSpans(params, &n.run.editNodeRun)
 	case *insertNode:
-		return n.run.collectSpans(ctx)
+		if v, ok := n.run.editNodeRun.rows.(*valuesNode); ok && !n.isUpsert() {
+			// subqueries, even within valuesNodes, can be arbitrarily complex,
+			// so we can't run the valuesNode ahead of time if they are present.
+			if v.isConst {
+				return insertNodeWithValuesSpans(params, n, v)
+			}
+		}
+		return editNodeSpans(params, &n.run.editNodeRun)
 	case *deleteNode:
-		return n.run.collectSpans(ctx)
+		return editNodeSpans(params, &n.run.editNodeRun)
 
 	case *delayedNode:
-		return collectSpans(ctx, n.plan)
+		return collectSpans(params, n.plan)
 	case *distinctNode:
-		return collectSpans(ctx, n.plan)
+		return collectSpans(params, n.plan)
 	case *explainDistSQLNode:
-		return collectSpans(ctx, n.plan)
+		return collectSpans(params, n.plan)
 	case *explainPlanNode:
-		return collectSpans(ctx, n.plan)
+		return collectSpans(params, n.plan)
 	case *traceNode:
-		return collectSpans(ctx, n.plan)
+		return collectSpans(params, n.plan)
 	case *limitNode:
-		return collectSpans(ctx, n.plan)
+		return collectSpans(params, n.plan)
 	case *sortNode:
-		return collectSpans(ctx, n.plan)
+		return collectSpans(params, n.plan)
 	case *groupNode:
-		return collectSpans(ctx, n.plan)
+		return collectSpans(params, n.plan)
 	case *windowNode:
-		return collectSpans(ctx, n.plan)
+		return collectSpans(params, n.plan)
 	case *ordinalityNode:
-		return collectSpans(ctx, n.source)
+		return collectSpans(params, n.source)
 	case *filterNode:
-		return collectSpans(ctx, n.source.plan)
+		return collectSpans(params, n.source.plan)
 	case *renderNode:
-		return collectSpans(ctx, n.source.plan)
+		return collectSpans(params, n.source.plan)
 
 	case *indexJoinNode:
-		return indexJoinSpans(ctx, n)
+		return indexJoinSpans(params, n)
 	case *joinNode:
-		return concatSpans(ctx, n.left.plan, n.right.plan)
+		return concatSpans(params, n.left.plan, n.right.plan)
 	case *unionNode:
-		return concatSpans(ctx, n.left, n.right)
+		return concatSpans(params, n.left, n.right)
 	}
 
 	panic(fmt.Sprintf("don't know how to collect spans for node %T", plan))
 }
 
-func indexJoinSpans(
-	ctx context.Context, n *indexJoinNode,
+// editNodeSpans determines the read and write spans for an editNodeRun
+// instance. It is conservative and assumes that anything in the table might be
+// touched because it performs no predicate analysis. Interestingly, performing
+// this analysis fully with optimal span bounds would reduce to the analysis
+// required for predicate locking. Predicate locking is a concurrency control
+// locking strategy where locks are based upon logical conditions.
+//
+// Where possible, we should try to specialize this analysis like we do with
+// insertNodeWithValuesSpans.
+func editNodeSpans(params runParams, r *editNodeRun) (reads, writes roachpb.Spans, err error) {
+	scanReads, scanWrites, err := collectSpans(params, r.rows)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(scanWrites) > 0 {
+		return nil, nil, errors.Errorf("unexpected scan span writes: %v", scanWrites)
+	}
+
+	writerReads, writerWrites := tableWriterSpans(params, r.tw)
+
+	sqReads, err := collectSubquerySpans(params, r.rows)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return append(scanReads, append(writerReads, sqReads...)...), writerWrites, nil
+}
+
+func tableWriterSpans(params runParams, tw tableWriter) (reads, writes roachpb.Spans) {
+	// We don't generally know which spans we will be modifying so we must be
+	// conservative and assume anything in the table might change.
+	tableSpans := tw.tableDesc().AllIndexSpans()
+	fkReads := tw.fkSpanCollector().CollectSpans()
+	return fkReads, tableSpans
+}
+
+// insertNodeWithValuesSpans is a special case of editNodeSpans. It tightens the
+// predicted read and write-sets for INSERT ... VALUES statements. The function
+// does so by evaluating the VALUES clause ahead of time and computing the
+// specific index spans that will be touched by each VALUES tuple. valuesNode
+// can not contain subqueries.
+func insertNodeWithValuesSpans(
+	params runParams, n *insertNode, v *valuesNode,
 ) (reads, writes roachpb.Spans, err error) {
-	indexReads, indexWrites, err := collectSpans(ctx, n.index)
+
+	// addWriteKey adds a write span for the given index key.
+	addWriteKey := func(key roachpb.Key) {
+		writes = append(writes, roachpb.Span{
+			Key:    key,
+			EndKey: key.PrefixEnd(),
+		})
+	}
+
+	// Run the valuesNode to completion while tracking its memory usage.
+	// Importantly, we only Reset the valuesNode, instead of Closing it when
+	// completed, so that the values don't need to be computed again during
+	// plan execution.
+	rowAcc := params.p.evalCtx.Mon.MakeBoundAccount()
+	params.p.evalCtx.ActiveMemAcc = &rowAcc
+	defer rowAcc.Close(params.ctx)
+
+	defer v.Reset(params.ctx)
+	if err = v.Start(params); err != nil {
+		return nil, nil, err
+	}
+
+	if err := forEachRow(params, v, func(values parser.Datums) error {
+		// insertNode uses fillDefaults to fill all defaults if it's data source
+		// is a valuesNode. This is important, because it means that the result
+		// of all DEFAULT expressions will be retained from span collection to
+		// plan execution.
+		if a, e := len(values), len(n.insertCols); a < e {
+			log.Fatalf(params.ctx, "missing columns for row; want %d, got %d", e, a)
+		}
+
+		// Determine the table spans that the current values tuple will mutate.
+		ti := n.run.editNodeRun.tw.(*tableInserter)
+		primaryKey, secondaryKeys, err := ti.ri.EncodeIndexesForRow(values)
+		if err != nil {
+			return err
+		}
+		addWriteKey(primaryKey)
+		for _, secondaryKey := range secondaryKeys {
+			addWriteKey(secondaryKey.Key)
+		}
+
+		// Determine the table spans that foreign key constraints will require
+		// us to read during FK validation.
+		fkReads, err := ti.fkSpanCollector().CollectSpansForValues(values)
+		if err != nil {
+			return err
+		}
+		reads = append(reads, fkReads...)
+		return nil
+	}); err != nil {
+		return nil, nil, err
+	}
+	return reads, writes, nil
+}
+
+func indexJoinSpans(params runParams, n *indexJoinNode) (reads, writes roachpb.Spans, err error) {
+	indexReads, indexWrites, err := collectSpans(params, n.index)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -103,14 +208,12 @@ func indexJoinSpans(
 	return append(indexReads, primaryReads), nil, nil
 }
 
-func concatSpans(
-	ctx context.Context, left, right planNode,
-) (reads, writes roachpb.Spans, err error) {
-	leftReads, leftWrites, err := collectSpans(ctx, left)
+func concatSpans(params runParams, left, right planNode) (reads, writes roachpb.Spans, err error) {
+	leftReads, leftWrites, err := collectSpans(params, left)
 	if err != nil {
 		return nil, nil, err
 	}
-	rightReads, rightWrites, err := collectSpans(ctx, right)
+	rightReads, rightWrites, err := collectSpans(params, right)
 	if err != nil {
 		return nil, nil, err
 	}
