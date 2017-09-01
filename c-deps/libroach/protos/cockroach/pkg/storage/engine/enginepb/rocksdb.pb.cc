@@ -18,44 +18,46 @@ namespace cockroach {
 namespace storage {
 namespace engine {
 namespace enginepb {
-class SSTUserPropertiesDefaultTypeInternal : public ::google::protobuf::internal::ExplicitlyConstructed<SSTUserProperties> {
+class SSTUserPropertiesDefaultTypeInternal {
+public:
+ ::google::protobuf::internal::ExplicitlyConstructed<SSTUserProperties>
+     _instance;
 } _SSTUserProperties_default_instance_;
-class SSTUserPropertiesCollectionDefaultTypeInternal : public ::google::protobuf::internal::ExplicitlyConstructed<SSTUserPropertiesCollection> {
+class SSTUserPropertiesCollectionDefaultTypeInternal {
+public:
+ ::google::protobuf::internal::ExplicitlyConstructed<SSTUserPropertiesCollection>
+     _instance;
 } _SSTUserPropertiesCollection_default_instance_;
 
 namespace protobuf_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto {
 
 PROTOBUF_CONSTEXPR_VAR ::google::protobuf::internal::ParseTableField
-    const TableStruct::entries[] = {
+    const TableStruct::entries[] GOOGLE_ATTRIBUTE_SECTION_VARIABLE(protodesc_cold) = {
   {0, 0, 0, ::google::protobuf::internal::kInvalidMask, 0, 0},
 };
 
 PROTOBUF_CONSTEXPR_VAR ::google::protobuf::internal::AuxillaryParseTableField
-    const TableStruct::aux[] = {
+    const TableStruct::aux[] GOOGLE_ATTRIBUTE_SECTION_VARIABLE(protodesc_cold) = {
   ::google::protobuf::internal::AuxillaryParseTableField(),
 };
 PROTOBUF_CONSTEXPR_VAR ::google::protobuf::internal::ParseTable const
-    TableStruct::schema[] = {
-  { NULL, NULL, 0, -1, -1, false },
-  { NULL, NULL, 0, -1, -1, false },
+    TableStruct::schema[] GOOGLE_ATTRIBUTE_SECTION_VARIABLE(protodesc_cold) = {
+  { NULL, NULL, 0, -1, -1, -1, -1, NULL, false },
+  { NULL, NULL, 0, -1, -1, -1, -1, NULL, false },
 };
-
-
-void TableStruct::Shutdown() {
-  _SSTUserProperties_default_instance_.Shutdown();
-  _SSTUserPropertiesCollection_default_instance_.Shutdown();
-}
 
 void TableStruct::InitDefaultsImpl() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
   ::google::protobuf::internal::InitProtobufDefaults();
   ::cockroach::util::hlc::protobuf_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto::InitDefaults();
-  _SSTUserProperties_default_instance_.DefaultConstruct();
-  _SSTUserPropertiesCollection_default_instance_.DefaultConstruct();
-  _SSTUserProperties_default_instance_.get_mutable()->ts_min_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
+  _SSTUserProperties_default_instance_._instance.DefaultConstruct();
+  ::google::protobuf::internal::OnShutdownDestroyMessage(
+      &_SSTUserProperties_default_instance_);_SSTUserPropertiesCollection_default_instance_._instance.DefaultConstruct();
+  ::google::protobuf::internal::OnShutdownDestroyMessage(
+      &_SSTUserPropertiesCollection_default_instance_);_SSTUserProperties_default_instance_._instance.get_mutable()->ts_min_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
-  _SSTUserProperties_default_instance_.get_mutable()->ts_max_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
+  _SSTUserProperties_default_instance_._instance.get_mutable()->ts_max_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
 }
 
@@ -63,24 +65,17 @@ void InitDefaults() {
   static GOOGLE_PROTOBUF_DECLARE_ONCE(once);
   ::google::protobuf::GoogleOnceInit(&once, &TableStruct::InitDefaultsImpl);
 }
+namespace {
 void AddDescriptorsImpl() {
   InitDefaults();
   ::cockroach::util::hlc::protobuf_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto::AddDescriptors();
-  ::google::protobuf::internal::OnShutdown(&TableStruct::Shutdown);
 }
+} // anonymous namespace
 
 void AddDescriptors() {
   static GOOGLE_PROTOBUF_DECLARE_ONCE(once);
   ::google::protobuf::GoogleOnceInit(&once, &AddDescriptorsImpl);
 }
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-// Force AddDescriptors() to be called at static initialization time.
-struct StaticDescriptorInitializer {
-  StaticDescriptorInitializer() {
-    AddDescriptors();
-  }
-} static_descriptor_initializer;
-#endif  // GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
 
 }  // namespace protobuf_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2frocksdb_2eproto
 
@@ -125,8 +120,9 @@ SSTUserProperties::SSTUserProperties(const SSTUserProperties& from)
 
 void SSTUserProperties::SharedCtor() {
   path_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  ::memset(&ts_min_, 0, reinterpret_cast<char*>(&ts_max_) -
-    reinterpret_cast<char*>(&ts_min_) + sizeof(ts_max_));
+  ::memset(&ts_min_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&ts_max_) -
+      reinterpret_cast<char*>(&ts_min_)) + sizeof(ts_max_));
   _cached_size_ = 0;
 }
 
@@ -137,12 +133,8 @@ SSTUserProperties::~SSTUserProperties() {
 
 void SSTUserProperties::SharedDtor() {
   path_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  if (this != internal_default_instance()) {
-    delete ts_min_;
-  }
-  if (this != internal_default_instance()) {
-    delete ts_max_;
-  }
+  if (this != internal_default_instance()) delete ts_min_;
+  if (this != internal_default_instance()) delete ts_max_;
 }
 
 void SSTUserProperties::SetCachedSize(int size) const {
@@ -165,6 +157,10 @@ SSTUserProperties* SSTUserProperties::New(::google::protobuf::Arena* arena) cons
 
 void SSTUserProperties::Clear() {
 // @@protoc_insertion_point(message_clear_start:cockroach.storage.engine.enginepb.SSTUserProperties)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
   path_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (GetArenaNoVirtual() == NULL && ts_min_ != NULL) {
     delete ts_min_;
@@ -174,12 +170,19 @@ void SSTUserProperties::Clear() {
     delete ts_max_;
   }
   ts_max_ = NULL;
+  _internal_metadata_.Clear();
 }
 
 bool SSTUserProperties::MergePartialFromCodedStream(
     ::google::protobuf::io::CodedInputStream* input) {
 #define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
+  ::google::protobuf::io::LazyStringOutputStream unknown_fields_string(
+      ::google::protobuf::NewPermanentCallback(&_internal_metadata_,
+          &::google::protobuf::internal::InternalMetadataWithArenaLite::
+              mutable_unknown_fields));
+  ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
+      &unknown_fields_string, false);
   // @@protoc_insertion_point(parse_start:cockroach.storage.engine.enginepb.SSTUserProperties)
   for (;;) {
     ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
@@ -189,11 +192,11 @@ bool SSTUserProperties::MergePartialFromCodedStream(
       // string path = 1;
       case 1: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(10u)) {
+            static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadString(
                 input, this->mutable_path()));
           DO_(::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-            this->path().data(), this->path().length(),
+            this->path().data(), static_cast<int>(this->path().length()),
             ::google::protobuf::internal::WireFormatLite::PARSE,
             "cockroach.storage.engine.enginepb.SSTUserProperties.path"));
         } else {
@@ -205,7 +208,7 @@ bool SSTUserProperties::MergePartialFromCodedStream(
       // .cockroach.util.hlc.Timestamp ts_min = 2;
       case 2: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(18u)) {
+            static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_ts_min()));
         } else {
@@ -217,7 +220,7 @@ bool SSTUserProperties::MergePartialFromCodedStream(
       // .cockroach.util.hlc.Timestamp ts_max = 3;
       case 3: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(26u)) {
+            static_cast< ::google::protobuf::uint8>(26u /* 26 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                input, mutable_ts_max()));
         } else {
@@ -228,12 +231,11 @@ bool SSTUserProperties::MergePartialFromCodedStream(
 
       default: {
       handle_unusual:
-        if (tag == 0 ||
-            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
-            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+        if (tag == 0) {
           goto success;
         }
-        DO_(::google::protobuf::internal::WireFormatLite::SkipField(input, tag));
+        DO_(::google::protobuf::internal::WireFormatLite::SkipField(
+            input, tag, &unknown_fields_stream));
         break;
       }
     }
@@ -256,7 +258,7 @@ void SSTUserProperties::SerializeWithCachedSizes(
   // string path = 1;
   if (this->path().size() > 0) {
     ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-      this->path().data(), this->path().length(),
+      this->path().data(), static_cast<int>(this->path().length()),
       ::google::protobuf::internal::WireFormatLite::SERIALIZE,
       "cockroach.storage.engine.enginepb.SSTUserProperties.path");
     ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
@@ -275,12 +277,16 @@ void SSTUserProperties::SerializeWithCachedSizes(
       3, *this->ts_max_, output);
   }
 
+  output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
+                   static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.storage.engine.enginepb.SSTUserProperties)
 }
 
 size_t SSTUserProperties::ByteSizeLong() const {
 // @@protoc_insertion_point(message_byte_size_start:cockroach.storage.engine.enginepb.SSTUserProperties)
   size_t total_size = 0;
+
+  total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
 
   // string path = 1;
   if (this->path().size() > 0) {
@@ -350,10 +356,12 @@ void SSTUserProperties::Swap(SSTUserProperties* other) {
   InternalSwap(other);
 }
 void SSTUserProperties::InternalSwap(SSTUserProperties* other) {
+  using std::swap;
   path_.Swap(&other->path_);
-  std::swap(ts_min_, other->ts_min_);
-  std::swap(ts_max_, other->ts_max_);
-  std::swap(_cached_size_, other->_cached_size_);
+  swap(ts_min_, other->ts_min_);
+  swap(ts_max_, other->ts_max_);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+  swap(_cached_size_, other->_cached_size_);
 }
 
 ::std::string SSTUserProperties::GetTypeName() const {
@@ -425,9 +433,10 @@ void SSTUserProperties::clear_ts_min() {
   ts_min_ = NULL;
 }
 const ::cockroach::util::hlc::Timestamp& SSTUserProperties::ts_min() const {
+  const ::cockroach::util::hlc::Timestamp* p = ts_min_;
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.SSTUserProperties.ts_min)
-  return ts_min_ != NULL ? *ts_min_
-                         : *::cockroach::util::hlc::Timestamp::internal_default_instance();
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
+      &::cockroach::util::hlc::_Timestamp_default_instance_);
 }
 ::cockroach::util::hlc::Timestamp* SSTUserProperties::mutable_ts_min() {
   
@@ -464,9 +473,10 @@ void SSTUserProperties::clear_ts_max() {
   ts_max_ = NULL;
 }
 const ::cockroach::util::hlc::Timestamp& SSTUserProperties::ts_max() const {
+  const ::cockroach::util::hlc::Timestamp* p = ts_max_;
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.SSTUserProperties.ts_max)
-  return ts_max_ != NULL ? *ts_max_
-                         : *::cockroach::util::hlc::Timestamp::internal_default_instance();
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
+      &::cockroach::util::hlc::_Timestamp_default_instance_);
 }
 ::cockroach::util::hlc::Timestamp* SSTUserProperties::mutable_ts_max() {
   
@@ -558,14 +568,25 @@ SSTUserPropertiesCollection* SSTUserPropertiesCollection::New(::google::protobuf
 
 void SSTUserPropertiesCollection::Clear() {
 // @@protoc_insertion_point(message_clear_start:cockroach.storage.engine.enginepb.SSTUserPropertiesCollection)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
   sst_.Clear();
   error_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  _internal_metadata_.Clear();
 }
 
 bool SSTUserPropertiesCollection::MergePartialFromCodedStream(
     ::google::protobuf::io::CodedInputStream* input) {
 #define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
+  ::google::protobuf::io::LazyStringOutputStream unknown_fields_string(
+      ::google::protobuf::NewPermanentCallback(&_internal_metadata_,
+          &::google::protobuf::internal::InternalMetadataWithArenaLite::
+              mutable_unknown_fields));
+  ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
+      &unknown_fields_string, false);
   // @@protoc_insertion_point(parse_start:cockroach.storage.engine.enginepb.SSTUserPropertiesCollection)
   for (;;) {
     ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
@@ -574,7 +595,7 @@ bool SSTUserPropertiesCollection::MergePartialFromCodedStream(
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
       case 1: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(10u)) {
+            static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
                 input, add_sst()));
         } else {
@@ -586,11 +607,11 @@ bool SSTUserPropertiesCollection::MergePartialFromCodedStream(
       // string error = 2;
       case 2: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(18u)) {
+            static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadString(
                 input, this->mutable_error()));
           DO_(::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-            this->error().data(), this->error().length(),
+            this->error().data(), static_cast<int>(this->error().length()),
             ::google::protobuf::internal::WireFormatLite::PARSE,
             "cockroach.storage.engine.enginepb.SSTUserPropertiesCollection.error"));
         } else {
@@ -601,12 +622,11 @@ bool SSTUserPropertiesCollection::MergePartialFromCodedStream(
 
       default: {
       handle_unusual:
-        if (tag == 0 ||
-            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
-            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+        if (tag == 0) {
           goto success;
         }
-        DO_(::google::protobuf::internal::WireFormatLite::SkipField(input, tag));
+        DO_(::google::protobuf::internal::WireFormatLite::SkipField(
+            input, tag, &unknown_fields_stream));
         break;
       }
     }
@@ -626,21 +646,24 @@ void SSTUserPropertiesCollection::SerializeWithCachedSizes(
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  for (unsigned int i = 0, n = this->sst_size(); i < n; i++) {
+  for (unsigned int i = 0,
+      n = static_cast<unsigned int>(this->sst_size()); i < n; i++) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      1, this->sst(i), output);
+      1, this->sst(static_cast<int>(i)), output);
   }
 
   // string error = 2;
   if (this->error().size() > 0) {
     ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-      this->error().data(), this->error().length(),
+      this->error().data(), static_cast<int>(this->error().length()),
       ::google::protobuf::internal::WireFormatLite::SERIALIZE,
       "cockroach.storage.engine.enginepb.SSTUserPropertiesCollection.error");
     ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
       2, this->error(), output);
   }
 
+  output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
+                   static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.storage.engine.enginepb.SSTUserPropertiesCollection)
 }
 
@@ -648,13 +671,15 @@ size_t SSTUserPropertiesCollection::ByteSizeLong() const {
 // @@protoc_insertion_point(message_byte_size_start:cockroach.storage.engine.enginepb.SSTUserPropertiesCollection)
   size_t total_size = 0;
 
+  total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
   {
-    unsigned int count = this->sst_size();
+    unsigned int count = static_cast<unsigned int>(this->sst_size());
     total_size += 1UL * count;
     for (unsigned int i = 0; i < count; i++) {
       total_size +=
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
-          this->sst(i));
+          this->sst(static_cast<int>(i)));
     }
   }
 
@@ -707,9 +732,11 @@ void SSTUserPropertiesCollection::Swap(SSTUserPropertiesCollection* other) {
   InternalSwap(other);
 }
 void SSTUserPropertiesCollection::InternalSwap(SSTUserPropertiesCollection* other) {
+  using std::swap;
   sst_.InternalSwap(&other->sst_);
   error_.Swap(&other->error_);
-  std::swap(_cached_size_, other->_cached_size_);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+  swap(_cached_size_, other->_cached_size_);
 }
 
 ::std::string SSTUserPropertiesCollection::GetTypeName() const {
