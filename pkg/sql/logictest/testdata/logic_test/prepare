@@ -77,7 +77,7 @@ EXECUTE a(3, 1)
 ----
 4
 
-query error could not parse 'foo' as type int
+query error could not parse "foo" as type int
 EXECUTE a('foo', 1)
 
 query error incompatible type for EXECUTE parameter expression: int vs decimal
@@ -108,7 +108,7 @@ EXECUTE b(3)
 ----
 3
 
-query error could not parse 'foo' as type int
+query error could not parse "foo" as type int
 EXECUTE b('foo')
 
 statement
@@ -149,7 +149,7 @@ EXECUTE i(2)
 ----
 3
 
-query error could not parse 'foo' as type int
+query error could not parse "foo" as type int
 EXECUTE i('foo')
 
 query error incompatible type for EXECUTE parameter expression: int vs decimal
@@ -260,7 +260,7 @@ PREPARE wrongTypeImpossibleCast(string) AS INSERT INTO foo VALUES ($1)
 statement
 EXECUTE wrongTypeImpossibleCast('3')
 
-statement error could not parse 'crabgas' as type int
+statement error could not parse "crabgas" as type int
 EXECUTE wrongTypeImpossibleCast('crabgas')
 
 # Check statement compatibility
