@@ -328,8 +328,9 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 		return false, expr
 	}
 
-	if _, ok := expr.(*subquery); ok {
-		// We already replaced this one; do nothing.
+	switch expr.(type) {
+	// We already replaced this one; do nothing.
+	case *subquery, *parser.SubqueryPlaceholder:
 		return false, expr
 	}
 
@@ -398,7 +399,8 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 		}
 	}
 
-	return false, result
+	// Embed subquery in a SubqueryPlaceholder for type casing during type checking.
+	return false, &parser.SubqueryPlaceholder{Sq: result}
 }
 
 func (v *subqueryVisitor) VisitPost(expr parser.Expr) parser.Expr {

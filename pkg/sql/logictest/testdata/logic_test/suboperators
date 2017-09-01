@@ -319,3 +319,10 @@ SELECT * FROM abc WHERE a > ALL(SELECT * FROM unnest(ARRAY[NULL, NULL]))
 query error unsupported comparison operator: <int> = ALL <string\[\]>
 SELECT 1 = ALL(SELECT * FROM unnest(ARRAY['foo', 'bar']))
 
+# ANY/ALL with tuples.
+
+query error unsupported comparison operator: 1 = ANY ROW\(\)
+SELECT 1 = ANY ROW()
+
+query error unsupported comparison operator: 1 = ANY \(1, 2, 3\)
+SELECT 1 = ANY (1, 2, 3)

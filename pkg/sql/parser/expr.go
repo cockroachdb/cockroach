@@ -728,6 +728,27 @@ func (node *Subquery) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, node.Select)
 }
 
+// SubqueryPlaceholder is a wrapper struct around sql.subquery for type casing
+// during type checking.
+type SubqueryPlaceholder struct {
+	Sq Expr
+}
+
+func (s *SubqueryPlaceholder) String() string { return s.Sq.String() }
+
+// Format implements the NodeFormatter interface.
+func (s *SubqueryPlaceholder) Format(buf *bytes.Buffer, f FmtFlags) {
+	s.Sq.Format(buf, f)
+}
+
+// Walk implements the Expr interface.
+func (s *SubqueryPlaceholder) Walk(_ Visitor) Expr { return s }
+
+// TypeCheck implements the Expr interface.
+func (s *SubqueryPlaceholder) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
+	return s.Sq.TypeCheck(ctx, desired)
+}
+
 // BinaryOperator represents a binary operator.
 type BinaryOperator int
 

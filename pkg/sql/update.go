@@ -307,7 +307,12 @@ func (p *planner) Update(
 
 					currentUpdateIdx++
 				}
-			case *subquery:
+			case *subquery, *parser.SubqueryPlaceholder:
+				// Extract nested subquery node from placeholder.
+				if sqholder, ok := t.(*parser.SubqueryPlaceholder); ok {
+					t = sqholder.Sq
+				}
+
 				selectExpr := parser.SelectExpr{Expr: t}
 				desiredTupleType := make(parser.TTuple, len(setExpr.Names))
 				for i := range setExpr.Names {
@@ -473,8 +478,13 @@ func (p *planner) namesForExprs(exprs parser.UpdateExprs) (parser.UnresolvedName
 		if expr.Tuple {
 			n := -1
 			switch t := expr.Expr.(type) {
-			case *subquery:
-				if tup, ok := t.typ.(parser.TTuple); ok {
+			case *subquery, *parser.SubqueryPlaceholder:
+				// Extract nested subquery node from placeholder.
+				if sqholder, ok := t.(*parser.SubqueryPlaceholder); ok {
+					t = sqholder.Sq
+				}
+
+				if tup, ok := t.(*subquery).typ.(parser.TTuple); ok {
 					n = len(tup)
 				}
 			case *parser.Tuple:
