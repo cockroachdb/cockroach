@@ -16,13 +16,16 @@ package sql_test
 
 import (
 	"database/sql/driver"
+	"fmt"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/lib/pq"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -174,5 +177,47 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 			}
 
 		})
+	}
+}
+
+// Test two things about non-retriable errors happening when the Executor does
+// an "autoCommit" (i.e. commits the KV txn after running an implicit
+// transaction):
+// 1) The error is reported to the client.
+// 2) The error doesn't leave the session in the Aborted state. After running
+// implicit transactions, the state should always be NoTxn, regardless of any
+// errors.
+func TestNonRetriableErrorOnAutoCommit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	query := "SELECT 42"
+
+	params := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				BeforeAutoCommit: func(ctx context.Context, stmt string) (skipCommit bool, _ error) {
+					if strings.Contains(stmt, query) {
+						return true, fmt.Errorf("injected autocommit error")
+					}
+					return false, nil
+				},
+			},
+		},
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	sqlDB.SetMaxOpenConns(1)
+
+	if _, err := sqlDB.Exec(query); !testutils.IsError(err, "injected") {
+		t.Fatalf("expected injected error, got: %v", err)
+	}
+
+	var state string
+	if err := sqlDB.QueryRow("SHOW TRANSACTION STATUS").Scan(&state); err != nil {
+		t.Fatal(err)
+	}
+	if state != "NoTxn" {
+		t.Fatalf("expected state %s, got: %s", "NoTxn", state)
 	}
 }
