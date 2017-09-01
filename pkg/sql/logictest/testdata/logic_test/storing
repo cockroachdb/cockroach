@@ -200,9 +200,8 @@ a  false
 b  false
 c  false
 
-# TODO(jordanlewis): https://github.com/cockroachdb/cockroach/issues/17493
-# statement ok
-# DROP INDEX i14601a
+statement ok
+DROP INDEX i14601a
 
 query TB
 SELECT a, b FROM t14601a ORDER BY a
