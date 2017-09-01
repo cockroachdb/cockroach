@@ -530,13 +530,13 @@ func (s *Session) Finish(e *Executor) {
 	// TODO(nvanbenschoten): Once we have better support for cancelling ongoing
 	// statement execution by the infrastructure added to support CancelRequest,
 	// we should try to actively drain this queue instead of passively waiting
-	// for it to drain.
+	// for it to drain. (andrei, 2017/09) - We now have support for statement
+	// cancellation. Now what?
 	_ = s.synchronizeParallelStmts(s.context)
 
 	// If we're inside a txn, roll it back.
 	if s.TxnState.State().kvTxnIsOpen() {
-		s.TxnState.updateStateAndCleanupOnErr(
-			errors.Errorf("session closing"), e)
+		_ = s.TxnState.updateStateAndCleanupOnErr(fmt.Errorf("session closing"), e)
 	}
 	if s.TxnState.State() != NoTxn {
 		s.TxnState.finishSQLTxn(s)
@@ -1135,7 +1135,7 @@ func (ts *txnState) resetStateAndTxn(state TxnStateEnum) {
 	}
 	if ts.mu.txn != nil && !ts.mu.txn.IsFinalized() {
 		panic(fmt.Sprintf(
-			"attempting to move SQL txn to state %v inconsistent with KV txn state: %s "+
+			"attempting to move SQL txn to state %s inconsistent with KV txn state: %s "+
 				"(finalized: false)", state, ts.mu.txn.Proto().Status))
 	}
 	ts.SetState(state)
@@ -1189,26 +1189,55 @@ func (ts *txnState) finishSQLTxn(s *Session) {
 // received. If it's a retriable error and we're going to retry the txn,
 // then the state moves to RestartWait. Otherwise, the state moves to Aborted
 // and the KV txn is cleaned up.
-func (ts *txnState) updateStateAndCleanupOnErr(err error, e *Executor) {
+//
+// This method always returns an error. Usually it's the input err, except that
+// a retriable error meant for another txn is replaced with a non-retriable
+// error because higher layers are not supposed to consider it retriable.
+func (ts *txnState) updateStateAndCleanupOnErr(err error, e *Executor) error {
 	if err == nil {
 		panic("updateStateAndCleanupOnErr called with no error")
 	}
+	if ts.mu.txn == nil {
+		panic(fmt.Sprintf(
+			"updateStateAndCleanupOnErr called in state with no KV txn. State: %s",
+			ts.State()))
+	}
 	if retErr, ok := err.(*roachpb.HandledRetryableTxnError); !ok ||
 		!ts.willBeRetried() ||
-		!ts.mu.txn.IsRetryableErrMeantForTxn(*retErr) {
+		!ts.mu.txn.IsRetryableErrMeantForTxn(*retErr) ||
+		// If we ran a COMMIT, then we can only do auto-retries, not client-directed
+		// retries.
+		(ts.commitSeen && ts.State() != AutoRetry) {
 
 		// We can't or don't want to retry this txn, so the txn is over.
 		e.TxnAbortCount.Inc(1)
+
+		// If we got a retriable error but it was meant for another txn, we'll
+		// return a non-retriable error instead further down. We need to identify
+		// this here, before the call to ts.resetStateAndTxn().
+		var retriableErrForAnotherTxn bool
+		txnID := ts.mu.txn.Proto().ID
+		if ok && !ts.mu.txn.IsRetryableErrMeantForTxn(*retErr) {
+			retriableErrForAnotherTxn = true
+		}
+
 		// This call rolls back a PENDING transaction and cleans up all its
 		// intents.
 		ts.mu.txn.CleanupOnError(ts.Ctx, err)
 		ts.resetStateAndTxn(Aborted)
+
+		if retriableErrForAnotherTxn {
+			return errors.Wrapf(
+				retErr,
+				"retryable error from another txn. Current txn ID: %v", txnID)
+		}
 	} else {
 		// If we got a retriable error, move the SQL txn to the RestartWait state.
 		// Note that TransactionAborted is also a retriable error, handled here;
 		// in this case cleanup for the txn has been done for us under the hood.
 		ts.SetState(RestartWait)
 	}
+	return err
 }
 
 func (ts *txnState) setIsolationLevel(isolation enginepb.IsolationType) error {
