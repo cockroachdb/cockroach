@@ -14,11 +14,13 @@ import { jobsKey, refreshJobs } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import { TimestampToMoment } from "src/util/convert";
+import docsURL from "src/util/docs";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import Loading from "src/views/shared/components/loading";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
+import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 
 type Job = protos.cockroach.server.serverpb.JobsResponse.Job;
 
@@ -166,9 +168,28 @@ interface JobsTableProps {
   jobsValid: boolean;
 }
 
+const titleTooltip = (
+  <span>
+    Some jobs can be paused or canceled through SQL. For details, view the docs
+    on the <a href={docsURL("pause-job.html")}><code>PAUSE JOB</code></a> and <a
+    href={docsURL("cancel-job.html")}><code>CANCEL JOB</code></a> statements.
+  </span>
+);
+
 class JobsTable extends React.Component<JobsTableProps, {}> {
   static title() {
-    return "Jobs";
+    return (
+      <div>
+        Jobs
+        <div className="section-heading__tooltip">
+          <ToolTipWrapper text={titleTooltip}>
+            <div className="section-heading__tooltip-hover-area">
+              <div className="section-heading__info-icon">!</div>
+            </div>
+          </ToolTipWrapper>
+        </div>
+      </div>
+    );
   }
 
   refresh(props = this.props) {
