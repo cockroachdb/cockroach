@@ -504,6 +504,6 @@ func (nl *NodeLiveness) SetDrainingInternal(
 
 func (nl *NodeLiveness) SetDecommissioningInternal(
 	ctx context.Context, nodeID roachpb.NodeID, liveness *Liveness, decommission bool,
-) error {
+) (changeCommitted bool, err error) {
 	return nl.setDecommissioningInternal(ctx, nodeID, liveness, decommission)
 }

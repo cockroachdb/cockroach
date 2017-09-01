@@ -613,7 +613,7 @@ func TestHeartbeatCallbackForDecommissioning(t *testing.T) {
 		}
 		break
 	}
-	if err := nodeLiveness.SetDecommissioning(context.Background(), ts.nodeIDContainer.Get(), true); err != nil {
+	if _, err := nodeLiveness.SetDecommissioning(context.Background(), ts.nodeIDContainer.Get(), true); err != nil {
 		t.Fatal(err)
 	}
 

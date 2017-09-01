@@ -1156,9 +1156,30 @@ func (s *Server) Undrain(off []serverpb.DrainMode) []serverpb.DrainMode {
 
 // Decommission idempotently sets the decommissioning flag for specified nodes.
 func (s *Server) Decommission(ctx context.Context, setTo bool, nodeIDs []roachpb.NodeID) error {
+	eventLogger := sql.MakeEventLogger(s.leaseMgr)
+	eventType := sql.EventLogNodeDecommissioned
+	if !setTo {
+		eventType = sql.EventLogNodeRecommissioned
+	}
 	for _, nodeID := range nodeIDs {
-		if err := s.nodeLiveness.SetDecommissioning(ctx, nodeID, setTo); err != nil {
+		changeCommitted, err := s.nodeLiveness.SetDecommissioning(ctx, nodeID, setTo)
+		if err != nil {
 			return errors.Wrapf(err, "during liveness update %d -> %t", nodeID, setTo)
+		}
+		if changeCommitted {
+			// If we die right now or if this transaction fails to commit, the
+			// commissioning event will not be recorded to the event log. While we
+			// could insert the event record in the same transaction as the liveness
+			// update, this would force a 2PC and potentially leave write intents in
+			// the node liveness range. Better to make the event logging best effort
+			// than to slow down future node liveness transactions.
+			if err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				return eventLogger.InsertEventRecord(
+					ctx, txn, eventType, int32(nodeID), int32(s.NodeID()), struct{}{},
+				)
+			}); err != nil {
+				log.Errorf(ctx, "unable to record %s event for node %d: %s", eventType, nodeID, err)
+			}
 		}
 	}
 	return nil
