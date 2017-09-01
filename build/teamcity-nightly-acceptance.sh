@@ -32,11 +32,11 @@ PKG=./pkg/acceptance
 
 case $TESTNAME in
   TestUpreplicate_1To3Small)
-    TESTTIMEOUT=2h
+    TESTTIMEOUT=4h
     COCKROACH_EXTRA_FLAGS+=' -tf.cockroach-env=COCKROACH_PREEMPTIVE_SNAPSHOT_RATE=8388608 -tf.cockroach-flags="--vmodule=allocator=5,allocator_scorer=5,replicate_queue=5"'
     ;;
   TestRebalance_3To5Small)
-    TESTTIMEOUT=2h
+    TESTTIMEOUT=4h
     COCKROACH_EXTRA_FLAGS+=' -tf.cockroach-env=COCKROACH_PREEMPTIVE_SNAPSHOT_RATE=8388608 -tf.cockroach-flags="--vmodule=allocator=5,allocator_scorer=5,replicate_queue=5" -at.std-dev 14'
     ;;
   TestRebalance_3To5Small_WithSchemaChanges)
