@@ -784,11 +784,19 @@ func (p *planner) expandIndexName(
 	}
 
 	if index.SearchTable {
-		realTableName, err := p.findTableContainingIndex(ctx, p.txn, p.getVirtualTabler(), tn.DatabaseName, tn.TableName)
+		// On the first call to expandIndexName(), index.Index is empty and
+		// index.Table is the index name. Once the table name is resolved
+		// for the index below, index.Table references a new table name
+		// (not the index), so a subsequent call to expandIndexName()
+		// will generate tn using the new value of index.Table, which
+		// is a table name. Therefore assign index.Index only once.
+		if index.Index == "" {
+			index.Index = tn.TableName
+		}
+		realTableName, err := p.findTableContainingIndex(ctx, p.txn, p.getVirtualTabler(), tn.DatabaseName, index.Index)
 		if err != nil {
 			return nil, err
 		}
-		index.Index = tn.TableName
 		index.Table.TableNameReference = realTableName
 		tn = realTableName
 	}
