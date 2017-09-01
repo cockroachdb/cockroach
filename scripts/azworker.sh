@@ -2,8 +2,9 @@
 #
 # Prerequisites:
 # - Cockroach Labs employees: ask an admin to create an Azure account for you.
-# - Install the Azure XPlat CLI: https://github.com/Azure/azure-xplat-cli
-# - Run "azure login" and sign in to your Azure account.
+# - Install the Azure XPlat CLI 2.0:
+#   https://docs.microsoft.com/en-us/cli/azure/install-azure-cli?view=azure-cli-latest
+# - Run "az login" and sign in to your Azure account.
 
 set -euo pipefail
 
