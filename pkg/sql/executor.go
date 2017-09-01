@@ -344,6 +344,19 @@ type ExecutorTestingKnobs struct {
 
 	// DistSQLPlannerKnobs are testing knobs for distSQLPlanner.
 	DistSQLPlannerKnobs DistSQLPlannerTestingKnobs
+
+	// BeforeAutoCommit is called when the Executor is about to commit the KV
+	// transaction after running a statement in an implicit transaction, allowing
+	// tests to inject errors into that commit.
+	// If an error is returned, that error will be considered the result of
+	// txn.Commit(), and the txn.Commit() call will not actually be
+	// made. If no error is returned, txn.Commit() is called normally.
+	//
+	// Note that this is not called if the SQL statement representing the implicit
+	// transaction has committed the KV txn itself (e.g. if it used the 1-PC
+	// optimization). This is only called when the Executor is the one doing the
+	// committing.
+	BeforeAutoCommit func(ctx context.Context, stmt string) error
 }
 
 // DistSQLPlannerTestingKnobs is used to control internals of the distSQLPlanner
@@ -569,6 +582,9 @@ func (e *Executor) Prepare(
 // Note that we will only receive an error even if we run a successful statement
 // followed by a statement which has an error then the caller will only receive
 // the error, however the first statement will have been executed.
+//
+// If no error is returned, the caller has to call Close() on the returned
+// StatementResults.
 func (e *Executor) ExecuteStatementsBuffered(
 	session *Session, stmts string, pinfo *parser.PlaceholderInfo, expectedNumResults int,
 ) (StatementResults, error) {
@@ -741,7 +757,7 @@ func (e *Executor) execRequest(
 		// statements or only one, so just pretend there was one.
 		if txnState.mu.txn != nil {
 			// Rollback the txn.
-			txnState.updateStateAndCleanupOnErr(err, e)
+			err = txnState.updateStateAndCleanupOnErr(err, e)
 		}
 		return err
 	}
@@ -767,7 +783,6 @@ func (e *Executor) execParsed(
 		// that is encountered resets stmts.
 
 		inTxn := txnState.State() != NoTxn
-		execOpt := client.TxnExecOptions{}
 		// Figure out the statements out of which we're going to try to consume
 		// this iteration. If we need to create an implicit txn, only one statement
 		// can be consumed.
@@ -775,13 +790,18 @@ func (e *Executor) execParsed(
 		// If protoTS is set, the transaction proto sets its Orig and Max timestamps
 		// to it each retry.
 		var protoTS *hlc.Timestamp
+
+		// autoCommit will be set if we're now starting an implicit transaction and
+		// thus should automatically commit after we've run the statement.
+		autoCommit := false
+
 		// If we're not in a transaction, then the next statement is part of a new
 		// transaction (implicit txn or explicit txn). We do the corresponding state
 		// reset.
 		if !inTxn {
 			// Detect implicit transactions - they need to be autocommitted.
 			if _, isBegin := stmts[0].AST.(*parser.BeginTransaction); !isBegin {
-				execOpt.AutoCommit = true
+				autoCommit = true
 				stmtsToExec = stmtsToExec[:1]
 				// Check for AS OF SYSTEM TIME. If it is present but not detected here,
 				// it will raise an error later on.
@@ -800,14 +820,13 @@ func (e *Executor) execParsed(
 			}
 			txnState.resetForNewSQLTxn(
 				e, session,
-				execOpt.AutoCommit, /* implicitTxn */
-				false,              /* retryIntent */
+				autoCommit, /* implicitTxn */
+				false,      /* retryIntent */
 				e.cfg.Clock.PhysicalTime(), /* sqlTimestamp */
 				session.DefaultIsolationLevel,
 				roachpb.NormalUserPriority,
 			)
 		}
-		execOpt.AutoRetry = txnState.State() == AutoRetry
 
 		if txnState.State() == NoTxn {
 			panic("we failed to initialize a txn")
@@ -818,15 +837,9 @@ func (e *Executor) execParsed(
 
 		// Track if we are retrying this query, so that we do not double count.
 		automaticRetryCount := 0
-		txnClosure := func(ctx context.Context, txn *client.Txn, opt *client.TxnExecOptions) error {
+
+		txnClosure := func(ctx context.Context) (transitionToOpen bool, _ error) {
 			defer func() { automaticRetryCount++ }()
-			if txnState.TxnIsOpen() && txnState.mu.txn != txn {
-				panic(fmt.Sprintf("closure wasn't called in the txn we set up for it."+
-					"\ntxnState.mu.txn:%+v\ntxn:%+v\ntxnState:%+v", txnState.mu.txn, txn, txnState))
-			}
-			txnState.mu.Lock()
-			txnState.mu.txn = txn
-			txnState.mu.Unlock()
 
 			if protoTS != nil {
 				txnState.mu.txn.SetFixedTimestamp(*protoTS)
@@ -835,7 +848,7 @@ func (e *Executor) execParsed(
 			// Some results may have been produced by a previous attempt.
 			txnState.txnResults.Reset(session.Ctx())
 			var err error
-			remainingStmts, err = runTxnAttempt(
+			remainingStmts, transitionToOpen, err = runTxnAttempt(
 				e, session, stmtsToExec, pinfo, origState,
 				!inTxn /* txnPrefix */, avoidCachedDescriptors, automaticRetryCount, txnState.txnResults)
 
@@ -854,42 +867,129 @@ func (e *Executor) execParsed(
 				}
 			}
 
-			return err
+			return transitionToOpen, err
 		}
-		// This is where the magic happens - we ask db to run a KV txn and possibly retry it.
-		txn := txnState.mu.txn // this might be nil if the txn was already aborted.
-		err := txn.Exec(session.Ctx(), execOpt, txnClosure)
+
+		// We now run the prefix of stmtsToExec that belong to the current
+		// transaction via txnClosure. We do this in a loop because we may want to
+		// do automatic retries, if possible. Whether or not we can do auto-retries
+		// depends on the state before we execute statements in the batch.
+		//
+		// TODO(andrei): It's unfortunate that we're keeping track of what the state
+		// was before running the statements. It'd be great if the state in which we
+		// find ourselves after running the statements told us if we can auto-retry.
+		// A way to do that is to introduce another state called AutoRestartWait,
+		// similar to RestartWait. We'd enter this state whenever we're in state
+		// AutoRetry and we get a retriable error.
+		txnCanBeAutoRetried := txnState.State() == AutoRetry
+		var err error
+		for {
+			// transitionToOpen will tell us if we need to transition from AutoRetry
+			// to Open after executing the statements.
+			var transitionToOpen bool
+
+			// Run some statements.
+			transitionToOpen, err = txnClosure(session.Ctx())
+
+			// Sanity checks.
+			if err != nil && txnState.TxnIsOpen() {
+				log.Fatalf(session.Ctx(), "statement(s) generated error but state is %s. err: %s",
+					txnState.State(), err)
+			} else {
+				state := txnState.State()
+				if err == nil && (state == Aborted || state == RestartWait) {
+					crash := true
+					if len(stmtsToExec) > 0 {
+						// SHOW TRANSACTION STATUS statements are always allowed regardless
+						// of the transaction state.
+						if _, ok := stmtsToExec[0].AST.(*parser.ShowTransactionStatus); ok {
+							crash = false
+						}
+					}
+					if crash {
+						log.Fatalf(session.Ctx(), "no error, but we're in error state: %s", state)
+					}
+				}
+			}
+
+			// Check if we need to auto-commit. If so, we end the transaction now; the
+			// transaction was only supposed to exist for the statement that we just
+			// ran.
+			if autoCommit {
+				if err == nil {
+					txn := txnState.mu.txn
+					if txn == nil {
+						log.Fatalf(session.Ctx(), "implicit txn returned with no error and yet "+
+							"the kv txn is gone. No state transition should have done that. State: %s",
+							txnState.State())
+					}
+
+					// We're were told to autoCommit. The KV txn might already be
+					// committed (planNodes are free to do that when running an implicit
+					// transaction, and some try to do it to take advantage of 1-PC txns).
+					// If it is, then there's nothing to do. If it isn't, then we commit
+					// it here.
+					//
+					// NOTE(andrei): It bothers me some that we're peeking at txn to
+					// figure out whether we committed or not, where SQL could already
+					// know that - individual statements could report this back.
+					if txn.IsAborted() {
+						// TODO(andrei): Until 7881 is fixed.
+						log.Fatalf(session.Ctx(), "#7881: the statement we just ran didn't generate an error "+
+							"but the txn proto is aborted. This should never happen. txn: %+v",
+							txn)
+					}
+
+					if !txn.IsCommitted() {
+						var skipCommit bool
+						if e.cfg.TestingKnobs.BeforeAutoCommit != nil {
+							err = e.cfg.TestingKnobs.BeforeAutoCommit(session.Ctx(), stmtsToExec[0].String())
+							skipCommit = err != nil
+						}
+						if !skipCommit {
+							err = txn.Commit(session.Ctx())
+						}
+						log.Eventf(session.Ctx(), "AutoCommit. err: %v\ntxn: %+v", err, txn.Proto())
+						if err != nil {
+							err = txnState.updateStateAndCleanupOnErr(err, e)
+						}
+					}
+				}
+
+				// After autoCommit, unless we're in RestartWait, we leave the
+				// transaction in NoTxn, regardless of whether we executed the query
+				// successfully or we encountered an error.
+				if txnState.State() != RestartWait {
+					txnState.resetStateAndTxn(NoTxn)
+				}
+			}
+
+			// If we've been told by runTxnAttempt that we should move to Open, do it
+			// now.
+			if err == nil && (txnState.State() == AutoRetry) && transitionToOpen {
+				txnState.SetState(Open)
+			}
+
+			if _, ok := err.(*roachpb.UnhandledRetryableError); ok {
+				// We sent transactional requests, so the TxnCoordSender was supposed to
+				// turn retryable errors into HandledRetryableTxnError.
+				log.Fatalf(session.Ctx(), "unexpected UnhandledRetryableError at the Executor level: %s", err)
+			}
+
+			shouldAutoRetry := txnState.State() == RestartWait && txnCanBeAutoRetried
+			if !shouldAutoRetry {
+				break
+			}
+			txnState.mu.txn.PrepareForRetry(session.Ctx(), err)
+		}
+		// We're now done with auto-retries.
+
 		if err != nil && (log.V(2) || logStatementsExecuteEnabled.Get(&e.cfg.Settings.SV)) {
 			log.Infof(session.Ctx(), "execParsed: error: %v. state: %s", err, txnState.State())
 		}
 
-		// Update the Err field of the last result if the error was coming from
-		// auto commit. The error was generated outside of the txn closure, so it was not
-		// set in any result.
-		if err != nil {
-			if aErr, ok := err.(*client.AutoCommitError); ok {
-				// TODO(andrei): Until #7881 fixed.
-				{
-					if txnState.mu.txn != nil {
-						log.Eventf(session.Ctx(), "executor got AutoCommitError: %s\n"+
-							"txn: %+v\nexecOpt.AutoRetry %t, execOpt.AutoCommit:%t, stmts %+v, remaining %+v",
-							aErr, txnState.mu.txn.Proto(), execOpt.AutoRetry, execOpt.AutoCommit, stmts,
-							remainingStmts)
-					} else {
-						log.Errorf(session.Ctx(), "7881: AutoCommitError on nil txn: %s, "+
-							"txnState %+v, execOpt %+v, stmts %+v, remaining %+v, txn captured before executing batch: %+v",
-							aErr, txnState, execOpt, stmts, remainingStmts, txn)
-						txnState.sp.SetBaggageItem(keyFor7881Sample, "sample me please")
-					}
-				}
-				e.TxnAbortCount.Inc(1)
-				// TODO(andrei): Once 7881 is fixed, this should be
-				// txnState.mu.txn.CleanupOnError().
-				txn.CleanupOnError(session.Ctx(), err)
-			}
-		}
-
-		// Sanity check about not leaving KV txns open on errors.
+		// Sanity check about not leaving KV txns open on errors (other than
+		// retriable errors).
 		if err != nil && txnState.mu.txn != nil && !txnState.mu.txn.IsFinalized() {
 			if _, retryable := err.(*roachpb.HandledRetryableTxnError); !retryable {
 				log.Fatalf(session.Ctx(), "got a non-retryable error but the KV "+
@@ -898,23 +998,15 @@ func (e *Executor) execParsed(
 			}
 		}
 
-		// Now make sense of the state we got into and update txnState.
-		if (txnState.State() == RestartWait || txnState.State() == Aborted) &&
-			txnState.commitSeen {
-			// A COMMIT got an error (retryable or not). Too bad, this txn is toast.
+		if txnState.commitSeen && txnState.State() == Aborted {
+			// A COMMIT got an error (retryable or not); we'll move to state NoTxn.
 			// After we return a result for COMMIT (with the COMMIT pgwire tag), the
 			// user can't send any more commands.
-			e.TxnAbortCount.Inc(1)
-			txn.CleanupOnError(session.Ctx(), err)
 			txnState.resetStateAndTxn(NoTxn)
 		}
 
-		if execOpt.AutoCommit {
-			// If execOpt.AutoCommit was set, then the txn no longer exists at this point.
-			txnState.resetStateAndTxn(NoTxn)
-		}
-
-		// If we're no longer in a transaction, finish the trace.
+		// If we're no longer in a transaction, close the transaction-scoped
+		// resources.
 		if txnState.State() == NoTxn {
 			txnState.finishSQLTxn(session)
 		}
@@ -971,7 +1063,7 @@ func (e *Executor) execParsed(
 		// Figure out what statements to run on the next iteration.
 		if err != nil {
 			return convertToErrWithPGCode(err)
-		} else if execOpt.AutoCommit {
+		} else if autoCommit {
 			stmts = stmts[1:]
 		} else {
 			stmts = remainingStmts
@@ -981,25 +1073,27 @@ func (e *Executor) execParsed(
 	return nil
 }
 
-// runTxnAttempt is used in the closure we pass to txn.Exec(). It will be called
-// possibly multiple times with the same set to statements.
-// It takes in a batch of statements and executes a prefix of them corresponding
-// to one transaction. More technically, it runs them one by one until either:
+// runTxnAttempt takes in a batch of statements and executes a prefix of them
+// corresponding to one transaction. It is called multiple times with the same
+// set of statements when performing auto-retries.
+//
+// More technically, it run statements one by one until either:
 // - a statement returns an error
 // - the end of the the batch is reached
 // - a statement transition the state to a non-"open" one, meaning that we're
 // not in a transaction any more (or we are in a transaction but in an error
 // state, although this also triggers the error condition above).
 //
-// This method may transition the state from AutoRetry to Open if the end of the
-// batch is reached.
-//
 // Args:
 // txnPrefix: set if the start of the batch corresponds to the start of the
 // current transaction. Used to trap nested BEGINs.
 // txnResults: used to push query results.
 //
-// It returns all the statements that were not executed.
+// It returns:
+// remainingStmts: all the statements that were not executed.
+// transitionToOpen: specifies if the caller should move from state AutoRetry to
+// state Open. This will be false if the state is not AutoRetry when this
+// returns.
 func runTxnAttempt(
 	e *Executor,
 	session *Session,
@@ -1010,7 +1104,7 @@ func runTxnAttempt(
 	avoidCachedDescriptors bool,
 	automaticRetryCount int,
 	txnResults ResultsGroup,
-) (StatementList, error) {
+) (remainingStmts StatementList, transitionToOpen bool, _ error) {
 
 	txnState := &session.TxnState
 
@@ -1048,7 +1142,7 @@ func runTxnAttempt(
 			txnPrefix && i == 0, /* firstInTxn */
 			avoidCachedDescriptors, automaticRetryCount, stmtResult,
 		); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 
 		// If the transaction is done, stop executing more statements.
@@ -1062,20 +1156,19 @@ func runTxnAttempt(
 	// statements. We also want future ResultsSentToClient() calls to return
 	// false.
 	if err := txnState.txnResults.Flush(session.Ctx()); err != nil {
-		txnState.updateStateAndCleanupOnErr(err, e)
-		return nil, err
+		err = txnState.updateStateAndCleanupOnErr(err, e)
+		return nil, false, err
 	}
 
 	// If we're still in AutoRetry but we've seen statements that would need to be
 	// retried if we'd later want to retry the transaction, we transition to Open.
 	// Automatic retries are not possible beyond this point.
-	if txnState.State() == AutoRetry && encounteredNonAutoRetryStmt {
-		txnState.SetState(Open)
-	}
+	transitionToOpen = txnState.State() == AutoRetry && encounteredNonAutoRetryStmt
+
 	// Return the statements that weren't executed in the current txn, so they can
 	// be executed in the context of other transactions. The set can be empty if
 	// we executed everything that was passed in.
-	return stmts[i+1:], nil
+	return stmts[i+1:], transitionToOpen, nil
 }
 
 // execSingleStatement executes one statement by dispatching according to the
@@ -1277,14 +1370,14 @@ func (e *Executor) execStmtInAbortedTxn(
 		}
 		if err := parser.ValidateRestartCheckpoint(spName); err != nil {
 			if txnState.State() == RestartWait {
-				txnState.updateStateAndCleanupOnErr(err, e)
+				err = txnState.updateStateAndCleanupOnErr(err, e)
 			}
 			return err
 		}
 		if !txnState.retryIntent {
 			err := fmt.Errorf("SAVEPOINT %s has not been used", parser.RestartSavepointName)
 			if txnState.State() == RestartWait {
-				txnState.updateStateAndCleanupOnErr(err, e)
+				err = txnState.updateStateAndCleanupOnErr(err, e)
 			}
 			return err
 		}
@@ -1322,8 +1415,7 @@ func (e *Executor) execStmtInAbortedTxn(
 			// there seems to be little point in staying in RestartWait (plus,
 			// higher-level code asserts that we're only in RestartWait when returning
 			// retryable errors to the client).
-			txnState.updateStateAndCleanupOnErr(err, e)
-			return err
+			return txnState.updateStateAndCleanupOnErr(err, e)
 		}
 		return sqlbase.NewTransactionAbortedError("" /* customMsg */)
 	}
@@ -1411,7 +1503,7 @@ func (e *Executor) execStmtInOpenTxn(
 			if !txnState.TxnIsOpen() {
 				panic(fmt.Sprintf("unexpected txnState when cleaning up: %v", txnState.State()))
 			}
-			txnState.updateStateAndCleanupOnErr(err, e)
+			err = txnState.updateStateAndCleanupOnErr(err, e)
 
 			if firstInTxn && isBegin(stmt) {
 				// A failed BEGIN statement that was starting a txn doesn't leave the
@@ -1455,6 +1547,7 @@ func (e *Executor) execStmtInOpenTxn(
 				// client.Txn.
 				roachpb.Transaction{},
 			)
+			err = txnState.updateStateAndCleanupOnErr(err, e)
 		}
 	}()
 
