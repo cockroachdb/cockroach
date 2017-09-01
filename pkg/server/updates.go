@@ -275,7 +275,6 @@ func (s *Server) reportDiagnostics(runningTime time.Duration) {
 
 	addInfoToURL(reportingURL, s, runningTime)
 	res, err := http.Post(reportingURL.String(), "application/x-protobuf", bytes.NewReader(b))
-
 	if err != nil {
 		if log.V(2) {
 			// This is probably going to be relatively common in production
@@ -284,6 +283,7 @@ func (s *Server) reportDiagnostics(runningTime time.Duration) {
 		}
 		return
 	}
+	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
 		b, err := ioutil.ReadAll(res.Body)
