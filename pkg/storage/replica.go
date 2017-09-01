@@ -3276,14 +3276,12 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		if err != nil {
 			return stats, err
 		}
-		oldSize := raftLogSize
 		raftLogSize += sideLoadedEntriesSize
 		if lastIndex, lastTerm, raftLogSize, err = r.append(
 			ctx, writer, lastIndex, lastTerm, raftLogSize, thinEntries,
 		); err != nil {
 			return stats, err
 		}
-		log.Infof(ctx, "raft log delta: %d", raftLogSize-oldSize)
 	}
 	if !raft.IsEmptyHardState(rd.HardState) {
 		if err := r.raftMu.stateLoader.setHardState(ctx, writer, rd.HardState); err != nil {
