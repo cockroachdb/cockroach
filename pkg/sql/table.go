@@ -774,25 +774,29 @@ func (p *planner) findTableContainingIndex(
 
 // expandIndexName ensures that the index name is qualified with a
 // table name, and searches the table name if not yet specified. It returns
-// the TableName of the underlying table for convenience.
+// the TableName of the underlying table for convenience. The search for the
+// table name can involve a store lookup (can change with time), so the
+// original parsed index is passed in by value here so that it can be
+// modified without worrying about the code having any side effects that
+// can affect its behavior during a transaction retry (idempotent).
 func (p *planner) expandIndexName(
-	ctx context.Context, index *parser.TableNameWithIndex,
-) (*parser.TableName, error) {
+	ctx context.Context, index parser.TableNameWithIndex,
+) (parser.TableNameWithIndex, *parser.TableName, error) {
 	tn, err := index.Table.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
-		return nil, err
+		return index, nil, err
 	}
 
 	if index.SearchTable {
 		realTableName, err := p.findTableContainingIndex(ctx, p.txn, p.getVirtualTabler(), tn.DatabaseName, tn.TableName)
 		if err != nil {
-			return nil, err
+			return index, nil, err
 		}
 		index.Index = tn.TableName
 		index.Table.TableNameReference = realTableName
 		tn = realTableName
 	}
-	return tn, nil
+	return index, tn, nil
 }
 
 // getTableAndIndex returns the table and index descriptors for a table
@@ -808,12 +812,13 @@ func (p *planner) getTableAndIndex(
 ) (*sqlbase.TableDescriptor, *sqlbase.IndexDescriptor, error) {
 	var tn *parser.TableName
 	var err error
+	var evalTableWithIndex parser.TableNameWithIndex
 	if tableWithIndex == nil {
 		// Variant: ALTER TABLE
 		tn, err = table.NormalizeWithDatabaseName(p.session.Database)
 	} else {
 		// Variant: ALTER INDEX
-		tn, err = p.expandIndexName(ctx, tableWithIndex)
+		evalTableWithIndex, tn, err = p.expandIndexName(ctx, *tableWithIndex)
 	}
 	if err != nil {
 		return nil, nil, err
@@ -834,12 +839,12 @@ func (p *planner) getTableAndIndex(
 	if tableWithIndex == nil {
 		index = tableDesc.PrimaryIndex
 	} else {
-		idx, dropped, err := tableDesc.FindIndexByName(string(tableWithIndex.Index))
+		idx, dropped, err := tableDesc.FindIndexByName(string(evalTableWithIndex.Index))
 		if err != nil {
 			return nil, nil, err
 		}
 		if dropped {
-			return nil, nil, fmt.Errorf("index %q being dropped", tableWithIndex.Index)
+			return nil, nil, fmt.Errorf("index %q being dropped", evalTableWithIndex.Index)
 		}
 		index = idx
 	}

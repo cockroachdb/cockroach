@@ -236,7 +236,7 @@ type fullIndexName struct {
 func (p *planner) DropIndex(ctx context.Context, n *parser.DropIndex) (planNode, error) {
 	idxNames := make([]fullIndexName, len(n.IndexList))
 	for i, index := range n.IndexList {
-		tn, err := p.expandIndexName(ctx, index)
+		evalIndex, tn, err := p.expandIndexName(ctx, *index)
 		if err != nil {
 			return nil, err
 		}
@@ -251,7 +251,7 @@ func (p *planner) DropIndex(ctx context.Context, n *parser.DropIndex) (planNode,
 		}
 
 		idxNames[i].tn = tn
-		idxNames[i].idxName = index.Index
+		idxNames[i].idxName = evalIndex.Index
 	}
 	return &dropIndexNode{n: n, idxNames: idxNames}, nil
 }

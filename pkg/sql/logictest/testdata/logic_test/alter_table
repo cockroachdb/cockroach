@@ -278,7 +278,7 @@ statement ok
 INSERT INTO t (a, d, x, y, z) VALUES (33, 34, DECIMAL '2.0', DECIMAL '2.1', DECIMAL '2.2')
 
 statement ok
-DROP INDEX t@t_f_idx
+DROP INDEX t_f_idx
 
 query TTTTRT
 SELECT type, description, username, status, fraction_completed, error
@@ -286,7 +286,7 @@ FROM crdb_internal.jobs
 ORDER BY created DESC
 LIMIT 1
 ----
-SCHEMA CHANGE  DROP INDEX test.t@t_f_idx  root  succeeded  1  ·
+SCHEMA CHANGE  DROP INDEX t_f_idx  root  succeeded  1  ·
 
 statement ok
 ALTER TABLE t DROP COLUMN f

@@ -255,7 +255,7 @@ func (p *planner) RenameTable(ctx context.Context, n *parser.RenameTable) (planN
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) RenameIndex(ctx context.Context, n *parser.RenameIndex) (planNode, error) {
-	tn, err := p.expandIndexName(ctx, n.Index)
+	evalTableWithIndex, tn, err := p.expandIndexName(ctx, *n.Index)
 	if err != nil {
 		return nil, err
 	}
@@ -265,7 +265,7 @@ func (p *planner) RenameIndex(ctx context.Context, n *parser.RenameIndex) (planN
 		return nil, err
 	}
 
-	idx, _, err := tableDesc.FindIndexByName(string(n.Index.Index))
+	idx, _, err := tableDesc.FindIndexByName(string(evalTableWithIndex.Index))
 	if err != nil {
 		if n.IfExists {
 			// Noop.
@@ -284,14 +284,14 @@ func (p *planner) RenameIndex(ctx context.Context, n *parser.RenameIndex) (planN
 			continue
 		}
 		return nil, p.dependentViewRenameError(
-			ctx, "index", n.Index.Index.String(), tableDesc.ParentID, tableRef.ID)
+			ctx, "index", evalTableWithIndex.Index.String(), tableDesc.ParentID, tableRef.ID)
 	}
 
 	if n.NewName == "" {
 		return nil, errEmptyIndexName
 	}
 
-	if n.Index.Index == n.NewName {
+	if evalTableWithIndex.Index == n.NewName {
 		// Noop.
 		return &zeroNode{}, nil
 	}
