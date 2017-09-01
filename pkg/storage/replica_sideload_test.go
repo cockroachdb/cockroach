@@ -41,6 +41,9 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
+	"math"
+	"os"
+	"path/filepath"
 )
 
 func entryEq(l, r raftpb.Entry) error {
@@ -261,6 +264,44 @@ func testSideloadingSideloadedStorage(
 				if _, err := ss.Get(ctx, i, term); err != errSideloadedFileNotFound {
 					t.Fatalf("%d.%d: %v", n, i, err)
 				}
+			}
+		}
+	}
+
+	if !isInMem {
+		// first add a file that shouldn't be in the sideloaded storage to ensure
+		// sane behaviour when directory can't be removed after full truncate
+		nonRemovableFile := filepath.Join(ss.(*diskSideloadStorage).dir, "cantremove.xx")
+		_, err := os.Create(nonRemovableFile)
+		if err != nil {
+			t.Fatalf("could not create non i*.t* file in sideloaded storage: %v", err)
+		}
+
+		err = ss.TruncateTo(ctx, math.MaxUint64)
+		if err == nil {
+			t.Fatalf("sideloaded directory should not have been removable due to extra file %s", nonRemovableFile)
+		}
+		expectedTruncateError := "while purging %q: remove %s: directory not empty"
+		if err.Error() != fmt.Sprintf(expectedTruncateError, ss.(*diskSideloadStorage).dir, ss.(*diskSideloadStorage).dir) {
+			t.Fatalf("error truncating sideloaded storage: %v", err)
+		}
+		// now remove extra file and let truncation proceed to remove directory
+		err = os.Remove(nonRemovableFile)
+		if err != nil {
+			t.Fatalf("could not remove %s: %v", nonRemovableFile, err)
+		}
+
+		if err := ss.TruncateTo(ctx, math.MaxUint64); err != nil {
+			t.Fatal(err)
+		}
+		// ensure dir. is removed when all records are removed from diskSideloadedStorage
+		_, err = os.Stat(ss.(*diskSideloadStorage).dir)
+		if err == nil {
+			t.Fatalf("expected %q to be removed after truncating full range", ss.(*diskSideloadStorage).dir)
+		}
+		if err != nil {
+			if !os.IsNotExist(err) {
+				t.Fatalf("expected %q to be removed: %v", ss.(*diskSideloadStorage).dir, err)
 			}
 		}
 	}
