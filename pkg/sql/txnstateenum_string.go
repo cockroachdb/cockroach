@@ -4,9 +4,9 @@ package sql
 
 import "fmt"
 
-const _TxnStateEnum_name = "NoTxnFirstBatchOpenAbortedRestartWaitCommitWait"
+const _TxnStateEnum_name = "NoTxnAutoRetryOpenAbortedRestartWaitCommitWait"
 
-var _TxnStateEnum_index = [...]uint8{0, 5, 15, 19, 26, 37, 47}
+var _TxnStateEnum_index = [...]uint8{0, 5, 14, 18, 25, 36, 46}
 
 func (i TxnStateEnum) String() string {
 	if i < 0 || i >= TxnStateEnum(len(_TxnStateEnum_index)-1) {
