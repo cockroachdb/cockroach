@@ -194,7 +194,7 @@ func TestTypeCheckError(t *testing.T) {
 		{`(1, 2) = (1, 'a')`, `tuples (1, 2), (1, 'a') are not comparable at index 2: unsupported comparison operator:`},
 		{`1 IN ('a', 'b')`, `unsupported comparison operator: 1 IN ('a', 'b'): could not parse "a" as type int`},
 		{`1 IN (1, 'a')`, `unsupported comparison operator: 1 IN (1, 'a'): could not parse "a" as type int`},
-		{`1 = ANY 2`, `unsupported comparison operator: 1 = ANY 2: op ANY <right> requires array or subquery on right side`},
+		{`1 = ANY 2`, `unsupported comparison operator: 1 = ANY 2: op ANY <right> requires array, tuple or subquery on right side`},
 		{`1 = ANY ARRAY[2, 'a']`, `unsupported comparison operator: 1 = ANY ARRAY[2, 'a']: could not parse "a" as type int`},
 		{`1 = ALL CURRENT_SCHEMAS(true)`, `unsupported comparison operator: <int> = ALL <string[]>`},
 		{`1.0 BETWEEN 2 AND 'a'`, `unsupported comparison operator: <decimal> < <string>`},
