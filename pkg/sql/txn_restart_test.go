@@ -1015,7 +1015,7 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	}
 }
 
-// Test that a COMMIT getting an error, retryable or not, leaves the txn
+// Test that a COMMIT getting an error, retriable or not, leaves the txn
 // finalized and not in Aborted/RestartWait (i.e. COMMIT, like ROLLBACK, is
 // always final). As opposed to an error on a COMMIT in an auto-retry
 // txn, where we retry the txn (not tested here).
@@ -1058,46 +1058,48 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 		{true},
 	}
 	for _, tc := range testCases {
-		const insertStmt = "INSERT INTO t.test(k, v) VALUES (0, 'boulanger')"
-		if err := aborter.QueueStmtForAbortion(
-			insertStmt, 1 /* abortCount */, false, /* willBeRetriedIbid */
-		); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := sqlDB.Exec("BEGIN"); err != nil {
-			t.Fatal(err)
-		}
-		if tc.retryIntent {
-			if _, err := sqlDB.Exec("SAVEPOINT cockroach_restart"); err != nil {
+		t.Run(fmt.Sprintf("retryIntent:%t", tc.retryIntent), func(t *testing.T) {
+			const insertStmt = "INSERT INTO t.test(k, v) VALUES (0, 'boulanger')"
+			if err := aborter.QueueStmtForAbortion(
+				insertStmt, 1 /* abortCount */, false, /* willBeRetriedIbid */
+			); err != nil {
 				t.Fatal(err)
 			}
-		}
-		if _, err := sqlDB.Exec(insertStmt); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := sqlDB.Exec("COMMIT"); !testutils.IsError(err, "pq: restart transaction") {
-			t.Fatalf("unexpected error: %v", err)
-		}
+			if _, err := sqlDB.Exec("BEGIN"); err != nil {
+				t.Fatal(err)
+			}
+			if tc.retryIntent {
+				if _, err := sqlDB.Exec("SAVEPOINT cockroach_restart"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, err := sqlDB.Exec(insertStmt); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := sqlDB.Exec("COMMIT"); !testutils.IsError(err, "pq: restart transaction") {
+				t.Fatalf("unexpected error: %v", err)
+			}
 
-		// Check that we can start another txn on the (one and only) connection.
-		if _, err := sqlDB.Exec("BEGIN"); err != nil {
-			t.Fatal(err)
-		}
-		// Check that we don't see any rows, so the previous txn was rolled back.
-		rows, err := sqlDB.Query("SELECT * FROM t.test")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer rows.Close()
-		if rows.Next() {
-			var k int
-			var v string
-			err := rows.Scan(&k, &v)
-			t.Fatalf("found unexpected row: %d %s, %v", k, v, err)
-		}
-		if _, err := sqlDB.Exec("END"); err != nil {
-			t.Fatal(err)
-		}
+			// Check that we can start another txn on the (one and only) connection.
+			if _, err := sqlDB.Exec("BEGIN"); err != nil {
+				t.Fatal(err)
+			}
+			// Check that we don't see any rows, so the previous txn was rolled back.
+			rows, err := sqlDB.Query("SELECT * FROM t.test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer rows.Close()
+			if rows.Next() {
+				var k int
+				var v string
+				err := rows.Scan(&k, &v)
+				t.Fatalf("found unexpected row: %d %s, %v", k, v, err)
+			}
+			if _, err := sqlDB.Exec("END"); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 
