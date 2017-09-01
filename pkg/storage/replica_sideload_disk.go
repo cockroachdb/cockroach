@@ -125,8 +125,6 @@ func (ss *diskSideloadStorage) Clear(_ context.Context) error {
 }
 
 func (ss *diskSideloadStorage) TruncateTo(ctx context.Context, index uint64) error {
-	// TODO(tschottdorf): if we end up removing *all* files, we could also
-	// remove the directory.
 	matches, err := filepath.Glob(filepath.Join(ss.dir, "i*.t*"))
 	if err != nil {
 		return err
@@ -149,5 +147,40 @@ func (ss *diskSideloadStorage) TruncateTo(ctx context.Context, index uint64) err
 			return errors.Wrapf(err, "while purging %q", match)
 		}
 	}
+	err = ss.purgeDirectoryIfEmpty(ctx)
+	if err != nil {
+		return errors.Wrapf(err, "while purging %q", ss.dir)
+	}
 	return nil
+}
+
+func (ss *diskSideloadStorage) purgeDirectoryIfEmpty(ctx context.Context) error {
+	isEmpty, err := ss.isEmpty()
+	if err != nil {
+		// dir is already removed
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if isEmpty {
+		if err := ss.purgeFile(ctx, ss.dir); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (ss *diskSideloadStorage) isEmpty() (bool, error) {
+	f, err := os.Open(ss.dir)
+	if err != nil {
+		return false, err
+	}
+	defer f.Close()
+	_, err = f.Readdirnames(1)
+	// dir is empty
+	if os.IsNotExist(err) {
+		return true, nil
+	}
+	return false, err
 }
