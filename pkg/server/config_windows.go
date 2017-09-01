@@ -18,6 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 )
 
-func setOpenFileLimitInner(physicalStoreCount int) (int, error) {
+func setOpenFileLimitInner(physicalStoreCount int) (uint64, error) {
 	return engine.DefaultMaxOpenFiles, nil
 }
