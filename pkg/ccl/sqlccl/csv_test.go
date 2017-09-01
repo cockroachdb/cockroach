@@ -394,31 +394,35 @@ func TestImportStmt(t *testing.T) {
 	expectedRows := numFiles * rowsPerFile
 
 	for i, tc := range []struct {
-		name  string
-		query string        // must have one `%s` for the files list.
-		args  []interface{} // will have backupPath appended
-		files []string
-		err   string
+		name    string
+		query   string        // must have one `%s` for the files list.
+		args    []interface{} // will have backupPath appended
+		files   []string
+		jobOpts string
+		err     string
 	}{
 		{
 			"schema-in-file",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2`,
 			[]interface{}{fmt.Sprintf("nodelocal://%s", tablePath)},
 			files,
+			`WITH temp = %s, transform_only`,
 			"",
 		},
 		{
 			"schema-in-query",
-			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) WITH temp = $1`,
+			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH temp = $1`,
 			nil,
 			files,
+			`WITH temp = %s, transform_only`,
 			"",
 		},
 		{
 			"schema-in-query-opts",
-			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) WITH temp = $1, delimiter = '|', comment = '#', nullif=''`,
+			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH temp = $1, delimiter = '|', comment = '#', nullif=''`,
 			nil,
 			filesWithOpts,
+			`WITH comment = '#', delimiter = '|', "nullif" = '', temp = %s, transform_only`,
 			"",
 		},
 		{
@@ -426,34 +430,40 @@ func TestImportStmt(t *testing.T) {
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, distributed`,
 			[]interface{}{fmt.Sprintf("nodelocal://%s", tablePath)},
 			files,
+			`WITH distributed, temp = %s, transform_only`,
 			"",
 		},
 		{
 			"schema-in-query-dist",
-			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) WITH temp = $1, distributed`,
+			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH temp = $1, distributed, transform_only`,
 			nil,
 			files,
+			`WITH distributed, temp = %s, transform_only`,
 			"",
 		},
 		{
 			"schema-in-query-dist-opts",
-			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) WITH temp = $1, distributed, delimiter = '|', comment = '#', nullif=''`,
+			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH temp = $1, distributed, delimiter = '|', comment = '#', nullif=''`,
 			nil,
 			filesWithOpts,
+			`WITH comment = '#', delimiter = '|', distributed, "nullif" = '', temp = %s, transform_only`,
 			"",
 		},
 		{
 			"schema-in-query-transform-only",
-			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s) WITH temp = $1, distributed, delimiter = '|', comment = '#', nullif='', transform_only`,
+			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH temp = $1, distributed, delimiter = '|', comment = '#', nullif='', transform_only`,
 			nil,
 			filesWithOpts,
+			`WITH comment = '#', delimiter = '|', distributed, "nullif" = '', temp = %s, transform_only`,
 			"",
 		},
+		// NB: successes above, failures below, because we check the i-th job.
 		{
 			"missing-temp",
-			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b)) CSV DATA (%s)`,
+			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s)`,
 			nil,
 			files,
+			``,
 			"must provide a temporary storage location",
 		},
 		{
@@ -461,6 +471,7 @@ func TestImportStmt(t *testing.T) {
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, distributed`,
 			[]interface{}{fmt.Sprintf("nodelocal://%s", tablePath)},
 			dups,
+			``,
 			"primary or unique index has duplicate keys",
 		},
 	} {
@@ -491,9 +502,10 @@ func TestImportStmt(t *testing.T) {
 				return
 			}
 
-			if err := verifySystemJob(sqlDB, 0, jobs.TypeImport, jobs.Record{
+			const jobPrefix = `IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) `
+			if err := verifySystemJob(sqlDB, i*2, jobs.TypeImport, jobs.Record{
 				Username:    security.RootUser,
-				Description: "import t CSV conversion",
+				Description: fmt.Sprintf(jobPrefix+tc.jobOpts, strings.Join(tc.files, ", "), `'`+backupPath+`'`),
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -558,7 +570,7 @@ func BenchmarkImport(b *testing.B) {
 
 	sqlDB.Exec(
 		fmt.Sprintf(
-			`IMPORT TABLE t (a int primary key, b string, index (b), index (a, b))
+			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b))
 			CSV DATA (%s) WITH temp = $1, distributed, transform_only`,
 			strings.Join(files, ","),
 		),
