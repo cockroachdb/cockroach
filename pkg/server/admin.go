@@ -962,7 +962,10 @@ func (s *adminServer) Cluster(
 	if clusterID == (uuid.UUID{}) {
 		return nil, grpc.Errorf(codes.Unavailable, "cluster ID not yet available")
 	}
-	return &serverpb.ClusterResponse{ClusterID: clusterID.String()}, nil
+	return &serverpb.ClusterResponse{
+		ClusterID:        clusterID.String(),
+		ReportingEnabled: log.DiagnosticsReportingEnabled.Get(&s.server.st.SV),
+	}, nil
 }
 
 // Health returns liveness for the node target of the request.
