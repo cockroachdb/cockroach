@@ -83,6 +83,15 @@ var (
 	// GracefulDrainModes is the standard succession of drain modes entered
 	// for a graceful shutdown.
 	GracefulDrainModes = []serverpb.DrainMode{serverpb.DrainMode_CLIENT, serverpb.DrainMode_LEASES}
+
+	// LicenseCheckFn is used to check if the current cluster has any enterprise
+	// features enabled. This function is overridden by an init hook in CCL
+	// builds.
+	LicenseCheckFn = func(
+		st *cluster.Settings, cluster uuid.UUID, org, feature string,
+	) error {
+		return errors.New("OSS build does not include Enterprise features")
+	}
 )
 
 // Server is the cockroach server node.
