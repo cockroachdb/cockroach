@@ -678,6 +678,7 @@ func (s *Session) evalCtx() parser.EvalContext {
 	return parser.EvalContext{
 		Location:   &s.Location,
 		Database:   s.Database,
+		User:       s.User,
 		SearchPath: s.SearchPath,
 		Ctx:        s.Ctx,
 		Mon:        &s.TxnState.mon,
