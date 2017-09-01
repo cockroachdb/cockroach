@@ -98,7 +98,6 @@ export class SortableTable extends React.Component<TableProps, {}> {
 
   render() {
     const { sortSetting, columns } = this.props;
-
     return <table className={classNames("sort-table", this.props.className)}>
       <thead>
         <tr className="sort-table__row sort-table__row--header">
