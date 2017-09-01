@@ -826,6 +826,7 @@ func showBackupPlanHook(
 		{Name: "start_time", Typ: parser.TypeTimestamp},
 		{Name: "end_time", Typ: parser.TypeTimestamp},
 		{Name: "size_bytes", Typ: parser.TypeInt},
+		{Name: "rows", Typ: parser.TypeInt},
 	}
 	fn := func(ctx context.Context, resultsCh chan<- parser.Datums) error {
 		// TODO(dan): Move this span into sql.
@@ -848,7 +849,7 @@ func showBackupPlanHook(
 				}
 			}
 		}
-		descSizes := make(map[sqlbase.ID]int64)
+		descSizes := make(map[sqlbase.ID]roachpb.BulkOpSummary)
 		for _, file := range desc.Files {
 			// TODO(dan): This assumes each file in the backup only contains
 			// data from a single table, which is usually but not always
@@ -859,7 +860,9 @@ func showBackupPlanHook(
 			if err != nil {
 				continue
 			}
-			descSizes[sqlbase.ID(tableID)] += file.EntryCounts.DataSize
+			s := descSizes[sqlbase.ID(tableID)]
+			s.Add(file.EntryCounts)
+			descSizes[sqlbase.ID(tableID)] = s
 		}
 		start := parser.DNull
 		if desc.StartTime.WallTime != 0 {
@@ -873,7 +876,8 @@ func showBackupPlanHook(
 					parser.NewDString(table.Name),
 					start,
 					parser.MakeDTimestamp(time.Unix(0, desc.EndTime.WallTime), time.Nanosecond),
-					parser.NewDInt(parser.DInt(descSizes[table.ID])),
+					parser.NewDInt(parser.DInt(descSizes[table.ID].DataSize)),
+					parser.NewDInt(parser.DInt(descSizes[table.ID].Rows)),
 				}
 			}
 		}
