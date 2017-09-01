@@ -699,7 +699,7 @@ func importPlanHook(
 		return nil, nil, errors.Errorf("unsupported import format: %q", importStmt.FileFormat)
 	}
 
-	optsFn, err := p.TypeAsStringOpts(importStmt.Options)
+	optsFn, err := p.TypeAsStringOpts(importStmt.Options, valuelessImportOptions)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -724,13 +724,7 @@ func importPlanHook(
 			return err
 		}
 
-		transformOnly := false
-		if override, ok := opts[importOptionTransformOnly]; ok {
-			if override != "" {
-				return errors.Errorf("option '%s' does not take a value", importOptionTransformOnly)
-			}
-			transformOnly = true
-		}
+		_, transformOnly := opts[importOptionTransformOnly]
 
 		var targetDB string
 		if !transformOnly {
@@ -781,14 +775,6 @@ func importPlanHook(
 				return err
 			}
 			sstSize = sz
-		}
-
-		distributed := false
-		if override, ok := opts[importOptionDistributed]; ok {
-			if override != "" {
-				return errors.New("option 'distributed' does not take a value")
-			}
-			distributed = true
 		}
 
 		var create *parser.CreateTable
@@ -842,7 +828,7 @@ func importPlanHook(
 		}
 
 		var importErr error
-		if distributed {
+		if _, distributed := opts[importOptionDistributed]; distributed {
 			_, importErr = doDistributedCSVTransform(
 				ctx, job, files, p, tableDesc, temp,
 				comma, comment, nullif, walltime,

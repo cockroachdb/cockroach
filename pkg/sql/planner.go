@@ -361,7 +361,7 @@ func (p *planner) TypeAsString(e parser.Expr, op string) (func() (string, error)
 // typecheck as strings, and returns a function that can be called to
 // get the string value during (planNode).Start.
 func (p *planner) TypeAsStringOpts(
-	opts parser.KVOptions,
+	opts parser.KVOptions, valuelessOpts map[string]bool,
 ) (func() (map[string]string, error), error) {
 	typed := make(map[string]parser.TypedExpr, len(opts))
 	for _, opt := range opts {
@@ -382,6 +382,9 @@ func (p *planner) TypeAsStringOpts(
 			if e == nil {
 				res[name] = ""
 				continue
+			}
+			if valuelessOpts[name] {
+				return nil, errors.Errorf("option %q does not take a value", name)
 			}
 			d, err := e.Eval(&p.evalCtx)
 			if err != nil {
