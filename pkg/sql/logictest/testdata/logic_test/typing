@@ -74,16 +74,16 @@ SELECT * from s
 qwe
 startend
 
-statement error incompatible COALESCE expressions: could not parse 'foo' as type int
+statement error incompatible COALESCE expressions: could not parse "foo" as type int
 INSERT INTO s VALUES (COALESCE(1, 'foo'))
 
-statement error incompatible COALESCE expressions: could not parse 'foo' as type int
+statement error incompatible COALESCE expressions: could not parse "foo" as type int
 INSERT INTO i VALUES (COALESCE(1, 'foo'))
 
-query error incompatible COALESCE expressions: could not parse 'foo' as type int
+query error incompatible COALESCE expressions: could not parse "foo" as type int
 SELECT COALESCE(1, 'foo')
 
-query error incompatible COALESCE expressions: could not parse 'foo' as type int
+query error incompatible COALESCE expressions: could not parse "foo" as type int
 SELECT COALESCE(1::INT, 'foo')
 
 query R
@@ -135,18 +135,18 @@ SELECT ts FROM untyped WHERE ts != '2015-09-18 00:00:00'
 
 # Regression tests for #15050
 
-statement error error type checking constant value: could not parse '2017-04-18 18:00' as type timestamp
+statement error error type checking constant value: could not parse "2017-04-18 18:00" as type timestamp
 CREATE TABLE t15050a (c DECIMAL DEFAULT CASE WHEN NOW() < '2017-04-18 18:00' THEN 2 ELSE 2 END);
 
-statement error error type checking constant value: could not parse '2017-04-18 18:00' as type timestamp
+statement error error type checking constant value: could not parse "2017-04-18 18:00" as type timestamp
 CREATE TABLE t15050b (c DECIMAL DEFAULT IF(NOW() < '2017-04-18 18:00', 2, 2));
 
 # Regression tests for #15632
 
-statement error incompatible IFNULL expressions: could not parse 'foo' as type bool: strconv.ParseBool: parsing "foo": invalid syntax
+statement error incompatible IFNULL expressions: could not parse "foo" as type bool: strconv.ParseBool: parsing "foo": invalid syntax
 SELECT IFNULL('foo', false)
 
-statement error incompatible IFNULL expressions: could not parse 'foo' as type bool: strconv.ParseBool: parsing "foo": invalid syntax
+statement error incompatible IFNULL expressions: could not parse "foo" as type bool: strconv.ParseBool: parsing "foo": invalid syntax
 SELECT IFNULL(true, 'foo')
 
 query B
