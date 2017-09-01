@@ -19,5 +19,5 @@ import (
 )
 
 func setOpenFileLimitInner(physicalStoreCount int) (uint64, error) {
-	return engine.DefaultMaxOpenFiles, nil
+	return engine.RecommendedMaxOpenFiles, nil
 }
