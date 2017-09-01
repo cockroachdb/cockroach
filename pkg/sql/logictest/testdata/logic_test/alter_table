@@ -188,7 +188,15 @@ statement error UNIQUE constraint depends on index "foo", use DROP INDEX if you 
 ALTER TABLE t DROP CONSTRAINT foo
 
 statement ok
-DROP INDEX t@foo
+DROP INDEX foo
+
+query TTTTRT
+SELECT type, description, username, status, fraction_completed, error
+FROM crdb_internal.jobs
+ORDER BY created DESC
+LIMIT 1
+----
+SCHEMA CHANGE  DROP INDEX test.t@foo  root  succeeded  1  ·
 
 query TTBITTBB colnames
 SHOW INDEXES FROM t
