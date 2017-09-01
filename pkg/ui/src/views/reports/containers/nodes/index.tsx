@@ -33,7 +33,8 @@ const detailTimeFormat = "Y/MM/DD HH:mm:ss";
 
 const loading = (
   <div className="section">
-    <h1>Loading cluster status...</h1>
+    <h1>Node Diagnostics</h1>
+    <h2>Loading cluster status...</h2>
   </div>
 );
 

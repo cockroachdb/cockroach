@@ -431,35 +431,38 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     });
 
     return (
-      <table className="range-table">
-        <tbody>
-          {
-            _.map(rangeTableDisplayList, (title, key) => (
-              this.renderRangeRow(
-                title,
-                detailsByStoreID,
-                dormantStoreIDs,
-                leader.source_store_id,
-                sortedStoreIDs,
-                key,
-              )
-            ))
-          }
-          {
-            _.map(replicas, (replica, key) => (
-              this.renderRangeReplicaRow(
-                replicasByReplicaIDByStoreID,
-                replica,
-                leaderReplicaIDs,
-                dormantStoreIDs,
-                sortedStoreIDs,
-                rangeID,
-                "replica" + key,
-              )
-            ))
-          }
-        </tbody>
-      </table>
+      <div>
+        <h2>Range r{rangeID.toString()} at {Print.Time(moment().utc())} UTC</h2>
+        <table className="range-table">
+          <tbody>
+            {
+              _.map(rangeTableDisplayList, (title, key) => (
+                this.renderRangeRow(
+                  title,
+                  detailsByStoreID,
+                  dormantStoreIDs,
+                  leader.source_store_id,
+                  sortedStoreIDs,
+                  key,
+                )
+              ))
+            }
+            {
+              _.map(replicas, (replica, key) => (
+                this.renderRangeReplicaRow(
+                  replicasByReplicaIDByStoreID,
+                  replica,
+                  leaderReplicaIDs,
+                  dormantStoreIDs,
+                  sortedStoreIDs,
+                  rangeID,
+                  "replica" + key,
+                )
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
     );
   }
 }

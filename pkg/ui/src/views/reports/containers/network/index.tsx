@@ -156,7 +156,8 @@ function createHeaderCell(staleIDs: Set<number>, id: Identity, key: number) {
 
 const loading = (
   <div className="section">
-    <h1>Loading cluster status...</h1>
+    <h1>Network Diagnostics</h1>
+    <h2>Loading cluster status...</h2>
   </div>
 );
 
