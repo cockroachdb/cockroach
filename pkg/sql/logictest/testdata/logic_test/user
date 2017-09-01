@@ -53,6 +53,11 @@ user3
 statement error no username specified
 CREATE USER ""
 
+query TTT
+SELECT current_user, session_user, user
+----
+root  root  root
+
 user testuser
 
 statement error pq: user testuser does not have INSERT privilege on relation users
@@ -63,3 +68,8 @@ UPSERT INTO system.users VALUES (user1, 'newpassword')
 
 statement error pq: user testuser does not have SELECT privilege on relation users
 SHOW USERS
+
+query TTT
+SELECT current_user, session_user, user
+----
+testuser  testuser  testuser

@@ -27,5 +27,6 @@ func MakeEvalContext(evalCtx parser.EvalContext) EvalContext {
 		ClusterTimestamp:   evalCtx.GetClusterTimestampRaw(),
 		Location:           evalCtx.GetLocation().String(),
 		Database:           evalCtx.Database,
+		User:               evalCtx.User,
 	}
 }
