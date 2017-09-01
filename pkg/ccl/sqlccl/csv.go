@@ -55,9 +55,14 @@ const (
 	importOptionTemp          = "temp"
 )
 
-var valuelessImportOptions = map[string]bool{
-	importOptionTransformOnly: true,
-	importOptionDistributed:   true,
+var importOptionExpectValues = map[string]bool{
+	importOptionDelimiter:     true,
+	importOptionComment:       true,
+	importOptionDistributed:   false,
+	importOptionNullIf:        true,
+	importOptionTransformOnly: false,
+	importOptionSSTSize:       true,
+	importOptionTemp:          true,
 }
 
 // LoadCSV converts CSV files into enterprise backup format.
@@ -657,7 +662,7 @@ func importJobDescription(
 			hasTransformOnly = true
 		}
 		opt := parser.KVOption{Key: parser.Name(k)}
-		if !valuelessImportOptions[k] {
+		if importOptionExpectValues[k] {
 			opt.Value = parser.NewDString(v)
 		}
 		stmt.Options = append(stmt.Options, opt)
@@ -699,7 +704,7 @@ func importPlanHook(
 		return nil, nil, errors.Errorf("unsupported import format: %q", importStmt.FileFormat)
 	}
 
-	optsFn, err := p.TypeAsStringOpts(importStmt.Options)
+	optsFn, err := p.TypeAsStringOpts(importStmt.Options, importOptionExpectValues)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -724,13 +729,7 @@ func importPlanHook(
 			return err
 		}
 
-		transformOnly := false
-		if override, ok := opts[importOptionTransformOnly]; ok {
-			if override != "" {
-				return errors.Errorf("option '%s' does not take a value", importOptionTransformOnly)
-			}
-			transformOnly = true
-		}
+		_, transformOnly := opts[importOptionTransformOnly]
 
 		var targetDB string
 		if !transformOnly {
@@ -781,14 +780,6 @@ func importPlanHook(
 				return err
 			}
 			sstSize = sz
-		}
-
-		distributed := false
-		if override, ok := opts[importOptionDistributed]; ok {
-			if override != "" {
-				return errors.New("option 'distributed' does not take a value")
-			}
-			distributed = true
 		}
 
 		var create *parser.CreateTable
@@ -842,7 +833,7 @@ func importPlanHook(
 		}
 
 		var importErr error
-		if distributed {
+		if _, distributed := opts[importOptionDistributed]; distributed {
 			_, importErr = doDistributedCSVTransform(
 				ctx, job, files, p, tableDesc, temp,
 				comma, comment, nullif, walltime,
