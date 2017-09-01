@@ -160,6 +160,13 @@ func (txn *Txn) status() roachpb.TransactionStatus {
 	return txn.mu.Proto.Status
 }
 
+// Status returns the txn proto status field.
+// This is exported because SQL needs to figure out if it needs to commit the
+// txn or if a 1-PC happened under it.
+func (txn *Txn) Status() roachpb.TransactionStatus {
+	return txn.status()
+}
+
 // SetUserPriority sets the transaction's user priority. Transactions default to
 // normal user priority. The user priority must be set before any operations are
 // performed on the transaction.
@@ -709,6 +716,11 @@ func (e *AutoCommitError) Error() string {
 // to clean up the transaction before returning an error. In case of
 // TransactionAbortedError, txn is reset to a fresh transaction, ready to be
 // used.
+//
+// TODO(andrei): The SQL Executor was the most complex user of this interface.
+// It needed fine control by using TxnExecOptions. Now SQL no longer uses this
+// interface, so it's time to see how it can be simplified. TxnExecOptions can
+// probably go way, and so can AutoCommitError.
 func (txn *Txn) Exec(
 	ctx context.Context, opt TxnExecOptions, fn func(context.Context, *Txn, *TxnExecOptions) error,
 ) (err error) {
@@ -766,13 +778,20 @@ func (txn *Txn) Exec(
 			break
 		}
 
-		txn.commitTriggers = nil
-
-		log.VEventf(ctx, 2, "automatically retrying transaction: %s because of error: %s",
-			txn.DebugName(), err)
+		txn.PrepareForRetry(ctx, err)
 	}
 
 	return err
+}
+
+// PrepareForRetry needs to be called before an retry to perform some
+// book-keeping.
+//
+// TODO(andrei): I think this is called in the wrong place. See #18170.
+func (txn *Txn) PrepareForRetry(ctx context.Context, err error) {
+	txn.commitTriggers = nil
+	log.VEventf(ctx, 2, "automatically retrying transaction: %s because of error: %s",
+		txn.DebugName(), err)
 }
 
 // IsRetryableErrMeantForTxn returns true if err is a retryable
