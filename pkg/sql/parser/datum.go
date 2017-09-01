@@ -1110,7 +1110,7 @@ func ParseDDate(s string, loc *time.Location) (*DDate, error) {
 		return nil, err
 	}
 
-	return NewDDateFromTime(t, loc), nil
+	return NewDDateFromTime(t, time.UTC), nil
 }
 
 // ResolvedType implements the TypedExpr interface.
