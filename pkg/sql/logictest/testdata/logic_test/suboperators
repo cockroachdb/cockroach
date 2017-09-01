@@ -99,6 +99,9 @@ SELECT * FROM abc WHERE a = ANY(ARRAY[NULL, NULL])
 query error unsupported comparison operator: 1 = ANY \(ARRAY\['foo', 'bar'\]\)
 SELECT 1 = ANY(ARRAY['foo', 'bar'])
 
+query error unsupported comparison operator: <int> = ANY <string\[\]>
+SELECT 1 = ANY(ARRAY['foo'] || 'bar')
+
 # ANY/SOME with subqueries.
 
 query B
@@ -179,7 +182,7 @@ query III
 SELECT * FROM abc WHERE a = ANY(SELECT * FROM unnest(ARRAY[NULL, NULL]))
 ----
 
-query error unsupported comparison operator: <int> = ANY <string\[\]>
+query error unsupported comparison operator: <int> = ANY <tuple\{string\}>
 SELECT 1 = ANY(SELECT * FROM unnest(ARRAY['foo', 'bar']))
 
 # ALL with arrays.
@@ -255,6 +258,9 @@ SELECT * FROM abc WHERE a > ALL(ARRAY[NULL, NULL])
 query error unsupported comparison operator: 1 = ALL \(ARRAY\['foo', 'bar'\]\)
 SELECT 1 = ALL(ARRAY['foo', 'bar'])
 
+query error unsupported comparison operator: <int> = ALL <string\[\]>
+SELECT 1 = ALL(ARRAY['foo'] || 'bar')
+
 # ALL with subqueries.
 
 query B
@@ -316,6 +322,39 @@ query III
 SELECT * FROM abc WHERE a > ALL(SELECT * FROM unnest(ARRAY[NULL, NULL]))
 ----
 
-query error unsupported comparison operator: <int> = ALL <string\[\]>
+query error unsupported comparison operator: <int> = ALL <tuple\{string\}>
 SELECT 1 = ALL(SELECT * FROM unnest(ARRAY['foo', 'bar']))
 
+# ANY/ALL with tuples.
+
+query B
+SELECT 1 = ANY (1, 2, 3)
+----
+true
+
+query B
+SELECT 1 = ANY (2, 3, 4)
+----
+false
+
+query error incompatible TUPLE element type: decimal
+SELECT 1 = ANY (1, 1.1)
+
+query B
+SELECT 1::decimal = ANY (1, 1.1)
+----
+true
+
+query error incompatible TUPLE element type: decimal
+SELECT 1 = ANY (1.0, 1.1)
+
+query B
+SELECT 1::decimal = ANY (1.0, 1.1)
+----
+true
+
+query error could not parse \"hello\" as type int
+SELECT 1 = ANY (1, 'hello', 3)
+
+query error unsupported comparison operator: <int> = ANY <tuple{}>
+SELECT 1 = ANY ROW()

@@ -905,6 +905,25 @@ func (d *DOidWrapper) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { ret
 // identity function for Datum.
 func (d dNull) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { return d, nil }
 
+// typeCheckAndRequireTupleElems asserts that all elements in the Tuple
+// can be typed as required and are equivalent to required. Note that one would invoke
+// with the required element type and NOT TTuple (as opposed to how Tuple.TypeCheck operates).
+// For example, (1, 2.5) with required TypeDecimal would raise a sane error whereas (1.0, 2.5) with required TypeDecimal would pass.
+func typeCheckAndRequireTupleElems(ctx *SemaContext, expr Expr, required Type) (TypedExpr, error) {
+	tuple := expr.(*Tuple)
+	tuple.types = make(TTuple, len(tuple.Exprs))
+	for i, subExpr := range tuple.Exprs {
+		// Require that the sub expression is equivalent (or may be inferred) to the required type.
+		typedExpr, err := typeCheckAndRequire(ctx, subExpr, required, "TUPLE element")
+		if err != nil {
+			return nil, err
+		}
+		tuple.Exprs[i] = typedExpr
+		tuple.types[i] = typedExpr.ResolvedType()
+	}
+	return tuple, nil
+}
+
 func typeCheckAndRequireBoolean(ctx *SemaContext, expr Expr, op string) (TypedExpr, error) {
 	return typeCheckAndRequire(ctx, expr, TypeBool, op)
 }
@@ -942,7 +961,8 @@ func typeCheckComparisonOpWithSubOperator(
 	foldedOp, _, _, _, _ := foldComparisonExpr(subOp, nil, nil)
 	ops := CmpOps[foldedOp]
 
-	var cmpTypeLeft, cmpTypeRight Type
+	var cmpTypeLeft Type
+	var cmpTypesRight []Type
 	var leftTyped, rightTyped TypedExpr
 	if array, isConstructor := StripParens(right).(*Array); isConstructor {
 		// If the right expression is an (optionally nested) array constructor, we
@@ -979,7 +999,7 @@ func typeCheckComparisonOpWithSubOperator(
 			break
 		}
 		rightTyped = right.(TypedExpr)
-		cmpTypeRight = retType
+		cmpTypesRight = append(cmpTypesRight, retType)
 
 		// Return early without looking up a CmpOp if the comparison type is TypeNull.
 		if retType == TypeNull {
@@ -995,11 +1015,24 @@ func typeCheckComparisonOpWithSubOperator(
 		}
 		cmpTypeLeft = leftTyped.ResolvedType()
 
-		// Try to type the right expression as an Array of the left's type.
-		// If right is an sql.subquery Expr, it should already be typed.
-		rightTyped, err = right.TypeCheck(ctx, TArray{cmpTypeLeft})
-		if err != nil {
-			return nil, nil, CmpOp{}, err
+		// TODO(richardwu): Write an Unwrap function for BinaryExpr to handle the case where the tuple
+		// is nested within ParenExpr.
+		if _, ok := right.(*Tuple); ok {
+			// If right expression is a tuple, we require that all elements' inferred
+			// type is equivalent to the left's type.
+			rightTyped, err = typeCheckAndRequireTupleElems(ctx, right, cmpTypeLeft)
+			if err != nil {
+				return nil, nil, CmpOp{}, err
+			}
+		} else {
+			// Try to type the right expression as an array of the left's type.
+			// If right is an sql.subquery Expr, it should already be typed.
+			// TODO(richardwu): If right is a subquery, we should really
+			// propagate the left type as a desired type for the result column.
+			rightTyped, err = right.TypeCheck(ctx, TArray{cmpTypeLeft})
+			if err != nil {
+				return nil, nil, CmpOp{}, err
+			}
 		}
 
 		rightReturn := rightTyped.ResolvedType()
@@ -1007,29 +1040,34 @@ func typeCheckComparisonOpWithSubOperator(
 			return leftTyped, rightTyped, CmpOp{}, nil
 		}
 
-		UnwrapType(rightReturn)
 		switch rightUnwrapped := UnwrapType(rightReturn).(type) {
 		case TArray:
-			cmpTypeRight = rightUnwrapped.Typ
+			cmpTypesRight = append(cmpTypesRight, rightUnwrapped.Typ)
 		case TTuple:
-			// Subqueries are expected to return 1 column of values
-			// (see planner.analyzeExpr in analyze.go).
-			cmpTypeRight = rightUnwrapped[0]
+			cmpTypesRight = append(cmpTypesRight, rightUnwrapped...)
 		default:
 			sigWithErr := fmt.Sprintf(compExprsWithSubOpFmt, left, subOp, op, right,
-				fmt.Sprintf("op %s <right> requires array or subquery on right side", op))
-			return nil, nil, CmpOp{},
-				pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sigWithErr)
+				fmt.Sprintf("op %s <right> requires array, tuple or subquery on right side", op))
+			return nil, nil, CmpOp{}, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sigWithErr)
 		}
 	}
 
-	fn, ok := ops.lookupImpl(cmpTypeLeft, cmpTypeRight)
-	if !ok {
-		sig := fmt.Sprintf(compSignatureWithSubOpFmt, cmpTypeLeft, subOp, op, TArray{cmpTypeRight})
-		return nil, nil, CmpOp{},
-			pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sig)
+	if len(cmpTypesRight) == 0 {
+		return nil, nil, CmpOp{}, compError(cmpTypeLeft, rightTyped.ResolvedType(), subOp, op)
+	}
+	var fn CmpOp
+	var ok bool
+	for _, cmpTypeRight := range cmpTypesRight {
+		if fn, ok = ops.lookupImpl(cmpTypeLeft, cmpTypeRight); !ok {
+			return nil, nil, CmpOp{}, compError(cmpTypeLeft, rightTyped.ResolvedType(), subOp, op)
+		}
 	}
 	return leftTyped, rightTyped, fn, nil
+}
+
+func compError(leftType, rightType Type, subOp, op ComparisonOperator) *pgerror.Error {
+	sig := fmt.Sprintf(compSignatureWithSubOpFmt, leftType, subOp, op, rightType)
+	return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sig)
 }
 
 func typeCheckComparisonOp(
