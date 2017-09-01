@@ -260,7 +260,7 @@ type TableNameWithIndex struct {
 // Format implements the NodeFormatter interface.
 func (n *TableNameWithIndex) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, &n.Table)
-	if !n.SearchTable {
+	if n.Index != "" {
 		buf.WriteByte('@')
 		FormatNode(buf, f, n.Index)
 	}
