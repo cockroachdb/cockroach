@@ -47,6 +47,11 @@ const (
 	restoreOptSkipMissingFKs = "skip_missing_foreign_keys"
 )
 
+var restoreOptionExpectValues = map[string]bool{
+	restoreOptIntoDB:         true,
+	restoreOptSkipMissingFKs: false,
+}
+
 func loadBackupDescs(ctx context.Context, uris []string) ([]BackupDescriptor, error) {
 	backupDescs := make([]BackupDescriptor, len(uris))
 
@@ -125,10 +130,7 @@ func allocateTableRewrites(
 			if index.ForeignKey.IsSet() {
 				to := index.ForeignKey.Table
 				if _, ok := tablesByID[to]; !ok {
-					if empty, ok := opts[restoreOptSkipMissingFKs]; ok {
-						if empty != "" {
-							return errors.Errorf("option %q does not take a value", restoreOptSkipMissingFKs)
-						}
+					if _, ok := opts[restoreOptSkipMissingFKs]; ok {
 						index.ForeignKey = sqlbase.ForeignKeyReference{}
 					} else {
 						return errors.Errorf(
@@ -972,7 +974,7 @@ func restorePlanHook(
 		return nil, nil, err
 	}
 
-	optsFn, err := p.TypeAsStringOpts(restoreStmt.Options)
+	optsFn, err := p.TypeAsStringOpts(restoreStmt.Options, restoreOptionExpectValues)
 	if err != nil {
 		return nil, nil, err
 	}
