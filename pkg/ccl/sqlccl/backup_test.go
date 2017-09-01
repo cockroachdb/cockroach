@@ -1898,9 +1898,9 @@ func TestShowBackup(t *testing.T) {
 
 	var unused driver.Value
 	var start, end *time.Time
-	var dataSize uint64
+	var dataSize, rows uint64
 	sqlDB.QueryRow(`SELECT * FROM [SHOW BACKUP $1] WHERE "table" = 'bank'`, full).Scan(
-		&unused, &unused, &start, &end, &dataSize,
+		&unused, &unused, &start, &end, &dataSize, &rows,
 	)
 	if start != nil {
 		t.Errorf("expected null start time on full backup, got %v", *start)
@@ -1911,21 +1911,25 @@ func TestShowBackup(t *testing.T) {
 	if dataSize <= 0 {
 		t.Errorf("expected dataSize to be >0 got : %d", dataSize)
 	}
+	if rows != numAccounts {
+		t.Errorf("expected %d got: %d", numAccounts, rows)
+	}
 
 	// Mess with half the rows.
-	if a, err := sqlDB.Exec(
+	affectedRows, err := sqlDB.Exec(
 		`UPDATE data.bank SET id = -1 * id WHERE id > $1`, numAccounts/2,
-	).RowsAffected(); err != nil {
+	).RowsAffected()
+	if err != nil {
 		t.Fatal(err)
-	} else if a != numAccounts/2 {
-		t.Fatalf("expected to update %d rows, got %d", numAccounts/2, a)
+	} else if affectedRows != numAccounts/2 {
+		t.Fatalf("expected to update %d rows, got %d", numAccounts/2, affectedRows)
 	}
 
 	beforeInc := timeutil.Now()
 	sqlDB.Exec(`BACKUP data.bank TO $1 INCREMENTAL FROM $2`, inc, full)
 
 	sqlDB.QueryRow(`SELECT * FROM [SHOW BACKUP $1] WHERE "table" = 'bank'`, inc).Scan(
-		&unused, &unused, &start, &end, &dataSize,
+		&unused, &unused, &start, &end, &dataSize, &rows,
 	)
 	if start == nil {
 		t.Errorf("expected start time on inc backup, got %v", *start)
@@ -1935,6 +1939,11 @@ func TestShowBackup(t *testing.T) {
 	}
 	if dataSize <= 0 {
 		t.Errorf("expected dataSize to be >0 got : %d", dataSize)
+	}
+	// We added affectedRows and removed affectedRows, so there should be 2*
+	// affectedRows in the backup.
+	if expected := affectedRows * 2; rows != uint64(expected) {
+		t.Errorf("expected %d got: %d", expected, rows)
 	}
 }
 
