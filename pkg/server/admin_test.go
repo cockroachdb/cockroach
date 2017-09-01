@@ -1026,18 +1026,31 @@ func TestClusterAPI(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 
-	// We need to retry, because the cluster ID isn't set until after
-	// bootstrapping.
-	testutils.SucceedsSoon(t, func() error {
-		var resp serverpb.ClusterResponse
-		if err := getAdminJSONProto(s, "cluster", &resp); err != nil {
-			return err
-		}
-		if a, e := resp.ClusterID, s.(*TestServer).node.ClusterID.String(); a != e {
-			return errors.Errorf("cluster ID %s != expected %s", a, e)
-		}
-		return nil
-	})
+	for _, reportingSetting := range []bool{
+		false,
+		true,
+	} {
+		t.Run(fmt.Sprintf("reportingEnabled=%t", reportingSetting), func(t *testing.T) {
+			settings := &s.ClusterSettings().SV
+			log.DiagnosticsReportingEnabled.Override(settings, reportingSetting)
+
+			// We need to retry, because the cluster ID isn't set until after
+			// bootstrapping.
+			testutils.SucceedsSoon(t, func() error {
+				var resp serverpb.ClusterResponse
+				if err := getAdminJSONProto(s, "cluster", &resp); err != nil {
+					return err
+				}
+				if a, e := resp.ClusterID, s.(*TestServer).node.ClusterID.String(); a != e {
+					return errors.Errorf("cluster ID %s != expected %s", a, e)
+				}
+				if a, e := resp.ReportingEnabled, reportingSetting; a != e {
+					return errors.Errorf("reportingEnabled = %t, wanted %t", a, e)
+				}
+				return nil
+			})
+		})
+	}
 }
 
 func TestHealthAPI(t *testing.T) {
