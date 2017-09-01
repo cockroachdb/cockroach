@@ -962,9 +962,22 @@ func (s *adminServer) Cluster(
 	if clusterID == (uuid.UUID{}) {
 		return nil, grpc.Errorf(codes.Unavailable, "cluster ID not yet available")
 	}
+
+	// Check if enterprise features are enabled.  We currently test for the
+	// feature "BACKUP", although enterprise licenses do not yet distinguish
+	// between different features.
+	enterpriseEnabled := false
+	organization := sql.ClusterOrganization.Get(&s.server.st.SV)
+	if err := LicenseCheckFn(
+		s.server.st, clusterID, organization, "BACKUP",
+	); err == nil {
+		enterpriseEnabled = true
+	}
+
 	return &serverpb.ClusterResponse{
-		ClusterID:        clusterID.String(),
-		ReportingEnabled: log.DiagnosticsReportingEnabled.Get(&s.server.st.SV),
+		ClusterID:         clusterID.String(),
+		ReportingEnabled:  log.DiagnosticsReportingEnabled.Get(&s.server.st.SV),
+		EnterpriseEnabled: enterpriseEnabled,
 	}, nil
 }
 

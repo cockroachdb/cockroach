@@ -3,10 +3,11 @@ import * as sinon from "sinon";
 
 import Analytics from "analytics-node";
 import { Location } from "history";
+import _ from "lodash";
 import { Store } from "redux";
 
 import { AnalyticsSync } from "./analytics";
-import { clusterReducerObj } from "./apiReducers";
+import { clusterReducerObj, nodesReducerObj } from "./apiReducers";
 import { AdminUIState, createAdminUIStore } from "./state";
 
 import * as protos from "src/js/protos";
@@ -29,7 +30,7 @@ describe("analytics listener", function() {
       } as any;
     });
 
-    const setClusterID = function (enabled = true) {
+    const setClusterData = function (enabled = true) {
       store.dispatch(clusterReducerObj.receiveData(
         new protos.cockroach.server.serverpb.ClusterResponse({
           cluster_id: clusterID,
@@ -50,7 +51,7 @@ describe("analytics listener", function() {
 
     it("does nothing if reporting is not explicitly enabled", function () {
       const sync = new AnalyticsSync(analytics, store, []);
-      setClusterID(false);
+      setClusterData(false);
 
       sync.page({
         pathname: "/test/path",
@@ -61,7 +62,7 @@ describe("analytics listener", function() {
 
     it("correctly calls segment on a page call", function () {
       const sync = new AnalyticsSync(analytics, store, []);
-      setClusterID();
+      setClusterData();
 
       sync.page({
         pathname: "/test/path",
@@ -84,7 +85,7 @@ describe("analytics listener", function() {
         pathname: "/test/path",
       } as Location);
 
-      setClusterID();
+      setClusterData();
       assert.isTrue(pageSpy.notCalled);
 
       sync.page({
@@ -109,7 +110,7 @@ describe("analytics listener", function() {
     });
 
     it("correctly applies redaction to matched paths", function () {
-      setClusterID();
+      setClusterData();
       const sync = new AnalyticsSync(analytics, store, [
         {
           match: RegExp("/test/.*/path"),
@@ -129,6 +130,103 @@ describe("analytics listener", function() {
           path: "/test/[redacted]/path",
         },
       });
+    });
+  });
+
+  describe("identify method", function () {
+    let store: Store<AdminUIState>;
+    let analytics: Analytics;
+    let identifySpy: sinon.SinonSpy;
+
+    beforeEach(function () {
+      store = createAdminUIStore();
+      identifySpy = sinon.spy();
+
+      // Analytics is a completely fake object, we don't want to call
+      // segment if an unexpected method is called.
+      analytics = {
+        identify: identifySpy,
+      } as any;
+    });
+
+    const setClusterData = function (enabled = true, enterprise = true) {
+      store.dispatch(clusterReducerObj.receiveData(
+        new protos.cockroach.server.serverpb.ClusterResponse({
+          cluster_id: clusterID,
+          reporting_enabled: enabled,
+          enterprise_enabled: enterprise,
+        }),
+      ));
+    };
+
+    const setVersionData = function () {
+      store.dispatch(nodesReducerObj.receiveData([
+        {
+          build_info: {
+            tag: "0.1",
+          },
+        },
+      ]));
+    };
+
+    it("does nothing if cluster info is not available", function () {
+      const sync = new AnalyticsSync(analytics, store, []);
+      setVersionData();
+
+      sync.identify();
+
+      assert.isTrue(identifySpy.notCalled);
+    });
+
+    it("does nothing if version info is not available", function () {
+      const sync = new AnalyticsSync(analytics, store, []);
+      setClusterData(true, true);
+
+      sync.identify();
+
+      assert.isTrue(identifySpy.notCalled);
+    });
+
+    it("does nothing if reporting is not explicitly enabled", function () {
+      const sync = new AnalyticsSync(analytics, store, []);
+      setClusterData(false, true);
+      setVersionData();
+
+      sync.identify();
+
+      assert.isTrue(identifySpy.notCalled);
+    });
+
+    it("sends the correct value of clusterID, version and enterprise", function () {
+      setVersionData();
+
+      _.each([false, true], (enterpriseSetting) => {
+        identifySpy.reset();
+        setClusterData(true, enterpriseSetting);
+        const sync = new AnalyticsSync(analytics, store, []);
+        sync.identify();
+
+        assert.isTrue(identifySpy.calledOnce);
+        assert.deepEqual(identifySpy.args[0][0], {
+          userId: clusterID,
+          traits: {
+            version: "0.1",
+            userAgent: window.navigator.userAgent,
+            enterprise: enterpriseSetting,
+          },
+        });
+      });
+    });
+
+    it("only reports once", function () {
+      const sync = new AnalyticsSync(analytics, store, []);
+      setClusterData(true, true);
+      setVersionData();
+
+      sync.identify();
+      sync.identify();
+
+      assert.isTrue(identifySpy.calledOnce);
     });
   });
 });

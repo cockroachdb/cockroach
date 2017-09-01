@@ -4,6 +4,7 @@ import _ from "lodash";
 import { Store } from "redux";
 
 import * as protos from "src/js/protos";
+import { versionsSelector } from "src/redux/alerts";
 import { store, history, AdminUIState } from "src/redux/state";
 
 type ClusterResponse = protos.cockroach.server.serverpb.ClusterResponse$Properties;
@@ -46,6 +47,14 @@ export class AnalyticsSync {
      * will dispatch all queued locations to the underlying analytics API.
      */
      private queuedPages: Location[] = [];
+
+     /**
+      * sentIdentifyEvent tracks whether the identification event has already
+      * been sent for this session. This event is not sent until all necessary
+      * information has been retrieved (current version of cockroachDB,
+      * cluster settings).
+      */
+     private identifyEventSent = false;
 
      /**
       * Construct a new AnalyticsSync object.
@@ -92,6 +101,45 @@ export class AnalyticsSync {
 
         // Push the page that was just accessed.
         this.pushPage(cluster_id, location);
+    }
+
+    /**
+     * identify attempts to send an "identify" event to the analytics service.
+     * The identify event will only be sent once per session; if it has already
+     * been sent, it will be a no-op whenever called afterwards.
+     */
+    identify() {
+        if (this.identifyEventSent) {
+            return;
+        }
+
+        // Do nothing if Cluster information is not yet available.
+        const cluster = this.getCluster();
+        if (cluster === null) {
+            return;
+        }
+
+        const { cluster_id, reporting_enabled, enterprise_enabled } = cluster;
+        if (!reporting_enabled) {
+            return;
+        }
+
+        // Do nothing if version information is not yet available.
+        const state = this.store.getState();
+        const versions = versionsSelector(state);
+        if (_.isEmpty(versions)) {
+            return;
+        }
+
+        this.analytics.identify({
+            userId: cluster_id,
+            traits: {
+                version: versions[0],
+                userAgent: window.navigator.userAgent,
+                enterprise: enterprise_enabled,
+            },
+        });
+        this.identifyEventSent = true;
     }
 
     /**
@@ -155,6 +203,7 @@ history.listen((location) => {
   }
   lastPageLocation = location;
   analytics.page(location);
+  analytics.identify();
 });
 
 // Record the initial page that was accessed; listen won't fire for the first
