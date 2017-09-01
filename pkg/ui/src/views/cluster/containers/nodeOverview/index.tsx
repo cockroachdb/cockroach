@@ -58,8 +58,8 @@ class NodeOverview extends React.Component<NodeOverviewProps, {}> {
         <section className="section parent-link">
           <Link to="/cluster/nodes">&lt; Back to Node List</Link>
         </section>
-        <div className="header header--subsection">
-          {`Node ${node.desc.node_id} / ${node.desc.address.address_field}`}
+        <div className="section section--heading">
+          <h2>{`Node ${node.desc.node_id} / ${node.desc.address.address_field}`}</h2>
         </div>
         <section className="section l-columns">
           <div className="l-columns__left">
