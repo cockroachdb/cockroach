@@ -325,13 +325,13 @@ func GetTotalMemory(ctx context.Context) (int64, error) {
 // On Windows there is no need to change the file descriptor, known as handles,
 // limit. This limit cannot be changed and is approximately 16,711,680. See
 // https://blogs.technet.microsoft.com/markrussinovich/2009/09/29/pushing-the-limits-of-windows-handles/
-func setOpenFileLimit(physicalStoreCount int) (int, error) {
+func setOpenFileLimit(physicalStoreCount int) (uint64, error) {
 	return setOpenFileLimitInner(physicalStoreCount)
 }
 
 // SetOpenFileLimitForOneStore sets the soft limit for open file descriptors
 // when there is only one store.
-func SetOpenFileLimitForOneStore() (int, error) {
+func SetOpenFileLimitForOneStore() (uint64, error) {
 	return setOpenFileLimit(1)
 }
 
