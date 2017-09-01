@@ -19,8 +19,8 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -34,20 +34,28 @@ import (
 	"golang.org/x/net/context"
 )
 
-// defaultIntentResolverTaskLimit is the maximum number of asynchronous tasks
-// that may be started by intentResolver. When this limit is reached
-// asynchronous tasks will start to block to apply backpressure.  This is a
-// last line of defense against issues like #4925.
-// TODO(bdarnell): how to determine best value?
-const defaultIntentResolverTaskLimit = 100
+const (
+	// defaultIntentResolverTaskLimit is the maximum number of asynchronous tasks
+	// that may be started by intentResolver. When this limit is reached
+	// asynchronous tasks will start to block to apply backpressure.  This is a
+	// last line of defense against issues like #4925.
+	// TODO(bdarnell): how to determine best value?
+	defaultIntentResolverTaskLimit = 100
 
-// intentResolverBatchSize is the maximum number of intents that will
-// be resolved in a single batch. Batches that span many ranges (which
-// is possible for the commit of a transaction that spans many ranges)
-// will be split into many batches with NoopRequests by the
-// DistSender, leading to high CPU overhead and quadratic memory
-// usage.
-const intentResolverBatchSize = 100
+	// intentResolverTimeout is the timeout when processing a group of intents.
+	// The timeout prevents intent resolution from getting stuck. Since
+	// processing intents is best effort, we'd rather give up than wait too long
+	// (this helps avoid deadlocks during test shutdown).
+	intentResolverTimeout = 30 * time.Second
+
+	// intentResolverBatchSize is the maximum number of intents that will
+	// be resolved in a single batch. Batches that span many ranges (which
+	// is possible for the commit of a transaction that spans many ranges)
+	// will be split into many batches with NoopRequests by the
+	// DistSender, leading to high CPU overhead and quadratic memory
+	// usage.
+	intentResolverBatchSize = 100
+)
 
 // intentResolver manages the process of pushing transactions and
 // resolving intents.
@@ -253,20 +261,19 @@ func (ir *intentResolver) maybePushTransactions(
 // differently and would be better served by different entry points,
 // but combining them simplifies the plumbing necessary in Replica.
 func (ir *intentResolver) processIntentsAsync(
-	r *Replica, intents []intentsWithArg, allowSyncProcessing bool,
+	ctx context.Context, r *Replica, intents []intentsWithArg, allowSyncProcessing bool,
 ) {
 	if r.store.TestingKnobs().DisableAsyncIntentResolution {
 		return
 	}
 	now := r.store.Clock().Now()
-	ctx := context.TODO()
 	stopper := r.store.Stopper()
 
 	for _, item := range intents {
 		err := stopper.RunLimitedAsyncTask(
 			ctx, "storage.intentResolver: processing intents", ir.sem, false, /* wait */
-			func(ctx context.Context) {
-				ir.processIntents(ctx, r, item, now)
+			func(_ context.Context) {
+				ir.processIntents(context.Background(), r, item, now)
 			})
 		if err != nil {
 			if err == stop.ErrThrottled && allowSyncProcessing {
@@ -284,11 +291,10 @@ func (ir *intentResolver) processIntentsAsync(
 func (ir *intentResolver) processIntents(
 	ctx context.Context, r *Replica, item intentsWithArg, now hlc.Timestamp,
 ) {
-	// Everything here is best effort; give up rather than waiting
-	// too long (helps avoid deadlocks during test shutdown,
-	// although this is imperfect due to the use of an
-	// uninterruptible WaitGroup.Wait in beginCmds).
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
+	// Everything here is best effort; so give the context a timeout to avoid
+	// waiting too long. This may be a larger timeout than the context already
+	// has, in which case we'll respect the existing timeout.
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, intentResolverTimeout)
 	defer cancel()
 
 	if item.args.Method() != roachpb.EndTransaction {
