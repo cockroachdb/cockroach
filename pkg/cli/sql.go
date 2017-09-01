@@ -78,6 +78,10 @@ type cliState struct {
 	// the upstream readline library handles multi-line history entries
 	// properly.
 	normalizeHistory bool
+	// smartPrompt indicates whether to update the prompt using queries
+	// to the server. See the state cliRefreshPrompt and
+	// doRefreshPrompt() below.
+	smartPrompt bool
 
 	// The prefix at the start of a prompt.
 	promptPrefix string
@@ -247,6 +251,12 @@ var options = map[string]struct {
 			return nil
 		},
 	},
+	`echo`: {
+		0,
+		false,
+		func(c *cliState, _ []string) error { sqlCtx.echo = true; return nil },
+		func(c *cliState) error { sqlCtx.echo = false; return nil },
+	},
 	`errexit`: {
 		0,
 		true,
@@ -271,6 +281,12 @@ var options = map[string]struct {
 		func(c *cliState, _ []string) error { cliCtx.showTimes = true; return nil },
 		func(c *cliState) error { cliCtx.showTimes = false; return nil },
 	},
+	`smart_prompt`: {
+		0,
+		true,
+		func(c *cliState, _ []string) error { c.smartPrompt = true; return nil },
+		func(c *cliState) error { c.smartPrompt = false; return nil },
+	},
 }
 
 // handleSet supports the \set client-side command.
@@ -281,9 +297,11 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 			newRowSliceIter([][]string{
 				{"display_format", cliCtx.tableDisplayFormat.String()},
 				{"errexit", strconv.FormatBool(c.errExit)},
+				{"echo", strconv.FormatBool(sqlCtx.echo)},
 				{"check_syntax", strconv.FormatBool(c.checkSyntax)},
 				{"normalize_history", strconv.FormatBool(c.normalizeHistory)},
 				{"show_times", strconv.FormatBool(cliCtx.showTimes)},
+				{"smart_prompt", strconv.FormatBool(c.smartPrompt)},
 			}),
 			"set")
 		if err != nil {
@@ -444,15 +462,20 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 		return nextState
 	}
 
-	c.refreshTransactionStatus()
-	dbName, hasDbName := c.refreshDatabaseName()
+	c.fullPrompt = c.promptPrefix
 
-	dbStr := ""
-	if hasDbName {
-		dbStr = "/" + dbName
+	if c.smartPrompt {
+		c.refreshTransactionStatus()
+		dbName, hasDbName := c.refreshDatabaseName()
+
+		dbStr := ""
+		if hasDbName {
+			dbStr = "/" + dbName
+		}
+
+		c.fullPrompt += dbStr + c.lastKnownTxnStatus
 	}
 
-	c.fullPrompt = c.promptPrefix + dbStr + c.lastKnownTxnStatus
 	c.continuePrompt = strings.Repeat(" ", len(c.fullPrompt)-1) + "-> "
 	c.fullPrompt += "> "
 
@@ -610,6 +633,7 @@ func (c *cliState) doStart(nextState cliStateEnum) cliStateEnum {
 		c.checkSyntax = true
 		c.normalizeHistory = true
 		c.errExit = false
+		c.smartPrompt = true
 	} else {
 		// When running non-interactive, by default we want errors to stop
 		// further processing and all syntax checking to be done
