@@ -138,7 +138,8 @@ class Certificates extends React.Component<CertificatesProps, {}> {
     if (!_.isNil(this.props.lastError)) {
       return (
         <div className="section">
-          <h1>Error loading certificates for node {nodeID}</h1>
+          <h1>Certificates</h1>
+          <h2>Error loading certificates for node {nodeID}</h2>
         </div>
       );
     }
@@ -146,15 +147,17 @@ class Certificates extends React.Component<CertificatesProps, {}> {
     if (_.isEmpty(certificates)) {
       return (
         <div className="section">
-          <h1>Loading cluster status...</h1>
+          <h1>Certificates</h1>
+          <h2>Loading cluster status...</h2>
         </div>
       );
     }
 
     if (_.isEmpty(certificates.certificates)) {
       return (
-        <div>
-          <h1>No certificates were found on node {this.props.params[nodeIDAttr]}.</h1>
+        <div className="section">
+          <h1>Certificates</h1>
+          <h2>No certificates were found on node {this.props.params[nodeIDAttr]}.</h2>
         </div>
       );
     }
@@ -167,8 +170,9 @@ class Certificates extends React.Component<CertificatesProps, {}> {
     }
 
     return (
-      <div>
-        <h1>{header} certificates</h1>
+      <div className="section">
+        <h1>Certificates</h1>
+        <h2>{header} certificates</h2>
         {
           _.map(certificates.certificates, (cert, key) => (
             this.renderCert(cert, key)

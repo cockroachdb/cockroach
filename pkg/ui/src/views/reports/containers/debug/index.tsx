@@ -32,7 +32,7 @@ function DebugTableRow(props: { title: string, children?: React.ReactNode }) {
 function DebugTable(props: { heading: string, children?: React.ReactNode }) {
   return (
     <div>
-      <h3>{props.heading}</h3>
+      <h2>{props.heading}</h2>
       <table className="debug-table">
         <tbody>
           {props.children}
@@ -45,7 +45,7 @@ function DebugTable(props: { heading: string, children?: React.ReactNode }) {
 export default function Debug() {
   return (
     <div className="section">
-      <h2>Advanced Debugging</h2>
+      <h1>Advanced Debugging</h1>
       <DebugTable heading="Reports">
         <DebugTableRow title="Node Diagnostics">
           <DebugTableLink name="All Nodes" url="#/reports/nodes" />
