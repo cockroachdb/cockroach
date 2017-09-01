@@ -247,6 +247,12 @@ var options = map[string]struct {
 			return nil
 		},
 	},
+	`echo`: {
+		0,
+		false,
+		func(c *cliState, _ []string) error { sqlCtx.echo = true; return nil },
+		func(c *cliState) error { sqlCtx.echo = false; return nil },
+	},
 	`errexit`: {
 		0,
 		true,
@@ -281,6 +287,7 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 			newRowSliceIter([][]string{
 				{"display_format", cliCtx.tableDisplayFormat.String()},
 				{"errexit", strconv.FormatBool(c.errExit)},
+				{"echo", strconv.FormatBool(sqlCtx.echo)},
 				{"check_syntax", strconv.FormatBool(c.checkSyntax)},
 				{"normalize_history", strconv.FormatBool(c.normalizeHistory)},
 				{"show_times", strconv.FormatBool(cliCtx.showTimes)},

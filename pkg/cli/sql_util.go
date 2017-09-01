@@ -260,6 +260,9 @@ func (c *sqlConn) Exec(query string, args []driver.Value) error {
 	if err := c.ensureConn(); err != nil {
 		return err
 	}
+	if sqlCtx.echo {
+		fmt.Fprintln(stderr, ">", query)
+	}
 	_, err := c.conn.Exec(query, args)
 	if err == driver.ErrBadConn {
 		c.reconnecting = true
@@ -271,6 +274,9 @@ func (c *sqlConn) Exec(query string, args []driver.Value) error {
 func (c *sqlConn) Query(query string, args []driver.Value) (*sqlRows, error) {
 	if err := c.ensureConn(); err != nil {
 		return nil, err
+	}
+	if sqlCtx.echo {
+		fmt.Fprintln(stderr, ">", query)
 	}
 	rows, err := c.conn.Query(query, args)
 	if err == driver.ErrBadConn {

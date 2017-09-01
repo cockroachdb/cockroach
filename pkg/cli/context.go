@@ -141,6 +141,10 @@ var sqlCtx = struct {
 	// unsafeUpdates indicates whether to unset
 	// sql_safe_updates in the CLI shell.
 	unsafeUpdates bool
+
+	// echo, when set, requests that SQL queries sent to the server are
+	// also printed out on the client.
+	echo bool
 }{cliContext: &cliCtx}
 
 // dumpCtx captures the command-line parameters of the `sql` command.
