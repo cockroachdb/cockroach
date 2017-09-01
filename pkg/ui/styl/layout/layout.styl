@@ -57,6 +57,32 @@ $subnav-background  = $background-color
   font-family Lato-Bold
   letter-spacing 5px
 
+  &__tooltip
+    color $tooltip-color
+    display inline-block
+    font-family Lato-Medium
+    font-size 14px
+    letter-spacing 0
+    text-transform none
+    vertical-align middle
+
+  &__tooltip-hover-area
+    padding 6px
+
+  &__info-icon
+    width 13px
+    height 13px
+    border-radius 50%
+    border 1px solid $tooltip-color
+    font-size 11px
+    color $tooltip-color
+    line-height 11px
+    text-align center
+
+  .hover-tooltip--hovered &__info-icon
+    border-color $body-color
+    color $body-color
+
 .header--subsection
   text-transform none
   letter-spacing 0
