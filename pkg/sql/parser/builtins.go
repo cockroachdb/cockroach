@@ -29,6 +29,7 @@ import (
 	"net"
 	"regexp"
 	"regexp/syntax"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -255,6 +256,8 @@ func init() {
 		Builtins[uname] = def
 		funDefs[uname] = funDefs[name]
 	}
+
+	sort.Strings(AllBuiltinNames)
 }
 
 var digitNames = []string{"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"}
@@ -287,14 +290,14 @@ var Builtins = map[string][]Builtin{
 			return nil, err
 		}
 		return NewDString(strings.ToLower(s)), nil
-	}, TypeString, "Converts all characters in `val`to their lower-case equivalents.")},
+	}, TypeString, "Converts all characters in `val` to their lower-case equivalents.")},
 
 	"upper": {stringBuiltin1(func(evalCtx *EvalContext, s string) (Datum, error) {
 		if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(s))); err != nil {
 			return nil, err
 		}
 		return NewDString(strings.ToUpper(s)), nil
-	}, TypeString, "Converts all characters in `val`to their to their upper-case equivalents.")},
+	}, TypeString, "Converts all characters in `val` to their to their upper-case equivalents.")},
 
 	"substr":    substringImpls,
 	"substring": substringImpls,
@@ -357,7 +360,7 @@ var Builtins = map[string][]Builtin{
 				return NewDString(buf.String()), nil
 			},
 			Info: "Uses the first argument as a separator between the concatenation of the " +
-				"subsequent arguments. <br/><br/>For example `concat_ws('!','wow','great')` " +
+				"subsequent arguments. \n\nFor example `concat_ws('!','wow','great')` " +
 				"returns `wow!great`.",
 		},
 	},
@@ -460,7 +463,7 @@ var Builtins = map[string][]Builtin{
 				return NewDString(splits[field-1]), nil
 			},
 			Info: "Splits `input` on `delimiter` and return the value in the `return_index_pos`  " +
-				"position (starting at 1). <br/><br/>For example, `split_part('123.456.789.0','.',3)`" +
+				"position (starting at 1). \n\nFor example, `split_part('123.456.789.0','.',3)`" +
 				"returns `789`.",
 		},
 	},
@@ -483,7 +486,7 @@ var Builtins = map[string][]Builtin{
 				}
 				return NewDString(strings.Repeat(s, count)), nil
 			},
-			Info: "Concatenates `input` `repeat_counter` number of times.<br/><br/>For example, " +
+			Info: "Concatenates `input` `repeat_counter` number of times.\n\nFor example, " +
 				"`repeat('dog', 2)` returns `dogdog`.",
 		},
 	},
@@ -573,7 +576,7 @@ var Builtins = map[string][]Builtin{
 		}
 
 		return NewDInt(DInt(utf8.RuneCountInString(s[:index]) + 1)), nil
-	}, TypeInt, "Calculates the position where the string `find` begins in `input`. <br/><br/>For"+
+	}, TypeInt, "Calculates the position where the string `find` begins in `input`. \n\nFor"+
 		" example, `strpos('doggie', 'gie')` returns `4`.")},
 
 	"overlay": {
@@ -592,7 +595,7 @@ var Builtins = map[string][]Builtin{
 				return overlay(s, to, pos, size)
 			},
 			Info: "Replaces characters in `input` with `overlay_val` starting at `start_pos` " +
-				"(begins at 1). <br/><br/>For example, `overlay('doggie', 'CAT', 2)` returns " +
+				"(begins at 1). \n\nFor example, `overlay('doggie', 'CAT', 2)` returns " +
 				"`dCATie`.",
 		},
 		Builtin{
@@ -620,7 +623,7 @@ var Builtins = map[string][]Builtin{
 		stringBuiltin2("input", "trim_chars", func(_ *EvalContext, s, chars string) (Datum, error) {
 			return NewDString(strings.Trim(s, chars)), nil
 		}, TypeString, "Removes any characters included in `trim_chars` from the beginning or end"+
-			" of `input` (applies recursively). <br/><br/>For example, `btrim('doggie', 'eod')` "+
+			" of `input` (applies recursively). \n\nFor example, `btrim('doggie', 'eod')` "+
 			"returns `ggi`."),
 		stringBuiltin1(func(_ *EvalContext, s string) (Datum, error) {
 			return NewDString(strings.TrimSpace(s)), nil
@@ -632,7 +635,7 @@ var Builtins = map[string][]Builtin{
 		stringBuiltin2("input", "trim_chars", func(_ *EvalContext, s, chars string) (Datum, error) {
 			return NewDString(strings.TrimLeft(s, chars)), nil
 		}, TypeString, "Removes any characters included in `trim_chars` from the beginning "+
-			"(left-hand side) of `input` (applies recursively). <br/><br/>For example, "+
+			"(left-hand side) of `input` (applies recursively). \n\nFor example, "+
 			"`ltrim('doggie', 'od')` returns `ggie`."),
 		stringBuiltin1(func(_ *EvalContext, s string) (Datum, error) {
 			return NewDString(strings.TrimLeftFunc(s, unicode.IsSpace)), nil
@@ -644,7 +647,7 @@ var Builtins = map[string][]Builtin{
 		stringBuiltin2("input", "trim_chars", func(_ *EvalContext, s, chars string) (Datum, error) {
 			return NewDString(strings.TrimRight(s, chars)), nil
 		}, TypeString, "Removes any characters included in `trim_chars` from the end (right-hand "+
-			"side) of `input` (applies recursively). <br/><br/>For example, `rtrim('doggie', 'ei')` "+
+			"side) of `input` (applies recursively). \n\nFor example, `rtrim('doggie', 'ei')` "+
 			"returns `dogg`."),
 		stringBuiltin1(func(_ *EvalContext, s string) (Datum, error) {
 			return NewDString(strings.TrimRightFunc(s, unicode.IsSpace)), nil
@@ -705,7 +708,7 @@ var Builtins = map[string][]Builtin{
 			}
 			return NewDString(string(runes)), nil
 		}, TypeString, "In `input`, replaces the first character from `find` with the first "+
-			"character in `replace`; repeat for each character in `find`. <br/><br/>For example, "+
+			"character in `replace`; repeat for each character in `find`. \n\nFor example, "+
 			"`translate('doggie', 'dog', '123');` returns `1233ie`.")},
 
 	"regexp_extract": {
@@ -767,23 +770,26 @@ var Builtins = map[string][]Builtin{
 				}
 				return result, nil
 			},
-			Info: "Replaces matches for the Regular Expression `regex` in `input` with the Regular " +
-				"Expression `replace` using `flags`.<br/><br/>CockroachDB supports the following " +
-				"flags:<br/><br/>&#8226; **c**: Case-sensitive matching<br/><br/>&#8226; **g**: " +
-				"Global matching (match each substring instead of only the first).<br/><br/>&#8226; " +
-				"**i**: Case-insensitive matching<br/><br/>&#8226; **m** or **n**: Newline-sensitive " +
-				"`.` and negated brackets (`[^...]`) do not match newline characters (preventing " +
-				"matching: matches from crossing newlines unless explicitly defined to); `^` and " +
-				"`$` match the space before and after newline characters respectively (so characters " +
-				"between newline characters are treated as if they're on a separate line).<br/>" +
-				"<br/>&#8226; **p**: Partial newline-sensitive matching: `.` and negated brackets " +
-				"(`[^...]`) do not match newline characters (preventing matches from crossing " +
-				"newlines unless explicitly defined to), but `^` and `$` still only match the " +
-				"beginning and end of `val`.<br/><br/>&#8226; **s**: Newline-insensitive " +
-				"matching *(default)*.<br/><br/>&#8226; **w**: Inverse partial newline-sensitive " +
-				"matching:`.` and negated brackets (`[^...]`) *do* match newline characters, but  `^` " +
-				"and `$` match the space before and after newline characters respectively (so " +
-				"characters between newline characters are treated as if they're on a separate line).",
+			Info: "Replaces matches for the regular expression `regex` in `input` with the regular " +
+				"expression `replace` using `flags`." + `
+
+CockroachDB supports the following flags:
+
+| Flag           | Description                                                       |
+|----------------|-------------------------------------------------------------------|
+| **c**          | Case-sensitive matching                                           |
+| **i**          | Global matching (match each substring instead of only the first). |
+| **m** or **n** | Newline-sensitive (see below)                                     |
+| **p**          | Partial newline-sensitive matching (see below)                    |
+| **s**          | Newline-insensitive (default)                                     |
+| **w**          | Inverse partial newline-sensitive matching (see below)            |
+
+| Mode | ` + "`.` and `[^...]` match newlines | `^` and `$` match line boundaries" + `|
+|------|----------------------------------|--------------------------------------|
+| s    | yes                              | no                                   |
+| w    | yes                              | yes                                  |
+| p    | no                               | no                                   |
+| m/n  | no                               | yes                                  |`,
 		},
 	},
 
@@ -1100,10 +1106,9 @@ var Builtins = map[string][]Builtin{
 				timeSpan := strings.ToLower(string(MustBeDString(args[0])))
 				return extractStringFromTimestamp(ctx, fromTS.Time, timeSpan)
 			},
-			Info: "Extracts `element` from `input`. Compatible `elements` are: <br/>&#8226; " +
-				"year<br/>&#8226; quarter<br/>&#8226; month<br/>&#8226; week<br/>&#8226; " +
-				"dayofweek<br/>&#8226; dayofyear<br/>&#8226; hour<br/>&#8226; minute<br/>&#8226; " +
-				"second<br/>&#8226; millisecond<br/>&#8226; microsecond<br/>&#8226; epoch",
+			Info: "Extracts `element` from `input`.\n\n" +
+				"Compatible elements: year, quarter, month, week, dayofweek, dayofyear,\n" +
+				"hour, minute, second, millisecond, microsecond, epoch",
 		},
 		Builtin{
 			Types:      ArgTypes{{"element", TypeString}, {"input", TypeDate}},
@@ -1115,10 +1120,9 @@ var Builtins = map[string][]Builtin{
 				fromTSTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), date)
 				return extractStringFromTimestamp(ctx, fromTSTZ.Time, timeSpan)
 			},
-			Info: "Extracts `element` from `input`. Compatible `elements` are: <br/>&#8226; " +
-				"year<br/>&#8226; quarter<br/>&#8226; month<br/>&#8226; week<br/>&#8226; " +
-				"dayofweek<br/>&#8226; dayofyear<br/>&#8226; hour<br/>&#8226; minute<br/>&#8226; " +
-				"second<br/>&#8226; millisecond<br/>&#8226; microsecond<br/>&#8226; epoch",
+			Info: "Extracts `element` from `input`.\n\n" +
+				"Compatible elements: year, quarter, month, week, dayofweek, dayofyear,\n" +
+				"hour, minute, second, millisecond, microsecond, epoch",
 		},
 	},
 
@@ -1153,9 +1157,8 @@ var Builtins = map[string][]Builtin{
 						pgerror.CodeInvalidParameterValueError, "unsupported timespan: %s", timeSpan)
 				}
 			},
-			Info: "Extracts `element` from `input`. Compatible `elements` are: <br/>&#8226; hour" +
-				"<br/>&#8226; minute<br/>&#8226; second<br/>&#8226; millisecond<br/>&#8226; " +
-				"microsecond",
+			Info: "Extracts `element` from `input`.\n" +
+				"Compatible elements: hour, minute, second, millisecond, microsecond.",
 		},
 	},
 
@@ -1213,12 +1216,12 @@ var Builtins = map[string][]Builtin{
 	"cbrt": {
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Cbrt(x))), nil
-		}, "Calculates the cube root (&#8731;) of `val`."),
+		}, "Calculates the cube root (∛) of `val`."),
 		decimalBuiltin1(func(x *apd.Decimal) (Datum, error) {
 			dd := &DDecimal{}
 			_, err := DecimalCtx.Cbrt(&dd.Decimal, x)
 			return dd, err
-		}, "Calculates the cube root (&#8731;) of `val`."),
+		}, "Calculates the cube root (∛) of `val`."),
 	},
 
 	"ceil":    ceilImpl,

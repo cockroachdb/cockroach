@@ -54,7 +54,7 @@ start_test "Check that a buit-in command in between tokens of a statement is pro
 send "select\r"
 eexpect " ->"
 
-send "\\h\r"
+send "\\?\r"
 eexpect " ->"
 
 send "1;\r"
@@ -88,7 +88,7 @@ end_test
 start_test "Check that a built-in command in the middle of a token (eg a string) is processed locally."
 send "select 'hello\r"
 eexpect " ->"
-send "\\h\r"
+send "\\?\r"
 eexpect " ->"
 send "world';\r"
 eexpect "1 row"
@@ -118,6 +118,60 @@ eexpect "Time:"
 eexpect root@
 # restore
 send "\\unset show_times\r"
+end_test
+
+start_test "Check that \\h with invalid commands print a reminder."
+send "\\h invalid\r"
+eexpect "no help available"
+eexpect "Try"
+expect "with no argument"
+eexpect root@
+end_test
+
+start_test "Check that \\h with no argument prints a full list."
+send "\\h\r"
+eexpect "TRUNCATE"
+eexpect "SHOW"
+eexpect "ROLLBACK"
+eexpect root@
+end_test
+
+start_test "Check that \\h with a known statement prints details."
+send "\\h select\r"
+eexpect "Command:"
+eexpect "SELECT"
+eexpect "data manipulation"
+eexpect "FROM"
+eexpect "ORDER BY"
+eexpect "See also"
+eexpect root@
+end_test
+
+start_test "Check that \\h with a documented clause name prints details."
+send "\\h <source>\r"
+eexpect "Command:"
+eexpect "<SOURCE>"
+eexpect "data manipulation"
+eexpect "JOIN"
+eexpect "SHOW"
+eexpect "See also"
+eexpect root@
+end_test
+
+start_test "Check that \\hf without argument prints a list."
+send "\\hf\r"
+eexpect "abs"
+eexpect "count"
+eexpect "round"
+eexpect root@
+end_test
+
+start_test "Check that \\hf with an invalid function name prints an error."
+send "\\hf invalid\r"
+eexpect "no help available"
+eexpect "Try"
+eexpect "with no argument"
+eexpect root@
 end_test
 
 # Finally terminate with Ctrl+C.
