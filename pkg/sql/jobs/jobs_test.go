@@ -395,19 +395,25 @@ func TestJobLifecycle(t *testing.T) {
 			}
 		}
 
-		{
-			job, _ := createJob(jobs.TypeSchemaChange, jobs.WithoutCancel, jobs.Record{
-				Details: jobs.SchemaChangeDetails{},
+		testCases := []struct {
+			typ     jobs.Type
+			details jobs.Details
+			name    string
+		}{
+			{jobs.TypeSchemaChange, jobs.SchemaChangeDetails{}, "schema change"},
+			{jobs.TypeImport, jobs.ImportDetails{}, "import"},
+		}
+		for _, tc := range testCases {
+			job, _ := createJob(tc.typ, jobs.WithoutCancel, jobs.Record{
+				Details: tc.details,
 			})
-			if err := job.Paused(ctx); !testutils.IsError(
-				err, `schema change jobs do not support PAUSE`,
-			) {
-				t.Fatalf("expected 'schema change jobs do not support PAUSE' error, but got %s", err)
+			pauseErr := fmt.Sprintf("%s jobs do not support PAUSE", tc.name)
+			if err := job.Paused(ctx); !testutils.IsError(err, pauseErr) {
+				t.Fatalf("expected '%s' error, but got %s", pauseErr, err)
 			}
-			if err := job.Canceled(ctx); !testutils.IsError(
-				err, `schema change jobs do not support CANCEL`,
-			) {
-				t.Fatalf("expected 'schema change jobs do not support CANCEL' error, but got %s", err)
+			cancelErr := fmt.Sprintf("%s jobs do not support CANCEL", tc.name)
+			if err := job.Canceled(ctx); !testutils.IsError(err, cancelErr) {
+				t.Fatalf("expected '%s' error, but got %s", cancelErr, err)
 			}
 		}
 	})
