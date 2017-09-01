@@ -281,13 +281,13 @@ func (p *planner) startSubqueryPlans(ctx context.Context, plan planNode) error {
 // subquerySpanCollector is responsible for collecting all read spans that
 // subqueries in a query plan may touch. Subqueries should never be performing
 // any write operations, so only the read spans are collected.
-// FOR REVIEW: this assumption is correct, right?
 type subquerySpanCollector struct {
-	reads roachpb.Spans
+	params runParams
+	reads  roachpb.Spans
 }
 
 func (v *subquerySpanCollector) subqueryNode(ctx context.Context, sq *subquery) error {
-	reads, writes, err := collectSpans(ctx, sq.plan)
+	reads, writes, err := collectSpans(v.params, sq.plan)
 	if err != nil {
 		return err
 	}
@@ -298,10 +298,10 @@ func (v *subquerySpanCollector) subqueryNode(ctx context.Context, sq *subquery) 
 	return nil
 }
 
-func collectSubquerySpans(ctx context.Context, plan planNode) (roachpb.Spans, error) {
-	var v subquerySpanCollector
+func collectSubquerySpans(params runParams, plan planNode) (roachpb.Spans, error) {
+	v := subquerySpanCollector{params: params}
 	po := planObserver{subqueryNode: v.subqueryNode}
-	if err := walkPlan(ctx, plan, po); err != nil {
+	if err := walkPlan(params.ctx, plan, po); err != nil {
 		return nil, err
 	}
 	return v.reads, nil
@@ -347,6 +347,8 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 			return true, expr
 		}
 	}
+
+	v.hasSubqueries = true
 
 	// Calling newPlan() might recursively invoke expandSubqueries, so we need to preserve
 	// the state of the visitor across the call to newPlan().

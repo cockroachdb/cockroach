@@ -229,15 +229,15 @@ can increase the number of statements that can be considered independent and
 thus run concurrently. However, increasing the granularity of dependency
 tracking also comes with added complexity and added risk of error.
 
-For these reasons, this RFC proposes to track dependencies between statements at
-the **table-level** of granularity. While this decision is conservative, it
-means that the initial version of Parallel SQL Statement Execution will have a
-simpler implementation that is easier to reason about by implementers and users.
-Tracking dependencies at the table-level also means that we will not need to
-worry about implicit table-level dependencies between seemingly independent
-statements. These implicit dependencies can take forms like column constraints
-and unique indexes, and can cause the ordering of mutations to different rows in
-a table, even without an associated filter, to be dependent.
+However, instead of working in the domain of SQL constructs, this RFC proposes
+to track dependencies between statements at the `roachpb.Key` level. The reason
+for this is that our SQL layer already maps SQL logic into the `roachpb.Key`
+domain, which is totally-ordered and is more straightforward to work with. In
+addition, `roachpb.Keys` can also be grouped into `roachpb.Span`, which already
+have set semantics defined for them. So, by first leveraging existing
+infrastructure to map SQL into reads and writes within `roachpb.Spans`, we can
+perform dependency analysis on SQL statements by determining if sets of
+`roachpb.Spans` overlap.
 
 #### Algorithm
 
@@ -575,20 +575,6 @@ especially in the case of obscure data dependencies like foreign keys. Secondly,
 the automatic detection of parallelizable SQL statements by our SQL engine would
 be a powerful feature for many users, and would fit with our theme of "making
 data easy".
-
-### Span-Based Dependency Detection
-
-An alternative to analyzing statement dependencies by collecting table names it
-to perform the analysis on the read and write `roachpb.Span`s created by the
-statements directly. This approach has a certain elegance to it, and would make
-dependency analysis easier in some regards. However, this approach mixes up two
-fundamentally different concepts, those being SQL data structures and their
-underlying key-value representations. The problem with this is that this
-statement independence analysis would then become dependent on the details of
-our SQL->KV mapping. This means that future changes to this mapping, changes to
-the KV access patterns by the SQL layer, or even options like column families or
-interleaved tables could all subtly change the semantics here. In essence, we'd
-be leaking the details of the KV-layer into the behavior of this new feature.
 
 ### Parallelizing Semicolon-Separated Statements
 
