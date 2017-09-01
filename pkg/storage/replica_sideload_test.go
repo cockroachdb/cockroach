@@ -416,13 +416,16 @@ func TestRaftSSTableSideloadingInflight(t *testing.T) {
 
 	// The entry should be recognized as "to be sideloaded", then maybeCmd is
 	// invoked and supplies the RaftCommand, whose SSTable is then persisted.
-	postEnts, err := maybeSideloadEntriesImpl(ctx, preEnts, sideloaded, maybeCmd)
+	postEnts, size, err := maybeSideloadEntriesImpl(ctx, preEnts, sideloaded, maybeCmd)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	if len(postEnts) != 1 {
 		t.Fatalf("expected exactly one entry: %+v", postEnts)
+	}
+	if size != int64(len(origBytes)) {
+		t.Fatalf("expected %d sideloadedSize, but found %d", len(origBytes), size)
 	}
 
 	if b, err := sideloaded.Get(ctx, preEnts[0].Index, preEnts[0].Term); err != nil {
@@ -462,31 +465,45 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 		name              string
 		preEnts, postEnts []raftpb.Entry
 		ss                []string
+		size              int64
 	}
 
 	// Intentionally ignore the fact that real calls would always have an
 	// unbroken run of `entry.Index`.
 	testCases := []tc{
-		{name: "empty", preEnts: nil, postEnts: nil, ss: nil},
-		{name: "v1", preEnts: []raftpb.Entry{entV1Reg, entV1SST}, postEnts: []raftpb.Entry{entV1Reg, entV1SST}},
+		{
+			name:     "empty",
+			preEnts:  nil,
+			postEnts: nil,
+			ss:       nil,
+			size:     0,
+		},
+		{
+			name:     "v1",
+			preEnts:  []raftpb.Entry{entV1Reg, entV1SST},
+			postEnts: []raftpb.Entry{entV1Reg, entV1SST},
+			size:     0,
+		},
 		{
 			name:     "v2",
 			preEnts:  []raftpb.Entry{entV2SST, entV2Reg},
 			postEnts: []raftpb.Entry{entV2SSTStripped, entV2Reg},
 			ss:       []string{"i13t99"},
+			size:     int64(len(addSST.Data)),
 		},
 		{
 			name:     "mixed",
 			preEnts:  []raftpb.Entry{entV1Reg, entV1SST, entV2Reg, entV2SST},
 			postEnts: []raftpb.Entry{entV1Reg, entV1SST, entV2Reg, entV2SSTStripped},
 			ss:       []string{"i13t99"},
+			size:     int64(len(addSST.Data)),
 		},
 	}
 
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
 			sideloaded := mustNewInMemSideloadStorage(roachpb.RangeID(3), roachpb.ReplicaID(17), ".")
-			postEnts, err := maybeSideloadEntriesImpl(ctx, test.preEnts, sideloaded, noCmd)
+			postEnts, size, err := maybeSideloadEntriesImpl(ctx, test.preEnts, sideloaded, noCmd)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -495,6 +512,9 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 			}
 			if !reflect.DeepEqual(postEnts, test.postEnts) {
 				t.Fatalf("result differs from expected: %s", pretty.Diff(postEnts, test.postEnts))
+			}
+			if test.size != size {
+				t.Fatalf("expected %d sideloadedSize, but found %d", test.size, size)
 			}
 			var actKeys []string
 			for k := range sideloaded.(*inMemSideloadStorage).m {

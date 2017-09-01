@@ -763,10 +763,12 @@ func (r *Replica) applySnapshot(
 	thinEntries := logEntries
 	if replicaID != 0 {
 		var err error
-		thinEntries, err = r.maybeSideloadEntriesRaftMuLocked(ctx, logEntries)
+		var sideloadedEntriesSize int64
+		thinEntries, sideloadedEntriesSize, err = r.maybeSideloadEntriesRaftMuLocked(ctx, logEntries)
 		if err != nil {
 			return err
 		}
+		raftLogSize += sideloadedEntriesSize
 	}
 
 	// Write the snapshot's Raft log into the range.
