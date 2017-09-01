@@ -600,7 +600,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 
 			default:
 				// TODO: #10495
-				v.err = pgerror.UnimplementedWithIssueErrorf(10495, "aggregate functions with multiple arguments are not supported yet")
+				v.err = pgerror.UnimplementedWithIssueError(10495, "aggregate functions with multiple arguments are not supported yet")
 				return false, expr
 			}
 

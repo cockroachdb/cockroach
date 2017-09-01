@@ -32,6 +32,7 @@ import (
 	"github.com/chzyer/readline"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/lib/pq"
@@ -181,6 +182,8 @@ Type:
   \unset NAME       unset a flag.
   \show             during a multi-line statement or transaction, show the SQL entered so far.
   \? or "help"      print this help.
+  \h [NAME]         help on syntax of SQL commands.
+  \hf [NAME]        help on SQL built-in functions.
 
 More documentation about our SQL dialect and the CLI shell is available online:
 https://www.cockroachlabs.com/docs/stable/sql-statements.html
@@ -330,7 +333,48 @@ func isEndOfStatement(fullStmt string) (isEmpty, isEnd bool) {
 		isEmpty = false
 		last = t
 	})
-	return isEmpty, last == ';'
+	return isEmpty, last == ';' || last == parser.HELPTOKEN
+}
+
+// handleHelp prints SQL help.
+func (c *cliState) handleHelp(cmd []string, nextState, errState cliStateEnum) cliStateEnum {
+	cmdrest := strings.TrimSpace(strings.Join(cmd, " "))
+	command := strings.ToUpper(cmdrest)
+	if command == "" {
+		fmt.Print(parser.AllHelp)
+	} else {
+		if h, ok := parser.HelpMessages[command]; ok {
+			msg := parser.HelpMessage{Command: command, HelpMessageBody: h}
+			msg.Format(os.Stdout)
+			fmt.Println()
+		} else {
+			fmt.Fprintf(stderr,
+				"no help available for %q.\nTry \\h with no argument to see available help.\n", cmdrest)
+			return errState
+		}
+	}
+	return nextState
+}
+
+// handleFunctionHelp prints help about built-in functions.
+func (c *cliState) handleFunctionHelp(cmd []string, nextState, errState cliStateEnum) cliStateEnum {
+	funcName := strings.TrimSpace(strings.Join(cmd, " "))
+	if funcName == "" {
+		for _, f := range parser.AllBuiltinNames {
+			fmt.Println(f)
+		}
+		fmt.Println()
+	} else {
+		_, err := parser.Parse(fmt.Sprintf("select %s(?", funcName))
+		pgerr, ok := pgerror.GetPGCause(err)
+		if !ok || !strings.HasPrefix(pgerr.Hint, "help:") {
+			fmt.Fprintf(stderr,
+				"no help available for %q.\nTry \\hf with no argument to see available help.\n", funcName)
+			return errState
+		}
+		fmt.Println(pgerr.Hint[6:])
+	}
+	return nextState
 }
 
 // execSyscmd executes system commands.
@@ -512,6 +556,30 @@ func endsWithIncompleteTxn(stmts parser.StatementList) bool {
 
 var cmdHistFile = envutil.EnvOrDefaultString("COCKROACH_SQL_CLI_HISTORY", ".cockroachdb_history")
 
+// Do implements the readline.AutoCompleter interface.
+func (c *cliState) Do(line []rune, pos int) (newLine [][]rune, length int) {
+	var p parser.Parser
+	sql := string(line)
+	if !strings.HasSuffix(sql, "?") {
+		fmt.Fprintf(c.ins.Stdout(),
+			"\ntab completion not supported; append '?' and press tab for contextual help\n\n%s", sql)
+		return nil, 0
+	}
+
+	_, err := p.Parse(sql)
+	if err != nil {
+		if pgErr, ok := pgerror.GetPGCause(err); ok &&
+			err.Error() == "help token in input" &&
+			strings.HasPrefix(pgErr.Hint, "help:") {
+			fmt.Fprintf(c.ins.Stdout(), "\nSuggestion:\n%s\n", pgErr.Hint[6:])
+		} else {
+			fmt.Fprintf(c.ins.Stdout(), "\n%v\n", err)
+			maybeShowErrorDetails(c.ins.Stdout(), err, false)
+		}
+	}
+	return nil, 0
+}
+
 func (c *cliState) doStart(nextState cliStateEnum) cliStateEnum {
 	// Common initialization.
 	c.partialLines = []string{}
@@ -533,6 +601,7 @@ func (c *cliState) doStart(nextState cliStateEnum) cliStateEnum {
 			cfg := c.ins.Config.Clone()
 			cfg.HistoryFile = histFile
 			cfg.HistorySearchFold = true
+			cfg.AutoComplete = c
 			c.ins.SetConfig(cfg)
 		}
 
@@ -717,6 +786,12 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	case `\|`:
 		return c.pipeSyscmd(c.lastInputLine, nextState, errState)
 
+	case `\h`:
+		return c.handleHelp(cmd[1:], loopState, errState)
+
+	case `\hf`:
+		return c.handleFunctionHelp(cmd[1:], loopState, errState)
+
 	default:
 		if strings.HasPrefix(cmd[0], `\d`) {
 			// Unrecognized command for now, but we want to be helpful.
@@ -779,7 +854,19 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 	// From here on, client-side syntax checking is enabled.
 	parsedStmts, err := parser.Parse(c.concatLines)
 	if err != nil {
-		_ = c.invalidSyntax(0, "statement ignored: %v", err)
+		if pgErr, ok := pgerror.GetPGCause(err); ok &&
+			err.Error() == "help token in input" &&
+			strings.HasPrefix(pgErr.Hint, "help:") {
+			fmt.Println(pgErr.Hint[6:])
+		} else {
+			_ = c.invalidSyntax(0, "statement ignored: %v", err)
+			maybeShowErrorDetails(stderr, err, false)
+
+			// Stop here if exiterr is set.
+			if c.errExit {
+				return cliStop
+			}
+		}
 
 		// Even on failure, add the last (erroneous) lines as-is to the
 		// history, so that the user can recall them later to fix them.
@@ -787,12 +874,7 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 			c.addHistory(c.partialLines[i])
 		}
 
-		// Stop here if exiterr is set.
-		if c.errExit {
-			return cliStop
-		}
-
-		// Otherwise, remove the erroneous lines from the buffered input,
+		// Remove the erroneous lines from the buffered input,
 		// then try again.
 		c.partialLines = c.partialLines[:c.partialStmtsLen]
 		if len(c.partialLines) == 0 {
@@ -865,19 +947,37 @@ func (c *cliState) doRunStatement(nextState cliStateEnum) cliStateEnum {
 	c.exitErr = runQueryAndFormatResults(c.conn, os.Stdout, makeQuery(c.concatLines))
 	if c.exitErr != nil {
 		fmt.Fprintln(stderr, c.exitErr)
-		if pqErr, ok := c.exitErr.(*pq.Error); ok {
-			if pqErr.Detail != "" {
-				fmt.Fprintln(stderr, "DETAIL:", pqErr.Detail)
-			}
-			if pqErr.Hint != "" {
-				fmt.Fprintln(stderr, "HINT:", pqErr.Hint)
-			}
-		}
+		maybeShowErrorDetails(stderr, c.exitErr, false)
 		if c.errExit {
 			return cliStop
 		}
 	}
 	return nextState
+}
+
+// maybeShowErrorDetails displays the pg "Detail" and "Hint" fields
+// embedded in the error, if any, to the user. If printNewline is set,
+// a newline character is printed before anything else.
+func maybeShowErrorDetails(w io.Writer, err error, printNewline bool) {
+	var hint, detail string
+	if pqErr, ok := err.(*pq.Error); ok {
+		hint, detail = pqErr.Hint, pqErr.Detail
+	} else if pgErr, ok := pgerror.GetPGCause(err); ok {
+		hint, detail = pgErr.Hint, pgErr.Detail
+	}
+	if detail != "" {
+		if printNewline {
+			fmt.Fprintln(w)
+			printNewline = false
+		}
+		fmt.Fprintln(w, "DETAIL:", detail)
+	}
+	if hint != "" {
+		if printNewline {
+			fmt.Fprintln(w)
+		}
+		fmt.Fprintln(w, "HINT:", hint)
+	}
 }
 
 func (c *cliState) doDecidePath() cliStateEnum {
@@ -975,7 +1075,11 @@ func runInteractive(conn *sqlConn, config *readline.Config) (exitErr error) {
 func runStatements(conn *sqlConn, stmts []string) error {
 	for _, stmt := range stmts {
 		if err := runQueryAndFormatResults(conn, os.Stdout, makeQuery(stmt)); err != nil {
-			return err
+			// Expand the details and hints so that they are printed to the user.
+			var buf bytes.Buffer
+			buf.WriteString(err.Error())
+			maybeShowErrorDetails(&buf, err, true)
+			return errors.New(strings.TrimSuffix(buf.String(), "\n"))
 		}
 	}
 	return nil

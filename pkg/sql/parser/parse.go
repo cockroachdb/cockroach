@@ -58,10 +58,15 @@ type Parser struct {
 func (p *Parser) Parse(sql string) (stmts StatementList, err error) {
 	p.scanner.init(sql)
 	if p.parserImpl.Parse(&p.scanner) != 0 {
+		var err *pgerror.Error
 		if feat := p.scanner.lastError.unimplementedFeature; feat != "" {
-			return nil, pgerror.Unimplemented(feat, p.scanner.lastError.msg)
+			err = pgerror.Unimplemented(feat, p.scanner.lastError.msg)
+		} else {
+			err = pgerror.NewError(pgerror.CodeSyntaxError, p.scanner.lastError.msg)
 		}
-		return nil, pgerror.NewError(pgerror.CodeSyntaxError, p.scanner.lastError.msg)
+		err.Hint = p.scanner.lastError.hint
+		err.Detail = p.scanner.lastError.detail
+		return nil, err
 	}
 	return p.scanner.stmts, nil
 }

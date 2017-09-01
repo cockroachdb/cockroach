@@ -42,6 +42,8 @@ type Scanner struct {
 	nextTok   *sqlSymType
 	lastError struct {
 		msg                  string
+		hint                 string
+		detail               string
 		unimplementedFeature string
 	}
 	stmts       []Statement
@@ -135,10 +137,9 @@ func (s *Scanner) Unimplemented(feature string) {
 
 // UnimplementedWithIssue wraps Error, setting lastUnimplementedError.
 func (s *Scanner) UnimplementedWithIssue(issue int) {
-	s.Error(fmt.Sprintf(
-		"unimplemented (see issue https://github.com/cockroachdb/cockroach/issues/%d)", issue,
-	))
+	s.Error("unimplemented")
 	s.lastError.unimplementedFeature = fmt.Sprintf("#%d", issue)
+	s.lastError.hint = fmt.Sprintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
 }
 
 // SetHelp marks the "last error" field in the Scanner to become a
@@ -150,21 +151,31 @@ func (s *Scanner) UnimplementedWithIssue(issue int) {
 // syntax error.
 func (s *Scanner) SetHelp(msg HelpMessage) {
 	if s.lastTok.id == HELPTOKEN {
-		s.lastError.unimplementedFeature = ""
-		s.lastError.msg = msg.String()
+		s.populateHelpMsg(msg.String())
+	} else {
+		if msg.Command != "" {
+			s.lastError.hint = `try \h ` + msg.Command
+		} else {
+			s.lastError.hint = `try \hf ` + msg.Function
+		}
 	}
 }
 
+func (s *Scanner) populateHelpMsg(msg string) {
+	s.lastError.unimplementedFeature = ""
+	s.lastError.msg = "help token in input"
+	s.lastError.hint = msg
+}
+
 func (s *Scanner) Error(e string) {
-	var buf bytes.Buffer
 	if s.lastTok.id == ERROR {
 		// This is a tokenizer (lexical) error: just emit the invalid
 		// input as error.
-		fmt.Fprintf(&buf, "%s", s.lastTok.str)
+		s.lastError.msg = s.lastTok.str
 	} else {
 		// This is a contextual error. Print the provided error message
 		// and the error context.
-		fmt.Fprintf(&buf, "%s at or near \"%s\"", e, s.lastTok.str)
+		s.lastError.msg = fmt.Sprintf("%s at or near \"%s\"", e, s.lastTok.str)
 	}
 
 	// Find the end of the line containing the last token.
@@ -178,11 +189,12 @@ func (s *Scanner) Error(e string) {
 	// LastIndex returns -1 if "\n" could not be found.
 	j := strings.LastIndex(s.in[:s.lastTok.pos], "\n") + 1
 	// Output everything up to and including the line containing the last token.
-	fmt.Fprintf(&buf, "\n%s\n", s.in[:i])
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "source SQL:\n%s\n", s.in[:i])
 	// Output a caret indicating where the last token starts.
-	fmt.Fprintf(&buf, "%s^\n", strings.Repeat(" ", s.lastTok.pos-j))
+	fmt.Fprintf(&buf, "%s^", strings.Repeat(" ", s.lastTok.pos-j))
+	s.lastError.detail = buf.String()
 	s.lastError.unimplementedFeature = ""
-	s.lastError.msg = buf.String()
 }
 
 func (s *Scanner) scan(lval *sqlSymType) {

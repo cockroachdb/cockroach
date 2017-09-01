@@ -23,6 +23,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 )
@@ -223,9 +224,6 @@ func TestParse(t *testing.T) {
 		{`EXPLAIN (A, B, C) SELECT 1`},
 		{`SELECT * FROM [EXPLAIN SELECT 1]`},
 		{`SELECT * FROM [SHOW TRANSACTION STATUS]`},
-
-		{`HELP count`},
-		{`HELP "varchar"`},
 
 		{`SHOW barfoo`},
 		{`SHOW database`},
@@ -1095,7 +1093,7 @@ SELECT2 1
 		{`SELECT 1 FROM (t)`, `syntax error at or near ")"
 SELECT 1 FROM (t)
                 ^
-`},
+HINT: try \h <SOURCE>`},
 		{`SET TIME ZONE INTERVAL 'foobar'`, `could not parse 'foobar' as type interval: interval: missing unit at position 0: "foobar" at or near "EOF"
 SET TIME ZONE INTERVAL 'foobar'
                                ^
@@ -1111,12 +1109,12 @@ SELECT 1 /* hello
 		{`SELECT '1`, `unterminated string
 SELECT '1
        ^
-`},
+HINT: try \h SELECT`},
 		{`SELECT * FROM t WHERE k=`,
 			`syntax error at or near "EOF"
 SELECT * FROM t WHERE k=
                         ^
-`,
+HINT: try \h SELECT`,
 		},
 		{`CREATE TABLE test (
   CONSTRAINT foo INDEX (bar)
@@ -1124,7 +1122,7 @@ SELECT * FROM t WHERE k=
 CREATE TABLE test (
   CONSTRAINT foo INDEX (bar)
                  ^
-`},
+HINT: try \h CREATE TABLE`},
 		{`CREATE TABLE test (
   foo BIT(0)
 )`, `length for type bit must be at least 1 at or near ")"
@@ -1186,28 +1184,28 @@ CREATE DATABASE a b c
 			`syntax error at or near ")"
 CREATE INDEX ON a (b) STORING ()
                                ^
-`},
+HINT: try \h CREATE INDEX`},
 		{`CREATE VIEW a`,
 			`syntax error at or near "EOF"
 CREATE VIEW a
              ^
-`},
+HINT: try \h CREATE VIEW`},
 		{`CREATE VIEW a () AS select * FROM b`,
 			`syntax error at or near ")"
 CREATE VIEW a () AS select * FROM b
                ^
-`},
+HINT: try \h CREATE VIEW`},
 		{`SELECT FROM t`,
 			`syntax error at or near "from"
 SELECT FROM t
        ^
-`},
+HINT: try \h SELECT`},
 
 		{"SELECT 1e-\n-1",
 			`invalid floating point literal
 SELECT 1e-
        ^
-`},
+HINT: try \h SELECT`},
 		{"SELECT foo''",
 			`syntax error at or near ""
 SELECT foo''
@@ -1218,42 +1216,42 @@ SELECT foo''
 			`invalid hexadecimal numeric literal
 SELECT 0x FROM t
        ^
-`,
+HINT: try \h SELECT`,
 		},
 		{
 			`SELECT x'fail' FROM t`,
 			`invalid hexadecimal bytes literal
 SELECT x'fail' FROM t
        ^
-`,
+HINT: try \h SELECT`,
 		},
 		{
 			`SELECT x'AAB' FROM t`,
 			`invalid hexadecimal bytes literal
 SELECT x'AAB' FROM t
        ^
-`,
+HINT: try \h SELECT`,
 		},
 		{
 			`SELECT POSITION('high', 'a')`,
 			`syntax error at or near ","
 SELECT POSITION('high', 'a')
                       ^
-`,
+HINT: try \h SELECT`,
 		},
 		{
 			`SELECT a FROM foo@{FORCE_INDEX}`,
 			`syntax error at or near "}"
 SELECT a FROM foo@{FORCE_INDEX}
                               ^
-`,
+HINT: try \h <SOURCE>`,
 		},
 		{
 			`SELECT a FROM foo@{FORCE_INDEX=}`,
 			`syntax error at or near "}"
 SELECT a FROM foo@{FORCE_INDEX=}
                                ^
-`,
+HINT: try \h <SOURCE>`,
 		},
 		{
 			`SELECT a FROM foo@{FORCE_INDEX=bar,FORCE_INDEX=baz}`,
@@ -1288,35 +1286,35 @@ SELECT a FROM foo@{NO_INDEX_JOIN,FORCE_INDEX=baz,NO_INDEX_JOIN}
 			`syntax error at or near "@"
 INSERT INTO a@b VALUES (1, 2)
              ^
-`,
+HINT: try \h INSERT`,
 		},
 		{
 			`ALTER TABLE t RENAME COLUMN x TO family`,
 			`syntax error at or near "family"
 ALTER TABLE t RENAME COLUMN x TO family
                                  ^
-`,
+HINT: try \h ALTER TABLE`,
 		},
 		{
 			`SELECT CAST(1.2+2.3 AS notatype)`,
 			`syntax error at or near "notatype"
 SELECT CAST(1.2+2.3 AS notatype)
                        ^
-`,
+HINT: try \h SELECT`,
 		},
 		{
 			`SELECT ANNOTATE_TYPE(1.2+2.3, notatype)`,
 			`syntax error at or near "notatype"
 SELECT ANNOTATE_TYPE(1.2+2.3, notatype)
                               ^
-`,
+HINT: try \h SELECT`,
 		},
 		{
 			`CREATE USER foo WITH PASSWORD`,
 			`syntax error at or near "EOF"
 CREATE USER foo WITH PASSWORD
                              ^
-`,
+HINT: try \h CREATE USER`,
 		},
 		{
 			`ALTER TABLE t RENAME TO t[TRUE]`,
@@ -1344,7 +1342,7 @@ TABLE abc[TRUE]
 			`syntax error at or near "["
 UPDATE kv SET k[0] = 9
                ^
-`,
+HINT: try \h UPDATE`,
 		},
 		{
 			`SELECT (ARRAY['a', 'b', 'c']).name`,
@@ -1365,7 +1363,7 @@ SELECT (0) FROM y[array[]]
 			`syntax error at or near "["
 INSERT INTO kv (k[0]) VALUES ('hello')
                  ^
-`,
+HINT: try \h <SELECTCLAUSE>`,
 		},
 		{
 			`SELECT CASE 1 = 1 WHEN true THEN ARRAY[1, 2] ELSE ARRAY[2, 3] END[1]`,
@@ -1391,8 +1389,19 @@ SELECT 1 + ANY ARRAY[1, 2, 3]
 	}
 	for _, d := range testData {
 		_, err := Parse(d.sql)
-		if err == nil || err.Error() != d.expected {
-			t.Errorf("%s: expected\n%s, but found\n%v", d.sql, d.expected, err)
+		if err == nil {
+			t.Errorf("expected error, got nil")
+			continue
+		}
+		msg := err.Error()
+		if pgerr, ok := pgerror.GetPGCause(err); ok {
+			msg += strings.TrimPrefix(pgerr.Detail, "source SQL:") + "\n"
+			if pgerr.Hint != "" {
+				msg += "HINT: " + pgerr.Hint
+			}
+		}
+		if msg != d.expected {
+			t.Errorf("%s: expected\n%s, but found\n%v", d.sql, d.expected, msg)
 		}
 	}
 }
