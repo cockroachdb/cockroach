@@ -47,7 +47,7 @@ const typeSetting = new LocalSetting<AdminUIState, number>(
 );
 
 const showOptions = [
-  { value: "50", label: "First 50" },
+  { value: "50", label: "Newest 50" },
   { value: "0", label: "All" },
 ];
 
