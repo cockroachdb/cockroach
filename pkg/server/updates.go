@@ -310,6 +310,7 @@ func (s *Server) reportDiagnostics(runningTime time.Duration) {
 		}
 		return
 	}
+	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
 		b, err := ioutil.ReadAll(res.Body)
