@@ -41,6 +41,9 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
+	"math"
+	"os"
+	"path/filepath"
 )
 
 func entryEq(l, r raftpb.Entry) error {
@@ -261,6 +264,69 @@ func testSideloadingSideloadedStorage(
 				if _, err := ss.Get(ctx, i, term); err != errSideloadedFileNotFound {
 					t.Fatalf("%d.%d: %v", n, i, err)
 				}
+			}
+		}
+	}
+
+	if !isInMem {
+		// First add a file that shouldn't be in the sideloaded storage to ensure
+		// sane behaviour when directory can't be removed after full truncate.
+		nonRemovableFile := filepath.Join(ss.(*diskSideloadStorage).dir, "cantremove.xx")
+		_, err := os.Create(nonRemovableFile)
+		if err != nil {
+			t.Fatalf("could not create non i*.t* file in sideloaded storage: %v", err)
+		}
+
+		err = ss.TruncateTo(ctx, math.MaxUint64)
+		if err == nil {
+			t.Fatalf("sideloaded directory should not have been removable due to extra file %s", nonRemovableFile)
+		}
+		expectedTruncateError := "while purging %q: remove %s: directory not empty"
+		if err.Error() != fmt.Sprintf(expectedTruncateError, ss.(*diskSideloadStorage).dir, ss.(*diskSideloadStorage).dir) {
+			t.Fatalf("error truncating sideloaded storage: %v", err)
+		}
+		// Now remove extra file and let truncation proceed to remove directory.
+		err = os.Remove(nonRemovableFile)
+		if err != nil {
+			t.Fatalf("could not remove %s: %v", nonRemovableFile, err)
+		}
+
+		// Test that directory is removed when filepath.Glob returns 0 matches.
+		if err := ss.TruncateTo(ctx, math.MaxUint64); err != nil {
+			t.Fatal(err)
+		}
+		// Ensure directory is removed, now that all files should be gone.
+		_, err = os.Stat(ss.(*diskSideloadStorage).dir)
+		if err == nil {
+			t.Fatalf("expected %q to be removed after truncating full range", ss.(*diskSideloadStorage).dir)
+		}
+		if err != nil {
+			if !os.IsNotExist(err) {
+				t.Fatalf("expected %q to be removed: %v", ss.(*diskSideloadStorage).dir, err)
+			}
+		}
+
+		// Repopulate with some random indexes to test deletion when there are a
+		// non-zero number of filepath.Glob matches.
+		payloads := []uint64{3, 5, 7, 9, 10}
+		for n := range rand.Perm(len(payloads)) {
+			i := payloads[n]
+			if err := ss.PutIfNotExists(ctx, i, highTerm, file(i*highTerm)); err != nil {
+				t.Fatalf("%d: %s", i, err)
+			}
+		}
+		assertCreated(true)
+		if err := ss.TruncateTo(ctx, math.MaxUint64); err != nil {
+			t.Fatal(err)
+		}
+		// Ensure directory is removed when all records are removed.
+		_, err = os.Stat(ss.(*diskSideloadStorage).dir)
+		if err == nil {
+			t.Fatalf("expected %q to be removed after truncating full range", ss.(*diskSideloadStorage).dir)
+		}
+		if err != nil {
+			if !os.IsNotExist(err) {
+				t.Fatalf("expected %q to be removed: %v", ss.(*diskSideloadStorage).dir, err)
 			}
 		}
 	}
