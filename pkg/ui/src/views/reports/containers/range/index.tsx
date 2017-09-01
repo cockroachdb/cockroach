@@ -1,6 +1,5 @@
 import _ from "lodash";
 import Long from "long";
-import moment from "moment";
 import React from "react";
 import { connect } from "react-redux";
 import { RouterState } from "react-router";
@@ -10,7 +9,6 @@ import { refreshRange, refreshAllocatorRange } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { rangeIDAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
-import Print from "src/views/reports/containers/range/print";
 import ConnectionsTable from "src/views/reports/containers/range/connectionsTable";
 import RangeTable from "src/views/reports/containers/range/rangeTable";
 import LogTable from "src/views/reports/containers/range/logTable";
@@ -36,7 +34,7 @@ function ErrorPage(props: {
 }) {
   return (
     <div className="section">
-      <h1>Range r{props.rangeID}</h1>
+      <h1>Range Report for r{props.rangeID}</h1>
       <h2>{props.errorText}</h2>
       {
         _.isNil(props.rangeResponse) ? null : <ConnectionsTable rangeResponse={props.rangeResponse} />
@@ -137,7 +135,7 @@ class Range extends React.Component<RangeProps, {}> {
 
     return (
       <div className="section">
-        <h1>Range r{responseRangeID.toString()} at {Print.Time(moment().utc())} UTC</h1>
+        <h1>Range Report for r{responseRangeID.toString()}</h1>
         <RangeTable infos={infos} replicas={replicas} />
         <LeaseTable info={_.head(infos)} />
         <LogTable rangeID={responseRangeID} log={range.range_log} />
