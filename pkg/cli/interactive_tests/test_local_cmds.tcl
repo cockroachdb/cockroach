@@ -64,7 +64,6 @@ end_test
 
 start_test "Check that \\set without argument prints the current options"
 send "\\set\r"
-eexpect "5 rows"
 eexpect "display_format\ttsv"
 eexpect root@
 end_test
@@ -79,7 +78,6 @@ end_test
 
 start_test "Check that \\set can change the display format"
 send "\\set display_format csv\r\\set\r"
-eexpect "5 rows"
 eexpect "display_format,csv"
 eexpect root@
 send "\\set display_format tsv\r"
@@ -109,7 +107,6 @@ expect {
 }
 # check the override
 send "\\set show_times\r\\set\r"
-eexpect "5 rows"
 eexpect "show_times\ttrue"
 eexpect root@
 send "select 1;\r"

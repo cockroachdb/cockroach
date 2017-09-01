@@ -153,6 +153,12 @@ with a non-zero status code and further statements are not executed. The
 results of each SQL statement are printed on the standard output.`,
 	}
 
+	EchoSQL = FlagInfo{
+		Name: "echo-sql",
+		Description: `
+Reveal the SQL statements sent implicitly by the command-line utility.`,
+	}
+
 	UnsafeUpdates = FlagInfo{
 		Name: "unsafe-updates",
 		Description: `
