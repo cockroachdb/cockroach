@@ -531,10 +531,10 @@ func backup(
 			mu.Lock()
 			for _, file := range res.(*roachpb.ExportResponse).Files {
 				mu.files = append(mu.files, BackupDescriptor_File{
-					Span:     file.Span,
-					Path:     file.Path,
-					Sha512:   file.Sha512,
-					DataSize: uint64(file.Exported.DataSize),
+					Span:        file.Span,
+					Path:        file.Path,
+					Sha512:      file.Sha512,
+					EntryCounts: file.Exported,
 				})
 				mu.exported.Add(file.Exported)
 			}
@@ -848,7 +848,7 @@ func showBackupPlanHook(
 				}
 			}
 		}
-		descSizes := make(map[sqlbase.ID]uint64)
+		descSizes := make(map[sqlbase.ID]int64)
 		for _, file := range desc.Files {
 			// TODO(dan): This assumes each file in the backup only contains
 			// data from a single table, which is usually but not always
@@ -859,7 +859,7 @@ func showBackupPlanHook(
 			if err != nil {
 				continue
 			}
-			descSizes[sqlbase.ID(tableID)] += file.DataSize
+			descSizes[sqlbase.ID(tableID)] += file.EntryCounts.DataSize
 		}
 		start := parser.DNull
 		if desc.StartTime.WallTime != 0 {

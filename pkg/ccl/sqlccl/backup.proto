@@ -31,7 +31,8 @@ message BackupDescriptor {
     string path = 2;
     reserved 3;
     bytes sha512 = 4;
-    uint64 data_size = 5;
+    reserved 5;
+    roachpb.BulkOpSummary entry_counts = 6 [(gogoproto.nullable) = false];
   }
 
   util.hlc.Timestamp start_time = 1 [(gogoproto.nullable) = false];
