@@ -16,6 +16,7 @@ package sql
 
 import (
 	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -145,6 +146,7 @@ func (b *bufferedWriter) End() {
 func (b *bufferedWriter) Reset(ctx context.Context) {
 	if b.currentGroupResults != nil {
 		b.currentGroupResults.Close(ctx)
+		b.currentGroupResults = nil
 	}
 	b.resultInProgress = false
 }
