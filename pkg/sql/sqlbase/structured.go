@@ -1013,7 +1013,12 @@ func (desc *TableDescriptor) ValidateTable() error {
 		}
 
 		if _, ok := columnNames[column.Name]; ok {
-			return fmt.Errorf("duplicate column name: %q", column.Name)
+			for _, col := range desc.Columns {
+				if col.Name == column.Name {
+					return fmt.Errorf("duplicate column name: %q", column.Name)
+				}
+			}
+			return fmt.Errorf("duplicate: column %q in the middle of being added, not yet public", column.Name)
 		}
 		columnNames[column.Name] = column.ID
 
@@ -1151,7 +1156,12 @@ func (desc *TableDescriptor) validateTableIndexes(
 		}
 
 		if _, ok := indexNames[index.Name]; ok {
-			return fmt.Errorf("duplicate index name: %q", index.Name)
+			for _, idx := range desc.Indexes {
+				if idx.Name == index.Name {
+					return fmt.Errorf("duplicate index name: %q", index.Name)
+				}
+			}
+			return fmt.Errorf("duplicate: index %q in the middle of being added, not yet public", index.Name)
 		}
 		indexNames[index.Name] = struct{}{}
 
