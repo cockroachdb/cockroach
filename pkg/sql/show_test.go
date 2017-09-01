@@ -26,6 +26,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -488,6 +489,7 @@ func TestShowJobs(t *testing.T) {
 		finished          time.Time
 		modified          time.Time
 		fractionCompleted float32
+		coordinatorID     roachpb.NodeID
 	}
 
 	in := row{
@@ -506,6 +508,7 @@ func TestShowJobs(t *testing.T) {
 		finished:          time.Unix(3, 0).In(time.FixedZone("", 0)),
 		modified:          time.Unix(4, 0).In(time.FixedZone("", 0)),
 		fractionCompleted: 0.42,
+		coordinatorID:     7,
 	}
 
 	// system.jobs is part proper SQL columns, part protobuf, so we can't use the
@@ -524,6 +527,9 @@ func TestShowJobs(t *testing.T) {
 			}
 			return ids
 		}(),
+		Lease: &jobs.Lease{
+			NodeID: 7,
+		},
 		Error:   in.err,
 		Details: jobs.WrapPayloadDetails(jobs.SchemaChangeDetails{}),
 	}).Marshal()
@@ -538,12 +544,14 @@ func TestShowJobs(t *testing.T) {
 	for _, source := range []string{"[SHOW JOBS]", "crdb_internal.jobs"} {
 		var out row
 		sqlDB.QueryRow(fmt.Sprintf(`
-			SELECT id, type, status, created, description, started, finished,
-						 modified, fraction_completed, username, descriptor_ids, error
+			SELECT
+				id, type, status, created, description, started, finished, modified,
+				fraction_completed, username, descriptor_ids, error, coordinator_id
 			FROM %s`, source),
 		).Scan(
-			&out.id, &out.typ, &out.status, &out.created, &out.description, &out.started, &out.finished,
-			&out.modified, &out.fractionCompleted, &out.username, &out.descriptorIDs, &out.err,
+			&out.id, &out.typ, &out.status, &out.created, &out.description, &out.started,
+			&out.finished, &out.modified, &out.fractionCompleted, &out.username, &out.descriptorIDs,
+			&out.err, &out.coordinatorID,
 		)
 		if !reflect.DeepEqual(in, out) {
 			diff := strings.Join(pretty.Diff(in, out), "\n")

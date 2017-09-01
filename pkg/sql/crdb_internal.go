@@ -357,7 +357,8 @@ CREATE TABLE crdb_internal.jobs (
 	finished           TIMESTAMP,
 	modified           TIMESTAMP,
 	fraction_completed FLOAT,
-	error              STRING
+	error              STRING,
+	coordinator_id     INT
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
@@ -385,6 +386,10 @@ CREATE TABLE crdb_internal.jobs (
 					return err
 				}
 			}
+			leaseNode := parser.DNull
+			if payload.Lease != nil {
+				leaseNode = parser.NewDInt(parser.DInt(payload.Lease.NodeID))
+			}
 			if err := addRow(
 				id,
 				parser.NewDString(payload.Type().String()),
@@ -398,6 +403,7 @@ CREATE TABLE crdb_internal.jobs (
 				tsOrNull(payload.ModifiedMicros),
 				parser.NewDFloat(parser.DFloat(payload.FractionCompleted)),
 				parser.NewDString(payload.Error),
+				leaseNode,
 			); err != nil {
 				return err
 			}
