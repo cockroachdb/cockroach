@@ -578,7 +578,18 @@ func TestRangeTransferLease(t *testing.T) {
 	forceLeaseExtension := func(sender *storage.Stores, lease roachpb.Lease) error {
 		shouldRenewTS := lease.Expiration.Add(-1, 0)
 		mtc.manualClock.Set(shouldRenewTS.WallTime + 1)
-		return sendRead(sender).GoError()
+		err := sendRead(sender).GoError()
+		if err != nil {
+			// We can sometimes receive an error from our renewal attempt because the
+			// lease transfer ends up causing the renewal to re-propose and second
+			// attempt fails because it's already been renewed. This used to work
+			// before we compared the proposer's lease with the actual lease because
+			// the renewed lease still encompassed the previous request.
+			if _, ok := err.(*roachpb.NotLeaseHolderError); ok {
+				err = nil
+			}
+		}
+		return err
 	}
 	t.Run("Transfer", func(t *testing.T) {
 		origLease, _ := replica0.GetLease()
@@ -651,7 +662,12 @@ func TestRangeTransferLease(t *testing.T) {
 		transferErrCh := make(chan error)
 		go func() {
 			// Transfer back from replica1 to replica0.
-			transferErrCh <- replica1.AdminTransferLease(context.Background(), replica0Desc.StoreID)
+			err := replica1.AdminTransferLease(context.Background(), replica0Desc.StoreID)
+			// Ignore not leaseholder errors which can arise due to re-proposals.
+			if _, ok := err.(*roachpb.NotLeaseHolderError); ok {
+				err = nil
+			}
+			transferErrCh <- err
 		}()
 		// Wait for the transfer to be blocked by the extension.
 		<-transferBlocked
@@ -660,16 +676,8 @@ func TestRangeTransferLease(t *testing.T) {
 		checkHasLease(t, mtc.senders[0])
 		setFilter(false, nil)
 
-		// We can sometimes receive an error from our renewal attempt
-		// because the lease transfer ends up causing the renewal to
-		// re-propose and second attempt fails because it's already been
-		// renewed. This used to work before we compared the proposer's lease
-		// with the actual lease because the renewed lease still encompassed the
-		// previous request.
 		if err := <-renewalErrCh; err != nil {
-			if _, ok := err.(*roachpb.NotLeaseHolderError); !ok {
-				t.Errorf("expected not lease holder error due to re-proposal; got %s", err)
-			}
+			t.Errorf("unexpected error from lease renewal: %s", err)
 		}
 		if err := <-transferErrCh; err != nil {
 			t.Errorf("unexpected error from lease transfer: %s", err)
@@ -717,7 +725,7 @@ func TestRangeTransferLease(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected %T, got %s", &roachpb.NotLeaseHolderError{}, pErr)
 		}
-		if *(nlhe.LeaseHolder) != replica1Desc {
+		if nlhe.LeaseHolder == nil || *nlhe.LeaseHolder != replica1Desc {
 			t.Fatalf("expected lease holder %+v, got %+v",
 				replica1Desc, nlhe.LeaseHolder)
 		}
@@ -754,16 +762,8 @@ func TestRangeTransferLease(t *testing.T) {
 		checkHasLease(t, mtc.senders[0])
 		setFilter(false, nil)
 
-		// We can sometimes receive an error from our renewal attempt
-		// because the lease transfer ends up causing the renewal to
-		// re-propose and second attempt fails because it's already been
-		// renewed. This used to work before we compared the proposer's lease
-		// with the actual lease because the renewed lease still encompassed the
-		// previous request.
 		if err := <-renewalErrCh; err != nil {
-			if _, ok := err.(*roachpb.NotLeaseHolderError); !ok {
-				t.Errorf("expected not lease holder error due to re-proposal; got %s", err)
-			}
+			t.Errorf("unexpected error from lease renewal: %s", err)
 		}
 	})
 }
