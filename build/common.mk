@@ -48,14 +48,7 @@ GO_INSTALL := GOBIN='$(LOCAL_BIN)' $(GO) install
 
 # Prefer tools we've installed with go install and Yarn to those elsewhere on
 # the PATH.
-#
-# Usually, we could use the yarn run command to avoid changing the PATH
-# globally. Unfortunately, yarn run must be executed in or beneath UI_ROOT, but
-# protobuf.mk, which depends on Yarn-installed executables, needs to execute in
-# ORG_ROOT. It's much simpler to add the Yarn executable-installation directory
-# to the PATH than have protobuf.mk adjust its paths to work in both ORG_ROOT
-# and UI_ROOT.
-export PATH := $(LOCAL_BIN):$(UI_ROOT)/node_modules/.bin:$(PATH)
+export PATH := $(LOCAL_BIN):$(PATH)
 
 # HACK: Make has a fast path and a slow path for command execution,
 # but the fast path uses the PATH variable from when make was started,
