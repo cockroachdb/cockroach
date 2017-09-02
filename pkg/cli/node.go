@@ -268,11 +268,7 @@ var decommissionNodeCmd = &cobra.Command{
 	Short: "decommissions the node(s)",
 	Long: `
 Marks the nodes with the supplied IDs as decommissioning.
-This will cause leases and replicas to be removed from these nodes.
-
-When called without any targets, lists decommissioning status of
-all known nodes.
-	`,
+This will cause leases and replicas to be removed from these nodes.`,
 	RunE: MaybeDecorateGRPCError(runDecommissionNode),
 }
 
