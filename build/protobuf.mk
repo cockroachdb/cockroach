@@ -51,6 +51,9 @@ GW_SOURCES := $(GW_PROTOS:%.proto=%.pb.gw.go)
 GO_PROTOS := $(addprefix $(REPO_ROOT)/, $(sort $(shell git -C $(REPO_ROOT) ls-files --exclude-standard --cached --others -- '*.proto')))
 GO_SOURCES := $(GO_PROTOS:%.proto=%.pb.go)
 
+PBJS := $(UI_ROOT)/node_modules/.bin/pbjs
+PBTS := $(UI_ROOT)/node_modules/.bin/pbts
+
 UI_JS := $(UI_ROOT)/src/js/protos.js
 UI_TS := $(UI_ROOT)/src/js/protos.d.ts
 UI_SOURCES := $(UI_JS) $(UI_TS)
@@ -101,7 +104,7 @@ $(CPP_SOURCES_TARGET): $(PROTOC) $(CPP_PROTOS)
 $(UI_JS): $(GO_PROTOS) $(COREOS_RAFT_PROTOS) $(YARN_INSTALLED_TARGET)
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
-	pbjs -t static-module -w es6 --strict-long --keep-case --path $(ORG_ROOT) --path $(GOGO_PROTOBUF_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(GW_PROTOS) >> $@
+	$(PBJS) -t static-module -w es6 --strict-long --keep-case --path $(ORG_ROOT) --path $(GOGO_PROTOBUF_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(GW_PROTOS) >> $@
 
 $(UI_TS): $(UI_JS) $(YARN_INSTALLED_TARGET)
 	# Install a known-good version of jsdoc; see
@@ -109,7 +112,7 @@ $(UI_TS): $(UI_JS) $(YARN_INSTALLED_TARGET)
 	(cd $(UI_ROOT)/node_modules/protobufjs/cli && npm install --silent jsdoc@3.4.3)
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
-	pbts $(UI_JS) >> $@
+	$(PBTS) $(UI_JS) >> $@
 
 .DEFAULT_GOAL := protos
 .PHONY: protos
