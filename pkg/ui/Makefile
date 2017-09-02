@@ -32,20 +32,20 @@ generate: $(GOBINDATA_TARGET)
 
 .PHONY: lint
 lint: $(YARN_INSTALLED_TARGET) | protos
-	stylint -c .stylintrc styl
-	tslint -c tslint.json -p tsconfig.json --type-check
+	yarn run stylint -c .stylintrc styl
+	yarn run tslint -c tslint.json -p tsconfig.json --type-check
 
 .PHONY: test
 test: $(YARN_INSTALLED_TARGET) | protos
-	karma start
+	yarn run karma start
 
 .PHONY: test-watch
 test-watch: $(YARN_INSTALLED_TARGET) | protos
-	karma start --no-single-run --auto-watch
+	yarn run karma start --no-single-run --auto-watch
 
 $(GOBINDATA_TARGET): $(YARN_INSTALLED_TARGET) $(shell git ls-files | grep -vF $(GOBINDATA_TARGET)) | protos
 	rm -rf dist
-	webpack -p
+	yarn run webpack -p
 	go-bindata -nometadata -pkg ui -o $@ -prefix dist dist/...
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' >> $@
