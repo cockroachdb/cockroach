@@ -3992,9 +3992,9 @@ opt_index_hints:
 //   <tablefunc> ( <exprs...> )
 //   ( { <selectclause> | <source> } )
 //   <source> [AS] <alias> [( <colnames...> )]
-//   <source> { [INNER] | { LEFT | RIGHT } [OUTER] } JOIN <source> ON <expr>
-//   <source> { [INNER] | { LEFT | RIGHT } [OUTER] } JOIN <source> USING ( <colnames...> )
-//   <source> NATURAL { [INNER] | { LEFT | RIGHT } [OUTER] } JOIN <source>
+//   <source> { [INNER] | { LEFT | RIGHT | FULL } [OUTER] } JOIN <source> ON <expr>
+//   <source> { [INNER] | { LEFT | RIGHT | FULL } [OUTER] } JOIN <source> USING ( <colnames...> )
+//   <source> NATURAL { [INNER] | { LEFT | RIGHT | FULL } [OUTER] } JOIN <source>
 //   <source> CROSS JOIN <source>
 //   <source> WITH ORDINALITY
 //   '[' EXPLAIN ... ']'
