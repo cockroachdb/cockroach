@@ -765,9 +765,10 @@ func TestReplicaLease(t *testing.T) {
 
 	// Test that leases with invalid times are rejected.
 	// Start leases at a point that avoids overlapping with the existing lease.
-	one := hlc.Timestamp{WallTime: time.Second.Nanoseconds(), Logical: 0}
+	leaseDuration := tc.store.cfg.RangeLeaseActiveDuration()
+	start := hlc.Timestamp{WallTime: (time.Second + leaseDuration).Nanoseconds(), Logical: 0}
 	for _, lease := range []roachpb.Lease{
-		{Start: one, Expiration: hlc.Timestamp{}},
+		{Start: start, Expiration: hlc.Timestamp{}},
 	} {
 		if _, err := evalRequestLease(context.Background(), tc.store.Engine(),
 			CommandArgs{
