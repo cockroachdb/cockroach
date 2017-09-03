@@ -2695,6 +2695,11 @@ const (
 	// cmdQCancelTestDeadlockTimeout is the timeout used in cmdQCancelTest to
 	// determine that a deadlock has occurred.
 	cmdQCancelTestDeadlockTimeout = 500 * time.Millisecond
+	// cmdQCancelTestProgressTimeout is the timeout used in cmdQCancelTest to
+	// wait for any unexpected progress, before determining that progress has
+	// properly halted. Once this timeout expires, the cmdQCancelTest unblocks
+	// other commands to allow for further progress.
+	cmdQCancelTestProgressTimeout = 10 * time.Millisecond
 )
 
 // onCmdQAction instruments CommandQueueActions, sending to different channels
@@ -2897,7 +2902,7 @@ func (ct *cmdQCancelTest) runCmds() {
 		select {
 		case <-ct.startingCmd:
 			ct.Fatalf("expected %d commands to begin running together, saw extra", readyLen)
-		case <-time.After(cmdQCancelTestDeadlockTimeout / 10):
+		case <-time.After(cmdQCancelTestProgressTimeout):
 		}
 
 		// We should see exactly this many command finish. Again, the absence
