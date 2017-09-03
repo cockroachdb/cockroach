@@ -258,11 +258,6 @@ func initBlockProfile() {
 	runtime.SetBlockProfileRate(int(d))
 }
 
-// ErrorCode is the value to be used by main() as exit code in case of
-// error. For most errors 1 is appropriate, but a signal termination
-// can change this.
-var ErrorCode = 1
-
 type bytesOrPercentageValue struct {
 	val  *int64
 	bval *humanizeutil.BytesValue
@@ -465,6 +460,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	shutdownSpan := tracer.StartSpan("server shutdown")
 	defer shutdownSpan.Finish()
 	shutdownCtx := opentracing.ContextWithSpan(context.Background(), shutdownSpan)
+
 	var returnErr error
 
 	// Block until one of the signals above is received or the stopper
@@ -493,7 +489,12 @@ func runStart(cmd *cobra.Command, args []string) error {
 			// to terminate with a non-zero exit code; however SIGTERM is
 			// "legitimate" and should be acknowledged with a success exit
 			// code. So we keep the error state here for later.
-			returnErr = errors.New("interrupted")
+			returnErr = &cliError{
+				exitCode: 1,
+				// INFO because a single interrupt is rather innocuous.
+				severity: log.Severity_INFO,
+				cause:    errors.New("interrupted"),
+			}
 			msgDouble := "Note: a second interrupt will skip graceful shutdown and terminate forcefully"
 			fmt.Fprintln(os.Stdout, msgDouble)
 		}
@@ -530,19 +531,24 @@ func runStart(cmd *cobra.Command, args []string) error {
 		}
 	}()
 
+	const hardShutdownHint = " - node may take longer to restart & clients may need to wait for leases to expire"
 	select {
 	case sig := <-signalCh:
-		returnErr = fmt.Errorf("received signal '%s' during shutdown, initiating hard shutdown", sig)
 		// This new signal is not welcome, as it interferes with the graceful
 		// shutdown process. On Unix, a signal that was not handled gracefully by
 		// the application should be visible to other processes as an exit code
 		// encoded as 128+signal number.
 		//
 		// Also, on Unix, os.Signal is syscall.Signal and it's convertible to int.
-		ErrorCode = 128 + int(sig.(syscall.Signal))
+		returnErr = &cliError{
+			exitCode: 128 + int(sig.(syscall.Signal)),
+			severity: log.Severity_ERROR,
+			cause: errors.Errorf(
+				"received signal '%s' during shutdown, initiating hard shutdown%s", sig, hardShutdownHint),
+		}
 		// NB: we do not return here to go through log.Flush below.
 	case <-time.After(time.Minute):
-		returnErr = errors.New("time limit reached, initiating hard shutdown")
+		returnErr = errors.Errorf("time limit reached, initiating hard shutdown%s", hardShutdownHint)
 		// NB: we do not return here to go through log.Flush below.
 	case <-stopper.IsStopped():
 		const msgDone = "server drained and shutdown completed"
