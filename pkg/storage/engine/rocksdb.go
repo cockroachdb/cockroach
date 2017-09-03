@@ -377,11 +377,11 @@ func newMemRocksDB(
 		cache: cache.ref(),
 	}
 
-	tempDir, err := ioutil.TempDir(os.TempDir(), ".inmemrocksdb")
+	auxDir, err := ioutil.TempDir(os.TempDir(), "cockroach-auxiliary")
 	if err != nil {
 		return nil, err
 	}
-	if err := r.setAuxiliaryDir(filepath.Join(tempDir, "./auxiliary")); err != nil {
+	if err := r.setAuxiliaryDir(auxDir); err != nil {
 		return nil, err
 	}
 
