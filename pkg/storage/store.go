@@ -2561,13 +2561,17 @@ func (s *Store) Send(
 		// retry. Other errors are returned to caller.
 		switch pErr.GetDetail().(type) {
 		case *roachpb.TransactionPushError:
-			// On a transaction push error, retry immediately. This will
-			// enqueue the command in the pushTxnQueue, to await further
-			// updates to the unpushed txn's status.
-			if s.cfg.DontRetryPushTxnFailures {
-				// If we're not to retry on push txn failures (unittesting
-				// only), return an txn retry error after the first failure
-				// to guarantee a retry.
+			// On a transaction push error, retry immediately if doing so will
+			// enqueue into the pushTxnQueue in order to await further updates to the
+			// unpushed txn's status.
+			dontRetry := s.cfg.DontRetryPushTxnFailures
+			if !dontRetry && ba.IsSinglePushTxnRequest() {
+				pushReq := ba.Requests[0].GetInner().(*roachpb.PushTxnRequest)
+				dontRetry = shouldPushImmediately(pushReq)
+			}
+			if dontRetry {
+				// If we're not retrying on push txn failures return a txn retry error
+				// after the first failure to guarantee a retry.
 				if ba.Txn != nil {
 					err := roachpb.NewTransactionRetryError(roachpb.RETRY_REASON_UNKNOWN)
 					return nil, roachpb.NewErrorWithTxn(err, ba.Txn)
