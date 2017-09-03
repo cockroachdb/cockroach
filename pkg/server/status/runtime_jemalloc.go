@@ -120,6 +120,11 @@ func getJemallocStats(ctx context.Context) (uint, uint, error) {
 
 	if log.V(3) {
 		// Detailed jemalloc stats (very verbose, includes per-arena stats).
+		//
+		// TODO(tschottdorf): send these through log.Info so that it plays ball
+		// with log.Intercept(). Right now while intercepting we'll spew this to
+		// the logs. Would actually be useful to be able to intercept the
+		// jemalloc stats on demand.
 		C.je_malloc_stats_print(nil, nil, nil)
 	}
 
