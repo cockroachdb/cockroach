@@ -36,6 +36,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -644,6 +646,8 @@ type loggingT struct {
 	verbosity level         // V logging level, the value of the --verbosity flag/
 	exitFunc  func(int)     // func that will be called on fatal errors
 	gcNotify  chan struct{} // notify GC daemon that a new log file was created
+
+	interceptor atomic.Value // InterceptorFn
 }
 
 // buffer holds a byte Buffer for reuse. The zero value is ready for use.
@@ -708,8 +712,6 @@ func (l *loggingT) putBuffer(b *buffer) {
 // the data to the log files. If a trace location is set, stack traces
 // are added to the entry before marshaling.
 func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string) {
-	// TODO(tschottdorf): this is a pretty horrible critical section.
-	l.mu.Lock()
 
 	// Set additional details in log entry.
 	now := time.Now()
@@ -721,6 +723,15 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 		Line:      int64(line),
 		Message:   msg,
 	}
+
+	if f, ok := l.interceptor.Load().(InterceptorFn); ok && f != nil {
+		f(entry)
+		return
+	}
+
+	// TODO(tschottdorf): this is a pretty horrible critical section.
+	l.mu.Lock()
+
 	// On fatal log, set all stacks.
 	var stacks []byte
 	if s == Severity_FATAL {
@@ -1145,6 +1156,24 @@ func v(level level) bool {
 	return VDepth(level, 1)
 }
 
+// InterceptorFn .
+type InterceptorFn func(entry Entry)
+
+// Intercept .
+func Intercept(ctx context.Context, f InterceptorFn) {
+	logging.Intercept(ctx, f)
+}
+
+func (l *loggingT) Intercept(ctx context.Context, f InterceptorFn) {
+	// TODO(tschottdorf): restore sanity so that all methods have a *loggingT
+	// receiver.
+	logDepth(ctx, 0, Severity_WARNING, "log traffic is now intercepted; log files will be incomplete", nil)
+	l.interceptor.Store(f) // intentionally also when f == nil
+	if f == nil {
+		logDepth(ctx, 0, Severity_INFO, "log interception is now stopped; normal logging resumes", nil)
+	}
+}
+
 // VDepth reports whether verbosity at the call site is at least the requested
 // level.
 func VDepth(level level, depth int) bool {
@@ -1153,6 +1182,10 @@ func VDepth(level level, depth int) bool {
 
 	// Here is a cheap but safe test to see if V logging is enabled globally.
 	if logging.verbosity.get() >= level {
+		return true
+	}
+
+	if f, ok := logging.interceptor.Load().(InterceptorFn); ok && f != nil {
 		return true
 	}
 
