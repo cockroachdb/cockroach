@@ -23,7 +23,8 @@ import "bytes"
 // These constants are replaced in template code.
 const (
 	ºnumRefsPerNode = iota
-	ºnumEnumsPerNode
+	ºnumNumsPerNode
+	ºnumStrsPerNode
 	ºtag
 )
 
@@ -39,3 +40,16 @@ func (t ºtype) FormatSExpr(buf *bytes.Buffer) {}
 
 // FormatSExprºType is a stub for Sexpr formatters for primitive types.
 func FormatSExprºType(buf *bytes.Buffer, x ºtype) {}
+
+// ºnumValSlotType is overridden during code generation.
+type ºnumValSlotType uint64
+
+const (
+	ºslotType       = 0
+	ºslotNum        = 0
+	ºslotBitSize    = 0
+	ºslotBitOffset  = 0
+	ºslotByteSize   = 0
+	ºslotByteOffset = 0
+	ºslotValueMask  = 0
+)

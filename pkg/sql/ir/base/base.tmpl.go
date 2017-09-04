@@ -14,18 +14,27 @@
 
 package base
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // node is a generic ADT node type, with slots for references to other nodes and
 // enumeration values. Values that don't fit and values of other types go in the
 // extra field.
 type node struct {
-	refs  [ºnumRefsPerNode]*node
-	enums [ºnumEnumsPerNode]enum
+	refs [ºnumRefsPerNode]*node
+	nums [ºnumNumsPerNode]numvalslot
+	strs [ºnumStrsPerNode]string
 	extra
 }
 
-type enum int32
+// enum is the type to define the tag part for working copies of IR
+// node with sum and enum types.
+type enum uint32
+
+// numvalslot is the type used to store integer values in persistent IR nodes.
+// must be larger than or as large as enum.
+type numvalslot ºnumValSlotType
 
 type extra interface {
 	extraRefs() []*node
@@ -95,6 +104,18 @@ func (x ºEnum) String() string {
 // ºStruct is the type of a reference to an immutable record.
 type ºStruct struct{ ref *node }
 
+// @for slot
+
+const ºStruct_Slot_ºslotName_Type = ºslotType
+const ºStruct_Slot_ºslotName_Num = ºslotNum
+const ºStruct_Slot_ºslotName_BitSize = ºslotBitSize
+const ºStruct_Slot_ºslotName_BitOffset = ºslotBitOffset
+const ºStruct_Slot_ºslotName_ByteSize = ºslotByteSize
+const ºStruct_Slot_ºslotName_ByteOffset = ºslotByteOffset
+const ºStruct_Slot_ºslotName_ValueMask = ºslotValueMask
+
+// @done slot
+
 // ºStructValue is the logical type of a record. Immutable records are stored in
 // nodes.
 type ºStructValue struct {
@@ -140,7 +161,7 @@ func (x ºStruct) ºItem() ºtype { return ºgetField(x.ref) }
 func (x ºStruct) V() ºStructValue {
 	return ºStructValue{
 		// @for item
-		ºgetField(x.ref),
+		ºItem: ºgetField(x.ref),
 		// @done item
 	}
 }
