@@ -45,11 +45,21 @@ func FormatSExprºType(buf *bytes.Buffer, x ºtype) {}
 type ºnumValSlotType uint64
 
 const (
-	ºslotType       = 0
-	ºslotNum        = 0
-	ºslotBitSize    = 0
-	ºslotBitOffset  = 0
-	ºslotByteSize   = 0
-	ºslotByteOffset = 0
-	ºslotValueMask  = 0
+	ºslotType          = 0
+	ºslotNum           = 0
+	ºslotBitSize       = 0
+	ºslotBitOffset     = 0
+	ºslotByteSize      = 0
+	ºslotByteOffset    = 0
+	ºslotValueMask     = 0
+	ºprimFieldsMask    = 0
+	ºnonPrimFieldsMask = 0
+	ºfieldNum          = 0
+	ºName              = 0
 )
+
+// openºtype is a stub for generated struct S-exp parsers.
+func (p *Parser) openºtype() (ºtype, error) { return ºtype{}, nil }
+
+// ParseºType is a stub for generated S-exp parsers.
+func (p *Parser) ParseºType() (ºtype, error) { return ºtype{}, nil }

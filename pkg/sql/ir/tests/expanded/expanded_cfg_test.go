@@ -83,7 +83,7 @@ func TestExprFormatSExpr(t *testing.T) {
 
 	var buf bytes.Buffer
 	e.FormatSExpr(&buf)
-	if buf.String() != "(BinExpr Left: (ConstExpr Datum: 3) Op: Mul Right: (BinExpr Left: (ConstExpr Datum: 1) Op: Add Right: (ConstExpr Datum: 2)))" {
+	if buf.String() != "(bin-expr :left (const-expr :datum 3) :op mul :right (bin-expr :left (const-expr :datum 1) :op add :right (const-expr :datum 2)))" {
 		t.Fatalf("unexpected: %q", buf.String())
 	}
 }
@@ -152,6 +152,33 @@ func TestDeepEqual(t *testing.T) {
 	}
 }
 
+func TestDoubleEntry(t *testing.T) {
+	a := d.NewAllocator()
+	e := makeSampleExpr(a)
+
+	var buf bytes.Buffer
+	e.FormatSExpr(&buf)
+	s := buf.String()
+
+	p := d.MakeParser(s, a)
+	be, err := p.ParseBinExpr()
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	e2 := be.Expr()
+
+	buf.Reset()
+	e2.FormatSExpr(&buf)
+	s2 := buf.String()
+
+	if !deepEqual(e, e2) {
+		t.Fatalf("expected expression to be deepEqual to its printer-reparsed form: expected:\n%s\ngot:\n%s", s, s2)
+	}
+	if s != s2 {
+		t.Fatalf("expected reprinted expression to be equal to its original form: expected:\n%s\ngot:\n%s", s, s2)
+	}
+}
+
 func TestPrimValues(t *testing.T) {
 	a := p.NewAllocator()
 	all := p.AllValue{
@@ -183,9 +210,19 @@ func TestPrimValues(t *testing.T) {
 
 	var buf bytes.Buffer
 	all.FormatSExpr(&buf)
-	assertEq(t, 100, buf.String(), strings.TrimSpace(`
-(All B: true I8: 98 U8: 99 I16: 4660 U16: 17185 I32: 305419896 U32: 2271560481 I64: 1311768467463790320 U64: 1147797409030816545 S: "k" F32: 1.234 F64: 5.678)
+	sall := buf.String()
+	assertEq(t, 100, sall, strings.TrimSpace(`
+(all :b true :i8 98 :u8 99 :i16 4660 :u16 17185 :i32 305419896 :u32 2271560481 :i64 1311768467463790320 :u64 1147797409030816545 :s "k" :f32 1.234 :f64 5.678)
 `))
+	pr := p.MakeParser(sall, a)
+	all2, err := pr.ParseAll()
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+
+	buf.Reset()
+	all2.FormatSExpr(&buf)
+	assertEq(t, 101, sall, buf.String())
 }
 
 func TestPrimValues2(t *testing.T) {
@@ -214,7 +251,7 @@ func TestPrimValues2(t *testing.T) {
 	var buf bytes.Buffer
 	v.FormatSExpr(&buf)
 	assertEq(t, 100, buf.String(), strings.TrimSpace(`
-(SmallBefore A: true B: false C: 99 D: 100 E: 101 F: 4660 G: 17185 H: 305419896 I: 1311768467463790320)
+(small-before :a true :b false :c 99 :d 100 :e 101 :f 4660 :g 17185 :h 305419896 :i 1311768467463790320)
 `))
 }
 
@@ -244,6 +281,6 @@ func TestPrimValues3(t *testing.T) {
 	var buf bytes.Buffer
 	v.FormatSExpr(&buf)
 	assertEq(t, 100, buf.String(), strings.TrimSpace(`
-(BigBefore A: 1311768467463790320 B: 305419896 C: 4660 D: 17185 E: 101 F: 102 G: 103 H: false I: true)
+(big-before :a 1311768467463790320 :b 305419896 :c 4660 :d 17185 :e 101 :f 102 :g 103 :h false :i true)
 `))
 }

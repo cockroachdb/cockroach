@@ -86,11 +86,11 @@ const (
 func (x BinOp) String() string {
 	switch x {
 	case BinOpAdd:
-		return "Add"
+		return "add"
 	case BinOpMul:
-		return "Mul"
+		return "mul"
 	default:
-		return fmt.Sprintf("<unknown BinOp %d>", x)
+		return fmt.Sprintf("bin-op(%d)", x)
 	}
 }
 

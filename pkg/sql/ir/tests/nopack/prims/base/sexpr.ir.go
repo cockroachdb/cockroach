@@ -19,10 +19,22 @@ package base
 import (
 	"bytes"
 	"fmt"
+	"strconv"
+	"strings"
+	"unicode"
+	"unicode/utf8"
+
+	"github.com/pkg/errors"
 )
 
 type SexprFormatter interface {
 	FormatSExpr(buf *bytes.Buffer)
+}
+
+func asString(x SexprFormatter) string {
+	var buf bytes.Buffer
+	x.FormatSExpr(&buf)
+	return buf.String()
 }
 
 func FormatSExprBool(buf *bytes.Buffer, x bool)       { fmt.Fprintf(buf, "%v", x) }
@@ -39,112 +51,655 @@ func FormatSExprFloat64(buf *bytes.Buffer, x float64) { fmt.Fprintf(buf, "%v", x
 func FormatSExprString(buf *bytes.Buffer, x string)   { fmt.Fprintf(buf, "%q", x) }
 
 func (x All) FormatSExpr(buf *bytes.Buffer) {
-	buf.WriteString("(All")
+	buf.WriteString("(all")
 
-	buf.WriteString(" B: ")
+	buf.WriteString(" :b ")
 	FormatSExprBool(buf, x.B())
 
-	buf.WriteString(" I8: ")
+	buf.WriteString(" :i8 ")
 	FormatSExprInt8(buf, x.I8())
 
-	buf.WriteString(" U8: ")
+	buf.WriteString(" :u8 ")
 	FormatSExprUint8(buf, x.U8())
 
-	buf.WriteString(" I16: ")
+	buf.WriteString(" :i16 ")
 	FormatSExprInt16(buf, x.I16())
 
-	buf.WriteString(" U16: ")
+	buf.WriteString(" :u16 ")
 	FormatSExprUint16(buf, x.U16())
 
-	buf.WriteString(" I32: ")
+	buf.WriteString(" :i32 ")
 	FormatSExprInt32(buf, x.I32())
 
-	buf.WriteString(" U32: ")
+	buf.WriteString(" :u32 ")
 	FormatSExprUint32(buf, x.U32())
 
-	buf.WriteString(" I64: ")
+	buf.WriteString(" :i64 ")
 	FormatSExprInt64(buf, x.I64())
 
-	buf.WriteString(" U64: ")
+	buf.WriteString(" :u64 ")
 	FormatSExprUint64(buf, x.U64())
 
-	buf.WriteString(" S: ")
+	buf.WriteString(" :s ")
 	FormatSExprString(buf, x.S())
 
-	buf.WriteString(" F32: ")
+	buf.WriteString(" :f32 ")
 	FormatSExprFloat32(buf, x.F32())
 
-	buf.WriteString(" F64: ")
+	buf.WriteString(" :f64 ")
 	FormatSExprFloat64(buf, x.F64())
 
 	buf.WriteByte(')')
 }
 
-func (x SmallBefore) FormatSExpr(buf *bytes.Buffer) {
-	buf.WriteString("(SmallBefore")
+func (x All) String() string { return asString(x) }
 
-	buf.WriteString(" A: ")
+func (x SmallBefore) FormatSExpr(buf *bytes.Buffer) {
+	buf.WriteString("(small-before")
+
+	buf.WriteString(" :a ")
 	FormatSExprBool(buf, x.A())
 
-	buf.WriteString(" B: ")
+	buf.WriteString(" :b ")
 	FormatSExprBool(buf, x.B())
 
-	buf.WriteString(" C: ")
+	buf.WriteString(" :c ")
 	FormatSExprUint8(buf, x.C())
 
-	buf.WriteString(" D: ")
+	buf.WriteString(" :d ")
 	FormatSExprUint8(buf, x.D())
 
-	buf.WriteString(" E: ")
+	buf.WriteString(" :e ")
 	FormatSExprUint8(buf, x.E())
 
-	buf.WriteString(" F: ")
+	buf.WriteString(" :f ")
 	FormatSExprUint16(buf, x.F())
 
-	buf.WriteString(" G: ")
+	buf.WriteString(" :g ")
 	FormatSExprUint16(buf, x.G())
 
-	buf.WriteString(" H: ")
+	buf.WriteString(" :h ")
 	FormatSExprUint32(buf, x.H())
 
-	buf.WriteString(" I: ")
+	buf.WriteString(" :i ")
 	FormatSExprUint64(buf, x.I())
 
 	buf.WriteByte(')')
 }
 
-func (x BigBefore) FormatSExpr(buf *bytes.Buffer) {
-	buf.WriteString("(BigBefore")
+func (x SmallBefore) String() string { return asString(x) }
 
-	buf.WriteString(" A: ")
+func (x BigBefore) FormatSExpr(buf *bytes.Buffer) {
+	buf.WriteString("(big-before")
+
+	buf.WriteString(" :a ")
 	FormatSExprUint64(buf, x.A())
 
-	buf.WriteString(" B: ")
+	buf.WriteString(" :b ")
 	FormatSExprUint32(buf, x.B())
 
-	buf.WriteString(" C: ")
+	buf.WriteString(" :c ")
 	FormatSExprUint16(buf, x.C())
 
-	buf.WriteString(" D: ")
+	buf.WriteString(" :d ")
 	FormatSExprUint16(buf, x.D())
 
-	buf.WriteString(" E: ")
+	buf.WriteString(" :e ")
 	FormatSExprUint8(buf, x.E())
 
-	buf.WriteString(" F: ")
+	buf.WriteString(" :f ")
 	FormatSExprUint8(buf, x.F())
 
-	buf.WriteString(" G: ")
+	buf.WriteString(" :g ")
 	FormatSExprUint8(buf, x.G())
 
-	buf.WriteString(" H: ")
+	buf.WriteString(" :h ")
 	FormatSExprBool(buf, x.H())
 
-	buf.WriteString(" I: ")
+	buf.WriteString(" :i ")
 	FormatSExprBool(buf, x.I())
 
 	buf.WriteByte(')')
 }
+
+func (x BigBefore) String() string { return asString(x) }
+
+type Parser struct {
+	// The string being parsed.
+	s string
+	// Allocator to use for new nodes.
+	alloc *Allocator
+	// Offset within the string.
+	pos int
+	// Current line number (0-indexed).
+	lineno int
+	// Current column number (0-indexed).
+	col int
+}
+
+func MakeParser(s string, a *Allocator) Parser {
+	return Parser{s: s, alloc: a}
+}
+
+var fmtErrDuplicateField = "%s: duplicate field definition for %s"
+var fmtErrNoSuchField = "%s: no member named %s"
+var fmtErrEOFWhileParsing = "%s: unexpected EOF"
+var fmtErrNoSuchVariantName = "%s has no variant named %s"
+var fmtErrNoSuchVariantTag = "%s has no variant with tag %d"
+var fmtErrUnexpectedVariant = "expected %s variant, got %s"
+var fmtErrUnexpectedSym = "expected %s, got %s"
+var fmtErrValueMissing = "%s: value missing for:%s"
+
+func (p *Parser) Errorf(format string, args ...interface{}) error {
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "%d:%d: syntax error: ", p.lineno+1, p.col+1)
+	fmt.Fprintf(&buf, format, args...)
+
+	// Find the end of the line containing the last token.
+	i := strings.Index(p.s[p.pos:], "\n")
+	if i == -1 {
+		i = len(p.s)
+	} else {
+		i += p.pos
+	}
+	// Find the beginning of the line containing the last token. Note that
+	// LastIndex returns -1 if "\n" could not be found.
+	j := strings.LastIndex(p.s[:p.pos], "\n") + 1
+	// Output everything up to and including the line containing the last token.
+	fmt.Fprintf(&buf, "\n%s\n", p.s[:i])
+	// Output a caret indicating where the last token starts.
+	fmt.Fprintf(&buf, "%*s^\n", p.pos-j, "")
+
+	return errors.New(buf.String())
+}
+
+func (p *Parser) Eof() bool {
+	return p.pos >= len(p.s)
+}
+
+func (p *Parser) skipWhite() bool {
+	for true {
+		if p.Eof() {
+			return true
+		}
+		switch c := p.s[p.pos]; c {
+		case '\n':
+			p.pos++
+			p.lineno++
+			p.col = 0
+		case ' ', '\t':
+			p.col++
+			p.pos++
+		case '\r', '\v', '\f':
+			p.pos++
+		default:
+			return false
+		}
+	}
+	return false // not reached
+}
+
+func (p *Parser) ParseAll() (res All, err error) {
+	if err = p.expChar('('); err != nil {
+		return res, err
+	}
+	sym, err := p.expAtom()
+	if err != nil {
+		return res, err
+	}
+	if sym != "all" {
+		return res, p.Errorf(fmtErrUnexpectedSym, "all", sym)
+	}
+	res, err = p.openAll()
+	if err != nil {
+		return res, err
+	}
+	if err = p.expChar(')'); err != nil {
+		return res, err
+	}
+	return res, nil
+}
+
+func (p *Parser) openAll() (res All, err error) {
+	if p.skipWhite() {
+		return res, p.Errorf(fmtErrEOFWhileParsing, "all")
+	}
+	var s AllValue
+	for {
+		lbl, err := p.expMaybeLabel()
+		if err != nil {
+			return res, err
+		}
+		if lbl == "" {
+			break
+		}
+		switch lbl {
+		case "b":
+			v, err := p.ParseBool()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithB(v)
+		case "i8":
+			v, err := p.ParseInt8()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithI8(v)
+		case "u8":
+			v, err := p.ParseUint8()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithU8(v)
+		case "i16":
+			v, err := p.ParseInt16()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithI16(v)
+		case "u16":
+			v, err := p.ParseUint16()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithU16(v)
+		case "i32":
+			v, err := p.ParseInt32()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithI32(v)
+		case "u32":
+			v, err := p.ParseUint32()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithU32(v)
+		case "i64":
+			v, err := p.ParseInt64()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithI64(v)
+		case "u64":
+			v, err := p.ParseUint64()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithU64(v)
+		case "s":
+			v, err := p.ParseString()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithS(v)
+		case "f32":
+			v, err := p.ParseFloat32()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithF32(v)
+		case "f64":
+			v, err := p.ParseFloat64()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithF64(v)
+
+		default:
+			return res, p.Errorf(fmtErrNoSuchField, "all", lbl)
+		}
+	}
+	return s.R(p.alloc), nil
+}
+
+func (p *Parser) ParseSmallBefore() (res SmallBefore, err error) {
+	if err = p.expChar('('); err != nil {
+		return res, err
+	}
+	sym, err := p.expAtom()
+	if err != nil {
+		return res, err
+	}
+	if sym != "small-before" {
+		return res, p.Errorf(fmtErrUnexpectedSym, "small-before", sym)
+	}
+	res, err = p.openSmallBefore()
+	if err != nil {
+		return res, err
+	}
+	if err = p.expChar(')'); err != nil {
+		return res, err
+	}
+	return res, nil
+}
+
+func (p *Parser) openSmallBefore() (res SmallBefore, err error) {
+	if p.skipWhite() {
+		return res, p.Errorf(fmtErrEOFWhileParsing, "small-before")
+	}
+	var s SmallBeforeValue
+	for {
+		lbl, err := p.expMaybeLabel()
+		if err != nil {
+			return res, err
+		}
+		if lbl == "" {
+			break
+		}
+		switch lbl {
+		case "a":
+			v, err := p.ParseBool()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithA(v)
+		case "b":
+			v, err := p.ParseBool()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithB(v)
+		case "c":
+			v, err := p.ParseUint8()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithC(v)
+		case "d":
+			v, err := p.ParseUint8()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithD(v)
+		case "e":
+			v, err := p.ParseUint8()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithE(v)
+		case "f":
+			v, err := p.ParseUint16()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithF(v)
+		case "g":
+			v, err := p.ParseUint16()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithG(v)
+		case "h":
+			v, err := p.ParseUint32()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithH(v)
+		case "i":
+			v, err := p.ParseUint64()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithI(v)
+
+		default:
+			return res, p.Errorf(fmtErrNoSuchField, "small-before", lbl)
+		}
+	}
+	return s.R(p.alloc), nil
+}
+
+func (p *Parser) ParseBigBefore() (res BigBefore, err error) {
+	if err = p.expChar('('); err != nil {
+		return res, err
+	}
+	sym, err := p.expAtom()
+	if err != nil {
+		return res, err
+	}
+	if sym != "big-before" {
+		return res, p.Errorf(fmtErrUnexpectedSym, "big-before", sym)
+	}
+	res, err = p.openBigBefore()
+	if err != nil {
+		return res, err
+	}
+	if err = p.expChar(')'); err != nil {
+		return res, err
+	}
+	return res, nil
+}
+
+func (p *Parser) openBigBefore() (res BigBefore, err error) {
+	if p.skipWhite() {
+		return res, p.Errorf(fmtErrEOFWhileParsing, "big-before")
+	}
+	var s BigBeforeValue
+	for {
+		lbl, err := p.expMaybeLabel()
+		if err != nil {
+			return res, err
+		}
+		if lbl == "" {
+			break
+		}
+		switch lbl {
+		case "a":
+			v, err := p.ParseUint64()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithA(v)
+		case "b":
+			v, err := p.ParseUint32()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithB(v)
+		case "c":
+			v, err := p.ParseUint16()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithC(v)
+		case "d":
+			v, err := p.ParseUint16()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithD(v)
+		case "e":
+			v, err := p.ParseUint8()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithE(v)
+		case "f":
+			v, err := p.ParseUint8()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithF(v)
+		case "g":
+			v, err := p.ParseUint8()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithG(v)
+		case "h":
+			v, err := p.ParseBool()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithH(v)
+		case "i":
+			v, err := p.ParseBool()
+			if err != nil {
+				return res, err
+			}
+			s = s.WithI(v)
+
+		default:
+			return res, p.Errorf(fmtErrNoSuchField, "big-before", lbl)
+		}
+	}
+	return s.R(p.alloc), nil
+}
+
+func (p *Parser) expChar(c byte) error {
+	if p.skipWhite() {
+		return p.Errorf("expected '%c', got EOF", c)
+	}
+	if p.s[p.pos] != c {
+		return p.Errorf("expected '%c', got '%c'", c, p.s[p.pos])
+	}
+	p.pos++
+	return nil
+}
+
+func (p *Parser) expMaybeLabel() (string, error) {
+	if p.skipWhite() {
+		return "", p.Errorf("expected ':' or ')', got EOF")
+	}
+	if p.s[p.pos] == ':' {
+		p.pos++
+		return p.expAtom()
+	}
+	return "", nil
+}
+
+func (p *Parser) scanInteger() (string, error) {
+	start := p.pos
+	for ; p.pos < len(p.s); p.pos++ {
+		c := p.s[p.pos]
+		if (c < '0' || c > '9') && c != '-' && c != '+' {
+			break
+		}
+	}
+	if p.pos == start {
+		return "", p.Errorf("expected number, got '%c'", p.s[p.pos])
+	}
+	return p.s[start:p.pos], nil
+}
+
+func (p *Parser) scanRune() (rune, error) {
+	s, err := p.scanString('\'')
+	if err != nil {
+		return 0, err
+	}
+	v, _, _, err := strconv.UnquoteChar(s, '\'')
+	return v, err
+}
+
+func (p *Parser) expInteger(width int) (int64, error) {
+	if p.skipWhite() {
+		return 0, p.Errorf("expected number, got EOF")
+	}
+	if p.s[p.pos] == '\'' {
+		v, err := p.scanRune()
+		return int64(v), err
+	}
+	sv, err := p.scanInteger()
+	if err != nil {
+		return 0, err
+	}
+	return strconv.ParseInt(sv, 0, width)
+}
+
+func (p *Parser) expUnsigned(width int) (uint64, error) {
+	if p.skipWhite() {
+		return 0, p.Errorf("expected number, got EOF")
+	}
+	if p.s[p.pos] == '\'' {
+		v, err := p.scanRune()
+		return uint64(v), err
+	}
+	sv, err := p.scanInteger()
+	if err != nil {
+		return 0, err
+	}
+	return strconv.ParseUint(sv, 0, width)
+}
+
+func (p *Parser) expAtom() (string, error) {
+	if p.skipWhite() {
+		return "", p.Errorf(fmtErrEOFWhileParsing, "atom")
+	}
+
+	i := p.pos
+	for w, r := 0, rune(0); i < len(p.s); i += w {
+		r, w = utf8.DecodeRuneInString(p.s[i:])
+		if r == '(' || r == ')' || unicode.IsSpace(r) {
+			break
+		}
+	}
+	res := p.s[p.pos:i]
+	p.pos = i
+	return res, nil
+}
+
+func (p *Parser) scanString(quote byte) (string, error) {
+	start := p.pos
+	if err := p.expChar(quote); err != nil {
+		return "", err
+	}
+	for ; !p.Eof() && p.s[p.pos] != quote; p.pos++ {
+		if p.s[p.pos] == '\\' {
+			p.pos++
+		}
+	}
+	if err := p.expChar(quote); err != nil {
+		return "", err
+	}
+	return p.s[start:p.pos], nil
+}
+
+func (p *Parser) ParseString() (string, error) {
+	if p.skipWhite() {
+		return "", p.Errorf(fmtErrEOFWhileParsing, "string")
+	}
+	s, err := p.scanString('"')
+	if err != nil {
+		return s, err
+	}
+	return strconv.Unquote(s)
+}
+
+func (p *Parser) ParseFloat64() (float64, error) {
+	sym, err := p.expAtom()
+	if err != nil {
+		return 0, err
+	}
+	return strconv.ParseFloat(sym, 64)
+}
+
+func (p *Parser) ParseFloat32() (float32, error) {
+	sym, err := p.expAtom()
+	if err != nil {
+		return 0, err
+	}
+	v, err := strconv.ParseFloat(sym, 32)
+	return float32(v), err
+}
+
+func (p *Parser) ParseBool() (bool, error) {
+	sym, err := p.expAtom()
+	if err != nil {
+		return false, err
+	}
+	return strconv.ParseBool(sym)
+}
+
+func (p *Parser) ParseInt64() (int64, error)   { return p.expInteger(64) }
+func (p *Parser) ParseUint64() (uint64, error) { return p.expUnsigned(64) }
+func (p *Parser) ParseInt32() (int32, error)   { v, err := p.expInteger(32); return int32(v), err }
+func (p *Parser) ParseUint32() (uint32, error) { v, err := p.expUnsigned(32); return uint32(v), err }
+func (p *Parser) ParseInt16() (int16, error)   { v, err := p.expInteger(16); return int16(v), err }
+func (p *Parser) ParseUint16() (uint16, error) { v, err := p.expUnsigned(16); return uint16(v), err }
+func (p *Parser) ParseInt8() (int8, error)     { v, err := p.expInteger(8); return int8(v), err }
+func (p *Parser) ParseUint8() (uint8, error)   { v, err := p.expUnsigned(8); return uint8(v), err }
 
 // Codegen parameters:
 // {NumNumericSlots:2 NumericSlotSize:64 NumRefSlots:2 NumStrSlots:1 Pack:false}

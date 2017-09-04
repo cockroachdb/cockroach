@@ -15,11 +15,14 @@
 package codegen
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"math"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/ir/irgen/ir"
 	"github.com/cockroachdb/cockroach/pkg/sql/ir/irgen/parser"
@@ -93,18 +96,22 @@ func (cfg *Config) Generate(w io.Writer, tmpl *template.Template, languages ...L
 			case *ir.EnumType:
 				node := root.NewChild("enum")
 				node.AddReplacement("Enum", namedType.Name)
+				node.AddReplacement("henum", toHumanName(namedType.String()))
 				for _, i := range t.Items {
 					child := node.NewChild("item")
 					child.AddReplacement(paramName, i.Name)
+					child.AddReplacement(paramNameHuman, strings.ToLower(string(i.Name)))
 					child.AddReplacement(paramTag, i.Tag)
 				}
 
 			case *ir.SumType:
 				node := root.NewChild("sum")
 				node.AddReplacement("Sum", namedType.Name)
+				node.AddReplacement("hsum", toHumanName(namedType.String()))
 				for _, i := range t.Items {
 					child := node.NewChild("item")
 					child.AddReplacement(paramType, i.Type)
+					child.AddReplacement(paramTypeHuman, toHumanName(i.Type.String()))
 					child.AddReplacement(paramTag, i.Tag)
 				}
 
@@ -112,6 +119,7 @@ func (cfg *Config) Generate(w io.Writer, tmpl *template.Template, languages ...L
 				// Structs (product types).
 				node := root.NewChild("struct")
 				node.AddReplacement("Struct", namedType.Name)
+				node.AddReplacement("hstruct", toHumanName(namedType.String()))
 				a := slotAllocator{
 					Config:     cfg,
 					structNode: node,
@@ -121,6 +129,16 @@ func (cfg *Config) Generate(w io.Writer, tmpl *template.Template, languages ...L
 				// persistent in-memory representation of nodes.
 				if err := a.allocateSlots(namedType.Name, t.Items); err != nil {
 					return err
+				}
+
+				node.AddReplacementf(paramPrimFieldsMask, "%d", a.primFieldsMask)
+				nonPrimMask := ((uint64(1) << uint(len(t.Items))) - 1) &^ a.primFieldsMask
+				node.AddReplacementf(paramNonPrimFieldsMask, "%d", nonPrimMask)
+				if nonPrimMask != 0 {
+					_ = node.NewChild("hasNonPrimitiveFields")
+				}
+				if a.primFieldsMask != 0 {
+					_ = node.NewChild("hasPrimitiveFields")
 				}
 
 				// Allow the template to inspect the slot structure.
@@ -150,6 +168,8 @@ func (cfg *Config) Generate(w io.Writer, tmpl *template.Template, languages ...L
 				for _, i := range t.Items {
 					child := node.NewChild("item")
 
+					child.AddReplacementf(paramFieldNum, "%d", a.slots[i.Name].fieldNum)
+
 					// isAtomic is defined for non-reference
 					// types, including enums.
 					// This can be used as conditional for value comparisons.
@@ -173,8 +193,10 @@ func (cfg *Config) Generate(w io.Writer, tmpl *template.Template, languages ...L
 					}
 
 					child.AddReplacement(paramName, i.Name)
+					child.AddReplacement(paramNameHuman, toHumanName(string(i.Name)))
 					child.AddReplacement(paramType, i.Type)
 					child.AddReplacement(paramTypeTitle, strings.Title(i.Type.String()))
+					child.AddReplacement(paramTypeHuman, toHumanName(i.Type.String()))
 					child.AddReplacement(paramTag, i.Tag)
 					child.AddReplacement(macroGetName, a.slots[i.Name].getName)
 					child.AddReplacement(macroSetName, a.slots[i.Name].setName)
@@ -189,22 +211,42 @@ func (cfg *Config) Generate(w io.Writer, tmpl *template.Template, languages ...L
 	return tmpl.Instantiate(w, root)
 }
 
+// toHumanName changes a CamelCasedName into a lisp-lowercased-name.
+func toHumanName(s string) string {
+	var buf bytes.Buffer
+	for i, c := range s {
+		if unicode.IsUpper(c) {
+			if i > 0 {
+				buf.WriteByte('-')
+			}
+			c = unicode.ToLower(c)
+		}
+		buf.WriteRune(c)
+	}
+	return buf.String()
+}
+
 const (
-	paramName           = "Item"
-	paramType           = "type"
-	paramTypeTitle      = "Type"
-	paramTag            = "tag"
-	macroGetName        = `getField\(([.º\w]+)\)`
-	macroSetName        = `setField\(([.º\w]+), ([.º\w]+), ([.º\w]+)\)`
-	macroGetExtraRefs   = `getExtraRefs\(([.º\w]+)\)`
-	paramSlotName       = "slotName"
-	paramSlotType       = "slotType"
-	paramSlotNum        = "slotNum"
-	paramSlotBitSize    = "slotBitSize"
-	paramSlotBitOffset  = "slotBitOffset"
-	paramSlotByteSize   = "slotByteSize"
-	paramSlotByteOffset = "slotByteOffset"
-	paramSlotValueMask  = "slotValueMask"
+	paramName              = "Item"
+	paramNameHuman         = "hitem"
+	paramType              = "type"
+	paramTypeTitle         = "Type"
+	paramTypeHuman         = "htype"
+	paramTag               = "tag"
+	macroGetName           = `getField\(([.º\w]+)\)`
+	macroSetName           = `setField\(([.º\w]+), ([.º\w]+), ([.º\w]+)\)`
+	macroGetExtraRefs      = `getExtraRefs\(([.º\w]+)\)`
+	paramSlotName          = "slotName"
+	paramSlotType          = "slotType"
+	paramSlotNum           = "slotNum"
+	paramSlotBitSize       = "slotBitSize"
+	paramSlotBitOffset     = "slotBitOffset"
+	paramSlotByteSize      = "slotByteSize"
+	paramSlotByteOffset    = "slotByteOffset"
+	paramSlotValueMask     = "slotValueMask"
+	paramPrimFieldsMask    = "primFieldsMask"
+	paramNonPrimFieldsMask = "nonPrimFieldsMask"
+	paramFieldNum          = "fieldNum"
 )
 
 // The interesting part of code generation is fitting structs into nodes.
@@ -341,6 +383,12 @@ type slotAllocator struct {
 	numExtraRefs              int
 	structNode                *template.Node
 
+	// primFieldsMask is the binary mask of fieldNum values (see slot
+	// structure below) which correspond to fields with primary
+	// types. Used for fast struct parsing. Assumes fewer than 65
+	// fields.
+	primFieldsMask uint64
+
 	slotNames []string
 	slots     map[parser.ItemName]slot
 }
@@ -382,6 +430,11 @@ type slot struct {
 	// zero.
 	szBits    int
 	bitOffset int
+
+	// fieldNum is a unique number for this field in the struct.
+	// fieldNum is different from the tag in that the fieldNums
+	// are contiguous.
+	fieldNum int
 }
 
 // slotType is used to annotate slot metadata.
@@ -587,6 +640,19 @@ func (a *slotAllocator) allocateSlots(sName parser.TypeName, items []ir.StructIt
 		a.slotNames = append(a.slotNames, string(k))
 	}
 	sort.Strings(a.slotNames)
+
+	// Number all the fields.
+	if len(items) > 64 {
+		return errors.New("not yet supported: more than 64 fields")
+	}
+	for i, it := range items {
+		if it.Type.Type == nil {
+			a.primFieldsMask |= uint64(1) << uint(i)
+		}
+		s := a.slots[it.Name]
+		s.fieldNum = i
+		a.slots[it.Name] = s
+	}
 
 	return nil
 }

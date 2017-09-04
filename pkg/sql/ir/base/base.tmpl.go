@@ -88,10 +88,10 @@ func (x ºEnum) String() string {
 	switch x {
 	// @for item
 	case ºEnumºItem:
-		return "ºItem"
+		return "ºhitem"
 	// @done item
 	default:
-		return fmt.Sprintf("<unknown ºEnum %d>", x)
+		return fmt.Sprintf("ºhenum(%d)", x)
 	}
 }
 
