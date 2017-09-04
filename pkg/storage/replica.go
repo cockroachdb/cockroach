@@ -3709,6 +3709,12 @@ func shouldReplicaQuiesce(
 		}
 		return nil, false
 	}
+	if status.LeadTransferee != 0 {
+		if log.V(4) {
+			log.Infof(ctx, "not quiescing: leader transfer to %d in progress", status.LeadTransferee)
+		}
+		return nil, false
+	}
 	// Only quiesce if this replica is the leaseholder as well;
 	// otherwise the replica which is the valid leaseholder may have
 	// pending commands which it's waiting on this leader to propose.
