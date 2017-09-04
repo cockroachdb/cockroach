@@ -5098,6 +5098,9 @@ func (r *Replica) shouldGossip() bool {
 //
 // maybeGossipSystemConfig must only be called from Raft commands
 // (which provide the necessary serialization to avoid data races).
+//
+// TODO(nvanbenschoten,bdarnell): even though this is best effort, we
+// should log louder when we continually fail to gossip system config.
 func (r *Replica) maybeGossipSystemConfig(ctx context.Context) error {
 	if r.store.Gossip() == nil {
 		log.VEventf(ctx, 2, "not gossiping system config because gossip isn't initialized")
@@ -5120,6 +5123,10 @@ func (r *Replica) maybeGossipSystemConfig(ctx context.Context) error {
 	// TODO(marc): check for bad split in the middle of the SystemConfig span.
 	loadedCfg, err := r.loadSystemConfig(ctx)
 	if err != nil {
+		if err == errSystemConfigIntent {
+			log.VEventf(ctx, 2, "not gossiping system config because intents were found on SystemConfigSpan")
+			return nil
+		}
 		return errors.Wrap(err, "could not load SystemConfig span")
 	}
 
