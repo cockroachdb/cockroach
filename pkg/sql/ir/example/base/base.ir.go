@@ -36,24 +36,30 @@ type extra interface {
 // Allocator allocates nodes in batches. Construct Allocators with NewAllocator
 // and pass them by value.
 type Allocator struct {
-	nodes *[]node
+	nodes []node
 }
 
-// NewAllocator constructs a new Allocator.
-func NewAllocator() Allocator {
+// MakeAllocator constructs a new Allocator.
+func MakeAllocator() Allocator {
 	nodes := make([]node, 16)
-	return Allocator{&nodes}
+	return Allocator{nodes}
+}
+
+// NewAllocator allocates a new Allocator.
+func NewAllocator() *Allocator {
+	a := MakeAllocator()
+	return &a
 }
 
 // new allocates a new node. Users of this package should use the appropriate
 // R() method, which is type safe.
-func (a Allocator) new() *node {
-	nodes := *a.nodes
+func (a *Allocator) new() *node {
+	nodes := a.nodes
 	if len(nodes) == 0 {
 		nodes = make([]node, 256)
 	}
 	x := &nodes[0]
-	*a.nodes = nodes[1:]
+	a.nodes = nodes[1:]
 	return x
 }
 
@@ -97,7 +103,7 @@ type extraConstExpr struct {
 func (x extraConstExpr) extraRefs() []*node { return nil }
 
 // R constructs a reference to an immutable record.
-func (x ConstExprValue) R(a Allocator) ConstExpr {
+func (x ConstExprValue) R(a *Allocator) ConstExpr {
 	ref := a.new()
 	extra := &extraConstExpr{}
 	ref.extra = extra
@@ -144,7 +150,7 @@ type extraBinExpr struct {
 func (x extraBinExpr) extraRefs() []*node { return x.refs[:] }
 
 // R constructs a reference to an immutable record.
-func (x BinExprValue) R(a Allocator) BinExpr {
+func (x BinExprValue) R(a *Allocator) BinExpr {
 	ref := a.new()
 	extra := &extraBinExpr{}
 	ref.extra = extra
@@ -221,7 +227,7 @@ type extraAll struct {
 func (x extraAll) extraRefs() []*node { return x.refs[:] }
 
 // R constructs a reference to an immutable record.
-func (x AllValue) R(a Allocator) All {
+func (x AllValue) R(a *Allocator) All {
 	ref := a.new()
 	extra := &extraAll{}
 	ref.extra = extra
