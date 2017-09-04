@@ -3650,36 +3650,83 @@ func (r *Replica) maybeTickQuiesced() bool {
 // not be sensitive enough.
 func (r *Replica) maybeQuiesceLocked() bool {
 	ctx := r.AnnotateCtx(context.TODO())
-	if len(r.mu.proposals) != 0 {
-		if log.V(4) {
-			log.Infof(ctx, "not quiescing: %d pending commands", len(r.mu.proposals))
-		}
+	status, ok := shouldReplicaQuiesce(ctx, r, len(r.mu.proposals))
+	if !ok {
 		return false
 	}
-	status := r.mu.internalRaftGroup.Status()
+	return r.quiesceAndNotifyLocked(ctx, status)
+}
+
+type quiescer interface {
+	Clock() *hlc.Clock
+	raftStatusRLocked() *raft.Status
+	raftLastIndexLocked() (uint64, error)
+	hasRaftReadyRLocked() bool
+	ownsValidLeaseRLocked(ts hlc.Timestamp) bool
+	maybeTransferRaftLeader(ctx context.Context, status *raft.Status, ts hlc.Timestamp)
+}
+
+// Clock accessor.
+func (r *Replica) Clock() *hlc.Clock {
+	return r.store.Clock()
+}
+
+func (r *Replica) hasRaftReadyRLocked() bool {
+	return r.mu.internalRaftGroup.HasReady()
+}
+
+func (r *Replica) maybeTransferRaftLeader(
+	ctx context.Context, status *raft.Status, now hlc.Timestamp,
+) {
+	l := *r.mu.state.Lease
+	if !r.isLeaseValidRLocked(l, now) {
+		return
+	}
+	if pr, ok := status.Progress[uint64(l.Replica.ReplicaID)]; ok && pr.Match >= status.Commit {
+		log.VEventf(ctx, 1, "transferring raft leadership to replica ID %v", l.Replica.ReplicaID)
+		r.store.metrics.RangeRaftLeaderTransfers.Inc(1)
+		r.mu.internalRaftGroup.TransferLeader(uint64(l.Replica.ReplicaID))
+	}
+}
+
+// shouldReplicaQuiesce determines if a replica should be quiesced. All of the
+// access to Replica internals are gated by the quiescer interface to
+// facilitate testing. Returns the raft.Status and true on success, and (nil,
+// false) on failure.
+func shouldReplicaQuiesce(ctx context.Context, q quiescer, numProposals int) (*raft.Status, bool) {
+	if numProposals != 0 {
+		if log.V(4) {
+			log.Infof(ctx, "not quiescing: %d pending commands", numProposals)
+		}
+		return nil, false
+	}
+	status := q.raftStatusRLocked()
+	if status == nil {
+		if log.V(4) {
+			log.Infof(ctx, "not quiescing: dormant Raft group")
+		}
+		return nil, false
+	}
 	if status.SoftState.RaftState != raft.StateLeader {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: not leader")
 		}
-		return false
+		return nil, false
 	}
 	// Only quiesce if this replica is the leaseholder as well;
 	// otherwise the replica which is the valid leaseholder may have
 	// pending commands which it's waiting on this leader to propose.
-	if now := r.store.Clock().Now(); !r.ownsValidLeaseRLocked(now) {
+	if now := q.Clock().Now(); !q.ownsValidLeaseRLocked(now) {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: not leaseholder")
 		}
 		// Try to correct leader-not-leaseholder condition, if encountered,
 		// assuming the leaseholder is caught up to the commit index.
-		if l := *r.mu.state.Lease; r.isLeaseValidRLocked(l, now) {
-			if pr, ok := status.Progress[uint64(l.Replica.ReplicaID)]; ok && pr.Match >= status.Commit {
-				log.VEventf(ctx, 1, "transferring raft leadership to replica ID %v", l.Replica.ReplicaID)
-				r.store.metrics.RangeRaftLeaderTransfers.Inc(1)
-				r.mu.internalRaftGroup.TransferLeader(uint64(l.Replica.ReplicaID))
-			}
-		}
-		return false
+		//
+		// TODO(peter): It is surprising that a method named shouldReplicaQuiesce
+		// might initiate transfer of the Raft leadership.
+		q.maybeTransferRaftLeader(ctx, status, now)
+		return nil, false
 	}
 	// We need all of Applied, Commit, LastIndex and Progress.Match indexes to be
 	// equal in order to quiesce.
@@ -3688,18 +3735,25 @@ func (r *Replica) maybeQuiesceLocked() bool {
 			log.Infof(ctx, "not quiescing: applied (%d) != commit (%d)",
 				status.Applied, status.Commit)
 		}
-		return false
+		return nil, false
 	}
-	if status.Commit != r.mu.lastIndex {
+	lastIndex, err := q.raftLastIndexLocked()
+	if err != nil {
+		if log.V(4) {
+			log.Infof(ctx, "not quiescing: %v", err)
+		}
+		return nil, false
+	}
+	if status.Commit != lastIndex {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: commit (%d) != last-index (%d)",
-				status.Commit, r.mu.lastIndex)
+				status.Commit, lastIndex)
 		}
-		return false
+		return nil, false
 	}
 	var foundSelf bool
 	for id, progress := range status.Progress {
-		if roachpb.ReplicaID(id) == r.mu.replicaID {
+		if id == status.ID {
 			foundSelf = true
 		}
 		if progress.Match != status.Applied {
@@ -3707,22 +3761,26 @@ func (r *Replica) maybeQuiesceLocked() bool {
 				log.Infof(ctx, "not quiescing: replica %d match (%d) != applied (%d)",
 					id, progress.Match, status.Applied)
 			}
-			return false
+			return nil, false
 		}
 	}
 	if !foundSelf {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: %d not found in progress: %+v",
-				r.mu.replicaID, status.Progress)
+				status.ID, status.Progress)
 		}
-		return false
+		return nil, false
 	}
-	if r.mu.internalRaftGroup.HasReady() {
+	if q.hasRaftReadyRLocked() {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: raft ready")
 		}
-		return false
+		return nil, false
 	}
+	return status, true
+}
+
+func (r *Replica) quiesceAndNotifyLocked(ctx context.Context, status *raft.Status) bool {
 	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(r.mu.replicaID, r.mu.lastToReplica)
 	if fromErr != nil {
 		if log.V(4) {
