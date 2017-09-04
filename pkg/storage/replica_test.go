@@ -8733,6 +8733,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 						2: {Match: logIndex},
 						3: {Match: logIndex},
 					},
+					LeadTransferee: 0,
 				},
 				lastIndex:      logIndex,
 				raftReady:      false,
@@ -8763,6 +8764,10 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	})
 	test(false, func(q *testQuiescer) *testQuiescer {
 		q.status.RaftState = raft.StateCandidate
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.status.LeadTransferee = 1
 		return q
 	})
 	test(false, func(q *testQuiescer) *testQuiescer {
