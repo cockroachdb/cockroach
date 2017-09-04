@@ -34,24 +34,30 @@ type extra interface {
 // Allocator allocates nodes in batches. Construct Allocators with NewAllocator
 // and pass them by value.
 type Allocator struct {
-	nodes *[]node
+	nodes []node
 }
 
-// NewAllocator constructs a new Allocator.
-func NewAllocator() Allocator {
+// MakeAllocator constructs a new Allocator.
+func MakeAllocator() Allocator {
 	nodes := make([]node, 16)
-	return Allocator{&nodes}
+	return Allocator{nodes}
+}
+
+// NewAllocator allocates a new Allocator.
+func NewAllocator() *Allocator {
+	a := MakeAllocator()
+	return &a
 }
 
 // new allocates a new node. Users of this package should use the appropriate
 // R() method, which is type safe.
-func (a Allocator) new() *node {
-	nodes := *a.nodes
+func (a *Allocator) new() *node {
+	nodes := a.nodes
 	if len(nodes) == 0 {
 		nodes = make([]node, 256)
 	}
 	x := &nodes[0]
-	*a.nodes = nodes[1:]
+	a.nodes = nodes[1:]
 	return x
 }
 
@@ -110,7 +116,7 @@ func (x extraºStruct) extraRefs() []*node { return ºgetExtraRefs(x) }
 // @fi extraField
 
 // R constructs a reference to an immutable record.
-func (x ºStructValue) R(a Allocator) ºStruct {
+func (x ºStructValue) R(a *Allocator) ºStruct {
 	ref := a.new()
 	// @if extraField
 	extra := &extraºStruct{}

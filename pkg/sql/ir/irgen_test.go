@@ -23,7 +23,7 @@ import (
 	d "github.com/cockroachdb/cockroach/pkg/sql/ir/example/base"
 )
 
-func makeSampleExpr(a d.Allocator) d.Expr {
+func makeSampleExpr(a *d.Allocator) d.Expr {
 	c1 := d.ConstExprValue{Datum: 1}.R(a).Expr()
 	c2 := d.ConstExprValue{Datum: 2}.R(a).Expr()
 	c3 := d.ConstExprValue{Datum: 3}.R(a).Expr()
@@ -74,7 +74,7 @@ func TestFormat(t *testing.T) {
 	}
 }
 
-func reverse(ref d.Expr, a d.Allocator) d.Expr {
+func reverse(ref d.Expr, a *d.Allocator) d.Expr {
 	if ref.Tag() != d.ExprBinExpr {
 		return ref
 	}
