@@ -1,0 +1,1 @@
+-pack=true -nums 10 -num-slot-size 64 -refs 10 -strs 10 -allow-unsafe=false

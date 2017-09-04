@@ -34,3 +34,16 @@ func (t Type) FormatSExpr(buf *bytes.Buffer) {}
 
 // FormatSExprTypName is a stub for Sexpr formatters for primitive types.
 func FormatSExprTypName(buf *bytes.Buffer, x Type) {}
+
+// numValSlotType is overridden during code generation.
+type numValSlotType uint64
+
+const (
+	slotType       = 0
+	slotNum        = 0
+	slotBitSize    = 0
+	slotBitOffset  = 0
+	slotByteSize   = 0
+	slotByteOffset = 0
+	slotValueMask  = 0
+)

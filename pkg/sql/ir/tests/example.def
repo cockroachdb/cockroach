@@ -13,6 +13,12 @@ struct BinExpr {
   Expr Right = 3
 }
 
+struct TriExpr {
+  Expr One = 1
+  Expr Two = 2
+  Expr Three = 4
+}
+
 enum BinOp {
   Add = 1
   Mul = 2
@@ -31,4 +37,3 @@ sum AllOrExpr {
   BinExpr = 2
 }
 
-prim int64
