@@ -65,7 +65,13 @@ func MaybeShoutError(
 	return func(cmd *cobra.Command, args []string) error {
 		err := wrapped(cmd, args)
 		if err != nil {
-			log.Shout(context.Background(), log.Severity_ERROR, err)
+			severity := log.Severity_ERROR
+			cause := err
+			if ec, ok := errors.Cause(err).(*cliError); ok {
+				severity = ec.severity
+				cause = ec.cause
+			}
+			log.Shout(context.Background(), severity, cause)
 		}
 		return err
 	}
