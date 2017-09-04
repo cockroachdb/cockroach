@@ -129,6 +129,9 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 		HistogramWindowInterval:     metric.TestSampleInterval,
 		EnableEpochRangeLeases:      true,
 	}
+
+	// Use shorter Raft tick settings in order to minimize start up and failover
+	// time in tests.
 	sc.RaftElectionTimeoutTicks = 3
 	sc.RaftTickInterval = 100 * time.Millisecond
 	sc.SetDefaults()

@@ -55,9 +55,9 @@ const (
 	// defaultRaftTickInterval is the default resolution of the Raft timer.
 	defaultRaftTickInterval = 200 * time.Millisecond
 
-	// rangeLeaseRaftElectionTimeoutMultiplier specifies what multiple the
+	// defaultRangeLeaseRaftElectionTimeoutMultiplier specifies what multiple the
 	// leader lease active duration should be of the raft election timeout.
-	rangeLeaseRaftElectionTimeoutMultiplier = 3
+	defaultRangeLeaseRaftElectionTimeoutMultiplier = 3
 
 	// rangeLeaseRenewalFraction specifies what fraction the range lease
 	// renewal duration should be of the range lease active time. For example,
@@ -320,6 +320,10 @@ type RaftConfig struct {
 	// previous election expires. This value is inherited by individual stores
 	// unless overridden.
 	RaftElectionTimeoutTicks int
+
+	// RangeLeaseRaftElectionTimeoutMultiplier specifies what multiple the leader
+	// lease active duration should be of the raft election timeout.
+	RangeLeaseRaftElectionTimeoutMultiplier float64
 }
 
 // SetDefaults initializes unset fields.
@@ -329,6 +333,9 @@ func (cfg *RaftConfig) SetDefaults() {
 	}
 	if cfg.RaftElectionTimeoutTicks == 0 {
 		cfg.RaftElectionTimeoutTicks = defaultRaftElectionTimeoutTicks
+	}
+	if cfg.RangeLeaseRaftElectionTimeoutMultiplier == 0 {
+		cfg.RangeLeaseRaftElectionTimeoutMultiplier = defaultRangeLeaseRaftElectionTimeoutMultiplier
 	}
 }
 
@@ -341,7 +348,8 @@ func (cfg RaftConfig) RaftElectionTimeout() time.Duration {
 // RangeLeaseDurations computes durations for range lease expiration and
 // renewal based on a default multiple of Raft election timeout.
 func (cfg RaftConfig) RangeLeaseDurations() (rangeLeaseActive, rangeLeaseRenewal time.Duration) {
-	rangeLeaseActive = time.Duration(rangeLeaseRaftElectionTimeoutMultiplier * float64(cfg.RaftElectionTimeout()))
+	rangeLeaseActive = time.Duration(cfg.RangeLeaseRaftElectionTimeoutMultiplier *
+		float64(cfg.RaftElectionTimeout()))
 	rangeLeaseRenewal = time.Duration(float64(rangeLeaseActive) * rangeLeaseRenewalFraction)
 	return
 }
