@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // rangeCacheKey is the key type used to store and sort values in the
@@ -280,7 +281,14 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 	}
 
 	requestKey := makeLookupRequestKey(key, evictToken, useReverseScan)
+	// TODO(peter): Is this correct? The closure passed to DoChan might never be
+	// called which means we might never invoke tracing.FinishSpan(reqSpan). Can
+	// we fork the context inside the closure?
+	reqCtx, reqSpan := tracing.ForkCtxSpan(ctx, "range lookup")
 	resC := rdc.lookupRequests.DoChan(requestKey, func() (interface{}, error) {
+		defer tracing.FinishSpan(reqSpan)
+
+		ctx := reqCtx
 		rs, preRs, err := rdc.performRangeLookup(ctx, key, useReverseScan)
 		if err != nil {
 			return nil, err
