@@ -11,6 +11,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 )
 
 // ErrInvertedRange is returned if an interval is used where the start value is greater
@@ -195,8 +197,13 @@ type TreeIterator interface {
 	Next() (Interface, bool)
 }
 
+var useBTreeImpl = envutil.EnvOrDefaultBool("COCKROACH_INTERVAL_BTREE", false)
+
 // NewTree creates a new interval tree with the given overlapper function. It
 // uses the augmented Left-Leaning Red Black tree implementation.
 func NewTree(overlapper Overlapper) Tree {
+	if useBTreeImpl {
+		return newBTree(overlapper)
+	}
 	return newLLBRTree(overlapper)
 }
