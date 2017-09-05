@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/coreos/etcd/raft"
+	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
@@ -8667,4 +8668,129 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	if len(propRes.Intents) != 0 {
 		t.Fatal("expected intents to have been cleared")
 	}
+}
+
+type testQuiescer struct {
+	numProposals   int
+	status         *raft.Status
+	lastIndex      uint64
+	raftReady      bool
+	ownsValidLease bool
+}
+
+func (q *testQuiescer) raftStatusRLocked() *raft.Status {
+	return q.status
+}
+
+func (q *testQuiescer) raftLastIndexLocked() (uint64, error) {
+	return q.lastIndex, nil
+}
+
+func (q *testQuiescer) hasRaftReadyRLocked() bool {
+	return q.raftReady
+}
+
+func (q *testQuiescer) ownsValidLeaseRLocked(ts hlc.Timestamp) bool {
+	return q.ownsValidLease
+}
+
+func (q *testQuiescer) maybeTransferRaftLeader(
+	ctx context.Context, status *raft.Status, ts hlc.Timestamp,
+) {
+	// Nothing to do here. We test Raft leadership transfer in
+	// TestTransferRaftLeadership.
+}
+
+func TestShouldReplicaQuiesce(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const logIndex = 10
+	const invalidIndex = 11
+	test := func(expected bool, transform func(q *testQuiescer) *testQuiescer) {
+		t.Run("", func(t *testing.T) {
+			// A testQuiescer initialized so that shouldReplicaQuiesce will return
+			// true. The transform function is intended to perform one mutation to
+			// this quiescer so that shouldReplicaQuiesce will return false.
+			q := &testQuiescer{
+				status: &raft.Status{
+					ID: 1,
+					HardState: raftpb.HardState{
+						Commit: logIndex,
+					},
+					SoftState: raft.SoftState{
+						RaftState: raft.StateLeader,
+					},
+					Applied: logIndex,
+					Progress: map[uint64]raft.Progress{
+						1: {Match: logIndex},
+						2: {Match: logIndex},
+						3: {Match: logIndex},
+					},
+					LeadTransferee: 0,
+				},
+				lastIndex:      logIndex,
+				raftReady:      false,
+				ownsValidLease: true,
+			}
+			q = transform(q)
+			_, ok := shouldReplicaQuiesce(context.Background(), q, hlc.Timestamp{}, q.numProposals)
+			if expected != ok {
+				t.Fatalf("expected %v, but found %v", expected, ok)
+			}
+		})
+	}
+
+	test(true, func(q *testQuiescer) *testQuiescer {
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.numProposals = 1
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.status = nil
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.status.RaftState = raft.StateFollower
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.status.RaftState = raft.StateCandidate
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.status.LeadTransferee = 1
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.status.Commit = invalidIndex
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.status.Applied = invalidIndex
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.lastIndex = invalidIndex
+		return q
+	})
+	for _, i := range []uint64{1, 2, 3} {
+		test(false, func(q *testQuiescer) *testQuiescer {
+			q.status.Progress[i] = raft.Progress{Match: invalidIndex}
+			return q
+		})
+	}
+	test(false, func(q *testQuiescer) *testQuiescer {
+		delete(q.status.Progress, q.status.ID)
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.ownsValidLease = false
+		return q
+	})
+	test(false, func(q *testQuiescer) *testQuiescer {
+		q.raftReady = true
+		return q
+	})
 }
