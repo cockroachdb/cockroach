@@ -3343,6 +3343,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	r.mu.lastTerm = lastTerm
 	r.mu.raftLogSize = raftLogSize
 	r.mu.leaderID = leaderID
+	if r.mu.replicaID == leaderID && !raft.IsEmptyHardState(rd.HardState) {
+		r.setEstimatedCommitIndexLocked(rd.HardState.Commit)
+	}
 	r.mu.Unlock()
 
 	for _, message := range rd.Messages {
