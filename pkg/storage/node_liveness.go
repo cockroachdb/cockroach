@@ -720,7 +720,12 @@ func (nl *NodeLiveness) livenessGossipUpdate(key string, content roachpb.Value) 
 	var callbacks []IsLiveCallback
 	nl.mu.Lock()
 	exLiveness, ok := nl.mu.nodes[liveness.NodeID]
-	if !ok || exLiveness.Expiration.Less(liveness.Expiration) || exLiveness.Epoch < liveness.Epoch || exLiveness.Draining != liveness.Draining {
+	apply := !ok ||
+		exLiveness.Expiration.Less(liveness.Expiration) ||
+		exLiveness.Epoch < liveness.Epoch ||
+		exLiveness.Draining != liveness.Draining ||
+		exLiveness.Decommissioning != liveness.Decommissioning
+	if apply {
 		nl.mu.nodes[liveness.NodeID] = liveness
 
 		// If isLive status is now true, but previously false, invoke any registered callbacks.
