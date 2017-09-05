@@ -1357,7 +1357,7 @@ func (r *Replica) assertStateRLocked(reader engine.Reader) {
 		// TODO(dt): expose properly once #15892 is addressed.
 		log.Errorf(ctx, "on-disk and in-memory state diverged:\n%s", pretty.Diff(diskState, r.mu.state))
 		r.mu.state.Desc, diskState.Desc = nil, nil
-		panic(log.Safe{V: fmt.Sprintf("on-disk and in-memory state diverged: %s", pretty.Diff(diskState, r.mu.state))})
+		panic(log.NotSensitive{V: fmt.Sprintf("on-disk and in-memory state diverged: %s", pretty.Diff(diskState, r.mu.state))})
 	}
 }
 

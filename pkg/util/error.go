@@ -16,7 +16,33 @@
 
 package util
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+)
+
+type safeError struct {
+	error
+}
+
+// RedactedValue implements log.Redactable.
+func (e safeError) RedactedValue() string {
+	return e.error.Error()
+}
+
+var _ log.Redactable = &safeError{}
+var _ log.Redactable = safeError{}
+
+// NotSensitive wraps the error in an implementation of `log.Redactable` that
+// just passes the error string through, so that `SafeError(err).Error() ==
+// err.Error()`. If `err == nil`, the result is `nil`.
+func NotSensitive(err error) error {
+	if err == nil {
+		return nil
+	}
+	return safeError{error: err}
+}
 
 // UnimplementedWithIssueError is an error that links unimplemented functionality back
 // to its issue on GitHub.

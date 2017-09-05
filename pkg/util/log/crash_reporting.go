@@ -61,19 +61,30 @@ func RecoverAndReportPanic(ctx context.Context) {
 	}
 }
 
-// A Safe panic can be reported verbatim, i.e. does not leak information.
+// Redactable is implemented by values that can represent (parts of) themselves
+// as non-sensitive strings.
+type Redactable interface {
+	RedactedValue() string
+}
+
+// A NotSensitive panic can be reported verbatim, i.e. does not leak information.
 //
 // TODO(dt): flesh out, see #15892.
-type Safe struct {
+type NotSensitive struct {
 	V interface{}
 }
 
+// RedactedValue implements Redactable.
+func (s NotSensitive) RedactedValue() string {
+	return fmt.Sprintf("%+v", s.V)
+}
+
+var _ Redactable = NotSensitive{}
+var _ Redactable = &NotSensitive{}
+
 func format(r interface{}) string {
-	switch wrapped := r.(type) {
-	case *Safe:
-		return fmt.Sprintf("%+v", wrapped.V)
-	case Safe:
-		return fmt.Sprintf("%+v", wrapped.V)
+	if s, ok := r.(Redactable); ok {
+		return s.RedactedValue()
 	}
 	return fmt.Sprintf("%T", r)
 }

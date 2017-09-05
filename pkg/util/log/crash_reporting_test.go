@@ -18,8 +18,8 @@ import "testing"
 
 func TestCrashReportingFormatSave(t *testing.T) {
 	r1 := "i am hidden"
-	r2 := Safe{V: "i am public"}
-	r3 := Safe{V: &r2}
+	r2 := NotSensitive{V: "i am public"}
+	r3 := NotSensitive{V: &r2}
 	f1, f2, f3 := format(r1), format(r2), format(r3)
 	exp1, exp2 := "string", r2.V.(string)
 	exp3 := "&{V:i am public}"
