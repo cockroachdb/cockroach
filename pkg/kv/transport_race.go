@@ -57,7 +57,9 @@ func GRPCTransportFactory(
 	opts SendOptions, rpcContext *rpc.Context, replicas ReplicaSlice, args roachpb.BatchRequest,
 ) (Transport, error) {
 	if atomic.AddInt32(&running, 1) <= 1 {
-		rpcContext.Stopper.RunWorker(context.TODO(), func(ctx context.Context) {
+		// NB: We can't use Stopper.RunWorker because doing so would race with
+		// calling Stopper.Stop.
+		rpcContext.Stopper.RunAsyncTask(context.TODO(), "transport racer", func(ctx context.Context) {
 			var iters int
 			var curIdx int
 			defer func() {
@@ -92,7 +94,7 @@ func GRPCTransportFactory(
 				// then access everything we have.
 				for {
 					select {
-					case <-rpcContext.Stopper.ShouldStop():
+					case <-rpcContext.Stopper.ShouldQuiesce():
 						return
 					case ba := <-incoming:
 						bas[curIdx%size] = ba
