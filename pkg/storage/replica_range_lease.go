@@ -80,10 +80,6 @@ func (p *pendingLeaseRequest) RequestPending() (roachpb.Lease, bool) {
 // transfer needs to be set if the request represents a lease transfer (as
 // opposed to an extension, or acquiring the lease when none is held).
 //
-// Note: Once this function gets a context to be used for cancellation, instead
-// of replica.store.Stopper().ShouldQuiesce(), care will be needed for cancelling
-// the Raft command, similar to replica.executeWriteBatch.
-//
 // Requires repl.mu is exclusively locked.
 func (p *pendingLeaseRequest) InitOrJoinRequest(
 	ctx context.Context,
@@ -157,7 +153,11 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 			newNotLeaseHolderError(nil, repl.store.StoreID(), repl.mu.state.Desc))
 		return llChan
 	}
-	// TODO(andrei): document this subtlety.
+	// InitOrJoinRequest requires that repl.mu is exclusively locked. requestLeaseAsync
+	// also requires this lock to send results on all waiter channels. This means that
+	// no results will be sent until we've release the lock, so there's no race between
+	// adding our new channel to p.llChans below and requestLeaseAsync sending results
+	// on all channels in p.llChans. The same logic applies to p.nextLease.
 	p.llChans = append(p.llChans, llChan)
 	p.nextLease = reqLease
 	return llChan
