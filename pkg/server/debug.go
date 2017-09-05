@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 	"github.com/rcrowley/go-metrics"
 	"github.com/rcrowley/go-metrics/exp"
@@ -37,6 +38,8 @@ import (
 // debugEndpoint is the prefix of golang's standard debug functionality
 // for access to exported vars and pprof tools.
 const debugEndpoint = "/debug/"
+
+const debugLogSpyEndpoint = "/debug/logspy"
 
 // We use the default http mux for the debug endpoint (as pprof and net/trace
 // register to that via import, and go-metrics registers to that via exp.Exp())
@@ -149,6 +152,11 @@ func init() {
 </html>
 `)
 	})
+
+	spy := logSpy{
+		setIntercept: log.Intercept,
+	}
+	debugServeMux.HandleFunc(debugLogSpyEndpoint, spy.handleDebugLogSpy)
 
 	// This registers a superset of the variables exposed through the /debug/vars endpoint
 	// onto the /debug/metrics endpoint. It includes all expvars registered globally and
