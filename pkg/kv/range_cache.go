@@ -21,6 +21,7 @@ import (
 	"sync"
 
 	"github.com/biogo/store/llrb"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"golang.org/x/sync/singleflight"
@@ -281,6 +282,18 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 
 	requestKey := makeLookupRequestKey(key, evictToken, useReverseScan)
 	resC := rdc.lookupRequests.DoChan(requestKey, func() (interface{}, error) {
+		// We're inside a goroutine here which makes it an error to use a span
+		// embedded inside ctx. But we want to remain hooked up to the parent
+		// context for cancellation. The nature of the singleflight interface
+		// prevents us from using tracing.ForkCtxSpan() because we're not
+		// guaranteed that this closure is run nor do we get a signal that the
+		// closure is not run. As a workaround, we hide the span in the context.
+		//
+		// TODO(nvanbenschoten): Figure out some way to not lose tracing continuity
+		// here.
+		ctx := ctx // disable shadows linter
+		ctx = opentracing.ContextWithSpan(ctx, nil)
+
 		rs, preRs, err := rdc.performRangeLookup(ctx, key, useReverseScan)
 		if err != nil {
 			return nil, err
