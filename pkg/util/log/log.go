@@ -19,6 +19,8 @@ import (
 	"io"
 	"strings"
 
+	"github.com/petermattis/goid"
+
 	"golang.org/x/net/context"
 )
 
@@ -169,6 +171,18 @@ func FatalfDepth(ctx context.Context, depth int, format string, args ...interfac
 // higher.
 func V(level level) bool {
 	return VDepth(level, 1)
+}
+
+// MakeEntry creates an Entry.
+func MakeEntry(s Severity, t int64, file string, line int, msg string) Entry {
+	return Entry{
+		Severity:  s,
+		Time:      t,
+		Goroutine: goid.Get(),
+		File:      file,
+		Line:      int64(line),
+		Message:   msg,
+	}
 }
 
 // Format writes the log entry to the specified writer.
