@@ -2477,7 +2477,7 @@ func TestStoreRangeMoveDecommissioning(t *testing.T) {
 	ctx := context.Background()
 	decommingNodeIdx := 2
 	decommingNodeID := mtc.idents[decommingNodeIdx].NodeID
-	if err := mtc.nodeLivenesses[decommingNodeIdx].
+	if _, err := mtc.nodeLivenesses[decommingNodeIdx].
 		SetDecommissioning(ctx, decommingNodeID, true); err != nil {
 		t.Fatal(err)
 	}

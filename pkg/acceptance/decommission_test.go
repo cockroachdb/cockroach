@@ -15,6 +15,7 @@
 package acceptance
 
 import (
+	"fmt"
 	"regexp"
 	"strconv"
 	"testing"
@@ -27,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -257,4 +260,30 @@ func testDecommissionInner(
 			t.Fatalf("node did not decommission: ok=%t, err=%v, output:\n%s", ok, err, o)
 		}
 	}
+
+	// Verify the event log has recorded exactly one decommissioned or
+	// recommissioned event for each commissioning operation.
+	db, err := gosql.Open("postgres", c.PGUrl(ctx, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := db.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+	sqlutils.MakeSQLRunner(t, db).CheckQueryResults(fmt.Sprintf(`
+		SELECT "eventType", "targetID" FROM system.eventlog
+		WHERE "eventType" IN ('%s', '%s') ORDER BY timestamp`,
+		sql.EventLogNodeDecommissioned, sql.EventLogNodeRecommissioned),
+		[][]string{
+			{string(sql.EventLogNodeDecommissioned), idMap[0].String()},
+			{string(sql.EventLogNodeRecommissioned), idMap[0].String()},
+			{string(sql.EventLogNodeDecommissioned), idMap[1].String()},
+			{string(sql.EventLogNodeRecommissioned), idMap[1].String()},
+			{string(sql.EventLogNodeDecommissioned), idMap[2].String()},
+			{string(sql.EventLogNodeRecommissioned), idMap[2].String()},
+			{string(sql.EventLogNodeDecommissioned), idMap[0].String()},
+		},
+	)
 }
