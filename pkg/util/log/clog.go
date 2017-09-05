@@ -36,6 +36,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -437,7 +439,7 @@ func formatHeader(
 	if line < 0 {
 		line = 0 // not a real line number, but acceptable to someDigits
 	}
-	if s > Severity_FATAL {
+	if s > Severity_FATAL || s <= Severity_UNKNOWN {
 		s = Severity_INFO // for safety.
 	}
 
@@ -462,6 +464,9 @@ func formatHeader(
 	// Lyymmdd hh:mm:ss.uuuuuu file:line
 	tmp[n] = severityChar[s-1]
 	n++
+	if year < 2000 {
+		year = 2000
+	}
 	n += buf.twoDigits(n, year-2000)
 	n += buf.twoDigits(n, int(month))
 	n += buf.twoDigits(n, day)
@@ -644,6 +649,8 @@ type loggingT struct {
 	verbosity level         // V logging level, the value of the --verbosity flag/
 	exitFunc  func(int)     // func that will be called on fatal errors
 	gcNotify  chan struct{} // notify GC daemon that a new log file was created
+
+	interceptor atomic.Value // InterceptorFn
 }
 
 // buffer holds a byte Buffer for reuse. The zero value is ready for use.
@@ -708,19 +715,18 @@ func (l *loggingT) putBuffer(b *buffer) {
 // the data to the log files. If a trace location is set, stack traces
 // are added to the entry before marshaling.
 func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string) {
+	// Set additional details in log entry.
+	now := time.Now()
+	entry := MakeEntry(s, now.UnixNano(), file, line, msg)
+
+	if f, ok := l.interceptor.Load().(InterceptorFn); ok && f != nil {
+		f(entry)
+		return
+	}
+
 	// TODO(tschottdorf): this is a pretty horrible critical section.
 	l.mu.Lock()
 
-	// Set additional details in log entry.
-	now := time.Now()
-	entry := Entry{
-		Severity:  s,
-		Time:      now.UnixNano(),
-		Goroutine: goid.Get(),
-		File:      file,
-		Line:      int64(line),
-		Message:   msg,
-	}
 	// On fatal log, set all stacks.
 	var stacks []byte
 	if s == Severity_FATAL {
@@ -1145,14 +1151,45 @@ func v(level level) bool {
 	return VDepth(level, 1)
 }
 
+// InterceptorFn is the type of function accepted by Intercept().
+type InterceptorFn func(entry Entry)
+
+// Intercept diverts log traffic to the given function `f`. When `f` is not nil,
+// the logging package begins operating at full verbosity (i.e. `V(n) == true`
+// for all `n`) but nothing will be printed to the logs. Instead, `f` is invoked
+// for each log entry.
+//
+// To end log interception, invoke `Intercept()` with `f == nil`. Note that
+// interception does not terminate atomically, that is, the originally supplied
+// callback may still be invoked after a call to `Intercept` with `f == nil`.
+func Intercept(ctx context.Context, f InterceptorFn) {
+	logging.Intercept(ctx, f)
+}
+
+func (l *loggingT) Intercept(ctx context.Context, f InterceptorFn) {
+	// TODO(tschottdorf): restore sanity so that all methods have a *loggingT
+	// receiver.
+	if f != nil {
+		logDepth(ctx, 0, Severity_WARNING, "log traffic is now intercepted; log files will be incomplete", nil)
+	}
+	l.interceptor.Store(f) // intentionally also when f == nil
+	if f == nil {
+		logDepth(ctx, 0, Severity_INFO, "log interception is now stopped; normal logging resumes", nil)
+	}
+}
+
 // VDepth reports whether verbosity at the call site is at least the requested
 // level.
 func VDepth(level level, depth int) bool {
 	// This function tries hard to be cheap unless there's work to do.
-	// The fast path is two atomic loads and compares.
+	// The fast path is three atomic loads and compares.
 
 	// Here is a cheap but safe test to see if V logging is enabled globally.
 	if logging.verbosity.get() >= level {
+		return true
+	}
+
+	if f, ok := logging.interceptor.Load().(InterceptorFn); ok && f != nil {
 		return true
 	}
 
