@@ -106,6 +106,12 @@ export function getEventInfo(e: Event$Properties): SimplifiedEvent {
     case eventTypes.NODE_JOIN:
       content = <span>Node Joined: Node {targetId} joined the cluster</span>;
       break;
+    case eventTypes.NODE_DECOMMISSIONED:
+      content = <span>Node Decommissioned: Node {targetId} was decommissioned</span>;
+      break;
+    case eventTypes.NODE_RECOMMISSIONED:
+      content = <span>Node Recommissioned: Node {targetId} was recommissioned</span>;
+      break;
     case eventTypes.NODE_RESTART:
       content = <span>Node Rejoined: Node {targetId} rejoined the cluster</span>;
       break;
