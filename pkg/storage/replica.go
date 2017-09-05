@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -2737,7 +2738,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	})
 	r.mu.Unlock()
 	if err != nil {
-		return stats, err
+		return stats, util.NotSensitive(err)
 	}
 
 	if !hasReady {
@@ -2767,7 +2768,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	if !raft.IsEmptySnap(rd.Snapshot) {
 		snapUUID, err := uuid.FromBytes(rd.Snapshot.Data)
 		if err != nil {
-			return stats, errors.Wrap(err, "invalid snapshot id")
+			return stats, util.NotSensitive(errors.Wrap(err, "invalid snapshot id"))
 		}
 		if inSnap.SnapUUID == (uuid.UUID{}) {
 			log.Fatalf(ctx, "programming error: a snapshot application was attempted outside of the streaming snapshot codepath")
@@ -2788,7 +2789,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				atomic.AddInt32(&r.store.counts.filledPlaceholders, 1)
 			}
 			if err := r.store.processRangeDescriptorUpdateLocked(ctx, r); err != nil {
-				return errors.Wrap(err, "could not processRangeDescriptorUpdate after applySnapshot")
+				return util.NotSensitive(errors.Wrap(err, "could not processRangeDescriptorUpdate after applySnapshot"))
 			}
 			return nil
 		}(); err != nil {
@@ -2796,7 +2797,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 
 		if lastIndex, err = r.stateLoader.loadLastIndex(ctx, r.store.Engine()); err != nil {
-			return stats, err
+			return stats, util.NotSensitive(err)
 		}
 		// We refresh pending commands after applying a snapshot because this
 		// replica may have been temporarily partitioned from the Raft group and
@@ -2823,12 +2824,12 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		// last index.
 		var err error
 		if lastIndex, raftLogSize, err = r.append(ctx, writer, lastIndex, raftLogSize, rd.Entries); err != nil {
-			return stats, err
+			return stats, util.NotSensitive(err)
 		}
 	}
 	if !raft.IsEmptyHardState(rd.HardState) {
 		if err := r.stateLoader.setHardState(ctx, writer, rd.HardState); err != nil {
-			return stats, err
+			return stats, util.NotSensitive(err)
 		}
 	}
 	writer.Close()
@@ -2836,7 +2837,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// state as we're promising not to lose this data.
 	start := timeutil.Now()
 	if err := batch.Commit(syncRaftLog.Get() && rd.MustSync); err != nil {
-		return stats, err
+		return stats, util.NotSensitive(err)
 	}
 	elapsed := timeutil.Since(start)
 	r.store.metrics.RaftLogCommitLatency.RecordValue(elapsed.Nanoseconds())
@@ -2919,7 +2920,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				raftGroup.ApplyConfChange(cc)
 				return true, nil
 			}); err != nil {
-				return stats, err
+				return stats, util.NotSensitive(err)
 			}
 		default:
 			log.Fatalf(ctx, "unexpected Raft entry: %v", e)
