@@ -84,6 +84,7 @@ package status
 import "C"
 
 import (
+	"math"
 	"reflect"
 	"strings"
 
@@ -118,7 +119,11 @@ func getJemallocStats(ctx context.Context) (uint, uint, error) {
 		log.Infof(ctx, "jemalloc stats: %s", strings.Join(stats, " "))
 	}
 
-	if log.V(3) {
+	// NB: the `!V(MaxInt32)` condition is a workaround to not spew this to the
+	// logs whenever log interception (log spy) is active. If we refactored
+	// je_malloc_stats_print to return a string that we can `log.Infof` instead,
+	// we wouldn't need this.
+	if log.V(3) && !log.V(math.MaxInt32) {
 		// Detailed jemalloc stats (very verbose, includes per-arena stats).
 		C.je_malloc_stats_print(nil, nil, nil)
 	}
