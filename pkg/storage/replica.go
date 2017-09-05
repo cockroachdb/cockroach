@@ -1082,10 +1082,10 @@ func (r *Replica) getEstimatedBehindCountRLocked(raftStatus *raft.Status) int64 
 		// We haven't heard from the leader, assume we're far behind. This is the
 		// case that is commonly hit when a node restarts. In particular, we hit
 		// this case until an election timeout passes and canCampaignIdleReplica
-		// starts to return true. The results it that a restarted node will
+		// starts to return true. The result is that a restarted node will
 		// consider its replicas far behind initially which will in turn cause it
 		// to reject rebalances.
-		return prohibitRebalancesBehindThreshold
+		return prohibitRebalancesBehindThreshold + 1
 	}
 	if r.mu.estimatedCommitIndex >= r.mu.state.RaftAppliedIndex {
 		return int64(r.mu.estimatedCommitIndex - r.mu.state.RaftAppliedIndex)
