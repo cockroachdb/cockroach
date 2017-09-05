@@ -38,6 +38,7 @@ psql -c "select 1" | grep "1 row"
 # Check that COPY works outside of a transaction (#13395)
 psql -d testdb <<EOF
 CREATE DATABASE IF NOT EXISTS testdb;
+CREATE TABLE ints (a INTEGER NOT NULL);
 CREATE TABLE playground (
     equip_id integer NOT NULL,
     type character varying(50) NOT NULL,
@@ -82,6 +83,16 @@ echo "SELECT 'hooray'" >> import.sql
 psql -d testdb < import.sql | grep hooray
 # Assert the junk line wasn't added.
 psql -d testdb -c "SELECT * from playground WHERE type='junk'" | grep "0 rows"
+
+# Test that large COPY FROM STDIN commands don't create a bad connection status.
+# See issue #17941.
+echo 'COPY ints FROM stdin;' > import.sql
+for i in {1..1000}; do
+    echo $i >> import.sql
+done
+echo "\." >> import.sql
+psql -d testdb < import.sql
+psql -d testdb -c "SELECT COUNT(*) FROM ints" | grep "1000"
 
 exit 0
 `
