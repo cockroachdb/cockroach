@@ -688,6 +688,7 @@ func (e *Executor) CopyDone(session *Session) error {
 
 // CopyEnd ends the COPY mode. Any buffered data is discarded.
 func (s *Session) CopyEnd(ctx context.Context) {
+	s.copyFrom.Close(ctx)
 	s.copyFrom = nil
 }
 
