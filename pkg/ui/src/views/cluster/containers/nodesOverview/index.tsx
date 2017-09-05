@@ -62,7 +62,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
 
     return <div>
       <section className="section section--heading">
-        <h2>Live Nodes</h2>
+        <h2>Hello World</h2>
       </section>
       <section className="section">
         <NodeSortedTable
