@@ -544,6 +544,31 @@ func (c *v3Conn) serve(ctx context.Context, draining func() bool, reserved mon.B
 		if err != nil {
 			return err
 		}
+
+		if c.streamingState.copyIn {
+			tag := append(c.tagBuf[:0], c.streamingState.pgTag...)
+			tag = append(tag, ' ')
+
+			// Run the copy pgwire state machine. This runs until its finished or
+			// there was an error, returning the number of rows inserted.
+			rowsInserted, err := c.copyIn(ctx, c.streamingState.columns)
+			c.streamingState.copyIn = false
+			if err != nil {
+				if err := c.setError(err); err != nil {
+					return err
+				}
+			}
+
+			// Send the number of rows inserted, along with the COPY tag. Then we're
+			// ready to return to normal operation.
+			tag = strconv.AppendInt(tag, rowsInserted, 10)
+			err = c.sendCommandComplete(tag, &c.streamingState.buf)
+			if err != nil {
+				if err := c.setError(err); err != nil {
+					return err
+				}
+			}
+		}
 	}
 }
 
@@ -1056,11 +1081,12 @@ func (c *v3Conn) sendRowDescription(
 	return c.writeBuf.finishMsg(w)
 }
 
-// copyIn processes COPY IN data and returns the number of rows inserted.
+// beginCopyIn begins the COPY IN data flow after we receive a
+// COPY ... FROM STDIN statement by sending the number of columns we expect
+// along with their expected formats to the client. Currently, we only support
+// the "text" format for COPY IN.
 // See: https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-COPY
-func (c *v3Conn) copyIn(ctx context.Context, columns []sqlbase.ResultColumn) (int64, error) {
-	defer c.session.CopyEnd(ctx)
-
+func (c *v3Conn) beginCopyIn(ctx context.Context, columns []sqlbase.ResultColumn) error {
 	c.writeBuf.initMsg(serverMsgCopyInResponse)
 	c.writeBuf.writeByte(byte(formatText))
 	c.writeBuf.putInt16(int16(len(columns)))
@@ -1068,11 +1094,18 @@ func (c *v3Conn) copyIn(ctx context.Context, columns []sqlbase.ResultColumn) (in
 		c.writeBuf.putInt16(int16(formatText))
 	}
 	if err := c.writeBuf.finishMsg(c.wr); err != nil {
-		return 0, sql.NewWireFailureError(err)
+		return sql.NewWireFailureError(err)
 	}
 	if err := c.wr.Flush(); err != nil {
-		return 0, sql.NewWireFailureError(err)
+		return sql.NewWireFailureError(err)
 	}
+	return nil
+}
+
+// copyIn processes COPY IN data and returns the number of rows inserted.
+// See: https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-COPY
+func (c *v3Conn) copyIn(ctx context.Context, columns []sqlbase.ResultColumn) (int64, error) {
+	defer c.session.CopyEnd(ctx)
 
 	for {
 		typ, n, err := c.readBuf.readTypedMsg(c.rd)
@@ -1250,17 +1283,12 @@ func (c *v3Conn) CloseResult() error {
 
 	case parser.CopyIn:
 		state.copyIn = true
-		rowsInserted, err := c.copyIn(ctx, state.columns)
-		state.copyIn = false
-		if err != nil {
+		if err := c.beginCopyIn(ctx, state.columns); err != nil {
 			if err := c.setError(err); err != nil {
 				return err
 			}
 		}
-
-		tag = append(tag, ' ')
-		tag = strconv.AppendInt(tag, rowsInserted, 10)
-		return c.sendCommandComplete(tag, &state.buf)
+		return nil
 
 	default:
 		panic(fmt.Sprintf("unexpected result type %v", state.statementType))
