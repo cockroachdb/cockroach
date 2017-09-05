@@ -393,7 +393,7 @@ SELECT * FROM customers WHERE State LIKE 'C%' AND strpos(address, 'Infinite') !=
 ```
 
 as a slightly contrived example. This is supposed to return customers
-from states starting with "N" and whose address contains the string
+from states starting with "C" and whose address contains the string
 "Infinite". To get excited, let's see the query plan for this
 statement:
 
