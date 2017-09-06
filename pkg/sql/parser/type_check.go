@@ -910,7 +910,8 @@ func (d dNull) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { retu
 // with the required element type and NOT TTuple (as opposed to how Tuple.TypeCheck operates).
 // For example, (1, 2.5) with required TypeDecimal would raise a sane error whereas (1.0, 2.5) with required TypeDecimal would pass.
 func typeCheckAndRequireTupleElems(ctx *SemaContext, expr Expr, required Type) (TypedExpr, error) {
-	tuple := expr.(*Tuple)
+	// Retrieve reference to (possibly nested) tuple expression
+	tuple := StripParens(expr).(*Tuple)
 	tuple.types = make(TTuple, len(tuple.Exprs))
 	for i, subExpr := range tuple.Exprs {
 		// Require that the sub expression is equivalent (or may be inferred) to the required type.
@@ -921,7 +922,10 @@ func typeCheckAndRequireTupleElems(ctx *SemaContext, expr Expr, required Type) (
 		tuple.Exprs[i] = typedExpr
 		tuple.types[i] = typedExpr.ResolvedType()
 	}
-	return tuple, nil
+	// We cannot simply return tuple since we want the original expression returned and with
+	// type annotations.
+	AnnotateParens(expr, tuple.ResolvedType())
+	return expr.(TypedExpr), nil
 }
 
 func typeCheckAndRequireBoolean(ctx *SemaContext, expr Expr, op string) (TypedExpr, error) {
@@ -989,15 +993,7 @@ func typeCheckComparisonOpWithSubOperator(
 		}
 		array.typ = TArray{retType}
 
-		rightParen := right
-		for {
-			if p, ok := rightParen.(*ParenExpr); ok {
-				p.typ = array.typ
-				rightParen = p.Expr
-				continue
-			}
-			break
-		}
+		AnnotateParens(right, array.typ)
 		rightTyped = right.(TypedExpr)
 		cmpTypesRight = append(cmpTypesRight, retType)
 
@@ -1015,9 +1011,7 @@ func typeCheckComparisonOpWithSubOperator(
 		}
 		cmpTypeLeft = leftTyped.ResolvedType()
 
-		// TODO(richardwu): Write an Unwrap function for BinaryExpr to handle the case where the tuple
-		// is nested within ParenExpr.
-		if _, ok := right.(*Tuple); ok {
+		if _, ok := StripParens(right).(*Tuple); ok {
 			// If right expression is a tuple, we require that all elements' inferred
 			// type is equivalent to the left's type.
 			rightTyped, err = typeCheckAndRequireTupleElems(ctx, right, cmpTypeLeft)

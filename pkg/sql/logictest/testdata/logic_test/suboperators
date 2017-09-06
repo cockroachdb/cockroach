@@ -14,12 +14,22 @@ SELECT 1 = ANY(ARRAY[1, 2])
 true
 
 query B
+SELECT 1 = ANY (((ARRAY[1, 2])))
+----
+true
+
+query B
 SELECT 1 = SOME(ARRAY[1, 2])
 ----
 true
 
 query B
 SELECT 1 = ANY(ARRAY[3, 4])
+----
+false
+
+query B
+SELECT 1 = ANY (((ARRAY[3, 4])))
 ----
 false
 
@@ -333,7 +343,17 @@ SELECT 1 = ANY (1, 2, 3)
 true
 
 query B
+SELECT 1 = ANY (((1, 2, 3)))
+----
+true
+
+query B
 SELECT 1 = ANY (2, 3, 4)
+----
+false
+
+query B
+SELECT 1 = ANY (((2, 3, 4)))
 ----
 false
 
@@ -348,8 +368,16 @@ true
 query error incompatible tuple element type: decimal
 SELECT 1 = ANY (1.0, 1.1)
 
+query error incompatible tuple element type: decimal
+SELECT 1 = ANY (((1.0, 1.1)))
+
 query B
 SELECT 1::decimal = ANY (1.0, 1.1)
+----
+true
+
+query B
+SELECT 1::decimal = ANY (((1.0, 1.1)))
 ----
 true
 
