@@ -38,6 +38,9 @@ import (
 // ID is a custom type for {Database,Table}Descriptor IDs.
 type ID parser.ID
 
+// InvalidID is the uninitialised descriptor id.
+const InvalidID ID = 0
+
 // IDs is a sortable list of IDs.
 type IDs []ID
 
@@ -82,7 +85,7 @@ const (
 	InterleavedFormatVersion
 )
 
-// MutationID is custom type for TableDescriptor mutations.
+// MutationID is a custom type for TableDescriptor mutations.
 type MutationID uint32
 
 // InvalidMutationID is the uninitialised mutation id.

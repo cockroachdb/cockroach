@@ -1247,20 +1247,25 @@ func (m *LeaseManager) resolveName(
 ) (sqlbase.ID, error) {
 	nameKey := tableKey{dbID, tableName}
 	key := nameKey.Key()
-	var id sqlbase.ID
-	err := m.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	id := sqlbase.InvalidID
+	if err := m.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		txn.SetFixedTimestamp(timestamp)
 		gr, err := txn.Get(ctx, key)
 		if err != nil {
 			return err
 		}
 		if !gr.Exists() {
-			return sqlbase.ErrDescriptorNotFound
+			return nil
 		}
 		id = sqlbase.ID(gr.ValueInt())
 		return nil
-	})
-	return id, err
+	}); err != nil {
+		return id, err
+	}
+	if id == sqlbase.InvalidID {
+		return id, sqlbase.ErrDescriptorNotFound
+	}
+	return id, nil
 }
 
 // Acquire acquires a read lease for the specified table ID valid for
