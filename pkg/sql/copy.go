@@ -41,7 +41,7 @@ import (
 //
 // See: https://www.postgresql.org/docs/9.5/static/sql-copy.html
 type copyNode struct {
-	p             *planner
+	session       *Session
 	table         parser.TableExpr
 	columns       parser.UnresolvedNames
 	resultColumns sqlbase.ResultColumns
@@ -54,7 +54,7 @@ func (*copyNode) Values() parser.Datums        { return nil }
 func (*copyNode) Next(runParams) (bool, error) { return false, nil }
 
 func (n *copyNode) Close(ctx context.Context) {
-	n.rowsMemAcc.Wsession(n.p.session).Close(ctx)
+	n.rowsMemAcc.Wsession(n.session).Close(ctx)
 }
 
 // CopyFrom begins a COPY.
@@ -81,7 +81,7 @@ func (p *planner) CopyFrom(ctx context.Context, n *parser.CopyFrom) (planNode, e
 	for i, c := range cols {
 		cn.resultColumns[i] = sqlbase.ResultColumn{Typ: c.Type.ToDatumType()}
 	}
-	cn.p = p
+	cn.session = p.session
 	cn.rowsMemAcc = p.session.OpenAccount()
 	return cn, nil
 }
@@ -90,10 +90,10 @@ func (p *planner) CopyFrom(ctx context.Context, n *parser.CopyFrom) (planNode, e
 func (n *copyNode) Start(runParams) error {
 	// Should never happen because the executor prevents non-COPY messages during
 	// a COPY.
-	if n.p.session.copyFrom != nil {
+	if n.session.copyFrom != nil {
 		return fmt.Errorf("COPY already in progress")
 	}
-	n.p.session.copyFrom = n
+	n.session.copyFrom = n
 	return nil
 }
 
@@ -174,7 +174,7 @@ func (n *copyNode) addRow(ctx context.Context, line []byte) error {
 		return fmt.Errorf("expected %d values, got %d", len(n.resultColumns), len(parts))
 	}
 	exprs := make(parser.Exprs, len(parts))
-	acc := n.rowsMemAcc.Wsession(n.p.session)
+	acc := n.rowsMemAcc.Wsession(n.session)
 	for i, part := range parts {
 		s := string(part)
 		if s == nullString {
@@ -194,7 +194,7 @@ func (n *copyNode) addRow(ctx context.Context, line []byte) error {
 				return err
 			}
 		}
-		d, err := parser.ParseStringAs(n.resultColumns[i].Typ, s, n.p.session.Location)
+		d, err := parser.ParseStringAs(n.resultColumns[i].Typ, s, n.session.Location)
 		if err != nil {
 			return err
 		}
