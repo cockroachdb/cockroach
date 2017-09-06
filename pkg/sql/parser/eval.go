@@ -1723,7 +1723,12 @@ func makeEvalTupleIn(typ Type) CmpOp {
 }
 
 // evalDatumsCmp evaluates Datums (slice of Datum) using the provided
-// sub-operator type and its CmpOp with the left Datum.
+// sub-operator type (ANY/SOME, ALL) and its CmpOp with the left Datum.
+// It returns the result of the ANY/SOME/ALL predicate.
+//
+// A null result is returned if there exists a null element and:
+//   ANY/SOME: no comparisons evaluate to true
+//   ALL: no comparisons evaluate to false
 //
 // For example, given 1 < ANY (SELECT * FROM GENERATE_SERIES(1,3))
 // (right is a DTuple), evalTupleCmp would be called with:
@@ -1735,8 +1740,7 @@ func evalDatumsCmp(
 	ctx *EvalContext, op, subOp ComparisonOperator, fn CmpOp, left Datum, right Datums,
 ) (Datum, error) {
 	all := op == All
-	allTrue := true
-	anyTrue := false
+	any := !all
 	sawNull := false
 	for _, elem := range right {
 		if elem == DNull {
@@ -1753,38 +1757,27 @@ func evalDatumsCmp(
 			sawNull = true
 			continue
 		}
+
 		b := d.(*DBool)
 		res := *b != DBool(not)
-		if res {
-			anyTrue = true
-		} else {
-			allTrue = false
+		if any && res {
+			return DBoolTrue, nil
+		} else if all && !res {
+			return DBoolFalse, nil
 		}
+	}
+
+	if sawNull {
+		// If the right-hand array contains any null elements and no [false,true]
+		// comparison result is obtained, the result of [ALL,ANY] will be null.
+		return DNull, nil
 	}
 
 	if all {
-		if !allTrue {
-			return DBoolFalse, nil
-		}
-		if sawNull {
-			// If the right-hand array contains any null elements and no false
-			// comparison result is obtained, the result of ALL will be null.
-			return DNull, nil
-		}
-		// allTrue && !sawNull
+		// ALL are true && !sawNull
 		return DBoolTrue, nil
 	}
-
-	// !all
-	if anyTrue {
-		return DBoolTrue, nil
-	}
-	if sawNull {
-		// If the right-hand array contains any null elements and no true
-		// comparison result is obtained, the result of ANY will be null.
-		return DNull, nil
-	}
-	// !anyTrue && !sawNull
+	// ANY is false && !sawNull
 	return DBoolFalse, nil
 }
 
