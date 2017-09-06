@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	"fmt"
 	"io"
 	"time"
 
@@ -76,34 +77,49 @@ const Version DistSQLVersion = 5
 // compatible with; see above.
 const MinAcceptedVersion DistSQLVersion = 4
 
-var distSQLUseTempStorage = settings.RegisterBoolSetting(
-	"sql.defaults.distsql.tempstorage",
+var settingUseTempStorage = settings.RegisterBoolSetting(
+	"sql.distsql.tempstorage",
 	"set to true to enable use of disk for larger distributed sql queries",
 	true,
 )
 
-var distSQLUseTempStorageSorts = settings.RegisterBoolSetting(
-	"sql.defaults.distsql.tempstorage.sorts",
-	"set to true to enable use of disk for distributed sql sorts. sql.defaults.distsql.tempstorage must be true",
+var settingUseTempStorageSorts = settings.RegisterBoolSetting(
+	"sql.distsql.tempstorage.sorts",
+	"set to true to enable use of disk for distributed sql sorts. sql.distsql.tempstorage must be true",
 	true,
 )
 
-var distSQLUseTempStorageJoins = settings.RegisterBoolSetting(
-	"sql.defaults.distsql.tempstorage.joins",
-	"set to true to enable use of disk for distributed sql joins. sql.defaults.distsql.tempstorage must be true",
+var settingUseTempStorageJoins = settings.RegisterBoolSetting(
+	"sql.distsql.tempstorage.joins",
+	"set to true to enable use of disk for distributed sql joins. sql.distsql.tempstorage must be true",
 	true,
 )
 
-// workMemBytes specifies the maximum amount of memory in bytes a processor can
-// use. This limit is only observed if the use of temporary storage is enabled
-// (see sql.defaults.distsql.tempstorage).
-var workMemBytes = envutil.EnvOrDefaultInt64("COCKROACH_WORK_MEM", 64*1024*1024 /* 64MB */)
+var settingWorkMemBytes = settings.RegisterByteSizeSetting(
+	"sql.distsql.tempstorage.workmem",
+	"maximum amount of memory in bytes a processor can use before falling back to temp storage (requires restart)",
+	envutil.EnvOrDefaultInt64("COCKROACH_WORK_MEM", 64*1024*1024 /* 64MB */),
+)
+
+var settingDiskBudgetPercent = settings.RegisterValidatedIntSetting(
+	"sql.distsql.tempstorage.max_percent",
+	"maximum amount of disk space used for a single query (as a percentage of the total capacity; requires restart)",
+	10,
+	func(val int64) error {
+		if val < 1 || val > 100 {
+			return fmt.Errorf("value must be between 1 and 100")
+		}
+		return nil
+	},
+)
+
+var settingDiskBudgetAbsolute = settings.RegisterByteSizeSetting(
+	"sql.distsql.tempstorage.max_bytes",
+	"maximum amount of disk space used for a single query (in bytes; requires restart)",
+	32*1024*1024*1024, /* 32GB */
+)
 
 var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_DISTSQL_MEMORY_USAGE", 1024*1024 /* 1MB */)
-
-// All queries that spill over to disk will be limited to use
-// total space / diskBudgetTotalSizeDivisor.
-const diskBudgetTotalSizeDivisor = 4
 
 // ServerConfig encompasses the configuration required to create a
 // DistSQLServer.
@@ -186,14 +202,19 @@ func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
 			errors.Wrap(err, "could not get temporary storage capacity"),
 		)
 	}
-	diskMonitorBudget := capacity.Capacity / diskBudgetTotalSizeDivisor
+	// We limit the disk usage to both a percentage of the total capacity and an
+	// absolute value (whichever is smaller).
+	diskMonitorBudget := capacity.Capacity * 100 / settingDiskBudgetPercent.Get(&ds.Settings.SV)
+	if maxBytes := settingDiskBudgetAbsolute.Get(&ds.Settings.SV); maxBytes < diskMonitorBudget {
+		diskMonitorBudget = maxBytes
+	}
 	ds.diskMonitor = mon.MakeMonitor(
 		"distsql-tempstorage",
 		mon.DiskResource,
-		nil,                 /* curCount */
-		nil,                 /* maxHist */
-		workMemBytes,        /* increment: same size as processor's memory budget */
-		diskMonitorBudget/2, /* noteworthy */
+		nil,                  /* curCount */
+		nil,                  /* maxHist */
+		64*1024*1024,         /* increment */
+		diskMonitorBudget/10, /* noteworthy */
 	)
 	ds.diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(diskMonitorBudget))
 	return ds
