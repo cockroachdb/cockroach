@@ -154,7 +154,7 @@ func (n *showRangesNode) Close(_ context.Context) {
 func scanMetaKVs(
 	ctx context.Context, txn *client.Txn, span roachpb.Span,
 ) ([]client.KeyValue, error) {
-	metaStart := keys.RangeMetaKey(keys.MustAddr(span.Key))
+	metaStart := keys.RangeMetaKey(keys.MustAddr(span.Key).Next())
 	metaEnd := keys.RangeMetaKey(keys.MustAddr(span.EndKey))
 
 	kvs, err := txn.Scan(ctx, metaStart, metaEnd, 0)
