@@ -1750,6 +1750,20 @@ func NewDTupleWithCap(c int) *DTuple {
 	return &DTuple{D: make(Datums, 0, c)}
 }
 
+// AsDTuple attempts to retrieve a *DTuple from an Expr, returning a *DTuple and
+// a flag signifying whether the assertion was successful. The function should
+// be used instead of direct type assertions wherever a *DTuple wrapped by a
+// *DOidWrapper is possible.
+func AsDTuple(e Expr) (*DTuple, bool) {
+	switch t := e.(type) {
+	case *DTuple:
+		return t, true
+	case *DOidWrapper:
+		return AsDTuple(t.Wrapped)
+	}
+	return nil, false
+}
+
 // ResolvedType implements the TypedExpr interface.
 func (d *DTuple) ResolvedType() Type {
 	typ := make(TTuple, len(d.D))
