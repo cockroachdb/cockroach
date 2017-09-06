@@ -52,3 +52,7 @@ ignored = [
 [[constraint]]
   name = "github.com/coreos/etcd"
   branch = "master"
+
+[[constraint]]
+  name = "github.com/cockroachdb/stress"
+  branch = "master"
