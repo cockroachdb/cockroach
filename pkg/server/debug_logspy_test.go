@@ -327,7 +327,7 @@ func TestDebugLogSpyBrokenConnection(t *testing.T) {
 		func() {
 			if err := spy.run(ctx, w, logSpyOptions{
 				Duration: durationAsString(time.Hour),
-				Count:    logSpyChanCap + 1,
+				Count:    logSpyChanCap - 1, // will definitely see that many entries
 			}); !testutils.IsError(err, test.failStr) {
 				t.Fatal(err)
 			}
