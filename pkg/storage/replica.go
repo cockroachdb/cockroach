@@ -2956,11 +2956,11 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// TODO(bdarnell): need to check replica id and not Advance if it
 	// has changed. Or do we need more locking to guarantee that replica
 	// ID cannot change during handleRaftReady?
-	const expl = "during advance"
 	if err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
 		raftGroup.Advance(rd)
 		return true, nil
 	}); err != nil {
+		const expl = "during advance"
 		return stats, expl, errors.Wrap(err, expl)
 	}
 	return stats, "", nil

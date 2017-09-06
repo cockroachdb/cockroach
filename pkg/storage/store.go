@@ -3428,8 +3428,24 @@ func (s *Store) processReady(rangeID roachpb.RangeID) {
 	if ok {
 		stats, expl, err := r.handleRaftReady(IncomingSnapshot{})
 		if err != nil {
-			log.Error(s.AnnotateCtx(context.TODO()), err)
-			panic(log.Safe{V: expl}) // TODO(bdarnell)
+			// Special logging for https://github.com/cockroachdb/cockroach/issues/18084.
+			const cta = "please report this error at https://gitter.im/cockroachdb/cockroach " +
+				"or https://github.com/cockroachdb/cockroach/issues"
+			state := r.mu.state
+			if state.Desc != nil {
+				state.Desc.StartKey = nil
+				state.Desc.EndKey = nil
+			}
+
+			safeMsg := fmt.Sprintf(`error returned from handleRaftReady
+explanation: %s
+replica state: %s`,
+				expl, pretty.Sprint(&state),
+			)
+
+			log.Error(r.AnnotateCtx(context.TODO()), errors.Wrap(err, fmt.Sprintf("%s\n\n%s", safeMsg, cta)))
+			// Mimic the behavior in processRaft.
+			panic(log.Safe{V: safeMsg})
 		}
 		elapsed := timeutil.Since(start)
 		s.metrics.RaftWorkingDurationNanos.Inc(elapsed.Nanoseconds())
