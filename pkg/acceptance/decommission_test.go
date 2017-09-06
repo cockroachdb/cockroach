@@ -15,7 +15,7 @@
 package acceptance
 
 import (
-	"fmt"
+	"reflect"
 	"regexp"
 	"strconv"
 	"testing"
@@ -33,6 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/kr/pretty"
+	"github.com/pkg/errors"
 )
 
 // TestDecommission starts up an >3 node cluster and decomissions and
@@ -270,18 +272,44 @@ func testDecommissionInner(
 			t.Error(err)
 		}
 	}()
-	sqlutils.MakeSQLRunner(t, db).CheckQueryResults(fmt.Sprintf(`
+
+	var rows *gosql.Rows
+	for {
+		var err error
+		rows, err = db.Query(`
 		SELECT "eventType", "targetID" FROM system.eventlog
-		WHERE "eventType" IN ('%s', '%s') ORDER BY timestamp`,
-		sql.EventLogNodeDecommissioned, sql.EventLogNodeRecommissioned),
-		[][]string{
-			{string(sql.EventLogNodeDecommissioned), idMap[0].String()},
-			{string(sql.EventLogNodeRecommissioned), idMap[0].String()},
-			{string(sql.EventLogNodeDecommissioned), idMap[1].String()},
-			{string(sql.EventLogNodeRecommissioned), idMap[1].String()},
-			{string(sql.EventLogNodeDecommissioned), idMap[2].String()},
-			{string(sql.EventLogNodeRecommissioned), idMap[2].String()},
-			{string(sql.EventLogNodeDecommissioned), idMap[0].String()},
-		},
-	)
+		WHERE "eventType" IN ($1, $2) ORDER BY timestamp`,
+			sql.EventLogNodeDecommissioned, sql.EventLogNodeRecommissioned,
+		)
+		if err != nil {
+			// Spurious errors appear to be possible since we might be trying to
+			// send RPCs to the (relatively recently) down node:
+			//
+			// pq: rpc error: code = Unavailable desc = grpc: the connection is
+			// unavailable
+			//
+			// Seen in https://teamcity.cockroachdb.com/viewLog.html?buildId=344802.
+			log.Warning(ctx, errors.Wrap(err, "retrying after"))
+			continue
+		}
+		break
+	}
+
+	matrix, err := sqlutils.RowsToStrMatrix(rows)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expMatrix := [][]string{
+		{string(sql.EventLogNodeDecommissioned), idMap[0].String()},
+		{string(sql.EventLogNodeRecommissioned), idMap[0].String()},
+		{string(sql.EventLogNodeDecommissioned), idMap[1].String()},
+		{string(sql.EventLogNodeRecommissioned), idMap[1].String()},
+		{string(sql.EventLogNodeDecommissioned), idMap[2].String()},
+		{string(sql.EventLogNodeRecommissioned), idMap[2].String()},
+		{string(sql.EventLogNodeDecommissioned), idMap[0].String()},
+	}
+
+	if !reflect.DeepEqual(matrix, expMatrix) {
+		t.Fatalf("unexpected diff(matrix, expMatrix):\n%s", pretty.Diff(matrix, expMatrix))
+	}
 }
