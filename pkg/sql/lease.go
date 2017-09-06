@@ -1255,11 +1255,14 @@ func (m *LeaseManager) resolveName(
 			return err
 		}
 		if !gr.Exists() {
-			return sqlbase.ErrDescriptorNotFound
+			return nil
 		}
 		id = sqlbase.ID(gr.ValueInt())
 		return nil
 	})
+	if id == sqlbase.InvalidID {
+		err = sqlbase.ErrDescriptorNotFound
+	}
 	return id, err
 }
 
