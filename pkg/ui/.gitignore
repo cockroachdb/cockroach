@@ -6,4 +6,5 @@ node_modules
 yarn.installed
 
 # Generated intermediates
+.cache-loader
 dist
