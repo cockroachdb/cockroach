@@ -26,6 +26,7 @@ import (
 	"math/rand"
 	"reflect"
 	"sort"
+	"strconv"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -48,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -2708,7 +2710,10 @@ type handleRaftReadyStats struct {
 // are ready to read, be saved to stable storage, committed or sent to other
 // peers. It takes a non-empty IncomingSnapshot to indicate that it is
 // about to process a snapshot.
-func (r *Replica) handleRaftReady(inSnap IncomingSnapshot) (handleRaftReadyStats, error) {
+//
+// The returned string is nonzero whenever an error is returned to give a
+// non-sensitive cue as to what happened.
+func (r *Replica) handleRaftReady(inSnap IncomingSnapshot) (handleRaftReadyStats, string, error) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	return r.handleRaftReadyRaftMuLocked(inSnap)
@@ -2716,9 +2721,12 @@ func (r *Replica) handleRaftReady(inSnap IncomingSnapshot) (handleRaftReadyStats
 
 // handleRaftReadyLocked is the same as handleRaftReady but requires that the
 // replica's raftMu be held.
+//
+// The returned string is nonzero whenever an error is returned to give a
+// non-sensitive cue as to what happened.
 func (r *Replica) handleRaftReadyRaftMuLocked(
 	inSnap IncomingSnapshot,
-) (handleRaftReadyStats, error) {
+) (handleRaftReadyStats, string, error) {
 	var stats handleRaftReadyStats
 
 	ctx := r.AnnotateCtx(context.TODO())
@@ -2737,11 +2745,12 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	})
 	r.mu.Unlock()
 	if err != nil {
-		return stats, err
+		const expl = "while checking raft group for Ready"
+		return stats, expl, errors.Wrap(err, expl)
 	}
 
 	if !hasReady {
-		return stats, nil
+		return stats, "", nil
 	}
 
 	logRaftReady(ctx, rd)
@@ -2767,7 +2776,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	if !raft.IsEmptySnap(rd.Snapshot) {
 		snapUUID, err := uuid.FromBytes(rd.Snapshot.Data)
 		if err != nil {
-			return stats, errors.Wrap(err, "invalid snapshot id")
+			const expl = "invalid snapshot id"
+			return stats, expl, errors.Wrap(err, expl)
 		}
 		if inSnap.SnapUUID == (uuid.UUID{}) {
 			log.Fatalf(ctx, "programming error: a snapshot application was attempted outside of the streaming snapshot codepath")
@@ -2777,7 +2787,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 
 		if err := r.applySnapshot(ctx, inSnap, rd.Snapshot, rd.HardState); err != nil {
-			return stats, err
+			const expl = "while applying snapshot"
+			return stats, expl, errors.Wrap(err, expl)
 		}
 
 		if err := func() error {
@@ -2787,16 +2798,15 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			if r.store.removePlaceholderLocked(r.RangeID) {
 				atomic.AddInt32(&r.store.counts.filledPlaceholders, 1)
 			}
-			if err := r.store.processRangeDescriptorUpdateLocked(ctx, r); err != nil {
-				return errors.Wrap(err, "could not processRangeDescriptorUpdate after applySnapshot")
-			}
-			return nil
+			return r.store.processRangeDescriptorUpdateLocked(ctx, r)
 		}(); err != nil {
-			return stats, err
+			const expl = "could not processRangeDescriptorUpdate after applySnapshot"
+			return stats, expl, errors.Wrap(err, expl)
 		}
 
 		if lastIndex, err = r.stateLoader.loadLastIndex(ctx, r.store.Engine()); err != nil {
-			return stats, err
+			const expl = "while loading last index"
+			return stats, expl, errors.Wrap(err, expl)
 		}
 		// We refresh pending commands after applying a snapshot because this
 		// replica may have been temporarily partitioned from the Raft group and
@@ -2823,12 +2833,14 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		// last index.
 		var err error
 		if lastIndex, raftLogSize, err = r.append(ctx, writer, lastIndex, raftLogSize, rd.Entries); err != nil {
-			return stats, err
+			const expl = "during append()"
+			return stats, expl, errors.Wrap(err, expl)
 		}
 	}
 	if !raft.IsEmptyHardState(rd.HardState) {
 		if err := r.stateLoader.setHardState(ctx, writer, rd.HardState); err != nil {
-			return stats, err
+			const expl = "during setHardState"
+			return stats, expl, errors.Wrap(err, expl)
 		}
 	}
 	writer.Close()
@@ -2836,7 +2848,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// state as we're promising not to lose this data.
 	start := timeutil.Now()
 	if err := batch.Commit(syncRaftLog.Get() && rd.MustSync); err != nil {
-		return stats, err
+		const expl = "while committing batch"
+		return stats, expl, errors.Wrap(err, expl)
 	}
 	elapsed := timeutil.Since(start)
 	r.store.metrics.RaftLogCommitLatency.RecordValue(elapsed.Nanoseconds())
@@ -2885,7 +2898,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				if len(encodedCommand) == 0 {
 					commandID = ""
 				} else if err := command.Unmarshal(encodedCommand); err != nil {
-					return stats, err
+					f, l, _ := caller.Lookup(0)
+					return stats, f + strconv.Itoa(l), err
 				}
 			}
 
@@ -2898,15 +2912,18 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		case raftpb.EntryConfChange:
 			var cc raftpb.ConfChange
 			if err := cc.Unmarshal(e.Data); err != nil {
-				return stats, err
+				f, l, _ := caller.Lookup(0)
+				return stats, f + strconv.Itoa(l), err
 			}
 			var ccCtx ConfChangeContext
 			if err := ccCtx.Unmarshal(cc.Context); err != nil {
-				return stats, err
+				f, l, _ := caller.Lookup(0)
+				return stats, f + strconv.Itoa(l), err
 			}
 			var command storagebase.RaftCommand
 			if err := command.Unmarshal(ccCtx.Payload); err != nil {
-				return stats, err
+				f, l, _ := caller.Lookup(0)
+				return stats, f + strconv.Itoa(l), err
 			}
 			if changedRepl := r.processRaftCommand(
 				ctx, storagebase.CmdIDKey(ccCtx.CommandID), e.Index, command,
@@ -2919,7 +2936,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				raftGroup.ApplyConfChange(cc)
 				return true, nil
 			}); err != nil {
-				return stats, err
+				const expl = "during ApplyConfChange"
+				return stats, expl, errors.Wrap(err, expl)
 			}
 		default:
 			log.Fatalf(ctx, "unexpected Raft entry: %v", e)
@@ -2934,10 +2952,14 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// TODO(bdarnell): need to check replica id and not Advance if it
 	// has changed. Or do we need more locking to guarantee that replica
 	// ID cannot change during handleRaftReady?
-	return stats, r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
+	const expl = "during advance"
+	if err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
 		raftGroup.Advance(rd)
 		return true, nil
-	})
+	}); err != nil {
+		return stats, expl, errors.Wrap(err, expl)
+	}
+	return stats, "", nil
 }
 
 // tick the Raft group, returning any error and true if the raft group exists
