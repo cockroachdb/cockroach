@@ -873,6 +873,10 @@ func (r *Replica) getLeaseRLocked() (*roachpb.Lease, *roachpb.Lease) {
 func (r *Replica) ownsValidLease(ts hlc.Timestamp) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	return r.ownsValidLeaseRLocked(ts)
+}
+
+func (r *Replica) ownsValidLeaseRLocked(ts hlc.Timestamp) bool {
 	return r.mu.state.Lease.OwnedBy(r.store.StoreID()) &&
 		r.leaseStatus(r.mu.state.Lease, ts, r.mu.minLeaseProposedTS).state == leaseValid
 }
@@ -3086,17 +3090,18 @@ func (r *Replica) maybeQuiesceLocked() bool {
 	// Only quiesce if this replica is the leaseholder as well;
 	// otherwise the replica which is the valid leaseholder may have
 	// pending commands which it's waiting on this leader to propose.
-	if l := r.mu.state.Lease; !l.OwnedBy(r.store.StoreID()) &&
-		r.isLeaseValidRLocked(l, r.store.Clock().Now()) {
+	if now := r.store.Clock().Now(); !r.ownsValidLeaseRLocked(now) {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: not leaseholder")
 		}
 		// Try to correct leader-not-leaseholder condition, if encountered,
 		// assuming the leaseholder is caught up to the commit index.
-		if pr, ok := status.Progress[uint64(l.Replica.ReplicaID)]; ok && pr.Match >= status.Commit {
-			log.VEventf(ctx, 1, "transferring raft leadership to replica ID %v", l.Replica.ReplicaID)
-			r.store.metrics.RangeRaftLeaderTransfers.Inc(1)
-			r.mu.internalRaftGroup.TransferLeader(uint64(l.Replica.ReplicaID))
+		if l := r.mu.state.Lease; r.isLeaseValidRLocked(l, now) {
+			if pr, ok := status.Progress[uint64(l.Replica.ReplicaID)]; ok && pr.Match >= status.Commit {
+				log.VEventf(ctx, 1, "transferring raft leadership to replica ID %v", l.Replica.ReplicaID)
+				r.store.metrics.RangeRaftLeaderTransfers.Inc(1)
+				r.mu.internalRaftGroup.TransferLeader(uint64(l.Replica.ReplicaID))
+			}
 		}
 		return false
 	}
