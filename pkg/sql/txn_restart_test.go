@@ -1728,3 +1728,75 @@ CREATE TABLE t.test (k INT PRIMARY KEY);
 			})
 	}
 }
+
+// Test that, if we'd otherwise perform an auto-retry but results for the
+// current txn have already been streamed to the client, we don't do the
+// auto-restart.
+func TestTxnAutoRetriesDisabledAfterResultsHaveBeenSentToClient(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params, _ := createTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	tests := []struct {
+		name                  string
+		clientDirectedRetries bool
+	}{
+		{
+			name: "client_directed_retries",
+			clientDirectedRetries: true,
+		},
+		{
+			name: "no_client_directed_retries",
+			clientDirectedRetries: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Cleanup the connection state after each test so the next one can run
+			// statements.
+			// TODO(andrei): Once we're on go 1.9, this test should use the new
+			// db.Conn() method to tie each test to a connection; then this cleanup
+			// wouldn't be necessary. Also, the test is currently technically
+			// incorrect, as there's no guarantee that the state check at the end will
+			// happen on the right connection.
+			defer func() {
+				if _, err := sqlDB.Exec("ROLLBACK"); err != nil {
+					t.Fatal(err)
+				}
+			}()
+
+			var savepoint string
+			if tc.clientDirectedRetries {
+				savepoint = "SAVEPOINT cockroach_restart;"
+			}
+			// We'll run a statement that produces enough results to overflow the
+			// buffers and start streaming results to the client before the retriable
+			// error is injected.
+			sql := fmt.Sprintf(`
+				BEGIN TRANSACTION;
+				%s
+				SELECT generate_series(1, 10000);
+				SELECT crdb_internal.force_retry('1s');
+				COMMIT TRANSACTION;`, savepoint)
+			_, err := sqlDB.Exec(sql)
+			if !isRetryableErr(err) {
+				t.Fatalf("expected retriable error, got: %v", err)
+			}
+			var expectedState string
+			if tc.clientDirectedRetries {
+				expectedState = "RestartWait"
+			} else {
+				expectedState = "Aborted"
+			}
+			var state string
+			if err := sqlDB.QueryRow("SHOW TRANSACTION STATUS").Scan(&state); err != nil {
+				t.Fatal(err)
+			}
+			if state != expectedState {
+				t.Fatalf("expected state %s, got: %s", expectedState, state)
+			}
+		})
+	}
+}
