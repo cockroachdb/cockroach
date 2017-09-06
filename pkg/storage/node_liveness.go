@@ -199,19 +199,40 @@ func (nl *NodeLiveness) SetDecommissioning(
 	ctx context.Context, nodeID roachpb.NodeID, decommission bool,
 ) (changeCommitted bool, err error) {
 	ctx = nl.ambientCtx.AnnotateCtx(ctx)
-	for {
+
+	attempt := func() (bool, error) {
+		// Allow only one decommissioning attempt in flight per node at a time.
+		// This is required for correct results since we may otherwise race with
+		// concurrent `IncrementEpoch` calls and get stuck in a situation in
+		// which the cached liveness is has decommissioning=false while it's
+		// really true, and that means that SetDecommissioning becomes a no-op
+		// (which is correct) but that our cached liveness never updates to
+		// reflect that.
+		//
+		// See https://github.com/cockroachdb/cockroach/issues/17995.
+		sem := nl.sem(nodeID)
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			return false, ctx.Err()
+		}
+		defer func() {
+			<-sem
+		}()
+
 		oldLiveness, err := nl.GetLiveness(nodeID) // need new liveness in each iteration
 		if err != nil {
 			return false, errors.Wrap(err, "unable to get liveness")
 		}
-		changeCommitted, err := nl.setDecommissioningInternal(ctx, nodeID, oldLiveness, decommission)
-		if err != nil {
-			if errors.Cause(err) == errChangeDecommissioningFailed {
-				continue // expected when epoch incremented
-			}
-			return false, err
+		return nl.setDecommissioningInternal(ctx, nodeID, oldLiveness, decommission)
+	}
+
+	for {
+		changeCommitted, err := attempt()
+		if errors.Cause(err) == errChangeDecommissioningFailed {
+			continue // expected when epoch incremented
 		}
-		return changeCommitted, nil
+		return changeCommitted, err
 	}
 }
 
@@ -257,19 +278,6 @@ func (nl *NodeLiveness) setDrainingInternal(
 func (nl *NodeLiveness) setDecommissioningInternal(
 	ctx context.Context, nodeID roachpb.NodeID, liveness *Liveness, decommission bool,
 ) (changeCommitted bool, err error) {
-	// Allow only one attempt to set the decommissioning field at a time if it is this node.
-	if nodeID == nl.gossip.NodeID.Get() {
-		sem := nl.sem(nodeID)
-		select {
-		case sem <- struct{}{}:
-			defer func() {
-				<-sem
-			}()
-		case <-ctx.Done():
-			return false, ctx.Err()
-		}
-	}
-
 	newLiveness := Liveness{
 		NodeID: nodeID,
 		Epoch:  1,
@@ -712,7 +720,12 @@ func (nl *NodeLiveness) livenessGossipUpdate(key string, content roachpb.Value) 
 	var callbacks []IsLiveCallback
 	nl.mu.Lock()
 	exLiveness, ok := nl.mu.nodes[liveness.NodeID]
-	if !ok || exLiveness.Expiration.Less(liveness.Expiration) || exLiveness.Epoch < liveness.Epoch || exLiveness.Draining != liveness.Draining {
+	apply := !ok ||
+		exLiveness.Expiration.Less(liveness.Expiration) ||
+		exLiveness.Epoch < liveness.Epoch ||
+		exLiveness.Draining != liveness.Draining ||
+		exLiveness.Decommissioning != liveness.Decommissioning
+	if apply {
 		nl.mu.nodes[liveness.NodeID] = liveness
 
 		// If isLive status is now true, but previously false, invoke any registered callbacks.
