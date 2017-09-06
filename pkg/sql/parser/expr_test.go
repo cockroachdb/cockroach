@@ -220,6 +220,47 @@ func TestStripParens(t *testing.T) {
 	}
 }
 
+func TestAnnotateParens(t *testing.T) {
+	// Arbitrary type to annotate with.
+	typ := TypeDate
+	testExprs := []struct {
+		name, in string
+		// Number of parentheses expression annotated.
+		count int
+	}{
+		{`NoParentheses`, `1`, 0},
+		{`OneParentheses`, `(1)`, 1},
+		{`MultiParentheses`, `(((1)))`, 3},
+		{`RedHerringParentheses`, `(((1)) + (1))`, 1},
+	}
+
+	for i, test := range testExprs {
+		t.Run(test.name, func(t *testing.T) {
+			expr, err := ParseExpr(test.in)
+			if err != nil {
+				t.Fatalf("%d: %v", i, err)
+			}
+			AnnotateParens(expr, typ)
+
+			n := 0
+			for ; ; n++ {
+				if p, ok := expr.(*ParenExpr); ok {
+					if p.typ != typ {
+						t.Fatalf("%d: expected AnnotateParens(%s, %v) to type %dth parenthese as %v, actual: %v", i, test.in, typ, n, typ, p.typ)
+					}
+					expr = p.Expr
+					continue
+				}
+				break
+			}
+
+			if n != test.count {
+				t.Fatalf("%d: expected AnnotateParens(%s, %v) to type %d parenthese expressions, actual: %d", i, test.in, typ, test.count, n)
+			}
+		})
+	}
+}
+
 type stripFuncsVisitor struct{}
 
 func (v stripFuncsVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {

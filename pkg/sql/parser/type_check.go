@@ -908,8 +908,22 @@ func (d dNull) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { retu
 // typeCheckAndRequireTupleElems asserts that all elements in the Tuple
 // can be typed as required and are equivalent to required. Note that one would invoke
 // with the required element type and NOT TTuple (as opposed to how Tuple.TypeCheck operates).
-// For example, (1, 2.5) with required TypeDecimal would raise a sane error whereas (1.0, 2.5) with required TypeDecimal would pass.
+// For example, (1, 2.5) with required TypeDecimal would raise a sane error whereas (1.0, 2.5)
+// with required TypeDecimal would pass.
+//
+// It is valid to pass in a Tuple expression nested within 0 or more ParenExprs.
 func typeCheckAndRequireTupleElems(ctx *SemaContext, expr Expr, required Type) (TypedExpr, error) {
+	// If the expression is wrapped in parentheses, do a recursive call
+	// and type annotate the parentheses with the resulting tuple type.
+	if parenExpr, ok := expr.(*ParenExpr); ok {
+		typedExpr, err := typeCheckAndRequireTupleElems(ctx, parenExpr.Expr, required)
+		if err != nil {
+			return nil, err
+		}
+		parenExpr.typ = typedExpr.ResolvedType()
+		return parenExpr, nil
+	}
+
 	tuple := expr.(*Tuple)
 	tuple.types = make(TTuple, len(tuple.Exprs))
 	for i, subExpr := range tuple.Exprs {
@@ -989,15 +1003,7 @@ func typeCheckComparisonOpWithSubOperator(
 		}
 		array.typ = TArray{retType}
 
-		rightParen := right
-		for {
-			if p, ok := rightParen.(*ParenExpr); ok {
-				p.typ = array.typ
-				rightParen = p.Expr
-				continue
-			}
-			break
-		}
+		AnnotateParens(right, array.typ)
 		rightTyped = right.(TypedExpr)
 		cmpTypesRight = append(cmpTypesRight, retType)
 
@@ -1015,9 +1021,7 @@ func typeCheckComparisonOpWithSubOperator(
 		}
 		cmpTypeLeft = leftTyped.ResolvedType()
 
-		// TODO(richardwu): Write an Unwrap function for BinaryExpr to handle the case where the tuple
-		// is nested within ParenExpr.
-		if _, ok := right.(*Tuple); ok {
+		if _, ok := StripParens(right).(*Tuple); ok {
 			// If right expression is a tuple, we require that all elements' inferred
 			// type is equivalent to the left's type.
 			rightTyped, err = typeCheckAndRequireTupleElems(ctx, right, cmpTypeLeft)

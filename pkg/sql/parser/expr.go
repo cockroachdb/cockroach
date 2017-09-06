@@ -264,6 +264,21 @@ func StripParens(expr Expr) Expr {
 	return expr
 }
 
+// AnnotateParens annotates the parentheses surrounding the first non-parentheses
+// expression with the given type.
+func AnnotateParens(expr Expr, typ Type) {
+	exprParen := expr
+	for {
+		if p, ok := exprParen.(*ParenExpr); ok {
+			p.typ = typ
+			exprParen = p.Expr
+		} else {
+			return
+		}
+
+	}
+}
+
 // ComparisonOperator represents a binary operator.
 type ComparisonOperator int
 
