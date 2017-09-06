@@ -818,150 +818,18 @@ func (e *Executor) execParsed(
 		if txnState.State() == NoTxn {
 			panic("we failed to initialize a txn")
 		}
-		// Now actually run some statements.
-		var remainingStmts StatementList
-		origState := txnState.State()
 
-		// Track if we are retrying this query, so that we do not double count.
-		automaticRetryCount := 0
-
-		txnClosure := func(ctx context.Context) (transitionToOpen bool, _ error) {
-			defer func() { automaticRetryCount++ }()
-
-			if protoTS != nil {
-				txnState.mu.txn.SetFixedTimestamp(*protoTS)
-			}
-
-			// Some results may have been produced by a previous attempt.
-			txnState.txnResults.Reset(session.Ctx())
-			var err error
-			remainingStmts, transitionToOpen, err = runTxnAttempt(
-				e, session, stmtsToExec, pinfo, origState,
-				!inTxn /* txnPrefix */, avoidCachedDescriptors, automaticRetryCount, txnState.txnResults)
-
-			// TODO(andrei): Until #7881 fixed.
-			if err == nil && txnState.State() == Aborted {
-				doWarn := true
-				if len(stmtsToExec) > 0 {
-					if _, ok := stmtsToExec[0].AST.(*parser.ShowTransactionStatus); ok {
-						doWarn = false
-					}
-				}
-				if doWarn {
-					log.Errorf(ctx,
-						"7881: txnState is Aborted without an error propagating. stmtsToExec: %s, "+
-							"remainingStmts: %s, txnState: %+v", stmtsToExec, remainingStmts, txnState)
-				}
-			}
-
-			return transitionToOpen, err
-		}
-
-		// We now run the prefix of stmtsToExec that belong to the current
-		// transaction via txnClosure. We do this in a loop because we may want to
-		// do automatic retries, if possible. Whether or not we can do auto-retries
-		// depends on the state before we execute statements in the batch.
-		//
-		// TODO(andrei): It's unfortunate that we're keeping track of what the state
-		// was before running the statements. It'd be great if the state in which we
-		// find ourselves after running the statements told us if we can auto-retry.
-		// A way to do that is to introduce another state called AutoRestartWait,
-		// similar to RestartWait. We'd enter this state whenever we're in state
-		// AutoRetry and we get a retriable error.
-		txnCanBeAutoRetried := txnState.State() == AutoRetry
 		var err error
-		for {
-			// transitionToOpen will tell us if we need to transition from AutoRetry
-			// to Open after executing the statements.
-			var transitionToOpen bool
-
-			// Run some statements.
-			transitionToOpen, err = txnClosure(session.Ctx())
-
-			// Sanity checks.
-			if err != nil && txnState.TxnIsOpen() {
-				log.Fatalf(session.Ctx(), "statement(s) generated error but state is %s. err: %s",
-					txnState.State(), err)
-			} else {
-				state := txnState.State()
-				if err == nil && (state == Aborted || state == RestartWait) {
-					crash := true
-					if len(stmtsToExec) > 0 {
-						// SHOW TRANSACTION STATUS statements are always allowed regardless
-						// of the transaction state.
-						if _, ok := stmtsToExec[0].AST.(*parser.ShowTransactionStatus); ok {
-							crash = false
-						}
-					}
-					if crash {
-						log.Fatalf(session.Ctx(), "no error, but we're in error state: %s", state)
-					}
-				}
-			}
-
-			// Check if we need to auto-commit. If so, we end the transaction now; the
-			// transaction was only supposed to exist for the statement that we just
-			// ran.
-			if autoCommit {
-				if err == nil {
-					txn := txnState.mu.txn
-					if txn == nil {
-						log.Fatalf(session.Ctx(), "implicit txn returned with no error and yet "+
-							"the kv txn is gone. No state transition should have done that. State: %s",
-							txnState.State())
-					}
-
-					// txn.Status() should now be PENDING or COMMITTED (for 1-PC).
-					// NOTE(andrei): It bothers me some that we're peeking at txn.Status()
-					// to figure out whether a 1-PC transaction ran under us, where SQL
-					// could already know that - individual statements decide whether to
-					// use 1-PC or not, so they could report this back.
-					status := txnState.mu.txn.Status()
-					switch status {
-					case roachpb.ABORTED:
-						// TODO(andrei): Until 7881 is fixed.
-						log.Fatalf(session.Ctx(), "#7881: the statement we just ran didn't generate an error "+
-							"but the txn proto is aborted. This should never happen. txn: %+v",
-							txn)
-					case roachpb.PENDING:
-						err = txn.Commit(session.Ctx())
-						log.Eventf(session.Ctx(), "AutoCommit. err: %v\ntxn: %+v", err, txn.Proto())
-						if err != nil {
-							txnState.updateStateAndCleanupOnErr(&err, e)
-							break
-						}
-						fallthrough
-					case roachpb.COMMITTED:
-						txnState.resetStateAndTxn(NoTxn)
-					}
-				} else {
-					// This is the (autoCommit && err != nil) case. If we're not going to
-					// do an auto-retry, we move to NoTxn.
-					if txnState.State() != RestartWait {
-						txnState.resetStateAndTxn(NoTxn)
-					}
-				}
-			}
-
-			// If we've been told by runTxnAttempt that we should move to Open, do it
-			// now.
-			if err == nil && (txnState.State() == AutoRetry) && transitionToOpen {
-				txnState.SetState(Open)
-			}
-
-			if _, ok := err.(*roachpb.UnhandledRetryableError); ok {
-				// We sent transactional requests, so the TxnCoordSender was supposed to
-				// turn retryable errors into HandledRetryableTxnError.
-				log.Fatalf(session.Ctx(), "unexpected UnhandledRetryableError at the Executor level: %s", err)
-			}
-
-			shouldAutoRetry := txnState.State() == RestartWait && txnCanBeAutoRetried
-			if !shouldAutoRetry {
-				break
-			}
-			txnState.mu.txn.PrepareForRetry(session.Ctx(), err)
+		var remainingStmts StatementList
+		var transitionToOpen bool
+		remainingStmts, transitionToOpen, err = runWithAutoRetry(
+			e, session, stmtsToExec, !inTxn /* txnPrefix */, autoCommit,
+			protoTS, pinfo, avoidCachedDescriptors,
+		)
+		// If we've been told that we should move to Open, do it now.
+		if err == nil && (txnState.State() == AutoRetry) && transitionToOpen {
+			txnState.SetState(Open)
 		}
-		// We're now done with auto-retries.
 
 		if err != nil && (log.V(2) || logStatementsExecuteEnabled.Get(&e.cfg.Settings.SV)) {
 			log.Infof(session.Ctx(), "execParsed: error: %v. state: %s", err, txnState.State())
@@ -1050,6 +918,159 @@ func (e *Executor) execParsed(
 	}
 
 	return nil
+}
+
+// runWithAutoRetry runs a prefix of stmtsToExec corresponding to the current
+// transaction. It deals with auto-retries: when possible, the statements are
+// retried in case of retriable errors. It also deals with "autoCommit" - if the
+// current transaction only consists a single statement (i.e. it's an "implicit
+// txn"), then this function deal with committing the transaction and possibly
+// retrying it if the commit gets a retriable error.
+//
+// Args:
+// stmtsToExec: A prefix of these will be executed. The remaining ones will be
+// returned as remainingStmts.
+// txnPrefix: Set if stmtsToExec corresponds to the start of the current
+// transaction. Used to trap nested BEGINs.
+// autoCommit: Set if the transction should be committed at the end of the
+// protoTS: If not nil, the transaction proto sets its Orig and Max timestamps
+// to it each retry.
+//
+// Returns:
+// remainingStmts: all the statements that were not executed.
+// transitionToOpen: specifies if the caller should move from state AutoRetry to
+// state Open. This will be false if the state is not AutoRetry when this
+// returns.
+// err: An error that occurred while executing the queries.
+func runWithAutoRetry(
+	e *Executor,
+	session *Session,
+	stmtsToExec StatementList,
+	txnPrefix bool,
+	autoCommit bool,
+	protoTS *hlc.Timestamp,
+	pinfo *parser.PlaceholderInfo,
+	avoidCachedDescriptors bool,
+) (remainingStmts StatementList, transitionToOpen bool, _ error) {
+
+	if autoCommit && !txnPrefix {
+		log.Fatal(session.Ctx(), "autoCommit implies txnPrefix. "+
+			"How could the transaction have been started before an implicit txn?")
+	}
+	if autoCommit && len(stmtsToExec) != 1 {
+		log.Fatal(session.Ctx(), "Only one statement should be executed when "+
+			"autoCommit is set. stmtsToExec: %s", stmtsToExec)
+	}
+
+	txnState := &session.TxnState
+	origState := txnState.State()
+
+	// Whether or not we can do auto-retries depends on the state before we
+	// execute statements in the batch.
+	//
+	// TODO(andrei): It's unfortunate that we're keeping track of what the state
+	// was before running the statements. It'd be great if the state in which we
+	// find ourselves after running the statements told us if we can auto-retry.
+	// A way to do that is to introduce another state called AutoRestartWait,
+	// similar to RestartWait. We'd enter this state whenever we're in state
+	// AutoRetry and we get a retriable error.
+	txnCanBeAutoRetried := txnState.State() == AutoRetry
+
+	// Track if we are retrying this query, so that we do not double count.
+	automaticRetryCount := 0
+
+	var err error
+	for {
+
+		if protoTS != nil {
+			txnState.mu.txn.SetFixedTimestamp(*protoTS)
+		}
+		// Some results may have been produced by a previous attempt.
+		txnState.txnResults.Reset(session.Ctx())
+
+		// Run some statements.
+		remainingStmts, transitionToOpen, err = runTxnAttempt(
+			e, session, stmtsToExec, pinfo, origState,
+			txnPrefix, avoidCachedDescriptors, automaticRetryCount, txnState.txnResults)
+
+		// Sanity checks.
+		if err != nil && txnState.TxnIsOpen() {
+			log.Fatalf(session.Ctx(), "statement(s) generated error but state is %s. err: %s",
+				txnState.State(), err)
+		} else {
+			state := txnState.State()
+			if err == nil && (state == Aborted || state == RestartWait) {
+				crash := true
+				// SHOW TRANSACTION STATUS statements are always allowed regardless of
+				// the transaction state.
+				if len(stmtsToExec) > 0 {
+					if _, ok := stmtsToExec[0].AST.(*parser.ShowTransactionStatus); ok {
+						crash = false
+					}
+				}
+				if crash {
+					log.Fatalf(session.Ctx(), "no error, but we're in error state: %s", state)
+				}
+			}
+		}
+
+		// Check if we need to auto-commit. If so, we end the transaction now; the
+		// transaction was only supposed to exist for the statement that we just
+		// ran.
+		if autoCommit {
+			if err == nil {
+				txn := txnState.mu.txn
+				if txn == nil {
+					log.Fatalf(session.Ctx(), "implicit txn returned with no error and yet "+
+						"the kv txn is gone. No state transition should have done that. State: %s",
+						txnState.State())
+				}
+
+				// txn.Status() should now be PENDING or COMMITTED (for 1-PC).
+				// NOTE(andrei): It bothers me some that we're peeking at txn.Status()
+				// to figure out whether a 1-PC transaction ran under us, where SQL
+				// could already know that - individual statements decide whether to use
+				// 1-PC or not, so they could report this back.
+				status := txnState.mu.txn.Status()
+				switch status {
+				case roachpb.ABORTED:
+					log.Fatalf(session.Ctx(), "#7881: the statement we just ran didn't generate an error "+
+						"but the txn proto is aborted. This should never happen. txn: %+v",
+						txn)
+				case roachpb.PENDING:
+					err = txn.Commit(session.Ctx())
+					log.Eventf(session.Ctx(), "AutoCommit. err: %v\ntxn: %+v", err, txn.Proto())
+					if err != nil {
+						txnState.updateStateAndCleanupOnErr(&err, e)
+						break
+					}
+					fallthrough
+				case roachpb.COMMITTED:
+					txnState.resetStateAndTxn(NoTxn)
+				}
+			} else {
+				// This is the (autoCommit && err != nil) case. If we're not going to
+				// do an auto-retry, we move to NoTxn.
+				if txnState.State() != RestartWait {
+					txnState.resetStateAndTxn(NoTxn)
+				}
+			}
+		}
+
+		if _, ok := err.(*roachpb.UnhandledRetryableError); ok {
+			// We sent transactional requests, so the TxnCoordSender was supposed to
+			// turn retryable errors into HandledRetryableTxnError.
+			log.Fatalf(session.Ctx(), "unexpected UnhandledRetryableError at the Executor level: %s", err)
+		}
+
+		shouldAutoRetry := txnState.State() == RestartWait && txnCanBeAutoRetried
+		if !shouldAutoRetry {
+			break
+		}
+		txnState.mu.txn.PrepareForRetry(session.Ctx(), err)
+		automaticRetryCount++
+	}
+	return remainingStmts, transitionToOpen, err
 }
 
 // runTxnAttempt takes in a batch of statements and executes a prefix of them
