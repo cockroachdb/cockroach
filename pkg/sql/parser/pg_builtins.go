@@ -316,7 +316,7 @@ var pgBuiltins = map[string][]Builtin{
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				oid := args[0]
 				t, err := ctx.Planner.QueryRow(ctx.Ctx(),
-					"SELECT nspname FROM pg_class c JOIN pg_namespace n ON c.relnamespace=n.oid "+
+					"SELECT nspname FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON c.relnamespace=n.oid "+
 						"WHERE c.oid=$1 AND nspname=ANY(current_schemas(true));", oid)
 				if err != nil {
 					return nil, err
