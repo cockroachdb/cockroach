@@ -4,6 +4,7 @@ const path = require('path');
 const rimraf = require('rimraf');
 
 const FaviconsWebpackPlugin = require('favicons-webpack-plugin');
+const ForkTsCheckerWebpackPlugin = require('fork-ts-checker-webpack-plugin');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 
 const title = 'Cockroach Console';
@@ -46,6 +47,8 @@ module.exports = {
       {
         test: /\.styl$/,
         use: [
+          'cache-loader',
+          'thread-loader',
           'style-loader',
           'css-loader',
           {
@@ -74,10 +77,18 @@ module.exports = {
         // the specific packages in node_modules that actually use ES6.
         // https://github.com/babel/babel-loader/issues/171
         exclude: /node_modules\/(?!analytics-node)/,
-        loader: 'babel-loader',
+        use: ['cache-loader', 'thread-loader', 'babel-loader'],
       },
 
-      { test: /\.tsx?$/, loaders: ['babel-loader', 'ts-loader'] },
+      {
+        test: /\.tsx?$/,
+        use: [
+          'cache-loader',
+          'thread-loader',
+          'babel-loader',
+          { loader: 'ts-loader', options: { happyPackMode: true } },
+        ]
+      },
 
       // All output '.js' files will have any sourcemaps re-processed by 'source-map-loader'.
       { enforce: 'pre', test: /\.js$/, loader: 'source-map-loader' },
@@ -85,6 +96,7 @@ module.exports = {
   },
 
   plugins: [
+    new ForkTsCheckerWebpackPlugin({ checkSyntacticErrors: true }),
     new RemoveBrokenDependenciesPlugin(),
     new FaviconsWebpackPlugin({
       logo: './logo.png',
