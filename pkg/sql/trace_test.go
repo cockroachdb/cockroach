@@ -17,13 +17,16 @@ package sql_test
 import (
 	gosql "database/sql"
 	"fmt"
+	"net/url"
 	"sort"
 	"testing"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -159,6 +162,25 @@ func TestTrace(t *testing.T) {
 		},
 	}
 
+	// Create a cluster. We'll run sub-tests using each node of this cluster.
+	const numNodes = 3
+	cluster := serverutils.StartTestCluster(t, numNodes, base.TestClusterArgs{})
+	defer cluster.Stopper().Stop(context.TODO())
+
+	clusterDB := cluster.ServerConn(0)
+	if _, err := clusterDB.Exec(`
+		CREATE DATABASE test;
+
+		--- test.foo is a single range table.
+		CREATE TABLE test.foo (id INT PRIMARY KEY);
+
+		--- test.bar is a multi-range table.
+		CREATE TABLE test.bar (id INT PRIMARY KEY);
+		ALTER TABLE  test.bar SPLIT AT VALUES (5);
+	`); err != nil {
+		t.Fatal(err)
+	}
+
 	for _, test := range testData {
 		test.optionalSpans = append(test.optionalSpans, alwaysOptionalSpans...)
 		sort.Strings(test.expSpans)
@@ -176,27 +198,24 @@ func TestTrace(t *testing.T) {
 					name = "TracingOn"
 				}
 				t.Run(name, func(t *testing.T) {
-					// Create a cluster. We'll run sub-tests using each node of this cluster.
-					const numNodes = 3
-					cluster := serverutils.StartTestCluster(t, numNodes, base.TestClusterArgs{})
-					defer cluster.Stopper().Stop(context.TODO())
-
-					clusterDB := cluster.ServerConn(0)
-					if _, err := clusterDB.Exec(`
-						CREATE DATABASE test;
-
-						--- test.foo is a single range table.
-						CREATE TABLE test.foo (id INT PRIMARY KEY);
-						
-						--- test.bar is a multi-range table.
-						CREATE TABLE test.bar (id INT PRIMARY KEY);
-						ALTER TABLE  test.bar SPLIT AT VALUES (5);
-					`); err != nil {
-						t.Fatal(err)
-					}
 					for i := 0; i < numNodes; i++ {
 						t.Run(fmt.Sprintf("node-%d", i), func(t *testing.T) {
-							sqlDB := cluster.ServerConn(i)
+							// Use a new "session" for each sub-test rather than
+							// cluster.ServerConn() so that per-session state has a known
+							// value. This is necessary for the check below that the
+							// session_trace starts empty.
+							//
+							// TODO(andrei): Pull the check for an empty session_trace out of
+							// the sub-tests so we can use cluster.ServerConn(i) here.
+							pgURL, cleanup := sqlutils.PGUrl(
+								t, cluster.Server(i).ServingAddr(), "TestTrace", url.User(security.RootUser))
+							defer cleanup()
+							sqlDB, err := gosql.Open("postgres", pgURL.String())
+							if err != nil {
+								t.Fatal(err)
+							}
+							defer sqlDB.Close()
+
 							sqlDB.SetMaxOpenConns(1)
 
 							// Run a non-traced read to acquire a lease on the table, so that the
