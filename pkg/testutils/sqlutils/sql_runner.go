@@ -86,14 +86,24 @@ func (sr *SQLRunner) QueryRow(query string, args ...interface{}) *Row {
 	return &Row{sr.TB, sr.DB.QueryRow(query, args...)}
 }
 
-// QueryStr runs a Query and converts the result to a string matrix; nulls are
-// represented as "NULL". Empty results are represented by an empty (but
-// non-nil) slice. Kills the test on errors.
+// QueryStr runs a Query and converts the result using RowsToStrMatrix. Kills
+// the test on errors.
 func (sr *SQLRunner) QueryStr(query string, args ...interface{}) [][]string {
 	rows := sr.Query(query, args...)
-	cols, err := rows.Columns()
+	r, err := RowsToStrMatrix(rows)
 	if err != nil {
 		sr.Fatal(err)
+	}
+	return r
+}
+
+// RowsToStrMatrix converts the given result rows to a string matrix; nulls are
+// represented as "NULL". Empty results are represented by an empty (but
+// non-nil) slice.
+func RowsToStrMatrix(rows *gosql.Rows) ([][]string, error) {
+	cols, err := rows.Columns()
+	if err != nil {
+		return nil, err
 	}
 	vals := make([]interface{}, len(cols))
 	for i := range vals {
@@ -102,7 +112,7 @@ func (sr *SQLRunner) QueryStr(query string, args ...interface{}) [][]string {
 	res := [][]string{}
 	for rows.Next() {
 		if err := rows.Scan(vals...); err != nil {
-			sr.Fatal(err)
+			return nil, err
 		}
 		row := make([]string, len(vals))
 		for j, v := range vals {
@@ -119,7 +129,7 @@ func (sr *SQLRunner) QueryStr(query string, args ...interface{}) [][]string {
 		}
 		res = append(res, row)
 	}
-	return res
+	return res, nil
 }
 
 // CheckQueryResults checks that the rows returned by a query match the expected
