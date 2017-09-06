@@ -29,6 +29,7 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/google/btree"
+	"github.com/kr/pretty"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -3106,9 +3107,28 @@ func (s *Store) processRaftRequest(
 		return roachpb.NewError(err)
 	}
 
-	if _, err := r.handleRaftReadyRaftMuLocked(inSnap); err != nil {
-		// mimic the behavior in processRaft.
-		panic(err)
+	if _, expl, err := r.handleRaftReadyRaftMuLocked(inSnap); err != nil {
+		// Special logging for https://github.com/cockroachdb/cockroach/issues/18084.
+		const cta = "please report this error at https://gitter.im/cockroachdb/cockroach " +
+			"or https://github.com/cockroachdb/cockroach/issues"
+		inSnap.State.Desc.StartKey = nil
+		inSnap.State.Desc.EndKey = nil
+		state := r.mu.state
+		if state.Desc != nil {
+			state.Desc.StartKey = nil
+			state.Desc.EndKey = nil
+		}
+
+		safeMsg := fmt.Sprintf(`error returned from handleRaftReady during preemptive snapshot
+explanation: %s
+snapshot state: %s
+replica state: %s`,
+			expl, pretty.Sprint(inSnap.State), pretty.Sprint(&state),
+		)
+
+		log.Error(ctx, errors.Wrap(err, fmt.Sprintf("%s\n\n%s", safeMsg, cta)))
+		// Mimic the behavior in processRaft.
+		panic(log.Safe{V: safeMsg})
 	}
 	removePlaceholder = false
 	return nil
@@ -3406,9 +3426,10 @@ func (s *Store) processReady(rangeID roachpb.RangeID) {
 	s.mu.RUnlock()
 
 	if ok {
-		stats, err := r.handleRaftReady(IncomingSnapshot{})
+		stats, expl, err := r.handleRaftReady(IncomingSnapshot{})
 		if err != nil {
-			panic(err) // TODO(bdarnell)
+			log.Error(s.AnnotateCtx(context.TODO()), err)
+			panic(log.Safe{V: expl}) // TODO(bdarnell)
 		}
 		elapsed := timeutil.Since(start)
 		s.metrics.RaftWorkingDurationNanos.Inc(elapsed.Nanoseconds())
