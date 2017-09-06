@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"sort"
 	"strconv"
 	"time"
 
@@ -45,8 +46,8 @@ var lsNodesCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "lists the IDs of all nodes in the cluster",
 	Long: `
-	Displays IDs for all nodes in cluster, which can be used with the status and stores
-	commands.
+Display the node IDs for all active (that is, running and not decommissioned) members of the cluster.
+To retrieve the IDs for inactive members, see the 'node status --decommission'.
 	`,
 	RunE: MaybeDecorateGRPCError(runLsNodes),
 }
@@ -56,19 +57,14 @@ func runLsNodes(cmd *cobra.Command, args []string) error {
 		return usageAndError(cmd)
 	}
 
-	c, stopper, err := getStatusClient()
-	if err != nil {
-		return err
-	}
-	defer stopper.Stop(stopperContext(stopper))
-
-	nodeStatuses, err := c.Nodes(stopperContext(stopper), &serverpb.NodesRequest{})
+	const showDecommissioned = false
+	nodeStatuses, _, err := runStatusNodeInner(showDecommissioned, nil)
 	if err != nil {
 		return err
 	}
 
 	var rows [][]string
-	for _, nodeStatus := range nodeStatuses.Nodes {
+	for _, nodeStatus := range nodeStatuses {
 		rows = append(rows, []string{
 			strconv.FormatInt(int64(nodeStatus.Desc.NodeID), 10),
 		})
@@ -119,11 +115,24 @@ var statusNodeCmd = &cobra.Command{
 }
 
 func runStatusNode(cmd *cobra.Command, args []string) error {
+	nodeStatuses, decommissionStatusResp, err := runStatusNodeInner(
+		nodeCtx.statusShowDecommission || nodeCtx.statusShowAll, args,
+	)
+	if err != nil {
+		return err
+	}
+
+	return printQueryOutput(os.Stdout, getStatusNodeHeaders(), newRowSliceIter(nodeStatusesToRows(nodeStatuses, decommissionStatusResp)), "")
+}
+
+func runStatusNodeInner(
+	showDecommissioned bool, args []string,
+) ([]status.NodeStatus, *serverpb.DecommissionStatusResponse, error) {
 	var nodeStatuses []status.NodeStatus
 
 	c, stopper, err := getStatusClient()
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	ctx := stopperContext(stopper)
 	defer stopper.Stop(ctx)
@@ -135,7 +144,7 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 		// Show status for all nodes.
 		nodes, err := c.Nodes(ctx, &serverpb.NodesRequest{})
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
 		nodeStatuses = nodes.Nodes
 		decommissionStatusRequest = &serverpb.DecommissionStatusRequest{
@@ -146,11 +155,11 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 		nodeID := args[0]
 		nodeStatus, err := c.Node(ctx, &serverpb.NodeRequest{NodeId: nodeID})
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
 		nodeIDs, err := parseNodeIDs(args)
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
 		decommissionStatusRequest = &serverpb.DecommissionStatusRequest{
 			NodeIDs: nodeIDs,
@@ -160,30 +169,49 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 			// exist. This should be revisited.
 			//
 			// TODO(cdo): Look into why status call returns erroneous data when given node ID of 0.
-			return fmt.Errorf("Error: node %s doesn't exist", nodeID)
+			return nil, nil, fmt.Errorf("Error: node %s doesn't exist", nodeID)
 		}
 		nodeStatuses = []status.NodeStatus{*nodeStatus}
 
 	default:
-		return errors.Errorf("expected no arguments or a single node ID")
+		return nil, nil, errors.Errorf("expected no arguments or a single node ID")
 	}
 
-	var decommissionStatusResp *serverpb.DecommissionStatusResponse
-	if nodeCtx.statusShowDecommission || nodeCtx.statusShowAll {
-		cAdmin, stopperAdmin, err := getAdminClient()
-		if err != nil {
-			return err
-		}
-		ctxAdmin := stopperContext(stopperAdmin)
-		defer stopperAdmin.Stop(ctxAdmin)
+	cAdmin, stopperAdmin, err := getAdminClient()
+	if err != nil {
+		return nil, nil, err
+	}
+	ctxAdmin := stopperContext(stopperAdmin)
+	defer stopperAdmin.Stop(ctxAdmin)
 
-		decommissionStatusResp, err = cAdmin.DecommissionStatus(ctxAdmin, decommissionStatusRequest)
-		if err != nil {
-			return err
-		}
+	decommissionStatusResp, err := cAdmin.DecommissionStatus(ctxAdmin, decommissionStatusRequest)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	return printQueryOutput(os.Stdout, getStatusNodeHeaders(), newRowSliceIter(nodeStatusesToRows(nodeStatuses, decommissionStatusResp)), "")
+	if !showDecommissioned {
+		for _, status := range decommissionStatusResp.Status {
+			if !status.Decommissioning || status.IsLive {
+				// Show this entry.
+				continue
+			}
+			for i := 0; i < len(nodeStatuses); i++ {
+				if nodeStatuses[i].Desc.NodeID == status.NodeID {
+					// Hide this entry (by swapping it out with the last one).
+					last := len(nodeStatuses) - 1
+					nodeStatuses[i] = nodeStatuses[last]
+					nodeStatuses = nodeStatuses[:last]
+				}
+			}
+		}
+		// Sort the surviving entries (again) by NodeID.
+		sort.Slice(nodeStatuses, func(i, j int) bool {
+			return nodeStatuses[i].Desc.NodeID < nodeStatuses[j].Desc.NodeID
+		})
+		// Hide the decommissioning status response from the output table.
+		decommissionStatusResp = nil
+	}
+	return nodeStatuses, decommissionStatusResp, nil
 }
 
 func getStatusNodeHeaders() []string {
