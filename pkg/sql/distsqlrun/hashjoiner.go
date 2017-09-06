@@ -161,7 +161,7 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	st := h.flowCtx.Settings
-	useTempStorage := (distSQLUseTempStorage.Get(&st.SV) && distSQLUseTempStorageJoins.Get(&st.SV)) ||
+	useTempStorage := settingUseTempStorageJoins.Get(&st.SV) ||
 		h.flowCtx.testingKnobs.MemoryLimitBytes > 0 ||
 		h.testingKnobMemFailPoint != unset
 	rowContainerMon := h.flowCtx.EvalCtx.Mon
@@ -170,7 +170,7 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 		// The hashJoiner will overflow to disk if this limit is not enough.
 		limit := h.flowCtx.testingKnobs.MemoryLimitBytes
 		if limit <= 0 {
-			limit = workMemBytes
+			limit = settingWorkMemBytes.Get(&st.SV)
 		}
 		limitedMon := mon.MakeMonitorInheritWithLimit("hashjoiner-limited", limit, rowContainerMon)
 		limitedMon.Start(ctx, rowContainerMon, mon.BoundAccount{})
