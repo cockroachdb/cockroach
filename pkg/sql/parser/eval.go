@@ -1735,8 +1735,7 @@ func evalDatumsCmp(
 	ctx *EvalContext, op, subOp ComparisonOperator, fn CmpOp, left Datum, right Datums,
 ) (Datum, error) {
 	all := op == All
-	allTrue := true
-	anyTrue := false
+	any := !all
 	sawNull := false
 	for _, elem := range right {
 		if elem == DNull {
@@ -1753,38 +1752,31 @@ func evalDatumsCmp(
 			sawNull = true
 			continue
 		}
+
 		b := d.(*DBool)
 		res := *b != DBool(not)
-		if res {
-			anyTrue = true
-		} else {
-			allTrue = false
+		if any && res {
+			// There exist 1 element that evaluates to true, therefore ANY
+			// elements evaluate to true, return true.
+			return DBoolTrue, nil
+		} else if all && !res {
+			// There exist 1 element that evaluates to false, therefore not ALL
+			// elements evaluate to true, return false.
+			return DBoolFalse, nil
 		}
+	}
+
+	if sawNull {
+		// If the right-hand array contains any null elements and no [false,true]
+		// comparison result is obtained, the result of [ALL,ANY] will be null.
+		return DNull, nil
 	}
 
 	if all {
-		if !allTrue {
-			return DBoolFalse, nil
-		}
-		if sawNull {
-			// If the right-hand array contains any null elements and no false
-			// comparison result is obtained, the result of ALL will be null.
-			return DNull, nil
-		}
-		// allTrue && !sawNull
+		// ALL are true && !sawNull
 		return DBoolTrue, nil
 	}
-
-	// !all
-	if anyTrue {
-		return DBoolTrue, nil
-	}
-	if sawNull {
-		// If the right-hand array contains any null elements and no true
-		// comparison result is obtained, the result of ANY will be null.
-		return DNull, nil
-	}
-	// !anyTrue && !sawNull
+	// ANY is false && !sawNull
 	return DBoolFalse, nil
 }
 
