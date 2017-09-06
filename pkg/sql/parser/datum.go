@@ -422,7 +422,16 @@ func (*DInt) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
 func (d *DInt) Format(buf *bytes.Buffer, f FmtFlags) {
+	// If the number is negative, we need to quote it or the `:::INT` type hint
+	// will take precedence over the negation sign.
+	quote := f.disambiguateDatumTypes && *d < 0
+	if quote {
+		buf.WriteByte('\'')
+	}
 	buf.WriteString(strconv.FormatInt(int64(*d), 10))
+	if quote {
+		buf.WriteByte('\'')
+	}
 }
 
 // Size implements the Datum interface.
