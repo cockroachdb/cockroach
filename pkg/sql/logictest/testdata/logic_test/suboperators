@@ -14,12 +14,22 @@ SELECT 1 = ANY(ARRAY[1, 2])
 true
 
 query B
+SELECT 1 = ANY (((ARRAY[1, 2])))
+----
+true
+
+query B
 SELECT 1 = SOME(ARRAY[1, 2])
 ----
 true
 
 query B
 SELECT 1 = ANY(ARRAY[3, 4])
+----
+false
+
+query B
+SELECT 1 = ANY (((ARRAY[3, 4])))
 ----
 false
 
@@ -96,7 +106,7 @@ query III
 SELECT * FROM abc WHERE a = ANY(ARRAY[NULL, NULL])
 ----
 
-query error unsupported comparison operator: 1 = ANY \(ARRAY\['foo', 'bar'\]\)
+query error unsupported comparison operator: 1 = ANY ARRAY\['foo', 'bar'\]
 SELECT 1 = ANY(ARRAY['foo', 'bar'])
 
 query error unsupported comparison operator: <int> = ANY <string\[\]>
@@ -255,7 +265,7 @@ query III
 SELECT * FROM abc WHERE a > ALL(ARRAY[NULL, NULL])
 ----
 
-query error unsupported comparison operator: 1 = ALL \(ARRAY\['foo', 'bar'\]\)
+query error unsupported comparison operator: 1 = ALL ARRAY\['foo', 'bar'\]
 SELECT 1 = ALL(ARRAY['foo', 'bar'])
 
 query error unsupported comparison operator: <int> = ALL <string\[\]>
@@ -333,7 +343,17 @@ SELECT 1 = ANY (1, 2, 3)
 true
 
 query B
+SELECT 1 = ANY (((1, 2, 3)))
+----
+true
+
+query B
 SELECT 1 = ANY (2, 3, 4)
+----
+false
+
+query B
+SELECT 1 = ANY (((2, 3, 4)))
 ----
 false
 
@@ -348,8 +368,16 @@ true
 query error incompatible tuple element type: decimal
 SELECT 1 = ANY (1.0, 1.1)
 
+query error incompatible tuple element type: decimal
+SELECT 1 = ANY (((1.0, 1.1)))
+
 query B
 SELECT 1::decimal = ANY (1.0, 1.1)
+----
+true
+
+query B
+SELECT 1::decimal = ANY (((1.0, 1.1)))
 ----
 true
 
