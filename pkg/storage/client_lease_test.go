@@ -46,7 +46,13 @@ func TestStoreRangeLease(t *testing.T) {
 			defer mtc.Stop()
 			mtc.Start(t, 1)
 
-			splitKeys := []roachpb.Key{roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")}
+			// NodeLivenessKeyMax is a static split point, so this is always
+			// the start key of the first range that uses epoch-based
+			// leases. Splitting on it here is redundant, but we want to include
+			// it in our tests of lease types below.
+			splitKeys := []roachpb.Key{
+				keys.NodeLivenessKeyMax, roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c"),
+			}
 			for _, splitKey := range splitKeys {
 				splitArgs := adminSplitArgs(splitKey)
 				if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], splitArgs); pErr != nil {
