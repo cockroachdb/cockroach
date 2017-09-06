@@ -48,10 +48,10 @@ const (
 	// Sub-query is argument to EXISTS. Only 0 or 1 row is expected.
 	// Result type is Bool.
 	execModeExists subqueryExecMode = iota
-	// Sub-query is argument to IN. Any number of rows expected. Result
-	// type is tuple of rows. As a special case, if there is only one
-	// column selected, the result is a tuple of the selected values
-	// (instead of a tuple of 1-tuples).
+	// Sub-query is argument to IN, ANY, SOME, or ALL. Any number of rows
+	// expected. Result type is tuple of rows. As a special case, if
+	// there is only one column selected, the result is a tuple of the
+	// selected values (instead of a tuple of 1-tuples).
 	execModeAllRowsNormalized
 	// Sub-query is argument to an ARRAY constructor. Any number of rows
 	// expected, and exactly one column is expected. Result type is tuple
@@ -452,7 +452,7 @@ func (v *subqueryVisitor) getSubqueryContext() (columns int, execMode subqueryEx
 
 			execMode = execModeOneRow
 			switch e.Operator {
-			case parser.In, parser.NotIn:
+			case parser.In, parser.NotIn, parser.Any, parser.Some, parser.All:
 				execMode = execModeAllRowsNormalized
 			}
 

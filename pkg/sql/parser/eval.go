@@ -1722,18 +1722,23 @@ func makeEvalTupleIn(typ Type) CmpOp {
 	}
 }
 
-// evalArrayCmp evaluates the array comparison using the provided sub-operator type
-// and its CmpOp with the left Datum and the right array of Datums.
+// evalDatumsCmp evaluates Datums (slice of Datum) using the provided
+// sub-operator type and its CmpOp with the left Datum.
 //
-// For example, given 1 < ANY (ARRAY[1, 2, 3]), evalArrayCmp would be called with:
-//   evalArrayCmp(ctx, LT, CmpOp(LT, leftType, rightParamType), leftDatum, rightArray).
-func evalArrayCmp(
-	ctx *EvalContext, subOp ComparisonOperator, fn CmpOp, left Datum, right *DArray, all bool,
+// For example, given 1 < ANY (SELECT * FROM GENERATE_SERIES(1,3))
+// (right is a DTuple), evalTupleCmp would be called with:
+//   evalDatumsCmp(ctx, LT, Any, CmpOp(LT, leftType, rightParamType), leftDatum, rightTuple.D).
+// Similarly, given 1 < ANY (ARRAY[1, 2, 3]) (right is a DArray),
+// evalArrayCmp would be called with:
+//   evalDatumsCmp(ctx, LT, Any, CmpOp(LT, leftType, rightParamType), leftDatum, rightArray.Array).
+func evalDatumsCmp(
+	ctx *EvalContext, op, subOp ComparisonOperator, fn CmpOp, left Datum, right Datums,
 ) (Datum, error) {
+	all := op == All
 	allTrue := true
 	anyTrue := false
 	sawNull := false
-	for _, elem := range right.Array {
+	for _, elem := range right {
 		if elem == DNull {
 			sawNull = true
 			continue
@@ -2727,7 +2732,16 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 
 	op := expr.Operator
 	if op.hasSubOperator() {
-		return evalArrayCmp(ctx, expr.SubOperator, expr.fn, left, MustBeDArray(right), op == All)
+		var datums Datums
+		// Right is either a tuple or an array of Datums.
+		if tuple, ok := AsDTuple(right); ok {
+			datums = tuple.D
+		} else if array, ok := AsDArray(right); ok {
+			datums = array.Array
+		} else {
+			return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled right expression %s", right)
+		}
+		return evalDatumsCmp(ctx, op, expr.SubOperator, expr.fn, left, datums)
 	}
 
 	_, newLeft, newRight, _, not := foldComparisonExpr(op, left, right)
@@ -3095,7 +3109,7 @@ func evalComparison(ctx *EvalContext, op ComparisonOperator, left, right Datum) 
 }
 
 // foldComparisonExpr folds a given comparison operation and its expressions
-// into an equivalent operation that will hit in the cmpOps map, returning
+// into an equivalent operation that will hit in the CmpOps map, returning
 // this new operation, along with potentially flipped operands and "flipped"
 // and "not" flags.
 func foldComparisonExpr(
