@@ -22,7 +22,7 @@ func TestCrashReportingFormatSave(t *testing.T) {
 	r3 := Safe{V: &r2}
 	f1, f2, f3 := format(r1), format(r2), format(r3)
 	exp1, exp2 := "string", r2.V.(string)
-	exp3 := "&{V:i am public}"
+	exp3 := exp2
 	if f1 != exp1 {
 		t.Errorf("wanted %s, got %s", exp1, f1)
 	}

@@ -68,6 +68,11 @@ type Safe struct {
 	V interface{}
 }
 
+// String implements fmt.Stringer.
+func (s Safe) String() string {
+	return fmt.Sprintf("%v", s.V)
+}
+
 func format(r interface{}) string {
 	switch wrapped := r.(type) {
 	case *Safe:
