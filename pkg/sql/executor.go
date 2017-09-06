@@ -1062,7 +1062,21 @@ func runWithAutoRetry(
 			log.Fatalf(session.Ctx(), "unexpected UnhandledRetryableError at the Executor level: %s", err)
 		}
 
+		resultsSentToClient := txnState.txnResults.ResultsSentToClient()
 		shouldAutoRetry := txnState.State() == RestartWait && txnCanBeAutoRetried
+		if shouldAutoRetry && resultsSentToClient {
+			shouldAutoRetry = false
+			// We otherwise can and should auto-retry, but, alas, we've already sent
+			// some results to the client, so we can no longer auto-retry. We only
+			// stay in RestartWait if the client is doing client-directed retries.
+			// Otherwise, we move to Aborted.
+			if !txnState.retryIntent {
+				e.TxnAbortCount.Inc(1)
+				txnState.mu.txn.CleanupOnError(session.Ctx(), err)
+				txnState.resetStateAndTxn(Aborted)
+			}
+		}
+
 		if !shouldAutoRetry {
 			break
 		}

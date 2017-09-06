@@ -1187,9 +1187,16 @@ func (ts *txnState) finishSQLTxn(s *Session) {
 }
 
 // updateStateAndCleanupOnErr updates txnState based on the type of error that we
-// received. If it's a retriable error and we're going to retry the txn,
-// then the state moves to RestartWait. Otherwise, the state moves to Aborted
-// and the KV txn is cleaned up.
+// received. If it's a retriable error and it looks like we're going to retry
+// the txn (we're either in the AutoRetry state, meaning that we can do
+// auto-retries, or the client is doing client-directed retries), then the state
+// moves to RestartWait. Otherwise, the state moves to Aborted and the KV txn is
+// cleaned up.
+// Note that even if we move to RestartWait here, this doesn't automatically
+// mean that we're going to auto-retry. It might be the case, for example, that
+// we've already streamed results to the client and so we can't auto-retry for
+// that reason. It is the responsibility of higher layers to catch this and
+// terminate the transaction, if appropriate.
 //
 // This method takes err by pointer because it might replace it: a retriable
 // error meant for another txn is replaced with a non-retriable error because
