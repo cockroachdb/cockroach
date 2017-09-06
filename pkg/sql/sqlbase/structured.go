@@ -590,6 +590,12 @@ func HasCompositeKeyEncoding(semanticType ColumnType_SemanticType) bool {
 	return false
 }
 
+// MustBeValueEncoded returns true if columns of the given kind can only be value
+// encoded.
+func MustBeValueEncoded(semanticType ColumnType_SemanticType) bool {
+	return semanticType == ColumnType_ARRAY
+}
+
 // HasOldStoredColumns returns whether the index has stored columns in the old
 // format (data encoded the same way as if they were in an implicit column).
 func (desc *IndexDescriptor) HasOldStoredColumns() bool {
@@ -1280,7 +1286,7 @@ func fitColumnToFamily(desc TableDescriptor, col ColumnDescriptor) (int, bool) {
 
 // columnTypeIsIndexable returns whether the type t is valid as an indexed column.
 func columnTypeIsIndexable(t ColumnType) bool {
-	return t.SemanticType != ColumnType_ARRAY
+	return !MustBeValueEncoded(t.SemanticType)
 }
 
 func notIndexableError(cols []ColumnDescriptor) error {
