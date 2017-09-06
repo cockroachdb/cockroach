@@ -148,6 +148,13 @@ func TestFormatExpr(t *testing.T) {
 		// {`ARRAY[e'j\x10k']`, FmtBareStrings,
 		//	 `ARRAY[j\x10k]`},
 
+		{`1`, FmtParsable, "1:::INT"},
+		{`9223372036854775807`, FmtParsable, "9223372036854775807:::INT"},
+		{`9223372036854775808`, FmtParsable, "9223372036854775808:::DECIMAL"},
+		{`-1`, FmtParsable, "(-1):::INT"},
+		{`-9223372036854775808`, FmtParsable, "(-9223372036854775808):::INT"},
+		{`-9223372036854775809`, FmtParsable, "-9223372036854775809:::DECIMAL"},
+
 		{`unique_rowid() + 123`, FmtParsable,
 			`unique_rowid() + 123:::INT`},
 		{`sqrt(123.0) + 456`, FmtParsable,
