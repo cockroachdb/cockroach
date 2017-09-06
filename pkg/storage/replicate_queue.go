@@ -344,6 +344,10 @@ func (rq *replicateQueue) processOneChange(
 		candidates := filterUnremovableReplicas(repl.RaftStatus(), desc.Replicas, lastReplAdded)
 		log.VEventf(ctx, 3, "filtered unremovable replicas from %v to get %v as candidates for removal",
 			desc.Replicas, candidates)
+		if len(candidates) == 0 {
+			return false, errors.Errorf("no removable replicas from range that needs a removal: %s",
+				rangeRaftProgress(repl.RaftStatus(), desc.Replicas))
+		}
 		removeReplica, details, err := rq.allocator.RemoveTarget(ctx, zone.Constraints, candidates, rangeInfo)
 		if err != nil {
 			return false, err
