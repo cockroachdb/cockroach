@@ -18,6 +18,7 @@ export class CachedDataReducerState<TResponseMessage> {
   data: TResponseMessage; // the latest data received
   inFlight = false; // true if a request is in flight
   valid = false; // true if data has been received and has not been invalidated
+  requestedAt: moment.Moment; // Timestamp when data was last requested.
   setAt: moment.Moment; // Timestamp when this data was last updated.
   lastError: Error; // populated with the most recent error, if the last request failed
 }
@@ -87,6 +88,7 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
       case this.REQUEST:
         // A request is in progress.
         state = _.clone(state);
+        state.requestedAt = this.timeSource();
         state.inFlight = true;
         return state;
       case this.RECEIVE:
