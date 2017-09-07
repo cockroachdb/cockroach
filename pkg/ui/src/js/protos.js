@@ -38332,7 +38332,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @typedef cockroach.storage.storagebase.RangeInfo$Properties
                  * @type {Object}
                  * @property {cockroach.storage.storagebase.ReplicaState$Properties} [state] RangeInfo state.
-                 * @property {Long} [lastIndex] RangeInfo lastIndex.
+                 * @property {Long} [last_index] RangeInfo last_index.
                  * @property {Long} [num_pending] RangeInfo num_pending.
                  * @property {Long} [num_dropped] RangeInfo num_dropped.
                  * @property {Long} [raft_log_size] RangeInfo raft_log_size.
@@ -38359,10 +38359,10 @@ export const cockroach = $root.cockroach = (() => {
                 RangeInfo.prototype.state = null;
 
                 /**
-                 * RangeInfo lastIndex.
+                 * RangeInfo last_index.
                  * @type {Long}
                  */
-                RangeInfo.prototype.lastIndex = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+                RangeInfo.prototype.last_index = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
                 /**
                  * RangeInfo num_pending.
@@ -38408,8 +38408,8 @@ export const cockroach = $root.cockroach = (() => {
                         writer = $Writer.create();
                     if (message.state != null && message.hasOwnProperty("state"))
                         $root.cockroach.storage.storagebase.ReplicaState.encode(message.state, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
-                    if (message.lastIndex != null && message.hasOwnProperty("lastIndex"))
-                        writer.uint32(/* id 2, wireType 0 =*/16).uint64(message.lastIndex);
+                    if (message.last_index != null && message.hasOwnProperty("last_index"))
+                        writer.uint32(/* id 2, wireType 0 =*/16).uint64(message.last_index);
                     if (message.num_pending != null && message.hasOwnProperty("num_pending"))
                         writer.uint32(/* id 3, wireType 0 =*/24).uint64(message.num_pending);
                     if (message.num_dropped != null && message.hasOwnProperty("num_dropped"))
@@ -38450,7 +38450,7 @@ export const cockroach = $root.cockroach = (() => {
                             message.state = $root.cockroach.storage.storagebase.ReplicaState.decode(reader, reader.uint32());
                             break;
                         case 2:
-                            message.lastIndex = reader.uint64();
+                            message.last_index = reader.uint64();
                             break;
                         case 3:
                             message.num_pending = reader.uint64();
@@ -38498,9 +38498,9 @@ export const cockroach = $root.cockroach = (() => {
                         if (error)
                             return "state." + error;
                     }
-                    if (message.lastIndex != null && message.hasOwnProperty("lastIndex"))
-                        if (!$util.isInteger(message.lastIndex) && !(message.lastIndex && $util.isInteger(message.lastIndex.low) && $util.isInteger(message.lastIndex.high)))
-                            return "lastIndex: integer|Long expected";
+                    if (message.last_index != null && message.hasOwnProperty("last_index"))
+                        if (!$util.isInteger(message.last_index) && !(message.last_index && $util.isInteger(message.last_index.low) && $util.isInteger(message.last_index.high)))
+                            return "last_index: integer|Long expected";
                     if (message.num_pending != null && message.hasOwnProperty("num_pending"))
                         if (!$util.isInteger(message.num_pending) && !(message.num_pending && $util.isInteger(message.num_pending.low) && $util.isInteger(message.num_pending.high)))
                             return "num_pending: integer|Long expected";
@@ -38530,15 +38530,15 @@ export const cockroach = $root.cockroach = (() => {
                             throw TypeError(".cockroach.storage.storagebase.RangeInfo.state: object expected");
                         message.state = $root.cockroach.storage.storagebase.ReplicaState.fromObject(object.state);
                     }
-                    if (object.lastIndex != null)
+                    if (object.last_index != null)
                         if ($util.Long)
-                            (message.lastIndex = $util.Long.fromValue(object.lastIndex)).unsigned = true;
-                        else if (typeof object.lastIndex === "string")
-                            message.lastIndex = parseInt(object.lastIndex, 10);
-                        else if (typeof object.lastIndex === "number")
-                            message.lastIndex = object.lastIndex;
-                        else if (typeof object.lastIndex === "object")
-                            message.lastIndex = new $util.LongBits(object.lastIndex.low >>> 0, object.lastIndex.high >>> 0).toNumber(true);
+                            (message.last_index = $util.Long.fromValue(object.last_index)).unsigned = true;
+                        else if (typeof object.last_index === "string")
+                            message.last_index = parseInt(object.last_index, 10);
+                        else if (typeof object.last_index === "number")
+                            message.last_index = object.last_index;
+                        else if (typeof object.last_index === "object")
+                            message.last_index = new $util.LongBits(object.last_index.low >>> 0, object.last_index.high >>> 0).toNumber(true);
                     if (object.num_pending != null)
                         if ($util.Long)
                             (message.num_pending = $util.Long.fromValue(object.num_pending)).unsigned = true;
@@ -38601,9 +38601,9 @@ export const cockroach = $root.cockroach = (() => {
                         object.state = null;
                         if ($util.Long) {
                             let long = new $util.Long(0, 0, true);
-                            object.lastIndex = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                            object.last_index = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
                         } else
-                            object.lastIndex = options.longs === String ? "0" : 0;
+                            object.last_index = options.longs === String ? "0" : 0;
                         if ($util.Long) {
                             let long = new $util.Long(0, 0, true);
                             object.num_pending = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
@@ -38627,11 +38627,11 @@ export const cockroach = $root.cockroach = (() => {
                     }
                     if (message.state != null && message.hasOwnProperty("state"))
                         object.state = $root.cockroach.storage.storagebase.ReplicaState.toObject(message.state, options);
-                    if (message.lastIndex != null && message.hasOwnProperty("lastIndex"))
-                        if (typeof message.lastIndex === "number")
-                            object.lastIndex = options.longs === String ? String(message.lastIndex) : message.lastIndex;
+                    if (message.last_index != null && message.hasOwnProperty("last_index"))
+                        if (typeof message.last_index === "number")
+                            object.last_index = options.longs === String ? String(message.last_index) : message.last_index;
                         else
-                            object.lastIndex = options.longs === String ? $util.Long.prototype.toString.call(message.lastIndex) : options.longs === Number ? new $util.LongBits(message.lastIndex.low >>> 0, message.lastIndex.high >>> 0).toNumber(true) : message.lastIndex;
+                            object.last_index = options.longs === String ? $util.Long.prototype.toString.call(message.last_index) : options.longs === Number ? new $util.LongBits(message.last_index.low >>> 0, message.last_index.high >>> 0).toNumber(true) : message.last_index;
                     if (message.num_pending != null && message.hasOwnProperty("num_pending"))
                         if (typeof message.num_pending === "number")
                             object.num_pending = options.longs === String ? String(message.num_pending) : message.num_pending;
