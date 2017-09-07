@@ -7,6 +7,7 @@ import "whatwg-fetch"; // needed for jsdom?
 import moment from "moment";
 
 import * as protos from "src/js/protos";
+import { FixLong } from "src/util/fixLong";
 
 export type DatabasesRequestMessage = protos.cockroach.server.serverpb.DatabasesRequest;
 export type DatabasesResponseMessage = protos.cockroach.server.serverpb.DatabasesResponse;
@@ -67,6 +68,11 @@ export type RangeResponseMessage = protos.cockroach.server.serverpb.RangeRespons
 
 export type AllocatorRangeRequestMessage = protos.cockroach.server.serverpb.AllocatorRangeRequest;
 export type AllocatorRangeResponseMessage = protos.cockroach.server.serverpb.AllocatorRangeResponse;
+
+export type RangeLogRequestMessage =
+  protos.cockroach.server.serverpb.RangeLogRequest;
+export type RangeLogResponseMessage =
+  protos.cockroach.server.serverpb.RangeLogResponse;
 
 // API constants
 
@@ -254,4 +260,20 @@ export function getRange(req: RangeRequestMessage, timeout?: moment.Duration): P
 // getAllocatorRange returns simulated Allocator info for the requested range
 export function getAllocatorRange(req: AllocatorRangeRequestMessage, timeout?: moment.Duration): Promise<AllocatorRangeResponseMessage> {
   return timeoutFetch(serverpb.AllocatorRangeResponse, `${STATUS_PREFIX}/allocator/range/${req.range_id}`, null, timeout);
+}
+
+// getRangeLog returns the range log for all ranges or a specific range
+export function getRangeLog(
+  req: RangeLogRequestMessage,
+  timeout?: moment.Duration,
+): Promise<RangeLogResponseMessage> {
+  const rangeID = FixLong(req.range_id);
+  const rangeIDQuery = (rangeID.eq(0)) ? "" : `/${rangeID.toString()}`;
+  const limit = (!_.isNil(req.limit)) ? `?limit=${req.limit}` : "";
+  return timeoutFetch(
+    serverpb.RangeLogResponse,
+    `${API_PREFIX}/rangelog${rangeIDQuery}${limit}`,
+    null,
+    timeout,
+  );
 }
