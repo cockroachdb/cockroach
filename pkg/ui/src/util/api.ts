@@ -68,6 +68,9 @@ export type RangeResponseMessage = protos.cockroach.server.serverpb.RangeRespons
 export type AllocatorRangeRequestMessage = protos.cockroach.server.serverpb.AllocatorRangeRequest;
 export type AllocatorRangeResponseMessage = protos.cockroach.server.serverpb.AllocatorRangeResponse;
 
+export type CommandQueueRequestMessage = protos.cockroach.server.serverpb.CommandQueueRequest;
+export type CommandQueueResponseMessage = protos.cockroach.server.serverpb.CommandQueueResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
@@ -254,4 +257,9 @@ export function getRange(req: RangeRequestMessage, timeout?: moment.Duration): P
 // getAllocatorRange returns simulated Allocator info for the requested range
 export function getAllocatorRange(req: AllocatorRangeRequestMessage, timeout?: moment.Duration): Promise<AllocatorRangeResponseMessage> {
   return timeoutFetch(serverpb.AllocatorRangeResponse, `${STATUS_PREFIX}/allocator/range/${req.range_id}`, null, timeout);
+}
+
+// getCommandQueue returns a representation of the command queue for a given range id
+export function getCommandQueue(req: CommandQueueRequestMessage, timeout?: moment.Duration): Promise<CommandQueueResponseMessage> {
+  return timeoutFetch(serverpb.CommandQueueResponse, `${STATUS_PREFIX}/range/${req.range_id}/cmdqueue`, null, timeout);
 }
