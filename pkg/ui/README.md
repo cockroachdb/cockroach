@@ -42,13 +42,6 @@ directory, while proxying all API requests to the specified CockroachDB node.
 To use this proxy, run `./proxy.js <target-cluster-http-uri>` and navigate to
 `http://localhost:3000` to access the UI.
 
-When you're ready to submit your changes, be sure to run `make` in this
-directory to regenerate the on-disk assets so that your commit includes the
-updated `embedded.go`. This is enforced by our build system, but forgetting to
-do this will result in wasted time waiting for CI. We commit this generated file
-so that CockroachDB can be compiled with minimal [non-go
-dependencies](#dependencies).
-
 If you get cryptic TypeScript compile/lint failures upon running `make` that seem
 completely unrelated to your changes, try removing `yarn.installed` and
 `node_modules` before re-running `make` (do NOT run `yarn install` directly).
