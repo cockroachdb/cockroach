@@ -1337,7 +1337,6 @@ func (t *logicTest) runFile(path string, config testClusterConfig) {
 
 func TestLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer sql.TestingEnableParallelStmts()()
 
 	if testutils.Stress() {
 		t.Skip()

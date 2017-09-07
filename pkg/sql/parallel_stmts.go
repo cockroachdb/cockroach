@@ -23,26 +23,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
-
-// enableParallelStmts can be used to enable parallel statement
-// execution. Parallel statement execution was known to be buggy
-// in Cockroach 1.0. This was fixed in #17627, but the fix was
-// too big to cherry-pick back into v1.0.
-var enableParallelStmts = envutil.EnvOrDefaultBool(
-	"COCKROACH_ENABLE_PARALLEL_STMTS", false)
-
-// TestingEnableParallelStmts enables parallel statement execution.
-// It returns a function that disables the feature again.
-func TestingEnableParallelStmts() func() {
-	enableParallelStmts = true
-	return func() {
-		enableParallelStmts = false
-	}
-}
 
 // ParallelizeQueue maintains a set of planNodes running with parallelized execution.
 // Parallelized execution means that multiple statements run asynchronously, with
