@@ -39,8 +39,7 @@ new engineers.
      - GNU Make (3.81+ is known to work)
      - CMake 3.1+
      - Autoconf 2.68+
-     - Optional: NodeJS 6.x and Yarn 0.22.0+. Required when compiling protocol
-       buffers.
+     - NodeJS 6.x and Yarn 0.22.0+
 
    Note that at least 4GB of RAM is required to build from source and run tests.
 

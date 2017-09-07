@@ -5,7 +5,6 @@
   "repository": "github.com/cockroachdb/cockroach",
   "license": "MIT",
   "dependencies": {
-    "@types/dagre-layout": "^0.8.0",
     "analytics-node": "^3.0.0",
     "classnames": "^2.2.5",
     "codemirror": "^5.25.2",
@@ -41,6 +40,7 @@
     "@types/d3-dispatch": "^1.0.4",
     "@types/d3-drag": "^1.1.0",
     "@types/d3-timer": "^1.0.5",
+    "@types/dagre-layout": "^0.8.0",
     "@types/enzyme": "^2.7.6",
     "@types/fetch-mock": "^5.8.1",
     "@types/highlight.js": "^9.1.9",
@@ -107,8 +107,8 @@
     "tslint": "^5.1.0",
     "typescript": "^2.2.1",
     "url-loader": "^0.5.8",
-    "webpack": "^3.5.6",
-    "webpack-dev-middleware": "^1.10.1"
+    "webpack-dev-server": "^2.7.1",
+    "webpack": "^3.5.6"
   },
   "engines": {
     "node": ">=6",
