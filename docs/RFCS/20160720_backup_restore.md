@@ -260,7 +260,7 @@ message JobPayload {
 When a job is started or adopted, the coordinating node will install a
 `JobLease` with the node's liveness epoch. If the node's liveness lease expires,
 so does all of its job leases. This is how [epoch-based range leases
-work](range_leases.md).
+work](20160210_range_leases.md).
 
 To find orphaned jobs, the job daemon periodically executes
 

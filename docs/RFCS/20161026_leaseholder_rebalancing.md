@@ -33,8 +33,8 @@ performance by periodically killing nodes in the cluster.
 The second goal is to more evenly distributed load in a cluster. The
 leaseholder for a range has extra duties when compared to a follower:
 it performs all reads for a range and proposes almost all
-writes. [Proposer evaluated KV](proposer_evaluated_kv.md) will reduce
-the cost of write KV operations on followers exacerbating the
+writes. [Proposer evaluated KV](20160420_proposer_evaluated_kv.md) will
+reduce the cost of write KV operations on followers exacerbating the
 difference between leaseholders and followers. These extra duties
 impose additional load on the leaseholder making it desirable to
 spread that load throughout a cluster in order to improve performance.
@@ -151,7 +151,7 @@ receiving load from, modulo their other placement constraints
 * Rather than placing the leaseholder rebalancing burden on
   `replicateQueue`, we could perform rebalancing when leases are
   acquired/extended. This would work with the current expiration-based
-  leases, but not with [epoch-based](range_leases.md) leases.
+  leases, but not with [epoch-based](20160210_range_leases.md) leases.
 
 * The overfull/underfull heuristics for leaseholder rebalancing
   mirrors the heuristics for replica rebalancing. For leaseholder
