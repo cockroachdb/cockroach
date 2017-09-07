@@ -2,30 +2,30 @@
 
 ## Getting and Building
 
-1.  Install the following prerequisites, as necessary:
-  - A C++ compiler that supports C++11. Note that GCC prior to 6.0 doesn't
+1. Install the following prerequisites, as necessary:
+   - A C++ compiler that supports C++11. Note that GCC prior to 6.0 doesn't
     work due to https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48891
-  - A Go environment with a recent 64-bit version of the toolchain. Note that
+   - A Go environment with a recent 64-bit version of the toolchain. Note that
     the Makefile enforces the specific version required, as it is updated
     frequently.
-  - Git 1.8+
-  - Bash (4+ is preferred)
-  - GNU Make (3.81+ is known to work)
-  - CMake 3.1+
-  - Autoconf 2.68+
-  - Optional: NodeJS 6.x and Yarn 0.22.0+. Required when compiling protocol
+   - Git 1.8+
+   - Bash (4+ is preferred)
+   - GNU Make (3.81+ is known to work)
+   - CMake 3.1+
+   - Autoconf 2.68+
+   - Optional: NodeJS 6.x and Yarn 0.22.0+. Required when compiling protocol
     buffers.
 
-  Note that at least 4GB of RAM is required to build from source and run tests.
+    Note that at least 4GB of RAM is required to build from source and run tests.
 
-2.  Get the CockroachDB code:
+2. Get the CockroachDB code:
 
-	```shell
-	go get -d github.com/cockroachdb/cockroach
-	cd $GOPATH/src/github.com/cockroachdb/cockroach
-	```
+   ```shell
+	 go get -d github.com/cockroachdb/cockroach
+   cd $GOPATH/src/github.com/cockroachdb/cockroach
+	 ```
 
-3.  Run `make build`, `make test`, or anything else our Makefile offers. Note
+3. Run `make build`, `make test`, or anything else our Makefile offers. Note
 that the first time you run `make`, it can take some time to download and
 install various dependencies. After running `make build`, the `cockroach`
 executable will be in your current directory and can be run as shown in the
