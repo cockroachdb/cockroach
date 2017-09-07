@@ -1263,13 +1263,15 @@ var (
 func parseTimestampInLocation(s string, loc *time.Location, typ Type) (time.Time, error) {
 	origS := s
 	l := len(s)
-	// HACK: go doesn't handle offsets that are not zero-padded from psql/jdbc.
-	// Thus, if we see `2015-10-05 3:0:5 +0:0:0` we need to change it to
-	// `... 3:00:50 +00:00:00`.
-	s = loneZeroRMatch.ReplaceAllString(s, ":0${1}")
-	// This must be run twice, since ReplaceAllString doesn't touch overlapping
-	// matches and thus wouldn't fix a string of the form 3:3:3.
-	s = loneZeroRMatch.ReplaceAllString(s, ":0${1}")
+	if loneZeroRMatch.MatchString(s) {
+		// HACK: go doesn't handle offsets that are not zero-padded from psql/jdbc.
+		// Thus, if we see `2015-10-05 3:0:5 +0:0:0` we need to change it to
+		// `... 3:00:50 +00:00:00`.
+		s = loneZeroRMatch.ReplaceAllString(s, ":0${1}")
+		// This must be run twice, since ReplaceAllString doesn't touch overlapping
+		// matches and thus wouldn't fix a string of the form 3:3:3.
+		s = loneZeroRMatch.ReplaceAllString(s, ":0${1}")
+	}
 
 	if loc := tzMatch.FindStringIndex(s); loc != nil && l > loc[1] {
 		// Remove `:` characters from timezone specifier and pad to 6 digits. A
