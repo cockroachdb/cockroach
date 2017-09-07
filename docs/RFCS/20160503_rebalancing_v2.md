@@ -61,7 +61,7 @@ offline. These are important problems that will be addressed in V3 or later.
 # Motivation
 
 To allocate replicas for ranges, we currently rely on distributed
-[stateless replica relocation](https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/stateless_replica_relocation.md).
+[stateless replica relocation](https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20150819_stateless_replica_relocation.md).
 
 Each range lease holder is responsible for replica allocation decisions (adding and removing replicas)
 for its respective range. This is a good, simple start. However, it is particularly susceptible to
