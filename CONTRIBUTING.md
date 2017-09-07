@@ -31,7 +31,7 @@ Before you start contributing, review these [basic guidelines](https://www.cockr
 2. Get the CockroachDB code:
 
    ```shell
-	 go get -d github.com/cockroachdb/cockroach
+   go get -d github.com/cockroachdb/cockroach
    cd $GOPATH/src/github.com/cockroachdb/cockroach
 	 ```
 
@@ -79,7 +79,9 @@ executable will be in your current directory and can be run as shown in the
   If you are working on your own fork, see [this tip](http://blog.campoy.cat/2014/03/github-and-go-forking-pull-requests-and.html)
   on forking in Go, which ensures that Go import paths will be correct.
 
-  `git checkout -b update-readme`
+  ```shell
+  git checkout -b update-readme
+  ```
 
 - Hack away and commit your changes locally using `git add` and `git commit`.
   Remember to write tests! The following are helpful for running specific
@@ -123,7 +125,7 @@ executable will be in your current directory and can be run as shown in the
 
 - Run the linters, code generators, and unit test suites locally:
 
-  ```
+  ``` shell
   make pre-push
   ````
 
@@ -136,7 +138,9 @@ executable will be in your current directory and can be run as shown in the
   submitting your changes on top of the newest version of our code. Next, push
   to your fork:
 
-  `git push -u <yourfork> update-readme`
+  ```shell
+  git push -u <yourfork> update-readme
+  ```
 
 - Then [create a pull request using GitHub’s UI](https://help.github.com/articles/creating-a-pull-request). If you know of
   another GitHub user particularly suited to reviewing your pull request, be
