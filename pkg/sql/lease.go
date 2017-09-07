@@ -693,12 +693,7 @@ func (t *tableState) acquireFromStoreLocked(ctx context.Context, m *LeaseManager
 		return nil
 	}
 
-	s, err := t.acquireNodeLease(ctx, m, hlc.Timestamp{})
-	if err != nil {
-		return err
-	}
-	t.upsertLocked(ctx, s, m)
-	return nil
+	return t.acquireNodeLease(ctx, m, hlc.Timestamp{})
 }
 
 // acquireFreshestFromStoreLocked acquires a new lease from the store and
@@ -726,12 +721,7 @@ func (t *tableState) acquireFreshestFromStoreLocked(ctx context.Context, m *Leas
 		minExpirationTime = newestTable.expiration.Add(int64(time.Millisecond), 0)
 	}
 
-	s, err := t.acquireNodeLease(ctx, m, minExpirationTime)
-	if err != nil {
-		return err
-	}
-	t.upsertLocked(ctx, s, m)
-	return nil
+	return t.acquireNodeLease(ctx, m, minExpirationTime)
 }
 
 // upsertLocked inserts a lease for a particular table version.
@@ -805,9 +795,9 @@ func (t *tableState) acquireWait() bool {
 // t.mu needs to be locked.
 func (t *tableState) acquireNodeLease(
 	ctx context.Context, m *LeaseManager, minExpirationTime hlc.Timestamp,
-) (*tableVersionState, error) {
+) error {
 	if m.isDraining() {
-		return nil, errors.New("cannot acquire lease when draining")
+		return errors.New("cannot acquire lease when draining")
 	}
 
 	// Notify when lease has been acquired.
@@ -819,13 +809,14 @@ func (t *tableState) acquireNodeLease(
 	// We're called with mu locked, but need to unlock it during lease
 	// acquisition.
 	t.mu.Unlock()
-	defer t.mu.Lock()
 	table, err := m.LeaseStore.acquire(ctx, t.id, minExpirationTime)
+	t.mu.Lock()
 	if err != nil {
-		return nil, err
+		return err
 	}
+	t.upsertLocked(ctx, table, m)
 	t.tableNameCache.insert(table)
-	return table, nil
+	return nil
 }
 
 func (t *tableState) release(table *sqlbase.TableDescriptor, m *LeaseManager) error {
