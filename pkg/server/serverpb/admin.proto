@@ -225,7 +225,7 @@ message UsersResponse {
 message EventsRequest {
   string type = 1;
   int64 target_id = 2;
-  // limit is the total number of results that are retreived by the query. If
+  // limit is the total number of results that are retrieved by the query. If
   // this is omitted or set to 0, the default maximum number of results are
   // returned. When set to > 0, at most only that number of results are
   // returned. When set to < 0, an unlimited number of results are returned.
@@ -439,7 +439,7 @@ message RangeLogRequest {
   // figure out how to teach grpc-gateway about custom names.
   // If RangeID is 0, returns range log history without filtering by range.
   int64 range_id = 1;
-  // limit is the total number of results that are retreived by the query. If
+  // limit is the total number of results that are retrieved by the query. If
   // this is omitted or set to 0, the default maximum number of results are
   // returned. When set to > 0, at most only that number of results are
   // returned. When set to < 0, an unlimited number of results are returned.
@@ -448,7 +448,22 @@ message RangeLogRequest {
 
 // RangeLogResponse contains a list of entries from the range log table.
 message RangeLogResponse {
-  repeated storage.RangeLogEvent events = 1 [(gogoproto.nullable) = false];
+  // To avoid porting the pretty printing of keys and descriptors to
+  // javascript, they will be precomputed on the serverside.
+  message PrettyInfo {
+    string updated_desc = 1;
+    string new_desc = 2;
+    string added_replica = 3;
+    string removed_replica = 4;
+    string reason = 5;
+    string details = 6;
+  }
+  message Event {
+    storage.RangeLogEvent event = 1 [(gogoproto.nullable) = false];
+    PrettyInfo pretty_info = 2 [(gogoproto.nullable) = false];
+  }
+  reserved 1; // Previously used.
+  repeated Event events = 2 [(gogoproto.nullable) = false];
 }
 
 // QueryPlanRequest requests the query plans for a SQL string.
