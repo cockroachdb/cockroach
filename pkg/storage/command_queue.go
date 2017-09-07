@@ -801,3 +801,27 @@ func (cq *CommandQueue) metrics() CommandQueueMetrics {
 		TreeSize:        int32(cq.treeSize()),
 	}
 }
+
+func (cq *CommandQueue) GetCommandQueueState() *CommandQueues {
+	return &CommandQueues{
+		Reads:  copyCommandsFromIntervalTree(cq.reads),
+		Writes: copyCommandsFromIntervalTree(cq.writes),
+	}
+}
+
+func copyCommandsFromIntervalTree(tree interval.Tree) []*CommandQueueCommand {
+	var result []*CommandQueueCommand
+	it := tree.Iterator()
+	for {
+		// TODO: is there a more idiomatic way to iterate?
+		item, hasNext := it.Next()
+		if !hasNext {
+			break
+		}
+		// TODO: how do we get the actual cmd struct?
+		result = append(result, &CommandQueueCommand{
+			Id: int64(item.ID()), // TODO: is this cast ok?
+		})
+	}
+	return result
+}
