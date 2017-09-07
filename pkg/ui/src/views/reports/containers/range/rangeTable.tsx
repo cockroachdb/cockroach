@@ -375,7 +375,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         term: this.createContent(FixLong(info.raft_state.hard_state.term)),
         applied: this.createContent(FixLong(info.raft_state.applied)),
         commit: this.createContent(FixLong(info.raft_state.hard_state.commit)),
-        lastIndex: this.createContent(FixLong(info.state.lastIndex)),
+        lastIndex: this.createContent(FixLong(info.state.last_index)),
         logSize: this.createContent(FixLong(info.state.raft_log_size)),
         leaseHolderQPS: leaseHolder ? this.createContent(info.stats.queries_per_second.toFixed(4)) : rangeTableEmptyContent,
         keysWrittenPS: this.createContent(info.stats.writes_per_second.toFixed(4)),
