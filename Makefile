@@ -173,7 +173,7 @@ $(COCKROACH) build go-install gotestdashi generate lint lintshort: $(C_LIBS_CCL)
 $(COCKROACH) build buildoss: BUILDMODE = build -i -o $(COCKROACH)
 
 # The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
-$(COCKROACH) build buildoss go-install gotestdashi generate lint lintshort: $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) .buildinfo/tag .buildinfo/rev .buildinfo/basebranch
+$(COCKROACH) build buildoss go-install gotestdashi generate lint lintshort: $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) ui .buildinfo/tag .buildinfo/rev .buildinfo/basebranch
 $(COCKROACH) build buildoss go-install gotestdashi generate lint lintshort: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
@@ -321,6 +321,10 @@ clean: clean-c-deps
 protobuf: ## Regenerate generated code for protobuf definitions.
 	$(MAKE) -C $(ORG_ROOT) -f cockroach/build/protobuf.mk
 
+.PHONY: ui
+ui: libprotobuf
+	$(MAKE) -C $(UI_ROOT) generate
+
 # pre-push locally runs most of the checks CI will run. Notably, it doesn't run
 # the acceptance tests.
 .PHONY: pre-push
@@ -347,6 +351,7 @@ $(ARCHIVE): $(ARCHIVE).tmp
 $(ARCHIVE).tmp: ARCHIVE_BASE = cockroach-$(shell cat .buildinfo/tag)
 $(ARCHIVE).tmp: .buildinfo/tag .buildinfo/rev .buildinfo/basebranch
 	scripts/ls-files.sh | $(TAR) -cf $@ -T - $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach/, $^
+	$(TAR) -rf $@ pkg/ui/embedded.go
 	(cd build/archive/contents && $(TAR) -rf ../../../$@ $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/, *)
 
 .buildinfo:

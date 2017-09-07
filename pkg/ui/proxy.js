@@ -1,19 +1,12 @@
 #!/usr/bin/env node
 
-// Simple proxy server that serves the UI from one Cockroach instance and
-// proxies requests to another Cockroach instance.
+// Simple proxy server that serves the UI from source and proxies requests to
+// another Cockroach instance.
 
-const express = require("express");
-const proxy = require("http-proxy-middleware");
-const webpackDevMiddleware = require("webpack-dev-middleware");
+const path = require("path");
 const webpack = require("webpack");
-const webpackConfig = require("./webpack.config");
-
-const app = express();
-
-const compiler = webpack(Object.assign(webpackConfig, {
-  devtool: "source-map",
-}));
+const webpackConfig = require("./webpack.app");
+const WebpackDevServer = require("webpack-dev-server");
 
 const argv = require("yargs")
   .usage("Usage: $0 <remote-cockroach-ui-url> [options]")
@@ -29,15 +22,21 @@ const argv = require("yargs")
 const port = argv.port;
 const remote = argv._[0];
 
-app.use(webpackDevMiddleware(compiler, {
+console.log(`Booting server at http://localhost:${port}`);
+
+const compiler = webpack(Object.assign(webpackConfig, {
+  devtool: "source-map",
+}));
+
+const server = new WebpackDevServer(compiler, {
+  contentBase: path.join(__dirname, "dist"),
   stats: webpackConfig.stats,
-}));
+  proxy: [{
+    context: ["/_admin", "/_status", "/ts"],
+    secure: false,
+    target: remote,
+  }],
+  port: port,
+});
 
-app.use("/", proxy({
-  secure: false,
-  target: remote,
-}));
-
-console.log(`Proxying requests to ${remote} at http://localhost:${port}`);
-
-app.listen(port);
+server.listen(port, "127.0.0.1");
