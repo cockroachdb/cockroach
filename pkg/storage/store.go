@@ -1114,8 +1114,13 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 				return false, errors.Errorf("found uninitialized RangeDescriptor: %+v", desc)
 			}
 
-			rep, err := NewReplica(&desc, s, 0)
-			if err != nil {
+			rep := newReplica(desc.RangeID, s)
+			// NB: We're not actually holding Replica.mu or Replica.raftMu, but that
+			// is ok because nothing else can be holding them either as we just
+			// created the Replica structure. We don't want to grab them as doing so
+			// violates our lock ordering invariants because we're currently holding
+			// Store.mu.
+			if err := rep.initRaftMuLockedReplicaMuLocked(&desc, s.Clock(), 0); err != nil {
 				return false, err
 			}
 			if err = s.addReplicaInternalLocked(rep); err != nil {
