@@ -439,22 +439,3 @@ func TestSpanBasedDependencyAnalyzer(t *testing.T) {
 		}
 	}
 }
-
-func TestParallelStmtsDisabled(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
-
-	if _, err := db.Exec(`CREATE DATABASE test`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`CREATE TABLE test.foo (k INT PRIMARY KEY)`); err != nil {
-		t.Fatal(err)
-	}
-
-	expectErr := "parallel statement execution is disabled by default until v1.1"
-	_, err := db.Exec(`INSERT INTO test.foo VALUES (1) RETURNING NOTHING`)
-	if !testutils.IsError(err, expectErr) {
-		t.Fatalf("expected error %q, found %v", expectErr, err)
-	}
-}

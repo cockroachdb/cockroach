@@ -1194,14 +1194,6 @@ func (e *Executor) execStmtInOpenTxn(
 	// execution. If neither of these cases are true, we need to synchronize
 	// parallel execution by letting it drain before we can begin executing ourselves.
 	parallelize := IsStmtParallelized(stmt)
-	if parallelize {
-		if !enableParallelStmts {
-			return Result{}, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
-				"parallel statement execution is disabled by default until v1.1. "+
-					"use the environment variable `COCKROACH_ENABLE_PARALLEL_STMTS` to override")
-		}
-	}
-
 	_, independentFromParallelStmts := stmt.(parser.IndependentFromParallelizedPriors)
 	if !(parallelize || independentFromParallelStmts) {
 		if err := session.parallelizeQueue.Wait(); err != nil {
