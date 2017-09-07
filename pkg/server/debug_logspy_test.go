@@ -225,7 +225,7 @@ func TestDebugLogSpyRun(t *testing.T) {
 	go func() {
 		if err := spy.run(ctx, &buf, logSpyOptions{
 			Duration: durationAsString(time.Hour),
-			Count:    2,
+			Count:    3, // we expect 2 results but log spy sends a header event
 			Grep:     regexpAsString{re: regexp.MustCompile(`first\.go|#2`)},
 		}); err != nil {
 			panic(err)
