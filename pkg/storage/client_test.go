@@ -876,8 +876,11 @@ func (m *multiTestContext) stopStore(i int) {
 	m.mu.Unlock()
 }
 
-// restartStore restarts a store previously stopped with StopStore.
-func (m *multiTestContext) restartStore(i int) {
+// restartStore restarts a store previously stopped with StopStore. It does not
+// wait for the store to successfully perform a heartbeat before returning. This
+// is important for tests where a restarted store may not be able to heartbeat
+// immediately.
+func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 	m.mu.Lock()
 	stopper := stop.NewStopper()
 	m.stoppers[i] = stopper
@@ -909,18 +912,25 @@ func (m *multiTestContext) restartStore(i int) {
 			log.Warning(ctx, err)
 		}
 	})
-	// Wait until we see the first heartbeat.
-	testutils.SucceedsSoon(m.t, func() error {
-		if live, err := cfg.NodeLiveness.IsLive(roachpb.NodeID(i + 1)); err != nil || !live {
-			return errors.New("node not live")
-		}
-		return nil
-	})
 
 	// Normally, the newly restarted store would not be able to accept rebalances
 	// until the election timeout passed. But we're using a manual clock which
 	// won't advance the time properly, so manually enable rebalances.
 	m.stores[i].SetRebalancesDisabled(false)
+}
+
+// restartStore restarts a store previously stopped with StopStore.
+func (m *multiTestContext) restartStore(i int) {
+	m.restartStoreWithoutHeartbeat(i)
+
+	// Wait until we see the first heartbeat.
+	liveness := m.nodeLivenesses[i]
+	testutils.SucceedsSoon(m.t, func() error {
+		if live, err := liveness.IsLive(roachpb.NodeID(i + 1)); err != nil || !live {
+			return errors.New("node not live")
+		}
+		return nil
+	})
 }
 
 func (m *multiTestContext) Store(i int) *storage.Store {
