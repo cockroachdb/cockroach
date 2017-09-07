@@ -90,8 +90,8 @@ func (r *Replica) raftEntriesLocked(lo, hi, maxBytes uint64) ([]raftpb.Entry, er
 
 // entries retrieves entries from the engine. To accommodate loading the term,
 // `sideloaded` can be supplied as nil, in which case sideloaded entries will
-// not be inlined, the raft entry cache not populated with *any* of the
-// loaded entries, and maxBytes not applied to the payloads.
+// not be inlined, the raft entry cache will not be populated with *any* of the
+// loaded entries, and maxBytes will not be applied to the payloads.
 func entries(
 	ctx context.Context,
 	e engine.Reader,
@@ -232,9 +232,16 @@ func iterateEntries(
 	return err
 }
 
+// invalidLastTerm is an out-of-band value for r.mu.lastTerm that
+// invalidates lastTerm caching and forces retrieval of Term(lastTerm)
+// from the raftEntryCache/RocksDB.
+const invalidLastTerm = 0
+
 // Term implements the raft.Storage interface.
 func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
-	if r.mu.lastIndex == i && r.mu.lastTerm != 0 {
+	// TODO(nvanbenschoten): should we set r.mu.lastTerm when
+	//   r.mu.lastIndex == i && r.mu.lastTerm == invalidLastTerm?
+	if r.mu.lastIndex == i && r.mu.lastTerm != invalidLastTerm {
 		return r.mu.lastTerm, nil
 	}
 	// Try to retrieve the term for the desired entry from the entry cache.
@@ -526,10 +533,10 @@ func snapshot(
 }
 
 // append the given entries to the raft log. Takes the previous values of
-// r.mu.lastIndex and r.mu.raftLogSize, and returns new values. We do this
-// rather than modifying them directly because these modifications need to be
-// atomic with the commit of the batch. This method requires that r.raftMu is
-// held.
+// r.mu.lastIndex, r.mu.lastTerm, and r.mu.raftLogSize, and returns new values.
+// We do this rather than modifying them directly because these modifications
+// need to be atomic with the commit of the batch. This method requires that
+// r.raftMu is held.
 //
 // append is intentionally oblivious to the existence of sideloaded proposals.
 // They are managed by the caller, including cleaning up obsolete on-disk
@@ -822,7 +829,9 @@ func (r *Replica) applySnapshot(
 	// feelings about this ever change, we can add a LastIndex field to
 	// raftpb.SnapshotMetadata.
 	r.mu.lastIndex = s.RaftAppliedIndex
-	r.mu.lastTerm = 0
+	// We could recompute and return the lastTerm in the snapshot, but instead we
+	// just set an invalid term and force a recomputation later.
+	r.mu.lastTerm = invalidLastTerm
 	r.mu.raftLogSize = raftLogSize
 	// Update the range and store stats.
 	r.store.metrics.subtractMVCCStats(r.mu.state.Stats)
