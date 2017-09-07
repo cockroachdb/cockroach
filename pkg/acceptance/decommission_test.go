@@ -15,9 +15,11 @@
 package acceptance
 
 import (
+	"encoding/csv"
 	"reflect"
 	"regexp"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -58,6 +60,45 @@ func decommission(
 	}
 }
 
+func matchCSV(csvStr string, matchColRow [][]string) (err error) {
+	defer func() {
+		if err != nil {
+			err = errors.Errorf("csv input:\n%v\nexpected:\n%s\nerrors:%s", csvStr, pretty.Sprint(matchColRow), err)
+		}
+	}()
+
+	reader := csv.NewReader(strings.NewReader(csvStr))
+	reader.FieldsPerRecord = -1
+	records, err := reader.ReadAll()
+	if err != nil {
+		return err
+	}
+
+	lr, lm := len(records), len(matchColRow)
+	if lr < lm {
+		return errors.Errorf("csv has %d rows, but expected at least %d", lr, lm)
+	}
+
+	// Compare only the last len(matchColRow) records. That is, if we want to
+	// match 4 rows and we have 100 records, we only really compare
+	// records[96:], that is, the last four rows.
+	records = records[lr-lm:]
+
+	for i := range records {
+		if lr, lm := len(records[i]), len(matchColRow[i]); lr != lm {
+			return errors.Errorf("row #%d: csv has %d columns, but expected %d", i+1, lr, lm)
+		}
+		for j := range records[i] {
+			pat, str := matchColRow[i][j], records[i][j]
+			re := regexp.MustCompile(pat)
+			if !re.MatchString(str) {
+				err = errors.Errorf("%v\nrow #%d, col #%d: found %q which does not match %q", err, i+1, j+1, str, pat)
+			}
+		}
+	}
+	return err
+}
+
 func testDecommissionInner(
 	ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig,
 ) {
@@ -94,6 +135,12 @@ func testDecommissionInner(
 		idMap[i] = details.NodeID
 	}
 
+	decommissionHeader := []string{"id", "is_live", "gossiped_replicas", "is_decommissioning", "is_draining"}
+	decommissionFooter := []string{"All target nodes report that they hold no more data. Please verify cluster health before removing the nodes."}
+	decommissionFooterLive := []string{"Decommissioning finished. Please verify cluster health before removing the nodes."}
+
+	statusHeader := []string{"id", "address", "build", "updated_at", "started_at"}
+
 	log.Info(ctx, "decommissioning first node from the second, polling the status manually")
 	retryOpts := retry.Options{
 		InitialBackoff: time.Second,
@@ -101,15 +148,60 @@ func testDecommissionInner(
 		Multiplier:     1,
 	}
 	for r := retry.Start(retryOpts); r.Next(); {
-		o, err := decommission(ctx, c, 1, idMap[0], "decommission", "--wait", "none")
+		o, err := decommission(ctx, c, 1, idMap[0], "decommission", "--wait", "none", "--format", "csv")
 		if err != nil {
 			t.Fatal(err)
 		}
+
+		exp := [][]string{
+			{"1 row"},
+			decommissionHeader,
+			{strconv.Itoa(int(idMap[0])), "true", "0", "true", "true"},
+			decommissionFooterLive,
+		}
 		log.Infof(ctx, o)
-		// Matches:
-		// 1	true	0	true	true
-		if ok, err := regexp.MatchString(strconv.Itoa(int(idMap[0]))+`\s+true\s+0\s+true\s+true`, o); ok && err == nil {
-			break
+
+		if err := matchCSV(o, exp); err != nil {
+			continue
+		}
+		break
+	}
+
+	// Check that even though the node is decommissioned, we still see it (since
+	// it remains live) in `node ls`.
+	{
+		o, _, err := c.ExecCLI(ctx, 2, []string{"node", "ls", "--format", "csv"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		exp := [][]string{
+			{"4 rows"},
+			{"id"},
+			{"1"},
+			{"2"},
+			{"3"},
+			{"4"},
+		}
+		if err := matchCSV(o, exp); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Ditto `node status`.
+	{
+		o, _, err := c.ExecCLI(ctx, 2, []string{"node", "status", "--format", "csv"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		exp := [][]string{
+			{"4 rows"},
+			statusHeader,
+			{`1`, `.*`, `.*`, `.*`, `.*`},
+			{`2`, `.*`, `.*`, `.*`, `.*`},
+			{`3`, `.*`, `.*`, `.*`, `.*`},
+			{`4`, `.*`, `.*`, `.*`, `.*`},
+		}
+		if err := matchCSV(o, exp); err != nil {
+			t.Fatal(err)
 		}
 	}
 
@@ -130,13 +222,20 @@ func testDecommissionInner(
 	log.Info(ctx, "decommissioning second node from third, using --wait=all")
 	{
 		target := idMap[1]
-		o, err := decommission(ctx, c, 2, target, "decommission", "--wait", "all")
+		o, err := decommission(ctx, c, 2, target, "decommission", "--wait", "all", "--format", "csv")
 		if err != nil {
 			t.Fatal(err)
 		}
 		log.Infof(ctx, o)
-		if ok, err := regexp.MatchString(strconv.Itoa(int(target))+`\s+true\s+0\s+true\s+true`, o); !ok || err != nil {
-			t.Fatalf("node did not decommission: ok=%t, err=%v, output:\n%s", ok, err, o)
+
+		exp := [][]string{
+			{"1 row"},
+			decommissionHeader,
+			{strconv.Itoa(int(target)), "true", "0", "true", "true"},
+			decommissionFooter,
+		}
+		if err := matchCSV(o, exp); err != nil {
+			t.Fatal(err)
 		}
 	}
 
@@ -178,13 +277,20 @@ func testDecommissionInner(
 	log.Info(ctx, "checking that other nodes see node three as successfully decommissioned")
 	{
 		target := idMap[2]
-		o, err := decommission(ctx, c, 1, target, "decommission") // wait=all is implied
+		o, err := decommission(ctx, c, 1, target, "decommission", "--format", "csv") // wait=all is implied
 		if err != nil {
 			t.Fatal(err)
 		}
 		log.Infof(ctx, o)
-		if ok, err := regexp.MatchString(strconv.Itoa(int(target))+`\s+true\s+0\s+true\s+true`, o); !ok || err != nil {
-			t.Fatalf("node not decommissioned: ok=%t, err=%v", ok, err)
+
+		exp := [][]string{
+			{"1 row"},
+			decommissionHeader,
+			{strconv.Itoa(int(target)), "true", "0", "true", "true"},
+			decommissionFooter,
+		}
+		if err := matchCSV(o, exp); err != nil {
+			t.Fatal(err)
 		}
 
 		// Recommission. Welcome back!
@@ -218,12 +324,21 @@ func testDecommissionInner(
 		// Run a second time to wait until the replicas have all been GC'ed.
 		// Note that we specify "all" because even though the first node is
 		// now running, it may not be live by the time the command runs.
-		o, err = decommission(ctx, c, 2, target, "decommission", "--wait", "all")
+		o, err = decommission(ctx, c, 2, target, "decommission", "--wait", "all", "--format", "csv")
 		if err != nil {
 			t.Fatal(err)
 		}
-		if ok, err := regexp.MatchString(strconv.Itoa(int(target))+`\s+true\s+0\s+true\s+true`, o); !ok || err != nil {
-			t.Fatalf("node did not decommission: ok=%t, err=%v, output:\n%s", ok, err, o)
+
+		log.Info(ctx, o)
+
+		exp := [][]string{
+			{"1 row"},
+			decommissionHeader,
+			{strconv.Itoa(int(target)), "true", "0", "true", "true"},
+			decommissionFooter,
+		}
+		if err := matchCSV(o, exp); err != nil {
+			t.Fatal(err)
 		}
 	}
 
@@ -244,11 +359,13 @@ func testDecommissionInner(
 	log.Info(ctx, "decommission first node in absentia using --wait=live")
 	{
 		target := idMap[0]
-		o, err := decommission(ctx, c, 2, target, "decommission", "--wait", "live")
+		o, err := decommission(ctx, c, 2, target, "decommission", "--wait", "live", "--format", "csv")
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		log.Infof(ctx, o)
+
 		// Note we don't check precisely zero replicas or that draining=true
 		// (which the node would write itself, but it's dead). We do check that
 		// the node isn't live, though, which is essentially what `--wait=live`
@@ -256,9 +373,61 @@ func testDecommissionInner(
 		// Note that the target node may still be "live" when it's marked as
 		// decommissioned, as its replica count may drop to zero faster than
 		// liveness times out.
-		if ok, err := regexp.MatchString(strconv.Itoa(int(target))+`\s+true|false\s+\d+\s+true\s+.*`, o); !ok || err != nil {
-			t.Fatalf("node did not decommission: ok=%t, err=%v, output:\n%s", ok, err, o)
+		exp := [][]string{
+			{"1 row"},
+			decommissionHeader,
+			{strconv.Itoa(int(target)), `true|false`, `\d+`, `true`, `true|false`},
+			decommissionFooterLive,
 		}
+		if err := matchCSV(o, exp); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Check that (at least after a bit) the node disappears from `node ls`
+	// because it is decommissioned and not live.
+	for {
+		o, _, err := c.ExecCLI(ctx, 2, []string{"node", "ls", "--format", "csv"})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		log.Info(ctx, o)
+
+		exp := [][]string{
+			{"3 rows"},
+			{"id"},
+			{"2"},
+			{"3"},
+			{"4"},
+		}
+
+		if err := matchCSV(o, exp); err != nil {
+			time.Sleep(time.Second)
+			continue
+		}
+		break
+	}
+	for {
+		o, _, err := c.ExecCLI(ctx, 2, []string{"node", "status", "--format", "csv"})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		log.Info(ctx, o)
+
+		exp := [][]string{
+			{"3 rows"},
+			statusHeader,
+			{`2`, `.*`, `.*`, `.*`, `.*`},
+			{`3`, `.*`, `.*`, `.*`, `.*`},
+			{`4`, `.*`, `.*`, `.*`, `.*`},
+		}
+		if err := matchCSV(o, exp); err != nil {
+			time.Sleep(time.Second)
+			continue
+		}
+		break
 	}
 
 	// Verify the event log has recorded exactly one decommissioned or
