@@ -72,7 +72,7 @@ The keys for a sql table represented in the kv map are
     /<tableID>/1/<pkCol1>/<pkCol2>/<familyID>/<suffix>
 
 Where `pkColN` is the key encoding of the Nth primary index column, there is one
-row per [family of columns](https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/sql_column_families.md),
+row per [family of columns](https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20151214_sql_column_families.md),
 and `suffix` counts how many bytes are stripped off the end to determine where
 ranges can split. The 0 row is always present and acts as a sentinel for the
 existence of the row. The single `0` on the end is an optimization that reuses
