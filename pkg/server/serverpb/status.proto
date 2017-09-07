@@ -482,22 +482,6 @@ message RangeResponse {
     string error_message = 2;
     repeated RangeInfo infos = 3 [(gogoproto.nullable) = false];
   }
-  message RangeLog {
-    // To avoid porting the pretty printing of keys and descriptors to
-    // javascript, they will be precomputed on the serverside.
-    message PrettyInfo {
-      string updated_desc = 1;
-      string new_desc = 2;
-      string added_replica = 3;
-      string removed_replica = 4;
-      string reason = 5;
-      string details = 6;
-    }
-    repeated storage.RangeLogEvent events = 1 [(gogoproto.nullable) = false];
-    repeated PrettyInfo pretty_infos = 2 [(gogoproto.nullable) = false];
-    string error_message = 3;
-  }
-
   // NodeID is the node that submitted all the requests.
   int32 node_id = 1 [
     (gogoproto.customname) = "NodeID",
@@ -512,7 +496,7 @@ message RangeResponse {
     (gogoproto.customname) = "ResponsesByNodeID",
     (gogoproto.nullable) = false
   ];
-  RangeLog range_log = 4 [(gogoproto.nullable) = false];
+  reserved 4;
 }
 
 service Status {

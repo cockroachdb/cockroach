@@ -5,7 +5,7 @@ import { connect } from "react-redux";
 import { RouterState } from "react-router";
 
 import * as protos from "src/js/protos";
-import { refreshRange, refreshAllocatorRange } from "src/redux/apiReducers";
+import { refreshAllocatorRange, refreshRange, refreshRangeLog } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { rangeIDAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
@@ -19,10 +19,13 @@ import LeaseTable from "src/views/reports/containers/range/leaseTable";
 interface RangeOwnProps {
   range: protos.cockroach.server.serverpb.RangeResponse;
   allocatorRange: protos.cockroach.server.serverpb.AllocatorRangeResponse;
+  rangeLog: protos.cockroach.server.serverpb.RangeLogResponse;
   lastError: Error;
-  lastAllocatorError: Error;
+  allocatorLastError: Error;
+  rangeLogLastError: Error;
   refreshRange: typeof refreshRange;
   refreshAllocatorRange: typeof refreshAllocatorRange;
+  refreshRangeLog: typeof refreshRangeLog;
 }
 
 type RangeProps = RangeOwnProps & RouterState;
@@ -48,12 +51,17 @@ function ErrorPage(props: {
  */
 class Range extends React.Component<RangeProps, {}> {
   refresh(props = this.props) {
-    // TODO(bram): Check range id for errors here?
+    const rangeID = Long.fromString(props.params[rangeIDAttr]);
     props.refreshRange(new protos.cockroach.server.serverpb.RangeRequest({
-      range_id: Long.fromString(props.params[rangeIDAttr]),
+      range_id: rangeID,
     }));
     props.refreshAllocatorRange(new protos.cockroach.server.serverpb.AllocatorRangeRequest({
-      range_id: Long.fromString(props.params[rangeIDAttr]),
+      range_id: rangeID,
+    }));
+    // TODO(bram): Remove this limit once #18159 is resolved.
+    props.refreshRangeLog(new protos.cockroach.server.serverpb.RangeLogRequest({
+      range_id: rangeID,
+      limit: -1,
     }));
   }
 
@@ -70,7 +78,7 @@ class Range extends React.Component<RangeProps, {}> {
 
   render() {
     const rangeID = this.props.params[rangeIDAttr];
-    const { range, allocatorRange } = this.props;
+    const { range } = this.props;
 
     // A bunch of quick error cases.
     if (!_.isNil(this.props.lastError)) {
@@ -138,9 +146,16 @@ class Range extends React.Component<RangeProps, {}> {
         <h1>Range Report for r{responseRangeID.toString()}</h1>
         <RangeTable infos={infos} replicas={replicas} />
         <LeaseTable info={_.head(infos)} />
-        <LogTable rangeID={responseRangeID} log={range.range_log} />
-        <AllocatorOutput allocatorRangeResponse={allocatorRange} lastError={this.props.lastAllocatorError} />
         <ConnectionsTable rangeResponse={range} />
+        <AllocatorOutput
+          allocatorRangeResponse={this.props.allocatorRange}
+          lastError={this.props.allocatorLastError}
+        />
+        <LogTable
+          rangeID={responseRangeID}
+          log={this.props.rangeLog}
+          lastError={this.props.rangeLogLastError}
+        />
       </div>
     );
   }
@@ -150,14 +165,17 @@ function mapStateToProps(state: AdminUIState) {
   return {
     range: state.cachedData.range.data,
     allocatorRange: state.cachedData.allocatorRange.data,
+    rangeLog: state.cachedData.rangeLog.data,
     lastError: state.cachedData.range.lastError,
-    lastAllocatorError: state.cachedData.allocatorRange.lastError,
+    allocatorLastError: state.cachedData.allocatorRange.lastError,
+    rangeLogLastError: state.cachedData.rangeLog.lastError,
   };
 }
 
 const actions = {
   refreshRange,
   refreshAllocatorRange,
+  refreshRangeLog,
 };
 
 export default connect(mapStateToProps, actions)(Range);
