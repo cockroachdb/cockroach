@@ -1,13 +1,19 @@
+// tslint:disable-next-line:no-var-requires
+const spinner = require<string>("assets/spinner.gif");
+
 import _ from "lodash";
 import React from "react";
 
 import * as protos from "src/js/protos";
 import { FixLong } from "src/util/fixLong";
 import Print from "src/views/reports/containers/range/print";
+import Loading from "src/views/shared/components/loading";
+import { TimestampToMoment } from "src/util/convert";
 
 interface LogTableProps {
   rangeID: Long;
-  log: protos.cockroach.server.serverpb.RangeResponse.RangeLog$Properties;
+  log: protos.cockroach.server.serverpb.RangeLogResponse$Properties;
+  lastError: Error;
 }
 
 function printLogEventType(eventType: protos.cockroach.storage.RangeLogEventType) {
@@ -52,7 +58,7 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
     );
   }
 
-  renderLogInfo(info: protos.cockroach.server.serverpb.RangeResponse.RangeLog.PrettyInfo$Properties) {
+  renderLogInfo(info: protos.cockroach.server.serverpb.RangeLogResponse.PrettyInfo$Properties) {
     return (
       <ul className="log-entries-list">
         {this.renderLogInfoDescriptor("Updated Range Descriptor", info.updated_desc)}
@@ -66,53 +72,58 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
   }
 
   render() {
-    const { log } = this.props;
-    if (!_.isEmpty(log.error_message)) {
+    const { log, lastError } = this.props;
+
+    if (!_.isEmpty(lastError)) {
       return (
         <div>
           <h2>Range Log</h2>
           There was an error retrieving the range log:
-          {log.error_message}
+          {lastError}
         </div>
       );
     }
 
-    if (_.isEmpty(log.events)) {
-      return (
-        <div>
-          <h2>Range Log</h2>
-          The range log is empty.
-        </div>
-      );
-    }
+    // Sort by descending timestamp.
+    const events = _.orderBy(log && log.events, event => TimestampToMoment(event.event.timestamp).valueOf(), "desc");
 
     return (
       <div>
         <h2>Range Log</h2>
-        <table className="log-table">
-          <tbody>
-            <tr className="log-table__row log-table__row--header">
-              <th className="log-table__cell log-table__cell--header">Timestamp</th>
-              <th className="log-table__cell log-table__cell--header">Store</th>
-              <th className="log-table__cell log-table__cell--header">Event Type</th>
-              <th className="log-table__cell log-table__cell--header">Range</th>
-              <th className="log-table__cell log-table__cell--header">Other Range</th>
-              <th className="log-table__cell log-table__cell--header">Info</th>
-            </tr>
-            {
-              _.map(log.events, (event, key) => (
-                <tr key={key} className="log-table__row">
-                  <td className="log-table__cell log-table__cell--date">{Print.Timestamp(event.timestamp)}</td>
-                  <td className="log-table__cell">s{event.store_id}</td>
-                  <td className="log-table__cell">{printLogEventType(event.event_type)}</td>
-                  <td className="log-table__cell">{this.renderRangeID(event.range_id)}</td>
-                  <td className="log-table__cell">{this.renderRangeID(event.other_range_id)}</td>
-                  <td className="log-table__cell">{this.renderLogInfo(log.pretty_infos[key])}</td>
-                </tr>
-              ))
-            }
-          </tbody>
-        </table>
+        <Loading
+          loading={_.isNil(log)}
+          className="loading-image loading-image__spinner-left"
+          image={spinner}
+        >
+          <table className="log-table">
+            <tbody>
+              <tr className="log-table__row log-table__row--header">
+                <th className="log-table__cell log-table__cell--header">Timestamp</th>
+                <th className="log-table__cell log-table__cell--header">Store</th>
+                <th className="log-table__cell log-table__cell--header">Event Type</th>
+                <th className="log-table__cell log-table__cell--header">Range</th>
+                <th className="log-table__cell log-table__cell--header">Other Range</th>
+                <th className="log-table__cell log-table__cell--header">Info</th>
+              </tr>
+              {
+                _.map(events, (event, key) => (
+                  <tr key={key} className="log-table__row">
+                    <td className="log-table__cell log-table__cell--date">
+                      {Print.Timestamp(event.event.timestamp)}
+                    </td>
+                    <td className="log-table__cell">s{event.event.store_id}</td>
+                    <td className="log-table__cell">{printLogEventType(event.event.event_type)}</td>
+                    <td className="log-table__cell">{this.renderRangeID(event.event.range_id)}</td>
+                    <td className="log-table__cell">
+                      {this.renderRangeID(event.event.other_range_id)}
+                    </td>
+                    <td className="log-table__cell">{this.renderLogInfo(event.pretty_info)}</td>
+                  </tr>
+                ))
+              }
+            </tbody>
+          </table>
+        </Loading>
       </div>
     );
   }

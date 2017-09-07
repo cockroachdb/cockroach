@@ -675,11 +675,6 @@ func TestRangeResponse(t *testing.T) {
 		t.Errorf("got the wrong number of responses, expected %d, actual %d", e, a)
 	}
 
-	// Make sure the rangelog has some values in it.
-	if e, a := 1, len(response.RangeLog.Events); e != a {
-		t.Errorf("range log has the wrong size, expected %d, actual %d", e, a)
-	}
-
 	node1Response := response.ResponsesByNodeID[response.NodeID]
 
 	// The response should come back as valid.
