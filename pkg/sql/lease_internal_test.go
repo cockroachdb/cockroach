@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -505,5 +506,66 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 			}
 		}()
 	}
+	wg.Wait()
+}
+
+func TestLeaseManagerAcquireDuringDrop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	dropChan := make(chan struct{})
+	testingKnobs := base.TestingKnobs{
+		SQLLeaseManager: &LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: LeaseStoreTestingKnobs{
+				LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, _ error) {
+					if table.Name == "test" && dropChan != nil {
+						close(dropChan)
+						dropChan = nil
+					}
+				},
+			},
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(
+		t, base.TestServerArgs{Knobs: testingKnobs})
+	defer s.Stopper().Stop(context.TODO())
+	leaseManager := s.LeaseManager().(*LeaseManager)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
+	var wg sync.WaitGroup
+	numRoutines := 10
+	now := s.Clock().Now()
+	notify := dropChan
+	wg.Add(numRoutines)
+	for i := 0; i < numRoutines; i++ {
+		go func() {
+			defer wg.Done()
+			table, _, err := leaseManager.Acquire(context.TODO(), now, tableDesc.ID)
+			if err != nil {
+				if !testutils.IsError(err, "table is being dropped") {
+					t.Error(err)
+				}
+				return
+			}
+			if err := leaseManager.Release(table); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+
+	<-notify
+
+	if _, err := sqlDB.Exec(`
+DROP TABLE t.test;
+`); err != nil {
+		t.Error(err)
+	}
+
 	wg.Wait()
 }

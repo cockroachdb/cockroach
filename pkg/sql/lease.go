@@ -575,7 +575,7 @@ func (t *tableState) acquire(
 	defer t.mu.Unlock()
 	// Acquire a lease if no lease exists or if the latest lease is
 	// about to expire.
-	if s := t.mu.active.findNewest(); s == nil || s.hasExpired(timestamp) {
+	for s := t.mu.active.findNewest(); s == nil || s.hasExpired(timestamp); s = t.mu.active.findNewest() {
 		if err := t.acquireFromStoreLocked(ctx, m); err != nil {
 			return nil, err
 		}
@@ -587,8 +587,7 @@ func (t *tableState) acquire(
 // ensureVersion ensures that the latest version >= minVersion. It will
 // check if the latest known version meets the criterion, or attempt to
 // acquire a lease at the latest version with the hope that it meets
-// the criterion. acquireFromStoreLocked() returns an error if it
-// is unable to acquire a lease meeting the criterion.
+// the criterion.
 func (t *tableState) ensureVersion(
 	ctx context.Context, minVersion sqlbase.DescriptorVersion, m *LeaseManager,
 ) error {
@@ -689,7 +688,8 @@ func (t *tableState) acquireFromStoreLocked(ctx context.Context, m *LeaseManager
 	// Ensure there is no lease acquisition in progress.
 	if t.acquireWait() {
 		// There was a lease acquisition in progress; accept the lease just
-		// acquired.
+		// acquired. The lease might already be released when the table
+		// is dropped.
 		return nil
 	}
 
