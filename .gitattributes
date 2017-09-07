@@ -1,8 +1,5 @@
 *.ir.* -diff
 *.pb.* -diff
-embedded.go -diff
 pkg/sql/ir/parser/irgen/irgen.go -diff
 pkg/sql/parser/help_messages.go -diff
 pkg/sql/parser/sql.go -diff
-pkg/ui/generated/* -diff
-pkg/ui/src/js/protos.* -diff
