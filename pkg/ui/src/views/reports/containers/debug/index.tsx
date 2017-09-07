@@ -103,6 +103,7 @@ export default function Debug() {
         <DebugTableRow title="Tracing">
           <DebugTableLink name="Requests" url="/debug/requests" />
           <DebugTableLink name="Events" url="/debug/events" />
+          <DebugTableLink name="Logs" url="/debug/logspy?count=1&amp;duration=10s&amp;grep=." />
         </DebugTableRow>
         <DebugTableRow title="Stopper">
           <DebugTableLink name="Active Tasks" url="/debug/stopper" />
