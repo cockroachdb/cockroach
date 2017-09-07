@@ -1,10 +1,7 @@
 *.pb.* -diff
 *.ir.* -diff
-pkg/ui/embedded.go -diff
 pkg/sql/parser/sql.go -diff
 pkg/sql/parser/help_messages.go -diff
 pkg/sql/ir/parser/irgen/irgen.go -diff
-pkg/ui/src/js/protos.* -diff
-pkg/ui/generated/* -diff
 pkg/ui/yarn.lock -merge
 Gopkg.toml -merge
