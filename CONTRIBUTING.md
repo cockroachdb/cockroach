@@ -1,5 +1,9 @@
 # Contributing to Cockroach
 
+## Prerequisites
+
+Before you start contributing, review these [basic guidelines](https://www.cockroachlabs.com/docs/stable/contribute-to-cockroachdb.html) on finding a project, determining its complexity, and learning what to expect in your collaboration with the Cockroach Labs team.
+
 ## Getting and Building
 
 1. Install the following prerequisites, as necessary:
