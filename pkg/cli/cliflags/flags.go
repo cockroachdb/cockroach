@@ -521,26 +521,22 @@ Takes any of the following values:
 	}
 
 	NodeRanges = FlagInfo{
-		Name: "ranges",
-		Description: `
-		 Show node details for ranges and replicas.`,
+		Name:        "ranges",
+		Description: `Show node details for ranges and replicas.`,
 	}
 
 	NodeStats = FlagInfo{
-		Name: "stats",
-		Description: `
-		 Show node disk usage details.`,
+		Name:        "stats",
+		Description: `Show node disk usage details.`,
 	}
 
 	NodeAll = FlagInfo{
-		Name: "all",
-		Description: `
-		 Show all node details.`,
+		Name: "all", Description: `Show all node details.
+When no node ID is specified, also lists old decommissioned nodes.`,
 	}
 
 	NodeDecommission = FlagInfo{
-		Name: "decommission",
-		Description: `
-		 Show node decomissioning details.`,
+		Name: "decommission", Description: `Show node decommissioning details.
+When no node ID is specified, also lists old decommissioned nodes.`,
 	}
 )
