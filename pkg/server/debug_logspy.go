@@ -220,7 +220,7 @@ func (spy *logSpy) run(ctx context.Context, w io.Writer, opts logSpyOptions) (er
 				return errors.Wrapf(err, "while writing entry %v", entry)
 			}
 			count++
-			if count > opts.Count {
+			if count >= opts.Count {
 				return nil
 			}
 			if done == nil {
