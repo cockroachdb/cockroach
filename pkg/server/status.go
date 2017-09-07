@@ -1101,6 +1101,34 @@ func (s *statusServer) Range(
 	return response, nil
 }
 
+func (s *statusServer) CommandQueue(
+	ctx context.Context, req *serverpb.CommandQueueRequest,
+) (*serverpb.CommandQueueResponse, error) {
+	var replica *storage.Replica
+
+	// TODO: move this into a `GetReplicaForRange` method on Store?
+	s.stores.VisitStores(func(store *storage.Store) error {
+		replicaFromStore, err := store.GetReplica(roachpb.RangeID(req.RangeId))
+
+		if err == nil {
+			replica = replicaFromStore
+		}
+		return nil
+	})
+
+	if replica == nil {
+		return nil, fmt.Errorf("replica not found for range %d", req.RangeId)
+	}
+
+	queueState := replica.GetCommandQueueState()
+
+	response := &serverpb.CommandQueueResponse{
+		Queues: queueState,
+	}
+
+	return response, nil
+}
+
 // ListLocalSessions returns a list of SQL sessions on this node.
 func (s *statusServer) ListLocalSessions(
 	ctx context.Context, req *serverpb.ListSessionsRequest,
