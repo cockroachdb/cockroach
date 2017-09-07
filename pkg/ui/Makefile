@@ -31,23 +31,26 @@ protos:
 generate: $(GOBINDATA_TARGET)
 
 .PHONY: lint
-lint: $(YARN_INSTALLED_TARGET) | protos
+lint: | protos
 	yarn run -- stylint -c .stylintrc styl
 	yarn run -- tslint -c tslint.json -p tsconfig.json --type-check
 	@# TODO(benesch): Invoke tslint just once when palantir/tslint#2827 is fixed.
 	yarn run -- tslint -c tslint.json *.js
 
 .PHONY: test
-test: $(YARN_INSTALLED_TARGET) | protos
+test: dist/vendor.js
 	yarn run -- karma start
 
 .PHONY: test-watch
-test-watch: $(YARN_INSTALLED_TARGET) | protos
+test-watch: dist/vendor.js
 	yarn run -- karma start --no-single-run --auto-watch
 
-$(GOBINDATA_TARGET): $(YARN_INSTALLED_TARGET) $(shell git ls-files | grep -vF $(GOBINDATA_TARGET)) | protos
-	rm -rf dist
-	yarn run -- webpack -p
+dist/vendor.js: | protos
+	yarn run -- webpack --optimize-minimize --config webpack.vendor.js
+
+$(GOBINDATA_TARGET): dist/vendor.js $(shell find src)
+	find dist -mindepth 1 -not -name $(<F) -delete
+	yarn run -- webpack --config webpack.app.js
 	go-bindata -nometadata -pkg ui -o $@ -prefix dist dist/...
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' >> $@
