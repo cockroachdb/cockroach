@@ -38,16 +38,19 @@ lint: $(YARN_INSTALLED_TARGET) | protos
 	yarn run -- tslint -c tslint.json *.js
 
 .PHONY: test
-test: $(YARN_INSTALLED_TARGET) | protos
+test: $(YARN_INSTALLED_TARGET) dist/vendor.js | protos
 	yarn run -- karma start
 
 .PHONY: test-watch
-test-watch: $(YARN_INSTALLED_TARGET) | protos
+test-watch: $(YARN_INSTALLED_TARGET) dist/vendor.js | protos
 	yarn run -- karma start --no-single-run --auto-watch
 
-$(GOBINDATA_TARGET): $(YARN_INSTALLED_TARGET) $(shell git ls-files | grep -vF $(GOBINDATA_TARGET)) | protos
-	rm -rf dist
-	yarn run -- webpack -p
+dist/vendor.js: $(YARN_INSTALLED_TARGET) | protos
+	yarn run -- webpack --optimize-minimize --config webpack.vendor.js
+
+$(GOBINDATA_TARGET): dist/vendor.js $(shell find src) | protos
+	find dist -not -name $(<F) -delete
+	yarn run -- webpack --config webpack.app.js
 	go-bindata -nometadata -pkg ui -o $@ -prefix dist dist/...
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' >> $@
