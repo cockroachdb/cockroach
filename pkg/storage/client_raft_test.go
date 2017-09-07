@@ -650,7 +650,6 @@ func TestRaftLogSizeAfterTruncation(t *testing.T) {
 // truncated.
 func TestSnapshotAfterTruncation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#17448")
 	for _, changeTerm := range []bool{false, true} {
 		name := "sameTerm"
 		if changeTerm {
@@ -726,7 +725,13 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 				// the snapshot is sent to reproduce #13506. If the snapshot
 				// happened before it learned the term, it would accept the
 				// snapshot no matter what term it contained.
-				mtc.restartStore(stoppedStore)
+				//
+				// We do not wait for the store to successfully heartbeat
+				// because it is not expected to succeed in cases where the
+				// other two stores have already completed their leader
+				// election. In this case, a successful heartbeat won't be
+				// possible until we re-enable snapshots.
+				mtc.restartStoreWithoutHeartbeat(stoppedStore)
 				testutils.SucceedsSoon(t, func() error {
 					hasLeader := false
 					term := uint64(0)
