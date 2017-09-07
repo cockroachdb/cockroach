@@ -346,4 +346,4 @@ func (CopyDataBlock) StatementType() parser.StatementType { return parser.RowsAf
 
 // StatementTag returns a short string identifying the type of statement.
 func (CopyDataBlock) StatementTag() string { return "" }
-func (CopyDataBlock) String() string       { return "" }
+func (CopyDataBlock) String() string       { return "CopyDataBlock" }
