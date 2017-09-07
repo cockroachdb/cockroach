@@ -1101,7 +1101,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// (consistent=false). Uncommitted intents which have been abandoned
 	// due to a split crashing halfway will simply be resolved on the
 	// next split attempt. They can otherwise be ignored.
-	s.mu.Lock()
 
 	// TODO(peter): While we have to iterate to find the replica descriptors
 	// serially, we can perform the migrations and replica creation
@@ -1118,9 +1117,19 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			if err != nil {
 				return false, err
 			}
-			if err = s.addReplicaInternalLocked(rep); err != nil {
-				return false, err
+
+			// We can't lock s.mu across NewReplica due to the lock ordering
+			// constraint (*Replica).raftMu < (*Store).mu. See the comment on
+			// (Store).mu.
+			{
+				s.mu.Lock()
+				if err = s.addReplicaInternalLocked(rep); err != nil {
+					s.mu.Unlock()
+					return false, err
+				}
+				s.mu.Unlock()
 			}
+
 			// Add this range and its stats to our counter.
 			s.metrics.ReplicaCount.Inc(1)
 			s.metrics.addMVCCStats(rep.GetMVCCStats())
@@ -1145,7 +1154,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			// and initialize those groups.
 			return false, nil
 		})
-	s.mu.Unlock()
 	if err != nil {
 		return err
 	}
