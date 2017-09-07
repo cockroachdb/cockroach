@@ -300,7 +300,8 @@ type Replica struct {
 		// Last index/term persisted to the raft log (not necessarily
 		// committed). Note that lastTerm may be 0 (and thus invalid) even when
 		// lastIndex is known, in which case the term will have to be retrieved
-		// from the Raft log entry.
+		// from the Raft log entry. Use the invalidLastTerm constant for this
+		// case.
 		lastIndex, lastTerm uint64
 		// The most recent commit index seen in a message from the leader. Used by
 		// the follower to estimate the number of Raft log entries it is
@@ -672,7 +673,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	if err != nil {
 		return err
 	}
-	r.mu.lastTerm = 0
+	r.mu.lastTerm = invalidLastTerm
 
 	pErr, err := r.mu.stateLoader.loadReplicaDestroyedError(ctx, r.store.Engine())
 	if err != nil {
@@ -3249,9 +3250,12 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			return stats, err
 		}
 
-		if lastIndex, err = r.raftMu.stateLoader.loadLastIndex(ctx, r.store.Engine()); err != nil {
-			return stats, err
-		}
+		// r.mu.lastIndex and r.mu.lastTerm were updated in applySnapshot, but
+		// we also want to make sure we reflect these changes in the local
+		// variables we're tracking here. We could pull these values from
+		// r.mu itself, but that would require us to grab a lock.
+		lastIndex, lastTerm = lastIndexAndTermInSnapshot(inSnap)
+
 		// We refresh pending commands after applying a snapshot because this
 		// replica may have been temporarily partitioned from the Raft group and
 		// missed leadership changes that occurred. Suppose node A is the leader,
@@ -3330,9 +3334,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 	}
 
-	// Update protected state (last index, raft log size and raft leader ID) and
-	// set raft log entry cache. We clear any older, uncommitted log entries and
-	// cache the latest ones.
+	// Update protected state (last index, last term, raft log size and raft
+	// leader ID) and set raft log entry cache. We clear any older, uncommitted
+	// log entries and cache the latest ones.
 	//
 	// Note also that we're likely to send messages related to the Entries we
 	// just appended, and these entries need to be inlined when sending them to
