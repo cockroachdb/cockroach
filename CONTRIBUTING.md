@@ -63,15 +63,15 @@ executable will be in your current directory and can be run as shown in the
 
 ## Code Review Workflow
 
-+ All contributors need to sign the [Contributor License Agreement](https://cla-assistant.io/cockroachdb/cockroach).
+- All contributors need to sign the [Contributor License Agreement](https://cla-assistant.io/cockroachdb/cockroach).
 
-+ Create a local feature branch to do work on, ideally on one thing at a time.
+- Create a local feature branch to do work on, ideally on one thing at a time.
   If you are working on your own fork, see [this tip](http://blog.campoy.cat/2014/03/github-and-go-forking-pull-requests-and.html)
   on forking in Go, which ensures that Go import paths will be correct.
 
   `git checkout -b update-readme`
 
-+ Hack away and commit your changes locally using `git add` and `git commit`.
+- Hack away and commit your changes locally using `git add` and `git commit`.
   Remember to write tests! The following are helpful for running specific
   subsets of tests:
 
@@ -111,7 +111,7 @@ executable will be in your current directory and can be run as shown in the
   not point to a specific package; those commits may begin with "*:" or "all:"
   to indicate their reach.
 
-+ Run the linters, code generators, and unit test suites locally:
+- Run the linters, code generators, and unit test suites locally:
 
   ```
   make pre-push
@@ -119,7 +119,7 @@ executable will be in your current directory and can be run as shown in the
 
   This will take several minutes.
 
-+ When you’re ready for review, groom your work: each commit should pass tests
+- When you’re ready for review, groom your work: each commit should pass tests
   and contain a substantial (but not overwhelming) unit of work. You may also
   want to `git fetch origin` and run
   `git rebase -i --exec "make lint test" origin/master` to make sure you're
@@ -128,14 +128,14 @@ executable will be in your current directory and can be run as shown in the
 
   `git push -u <yourfork> update-readme`
 
-+ Then [create a pull request using GitHub’s UI](https://help.github.com/articles/creating-a-pull-request). If you know of
+- Then [create a pull request using GitHub’s UI](https://help.github.com/articles/creating-a-pull-request). If you know of
   another GitHub user particularly suited to reviewing your pull request, be
   sure to mention them in the pull request body. If you possess the necessary
   GitHub privileges, please also [assign them to the pull request using
   GitHub's UI](https://help.github.com/articles/assigning-issues-and-pull-requests-to-other-github-users/).
   This will help focus and expedite the code review process.
 
-+ Address test failures and feedback by amending your commits. If your change
+- Address test failures and feedback by amending your commits. If your change
   contains multiple commits, address each piece of feedback by amending that
   commit to which the particular feedback is aimed. Wait (or ask) for new
   feedback on those commits if they are not straightforward. An `LGTM` ("looks
@@ -147,13 +147,13 @@ executable will be in your current directory and can be run as shown in the
 
 Peeking into a running cluster can be done in several ways:
 
-* the [net/trace](https://godoc.org/golang.org/x/net/trace) endpoint at
+- the [net/trace](https://godoc.org/golang.org/x/net/trace) endpoint at
   `/debug/requests`.  It has a breakdown of the recent traced requests, in
   particularly slow ones. Two families are traced: `node` and `coord`, the
   former (and likely more interesting one) containing what happens inside of
   `Node`/`Store`/`Replica` and the other inside of the coordinator
   (`TxnCoordSender`).
-* [pprof](https://golang.org/pkg/net/http/pprof/) gives us (among other things)
+- [pprof](https://golang.org/pkg/net/http/pprof/) gives us (among other things)
   heap and cpu profiles; [this golang blog post](http://blog.golang.org/profiling-go-programs) explains it extremely well and
   [this one by Dmitry Vuykov](https://software.intel.com/en-us/blogs/2014/05/10/debugging-performance-issues-in-go-programs)
   goes into even more detail.
