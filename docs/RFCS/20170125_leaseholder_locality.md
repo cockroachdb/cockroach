@@ -43,23 +43,24 @@ a range is always in an Asian data center, then the latency of accessing that
 range will be much worse when most of its requests come from elsewhere. This is
 where the idea of the lease "following the sun" comes from.
 
-Finally, it's worth noting that this goal is somewhat at odds with our desire to
-distribute load evenly throughout a cluster (e.g. via [range
-rebalancing](rebalancing_v2.md) and [leaseholder
-rebalancing](leaseholder_rebalancing.md). In fact, this goal was specifically
-pushed off when the initial form of leaseholder rebalancing was designed and
-implemented.  Placing the leaseholders near their most common gateways may lower
-total throughput if it maxes out what the local machines can do while leaving
-the machines in other datacenters underutilized, particularly if the latency
-between datacenters is small. There is a fine balance to be kept to avoid
-minimizing latency at the expense of too much throughput and vice versa.
+Finally, it's worth noting that this goal is somewhat at odds with our desire
+to distribute load evenly throughout a cluster (e.g. via [range
+rebalancing](20160503_rebalancing_v2.md) and [leaseholder
+rebalancing](20161026_leaseholder_rebalancing.md). In fact, this goal was
+specifically pushed off when the initial form of leaseholder rebalancing was
+designed and implemented.  Placing the leaseholders near their most common
+gateways may lower total throughput if it maxes out what the local machines can
+do while leaving the machines in other datacenters underutilized, particularly
+if the latency between datacenters is small. There is a fine balance to be kept
+to avoid minimizing latency at the expense of too much throughput and vice
+versa.
 
 # Detailed design
 
 Given that a lease transfer mechanism already exists, the remaining difficulty
 lies in deciding when to transfer leases. We [already have
-logic](leaseholder_rebalancing.md) that decides when to transfer leases with the
-goal of ensuring each node has approximately the same number of leases.
+logic](20161026_leaseholder_rebalancing.md) that decides when to transfer leases
+with the goal of ensuring each node has approximately the same number of leases.
 Anything we add to make leases follow the sun will need to place nicely with
 that existing goal.
 
@@ -217,13 +218,13 @@ gain. We'll stick with the first option for now.
 ### Reconciling lease locality with lease balance
 
 As mentioned above, our goals in this RFC come into fairly direct conflict with
-the goals of the [lease rebalancing RFC](leaseholder_rebalancing.md). If all the
-requests are coming from a single locality, it would be ideal from a latency
-perspective for all the leases to be there as well, so long as that wouldn't
-overload the nodes with too much work. However, it's possible that putting all
-the leases into that locality will overload the nodes such that overall cluster
-throughput (and even latency) is worse than it would be if the leases were
-properly balanced.
+the goals of the [lease rebalancing RFC](20161026_leaseholder_rebalancing.md).
+If all the requests are coming from a single locality, it would be ideal from a
+latency perspective for all the leases to be there as well, so long as that
+wouldn't overload the nodes with too much work. However, it's possible that
+putting all the leases into that locality will overload the nodes such that
+overall cluster throughput (and even latency) is worse than it would be if the
+leases were properly balanced.
 
 Ideally, we would have some understanding of how fully utilized each node is in
 terms of throughput. That measurement could be gossiped in the same way as each
@@ -313,7 +314,7 @@ heuristic.
   heuristics. This should be fairly straightforward, it'll just require some
   benchmarking. There's more discussion of this in the [future directions
   section of the leaseholder rebalancing
-  RFC](leaseholder_rebalancing.md#future-directions).
+  RFC](20161026_leaseholder_rebalancing.md#future-directions).
 
 * As mentioned above, it would be very beneficial if we came up with some way of
   measuring the true load on each node, either as a collection of measurements

@@ -15,7 +15,8 @@ Lay out plans for which rebalancing improvements to make (or not make) in the
 # Background / Motivation
 
 We’ve made a couple of efforts over the past year to improve the balance of
-[replicas](rebalancing_v2.md) and [leases](leaseholder_locality.md) across a
+[replicas](20160503_rebalancing_v2.md) and
+[leases](20170125_leaseholder_locality.md) across a
 cluster, but our balancing algorithms still don’t take into account everything
 that a user might care about balancing within their cluster. This document puts
 forth plans for what we’ll work on with respect to rebalancing during the 1.1
@@ -42,13 +43,13 @@ load is on that range and on each of the candidate nodes.
 ## Moving replicas closer to where their load is coming from ("load-based replica locality")
 
 For the 1.0 release, [we added lease transfer
-heuristics](leaseholder_locality.md) that move leases closer to the where
-requests are coming from in high-latency environments. It’s easy to imagine a
-similar heuristic for moving ranges -- if a lot of requests for a range are
-coming from a locality that doesn’t have a replica of the range, then we should
-add a replica there. That will then enable the lease-transferring heuristics to
-transfer the lease there if appropriate, reducing the latency to access the
-range.
+heuristics](20170125_leaseholder_locality.md) that move leases closer to the
+where requests are coming from in high-latency environments. It’s easy to
+imagine a similar heuristic for moving ranges -- if a lot of requests for a
+range are coming from a locality that doesn’t have a replica of the range, then
+we should add a replica there. That will then enable the lease-transferring
+heuristics to transfer the lease there if appropriate, reducing the latency to
+access the range.
 
 ## Splitting ranges based on load ("load-based splitting")
 
@@ -129,16 +130,16 @@ replicas.
 
 ## Load-based rebalancing
 
-As part of our [leaseholder locality](leaseholder_locality.md) work, we started
-tracking how many requests each range’s leaseholder receives. This gives us a
-QPS number for each leaseholder replica, but no data for replicas that aren’t
-leaseholders. If we left things this way, our replica rebalancing would suddenly
-take a dependency on the cluster’s current distribution of leaseholders, which
-is a scary thought given that leaseholder rebalancing conceptually already
-depends on replica rebalancing (because it can only balance leases to where the
-replicas are). As a result, I think we’ll want to start tracking the number of
-applied commands on each replica instead of relying on the existing leaseholder
-QPS.
+As part of our [leaseholder locality](20170125_leaseholder_locality.md) work, we
+started tracking how many requests each range’s leaseholder receives. This gives
+us a QPS number for each leaseholder replica, but no data for replicas that
+aren’t leaseholders. If we left things this way, our replica rebalancing would
+suddenly take a dependency on the cluster’s current distribution of
+leaseholders, which is a scary thought given that leaseholder rebalancing
+conceptually already depends on replica rebalancing (because it can only balance
+leases to where the replicas are). As a result, I think we’ll want to start
+tracking the number of applied commands on each replica instead of relying on
+the existing leaseholder QPS.
 
 Once we have that per-replica QPS, though, we can aggregate it at the store
 level and start including it in the store’s capacity gossip messages to use it
@@ -155,10 +156,11 @@ just transferring leases, the cost of thrashing skyrockets because snapshots
 consume a lot of disk/network bandwidth.
 
 This also conflicts with one of our design goals from [the original rebalancing
-RFC](stateless_replica_relocation.md), which is that the decision to make any
-individual operation should be stateless. Because the counts of requests by
-locality are only tracked on the leaseholder, these types of decisions are
-inherently stateful, so we should tread into making them with caution.
+RFC](20150819_stateless_replica_relocation.md), which is that the decision to
+make any individual operation should be stateless. Because the counts of
+requests by locality are only tracked on the leaseholder, these types of
+decisions are inherently stateful, so we should tread into making them with
+caution.
 
 In the interest of not creating problem cases for users, I’d suggest pushing
 this back until we have known demand for it. Custom zone configs paired with
