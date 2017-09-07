@@ -1,5 +1,11 @@
 # Contributing to Cockroach
 
+- [Prerequisites](#prerequisites)
+- [Getting and Building](#getting-and-building)
+- [Style Guide](#style-guide)
+- [Code Review Workflow](#code-review-workflow)
+- [Debugging](#debugging)
+
 ## Prerequisites
 
 Before you start contributing, review these [basic guidelines](https://www.cockroachlabs.com/docs/stable/contribute-to-cockroachdb.html) on finding a project, determining its complexity, and learning what to expect in your collaboration with the Cockroach Labs team.
