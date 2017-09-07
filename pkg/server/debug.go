@@ -44,7 +44,7 @@ var debugServeMux = http.DefaultServeMux
 // TODO(arjun): use an Enum setting here.
 var debugRemote = settings.RegisterStringSetting(
 	"server.remote_debugging.mode",
-	"set to enable remote debugging, localhost-only or disable (all, local, false)",
+	"set to enable remote debugging, localhost-only or disable (any, local, false)",
 	"local")
 
 // handleDebug passes requests with the debugPathPrefix onto the default
