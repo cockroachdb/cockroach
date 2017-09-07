@@ -126,6 +126,11 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 
 // prev gives the right boundary of the union of all requests which don't
 // affect keys larger than the given key.
+//
+// Informally, a call `prev(ba, k)` means: we've already executed the parts
+// of `ba` that intersect `[key, KeyMax)`; please tell me how far to the
+// left the next relevant request begins.
+//
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
 // 'keys' into 'roachpb'.
 func prev(ba roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
@@ -140,24 +145,38 @@ func prev(ba roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
 		if err != nil {
 			return nil, err
 		}
+		// FIXINPR(tschottdorf,nvanbenschoten): yikes, this is totally paged out.
+		// Page it in and add commentary because this is super subtle and the PrevNext
+		// test doesn't explain anything. The good news is that just using `Addr()` here
+		// breaks one test case.
+		//
+		//eAddr, err := keys.Addr(h.EndKey)
 		eAddr, err := keys.AddrUpperBound(h.EndKey)
 		if err != nil {
 			return nil, err
 		}
 		if len(eAddr) == 0 {
-			eAddr = addr.Next()
+			// This is unintuitive, but if we have a point request at `x=k` then we're done
+			// with `k`, so we treat `k` as `[k,k)` which does the right thing below. It also
+			// does when `x > k` and `x < k`, so we're good.
+			eAddr = addr
 		}
 		if !eAddr.Less(k) {
-			if !k.Less(addr) {
+			if addr.Less(k) {
 				// Range contains k, so won't be able to go lower.
+				// Note that in the special case in which the interval
+				// touches k, we don't take this branch. This reflects
+				// the fact that `prev(k)` means that all keys >= k have
+				// been handled, so a request `[k, x)` should simply be
+				// skipped.
 				return k, nil
 			}
 			// Range is disjoint from [KeyMin,k).
 			continue
 		}
 		// We want the largest surviving candidate.
-		if candidate.Less(addr) {
-			candidate = addr
+		if candidate.Less(eAddr) {
+			candidate = eAddr
 		}
 	}
 	return candidate, nil
