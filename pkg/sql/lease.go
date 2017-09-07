@@ -573,10 +573,13 @@ func (t *tableState) acquire(
 ) (*tableVersionState, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	// Wait for any existing lease acquisition.
+	t.acquireWait()
+
 	// Acquire a lease if no lease exists or if the latest lease is
 	// about to expire.
 	if s := t.mu.active.findNewest(); s == nil || s.hasExpired(timestamp) {
-		if err := t.acquireFromStoreLocked(ctx, m); err != nil {
+		if err := t.acquireNodeLease(ctx, m, hlc.Timestamp{}); err != nil {
 			return nil, err
 		}
 	}
@@ -587,8 +590,7 @@ func (t *tableState) acquire(
 // ensureVersion ensures that the latest version >= minVersion. It will
 // check if the latest known version meets the criterion, or attempt to
 // acquire a lease at the latest version with the hope that it meets
-// the criterion. acquireFromStoreLocked() returns an error if it
-// is unable to acquire a lease meeting the criterion.
+// the criterion.
 func (t *tableState) ensureVersion(
 	ctx context.Context, minVersion sqlbase.DescriptorVersion, m *LeaseManager,
 ) error {
@@ -599,7 +601,7 @@ func (t *tableState) ensureVersion(
 		return nil
 	}
 
-	if err := t.acquireFromStoreLocked(ctx, m); err != nil {
+	if err := t.acquireFreshestFromStoreLocked(ctx, m); err != nil {
 		return err
 	}
 
@@ -682,20 +684,6 @@ func (t *tableState) findForTimestamp(
 	return table, nil
 }
 
-// acquireFromStoreLocked acquires a new lease from the store and inserts it
-// into the active set. t.mu must be locked. If the table descriptor version
-// doesn't exist an error is returned (the descriptor version >= minVersion).
-func (t *tableState) acquireFromStoreLocked(ctx context.Context, m *LeaseManager) error {
-	// Ensure there is no lease acquisition in progress.
-	if t.acquireWait() {
-		// There was a lease acquisition in progress; accept the lease just
-		// acquired.
-		return nil
-	}
-
-	return t.acquireNodeLease(ctx, m, hlc.Timestamp{})
-}
-
 // acquireFreshestFromStoreLocked acquires a new lease from the store and
 // inserts it into the active set. It guarantees that the lease returned is
 // the one acquired after the call is made. Use this if the lease we want to
@@ -768,20 +756,16 @@ func (t *tableState) removeInactiveVersions(m *LeaseManager) {
 	}
 }
 
-// acquireWait waits until no lease acquisition is in progress. It returns
-// true if it needed to wait.
-func (t *tableState) acquireWait() bool {
-	wait := t.mu.acquiring != nil
+// acquireWait waits until no lease acquisition is in progress.
+func (t *tableState) acquireWait() {
 	// Spin until no lease acquisition is in progress.
-	for t.mu.acquiring != nil {
+	for acquiring := t.mu.acquiring; acquiring != nil; acquiring = t.mu.acquiring {
 		// We're called with mu locked, but need to unlock it while we wait
 		// for the in-progress lease acquisition to finish.
-		acquiring := t.mu.acquiring
 		t.mu.Unlock()
 		<-acquiring
 		t.mu.Lock()
 	}
-	return wait
 }
 
 // If the lease cannot be obtained because the descriptor is in the process of
