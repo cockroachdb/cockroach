@@ -184,7 +184,7 @@ initialized from something else, for example the cluster setting.
   ) - we should provision a way to set up the cluster settings upfront
   for newly created clusters. Ben: "Another thing for the explicit
   init command, perhaps." (see RFC merged in #14251
-  [init_command.md](init_command.md))
+  [init_command.md](20170318_init_command.md))
 
 # How to name cluster settings
 

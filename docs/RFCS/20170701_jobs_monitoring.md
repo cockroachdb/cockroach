@@ -23,7 +23,7 @@ ability to query job status from SQL directly.
 # Design
 
 For consistency, it is best to mimic the `SHOW [QUERIES|SESSIONS]` syntax
-([RFC](monitoring_queries_and_sessions.md)):
+([RFC](20170505_monitoring_queries_and_sessions.md)):
 
 ```sql
 SHOW JOBS
@@ -37,11 +37,11 @@ JOBS` as a data source in a `FROM` clause, thanks to [#15590]:
 SELECT fraction_completed FROM [SHOW JOBS] WHERE type = 'RESTORE';
 ```
 
-Though the [`system.jobs`](system_jobs.md) table is the source for `SHOW JOBS`
-and can be queried by users (`SELECT * FROM system.jobs`), `system.jobs` cannot
-be used for monitoring. Users cannot retrieve any of several important fields
-stored in the `payload` protobuf, like `fraction_completed` and `username`, from
-SQL directly.
+Though the [`system.jobs`](20170215_system_jobs.md) table is the source for
+`SHOW JOBS` and can be queried by users (`SELECT * FROM system.jobs`),
+`system.jobs` cannot be used for monitoring. Users cannot retrieve any of
+several important fields stored in the `payload` protobuf, like 
+`fraction_completed` and `username`, from SQL directly.
 
 The `crdb_internal.jobs` table wraps the `system.jobs` table and exposes the
 important information by decoding the `payload` protobuf. The columns returned
