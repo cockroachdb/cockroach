@@ -102,6 +102,8 @@
 		ProblemRangesResponse
 		RangeRequest
 		RangeResponse
+		CommandQueueRequest
+		CommandQueueResponse
 */
 package serverpb
 

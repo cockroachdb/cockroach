@@ -22,6 +22,7 @@ import "cockroach/pkg/roachpb/data.proto";
 import "cockroach/pkg/server/status/status.proto";
 import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
 import "cockroach/pkg/storage/log.proto";
+import "cockroach/pkg/storage/command_queue.proto";
 import "cockroach/pkg/storage/storagebase/state.proto";
 import "cockroach/pkg/util/log/log.proto";
 import "cockroach/pkg/util/unresolved_addr.proto";
@@ -515,6 +516,14 @@ message RangeResponse {
   RangeLog range_log = 4 [(gogoproto.nullable) = false];
 }
 
+message CommandQueueRequest {
+  int64 range_id = 1;
+}
+
+message CommandQueueResponse {
+  storage.CommandQueuesForReplica queues = 1;
+}
+
 service Status {
   rpc Certificates(CertificatesRequest) returns (CertificatesResponse) {
     option (google.api.http) = {
@@ -625,6 +634,11 @@ service Status {
   rpc Range(RangeRequest) returns (RangeResponse) {
     option (google.api.http) = {
       get: "/_status/range/{range_id}"
+    };
+  }
+  rpc CommandQueue(CommandQueueRequest) returns (CommandQueueResponse) {
+    option (google.api.http) = {
+      get: "/_status/range/{range_id}/cmdqueue"
     };
   }
 }
