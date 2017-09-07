@@ -3,7 +3,7 @@
 
 "use strict";
 
-const webpackConfig = require("./webpack.config");
+const webpackConfig = require("./webpack.app");
 
 module.exports = function(config) {
   config.set({
@@ -26,6 +26,8 @@ module.exports = function(config) {
 
     // list of files / patterns to load in the browser
     files: [
+      "dist/protos.dll.js",
+      "dist/vendor.dll.js",
       "src/**/*.spec.*",
     ],
 
