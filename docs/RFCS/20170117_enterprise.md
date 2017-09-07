@@ -49,7 +49,7 @@ message License {
 ```
 
 The latest license will be stored as a gossiped [cluster
-setting](https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/settings_table.md).
+setting](https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20170317_settings_table.md).
 Once viewing historical settings is supported, it can be used to show historical
 licensing information. When nodes observe the setting change, the value is
 decoded to update an in-memory copy of the `License` struct.

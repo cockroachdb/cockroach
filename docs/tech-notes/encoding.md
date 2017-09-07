@@ -549,8 +549,8 @@ Example dump:
   [pkg/util/encoding/encoding.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/util/encoding/encoding.go
   [SQL in CockroachDB: Mapping Table Data to Key-Value Storage]: https://www.cockroachlabs.com/blog/sql-in-cockroachdb-mapping-table-data-to-key-value-storage/
   [Implementing Column Families in CockroachDB]: https://www.cockroachlabs.com/blog/sql-cockroachdb-column-families/
-  [column families RFC]: https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/sql_column_families.md
-  [interleaving RFC]: https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/sql_interleaved_tables.md
+  [column families RFC]: https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20151214_sql_column_families.md
+  [interleaving RFC]: https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160624_sql_interleaved_tables.md
   [pkg/sql/sqlbase/structured.proto]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/sqlbase/structured.proto
   [pkg/sql/rowwriter.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/sqlbase/rowwriter.go
   [pkg/sql/sqlbase/rowfetcher.go]: https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/sqlbase/rowfetcher.go

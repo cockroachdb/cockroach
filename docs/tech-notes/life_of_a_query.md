@@ -316,7 +316,7 @@ our execution planning more in the future).
    data source (usually a `scanNode`))
 2. normalization (e.g. `a = 1 + 1` -> `a = 2`, ` a not between b and c` -> `(a < b) or (a > c)`)
 3. type checking (see [the typing
-   RFC](https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/typing.md)
+   RFC](https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160203_typing.md)
    for an in-depth discussion of Cockroach's typing system).
 
    1. constant folding (e.g. `1 + 2` becomes `3`): we perform exact
