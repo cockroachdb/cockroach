@@ -20562,7 +20562,7 @@ export namespace cockroach {
 
             type RangeInfo$Properties = {
                 state?: cockroach.storage.storagebase.ReplicaState$Properties;
-                lastIndex?: Long;
+                last_index?: Long;
                 num_pending?: Long;
                 num_dropped?: Long;
                 raft_log_size?: Long;
@@ -20592,10 +20592,10 @@ export namespace cockroach {
                 public state: (cockroach.storage.storagebase.ReplicaState$Properties|null);
 
                 /**
-                 * RangeInfo lastIndex.
+                 * RangeInfo last_index.
                  * @type {Long}
                  */
-                public lastIndex: Long;
+                public last_index: Long;
 
                 /**
                  * RangeInfo num_pending.
