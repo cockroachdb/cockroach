@@ -395,7 +395,7 @@ func (p *planningCtx) sanityCheckAddresses() error {
 		if otherNodeID, ok := inverted[addr]; ok {
 			return util.UnexpectedWithIssueErrorf(
 				12876,
-				"different nodes with the same address: %d and %d", nodeID, otherNodeID)
+				"different nodes %d and %d with the same address '%s'", nodeID, otherNodeID, addr)
 		}
 		inverted[addr] = nodeID
 	}

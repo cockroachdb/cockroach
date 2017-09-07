@@ -33,7 +33,7 @@ type UnexpectedWithIssueErr struct {
 func UnexpectedWithIssueErrorf(issue int, format string, args ...interface{}) error {
 	return UnexpectedWithIssueErr{
 		issue: issue,
-		msg:   fmt.Sprintf(format, args),
+		msg:   fmt.Sprintf(format, args...),
 	}
 }
 
