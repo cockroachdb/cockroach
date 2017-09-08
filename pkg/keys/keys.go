@@ -411,6 +411,12 @@ func MustAddr(k roachpb.Key) roachpb.RKey {
 // of a range-local key, which is guaranteed to be located on the same range. AddrUpperBound()
 // returns the regular key that is just to the right, which may not be on the same range
 // but is suitable for use as the EndKey of a span involving a range-local key.
+//
+// Logically, the keys are arranged as follows:
+//
+// k1 /local/k1/KeyMin ... /local/k1/KeyMax k1\x00 /local/k1/x00/KeyMin ...
+//
+// and so any end key /local/k1/x corresponds to an address-resolved end key of k1\x00.
 func AddrUpperBound(k roachpb.Key) (roachpb.RKey, error) {
 	rk, err := Addr(k)
 	if err != nil {
