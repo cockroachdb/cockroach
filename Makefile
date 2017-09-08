@@ -155,12 +155,13 @@ all: $(COCKROACH)
 buildoss: BUILDTARGET = ./pkg/cmd/cockroach-oss
 buildoss: $(C_LIBS_OSS)
 
-$(COCKROACH) build go-install: $(C_LIBS_CCL)
+$(COCKROACH) build go-install gotestdashi generate lint lintshort: $(C_LIBS_CCL)
 
 $(COCKROACH) build buildoss: BUILDMODE = build -i -o $(COCKROACH)
 
 # The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
-$(COCKROACH) build buildoss go-install check test testshort testrace bench: override LINKFLAGS += \
+$(COCKROACH) build buildoss go-install gotestdashi generate lint lintshort: $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) .buildinfo/tag .buildinfo/rev .buildinfo/basebranch
+$(COCKROACH) build buildoss go-install gotestdashi generate lint lintshort: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.rev=$(shell cat .buildinfo/rev)" \
@@ -173,7 +174,7 @@ $(COCKROACH) build buildoss go-install check test testshort testrace bench: over
 .PHONY: build buildoss install
 build: ## Build the CockroachDB binary.
 buildoss: ## Build the CockroachDB binary without any CCL-licensed code.
-$(COCKROACH) build buildoss go-install: $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) .buildinfo/tag .buildinfo/rev .buildinfo/basebranch
+$(COCKROACH) build buildoss go-install:
 	 $(XGO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 
 .PHONY: install
@@ -196,7 +197,7 @@ testbuild: gotestdashi
 	$(SHELL)
 
 .PHONY: gotestdashi
-gotestdashi: $(C_LIBS_CCL) $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET)
+gotestdashi:
 	$(XGO) test -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i $(PKG)
 
 testshort: override TESTFLAGS += -short
@@ -256,7 +257,7 @@ stressrace: TESTTIMEOUT := $(RACETIMEOUT)
 .PHONY: stress stressrace
 stress: ## Run tests under stress.
 stressrace: ## Run tests under stress with the race detector enabled.
-stress stressrace: $(C_LIBS_CCL) $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET)
+stress stressrace: gotestdashi
 	$(GO) list -tags '$(TAGS)' -f '$(XGO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -i -c {{.ImportPath}} -o '\''{{.Dir}}'\''/stress.test && (cd '\''{{.Dir}}'\'' && if [ -f stress.test ]; then stress $(STRESSFLAGS) ./stress.test -test.run '\''$(TESTS)'\'' $(if $(BENCHES),-test.bench '\''$(BENCHES)'\'') -test.timeout $(TESTTIMEOUT) $(TESTFLAGS); fi)' $(PKG) | $(SHELL)
 
 .PHONY: upload-coverage
