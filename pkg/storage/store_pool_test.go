@@ -354,21 +354,8 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 		},
 	}
 	sg.GossipStores(stores, t)
-	node := roachpb.NodeDescriptor{NodeID: roachpb.NodeID(1)}
-	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
-	stopper.AddCloser(eng)
-	cfg := TestStoreConfig(clock)
-	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
-	store := NewStore(cfg, eng, &node)
-	rg := roachpb.RangeDescriptor{
-		RangeID:  1,
-		StartKey: roachpb.RKey([]byte("a")),
-		EndKey:   roachpb.RKey([]byte("b")),
-	}
-	replica, err := NewReplica(&rg, store, roachpb.ReplicaID(0))
-	if err != nil {
-		t.Fatalf("make replica error : %s", err)
-	}
+
+	replica := &Replica{RangeID: 1}
 	replica.mu.Lock()
 	replica.mu.state.Stats = &enginepb.MVCCStats{
 		KeyBytes: 2,
@@ -382,7 +369,13 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	manual.Increment(int64(MinStatsDuration + time.Second))
 	replica.writeStats = rs
 
-	sp.updateLocalStoreAfterRebalance(roachpb.StoreID(1), replica, roachpb.ADD_REPLICA)
+	rangeDesc := &roachpb.RangeDescriptor{
+		RangeID: replica.RangeID,
+	}
+
+	rangeInfo := rangeInfoForRepl(replica, rangeDesc)
+
+	sp.updateLocalStoreAfterRebalance(roachpb.StoreID(1), rangeInfo, roachpb.ADD_REPLICA)
 	desc, ok := sp.getStoreDescriptor(roachpb.StoreID(1))
 	if !ok {
 		t.Fatalf("couldn't find StoreDescriptor for Store ID %d", 1)
@@ -393,7 +386,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 			expectedBytes, desc.Capacity.LogicalBytes, expectedQPS, desc.Capacity.WritesPerSecond)
 	}
 
-	sp.updateLocalStoreAfterRebalance(roachpb.StoreID(2), replica, roachpb.REMOVE_REPLICA)
+	sp.updateLocalStoreAfterRebalance(roachpb.StoreID(2), rangeInfo, roachpb.REMOVE_REPLICA)
 	desc, ok = sp.getStoreDescriptor(roachpb.StoreID(2))
 	if !ok {
 		t.Fatalf("couldn't find StoreDescriptor for Store ID %d", 2)
