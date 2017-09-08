@@ -186,7 +186,12 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 	// using the replicate queue, and to ensure that's the case, the test
 	// cluster needs to be kept in auto replication mode.
 	tc := testcluster.StartTestCluster(t, replicaCount+2,
-		base.TestClusterArgs{ReplicationMode: base.ReplicationAuto},
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationAuto,
+			ServerArgs: base.TestServerArgs{
+				RaftConfig: base.TestFastRaftConfig,
+			},
+		},
 	)
 	defer tc.Stopper().Stop(context.Background())
 

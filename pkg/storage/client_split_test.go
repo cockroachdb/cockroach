@@ -1043,7 +1043,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 func runSetupSplitSnapshotRace(
 	t *testing.T, testFn func(*multiTestContext, roachpb.Key, roachpb.Key),
 ) {
-	sc := storage.TestStoreConfig(nil)
+	sc := storage.TestFastRaftStoreConfig(nil)
 	// We'll control replication by hand.
 	sc.TestingKnobs.DisableReplicateQueue = true
 	// Async intent resolution can sometimes lead to hangs when we stop
@@ -1462,6 +1462,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 	// or race tests never make any progress.
 	storeCfg.RaftTickInterval = 50 * time.Millisecond
 	storeCfg.RaftElectionTimeoutTicks = 2
+	storeCfg.RaftHeartbeatIntervalTicks = 1
 	currentTrigger := make(chan *roachpb.SplitTrigger, 1)
 	var seen struct {
 		syncutil.Mutex
@@ -1586,7 +1587,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 // elects a leader without waiting for an election timeout.
 func TestLeaderAfterSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	storeConfig := storage.TestStoreConfig(nil)
+	storeConfig := storage.TestFastRaftStoreConfig(nil)
 	storeConfig.RaftElectionTimeoutTicks = 1000000
 	mtc := &multiTestContext{
 		storeConfig: &storeConfig,

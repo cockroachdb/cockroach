@@ -192,6 +192,7 @@ func (t *parallelTest) setup(spec *parTestSpec) {
 					CheckStmtStringChange: true,
 				},
 			},
+			RaftConfig: base.TestFastRaftConfig,
 		},
 	}
 	t.cluster = serverutils.StartTestCluster(t, spec.ClusterSize, args)

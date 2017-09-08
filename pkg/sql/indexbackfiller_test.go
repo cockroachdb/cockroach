@@ -57,6 +57,7 @@ func TestIndexBackfiller(t *testing.T) {
 			},
 		},
 	}
+	params.RaftConfig = base.TestFastRaftConfig
 
 	tc := serverutils.StartTestCluster(t, 3,
 		base.TestClusterArgs{

@@ -29,7 +29,7 @@ import (
 // process ranges whose replicas are not all live.
 func TestConsistencyQueueRequiresLive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	sc := storage.TestStoreConfig(nil)
+	sc := storage.TestFastRaftStoreConfig(nil)
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 3)

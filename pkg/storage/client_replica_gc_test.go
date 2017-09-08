@@ -114,7 +114,8 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 func TestReplicaGCQueueDropReplicaGCOnScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mtc := &multiTestContext{}
+	sc := storage.TestFastRaftStoreConfig(nil)
+	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 	// Disable the replica gc queue to prevent direct removal of replica.
