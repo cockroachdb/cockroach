@@ -21,7 +21,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -30,7 +29,6 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
-	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
@@ -47,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -346,47 +345,6 @@ func backupAndRestore(
 		}
 	}
 }
-
-func verifySystemJob(
-	db *sqlutils.SQLRunner, offset int, expectedType jobs.Type, expected jobs.Record,
-) error {
-	var actual jobs.Record
-	var rawDescriptorIDs pq.Int64Array
-	var actualType string
-	var statusString string
-	// We have to query for the nth job created rather than filtering by ID,
-	// because job-generating SQL queries (e.g. BACKUP) do not currently return
-	// the job ID.
-	db.QueryRow(`
-		SELECT type, description, username, descriptor_ids, status
-		FROM crdb_internal.jobs ORDER BY created LIMIT 1 OFFSET $1`,
-		offset,
-	).Scan(
-		&actualType, &actual.Description, &actual.Username, &rawDescriptorIDs,
-		&statusString,
-	)
-
-	for _, id := range rawDescriptorIDs {
-		actual.DescriptorIDs = append(actual.DescriptorIDs, sqlbase.ID(id))
-	}
-	sort.Sort(actual.DescriptorIDs)
-	sort.Sort(expected.DescriptorIDs)
-	expected.Details = nil
-	if e, a := expected, actual; !reflect.DeepEqual(e, a) {
-		return errors.Errorf("job %d did not match:\n%s",
-			offset, strings.Join(pretty.Diff(e, a), "\n"))
-	}
-
-	if e, a := jobs.StatusSucceeded, jobs.Status(statusString); e != a {
-		return errors.Errorf("job %d: expected status %v, got %v", offset, e, a)
-	}
-	if e, a := expectedType.String(), actualType; e != a {
-		return errors.Errorf("job %d: expected type %v, got type %v", offset, e, a)
-	}
-
-	return nil
-}
-
 func TestBackupRestoreSystemJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -428,7 +386,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	sqlDB.Exec(`SET DATABASE = data`)
 
 	sqlDB.Exec(`BACKUP bank TO $1 INCREMENTAL FROM $2`, incDir, fullDir)
-	if err := verifySystemJob(sqlDB, 1, jobs.TypeBackup, jobs.Record{
+	if err := jobutils.VerifySystemJob(sqlDB, 1, jobs.TypeBackup, jobs.Record{
 		Username: security.RootUser,
 		Description: fmt.Sprintf(
 			`BACKUP data.bank TO '%s' INCREMENTAL FROM '%s'`,
@@ -446,7 +404,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	}
 
 	sqlDB.Exec(`RESTORE data.* FROM $1, $2 WITH OPTIONS ('into_db'='restoredb')`, fullDir, incDir)
-	if err := verifySystemJob(sqlDB, 2, jobs.TypeRestore, jobs.Record{
+	if err := jobutils.VerifySystemJob(sqlDB, 2, jobs.TypeRestore, jobs.Record{
 		Username: security.RootUser,
 		Description: fmt.Sprintf(
 			`RESTORE data.* FROM '%s', '%s' WITH into_db = 'restoredb'`,
