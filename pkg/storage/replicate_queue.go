@@ -489,6 +489,22 @@ func (rq *replicateQueue) processOneChange(
 					NodeID:  rebalanceStore.Node.NodeID,
 					StoreID: rebalanceStore.StoreID,
 				}
+				// we shoud use RemoveTarget to have a simulation to avoid adding a replica which will probably
+				// be removed immediately after the rebalance.
+				rep := roachpb.ReplicaDescriptor{
+					NodeID:  rebalanceReplica.NodeID,
+					StoreID: rebalanceReplica.StoreID,
+				}
+				candidates := filterUnremovableReplicas(repl.RaftStatus(), desc.Replicas, 0)
+				candidates = append(candidates, rep)
+				removeReplica, _, err := rq.allocator.RemoveTarget(ctx, zone.Constraints, candidates, rangeInfo)
+				if err != nil {
+					return false, err
+				}
+				if removeReplica.StoreID == rebalanceReplica.StoreID {
+					log.VEventf(ctx, 1, "we may immediately remove the same replica after we add this replica for rebalancing")
+					return false, nil
+				}
 				rq.metrics.RebalanceReplicaCount.Inc(1)
 				log.VEventf(ctx, 1, "rebalancing to %+v: %s",
 					rebalanceReplica, rangeRaftProgress(repl.RaftStatus(), desc.Replicas))
