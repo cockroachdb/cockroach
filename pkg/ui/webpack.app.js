@@ -125,4 +125,13 @@ module.exports = {
     colors: true,
     chunks: false,
   },
+
+  devServer: {
+    contentBase: path.join(__dirname, "dist"),
+    proxy: [{
+      context: ["/_admin", "/_status", "/ts"],
+      secure: false,
+      target: process.env.TARGET,
+    }],
+  },
 };

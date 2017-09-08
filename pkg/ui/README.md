@@ -39,11 +39,21 @@ We've created a simple NodeJS proxy to accomplish this. This server serves all
 requests for web resources (JavaScript, HTML, CSS) out of the code in this
 directory, while proxying all API requests to the specified CockroachDB node.
 
-To use this proxy, run `./proxy.js <target-cluster-http-uri>` and navigate to
-`http://localhost:3000` to access the UI.
+To use this proxy, run
 
-If you get cryptic TypeScript compile/lint failures upon running `make` that seem
-completely unrelated to your changes, try removing `yarn.installed` and
+```shell
+$ make watch TARGET=<target-cluster-http-uri>
+```
+
+then navigate to `http://localhost:3000` to access the UI.
+
+While the proxy is running, any changes you make in the `src` directory will
+trigger an automatic recompilation of the UI. This recompilation should be much
+faster than a cold compile—usually less than one second—as Webpack can reuse
+in-memory compilation artifacts from the last compile.
+
+If you get cryptic TypeScript compile/lint failures upon running `make` that
+seem completely unrelated to your changes, try removing `yarn.installed` and
 `node_modules` before re-running `make` (do NOT run `yarn install` directly).
 
 Be sure to also commit modifications resulting from dependency changes, like
@@ -75,11 +85,11 @@ Still, the tradeoff seems well worth it.
 
 ## Running tests
 
-If you'd like to run the tests directly you can run `make test`. If you're
-having trouble debugging tests, we recommend using `make test-debug` which
-prettifies the test output and runs the tests in Chrome. When a webpage opens,
-you can press the debug button in the top right-hand corner to run tests and set
-breakpoints directly in the browser.
+To run the tests outside of CI:
+
+```shell
+$ make test
+```
 
 [main app bundle]: ./webpack.app.js
 [protos DLL]: ./webpack.protos.js
