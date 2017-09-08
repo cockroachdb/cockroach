@@ -64,3 +64,9 @@ $(GOBINDATA_TARGET): webpack.app.js $(DLLS) $(shell find src)
 	echo '// GENERATED FILE DO NOT EDIT' >> $@
 	gofmt -s -w $@
 	goimports -w $@
+
+.PHONY: watch
+watch: export TARGET := http://localhost:8080
+watch: PORT := 3000
+watch: dist/vendor.js
+	yarn run -- webpack-dev-server --config webpack.app.js --port $(PORT)
