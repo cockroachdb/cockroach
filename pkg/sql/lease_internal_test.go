@@ -507,3 +507,54 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 	wg.Wait()
 }
+
+// This test checks that multiple threads can simultaneously acquire the
+// latest table version with a lease. When multiple threads
+// wait on a particular thread acquiring a lease for the latest table version,
+// they are able to check after waiting that the lease they were waiting on
+// is still valid. They are able to reacquire a lease if needed.
+func TestParallelLeaseAcquireWithImmediateRelease(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testingKnobs := base.TestingKnobs{
+		SQLLeaseManager: &LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: LeaseStoreTestingKnobs{
+				// Immediate remove tableVersionState and release its
+				// lease when it is dereferenced. This forces threads
+				// waiting on a lease to reacquire the lease.
+				RemoveOnceDereferenced: true,
+			},
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(
+		t, base.TestServerArgs{Knobs: testingKnobs})
+	defer s.Stopper().Stop(context.TODO())
+	leaseManager := s.LeaseManager().(*LeaseManager)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
+	var wg sync.WaitGroup
+	numRoutines := 10
+	now := s.Clock().Now()
+	wg.Add(numRoutines)
+	for i := 0; i < numRoutines; i++ {
+		go func() {
+			defer wg.Done()
+			table, _, err := leaseManager.Acquire(context.TODO(), now, tableDesc.ID)
+			if err != nil {
+				t.Error(err)
+			}
+			if err := leaseManager.Release(table); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+
+	wg.Wait()
+}
