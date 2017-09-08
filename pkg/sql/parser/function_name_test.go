@@ -34,7 +34,7 @@ func TestResolveFunction(t *testing.T) {
 		{`foo.*`, ``, `invalid function name: foo.*`},
 	}
 
-	searchPath := []string{"pg_catalog"}
+	searchPath := MakeSearchPath([]string{"pg_catalog"})
 	for _, tc := range testCases {
 		stmt, err := ParseOne("SELECT " + tc.in + "(1)")
 		if err != nil {
