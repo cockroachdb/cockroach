@@ -85,12 +85,8 @@ Still, the tradeoff seems well worth it.
 
 ## Running tests
 
-If you'd like to run the tests directly you can run `make test`. If you're
-having trouble debugging tests, we recommend using `make test-debug` which
-prettifies the test output and runs the tests in Chrome. When a webpage opens,
-you can press the debug button in the top right-hand corner to run tests and set
-breakpoints directly in the browser.
+To run the tests outside of CI:
 
-[main app bundle]: ./webpack.app.js
-[protos DLL]: ./webpack.protos.js
-[vendor DLL]: ./webpack.vendor.js
+```shell
+$ make test
+```
