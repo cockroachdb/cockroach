@@ -34,6 +34,8 @@ generate: $(GOBINDATA_TARGET)
 lint: $(YARN_INSTALLED_TARGET) | protos
 	yarn run -- stylint -c .stylintrc styl
 	yarn run -- tslint -c tslint.json -p tsconfig.json --type-check
+	@# TODO(benesch): Invoke tslint just once when palantir/tslint#2827 is fixed.
+	yarn run -- tslint -c tslint.json *.js
 
 .PHONY: test
 test: $(YARN_INSTALLED_TARGET) | protos
