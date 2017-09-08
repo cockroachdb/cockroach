@@ -39,7 +39,7 @@ class CommandQueue extends React.Component<CommandQueueProps, {}> {
 
   refresh(props = this.props) {
     props.refreshCommandQueue(new protos.cockroach.server.serverpb.CommandQueueRequest({
-      range_id: Long.fromString(props.params[rangeIDAttr])
+      range_id: Long.fromString(props.params[rangeIDAttr]),
     }));
   }
 
@@ -68,7 +68,7 @@ function mapStateToProps(state: AdminUIState) {
 }
 
 const actions = {
-  refreshCommandQueue
+  refreshCommandQueue,
 };
 
 export default connect(mapStateToProps, actions)(CommandQueue);

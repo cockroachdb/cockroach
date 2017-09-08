@@ -16,11 +16,15 @@ syntax = "proto3";
 package cockroach.storage;
 option go_package = "storage";
 
+import "cockroach/pkg/roachpb/data.proto";
+import "cockroach/pkg/util/hlc/timestamp.proto";
+
 message CommandQueueCommand {
   int64 id = 1;
-  bool readonly = 2;
-  // TODO: timestamp (hlc package?)
-  repeated int64 prereqs = 3;
+  roachpb.Span span = 2;
+  bool readonly = 3;
+  util.hlc.Timestamp timestamp = 4;
+  repeated int64 prereqs = 5;
 }
 
 message CommandQueues {

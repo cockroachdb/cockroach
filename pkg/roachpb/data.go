@@ -1184,6 +1184,16 @@ func (s Span) AsRange() interval.Range {
 	}
 }
 
+// AsSpan converts an interval.Range back to a Span
+// TODO(vilterp) is this an appropriate place for this?
+// only used by the storage package for the command queue
+func AsSpan(r interval.Range) *Span {
+	return &Span{
+		Key:    Key([]byte(r.Start)),
+		EndKey: Key([]byte(r.End)),
+	}
+}
+
 func (s Span) String() string {
 	const maxChars = math.MaxInt32
 	return PrettyPrintRange(s.Key, s.EndKey, maxChars)

@@ -5640,7 +5640,8 @@ func EnableLeaseHistory(maxEntries int) func() {
 	}
 }
 
-// GetCommandQueues returns the command queues for this replica
+// GetCommandQueues returns a snapshot of the command queue state for
+// this replica.
 func (r *Replica) GetCommandQueueState() *CommandQueuesForReplica {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
