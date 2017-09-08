@@ -1159,6 +1159,33 @@ func TestAdminAPIJobs(t *testing.T) {
 	}
 }
 
+func TestAdminAPIQueryPlan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+	sqlDB := sqlutils.MakeSQLRunner(t, conn)
+
+	sqlDB.Exec(`CREATE DATABASE api_test`)
+	sqlDB.Exec(`CREATE TABLE api_test.t1 (id int primary key, name string)`)
+	sqlDB.Exec(`CREATE TABLE api_test.t2 (id int primary key, name string)`)
+
+	testCases := []struct {
+		query string
+	}{
+		{"SELECT sum(id) FROM api_test.t1"},
+		{"SELECT sum(1) FROM api_test.t1 JOIN api_test.t2 on t1.id = t2.id"},
+	}
+	for i, testCase := range testCases {
+		var res serverpb.QueryPlanResponse
+		queryParam := url.QueryEscape(testCase.query)
+		if err := getAdminJSONProto(s, fmt.Sprintf("queryplan?query=%s", queryParam), &res); err != nil {
+			t.Errorf("%d: got error %s", i, err)
+		}
+	}
+
+}
+
 func TestAdminAPIRangeLog(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
