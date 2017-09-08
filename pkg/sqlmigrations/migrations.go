@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -460,11 +461,10 @@ func populateVersionSetting(ctx context.Context, r runner) error {
 		return err
 	}
 
-	// TODO(tschottdorf): revisit after https://github.com/cockroachdb/cockroach/pull/17591.
+	pl := parser.MakePlaceholderInfo()
+	pl.SetValue("1", parser.NewDString(v.String()))
 	if res, err := r.sqlExecutor.ExecuteStatementsBuffered(
-		session,
-		fmt.Sprintf("SET CLUSTER SETTING version = '%s'", v.String()),
-		nil, 1); err == nil {
+		session, "SET CLUSTER SETTING version = $1", &pl, 1); err == nil {
 		res.Close(ctx)
 	} else if err != nil {
 		return err
