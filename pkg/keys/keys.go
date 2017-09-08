@@ -352,20 +352,25 @@ func IsLocal(k roachpb.Key) bool {
 	return bytes.HasPrefix(k, localPrefix)
 }
 
-// Addr returns the address for the key, used to lookup the range containing
-// the key. In the normal case, this is simply the key's value. However, for
-// local keys, such as transaction records, range-spanning binary tree node
-// pointers, the address is the inner encoded key, with the local key prefix
-// and the suffix and optional detail removed. This address unwrapping is
-// performed repeatedly in the case of doubly-local keys. In this way, local
-// keys address to the same range as non-local keys, but are stored separately
-// so that they don't collide with user-space or global system keys.
+// Addr returns the address for the key, used to lookup the range containing the
+// key. In the normal case, this is simply the key's value. However, for local
+// keys, such as transaction records, the address is the inner encoded key, with
+// the local key prefix and the suffix and optional detail removed. This address
+// unwrapping is performed repeatedly in the case of doubly-local keys. In this
+// way, local keys address to the same range as non-local keys, but are stored
+// separately so that they don't collide with user-space or global system keys.
+//
+// Logically, the keys are arranged as follows:
+//
+// k1 /local/k1/KeyMin ... /local/k1/KeyMax k1\x00 /local/k1/x00/KeyMin ...
 //
 // However, not all local keys are addressable in the global map. Only range
 // local keys incorporating a range key (start key or transaction key) are
 // addressable (e.g. range metadata and txn records). Range local keys
 // incorporating the Range ID are not (e.g. abort cache entries, and range
 // stats).
+//
+// See AddrEndKey which is to be used when `k` is the EndKey of an interval.
 func Addr(k roachpb.Key) (roachpb.RKey, error) {
 	if !IsLocal(k) {
 		return roachpb.RKey(k), nil
@@ -404,13 +409,22 @@ func MustAddr(k roachpb.Key) roachpb.RKey {
 	return rk
 }
 
-// AddrUpperBound returns the address for the key, used to lookup the range containing
-// the key. However, unlike Addr, it will return the following key that local range
-// keys address to. This is necessary because range-local keys exist conceptually in the
-// space between regular keys. Addr() returns the regular key that is just to the left
-// of a range-local key, which is guaranteed to be located on the same range. AddrUpperBound()
-// returns the regular key that is just to the right, which may not be on the same range
-// but is suitable for use as the EndKey of a span involving a range-local key.
+// AddrUpperBound returns the address of an (exclusive) EndKey, used to lookup
+// ranges containing the keys strictly smaller than that key. However, unlike
+// Addr, it will return the following key that local range keys address to. This
+// is necessary because range-local keys exist conceptually in the space between
+// regular keys. Addr() returns the regular key that is just to the left of a
+// range-local key, which is guaranteed to be located on the same range.
+// AddrUpperBound() returns the regular key that is just to the right, which may
+// not be on the same range but is suitable for use as the EndKey of a span
+// involving a range-local key.
+//
+// Logically, the keys are arranged as follows:
+//
+// k1 /local/k1/KeyMin ... /local/k1/KeyMax k1\x00 /local/k1/x00/KeyMin ...
+//
+// and so any end key /local/k1/x corresponds to an address-resolved end key of
+// k1\x00.
 func AddrUpperBound(k roachpb.Key) (roachpb.RKey, error) {
 	rk, err := Addr(k)
 	if err != nil {
