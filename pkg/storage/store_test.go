@@ -2393,10 +2393,10 @@ func TestRemovedReplicaTombstone(t *testing.T) {
 			func() {
 				repl1.raftMu.Lock()
 				defer repl1.raftMu.Unlock()
-				repl1.mu.Lock()
-				defer repl1.mu.Unlock()
 				s.mu.Lock()
 				defer s.mu.Unlock()
+				repl1.mu.Lock()
+				defer repl1.mu.Unlock()
 
 				go func() {
 					desc := roachpb.RangeDescriptor{
