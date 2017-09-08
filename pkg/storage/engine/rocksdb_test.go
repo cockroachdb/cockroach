@@ -622,3 +622,64 @@ func TestRocksDBTimeBound(t *testing.T) {
 		t.Fatalf("got max %v expected %v", sst.TsMax, maxTimestamp)
 	}
 }
+
+// Regression test for https://github.com/facebook/rocksdb/issues/2752. Range
+// deletion tombstones between different snapshot stripes are not stored in
+// order, so the first tombstone of each snapshot stripe should be checked as a
+// smallest candidate.
+func TestRocksDBDeleteRangeBug(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	dir, dirCleanup := testutils.TempDir(t)
+	defer dirCleanup()
+
+	db, err := NewRocksDB(
+		RocksDBConfig{
+			Settings: cluster.MakeTestingClusterSettings(),
+			Dir:      dir,
+		},
+		RocksDBCache{},
+	)
+	if err != nil {
+		t.Fatalf("could not create new rocksdb db instance at %s: %v", dir, err)
+	}
+	defer db.Close()
+
+	key := func(s string) MVCCKey {
+		return MakeMVCCMetadataKey([]byte(s))
+	}
+	if err := db.Put(key("a"), []byte("a")); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Compact(); err != nil {
+		t.Fatal(err)
+	}
+
+	func() {
+		if err := db.ClearRange(key("b"), key("c")); err != nil {
+			t.Fatal(err)
+		}
+		// Hold a snapshot to separate these two delete ranges.
+		snap := db.NewSnapshot()
+		defer snap.Close()
+		if err := db.ClearRange(key("a"), key("b")); err != nil {
+			t.Fatal(err)
+		}
+		if err := db.Flush(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	if err := db.Compact(); err != nil {
+		t.Fatal(err)
+	}
+
+	iter := db.NewIterator(false)
+	iter.Seek(key("a"))
+	if ok, _ := iter.Valid(); ok {
+		t.Fatalf("unexpected key: %s", iter.Key())
+	}
+	iter.Close()
+}
