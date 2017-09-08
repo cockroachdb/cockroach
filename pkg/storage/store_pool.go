@@ -330,7 +330,7 @@ func (sp *StorePool) deadReplicasGossipUpdate(_ string, content roachpb.Value) {
 // updateLocalStoreAfterRebalance is used to update the local copy of the
 // target store immediately after a rebalance.
 func (sp *StorePool) updateLocalStoreAfterRebalance(
-	storeID roachpb.StoreID, repl *Replica, changeType roachpb.ReplicaChangeType,
+	storeID roachpb.StoreID, rangeInfo RangeInfo, changeType roachpb.ReplicaChangeType,
 ) {
 	sp.detailsMu.Lock()
 	defer sp.detailsMu.Unlock()
@@ -343,23 +343,18 @@ func (sp *StorePool) updateLocalStoreAfterRebalance(
 	}
 	switch changeType {
 	case roachpb.ADD_REPLICA:
-		detail.desc.Capacity.LogicalBytes += repl.GetMVCCStats().Total()
-		if qps, dur := repl.writeStats.avgQPS(); dur >= MinStatsDuration {
-			detail.desc.Capacity.WritesPerSecond += qps
-		}
+		detail.desc.Capacity.LogicalBytes += rangeInfo.LogicalBytes
+		detail.desc.Capacity.WritesPerSecond += rangeInfo.WritesPerSecond
 	case roachpb.REMOVE_REPLICA:
-		total := repl.GetMVCCStats().Total()
-		if detail.desc.Capacity.LogicalBytes <= total {
+		if detail.desc.Capacity.LogicalBytes <= rangeInfo.LogicalBytes {
 			detail.desc.Capacity.LogicalBytes = 0
 		} else {
-			detail.desc.Capacity.LogicalBytes -= total
+			detail.desc.Capacity.LogicalBytes -= rangeInfo.LogicalBytes
 		}
-		if qps, dur := repl.writeStats.avgQPS(); dur >= MinStatsDuration {
-			if detail.desc.Capacity.WritesPerSecond <= qps {
-				detail.desc.Capacity.WritesPerSecond = 0
-			} else {
-				detail.desc.Capacity.WritesPerSecond -= qps
-			}
+		if detail.desc.Capacity.WritesPerSecond <= rangeInfo.WritesPerSecond {
+			detail.desc.Capacity.WritesPerSecond = 0
+		} else {
+			detail.desc.Capacity.WritesPerSecond -= rangeInfo.WritesPerSecond
 		}
 	}
 	sp.detailsMu.storeDetails[storeID] = &detail
