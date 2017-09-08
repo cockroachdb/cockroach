@@ -125,7 +125,14 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 }
 
 // prev gives the right boundary of the union of all requests which don't
-// affect keys larger than the given key.
+// affect keys larger than the given key. Note that a right boundary is
+// exclusive, that is, the returned RKey is to be used as the exclusive
+// right endpoint in finding the next range to query.
+//
+// Informally, a call `prev(ba, k)` means: we've already executed the parts
+// of `ba` that intersect `[k, KeyMax)`; please tell me how far to the
+// left the next relevant request begins.
+//
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
 // 'keys' into 'roachpb'.
 func prev(ba roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
@@ -140,31 +147,63 @@ func prev(ba roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
 		if err != nil {
 			return nil, err
 		}
-		eAddr, err := keys.AddrUpperBound(h.EndKey)
+		endKey := h.EndKey
+		if len(endKey) == 0 {
+			// This is unintuitive, but if we have a point request at `x=k` then that request has
+			// already been satisfied (since the batch has already been executed for all keys `>=
+			// k`). We treat `k` as `[k,k)` which does the right thing below. It also does when `x >
+			// k` and `x < k`, so we're good.
+			//
+			// Note that if `x` is /Local/k/something, then AddrUpperBound below will turn it into
+			// `k\x00`, and so we're looking at the key range `[k, k\x00)`. This is exactly what we
+			// want since otherwise the result would be `k` and so the caller would restrict itself
+			// to `key < k`, but that excludes `k` itself and thus all local keys attached to it.
+			//
+			// See TestBatchPrevNext for a test case with commentary.
+			endKey = h.Key
+		}
+		eAddr, err := keys.AddrUpperBound(endKey)
 		if err != nil {
 			return nil, err
 		}
-		if len(eAddr) == 0 {
-			eAddr = addr.Next()
-		}
 		if !eAddr.Less(k) {
-			if !k.Less(addr) {
+			// EndKey is k or higher.
+			//           [x-------y)    !x.Less(k) -> skip
+			//         [x-------y)      !x.Less(k) -> skip
+			//      [x-------y)          x.Less(k) -> return k
+			//  [x------y)               x.Less(k) -> return k
+			// [x------y)                not in this branch
+			//          k
+			if addr.Less(k) {
 				// Range contains k, so won't be able to go lower.
+				// Note that in the special case in which the interval
+				// touches k, we don't take this branch. This reflects
+				// the fact that `prev(k)` means that all keys >= k have
+				// been handled, so a request `[k, x)` should simply be
+				// skipped.
 				return k, nil
 			}
 			// Range is disjoint from [KeyMin,k).
 			continue
 		}
+		// Current candidate interval is strictly to the left of `k`.
 		// We want the largest surviving candidate.
-		if candidate.Less(addr) {
-			candidate = addr
+		if candidate.Less(eAddr) {
+			candidate = eAddr
 		}
 	}
 	return candidate, nil
 }
 
-// next gives the left boundary of the union of all requests which don't
-// affect keys less than the given key.
+// next gives the left boundary of the union of all requests which don't affect
+// keys less than the given key. Note that the left boundary is inclusive, that
+// is, the returned RKey is the inclusive left endpoint of the keys the request
+// should operate on next.
+//
+// Informally, a call `next(ba, k)` means: we've already executed the parts of
+// `ba` that intersect `[KeyMin, k)`; please tell me how far to the right the
+// next relevant request begins.
+//
 // TODO(tschottdorf): again, better on BatchRequest itself, but can't pull
 // 'keys' into 'proto'.
 func next(ba roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
