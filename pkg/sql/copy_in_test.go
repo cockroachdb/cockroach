@@ -297,7 +297,7 @@ func TestCopyError(t *testing.T) {
 func TestCopyOne(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("https://github.com/lib/pq/issues/558")
+	t.Skip("#18352")
 
 	params, _ := createTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
@@ -331,7 +331,7 @@ func TestCopyOne(t *testing.T) {
 func TestCopyInProgress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("https://github.com/lib/pq/issues/558")
+	t.Skip("#18352")
 
 	params, _ := createTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
