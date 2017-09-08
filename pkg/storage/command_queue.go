@@ -802,6 +802,7 @@ func (cq *CommandQueue) metrics() CommandQueueMetrics {
 	}
 }
 
+// GetCommandQueueState returns a snapshot of this command queue's state.
 func (cq *CommandQueue) GetCommandQueueState() *CommandQueues {
 	return &CommandQueues{
 		Reads:  copyCommandsFromIntervalTree(cq.reads),
@@ -810,18 +811,21 @@ func (cq *CommandQueue) GetCommandQueueState() *CommandQueues {
 }
 
 func copyCommandsFromIntervalTree(tree interval.Tree) []*CommandQueueCommand {
-	var result []*CommandQueueCommand
-	it := tree.Iterator()
-	for {
-		// TODO: is there a more idiomatic way to iterate?
-		item, hasNext := it.Next()
-		if !hasNext {
-			break
+	// TODO(vilterp) flatten out child commands
+	result := []*CommandQueueCommand{}
+	tree.Do(func(item interval.Interface) (done bool) {
+		currentCmd := item.(*cmd)
+		command := &CommandQueueCommand{
+			Id:        currentCmd.id,
+			Readonly:  currentCmd.readOnly,
+			Timestamp: &currentCmd.timestamp,
+			Span:      roachpb.AsSpan(currentCmd.key),
 		}
-		// TODO: how do we get the actual cmd struct?
-		result = append(result, &CommandQueueCommand{
-			Id: int64(item.ID()), // TODO: is this cast ok?
-		})
-	}
+		for _, prereqCmd := range *currentCmd.prereqs {
+			command.Prereqs = append(command.Prereqs, prereqCmd.id)
+		}
+		result = append(result, command)
+		return false
+	})
 	return result
 }

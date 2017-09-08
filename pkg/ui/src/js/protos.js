@@ -38266,7 +38266,9 @@ export const cockroach = $root.cockroach = (() => {
              * @typedef cockroach.storage.CommandQueueCommand$Properties
              * @type {Object}
              * @property {Long} [id] CommandQueueCommand id.
+             * @property {cockroach.roachpb.Span$Properties} [span] CommandQueueCommand span.
              * @property {boolean} [readonly] CommandQueueCommand readonly.
+             * @property {cockroach.util.hlc.Timestamp$Properties} [timestamp] CommandQueueCommand timestamp.
              * @property {Array.<Long>} [prereqs] CommandQueueCommand prereqs.
              */
 
@@ -38291,10 +38293,22 @@ export const cockroach = $root.cockroach = (() => {
             CommandQueueCommand.prototype.id = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
             /**
+             * CommandQueueCommand span.
+             * @type {(cockroach.roachpb.Span$Properties|null)}
+             */
+            CommandQueueCommand.prototype.span = null;
+
+            /**
              * CommandQueueCommand readonly.
              * @type {boolean}
              */
             CommandQueueCommand.prototype.readonly = false;
+
+            /**
+             * CommandQueueCommand timestamp.
+             * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
+             */
+            CommandQueueCommand.prototype.timestamp = null;
 
             /**
              * CommandQueueCommand prereqs.
@@ -38322,10 +38336,14 @@ export const cockroach = $root.cockroach = (() => {
                     writer = $Writer.create();
                 if (message.id != null && message.hasOwnProperty("id"))
                     writer.uint32(/* id 1, wireType 0 =*/8).int64(message.id);
+                if (message.span != null && message.hasOwnProperty("span"))
+                    $root.cockroach.roachpb.Span.encode(message.span, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
                 if (message.readonly != null && message.hasOwnProperty("readonly"))
-                    writer.uint32(/* id 2, wireType 0 =*/16).bool(message.readonly);
+                    writer.uint32(/* id 3, wireType 0 =*/24).bool(message.readonly);
+                if (message.timestamp != null && message.hasOwnProperty("timestamp"))
+                    $root.cockroach.util.hlc.Timestamp.encode(message.timestamp, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
                 if (message.prereqs != null && message.prereqs.length) {
-                    writer.uint32(/* id 3, wireType 2 =*/26).fork();
+                    writer.uint32(/* id 5, wireType 2 =*/42).fork();
                     for (let i = 0; i < message.prereqs.length; ++i)
                         writer.int64(message.prereqs[i]);
                     writer.ldelim();
@@ -38362,9 +38380,15 @@ export const cockroach = $root.cockroach = (() => {
                         message.id = reader.int64();
                         break;
                     case 2:
-                        message.readonly = reader.bool();
+                        message.span = $root.cockroach.roachpb.Span.decode(reader, reader.uint32());
                         break;
                     case 3:
+                        message.readonly = reader.bool();
+                        break;
+                    case 4:
+                        message.timestamp = $root.cockroach.util.hlc.Timestamp.decode(reader, reader.uint32());
+                        break;
+                    case 5:
                         if (!(message.prereqs && message.prereqs.length))
                             message.prereqs = [];
                         if ((tag & 7) === 2) {
@@ -38406,9 +38430,19 @@ export const cockroach = $root.cockroach = (() => {
                 if (message.id != null && message.hasOwnProperty("id"))
                     if (!$util.isInteger(message.id) && !(message.id && $util.isInteger(message.id.low) && $util.isInteger(message.id.high)))
                         return "id: integer|Long expected";
+                if (message.span != null && message.hasOwnProperty("span")) {
+                    let error = $root.cockroach.roachpb.Span.verify(message.span);
+                    if (error)
+                        return "span." + error;
+                }
                 if (message.readonly != null && message.hasOwnProperty("readonly"))
                     if (typeof message.readonly !== "boolean")
                         return "readonly: boolean expected";
+                if (message.timestamp != null && message.hasOwnProperty("timestamp")) {
+                    let error = $root.cockroach.util.hlc.Timestamp.verify(message.timestamp);
+                    if (error)
+                        return "timestamp." + error;
+                }
                 if (message.prereqs != null && message.hasOwnProperty("prereqs")) {
                     if (!Array.isArray(message.prereqs))
                         return "prereqs: array expected";
@@ -38437,8 +38471,18 @@ export const cockroach = $root.cockroach = (() => {
                         message.id = object.id;
                     else if (typeof object.id === "object")
                         message.id = new $util.LongBits(object.id.low >>> 0, object.id.high >>> 0).toNumber();
+                if (object.span != null) {
+                    if (typeof object.span !== "object")
+                        throw TypeError(".cockroach.storage.CommandQueueCommand.span: object expected");
+                    message.span = $root.cockroach.roachpb.Span.fromObject(object.span);
+                }
                 if (object.readonly != null)
                     message.readonly = Boolean(object.readonly);
+                if (object.timestamp != null) {
+                    if (typeof object.timestamp !== "object")
+                        throw TypeError(".cockroach.storage.CommandQueueCommand.timestamp: object expected");
+                    message.timestamp = $root.cockroach.util.hlc.Timestamp.fromObject(object.timestamp);
+                }
                 if (object.prereqs) {
                     if (!Array.isArray(object.prereqs))
                         throw TypeError(".cockroach.storage.CommandQueueCommand.prereqs: array expected");
@@ -38483,15 +38527,21 @@ export const cockroach = $root.cockroach = (() => {
                         object.id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
                     } else
                         object.id = options.longs === String ? "0" : 0;
+                    object.span = null;
                     object.readonly = false;
+                    object.timestamp = null;
                 }
                 if (message.id != null && message.hasOwnProperty("id"))
                     if (typeof message.id === "number")
                         object.id = options.longs === String ? String(message.id) : message.id;
                     else
                         object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber() : message.id;
+                if (message.span != null && message.hasOwnProperty("span"))
+                    object.span = $root.cockroach.roachpb.Span.toObject(message.span, options);
                 if (message.readonly != null && message.hasOwnProperty("readonly"))
                     object.readonly = message.readonly;
+                if (message.timestamp != null && message.hasOwnProperty("timestamp"))
+                    object.timestamp = $root.cockroach.util.hlc.Timestamp.toObject(message.timestamp, options);
                 if (message.prereqs && message.prereqs.length) {
                     object.prereqs = [];
                     for (let j = 0; j < message.prereqs.length; ++j)
