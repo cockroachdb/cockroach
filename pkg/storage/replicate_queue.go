@@ -197,7 +197,7 @@ func (rq *replicateQueue) shouldQueue(
 		return false, 0
 	}
 
-	target, _ := rq.allocator.RebalanceTarget(ctx, zone.Constraints, rangeInfo, storeFilterThrottled)
+	target, _ := rq.allocator.RebalanceTarget(ctx, zone.Constraints, repl, rangeInfo, storeFilterThrottled)
 	if target != nil {
 		log.VEventf(ctx, 2, "rebalance target found, enqueuing")
 	} else {
@@ -485,7 +485,7 @@ func (rq *replicateQueue) processOneChange(
 
 		if !rq.store.TestingKnobs().DisableReplicaRebalancing {
 			rebalanceStore, details := rq.allocator.RebalanceTarget(
-				ctx, zone.Constraints, rangeInfo, storeFilterThrottled)
+				ctx, zone.Constraints, repl, rangeInfo, storeFilterThrottled)
 			if rebalanceStore == nil {
 				log.VEventf(ctx, 1, "no suitable rebalance target")
 			} else {

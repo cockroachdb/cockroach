@@ -285,6 +285,17 @@ func (cl candidateList) selectBad(randGen allocatorRand) *candidate {
 	return worst
 }
 
+// removeCandidate remove the specified candidate from candidateList.
+func (cl candidateList) removeCandidate(c candidate) candidateList {
+	for i := 0; i < len(cl); i++ {
+		if cl[i].store.StoreID == c.store.StoreID {
+			cl = append(cl[:i], cl[i+1:]...)
+			break
+		}
+	}
+	return cl
+}
+
 // allocateCandidates creates a candidate list of all stores that can be used
 // for allocating a new replica ordered from the best to the worst. Only
 // stores that meet the criteria are included in the list.

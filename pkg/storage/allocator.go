@@ -374,6 +374,22 @@ func (a *Allocator) AllocateTarget(
 	}
 }
 
+func (a Allocator) simulationRemoveTarget(
+	ctx context.Context,
+	replica *Replica,
+	targetStore roachpb.StoreID,
+	constraints config.Constraints,
+	candidates []roachpb.ReplicaDescriptor,
+	rangeInfo RangeInfo,
+) (roachpb.ReplicaDescriptor, string, error) {
+	// Update statics first
+	a.storePool.updateLocalStoreAfterRebalance(targetStore, replica, roachpb.ADD_REPLICA)
+	defer func() {
+		a.storePool.updateLocalStoreAfterRebalance(targetStore, replica, roachpb.REMOVE_REPLICA)
+	}()
+	return a.RemoveTarget(ctx, constraints, candidates, rangeInfo)
+}
+
 // RemoveTarget returns a suitable replica to remove from the provided replica
 // set. It first attempts to randomly select a target from the set of stores
 // that have greater than the average number of replicas. Failing that, it
@@ -444,7 +460,11 @@ func (a Allocator) RemoveTarget(
 // rebalance. This helps prevent a stampeding herd targeting an abnormally
 // under-utilized store.
 func (a Allocator) RebalanceTarget(
-	ctx context.Context, constraints config.Constraints, rangeInfo RangeInfo, filter storeFilter,
+	ctx context.Context,
+	constraints config.Constraints,
+	repl *Replica,
+	rangeInfo RangeInfo,
+	filter storeFilter,
 ) (*roachpb.StoreDescriptor, string) {
 	sl, _, _ := a.storePool.getStoreList(rangeInfo.Desc.RangeID, filter)
 
@@ -490,6 +510,33 @@ func (a Allocator) RebalanceTarget(
 		candidates, existingCandidates, target)
 	if target == nil {
 		return nil, ""
+	}
+	// We could make a simulation here to verify whether we'll remove the target we'll rebalance to.
+	if repl.RaftStatus() != nil {
+		newReplica := roachpb.ReplicaDescriptor{
+			NodeID:    target.store.Node.NodeID,
+			StoreID:   target.store.StoreID,
+			ReplicaID: rangeInfo.Desc.NextReplicaID,
+		}
+		desc := *rangeInfo.Desc
+		desc.Replicas = append(desc.Replicas, newReplica)
+		rangeInfo.Desc = &desc
+
+		replicaCandidates := simulationFilterUnremovableReplicas(repl, desc.Replicas, newReplica.ReplicaID)
+
+		removeReplica, _, err := a.simulationRemoveTarget(ctx, repl, target.store.StoreID, constraints, replicaCandidates, rangeInfo)
+		if err != nil {
+			log.Warningf(ctx, "simulating RemoveTarget failed: %s", err)
+			return nil, ""
+		}
+		if removeReplica.StoreID == target.store.StoreID {
+			newTargets := candidates.removeCandidate(*target)
+			newTarget := newTargets.selectGood(a.randGen)
+			if newTarget == nil {
+				return nil, ""
+			}
+			target = newTarget
+		}
 	}
 	details, err := json.Marshal(decisionDetails{
 		Target:               target.String(),
@@ -875,6 +922,14 @@ func filterBehindReplicas(
 		}
 	}
 	return candidates
+}
+
+func simulationFilterUnremovableReplicas(
+	repl *Replica, replicas []roachpb.ReplicaDescriptor, brandNewReplicaID roachpb.ReplicaID,
+) []roachpb.ReplicaDescriptor {
+	status := *repl.RaftStatus()
+	status.Progress[uint64(brandNewReplicaID)] = raft.Progress{Match: 0}
+	return filterUnremovableReplicas(&status, replicas, brandNewReplicaID)
 }
 
 // filterUnremovableReplicas removes any unremovable replicas from the supplied
