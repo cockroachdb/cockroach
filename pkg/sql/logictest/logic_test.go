@@ -709,9 +709,8 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 	}
 
 	if cfg.overrideDistSQLMode != "" {
-		// TODO(tschottdorf): avoid Sprintf after https://github.com/cockroachdb/cockroach/pull/17591.
 		if _, err := t.cluster.ServerConn(0).Exec(
-			fmt.Sprintf("SET CLUSTER SETTING sql.defaults.distsql = '%s'", cfg.overrideDistSQLMode),
+			"SET CLUSTER SETTING sql.defaults.distsql = $1::string", cfg.overrideDistSQLMode,
 		); err != nil {
 			t.Fatal(err)
 		}
