@@ -1189,6 +1189,92 @@ func TestGetNodeDescriptor(t *testing.T) {
 	})
 }
 
+func TestMultiRangeGapReverse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	g, clock := makeGossip(t, stopper)
+
+	var descs []roachpb.RangeDescriptor
+	splits := []roachpb.Key{roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c"), roachpb.Key("d")}
+	for i, split := range splits {
+		var startKey roachpb.RKey
+		if i > 0 {
+			startKey = descs[i-1].EndKey
+		}
+		descs = append(descs, roachpb.RangeDescriptor{
+			RangeID:  roachpb.RangeID(i + 1),
+			StartKey: startKey,
+			EndKey:   keys.MustAddr(split),
+			Replicas: []roachpb.ReplicaDescriptor{
+				{
+					NodeID:  1,
+					StoreID: 1,
+				},
+			},
+		})
+	}
+
+	sender := client.SenderFunc(
+		func(_ context.Context, args roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			rb := args.CreateReply()
+			return rb, nil
+		})
+
+	rdb := MockRangeDescriptorDB(func(key roachpb.RKey, reverse bool) (
+		[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error,
+	) {
+		n := 0
+		if !bytes.HasPrefix(key, keys.Meta2Prefix) {
+			n = sort.Search(len(descs), func(i int) bool {
+				if !reverse {
+					return key.Less(descs[i].EndKey)
+				}
+				// In reverse mode, the key is "inclusive". If we scan
+				// [a,z) in reverse mode, we'd look up key z.
+				return !descs[i].EndKey.Less(key) // key <= EndKey
+			})
+		}
+		if n < 0 {
+			n = 0
+		}
+		if n >= len(descs) {
+			panic(fmt.Sprintf("didn't set up descriptor for key %q", key))
+		}
+		return descs[n : n+1], nil, nil
+	})
+
+	cfg := DistSenderConfig{
+		AmbientCtx:        log.AmbientContext{Tracer: tracing.NewTracer()},
+		Clock:             clock,
+		RangeDescriptorDB: rdb,
+		TestingKnobs: DistSenderTestingKnobs{
+			TransportFactory: SenderTransportFactory(
+				tracing.NewTracer(),
+				client.SenderFunc(sender),
+			),
+		},
+	}
+
+	ds := NewDistSender(cfg, g)
+
+	txn := roachpb.MakeTransaction("foo", nil, 1.0, enginepb.SERIALIZABLE, clock.Now(), 0)
+
+	var ba roachpb.BatchRequest
+	ba.Txn = &txn
+	ba.Add(roachpb.NewReverseScan(splits[0], splits[1]))
+	ba.Add(roachpb.NewReverseScan(splits[2], splits[3]))
+
+	// Before fixing https://github.com/cockroachdb/cockroach/issues/18174, this
+	// would error with:
+	//
+	// truncation resulted in empty batch on {b-c}: ReverseScan ["a","b"), ReverseScan ["c","d")
+	if _, pErr := ds.Send(context.Background(), ba); pErr != nil {
+		t.Fatal(pErr)
+	}
+}
+
 // TestMultiRangeMergeStaleDescriptor simulates the situation in which the
 // DistSender executes a multi-range scan which encounters the stale descriptor
 // of a range which has since incorporated its right neighbor by means of a
