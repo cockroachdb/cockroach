@@ -142,6 +142,11 @@ YARN_INSTALLED_TARGET := $(UI_ROOT)/yarn.installed
 
 $(YARN_INSTALLED_TARGET): $(BOOTSTRAP_TARGET) $(UI_ROOT)/package.json $(UI_ROOT)/yarn.lock
 	cd $(UI_ROOT) && yarn install
+	# Prevent ProtobufJS from trying to install its own packages because a) the
+	# the feature is buggy, and b) it introduces an unnecessary dependency on NPM.
+	# Additionally pin a known-good version of jsdoc.
+	# See: https://github.com/dcodeIO/protobuf.js/issues/716.
+	(cd $(UI_ROOT)/node_modules/protobufjs/cli && cp package.standalone.json package.json && yarn add jsdoc@3.4.3 && yarn install)
 	@# We remove this broken dependency again in pkg/ui/webpack.config.js.
 	@# See the comment there for details.
 	rm -rf $(UI_ROOT)/node_modules/@types/node
