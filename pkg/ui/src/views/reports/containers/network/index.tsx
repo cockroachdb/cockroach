@@ -112,8 +112,8 @@ function noConnectionTable(noConnections: NoConnection[]) {
               </td>
           </tr>
           {
-            _.map(noConnections, (noConn, k) => (
-              <tr className="failure-table__row" key={k}>
+            _.map(noConnections, (noConn) => (
+              <tr className="failure-table__row" key={`${noConn.from.nodeID}-${noConn.to.nodeID}`}>
                 <td className="failure-table__cell">
                   n{noConn.from.nodeID}
                 </td>
@@ -142,7 +142,7 @@ function noConnectionTable(noConnections: NoConnection[]) {
 }
 
 // createHeaderCell creates and decorates a header cell.
-function createHeaderCell(staleIDs: Set<number>, id: Identity, key: number) {
+function createHeaderCell(staleIDs: Set<number>, id: Identity, key: string) {
   const node = `n${id.nodeID.toString()}`;
   const title = _.join([node, id.address, id.locality], "\n");
   let className = "network-table__cell network-table__cell--header";
@@ -197,19 +197,20 @@ class Network extends React.Component<NetworkProps, {}> {
 
     // getLatencyCell creates and decorates a cell based on it's latency.
     function getLatencyCell(nodeIDa: number, nodeIDb: number) {
+      const key = `${nodeIDa}-${nodeIDb}`;
       if (nodeIDa === nodeIDb) {
-        return <td className="network-table__cell network-table__cell--self" key={nodeIDb}>
+        return <td key={key} className="network-table__cell network-table__cell--self">
           -
         </td>;
       }
       if (staleIDs.has(nodeIDa) || staleIDs.has(nodeIDb)) {
-        return <td className="network-table__cell network-table__cell--no-connection" key={nodeIDb}>
+        return <td key={key} className="network-table__cell network-table__cell--no-connection">
           X
         </td>;
       }
       const a = nodesSummary.nodeStatusByID[nodeIDa].latencies;
       if (_.isNil(a[nodeIDb])) {
-        return <td className="network-table__cell network-table__cell--no-connection" key={nodeIDb}>
+        return <td key={key} className="network-table__cell network-table__cell--no-connection">
           X
         </td>;
       }
@@ -228,31 +229,38 @@ class Network extends React.Component<NetworkProps, {}> {
       }
       const className = `network-table__cell network-table__cell--${heat}`;
       const title = `n${nodeIDa} -> n${nodeIDb}\n${latency.toString()}ms`;
-      return <td className={className} title={title} key={nodeIDb}>
+      return <td key={key} className={className} title={title}>
         {latency.toFixed(2)}ms
       </td>;
     }
 
     // latencyTable is the table and heat-map that's displayed for all nodes.
     const latencyTable = (
-      <div>
+      <div key="latency-table">
         <h2>Latencies</h2>
         <table className="network-table">
           <tbody>
             <tr className="network-table__row">
               <td className="network-table__cell network-table__cell--spacer" />
               {
-                _.map(displayIdentities, (identity) => createHeaderCell(staleIDs, identity, identity.nodeID))
+                _.map(displayIdentities, (identity) => createHeaderCell(
+                  staleIDs,
+                  identity,
+                  `0-${identity.nodeID}`,
+                ))
               }
             </tr>
             {
               _.map(displayIdentities, (identityA) => (
                 <tr key={identityA.nodeID} className="network-table__row">
                   {
-                    createHeaderCell(staleIDs, identityA, 0)
+                    createHeaderCell(staleIDs, identityA, `${identityA.nodeID}-0`)
                   }
                   {
-                    _.map(displayIdentities, (identityB) => getLatencyCell(identityA.nodeID, identityB.nodeID))
+                    _.map(displayIdentities, (identityB) => getLatencyCell(
+                      identityA.nodeID,
+                      identityB.nodeID,
+                    ))
                   }
                 </tr>
               ))
@@ -264,7 +272,7 @@ class Network extends React.Component<NetworkProps, {}> {
 
     // legend is just a quick table showing the standard deviation values.
     const legend = (
-      <div>
+      <div key="legend">
         <h2>Legend</h2>
         <table className="network-table">
           <tbody>
