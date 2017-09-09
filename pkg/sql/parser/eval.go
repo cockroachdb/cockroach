@@ -1857,6 +1857,8 @@ type EvalContext struct {
 	// unqualified table name. Names in the search path are normalized already.
 	// This must not be modified (this is shared from the session).
 	SearchPath SearchPath
+	// RoundCtx is the decimal context used in round().
+	RoundCtx *apd.Context
 	// Ctx represents the context in which the expression is evaluated. This will
 	// point to the Session's context container.
 	// NOTE: seems a bit lazy to hold a pointer to the session's context here,

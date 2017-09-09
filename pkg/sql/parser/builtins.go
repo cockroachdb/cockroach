@@ -1380,14 +1380,19 @@ CockroachDB supports the following flags:
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(round(x))), nil
 		}, "Rounds `val` to the nearest integer using half to even (banker's) rounding."),
-		decimalBuiltin1(func(x *apd.Decimal) (Datum, error) {
-			return roundDecimal(x, 0)
-		}, "Rounds `val` to the nearest integer, half away from zero: "+
-			"ROUND(+/-2.4) = +/-2, ROUND(+/-2.5) = +/-3."),
+		Builtin{
+			Types:      ArgTypes{{"input", TypeDecimal}},
+			ReturnType: fixedReturnType(TypeDecimal),
+			fn: func(evalCtx *EvalContext, args Datums) (Datum, error) {
+				return roundDecimal(evalCtx, &args[0].(*DDecimal).Decimal, 0)
+			},
+			Info: "Rounds `val` to the nearest integer, half away from zero: " +
+				"ROUND(+/-2.4) = +/-2, ROUND(+/-2.5) = +/-3.",
+		},
 		Builtin{
 			Types:      ArgTypes{{"input", TypeFloat}, {"decimal_accuracy", TypeInt}},
 			ReturnType: fixedReturnType(TypeFloat),
-			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+			fn: func(evalCtx *EvalContext, args Datums) (Datum, error) {
 				f := float64(*args[0].(*DFloat))
 				if math.IsInf(f, 0) || math.IsNaN(f) {
 					return args[0], nil
@@ -1418,10 +1423,10 @@ CockroachDB supports the following flags:
 		Builtin{
 			Types:      ArgTypes{{"input", TypeDecimal}, {"decimal_accuracy", TypeInt}},
 			ReturnType: fixedReturnType(TypeDecimal),
-			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+			fn: func(evalCtx *EvalContext, args Datums) (Datum, error) {
 				// TODO(mjibson): make sure this fits in an int32.
 				scale := int32(MustBeDInt(args[1]))
-				return roundDecimal(&args[0].(*DDecimal).Decimal, scale)
+				return roundDecimal(evalCtx, &args[0].(*DDecimal).Decimal, scale)
 			},
 			Info: "Keeps `decimal_accuracy` number of figures to the right of the zero position " +
 				" in `input using half away from zero rounding. If `decimal_accuracy` " +
@@ -2602,9 +2607,13 @@ func round(x float64) float64 {
 	return roundFn(x*0.5) * 2.0
 }
 
-func roundDecimal(x *apd.Decimal, n int32) (Datum, error) {
+func roundDecimal(ctx *EvalContext, x *apd.Decimal, n int32) (Datum, error) {
 	dd := &DDecimal{}
-	_, err := HighPrecisionCtx.Quantize(&dd.Decimal, x, -n)
+	dc := HighPrecisionCtx
+	if ctx.RoundCtx != nil {
+		dc = ctx.RoundCtx
+	}
+	_, err := dc.Quantize(&dd.Decimal, x, -n)
 	return dd, err
 }
 

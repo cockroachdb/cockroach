@@ -27,6 +27,7 @@ import (
 	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -201,6 +202,8 @@ type Session struct {
 	DistSQLMode DistSQLExecMode
 	// Location indicates the current time zone.
 	Location *time.Location
+	// RoundCtx is the decimal context used in round().
+	RoundCtx *apd.Context
 	// SearchPath is a list of databases that will be searched for a table name
 	// before the database. Currently, this is used only for SELECTs.
 	// Names in the search path must have been normalized already.
@@ -681,6 +684,7 @@ func (s *Session) evalCtx() parser.EvalContext {
 		SearchPath: s.SearchPath,
 		Ctx:        s.Ctx,
 		Mon:        &s.TxnState.mon,
+		RoundCtx:   s.RoundCtx,
 	}
 }
 

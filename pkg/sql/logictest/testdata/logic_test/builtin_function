@@ -778,6 +778,35 @@ SELECT round('inf'::decimal)
 query error invalid operation
 SELECT round(1::decimal, 3000)
 
+# Test rounding modes.
+
+statement error unknown rounding: blah
+SET decimal_round = 'blah'
+
+statement ok
+SET decimal_round = 'DOWN'
+
+query RRRR
+SELECT round(-2.5::decimal), round(-1.5::decimal), round(1.5::decimal), round(2.5::decimal)
+----
+-2  -1  1  2
+
+statement ok
+SET decimal_round = 'HALF_EVEN'
+
+query RRRR
+SELECT round(-2.5::decimal), round(-1.5::decimal), round(1.5::decimal), round(2.5::decimal)
+----
+-2  -2  2  2
+
+statement ok
+RESET decimal_round
+
+query RRRR
+SELECT round(-2.5::decimal), round(-1.5::decimal), round(1.5::decimal), round(2.5::decimal)
+----
+-3  -2  2  3
+
 query III
 SELECT sign(-2), sign(0), sign(2)
 ----
