@@ -298,15 +298,30 @@ func (ag *aggregator) accumulateRows(ctx context.Context) (err error) {
 					continue
 				}
 			}
-			var value parser.Datum
-			if len(a.ColIdx) != 0 {
-				c := a.ColIdx[0]
+			// Extract the corresponding arguments from the row to feed into the
+			// aggregate function.
+			// Most functions require at most one argument thus we separate
+			// the first argument and allocation of (if applicable) a variadic
+			// collection of arguments thereafter.
+			var firstArg parser.Datum
+			var otherArgs parser.Datums
+			if len(a.ColIdx) > 1 {
+				otherArgs = make(parser.Datums, len(a.ColIdx)-1)
+			}
+			isFirstArg := true
+			for j, c := range a.ColIdx {
 				if err := row[c].EnsureDecoded(&ag.datumAlloc); err != nil {
 					return err
 				}
-				value = row[c].Datum
+				if isFirstArg {
+					firstArg = row[c].Datum
+					isFirstArg = false
+					continue
+				}
+				otherArgs[j-1] = row[c].Datum
 			}
-			if err := ag.funcs[i].add(ctx, encoded, value); err != nil {
+
+			if err := ag.funcs[i].add(ctx, encoded, firstArg, otherArgs); err != nil {
 				return err
 			}
 		}
@@ -335,11 +350,18 @@ func (ag *aggregator) newAggregateFuncHolder(
 	}
 }
 
-func (a *aggregateFuncHolder) add(ctx context.Context, bucket []byte, d parser.Datum) error {
+func (a *aggregateFuncHolder) add(ctx context.Context, bucket []byte, firstArg parser.Datum, otherArgs parser.Datums) error {
 	if a.seen != nil {
-		encoded, err := sqlbase.EncodeDatum(bucket, d)
+		encoded, err := sqlbase.EncodeDatum(bucket, firstArg)
 		if err != nil {
 			return err
+		}
+		// Encode additional arguments if necessary.
+		if otherArgs != nil {
+			encoded, err = sqlbase.EncodeDatums(bucket, otherArgs)
+			if err != nil {
+				return err
+			}
 		}
 		if _, ok := a.seen[string(encoded)]; ok {
 			// skip
@@ -367,7 +389,7 @@ func (a *aggregateFuncHolder) add(ctx context.Context, bucket []byte, d parser.D
 		a.buckets[string(bucket)] = impl
 	}
 
-	return impl.Add(ctx, d)
+	return impl.Add(ctx, firstArg, otherArgs...)
 }
 
 func (a *aggregateFuncHolder) get(bucket string) (parser.Datum, error) {
