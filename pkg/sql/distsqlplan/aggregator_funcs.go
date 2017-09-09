@@ -23,6 +23,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
+// FinalStageInfo is a wrapper around an aggregation function performed
+// in the final stage of distributed aggregations that allows us to specify the
+// corresponding inputs from the local aggregations by their indices in the LocalStage.
+type FinalStageInfo struct {
+	Fn distsqlrun.AggregatorSpec_Func
+	// Specifies the ordered slice of outputs from local aggregations to propagate
+	// as inputs to Fn. This must be ordered according to the underlying aggregate builtin
+	// arguments signature found in aggregate_builtins.go.
+	LocalIdxs []uint32
+}
+
 // DistAggregationInfo is a blueprint for planning distributed aggregations. It
 // describes two stages - a local stage performs local aggregations wherever
 // data is available and generates partial results, and a final stage aggregates
@@ -45,10 +56,11 @@ type DistAggregationInfo struct {
 	// the same input.
 	LocalStage []distsqlrun.AggregatorSpec_Func
 
-	// The final stage consists of the same number of aggregations as the local
-	// stage (the input of each one is the corresponding result from each instance
-	// of the local stage).
-	FinalStage []distsqlrun.AggregatorSpec_Func
+	// The final stage consists of one or more aggregations that take in an
+	// arbitrary number of inputs from the local stages. The inputs are ordered and
+	// mapped by the indices of the local aggregations in LocalStage (specified by
+	// inlocalIdxs).
+	FinalStage []FinalStageInfo
 
 	// An optional rendering expression used to obtain the final result; required
 	// if there is more than one aggregation in each of the stages.
@@ -70,52 +82,102 @@ type DistAggregationInfo struct {
 	FinalRendering func(h *parser.IndexedVarHelper, varIdxOffset int) (parser.TypedExpr, error)
 }
 
+// Convenient value for FinalStageInfo.LocalIdxs when there is only one aggregation
+// function in each of the LocalStage and FinalStage. Otherwise, specify the explicit
+// index corresponding to the local stage.
+var passThroughLocalIdxs = []uint32{0}
+
 // DistAggregationTable is DistAggregationInfo look-up table. Functions that
 // don't have an entry in the table are not optimized with a local stage.
 var DistAggregationTable = map[distsqlrun.AggregatorSpec_Func]DistAggregationInfo{
 	distsqlrun.AggregatorSpec_IDENT: {
 		LocalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_IDENT},
-		FinalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_IDENT},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        distsqlrun.AggregatorSpec_IDENT,
+				LocalIdxs: passThroughLocalIdxs,
+			},
+		},
 	},
 
 	distsqlrun.AggregatorSpec_BOOL_AND: {
 		LocalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_BOOL_AND},
-		FinalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_BOOL_AND},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        distsqlrun.AggregatorSpec_BOOL_AND,
+				LocalIdxs: passThroughLocalIdxs,
+			},
+		},
 	},
 
 	distsqlrun.AggregatorSpec_BOOL_OR: {
 		LocalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_BOOL_OR},
-		FinalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_BOOL_OR},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        distsqlrun.AggregatorSpec_BOOL_OR,
+				LocalIdxs: passThroughLocalIdxs,
+			},
+		},
 	},
 
 	distsqlrun.AggregatorSpec_COUNT: {
 		LocalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_COUNT},
-		FinalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_SUM_INT},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        distsqlrun.AggregatorSpec_SUM_INT,
+				LocalIdxs: passThroughLocalIdxs,
+			},
+		},
 	},
 
 	distsqlrun.AggregatorSpec_COUNT_ROWS: {
 		LocalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_COUNT_ROWS},
-		FinalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_SUM_INT},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        distsqlrun.AggregatorSpec_SUM_INT,
+				LocalIdxs: passThroughLocalIdxs,
+			},
+		},
 	},
 
 	distsqlrun.AggregatorSpec_MAX: {
 		LocalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_MAX},
-		FinalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_MAX},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        distsqlrun.AggregatorSpec_MAX,
+				LocalIdxs: passThroughLocalIdxs,
+			},
+		},
 	},
 
 	distsqlrun.AggregatorSpec_MIN: {
 		LocalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_MIN},
-		FinalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_MIN},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        distsqlrun.AggregatorSpec_MIN,
+				LocalIdxs: passThroughLocalIdxs,
+			},
+		},
 	},
 
 	distsqlrun.AggregatorSpec_SUM: {
 		LocalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_SUM},
-		FinalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_SUM},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        distsqlrun.AggregatorSpec_SUM,
+				LocalIdxs: passThroughLocalIdxs,
+			},
+		},
 	},
 
 	distsqlrun.AggregatorSpec_XOR_AGG: {
 		LocalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_XOR_AGG},
-		FinalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_XOR_AGG},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        distsqlrun.AggregatorSpec_XOR_AGG,
+				LocalIdxs: passThroughLocalIdxs,
+			},
+		},
 	},
 
 	// AVG is more tricky than the ones above; we need two intermediate values in
@@ -130,9 +192,15 @@ var DistAggregationTable = map[distsqlrun.AggregatorSpec_Func]DistAggregationInf
 			distsqlrun.AggregatorSpec_SUM,
 			distsqlrun.AggregatorSpec_COUNT,
 		},
-		FinalStage: []distsqlrun.AggregatorSpec_Func{
-			distsqlrun.AggregatorSpec_SUM,
-			distsqlrun.AggregatorSpec_SUM_INT,
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        distsqlrun.AggregatorSpec_SUM,
+				LocalIdxs: []uint32{0},
+			},
+			{
+				Fn:        distsqlrun.AggregatorSpec_SUM_INT,
+				LocalIdxs: []uint32{1},
+			},
 		},
 		FinalRendering: func(h *parser.IndexedVarHelper, varIdxOffset int) (parser.TypedExpr, error) {
 			sum := h.IndexedVar(varIdxOffset)
