@@ -61,8 +61,14 @@ func initAggregateBuiltins() {
 
 // AggregateFunc accumulates the result of a function of a Datum.
 type AggregateFunc interface {
-	// Add accumulates the passed datum into the AggregateFunc.
-	Add(context.Context, Datum) error
+	// Add accumulates the passed datums into the AggregateFunc.
+	// Most implementations require one and only one firstArg argument.
+	// If an aggregate function requires more than one argument,
+	// all additional arguments (after firstArg) are passed in as a
+	// variadic collection, otherArgs.
+	// This interface (as opposed to `args ...Datum`) avoids unnecessary
+	// allocation of otherArgs in the majority of cases.
+	Add(_ context.Context, firstArg Datum, otherArgs ...Datum) error
 
 	// Result returns the current value of the accumulation. This value
 	// will be a deep copy of any AggregateFunc internal state, so that
@@ -89,7 +95,7 @@ type AggregateFunc interface {
 var Aggregates = map[string][]Builtin{
 	"array_agg": {
 		makeAggBuiltinWithReturnType(
-			TypeAny,
+			[]Type{TypeAny},
 			func(args []TypedExpr) Type {
 				if len(args) == 0 {
 					return unknownReturnType
@@ -102,21 +108,21 @@ var Aggregates = map[string][]Builtin{
 	},
 
 	"avg": {
-		makeAggBuiltin(TypeInt, TypeDecimal, newIntAvgAggregate,
+		makeAggBuiltin([]Type{TypeInt}, TypeDecimal, newIntAvgAggregate,
 			"Calculates the average of the selected values."),
-		makeAggBuiltin(TypeFloat, TypeFloat, newFloatAvgAggregate,
+		makeAggBuiltin([]Type{TypeFloat}, TypeFloat, newFloatAvgAggregate,
 			"Calculates the average of the selected values."),
-		makeAggBuiltin(TypeDecimal, TypeDecimal, newDecimalAvgAggregate,
+		makeAggBuiltin([]Type{TypeDecimal}, TypeDecimal, newDecimalAvgAggregate,
 			"Calculates the average of the selected values."),
 	},
 
 	"bool_and": {
-		makeAggBuiltin(TypeBool, TypeBool, newBoolAndAggregate,
+		makeAggBuiltin([]Type{TypeBool}, TypeBool, newBoolAndAggregate,
 			"Calculates the boolean value of `AND`ing all selected values."),
 	},
 
 	"bool_or": {
-		makeAggBuiltin(TypeBool, TypeBool, newBoolOrAggregate,
+		makeAggBuiltin([]Type{TypeBool}, TypeBool, newBoolOrAggregate,
 			"Calculates the boolean value of `OR`ing all selected values."),
 	},
 
@@ -124,16 +130,16 @@ var Aggregates = map[string][]Builtin{
 		// TODO(knz): When CockroachDB supports STRING_AGG, CONCAT_AGG(X)
 		// should be substituted to STRING_AGG(X, '') and executed as
 		// such (no need for a separate implementation).
-		makeAggBuiltin(TypeString, TypeString, newStringConcatAggregate,
+		makeAggBuiltin([]Type{TypeString}, TypeString, newStringConcatAggregate,
 			"Concatenates all selected values."),
-		makeAggBuiltin(TypeBytes, TypeBytes, newBytesConcatAggregate,
+		makeAggBuiltin([]Type{TypeBytes}, TypeBytes, newBytesConcatAggregate,
 			"Concatenates all selected values."),
 		// TODO(eisen): support collated strings when the type system properly
 		// supports parametric types.
 	},
 
 	"count": {
-		makeAggBuiltin(TypeAny, TypeInt, newCountAggregate,
+		makeAggBuiltin([]Type{TypeAny}, TypeInt, newCountAggregate,
 			"Calculates the number of selected elements."),
 	},
 
@@ -152,69 +158,77 @@ var Aggregates = map[string][]Builtin{
 	},
 
 	"max": collectBuiltins(func(t Type) Builtin {
-		return makeAggBuiltin(t, t, newMaxAggregate,
+		return makeAggBuiltin([]Type{t}, t, newMaxAggregate,
 			"Identifies the maximum selected value.")
 	}, TypesAnyNonArray...),
 	"min": collectBuiltins(func(t Type) Builtin {
-		return makeAggBuiltin(t, t, newMinAggregate,
+		return makeAggBuiltin([]Type{t}, t, newMinAggregate,
 			"Identifies the minimum selected value.")
 	}, TypesAnyNonArray...),
 
 	"sum_int": {
-		makeAggBuiltin(TypeInt, TypeInt, newSmallIntSumAggregate,
+		makeAggBuiltin([]Type{TypeInt}, TypeInt, newSmallIntSumAggregate,
 			"Calculates the sum of the selected values."),
 	},
 
 	"sum": {
-		makeAggBuiltin(TypeInt, TypeDecimal, newIntSumAggregate,
+		makeAggBuiltin([]Type{TypeInt}, TypeDecimal, newIntSumAggregate,
 			"Calculates the sum of the selected values."),
-		makeAggBuiltin(TypeFloat, TypeFloat, newFloatSumAggregate,
+		makeAggBuiltin([]Type{TypeFloat}, TypeFloat, newFloatSumAggregate,
 			"Calculates the sum of the selected values."),
-		makeAggBuiltin(TypeDecimal, TypeDecimal, newDecimalSumAggregate,
+		makeAggBuiltin([]Type{TypeDecimal}, TypeDecimal, newDecimalSumAggregate,
 			"Calculates the sum of the selected values."),
-		makeAggBuiltin(TypeInterval, TypeInterval, newIntervalSumAggregate,
+		makeAggBuiltin([]Type{TypeInterval}, TypeInterval, newIntervalSumAggregate,
 			"Calculates the sum of the selected values."),
 	},
 
 	"variance": {
-		makeAggBuiltin(TypeInt, TypeDecimal, newIntVarianceAggregate,
+		makeAggBuiltin([]Type{TypeInt}, TypeDecimal, newIntVarianceAggregate,
 			"Calculates the variance of the selected values."),
-		makeAggBuiltin(TypeDecimal, TypeDecimal, newDecimalVarianceAggregate,
+		makeAggBuiltin([]Type{TypeDecimal}, TypeDecimal, newDecimalVarianceAggregate,
 			"Calculates the variance of the selected values."),
-		makeAggBuiltin(TypeFloat, TypeFloat, newFloatVarianceAggregate,
+		makeAggBuiltin([]Type{TypeFloat}, TypeFloat, newFloatVarianceAggregate,
 			"Calculates the variance of the selected values."),
 	},
 
 	"stddev": {
-		makeAggBuiltin(TypeInt, TypeDecimal, newIntStdDevAggregate,
+		makeAggBuiltin([]Type{TypeInt}, TypeDecimal, newIntStdDevAggregate,
 			"Calculates the standard deviation of the selected values."),
-		makeAggBuiltin(TypeDecimal, TypeDecimal, newDecimalStdDevAggregate,
+		makeAggBuiltin([]Type{TypeDecimal}, TypeDecimal, newDecimalStdDevAggregate,
 			"Calculates the standard deviation of the selected values."),
-		makeAggBuiltin(TypeFloat, TypeFloat, newFloatStdDevAggregate,
+		makeAggBuiltin([]Type{TypeFloat}, TypeFloat, newFloatStdDevAggregate,
 			"Calculates the standard deviation of the selected values."),
 	},
 
 	"xor_agg": {
-		makeAggBuiltin(TypeBytes, TypeBytes, newBytesXorAggregate,
+		makeAggBuiltin([]Type{TypeBytes}, TypeBytes, newBytesXorAggregate,
 			"Calculates the bitwise XOR of the selected values."),
-		makeAggBuiltin(TypeInt, TypeInt, newIntXorAggregate,
+		makeAggBuiltin([]Type{TypeInt}, TypeInt, newIntXorAggregate,
 			"Calculates the bitwise XOR of the selected values."),
 	},
 }
 
-func makeAggBuiltin(in, ret Type, f func([]Type, *EvalContext) AggregateFunc, info string) Builtin {
+func makeAggBuiltin(
+	in []Type, ret Type, f func([]Type, *EvalContext) AggregateFunc, info string,
+) Builtin {
 	return makeAggBuiltinWithReturnType(in, fixedReturnType(ret), f, info)
 }
 
 func makeAggBuiltinWithReturnType(
-	in Type, retType returnTyper, f func([]Type, *EvalContext) AggregateFunc, info string,
+	in []Type, retType returnTyper, f func([]Type, *EvalContext) AggregateFunc, info string,
 ) Builtin {
+	argTypes := make(ArgTypes, len(in))
+	for i, typ := range in {
+		argTypes[i].Name = fmt.Sprintf("arg%d", i+1)
+		argTypes[i].Typ = typ
+	}
+
 	return Builtin{
 		// See the comment about aggregate functions in the definitions
 		// of the Builtins array above.
 		impure:        true,
 		class:         AggregateClass,
-		Types:         ArgTypes{{"arg", in}},
+		Types:         argTypes,
 		ReturnType:    retType,
 		AggregateFunc: f,
 		WindowFunc: func(params []Type, evalCtx *EvalContext) WindowFunc {
@@ -257,7 +271,7 @@ func NewIdentAggregate(*EvalContext) AggregateFunc {
 }
 
 // Add sets the value to the passed datum.
-func (a *identAggregate) Add(_ context.Context, datum Datum) error {
+func (a *identAggregate) Add(_ context.Context, datum Datum, _ ...Datum) error {
 	// If we see at least one non-NULL value, ignore any NULLs.
 	// This is used in distributed multi-stage aggregations, where a local stage
 	// with multiple (parallel) instances feeds into a final stage. If some of the
@@ -298,7 +312,7 @@ func newArrayAggregate(params []Type, evalCtx *EvalContext) AggregateFunc {
 }
 
 // Add accumulates the passed datum into the array.
-func (a *arrayAggregate) Add(ctx context.Context, datum Datum) error {
+func (a *arrayAggregate) Add(ctx context.Context, datum Datum, _ ...Datum) error {
 	if err := a.acc.Grow(ctx, int64(datum.Size())); err != nil {
 		return err
 	}
@@ -338,7 +352,7 @@ func newDecimalAvgAggregate(params []Type, evalCtx *EvalContext) AggregateFunc {
 }
 
 // Add accumulates the passed datum into the average.
-func (a *avgAggregate) Add(ctx context.Context, datum Datum) error {
+func (a *avgAggregate) Add(ctx context.Context, datum Datum, _ ...Datum) error {
 	if datum == DNull {
 		return nil
 	}
@@ -390,7 +404,7 @@ func newStringConcatAggregate(_ []Type, evalCtx *EvalContext) AggregateFunc {
 	return &concatAggregate{acc: evalCtx.Mon.MakeBoundAccount()}
 }
 
-func (a *concatAggregate) Add(ctx context.Context, datum Datum) error {
+func (a *concatAggregate) Add(ctx context.Context, datum Datum, _ ...Datum) error {
 	if datum == DNull {
 		return nil
 	}
@@ -435,7 +449,7 @@ func newBoolAndAggregate(_ []Type, _ *EvalContext) AggregateFunc {
 	return &boolAndAggregate{}
 }
 
-func (a *boolAndAggregate) Add(_ context.Context, datum Datum) error {
+func (a *boolAndAggregate) Add(_ context.Context, datum Datum, _ ...Datum) error {
 	if datum == DNull {
 		return nil
 	}
@@ -466,7 +480,7 @@ func newBoolOrAggregate(_ []Type, _ *EvalContext) AggregateFunc {
 	return &boolOrAggregate{}
 }
 
-func (a *boolOrAggregate) Add(_ context.Context, datum Datum) error {
+func (a *boolOrAggregate) Add(_ context.Context, datum Datum, _ ...Datum) error {
 	if datum == DNull {
 		return nil
 	}
@@ -493,7 +507,7 @@ func newCountAggregate(_ []Type, _ *EvalContext) AggregateFunc {
 	return &countAggregate{}
 }
 
-func (a *countAggregate) Add(_ context.Context, datum Datum) error {
+func (a *countAggregate) Add(_ context.Context, datum Datum, _ ...Datum) error {
 	if datum == DNull {
 		return nil
 	}
@@ -516,7 +530,7 @@ func newCountRowsAggregate(_ []Type, _ *EvalContext) AggregateFunc {
 	return &countRowsAggregate{}
 }
 
-func (a *countRowsAggregate) Add(_ context.Context, _ Datum) error {
+func (a *countRowsAggregate) Add(_ context.Context, _ Datum, _ ...Datum) error {
 	a.count++
 	return nil
 }
@@ -539,7 +553,7 @@ func newMaxAggregate(_ []Type, evalCtx *EvalContext) AggregateFunc {
 }
 
 // Add sets the max to the larger of the current max or the passed datum.
-func (a *MaxAggregate) Add(_ context.Context, datum Datum) error {
+func (a *MaxAggregate) Add(_ context.Context, datum Datum, _ ...Datum) error {
 	if datum == DNull {
 		return nil
 	}
@@ -576,7 +590,7 @@ func newMinAggregate(_ []Type, evalCtx *EvalContext) AggregateFunc {
 }
 
 // Add sets the min to the smaller of the current min or the passed datum.
-func (a *MinAggregate) Add(_ context.Context, datum Datum) error {
+func (a *MinAggregate) Add(_ context.Context, datum Datum, _ ...Datum) error {
 	if datum == DNull {
 		return nil
 	}
@@ -612,7 +626,7 @@ func newSmallIntSumAggregate(_ []Type, _ *EvalContext) AggregateFunc {
 }
 
 // Add adds the value of the passed datum to the sum.
-func (a *smallIntSumAggregate) Add(_ context.Context, datum Datum) error {
+func (a *smallIntSumAggregate) Add(_ context.Context, datum Datum, _ ...Datum) error {
 	if datum == DNull {
 		return nil
 	}
@@ -649,7 +663,7 @@ func newIntSumAggregate(_ []Type, _ *EvalContext) AggregateFunc {
 }
 
 // Add adds the value of the passed datum to the sum.
-func (a *intSumAggregate) Add(_ context.Context, datum Datum) error {
+func (a *intSumAggregate) Add(_ context.Context, datum Datum, _ ...Datum) error {
 	if datum == DNull {
 		return nil
 	}
@@ -711,7 +725,7 @@ func newDecimalSumAggregate(_ []Type, _ *EvalContext) AggregateFunc {
 }
 
 // Add adds the value of the passed datum to the sum.
-func (a *decimalSumAggregate) Add(_ context.Context, datum Datum) error {
+func (a *decimalSumAggregate) Add(_ context.Context, datum Datum, _ ...Datum) error {
 	if datum == DNull {
 		return nil
 	}
@@ -747,7 +761,7 @@ func newFloatSumAggregate(_ []Type, _ *EvalContext) AggregateFunc {
 }
 
 // Add adds the value of the passed datum to the sum.
-func (a *floatSumAggregate) Add(_ context.Context, datum Datum) error {
+func (a *floatSumAggregate) Add(_ context.Context, datum Datum, _ ...Datum) error {
 	if datum == DNull {
 		return nil
 	}
@@ -778,7 +792,7 @@ func newIntervalSumAggregate(_ []Type, _ *EvalContext) AggregateFunc {
 }
 
 // Add adds the value of the passed datum to the sum.
-func (a *intervalSumAggregate) Add(_ context.Context, datum Datum) error {
+func (a *intervalSumAggregate) Add(_ context.Context, datum Datum, _ ...Datum) error {
 	if datum == DNull {
 		return nil
 	}
@@ -811,7 +825,7 @@ func newIntVarianceAggregate(_ []Type, _ *EvalContext) AggregateFunc {
 	}
 }
 
-func (a *intVarianceAggregate) Add(ctx context.Context, datum Datum) error {
+func (a *intVarianceAggregate) Add(ctx context.Context, datum Datum, _ ...Datum) error {
 	if datum == DNull {
 		return nil
 	}
@@ -837,7 +851,7 @@ func newFloatVarianceAggregate(_ []Type, _ *EvalContext) AggregateFunc {
 	return &floatVarianceAggregate{}
 }
 
-func (a *floatVarianceAggregate) Add(_ context.Context, datum Datum) error {
+func (a *floatVarianceAggregate) Add(_ context.Context, datum Datum, _ ...Datum) error {
 	if datum == DNull {
 		return nil
 	}
@@ -897,7 +911,7 @@ var (
 	decimalTwo = apd.New(2, 0)
 )
 
-func (a *decimalVarianceAggregate) Add(_ context.Context, datum Datum) error {
+func (a *decimalVarianceAggregate) Add(_ context.Context, datum Datum, _ ...Datum) error {
 	if datum == DNull {
 		return nil
 	}
@@ -952,7 +966,7 @@ func newDecimalStdDevAggregate(params []Type, evalCtx *EvalContext) AggregateFun
 }
 
 // Add implements the AggregateFunc interface.
-func (a *stdDevAggregate) Add(ctx context.Context, datum Datum) error {
+func (a *stdDevAggregate) Add(ctx context.Context, datum Datum, _ ...Datum) error {
 	return a.agg.Add(ctx, datum)
 }
 
@@ -990,7 +1004,7 @@ func newBytesXorAggregate(_ []Type, _ *EvalContext) AggregateFunc {
 }
 
 // Add inserts one value into the running xor.
-func (a *bytesXorAggregate) Add(_ context.Context, datum Datum) error {
+func (a *bytesXorAggregate) Add(_ context.Context, datum Datum, _ ...Datum) error {
 	if datum == DNull {
 		return nil
 	}
@@ -1029,7 +1043,7 @@ func newIntXorAggregate(_ []Type, _ *EvalContext) AggregateFunc {
 }
 
 // Add inserts one value into the running xor.
-func (a *intXorAggregate) Add(_ context.Context, datum Datum) error {
+func (a *intXorAggregate) Add(_ context.Context, datum Datum, _ ...Datum) error {
 	if datum == DNull {
 		return nil
 	}

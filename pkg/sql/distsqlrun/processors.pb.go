@@ -542,8 +542,12 @@ type AggregatorSpec_Aggregation struct {
 	Distinct bool `protobuf:"varint,2,opt,name=distinct" json:"distinct"`
 	// The column index specifies the argument(s) to the aggregator function.
 	//
-	// Currently no functions take more than one argument.
-	// COUNT_ROWS takes no arguments.
+	// Most functions take one argument whereas some may take multiple
+	// arguments (see corresponding AggregatorFunc implementatations
+	// for each AggregatorSpec_Func in aggregate_builtins.go; see
+	// DistAggregationTable in aggregator_funcs.go for distributed
+	// aggregation definitions).
+	// Note e.g. COUNT_ROWS takes no arguments.
 	ColIdx []uint32 `protobuf:"varint,5,rep,name=col_idx,json=colIdx" json:"col_idx,omitempty"`
 	// If set, this column index specifies a boolean argument; rows for which
 	// this value is not true don't contribute to this aggregation. This enables
