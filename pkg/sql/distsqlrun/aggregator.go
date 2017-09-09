@@ -298,15 +298,16 @@ func (ag *aggregator) accumulateRows(ctx context.Context) (err error) {
 					continue
 				}
 			}
-			var value parser.Datum
-			if len(a.ColIdx) != 0 {
-				c := a.ColIdx[0]
+			// Extract the corresponding values from the row to feed into the aggregate function.
+			values := make(parser.Datums, len(a.ColIdx))
+			for i, c := range a.ColIdx {
 				if err := row[c].EnsureDecoded(&ag.datumAlloc); err != nil {
 					return err
 				}
-				value = row[c].Datum
+				values[i] = row[c].Datum
 			}
-			if err := ag.funcs[i].add(ctx, encoded, value); err != nil {
+
+			if err := ag.funcs[i].add(ctx, encoded, values); err != nil {
 				return err
 			}
 		}
@@ -335,9 +336,9 @@ func (ag *aggregator) newAggregateFuncHolder(
 	}
 }
 
-func (a *aggregateFuncHolder) add(ctx context.Context, bucket []byte, d parser.Datum) error {
+func (a *aggregateFuncHolder) add(ctx context.Context, bucket []byte, values parser.Datums) error {
 	if a.seen != nil {
-		encoded, err := sqlbase.EncodeDatum(bucket, d)
+		encoded, err := sqlbase.EncodeDatums(bucket, values)
 		if err != nil {
 			return err
 		}
@@ -367,7 +368,14 @@ func (a *aggregateFuncHolder) add(ctx context.Context, bucket []byte, d parser.D
 		a.buckets[string(bucket)] = impl
 	}
 
-	return impl.Add(ctx, d)
+	switch len(values) {
+	case 0:
+		return impl.Add(ctx, nil)
+	case 1:
+		return impl.Add(ctx, values[0])
+	default:
+		return impl.Add(ctx, values[0], values[1:]...)
+	}
 }
 
 func (a *aggregateFuncHolder) get(bucket string) (parser.Datum, error) {

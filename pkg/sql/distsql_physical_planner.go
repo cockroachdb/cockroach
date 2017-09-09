@@ -1372,39 +1372,42 @@ func (dsp *distSQLPlanner) addAggregators(
 		//
 		// Count the total number of aggregation in the local/final stages and keep
 		// track of whether any of them needs a final rendering.
-		numAgg := 0
+		nLocalAgg := 0
+		nFinalAgg := 0
 		needRender := false
 		for _, e := range aggregations {
 			info := distsqlplan.DistAggregationTable[e.Func]
-			numAgg += len(info.LocalStage)
+			nLocalAgg += len(info.LocalStage)
+			nFinalAgg += len(info.FinalStage)
 			if info.FinalRendering != nil {
 				needRender = true
 			}
 		}
 
-		localAgg := make([]distsqlrun.AggregatorSpec_Aggregation, numAgg, numAgg+len(groupCols))
-		intermediateTypes := make([]sqlbase.ColumnType, numAgg, numAgg+len(groupCols))
-		finalAgg := make([]distsqlrun.AggregatorSpec_Aggregation, numAgg)
+		localAgg := make([]distsqlrun.AggregatorSpec_Aggregation, nLocalAgg, nLocalAgg+len(groupCols))
+		intermediateTypes := make([]sqlbase.ColumnType, nLocalAgg, nLocalAgg+len(groupCols))
+		finalAgg := make([]distsqlrun.AggregatorSpec_Aggregation, nFinalAgg)
 		finalGroupCols := make([]uint32, len(groupCols))
 		var finalPreRenderTypes []sqlbase.ColumnType
 		if needRender {
-			finalPreRenderTypes = make([]sqlbase.ColumnType, numAgg)
+			finalPreRenderTypes = make([]sqlbase.ColumnType, nFinalAgg)
 		}
 
 		// Each aggregation can have multiple aggregations in the local/final
-		// stages. We concatenate all these into localAgg/finalAgg; aIdx is an index
-		// inside localAgg/finalAgg.
-		aIdx := 0
+		// stages. We concatenate all these into localAgg/finalAgg; localIdx is an index
+		// inside localAgg and finalIdx is an index inside finalAgg.
+		localIdx := 0
+		finalIdx := 0
 		for _, e := range aggregations {
 			info := distsqlplan.DistAggregationTable[e.Func]
-			for i, localFunc := range info.LocalStage {
-				localAgg[aIdx] = distsqlrun.AggregatorSpec_Aggregation{
+			// First prepare and spec local aggregations.
+			// Note the planNode first feeds the input (inputTypes) into the local aggregators.
+			for _, localFunc := range info.LocalStage {
+				localAgg[localIdx] = distsqlrun.AggregatorSpec_Aggregation{
 					Func:         localFunc,
 					ColIdx:       e.ColIdx,
 					FilterColIdx: e.FilterColIdx,
 				}
-
-				var localResultType sqlbase.ColumnType
 
 				argTypes := make([]sqlbase.ColumnType, len(e.ColIdx))
 				for i, c := range e.ColIdx {
@@ -1412,27 +1415,55 @@ func (dsp *distSQLPlanner) addAggregators(
 				}
 
 				var err error
-				_, localResultType, err = distsqlrun.GetAggregateInfo(localFunc, argTypes...)
+				_, intermediateTypes[localIdx], err = distsqlrun.GetAggregateInfo(localFunc, argTypes...)
 				if err != nil {
 					return err
 				}
-				intermediateTypes[aIdx] = localResultType
+				localIdx++
+			}
 
-				finalAgg[aIdx] = distsqlrun.AggregatorSpec_Aggregation{
-					Func: info.FinalStage[i],
-					// The input of final expression aIdx is the output of the
-					// local expression aIdx.
-					ColIdx: []uint32{uint32(aIdx)},
+			for _, finalInfo := range info.FinalStage {
+				// Set a pointer to the first local aggregator for the current aggregation e.
+				// This is required since we append all localAggs and finalAggs together.
+				//
+				// For example, if we have 2 aggregations FOO and BAR each with two local aggregator
+				// values FOO_1, FOO_2 and BAR_1, BAR_2, then localAgg will look like:
+				//   localAgg: [FOO_1, FOO_2, BAR_1, BAR_2]
+				// During the iteration with FOO, localIdx at this point is 2 (pointing at BAR_1).
+				// Since finalInfo.LocalIdxs is relative to the index of FOO_1, we need to offset it
+				// by the # of local values, or len(info.LocalStage) = 2 to get the adjusted
+				// localIdxCurrentAgg = 2 - 2 = 0.
+				localIdxCurrentAgg := uint32(localIdx - len(info.LocalStage))
+
+				// The input of the final aggregators are specified as the indices of the local aggregation
+				// values. We need to offset the relative indices specified by finalInfo.LocalIdxs by
+				// localIdxCurrentAgg.
+				argIdxs := make([]uint32, len(finalInfo.LocalIdxs))
+				for i, c := range finalInfo.LocalIdxs {
+					argIdxs[i] = c + localIdxCurrentAgg
 				}
+				finalAgg[finalIdx] = distsqlrun.AggregatorSpec_Aggregation{
+					Func:   finalInfo.Fn,
+					ColIdx: argIdxs,
+				}
+
 				if needRender {
-					_, finalPreRenderTypes[aIdx], err = distsqlrun.GetAggregateInfo(
-						info.FinalStage[i], localResultType,
+					argTypes := make([]sqlbase.ColumnType, len(finalInfo.LocalIdxs))
+					for i, c := range finalInfo.LocalIdxs {
+						// We want to access the corresponding local output type
+						// for the current aggregation e. c is the offset from
+						// the first local aggregator.
+						argTypes[i] = intermediateTypes[localIdxCurrentAgg+c]
+					}
+					var err error
+					_, finalPreRenderTypes[finalIdx], err = distsqlrun.GetAggregateInfo(
+						finalInfo.Fn, argTypes...,
 					)
 					if err != nil {
 						return err
 					}
 				}
-				aIdx++
+				finalIdx++
 			}
 		}
 
@@ -1481,21 +1512,21 @@ func (dsp *distSQLPlanner) addAggregators(
 			// Build rendering expressions.
 			renderExprs := make([]distsqlrun.Expression, len(aggregations))
 			h := distsqlplan.MakeTypeIndexedVarHelper(finalPreRenderTypes)
-			// aIdx is an index inside finalAgg. It is used to keep track of the
+			// finalIdx is an index inside finalAgg. It is used to keep track of the
 			// finalAgg results that correspond to each aggregation.
-			aIdx := 0
+			finalIdx := 0
 			for i, e := range aggregations {
 				info := distsqlplan.DistAggregationTable[e.Func]
 				if info.FinalRendering == nil {
-					renderExprs[i] = distsqlplan.MakeExpression(h.IndexedVar(aIdx), nil)
+					renderExprs[i] = distsqlplan.MakeExpression(h.IndexedVar(finalIdx), nil)
 				} else {
-					expr, err := info.FinalRendering(&h, aIdx)
+					expr, err := info.FinalRendering(&h, finalIdx)
 					if err != nil {
 						return err
 					}
 					renderExprs[i] = distsqlplan.MakeExpression(expr, nil)
 				}
-				aIdx += len(info.LocalStage)
+				finalIdx += len(info.FinalStage)
 			}
 			finalAggPost.RenderExprs = renderExprs
 		}
