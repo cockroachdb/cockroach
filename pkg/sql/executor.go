@@ -1210,7 +1210,12 @@ func (e *Executor) execSingleStatement(
 // getTransactionState retrieves a text representation of the given state.
 func getTransactionState(txnState *txnState) string {
 	state := txnState.State()
-	if txnState.implicitTxn {
+	// If the statement reading the state is in an implicit transaction, then we
+	// want to tell NoTxn to the client.
+	// If implicitTxn is set, the state is supposed to be AutoRetry. However, we
+	// test the state too, just in case we have a state machine bug, in which case
+	// we don't want this code to hide a bug.
+	if txnState.implicitTxn && state == AutoRetry {
 		state = NoTxn
 	}
 	// For the purposes of representing the states to client, make the AutoRetry
