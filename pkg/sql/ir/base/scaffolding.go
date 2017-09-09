@@ -20,17 +20,22 @@ import "bytes"
 // Go compiler (and linters) to check the templates *before* they are
 // transformed into generated code.
 
-// Type is a mock struct type.
-type Type struct{ ref *node }
+// These constants are replaced in template code.
+const (
+	ºnumRefsPerNode = iota
+	ºnumEnumsPerNode
+	ºtag
+)
 
-func macroGetExtraRefs(x extraStruct) []*node { return nil }
+// ºtype is a mock struct type.
+type ºtype struct{ ref *node }
 
-func macroGetName(ref *node) Type { return Type{} }
-
-func macroSetName(ref *node, extra *extraStruct, x Type) {}
+func ºgetExtraRefs(x extraºStruct) []*node              { return nil }
+func ºgetField(ref *node) ºtype                         { return ºtype{} }
+func ºsetField(ref *node, extra *extraºStruct, x ºtype) {}
 
 // FormatSExpr implements the SexprFormatter interface.
-func (t Type) FormatSExpr(buf *bytes.Buffer) {}
+func (t ºtype) FormatSExpr(buf *bytes.Buffer) {}
 
-// FormatSExprTypName is a stub for Sexpr formatters for primitive types.
-func FormatSExprTypName(buf *bytes.Buffer, x Type) {}
+// FormatSExprºType is a stub for Sexpr formatters for primitive types.
+func FormatSExprºType(buf *bytes.Buffer, x ºtype) {}

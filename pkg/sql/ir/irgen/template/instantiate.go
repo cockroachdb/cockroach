@@ -40,7 +40,7 @@ func NewRoot() *Node {
 // AddReplacement adds a regexp replacement to the given node. The replacement
 // value is formatted with a %s conversion.
 func (node *Node) AddReplacement(expr string, repl interface{}) {
-	node.replacements = append(node.replacements, replacement{regexp.MustCompile(expr), fmt.Sprintf("%s", repl)})
+	node.replacements = append(node.replacements, replacement{regexp.MustCompile("º" + expr), fmt.Sprintf("%s", repl)})
 }
 
 // AddReplacementf adds a regexp replacement to the given node. The replacement
