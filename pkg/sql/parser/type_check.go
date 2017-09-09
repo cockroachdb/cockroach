@@ -603,9 +603,9 @@ func (expr *ParenExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, err
 	if err != nil {
 		return nil, err
 	}
-	expr.Expr = exprTyped
-	expr.typ = exprTyped.ResolvedType()
-	return expr, nil
+	// Parentheses are semantically unimportant and can be removed/replaced
+	// with its nested expression in our plan. This makes type checking cleaner.
+	return exprTyped, nil
 }
 
 // presetTypesForTesting is a mapping of qualified names to types that can be mocked out
@@ -908,7 +908,10 @@ func (d dNull) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { retu
 // typeCheckAndRequireTupleElems asserts that all elements in the Tuple
 // can be typed as required and are equivalent to required. Note that one would invoke
 // with the required element type and NOT TTuple (as opposed to how Tuple.TypeCheck operates).
-// For example, (1, 2.5) with required TypeDecimal would raise a sane error whereas (1.0, 2.5) with required TypeDecimal would pass.
+// For example, (1, 2.5) with required TypeDecimal would raise a sane error whereas (1.0, 2.5)
+// with required TypeDecimal would pass.
+//
+// It is only valid to pass in a Tuple expression
 func typeCheckAndRequireTupleElems(ctx *SemaContext, expr Expr, required Type) (TypedExpr, error) {
 	tuple := expr.(*Tuple)
 	tuple.types = make(TTuple, len(tuple.Exprs))
@@ -956,6 +959,11 @@ const (
 func typeCheckComparisonOpWithSubOperator(
 	ctx *SemaContext, op, subOp ComparisonOperator, left, right Expr,
 ) (TypedExpr, TypedExpr, CmpOp, error) {
+	// Parentheses are semantically unimportant and can be removed/replaced
+	// with its nested expression in our plan. This makes type checking cleaner.
+	left = StripParens(left)
+	right = StripParens(right)
+
 	// Determine the set of comparisons are possible for the sub-operation,
 	// which will be memoized.
 	foldedOp, _, _, _, _ := foldComparisonExpr(subOp, nil, nil)
@@ -963,7 +971,7 @@ func typeCheckComparisonOpWithSubOperator(
 
 	var cmpTypeLeft, cmpTypeRight Type
 	var leftTyped, rightTyped TypedExpr
-	if array, isConstructor := StripParens(right).(*Array); isConstructor {
+	if array, isConstructor := right.(*Array); isConstructor {
 		// If the right expression is an (optionally nested) array constructor, we
 		// perform type inference on the array elements and the left expression.
 		sameTypeExprs := make([]Expr, len(array.Exprs)+1)
@@ -988,16 +996,7 @@ func typeCheckComparisonOpWithSubOperator(
 		}
 		array.typ = TArray{retType}
 
-		rightParen := right
-		for {
-			if p, ok := rightParen.(*ParenExpr); ok {
-				p.typ = array.typ
-				rightParen = p.Expr
-				continue
-			}
-			break
-		}
-		rightTyped = right.(TypedExpr)
+		rightTyped = array
 		cmpTypeRight = retType
 
 		// Return early without looking up a CmpOp if the comparison type is TypeNull.
@@ -1014,12 +1013,10 @@ func typeCheckComparisonOpWithSubOperator(
 		}
 		cmpTypeLeft = leftTyped.ResolvedType()
 
-		// TODO(richardwu): Write an Unwrap function for BinaryExpr to handle the case where the tuple
-		// is nested within ParenExpr.
-		if _, ok := right.(*Tuple); ok {
+		if tuple, ok := right.(*Tuple); ok {
 			// If right expression is a tuple, we require that all elements' inferred
 			// type is equivalent to the left's type.
-			rightTyped, err = typeCheckAndRequireTupleElems(ctx, right, cmpTypeLeft)
+			rightTyped, err = typeCheckAndRequireTupleElems(ctx, tuple, cmpTypeLeft)
 			if err != nil {
 				return nil, nil, CmpOp{}, err
 			}
