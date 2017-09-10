@@ -2438,11 +2438,17 @@ func TestReplicaGCRace(t *testing.T) {
 	errChan := errorChannelTestHandler(make(chan *roachpb.Error, 1))
 	fromTransport.Listen(fromStore.StoreID(), errChan)
 
-	// Send the heartbeat. Boom. See
-	// https://github.com/cockroachdb/cockroach/issues/11591.
-	fromTransport.SendAsync(&hbReq)
+	// Send the heartbeat. Boom. See #11591.
+	// We have to send this multiple times to protect against
+	// dropped messages (see #18355).
+	if sent := fromTransport.SendAsync(&hbReq); !sent {
+		t.Fatal("failed to send heartbeat")
+	}
+	heartbeatsSent := 1
 
-	// The receiver of this message should return an error.
+	// The receiver of this message should return an error. If we don't get a
+	// quick response, assume that the message got dropped and try sending it
+	// again.
 	select {
 	case pErr := <-errChan:
 		switch pErr.GetDetail().(type) {
@@ -2451,7 +2457,13 @@ func TestReplicaGCRace(t *testing.T) {
 			t.Fatalf("unexpected error type %T: %s", pErr.GetDetail(), pErr)
 		}
 	case <-time.After(time.Second):
-		t.Fatal("did not get expected error")
+		if heartbeatsSent >= 5 {
+			t.Fatal("did not get expected error")
+		}
+		heartbeatsSent++
+		if sent := fromTransport.SendAsync(&hbReq); !sent {
+			t.Fatal("failed to send heartbeat")
+		}
 	}
 }
 

@@ -3532,7 +3532,9 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 		if pErr := s.processRaftRequest(info.respStream.Context(), info.req, IncomingSnapshot{}); pErr != nil {
 			// If we're unable to process the request, clear the request queue. This
 			// only happens if we couldn't create the replica because the request was
-			// targeted to a removed range.
+			// targeted to a removed range. This is also racy and could cause us to
+			// drop messages to the deleted range occasionally (#18355), but raft
+			// will just retry.
 			q.Lock()
 			if len(q.infos) == 0 {
 				s.replicaQueues.Delete(int64(rangeID))
