@@ -3429,6 +3429,7 @@ func sendSnapshot(
 	{
 		var ent raftpb.Entry
 		for i := range logEntries {
+			ent.Reset()
 			if err := ent.Unmarshal(logEntries[i]); err != nil {
 				return err
 			}
