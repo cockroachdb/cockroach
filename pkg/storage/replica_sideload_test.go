@@ -792,7 +792,7 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 		tc.store.raftEntryCache.clearTo(tc.repl.RangeID, sideloadedIndex+1)
 
 		mockSender := &mockSender{}
-		if err := sendSnapshot(
+		err = sendSnapshot(
 			ctx,
 			tc.store.cfg.Settings,
 			mockSender,
@@ -801,7 +801,8 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 			failingOS,
 			tc.repl.store.Engine().NewBatch,
 			func() {},
-		); errors.Cause(err) != errMustRetrySnapshotDueToTruncation {
+		)
+		if _, ok := errors.Cause(err).(*errMustRetrySnapshotDueToTruncation); !ok {
 			t.Fatal(err)
 		}
 	}()
