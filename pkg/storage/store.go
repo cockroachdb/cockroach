@@ -3266,7 +3266,16 @@ func snapshotRateLimit(
 	}
 }
 
-var errMustRetrySnapshotDueToTruncation = errors.New("log truncation during snapshot removed sideloaded SSTable")
+type errMustRetrySnapshotDueToTruncation struct {
+	index, term uint64
+}
+
+func (e *errMustRetrySnapshotDueToTruncation) Error() string {
+	return fmt.Sprintf(
+		"log truncation during snapshot removed sideloaded SSTable at index %d, term %d",
+		e.index, e.term,
+	)
+}
 
 // sendSnapshot sends an outgoing snapshot via a pre-opened GRPC stream.
 func sendSnapshot(
@@ -3445,7 +3454,10 @@ func sendSnapshot(
 					// instance by pre-loading them into memory. Or we can make
 					// log truncation less aggressive about removing sideloaded
 					// files, by delaying trailing file deletion for a bit.
-					return errMustRetrySnapshotDueToTruncation
+					return &errMustRetrySnapshotDueToTruncation{
+						index: ent.Index,
+						term:  ent.Term,
+					}
 				}
 				return err
 			}
