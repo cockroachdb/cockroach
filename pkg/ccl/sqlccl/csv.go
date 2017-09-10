@@ -182,6 +182,11 @@ func doLocalCSVTransform(
 	})
 	group.Go(func() error {
 		defer close(contentCh)
+		// TODO(mjibson): this error may be swalloed if the goroutine below returns first
+		// (with a "no files in backup error"). Need to refactor this code so that this
+		// error is always surfaced first.
+		//
+		// See https://github.com/cockroachdb/cockroach/issues/17336#issuecomment-328380578.
 		var err error
 		kvCount, err = writeRocksDB(gCtx, kvCh, tempEngine, sstMaxSize, contentCh, walltime)
 		if job != nil {
