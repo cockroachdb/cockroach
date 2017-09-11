@@ -2597,31 +2597,56 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 
 	ctx := context.Background()
 
-	cleanupNonEmpty1, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{
+	cleanupNonEmpty1, rejectionMsg, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{
 		RangeSize: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if rejectionMsg != "" {
+		t.Fatalf("expected no rejection message, got %q", rejectionMsg)
 	}
 	if n := s.ReservationCount(); n != 1 {
 		t.Fatalf("expected 1 reservation, but found %d", n)
 	}
 
 	// Ensure we allow a concurrent empty snapshot.
-	cleanupEmpty, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{})
+	cleanupEmpty, rejectionMsg, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if rejectionMsg != "" {
+		t.Fatalf("expected no rejection message, got %q", rejectionMsg)
 	}
 	// Empty snapshots are not throttled and so do not increase the reservation
 	// count.
 	if n := s.ReservationCount(); n != 1 {
-		t.Fatalf("expected 1 reservations, but found %d", n)
+		t.Fatalf("expected 1 reservation, but found %d", n)
 	}
 	cleanupEmpty()
 
-	// Verify we don't allow concurrent snapshots by spawning a goroutine which
-	// will execute the cleanup after a short delay but only if another snapshot
-	// was not allowed through.
+	// Verify that a declinable snapshot will be declined if another is in
+	// progress.
+	cleanupNonEmpty2, rejectionMsg, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{
+		RangeSize:  1,
+		CanDecline: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rejectionMsg != snapshotApplySemBusyMsg {
+		t.Fatalf("expected rejection message %q, got %q", snapshotApplySemBusyMsg, rejectionMsg)
+	}
+	if cleanupNonEmpty2 != nil {
+		t.Fatalf("got unexpected non-nil cleanup method")
+	}
+	if n := s.ReservationCount(); n != 1 {
+		t.Fatalf("expected 1 reservation, but found %d", n)
+	}
+
+	// Verify we block concurrent snapshots by spawning a goroutine which will
+	// execute the cleanup after a short delay but only if another snapshot was
+	// not allowed through.
 	var boom int32
 	go func() {
 		time.Sleep(20 * time.Millisecond)
@@ -2630,14 +2655,17 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 		}
 	}()
 
-	cleanupNonEmpty2, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{
+	cleanupNonEmpty3, rejectionMsg, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{
 		RangeSize: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	if rejectionMsg != "" {
+		t.Fatalf("expected no rejection message, got %q", rejectionMsg)
+	}
 	atomic.StoreInt32(&boom, 1)
-	cleanupNonEmpty2()
+	cleanupNonEmpty3()
 
 	if n := s.ReservationCount(); n != 0 {
 		t.Fatalf("expected 0 reservations, but found %d", n)
