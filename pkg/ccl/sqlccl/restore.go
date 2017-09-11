@@ -56,7 +56,7 @@ func loadBackupDescs(ctx context.Context, uris []string) ([]BackupDescriptor, er
 	backupDescs := make([]BackupDescriptor, len(uris))
 
 	for i, uri := range uris {
-		desc, err := readBackupDescriptorFromURI(ctx, uri)
+		desc, err := ReadBackupDescriptorFromURI(ctx, uri)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to read backup descriptor")
 		}
