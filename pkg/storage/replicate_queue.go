@@ -572,7 +572,11 @@ func (rq *replicateQueue) addReplica(
 	if dryRun {
 		return nil
 	}
-	return repl.changeReplicas(ctx, roachpb.ADD_REPLICA, target, desc, priority, reason, details)
+	if err := repl.changeReplicas(ctx, roachpb.ADD_REPLICA, target, desc, priority, reason, details); err != nil {
+		return err
+	}
+	rq.allocator.storePool.updateLocalStoreAfterRebalance(target.StoreID, repl, roachpb.ADD_REPLICA)
+	return nil
 }
 
 func (rq *replicateQueue) removeReplica(
@@ -587,7 +591,11 @@ func (rq *replicateQueue) removeReplica(
 	if dryRun {
 		return nil
 	}
-	return repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, target, desc, reason, details)
+	if err := repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, target, desc, reason, details); err != nil {
+		return err
+	}
+	rq.allocator.storePool.updateLocalStoreAfterRebalance(target.StoreID, repl, roachpb.REMOVE_REPLICA)
+	return nil
 }
 
 func (rq *replicateQueue) canTransferLease() bool {
