@@ -174,7 +174,7 @@ func (rq *replicateQueue) shouldQueue(
 	}
 
 	rangeInfo := rangeInfoForRepl(repl, desc)
-	action, priority := rq.allocator.ComputeAction(ctx, zone, rangeInfo)
+	action, priority := rq.allocator.ComputeAction(ctx, zone, rangeInfo, false)
 	if action == AllocatorNoop {
 		log.VEventf(ctx, 2, "no action to take")
 		return false, 0
@@ -184,7 +184,7 @@ func (rq *replicateQueue) shouldQueue(
 	}
 
 	if !rq.store.TestingKnobs().DisableReplicaRebalancing {
-		target, _ := rq.allocator.RebalanceTarget(ctx, zone.Constraints, repl.RaftStatus(), rangeInfo, storeFilterThrottled)
+		target, _ := rq.allocator.RebalanceTarget(ctx, zone.Constraints, repl.RaftStatus(), rangeInfo, storeFilterThrottled, false)
 		if target != nil {
 			log.VEventf(ctx, 2, "rebalance target found, enqueuing")
 			return true, 0
@@ -219,7 +219,7 @@ func (rq *replicateQueue) process(
 	// snapshot errors, usually signalling that a rebalancing
 	// reservation could not be made with the selected target.
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		if requeue, err := rq.processOneChange(ctx, repl, sysCfg, rq.canTransferLease, false /* dryRun */); err != nil {
+		if requeue, err := rq.processOneChange(ctx, repl, sysCfg, rq.canTransferLease, false /* dryRun */, false /* disableStatsBasedRebalance */); err != nil {
 			if IsSnapshotError(err) {
 				// If ChangeReplicas failed because the preemptive snapshot failed, we
 				// log the error but then return success indicating we should retry the
@@ -246,6 +246,7 @@ func (rq *replicateQueue) processOneChange(
 	sysCfg config.SystemConfig,
 	canTransferLease func() bool,
 	dryRun bool,
+	disableStatsBasedRebalance bool,
 ) (requeue bool, _ error) {
 	desc := repl.Desc()
 
@@ -266,7 +267,7 @@ func (rq *replicateQueue) processOneChange(
 	}
 
 	rangeInfo := rangeInfoForRepl(repl, desc)
-	switch action, _ := rq.allocator.ComputeAction(ctx, zone, rangeInfo); action {
+	switch action, _ := rq.allocator.ComputeAction(ctx, zone, rangeInfo, disableStatsBasedRebalance); action {
 	case AllocatorNoop:
 		break
 	case AllocatorAdd:
@@ -277,6 +278,7 @@ func (rq *replicateQueue) processOneChange(
 			desc.Replicas,
 			rangeInfo,
 			true, /* relaxConstraints */
+			disableStatsBasedRebalance,
 		)
 		if err != nil {
 			return false, err
@@ -312,6 +314,7 @@ func (rq *replicateQueue) processOneChange(
 				oldPlusNewReplicas,
 				rangeInfo,
 				true, /* relaxConstraints */
+				disableStatsBasedRebalance,
 			)
 			if err != nil {
 				// Does not seem possible to go to the next odd replica state. Return an
@@ -347,7 +350,7 @@ func (rq *replicateQueue) processOneChange(
 			return false, errors.Errorf("no removable replicas from range that needs a removal: %s",
 				rangeRaftProgress(repl.RaftStatus(), desc.Replicas))
 		}
-		removeReplica, details, err := rq.allocator.RemoveTarget(ctx, zone.Constraints, candidates, rangeInfo)
+		removeReplica, details, err := rq.allocator.RemoveTarget(ctx, zone.Constraints, candidates, rangeInfo, disableStatsBasedRebalance)
 		if err != nil {
 			return false, err
 		}
@@ -461,7 +464,7 @@ func (rq *replicateQueue) processOneChange(
 
 		if !rq.store.TestingKnobs().DisableReplicaRebalancing {
 			rebalanceStore, details := rq.allocator.RebalanceTarget(
-				ctx, zone.Constraints, repl.RaftStatus(), rangeInfo, storeFilterThrottled)
+				ctx, zone.Constraints, repl.RaftStatus(), rangeInfo, storeFilterThrottled, disableStatsBasedRebalance)
 			if rebalanceStore == nil {
 				log.VEventf(ctx, 1, "no suitable rebalance target")
 			} else {
