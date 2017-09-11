@@ -224,7 +224,7 @@ func MakeAllocator(
 // supplied range, as governed by the supplied zone configuration. It
 // returns the required action that should be taken and a priority.
 func (a *Allocator) ComputeAction(
-	ctx context.Context, zone config.ZoneConfig, rangeInfo RangeInfo,
+	ctx context.Context, zone config.ZoneConfig, rangeInfo RangeInfo, disableStatsBasedRebalance bool,
 ) (AllocatorAction, float64) {
 	if a.storePool == nil {
 		// Do nothing if storePool is nil for some unittests.
@@ -282,6 +282,7 @@ func (a *Allocator) ComputeAction(
 				liveReplicas,
 				rangeInfo,
 				true, /* relaxConstraints */
+				disableStatsBasedRebalance,
 			); err == nil {
 				removeDead = true
 			}
@@ -338,6 +339,7 @@ func (a *Allocator) AllocateTarget(
 	existing []roachpb.ReplicaDescriptor,
 	rangeInfo RangeInfo,
 	relaxConstraints bool,
+	disableStatsBasedRebalance bool,
 ) (*roachpb.StoreDescriptor, string, error) {
 	sl, _, throttledStoreCount := a.storePool.getStoreList(rangeInfo.Desc.RangeID, storeFilterThrottled)
 
@@ -349,6 +351,7 @@ func (a *Allocator) AllocateTarget(
 		rangeInfo,
 		a.storePool.getLocalities(existing),
 		a.storePool.deterministic,
+		disableStatsBasedRebalance,
 	)
 	log.VEventf(ctx, 3, "allocate candidates: %s", candidates)
 	if target := candidates.selectGood(a.randGen); target != nil {
@@ -384,6 +387,7 @@ func (a Allocator) RemoveTarget(
 	constraints config.Constraints,
 	candidates []roachpb.ReplicaDescriptor,
 	rangeInfo RangeInfo,
+	disableStatsBasedRebalance bool,
 ) (roachpb.ReplicaDescriptor, string, error) {
 	if len(candidates) == 0 {
 		return roachpb.ReplicaDescriptor{}, "", errors.Errorf("must supply at least one candidate replica to allocator.RemoveTarget()")
@@ -403,6 +407,7 @@ func (a Allocator) RemoveTarget(
 		rangeInfo,
 		a.storePool.getLocalities(rangeInfo.Desc.Replicas),
 		a.storePool.deterministic,
+		disableStatsBasedRebalance,
 	)
 	log.VEventf(ctx, 3, "remove candidates: %s", rankedCandidates)
 	if bad := rankedCandidates.selectBad(a.randGen); bad != nil {
@@ -444,7 +449,11 @@ func (a Allocator) RemoveTarget(
 // rebalance. This helps prevent a stampeding herd targeting an abnormally
 // under-utilized store.
 func (a Allocator) RebalanceTarget(
-	ctx context.Context, constraints config.Constraints, rangeInfo RangeInfo, filter storeFilter,
+	ctx context.Context,
+	constraints config.Constraints,
+	rangeInfo RangeInfo,
+	filter storeFilter,
+	disableStatsBasedRebalance bool,
 ) (*roachpb.StoreDescriptor, string) {
 	sl, _, _ := a.storePool.getStoreList(rangeInfo.Desc.RangeID, filter)
 
@@ -457,6 +466,7 @@ func (a Allocator) RebalanceTarget(
 		rangeInfo,
 		a.storePool.getLocalities(rangeInfo.Desc.Replicas),
 		a.storePool.deterministic,
+		disableStatsBasedRebalance,
 	)
 
 	// We're going to add another replica to the range which will change the
