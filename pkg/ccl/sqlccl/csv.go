@@ -24,6 +24,7 @@ import (
 	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -138,7 +139,7 @@ func LoadCSV(
 	defer r.Close()
 
 	return doLocalCSVTransform(
-		ctx, nil, parentID, tableDesc, dest, dataFiles, comma, comment, nullif, sstMaxSize, r, walltime,
+		ctx, nil, parentID, tableDesc, dest, dataFiles, comma, comment, nullif, sstMaxSize, r, walltime, nil,
 	)
 }
 
@@ -154,6 +155,7 @@ func doLocalCSVTransform(
 	sstMaxSize int64,
 	tempEngine engine.Engine,
 	walltime int64,
+	execCfg *sql.ExecutorConfig,
 ) (csvCount, kvCount, sstCount int64, err error) {
 	// Some channels are buffered because reads happen in bursts, so having lots
 	// of pre-computed data improves overall performance.
@@ -198,7 +200,7 @@ func doLocalCSVTransform(
 	})
 	group.Go(func() error {
 		var err error
-		sstCount, err = makeBackup(gCtx, parentID, tableDesc, dest, contentCh, walltime)
+		sstCount, err = makeBackup(gCtx, parentID, tableDesc, dest, contentCh, walltime, execCfg)
 		return err
 	})
 	return csvCount, kvCount, sstCount, group.Wait()
@@ -570,10 +572,10 @@ func makeBackup(
 	destDir string,
 	contentCh <-chan sstContent,
 	walltime int64,
+	execCfg *sql.ExecutorConfig,
 ) (int64, error) {
 	backupDesc := BackupDescriptor{
-		FormatVersion: BackupFormatInitialVersion,
-		EndTime:       hlc.Timestamp{WallTime: walltime},
+		EndTime: hlc.Timestamp{WallTime: walltime},
 	}
 
 	conf, err := storageccl.ExportStorageConfFromURI(destDir)
@@ -606,7 +608,7 @@ func makeBackup(
 		})
 	}
 
-	err = finalizeCSVBackup(ctx, &backupDesc, parentID, tableDesc, es)
+	err = finalizeCSVBackup(ctx, &backupDesc, parentID, tableDesc, es, execCfg)
 	return int64(len(backupDesc.Files)), err
 }
 
@@ -618,6 +620,7 @@ func finalizeCSVBackup(
 	parentID sqlbase.ID,
 	tableDesc *sqlbase.TableDescriptor,
 	es storageccl.ExportStorage,
+	execCfg *sql.ExecutorConfig,
 ) error {
 	if len(backupDesc.Files) == 0 {
 		return errors.New("no files in backup")
@@ -631,6 +634,12 @@ func finalizeCSVBackup(
 			ID:   parentID,
 		}),
 		*sqlbase.WrapDescriptor(tableDesc),
+	}
+	backupDesc.FormatVersion = BackupFormatInitialVersion
+	backupDesc.BuildInfo = build.GetInfo()
+	if execCfg != nil {
+		backupDesc.NodeID = execCfg.NodeID.Get()
+		backupDesc.ClusterID = execCfg.ClusterID()
 	}
 	descBuf, err := backupDesc.Marshal()
 	if err != nil {
@@ -848,7 +857,7 @@ func importPlanHook(
 				ctx, job, parentID, tableDesc, temp, files,
 				comma, comment, nullif, sstSize,
 				p.ExecCfg().DistSQLSrv.TempStorage,
-				walltime,
+				walltime, p.ExecCfg(),
 			)
 		}
 		if err := job.FinishedWith(ctx, importErr); err != nil {
@@ -940,8 +949,7 @@ func doDistributedCSVTransform(
 	}
 
 	backupDesc := BackupDescriptor{
-		FormatVersion: BackupFormatInitialVersion,
-		EndTime:       hlc.Timestamp{WallTime: walltime},
+		EndTime: hlc.Timestamp{WallTime: walltime},
 	}
 	n := rows.Len()
 	for i := 0; i < n; i++ {
@@ -972,7 +980,7 @@ func doDistributedCSVTransform(
 	}
 	defer es.Close()
 
-	if err := finalizeCSVBackup(ctx, &backupDesc, defaultCSVParentID, tableDesc, es); err != nil {
+	if err := finalizeCSVBackup(ctx, &backupDesc, defaultCSVParentID, tableDesc, es, p.ExecCfg()); err != nil {
 		return 0, err
 	}
 	total := int64(len(backupDesc.Files))
