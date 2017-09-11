@@ -508,6 +508,7 @@ func (rq *replicateQueue) processOneChange(
 				); err != nil {
 					return false, err
 				}
+				rq.allocator.storePool.updateLocalStoreAfterRebalance(rebalanceReplica.StoreID, repl)
 				return true, nil
 			}
 		}

@@ -327,6 +327,20 @@ func (sp *StorePool) deadReplicasGossipUpdate(_ string, content roachpb.Value) {
 	detail.deadReplicas = deadReplicas
 }
 
+// updateLocalStoreAfterRebalance is used to update local copy of target store
+// after we make an rebalance immediately.
+func (sp *StorePool) updateLocalStoreAfterRebalance(storeID roachpb.StoreID, repl *Replica) {
+	sp.detailsMu.Lock()
+	defer sp.detailsMu.Unlock()
+	detail := sp.getStoreDetailLocked(storeID)
+	// update LogicalBytes.
+	detail.desc.Capacity.LogicalBytes += repl.GetMVCCStats().Total()
+	// update WritesPerSecond
+	qps, _ := repl.writeStats.avgQPS()
+	detail.desc.Capacity.WritesPerSecond += qps
+	detail.lastUpdatedTime = sp.clock.PhysicalTime()
+}
+
 // newStoreDetail makes a new storeDetail struct. It sets index to be -1 to
 // ensure that it will be processed by a queue immediately.
 func newStoreDetail() *storeDetail {
