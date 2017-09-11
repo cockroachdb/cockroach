@@ -166,16 +166,16 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 		log.Info(ctx, "running schema changes while cluster is rebalancing")
 		// These schema changes are over a table that is not actively
 		// being updated.
-		log.Info(ctx, "running schema changes over tpch.orders")
+		log.Info(ctx, "running schema changes over tpch.customer")
 		schemaChanges := []string{
-			"ALTER TABLE tpch.orders ADD COLUMN newcol INT DEFAULT (INT 23456)",
-			"CREATE INDEX foo ON tpch.orders (o_orderdate)",
+			"ALTER TABLE tpch.customer ADD COLUMN newcol INT DEFAULT 23456",
+			"CREATE INDEX foo ON tpch.customer (c_name)",
 		}
 		// All these return the same result.
 		validationQueries := []string{
-			"SELECT COUNT(*) FROM tpch.orders AS OF SYSTEM TIME %s",
-			"SELECT COUNT(newcol) FROM tpch.orders AS OF SYSTEM TIME %s",
-			"SELECT COUNT(o_orderdate) FROM tpch.orders@foo AS OF SYSTEM TIME %s",
+			"SELECT COUNT(*) FROM tpch.customer AS OF SYSTEM TIME %s",
+			"SELECT COUNT(newcol) FROM tpch.customer AS OF SYSTEM TIME %s",
+			"SELECT COUNT(c_name) FROM tpch.customer@foo AS OF SYSTEM TIME %s",
 		}
 		if err := at.runSchemaChanges(ctx, t, schemaChanges, validationQueries); err != nil {
 			t.Fatal(err)
