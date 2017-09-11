@@ -164,7 +164,39 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 
 	if at.RunSchemaChanges {
 		log.Info(ctx, "running schema changes while cluster is rebalancing")
-		if err := at.runSchemaChanges(ctx, t); err != nil {
+		// These schema changes are over a table that is not actively
+		// being updated.
+		log.Info(ctx, "running schema changes over tpch.orders")
+		schemaChanges := []string{
+			"ALTER TABLE tpch.orders ADD COLUMN newcol INT DEFAULT (INT 23456)",
+			"CREATE INDEX foo ON tpch.orders (o_orderdate)",
+		}
+		// All these return the same result.
+		validationQueries := []string{
+			"SELECT COUNT(*) FROM tpch.orders AS OF SYSTEM TIME %s",
+			"SELECT COUNT(newcol) FROM tpch.orders AS OF SYSTEM TIME %s",
+			"SELECT COUNT(o_orderdate) FROM tpch.orders@foo AS OF SYSTEM TIME %s",
+		}
+		if err := at.runSchemaChanges(ctx, t, schemaChanges, validationQueries); err != nil {
+			t.Fatal(err)
+		}
+		// These schema changes are run later because the above schema
+		// changes run for a decent amount of time giving datablocks.blocks
+		// an opportunity to get populate through the load generator. These
+		// schema changes are acting upon a decent sized table that is also
+		// being updated.
+		log.Info(ctx, "running schema changes over datablocks.blocks")
+		schemaChanges = []string{
+			"ALTER TABLE datablocks.blocks ADD COLUMN newcol DECIMAL DEFAULT (DECIMAL '1.4')",
+			"CREATE INDEX foo ON datablocks.blocks (block_id)",
+		}
+		// All these return the same result.
+		validationQueries = []string{
+			"SELECT COUNT(*) FROM datablocks.blocks AS OF SYSTEM TIME %s",
+			"SELECT COUNT(newcol) FROM datablocks.blocks AS OF SYSTEM TIME %s",
+			"SELECT COUNT(block_id) FROM datablocks.blocks@foo AS OF SYSTEM TIME %s",
+		}
+		if err := at.runSchemaChanges(ctx, t, schemaChanges, validationQueries); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -185,7 +217,9 @@ func (at *allocatorTest) RunAndCleanup(ctx context.Context, t *testing.T) {
 	at.Run(ctx, t)
 }
 
-func (at *allocatorTest) runSchemaChanges(ctx context.Context, t *testing.T) error {
+func (at *allocatorTest) runSchemaChanges(
+	ctx context.Context, t *testing.T, schemaChanges []string, validationQueries []string,
+) error {
 	db, err := gosql.Open("postgres", at.f.PGUrl(ctx, 0))
 	if err != nil {
 		return err
@@ -194,17 +228,11 @@ func (at *allocatorTest) runSchemaChanges(ctx context.Context, t *testing.T) err
 		_ = db.Close()
 	}()
 
-	const tableName = "datablocks.blocks"
-	schemaChanges := []string{
-		"ALTER TABLE %s ADD COLUMN newcol DECIMAL DEFAULT (DECIMAL '1.4')",
-		"CREATE INDEX foo ON %s (block_id)",
-	}
-
 	errChan := make(chan error)
 	for i := range schemaChanges {
+		cmd := schemaChanges[i]
 		go func(i int) {
 			start := timeutil.Now()
-			cmd := fmt.Sprintf(schemaChanges[i], tableName)
 			log.Infof(ctx, "starting schema change: %s", cmd)
 			if _, err := db.Exec(cmd); err != nil {
 				errChan <- errors.Errorf("hit schema change error: %s, for %s, in %s", err, cmd, timeutil.Since(start))
@@ -223,13 +251,16 @@ func (at *allocatorTest) runSchemaChanges(ctx context.Context, t *testing.T) err
 	}
 
 	log.Info(ctx, "validate applied schema changes")
-	if err := at.ValidateSchemaChanges(ctx, t); err != nil {
+	if err := at.ValidateSchemaChanges(ctx, t, validationQueries); err != nil {
 		t.Fatal(err)
 	}
 	return nil
 }
 
-func (at *allocatorTest) ValidateSchemaChanges(ctx context.Context, t *testing.T) error {
+// The validationQueries all return the same result.
+func (at *allocatorTest) ValidateSchemaChanges(
+	ctx context.Context, t *testing.T, validationQueries []string,
+) error {
 	db, err := gosql.Open("postgres", at.f.PGUrl(ctx, 0))
 	if err != nil {
 		return err
@@ -238,31 +269,26 @@ func (at *allocatorTest) ValidateSchemaChanges(ctx context.Context, t *testing.T
 		_ = db.Close()
 	}()
 
-	const tableName = "datablocks.blocks"
 	var now string
 	if err := db.QueryRow("SELECT cluster_logical_timestamp()").Scan(&now); err != nil {
 		t.Fatal(err)
 	}
-	var eCount int64
-	q := fmt.Sprintf(`SELECT COUNT(*) FROM %s AS OF SYSTEM TIME %s`, tableName, now)
-	if err := db.QueryRow(q).Scan(&eCount); err != nil {
-		return err
-	}
-	log.Infof(ctx, "%s: %d rows", q, eCount)
 
 	// Validate the different schema changes
-	validationQueries := []string{
-		"SELECT COUNT(newcol) FROM %s AS OF SYSTEM TIME %s",
-		"SELECT COUNT(block_id) FROM %s@foo AS OF SYSTEM TIME %s",
-	}
+	var eCount int64
 	for i := range validationQueries {
 		var count int64
-		q := fmt.Sprintf(validationQueries[i], tableName, now)
+		q := fmt.Sprintf(validationQueries[i], now)
 		if err := db.QueryRow(q).Scan(&count); err != nil {
 			return err
 		}
 		log.Infof(ctx, "query: %s, found %d rows", q, count)
-		if count != eCount {
+		if count == 0 {
+			t.Fatalf("%s: %d rows found", q, count)
+		}
+		if eCount == 0 {
+			eCount = count
+		} else if count != eCount {
 			t.Fatalf("%s: %d rows found, expected %d rows", q, count, eCount)
 		}
 	}
