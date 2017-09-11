@@ -4020,6 +4020,7 @@ func (r *Replica) adminScatter(
 		Multiplier:     2,
 		MaxRetries:     5,
 	}
+	rq.options.disableStatsBasedRebalance = args.DisableStatsBasedRebalance
 
 	// Loop until the replicate queue decides there is nothing left to do for the
 	// range. Note that we disable lease transfers until the final step as

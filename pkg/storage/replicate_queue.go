@@ -53,6 +53,10 @@ const (
 	newReplicaGracePeriod = 5 * time.Minute
 )
 
+type replicateQueueOptions struct {
+	disableStatsBasedRebalance bool
+}
+
 var (
 	metaReplicateQueueAddReplicaCount = metric.Metadata{
 		Name: "queue.replicate.addreplica",
@@ -94,6 +98,7 @@ func makeReplicateQueueMetrics() ReplicateQueueMetrics {
 // additional replica to their range.
 type replicateQueue struct {
 	*baseQueue
+	options           replicateQueueOptions
 	metrics           ReplicateQueueMetrics
 	allocator         Allocator
 	clock             *hlc.Clock
@@ -174,7 +179,7 @@ func (rq *replicateQueue) shouldQueue(
 	}
 
 	rangeInfo := rangeInfoForRepl(repl, desc)
-	action, priority := rq.allocator.ComputeAction(ctx, zone, rangeInfo)
+	action, priority := rq.allocator.ComputeAction(ctx, zone, rangeInfo, rq.options.disableStatsBasedRebalance)
 	if action == AllocatorNoop {
 		log.VEventf(ctx, 2, "no action to take")
 		return false, 0
@@ -197,7 +202,7 @@ func (rq *replicateQueue) shouldQueue(
 		return false, 0
 	}
 
-	target, _ := rq.allocator.RebalanceTarget(ctx, zone.Constraints, rangeInfo, storeFilterThrottled)
+	target, _ := rq.allocator.RebalanceTarget(ctx, zone.Constraints, rangeInfo, storeFilterThrottled, rq.options.disableStatsBasedRebalance)
 	if target != nil {
 		log.VEventf(ctx, 2, "rebalance target found, enqueuing")
 	} else {
@@ -267,7 +272,7 @@ func (rq *replicateQueue) processOneChange(
 	}
 
 	rangeInfo := rangeInfoForRepl(repl, desc)
-	switch action, _ := rq.allocator.ComputeAction(ctx, zone, rangeInfo); action {
+	switch action, _ := rq.allocator.ComputeAction(ctx, zone, rangeInfo, rq.options.disableStatsBasedRebalance); action {
 	case AllocatorNoop:
 		break
 	case AllocatorAdd:
@@ -278,6 +283,7 @@ func (rq *replicateQueue) processOneChange(
 			desc.Replicas,
 			rangeInfo,
 			true, /* relaxConstraints */
+			rq.options.disableStatsBasedRebalance,
 		)
 		if err != nil {
 			return false, err
@@ -313,6 +319,7 @@ func (rq *replicateQueue) processOneChange(
 				oldPlusNewReplicas,
 				rangeInfo,
 				true, /* relaxConstraints */
+				rq.options.disableStatsBasedRebalance,
 			)
 			if err != nil {
 				// Does not seem possible to go to the next odd replica state. Return an
@@ -348,7 +355,7 @@ func (rq *replicateQueue) processOneChange(
 			return false, errors.Errorf("no removable replicas from range that needs a removal: %s",
 				rangeRaftProgress(repl.RaftStatus(), desc.Replicas))
 		}
-		removeReplica, details, err := rq.allocator.RemoveTarget(ctx, zone.Constraints, candidates, rangeInfo)
+		removeReplica, details, err := rq.allocator.RemoveTarget(ctx, zone.Constraints, candidates, rangeInfo, rq.options.disableStatsBasedRebalance)
 		if err != nil {
 			return false, err
 		}
@@ -485,7 +492,7 @@ func (rq *replicateQueue) processOneChange(
 
 		if !rq.store.TestingKnobs().DisableReplicaRebalancing {
 			rebalanceStore, details := rq.allocator.RebalanceTarget(
-				ctx, zone.Constraints, rangeInfo, storeFilterThrottled)
+				ctx, zone.Constraints, rangeInfo, storeFilterThrottled, rq.options.disableStatsBasedRebalance)
 			if rebalanceStore == nil {
 				log.VEventf(ctx, 1, "no suitable rebalance target")
 			} else {

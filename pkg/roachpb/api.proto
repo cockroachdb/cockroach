@@ -943,6 +943,7 @@ message AdminScatterRequest {
   option (gogoproto.equal) = true;
 
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  optional bool disableStatsBasedRebalance = 2 [(gogoproto.nullable) = false];
 }
 
 // ScatterResponse is the response to a Scatter() operation.

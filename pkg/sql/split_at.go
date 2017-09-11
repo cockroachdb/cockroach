@@ -432,6 +432,7 @@ func (n *scatterNode) Start(params runParams) error {
 	db := params.p.ExecCfg().DB
 	req := &roachpb.AdminScatterRequest{
 		Span: roachpb.Span{Key: n.span.Key, EndKey: n.span.EndKey},
+		DisableStatsBasedRebalance: true,
 	}
 	res, pErr := client.SendWrapped(params.ctx, db.GetSender(), req)
 	if pErr != nil {

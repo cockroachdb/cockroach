@@ -933,7 +933,7 @@ func TestBalanceScore(t *testing.T) {
 		{sRangesUnderfullBytesUnderfullWritesOverfull, rLowWrites, 3},
 	}
 	for i, tc := range testCases {
-		if a, e := balanceScore(st, storeList, tc.sc, tc.ri), tc.expected; a.totalScore() != e {
+		if a, e := balanceScore(st, storeList, tc.sc, tc.ri, false), tc.expected; a.totalScore() != e {
 			t.Errorf("%d: balanceScore(storeList, %+v, %+v) got %s; want %.2f", i, tc.sc, tc.ri, a, e)
 		}
 	}
@@ -1007,10 +1007,10 @@ func TestRebalanceConvergesOnMean(t *testing.T) {
 			RangeCount:      tc.rangeCount,
 			WritesPerSecond: tc.writesPerSecond,
 		}
-		if a, e := rebalanceToConvergesOnMean(st, storeList, sc, tc.ri), tc.toConverges; a != e {
+		if a, e := rebalanceToConvergesOnMean(st, storeList, sc, tc.ri, false), tc.toConverges; a != e {
 			t.Errorf("%d: rebalanceToConvergesOnMean(storeList, %+v, %+v) got %t; want %t", i, sc, tc.ri, a, e)
 		}
-		if a, e := rebalanceFromConvergesOnMean(st, storeList, sc, tc.ri), tc.fromConverges; a != e {
+		if a, e := rebalanceFromConvergesOnMean(st, storeList, sc, tc.ri, false), tc.fromConverges; a != e {
 			t.Errorf("%d: rebalanceFromConvergesOnMean(storeList, %+v, %+v) got %t; want %t", i, sc, tc.ri, a, e)
 		}
 	}
