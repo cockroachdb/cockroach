@@ -4310,7 +4310,7 @@ func (s *Store) AllocatorDryRun(
 	defer cancel()
 	canTransferLease := func() bool { return true }
 	_, err := s.replicateQueue.processOneChange(
-		ctx, repl, sysCfg, canTransferLease, true /* dryRun */)
+		ctx, repl, sysCfg, canTransferLease, true /* dryRun */, false /* disableStatsBasedRebalance */)
 	if err != nil {
 		log.Eventf(ctx, "error simulating allocator on replica %s: %s", repl, err)
 	}

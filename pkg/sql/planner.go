@@ -133,7 +133,6 @@ func makeInternalPlanner(
 		context:  ctx,
 		tables:   TableCollection{databaseCache: newDatabaseCache(config.SystemConfig{})},
 	}
-
 	s.mon = mon.MakeUnlimitedMonitor(ctx,
 		"internal-root",
 		mon.MemoryResource,
