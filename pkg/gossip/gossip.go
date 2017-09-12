@@ -228,6 +228,8 @@ type Gossip struct {
 	resolvers      []resolver.Resolver
 	resolversTried map[int]struct{} // Set of attempted resolver indexes
 	nodeDescs      map[roachpb.NodeID]*roachpb.NodeDescriptor
+	// storeMap maps store IDs to node IDs.
+	storeMap map[roachpb.StoreID]roachpb.NodeID
 
 	// Membership sets for resolvers and bootstrap addresses.
 	// bootstrapAddrs also tracks which address is associated with which
@@ -262,6 +264,7 @@ func New(
 		cullInterval:      defaultCullInterval,
 		resolversTried:    map[int]struct{}{},
 		nodeDescs:         map[roachpb.NodeID]*roachpb.NodeDescriptor{},
+		storeMap:          make(map[roachpb.StoreID]roachpb.NodeID),
 		resolverAddrs:     map[util.UnresolvedAddr]resolver.Resolver{},
 		bootstrapAddrs:    map[util.UnresolvedAddr]roachpb.NodeID{},
 	}
@@ -275,6 +278,7 @@ func New(
 	g.mu.is.registerCallback(KeySystemConfig, g.updateSystemConfig)
 	// Add ourselves as a node descriptor watcher.
 	g.mu.is.registerCallback(MakePrefixPattern(KeyNodeIDPrefix), g.updateNodeAddress)
+	g.mu.is.registerCallback(MakePrefixPattern(KeyStorePrefix), g.updateStoreMap)
 	g.mu.Unlock()
 
 	RegisterGossipServer(grpcServer, g.server)
@@ -435,6 +439,13 @@ func (g *Gossip) GetNodeIDAddress(nodeID roachpb.NodeID) (*util.UnresolvedAddr, 
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.getNodeIDAddressLocked(nodeID)
+}
+
+// GetNodeIDForStoreID looks up the NodeID by StoreID.
+func (g *Gossip) GetNodeIDForStoreID(storeID roachpb.StoreID) (roachpb.NodeID, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.getNodeIDForStoreIDLocked(storeID)
 }
 
 // GetNodeDescriptor looks up the descriptor of the node by ID.
@@ -715,6 +726,31 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 func (g *Gossip) removeNodeDescriptorLocked(nodeID roachpb.NodeID) {
 	delete(g.nodeDescs, nodeID)
 	g.recomputeMaxPeersLocked()
+}
+
+// updateStoreMaps is a gossip callback which is used to update storeMap.
+func (g *Gossip) updateStoreMap(key string, content roachpb.Value) {
+	ctx := g.AnnotateCtx(context.TODO())
+	var desc roachpb.StoreDescriptor
+	if err := content.GetProto(&desc); err != nil {
+		log.Error(ctx, err)
+		return
+	}
+
+	if log.V(1) {
+		log.Infof(ctx, "updateStoreMap called on %q with desc %+v", key, desc)
+	}
+
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.storeMap[desc.StoreID] = desc.Node.NodeID
+}
+
+func (g *Gossip) getNodeIDForStoreIDLocked(storeID roachpb.StoreID) (roachpb.NodeID, error) {
+	if nodeID, ok := g.storeMap[storeID]; ok {
+		return nodeID, nil
+	}
+	return 0, errors.Errorf("unable to look up Node ID for store %d", storeID)
 }
 
 // recomputeMaxPeersLocked recomputes max peers based on size of
