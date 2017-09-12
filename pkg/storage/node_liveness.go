@@ -177,8 +177,8 @@ func (nl *NodeLiveness) sem(nodeID roachpb.NodeID) chan struct{} {
 	return nl.otherSem
 }
 
-// SetDraining calls PauseHeartbeat with the given boolean and then attempts to
-// update the liveness record.
+// SetDraining attempts to update this node's liveness record to put itself
+// into the draining state.
 func (nl *NodeLiveness) SetDraining(ctx context.Context, drain bool) {
 	ctx = nl.ambientCtx.AnnotateCtx(ctx)
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
@@ -375,6 +375,8 @@ func (nl *NodeLiveness) StartHeartbeat(
 
 // PauseHeartbeat stops or restarts the periodic heartbeat depending on the
 // pause parameter. When unpausing, triggers an immediate heartbeat.
+// This is only used by tests as of the 1.1 release, so be careful about using
+// it in non-test code.
 func (nl *NodeLiveness) PauseHeartbeat(pause bool) {
 	nl.pauseHeartbeat.Store(pause)
 	if !pause {
@@ -382,6 +384,19 @@ func (nl *NodeLiveness) PauseHeartbeat(pause bool) {
 		case nl.triggerHeartbeat <- struct{}{}:
 		default:
 		}
+	}
+}
+
+// DisableAllHeartbeatsForTest disables all node liveness heartbeats, including
+// those triggered from outside the normal StartHeartbeat loop. Returns a
+// closure to call to re-enable heartbeats. Only safe for use in tests.
+func (nl *NodeLiveness) DisableAllHeartbeatsForTest() func() {
+	nl.PauseHeartbeat(true)
+	nl.selfSem <- struct{}{}
+	nl.otherSem <- struct{}{}
+	return func() {
+		<-nl.selfSem
+		<-nl.otherSem
 	}
 }
 
