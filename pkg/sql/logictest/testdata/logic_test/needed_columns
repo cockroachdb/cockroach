@@ -182,3 +182,19 @@ EXPLAIN (VERBOSE) SELECT count(*) FROM (SELECT "name", age FROM a);
 3  scan    ·            ·             ("name"[omitted], age[omitted], rowid[hidden,omitted])  ·
 3  ·       table        a@primary     ·                                                       ·
 3  ·       spans        ALL           ·                                                       ·
+
+# Ensure that variables within filter conditions are omitted (not decoded) if
+# the filter condition is replaced by an index search.
+
+statement ok
+CREATE TABLE ab (a INT, b INT, PRIMARY KEY (a, b));
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT count(*) FROM ab WHERE a=1
+----
+0  group   ·            ·             ("count(*)")              ·
+0  ·       aggregate 0  count_rows()  ·                         ·
+1  render  ·            ·             ()                        ·
+2  scan    ·            ·             (a[omitted], b[omitted])  ·
+2  ·       table        ab@primary    ·                         ·
+2  ·       spans        /1-/2         ·                         ·
