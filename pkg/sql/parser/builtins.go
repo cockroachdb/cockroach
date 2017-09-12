@@ -941,6 +941,7 @@ CockroachDB supports the following flags:
 		Builtin{
 			Types:      ArgTypes{{"input", TypeTimestamp}, {"extract_format", TypeString}},
 			ReturnType: fixedReturnType(TypeString),
+			category:   categoryDateAndTime,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				fromTime := args[0].(*DTimestamp).Time
 				format := string(MustBeDString(args[1]))
@@ -956,6 +957,7 @@ CockroachDB supports the following flags:
 		Builtin{
 			Types:      ArgTypes{{"input", TypeDate}, {"extract_format", TypeString}},
 			ReturnType: fixedReturnType(TypeString),
+			category:   categoryDateAndTime,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				fromTime := time.Unix(int64(*args[0].(*DDate))*secondsInDay, 0).UTC()
 				format := string(MustBeDString(args[1]))
@@ -971,6 +973,7 @@ CockroachDB supports the following flags:
 		Builtin{
 			Types:      ArgTypes{{"input", TypeTimestampTZ}, {"extract_format", TypeString}},
 			ReturnType: fixedReturnType(TypeString),
+			category:   categoryDateAndTime,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				fromTime := args[0].(*DTimestampTZ).Time
 				format := string(MustBeDString(args[1]))
@@ -989,6 +992,7 @@ CockroachDB supports the following flags:
 		Builtin{
 			Types:      ArgTypes{{"input", TypeString}, {"format", TypeString}},
 			ReturnType: fixedReturnType(TypeTimestampTZ),
+			category:   categoryDateAndTime,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				toParse := string(MustBeDString(args[0]))
 				format := string(MustBeDString(args[1]))
