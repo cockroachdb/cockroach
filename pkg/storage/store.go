@@ -96,6 +96,11 @@ const (
 	// recovery because it is on a recently restarted node.
 	prohibitRebalancesBehindThreshold = 1000
 
+	// Messages that provide detail about why a preemptive snapshot was rejected.
+	rebalancesDisabledMsg   = "rebalances disabled because node is behind"
+	snapshotApplySemBusyMsg = "store busy applying snapshots and/or removing replicas"
+	storeDrainingMsg        = "store is draining"
+
 	// IntersectingSnapshotMsg is part of the error message returned from
 	// canApplySnapshotLocked and is exposed here so testing can rely on it.
 	IntersectingSnapshotMsg = "snapshot intersects existing range"
@@ -2681,10 +2686,10 @@ func (s *Store) maybeWaitInPushTxnQueue(
 
 // reserveSnapshot throttles incoming snapshots. The returned closure is used
 // to cleanup the reservation and release its resources. A nil cleanup function
-// and a nil error indicates the reservation was declined.
+// and a non-empty rejectionMessage indicates the reservation was declined.
 func (s *Store) reserveSnapshot(
 	ctx context.Context, header *SnapshotRequest_Header,
-) (func(), error) {
+) (_cleanup func(), _rejectionMsg string, _err error) {
 	if header.RangeSize == 0 {
 		// Empty snapshots are exempt from rate limits because they're so cheap to
 		// apply. This vastly speeds up rebalancing any empty ranges created by a
@@ -2692,24 +2697,24 @@ func (s *Store) reserveSnapshot(
 		// getting stuck behind large snapshots managed by the replicate queue.
 	} else if header.CanDecline {
 		if atomic.LoadInt32(&s.rebalancesDisabled) == 1 {
-			return nil, nil
+			return nil, rebalancesDisabledMsg, nil
 		}
 		select {
 		case s.snapshotApplySem <- struct{}{}:
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, "", ctx.Err()
 		case <-s.stopper.ShouldStop():
-			return nil, errors.Errorf("stopped")
+			return nil, "", errors.Errorf("stopped")
 		default:
-			return nil, nil
+			return nil, snapshotApplySemBusyMsg, nil
 		}
 	} else {
 		select {
 		case s.snapshotApplySem <- struct{}{}:
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, "", ctx.Err()
 		case <-s.stopper.ShouldStop():
-			return nil, errors.Errorf("stopped")
+			return nil, "", errors.Errorf("stopped")
 		}
 	}
 
@@ -2721,7 +2726,7 @@ func (s *Store) reserveSnapshot(
 		if header.RangeSize != 0 {
 			<-s.snapshotApplySem
 		}
-	}, nil
+	}, "", nil
 }
 
 // HandleSnapshot reads an incoming streaming snapshot and applies it if
@@ -2734,17 +2739,20 @@ func (s *Store) HandleSnapshot(
 	if s.IsDraining() {
 		return stream.Send(&SnapshotResponse{
 			Status:  SnapshotResponse_DECLINED,
-			Message: "store is draining",
+			Message: storeDrainingMsg,
 		})
 	}
 
 	ctx := s.AnnotateCtx(stream.Context())
-	cleanup, err := s.reserveSnapshot(ctx, header)
+	cleanup, rejectionMsg, err := s.reserveSnapshot(ctx, header)
 	if err != nil {
 		return err
 	}
 	if cleanup == nil {
-		return stream.Send(&SnapshotResponse{Status: SnapshotResponse_DECLINED})
+		return stream.Send(&SnapshotResponse{
+			Status:  SnapshotResponse_DECLINED,
+			Message: rejectionMsg,
+		})
 	}
 	defer cleanup()
 
