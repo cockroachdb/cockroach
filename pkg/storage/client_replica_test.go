@@ -1034,7 +1034,6 @@ func LeaseInfo(
 
 func TestLeaseInfoRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#13503")
 	tc := testcluster.StartTestCluster(t, 3,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
