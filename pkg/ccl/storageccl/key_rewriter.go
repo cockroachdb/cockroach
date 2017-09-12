@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
 
@@ -62,7 +63,7 @@ func MakeKeyRewriter(rekeys []roachpb.ImportRequest_TableRekey) (*KeyRewriter, e
 	descs := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
 	for _, rekey := range rekeys {
 		var desc sqlbase.Descriptor
-		if err := desc.Unmarshal(rekey.NewDesc); err != nil {
+		if err := proto.Unmarshal(rekey.NewDesc, &desc); err != nil {
 			return nil, errors.Wrapf(err, "unmarshalling rekey descriptor for old table id %d", rekey.OldID)
 		}
 		table := desc.GetTable()
