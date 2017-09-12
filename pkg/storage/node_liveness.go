@@ -370,6 +370,19 @@ func (nl *NodeLiveness) PauseHeartbeat(pause bool) {
 	}
 }
 
+// DisableAllHeartbeatsForTest disables all node liveness heartbeats, including
+// those triggered from outside the normal StartHeartbeat loop. Returns a
+// closure to call to re-enable heartbeats. Only safe for use in tests.
+func (nl *NodeLiveness) DisableAllHeartbeatsForTest() func() {
+	nl.PauseHeartbeat(true)
+	nl.selfSem <- struct{}{}
+	nl.otherSem <- struct{}{}
+	return func() {
+		<-nl.selfSem
+		<-nl.otherSem
+	}
+}
+
 var errNodeAlreadyLive = errors.New("node already live")
 
 // Heartbeat is called to update a node's expiration timestamp. This
