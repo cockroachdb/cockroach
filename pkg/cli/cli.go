@@ -16,6 +16,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"math/rand"
 	"os"
 	"text/tabwriter"
@@ -111,6 +112,11 @@ var cockroachCmd = &cobra.Command{
 // terminal.
 var isInteractive = isatty.IsTerminal(os.Stdout.Fd()) &&
 	isatty.IsTerminal(os.Stdin.Fd())
+
+// clearTerminal clears the terminal corresponding to the given Writer.
+func clearTerminal(w io.Writer) {
+	w.Write([]byte("\033[H\033[2J"))
+}
 
 func init() {
 	cobra.EnableCommandSorting = false

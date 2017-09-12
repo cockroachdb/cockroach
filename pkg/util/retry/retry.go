@@ -70,6 +70,11 @@ func StartWithCtx(ctx context.Context, opts Options) Retry {
 	return r
 }
 
+// CurrentAttempt reports the index of the current attempt.
+func (r Retry) CurrentAttempt() int {
+	return r.currentAttempt
+}
+
 // Reset resets the Retry to its initial state, meaning that the next call to
 // Next will return true immediately and subsequent calls will behave as if
 // they had followed the very first attempt (i.e. their backoffs will be

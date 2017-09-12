@@ -340,6 +340,9 @@ func runDecommissionNodeImpl(
 		MaxBackoff:     20 * time.Second,
 	}
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+		if r.CurrentAttempt() > 0 && isInteractive {
+			clearTerminal(os.Stdout)
+		}
 		req := &serverpb.DecommissionRequest{
 			NodeIDs:         nodeIDs,
 			Decommissioning: true,
@@ -362,10 +365,10 @@ func runDecommissionNodeImpl(
 		}
 		if replicaCount == 0 && allDecommissioning {
 			if wait == nodeDecommissionWaitAll {
-				fmt.Fprintln(os.Stdout, "All target nodes report that they hold no more data. "+
+				fmt.Fprintln(os.Stdout, "\nAll target nodes report that they hold no more data. "+
 					"Please verify cluster health before removing the nodes.")
 			} else {
-				fmt.Fprintln(os.Stdout, "Decommissioning finished. Please verify cluster health "+
+				fmt.Fprintln(os.Stdout, "\nDecommissioning finished. Please verify cluster health "+
 					"before removing the nodes.")
 			}
 			return nil
@@ -412,6 +415,7 @@ effect and the nodes will participate in the cluster as regular nodes.
 }
 
 func printDecommissionStatus(resp serverpb.DecommissionStatusResponse) error {
+	fmt.Fprintln(os.Stdout, "Status of nodes being decommissionned:")
 	return printQueryOutput(os.Stdout, decommissionNodesColumnHeaders,
 		newRowSliceIter(decommissionResponseValueToRows(resp.Status)), "")
 }
