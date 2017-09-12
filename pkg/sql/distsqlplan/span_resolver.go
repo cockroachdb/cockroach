@@ -308,17 +308,23 @@ func (it *spanResolverIterator) ReplicaInfo(ctx context.Context) (kv.ReplicaInfo
 
 	resolvedLH := false
 	var repl kv.ReplicaInfo
-	if lh, ok := it.it.LeaseHolder(ctx); ok {
-		repl.ReplicaDescriptor = lh
+	if storeID, ok := it.it.LeaseHolderStoreID(ctx); ok {
+		repl.ReplicaDescriptor = roachpb.ReplicaDescriptor{StoreID: storeID}
 		// Fill in the node descriptor.
-		nd, err := it.gossip.GetNodeDescriptor(repl.NodeID)
+		nodeID, err := it.gossip.GetNodeIDForStoreID(storeID)
 		if err != nil {
-			// Ignore the error; ask the oracle to pick another replica below.
-			log.VEventf(ctx, 2, "failed to resolve node %d: %s", repl.NodeID, err)
+			log.VEventf(ctx, 2, "failed to lookup store %d: %s", storeID, err)
 		} else {
-			repl.NodeDesc = nd
-			resolvedLH = true
+			nd, err := it.gossip.GetNodeDescriptor(nodeID)
+			if err != nil {
+				// Ignore the error; ask the oracle to pick another replica below.
+				log.VEventf(ctx, 2, "failed to resolve node %d: %s", nodeID, err)
+			} else {
+				repl.NodeDesc = nd
+				resolvedLH = true
+			}
 		}
+
 	}
 	if !resolvedLH {
 		leaseHolder, err := it.oracle.ChoosePreferredLeaseHolder(

@@ -72,11 +72,11 @@ func (ri *RangeIterator) Desc() *roachpb.RangeDescriptor {
 	return ri.desc
 }
 
-// LeaseHolder returns the lease holder of the iterator's current range, if that
+// LeaseHolderStoreID returns the lease holder's StoreID of the iterator's current range, if that
 // information is present in the DistSender's LeaseHolderCache. The second
 // return val is true if the descriptor has been found.
 // The iterator must be valid.
-func (ri *RangeIterator) LeaseHolder(ctx context.Context) (roachpb.ReplicaDescriptor, bool) {
+func (ri *RangeIterator) LeaseHolderStoreID(ctx context.Context) (roachpb.StoreID, bool) {
 	if !ri.Valid() {
 		panic(ri.Error())
 	}

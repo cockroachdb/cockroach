@@ -436,8 +436,8 @@ func (ds *DistSender) sendSingleRange(
 	// If this request needs to go to a lease holder and we know who that is, move
 	// it to the front.
 	if !(ba.IsReadOnly() && ba.ReadConsistency == roachpb.INCONSISTENT) {
-		if leaseHolder, ok := ds.leaseHolderCache.Lookup(ctx, desc.RangeID); ok {
-			if i := replicas.FindReplica(leaseHolder.StoreID); i >= 0 {
+		if storeID, ok := ds.leaseHolderCache.Lookup(ctx, desc.RangeID); ok {
+			if i := replicas.FindReplica(storeID); i >= 0 {
 				replicas.MoveToFront(i)
 			}
 		}
@@ -1181,7 +1181,7 @@ func (ds *DistSender) sendToReplicas(
 					ds.metrics.NotLeaseHolderErrCount.Inc(1)
 					if lh := tErr.LeaseHolder; lh != nil {
 						// If the replica we contacted knows the new lease holder, update the cache.
-						ds.leaseHolderCache.Update(ctx, rangeID, *lh)
+						ds.leaseHolderCache.Update(ctx, rangeID, lh.StoreID)
 
 						// If the implicated leaseholder is not a known replica,
 						// return a RangeNotFoundError to signal eviction of the

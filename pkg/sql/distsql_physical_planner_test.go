@@ -343,12 +343,9 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 			t.Fatalf("expected: %+v, got: %+v", descs[i], desc)
 		}
 
-		replica, ok := leaseCache.Lookup(context.TODO(), descs[i].RangeID)
+		_, ok := leaseCache.Lookup(context.TODO(), descs[i].RangeID)
 		if !ok {
 			t.Fatalf("didn't find lease for RangeID: %d", descs[i].RangeID)
-		}
-		if replica.ReplicaID != roachpb.ReplicaID(i+1) {
-			t.Fatalf("expected ReplicaID: %d but found replica: %d", i, replica)
 		}
 	}
 }
