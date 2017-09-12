@@ -338,6 +338,11 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 				ec.addEntries(rangeID, []raftpb.Entry{mkEnt(v2, 5, 6, &sstFat)})
 			}, expTrace: "using cache hit",
 		},
+		"v2-fat-without-file": {
+			thin: mkEnt(v2, 5, 6, &sstFat), fat: mkEnt(v2, 5, 6, &sstFat),
+			setup:    func(ec *raftEntryCache, ss sideloadStorage) {},
+			expTrace: "already inlined",
+		},
 	}
 
 	runOne := func(k string, test testCase) {
