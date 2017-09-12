@@ -338,7 +338,7 @@ func (rq *replicateQueue) processOneChange(
 	case AllocatorRemove:
 		log.VEventf(ctx, 1, "removing a replica")
 		lastReplAdded, lastAddedTime := repl.LastReplicaAdded()
-		if timeutil.Since(lastAddedTime) < newReplicaGracePeriod {
+		if timeutil.Since(lastAddedTime) > newReplicaGracePeriod {
 			lastReplAdded = 0
 		}
 		candidates := filterUnremovableReplicas(repl.RaftStatus(), desc.Replicas, lastReplAdded)
