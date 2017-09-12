@@ -28,6 +28,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
@@ -599,7 +600,7 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 			return errors.Errorf("%+v", err)
 		}
 		var checkpointDesc sqlccl.BackupDescriptor
-		if err := checkpointDesc.Unmarshal(checkpointDescBytes); err != nil {
+		if err := proto.Unmarshal(checkpointDescBytes, &checkpointDesc); err != nil {
 			return errors.Errorf("%+v", err)
 		}
 		if len(checkpointDesc.Files) == 0 {
@@ -620,7 +621,7 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 			return err
 		}
 		var payload jobs.Payload
-		if err := payload.Unmarshal(payloadBytes); err != nil {
+		if err := proto.Unmarshal(payloadBytes, &payload); err != nil {
 			return err
 		}
 		switch d := payload.Details.(type) {
@@ -748,7 +749,7 @@ func TestBackupRestoreResume(t *testing.T) {
 			t.Fatal(err)
 		}
 		var backupDescriptor sqlccl.BackupDescriptor
-		if err := backupDescriptor.Unmarshal(backupDescriptorBytes); err != nil {
+		if err := proto.Unmarshal(backupDescriptorBytes, &backupDescriptor); err != nil {
 			t.Fatal(err)
 		}
 		for _, file := range backupDescriptor.Files {
@@ -1630,7 +1631,7 @@ func TestBackupRestoreChecksum(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
-		if err := backupDesc.Unmarshal(backupDescBytes); err != nil {
+		if err := proto.Unmarshal(backupDescBytes, &backupDesc); err != nil {
 			t.Fatalf("%+v", err)
 		}
 	}

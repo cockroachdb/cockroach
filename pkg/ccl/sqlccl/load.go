@@ -17,6 +17,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -81,7 +82,7 @@ func Load(
 		return BackupDescriptor{}, errors.Wrap(err, "fetch database descriptor")
 	}
 	var dbDescWrapper sqlbase.Descriptor
-	if err := dbDescWrapper.Unmarshal(dbDescBytes); err != nil {
+	if err := proto.Unmarshal(dbDescBytes, &dbDescWrapper); err != nil {
 		return BackupDescriptor{}, errors.Wrap(err, "unmarshal database descriptor")
 	}
 	dbDesc := dbDescWrapper.GetDatabase()

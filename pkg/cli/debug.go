@@ -232,7 +232,7 @@ func tryMeta(kv engine.MVCCKeyValue) (string, error) {
 
 func maybeUnmarshalInline(v []byte, dest proto.Message) error {
 	var meta enginepb.MVCCMetadata
-	if err := meta.Unmarshal(v); err != nil {
+	if err := proto.Unmarshal(v, &meta); err != nil {
 		return err
 	}
 	value := roachpb.Value{
@@ -260,7 +260,7 @@ func tryRangeIDKey(kv engine.MVCCKeyValue) (string, error) {
 
 	// All range ID keys are stored inline on the metadata.
 	var meta enginepb.MVCCMetadata
-	if err := meta.Unmarshal(kv.Value); err != nil {
+	if err := proto.Unmarshal(kv.Value, &meta); err != nil {
 		return "", err
 	}
 	value := roachpb.Value{RawBytes: meta.RawBytes}
@@ -436,7 +436,7 @@ func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 		if len(ent.Data) > 0 {
 			_, cmdData := storage.DecodeRaftCommand(ent.Data)
 			var cmd storagebase.RaftCommand
-			if err := cmd.Unmarshal(cmdData); err != nil {
+			if err := proto.Unmarshal(cmdData, &cmd); err != nil {
 				return "", err
 			}
 			ent.Data = nil
@@ -445,15 +445,15 @@ func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 		return fmt.Sprintf("%s: EMPTY\n", &ent), nil
 	} else if ent.Type == raftpb.EntryConfChange {
 		var cc raftpb.ConfChange
-		if err := cc.Unmarshal(ent.Data); err != nil {
+		if err := proto.Unmarshal(ent.Data, &cc); err != nil {
 			return "", err
 		}
 		var ctx storage.ConfChangeContext
-		if err := ctx.Unmarshal(cc.Context); err != nil {
+		if err := proto.Unmarshal(cc.Context, &ctx); err != nil {
 			return "", err
 		}
 		var cmd storagebase.ReplicatedEvalResult
-		if err := cmd.Unmarshal(ctx.Payload); err != nil {
+		if err := proto.Unmarshal(ctx.Payload, &cmd); err != nil {
 			return "", err
 		}
 		ent.Data = nil

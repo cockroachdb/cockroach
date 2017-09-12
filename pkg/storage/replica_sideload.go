@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
 
@@ -152,7 +153,7 @@ func maybeSideloadEntriesImpl(
 				// Bad luck: we didn't have the proposal in-memory, so we'll
 				// have to unmarshal it.
 				log.Event(ctx, "proposal not already in memory; unmarshaling")
-				if err := strippedCmd.Unmarshal(data); err != nil {
+				if err := proto.Unmarshal(data, &strippedCmd); err != nil {
 					return nil, 0, err
 				}
 			}
@@ -232,7 +233,7 @@ func maybeInlineSideloadedRaftCommand(
 	ent.Data = nil // no reuse of potentially shared slice
 
 	var command storagebase.RaftCommand
-	if err := command.Unmarshal(data); err != nil {
+	if err := proto.Unmarshal(data, &command); err != nil {
 		return nil, err
 	}
 	sideloadedData, err := sideloaded.Get(ctx, ent.Index, ent.Term)

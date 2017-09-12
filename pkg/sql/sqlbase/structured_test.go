@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/gogo/protobuf/proto"
 )
 
 // Makes an IndexDescriptor with all columns being ascending.
@@ -1103,7 +1104,7 @@ func TestKeysPerRow(t *testing.T) {
 				`SELECT descriptor FROM system.descriptor ORDER BY id DESC LIMIT 1`)
 			row.Scan(&descBytes)
 			var desc Descriptor
-			if err := desc.Unmarshal(descBytes); err != nil {
+			if err := proto.Unmarshal(descBytes, &desc); err != nil {
 				t.Fatalf("%+v", err)
 			}
 

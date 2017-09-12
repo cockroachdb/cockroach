@@ -1476,7 +1476,7 @@ func (s *adminServer) queryZone(
 	}
 
 	var zone config.ZoneConfig
-	if err := zone.Unmarshal(zoneBytes); err != nil {
+	if err := proto.Unmarshal(zoneBytes, &zone); err != nil {
 		return config.ZoneConfig{}, false, err
 	}
 	return zone, true, nil
