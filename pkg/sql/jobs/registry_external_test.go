@@ -65,6 +65,7 @@ func TestRoundtripJob(t *testing.T) {
 
 func TestRegistryResumeExpiredLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer jobs.ResetResumeHooks()()
 
 	ctx := context.Background()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -122,7 +123,6 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 	resumeCounts := make(map[roachpb.NodeID]int)
 	resumeCalled := make(chan struct{})
 	var newJobs []*jobs.Job
-	defer jobs.ResetResumeHooks()()
 	jobs.AddResumeHook(func(_ jobs.Type) func(context.Context, *jobs.Job) error {
 		hookCallCount++
 		return func(_ context.Context, job *jobs.Job) error {
