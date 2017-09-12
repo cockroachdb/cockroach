@@ -289,7 +289,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 	type testCase struct {
 		// Entry passed into maybeInlineSideloadedRaftCommand and the entry
 		// after having (perhaps) been modified.
-		fat, thin raftpb.Entry
+		thin, fat raftpb.Entry
 		// Populate the raft entry cache and sideload storage before running the test.
 		setup func(*raftEntryCache, sideloadStorage)
 		// If nonempty, the error expected from maybeInlineSideloadedRaftCommand.
@@ -314,25 +314,25 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 
 	testCases := map[string]testCase{
 		// Plain old v1 Raft command without payload. Don't touch.
-		"v1-no-payload": {fat: mkEnt(v1, 5, 6, &sstThin), thin: mkEnt(v1, 5, 6, &sstThin)},
+		"v1-no-payload": {thin: mkEnt(v1, 5, 6, &sstThin), fat: mkEnt(v1, 5, 6, &sstThin)},
 		// With payload, but command is v1. Don't touch. Note that the
 		// first of the two shouldn't happen in practice or we have a
 		// huge problem once we try to apply this entry.
-		"v1-slim-with-payload": {fat: mkEnt(v1, 5, 6, &sstThin), thin: mkEnt(v1, 5, 6, &sstThin)},
-		"v1-with-payload":      {fat: mkEnt(v1, 5, 6, &sstFat), thin: mkEnt(v1, 5, 6, &sstFat)},
+		"v1-slim-with-payload": {thin: mkEnt(v1, 5, 6, &sstThin), fat: mkEnt(v1, 5, 6, &sstThin)},
+		"v1-with-payload":      {thin: mkEnt(v1, 5, 6, &sstFat), fat: mkEnt(v1, 5, 6, &sstFat)},
 		// v2 with payload, but payload is AWOL. This would be fatal in practice.
 		"v2-with-payload-missing-file": {
-			fat: mkEnt(v2, 5, 6, &sstThin), thin: mkEnt(v2, 5, 6, &sstThin),
+			thin: mkEnt(v2, 5, 6, &sstThin), fat: mkEnt(v2, 5, 6, &sstThin),
 			expErr: "not found",
 		},
 		// v2 with payload that's actually there. The request we'll see in
 		// practice.
 		"v2-with-payload-with-file-no-cache": {
-			fat: mkEnt(v2, 5, 6, &sstThin), thin: mkEnt(v2, 5, 6, &sstFat),
+			thin: mkEnt(v2, 5, 6, &sstThin), fat: mkEnt(v2, 5, 6, &sstFat),
 			setup: putOnDisk, expTrace: "inlined entry not cached",
 		},
 		"v2-with-payload-with-file-with-cache": {
-			fat: mkEnt(v2, 5, 6, &sstThin), thin: mkEnt(v2, 5, 6, &sstFat),
+			thin: mkEnt(v2, 5, 6, &sstThin), fat: mkEnt(v2, 5, 6, &sstFat),
 			setup: func(ec *raftEntryCache, ss sideloadStorage) {
 				putOnDisk(ec, ss)
 				ec.addEntries(rangeID, []raftpb.Entry{mkEnt(v2, 5, 6, &sstFat)})
@@ -350,22 +350,22 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 			test.setup(ec, ss)
 		}
 
-		fatCopy := *(protoutil.Clone(&test.fat).(*raftpb.Entry))
-		newEnt, err := maybeInlineSideloadedRaftCommand(ctx, rangeID, fatCopy, ss, ec)
+		thinCopy := *(protoutil.Clone(&test.thin).(*raftpb.Entry))
+		newEnt, err := maybeInlineSideloadedRaftCommand(ctx, rangeID, thinCopy, ss, ec)
 		if err != nil {
 			if test.expErr == "" || !testutils.IsError(err, test.expErr) {
 				t.Fatalf("%s: %s", k, err)
 			}
 		} else if test.expErr != "" {
 			t.Fatalf("%s: success, but expected error: %s", k, test.expErr)
-		} else if err := entryEq(fatCopy, test.fat); err != nil {
-			t.Fatalf("%s: mutated the original entry: %s", k, pretty.Diff(fatCopy, test.fat))
+		} else if err := entryEq(thinCopy, test.thin); err != nil {
+			t.Fatalf("%s: mutated the original entry: %s", k, pretty.Diff(thinCopy, test.thin))
 		}
 
 		if newEnt == nil {
-			newEnt = &fatCopy
+			newEnt = &thinCopy
 		}
-		if err := entryEq(*newEnt, test.thin); err != nil {
+		if err := entryEq(*newEnt, test.fat); err != nil {
 			t.Fatalf("%s: %s", k, err)
 		}
 
