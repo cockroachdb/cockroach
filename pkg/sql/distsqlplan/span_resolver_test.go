@@ -114,21 +114,20 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(replicas) != 3 {
-		t.Fatalf("expected replies for 3 spans, got %d: %+v", len(replicas), replicas)
+		t.Fatalf("expected replies for 3 spans, got %d", len(replicas))
 	}
 	si := tc.Servers[0]
 
-	nodeID := si.GetNode().Descriptor.NodeID
 	storeID := si.GetFirstStoreID()
 	for i := 0; i < 3; i++ {
 		if len(replicas[i]) != 1 {
-			t.Fatalf("expected 1 range for span %s, got %d (%+v)",
-				spans[i].Span, len(replicas[i]), replicas[i])
+			t.Fatalf("expected 1 range for span %s, got %d",
+				spans[i].Span, len(replicas[i]))
 		}
 		rd := replicas[i][0].ReplicaDescriptor
-		if rd.NodeID != nodeID || rd.StoreID != storeID {
-			t.Fatalf("expected span %s to be on replica (%d, %d) but was on %s",
-				spans[i].Span, nodeID, storeID, rd)
+		if rd.StoreID != storeID {
+			t.Fatalf("expected span %s to be on replica (%d) but was on %s",
+				spans[i].Span, storeID, rd)
 		}
 	}
 
@@ -430,19 +429,19 @@ func selectReplica(nodeID roachpb.NodeID, rng roachpb.RangeDescriptor) rngInfo {
 func expectResolved(actual [][]rngInfo, expected ...[]rngInfo) error {
 	if len(actual) != len(expected) {
 		return errors.Errorf(
-			"expected %d ranges, got %d: %+v", len(expected), len(actual), actual)
+			"expected %d ranges, got %d", len(expected), len(actual))
 	}
 	for i, exp := range expected {
 		act := actual[i]
 		if len(exp) != len(act) {
-			return errors.Errorf("expected %d ranges, got %d (%+v)",
-				len(exp), len(act), act)
+			return errors.Errorf("expected %d ranges, got %d",
+				len(exp), len(act))
 		}
 		for i, e := range exp {
 			a := act[i]
-			if e.ReplicaDescriptor != a.ReplicaDescriptor || e.rngDesc.RangeID != a.rngDesc.RangeID {
+			if e.ReplicaDescriptor.StoreID != a.ReplicaDescriptor.StoreID || e.rngDesc.RangeID != a.rngDesc.RangeID {
 				return errors.Errorf(
-					"expected replica: %+v but got: %+v", e, a)
+					"expected replica's store : %d but got: %d", e.ReplicaDescriptor.StoreID, a.ReplicaDescriptor.StoreID)
 			}
 		}
 	}
