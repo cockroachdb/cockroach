@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
 
@@ -271,7 +272,7 @@ func versionTransformer(
 		}
 	}
 
-	if err := oldV.Unmarshal(curRawProto); err != nil {
+	if err := proto.Unmarshal(curRawProto, &oldV); err != nil {
 		return nil, nil, err
 	}
 	if versionBump == nil {

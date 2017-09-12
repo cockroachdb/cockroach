@@ -15,6 +15,7 @@
 package settings_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -22,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
 
@@ -49,6 +51,13 @@ func (d *dummy) Marshal() ([]byte, error) {
 	return []byte(d.msg1 + "." + d.growsbyone), nil
 }
 
+// implement the proto.Message interface
+func (d *dummy) ProtoMessage() {}
+func (d *dummy) Reset()        { *d = dummy{} }
+func (d *dummy) String() string {
+	return fmt.Sprintf("&{%s %s}", d.msg1, d.growsbyone)
+}
+
 var dummyTransformer = func(sv *settings.Values, old []byte, update *string) ([]byte, interface{}, error) {
 	var oldD dummy
 
@@ -62,7 +71,7 @@ var dummyTransformer = func(sv *settings.Values, old []byte, update *string) ([]
 			return nil, nil, err
 		}
 	}
-	if err := oldD.Unmarshal(old); err != nil {
+	if err := proto.Unmarshal(old, &oldD); err != nil {
 		return nil, nil, err
 	}
 

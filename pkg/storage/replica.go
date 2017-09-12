@@ -27,6 +27,7 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/gogo/protobuf/proto"
 	"github.com/google/btree"
 	"github.com/kr/pretty"
 	"github.com/opentracing/opentracing-go"
@@ -3433,7 +3434,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				// leader. Clear commandID so it's ignored for processing.
 				if len(encodedCommand) == 0 {
 					commandID = ""
-				} else if err := command.Unmarshal(encodedCommand); err != nil {
+				} else if err := proto.Unmarshal(encodedCommand, &command); err != nil {
 					return stats, err
 				}
 			}
@@ -3460,15 +3461,15 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 		case raftpb.EntryConfChange:
 			var cc raftpb.ConfChange
-			if err := cc.Unmarshal(e.Data); err != nil {
+			if err := proto.Unmarshal(e.Data, &cc); err != nil {
 				return stats, err
 			}
 			var ccCtx ConfChangeContext
-			if err := ccCtx.Unmarshal(cc.Context); err != nil {
+			if err := proto.Unmarshal(cc.Context, &ccCtx); err != nil {
 				return stats, err
 			}
 			var command storagebase.RaftCommand
-			if err := command.Unmarshal(ccCtx.Payload); err != nil {
+			if err := proto.Unmarshal(ccCtx.Payload, &command); err != nil {
 				return stats, err
 			}
 			commandID := storagebase.CmdIDKey(ccCtx.CommandID)

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
 
@@ -55,7 +56,7 @@ func (th *testClusterWithHelpers) getVersionFromSelect(i int) string {
 		th.Fatalf("%d: %s (%T)", i, err, err)
 	}
 	var v cluster.ClusterVersion
-	if err := v.Unmarshal([]byte(version)); err != nil {
+	if err := proto.Unmarshal([]byte(version), &v); err != nil {
 		th.Fatalf("%d: %s", i, err)
 	}
 	return v.MinimumVersion.String()

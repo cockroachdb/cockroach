@@ -319,6 +319,34 @@ func TestStyle(t *testing.T) {
 		}
 	})
 
+	t.Run("TestProtoUnmarshal", func(t *testing.T) {
+		t.Parallel()
+		cmd, stderr, filter, err := dirCmd(pkg.Dir, "git", "grep", "-nE", `\.Unmarshal\([^)]+\)`, "--", "*.go")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(stream.Sequence(
+			filter,
+			stream.GrepNot(`(json|jsonpb|yaml|proto)\.Unmarshal`),
+			stream.GrepNot(`\.pb\.go\b`),
+		), func(s string) {
+			t.Errorf(`%s <- forbidden; use "proto.Unmarshal" instead`, s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
 	t.Run("TestImportNames", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(pkg.Dir, "git", "grep", "-nE", `^(import|\s+)(\w+ )?"database/sql"$`, "--", "*.go")

@@ -886,7 +886,7 @@ func (r *RocksDB) GetSSTables() SSTableInfos {
 func (r *RocksDB) getUserProperties() (enginepb.SSTUserPropertiesCollection, error) {
 	buf := cStringToGoBytes(C.DBGetUserProperties(r.rdb))
 	var ssts enginepb.SSTUserPropertiesCollection
-	if err := ssts.Unmarshal(buf); err != nil {
+	if err := proto.Unmarshal(buf, &ssts); err != nil {
 		return enginepb.SSTUserPropertiesCollection{}, err
 	}
 	if ssts.Error != "" {
