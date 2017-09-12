@@ -176,6 +176,16 @@ func (s *Store) SetReplicaScannerActive(active bool) {
 	s.setScannerActive(active)
 }
 
+// GetOrCreateReplica passes through to its lowercase sibling.
+func (s *Store) GetOrCreateReplica(
+	ctx context.Context,
+	rangeID roachpb.RangeID,
+	replicaID roachpb.ReplicaID,
+	creatingReplica *roachpb.ReplicaDescriptor,
+) (*Replica, bool, error) {
+	return s.getOrCreateReplica(ctx, rangeID, replicaID, creatingReplica)
+}
+
 func (s *Store) SetRebalancesDisabled(v bool) {
 	var i int32
 	if v {
