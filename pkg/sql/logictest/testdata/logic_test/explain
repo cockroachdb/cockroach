@@ -11,15 +11,15 @@ query ITTTTT colnames
 EXPLAIN (PLAN, METADATA) SELECT 1
 ----
 Level  Type      Field  Description  Columns  Ordering
-0      render    ·      ·            ("1")    ="1"
+0      render    ·      ·            ("1")    "1"=CONST
 1      emptyrow  ·      ·            ()       ·
 
 query ITTTTT colnames
 EXPLAIN (METADATA,PLAN) SELECT 1
 ----
-Level  Type     Field  Description  Columns  Ordering
-0      render   ·      ·            ("1")    ="1"
-1      emptyrow ·      ·            ()       ·
+Level  Type      Field  Description  Columns  Ordering
+0      render    ·      ·            ("1")    "1"=CONST
+1      emptyrow  ·      ·            ()       ·
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT 1]
@@ -30,10 +30,10 @@ output row: [1]
 query ITTTTT colnames
 EXPLAIN (TYPES) SELECT 1
 ----
-Level  Type     Field     Description  Columns    Ordering
-0      render   ·         ·            ("1" int)  ="1"
-0      ·        render 0  (1)[int]     ·          ·
-1      emptyrow ·         ·            ()         ·
+Level  Type      Field     Description  Columns    Ordering
+0      render    ·         ·            ("1" int)  "1"=CONST
+0      ·         render 0  (1)[int]     ·          ·
+1      emptyrow  ·         ·            ()         ·
 
 statement error cannot set EXPLAIN mode more than once
 EXPLAIN (PLAN,PLAN) SELECT 1
@@ -51,11 +51,11 @@ EXPLAIN (METADATA) SHOW TRACE FOR SELECT 1
 0  sort            ·      ·             ("timestamp", age, message, context, operation, span)                             +"timestamp"
 0  ·               order  +"timestamp"  ·                                                                                 ·
 1  window          ·      ·             ("timestamp", age, message, context, operation, span)                             ·
-2  render          ·      ·             ("timestamp", """timestamp""", message, context, operation, span)                 ·
+2  render          ·      ·             ("timestamp", """timestamp""", message, context, operation, span)                 "timestamp"="""timestamp"""
 3  window          ·      ·             ("timestamp", message, context, operation, span)                                  ·
 4  render          ·      ·             ("timestamp", message, context, operation, span, txn_idx, span_idx, message_idx)  ·
 5  show trace for  ·      ·             (txn_idx, span_idx, message_idx, "timestamp", duration, operation, message)       ·
-6  render          ·      ·             ("1")                                                                             ="1"
+6  render          ·      ·             ("1")                                                                             "1"=CONST
 7  emptyrow        ·      ·             ()                                                                                ·
 
 # Ensure that all relevant statement types can be explained

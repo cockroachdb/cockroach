@@ -548,51 +548,74 @@ func (n *joinNode) Close(ctx context.Context) {
 	n.left.plan.Close(ctx)
 }
 
-// equalityColIdxInSchema takes a column index from joinPred.leftEqualityIndices
-// or joinPred.rightEqualityIndices, and maps it to the column index in n.Columns.
-func (n *joinNode) equalityColIdxInSchema(colIdx int, right bool) uint32 {
-	if right {
-		return uint32(n.pred.rightEqualityIndices[colIdx] +
-			n.pred.numMergedEqualityColumns +
-			n.pred.numLeftCols)
-	}
-	return uint32(n.pred.numMergedEqualityColumns +
-		n.pred.leftEqualityIndices[colIdx])
-}
-
 func (n *joinNode) joinOrdering() orderingInfo {
 	if len(n.mergeJoinOrdering) == 0 {
 		return orderingInfo{}
 	}
 	info := orderingInfo{}
 
-	// For now we only propagate orderings on INNER JOINs.
-	// TODO(arjun): Support order propagation for other JOIN types.
-	if n.joinType == joinTypeInner {
-		// TODO(arjun): copy over the constant columns as well from the left and right subplans.
+	// n.Columns has the following schema on equality JOINs:
+	//
+	// 0                     numMerged                 numMerged + numLeftCols
+	// |                     |                         |                          |
+	// --- Merged columns --- --- Columns from left --- --- Columns from right ---
 
-		for _, col := range n.mergeJoinOrdering {
-			group := orderingColumnGroup{}
-			// n.Columns has the following schema on equality JOINs:
-			// First, the merged columns.
-			// Second, the non-merged columns from the left input.
-			// Third, the non-merged columns from the right input.
+	leftCol := func(leftColIdx int) int {
+		return n.pred.numMergedEqualityColumns + leftColIdx
+	}
+	rightCol := func(rightColIdx int) int {
+		return n.pred.numMergedEqualityColumns + n.pred.numLeftCols + rightColIdx
+	}
 
-			// If col is an index into the equality columns, then its simple:
-			// we just add it.
-			if col.ColIdx < n.pred.numMergedEqualityColumns {
-				group.cols.Add(uint32(col.ColIdx))
-			}
+	leftOrd := planOrdering(n.left.plan)
+	rightOrd := planOrdering(n.right.plan)
 
-			// Otherwise, this is an index into non-equality columns, so we
-			// then add all the columns from the left and right inputs that
-			// have an ordering.
-			group.cols.Add(n.equalityColIdxInSchema(col.ColIdx, false /* !right */))
-			group.cols.Add(n.equalityColIdxInSchema(col.ColIdx, true /* right */))
-
-			group.dir = col.Direction
-			info.ordering = append(info.ordering, group)
+	// Propagate the equivalency groups for the left columns.
+	for i := 0; i < n.pred.numLeftCols; i++ {
+		if group := leftOrd.eqGroups.Find(i); group != i {
+			info.eqGroups.Union(leftCol(group), rightCol(group))
 		}
 	}
+	// Propagate the equivalency groups for the right columns.
+	for i := 0; i < n.pred.numRightCols; i++ {
+		if group := rightOrd.eqGroups.Find(i); group != i {
+			info.eqGroups.Union(rightCol(group), rightCol(i))
+		}
+	}
+	// Set equivalency between the equality column pairs (and merged column if
+	// appropriate).
+	for i, leftIdx := range n.pred.leftEqualityIndices {
+		rightIdx := n.pred.rightEqualityIndices[i]
+		info.eqGroups.Union(leftCol(leftIdx), rightCol(rightIdx))
+		if i < n.pred.numMergedEqualityColumns {
+			info.eqGroups.Union(i, leftCol(leftIdx))
+		}
+	}
+
+	// TODO(arjun): Support order propagation for other JOIN types.
+	if n.joinType != joinTypeInner {
+		return info
+	}
+
+	// Propagate any constant equality columns.
+	for i, leftIdx := range n.pred.leftEqualityIndices {
+		leftGroup := leftOrd.eqGroups.Find(leftIdx)
+		rightGroup := rightOrd.eqGroups.Find(n.pred.rightEqualityIndices[i])
+		if leftOrd.constantCols.Contains(uint32(leftGroup)) ||
+			rightOrd.constantCols.Contains(uint32(rightGroup)) {
+			info.addConstantColumn(leftCol(leftIdx))
+		}
+	}
+
+	// TODO(radu): if the equality columns form a key on one side, we can
+	// propagate all constant columns from the other side.
+
+	info.ordering = make(sqlbase.ColumnOrdering, len(n.mergeJoinOrdering))
+	for i, col := range n.mergeJoinOrdering {
+		leftGroup := leftOrd.eqGroups.Find(n.pred.leftEqualityIndices[col.ColIdx])
+		info.ordering[i].ColIdx = leftCol(leftGroup)
+		info.ordering[i].Direction = col.Direction
+	}
+	info.ordering = info.reduce(info.ordering)
 	return info
 }

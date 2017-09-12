@@ -200,12 +200,17 @@ func doExpandPlan(
 		ordering := planOrdering(n.plan)
 		if !ordering.isEmpty() {
 			n.columnsInOrder = make([]bool, len(planColumns(n.plan)))
-			ordering.constantCols.ForEach(func(colIdx uint32) {
-				n.columnsInOrder[colIdx] = true
-			})
-			for _, g := range ordering.ordering {
-				for col, ok := g.cols.Next(0); ok; col, ok = g.cols.Next(col + 1) {
-					n.columnsInOrder[col] = true
+			for i := range n.columnsInOrder {
+				group := ordering.eqGroups.Find(i)
+				if ordering.constantCols.Contains(uint32(group)) {
+					n.columnsInOrder[i] = true
+					continue
+				}
+				for _, g := range ordering.ordering {
+					if g.ColIdx == group {
+						n.columnsInOrder[i] = true
+						break
+					}
 				}
 			}
 		}
@@ -532,7 +537,7 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 		// distinctNode uses whatever order the underlying node presents (regardless
 		// of any ordering requirement on distinctNode itself).
 		sourceOrdering := planOrdering(n.plan)
-		n.plan = simplifyOrderings(n.plan, sourceOrdering.getColumnOrdering())
+		n.plan = simplifyOrderings(n.plan, sourceOrdering.ordering)
 
 	case *scanNode:
 		n.ordering.trim(usefulOrdering)

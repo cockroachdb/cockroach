@@ -671,39 +671,41 @@ func getOutputColumnsFromScanNode(n *scanNode) []uint32 {
 	return outputColumns
 }
 
-// convert ordering takes sql.orderingInfo
+// convertOrdering maps the columns in ord.ordering to the output columns of a
+// processor.
 func (dsp *distSQLPlanner) convertOrdering(
-	planOrdering []orderingColumnGroup, planToStreamColMap []int,
+	ord orderingInfo, planToStreamColMap []int,
 ) distsqlrun.Ordering {
-	if len(planOrdering) == 0 {
+	if len(ord.ordering) == 0 {
 		return distsqlrun.Ordering{}
 	}
-	ordering := distsqlrun.Ordering{
-		Columns: make([]distsqlrun.Ordering_Column, 0, len(planOrdering)),
+	result := distsqlrun.Ordering{
+		Columns: make([]distsqlrun.Ordering_Column, len(ord.ordering)),
 	}
-	for _, group := range planOrdering {
-		// Try to find any column in the group that is part of the processor output.
-		streamColIdx := -1
-		for col, ok := group.cols.Next(0); ok; col, ok = group.cols.Next(col + 1) {
-			streamColIdx = planToStreamColMap[col]
-			if streamColIdx != -1 {
-				break
+	for i, o := range ord.ordering {
+		streamColIdx := planToStreamColMap[o.ColIdx]
+		if streamColIdx == -1 {
+			// Find any column in the equivalency group that is part of the processor
+			// output.
+			group := ord.eqGroups.Find(o.ColIdx)
+			for col, pos := range planToStreamColMap {
+				if pos != -1 && ord.eqGroups.Find(col) == group {
+					streamColIdx = pos
+					break
+				}
+			}
+			if streamColIdx == -1 {
+				panic("column in ordering not part of processor output")
 			}
 		}
-
-		if streamColIdx == -1 {
-			panic("column in ordering not part of processor output")
+		result.Columns[i].ColIdx = uint32(streamColIdx)
+		dir := distsqlrun.Ordering_Column_ASC
+		if o.Direction == encoding.Descending {
+			dir = distsqlrun.Ordering_Column_DESC
 		}
-		oc := distsqlrun.Ordering_Column{
-			ColIdx:    uint32(streamColIdx),
-			Direction: distsqlrun.Ordering_Column_ASC,
-		}
-		if group.dir == encoding.Descending {
-			oc.Direction = distsqlrun.Ordering_Column_DESC
-		}
-		ordering.Columns = append(ordering.Columns, oc)
+		result.Columns[i].Direction = dir
 	}
-	return ordering
+	return result
 }
 
 // createTableReaders generates a plan consisting of table reader processors,
@@ -758,7 +760,7 @@ func (dsp *distSQLPlanner) createTableReaders(
 		// This information is taken into account by the AddProjection call below:
 		// specifically, it will make sure these columns are kept even if they are
 		// not in the projection (e.g. "SELECT v FROM kv ORDER BY k").
-		p.SetMergeOrdering(dsp.convertOrdering(n.ordering.ordering, planToStreamColMap))
+		p.SetMergeOrdering(dsp.convertOrdering(n.ordering, planToStreamColMap))
 	}
 	p.SetLastStagePost(post, getTypesForPlanResult(n, planToStreamColMap))
 
@@ -1326,7 +1328,7 @@ func (dsp *distSQLPlanner) addAggregators(
 		// We can't do local aggregation, but we can do local distinct processing
 		// to reduce streaming duplicates, and aggregate on the final node.
 
-		ordering := dsp.convertOrdering(planOrdering(n.plan).ordering, p.planToStreamColMap).Columns
+		ordering := dsp.convertOrdering(planOrdering(n.plan), p.planToStreamColMap).Columns
 		orderedColsMap := make(map[uint32]struct{})
 		for _, ord := range ordering {
 			orderedColsMap[ord.ColIdx] = struct{}{}
@@ -1634,7 +1636,7 @@ ColLoop:
 			distsqlrun.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
 			post,
 			getTypesForPlanResult(n, plan.planToStreamColMap),
-			dsp.convertOrdering(planOrdering(n).ordering, plan.planToStreamColMap),
+			dsp.convertOrdering(planOrdering(n), plan.planToStreamColMap),
 		)
 	} else {
 		// Use a single join reader (if there is a single stream, on that node; if
@@ -2007,7 +2009,7 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 	// Joiners may guarantee an ordering to outputs, so we ensure that
 	// ordering is propagated through the input synchronizer of the next stage.
 	// We can propagate the ordering from either side, we use the left side here.
-	p.SetMergeOrdering(dsp.convertOrdering(n.ordering.ordering, p.planToStreamColMap))
+	p.SetMergeOrdering(dsp.convertOrdering(n.ordering, p.planToStreamColMap))
 	return p, nil
 }
 
