@@ -31,15 +31,6 @@ type FastIntSet struct {
 // We store bits for values smaller than this cutoff.
 const smallValCutoff = 64
 
-// MakeFastIntSet initializes a FastIntSet with the given elements.
-func MakeFastIntSet(elements ...uint32) FastIntSet {
-	var s FastIntSet
-	for _, v := range elements {
-		s.Add(v)
-	}
-	return s
-}
-
 // Add adds a value to the set. No-op if the value is already in the set.
 func (s *FastIntSet) Add(i uint32) {
 	if i < smallValCutoff {

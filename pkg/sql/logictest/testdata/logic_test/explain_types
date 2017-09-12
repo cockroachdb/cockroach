@@ -23,7 +23,7 @@ INSERT INTO t VALUES (1, 2)
 query ITTTTT
 EXPLAIN (TYPES) SELECT 42
 ----
-0  render    ·         ·          ("42" int)  ="42"
+0  render    ·         ·          ("42" int)  "42"=CONST
 0  ·         render 0  (42)[int]  ·           ·
 1  emptyrow  ·         ·          ()          ·
 
@@ -189,11 +189,11 @@ EXPLAIN (TYPES) VALUES (1) UNION VALUES (2)
 query ITTTTT
 EXPLAIN (TYPES) SELECT DISTINCT k FROM t
 ----
-0  distinct  ·         ·          (k int)                  +k,key
+0  distinct  ·         ·          (k int)                  +k; key
 0  ·         key       k          ·                        ·
-1  render    ·         ·          (k int)                  +k,key
+1  render    ·         ·          (k int)                  +k; key
 1  ·         render 0  (k)[int]   ·                        ·
-2  scan      ·         ·          (k int, v[omitted] int)  +k,key
+2  scan      ·         ·          (k int, v[omitted] int)  +k; key
 2  ·         table     t@primary  ·                        ·
 2  ·         spans     ALL        ·                        ·
 
@@ -279,21 +279,21 @@ EXPLAIN (TYPES,NOEXPAND) SELECT * FROM tt WHERE x < 10 AND y > 10
 query ITTTTT
 EXPLAIN (TYPES) SELECT $1 + 2 AS a
 ----
-0  render    ·         ·                            (a int)  =a
+0  render    ·         ·                            (a int)  a=CONST
 0  ·         render 0  (($1)[int] + (2)[int])[int]  ·        ·
 1  emptyrow  ·         ·                            ()       ·
 
 query ITTTTT
 EXPLAIN (TYPES,NONORMALIZE) SELECT ABS(2-3) AS a
 ----
-0  render    ·         ·                      (a int)  =a
+0  render    ·         ·                      (a int)  a=CONST
 0  ·         render 0  (abs((-1)[int]))[int]  ·        ·
 1  emptyrow  ·         ·                      ()       ·
 
 query ITTTTT
 EXPLAIN (TYPES) SELECT ABS(2-3) AS a
 ----
-0  render    ·         ·         (a int)  =a
+0  render    ·         ·         (a int)  a=CONST
 0  ·         render 0  (1)[int]  ·        ·
 1  emptyrow  ·         ·         ()       ·
 
@@ -303,6 +303,6 @@ EXPLAIN (TYPES) SELECT x[1] FROM (SELECT ARRAY[1,2,3] AS x)
 ----
 0  render    ·         ·                                           ("x[1]" int)  ·
 0  ·         render 0  ((x)[int[]][(1)[int]])[int]                 ·             ·
-1  render    ·         ·                                           (x int[])     =x
+1  render    ·         ·                                           (x int[])     x=CONST
 1  ·         render 0  (ARRAY[(1)[int],(2)[int],(3)[int]])[int[]]  ·             ·
 2  emptyrow  ·         ·                                           ()            ·

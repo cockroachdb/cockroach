@@ -399,11 +399,13 @@ func (n *scanNode) computeOrdering(
 			if reverse {
 				dir = dir.Reverse()
 			}
-			ordering.addColumn(idx, dir)
+			ordering.addOrderColumn(idx, dir)
 		}
 	}
 	// We included any implicit columns, so the results are unique.
-	ordering.isKey = true
+	if len(ordering.ordering) > 0 {
+		ordering.isKey = true
+	}
 	return ordering
 }
 

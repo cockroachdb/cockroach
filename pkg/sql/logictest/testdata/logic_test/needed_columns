@@ -3,15 +3,15 @@
 query ITTTTT
 EXPLAIN (METADATA,NOOPTIMIZE) SELECT 1 FROM (SELECT 2 AS s)
 ----
-0  render    ·  ·  ("1")  ="1"
-1  render    ·  ·  (s)    =s
+0  render    ·  ·  ("1")  "1"=CONST
+1  render    ·  ·  (s)    s=CONST
 2  emptyrow  ·  ·  ()     ·
 
 # Propagation to data sources.
 query ITTTTT
 EXPLAIN (METADATA) SELECT 1 FROM (SELECT 2 AS s)
 ----
-0  render    ·  ·  ("1")         ="1"
+0  render    ·  ·  ("1")         "1"=CONST
 1  render    ·  ·  (s[omitted])  ·
 2  emptyrow  ·  ·  ()            ·
 
@@ -20,7 +20,7 @@ query ITTTTT
 EXPLAIN (METADATA) CREATE TABLE t AS SELECT 1 FROM (SELECT 2 AS s)
 ----
 0  create table  ·  ·  ()            ·
-1  render        ·  ·  ("1")         ="1"
+1  render        ·  ·  ("1")         "1"=CONST
 2  render        ·  ·  (s[omitted])  ·
 3  emptyrow      ·  ·  ()            ·
 
@@ -28,15 +28,15 @@ EXPLAIN (METADATA) CREATE TABLE t AS SELECT 1 FROM (SELECT 2 AS s)
 query ITTTTT
 EXPLAIN (METADATA) SELECT 1 FROM (SELECT 2 AS s) LIMIT 1
 ----
-0  limit     ·  ·  ("1")         ="1"
-1  render    ·  ·  ("1")         ="1"
+0  limit     ·  ·  ("1")         "1"=CONST
+1  render    ·  ·  ("1")         "1"=CONST
 2  render    ·  ·  (s[omitted])  ·
 3  emptyrow  ·  ·  ()            ·
 
 query ITTTTT
 EXPLAIN (METADATA) SELECT 1 FROM (SELECT 2 AS s LIMIT 1)
 ----
-0  render    ·  ·  ("1")         ="1"
+0  render    ·  ·  ("1")         "1"=CONST
 1  limit     ·  ·  (s[omitted])  ·
 2  render    ·  ·  (s[omitted])  ·
 3  emptyrow  ·  ·  ()            ·
@@ -45,17 +45,17 @@ EXPLAIN (METADATA) SELECT 1 FROM (SELECT 2 AS s LIMIT 1)
 query ITTTTT
 EXPLAIN (METADATA) SELECT 1 FROM (SELECT 1 AS s UNION SELECT 2 AS s)
 ----
-0  render    ·  ·  ("1")  ="1"
+0  render    ·  ·  ("1")  "1"=CONST
 1  union     ·  ·  (s)    ·
-2  render    ·  ·  (s)    =s
+2  render    ·  ·  (s)    s=CONST
 3  emptyrow  ·  ·  ()     ·
-2  render    ·  ·  (s)    =s
+2  render    ·  ·  (s)    s=CONST
 3  emptyrow  ·  ·  ()     ·
 
 query ITTTTT
 EXPLAIN (METADATA) SELECT 1 FROM (SELECT 1 AS s UNION ALL SELECT 2 AS s)
 ----
-0  render    ·  ·  ("1")         ="1"
+0  render    ·  ·  ("1")         "1"=CONST
 1  append    ·  ·  (s[omitted])  ·
 2  render    ·  ·  (s[omitted])  ·
 3  emptyrow  ·  ·  ()            ·
@@ -66,7 +66,7 @@ EXPLAIN (METADATA) SELECT 1 FROM (SELECT 1 AS s UNION ALL SELECT 2 AS s)
 query ITTTTT
 EXPLAIN (METADATA) SELECT 1 FROM (SELECT 1 AS s) WITH ORDINALITY
 ----
-0  render      ·  ·  ("1")                       ="1"
+0  render      ·  ·  ("1")                       "1"=CONST
 1  ordinality  ·  ·  (s[omitted], "ordinality")  ·
 2  render      ·  ·  (s[omitted])                ·
 3  emptyrow    ·  ·  ()                          ·
@@ -75,28 +75,28 @@ EXPLAIN (METADATA) SELECT 1 FROM (SELECT 1 AS s) WITH ORDINALITY
 query ITTTTT
 EXPLAIN (METADATA) SELECT x FROM (SELECT 1 AS x, 2 AS y) ORDER BY x
 ----
-0  render    ·  ·  (x)              =x
-1  render    ·  ·  (x, y[omitted])  =x
+0  render    ·  ·  (x)              x=CONST
+1  render    ·  ·  (x, y[omitted])  x=CONST
 2  emptyrow  ·  ·  ()               ·
 
 # Propagation through sort, when the sorting column is not in the results.
 query ITTTTT
 EXPLAIN (METADATA) SELECT x FROM (SELECT 1 AS x, 2 AS y, 3 AS z) ORDER BY y
 ----
-0  nosort    ·      ·   (x)                 =x
+0  nosort    ·      ·   (x)                 x=CONST
 0  ·         order  +y  ·                   ·
-1  render    ·      ·   (x, y)              =x,=y
-2  render    ·      ·   (x, y, z[omitted])  =x,=y
+1  render    ·      ·   (x, y)              x=CONST; y=CONST
+2  render    ·      ·   (x, y, z[omitted])  x=CONST; y=CONST
 3  emptyrow  ·      ·   ()                  ·
 
 # Propagation to sub-queries.
 query ITTTTT
 EXPLAIN (METADATA) SELECT 1 = (SELECT 2 AS x FROM (SELECT 3 AS s)) AS y
 ----
-0  render    ·           ·  (y)           =y
+0  render    ·           ·  (y)           y=CONST
 0  ·         subqueries  1  ·             ·
-1  limit     ·           ·  (x)           =x
-2  render    ·           ·  (x)           =x
+1  limit     ·           ·  (x)           x=CONST
+2  render    ·           ·  (x)           x=CONST
 3  render    ·           ·  (s[omitted])  ·
 4  emptyrow  ·           ·  ()            ·
 1  emptyrow  ·           ·  ()            ·
@@ -108,7 +108,7 @@ CREATE TABLE kv(k INT PRIMARY KEY, v INT)
 query ITTTTT
 EXPLAIN (METADATA) SELECT 1 FROM kv
 ----
-0  render  ·      ·           ("1")                     ="1"
+0  render  ·      ·           ("1")                     "1"=CONST
 1  scan    ·      ·           (k[omitted], v[omitted])  ·
 1  ·       table  kv@primary  ·                         ·
 1  ·       spans  ALL         ·                         ·
@@ -129,7 +129,7 @@ EXPLAIN (METADATA) INSERT INTO kv(k, v) SELECT 1, 2 FROM (SELECT 3 AS x, 4 AS y)
 ----
 0  insert    ·     ·         ()                        ·
 0  ·         into  kv(k, v)  ·                         ·
-1  render    ·     ·         ("1", "2")                ="1",="2"
+1  render    ·     ·         ("1", "2")                "1"=CONST; "2"=CONST
 2  render    ·     ·         (x[omitted], y[omitted])  ·
 3  emptyrow  ·     ·         ()                        ·
 
@@ -149,9 +149,9 @@ EXPLAIN (METADATA) DELETE FROM kv WHERE k = 3
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT x FROM (SELECT 1 AS x, y FROM (SELECT 2 AS y))
 ----
-0  render    ·         ·     (x)              =x
+0  render    ·         ·     (x)              x=CONST
 0  ·         render 0  x     ·                ·
-1  render    ·         ·     (x, y[omitted])  =x
+1  render    ·         ·     (x, y[omitted])  x=CONST
 1  ·         render 0  1     ·                ·
 1  ·         render 1  NULL  ·                ·
 2  render    ·         ·     (y[omitted])     ·
@@ -161,7 +161,7 @@ EXPLAIN (VERBOSE) SELECT x FROM (SELECT 1 AS x, y FROM (SELECT 2 AS y))
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT 1 FROM (SELECT k+1 AS x, v-2 AS y FROM kv)
 ----
-0  render  ·         ·           ("1")                     ="1"
+0  render  ·         ·           ("1")                     "1"=CONST
 0  ·       render 0  1           ·                         ·
 1  scan    ·         ·           (k[omitted], v[omitted])  ·
 1  ·       table     kv@primary  ·                         ·

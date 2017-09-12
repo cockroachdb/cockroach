@@ -564,27 +564,17 @@ func (r *renderNode) renderRow() error {
 	return nil
 }
 
-// Searches for a render target that matches the given column reference.
-func (r *renderNode) findRenderIndexForCol(colIdx int) (idx int, ok bool) {
-	for i, r := range r.render {
-		if ivar, ok := r.(*parser.IndexedVar); ok && ivar.Idx == colIdx {
-			return i, true
-		}
-	}
-	return invalidColIdx, false
-}
-
 // Computes ordering information for the render node, given ordering information for the "from"
 // node.
 //
 //    SELECT a, b FROM t@abc ...
-//      the ordering is: first by column 0 (a), then by column 1 (b)
+//      the ordering is: first by column 0 (a), then by column 1 (b).
 //
 //    SELECT a, b FROM t@abc WHERE a = 1 ...
-//      the ordering is: exact match column (a), ordered by column 1 (b)
+//      the ordering is: exact match column (a), ordered by column 1 (b).
 //
 //    SELECT b, a FROM t@abc ...
-//      the ordering is: first by column 1 (a), then by column 0 (a)
+//      the ordering is: first by column 1 (a), then by column 0 (a).
 //
 //    SELECT a, c FROM t@abc ...
 //      the ordering is: just by column 0 (a). Here we don't have b as a render target so we
@@ -595,8 +585,22 @@ func (r *renderNode) findRenderIndexForCol(colIdx int) (idx int, ok bool) {
 //         SELECT a, c FROM t@abc ORDER by a,b,c
 //      we internally add b as a render target. The same holds for any targets required for
 //      grouping.
+//
+//    SELECT a, b, a FROM t@abc ...
+//      we have an equivalency group between columns 0 and 2 and the ordering is
+//      first by column 0 (a), then by column 1.
 func (r *renderNode) computeOrdering(fromOrder orderingInfo) {
-	r.ordering = orderingInfo{}
+	// See orderingInfo.project for a description of the projection map.
+	projMap := make([]int, len(r.render))
+	for i, expr := range r.render {
+		if ivar, ok := expr.(*parser.IndexedVar); ok {
+			// Column ivar.Idx of the source becomes column i of the render node.
+			projMap[i] = ivar.Idx
+		} else {
+			projMap[i] = -1
+		}
+	}
+	r.ordering = fromOrder.project(projMap)
 
 	// Detect constants.
 	for col, expr := range r.render {
@@ -610,45 +614,4 @@ func (r *renderNode) computeOrdering(fromOrder orderingInfo) {
 			r.ordering.addConstantColumn(col)
 		}
 	}
-
-	// See if any of the constant columns have render targets. We can ignore any columns that
-	// don't have render targets. For example, assume we are using an ascending index on (k, v) with
-	// the query:
-	//
-	//   SELECT v FROM t WHERE k = 1
-	//
-	// The rows from the index are ordered by k then by v, but since k is a
-	// constant column the results are also ordered just by v.
-	if !fromOrder.constantCols.Empty() {
-		fromOrder.constantCols.ForEach(func(colIdx uint32) {
-			if renderIdx, ok := r.findRenderIndexForCol(int(colIdx)); ok {
-				r.ordering.addConstantColumn(renderIdx)
-			}
-		})
-	}
-	// Find the longest prefix of columns that have render targets. Once we find a column that is
-	// not part of the output, the rest of the ordered columns aren't useful.
-	//
-	// For example, assume we are using an ascending index on (k, v) with the query:
-	//
-	//   SELECT v FROM t WHERE k > 1
-	//
-	// The rows from the index are ordered by k then by v. We cannot make any use of this
-	// ordering as an ordering on v.
-	for _, group := range fromOrder.ordering {
-		var colsWithTargets util.FastIntSet
-		for col, ok := group.cols.Next(0); ok; col, ok = group.cols.Next(col + 1) {
-			if renderIdx, ok := r.findRenderIndexForCol(int(col)); ok {
-				colsWithTargets.Add(uint32(renderIdx))
-			}
-		}
-		if colsWithTargets.Empty() {
-			// This group has no output columns we can refer to in the ordering; we
-			// have to stop here.
-			return
-		}
-		r.ordering.addColumnGroup(colsWithTargets, group.dir)
-	}
-	// We added all columns in fromOrder; we can copy the unique flag.
-	r.ordering.isKey = fromOrder.isKey
 }
