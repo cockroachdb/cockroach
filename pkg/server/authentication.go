@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/gogo/protobuf/proto"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -366,7 +367,7 @@ func decodeSessionCookie(encodedCookie *http.Cookie) (*serverpb.SessionCookie, e
 		return nil, errors.Wrap(err, "session cookie could not be decoded")
 	}
 	var sessionCookieValue serverpb.SessionCookie
-	if err := sessionCookieValue.Unmarshal(cookieBytes); err != nil {
+	if err := proto.Unmarshal(cookieBytes, &sessionCookieValue); err != nil {
 		return nil, errors.Wrap(err, "session cookie could not be unmarshalled")
 	}
 	return &sessionCookieValue, nil

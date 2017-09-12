@@ -20,6 +20,7 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -760,7 +761,7 @@ func (r *Replica) applySnapshot(
 
 	logEntries := make([]raftpb.Entry, len(inSnap.LogEntries))
 	for i, bytes := range inSnap.LogEntries {
-		if err := logEntries[i].Unmarshal(bytes); err != nil {
+		if err := proto.Unmarshal(bytes, &logEntries[i]); err != nil {
 			return err
 		}
 	}

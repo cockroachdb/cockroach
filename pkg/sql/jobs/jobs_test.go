@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -60,7 +61,7 @@ func (expected *expectation) verify(id *int64, expectedStatus jobs.Status) error
 	}
 
 	var payload jobs.Payload
-	if err := payload.Unmarshal(payloadBytes); err != nil {
+	if err := proto.Unmarshal(payloadBytes, &payload); err != nil {
 		return err
 	}
 

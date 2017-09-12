@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -334,7 +335,7 @@ func makeMockRecorder(t *testing.T) *mockRecorder {
 		}
 		rec.last.rawReportBody = string(body)
 		// TODO(dt): switch on the request path to handle different request types.
-		if err := rec.last.DiagnosticReport.Unmarshal(body); err != nil {
+		if err := proto.Unmarshal(body, &rec.last.DiagnosticReport); err != nil {
 			panic(err)
 		}
 	}))

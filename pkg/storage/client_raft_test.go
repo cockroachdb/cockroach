@@ -26,6 +26,7 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -2282,15 +2283,15 @@ func (ncc *noConfChangeTestHandler) HandleRaftRequest(
 	for i, e := range req.Message.Entries {
 		if e.Type == raftpb.EntryConfChange {
 			var cc raftpb.ConfChange
-			if err := cc.Unmarshal(e.Data); err != nil {
+			if err := proto.Unmarshal(e.Data, &cc); err != nil {
 				panic(err)
 			}
 			var ccCtx storage.ConfChangeContext
-			if err := ccCtx.Unmarshal(cc.Context); err != nil {
+			if err := proto.Unmarshal(cc.Context, &ccCtx); err != nil {
 				panic(err)
 			}
 			var command storagebase.RaftCommand
-			if err := command.Unmarshal(ccCtx.Payload); err != nil {
+			if err := proto.Unmarshal(ccCtx.Payload, &command); err != nil {
 				panic(err)
 			}
 			if req.RangeID == ncc.rangeID {
