@@ -873,7 +873,8 @@ func (l *DockerCluster) Hostname(i int) string {
 
 // ExecCLI runs ./cockroach <args> with sane defaults.
 func (l *DockerCluster) ExecCLI(ctx context.Context, i int, cmd []string) (string, string, error) {
-	cmd = append([]string{"--host", l.Hostname(i), "--certs-dir=/certs"}, cmd...)
+	cmd = append([]string{CockroachBinaryInContainer}, cmd...)
+	cmd = append(cmd, "--host", l.Hostname(i), "--certs-dir=/certs")
 	cfg := types.ExecConfig{
 		User:         "root",
 		Privileged:   true,
