@@ -682,7 +682,6 @@ func (r *Replica) applySnapshot(
 	}
 
 	r.mu.RLock()
-	raftLogSize := r.mu.raftLogSize
 	replicaID := r.mu.replicaID
 	keyCount := r.mu.state.Stats.KeyCount
 	r.mu.RUnlock()
@@ -768,6 +767,7 @@ func (r *Replica) applySnapshot(
 	// If this replica doesn't know its ReplicaID yet, we're applying a
 	// preemptive snapshot. In this case, we're going to have to write the
 	// sideloaded proposals into the Raft log. Otherwise, sideload.
+	var raftLogSize int64
 	thinEntries := logEntries
 	if replicaID != 0 {
 		var err error
@@ -780,8 +780,9 @@ func (r *Replica) applySnapshot(
 	}
 
 	// Write the snapshot's Raft log into the range.
-	_, _, raftLogSize, err = r.append(
-		ctx, distinctBatch, 0, 0, raftLogSize, thinEntries,
+	var lastTerm uint64
+	_, lastTerm, raftLogSize, err = r.append(
+		ctx, distinctBatch, 0, invalidLastTerm, raftLogSize, thinEntries,
 	)
 	if err != nil {
 		return err
@@ -830,9 +831,7 @@ func (r *Replica) applySnapshot(
 	// feelings about this ever change, we can add a LastIndex field to
 	// raftpb.SnapshotMetadata.
 	r.mu.lastIndex = s.RaftAppliedIndex
-	// We could recompute and return the lastTerm in the snapshot, but instead we
-	// just set an invalid term and force a recomputation later.
-	r.mu.lastTerm = invalidLastTerm
+	r.mu.lastTerm = lastTerm
 	r.mu.raftLogSize = raftLogSize
 	// Update the range and store stats.
 	r.store.metrics.subtractMVCCStats(r.mu.state.Stats)
