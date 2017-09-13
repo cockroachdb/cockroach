@@ -417,7 +417,7 @@ func (r *distSQLReceiver) updateCaches(ctx context.Context, ranges []roachpb.Ran
 
 	// Update the LeaseHolderCache.
 	for _, ri := range ranges {
-		r.leaseCache.Update(ctx, ri.Desc.RangeID, ri.Lease.Replica)
+		r.leaseCache.Update(ctx, ri.Desc.RangeID, ri.Lease.Replica.StoreID)
 	}
 	return nil
 }
