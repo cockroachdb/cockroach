@@ -614,7 +614,7 @@ EXPLAIN (METADATA) SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) O
 0  nosort  ·      ·            (b, c)                 +b,+c,key
 0  ·       order  +b,+c        ·                      ·
 1  render  ·      ·            (b, c, a[omitted])     =a,+b,+c,key
-2  scan    ·      ·            (a, b, c, d[omitted])  =a,+b,+c,key
+2  scan    ·      ·            (a[omitted], b, c, d[omitted])  =a,+b,+c,key
 2  ·       table  abc@primary  ·                      ·
 2  ·       spans  /1-/2        ·                      ·
 
