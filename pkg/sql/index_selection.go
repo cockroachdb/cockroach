@@ -237,6 +237,7 @@ func (p *planner) selectIndex(
 			s.filter = nil
 		}
 	}
+	s.filterVars.Rebind(s.filter, true, false)
 
 	s.reverse = c.reverse
 
