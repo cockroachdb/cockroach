@@ -726,7 +726,7 @@ func DecodeIndexKeyPrefix(
 func DecodeIndexKey(
 	a *DatumAlloc,
 	desc *TableDescriptor,
-	indexID IndexID,
+	index *IndexDescriptor,
 	vals []EncDatum,
 	colDirs []encoding.Direction,
 	key []byte,
@@ -735,7 +735,7 @@ func DecodeIndexKey(
 	var decodedIndexID IndexID
 	var err error
 
-	if index, err := desc.FindIndexByID(indexID); err == nil && len(index.Interleave.Ancestors) > 0 {
+	if len(index.Interleave.Ancestors) > 0 {
 		for _, ancestor := range index.Interleave.Ancestors {
 			key, decodedTableID, decodedIndexID, err = DecodeTableIDIndexID(key)
 			if err != nil {
@@ -765,7 +765,7 @@ func DecodeIndexKey(
 	if err != nil {
 		return nil, false, err
 	}
-	if decodedTableID != desc.ID || decodedIndexID != indexID {
+	if decodedTableID != desc.ID || decodedIndexID != index.ID {
 		return nil, false, nil
 	}
 
@@ -842,7 +842,7 @@ func ExtractIndexKey(
 		// find the index id so we can look up the descriptor, and once to extract
 		// the values. Only parse once.
 		var ok bool
-		_, ok, err = DecodeIndexKey(a, tableDesc, indexID, values, dirs, entry.Key)
+		_, ok, err = DecodeIndexKey(a, tableDesc, i, values, dirs, entry.Key)
 		if err != nil {
 			return nil, err
 		}
