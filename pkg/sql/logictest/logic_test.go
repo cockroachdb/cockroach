@@ -1435,7 +1435,7 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		var buf bytes.Buffer
 		tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
 
-		fmt.Fprintf(&buf, "%s: \nexpected:\n", query.pos)
+		fmt.Fprintf(&buf, "%s: %s\nexpected:\n", query.pos, query.sql)
 		for _, expectedResultRaw := range query.expectedResultsRaw {
 			fmt.Fprintf(tw, "    %s\n", expectedResultRaw)
 		}
