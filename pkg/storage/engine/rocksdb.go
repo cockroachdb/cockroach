@@ -903,18 +903,19 @@ func (r *RocksDB) GetStats() (*Stats, error) {
 		return nil, err
 	}
 	return &Stats{
-		BlockCacheHits:           int64(s.block_cache_hits),
-		BlockCacheMisses:         int64(s.block_cache_misses),
-		BlockCacheUsage:          int64(s.block_cache_usage),
-		BlockCachePinnedUsage:    int64(s.block_cache_pinned_usage),
-		BloomFilterPrefixChecked: int64(s.bloom_filter_prefix_checked),
-		BloomFilterPrefixUseful:  int64(s.bloom_filter_prefix_useful),
-		MemtableHits:             int64(s.memtable_hits),
-		MemtableMisses:           int64(s.memtable_misses),
-		MemtableTotalSize:        int64(s.memtable_total_size),
-		Flushes:                  int64(s.flushes),
-		Compactions:              int64(s.compactions),
-		TableReadersMemEstimate:  int64(s.table_readers_mem_estimate),
+		BlockCacheHits:                 int64(s.block_cache_hits),
+		BlockCacheMisses:               int64(s.block_cache_misses),
+		BlockCacheUsage:                int64(s.block_cache_usage),
+		BlockCachePinnedUsage:          int64(s.block_cache_pinned_usage),
+		BloomFilterPrefixChecked:       int64(s.bloom_filter_prefix_checked),
+		BloomFilterPrefixUseful:        int64(s.bloom_filter_prefix_useful),
+		MemtableHits:                   int64(s.memtable_hits),
+		MemtableMisses:                 int64(s.memtable_misses),
+		MemtableTotalSize:              int64(s.memtable_total_size),
+		Flushes:                        int64(s.flushes),
+		Compactions:                    int64(s.compactions),
+		TableReadersMemEstimate:        int64(s.table_readers_mem_estimate),
+		PendingCompactionBytesEstimate: int64(s.pending_compaction_bytes_estimate),
 	}, nil
 }
 
