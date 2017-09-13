@@ -1115,14 +1115,24 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 	mtc.stores[0].ForceReplicationScanAndProcess()
 
 	// The range should become available on every node.
+	var r *storage.Replica // from the last store
 	testutils.SucceedsSoon(t, func() error {
+		rs := roachpb.RSpan{
+			Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z"),
+		}
 		for _, s := range mtc.stores {
-			r := s.LookupReplica(roachpb.RKey("a"), roachpb.RKey("b"))
+			r = s.LookupReplica(rs.Key, rs.EndKey)
 			if r == nil {
-				return errors.Errorf("expected replica for keys \"a\" - \"b\"")
+				return errors.Errorf("expected replica for span %v", rs)
 			}
 			if n := s.ReservationCount(); n != 0 {
 				return errors.Errorf("expected 0 reservations, but found %d", n)
+			}
+			if len(r.Desc().Replicas) != 3 {
+				// This fails even after the preemptive snapshot has arrived and
+				// only goes through once the replica has properly caught up to
+				// the fully replicated descriptor.
+				return errors.Errorf("not fully initialized")
 			}
 		}
 		return nil
@@ -1146,6 +1156,23 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 	}
 	if generated != preemptiveApplied {
 		t.Fatalf("expected %d preemptive snapshots, but found %d", generated, preemptiveApplied)
+	}
+
+	r.PutBogusSideloadedData()
+
+	againR, _, err := mtc.stores[2].GetOrCreateReplica(
+		context.Background(),
+		r.RangeID,
+		0,   // replicaID
+		nil, // fromReplica
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	againR.RaftUnlock()
+
+	if !againR.HasBogusSideloadedData() {
+		t.Fatalf("sideloaded storage changed after fake message to replicaID zero")
 	}
 }
 
