@@ -2784,8 +2784,17 @@ func (r *Replica) adminSplitWithDescriptor(
 		// range descriptors are picked outside the transaction. Return
 		// ConditionFailedError in the error detail so that the command can be
 		// retried.
-		if _, ok := err.(*roachpb.ConditionFailedError); ok {
-			return reply, true, roachpb.NewError(err)
+		if detail, ok := err.(*roachpb.ConditionFailedError); ok {
+			pErr := roachpb.NewError(err)
+			// Provide a better message in the common case that the range being split
+			// changed during the split.
+			var actualDesc roachpb.RangeDescriptor
+			if err := detail.ActualValue.GetProto(&actualDesc); err == nil {
+				if desc.RangeID == actualDesc.RangeID && !desc.Equal(actualDesc) {
+					pErr.Message = fmt.Sprintf("descriptor changed: %s != %s", desc, actualDesc)
+				}
+			}
+			return reply, true, pErr
 		}
 		return reply, true, roachpb.NewErrorf("split at key %s failed: %s", splitKey, err)
 	}
