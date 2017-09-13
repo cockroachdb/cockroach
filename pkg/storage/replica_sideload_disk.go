@@ -58,6 +58,10 @@ func (ss *diskSideloadStorage) createDir() error {
 	return err
 }
 
+func (ss *diskSideloadStorage) Dir() string {
+	return ss.dir
+}
+
 func (ss *diskSideloadStorage) PutIfNotExists(
 	ctx context.Context, index, term uint64, contents []byte,
 ) error {
