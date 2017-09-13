@@ -230,12 +230,20 @@ func maybeInlineSideloadedRaftCommand(
 	log.Event(ctx, "inlined entry not cached")
 	// Out of luck, for whatever reason the inlined proposal isn't in the cache.
 	cmdID, data := DecodeRaftCommand(ent.Data)
-	ent.Data = nil // no reuse of potentially shared slice
 
 	var command storagebase.RaftCommand
 	if err := proto.Unmarshal(data, &command); err != nil {
 		return nil, err
 	}
+
+	if len(command.ReplicatedEvalResult.AddSSTable.Data) > 0 {
+		// The entry we started out with was already "fat". This happens when
+		// the entry reached us through a preemptive snapshot (when we didn't
+		// have a ReplicaID yet).
+		log.Event(ctx, "entry already inlined")
+		return &ent, nil
+	}
+
 	sideloadedData, err := sideloaded.Get(ctx, ent.Index, ent.Term)
 	if err != nil {
 		return nil, errors.Wrap(err, "loading sideloaded data")

@@ -814,7 +814,9 @@ func (r *Replica) handleReplicatedEvalResult(
 		// to and including the most recently truncated index.
 		r.store.raftEntryCache.clearTo(r.RangeID, newTruncState.Index+1)
 
-		// Truncate the sideloaded storage.
+		// Truncate the sideloaded storage. Note that this is safe only if the new truncated state
+		// is durably on disk (i.e.) synced. This is true at the time of writing but unfortunately
+		// could rot.
 		{
 			log.Eventf(ctx, "truncating sideloaded storage up to (and including) index %d", newTruncState.Index)
 			if err := r.raftMu.sideloaded.TruncateTo(ctx, newTruncState.Index+1); err != nil {
