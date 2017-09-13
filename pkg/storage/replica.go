@@ -3252,14 +3252,14 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			return stats, err
 		}
 
-		// r.mu.lastIndex and r.mu.lastTerm were updated in applySnapshot, but
-		// we also want to make sure we reflect these changes in the local
-		// variables we're tracking here. We could pull these values from
-		// r.mu itself, but that would require us to grab a lock.
-		if lastIndex, err = r.raftMu.stateLoader.loadLastIndex(ctx, r.store.Engine()); err != nil {
-			return stats, err
-		}
-		lastTerm = invalidLastTerm
+		// r.mu.lastIndex, r.mu.lastTerm and r.mu.raftLogSize were updated in
+		// applySnapshot, but we also want to make sure we reflect these changes in
+		// the local variables we're tracking here.
+		r.mu.RLock()
+		lastIndex = r.mu.lastIndex
+		lastTerm = r.mu.lastTerm
+		raftLogSize = r.mu.raftLogSize
+		r.mu.RUnlock()
 
 		// We refresh pending commands after applying a snapshot because this
 		// replica may have been temporarily partitioned from the Raft group and

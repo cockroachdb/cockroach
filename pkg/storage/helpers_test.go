@@ -349,14 +349,22 @@ func (r *Replica) GetTimestampCacheLowWater() hlc.Timestamp {
 
 // GetRaftLogSize returns the raft log size.
 func (r *Replica) GetRaftLogSize() int64 {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	return r.mu.raftLogSize
 }
 
+// GetCachedLastTerm returns the cached last term value. May return
+// invalidLastTerm if the cache is not set.
+func (r *Replica) GetCachedLastTerm() uint64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.lastTerm
+}
+
 func (r *Replica) IsRaftGroupInitialized() bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	return r.mu.internalRaftGroup != nil
 }
 

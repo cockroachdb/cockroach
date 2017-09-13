@@ -661,7 +661,7 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 			defer mtc.Stop()
 			mtc.Start(t, 3)
 			const stoppedStore = 1
-			repl, err := mtc.stores[0].GetReplica(1)
+			repl0, err := mtc.stores[0].GetReplica(1)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -694,7 +694,7 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 
 			mtc.waitForValues(key, []int64{incAB, incA, incAB})
 
-			index, err := repl.GetLastIndex()
+			index, err := repl0.GetLastIndex()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -771,6 +771,30 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 				mtc.restartStore(stoppedStore)
 			}
 			mtc.waitForValues(key, []int64{incAB, incAB, incAB})
+
+			// Verify that the cached index and term (Replica.mu.last{Index,Term}))
+			// on all of the replicas is the same. #18327 fixed an issue where the
+			// cached term was left unchanged after applying a snapshot leading to a
+			// persistently unavailable range.
+			repl0, err = mtc.stores[0].GetReplica(1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			expectedLastIndex, _ := repl0.GetLastIndex()
+			expectedLastTerm := repl0.GetCachedLastTerm()
+
+			for i := 1; i < len(mtc.stores); i++ {
+				repl1, err := mtc.stores[i].GetReplica(1)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if lastIndex, _ := repl1.GetLastIndex(); expectedLastIndex != lastIndex {
+					t.Fatalf("%d: expected last index %d, but found %d", i, expectedLastIndex, lastIndex)
+				}
+				if lastTerm := repl1.GetCachedLastTerm(); expectedLastTerm != lastTerm {
+					t.Fatalf("%d: expected last term %d, but found %d", i, expectedLastTerm, lastTerm)
+				}
+			}
 		})
 	}
 }
