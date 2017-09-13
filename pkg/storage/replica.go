@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"os"
 	"reflect"
 	"sort"
 	"sync/atomic"
@@ -846,18 +847,41 @@ func (r *Replica) setReplicaIDRaftMuLockedMuLocked(replicaID roachpb.ReplicaID) 
 	// 	// TODO(bdarnell): clean up previous raftGroup (update peers)
 	// }
 
-	// Initialize the new sideloaded storage.
-	{
-		var err error
-		if r.raftMu.sideloaded, err = newDiskSideloadStorage(
-			r.store.cfg.Settings, r.mu.state.Desc.RangeID, replicaID, r.store.Engine().GetAuxiliaryDir(),
-		); err != nil {
-			return errors.Wrap(err, "while initializing sideloaded storage")
+	// Initialize or update the sideloaded storage. If the sideloaded storage
+	// already exists (which is iff the previous replicaID was non-zero), then
+	// we have to move the contained files over (this corresponds to the case in
+	// which our replica is removed and re-added to the range, without having
+	// the replica GC'ed in the meantime).
+	//
+	// Note that we can't race with a concurrent replicaGC here because both that
+	// and this is under raftMu.
+	var prevSideloadedDir string
+	if ss := r.raftMu.sideloaded; ss != nil {
+		prevSideloadedDir = ss.Dir()
+	}
+	var err error
+	if r.raftMu.sideloaded, err = newDiskSideloadStorage(
+		r.store.cfg.Settings, r.mu.state.Desc.RangeID, replicaID, r.store.Engine().GetAuxiliaryDir(),
+	); err != nil {
+		return errors.Wrap(err, "while initializing sideloaded storage")
+	}
+	if prevSideloadedDir != "" {
+		if _, err := os.Stat(prevSideloadedDir); err != nil {
+			if !os.IsNotExist(err) {
+				return err
+			}
+			// Old directory not found.
+		} else {
+			// Old directory found, so we have something to move over to the new one.
+			if err := os.Rename(prevSideloadedDir, r.raftMu.sideloaded.Dir()); err != nil {
+				return errors.Wrap(err, "while moving sideloaded directory")
+			}
 		}
 	}
 
 	previousReplicaID := r.mu.replicaID
 	r.mu.replicaID = replicaID
+
 	if replicaID >= r.mu.minReplicaID {
 		r.mu.minReplicaID = replicaID + 1
 	}
