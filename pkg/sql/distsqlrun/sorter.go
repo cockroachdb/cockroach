@@ -97,8 +97,7 @@ func (s *sorter) Run(ctx context.Context, wg *sync.WaitGroup) {
 	// Enable fall back to disk if the cluster setting is set or a memory limit
 	// has been set through testing.
 	st := s.flowCtx.Settings
-	useTempStorage := (distSQLUseTempStorage.Get(&st.SV) && distSQLUseTempStorageSorts.Get(&st.SV)) ||
-		s.testingKnobMemLimit > 0
+	useTempStorage := settingUseTempStorageSorts.Get(&st.SV) || s.testingKnobMemLimit > 0
 	rowContainerMon := s.flowCtx.EvalCtx.Mon
 	if s.matchLen == 0 && s.count == 0 && useTempStorage {
 		// We will use the sortAllStrategy in this case and potentially fall
@@ -107,7 +106,7 @@ func (s *sorter) Run(ctx context.Context, wg *sync.WaitGroup) {
 		// The strategy will overflow to disk if this limit is not enough.
 		limit := s.testingKnobMemLimit
 		if limit <= 0 {
-			limit = workMemBytes
+			limit = settingWorkMemBytes.Get(&st.SV)
 		}
 		limitedMon := mon.MakeMonitorInheritWithLimit(
 			"sortall-limited", limit, s.flowCtx.EvalCtx.Mon,

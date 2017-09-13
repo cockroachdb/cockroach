@@ -78,11 +78,13 @@ server.remote_debugging.mode                       local          s     set to e
 server.time_until_store_dead                       5m0s           d     the time after which if there is no new gossiped information about a store, it is considered dead
 server.web_session_timeout                         168h0m0s       d     the duration that a newly created web session will be valid
 sql.defaults.distsql                               0              e     Default distributed SQL execution mode [off = 0, auto = 1, on = 2]
-sql.defaults.distsql.tempstorage                   true           b     set to true to enable use of disk for larger distributed sql queries
-sql.defaults.distsql.tempstorage.joins             true           b     set to true to enable use of disk for distributed sql joins. sql.defaults.distsql.tempstorage must be true
-sql.defaults.distsql.tempstorage.sorts             true           b     set to true to enable use of disk for distributed sql sorts. sql.defaults.distsql.tempstorage must be true
 sql.distsql.distribute_index_joins                 true           b     if set, for index joins we instantiate a join reader on every node that has a stream; if not set, we use a single join reader
 sql.distsql.merge_joins.enabled                    true           b     if set, we plan merge joins when possible
+sql.distsql.temp_storage.joins                     true           b     set to true to enable use of disk for distributed sql joins
+sql.distsql.temp_storage.max_bytes                 32 GiB         z     maximum amount of disk space used for queries (in bytes; requires restart); also see sql.distsql.temp_storage.max_percent
+sql.distsql.temp_storage.max_percent               10             i     maximum amount of disk space used for queries (as a percentage of the total capacity; requires restart); also see sql.distsql.temp_storage.max_bytes
+sql.distsql.temp_storage.sorts                     true           b     set to true to enable use of disk for distributed sql sorts
+sql.distsql.temp_storage.workmem                   64 MiB         z     maximum amount of memory in bytes a processor can use before falling back to temp storage (requires restart)
 sql.metrics.statement_details.dump_to_logs         false          b     dump collected statement statistics to node logs when periodically cleared
 sql.metrics.statement_details.enabled              true           b     collect per-statement query statistics
 sql.metrics.statement_details.threshold            0s             d     minimum execution time to cause statistics to be collected
