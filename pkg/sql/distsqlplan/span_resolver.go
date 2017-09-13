@@ -311,7 +311,7 @@ func (it *spanResolverIterator) ReplicaInfo(ctx context.Context) (kv.ReplicaInfo
 	if storeID, ok := it.it.LeaseHolderStoreID(ctx); ok {
 		repl.ReplicaDescriptor = roachpb.ReplicaDescriptor{StoreID: storeID}
 		// Fill in the node descriptor.
-		nodeID, err := it.gossip.GetNodeID(storeID)
+		nodeID, err := it.gossip.GetNodeIDForStoreID(storeID)
 		if err != nil {
 			log.VEventf(ctx, 2, "failed to lookup store %d: %s", storeID, err)
 		} else {
