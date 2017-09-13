@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"os"
 	"reflect"
 	"regexp"
 	"sort"
@@ -882,4 +883,55 @@ func TestRaftSSTableSideloadingTruncation(t *testing.T) {
 		t.Fatalf("expected all files to be cleaned up, but found %v", sideloadStrings)
 	}
 
+}
+
+func TestRaftSSTableSideloadingUpdatedReplicaID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc.Start(t, stopper)
+	repl := tc.repl
+	ctx := context.Background()
+
+	const (
+		index = 123
+		term  = 456
+	)
+
+	val := []byte("foo")
+
+	repl.raftMu.Lock()
+	oldDir := repl.raftMu.sideloaded.Dir()
+	err := repl.raftMu.sideloaded.PutIfNotExists(ctx, index, term, val)
+	repl.raftMu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Set the ReplicaID on the replica.
+	if err := repl.setReplicaID(2); err != nil {
+		t.Fatal(err)
+	}
+
+	newDir := repl.raftMu.sideloaded.Dir()
+
+	if oldDir == newDir {
+		t.Fatalf("old and new sideloaded directory are equal: %s", oldDir)
+	}
+
+	// We assert below that oldDir moved to newDir.
+
+	repl.raftMu.Lock()
+	_, err = repl.raftMu.sideloaded.Get(ctx, index, term)
+	repl.raftMu.Unlock()
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(oldDir); !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
 }

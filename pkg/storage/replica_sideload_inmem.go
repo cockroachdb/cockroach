@@ -51,8 +51,15 @@ func newInMemSideloadStorage(
 		m:      make(map[slKey][]byte),
 	}, nil
 }
+
 func (ss *inMemSideloadStorage) key(index, term uint64) slKey {
 	return slKey{index: index, term: term}
+}
+
+func (ss *inMemSideloadStorage) Dir() string {
+	// We could return ss.prefix but real code calling this would then take the
+	// result in look for it on the actual file system.
+	panic("unsupported")
 }
 
 func (ss *inMemSideloadStorage) PutIfNotExists(

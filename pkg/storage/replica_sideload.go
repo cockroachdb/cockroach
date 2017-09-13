@@ -62,6 +62,9 @@ var errSideloadedFileNotFound = errors.New("sideloaded file not found")
 // sideloadStorage is the interface used for Raft SSTable sideloading.
 // Implementations do not need to be thread safe.
 type sideloadStorage interface {
+	// The directory in which the sideloaded files are stored. May or may not
+	// exist.
+	Dir() string
 	// Writes the given contents to the file specified by the given index and
 	// term. Does not perform the write if the file exists.
 	PutIfNotExists(_ context.Context, index, term uint64, contents []byte) error
