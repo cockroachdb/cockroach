@@ -101,7 +101,7 @@ func decodeIndex(
 			return nil, err
 		}
 	}
-	_, ok, err := DecodeIndexKey(a, tableDesc, index.ID, values, colDirs, key)
+	_, ok, err := DecodeIndexKey(a, tableDesc, index, values, colDirs, key)
 	if err != nil {
 		return nil, err
 	}
