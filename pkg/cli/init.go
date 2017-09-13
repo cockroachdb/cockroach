@@ -15,10 +15,15 @@
 package cli
 
 import (
+	"fmt"
+	"os"
+
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
@@ -48,10 +53,17 @@ func runInit(cmd *cobra.Command, args []string) error {
 	defer stopper.Stop(ctx)
 
 	if _, err = c.Bootstrap(ctx, &serverpb.BootstrapRequest{}); err != nil {
-		log.Error(ctx, err)
+		// We'll only get an unimplemented error if we successfully connected to the
+		// server but the server has already closed its "Init" service. In such
+		// cases, try to provide a more helpful error message to the user.
+		unwrappedErr := errors.Cause(err)
+		if unwrappedErr != nil && grpc.Code(unwrappedErr) == codes.Unimplemented {
+			return errors.New("cluster has already been initialized")
+		}
 		return err
 	}
 
+	fmt.Fprintln(os.Stdout, "Cluster successfully initialized")
 	return nil
 }
 
