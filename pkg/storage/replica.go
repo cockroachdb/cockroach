@@ -827,15 +827,6 @@ func (r *Replica) setReplicaID(replicaID roachpb.ReplicaID) error {
 }
 
 func (r *Replica) setReplicaIDRaftMuLockedMuLocked(replicaID roachpb.ReplicaID) error {
-	if r.raftMu.sideloaded == nil || r.mu.replicaID != replicaID {
-		var err error
-		if r.raftMu.sideloaded, err = newDiskSideloadStorage(
-			r.store.cfg.Settings, r.mu.state.Desc.RangeID, replicaID, r.store.Engine().GetAuxiliaryDir(),
-		); err != nil {
-			return errors.Wrap(err, "while initializing sideloaded storage")
-		}
-	}
-
 	if r.mu.replicaID == replicaID {
 		// The common case: the replica ID is unchanged.
 		return nil
@@ -855,6 +846,16 @@ func (r *Replica) setReplicaIDRaftMuLockedMuLocked(replicaID roachpb.ReplicaID) 
 	// if r.mu.replicaID != 0 {
 	// 	// TODO(bdarnell): clean up previous raftGroup (update peers)
 	// }
+
+	// Initialize the new sideloaded storage.
+	{
+		var err error
+		if r.raftMu.sideloaded, err = newDiskSideloadStorage(
+			r.store.cfg.Settings, r.mu.state.Desc.RangeID, replicaID, r.store.Engine().GetAuxiliaryDir(),
+		); err != nil {
+			return errors.Wrap(err, "while initializing sideloaded storage")
+		}
+	}
 
 	previousReplicaID := r.mu.replicaID
 	r.mu.replicaID = replicaID
