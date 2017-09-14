@@ -199,6 +199,12 @@ func doExpandPlan(
 
 		ordering := planOrdering(n.plan)
 		if !ordering.isEmpty() {
+			// If any of the columns form a key, we already know that all rows are
+			// unique. Elide the distinctNode.
+			if len(ordering.keySets) > 0 {
+				return n.plan, nil
+			}
+
 			// The distinctNode can take advantage of any ordering. It only needs to
 			// know the set of columns S that contribute to the ordering (it keeps
 			// track of distinct elements within each group of rows with equal values

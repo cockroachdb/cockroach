@@ -76,41 +76,43 @@ EXPLAIN (EXPRS) SELECT * FROM t WITH ORDINALITY LIMIT 1 OFFSET 1
 2  ·           limit   2
 
 query ITTT
-EXPLAIN SELECT DISTINCT * FROM t
+EXPLAIN SELECT DISTINCT v FROM t
 ----
 0  distinct  ·      ·
-0  ·         key    k
-1  scan      ·      ·
-1  ·         table  t@primary
-1  ·         spans  ALL
+1  render    ·      ·
+2  scan      ·      ·
+2  ·         table  t@primary
+2  ·         spans  ALL
 
 query ITTT
-EXPLAIN (EXPRS) SELECT DISTINCT * FROM t LIMIT 1 OFFSET 1
+EXPLAIN (EXPRS) SELECT DISTINCT v FROM t LIMIT 1 OFFSET 1
 ----
-0  limit     ·       ·
-0  ·         count   1
-0  ·         offset  1
-1  distinct  ·       ·
-1  ·         key     k
-2  scan      ·       ·
-2  ·         table   t@primary
-2  ·         spans   ALL
+0  limit     ·         ·
+0  ·         count     1
+0  ·         offset    1
+1  distinct  ·         ·
+2  render    ·         ·
+2  ·         render 0  v
+3  scan      ·         ·
+3  ·         table     t@primary
+3  ·         spans     ALL
 
 # Ensure EXPLAIN EXECUTE works properly
 
 statement ok
-PREPARE x AS SELECT DISTINCT * from t LIMIT $1
+PREPARE x AS SELECT DISTINCT v from t LIMIT $1
 
 query ITTT
 EXPLAIN (EXPRS) EXECUTE x(3)
 ----
-0  limit     ·      ·
-0  ·         count  3
-1  distinct  ·      ·
-1  ·         key    k
-2  scan      ·      ·
-2  ·         table  t@primary
-2  ·         spans  ALL
+0  limit     ·         ·
+0  ·         count     3
+1  distinct  ·         ·
+2  render    ·         ·
+2  ·         render 0  v
+3  scan      ·         ·
+3  ·         table     t@primary
+3  ·         spans     ALL
 
 statement ok
 CREATE TABLE tc (a INT, b INT, INDEX c(a))
