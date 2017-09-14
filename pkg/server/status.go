@@ -1098,35 +1098,6 @@ func (s *statusServer) Range(
 		}
 	}
 
-	// Fetch the range history.
-	rangeLogReq := &serverpb.RangeLogRequest{RangeId: req.RangeId}
-	rangeLogResp, err := s.admin.RangeLog(nodeCtx, rangeLogReq)
-	if err != nil {
-		response.RangeLog.ErrorMessage = err.Error()
-	}
-	if rangeLogResp != nil {
-		response.RangeLog.Events = rangeLogResp.Events
-		for _, event := range rangeLogResp.Events {
-			var prettyInfo serverpb.RangeResponse_RangeLog_PrettyInfo
-			if event.Info.NewDesc != nil {
-				prettyInfo.NewDesc = event.Info.NewDesc.String()
-			}
-			if event.Info.UpdatedDesc != nil {
-				prettyInfo.UpdatedDesc = event.Info.UpdatedDesc.String()
-			}
-			if event.Info.AddedReplica != nil {
-				prettyInfo.AddedReplica = event.Info.AddedReplica.String()
-			}
-			if event.Info.RemovedReplica != nil {
-				prettyInfo.RemovedReplica = event.Info.RemovedReplica.String()
-			}
-			prettyInfo.Reason = string(event.Info.Reason)
-			prettyInfo.Details = event.Info.Details
-			response.RangeLog.PrettyInfos = append(
-				response.RangeLog.PrettyInfos, prettyInfo)
-		}
-	}
-
 	return response, nil
 }
 

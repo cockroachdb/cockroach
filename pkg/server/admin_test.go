@@ -1193,10 +1193,10 @@ func TestAdminAPIRangeLog(t *testing.T) {
 			}
 
 			for _, event := range resp.Events {
-				if event.RangeID != roachpb.RangeID(tc.rangeID) &&
-					event.OtherRangeID != roachpb.RangeID(tc.rangeID) {
+				if event.Event.RangeID != roachpb.RangeID(tc.rangeID) &&
+					event.Event.OtherRangeID != roachpb.RangeID(tc.rangeID) {
 					t.Errorf("expected rangeID or otherRangeID to be r%d, got r%d and r%d",
-						tc.rangeID, event.RangeID, event.OtherRangeID)
+						tc.rangeID, event.Event.RangeID, event.Event.OtherRangeID)
 				}
 			}
 		})

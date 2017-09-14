@@ -749,8 +749,8 @@ func (s *adminServer) RangeLog(
 		rangeID := parser.NewDInt(parser.DInt(req.RangeId))
 		q.Append(`WHERE "rangeID" = $ OR "otherRangeID" = $`, rangeID, rangeID)
 	}
-	q.Append("ORDER BY timestamp DESC ")
 	if limit > 0 {
+		q.Append("ORDER BY timestamp desc ")
 		q.Append("LIMIT $", parser.NewDInt(parser.DInt(limit)))
 	}
 	if len(q.Errors()) > 0 {
@@ -803,6 +803,8 @@ func (s *adminServer) RangeLog(
 			}
 			event.OtherRangeID = roachpb.RangeID(otherRangeID)
 		}
+
+		var prettyInfo serverpb.RangeLogResponse_PrettyInfo
 		if row[5].String() != "NULL" {
 			var info string
 			if err := scanner.ScanIndex(row, 5, &info); err != nil {
@@ -811,9 +813,26 @@ func (s *adminServer) RangeLog(
 			if err := json.Unmarshal([]byte(info), &event.Info); err != nil {
 				return nil, errors.Wrap(err, fmt.Sprintf("info didn't parse correctly: %s", info))
 			}
+			if event.Info.NewDesc != nil {
+				prettyInfo.NewDesc = event.Info.NewDesc.String()
+			}
+			if event.Info.UpdatedDesc != nil {
+				prettyInfo.UpdatedDesc = event.Info.UpdatedDesc.String()
+			}
+			if event.Info.AddedReplica != nil {
+				prettyInfo.AddedReplica = event.Info.AddedReplica.String()
+			}
+			if event.Info.RemovedReplica != nil {
+				prettyInfo.RemovedReplica = event.Info.RemovedReplica.String()
+			}
+			prettyInfo.Reason = string(event.Info.Reason)
+			prettyInfo.Details = event.Info.Details
 		}
 
-		resp.Events = append(resp.Events, event)
+		resp.Events = append(resp.Events, serverpb.RangeLogResponse_Event{
+			Event:      event,
+			PrettyInfo: prettyInfo,
+		})
 	}
 	return &resp, nil
 }
