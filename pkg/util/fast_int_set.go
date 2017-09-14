@@ -17,6 +17,7 @@ package util
 import (
 	"bytes"
 	"fmt"
+	"math/bits"
 
 	"golang.org/x/tools/container/intsets"
 )
@@ -107,18 +108,8 @@ func (s *FastIntSet) Next(startVal int) (int, bool) {
 			startVal = 0
 		}
 
-		for v := s.small >> uint64(startVal); v > 0; {
-			// Skip 8 bits at a time when possible.
-			if v&0xFF == 0 {
-				startVal += 8
-				v >>= 8
-				continue
-			}
-			if v&1 != 0 {
-				return startVal, true
-			}
-			startVal++
-			v >>= 1
+		if ntz := bits.TrailingZeros64(s.small >> uint64(startVal)); ntz < 64 {
+			return startVal + ntz, true
 		}
 	}
 	return intsets.MaxInt, false
@@ -133,17 +124,14 @@ func (s *FastIntSet) ForEach(f func(i int)) {
 		return
 	}
 	for i, v := 0, s.small; v > 0; {
-		// Skip 8 bits at a time when possible.
-		if v&0xFF == 0 {
-			i += 8
-			v >>= 8
-			continue
+		ntz := bits.TrailingZeros64(v)
+		if ntz == 64 {
+			return
 		}
-		if v&1 != 0 {
-			f(i)
-		}
+		i += ntz
+		f(i)
 		i++
-		v >>= 1
+		v >>= uint64(ntz + 1)
 	}
 }
 
@@ -152,9 +140,7 @@ func (s *FastIntSet) Ordered() []int {
 	if s.large != nil {
 		return s.large.AppendTo([]int(nil))
 	}
-	// TODO(radu): when we switch to go1.9, use the new math/bits.OnesCount64 to
-	// calculate the correct length.
-	result := make([]int, 0)
+	result := make([]int, 0, bits.OnesCount64(s.small))
 	s.ForEach(func(i int) {
 		result = append(result, i)
 	})
