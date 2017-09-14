@@ -17,6 +17,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -25,7 +26,7 @@ const LicensePrefix = "crl-0-"
 
 // Encode serializes the License as a base64 string.
 func (l License) Encode() (string, error) {
-	bytes, err := l.Marshal()
+	bytes, err := protoutil.Marshal(&l)
 	if err != nil {
 		return "", err
 	}

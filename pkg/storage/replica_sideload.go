@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
@@ -175,7 +176,7 @@ func maybeSideloadEntriesImpl(
 
 			{
 				var err error
-				data, err = strippedCmd.Marshal()
+				data, err = protoutil.Marshal(&strippedCmd)
 				if err != nil {
 					return nil, 0, errors.Wrap(err, "while marshalling stripped sideloaded command")
 				}
@@ -253,7 +254,7 @@ func maybeInlineSideloadedRaftCommand(
 	}
 	command.ReplicatedEvalResult.AddSSTable.Data = sideloadedData
 	{
-		data, err := command.Marshal()
+		data, err := protoutil.Marshal(&command)
 		if err != nil {
 			return nil, err
 		}
