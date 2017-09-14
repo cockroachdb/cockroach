@@ -16,21 +16,23 @@ package util
 
 import (
 	"fmt"
-	"math/rand"
 	"reflect"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func TestFastIntSet(t *testing.T) {
-	for _, m := range []uint32{1, 8, 30, smallValCutoff, 2 * smallValCutoff, 4 * smallValCutoff} {
+	for _, m := range []int{1, 8, 30, smallCutoff, 2 * smallCutoff, 4 * smallCutoff} {
 		t.Run(fmt.Sprintf("%d", m), func(t *testing.T) {
+			rng, _ := randutil.NewPseudoRand()
 			in := make([]bool, m)
 			forEachRes := make([]bool, m)
 
 			var s FastIntSet
 			for i := 0; i < 1000; i++ {
-				v := uint32(rand.Intn(int(m)))
-				if rand.Intn(2) == 0 {
+				v := rng.Intn(m)
+				if rng.Intn(2) == 0 {
 					in[v] = true
 					s.Add(v)
 				} else {
@@ -38,7 +40,7 @@ func TestFastIntSet(t *testing.T) {
 					s.Remove(v)
 				}
 				empty := true
-				for j := uint32(0); j < m; j++ {
+				for j := 0; j < m; j++ {
 					empty = empty && !in[j]
 					if in[j] != s.Contains(j) {
 						t.Fatalf("incorrect result for Contains(%d), expected %t", j, in[j])
@@ -51,10 +53,10 @@ func TestFastIntSet(t *testing.T) {
 				for j := range forEachRes {
 					forEachRes[j] = false
 				}
-				s.ForEach(func(j uint32) {
+				s.ForEach(func(j int) {
 					forEachRes[j] = true
 				})
-				for j := uint32(0); j < m; j++ {
+				for j := 0; j < m; j++ {
 					if in[j] != forEachRes[j] {
 						t.Fatalf("incorrect ForEachResult for %d (%t, expected %t)", j, forEachRes[j], in[j])
 					}
@@ -62,10 +64,10 @@ func TestFastIntSet(t *testing.T) {
 				// Cross-check Ordered and Next().
 				vals := make([]int, 0)
 				for i, ok := s.Next(0); ok; i, ok = s.Next(i + 1) {
-					vals = append(vals, int(i))
+					vals = append(vals, i)
 				}
 				if o := s.Ordered(); !reflect.DeepEqual(vals, o) {
-					t.Fatalf("set build with Next doesn't match Ordered: %v vs %v", vals, o)
+					t.Fatalf("set built with Next doesn't match Ordered: %v vs %v", vals, o)
 				}
 				s2 := s.Copy()
 				if !s.Equals(s2) || !s2.Equals(s) {
@@ -83,5 +85,67 @@ func TestFastIntSet(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestFastIntSetTwoSetOps(t *testing.T) {
+	rng, _ := randutil.NewPseudoRand()
+	// genSet creates a set of numElem values in [minVal, minVal + valRange)
+	// It also adds and then removes numRemoved elements.
+	genSet := func(numElem, numRemoved, minVal, valRange int) (FastIntSet, map[int]bool) {
+		var s FastIntSet
+		vals := rng.Perm(valRange)[:numElem+numRemoved]
+		used := make(map[int]bool, len(vals))
+		for _, i := range vals {
+			used[i] = true
+		}
+		for k := range used {
+			s.Add(k)
+		}
+		p := rng.Perm(len(vals))
+		for i := 0; i < numRemoved; i++ {
+			k := vals[p[i]]
+			s.Remove(k)
+			delete(used, k)
+		}
+		return s, used
+	}
+
+	// returns true if a is a subset of b
+	subset := func(a, b map[int]bool) bool {
+		for k := range a {
+			if !b[k] {
+				return false
+			}
+		}
+		return true
+	}
+
+	for _, minVal := range []int{-10, -1, 0, smallCutoff, 2 * smallCutoff} {
+		for _, valRange := range []int{0, 20, 200} {
+			for _, num1 := range []int{0, 1, 5, 10, 20} {
+				for _, removed1 := range []int{0, 1, 3, 8} {
+					s1, m1 := genSet(num1, removed1, minVal, num1+removed1+valRange)
+					for _, num2 := range []int{0, 1, 5, 10, 20} {
+						for _, removed2 := range []int{0, 1, 4, 10} {
+							s2, m2 := genSet(num2, removed2, minVal, num2+removed2+valRange)
+
+							subset1 := subset(m1, m2)
+							if subset1 != s1.SubsetOf(s2) {
+								t.Errorf("SubsetOf result incorrect: %s, %s", &s1, &s2)
+							}
+							subset2 := subset(m2, m1)
+							if subset2 != s2.SubsetOf(s1) {
+								t.Errorf("SubsetOf result incorrect: %s, %s", &s2, &s1)
+							}
+							eq := subset1 && subset2
+							if eq != s1.Equals(s2) || eq != s2.Equals(s1) {
+								t.Errorf("Equals result incorrect: %s, %s", &s1, &s2)
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 }

@@ -89,7 +89,7 @@ func makeOrdInfo(args ...interface{}) orderingInfo {
 		case constCols:
 			// Constant columns.
 			for _, i := range a {
-				ord.constantCols.Add(uint32(ord.eqGroups.Find(i)))
+				ord.constantCols.Add(ord.eqGroups.Find(i))
 			}
 		case isKeyType:
 			ord.isKey = true
@@ -361,15 +361,15 @@ func TestTrimOrderingGuarantee(t *testing.T) {
 								j = rng.Intn(10)
 							}
 							o.addConstantColumn(j)
-							used.Add(uint32(j))
+							used.Add(j)
 						}
 
 						for i := 0; i < numOrderCols; i++ {
 							for tries := 0; ; tries++ {
 								// Increase the range if we can't find a new valid id.
 								x := rng.Intn(10 + tries/10)
-								if o.eqGroups.Find(x) == x && !used.Contains(uint32(x)) {
-									used.Add(uint32(x))
+								if o.eqGroups.Find(x) == x && !used.Contains(x) {
+									used.Add(x)
 									o.addOrderColumn(x, genDir())
 									break
 								}
