@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/olekukonko/tablewriter"
 )
 
 const (
@@ -64,13 +65,15 @@ func runLsNodes(cmd *cobra.Command, args []string) error {
 	}
 
 	var rows [][]string
+	align := []int{tablewriter.ALIGN_RIGHT}
 	for _, nodeStatus := range nodeStatuses {
+
 		rows = append(rows, []string{
 			strconv.FormatInt(int64(nodeStatus.Desc.NodeID), 10),
 		})
 	}
 
-	return printQueryOutput(os.Stdout, lsNodesColumnHeaders, newRowSliceIter(rows), "")
+	return printQueryOutput(os.Stdout, lsNodesColumnHeaders, newRowSliceIter(rows, align), "")
 }
 
 var baseNodeColumnHeaders = []string{
@@ -233,9 +236,10 @@ func getStatusNodeHeaders() []string {
 // them. We also pass a decommission status object if status was called with the --decommission flag.
 func nodeStatusesToRows(
 	statuses []status.NodeStatus, decomStatus *serverpb.DecommissionStatusResponse,
-) [][]string {
+) ([][]string, []int) {
 	// Create results that are like the results for SQL results, so that we can pretty-print them.
 	var rows [][]string
+	align := []int{}
 	for i, nodeStatus := range statuses {
 		hostPort := nodeStatus.Desc.Address.AddressField
 		updatedAt := time.Unix(0, nodeStatus.UpdatedAt)
@@ -257,6 +261,16 @@ func nodeStatusesToRows(
 			updatedAtStr,
 			startedAtStr}
 
+		if len(align) < len(row) {
+			align = []int{
+				tablewriter.ALIGN_RIGHT,
+				tablewriter.ALIGN_LEFT,
+				tablewriter.ALIGN_LEFT,
+				tablewriter.ALIGN_LEFT,
+				tablewriter.ALIGN_LEFT,
+			}
+		}
+
 		if nodeCtx.statusShowAll || nodeCtx.statusShowRanges {
 			row = append(row,
 				strconv.FormatInt(int64(metricVals["replicas.leaders"]), 10),
@@ -265,6 +279,16 @@ func nodeStatusesToRows(
 				strconv.FormatInt(int64(metricVals["ranges.unavailable"]), 10),
 				strconv.FormatInt(int64(metricVals["ranges.underreplicated"]), 10),
 			)
+			if len(align) < len(row) {
+				align = append(align,
+					tablewriter.ALIGN_RIGHT,
+					tablewriter.ALIGN_RIGHT,
+					tablewriter.ALIGN_RIGHT,
+					tablewriter.ALIGN_RIGHT,
+					tablewriter.ALIGN_RIGHT,
+					tablewriter.ALIGN_RIGHT,
+				)
+			}
 		}
 		if nodeCtx.statusShowAll || nodeCtx.statusShowStats {
 			row = append(row,
@@ -274,13 +298,25 @@ func nodeStatusesToRows(
 				strconv.FormatInt(int64(metricVals["intentbytes"]), 10),
 				strconv.FormatInt(int64(metricVals["sysbytes"]), 10),
 			)
+			if len(align) < len(row) {
+				align = append(align,
+					tablewriter.ALIGN_RIGHT,
+					tablewriter.ALIGN_RIGHT,
+					tablewriter.ALIGN_RIGHT,
+					tablewriter.ALIGN_RIGHT,
+					tablewriter.ALIGN_RIGHT,
+					tablewriter.ALIGN_RIGHT,
+				)
+			}
 		}
 		if nodeCtx.statusShowAll || nodeCtx.statusShowDecommission {
-			row = append(row, decommissionResponseValueToRows(decomStatus.Status)[i][1:]...)
+			r, a := decommissionResponseValueToRows(decomStatus.Status)
+			row = append(row, r[i][1:]...)
+			align = append(align, a[1:]...)
 		}
 		rows = append(rows, row)
 	}
-	return rows
+	return rows, align
 }
 
 var decommissionNodesColumnHeaders = []string{
@@ -385,9 +421,16 @@ func runDecommissionNodeImpl(
 // SQL-like result rows, so that we can pretty-print them.
 func decommissionResponseValueToRows(
 	statuses []serverpb.DecommissionStatusResponse_Status,
-) [][]string {
+) ([][]string, []int) {
 	// Create results that are like the results for SQL results, so that we can pretty-print them.
 	var rows [][]string
+	align := []int{
+		tablewriter.ALIGN_RIGHT,
+		tablewriter.ALIGN_CENTER,
+		tablewriter.ALIGN_RIGHT,
+		tablewriter.ALIGN_CENTER,
+		tablewriter.ALIGN_CENTER,
+	}
 	for _, node := range statuses {
 		rows = append(rows, []string{
 			strconv.FormatInt(int64(node.NodeID), 10),
@@ -397,7 +440,7 @@ func decommissionResponseValueToRows(
 			strconv.FormatBool(node.Draining),
 		})
 	}
-	return rows
+	return rows, align
 }
 
 var recommissionNodeCmd = &cobra.Command{

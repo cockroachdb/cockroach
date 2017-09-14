@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/lib/pq"
+	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 )
 
@@ -302,7 +303,7 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 				{"normalize_history", strconv.FormatBool(c.normalizeHistory)},
 				{"show_times", strconv.FormatBool(cliCtx.showTimes)},
 				{"smart_prompt", strconv.FormatBool(c.smartPrompt)},
-			}),
+			}, []int{tablewriter.ALIGN_LEFT, tablewriter.ALIGN_LEFT}),
 			"set")
 		if err != nil {
 			panic(err)

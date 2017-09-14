@@ -572,7 +572,7 @@ func getAllRowStrings(rows *sqlRows, showMoreChars bool) ([][]string, error) {
 	return allRows, nil
 }
 
-func getNextRowStrings(rows *sqlRows, showMoreChars bool) ([]string, error) {
+func getNextRow(rows *sqlRows) ([]driver.Value, error) {
 	cols := rows.Columns()
 	var vals []driver.Value
 	if len(cols) > 0 {
@@ -587,11 +587,27 @@ func getNextRowStrings(rows *sqlRows, showMoreChars bool) ([]string, error) {
 		return nil, err
 	}
 
-	rowStrings := make([]string, len(cols))
+	return vals, nil
+}
+
+func formatRow(vals []driver.Value, showMoreChars bool, align []int) []string {
+	rowStrings := make([]string, len(vals))
 	for i, v := range vals {
 		rowStrings[i] = formatVal(v, showMoreChars, showMoreChars)
+		if len(align) == len(vals) && v != nil {
+			align[i] = alignVal(v)
+		}
 	}
-	return rowStrings, nil
+	return rowStrings
+}
+
+func getNextRowStrings(rows *sqlRows, showMoreChars bool) ([]string, error) {
+	vals, err := getNextRow(rows)
+	if vals == nil {
+		return nil, err
+	}
+
+	return formatRow(vals, showMoreChars, []int{}), nil
 }
 
 func getFormattedTag(tag string, result driver.Result) string {

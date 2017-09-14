@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -174,6 +175,14 @@ func runListCerts(cmd *cobra.Command, args []string) error {
 
 	certTableHeaders := []string{"Usage", "Certificate File", "Key File", "Expires", "Notes", "Error"}
 	var rows [][]string
+	align := []int{
+		tablewriter.ALIGN_LEFT,
+		tablewriter.ALIGN_LEFT,
+		tablewriter.ALIGN_LEFT,
+		tablewriter.ALIGN_LEFT,
+		tablewriter.ALIGN_LEFT,
+		tablewriter.ALIGN_LEFT,
+	}
 
 	addRow := func(ci *security.CertInfo, notes string) {
 		var errString string
@@ -223,7 +232,7 @@ func runListCerts(cmd *cobra.Command, args []string) error {
 		addRow(cert, fmt.Sprintf("user: %s", user))
 	}
 
-	return printQueryOutput(os.Stdout, certTableHeaders, newRowSliceIter(rows), "")
+	return printQueryOutput(os.Stdout, certTableHeaders, newRowSliceIter(rows, align), "")
 }
 
 var certCmds = []*cobra.Command{

@@ -22,6 +22,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"database/sql/driver"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/olekukonko/tablewriter"
@@ -33,6 +34,7 @@ import (
 type rowStrIter interface {
 	Next() (row []string, err error)
 	ToSlice() (allRows [][]string, err error)
+	Align() []int
 }
 
 // rowSliceIter is an implementation of the rowStrIter interface and it is used
@@ -41,6 +43,7 @@ type rowStrIter interface {
 type rowSliceIter struct {
 	allRows [][]string
 	index   int
+	align   []int
 }
 
 func (iter *rowSliceIter) Next() (row []string, err error) {
@@ -56,40 +59,71 @@ func (iter *rowSliceIter) ToSlice() ([][]string, error) {
 	return iter.allRows, nil
 }
 
+func (iter *rowSliceIter) Align() []int {
+	return iter.align
+}
+
 // newRowSliceIter is an implementation of the rowStrIter interface and it is
 // used when the rows have not been buffered into memory yet and we want to
 // stream them to the row formatters as they arrive over the network.
-func newRowSliceIter(allRows [][]string) *rowSliceIter {
+func newRowSliceIter(allRows [][]string, align []int) *rowSliceIter {
 	return &rowSliceIter{
 		allRows: allRows,
 		index:   0,
+		align:   align,
 	}
 }
 
 type rowIter struct {
 	rows          *sqlRows
 	showMoreChars bool
+	align         []int
 }
 
 func (iter *rowIter) Next() (row []string, err error) {
-	nextRowString, err := getNextRowStrings(iter.rows, iter.showMoreChars)
+	nextRow, err := getNextRow(iter.rows)
 	if err != nil {
 		return nil, err
 	}
-	if nextRowString == nil {
+	if nextRow == nil {
 		return nil, io.EOF
 	}
-	return nextRowString, nil
+	if len(iter.align) < len(nextRow) {
+		iter.align = make([]int, len(nextRow))
+	}
+	return formatRow(nextRow, iter.showMoreChars, iter.align), nil
 }
 
 func (iter *rowIter) ToSlice() ([][]string, error) {
 	return getAllRowStrings(iter.rows, iter.showMoreChars)
 }
 
+func (iter *rowIter) Align() []int {
+	return iter.align
+}
+
 func newRowIter(rows *sqlRows, showMoreChars bool) *rowIter {
 	return &rowIter{
 		rows:          rows,
 		showMoreChars: showMoreChars,
+		align:         []int{},
+	}
+}
+
+func alignVal(val driver.Value) int {
+	switch val.(type) {
+	case string:
+		return tablewriter.ALIGN_LEFT
+	case []byte:
+		return tablewriter.ALIGN_LEFT
+	case int64:
+		return tablewriter.ALIGN_RIGHT
+	case float64:
+		return tablewriter.ALIGN_RIGHT
+	case bool:
+		return tablewriter.ALIGN_CENTER
+	default:
+		return tablewriter.ALIGN_DEFAULT
 	}
 }
 
@@ -125,6 +159,7 @@ func printQueryOutput(w io.Writer, cols []string, allRows rowStrIter, tag string
 			table.Append(row)
 			nRows++
 		}
+		table.SetColumnAlignment(allRows.Align())
 		table.Render()
 		fmt.Fprintf(w, "(%d row%s)\n", nRows, util.Pluralize(int64(nRows)))
 
