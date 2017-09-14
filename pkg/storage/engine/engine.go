@@ -258,18 +258,19 @@ type Batch interface {
 // This is a good resource describing RocksDB's memory-related stats:
 // https://github.com/facebook/rocksdb/wiki/Memory-usage-in-RocksDB
 type Stats struct {
-	BlockCacheHits           int64
-	BlockCacheMisses         int64
-	BlockCacheUsage          int64
-	BlockCachePinnedUsage    int64
-	BloomFilterPrefixChecked int64
-	BloomFilterPrefixUseful  int64
-	MemtableHits             int64
-	MemtableMisses           int64
-	MemtableTotalSize        int64
-	Flushes                  int64
-	Compactions              int64
-	TableReadersMemEstimate  int64
+	BlockCacheHits                 int64
+	BlockCacheMisses               int64
+	BlockCacheUsage                int64
+	BlockCachePinnedUsage          int64
+	BloomFilterPrefixChecked       int64
+	BloomFilterPrefixUseful        int64
+	MemtableHits                   int64
+	MemtableMisses                 int64
+	MemtableTotalSize              int64
+	Flushes                        int64
+	Compactions                    int64
+	TableReadersMemEstimate        int64
+	PendingCompactionBytesEstimate int64
 }
 
 // PutProto sets the given key to the protobuf-serialized byte string
