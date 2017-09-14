@@ -205,7 +205,7 @@ func (s *FastIntSet) SubsetOf(rhs FastIntSet) bool {
 	return (s1 & s2) == s1
 }
 
-func (s *FastIntSet) String() string {
+func (s FastIntSet) String() string {
 	var buf bytes.Buffer
 	buf.WriteByte('(')
 	first := true

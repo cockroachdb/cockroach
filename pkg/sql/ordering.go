@@ -48,15 +48,13 @@ import (
 // TODO(radu): generalize this to Functional Dependencies as described in the
 // paper (referenced above).
 //
-// == Key information ==
+// == Keys ==
 //
 // A set of columns S forms a "key" if no two rows are equal when projected
 // on S. Such a property arises when we are scanning a unique index.
 //
-// Currently, we only maintain an "isKey" flag which indicates if the columns in
-// the ordering (see below) form a key.
-//
-// TODO(radu): generalize this to allow arbitrary sets for keys.
+// We store a list of sets which form keys. In most cases there is at most one
+// key.
 //
 // == Ordering information ==
 //
@@ -104,13 +102,15 @@ type orderingInfo struct {
 	// columns, only the group representative can be in the set.
 	constantCols util.FastIntSet
 
+	// List of column sets which are "keys"; a column set is a key if no two rows
+	// are equal after projection onto that set. Key sets cannot contain constant
+	// columns. An empty key set is valid (it implies there is a single row).
+	keySets []util.FastIntSet
+
 	// ordering of any other columns. This order is "reduced", meaning that there
 	// the columns in constantCols do not appear in this ordering and for groups of
 	// equivalent columns, only the group representative can appear.
 	ordering sqlbase.ColumnOrdering
-
-	// true if the columns in ordering form a "key" (see above).
-	isKey bool
 }
 
 // check verifies the invariants of the structure.
@@ -121,8 +121,22 @@ func (ord orderingInfo) check() {
 			panic(fmt.Sprintf("non-representative const column %d (representative: %d)", c, repr))
 		}
 	}
+	// Only equivalency group representatives show up in keySets.
+	for _, k := range ord.keySets {
+		for c, ok := k.Next(0); ok; c, ok = k.Next(c + 1) {
+			if repr := ord.eqGroups.Find(c); repr != c {
+				panic(fmt.Sprintf("non-representative key set column %d (representative: %d)", c, repr))
+			}
+			if ord.constantCols.Contains(c) {
+				panic(fmt.Sprintf("const column %d in key set %s", c, k))
+			}
+		}
+	}
 	var seen util.FastIntSet
 	for _, o := range ord.ordering {
+		if ord.groupContainsKey(seen) {
+			panic(fmt.Sprintf("ordering contains columns after forming a key"))
+		}
 		// Only equivalency group representatives show up in ordering.
 		if repr := ord.eqGroups.Find(o.ColIdx); repr != o.ColIdx {
 			panic(fmt.Sprintf("non-representative order column %d (representative: %d)", o.ColIdx, repr))
@@ -136,15 +150,22 @@ func (ord orderingInfo) check() {
 		}
 		seen.Add(o.ColIdx)
 	}
-	if ord.isKey && len(ord.ordering) == 0 {
-		panic("isKey with no ordering")
+}
+
+// Returns true if there is a keySet that is a subset of cols.
+// Assumes cols contains only column group representatives.
+func (ord *orderingInfo) groupContainsKey(cols util.FastIntSet) bool {
+	for _, k := range ord.keySets {
+		if k.SubsetOf(cols) {
+			return true
+		}
 	}
+	return false
 }
 
 // reduce rewrites an order specification, replacing columns with the
 // equivalency group representative and removing any columns that are redundant
-// (thanks to the physical properties). If no modifications are necessary,
-// returns the same slice.
+// Note: the resulting slice can be aliased with the given slice.
 //
 // An example of a redundant column is if we have an order A+,B+,C+ but A and C
 // are in an equivalence group; the reduced ordering is A+,B+.
@@ -156,6 +177,14 @@ func (ord *orderingInfo) reduce(order sqlbase.ColumnOrdering) sqlbase.ColumnOrde
 	var groupsSeen util.FastIntSet
 	for i, o := range order {
 		group := ord.eqGroups.Find(o.ColIdx)
+		if ord.groupContainsKey(groupsSeen) {
+			// The group of columns we added so far contains a key; further columns
+			// are all redundant.
+			if result == nil {
+				return order[:i]
+			}
+			return result
+		}
 		redundant := groupsSeen.Contains(group) || ord.constantCols.Contains(group)
 		groupsSeen.Add(group)
 		if result == nil {
@@ -237,6 +266,20 @@ func (ord *orderingInfo) Format(buf *bytes.Buffer, columns sqlbase.ResultColumns
 		}
 	}
 
+	for _, k := range ord.keySets {
+		semiColon()
+		buf.WriteString("key(")
+		first := true
+		for c, ok := k.Next(0); ok; c, ok = k.Next(c + 1) {
+			if !first {
+				buf.WriteByte(',')
+			}
+			first = false
+			printCol(buf, columns, c)
+		}
+		buf.WriteByte(')')
+	}
+
 	// Print the ordering columns and for each their sort order.
 	for i, o := range ord.ordering {
 		if i == 0 {
@@ -253,11 +296,6 @@ func (ord *orderingInfo) Format(buf *bytes.Buffer, columns sqlbase.ResultColumns
 		buf.WriteByte(prefix)
 		printCol(buf, columns, o.ColIdx)
 	}
-
-	if ord.isKey {
-		semiColon()
-		buf.WriteString("key")
-	}
 }
 
 // AsString pretty-prints the orderingInfo to a string. The result columns are
@@ -273,27 +311,70 @@ func (ord *orderingInfo) isEmpty() bool {
 }
 
 func (ord *orderingInfo) addConstantColumn(colIdx int) {
-	ord.constantCols.Add(ord.eqGroups.Find(colIdx))
-	ord.ordering = ord.reduce(ord.ordering)
-	if len(ord.ordering) == 0 {
-		// TODO(radu): we can only keep track of "keys" for columns in ordering.
-		ord.isKey = false
+	group := ord.eqGroups.Find(colIdx)
+	ord.constantCols.Add(group)
+	for i := range ord.keySets {
+		ord.keySets[i].Remove(group)
 	}
+	ord.ordering = ord.reduce(ord.ordering)
 }
 
 func (ord *orderingInfo) addEquivalency(colA, colB int) {
-	ord.eqGroups.Union(colA, colB)
-	ord.ordering = ord.reduce(ord.ordering)
-	if len(ord.ordering) == 0 {
-		ord.isKey = false
+	gA := ord.eqGroups.Find(colA)
+	gB := ord.eqGroups.Find(colB)
+	if gA == gB {
+		return
 	}
+	ord.eqGroups.Union(gA, gB)
+	// Make sure gA is the new representative.
+	if ord.eqGroups.Find(gA) == gB {
+		gA, gB = gB, gA
+	}
+
+	if ord.constantCols.Contains(gB) {
+		ord.constantCols.Remove(gB)
+		ord.constantCols.Add(gA)
+	}
+
+	for i := range ord.keySets {
+		if ord.keySets[i].Contains(gB) {
+			ord.keySets[i].Remove(gB)
+			ord.keySets[i].Add(gA)
+		}
+	}
+
+	ord.ordering = ord.reduce(ord.ordering)
+}
+
+func (ord *orderingInfo) addKeySet(cols util.FastIntSet) {
+	// Check if the key set is redundant, or if it makes some existing
+	// key sets redundant.
+	// Note: we don't use range because we are modifying keySets.
+	for i := 0; i < len(ord.keySets); i++ {
+		k := ord.keySets[i]
+		if k.SubsetOf(cols) {
+			// We already have a key with a subset of these columns.
+			return
+		}
+		if cols.SubsetOf(k) {
+			// The new key set makes this one redundant.
+			copy(ord.keySets[i:], ord.keySets[i+1:])
+			ord.keySets = ord.keySets[:len(ord.keySets)-1]
+			i--
+		}
+	}
+	// Remap column indices to equivalency group representatives.
+	var k util.FastIntSet
+	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
+		group := ord.eqGroups.Find(c)
+		if !ord.constantCols.Contains(group) {
+			k.Add(ord.eqGroups.Find(c))
+		}
+	}
+	ord.keySets = append(ord.keySets, k)
 }
 
 func (ord *orderingInfo) addOrderColumn(colIdx int, dir encoding.Direction) {
-	// If isKey is true, there are no "ties" to break with adding more columns.
-	if ord.isKey {
-		return
-	}
 	ord.ordering = append(ord.ordering, sqlbase.ColumnOrderInfo{
 		ColIdx:    ord.eqGroups.Find(colIdx),
 		Direction: dir,
@@ -305,9 +386,13 @@ func (ord *orderingInfo) addOrderColumn(colIdx int, dir encoding.Direction) {
 func (ord *orderingInfo) copy() orderingInfo {
 	result := orderingInfo{
 		eqGroups:     ord.eqGroups.Copy(),
-		isKey:        ord.isKey,
 		constantCols: ord.constantCols.Copy(),
+		keySets:      make([]util.FastIntSet, len(ord.keySets)),
 	}
+	for i := range ord.keySets {
+		result.keySets[i] = ord.keySets[i].Copy()
+	}
+
 	if len(ord.ordering) > 0 {
 		result.ordering = append(sqlbase.ColumnOrdering(nil), ord.ordering...)
 	}
@@ -384,7 +469,21 @@ func (ord *orderingInfo) project(colMap []int) orderingInfo {
 		}
 	}
 
-	newOrd.isKey = ord.isKey
+	// Retain key sets that contain only projected columns.
+KeySetLoop:
+	for _, k := range ord.keySets {
+		var newK util.FastIntSet
+		for col, ok := k.Next(0); ok; col, ok = k.Next(col + 1) {
+			group := ord.eqGroups.Find(col)
+			r, ok := newRepr[group]
+			if !ok {
+				continue KeySetLoop
+			}
+			newK.Add(r)
+		}
+		newOrd.keySets = append(newOrd.keySets, newK)
+	}
+
 	newOrd.ordering = make(sqlbase.ColumnOrdering, 0, len(ord.ordering))
 
 	// Preserve the ordering, up to the first column that's not present in the
@@ -402,7 +501,6 @@ func (ord *orderingInfo) project(colMap []int) orderingInfo {
 			// 1 | 1 | 2   --->   1 | 2
 			// 1 | 2 | 1          1 | 1
 			// 1 | 2 | 3          1 | 3
-			newOrd.isKey = false
 			break
 		}
 		newOrd.ordering = append(newOrd.ordering, sqlbase.ColumnOrderInfo{
@@ -433,6 +531,11 @@ func (ord orderingInfo) computeMatchInternal(
 	var groupsSeen util.FastIntSet
 
 	for i, col := range desired {
+		if ord.groupContainsKey(groupsSeen) {
+			// The columns accumulated so far form a key; any other columns with which
+			// we may want to "refine" the ordering don't make a difference.
+			return len(desired), pos
+		}
 		group := ord.eqGroups.Find(col.ColIdx)
 		// Check if the column is one of the constant columns.
 		if ord.constantCols.Contains(group) {
@@ -449,13 +552,6 @@ func (ord orderingInfo) computeMatchInternal(
 			pos++
 			continue
 		}
-		if pos == len(ord.ordering) && ord.isKey {
-			// Everything matched up to the last column and we know there are no
-			// duplicate combinations of values for these columns. Any other columns
-			// with which we may want to "refine" the ordering don't make a
-			// difference.
-			return len(desired), pos
-		}
 		// Everything matched up to this point.
 		return i, pos
 	}
@@ -464,8 +560,8 @@ func (ord orderingInfo) computeMatchInternal(
 }
 
 // trim simplifies ord.ordering, retaining only the column groups that are
-// needed to to match a desired ordering (or a prefix of it); constant
-// columns are left untouched.
+// needed to to match a desired ordering (or a prefix of it); equivalency
+// groups, constant columns, and key sets are left untouched.
 //
 // A trimmed ordering is guaranteed to still match the desired ordering to the
 // same extent, i.e. before and after are equal in:
@@ -481,7 +577,6 @@ func (ord *orderingInfo) trim(desired sqlbase.ColumnOrdering) {
 	_, pos := ord.computeMatchInternal(desired)
 	if pos < len(ord.ordering) {
 		ord.ordering = ord.ordering[:pos]
-		ord.isKey = false
 	}
 }
 
@@ -634,7 +729,8 @@ MainLoop:
 			groupA := a.eqGroups.Find(ordA[0].ColIdx)
 			for i := range colA {
 				if a.eqGroups.Find(colA[i]) == groupA &&
-					((doneB && b.isKey) || seenGroupsB.Contains(b.eqGroups.Find(colB[i]))) {
+					((doneB && b.groupContainsKey(seenGroupsB)) ||
+						seenGroupsB.Contains(b.eqGroups.Find(colB[i]))) {
 					result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: ordA[0].Direction})
 					seenGroupsA.Add(groupA)
 					ordA = ordA[1:]
@@ -649,7 +745,8 @@ MainLoop:
 			groupB := b.eqGroups.Find(ordB[0].ColIdx)
 			for i := range colB {
 				if b.eqGroups.Find(colB[i]) == groupB &&
-					((doneA && a.isKey) || seenGroupsA.Contains(a.eqGroups.Find(colA[i]))) {
+					((doneA && a.groupContainsKey(seenGroupsA)) ||
+						seenGroupsA.Contains(a.eqGroups.Find(colA[i]))) {
 					result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: ordB[0].Direction})
 					seenGroupsB.Add(groupB)
 					ordB = ordB[1:]
