@@ -159,8 +159,16 @@ func checkDistAggregationInfo(
 	)
 
 	numIntermediary := len(info.LocalStage)
-	if len(info.FinalStage) != numIntermediary {
-		t.Fatalf("local and final stages have different lengths: %#v", info)
+	numFinal := len(info.FinalStage)
+	for _, finalInfo := range info.FinalStage {
+		if len(finalInfo.LocalIdxs) == 0 {
+			t.Fatalf("final stage must specify input local indices: %#v", info)
+		}
+		for _, localIdx := range finalInfo.LocalIdxs {
+			if localIdx < 0 || localIdx >= uint32(numIntermediary) {
+				t.Fatalf("local index %d out of bounds of local stages: %#v", localIdx, info)
+			}
+		}
 	}
 
 	// Now run a flow with 4 separate table readers, each with its own local
@@ -184,7 +192,7 @@ func checkDistAggregationInfo(
 		// Local aggregations have the same input.
 		localAggregations[i] = distsqlrun.AggregatorSpec_Aggregation{Func: fn, ColIdx: []uint32{0}}
 	}
-	finalAggregations := make([]distsqlrun.AggregatorSpec_Aggregation, numIntermediary)
+	finalAggregations := make([]distsqlrun.AggregatorSpec_Aggregation, numFinal)
 	for i, finalInfo := range info.FinalStage {
 		// Each local aggregation feeds into a final aggregation.
 		finalAggregations[i] = distsqlrun.AggregatorSpec_Aggregation{
