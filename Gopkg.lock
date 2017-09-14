@@ -635,9 +635,10 @@
   revision = "8be79e1e0910c292df4e79c241bb7e8f7e725959"
 
 [[projects]]
+  branch = "master"
   name = "golang.org/x/tools"
-  packages = ["cmd/goimports","cmd/goyacc","cmd/stringer","cover","go/ast/astutil","go/buildutil","go/gcexportdata","go/gcimporter15","go/loader","go/types/typeutil","imports"]
-  revision = "bf4b54dc687c73b6ef63de8b8abf0ad3951e3edc"
+  packages = ["cmd/goimports","cmd/goyacc","cmd/stringer","container/intsets","cover","go/ast/astutil","go/buildutil","go/gcexportdata","go/gcimporter15","go/loader","go/types/typeutil","imports"]
+  revision = "68e087e2a5786de2c035ed544b1c5a42e31f1933"
 
 [[projects]]
   name = "google.golang.org/api"
@@ -673,6 +674,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "0c4cdc41e60e9405fc2dab5b883635e3c5b6f15afef358d81d488091edea9e40"
+  inputs-digest = "6f894a326b8459636d3168b14fda3ab490b310ec4394b997402e0b437756a92d"
   solver-name = "gps-cdcl"
   solver-version = 1
