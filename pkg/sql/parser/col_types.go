@@ -185,6 +185,15 @@ type DecimalColType struct {
 	Scale int
 }
 
+// NewDecimalColType creates a type representing a DECIMAL, optionally with a
+// precision and scale.
+func NewDecimalColType(prec, scale int) *DecimalColType {
+	if prec == 0 && scale == 0 {
+		return decimalColTypeDecimal
+	}
+	return &DecimalColType{Name: "DECIMAL", Prec: prec, Scale: scale}
+}
+
 // Format implements the NodeFormatter interface.
 func (node *DecimalColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(node.Name)

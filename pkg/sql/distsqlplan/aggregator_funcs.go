@@ -224,6 +224,41 @@ var DistAggregationTable = map[distsqlrun.AggregatorSpec_Func]DistAggregationInf
 			return expr.TypeCheck(nil, parser.TypeAny)
 		},
 	},
+
+	// For VARIANCE/STDDEV we need three and two intermediate values in the local and final stage,
+	// respectively:
+	//  - the local stage accumulates the SQRDIFF, SUM and the COUNT;
+	//  - the final stage calculates the FINAL_(VARIANCE|STDDEV)
+	//
+	// At a high level, this is analogous to rewriting VARIANCE(x) as SQRDIFF(x)/COUNT(x)
+	// (and STDDEV(x) as sqrt(VARIANCE(x))).
+	distsqlrun.AggregatorSpec_VARIANCE: {
+		LocalStage: []distsqlrun.AggregatorSpec_Func{
+			distsqlrun.AggregatorSpec_SQRDIFF,
+			distsqlrun.AggregatorSpec_SUM,
+			distsqlrun.AggregatorSpec_COUNT,
+		},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        distsqlrun.AggregatorSpec_FINAL_VARIANCE,
+				LocalIdxs: []uint32{0, 1, 2},
+			},
+		},
+	},
+
+	distsqlrun.AggregatorSpec_STDDEV: {
+		LocalStage: []distsqlrun.AggregatorSpec_Func{
+			distsqlrun.AggregatorSpec_SQRDIFF,
+			distsqlrun.AggregatorSpec_SUM,
+			distsqlrun.AggregatorSpec_COUNT,
+		},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        distsqlrun.AggregatorSpec_FINAL_STDDEV,
+				LocalIdxs: []uint32{0, 1, 2},
+			},
+		},
+	},
 }
 
 // typeContainer is a helper type that implements parser.IndexedVarContainer; it
