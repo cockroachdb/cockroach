@@ -70,7 +70,7 @@ func mkEnt(
 	cmdIDKey := strings.Repeat("x", raftCommandIDLen)
 	var cmd storagebase.RaftCommand
 	cmd.ReplicatedEvalResult.AddSSTable = as
-	b, err := cmd.Marshal()
+	b, err := protoutil.Marshal(&cmd)
 	if err != nil {
 		panic(err)
 	}

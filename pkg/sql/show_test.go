@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/kr/pretty"
 	"github.com/lib/pq"
 )
@@ -513,7 +514,7 @@ func TestShowJobs(t *testing.T) {
 
 	// system.jobs is part proper SQL columns, part protobuf, so we can't use the
 	// row struct directly.
-	inPayload, err := (&jobs.Payload{
+	inPayload, err := protoutil.Marshal(&jobs.Payload{
 		Description:       in.description,
 		StartedMicros:     in.started.UnixNano() / time.Microsecond.Nanoseconds(),
 		FinishedMicros:    in.finished.UnixNano() / time.Microsecond.Nanoseconds(),
@@ -532,7 +533,7 @@ func TestShowJobs(t *testing.T) {
 		},
 		Error:   in.err,
 		Details: jobs.WrapPayloadDetails(jobs.SchemaChangeDetails{}),
-	}).Marshal()
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

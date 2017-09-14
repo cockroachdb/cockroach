@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
@@ -96,7 +97,7 @@ const BulkIOWriteLimiterBurst = 2 * 1024 * 1024 // 2MB
 // method has been called, usage of the Version field is illegal and leads to a
 // fatal error.
 func (s *Settings) InitializeVersion(cv ClusterVersion) error {
-	b, err := cv.Marshal()
+	b, err := protoutil.Marshal(&cv)
 	if err != nil {
 		return err
 	}
@@ -266,7 +267,7 @@ func versionTransformer(
 	if curRawProto == nil {
 		oldV = *s.Version.baseVersion.Load().(*ClusterVersion)
 		var err error
-		curRawProto, err = oldV.Marshal()
+		curRawProto, err = protoutil.Marshal(&oldV)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -311,6 +312,6 @@ func versionTransformer(
 			minVersion, serverVersion)
 	}
 
-	b, err := newV.Marshal()
+	b, err := protoutil.Marshal(&newV)
 	return b, &newV, err
 }

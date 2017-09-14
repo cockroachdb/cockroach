@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -621,7 +622,7 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 
 	// Function to store a zone config for a given object ID.
 	setZone := func(zoneCfg config.ZoneConfig, id sqlbase.ID) {
-		zoneBytes, err := zoneCfg.Marshal()
+		zoneBytes, err := protoutil.Marshal(&zoneCfg)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1117,7 +1118,7 @@ func TestAdminAPIJobs(t *testing.T) {
 	}
 	for _, job := range testJobs {
 		payload := jobs.Payload{Details: jobs.WrapPayloadDetails(job.details)}
-		payloadBytes, err := payload.Marshal()
+		payloadBytes, err := protoutil.Marshal(&payload)
 		if err != nil {
 			t.Fatal(err)
 		}
