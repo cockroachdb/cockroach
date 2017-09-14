@@ -4,4 +4,11 @@
     sent by the server-side of FlowStream informing the producer of the
     consumer's status. The messages would cause a server running the previous
     version to erroneously think that the consumer has sent a drain signal,
-    therefor MinAcceptedVersion was increased.
+    therefore MinAcceptedVersion was increased.
+- Version: 7 (MinAcceptedVersion: 6)
+  - Three new aggregations (SQRDIFF, FINAL_VARIANCE, FINAL_STDDEV) were
+    introduced to support local and final aggregation of the builtin
+    functions STDDEV and VARIANCE. These new aggregations would be unrecognized
+    by a server running older versions, hence the version bump. However, a
+    server running v7 can still process all plans from servers running v6,
+    thus the MinAcceptedVersion is kept at 6.

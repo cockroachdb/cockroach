@@ -224,6 +224,52 @@ var DistAggregationTable = map[distsqlrun.AggregatorSpec_Func]DistAggregationInf
 			return expr.TypeCheck(nil, parser.TypeAny)
 		},
 	},
+
+	// For VARIANCE/STDDEV the local stage consists of three aggregations,
+	// and the final stage aggregation uses all three values.
+	// respectively:
+	//  - the local stage accumulates the SQRDIFF, SUM and the COUNT
+	//  - the final stage calculates the FINAL_(VARIANCE|STDDEV)
+	//
+	// At a high level, this is analogous to rewriting VARIANCE(x) as
+	// SQRDIFF(x)/(COUNT(x) - 1) (and STDDEV(x) as sqrt(VARIANCE(x))).
+	distsqlrun.AggregatorSpec_VARIANCE: {
+		LocalStage: []distsqlrun.AggregatorSpec_Func{
+			distsqlrun.AggregatorSpec_SQRDIFF,
+			distsqlrun.AggregatorSpec_SUM,
+			distsqlrun.AggregatorSpec_COUNT,
+		},
+		// Instead of have a SUM_SQRDIFFS and SUM_INT (for COUNT) stage
+		// for VARIANCE (and STDDEV) then tailoring a FinalRendering
+		// stage specific to each, it is better to use a specific
+		// FINAL_(VARIANCE|STDDEV) aggregation stage: - For underlying
+		// Decimal results, it is not possible to reduce trailing zeros
+		// since the expression is wrapped in IndexVar. Taking the
+		// BinaryExpr Pow(0.5) for STDDEV would result in trailing
+		// zeros which is not ideal.
+		// TODO(richardwu): Consolidate FinalStage and FinalRendering:
+		// have one or the other
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        distsqlrun.AggregatorSpec_FINAL_VARIANCE,
+				LocalIdxs: []uint32{0, 1, 2},
+			},
+		},
+	},
+
+	distsqlrun.AggregatorSpec_STDDEV: {
+		LocalStage: []distsqlrun.AggregatorSpec_Func{
+			distsqlrun.AggregatorSpec_SQRDIFF,
+			distsqlrun.AggregatorSpec_SUM,
+			distsqlrun.AggregatorSpec_COUNT,
+		},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        distsqlrun.AggregatorSpec_FINAL_STDDEV,
+				LocalIdxs: []uint32{0, 1, 2},
+			},
+		},
+	},
 }
 
 // typeContainer is a helper type that implements parser.IndexedVarContainer; it
