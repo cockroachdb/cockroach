@@ -171,11 +171,11 @@ func MakeColumnDefDescs(
 	}
 
 	if len(d.CheckExprs) > 0 {
-		// Should never happen since `hoistConstraints` moves these to table level
+		// Should never happen since `HoistConstraints` moves these to table level
 		return nil, nil, errors.New("unexpected column CHECK constraint")
 	}
 	if d.HasFKConstraint() {
-		// Should never happen since `hoistConstraints` moves these to table level
+		// Should never happen since `HoistConstraints` moves these to table level
 		return nil, nil, errors.New("unexpected column REFERENCED constraint")
 	}
 

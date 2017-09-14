@@ -241,6 +241,7 @@ func readCreateTableFromStore(ctx context.Context, filename string) (*parser.Cre
 func makeCSVTableDescriptor(
 	ctx context.Context, create *parser.CreateTable, parentID, tableID sqlbase.ID, walltime int64,
 ) (*sqlbase.TableDescriptor, error) {
+	sql.HoistConstraints(create)
 	if create.IfNotExists {
 		return nil, errors.New("unsupported IF NOT EXISTS")
 	}
@@ -250,7 +251,23 @@ func makeCSVTableDescriptor(
 	if create.AsSource != nil {
 		return nil, errors.New("CREATE AS not supported")
 	}
-	// TODO(mjibson): error on FKs
+	for _, def := range create.Defs {
+		switch def := def.(type) {
+		case *parser.CheckConstraintTableDef,
+			*parser.FamilyTableDef,
+			*parser.IndexTableDef,
+			*parser.UniqueConstraintTableDef:
+			// ignore
+		case *parser.ColumnTableDef:
+			if def.DefaultExpr.Expr != nil {
+				return nil, errors.Errorf("DEFAULT expressions not supported: %s", parser.AsString(def))
+			}
+		case *parser.ForeignKeyConstraintTableDef:
+			return nil, errors.Errorf("foreign keys not supported: %s", parser.AsString(def))
+		default:
+			return nil, errors.Errorf("unsupported table definition: %s", parser.AsString(def))
+		}
+	}
 	tableDesc, err := sql.MakeTableDesc(
 		ctx,
 		nil, /* txn */
@@ -267,13 +284,6 @@ func makeCSVTableDescriptor(
 	)
 	if err != nil {
 		return nil, err
-	}
-
-	visibleCols := tableDesc.VisibleColumns()
-	for _, col := range visibleCols {
-		if col.DefaultExpr != nil {
-			return nil, errors.Errorf("column %q: DEFAULT expression unsupported", col.Name)
-		}
 	}
 
 	return &tableDesc, nil
