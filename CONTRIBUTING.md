@@ -18,7 +18,7 @@ Before you start contributing, review these [basic guidelines](https://www.cockr
    - A Go environment with a recent 64-bit version of the toolchain. Note that
     the Makefile enforces the specific version required, as it is updated
     frequently.
-   - Git 1.8+
+   - Git 1.9+
    - Bash (4+ is preferred)
    - GNU Make (3.81+ is known to work)
    - CMake 3.1+
