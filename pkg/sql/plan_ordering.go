@@ -79,7 +79,7 @@ func sortOrdering(n *sortNode) orderingInfo {
 		ord.ordering = make(sqlbase.ColumnOrdering, 0, len(n.ordering))
 		for _, o := range n.ordering {
 			// Skip any constant columns (we preserve them below).
-			if !underlying.constantCols.Contains(uint32(o.ColIdx)) {
+			if !underlying.constantCols.Contains(o.ColIdx) {
 				ord.addOrderColumn(o.ColIdx, o.Direction)
 			}
 		}
