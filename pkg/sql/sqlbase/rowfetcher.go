@@ -141,7 +141,7 @@ func (rf *RowFetcher) Init(
 		// corresponding ColumnID.
 		for col, idx := range colIdxMap {
 			if idx == i {
-				rf.neededCols.Add(uint32(col))
+				rf.neededCols.Add(int(col))
 				break
 			}
 		}
@@ -170,7 +170,7 @@ func (rf *RowFetcher) Init(
 
 	if isSecondaryIndex {
 		for i := range rf.cols {
-			if rf.neededCols.Contains(uint32(rf.cols[i].ID)) && !index.ContainsColumnID(rf.cols[i].ID) {
+			if rf.neededCols.Contains(int(rf.cols[i].ID)) && !index.ContainsColumnID(rf.cols[i].ID) {
 				return fmt.Errorf("requested column %s not in index", rf.cols[i].Name)
 			}
 		}
@@ -392,7 +392,7 @@ func (rf *RowFetcher) processKV(
 				return "", "", err
 			}
 			for i, id := range rf.index.ExtraColumnIDs {
-				if rf.neededCols.Contains(uint32(id)) {
+				if rf.neededCols.Contains(int(id)) {
 					rf.row[rf.colIdxMap[id]] = rf.extraVals[i]
 				}
 			}
@@ -449,7 +449,7 @@ func (rf *RowFetcher) processValueSingle(
 		return "", "", errors.Errorf("single entry value with no default column id")
 	}
 
-	if debugStrings || rf.neededCols.Contains(uint32(colID)) {
+	if debugStrings || rf.neededCols.Contains(int(colID)) {
 		if idx, ok := rf.colIdxMap[colID]; ok {
 			if debugStrings {
 				prettyKey = fmt.Sprintf("%s/%s", prettyKey, rf.desc.Columns[idx].Name)
@@ -507,7 +507,7 @@ func (rf *RowFetcher) processValueBytes(
 		}
 		colID := lastColID + ColumnID(colIDDiff)
 		lastColID = colID
-		if !rf.neededCols.Contains(uint32(colID)) {
+		if !rf.neededCols.Contains(int(colID)) {
 			// This column wasn't requested, so read its length and skip it.
 			_, len, err := encoding.PeekValueLength(valueBytes)
 			if err != nil {
@@ -617,7 +617,7 @@ func (rf *RowFetcher) NextRowDecoded(ctx context.Context, traceKV bool) (parser.
 func (rf *RowFetcher) finalizeRow() {
 	// Fill in any missing values with NULLs
 	for i := range rf.cols {
-		if rf.neededCols.Contains(uint32(rf.cols[i].ID)) && rf.row[i].IsUnset() {
+		if rf.neededCols.Contains(int(rf.cols[i].ID)) && rf.row[i].IsUnset() {
 			if !rf.cols[i].Nullable {
 				panic(fmt.Sprintf("Non-nullable column \"%s:%s\" with no value!",
 					rf.desc.Name, rf.cols[i].Name))
