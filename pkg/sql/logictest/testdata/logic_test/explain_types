@@ -189,13 +189,11 @@ EXPLAIN (TYPES) VALUES (1) UNION VALUES (2)
 query ITTTTT
 EXPLAIN (TYPES) SELECT DISTINCT k FROM t
 ----
-0  distinct  ·         ·          (k int)                  key(k); +k
-0  ·         key       k          ·                        ·
-1  render    ·         ·          (k int)                  key(k); +k
-1  ·         render 0  (k)[int]   ·                        ·
-2  scan      ·         ·          (k int, v[omitted] int)  key(k); +k
-2  ·         table     t@primary  ·                        ·
-2  ·         spans     ALL        ·                        ·
+0  render  ·         ·          (k int)                  key(k)
+0  ·       render 0  (k)[int]   ·                        ·
+1  scan    ·         ·          (k int, v[omitted] int)  key(k)
+1  ·       table     t@primary  ·                        ·
+1  ·       spans     ALL        ·                        ·
 
 query ITTTTT
 EXPLAIN (TYPES,NOEXPAND) SELECT DISTINCT k FROM t
