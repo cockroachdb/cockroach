@@ -24,8 +24,10 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/net/context"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -134,15 +136,13 @@ func collect(tid int64, byID map[int64]tableMetadata, seen map[int64]bool, colle
 
 // tableMetadata describes one table to dump.
 type tableMetadata struct {
-	ID           int64
-	name         *parser.TableName
-	numIndexCols int
-	idxColNames  string
-	columnNames  string
-	columnTypes  map[string]string
-	createStmt   string
-	dependsOn    []int64
-	isView       bool
+	ID          int64
+	name        *parser.TableName
+	columnNames string
+	columnTypes map[string]string
+	createStmt  string
+	dependsOn   []int64
+	isView      bool
 }
 
 // getDumpMetadata retrieves the table information for the specified table(s).
@@ -278,40 +278,6 @@ func getMetadataForTable(
 		return tableMetadata{}, err
 	}
 
-	rows, err = conn.Query(fmt.Sprintf(`
-		SELECT COLUMN_NAME
-		FROM "".information_schema.key_column_usage
-		AS OF SYSTEM TIME '%s'
-		WHERE TABLE_SCHEMA = $1
-			AND TABLE_NAME = $2
-			AND CONSTRAINT_NAME = $3
-		ORDER BY ORDINAL_POSITION
-		`, ts), []driver.Value{dbName, tableName, sqlbase.PrimaryKeyIndexName})
-	if err != nil {
-		return tableMetadata{}, err
-	}
-	vals = make([]driver.Value, 1)
-
-	var numIndexCols int
-	var idxColNames bytes.Buffer
-	// Find the primary index columns.
-	for {
-		if err := rows.Next(vals); err == io.EOF {
-			break
-		} else if err != nil {
-			return tableMetadata{}, err
-		}
-		name := vals[0].(string)
-		if idxColNames.Len() > 0 {
-			idxColNames.WriteString(", ")
-		}
-		parser.FormatNode(&idxColNames, parser.FmtSimple, parser.Name(name))
-		numIndexCols++
-	}
-	if err := rows.Close(); err != nil {
-		return tableMetadata{}, err
-	}
-
 	vals, err = conn.QueryRow(fmt.Sprintf(`
 		SELECT create_statement, descriptor_type = 'view'
 		FROM %s.crdb_internal.create_statements
@@ -351,15 +317,13 @@ func getMetadataForTable(
 	}
 
 	return tableMetadata{
-		ID:           tableID,
-		name:         name,
-		numIndexCols: numIndexCols,
-		idxColNames:  idxColNames.String(),
-		columnNames:  colnames.String(),
-		columnTypes:  coltypes,
-		createStmt:   create,
-		dependsOn:    refs,
-		isView:       descType,
+		ID:          tableID,
+		name:        name,
+		columnNames: colnames.String(),
+		columnTypes: coltypes,
+		createStmt:  create,
+		dependsOn:   refs,
+		isView:      descType,
 	}, nil
 }
 
@@ -375,64 +339,61 @@ func dumpCreateTable(w io.Writer, md tableMetadata) error {
 }
 
 const (
-	// limit is the number of rows to dump at a time (in each SELECT statement).
-	limit = 10000
 	// insertRows is the number of rows per INSERT statement.
 	insertRows = 100
 )
 
 // dumpTableData dumps the data of the specified table to w.
 func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadata) error {
-	// Build the SELECT query.
-	var sbuf bytes.Buffer
-	if md.idxColNames == "" {
-		// TODO(mjibson): remove hard coded rowid. Maybe create a crdb_internal
-		// table with the information we need instead.
-		md.idxColNames = "rowid"
-		md.numIndexCols = 1
-	}
-	fmt.Fprintf(&sbuf, "SELECT %s, %s FROM %s", md.idxColNames, md.columnNames, md.name)
-	fmt.Fprintf(&sbuf, " AS OF SYSTEM TIME '%s'", clusterTS)
-
-	var wbuf bytes.Buffer
-	fmt.Fprintf(&wbuf, " WHERE ROW (%s) > ROW (", md.idxColNames)
-	for i := 0; i < md.numIndexCols; i++ {
-		if i > 0 {
-			wbuf.WriteString(", ")
-		}
-		fmt.Fprintf(&wbuf, "$%d", i+1)
-	}
-	wbuf.WriteString(")")
-	// No WHERE clause first time, so add a place to inject it.
-	fmt.Fprintf(&sbuf, "%%s ORDER BY PRIMARY KEY %s LIMIT %d", md.name, limit)
-	bs := sbuf.String()
-
-	// pk holds the last values of the fetched primary keys
-	var pk []driver.Value
-	q := fmt.Sprintf(bs, "")
+	bs := fmt.Sprintf("SELECT * FROM %s AS OF SYSTEM TIME '%s' ORDER BY PRIMARY KEY %[1]s",
+		md.name,
+		clusterTS,
+	)
 	inserts := make([]string, 0, insertRows)
-	for {
-		rows, err := conn.Query(q, pk)
-		if err != nil {
-			return err
-		}
-		cols := rows.Columns()
-		pkcols := cols[:md.numIndexCols]
-		cols = cols[md.numIndexCols:]
-		i := 0
-		for {
-			vals := make([]driver.Value, len(cols)+len(pkcols))
+	rows, err := conn.Query(bs, nil)
+	if err != nil {
+		return err
+	}
+	cols := rows.Columns()
+	// Make 2 []driver.Values and alternate sending them on the chan. This is
+	// needed so val encoding can proceed at the same time as fetching a new
+	// row. There's no benefit to having more than 2 because that's all we can
+	// encode at once if we want to preserve the select order.
+	var valArray [2][]driver.Value
+	for i := range valArray {
+		valArray[i] = make([]driver.Value, len(cols))
+	}
+	g, ctx := errgroup.WithContext(context.Background())
+	done := ctx.Done()
+	valsCh := make(chan []driver.Value)
+	// stringsCh receives VALUES lines and batches them before writing to the
+	// output. Buffering this chan allows the val encoding to proceed during
+	// writes.
+	stringsCh := make(chan string, insertRows)
+
+	g.Go(func() error {
+		// Fetch SQL rows and put them onto valsCh.
+		defer close(valsCh)
+		for i := 0; ; i++ {
+			vals := valArray[i%len(valArray)]
 			if err := rows.Next(vals); err == io.EOF {
-				break
+				return rows.Close()
 			} else if err != nil {
 				return err
 			}
-			if pk == nil {
-				q = fmt.Sprintf(bs, wbuf.String())
+			select {
+			case <-done:
+				return ctx.Err()
+			case valsCh <- vals:
 			}
-			pk = vals[:md.numIndexCols]
-			vals = vals[md.numIndexCols:]
-			var ivals bytes.Buffer
+		}
+	})
+	g.Go(func() error {
+		// Convert SQL rows into VALUE strings.
+		defer close(stringsCh)
+		var ivals bytes.Buffer
+		for vals := range valsCh {
+			ivals.Reset()
 			// Values need to be correctly encoded for INSERT statements in a text file.
 			for si, sv := range vals {
 				if si > 0 {
@@ -455,7 +416,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 					case "INTERVAL":
 						d, err = parser.ParseDInterval(string(t))
 						if err != nil {
-							panic(err)
+							return err
 						}
 					case "BYTES":
 						d = parser.NewDBytes(parser.DBytes(t))
@@ -472,10 +433,10 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 						} else if strings.HasPrefix(md.columnTypes[cols[si]], "DECIMAL") {
 							d, err = parser.ParseDDecimal(string(t))
 							if err != nil {
-								panic(err)
+								return err
 							}
 						} else {
-							panic(errors.Errorf("unknown []byte type: %s, %v: %s", t, cols[si], md.columnTypes[cols[si]]))
+							return errors.Errorf("unknown []byte type: %s, %v: %s", t, cols[si], md.columnTypes[cols[si]])
 						}
 					}
 				case time.Time:
@@ -488,40 +449,37 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 					case "TIMESTAMP WITH TIME ZONE":
 						d = parser.MakeDTimestampTZ(t, time.Nanosecond)
 					default:
-						panic(errors.Errorf("unknown timestamp type: %s, %v: %s", t, cols[si], md.columnTypes[cols[si]]))
+						return errors.Errorf("unknown timestamp type: %s, %v: %s", t, cols[si], md.columnTypes[cols[si]])
 					}
 				default:
-					panic(errors.Errorf("unknown field type: %T (%s)", t, cols[si]))
+					return errors.Errorf("unknown field type: %T (%s)", t, cols[si])
 				}
 				d.Format(&ivals, parser.FmtParsable)
 			}
-			inserts = append(inserts, ivals.String())
-			i++
+			select {
+			case <-done:
+				return ctx.Err()
+			case stringsCh <- ivals.String():
+			}
+		}
+		return nil
+	})
+	g.Go(func() error {
+		// Batch SQL strings into groups and write to output.
+		for s := range stringsCh {
+			inserts = append(inserts, s)
 			if len(inserts) == cap(inserts) {
 				writeInserts(w, md, inserts)
 				inserts = inserts[:0]
 			}
 		}
-		for si, sv := range pk {
-			b, ok := sv.([]byte)
-			if ok && strings.HasPrefix(md.columnTypes[pkcols[si]], "STRING") {
-				// Primary key strings need to be converted to a go string, but not SQL
-				// encoded since they aren't being written to a text file.
-				pk[si] = string(b)
-			}
-		}
-		if err := rows.Close(); err != nil {
-			return err
-		}
 		if len(inserts) != 0 {
 			writeInserts(w, md, inserts)
 			inserts = inserts[:0]
 		}
-		if i < limit {
-			break
-		}
-	}
-	return nil
+		return nil
+	})
+	return g.Wait()
 }
 
 func writeInserts(w io.Writer, md tableMetadata, inserts []string) {
