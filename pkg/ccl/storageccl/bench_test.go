@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 func BenchmarkAddSSTable(b *testing.B) {
@@ -175,7 +176,7 @@ func BenchmarkImport(b *testing.B) {
 					oldStartKey = sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
 					newDesc := *tableDesc
 					newDesc.ID = id
-					newDescBytes, err := sqlbase.WrapDescriptor(&newDesc).Marshal()
+					newDescBytes, err := protoutil.Marshal(sqlbase.WrapDescriptor(&newDesc))
 					if err != nil {
 						panic(err)
 					}

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 // Load converts r into SSTables and backup descriptors. database is the name
@@ -218,7 +219,7 @@ func Load(
 		}
 	}
 
-	descBuf, err := backup.Marshal()
+	descBuf, err := protoutil.Marshal(&backup)
 	if err != nil {
 		return BackupDescriptor{}, errors.Wrap(err, "marshal backup descriptor")
 	}

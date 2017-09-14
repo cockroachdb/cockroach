@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -757,7 +758,7 @@ func restore(
 	// Get TableRekeys to use when importing raw data.
 	var rekeys []roachpb.ImportRequest_TableRekey
 	for i := range tables {
-		newDescBytes, err := sqlbase.WrapDescriptor(tables[i]).Marshal()
+		newDescBytes, err := protoutil.Marshal(sqlbase.WrapDescriptor(tables[i]))
 		if err != nil {
 			return failed, errors.Wrap(err, "marshalling descriptor")
 		}

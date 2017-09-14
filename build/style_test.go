@@ -128,38 +128,72 @@ func TestStyle(t *testing.T) {
 
 	t.Run("TestEnvutil", func(t *testing.T) {
 		t.Parallel()
-		cmd, stderr, filter, err := dirCmd(pkg.Dir, "git", "grep", "-nE", `os\.(Getenv|LookupEnv)`, "--", "*.go")
-		if err != nil {
-			t.Fatal(err)
-		}
+		for _, tc := range []struct {
+			re       string
+			excludes []string
+		}{
+			{re: `\bos\.(Getenv|LookupEnv)\("COCKROACH`},
+			{
+				re: `\bos\.(Getenv|LookupEnv)\(`,
+				excludes: []string{
+					":!acceptance",
+					":!build/style_test.go",
+					":!ccl/acceptanceccl/backup_test.go",
+					":!ccl/sqlccl/backup_cloud_test.go",
+					":!ccl/storageccl/export_storage_test.go",
+					":!cmd",
+					":!util/envutil/env.go",
+					":!util/log/clog.go",
+					":!util/log/color.go",
+					":!util/sdnotify/sdnotify_unix.go",
+				},
+			},
+		} {
+			cmd, stderr, filter, err := dirCmd(
+				pkg.Dir,
+				"git",
+				append([]string{
+					"grep",
+					"-nE",
+					tc.re,
+					"--",
+					"*.go",
+				}, tc.excludes...)...,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
 
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
+			if err := cmd.Start(); err != nil {
+				t.Fatal(err)
+			}
 
-		if err := stream.ForEach(stream.Sequence(
-			filter,
-			stream.GrepNot(`^cmd(/.*)?/\w+\.go\b`),
-			stream.GrepNot(`^build/style_test\.go\b`),
-			stream.GrepNot(`^ccl/(sqlccl/backup_cloud|storageccl/export_storage|acceptanceccl/backup)_test\.go\b`),
-			stream.GrepNot(`^acceptance(/.*)?/\w+\.go\b`),
-			stream.GrepNot(`^util/(log|envutil|sdnotify)/\w+\.go\b`),
-		), func(s string) {
-			t.Errorf(`%s <- forbidden; use "envutil" instead`, s)
-		}); err != nil {
-			t.Error(err)
-		}
+			if err := stream.ForEach(filter, func(s string) {
+				t.Errorf(`%s <- forbidden; use "envutil" instead`, s)
+			}); err != nil {
+				t.Error(err)
+			}
 
-		if err := cmd.Wait(); err != nil {
-			if out := stderr.String(); len(out) > 0 {
-				t.Fatalf("err=%s, stderr=%s", err, out)
+			if err := cmd.Wait(); err != nil {
+				if out := stderr.String(); len(out) > 0 {
+					t.Fatalf("err=%s, stderr=%s", err, out)
+				}
 			}
 		}
 	})
 
 	t.Run("TestSyncutil", func(t *testing.T) {
 		t.Parallel()
-		cmd, stderr, filter, err := dirCmd(pkg.Dir, "git", "grep", "-nE", `sync\.(RW)?Mutex`, "--", "*.go")
+		cmd, stderr, filter, err := dirCmd(
+			pkg.Dir,
+			"git",
+			"grep",
+			"-nE",
+			`\bsync\.(RW)?Mutex`,
+			"--",
+			"*.go",
+			":!util/syncutil/mutex_sync.go",
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -168,10 +202,7 @@ func TestStyle(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := stream.ForEach(stream.Sequence(
-			filter,
-			stream.GrepNot(`^util/syncutil/mutex_sync\.go\b`),
-		), func(s string) {
+		if err := stream.ForEach(filter, func(s string) {
 			t.Errorf(`%s <- forbidden; use "syncutil.{,RW}Mutex" instead`, s)
 		}); err != nil {
 			t.Error(err)
@@ -186,6 +217,7 @@ func TestStyle(t *testing.T) {
 
 	t.Run("TestTodoStyle", func(t *testing.T) {
 		t.Parallel()
+		// TODO(tamird): enforce presence of name.
 		cmd, stderr, filter, err := dirCmd(pkg.Dir, "git", "grep", "-nE", `\sTODO\([^)]*\)[^:]`, "--", "*.go")
 		if err != nil {
 			t.Fatal(err)
@@ -210,7 +242,23 @@ func TestStyle(t *testing.T) {
 
 	t.Run("TestTimeutil", func(t *testing.T) {
 		t.Parallel()
-		cmd, stderr, filter, err := dirCmd(pkg.Dir, "git", "grep", "-nE", `time\.(Now|Since)`, "--", "*.go")
+		cmd, stderr, filter, err := dirCmd(
+			pkg.Dir,
+			"git",
+			"grep",
+			"-nE",
+			`\btime\.(Now|Since)`,
+			"--",
+			"*.go",
+			":!util/log/clog_test.go",
+			":!util/log/clog.go",
+			":!util/log/crash_reporting.go",
+			":!util/log/file_test.go",
+			":!util/timeutil/now_unix.go",
+			":!util/timeutil/now_windows.go",
+			":!util/tracing/tracer_span.go",
+			":!util/tracing/tracer.go",
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -219,10 +267,7 @@ func TestStyle(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := stream.ForEach(stream.Sequence(
-			filter,
-			stream.GrepNot(`^util/(log|syncutil|timeutil|tracing)/\w+\.go\b`),
-		), func(s string) {
+		if err := stream.ForEach(filter, func(s string) {
 			t.Errorf(`%s <- forbidden; use "timeutil" instead`, s)
 		}); err != nil {
 			t.Error(err)
@@ -237,7 +282,18 @@ func TestStyle(t *testing.T) {
 
 	t.Run("TestGrpc", func(t *testing.T) {
 		t.Parallel()
-		cmd, stderr, filter, err := dirCmd(pkg.Dir, "git", "grep", "-nE", `grpc.NewServer\([^)]*\)`, "--", "*.go")
+		cmd, stderr, filter, err := dirCmd(
+			pkg.Dir,
+			"git",
+			"grep",
+			"-nE",
+			`\bgrpc\.NewServer\(`,
+			"--",
+			"*.go",
+			":!rpc/context_test.go",
+			":!rpc/context.go",
+			":!util/grpcutil/grpc_util_test.go",
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -246,11 +302,7 @@ func TestStyle(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := stream.ForEach(stream.Sequence(
-			filter,
-			stream.GrepNot(`^rpc/context(_test)?\.go\b`),
-			stream.GrepNot(`^util/grpcutil/`),
-		), func(s string) {
+		if err := stream.ForEach(filter, func(s string) {
 			t.Errorf(`%s <- forbidden; use "rpc.NewServer" instead`, s)
 		}); err != nil {
 			t.Error(err)
@@ -265,7 +317,17 @@ func TestStyle(t *testing.T) {
 
 	t.Run("TestProtoClone", func(t *testing.T) {
 		t.Parallel()
-		cmd, stderr, filter, err := dirCmd(pkg.Dir, "git", "grep", "-nE", `\.Clone\([^)]+\)`, "--", "*.go")
+		cmd, stderr, filter, err := dirCmd(
+			pkg.Dir,
+			"git",
+			"grep",
+			"-nE",
+			`\.Clone\([^)]`,
+			"--",
+			"*.go",
+			":!util/protoutil/clone_test.go",
+			":!util/protoutil/clone.go",
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -276,8 +338,7 @@ func TestStyle(t *testing.T) {
 
 		if err := stream.ForEach(stream.Sequence(
 			filter,
-			stream.GrepNot(`protoutil\.Clone\([^)]+\)`),
-			stream.GrepNot(`^util/protoutil/clone(_test)?\.go\b`),
+			stream.GrepNot(`protoutil\.Clone\(`),
 		), func(s string) {
 			t.Errorf(`%s <- forbidden; use "protoutil.Clone" instead`, s)
 		}); err != nil {
@@ -293,7 +354,17 @@ func TestStyle(t *testing.T) {
 
 	t.Run("TestProtoMarshal", func(t *testing.T) {
 		t.Parallel()
-		cmd, stderr, filter, err := dirCmd(pkg.Dir, "git", "grep", "-nE", `\.Marshal\([^)]+\)`, "--", "*.go")
+		cmd, stderr, filter, err := dirCmd(
+			pkg.Dir,
+			"git",
+			"grep",
+			"-nE",
+			`\.Marshal\(`,
+			"--",
+			"*.go",
+			":!util/protoutil/marshal.go",
+			":!settings/settings_test.go",
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -304,8 +375,7 @@ func TestStyle(t *testing.T) {
 
 		if err := stream.ForEach(stream.Sequence(
 			filter,
-			stream.GrepNot(`(json|yaml|protoutil|Field)\.Marshal`),
-			stream.GrepNot(`^util/protoutil/marshal(_test)?\.go\b`),
+			stream.GrepNot(`(json|yaml|protoutil|\.Field)\.Marshal\(`),
 		), func(s string) {
 			t.Errorf(`%s <- forbidden; use "protoutil.Marshal" instead`, s)
 		}); err != nil {
@@ -321,7 +391,16 @@ func TestStyle(t *testing.T) {
 
 	t.Run("TestProtoUnmarshal", func(t *testing.T) {
 		t.Parallel()
-		cmd, stderr, filter, err := dirCmd(pkg.Dir, "git", "grep", "-nE", `\.Unmarshal\([^)]+\)`, "--", "*.go")
+		cmd, stderr, filter, err := dirCmd(
+			pkg.Dir,
+			"git",
+			"grep",
+			"-nE",
+			`\.Unmarshal\(`,
+			"--",
+			"*.go",
+			":!*.pb.go",
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -332,8 +411,7 @@ func TestStyle(t *testing.T) {
 
 		if err := stream.ForEach(stream.Sequence(
 			filter,
-			stream.GrepNot(`(json|jsonpb|yaml|proto)\.Unmarshal`),
-			stream.GrepNot(`\.pb\.go\b`),
+			stream.GrepNot(`(json|jsonpb|yaml|proto)\.Unmarshal\(`),
 		), func(s string) {
 			t.Errorf(`%s <- forbidden; use "proto.Unmarshal" instead`, s)
 		}); err != nil {
@@ -629,6 +707,9 @@ func TestStyle(t *testing.T) {
 	// TODO(tamird): replace this with errcheck.NewChecker() when
 	// https://github.com/dominikh/go-tools/issues/57 is fixed.
 	t.Run("TestErrCheck", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("short flag")
+		}
 		// errcheck uses 1GB of ram (as of 2017-02-18), so don't parallelize it.
 		cmd, stderr, filter, err := dirCmd(
 			pkg.Dir,
@@ -659,6 +740,9 @@ func TestStyle(t *testing.T) {
 	})
 
 	t.Run("TestReturnCheck", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("short flag")
+		}
 		// returncheck uses 1GB of ram (as of 2017-02-18), so don't parallelize it.
 		cmd, stderr, filter, err := dirCmd(pkg.Dir, "returncheck", pkgScope)
 		if err != nil {

@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -315,7 +316,7 @@ func writeBackupDescriptor(
 ) error {
 	sort.Sort(backupFileDescriptors(desc.Files))
 
-	descBuf, err := desc.Marshal()
+	descBuf, err := protoutil.Marshal(desc)
 	if err != nil {
 		return err
 	}
