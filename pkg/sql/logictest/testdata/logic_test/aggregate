@@ -803,6 +803,8 @@ EXPLAIN (EXPRS) SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 2  ·        spans        /3/2/#-/3/3
 2  ·        limit        1
 
+# VARIANCE/STDDEV
+
 query RRR
 SELECT VARIANCE(x), VARIANCE(y::decimal), round(VARIANCE(z), 14) FROM xyz
 ----
@@ -852,6 +854,37 @@ query R
 SELECT STDDEV(x) FROM xyz WHERE x = 1
 ----
 NULL
+
+# Numerical stability test for VARIANCE/STDDEV.
+# See https://www.johndcook.com/blog/2008/09/28/theoretical-explanation-for-numerical-results.
+# Avoid using random() since we do not have the deterministic option to specify a pseudo-random seed yet.
+# Note under distsql, this is non-deterministic since the running variance/stddev algorithms depend on
+# the local sum of squared difference values which depend on how the data is distributed across the distsql nodes.
+statement ok
+CREATE TABLE mnop (
+  m INT PRIMARY KEY,
+  n FLOAT,
+  o DECIMAL,
+  p BIGINT
+)
+
+statement ok
+INSERT INTO mnop (m, n) SELECT i, (1e9 + i/2e4)::float FROM
+  GENERATE_SERIES(1, 2e4) AS I(i)
+
+statement ok
+UPDATE mnop SET o = n::decimal, p = (n * 10)::bigint
+
+query RRR
+SELECT round(VARIANCE(n), 2), round(VARIANCE(n), 2), round(VARIANCE(p)) FROM mnop
+----
+0.08 0.08 8
+
+
+query RRR
+SELECT round(STDDEV(n), 2), round(STDDEV(n), 2), round(STDDEV(p)) FROM mnop
+----
+0.29 0.29 3
 
 # Verify we only look at one row for MIN when we have an index on that column.
 query T
