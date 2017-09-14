@@ -2025,11 +2025,14 @@ DBStatus DBImpl::GetStats(DBStatsResult* stats) {
   const rocksdb::Options &opts = rep->GetOptions();
   const std::shared_ptr<rocksdb::Statistics> &s = opts.statistics;
 
-  std::string memtable_total_size;
-  rep->GetProperty("rocksdb.cur-size-all-mem-tables", &memtable_total_size);
+  uint64_t memtable_total_size;
+  rep->GetIntProperty("rocksdb.cur-size-all-mem-tables", &memtable_total_size);
 
-  std::string table_readers_mem_estimate;
-  rep->GetProperty("rocksdb.estimate-table-readers-mem", &table_readers_mem_estimate);
+  uint64_t table_readers_mem_estimate;
+  rep->GetIntProperty("rocksdb.estimate-table-readers-mem", &table_readers_mem_estimate);
+
+  uint64_t pending_compaction_bytes_estimate;
+  rep->GetIntProperty("rocksdb.estimate-pending-compaction-bytes", &pending_compaction_bytes_estimate);
 
   stats->block_cache_hits = (int64_t)s->getTickerCount(rocksdb::BLOCK_CACHE_HIT);
   stats->block_cache_misses = (int64_t)s->getTickerCount(rocksdb::BLOCK_CACHE_MISS);
@@ -2041,10 +2044,11 @@ DBStatus DBImpl::GetStats(DBStatsResult* stats) {
     (int64_t)s->getTickerCount(rocksdb::BLOOM_FILTER_PREFIX_USEFUL);
   stats->memtable_hits = (int64_t)s->getTickerCount(rocksdb::MEMTABLE_HIT);
   stats->memtable_misses = (int64_t)s->getTickerCount(rocksdb::MEMTABLE_MISS);
-  stats->memtable_total_size = std::stoll(memtable_total_size);
+  stats->memtable_total_size = memtable_total_size;
   stats->flushes = (int64_t)event_listener->GetFlushes();
   stats->compactions = (int64_t)event_listener->GetCompactions();
-  stats->table_readers_mem_estimate = std::stoll(table_readers_mem_estimate);
+  stats->table_readers_mem_estimate = table_readers_mem_estimate;
+  stats->pending_compaction_bytes_estimate = pending_compaction_bytes_estimate;
   return kSuccess;
 }
 

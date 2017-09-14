@@ -235,6 +235,7 @@ typedef struct {
   int64_t flushes;
   int64_t compactions;
   int64_t table_readers_mem_estimate;
+  int64_t pending_compaction_bytes_estimate;
 } DBStatsResult;
 
 DBStatus DBGetStats(DBEngine* db, DBStatsResult* stats);
