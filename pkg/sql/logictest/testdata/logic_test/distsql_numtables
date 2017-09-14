@@ -150,11 +150,11 @@ EXPLAIN (VERBOSE) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x 
 1  ·       type            inner                ·                                        ·
 1  ·       equality        (x) = (y)            ·                                        ·
 1  ·       mergeJoinOrder  +"(x=y)"             ·                                        ·
-2  scan    ·               ·                    (x, xsquared[omitted])                   +x; key
+2  scan    ·               ·                    (x, xsquared[omitted])                   key(x); +x
 2  ·       table           numtosquare@primary  ·                                        ·
 2  ·       spans           ALL                  ·                                        ·
 2  ·       filter          (x % 2) = 0          ·                                        ·
-2  scan    ·               ·                    (y, str)                                 +y; key
+2  scan    ·               ·                    (y, str)                                 key(y); +y
 2  ·       table           numtostr@primary     ·                                        ·
 2  ·       spans           ALL                  ·                                        ·
 
