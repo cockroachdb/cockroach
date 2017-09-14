@@ -206,7 +206,7 @@ func doExpandPlan(
 			n.columnsInOrder = make([]bool, len(planColumns(n.plan)))
 			for i := range n.columnsInOrder {
 				group := ordering.eqGroups.Find(i)
-				if ordering.constantCols.Contains(uint32(group)) {
+				if ordering.constantCols.Contains(group) {
 					n.columnsInOrder[i] = true
 					continue
 				}
@@ -504,13 +504,13 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 			// the useful ordering. Check for this, ignoring any constant columns.
 			sortOrder := make(sqlbase.ColumnOrdering, 0, len(n.ordering))
 			for _, c := range n.ordering {
-				if !constantCols.Contains(uint32(c.ColIdx)) {
+				if !constantCols.Contains(c.ColIdx) {
 					sortOrder = append(sortOrder, c)
 				}
 			}
 			givenOrder := make(sqlbase.ColumnOrdering, 0, len(usefulOrdering))
 			for _, c := range usefulOrdering {
-				if !constantCols.Contains(uint32(c.ColIdx)) {
+				if !constantCols.Contains(c.ColIdx) {
 					givenOrder = append(givenOrder, c)
 				}
 			}
