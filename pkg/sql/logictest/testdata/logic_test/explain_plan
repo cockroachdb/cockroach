@@ -32,7 +32,7 @@ EXPLAIN SELECT * FROM t
 query ITTTTT
 EXPLAIN (METADATA) SELECT * FROM t
 ----
-0  scan  ·      ·          (k, v)  ·
+0  scan  ·      ·          (k, v)  key(k)
 0  ·     table  t@primary  ·       ·
 0  ·     spans  ALL        ·       ·
 
@@ -46,7 +46,7 @@ EXPLAIN SELECT * FROM t WHERE k = 1 OR k = 3
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE k % 2 = 0
 ----
-0  scan  ·       ·            (k, v)  ·
+0  scan  ·       ·            (k, v)  key(k)
 0  ·     table   t@primary    ·       ·
 0  ·     spans   ALL          ·       ·
 0  ·     filter  (k % 2) = 0  ·       ·
@@ -121,8 +121,8 @@ EXPLAIN (METADATA) SELECT * FROM tc WHERE a = 10 ORDER BY b
 0  sort        ·      ·           (a, b)                                   a=CONST; +b
 0  ·           order  +b          ·                                        ·
 1  render      ·      ·           (a, b)                                   a=CONST
-2  index-join  ·      ·           (a, b, rowid[hidden,omitted])            a=CONST
-3  scan        ·      ·           (a[omitted], b[omitted], rowid[hidden])  a=CONST
+2  index-join  ·      ·           (a, b, rowid[hidden,omitted])            a=CONST; key(rowid)
+3  scan        ·      ·           (a[omitted], b[omitted], rowid[hidden])  a=CONST; key(rowid)
 3  ·           table  tc@c        ·                                        ·
 3  ·           spans  /10-/11     ·                                        ·
 3  scan        ·      ·           (a, b, rowid[hidden,omitted])            ·

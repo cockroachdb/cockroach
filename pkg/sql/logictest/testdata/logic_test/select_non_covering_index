@@ -72,8 +72,8 @@ SELECT * FROM t WHERE c = 7
 query ITTTTT
 EXPLAIN (METADATA) SELECT * FROM t WHERE c > 0 ORDER BY c DESC
 ----
-0  index-join  ·      ·          (a, b, c, d)                             -c; key
-1  revscan     ·      ·          (a, b[omitted], c[omitted], d[omitted])  -c; key
+0  index-join  ·      ·          (a, b, c, d)                             key(c); -c
+1  revscan     ·      ·          (a, b[omitted], c[omitted], d[omitted])  key(c); -c
 1  ·           table  t@c        ·                                        ·
 1  ·           spans  /1-        ·                                        ·
 1  scan        ·      ·          (a, b, c, d)                             ·

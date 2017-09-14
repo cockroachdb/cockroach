@@ -342,13 +342,13 @@ true
 query ITTTTT
 EXPLAIN (METADATA) SELECT x FROM xyz WHERE x IN (SELECT x FROM xyz)
 ----
-0  render  ·           ·            (x)                          ·
-1  scan    ·           ·            (x, y[omitted], z[omitted])  ·
+0  render  ·           ·            (x)                          key(x)
+1  scan    ·           ·            (x, y[omitted], z[omitted])  key(x)
 1  ·       table       xyz@primary  ·                            ·
 1  ·       spans       ALL          ·                            ·
 1  ·       subqueries  1            ·                            ·
-2  render  ·           ·            (x)                          ·
-3  scan    ·           ·            (x, y[omitted], z[omitted])  ·
+2  render  ·           ·            (x)                          key(x)
+3  scan    ·           ·            (x, y[omitted], z[omitted])  key(x)
 3  ·       table       xyz@primary  ·                            ·
 3  ·       spans       ALL          ·                            ·
 
