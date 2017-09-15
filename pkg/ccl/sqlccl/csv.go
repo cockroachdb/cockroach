@@ -511,7 +511,7 @@ func writeRocksDB(
 	}
 
 	var kv engine.MVCCKeyValue
-	kv.Key.Timestamp.WallTime = timeutil.Now().UnixNano()
+	kv.Key.Timestamp.WallTime = walltime
 	var firstKey, lastKey roachpb.Key
 	var count int64
 	for it.Rewind(); ; it.Next() {
@@ -533,7 +533,6 @@ func writeRocksDB(
 		}
 
 		kv.Key.Key = it.UnsafeKey()
-		kv.Key.Timestamp.WallTime = walltime
 		kv.Value = it.UnsafeValue()
 
 		if err := sst.Add(kv); err != nil {
