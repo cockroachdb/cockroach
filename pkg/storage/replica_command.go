@@ -2613,6 +2613,21 @@ func (r *Replica) AdminSplit(
 	return roachpb.AdminSplitResponse{}, roachpb.NewError(ctx.Err())
 }
 
+func maybeDescriptorChangedError(desc *roachpb.RangeDescriptor, err error) (string, bool) {
+	if detail, ok := err.(*roachpb.ConditionFailedError); ok {
+		// Provide a better message in the common case that the range being changed
+		// was already changed by a concurrent transaction.
+		var actualDesc roachpb.RangeDescriptor
+		if err := detail.ActualValue.GetProto(&actualDesc); err == nil {
+			if desc.RangeID == actualDesc.RangeID && !desc.Equal(actualDesc) {
+				return fmt.Sprintf("descriptor changed: [expected] %s != [actual] %s",
+					desc, actualDesc), true
+			}
+		}
+	}
+	return "", false
+}
+
 // adminSplitWithDescriptor divides the range into into two ranges, using
 // either args.SplitKey (if provided) or an internally computed key that aims
 // to roughly equipartition the range by size. The split is done inside of a
@@ -2784,10 +2799,13 @@ func (r *Replica) adminSplitWithDescriptor(
 		// range descriptors are picked outside the transaction. Return
 		// ConditionFailedError in the error detail so that the command can be
 		// retried.
-		if _, ok := err.(*roachpb.ConditionFailedError); ok {
-			return reply, true, roachpb.NewError(err)
+		pErr := roachpb.NewError(err)
+		if msg, ok := maybeDescriptorChangedError(desc, err); ok {
+			pErr.Message = fmt.Sprintf("split at key %s failed: %s", splitKey, msg)
+		} else {
+			pErr.Message = fmt.Sprintf("split at key %s failed: %s", splitKey, err)
 		}
-		return reply, true, roachpb.NewErrorf("split at key %s failed: %s", splitKey, err)
+		return reply, true, pErr
 	}
 	return reply, true, nil
 }
@@ -3702,6 +3720,9 @@ func (r *Replica) changeReplicas(
 		return nil
 	}); err != nil {
 		log.Event(ctx, err.Error())
+		if msg, ok := maybeDescriptorChangedError(desc, err); ok {
+			return errors.Wrapf(err, "change replicas of r%d failed: %s", rangeID, msg)
+		}
 		return errors.Wrapf(err, "change replicas of r%d failed", rangeID)
 	}
 	log.Event(ctx, "txn complete")
