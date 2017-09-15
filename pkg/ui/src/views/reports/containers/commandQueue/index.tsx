@@ -7,7 +7,7 @@ import * as protos from "src/js/protos";
 import { refreshCommandQueue } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { rangeIDAttr } from "src/util/constants";
-// import ConnectionsTable from "src/views/reports/containers/range/connectionsTable";
+import CommandQueueViz from "src/views/reports/containers/commandQueue/commandQueueViz";
 
 interface CommandQueueOwnProps {
   commandQueue: protos.cockroach.server.serverpb.CommandQueueResponse;
@@ -53,8 +53,17 @@ class CommandQueue extends React.Component<CommandQueueProps, {}> {
     return (
       <div className="section">
         <h1>Command queue report for r{rangeID.toString()}</h1>
+        <h2>Local Scope</h2>
         <pre>
-          {JSON.stringify(this.props.commandQueue, null, 2)}
+          {this.props.commandQueue
+            ? <CommandQueueViz queue={this.props.commandQueue.queues.localScope} />
+            : <p>Loading...</p>}
+        </pre>
+        <h2>Global Scope</h2>
+        <pre>
+          {this.props.commandQueue
+            ? <CommandQueueViz queue={this.props.commandQueue.queues.localScope} />
+            : <p>Loading...</p>}
         </pre>
       </div>
     );
