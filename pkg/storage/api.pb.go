@@ -17,7 +17,7 @@
 		CollectChecksumRequest
 		CollectChecksumResponse
 		CommandQueueCommand
-		CommandQueues
+		CommandQueueSnapshot
 		CommandQueuesForReplica
 		Liveness
 		RangeLogEvent

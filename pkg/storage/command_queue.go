@@ -803,16 +803,20 @@ func (cq *CommandQueue) metrics() CommandQueueMetrics {
 }
 
 // GetCommandQueueState returns a snapshot of this command queue's state.
-func (cq *CommandQueue) GetCommandQueueState() *CommandQueues {
-	return &CommandQueues{
-		Reads:  copyCommandsFromIntervalTree(cq.reads),
-		Writes: copyCommandsFromIntervalTree(cq.writes),
+func (cq *CommandQueue) GetCommandQueueState() *CommandQueueSnapshot {
+	result := []*CommandQueueCommand{}
+	result = appendCommandsFromTree(result, cq.reads)
+	result = appendCommandsFromTree(result, cq.writes)
+	return &CommandQueueSnapshot{
+		Commands: result,
 	}
 }
 
-func copyCommandsFromIntervalTree(tree interval.Tree) []*CommandQueueCommand {
+func appendCommandsFromTree(
+	commandsSoFar []*CommandQueueCommand,
+	tree interval.Tree,
+) []*CommandQueueCommand {
 	// TODO(vilterp) flatten out child commands
-	result := []*CommandQueueCommand{}
 	tree.Do(func(item interval.Interface) (done bool) {
 		currentCmd := item.(*cmd)
 		command := &CommandQueueCommand{
@@ -824,8 +828,8 @@ func copyCommandsFromIntervalTree(tree interval.Tree) []*CommandQueueCommand {
 		for _, prereqCmd := range *currentCmd.prereqs {
 			command.Prereqs = append(command.Prereqs, prereqCmd.id)
 		}
-		result = append(result, command)
+		commandsSoFar = append(commandsSoFar, command)
 		return false
 	})
-	return result
+	return commandsSoFar
 }

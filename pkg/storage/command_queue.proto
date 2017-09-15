@@ -27,12 +27,14 @@ message CommandQueueCommand {
   repeated int64 prereqs = 5;
 }
 
-message CommandQueues {
-  repeated CommandQueueCommand reads = 1;
-  repeated CommandQueueCommand writes = 2;
+// would be called CommandQueue but that's already taken by the struct in command_queue.go
+// TODO(vilterp): should we use the same proto to define that struct that we use for
+// serialization to the UI?
+message CommandQueueSnapshot {
+  repeated CommandQueueCommand commands = 1;
 }
 
 message CommandQueuesForReplica {
-  CommandQueues localScope = 1;
-  CommandQueues globalScope = 2;
+  CommandQueueSnapshot localScope = 1;
+  CommandQueueSnapshot globalScope = 2;
 }
