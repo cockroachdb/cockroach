@@ -149,18 +149,17 @@ func (s *statusServer) RegisterGateway(
 	return serverpb.RegisterStatusHandler(ctx, mux, conn)
 }
 
-func (s *statusServer) parseNodeID(nodeIDParam string) (roachpb.NodeID, bool, error) {
+func (s *statusServer) parseNodeID(nodeIDParam string) (roachpb.NodeID, error) {
 	// No parameter provided or set to local.
 	if len(nodeIDParam) == 0 || localRE.MatchString(nodeIDParam) {
-		return s.gossip.NodeID.Get(), true, nil
+		return s.gossip.NodeID.Get(), nil
 	}
 
 	id, err := strconv.ParseInt(nodeIDParam, 0, 32)
 	if err != nil {
-		return 0, false, errors.Wrap(err, "node id could not be parsed")
+		return 0, errors.Wrap(err, "node id could not be parsed")
 	}
-	nodeID := roachpb.NodeID(id)
-	return nodeID, nodeID == s.gossip.NodeID.Get(), nil
+	return roachpb.NodeID(id), nil
 }
 
 func (s *statusServer) dialNode(nodeID roachpb.NodeID) (serverpb.StatusClient, error) {
@@ -175,25 +174,34 @@ func (s *statusServer) dialNode(nodeID roachpb.NodeID) (serverpb.StatusClient, e
 	return serverpb.NewStatusClient(conn), nil
 }
 
+// maybeRedirect returns a non-nil StatusClient if the nodeIDParam indicates
+// that the request should be redirected to another node. If the nodeIDParam
+// indicates that the request is meant for this node, the returned client will
+// be nil.
+func (s *statusServer) maybeRedirect(nodeIDParam string) (serverpb.StatusClient, error) {
+	nodeID, err := s.parseNodeID(nodeIDParam)
+	if err != nil {
+		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+	}
+	if nodeID == s.gossip.NodeID.Get() {
+		return nil, nil
+	}
+	return s.dialNode(nodeID)
+}
+
 // Gossip returns gossip network status.
 func (s *statusServer) Gossip(
 	ctx context.Context, req *serverpb.GossipRequest,
 ) (*gossip.InfoStatus, error) {
 	ctx = s.AnnotateCtx(ctx)
-	nodeID, local, err := s.parseNodeID(req.NodeId)
-	if err != nil {
-		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+	if remote, err := s.maybeRedirect(req.NodeId); err != nil {
+		return nil, err
+	} else if remote != nil {
+		return remote.Gossip(ctx, req)
 	}
 
-	if local {
-		infoStatus := s.gossip.GetInfoStatus()
-		return &infoStatus, nil
-	}
-	status, err := s.dialNode(nodeID)
-	if err != nil {
-		return nil, err
-	}
-	return status.Gossip(ctx, req)
+	infoStatus := s.gossip.GetInfoStatus()
+	return &infoStatus, nil
 }
 
 // Allocator returns simulated allocator info for the ranges on the given node.
@@ -201,21 +209,14 @@ func (s *statusServer) Allocator(
 	ctx context.Context, req *serverpb.AllocatorRequest,
 ) (*serverpb.AllocatorResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
-	nodeID, local, err := s.parseNodeID(req.NodeId)
-	if err != nil {
-		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
-	}
-
-	if !local {
-		status, err := s.dialNode(nodeID)
-		if err != nil {
-			return nil, err
-		}
-		return status.Allocator(ctx, req)
+	if remote, err := s.maybeRedirect(req.NodeId); err != nil {
+		return nil, err
+	} else if remote != nil {
+		return remote.Allocator(ctx, req)
 	}
 
 	output := new(serverpb.AllocatorResponse)
-	err = s.stores.VisitStores(func(store *storage.Store) error {
+	err := s.stores.VisitStores(func(store *storage.Store) error {
 		// All ranges requested:
 		if len(req.RangeIDs) == 0 {
 			// Use IterateRangeDescriptors to read from the engine only
@@ -385,21 +386,15 @@ func (s *statusServer) Certificates(
 	ctx context.Context, req *serverpb.CertificatesRequest,
 ) (*serverpb.CertificatesResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
-	nodeID, local, err := s.parseNodeID(req.NodeId)
-	if err != nil {
-		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
-	}
 
 	if s.cfg.Insecure {
 		return nil, errors.New("server is in insecure mode, cannot examine certificates")
 	}
 
-	if !local {
-		status, err := s.dialNode(nodeID)
-		if err != nil {
-			return nil, err
-		}
-		return status.Certificates(ctx, req)
+	if remote, err := s.maybeRedirect(req.NodeId); err != nil {
+		return nil, err
+	} else if remote != nil {
+		return remote.Certificates(ctx, req)
 	}
 
 	cm, err := s.cfg.GetCertificateManager()
@@ -494,25 +489,21 @@ func (s *statusServer) Details(
 	ctx context.Context, req *serverpb.DetailsRequest,
 ) (*serverpb.DetailsResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
-	nodeID, local, err := s.parseNodeID(req.NodeId)
-	if err != nil {
-		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
-	}
-	if local {
-		resp := &serverpb.DetailsResponse{
-			NodeID:    s.gossip.NodeID.Get(),
-			BuildInfo: build.GetInfo(),
-		}
-		if addr, err := s.gossip.GetNodeIDAddress(s.gossip.NodeID.Get()); err == nil {
-			resp.Address = *addr
-		}
-		return resp, nil
-	}
-	status, err := s.dialNode(nodeID)
-	if err != nil {
+	if remote, err := s.maybeRedirect(req.NodeId); err != nil {
 		return nil, err
+	} else if remote != nil {
+		return remote.Details(ctx, req)
 	}
-	return status.Details(ctx, req)
+
+	nodeID := s.gossip.NodeID.Get()
+	resp := &serverpb.DetailsResponse{
+		NodeID:    nodeID,
+		BuildInfo: build.GetInfo(),
+	}
+	if addr, err := s.gossip.GetNodeIDAddress(nodeID); err == nil {
+		resp.Address = *addr
+	}
+	return resp, nil
 }
 
 // LogFilesList returns a list of available log files.
@@ -520,17 +511,12 @@ func (s *statusServer) LogFilesList(
 	ctx context.Context, req *serverpb.LogFilesListRequest,
 ) (*serverpb.LogFilesListResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
-	nodeID, local, err := s.parseNodeID(req.NodeId)
-	if err != nil {
-		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+	if remote, err := s.maybeRedirect(req.NodeId); err != nil {
+		return nil, err
+	} else if remote != nil {
+		return remote.LogFilesList(ctx, req)
 	}
-	if !local {
-		status, err := s.dialNode(nodeID)
-		if err != nil {
-			return nil, err
-		}
-		return status.LogFilesList(ctx, req)
-	}
+
 	log.Flush()
 	logFiles, err := log.ListLogFiles()
 	if err != nil {
@@ -544,16 +530,10 @@ func (s *statusServer) LogFile(
 	ctx context.Context, req *serverpb.LogFileRequest,
 ) (*serverpb.LogEntriesResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
-	nodeID, local, err := s.parseNodeID(req.NodeId)
-	if err != nil {
-		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
-	}
-	if !local {
-		status, err := s.dialNode(nodeID)
-		if err != nil {
-			return nil, err
-		}
-		return status.LogFile(ctx, req)
+	if remote, err := s.maybeRedirect(req.NodeId); err != nil {
+		return nil, err
+	} else if remote != nil {
+		return remote.LogFile(ctx, req)
 	}
 
 	log.Flush()
@@ -614,16 +594,10 @@ func (s *statusServer) Logs(
 	ctx context.Context, req *serverpb.LogsRequest,
 ) (*serverpb.LogEntriesResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
-	nodeID, local, err := s.parseNodeID(req.NodeId)
-	if err != nil {
-		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
-	}
-	if !local {
-		status, err := s.dialNode(nodeID)
-		if err != nil {
-			return nil, err
-		}
-		return status.Logs(ctx, req)
+	if remote, err := s.maybeRedirect(req.NodeId); err != nil {
+		return nil, err
+	} else if remote != nil {
+		return remote.Logs(ctx, req)
 	}
 
 	log.Flush()
@@ -675,17 +649,10 @@ func (s *statusServer) Stacks(
 	ctx context.Context, req *serverpb.StacksRequest,
 ) (*serverpb.JSONResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
-	nodeID, local, err := s.parseNodeID(req.NodeId)
-	if err != nil {
-		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
-	}
-
-	if !local {
-		status, err := s.dialNode(nodeID)
-		if err != nil {
-			return nil, err
-		}
-		return status.Stacks(ctx, req)
+	if remote, err := s.maybeRedirect(req.NodeId); err != nil {
+		return nil, err
+	} else if remote != nil {
+		return remote.Stacks(ctx, req)
 	}
 
 	bufSize := runtime.NumGoroutine() * stackTraceApproxSize
@@ -735,7 +702,7 @@ func (s *statusServer) Node(
 	ctx context.Context, req *serverpb.NodeRequest,
 ) (*status.NodeStatus, error) {
 	ctx = s.AnnotateCtx(ctx)
-	nodeID, _, err := s.parseNodeID(req.NodeId)
+	nodeID, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
 	}
@@ -762,18 +729,12 @@ func (s *statusServer) Metrics(
 	ctx context.Context, req *serverpb.MetricsRequest,
 ) (*serverpb.JSONResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
-	nodeID, local, err := s.parseNodeID(req.NodeId)
-	if err != nil {
-		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
+	if remote, err := s.maybeRedirect(req.NodeId); err != nil {
+		return nil, err
+	} else if remote != nil {
+		return remote.Metrics(ctx, req)
 	}
 
-	if !local {
-		status, err := s.dialNode(nodeID)
-		if err != nil {
-			return nil, err
-		}
-		return status.Metrics(ctx, req)
-	}
 	return marshalJSONResponse(s.metricSource)
 }
 
@@ -888,17 +849,10 @@ func (s *statusServer) Ranges(
 	ctx context.Context, req *serverpb.RangesRequest,
 ) (*serverpb.RangesResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
-	nodeID, local, err := s.parseNodeID(req.NodeId)
-	if err != nil {
-		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
-	}
-
-	if !local {
-		status, err := s.dialNode(nodeID)
-		if err != nil {
-			return nil, err
-		}
-		return status.Ranges(ctx, req)
+	if remote, err := s.maybeRedirect(req.NodeId); err != nil {
+		return nil, err
+	} else if remote != nil {
+		return remote.Ranges(ctx, req)
 	}
 
 	output := serverpb.RangesResponse{
@@ -934,6 +888,7 @@ func (s *statusServer) Ranges(
 		return state
 	}
 
+	nodeID := s.gossip.NodeID.Get()
 	constructRangeInfo := func(
 		desc roachpb.RangeDescriptor, rep *storage.Replica, storeID roachpb.StoreID, metrics storage.ReplicaMetrics,
 	) serverpb.RangeInfo {
@@ -978,7 +933,7 @@ func (s *statusServer) Ranges(
 	}
 	isLiveMap := s.nodeLiveness.GetIsLiveMap()
 
-	err = s.stores.VisitStores(func(store *storage.Store) error {
+	err := s.stores.VisitStores(func(store *storage.Store) error {
 		timestamp := store.Clock().Now()
 		if len(req.RangeIDs) == 0 {
 			// All ranges requested.
@@ -1209,18 +1164,10 @@ func (s *statusServer) CancelQuery(
 	ctx context.Context, req *serverpb.CancelQueryRequest,
 ) (*serverpb.CancelQueryResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
-	nodeID, local, err := s.parseNodeID(req.NodeId)
-
-	if err != nil {
-		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
-	}
-
-	if !local {
-		status, err := s.dialNode(nodeID)
-		if err != nil {
-			return nil, err
-		}
-		return status.CancelQuery(ctx, req)
+	if remote, err := s.maybeRedirect(req.NodeId); err != nil {
+		return nil, err
+	} else if remote != nil {
+		return remote.CancelQuery(ctx, req)
 	}
 
 	output := &serverpb.CancelQueryResponse{}
@@ -1240,21 +1187,14 @@ func (s *statusServer) SpanStats(
 	ctx context.Context, req *serverpb.SpanStatsRequest,
 ) (*serverpb.SpanStatsResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
-	nodeID, local, err := s.parseNodeID(req.NodeID)
-	if err != nil {
-		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
-	}
-
-	if !local {
-		status, err := s.dialNode(nodeID)
-		if err != nil {
-			return nil, err
-		}
-		return status.SpanStats(ctx, req)
+	if remote, err := s.maybeRedirect(req.NodeID); err != nil {
+		return nil, err
+	} else if remote != nil {
+		return remote.SpanStats(ctx, req)
 	}
 
 	output := &serverpb.SpanStatsResponse{}
-	err = s.stores.VisitStores(func(store *storage.Store) error {
+	err := s.stores.VisitStores(func(store *storage.Store) error {
 		stats, count := store.ComputeStatsForKeySpan(req.StartKey.Next(), req.EndKey)
 		output.TotalStats.Add(stats)
 		output.RangeCount += int32(count)
