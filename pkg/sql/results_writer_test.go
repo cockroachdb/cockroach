@@ -243,7 +243,7 @@ func TestStreamingWireFailure(t *testing.T) {
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &ExecutorTestingKnobs{
-					BeforeExecute: func(ctx context.Context, stmt string, isDistributed bool) {
+					BeforeExecute: func(ctx context.Context, stmt string, _ /* isParallel */ bool) {
 						if strings.Contains(stmt, "generate_series") {
 							if err := conn.Close(); err != nil {
 								t.Error(err)
