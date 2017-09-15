@@ -1740,16 +1740,19 @@ func TestTxnAutoRetriesDisabledAfterResultsHaveBeenSentToClient(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	tests := []struct {
-		name                  string
-		clientDirectedRetries bool
+		name                       string
+		clientDirectedRetry        bool
+		expectedTxnStateAfterRetry sql.TxnStateEnum
 	}{
 		{
-			name: "client_directed_retries",
-			clientDirectedRetries: true,
+			name:                       "client_directed_retries",
+			clientDirectedRetry:        true,
+			expectedTxnStateAfterRetry: sql.RestartWait,
 		},
 		{
-			name: "no_client_directed_retries",
-			clientDirectedRetries: false,
+			name:                       "no_client_directed_retries",
+			clientDirectedRetry:        false,
+			expectedTxnStateAfterRetry: sql.Aborted,
 		},
 	}
 	for _, tc := range tests {
@@ -1768,7 +1771,7 @@ func TestTxnAutoRetriesDisabledAfterResultsHaveBeenSentToClient(t *testing.T) {
 			}()
 
 			var savepoint string
-			if tc.clientDirectedRetries {
+			if tc.clientDirectedRetry {
 				savepoint = "SAVEPOINT cockroach_restart;"
 			}
 			// We'll run a statement that produces enough results to overflow the
@@ -1784,18 +1787,12 @@ func TestTxnAutoRetriesDisabledAfterResultsHaveBeenSentToClient(t *testing.T) {
 			if !isRetryableErr(err) {
 				t.Fatalf("expected retriable error, got: %v", err)
 			}
-			var expectedState string
-			if tc.clientDirectedRetries {
-				expectedState = "RestartWait"
-			} else {
-				expectedState = "Aborted"
-			}
 			var state string
 			if err := sqlDB.QueryRow("SHOW TRANSACTION STATUS").Scan(&state); err != nil {
 				t.Fatal(err)
 			}
-			if state != expectedState {
-				t.Fatalf("expected state %s, got: %s", expectedState, state)
+			if expStateStr := tc.expectedTxnStateAfterRetry.String(); state != expStateStr {
+				t.Fatalf("expected state %s, got: %s", expStateStr, state)
 			}
 		})
 	}
