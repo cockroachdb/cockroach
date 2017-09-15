@@ -9,7 +9,7 @@ export default function (props: GraphDashboardProps) {
   const { nodeSources, tooltipSelection } = props;
 
   return [
-    <LineGraph title="Node Count" tooltip="The number of nodes active on the cluster.">
+    <LineGraph title="Live Node Count" tooltip="The number of live nodes in the cluster.">
       <Axis>
         <Metric name="cr.node.liveness.livenodes" title="Live Nodes" aggregateMax />
       </Axis>
