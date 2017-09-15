@@ -331,6 +331,13 @@ func EncodePartialIndexKey(
 	return key, containsNull, err
 }
 
+// InterleaveEnd returns the key at the end of the current interleave segment.
+// This is useful for constructing the end of the span over all keys for a single
+// row, without including any rows from tables interleaved into that row.
+func InterleaveEnd(key []byte) []byte {
+	return encoding.EncodeNotNullDescending(key)
+}
+
 type directions []IndexDescriptor_Direction
 
 func (d directions) get(i int) (encoding.Direction, error) {

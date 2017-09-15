@@ -154,7 +154,7 @@ message ColumnFamilyDescriptor {
 // grandparent) with shared lengths 2 and 1.
 message InterleaveDescriptor {
   message Ancestor {
-    // TableID the ID of the table being interleaved into.
+    // TableID is the ID of the table being interleaved into.
     optional uint32 table_id = 1 [(gogoproto.nullable) = false,
         (gogoproto.customname) = "TableID", (gogoproto.casttype) = "ID"];
     // IndexID is the ID of the parent index being interleaved into.
