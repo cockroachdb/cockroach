@@ -48,6 +48,7 @@ func TestParseColumnType(t *testing.T) {
 		{"NUMERIC", &DecimalColType{Name: "NUMERIC"}},
 		{"NUMERIC(8)", &DecimalColType{Name: "NUMERIC", Prec: 8}},
 		{"NUMERIC(9,10)", &DecimalColType{Name: "NUMERIC", Prec: 9, Scale: 10}},
+		{"UUID", &UUIDColType{}},
 		{"DATE", &DateColType{}},
 		{"TIMESTAMP", &TimestampColType{}},
 		{"TIMESTAMP WITH TIME ZONE", &TimestampTZColType{}},
