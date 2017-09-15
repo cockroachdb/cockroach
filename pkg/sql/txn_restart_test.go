@@ -32,7 +32,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -1015,7 +1014,7 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	}
 }
 
-// Test that a COMMIT getting an error, retryable or not, leaves the txn
+// Test that a COMMIT getting an error, retriable or not, leaves the txn
 // finalized and not in Aborted/RestartWait (i.e. COMMIT, like ROLLBACK, is
 // always final). As opposed to an error on a COMMIT in an auto-retry
 // txn, where we retry the txn (not tested here).
@@ -1058,46 +1057,48 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 		{true},
 	}
 	for _, tc := range testCases {
-		const insertStmt = "INSERT INTO t.test(k, v) VALUES (0, 'boulanger')"
-		if err := aborter.QueueStmtForAbortion(
-			insertStmt, 1 /* abortCount */, false, /* willBeRetriedIbid */
-		); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := sqlDB.Exec("BEGIN"); err != nil {
-			t.Fatal(err)
-		}
-		if tc.retryIntent {
-			if _, err := sqlDB.Exec("SAVEPOINT cockroach_restart"); err != nil {
+		t.Run(fmt.Sprintf("retryIntent=%t", tc.retryIntent), func(t *testing.T) {
+			const insertStmt = "INSERT INTO t.test(k, v) VALUES (0, 'boulanger')"
+			if err := aborter.QueueStmtForAbortion(
+				insertStmt, 1 /* abortCount */, false, /* willBeRetriedIbid */
+			); err != nil {
 				t.Fatal(err)
 			}
-		}
-		if _, err := sqlDB.Exec(insertStmt); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := sqlDB.Exec("COMMIT"); !testutils.IsError(err, "pq: restart transaction") {
-			t.Fatalf("unexpected error: %v", err)
-		}
+			if _, err := sqlDB.Exec("BEGIN"); err != nil {
+				t.Fatal(err)
+			}
+			if tc.retryIntent {
+				if _, err := sqlDB.Exec("SAVEPOINT cockroach_restart"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, err := sqlDB.Exec(insertStmt); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := sqlDB.Exec("COMMIT"); !testutils.IsError(err, "pq: restart transaction") {
+				t.Fatalf("unexpected error: %v", err)
+			}
 
-		// Check that we can start another txn on the (one and only) connection.
-		if _, err := sqlDB.Exec("BEGIN"); err != nil {
-			t.Fatal(err)
-		}
-		// Check that we don't see any rows, so the previous txn was rolled back.
-		rows, err := sqlDB.Query("SELECT * FROM t.test")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer rows.Close()
-		if rows.Next() {
-			var k int
-			var v string
-			err := rows.Scan(&k, &v)
-			t.Fatalf("found unexpected row: %d %s, %v", k, v, err)
-		}
-		if _, err := sqlDB.Exec("END"); err != nil {
-			t.Fatal(err)
-		}
+			// Check that we can start another txn on the (one and only) connection.
+			if _, err := sqlDB.Exec("BEGIN"); err != nil {
+				t.Fatal(err)
+			}
+			// Check that we don't see any rows, so the previous txn was rolled back.
+			rows, err := sqlDB.Query("SELECT * FROM t.test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer rows.Close()
+			if rows.Next() {
+				var k int
+				var v string
+				err := rows.Scan(&k, &v)
+				t.Fatalf("found unexpected row: %d %s, %v", k, v, err)
+			}
+			if _, err := sqlDB.Exec("END"); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 
@@ -1250,29 +1251,6 @@ SELECT * from t.test WHERE k = 'test_key';
 	}
 	if !hitError {
 		t.Errorf("expected to hit error, but it didn't happen")
-	}
-}
-
-// TestNonRetryableErrorOnCommit verifies that a non-retryable error from the
-// execution of EndTransactionRequests is propagated to the client.
-func TestNonRetryableErrorOnCommit(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	params, cmdFilters := createTestServerParams()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
-
-	defer cmdFilters.AppendFilter(func(args storagebase.FilterArgs) *roachpb.Error {
-		if req, ok := args.Req.(*roachpb.EndTransactionRequest); ok {
-			if bytes.Contains(req.Key, []byte(keys.SystemConfigSpan.Key)) {
-				return roachpb.NewErrorWithTxn(errors.New(t.Name()), args.Hdr.Txn)
-			}
-		}
-		return nil
-	}, false)()
-
-	if _, err := sqlDB.Exec("CREATE DATABASE t"); !testutils.IsError(err, t.Name()) {
-		t.Errorf("unexpected error %v", err)
 	}
 }
 
@@ -1748,5 +1726,77 @@ CREATE TABLE t.test (k INT PRIMARY KEY);
 					}
 				}
 			})
+	}
+}
+
+// Test that, if we'd otherwise perform an auto-retry but results for the
+// current txn have already been streamed to the client, we don't do the
+// auto-restart.
+func TestTxnAutoRetriesDisabledAfterResultsHaveBeenSentToClient(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params, _ := createTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	tests := []struct {
+		name                  string
+		clientDirectedRetries bool
+	}{
+		{
+			name: "client_directed_retries",
+			clientDirectedRetries: true,
+		},
+		{
+			name: "no_client_directed_retries",
+			clientDirectedRetries: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Cleanup the connection state after each test so the next one can run
+			// statements.
+			// TODO(andrei): Once we're on go 1.9, this test should use the new
+			// db.Conn() method to tie each test to a connection; then this cleanup
+			// wouldn't be necessary. Also, the test is currently technically
+			// incorrect, as there's no guarantee that the state check at the end will
+			// happen on the right connection.
+			defer func() {
+				if _, err := sqlDB.Exec("ROLLBACK"); err != nil {
+					t.Fatal(err)
+				}
+			}()
+
+			var savepoint string
+			if tc.clientDirectedRetries {
+				savepoint = "SAVEPOINT cockroach_restart;"
+			}
+			// We'll run a statement that produces enough results to overflow the
+			// buffers and start streaming results to the client before the retriable
+			// error is injected.
+			sql := fmt.Sprintf(`
+				BEGIN TRANSACTION;
+				%s
+				SELECT generate_series(1, 10000);
+				SELECT crdb_internal.force_retry('1s');
+				COMMIT TRANSACTION;`, savepoint)
+			_, err := sqlDB.Exec(sql)
+			if !isRetryableErr(err) {
+				t.Fatalf("expected retriable error, got: %v", err)
+			}
+			var expectedState string
+			if tc.clientDirectedRetries {
+				expectedState = "RestartWait"
+			} else {
+				expectedState = "Aborted"
+			}
+			var state string
+			if err := sqlDB.QueryRow("SHOW TRANSACTION STATUS").Scan(&state); err != nil {
+				t.Fatal(err)
+			}
+			if state != expectedState {
+				t.Fatalf("expected state %s, got: %s", expectedState, state)
+			}
+		})
 	}
 }

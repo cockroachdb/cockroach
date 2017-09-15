@@ -407,6 +407,7 @@ func TestCommonMethods(t *testing.T) {
 		{txnType, "IsSerializableRestart"}:           {},
 		{txnType, "NewBatch"}:                        {},
 		{txnType, "Exec"}:                            {},
+		{txnType, "PrepareForRetry"}:                 {},
 		{txnType, "ResetDeadline"}:                   {},
 		{txnType, "Run"}:                             {},
 		{txnType, "Send"}:                            {},
@@ -427,6 +428,8 @@ func TestCommonMethods(t *testing.T) {
 		{txnType, "UserPriority"}:                    {},
 		{txnType, "AnchorKey"}:                       {},
 		{txnType, "ID"}:                              {},
+		{txnType, "IsAborted"}:                       {},
+		{txnType, "IsCommitted"}:                     {},
 	}
 
 	for b := range omittedChecks {
