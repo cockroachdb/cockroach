@@ -20752,129 +20752,122 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        type CommandQueues$Properties = {
-            reads?: cockroach.storage.CommandQueueCommand$Properties[];
-            writes?: cockroach.storage.CommandQueueCommand$Properties[];
+        type CommandQueueSnapshot$Properties = {
+            commands?: cockroach.storage.CommandQueueCommand$Properties[];
         };
 
         /**
-         * Constructs a new CommandQueues.
-         * @exports cockroach.storage.CommandQueues
+         * Constructs a new CommandQueueSnapshot.
+         * @exports cockroach.storage.CommandQueueSnapshot
          * @constructor
-         * @param {cockroach.storage.CommandQueues$Properties=} [properties] Properties to set
+         * @param {cockroach.storage.CommandQueueSnapshot$Properties=} [properties] Properties to set
          */
-        class CommandQueues {
+        class CommandQueueSnapshot {
 
             /**
-             * Constructs a new CommandQueues.
-             * @exports cockroach.storage.CommandQueues
+             * Constructs a new CommandQueueSnapshot.
+             * @exports cockroach.storage.CommandQueueSnapshot
              * @constructor
-             * @param {cockroach.storage.CommandQueues$Properties=} [properties] Properties to set
+             * @param {cockroach.storage.CommandQueueSnapshot$Properties=} [properties] Properties to set
              */
-            constructor(properties?: cockroach.storage.CommandQueues$Properties);
+            constructor(properties?: cockroach.storage.CommandQueueSnapshot$Properties);
 
             /**
-             * CommandQueues reads.
+             * CommandQueueSnapshot commands.
              * @type {Array.<cockroach.storage.CommandQueueCommand$Properties>}
              */
-            public reads: cockroach.storage.CommandQueueCommand$Properties[];
+            public commands: cockroach.storage.CommandQueueCommand$Properties[];
 
             /**
-             * CommandQueues writes.
-             * @type {Array.<cockroach.storage.CommandQueueCommand$Properties>}
+             * Creates a new CommandQueueSnapshot instance using the specified properties.
+             * @param {cockroach.storage.CommandQueueSnapshot$Properties=} [properties] Properties to set
+             * @returns {cockroach.storage.CommandQueueSnapshot} CommandQueueSnapshot instance
              */
-            public writes: cockroach.storage.CommandQueueCommand$Properties[];
+            public static create(properties?: cockroach.storage.CommandQueueSnapshot$Properties): cockroach.storage.CommandQueueSnapshot;
 
             /**
-             * Creates a new CommandQueues instance using the specified properties.
-             * @param {cockroach.storage.CommandQueues$Properties=} [properties] Properties to set
-             * @returns {cockroach.storage.CommandQueues} CommandQueues instance
-             */
-            public static create(properties?: cockroach.storage.CommandQueues$Properties): cockroach.storage.CommandQueues;
-
-            /**
-             * Encodes the specified CommandQueues message. Does not implicitly {@link cockroach.storage.CommandQueues.verify|verify} messages.
-             * @param {cockroach.storage.CommandQueues$Properties} message CommandQueues message or plain object to encode
+             * Encodes the specified CommandQueueSnapshot message. Does not implicitly {@link cockroach.storage.CommandQueueSnapshot.verify|verify} messages.
+             * @param {cockroach.storage.CommandQueueSnapshot$Properties} message CommandQueueSnapshot message or plain object to encode
              * @param {$protobuf.Writer} [writer] Writer to encode to
              * @returns {$protobuf.Writer} Writer
              */
-            public static encode(message: cockroach.storage.CommandQueues$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+            public static encode(message: cockroach.storage.CommandQueueSnapshot$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
 
             /**
-             * Encodes the specified CommandQueues message, length delimited. Does not implicitly {@link cockroach.storage.CommandQueues.verify|verify} messages.
-             * @param {cockroach.storage.CommandQueues$Properties} message CommandQueues message or plain object to encode
+             * Encodes the specified CommandQueueSnapshot message, length delimited. Does not implicitly {@link cockroach.storage.CommandQueueSnapshot.verify|verify} messages.
+             * @param {cockroach.storage.CommandQueueSnapshot$Properties} message CommandQueueSnapshot message or plain object to encode
              * @param {$protobuf.Writer} [writer] Writer to encode to
              * @returns {$protobuf.Writer} Writer
              */
-            public static encodeDelimited(message: cockroach.storage.CommandQueues$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+            public static encodeDelimited(message: cockroach.storage.CommandQueueSnapshot$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
 
             /**
-             * Decodes a CommandQueues message from the specified reader or buffer.
+             * Decodes a CommandQueueSnapshot message from the specified reader or buffer.
              * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
              * @param {number} [length] Message length if known beforehand
-             * @returns {cockroach.storage.CommandQueues} CommandQueues
+             * @returns {cockroach.storage.CommandQueueSnapshot} CommandQueueSnapshot
              * @throws {Error} If the payload is not a reader or valid buffer
              * @throws {$protobuf.util.ProtocolError} If required fields are missing
              */
-            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.storage.CommandQueues;
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.storage.CommandQueueSnapshot;
 
             /**
-             * Decodes a CommandQueues message from the specified reader or buffer, length delimited.
+             * Decodes a CommandQueueSnapshot message from the specified reader or buffer, length delimited.
              * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-             * @returns {cockroach.storage.CommandQueues} CommandQueues
+             * @returns {cockroach.storage.CommandQueueSnapshot} CommandQueueSnapshot
              * @throws {Error} If the payload is not a reader or valid buffer
              * @throws {$protobuf.util.ProtocolError} If required fields are missing
              */
-            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.storage.CommandQueues;
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.storage.CommandQueueSnapshot;
 
             /**
-             * Verifies a CommandQueues message.
+             * Verifies a CommandQueueSnapshot message.
              * @param {Object.<string,*>} message Plain object to verify
              * @returns {?string} `null` if valid, otherwise the reason why it is not
              */
             public static verify(message: { [k: string]: any }): string;
 
             /**
-             * Creates a CommandQueues message from a plain object. Also converts values to their respective internal types.
+             * Creates a CommandQueueSnapshot message from a plain object. Also converts values to their respective internal types.
              * @param {Object.<string,*>} object Plain object
-             * @returns {cockroach.storage.CommandQueues} CommandQueues
+             * @returns {cockroach.storage.CommandQueueSnapshot} CommandQueueSnapshot
              */
-            public static fromObject(object: { [k: string]: any }): cockroach.storage.CommandQueues;
+            public static fromObject(object: { [k: string]: any }): cockroach.storage.CommandQueueSnapshot;
 
             /**
-             * Creates a CommandQueues message from a plain object. Also converts values to their respective internal types.
-             * This is an alias of {@link cockroach.storage.CommandQueues.fromObject}.
+             * Creates a CommandQueueSnapshot message from a plain object. Also converts values to their respective internal types.
+             * This is an alias of {@link cockroach.storage.CommandQueueSnapshot.fromObject}.
              * @function
              * @param {Object.<string,*>} object Plain object
-             * @returns {cockroach.storage.CommandQueues} CommandQueues
+             * @returns {cockroach.storage.CommandQueueSnapshot} CommandQueueSnapshot
              */
-            public static from(object: { [k: string]: any }): cockroach.storage.CommandQueues;
+            public static from(object: { [k: string]: any }): cockroach.storage.CommandQueueSnapshot;
 
             /**
-             * Creates a plain object from a CommandQueues message. Also converts values to other types if specified.
-             * @param {cockroach.storage.CommandQueues} message CommandQueues
+             * Creates a plain object from a CommandQueueSnapshot message. Also converts values to other types if specified.
+             * @param {cockroach.storage.CommandQueueSnapshot} message CommandQueueSnapshot
              * @param {$protobuf.ConversionOptions} [options] Conversion options
              * @returns {Object.<string,*>} Plain object
              */
-            public static toObject(message: cockroach.storage.CommandQueues, options?: $protobuf.ConversionOptions): { [k: string]: any };
+            public static toObject(message: cockroach.storage.CommandQueueSnapshot, options?: $protobuf.ConversionOptions): { [k: string]: any };
 
             /**
-             * Creates a plain object from this CommandQueues message. Also converts values to other types if specified.
+             * Creates a plain object from this CommandQueueSnapshot message. Also converts values to other types if specified.
              * @param {$protobuf.ConversionOptions} [options] Conversion options
              * @returns {Object.<string,*>} Plain object
              */
             public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
 
             /**
-             * Converts this CommandQueues to JSON.
+             * Converts this CommandQueueSnapshot to JSON.
              * @returns {Object.<string,*>} JSON object
              */
             public toJSON(): { [k: string]: any };
         }
 
         type CommandQueuesForReplica$Properties = {
-            localScope?: cockroach.storage.CommandQueues$Properties;
-            globalScope?: cockroach.storage.CommandQueues$Properties;
+            localScope?: cockroach.storage.CommandQueueSnapshot$Properties;
+            globalScope?: cockroach.storage.CommandQueueSnapshot$Properties;
         };
 
         /**
@@ -20895,15 +20888,15 @@ export namespace cockroach {
 
             /**
              * CommandQueuesForReplica localScope.
-             * @type {(cockroach.storage.CommandQueues$Properties|null)}
+             * @type {(cockroach.storage.CommandQueueSnapshot$Properties|null)}
              */
-            public localScope: (cockroach.storage.CommandQueues$Properties|null);
+            public localScope: (cockroach.storage.CommandQueueSnapshot$Properties|null);
 
             /**
              * CommandQueuesForReplica globalScope.
-             * @type {(cockroach.storage.CommandQueues$Properties|null)}
+             * @type {(cockroach.storage.CommandQueueSnapshot$Properties|null)}
              */
-            public globalScope: (cockroach.storage.CommandQueues$Properties|null);
+            public globalScope: (cockroach.storage.CommandQueueSnapshot$Properties|null);
 
             /**
              * Creates a new CommandQueuesForReplica instance using the specified properties.
