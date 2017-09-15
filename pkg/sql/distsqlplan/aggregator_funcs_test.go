@@ -185,11 +185,11 @@ func checkDistAggregationInfo(
 		localAggregations[i] = distsqlrun.AggregatorSpec_Aggregation{Func: fn, ColIdx: []uint32{0}}
 	}
 	finalAggregations := make([]distsqlrun.AggregatorSpec_Aggregation, numIntermediary)
-	for i, fn := range info.FinalStage {
+	for i, finalInfo := range info.FinalStage {
 		// Each local aggregation feeds into a final aggregation.
 		finalAggregations[i] = distsqlrun.AggregatorSpec_Aggregation{
-			Func:   fn,
-			ColIdx: []uint32{uint32(i)},
+			Func:   finalInfo.Fn,
+			ColIdx: finalInfo.LocalIdxs,
 		}
 	}
 
