@@ -9,13 +9,18 @@
 package cliccl
 
 import (
+	"fmt"
 	"os"
+	"strings"
+	"time"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 
 	"github.com/pkg/errors"
@@ -68,6 +73,13 @@ Then the file could be converted and saved to /data/backup with:
 	flags.StringVar(&csvComment, "comment", "", "if specified, allows comment lines starting with this character")
 	flags.StringVar(&csvTempDir, "tempdir", os.TempDir(), "directory to store intermediate temp files")
 
+	loadShowCmd := &cobra.Command{
+		Use:   "show <basepath>",
+		Short: "show backups",
+		Long:  "Shows information about a SQL backup.",
+		RunE:  cli.MaybeDecorateGRPCError(runLoadShow),
+	}
+
 	loadCmds := &cobra.Command{
 		Use:   "load [command]",
 		Short: "loading commands",
@@ -78,6 +90,7 @@ Then the file could be converted and saved to /data/backup with:
 	}
 	cli.AddCmd(loadCmds)
 	loadCmds.AddCommand(loadCSVCmd)
+	loadCmds.AddCommand(loadShowCmd)
 }
 
 var (
@@ -138,5 +151,61 @@ func runLoadCSV(cmd *cobra.Command, args []string) error {
 	log.Infof(ctx, "KVs pairs created: %d", kv)
 	log.Infof(ctx, "SST files written: %d", sst)
 
+	return nil
+}
+
+func runLoadShow(cmd *cobra.Command, args []string) error {
+	if len(args) != 1 {
+		return errors.New("basepath argument is required")
+	}
+
+	ctx := context.Background()
+	basepath := args[0]
+	if !strings.Contains(basepath, "://") {
+		var err error
+		basepath, err = storageccl.MakeLocalStorageURI(basepath)
+		if err != nil {
+			return err
+		}
+	}
+	desc, err := sqlccl.ReadBackupDescriptorFromURI(ctx, basepath)
+	if err != nil {
+		return err
+	}
+	start := time.Unix(0, desc.StartTime.WallTime).UTC().Format(time.RFC3339Nano)
+	end := time.Unix(0, desc.EndTime.WallTime).UTC().Format(time.RFC3339Nano)
+	fmt.Printf("StartTime: %s (%s)\n", start, desc.StartTime)
+	fmt.Printf("EndTime: %s (%s)\n", end, desc.EndTime)
+	fmt.Printf("DataSize: %d (%s)\n", desc.EntryCounts.DataSize, humanizeutil.IBytes(desc.EntryCounts.DataSize))
+	fmt.Printf("Rows: %d\n", desc.EntryCounts.Rows)
+	fmt.Printf("IndexEntries: %d\n", desc.EntryCounts.IndexEntries)
+	fmt.Printf("SystemRecords: %d\n", desc.EntryCounts.SystemRecords)
+	fmt.Printf("FormatVersion: %d\n", desc.FormatVersion)
+	fmt.Printf("ClusterID: %s\n", desc.ClusterID)
+	fmt.Printf("NodeID: %s\n", desc.NodeID)
+	fmt.Printf("BuildInfo: %s\n", desc.BuildInfo.Short())
+	fmt.Printf("Spans:\n")
+	for _, s := range desc.Spans {
+		fmt.Printf("	%s\n", s)
+	}
+	fmt.Printf("Files:\n")
+	for _, f := range desc.Files {
+		fmt.Printf("	%s:\n", f.Path)
+		fmt.Printf("		Span: %s\n", f.Span)
+		fmt.Printf("		Sha512: %0128x\n", f.Sha512)
+		fmt.Printf("		DataSize: %d (%s)\n", f.EntryCounts.DataSize, humanizeutil.IBytes(f.EntryCounts.DataSize))
+		fmt.Printf("		Rows: %d\n", f.EntryCounts.Rows)
+		fmt.Printf("		IndexEntries: %d\n", f.EntryCounts.IndexEntries)
+		fmt.Printf("		SystemRecords: %d\n", f.EntryCounts.SystemRecords)
+	}
+	fmt.Printf("Descriptors:\n")
+	for _, d := range desc.Descriptors {
+		if desc := d.GetTable(); desc != nil {
+			fmt.Printf("	%d: %s (table)\n", d.GetID(), d.GetName())
+		}
+		if desc := d.GetDatabase(); desc != nil {
+			fmt.Printf("	%d: %s (database)\n", d.GetID(), d.GetName())
+		}
+	}
 	return nil
 }
