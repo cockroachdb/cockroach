@@ -54,17 +54,13 @@ class CommandQueue extends React.Component<CommandQueueProps, {}> {
       <div className="section">
         <h1>Command queue report for r{rangeID.toString()}</h1>
         <h2>Local Scope</h2>
-        <pre>
-          {this.props.commandQueue
-            ? <CommandQueueViz queue={this.props.commandQueue.queues.localScope} />
-            : <p>Loading...</p>}
-        </pre>
+        {this.props.commandQueue
+          ? <CommandQueueViz queue={this.props.commandQueue.queues.localScope} />
+          : <p>Loading...</p>}
         <h2>Global Scope</h2>
-        <pre>
-          {this.props.commandQueue
-            ? <CommandQueueViz queue={this.props.commandQueue.queues.localScope} />
-            : <p>Loading...</p>}
-        </pre>
+        {this.props.commandQueue
+          ? <CommandQueueViz queue={this.props.commandQueue.queues.globalScope} />
+          : <p>Loading...</p>}
       </div>
     );
   }
