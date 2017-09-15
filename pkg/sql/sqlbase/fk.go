@@ -374,12 +374,12 @@ func (f baseFKHelper) spanForValues(values parser.Datums) (roachpb.Span, error) 
 	} else {
 		key = roachpb.Key(f.searchPrefix)
 	}
-	return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}, nil
+	return roachpb.Span{Key: key, EndKey: InterleaveEnd(key)}, nil
 }
 
 func (f baseFKHelper) span() roachpb.Span {
 	key := roachpb.Key(f.searchPrefix)
-	return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}
+	return roachpb.Span{Key: key, EndKey: InterleaveEnd(key)}
 }
 
 // FkSpanCollector can collect the spans that foreign key validation will touch.

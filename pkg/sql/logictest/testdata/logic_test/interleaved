@@ -279,6 +279,9 @@ INSERT INTO orders
   (1, 1002, 80.00),
   (2, 1003, 70.00)
 
+statement error foreign key violation: value \[3\] not found in customers@primary \[id\]
+INSERT INTO orders VALUES (3, 1000, 100.0)
+
 query IIR
 SELECT * FROM orders WHERE customer = 1 AND id = 1000
 ----

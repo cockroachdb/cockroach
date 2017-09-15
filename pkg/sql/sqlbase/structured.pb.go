@@ -485,7 +485,7 @@ func (*InterleaveDescriptor) ProtoMessage()               {}
 func (*InterleaveDescriptor) Descriptor() ([]byte, []int) { return fileDescriptorStructured, []int{4} }
 
 type InterleaveDescriptor_Ancestor struct {
-	// TableID the ID of the table being interleaved into.
+	// TableID is the ID of the table being interleaved into.
 	TableID ID `protobuf:"varint,1,opt,name=table_id,json=tableId,casttype=ID" json:"table_id"`
 	// IndexID is the ID of the parent index being interleaved into.
 	IndexID IndexID `protobuf:"varint,2,opt,name=index_id,json=indexId,casttype=IndexID" json:"index_id"`
