@@ -108,7 +108,7 @@ func TestCancelParallelQuery(t *testing.T) {
 				UseDatabase: "test",
 				Knobs: base.TestingKnobs{
 					SQLExecutor: &sql.ExecutorTestingKnobs{
-						BeforeExecute: func(ctx context.Context, stmt string, isDistributed bool) {
+						BeforeExecute: func(ctx context.Context, stmt string, _ /* isParallel */ bool) {
 							// if queryToBlock
 							if strings.Contains(stmt, "(1)") {
 								// Block start of execution until queryToCancel has been cancelled
@@ -191,7 +191,7 @@ func TestCancelDistSQLQuery(t *testing.T) {
 				UseDatabase: "test",
 				Knobs: base.TestingKnobs{
 					SQLExecutor: &sql.ExecutorTestingKnobs{
-						BeforeExecute: func(ctx context.Context, stmt string, isDistributed bool) {
+						BeforeExecute: func(ctx context.Context, stmt string, _ /* isParallel */ bool) {
 							// if queryToCancel
 							if strings.Contains(stmt, "ORDER BY num") {
 								// Cancel it
