@@ -1085,7 +1085,13 @@ func (*DUuid) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
 func (d *DUuid) Format(buf *bytes.Buffer, f FmtFlags) {
-	encodeSQLString(buf, d.UUID.String())
+	if !f.bareStrings {
+		buf.WriteByte('\'')
+	}
+	buf.WriteString(d.UUID.String())
+	if !f.bareStrings {
+		buf.WriteByte('\'')
+	}
 }
 
 // Size implements the Datum interface.
