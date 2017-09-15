@@ -40,7 +40,7 @@ func (s *statusServer) ProblemRanges(
 	// If there is a specific nodeID requested, limited the responses to
 	// just that node.
 	if len(req.NodeID) > 0 {
-		requestedNodeID, _, err := s.parseNodeID(req.NodeID)
+		requestedNodeID, err := s.parseNodeID(req.NodeID)
 		if err != nil {
 			return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
 		}
