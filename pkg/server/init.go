@@ -15,18 +15,35 @@
 package server
 
 import (
-	"errors"
 	"net"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
+
+// noopInitServer implements the Init server interface for a cluster that has
+// already been initialized. Its purpose is simply to provide better error
+// messages if someone tries to initialize a cluster that's already been
+// initialized.
+type noopInitServer struct {
+	clusterID func() uuid.UUID
+}
+
+func (s *noopInitServer) Bootstrap(
+	_ context.Context, _ *serverpb.BootstrapRequest,
+) (*serverpb.BootstrapResponse, error) {
+	return nil, grpc.Errorf(
+		codes.AlreadyExists, "cluster has already been initialized with ID %s", s.clusterID())
+}
 
 // initListener wraps a net.Listener and turns its Close() method into
 // a no-op. This is used so that the initServer's grpc.Server can be

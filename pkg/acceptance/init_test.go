@@ -116,6 +116,18 @@ func testInitModeNoneInner(
 	// --join address?)
 	lc.RunInitCommand(ctx, 0)
 
+	// Make sure that running init again returns the expected error message and
+	// does not break the cluster. We have to use ExecCLI rahter than OneShot in
+	// order to actually get the output from the command.
+	output, _, err := c.ExecCLI(ctx, 0, []string{"init"})
+	if err == nil {
+		t.Fatalf("expected error running init command on initialized cluster, got output: %s", output)
+	}
+	if !testutils.IsError(err, "cluster has already been initialized") {
+		t.Fatalf("got unexpected error when running init command on initialized cluster: %v\noutput: %s",
+			err, output)
+	}
+
 	// Once initialized, we can query each node.
 	testutils.SucceedsSoon(t, func() error {
 		for i, db := range dbs {

@@ -15,10 +15,12 @@
 package cli
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/spf13/cobra"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
@@ -48,10 +50,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 	defer stopper.Stop(ctx)
 
 	if _, err = c.Bootstrap(ctx, &serverpb.BootstrapRequest{}); err != nil {
-		log.Error(ctx, err)
 		return err
 	}
 
+	fmt.Fprintln(os.Stdout, "Cluster successfully initialized")
 	return nil
 }
 
