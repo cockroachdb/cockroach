@@ -73,10 +73,10 @@ func exportStorageFromURI(ctx context.Context, uri string) (storageccl.ExportSto
 	return storageccl.MakeExportStorage(ctx, conf)
 }
 
-// readBackupDescriptorFromURI creates an export store from the given URI, then
+// ReadBackupDescriptorFromURI creates an export store from the given URI, then
 // reads and unmarshals a BackupDescriptor at the standard location in the
 // export storage.
-func readBackupDescriptorFromURI(ctx context.Context, uri string) (BackupDescriptor, error) {
+func ReadBackupDescriptorFromURI(ctx context.Context, uri string) (BackupDescriptor, error) {
 	exportStore, err := exportStorageFromURI(ctx, uri)
 	if err != nil {
 		return BackupDescriptor{}, err
@@ -122,7 +122,7 @@ func ValidatePreviousBackups(ctx context.Context, uris []string) (hlc.Timestamp,
 	}
 	backups := make([]BackupDescriptor, len(uris))
 	for i, uri := range uris {
-		desc, err := readBackupDescriptorFromURI(ctx, uri)
+		desc, err := ReadBackupDescriptorFromURI(ctx, uri)
 		if err != nil {
 			return hlc.Timestamp{}, err
 		}
@@ -838,7 +838,7 @@ func showBackupPlanHook(
 		if err != nil {
 			return err
 		}
-		desc, err := readBackupDescriptorFromURI(ctx, str)
+		desc, err := ReadBackupDescriptorFromURI(ctx, str)
 		if err != nil {
 			return err
 		}
