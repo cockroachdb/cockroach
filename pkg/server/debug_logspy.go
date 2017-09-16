@@ -15,105 +15,35 @@
 package server
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 	"regexp"
-	"strconv"
 	"sync/atomic"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
 )
 
-// regexpAsString wraps a *regexp.Regexp for better printing and
-// JSON unmarshaling.
-type regexpAsString struct {
-	re *regexp.Regexp
-}
-
-func (r regexpAsString) String() string {
-	if r.re == nil {
-		return ".*"
-	}
-	return r.re.String()
-}
-
-func (r *regexpAsString) UnmarshalJSON(data []byte) error {
-	var s string
-	if err := json.Unmarshal(data, &s); err != nil {
-		return err
-	}
-	var err error
-	(*r).re, err = regexp.Compile(s)
-	return err
-}
-
-// intAsString wraps an int that can be populated from a JSON string.
-type intAsString int
-
-func (i *intAsString) UnmarshalJSON(data []byte) error {
-	var s string
-	if err := json.Unmarshal(data, &s); err != nil {
-		return err
-	}
-	var err error
-	*(*int)(i), err = strconv.Atoi(s)
-	return err
-}
-
-// durationAsString wraps a time.Duration that can be populated from a JSON
-// string.
-type durationAsString time.Duration
-
-func (d *durationAsString) UnmarshalJSON(data []byte) error {
-	var s string
-	if err := json.Unmarshal(data, &s); err != nil {
-		return err
-	}
-	var err error
-	*(*time.Duration)(d), err = time.ParseDuration(s)
-	return err
-}
-
-func (d durationAsString) String() string {
-	return time.Duration(d).String()
-}
-
 const (
-	logSpyDefaultDuration = durationAsString(10 * time.Second)
-	logSpyMaxDuration     = durationAsString(time.Minute)
-	logSpyDefaultCount    = 1000
+	logSpyDefaultDuration = 10 * time.Second
+	logSpyMaxDuration     = 1 * time.Minute
+	logSpyDefaultCount    = 100
 	logSpyChanCap         = 4096
 )
 
 type logSpyOptions struct {
-	Count    intAsString
-	Duration durationAsString
-	Grep     regexpAsString
+	Count    int
+	Duration time.Duration
+	Grep     *regexp.Regexp
 }
 
-func logSpyOptionsFromValues(values url.Values) (logSpyOptions, error) {
-	rawValues := map[string]string{}
-	for k, vals := range values {
-		if len(vals) > 0 {
-			rawValues[k] = vals[0]
-		}
-	}
-	data, err := json.Marshal(rawValues)
-	if err != nil {
-		return logSpyOptions{}, err
-	}
-	var opts logSpyOptions
-	if err := json.Unmarshal(data, &opts); err != nil {
-		return logSpyOptions{}, err
+func (opts *logSpyOptions) validate() error {
+	if opts.Count == 0 {
+		opts.Count = logSpyDefaultCount
 	}
 	if opts.Duration == 0 {
 		if opts.Count > 0 {
@@ -122,56 +52,39 @@ func logSpyOptionsFromValues(values url.Values) (logSpyOptions, error) {
 			opts.Duration = logSpyDefaultDuration
 		}
 	} else if opts.Duration > logSpyMaxDuration {
-		return logSpyOptions{}, errors.Errorf("duration %s is too large (limit is %s)", opts.Duration, logSpyMaxDuration)
+		return errors.Errorf("duration %s is too large (limit is %s)", opts.Duration, logSpyMaxDuration)
 	}
+	if opts.Grep == nil {
+		return errors.Errorf("options must include a non-nil regexp")
+	}
+	return nil
+}
 
-	if opts.Count == 0 {
-		opts.Count = logSpyDefaultCount
-	}
-	return opts, nil
+type logSpyMsg struct {
+	entry log.Entry
+	err   error
 }
 
 type logSpy struct {
-	active       int32 // updated atomically between 0 and 1
-	setIntercept func(ctx context.Context, f log.InterceptorFn)
+	setIntercept func(ctx context.Context, f log.InterceptorFn) error
 }
 
-func (spy *logSpy) handleDebugLogSpy(w http.ResponseWriter, r *http.Request) {
-	opts, err := logSpyOptionsFromValues(r.URL.Query())
-	if err != nil {
-		http.Error(w, "while parsing options: "+err.Error(), http.StatusInternalServerError)
-		return
+func (spy *logSpy) run(
+	ctx context.Context, msgC chan<- logSpyMsg, opts logSpyOptions,
+) (dropped int32) {
+	defer close(msgC)
+
+	if err := opts.validate(); err != nil {
+		msgC <- logSpyMsg{err: err}
+		return 0
 	}
 
-	if swapped := atomic.CompareAndSwapInt32(&spy.active, 0, 1); !swapped {
-		http.Error(w, "a log interception is already in progress", http.StatusInternalServerError)
-		return
-	}
-	defer atomic.StoreInt32(&spy.active, 0)
-
-	w.Header().Add("Content-type", "text/plain; charset=UTF-8")
-	ctx := r.Context()
-	if err := spy.run(ctx, w, opts); err != nil {
-		// This is likely a broken HTTP connection, so nothing too unexpected.
-		log.Info(ctx, err)
-	}
-}
-
-func (spy *logSpy) run(ctx context.Context, w io.Writer, opts logSpyOptions) (err error) {
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(opts.Duration))
+	ctx, cancel := context.WithTimeout(ctx, opts.Duration)
 	defer cancel()
 
 	var countDropped int32
 	defer func() {
-		if err == nil {
-			if dropped := atomic.LoadInt32(&countDropped); dropped > 0 {
-				f, l, _ := caller.Lookup(0)
-				entry := log.MakeEntry(
-					log.Severity_WARNING, timeutil.Now().UnixNano(), f, l,
-					fmt.Sprintf("%d messages were dropped", dropped))
-				err = entry.Format(w) // modify return value
-			}
-		}
+		dropped = atomic.LoadInt32(&countDropped)
 	}()
 
 	// Note that in the code below, this channel is never closed. This is
@@ -188,8 +101,13 @@ func (spy *logSpy) run(ctx context.Context, w io.Writer, opts logSpyOptions) (er
 		entries <- entry
 	}
 
-	spy.setIntercept(ctx, func(entry log.Entry) {
-		if re := opts.Grep.re; re != nil && !re.MatchString(entry.Message) && !re.MatchString(entry.File) {
+	setInterceptOrErr := func(f log.InterceptorFn) {
+		if err := spy.setIntercept(ctx, f); err != nil {
+			msgC <- logSpyMsg{err: err}
+		}
+	}
+	setInterceptOrErr(func(entry log.Entry) {
+		if re := opts.Grep; re != nil && !re.MatchString(entry.Message) && !re.MatchString(entry.File) {
 			return
 		}
 
@@ -200,37 +118,22 @@ func (spy *logSpy) run(ctx context.Context, w io.Writer, opts logSpyOptions) (er
 			atomic.AddInt32(&countDropped, 1)
 		}
 	})
+	defer setInterceptOrErr(nil)
 
-	defer spy.setIntercept(ctx, nil)
-
-	const flushInterval = time.Second
-	var flushTimer timeutil.Timer
-	defer flushTimer.Stop()
-	flushTimer.Reset(flushInterval)
-
-	var count intAsString
-	var done <-chan struct{} // set later; helps always send header message
+	var count int
+	var done <-chan struct{} // set later; assures that we always send header message
 	for {
 		select {
 		case <-done:
-
 			return
 		case entry := <-entries:
-			if err := entry.Format(w); err != nil {
-				return errors.Wrapf(err, "while writing entry %v", entry)
-			}
+			msgC <- logSpyMsg{entry: entry}
 			count++
 			if count >= opts.Count {
-				return nil
+				return
 			}
 			if done == nil {
 				done = ctx.Done()
-			}
-		case <-flushTimer.C:
-			flushTimer.Read = true
-			flushTimer.Reset(flushInterval)
-			if flusher, ok := w.(http.Flusher); ok {
-				flusher.Flush()
 			}
 		}
 	}

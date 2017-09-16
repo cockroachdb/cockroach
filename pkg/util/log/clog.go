@@ -651,7 +651,8 @@ type loggingT struct {
 	exitFunc  func(int)     // func that will be called on fatal errors
 	gcNotify  chan struct{} // notify GC daemon that a new log file was created
 
-	interceptor atomic.Value // InterceptorFn
+	interceptor       atomic.Value // InterceptorFn
+	interceptorActive int32        // updated atomically between 0 and 1
 }
 
 // buffer holds a byte Buffer for reuse. The zero value is ready for use.
@@ -1171,20 +1172,25 @@ type InterceptorFn func(entry Entry)
 // To end log interception, invoke `Intercept()` with `f == nil`. Note that
 // interception does not terminate atomically, that is, the originally supplied
 // callback may still be invoked after a call to `Intercept` with `f == nil`.
-func Intercept(ctx context.Context, f InterceptorFn) {
-	logging.Intercept(ctx, f)
+func Intercept(ctx context.Context, f InterceptorFn) error {
+	return logging.Intercept(ctx, f)
 }
 
-func (l *loggingT) Intercept(ctx context.Context, f InterceptorFn) {
+func (l *loggingT) Intercept(ctx context.Context, f InterceptorFn) error {
 	// TODO(tschottdorf): restore sanity so that all methods have a *loggingT
 	// receiver.
 	if f != nil {
+		if swapped := atomic.CompareAndSwapInt32(&l.interceptorActive, 0, 1); !swapped {
+			return errors.New("a log interception is already in progress")
+		}
 		logDepth(ctx, 0, Severity_WARNING, "log traffic is now intercepted; log files will be incomplete", nil)
 	}
 	l.interceptor.Store(f) // intentionally also when f == nil
 	if f == nil {
+		atomic.StoreInt32(&l.interceptorActive, 0)
 		logDepth(ctx, 0, Severity_INFO, "log interception is now stopped; normal logging resumes", nil)
 	}
+	return nil
 }
 
 // VDepth reports whether verbosity at the call site is at least the requested

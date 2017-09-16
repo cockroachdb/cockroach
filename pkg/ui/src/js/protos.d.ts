@@ -9990,6 +9990,140 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
+            type LogSpyRequest$Properties = {
+                node_id?: string;
+                count?: Long;
+                duration?: string;
+                grep?: string;
+            };
+
+            /**
+             * Constructs a new LogSpyRequest.
+             * @exports cockroach.server.serverpb.LogSpyRequest
+             * @constructor
+             * @param {cockroach.server.serverpb.LogSpyRequest$Properties=} [properties] Properties to set
+             */
+            class LogSpyRequest {
+
+                /**
+                 * Constructs a new LogSpyRequest.
+                 * @exports cockroach.server.serverpb.LogSpyRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.LogSpyRequest$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.LogSpyRequest$Properties);
+
+                /**
+                 * LogSpyRequest node_id.
+                 * @type {string}
+                 */
+                public node_id: string;
+
+                /**
+                 * LogSpyRequest count.
+                 * @type {Long}
+                 */
+                public count: Long;
+
+                /**
+                 * LogSpyRequest duration.
+                 * @type {string}
+                 */
+                public duration: string;
+
+                /**
+                 * LogSpyRequest grep.
+                 * @type {string}
+                 */
+                public grep: string;
+
+                /**
+                 * Creates a new LogSpyRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.LogSpyRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.LogSpyRequest} LogSpyRequest instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.LogSpyRequest$Properties): cockroach.server.serverpb.LogSpyRequest;
+
+                /**
+                 * Encodes the specified LogSpyRequest message. Does not implicitly {@link cockroach.server.serverpb.LogSpyRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.LogSpyRequest$Properties} message LogSpyRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.LogSpyRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified LogSpyRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.LogSpyRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.LogSpyRequest$Properties} message LogSpyRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.LogSpyRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a LogSpyRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.LogSpyRequest} LogSpyRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.LogSpyRequest;
+
+                /**
+                 * Decodes a LogSpyRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.LogSpyRequest} LogSpyRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.LogSpyRequest;
+
+                /**
+                 * Verifies a LogSpyRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a LogSpyRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.LogSpyRequest} LogSpyRequest
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.LogSpyRequest;
+
+                /**
+                 * Creates a LogSpyRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.LogSpyRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.LogSpyRequest} LogSpyRequest
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.LogSpyRequest;
+
+                /**
+                 * Creates a plain object from a LogSpyRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.LogSpyRequest} message LogSpyRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.LogSpyRequest, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this LogSpyRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this LogSpyRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
             type StacksRequest$Properties = {
                 node_id?: string;
             };
@@ -12903,6 +13037,14 @@ export namespace cockroach {
                  * @returns {undefined}
                  */
                 public logs(request: (cockroach.server.serverpb.LogsRequest|{ [k: string]: any }), callback: Status_logs_Callback): void;
+
+                /**
+                 * Calls LogSpy.
+                 * @param {cockroach.server.serverpb.LogSpyRequest|Object.<string,*>} request LogSpyRequest message or plain object
+                 * @param {Status_logSpy_Callback} callback Node-style callback called with the error, if any, and Entry
+                 * @returns {undefined}
+                 */
+                public logSpy(request: (cockroach.server.serverpb.LogSpyRequest|{ [k: string]: any }), callback: Status_logSpy_Callback): void;
 
                 /**
                  * Calls ProblemRanges.
@@ -26609,6 +26751,8 @@ type Status_logFilesList_Callback = (error: Error, response?: cockroach.server.s
 type Status_logFile_Callback = (error: Error, response?: cockroach.server.serverpb.LogEntriesResponse) => void;
 
 type Status_logs_Callback = (error: Error, response?: cockroach.server.serverpb.LogEntriesResponse) => void;
+
+type Status_logSpy_Callback = (error: Error, response?: cockroach.util.log.Entry) => void;
 
 type Status_problemRanges_Callback = (error: Error, response?: cockroach.server.serverpb.ProblemRangesResponse) => void;
 

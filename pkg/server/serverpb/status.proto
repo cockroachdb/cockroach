@@ -283,6 +283,15 @@ message LogFileRequest {
   string file = 2;
 }
 
+message LogSpyRequest {
+  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
+  // figure out how to teach grpc-gateway about custom names.
+  string node_id = 1;
+  uint64 count = 2;
+  string duration = 3;
+  string grep = 4;
+}
+
 message StacksRequest {
   // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
   // figure out how to teach grpc-gateway about custom names.
@@ -600,6 +609,11 @@ service Status {
   rpc Logs(LogsRequest) returns (LogEntriesResponse) {
     option (google.api.http) = {
       get: "/_status/logs/{node_id}"
+    };
+  }
+  rpc LogSpy(LogSpyRequest) returns (stream cockroach.util.log.Entry) {
+    option (google.api.http) = {
+      get: "/_status/logspy/{node_id}"
     };
   }
   rpc ProblemRanges(ProblemRangesRequest) returns (ProblemRangesResponse) {

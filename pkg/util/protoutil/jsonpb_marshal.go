@@ -23,6 +23,7 @@ import (
 
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
+	goproto "github.com/golang/protobuf/proto"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
 
@@ -43,7 +44,7 @@ func (*JSONPb) ContentType() string {
 
 // Marshal implements gwruntime.Marshaler.
 func (j *JSONPb) Marshal(v interface{}) ([]byte, error) {
-	return j.marshal(v)
+	return j.marshal(j.stripStreamProtoWrapper(v))
 }
 
 // a lower-case version of marshal to allow for a call from
@@ -58,6 +59,17 @@ func (j *JSONPb) marshal(v interface{}) ([]byte, error) {
 		return buf.Bytes(), nil
 	}
 	return j.marshalNonProtoField(v)
+}
+
+// strips the "result" proto wrapper that grpc-gateway adds around streaming
+// proto objects. See streamChunk in grpc-gateway/runtime/handler.go.
+func (j *JSONPb) stripStreamProtoWrapper(v interface{}) interface{} {
+	if m, ok := v.(map[string]goproto.Message); ok {
+		if res, ok := m["result"]; ok {
+			v = res
+		}
+	}
+	return v
 }
 
 // Cribbed verbatim from grpc-gateway.

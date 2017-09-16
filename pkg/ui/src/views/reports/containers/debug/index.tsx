@@ -105,8 +105,8 @@ export default function Debug() {
           <DebugTableLink name="Events" url="/debug/events" />
           <DebugTableLink
             name="Logs"
-            url="/debug/logspy?count=1&amp;duration=10s&amp;grep=."
-            note="/debug/logspy?count=[count]&amp;duration=[duration]&amp;grep=[regexp]"
+            url="/_status/logspy/local?count=1&amp;duration=10s&amp;grep=."
+            note="/_status/logspy/[node_id]?count=[count]&amp;duration=[duration]&amp;grep=[regexp]"
           />
         </DebugTableRow>
         <DebugTableRow title="Stopper">

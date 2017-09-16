@@ -29,6 +29,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/coreos/etcd/raft"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
@@ -639,6 +640,74 @@ func (s *statusServer) Logs(
 	}
 
 	return &serverpb.LogEntriesResponse{Entries: entries}, nil
+}
+
+// LogSpy temporarily monitors logging using an optional regexp filter and
+// streams matching log messages to the client.
+func (s *statusServer) LogSpy(
+	req *serverpb.LogSpyRequest, stream serverpb.Status_LogSpyServer,
+) error {
+	ctx := s.AnnotateCtx(stream.Context())
+	if remote, err := s.maybeRedirect(req.NodeId); err != nil {
+		return err
+	} else if remote != nil {
+		remoteStream, err := remote.LogSpy(ctx, req)
+		if err != nil {
+			return err
+		}
+		for {
+			// Read each entry from the remote stream and forward.
+			entry, err := remoteStream.Recv()
+			if err == io.EOF {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			if err := stream.Send(entry); err != nil {
+				return err
+			}
+		}
+	}
+
+	msgC := make(chan logSpyMsg)
+	opts, err := logSpyOptionsFromReq(req)
+	if err != nil {
+		return err
+	}
+
+	spy := logSpy{setIntercept: log.Intercept}
+	go func() {
+		if dropped := spy.run(ctx, msgC, opts); dropped > 0 {
+			log.Infof(ctx, "%d messages were dropped", dropped)
+		}
+	}()
+
+	for msg := range msgC {
+		if err := msg.err; err != nil {
+			return err
+		}
+		if err := stream.Send(&msg.entry); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func logSpyOptionsFromReq(req *serverpb.LogSpyRequest) (opts logSpyOptions, err error) {
+	opts.Count = int(req.Count)
+
+	if req.Duration != "" {
+		if opts.Duration, err = time.ParseDuration(req.Duration); err != nil {
+			return opts, errors.Wrap(err, "error parsing Duration in options")
+		}
+	}
+
+	if opts.Grep, err = regexp.Compile(req.Grep); err != nil {
+		return opts, errors.Wrap(err, "error parsing Grep in options")
+	}
+
+	return opts, nil
 }
 
 // TODO(tschottdorf): significant overlap with /debug/pprof/goroutine, except

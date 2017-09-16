@@ -18102,6 +18102,255 @@ export const cockroach = $root.cockroach = (() => {
                 return LogFileRequest;
             })();
 
+            serverpb.LogSpyRequest = (function() {
+
+                /**
+                 * Properties of a LogSpyRequest.
+                 * @typedef cockroach.server.serverpb.LogSpyRequest$Properties
+                 * @type {Object}
+                 * @property {string} [node_id] LogSpyRequest node_id.
+                 * @property {Long} [count] LogSpyRequest count.
+                 * @property {string} [duration] LogSpyRequest duration.
+                 * @property {string} [grep] LogSpyRequest grep.
+                 */
+
+                /**
+                 * Constructs a new LogSpyRequest.
+                 * @exports cockroach.server.serverpb.LogSpyRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.LogSpyRequest$Properties=} [properties] Properties to set
+                 */
+                function LogSpyRequest(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * LogSpyRequest node_id.
+                 * @type {string}
+                 */
+                LogSpyRequest.prototype.node_id = "";
+
+                /**
+                 * LogSpyRequest count.
+                 * @type {Long}
+                 */
+                LogSpyRequest.prototype.count = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+                /**
+                 * LogSpyRequest duration.
+                 * @type {string}
+                 */
+                LogSpyRequest.prototype.duration = "";
+
+                /**
+                 * LogSpyRequest grep.
+                 * @type {string}
+                 */
+                LogSpyRequest.prototype.grep = "";
+
+                /**
+                 * Creates a new LogSpyRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.LogSpyRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.LogSpyRequest} LogSpyRequest instance
+                 */
+                LogSpyRequest.create = function create(properties) {
+                    return new LogSpyRequest(properties);
+                };
+
+                /**
+                 * Encodes the specified LogSpyRequest message. Does not implicitly {@link cockroach.server.serverpb.LogSpyRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.LogSpyRequest$Properties} message LogSpyRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                LogSpyRequest.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        writer.uint32(/* id 1, wireType 2 =*/10).string(message.node_id);
+                    if (message.count != null && message.hasOwnProperty("count"))
+                        writer.uint32(/* id 2, wireType 0 =*/16).uint64(message.count);
+                    if (message.duration != null && message.hasOwnProperty("duration"))
+                        writer.uint32(/* id 3, wireType 2 =*/26).string(message.duration);
+                    if (message.grep != null && message.hasOwnProperty("grep"))
+                        writer.uint32(/* id 4, wireType 2 =*/34).string(message.grep);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified LogSpyRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.LogSpyRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.LogSpyRequest$Properties} message LogSpyRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                LogSpyRequest.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a LogSpyRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.LogSpyRequest} LogSpyRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                LogSpyRequest.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.LogSpyRequest();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.node_id = reader.string();
+                            break;
+                        case 2:
+                            message.count = reader.uint64();
+                            break;
+                        case 3:
+                            message.duration = reader.string();
+                            break;
+                        case 4:
+                            message.grep = reader.string();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a LogSpyRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.LogSpyRequest} LogSpyRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                LogSpyRequest.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a LogSpyRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                LogSpyRequest.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        if (!$util.isString(message.node_id))
+                            return "node_id: string expected";
+                    if (message.count != null && message.hasOwnProperty("count"))
+                        if (!$util.isInteger(message.count) && !(message.count && $util.isInteger(message.count.low) && $util.isInteger(message.count.high)))
+                            return "count: integer|Long expected";
+                    if (message.duration != null && message.hasOwnProperty("duration"))
+                        if (!$util.isString(message.duration))
+                            return "duration: string expected";
+                    if (message.grep != null && message.hasOwnProperty("grep"))
+                        if (!$util.isString(message.grep))
+                            return "grep: string expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a LogSpyRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.LogSpyRequest} LogSpyRequest
+                 */
+                LogSpyRequest.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.LogSpyRequest)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.LogSpyRequest();
+                    if (object.node_id != null)
+                        message.node_id = String(object.node_id);
+                    if (object.count != null)
+                        if ($util.Long)
+                            (message.count = $util.Long.fromValue(object.count)).unsigned = true;
+                        else if (typeof object.count === "string")
+                            message.count = parseInt(object.count, 10);
+                        else if (typeof object.count === "number")
+                            message.count = object.count;
+                        else if (typeof object.count === "object")
+                            message.count = new $util.LongBits(object.count.low >>> 0, object.count.high >>> 0).toNumber(true);
+                    if (object.duration != null)
+                        message.duration = String(object.duration);
+                    if (object.grep != null)
+                        message.grep = String(object.grep);
+                    return message;
+                };
+
+                /**
+                 * Creates a LogSpyRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.LogSpyRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.LogSpyRequest} LogSpyRequest
+                 */
+                LogSpyRequest.from = LogSpyRequest.fromObject;
+
+                /**
+                 * Creates a plain object from a LogSpyRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.LogSpyRequest} message LogSpyRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                LogSpyRequest.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults) {
+                        object.node_id = "";
+                        if ($util.Long) {
+                            let long = new $util.Long(0, 0, true);
+                            object.count = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                        } else
+                            object.count = options.longs === String ? "0" : 0;
+                        object.duration = "";
+                        object.grep = "";
+                    }
+                    if (message.node_id != null && message.hasOwnProperty("node_id"))
+                        object.node_id = message.node_id;
+                    if (message.count != null && message.hasOwnProperty("count"))
+                        if (typeof message.count === "number")
+                            object.count = options.longs === String ? String(message.count) : message.count;
+                        else
+                            object.count = options.longs === String ? $util.Long.prototype.toString.call(message.count) : options.longs === Number ? new $util.LongBits(message.count.low >>> 0, message.count.high >>> 0).toNumber(true) : message.count;
+                    if (message.duration != null && message.hasOwnProperty("duration"))
+                        object.duration = message.duration;
+                    if (message.grep != null && message.hasOwnProperty("grep"))
+                        object.grep = message.grep;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this LogSpyRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                LogSpyRequest.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this LogSpyRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                LogSpyRequest.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return LogSpyRequest;
+            })();
+
             serverpb.StacksRequest = (function() {
 
                 /**
@@ -23661,6 +23910,33 @@ export const cockroach = $root.cockroach = (() => {
                  * @function
                  * @param {cockroach.server.serverpb.LogsRequest|Object.<string,*>} request LogsRequest message or plain object
                  * @returns {Promise<cockroach.server.serverpb.LogEntriesResponse>} Promise
+                 * @variation 2
+                 */
+
+                /**
+                 * Callback as used by {@link Status#logSpy}.
+                 * @typedef Status_logSpy_Callback
+                 * @type {function}
+                 * @param {?Error} error Error, if any
+                 * @param {cockroach.util.log.Entry} [response] Entry
+                 */
+
+                /**
+                 * Calls LogSpy.
+                 * @param {cockroach.server.serverpb.LogSpyRequest|Object.<string,*>} request LogSpyRequest message or plain object
+                 * @param {Status_logSpy_Callback} callback Node-style callback called with the error, if any, and Entry
+                 * @returns {undefined}
+                 */
+                Status.prototype.logSpy = function logSpy(request, callback) {
+                    return this.rpcCall(logSpy, $root.cockroach.server.serverpb.LogSpyRequest, $root.cockroach.util.log.Entry, request, callback);
+                };
+
+                /**
+                 * Calls LogSpy.
+                 * @name Status#logSpy
+                 * @function
+                 * @param {cockroach.server.serverpb.LogSpyRequest|Object.<string,*>} request LogSpyRequest message or plain object
+                 * @returns {Promise<cockroach.util.log.Entry>} Promise
                  * @variation 2
                  */
 
