@@ -71,11 +71,11 @@ type DistSQLVersion uint32
 //
 // ATTENTION: When updating these fields, add to version_history.txt explaining
 // what changed.
-const Version DistSQLVersion = 5
+const Version DistSQLVersion = 6
 
 // MinAcceptedVersion is the oldest version that the server is
 // compatible with; see above.
-const MinAcceptedVersion DistSQLVersion = 4
+const MinAcceptedVersion DistSQLVersion = 6
 
 var settingUseTempStorageSorts = settings.RegisterBoolSetting(
 	"sql.distsql.temp_storage.sorts",

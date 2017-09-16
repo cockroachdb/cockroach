@@ -1,4 +1,4 @@
-- Verion: 6 (MinAcceptedVersion: 6)
+- Version: 6 (MinAcceptedVersion: 6)
   - The producer<->consumer (FlowStream RPC) protocol has changed: the
     consumer_signal.handshake field was introduced. The handshake messages are
     sent by the server-side of FlowStream informing the producer of the
