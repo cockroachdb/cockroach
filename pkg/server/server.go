@@ -1222,21 +1222,18 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case strings.Contains(ae, httputil.GzipEncoding):
 		w.Header().Set(httputil.ContentEncodingHeader, httputil.GzipEncoding)
 		gzw := newGzipResponseWriter(w)
-		defer gzw.Close()
+		defer func() {
+			_ = gzw.Close()
+		}()
 		w = gzw
 	}
 	s.mux.ServeHTTP(w, r)
 }
 
 type gzipResponseWriter struct {
-	io.WriteCloser
+	gz *gzip.Writer
 	http.ResponseWriter
 }
-
-// Flush implements http.Flusher as required by grpc-gateway for clients
-// which access streaming endpoints (as exercised by the acceptance tests
-// at time of writing).
-func (*gzipResponseWriter) Flush() {}
 
 func newGzipResponseWriter(w http.ResponseWriter) *gzipResponseWriter {
 	var gz *gzip.Writer
@@ -1246,19 +1243,36 @@ func newGzipResponseWriter(w http.ResponseWriter) *gzipResponseWriter {
 		gz = gzI.(*gzip.Writer)
 		gz.Reset(w)
 	}
-	return &gzipResponseWriter{WriteCloser: gz, ResponseWriter: w}
+	return &gzipResponseWriter{gz: gz, ResponseWriter: w}
 }
 
 func (w *gzipResponseWriter) Write(b []byte) (int, error) {
-	return w.WriteCloser.Write(b)
+	return w.gz.Write(b)
 }
 
-func (w *gzipResponseWriter) Close() {
-	if w.WriteCloser != nil {
-		w.WriteCloser.Close()
-		gzipWriterPool.Put(w.WriteCloser)
-		w.WriteCloser = nil
+// Flush implements http.Flusher as required by grpc-gateway for clients
+// which access streaming endpoints (as exercised by the acceptance tests
+// at time of writing).
+func (w *gzipResponseWriter) Flush() {
+	// If Flush returns an error, we'll see it on the next call to Write or
+	// Close as well, so we can ignore it here.
+	if err := w.gz.Flush(); err == nil {
+		// Flush the wrapped ResponseWriter as well, if possible.
+		if f, ok := w.ResponseWriter.(http.Flusher); ok {
+			f.Flush()
+		}
 	}
+}
+
+func (w *gzipResponseWriter) Close() error {
+	if w.gz == nil {
+		return nil
+	}
+
+	err := w.gz.Close()
+	gzipWriterPool.Put(w.gz)
+	w.gz = nil
+	return err
 }
 
 func officialAddr(

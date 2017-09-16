@@ -82,6 +82,7 @@
 		LogFilesListRequest
 		LogFilesListResponse
 		LogFileRequest
+		LogSpyRequest
 		StacksRequest
 		MetricsRequest
 		RaftRangeNode
