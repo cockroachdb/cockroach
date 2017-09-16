@@ -31,11 +31,9 @@ import (
 
 var alphaRangeDescriptors []*roachpb.RangeDescriptor
 
-var alphaRangeDescriptorDB = MockRangeDescriptorDB(func(key roachpb.RKey, useReverseScan bool) (
-	[]roachpb.RangeDescriptor,
-	[]roachpb.RangeDescriptor,
-	*roachpb.Error,
-) {
+var alphaRangeDescriptorDB = MockRangeDescriptorDB(func(
+	key roachpb.RKey, useReverseScan bool,
+) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 	if bytes.HasPrefix(key, keys.Meta2Prefix) {
 		return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
 	}
