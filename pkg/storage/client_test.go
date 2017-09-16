@@ -632,7 +632,7 @@ type mtcRangeDescriptorDB struct {
 
 func (mrdb mtcRangeDescriptorDB) RangeLookup(
 	ctx context.Context, key roachpb.RKey, desc *roachpb.RangeDescriptor, useReverseScan bool,
-) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 	return (*mrdb.ds).RangeLookup(ctx, key, desc, useReverseScan)
 }
 

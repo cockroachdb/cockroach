@@ -60,7 +60,7 @@ func (a testDescriptorNode) Compare(b llrb.Comparable) int {
 
 func (db *testDescriptorDB) getDescriptors(
 	key roachpb.RKey, useReverseScan bool,
-) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 	rs := make([]roachpb.RangeDescriptor, 0, 1)
 	preRs := make([]roachpb.RangeDescriptor, 0, 2)
 	for i := 0; i < 3; i++ {
@@ -110,11 +110,11 @@ func (db *testDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, error) {
 
 func (db *testDescriptorDB) RangeLookup(
 	ctx context.Context, key roachpb.RKey, _ *roachpb.RangeDescriptor, useReverseScan bool,
-) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 	select {
 	case <-db.pauseChan:
 	case <-ctx.Done():
-		return nil, nil, roachpb.NewError(ctx.Err())
+		return nil, nil, ctx.Err()
 	}
 	atomic.AddInt64(&db.lookupCount, 1)
 	return db.getDescriptors(stripMeta(key), useReverseScan)
