@@ -282,7 +282,7 @@ func (ds *DistSender) LeaseHolderCache() *LeaseHolderCache {
 // single inconsistent read only.
 func (ds *DistSender) RangeLookup(
 	ctx context.Context, key roachpb.RKey, desc *roachpb.RangeDescriptor, useReverseScan bool,
-) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Add(&roachpb.RangeLookupRequest{
@@ -298,10 +298,10 @@ func (ds *DistSender) RangeLookup(
 	shuffle.Shuffle(replicas)
 	br, err := ds.sendRPC(ctx, desc.RangeID, replicas, ba)
 	if err != nil {
-		return nil, nil, roachpb.NewError(err)
+		return nil, nil, err
 	}
 	if br.Error != nil {
-		return nil, nil, br.Error
+		return nil, nil, br.Error.GoError()
 	}
 	resp := br.Responses[0].GetInner().(*roachpb.RangeLookupResponse)
 	return resp.Ranges, resp.PrefetchedRanges, nil
