@@ -4381,6 +4381,20 @@ simple_typename:
   {
     $$.val = int2vectorColType
   }
+| IDENT
+  {
+    // See https://www.postgresql.org/docs/9.1/static/datatype-character.html
+    // Postgres supports a special character type named "char" (with the quotes)
+    // that is a single-character column type. It's used by system tables.
+    // Eventually this clause will be used to parse user-defined types as well,
+    // since their names can be quoted.
+    if $1 == "char" {
+      $$.val = stringColTypeChar
+    } else {
+      sqllex.Error("syntax error")
+      return 1
+    }
+  }
 
 // We have a separate const_typename to allow defaulting fixed-length types
 // such as CHAR() and BIT() to an unspecified length. SQL9x requires that these

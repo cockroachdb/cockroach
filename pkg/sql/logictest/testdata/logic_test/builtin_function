@@ -1663,3 +1663,10 @@ b2d173023893f71caadf7cb2f9557355462570de2c9c971b9cfa5494936e28df8e13d0db4d550aab
 960b0fed9378be1e9adefd91e1be6ac9c1de7208008dfec438ff845135727bebea0f7458a5181079f61288176e0168cfea501b900c3e495b3ab9bbe4d372486d
 d82c4eb5261cb9c8aa9855edd67d1bd10482f41529858d925094d173fa662aa91ff39bc5b188615273484021dfb16fd8284cf684ccf0fc795be3aa2fc1e6c181
 d82c4eb5261cb9c8aa9855edd67d1bd10482f41529858d925094d173fa662aa91ff39bc5b188615273484021dfb16fd8284cf684ccf0fc795be3aa2fc1e6c181
+
+# We only support one encoding, UTF8, which is hardcoded to id 6 just like in
+# Postgres.
+query TT
+SELECT pg_catalog.pg_encoding_to_char(6), pg_catalog.pg_encoding_to_char(7)
+----
+UTF8  NULL
