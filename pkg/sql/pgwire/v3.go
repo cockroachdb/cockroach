@@ -713,9 +713,9 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 	return c.writeBuf.finishMsg(c.wr)
 }
 
-// canSendNoData returns true if describing a result of the input statement
+// stmtHasNoData returns true if describing a result of the input statement
 // type should return NoData.
-func canSendNoData(stmt parser.Statement) bool {
+func stmtHasNoData(stmt parser.Statement) bool {
 	return stmt == nil || stmt.StatementType() != parser.Rows
 }
 
@@ -745,7 +745,10 @@ func (c *v3Conn) handleDescribe(ctx context.Context, buf *readBuffer) error {
 			return err
 		}
 
-		return c.sendRowDescription(ctx, stmt.Columns, nil, canSendNoData(stmt.Statement), c.wr)
+		if stmtHasNoData(stmt.Statement) {
+			return c.sendNoData(c.wr)
+		}
+		return c.sendRowDescription(ctx, stmt.Columns, nil, c.wr)
 	case preparePortal:
 		portal, ok := c.session.PreparedPortals.Get(name)
 		if !ok {
@@ -753,7 +756,11 @@ func (c *v3Conn) handleDescribe(ctx context.Context, buf *readBuffer) error {
 		}
 
 		portalMeta := portal.ProtocolMeta.(preparedPortalMeta)
-		return c.sendRowDescription(ctx, portal.Stmt.Columns, portalMeta.outFormats, canSendNoData(portal.Stmt.Statement), c.wr)
+
+		if stmtHasNoData(portal.Stmt.Statement) {
+			return c.sendNoData(c.wr)
+		}
+		return c.sendRowDescription(ctx, portal.Stmt.Columns, portalMeta.outFormats, c.wr)
 	default:
 		return errors.Errorf("unknown describe type: %s", typ)
 	}
@@ -1029,26 +1036,22 @@ func (c *v3Conn) sendError(err error) error {
 	return c.wr.Flush()
 }
 
-// sendRowDescription sends a row description over the wire for the given
-// slice of columns. canSendNoData indicates that the current state of the
-// connection allows for short circuiting by sending the NoData message if
-// there aren't any columns to send. This must be set to true iff we are
-// responding in the Extended Query protocol and the portal or statement will
-// not return rows. See the notes about the NoData message in the Extended
-// Query section of the docs here:
+// sendNoData sends NoData message when there aren't any rows to
+// send. This must be set to true iff we are responding in the
+// Extended Query protocol and the portal or statement will not return
+// rows. See the notes about the NoData message in the Extended Query
+// section of the docs here:
 // https://www.postgresql.org/docs/9.6/static/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
-func (c *v3Conn) sendRowDescription(
-	ctx context.Context,
-	columns []sqlbase.ResultColumn,
-	formatCodes []formatCode,
-	canSendNoData bool,
-	w io.Writer,
-) error {
-	if len(columns) == 0 && canSendNoData {
-		c.writeBuf.initMsg(serverMsgNoData)
-		return c.writeBuf.finishMsg(w)
-	}
+func (c *v3Conn) sendNoData(w io.Writer) error {
+	c.writeBuf.initMsg(serverMsgNoData)
+	return c.writeBuf.finishMsg(w)
+}
 
+// sendRowDescription sends a row description over the wire for the given
+// slice of columns.
+func (c *v3Conn) sendRowDescription(
+	ctx context.Context, columns []sqlbase.ResultColumn, formatCodes []formatCode, w io.Writer,
+) error {
 	c.writeBuf.initMsg(serverMsgRowDescription)
 	c.writeBuf.putInt16(int16(len(columns)))
 	for i, column := range columns {
@@ -1241,9 +1244,9 @@ func (c *v3Conn) CloseResult() error {
 	}
 
 	if limit != 0 && state.statementType == parser.Rows && state.rowsAffected > state.limit {
-		return c.setError(pgerror.NewError(
+		return c.setError(pgerror.NewErrorf(
 			pgerror.CodeInternalError,
-			fmt.Sprintf("execute row count limits not supported: %d of %d", limit, state.rowsAffected),
+			"execute row count limits not supported: %d of %d", limit, state.rowsAffected,
 		))
 	}
 
@@ -1263,9 +1266,7 @@ func (c *v3Conn) CloseResult() error {
 
 	case parser.Rows:
 		if state.firstRow && state.sendDescription {
-			// We're not allowed to send a NoData message here, even if there are
-			// 0 result columns, since we're responding to a "Simple Query".
-			if err := c.sendRowDescription(ctx, state.columns, formatCodes, false, &state.buf); err != nil {
+			if err := c.sendRowDescription(ctx, state.columns, formatCodes, &state.buf); err != nil {
 				return err
 			}
 		}
@@ -1334,22 +1335,23 @@ func (c *v3Conn) AddRow(ctx context.Context, row parser.Datums) error {
 		return state.err
 	}
 
-	formatCodes := state.formatCodes
-	state.rowsAffected++
-	if len(state.columns) == 0 || state.statementType != parser.Rows {
-		return nil
+	if state.statementType != parser.Rows {
+		return c.setError(pgerror.NewError(
+			pgerror.CodeInternalError, "cannot use AddRow() with statements that don't return rows"))
 	}
 
-	if state.firstRow {
-		if state.sendDescription {
-			// We're not allowed to send a NoData message here, even if there are
-			// 0 result columns, since we're responding to a "Simple Query".
-			if err := c.sendRowDescription(ctx, state.columns, formatCodes, false, &state.buf); err != nil {
-				return err
-			}
+	// The final tag will need to know the total row count.
+	state.rowsAffected++
+
+	formatCodes := state.formatCodes
+
+	// First row and description needed: do it.
+	if state.firstRow && state.sendDescription {
+		if err := c.sendRowDescription(ctx, state.columns, formatCodes, &state.buf); err != nil {
+			return err
 		}
-		state.firstRow = false
 	}
+	state.firstRow = false
 
 	c.writeBuf.initMsg(serverMsgDataRow)
 	c.writeBuf.putInt16(int16(len(row)))
