@@ -231,24 +231,24 @@ oid         relname       relnamespace  reltype  relowner  relam  relfilenode  r
 624432001   t3_a_b_idx    1708731312    0        NULL      NULL   0            0
 2875635133  v1            1708731312    0        NULL      NULL   0            0
 
-query TIRIOBB colnames
-SELECT relname, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared
+query TIRIOBBT colnames
+SELECT relname, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence
 FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'constraint_db'
 ----
-relname       relpages  reltuples  relallvisible  reltoastrelid  relhasindex  relisshared
-t1            NULL      NULL       0              0              true         false
-primary       NULL      NULL       0              0              false        false
-t1_a_key      NULL      NULL       0              0              false        false
-index_key     NULL      NULL       0              0              false        false
-t2            NULL      NULL       0              0              true         false
-primary       NULL      NULL       0              0              false        false
-t2_t1_id_idx  NULL      NULL       0              0              false        false
-t3            NULL      NULL       0              0              true         false
-primary       NULL      NULL       0              0              false        false
-t3_a_b_idx    NULL      NULL       0              0              false        false
-v1            NULL      NULL       0              0              false        false
+relname       relpages  reltuples  relallvisible  reltoastrelid  relhasindex  relisshared  relpersistence
+t1            NULL      NULL       0              0              true         false        p
+primary       NULL      NULL       0              0              false        false        p
+t1_a_key      NULL      NULL       0              0              false        false        p
+index_key     NULL      NULL       0              0              false        false        p
+t2            NULL      NULL       0              0              true         false        p
+primary       NULL      NULL       0              0              false        false        p
+t2_t1_id_idx  NULL      NULL       0              0              false        false        p
+t3            NULL      NULL       0              0              true         false        p
+primary       NULL      NULL       0              0              false        false        p
+t3_a_b_idx    NULL      NULL       0              0              false        false        p
+v1            NULL      NULL       0              0              false        false        p
 
 query TBTIIBB colnames
 SELECT relname, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey

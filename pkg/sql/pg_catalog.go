@@ -221,6 +221,8 @@ var (
 	relKindTable = parser.NewDString("r")
 	relKindIndex = parser.NewDString("i")
 	relKindView  = parser.NewDString("v")
+
+	relPersistencePermanent = parser.NewDString("p")
 )
 
 // See: https://www.postgresql.org/docs/9.6/static/catalog-pg-class.html.
@@ -241,6 +243,7 @@ CREATE TABLE pg_catalog.pg_class (
 	reltoastrelid OID,
 	relhasindex BOOL,
 	relisshared BOOL,
+	relpersistence CHAR,
 	relistemp BOOL,
 	relkind CHAR,
 	relnatts INT,
@@ -279,6 +282,7 @@ CREATE TABLE pg_catalog.pg_class (
 				oidZero,                     // reltoastrelid
 				parser.MakeDBool(parser.DBool(table.IsPhysicalTable())), // relhasindex
 				parser.MakeDBool(false),                                 // relisshared
+				relPersistencePermanent,                                 // relPersistence
 				parser.MakeDBool(false),                                 // relistemp
 				relKind,                                                 // relkind
 				parser.NewDInt(parser.DInt(len(table.Columns))),         // relnatts
@@ -312,6 +316,7 @@ CREATE TABLE pg_catalog.pg_class (
 					oidZero,                      // reltoastrelid
 					parser.MakeDBool(false),      // relhasindex
 					parser.MakeDBool(false),      // relisshared
+					relPersistencePermanent,      // relPersistence
 					parser.MakeDBool(false),      // relistemp
 					relKindIndex,                 // relkind
 					parser.NewDInt(parser.DInt(len(index.ColumnNames))), // relnatts
