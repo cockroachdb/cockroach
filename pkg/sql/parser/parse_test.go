@@ -771,6 +771,7 @@ func TestParse2(t *testing.T) {
 
 		{`SELECT TIMESTAMP WITHOUT TIME ZONE 'foo'`, `SELECT TIMESTAMP 'foo'`},
 		{`SELECT CAST('foo' AS TIMESTAMP WITHOUT TIME ZONE)`, `SELECT CAST('foo' AS TIMESTAMP)`},
+		{`SELECT CAST(1 AS "char")`, `SELECT CAST(1 AS CHAR)`},
 
 		{`SELECT 'a' FROM t@{FORCE_INDEX=bar}`, `SELECT 'a' FROM t@bar`},
 		{`SELECT 'a' FROM t@{NO_INDEX_JOIN,FORCE_INDEX=bar}`,
@@ -1306,14 +1307,14 @@ HINT: try \h ALTER TABLE`,
 			`syntax error at or near "notatype"
 SELECT CAST(1.2+2.3 AS notatype)
                        ^
-HINT: try \h SELECT`,
+`,
 		},
 		{
 			`SELECT ANNOTATE_TYPE(1.2+2.3, notatype)`,
 			`syntax error at or near "notatype"
 SELECT ANNOTATE_TYPE(1.2+2.3, notatype)
                               ^
-HINT: try \h SELECT`,
+`,
 		},
 		{
 			`CREATE USER foo WITH PASSWORD`,
@@ -1390,6 +1391,13 @@ SELECT EXISTS(SELECT 1)[1]
 			`+ ANY <array> is invalid because "+" is not a boolean operator at or near "]"
 SELECT 1 + ANY ARRAY[1, 2, 3]
                             ^
+`,
+		},
+		{
+			`SELECT 'f'::"blah"`,
+			`syntax error at or near "blah"
+SELECT 'f'::"blah"
+            ^
 `,
 		},
 	}
