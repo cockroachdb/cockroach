@@ -357,7 +357,7 @@ CREATE TABLE pg_catalog.pg_collation (
 				parser.NewDString(collName), // collname
 				pgNamespacePGCatalog.Oid,    // collnamespace
 				parser.DNull,                // collowner
-				datEncodingUTFId,            // collencoding
+				parser.DatEncodingUTFId,     // collencoding
 				// It's not clear how to translate a Go collation tag into the format
 				// required by LC_COLLATE and LC_CTYPE.
 				parser.DNull, // collcollate
@@ -576,12 +576,6 @@ func colIDArrayToVector(arr []sqlbase.ColumnID) (parser.Datum, error) {
 	return parser.NewDIntVectorFromDArray(parser.MustBeDArray(dArr)), nil
 }
 
-var (
-	// http://doxygen.postgresql.org/pg__wchar_8h.html#a22e0c8b9f59f6e226a5968620b4bb6a9aac3b065b882d3231ba59297524da2f23
-	datEncodingUTFId  = parser.NewDInt(6)
-	datEncodingEnUTF8 = parser.NewDString("en_US.utf8")
-)
-
 // See https://www.postgresql.org/docs/9.6/static/catalog-pg-database.html.
 var pgCatalogDatabaseTable = virtualSchemaTable{
 	schema: `
@@ -609,9 +603,9 @@ CREATE TABLE pg_catalog.pg_database (
 				h.DBOid(db),              // oid
 				parser.NewDName(db.Name), // datname
 				parser.DNull,             // datdba
-				datEncodingUTFId,         // encoding
-				datEncodingEnUTF8,        // datcollate
-				datEncodingEnUTF8,        // datctype
+				parser.DatEncodingUTFId,  // encoding
+				parser.DatEncodingEnUTF8, // datcollate
+				parser.DatEncodingEnUTF8, // datctype
 				parser.MakeDBool(false),  // datistemplate
 				parser.MakeDBool(true),   // datallowconn
 				negOneVal,                // datconnlimit
