@@ -31,7 +31,7 @@ import (
 
 // RefreshSettings starts a settings-changes listener.
 func (s *Server) refreshSettings() {
-	tbl := sqlbase.SettingsTable
+	tbl := &sqlbase.SettingsTable
 
 	a := &sqlbase.DatumAlloc{}
 	settingsTablePrefix := keys.MakeTablePrefix(uint32(tbl.ID))
@@ -46,7 +46,7 @@ func (s *Server) refreshSettings() {
 		// First we need to decode the setting name field from the index key.
 		{
 			nameRow := []sqlbase.EncDatum{{Type: tbl.Columns[0].Type}}
-			_, matches, err := sqlbase.DecodeIndexKey(a, &tbl, tbl.PrimaryIndex.ID, nameRow, nil, kv.Key)
+			_, matches, err := sqlbase.DecodeIndexKey(a, tbl, &tbl.PrimaryIndex, nameRow, nil, kv.Key)
 			if err != nil {
 				return errors.Wrap(err, "failed to decode key")
 			}
