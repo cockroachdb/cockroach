@@ -73,6 +73,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogRolesTable,
 		pgCatalogSettingsTable,
 		pgCatalogTablesTable,
+		pgCatalogTablespaceTable,
 		pgCatalogTypeTable,
 		pgCatalogViewsTable,
 	},
@@ -221,6 +222,8 @@ var (
 	relKindTable = parser.NewDString("r")
 	relKindIndex = parser.NewDString("i")
 	relKindView  = parser.NewDString("v")
+
+	relPersistencePermanent = parser.NewDString("p")
 )
 
 // See: https://www.postgresql.org/docs/9.6/static/catalog-pg-class.html.
@@ -241,6 +244,7 @@ CREATE TABLE pg_catalog.pg_class (
 	reltoastrelid OID,
 	relhasindex BOOL,
 	relisshared BOOL,
+	relpersistence CHAR,
 	relistemp BOOL,
 	relkind CHAR,
 	relnatts INT,
@@ -279,6 +283,7 @@ CREATE TABLE pg_catalog.pg_class (
 				oidZero,                     // reltoastrelid
 				parser.MakeDBool(parser.DBool(table.IsPhysicalTable())), // relhasindex
 				parser.MakeDBool(false),                                 // relisshared
+				relPersistencePermanent,                                 // relPersistence
 				parser.MakeDBool(false),                                 // relistemp
 				relKind,                                                 // relkind
 				parser.NewDInt(parser.DInt(len(table.Columns))),         // relnatts
@@ -312,6 +317,7 @@ CREATE TABLE pg_catalog.pg_class (
 					oidZero,                      // reltoastrelid
 					parser.MakeDBool(false),      // relhasindex
 					parser.MakeDBool(false),      // relisshared
+					relPersistencePermanent,      // relPersistence
 					parser.MakeDBool(false),      // relistemp
 					relKindIndex,                 // relkind
 					parser.NewDInt(parser.DInt(len(index.ColumnNames))), // relnatts
@@ -352,7 +358,7 @@ CREATE TABLE pg_catalog.pg_collation (
 				parser.NewDString(collName), // collname
 				pgNamespacePGCatalog.Oid,    // collnamespace
 				parser.DNull,                // collowner
-				datEncodingUTFId,            // collencoding
+				parser.DatEncodingUTFId,     // collencoding
 				// It's not clear how to translate a Go collation tag into the format
 				// required by LC_COLLATE and LC_CTYPE.
 				parser.DNull, // collcollate
@@ -571,12 +577,6 @@ func colIDArrayToVector(arr []sqlbase.ColumnID) (parser.Datum, error) {
 	return parser.NewDIntVectorFromDArray(parser.MustBeDArray(dArr)), nil
 }
 
-var (
-	// http://doxygen.postgresql.org/pg__wchar_8h.html#a22e0c8b9f59f6e226a5968620b4bb6a9aac3b065b882d3231ba59297524da2f23
-	datEncodingUTFId  = parser.NewDInt(6)
-	datEncodingEnUTF8 = parser.NewDString("en_US.utf8")
-)
-
 // See https://www.postgresql.org/docs/9.6/static/catalog-pg-database.html.
 var pgCatalogDatabaseTable = virtualSchemaTable{
 	schema: `
@@ -604,16 +604,16 @@ CREATE TABLE pg_catalog.pg_database (
 				h.DBOid(db),              // oid
 				parser.NewDName(db.Name), // datname
 				parser.DNull,             // datdba
-				datEncodingUTFId,         // encoding
-				datEncodingEnUTF8,        // datcollate
-				datEncodingEnUTF8,        // datctype
+				parser.DatEncodingUTFId,  // encoding
+				parser.DatEncodingEnUTF8, // datcollate
+				parser.DatEncodingEnUTF8, // datctype
 				parser.MakeDBool(false),  // datistemplate
 				parser.MakeDBool(true),   // datallowconn
 				negOneVal,                // datconnlimit
 				parser.DNull,             // datlastsysoid
 				parser.DNull,             // datfrozenxid
 				parser.DNull,             // datminmxid
-				parser.DNull,             // dattablespace
+				oidZero,                  // dattablespace
 				parser.DNull,             // datacl
 			)
 		})
@@ -1001,7 +1001,7 @@ CREATE TABLE pg_catalog.pg_namespace (
 	oid OID,
 	nspname NAME NOT NULL,
 	nspowner OID,
-	aclitem STRING
+	nspacl STRING
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
@@ -1011,7 +1011,7 @@ CREATE TABLE pg_catalog.pg_namespace (
 				h.NamespaceOid(db.Name),    // oid
 				parser.NewDString(db.Name), // nspname
 				parser.DNull,               // nspowner
-				parser.DNull,               // aclitem
+				parser.DNull,               // nspacl
 			)
 		})
 	},
@@ -1333,6 +1333,30 @@ CREATE TABLE pg_catalog.pg_tables (
 				parser.MakeDBool(false),                                 // rowsecurity
 			)
 		})
+	},
+}
+
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-tablespace.html
+var pgCatalogTablespaceTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_tablespace (
+  oid OID,
+  spcname NAME,
+  spcowner OID,
+  spclocation TEXT,
+  spcacl STRING,
+  spcoptions TEXT
+);
+`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error {
+		return addRow(
+			oidZero, // oid
+			parser.NewDString("pg_default"), // spcname
+			parser.DNull,                    // spcowner
+			parser.DNull,                    // spclocation
+			parser.DNull,                    // spcacl
+			parser.DNull,                    // spcoptions
+		)
 	},
 }
 
