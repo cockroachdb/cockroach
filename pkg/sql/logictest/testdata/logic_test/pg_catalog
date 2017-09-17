@@ -79,7 +79,7 @@ pg_catalog.pg_namespace  CREATE TABLE pg_namespace (
                              oid OID NULL,
                              nspname NAME NOT NULL,
                              nspowner OID NULL,
-                             aclitem STRING NULL
+                             nspacl STRING NULL
 )
 
 query TTBTT colnames
@@ -89,7 +89,7 @@ Field     Type    Null   Default Indices
 oid       OID     true   NULL    {}
 nspname   NAME    false  NULL    {}
 nspowner  OID     true   NULL    {}
-aclitem   STRING  true   NULL    {}
+nspacl    STRING  true   NULL    {}
 
 query TTBITTBB colnames
 SHOW INDEXES FROM pg_catalog.pg_namespace
@@ -145,7 +145,7 @@ CREATE VIEW constraint_db.v1 AS SELECT p,a,b,c FROM constraint_db.t1
 query OTOT colnames
 SELECT * FROM pg_catalog.pg_namespace
 ----
-oid         nspname             nspowner  aclitem
+oid         nspname             nspowner  nspacl
 1708731312  constraint_db       NULL      NULL
 2699457641  crdb_internal       NULL      NULL
 719671438   information_schema  NULL      NULL

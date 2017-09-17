@@ -1001,7 +1001,7 @@ CREATE TABLE pg_catalog.pg_namespace (
 	oid OID,
 	nspname NAME NOT NULL,
 	nspowner OID,
-	aclitem STRING
+	nspacl STRING
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
@@ -1011,7 +1011,7 @@ CREATE TABLE pg_catalog.pg_namespace (
 				h.NamespaceOid(db.Name),    // oid
 				parser.NewDString(db.Name), // nspname
 				parser.DNull,               // nspowner
-				parser.DNull,               // aclitem
+				parser.DNull,               // nspacl
 			)
 		})
 	},
