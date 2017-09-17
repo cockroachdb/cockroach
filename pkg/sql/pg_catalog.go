@@ -73,6 +73,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogRolesTable,
 		pgCatalogSettingsTable,
 		pgCatalogTablesTable,
+		pgCatalogTablespaceTable,
 		pgCatalogTypeTable,
 		pgCatalogViewsTable,
 	},
@@ -612,7 +613,7 @@ CREATE TABLE pg_catalog.pg_database (
 				parser.DNull,             // datlastsysoid
 				parser.DNull,             // datfrozenxid
 				parser.DNull,             // datminmxid
-				parser.DNull,             // dattablespace
+				oidZero,                  // dattablespace
 				parser.DNull,             // datacl
 			)
 		})
@@ -1332,6 +1333,30 @@ CREATE TABLE pg_catalog.pg_tables (
 				parser.MakeDBool(false),                                 // rowsecurity
 			)
 		})
+	},
+}
+
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-tablespace.html
+var pgCatalogTablespaceTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_tablespace (
+  oid OID,
+  spcname NAME,
+  spcowner OID,
+  spclocation TEXT,
+  spcacl STRING,
+  spcoptions TEXT
+);
+`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error {
+		return addRow(
+			oidZero, // oid
+			parser.NewDString("pg_default"), // spcname
+			parser.DNull,                    // spcowner
+			parser.DNull,                    // spclocation
+			parser.DNull,                    // spcacl
+			parser.DNull,                    // spcoptions
+		)
 	},
 }
 

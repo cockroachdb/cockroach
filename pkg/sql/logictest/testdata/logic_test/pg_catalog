@@ -68,6 +68,7 @@ pg_range
 pg_roles
 pg_settings
 pg_tables
+pg_tablespace
 pg_type
 pg_views
 
@@ -174,12 +175,12 @@ FROM pg_catalog.pg_database
 ORDER BY oid
 ----
 oid         datname             datconnlimit  datlastsysoid  datfrozenxid  datminmxid  dattablespace  datacl
-381876367   system              -1            NULL           NULL          NULL        NULL           NULL
-437457361   constraint_db       -1            NULL           NULL          NULL        NULL           NULL
-1965331359  test                -1            NULL           NULL          NULL        NULL           NULL
-2107984548  crdb_internal       -1            NULL           NULL          NULL        NULL           NULL
-2157629366  pg_catalog          -1            NULL           NULL          NULL        NULL           NULL
-3177026209  information_schema  -1            NULL           NULL          NULL        NULL           NULL
+381876367   system              -1            NULL           NULL          NULL        0              NULL
+437457361   constraint_db       -1            NULL           NULL          NULL        0              NULL
+1965331359  test                -1            NULL           NULL          NULL        0              NULL
+2107984548  crdb_internal       -1            NULL           NULL          NULL        0              NULL
+2157629366  pg_catalog          -1            NULL           NULL          NULL        0              NULL
+3177026209  information_schema  -1            NULL           NULL          NULL        0              NULL
 
 ## pg_catalog.pg_tables
 
@@ -201,6 +202,14 @@ tablename          hasindexes
 table_constraints  false
 table_privileges   false
 tables             false
+
+## pg_catalog.pg_tablespace
+
+query OTOTT colnames
+SELECT oid, spcname, spcowner, spcacl, spcoptions FROM pg_tablespace
+----
+oid  spcname     spcowner  spcacl  spcoptions
+0    pg_default  NULL      NULL    NULL
 
 ## pg_catalog.pg_views
 
