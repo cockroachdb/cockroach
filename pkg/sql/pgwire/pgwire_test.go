@@ -832,8 +832,11 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs(pq.StringArray([]string{"foo"})).Results("foo"),
 		},
 		// #13725
-		"SELECT * FROM d.empty": {
+		"SELECT * FROM d.emptynorows": {
 			baseTest.SetArgs(),
+		},
+		"SELECT * FROM d.emptyrows": {
+			baseTest.SetArgs().Results().Results().Results(),
 		},
 		// #14238
 		"EXPLAIN SELECT 1": {
@@ -925,7 +928,7 @@ func TestPGPreparedQuery(t *testing.T) {
 					for i, d := range dst {
 						dst[i] = reflect.Indirect(reflect.ValueOf(d)).Interface()
 					}
-					if !reflect.DeepEqual(dst, expected) {
+					if len(dst) > 0 && len(expected) > 0 && !reflect.DeepEqual(dst, expected) {
 						t.Errorf("%s: %v: expected %v, got %v", query, test.qargs, expected, dst)
 					}
 				}
@@ -970,7 +973,11 @@ CREATE TABLE d.ts (a TIMESTAMP, b DATE);
 CREATE TABLE d.two (a INT, b INT);
 CREATE TABLE d.intStr (a INT, s STRING);
 CREATE TABLE d.str (s STRING, b BYTES);
-CREATE TABLE d.empty ();`
+CREATE TABLE d.emptynorows (); -- zero columns, zero rows
+CREATE TABLE d.emptyrows (x INT);
+INSERT INTO d.emptyrows VALUES (1),(2),(3);
+ALTER TABLE d.emptyrows DROP COLUMN x; -- zero columns, 3 rows
+`
 	if _, err := db.Exec(initStmt); err != nil {
 		t.Fatal(err)
 	}
