@@ -154,9 +154,9 @@ func testDecommissionInner(
 		}
 
 		exp := [][]string{
-			{"1 row"},
 			decommissionHeader,
 			{strconv.Itoa(int(idMap[0])), "true", "0", "true", "true"},
+			{"# 1 row"},
 			decommissionFooterLive,
 		}
 		log.Infof(ctx, o)
@@ -175,12 +175,12 @@ func testDecommissionInner(
 			t.Fatal(err)
 		}
 		exp := [][]string{
-			{"4 rows"},
 			{"id"},
 			{"1"},
 			{"2"},
 			{"3"},
 			{"4"},
+			{"# 4 rows"},
 		}
 		if err := matchCSV(o, exp); err != nil {
 			t.Fatal(err)
@@ -193,12 +193,12 @@ func testDecommissionInner(
 			t.Fatal(err)
 		}
 		exp := [][]string{
-			{"4 rows"},
 			statusHeader,
 			{`1`, `.*`, `.*`, `.*`, `.*`},
 			{`2`, `.*`, `.*`, `.*`, `.*`},
 			{`3`, `.*`, `.*`, `.*`, `.*`},
 			{`4`, `.*`, `.*`, `.*`, `.*`},
+			{"# 4 rows"},
 		}
 		if err := matchCSV(o, exp); err != nil {
 			t.Fatal(err)
@@ -229,9 +229,9 @@ func testDecommissionInner(
 		log.Infof(ctx, o)
 
 		exp := [][]string{
-			{"1 row"},
 			decommissionHeader,
 			{strconv.Itoa(int(target)), "true", "0", "true", "true"},
+			{"# 1 row"},
 			decommissionFooter,
 		}
 		if err := matchCSV(o, exp); err != nil {
@@ -284,9 +284,9 @@ func testDecommissionInner(
 		log.Infof(ctx, o)
 
 		exp := [][]string{
-			{"1 row"},
 			decommissionHeader,
 			{strconv.Itoa(int(target)), "true", "0", "true", "true"},
+			{"# 1 row"},
 			decommissionFooter,
 		}
 		if err := matchCSV(o, exp); err != nil {
@@ -332,9 +332,9 @@ func testDecommissionInner(
 		log.Info(ctx, o)
 
 		exp := [][]string{
-			{"1 row"},
 			decommissionHeader,
 			{strconv.Itoa(int(target)), "true", "0", "true", "true"},
+			{"# 1 row"},
 			decommissionFooter,
 		}
 		if err := matchCSV(o, exp); err != nil {
@@ -374,9 +374,9 @@ func testDecommissionInner(
 		// decommissioned, as its replica count may drop to zero faster than
 		// liveness times out.
 		exp := [][]string{
-			{"1 row"},
 			decommissionHeader,
 			{strconv.Itoa(int(target)), `true|false`, `\d+`, `true`, `true|false`},
+			{"# 1 row"},
 			decommissionFooterLive,
 		}
 		if err := matchCSV(o, exp); err != nil {
@@ -395,11 +395,11 @@ func testDecommissionInner(
 		log.Info(ctx, o)
 
 		exp := [][]string{
-			{"3 rows"},
 			{"id"},
 			{"2"},
 			{"3"},
 			{"4"},
+			{"# 3 rows"},
 		}
 
 		if err := matchCSV(o, exp); err != nil {
@@ -417,11 +417,11 @@ func testDecommissionInner(
 		log.Info(ctx, o)
 
 		exp := [][]string{
-			{"3 rows"},
 			statusHeader,
 			{`2`, `.*`, `.*`, `.*`, `.*`},
 			{`3`, `.*`, `.*`, `.*`, `.*`},
 			{`4`, `.*`, `.*`, `.*`, `.*`},
+			{"# 3 rows"},
 		}
 		if err := matchCSV(o, exp); err != nil {
 			time.Sleep(time.Second)
