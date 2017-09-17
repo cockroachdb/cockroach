@@ -206,20 +206,27 @@ func (p *prettyReporter) doneRows(w io.Writer, seenRows int) error {
 func (p *prettyReporter) doneNoRows(_ io.Writer) error { return nil }
 
 type csvReporter struct {
-	cols    []string
-	allRows [][]string
+	csvWriter *csv.Writer
 }
 
 func (p *csvReporter) describe(w io.Writer, cols []string) error {
-	p.cols = cols
+	p.csvWriter = csv.NewWriter(w)
+	if cliCtx.tableDisplayFormat == tableDisplayTSV {
+		p.csvWriter.Comma = '\t'
+	}
+	if len(cols) == 0 {
+		_ = p.csvWriter.Write([]string{"# no columns"})
+	} else {
+		_ = p.csvWriter.Write(cols)
+	}
 	return nil
 }
 
 func (p *csvReporter) iter(_ io.Writer, _ int, row []string) error {
 	if len(row) == 0 {
-		p.allRows = append(p.allRows, []string{"# empty"})
+		_ = p.csvWriter.Write([]string{"# empty"})
 	} else {
-		p.allRows = append(p.allRows, row)
+		_ = p.csvWriter.Write(row)
 	}
 	return nil
 }
@@ -228,18 +235,8 @@ func (p *csvReporter) beforeFirstRow(_ io.Writer) error { return nil }
 func (p *csvReporter) doneNoRows(_ io.Writer) error     { return nil }
 
 func (p *csvReporter) doneRows(w io.Writer, seenRows int) error {
-	fmt.Fprintf(w, "%d row%s\n", seenRows, util.Pluralize(int64(seenRows)))
-
-	csvWriter := csv.NewWriter(w)
-	if cliCtx.tableDisplayFormat == tableDisplayTSV {
-		csvWriter.Comma = '\t'
-	}
-	if len(p.cols) == 0 {
-		_ = csvWriter.Write([]string{"# no columns"})
-	} else {
-		_ = csvWriter.Write(p.cols)
-	}
-	_ = csvWriter.WriteAll(p.allRows)
+	p.csvWriter.Flush()
+	fmt.Fprintf(w, "# %d row%s\n", seenRows, util.Pluralize(int64(seenRows)))
 	return nil
 }
 

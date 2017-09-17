@@ -443,29 +443,29 @@ func Example_logging() {
 
 	// Output:
 	// sql --logtostderr=false -e select 1
-	// 1 row
 	// 1
 	// 1
+	// # 1 row
 	// sql --log-backtrace-at=foo.go:1 -e select 1
-	// 1 row
 	// 1
 	// 1
+	// # 1 row
 	// sql --log-dir= -e select 1
-	// 1 row
 	// 1
 	// 1
+	// # 1 row
 	// sql --logtostderr=true -e select 1
-	// 1 row
 	// 1
 	// 1
+	// # 1 row
 	// sql --verbosity=0 -e select 1
-	// 1 row
 	// 1
 	// 1
+	// # 1 row
 	// sql --vmodule=foo=1 -e select 1
-	// 1 row
 	// 1
 	// 1
+	// # 1 row
 }
 
 func Example_max_results() {
@@ -696,63 +696,63 @@ func Example_sql() {
 
 	// Output:
 	// sql -e show application_name
-	// 1 row
 	// application_name
 	// cockroach
+	// # 1 row
 	// sql -e create database t; create table t.f (x int, y int); insert into t.f values (42, 69)
 	// INSERT 1
 	// sql -e delete from t.f
 	// pq: rejected: DELETE without WHERE clause (sql_safe_updates = true)
 	// sql -e select 3 -e select * from t.f
-	// 1 row
 	// 3
 	// 3
-	// 1 row
+	// # 1 row
 	// x	y
 	// 42	69
+	// # 1 row
 	// sql -e begin -e select 3 -e commit
 	// BEGIN
-	// 1 row
 	// 3
 	// 3
+	// # 1 row
 	// COMMIT
 	// sql -e select * from t.f
-	// 1 row
 	// x	y
 	// 42	69
+	// # 1 row
 	// sql --execute=show databases
-	// 5 rows
 	// Database
 	// crdb_internal
 	// information_schema
 	// pg_catalog
 	// system
 	// t
+	// # 5 rows
 	// sql -e select 1; select 2
-	// 1 row
 	// 1
 	// 1
-	// 1 row
+	// # 1 row
 	// 2
 	// 2
+	// # 1 row
 	// sql -e select 1; select 2 where false
-	// 1 row
 	// 1
 	// 1
-	// 0 rows
+	// # 1 row
 	// 2
+	// # 0 rows
 	// sql -d nonexistent -e select count(*) from pg_class limit 0
-	// 0 rows
 	// count(*)
+	// # 0 rows
 	// sql -d nonexistent -e create database nonexistent; create table foo(x int); select * from foo
-	// 0 rows
 	// x
+	// # 0 rows
 	// sql -e copy t.f from stdin
 	// woops! COPY has confused this client! Suggestion: use 'psql' for COPY
 	// user ls --echo-sql
 	// > SELECT username FROM system.users
-	// 0 rows
 	// username
+	// # 0 rows
 }
 
 func Example_sql_format() {
@@ -769,9 +769,9 @@ func Example_sql_format() {
 	// sql -e insert into t.times values ('2016-01-25 10:10:10', '2016-01-25 10:10:10-05:00')
 	// INSERT 1
 	// sql -e select * from t.times
-	// 1 row
 	// bare	withtz
 	// 2016-01-25 10:10:10+00:00	2016-01-25 15:10:10+00:00
+	// # 1 row
 }
 
 func Example_sql_column_labels() {
@@ -797,7 +797,6 @@ func Example_sql_column_labels() {
 	// sql -e insert into t.u values (0, 0, 0, 0, 0, 0)
 	// INSERT 1
 	// sql -e show columns from t.u
-	// 6 rows
 	// Field	Type	Null	Default	Indices
 	// """foo"	INT	true	NULL	{}
 	// \foo	INT	true	NULL	{}
@@ -806,10 +805,11 @@ func Example_sql_column_labels() {
 	// κόσμε	INT	true	NULL	{}
 	// a|b	INT	true	NULL	{}
 	// ܈85	INT	true	NULL	{}
+	// # 6 rows
 	// sql -e select * from t.u
-	// 1 row
 	// """foo"	\foo	"""foo\nbar"""	κόσμε	a|b	܈85
 	// 0	0	0	0	0	0
+	// # 1 row
 	// sql --format=pretty -e show columns from t.u
 	// +---------+------+------+---------+---------+
 	// |  Field  | Type | Null | Default | Indices |
@@ -831,13 +831,13 @@ func Example_sql_column_labels() {
 	// +------+------+------------+-------+-----+-----+
 	// (1 row)
 	// sql --format=tsv -e select * from t.u
-	// 1 row
 	// """foo"	\foo	"""foo\nbar"""	κόσμε	a|b	܈85
 	// 0	0	0	0	0	0
+	// # 1 row
 	// sql --format=csv -e select * from t.u
-	// 1 row
 	// """foo",\foo,"""foo\nbar""",κόσμε,a|b,܈85
 	// 0,0,0,0,0,0
+	// # 1 row
 	// sql --format=sql -e select * from t.u
 	// CREATE TABLE results (
 	//   """foo" STRING,
@@ -890,11 +890,11 @@ func Example_sql_empty_table() {
 	// +---+
 	// (0 rows)
 	// sql --format=tsv -e select * from t.norows
-	// 0 rows
 	// x
+	// # 0 rows
 	// sql --format=csv -e select * from t.norows
-	// 0 rows
 	// x
+	// # 0 rows
 	// sql --format=sql -e select * from t.norows
 	// CREATE TABLE results (
 	//   x STRING
@@ -913,17 +913,17 @@ func Example_sql_empty_table() {
 	// --
 	// (3 rows)
 	// sql --format=tsv -e select * from t.nocols
-	// 3 rows
 	// # no columns
 	// # empty
 	// # empty
 	// # empty
+	// # 3 rows
 	// sql --format=csv -e select * from t.nocols
-	// 3 rows
 	// # no columns
 	// # empty
 	// # empty
 	// # empty
+	// # 3 rows
 	// sql --format=sql -e select * from t.nocols
 	// CREATE TABLE results (
 	// );
@@ -952,11 +952,11 @@ func Example_sql_empty_table() {
 	// --
 	// (0 rows)
 	// sql --format=tsv -e select * from t.nocolsnorows
-	// 0 rows
 	// # no columns
+	// # 0 rows
 	// sql --format=csv -e select * from t.nocolsnorows
-	// 0 rows
 	// # no columns
+	// # 0 rows
 	// sql --format=sql -e select * from t.nocolsnorows
 	// CREATE TABLE results (
 	// );
@@ -1027,7 +1027,6 @@ func Example_sql_table() {
 	// sql -e insert into t.t values (e'a\tb\tc\n12\t123123213\t12313', 'tabs')
 	// INSERT 1
 	// sql -e select * from t.t
-	// 9 rows
 	// s	d
 	// foo	printable ASCII
 	// """foo"	printable ASCII with quotes
@@ -1040,6 +1039,7 @@ func Example_sql_table() {
 	// ܈85	UTF8 string with RTL char
 	// "a	b	c
 	// 12	123123213	12313"	tabs
+	// # 9 rows
 	// sql --format=pretty -e select * from t.t
 	// +--------------------------------+--------------------------------+
 	// |               s                |               d                |
@@ -1058,7 +1058,6 @@ func Example_sql_table() {
 	// +--------------------------------+--------------------------------+
 	// (9 rows)
 	// sql --format=tsv -e select * from t.t
-	// 9 rows
 	// s	d
 	// foo	printable ASCII
 	// """foo"	printable ASCII with quotes
@@ -1071,8 +1070,8 @@ func Example_sql_table() {
 	// ܈85	UTF8 string with RTL char
 	// "a	b	c
 	// 12	123123213	12313"	tabs
+	// # 9 rows
 	// sql --format=csv -e select * from t.t
-	// 9 rows
 	// s,d
 	// foo,printable ASCII
 	// """foo",printable ASCII with quotes
@@ -1085,6 +1084,7 @@ func Example_sql_table() {
 	// ܈85,UTF8 string with RTL char
 	// "a	b	c
 	// 12	123123213	12313",tabs
+	// # 9 rows
 	// sql --format=sql -e select * from t.t
 	// CREATE TABLE results (
 	//   s STRING,
@@ -1254,8 +1254,8 @@ func Example_user() {
 
 	// Output:
 	// user ls
-	// 0 rows
 	// username
+	// # 0 rows
 	// user ls --format=pretty
 	// +----------+
 	// | username |
@@ -1263,8 +1263,8 @@ func Example_user() {
 	// +----------+
 	// (0 rows)
 	// user ls --format=tsv
-	// 0 rows
 	// username
+	// # 0 rows
 	// user set FOO
 	// INSERT 1
 	// user set Foo
@@ -1463,9 +1463,9 @@ func Example_node() {
 
 	// Output:
 	// node ls
-	// 1 row
 	// id
 	// 1
+	// # 1 row
 	// node ls --format=pretty
 	// +----+
 	// | id |
@@ -1855,7 +1855,7 @@ func Example_in_memory() {
 	// sql -e create database t; create table t.f (x int, y int); insert into t.f values (42, 69)
 	// INSERT 1
 	// node ls
-	// 1 row
 	// id
 	// 1
+	// # 1 row
 }
