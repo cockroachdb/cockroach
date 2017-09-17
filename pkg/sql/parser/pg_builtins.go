@@ -111,6 +111,17 @@ func makeTypeIOBuiltins(builtinPrefix string, typ Type) map[string][]Builtin {
 	}
 }
 
+// http://doxygen.postgresql.org/pg__wchar_8h.html#a22e0c8b9f59f6e226a5968620b4bb6a9aac3b065b882d3231ba59297524da2f23
+var (
+	// DatEncodingUTFId is the encoding ID for our only supported database
+	// encoding, UTF8.
+	DatEncodingUTFId = NewDInt(6)
+	// DatEncodingEnUTF8 is the encoding name for our only supported database
+	// encoding, UTF8.
+	DatEncodingEnUTF8        = NewDString("en_US.utf8")
+	datEncodingUTF8ShortName = NewDString("UTF8")
+)
+
 var pgBuiltins = map[string][]Builtin{
 	// See https://www.postgresql.org/docs/9.6/static/functions-info.html.
 	"pg_backend_pid": {
@@ -119,6 +130,23 @@ var pgBuiltins = map[string][]Builtin{
 			ReturnType: fixedReturnType(TypeInt),
 			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
 				return NewDInt(-1), nil
+			},
+			Info: notUsableInfo,
+		},
+	},
+
+	// See https://www.postgresql.org/docs/9.3/static/catalog-pg-database.html.
+	"pg_encoding_to_char": {
+		Builtin{
+			Types: ArgTypes{
+				{"encoding_id", TypeInt},
+			},
+			ReturnType: fixedReturnType(TypeString),
+			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+				if args[0].Compare(ctx, DatEncodingUTFId) == 0 {
+					return datEncodingUTF8ShortName, nil
+				}
+				return DNull, nil
 			},
 			Info: notUsableInfo,
 		},
