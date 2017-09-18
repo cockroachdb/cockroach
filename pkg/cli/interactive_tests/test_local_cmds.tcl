@@ -36,8 +36,8 @@ end_test
 
 start_test "Check that \\| reads statements."
 send "\\| echo 'select '; echo '38 + 4;'\r"
-eexpect "1 row"
 eexpect 42
+eexpect "1 row"
 eexpect root@
 end_test
 
@@ -89,8 +89,8 @@ eexpect " ->"
 send "\\?\r"
 eexpect " ->"
 send "world';\r"
-eexpect "1 row"
 eexpect "hello\\\\nworld"
+eexpect "1 row"
 eexpect root@
 end_test
 
