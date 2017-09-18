@@ -250,7 +250,7 @@ func (ri *RowInserter) InsertRow(
 		}
 	}
 
-	if err := ri.Fks.checkAll(ctx, values); err != nil {
+	if err := ri.Fks.checkAll(ctx, values, traceKV); err != nil {
 		return err
 	}
 
@@ -619,12 +619,12 @@ func (ru *RowUpdater) UpdateRow(
 	}
 
 	if rowPrimaryKeyChanged {
-		if err := ru.Fks.checkIdx(ctx, ru.Helper.TableDesc.PrimaryIndex.ID, oldValues, ru.newValues); err != nil {
+		if err := ru.Fks.checkIdx(ctx, ru.Helper.TableDesc.PrimaryIndex.ID, oldValues, ru.newValues, traceKV); err != nil {
 			return nil, err
 		}
 		for i := range newSecondaryIndexEntries {
 			if !bytes.Equal(newSecondaryIndexEntries[i].Key, secondaryIndexEntries[i].Key) {
-				if err := ru.Fks.checkIdx(ctx, ru.Helper.Indexes[i].ID, oldValues, ru.newValues); err != nil {
+				if err := ru.Fks.checkIdx(ctx, ru.Helper.Indexes[i].ID, oldValues, ru.newValues, traceKV); err != nil {
 					return nil, err
 				}
 			}
@@ -741,7 +741,7 @@ func (ru *RowUpdater) UpdateRow(
 		secondaryIndexEntry := secondaryIndexEntries[i]
 		var expValue interface{}
 		if !bytes.Equal(newSecondaryIndexEntry.Key, secondaryIndexEntry.Key) {
-			if err := ru.Fks.checkIdx(ctx, ru.Helper.Indexes[i].ID, oldValues, ru.newValues); err != nil {
+			if err := ru.Fks.checkIdx(ctx, ru.Helper.Indexes[i].ID, oldValues, ru.newValues, traceKV); err != nil {
 				return nil, err
 			}
 
@@ -863,7 +863,7 @@ func MakeRowDeleter(
 func (rd *RowDeleter) DeleteRow(
 	ctx context.Context, b *client.Batch, values []parser.Datum, traceKV bool,
 ) error {
-	if err := rd.Fks.checkAll(ctx, values); err != nil {
+	if err := rd.Fks.checkAll(ctx, values, traceKV); err != nil {
 		return err
 	}
 
@@ -896,7 +896,7 @@ func (rd *RowDeleter) DeleteRow(
 func (rd *RowDeleter) DeleteIndexRow(
 	ctx context.Context, b *client.Batch, idx *IndexDescriptor, values []parser.Datum, traceKV bool,
 ) error {
-	if err := rd.Fks.checkAll(ctx, values); err != nil {
+	if err := rd.Fks.checkAll(ctx, values, traceKV); err != nil {
 		return err
 	}
 	secondaryIndexEntry, err := EncodeSecondaryIndex(
