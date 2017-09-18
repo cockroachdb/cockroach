@@ -302,7 +302,7 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 				{"normalize_history", strconv.FormatBool(c.normalizeHistory)},
 				{"show_times", strconv.FormatBool(cliCtx.showTimes)},
 				{"smart_prompt", strconv.FormatBool(c.smartPrompt)},
-			}))
+			}, "ll")) // alignment for `option` and `value` columns
 		if err != nil {
 			panic(err)
 		}

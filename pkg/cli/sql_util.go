@@ -532,11 +532,12 @@ func runQueryAndFormatResults(conn *sqlConn, w io.Writer, fn queryFunc) error {
 		}
 
 		cols := getColumnStrings(rows)
-		reporter, err := makeReporter()
+		rowIter := newRowIter(rows, true)
+		reporter, err := makeReporter(rowIter)
 		if err != nil {
 			return nil
 		}
-		if err := render(reporter, w, cols, newRowIter(rows, true), noRowsHook); err != nil {
+		if err := render(reporter, w, cols, rowIter, noRowsHook); err != nil {
 			return err
 		}
 
@@ -611,10 +612,13 @@ func getNextRow(rows *sqlRows) ([]driver.Value, error) {
 	return vals, err
 }
 
-func formatRow(vals []driver.Value, showMoreChars bool) []string {
+func formatRow(vals []driver.Value, showMoreChars bool, align []int) []string {
 	rowStrings := make([]string, len(vals))
 	for i, v := range vals {
 		rowStrings[i] = formatVal(v, showMoreChars, showMoreChars)
+		if align != nil && len(align) == len(vals) && v != nil {
+			align[i] = alignVal(v)
+		}
 	}
 	return rowStrings
 }
@@ -624,7 +628,7 @@ func getNextRowStrings(rows *sqlRows, showMoreChars bool) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return formatRow(vals, showMoreChars), nil
+	return formatRow(vals, showMoreChars, nil), nil
 }
 
 // expandTabsAndNewLines ensures that multi-line row strings that may

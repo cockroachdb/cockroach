@@ -22,6 +22,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"database/sql/driver"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/olekukonko/tablewriter"
@@ -34,6 +35,7 @@ import (
 type rowStrIter interface {
 	Next() (row []string, err error)
 	ToSlice() (allRows [][]string, err error)
+	Align() []int
 }
 
 // rowSliceIter is an implementation of the rowStrIter interface and it is used
@@ -42,6 +44,7 @@ type rowStrIter interface {
 type rowSliceIter struct {
 	allRows [][]string
 	index   int
+	align   []int
 }
 
 func (iter *rowSliceIter) Next() (row []string, err error) {
@@ -57,19 +60,42 @@ func (iter *rowSliceIter) ToSlice() ([][]string, error) {
 	return iter.allRows, nil
 }
 
+func (iter *rowSliceIter) Align() []int {
+	return iter.align
+}
+
+func convertAlign(align string) []int {
+	result := make([]int, len(align))
+	for i, v := range align {
+		switch v {
+		case 'l':
+			result[i] = tablewriter.ALIGN_LEFT
+		case 'r':
+			result[i] = tablewriter.ALIGN_RIGHT
+		case 'c':
+			result[i] = tablewriter.ALIGN_CENTER
+		default:
+			result[i] = tablewriter.ALIGN_DEFAULT
+		}
+	}
+	return result
+}
+
 // newRowSliceIter is an implementation of the rowStrIter interface and it is
 // used when the rows have not been buffered into memory yet and we want to
 // stream them to the row formatters as they arrive over the network.
-func newRowSliceIter(allRows [][]string) *rowSliceIter {
+func newRowSliceIter(allRows [][]string, align string) *rowSliceIter {
 	return &rowSliceIter{
 		allRows: allRows,
 		index:   0,
+		align:   convertAlign(align),
 	}
 }
 
 type rowIter struct {
 	rows          *sqlRows
 	showMoreChars bool
+	align         []int
 }
 
 func (iter *rowIter) Next() (row []string, err error) {
@@ -77,17 +103,42 @@ func (iter *rowIter) Next() (row []string, err error) {
 	if err != nil {
 		return nil, err
 	}
-	return formatRow(nextRow, iter.showMoreChars), nil
+	if len(iter.align) < len(nextRow) {
+		iter.align = make([]int, len(nextRow))
+	}
+	return formatRow(nextRow, iter.showMoreChars, iter.align), nil
 }
 
 func (iter *rowIter) ToSlice() ([][]string, error) {
 	return getAllRowStrings(iter.rows, iter.showMoreChars)
 }
 
+func (iter *rowIter) Align() []int {
+	return iter.align
+}
+
 func newRowIter(rows *sqlRows, showMoreChars bool) *rowIter {
 	return &rowIter{
 		rows:          rows,
 		showMoreChars: showMoreChars,
+		align:         []int{},
+	}
+}
+
+func alignVal(val driver.Value) int {
+	switch val.(type) {
+	case string:
+		return tablewriter.ALIGN_LEFT
+	case []byte:
+		return tablewriter.ALIGN_LEFT
+	case int64:
+		return tablewriter.ALIGN_RIGHT
+	case float64:
+		return tablewriter.ALIGN_RIGHT
+	case bool:
+		return tablewriter.ALIGN_CENTER
+	default:
+		return tablewriter.ALIGN_DEFAULT
 	}
 }
 
@@ -158,8 +209,9 @@ func render(
 }
 
 type prettyReporter struct {
-	cols  []string
-	table *tablewriter.Table
+	cols    []string
+	table   *tablewriter.Table
+	allRows rowStrIter
 }
 
 func (p *prettyReporter) describe(w io.Writer, cols []string) error {
@@ -190,6 +242,7 @@ func (p *prettyReporter) iter(_ io.Writer, _ int, row []string) error {
 
 func (p *prettyReporter) doneRows(w io.Writer, seenRows int) error {
 	if p.table != nil {
+		p.table.SetColumnAlignment(p.allRows.Align())
 		p.table.Render()
 	} else {
 		// A simple delimiter, like in psql.
@@ -391,10 +444,10 @@ func (p *sqlReporter) beforeFirstRow(_ io.Writer) error  { return nil }
 func (p *sqlReporter) doneNoRows(_ io.Writer) error      { return nil }
 func (p *sqlReporter) doneRows(_ io.Writer, _ int) error { return nil }
 
-func makeReporter() (rowReporter, error) {
+func makeReporter(allRows rowStrIter) (rowReporter, error) {
 	switch cliCtx.tableDisplayFormat {
 	case tableDisplayPretty:
-		return &prettyReporter{}, nil
+		return &prettyReporter{allRows: allRows}, nil
 
 	case tableDisplayTSV:
 		fallthrough
@@ -421,7 +474,7 @@ func makeReporter() (rowReporter, error) {
 // printQueryOutput takes a list of column names and a list of row
 // contents writes a formatted table to 'w'.
 func printQueryOutput(w io.Writer, cols []string, allRows rowStrIter) error {
-	reporter, err := makeReporter()
+	reporter, err := makeReporter(allRows)
 	if err != nil {
 		return err
 	}
