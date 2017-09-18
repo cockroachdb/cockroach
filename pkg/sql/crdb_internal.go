@@ -84,7 +84,7 @@ CREATE TABLE crdb_internal.node_build_info (
 			"ClusterID":    execCfg.ClusterID().String(),
 			"Organization": execCfg.Organization(),
 			"Build":        info.Short(),
-			"Version":      info.VersionedTag(),
+			"Version":      info.Tag,
 		} {
 			if err := addRow(
 				nodeID,

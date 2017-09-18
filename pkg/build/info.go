@@ -42,8 +42,8 @@ const TimeFormat = "2006/01/02 15:04:05"
 var (
 	// These variables are initialized via the linker -X flag in the
 	// top-level Makefile when compiling release binaries.
-	tag         = "unknown" // Tag of this build (git describe --exact-match)
-	baseBranch  = "unknown" // Base branch of this build (git describe)
+	tag         = "unknown" // Tag of this build (git describe --tags w/ optional '-dirty' suffix)
+	baseBranch  = "unknown" // Base branch of this build (git describe --tags --abbrev=0)
 	utcTime     string      // Build time in UTC (year/month/day hour:min:sec)
 	rev         string      // SHA-1 of this build (git rev-parse)
 	cgoCompiler = C.GoString(C.compilerVersion())
@@ -76,15 +76,10 @@ func init() {
 	}
 }
 
-// VersionedTag prefixes the tag with VersionPrefix.
-func (b Info) VersionedTag() string {
-	return VersionPrefix() + "-" + b.Tag
-}
-
 // Short returns a pretty printed build and version summary.
 func (b Info) Short() string {
 	return fmt.Sprintf("CockroachDB %s %s (%s, built %s, %s)",
-		b.Distribution, b.VersionedTag(), b.Platform, b.Time, b.GoVersion)
+		b.Distribution, b.Tag, b.Platform, b.Time, b.GoVersion)
 }
 
 // Timestamp parses the utcTime string and returns the number of seconds since epoch.
