@@ -17,8 +17,6 @@ package timeutil
 import (
 	"math"
 	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 )
 
 // ClocklessMaxOffset is a special-cased value that is used when the cluster
@@ -26,25 +24,9 @@ import (
 // assuming any bound on the clock drift.
 const ClocklessMaxOffset = math.MaxInt64
 
-var nowFunc = now
-
-func initFakeTime() {
-	if offset := envutil.EnvOrDefaultDuration("COCKROACH_SIMULATED_OFFSET", 0); offset == 0 {
-		nowFunc = now
-	} else {
-		nowFunc = func() time.Time {
-			return now().Add(offset)
-		}
-	}
-}
-
-// Now returns the current local time with an optional offset specified by the
-// environment. The offset functionality is guarded by the  "clockoffset" build
-// tag - if built with that tag, the clock offset is parsed from the
-// "COCKROACH_SIMULATED_OFFSET" environment variable using time.ParseDuration,
-// which supports quasi-human values like "1h" or "1m".
+// Now returns the current local time.
 func Now() time.Time {
-	return nowFunc()
+	return now()
 }
 
 // Since returns the time elapsed since t.
