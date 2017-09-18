@@ -64,7 +64,7 @@ export default class CommandQueueViz extends React.Component<QueueVizProps, Queu
           </tr>
           <tr>
             <td>Key Range</td>
-            <td>{command.span.key} to {command.span.end_key}</td>
+            <td>{command.key} to {command.end_key}</td>
           </tr>
           <tr>
             <td>Timestamp</td>

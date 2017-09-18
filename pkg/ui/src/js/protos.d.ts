@@ -20613,7 +20613,8 @@ export namespace cockroach {
 
         type CommandQueueCommand$Properties = {
             id?: Long;
-            span?: cockroach.roachpb.Span$Properties;
+            key?: string;
+            end_key?: string;
             readonly?: boolean;
             timestamp?: cockroach.util.hlc.Timestamp$Properties;
             prereqs?: Long[];
@@ -20642,10 +20643,16 @@ export namespace cockroach {
             public id: Long;
 
             /**
-             * CommandQueueCommand span.
-             * @type {(cockroach.roachpb.Span$Properties|null)}
+             * CommandQueueCommand key.
+             * @type {string}
              */
-            public span: (cockroach.roachpb.Span$Properties|null);
+            public key: string;
+
+            /**
+             * CommandQueueCommand end_key.
+             * @type {string}
+             */
+            public end_key: string;
 
             /**
              * CommandQueueCommand readonly.
