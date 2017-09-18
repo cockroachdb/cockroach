@@ -261,6 +261,15 @@ func (at *allocatorTest) runSchemaChanges(
 func (at *allocatorTest) ValidateSchemaChanges(
 	ctx context.Context, t *testing.T, validationQueries []string,
 ) error {
+	// Sleep for a bit before validating the schema changes to
+	// accommodate for time differences between nodes. Some of the
+	// schema change backfill transactions might use a timestamp a bit
+	// into the future. This is not a problem normally because a read
+	// of schema data written into the impending future gets pushed,
+	// but the reads being done here are at a specific timestamp through
+	// AS OF SYSTEM TIME.
+	time.Sleep(5 * time.Second)
+
 	db, err := gosql.Open("postgres", at.f.PGUrl(ctx, 0))
 	if err != nil {
 		return err
