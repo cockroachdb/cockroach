@@ -15,45 +15,66 @@
 package engine
 
 import (
-	"fmt"
-	"io/ioutil"
-	"path/filepath"
-	"sync"
+	"os"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"golang.org/x/net/context"
 )
 
-func TestCleanupTempStorageDirs(t *testing.T) {
+func TestNewTempEngine(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// Create the temporary directory for the RocksDB engine.
+	tempDir, tempDirCleanup := testutils.TempDir(t)
+	defer tempDirCleanup()
+
+	engine, err := NewTempEngine(base.TempStorageConfig{Path: tempDir})
+	if err != nil {
+		t.Fatalf("error encountered when invoking NewTempEngine: %v", err)
+	}
+	defer engine.Close()
+
+	tempEngine := engine.(*tempEngine)
+	if tempEngine.RocksDB == nil {
+		t.Fatalf("a rocksdb instance was not returned in NewTempEngine")
+	}
+
+	// Temp engine initialized with the temporary directory.
+	if tempDir != tempEngine.RocksDB.cfg.Dir {
+		t.Fatalf("rocksdb instance initialized with unexpected parent directory.\nexpected %s\nactual %s", tempDir, tempEngine.RocksDB.cfg.Dir)
+	}
+}
+
+// TestTempEngineClose verifies that Close indeeds removes the associated
+// temporary directory for the engine.
+func TestTempEngineClose(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	dir, dirCleanup := testutils.TempDir(t)
 	defer dirCleanup()
 
-	tempBytes := []byte{byte(1), byte(2), byte(3)}
-	if err := ioutil.WriteFile(filepath.Join(dir, "FOO"), tempBytes, 0777); err != nil {
-		t.Fatal(err)
-	}
-	if err := ioutil.WriteFile(filepath.Join(dir, "BAR"), tempBytes, 0777); err != nil {
-		t.Fatal(err)
-	}
-	if err := ioutil.WriteFile(filepath.Join(dir, "BAZ"), tempBytes, 0777); err != nil {
-		t.Fatal(err)
-	}
-
-	wg := sync.WaitGroup{}
-	if err := cleanupTempStorageDirs(context.TODO(), dir, &wg); err != nil {
-		t.Fatal(fmt.Sprintf("error encountered in cleanupTempStorageDirs: %v", err))
-	}
-	wg.Wait()
-
-	files, err := ioutil.ReadDir(dir)
+	engine, err := NewTempEngine(base.TempStorageConfig{Path: dir})
 	if err != nil {
-		t.Fatal(fmt.Sprintf("error reading temporary directory: %v", err))
+		t.Fatalf("error encountered when invoking NewTempEngine: %v", err)
 	}
-	if len(files) != 0 {
-		t.Fatalf("directory not cleaned up after calling cleanupTempStorageDirs, still have %d files", len(files))
+
+	// Close the engine to cleanup temporary directory.
+	engine.Close()
+
+	tempEngine := engine.(*tempEngine)
+
+	// Check that the temp store directory is removed.
+	_, err = os.Stat(tempEngine.RocksDB.cfg.Dir)
+	// os.Stat returns a nil err if the file exists, so we need to check
+	// the NOT of this condition instead of os.IsExist() (which returns
+	// false and misses this error).
+	if !os.IsNotExist(err) {
+		if err == nil {
+			t.Fatalf("temp storage directory %s was not cleaned up during Close", tempEngine.RocksDB.cfg.Dir)
+		} else {
+			// Unexpected error.
+			t.Fatal(err)
+		}
 	}
 }

@@ -390,3 +390,61 @@ func DefaultRetryOptions() retry.Options {
 		Multiplier:     2,
 	}
 }
+
+const (
+	// DefaultTempStorageMaxSizeBytes is the default maximum budget
+	// for temp storage.
+	DefaultTempStorageMaxSizeBytes = 32 * 1024 * 1024 * 1024 /* 32GB */
+	// DefaultInMemTempStorageMaxSizeBytes is the default maximum budget
+	// for in-memory temp storages.
+	DefaultInMemTempStorageMaxSizeBytes = 100 * 1024 * 1024 /* 100MB */
+)
+
+// TempStorageConfig contains the details that can be specified in the cli
+// pertaining to temp storage flags, specifically --temp-dir and
+// --max-disk-temp-storage.
+type TempStorageConfig struct {
+	// InMemory specifies whether the temporary storage will remain
+	// in-memory or occupy a temporary subdirectory on-disk.
+	InMemory bool
+	// ParentDir is the path to the parent directory where the temporary
+	// subdirectory (with filepath Path) for temp storage will be created.
+	ParentDir string
+	// Path is the filepath of the temporary subdirectory created for
+	// the temp storage. This is dynamically set when NewServer is called.
+	Path string
+	// MaxSizeBytes is the space budget allocated for temp storage. This
+	// will either be a limit in-memory (if InMemory is true) or on-disk.
+	// If the budget is exceeded, no further allocations on temp storage
+	// will be permitted unless space is freed from previous allocations.
+	MaxSizeBytes int64
+}
+
+// TempStorageConfigFromEnv creates a TempStorageConfig.
+// If parentDir is unspecified (empty) and the specified store is in-memory,
+// then the temp storage will also be in-memory.
+// If parentDir is unspecified but the specified store has an on-disk path,
+// parentDir will be defaulted to the store's path.
+func TempStorageConfigFromEnv(
+	firstStore StoreSpec, parentDir string, maxSizeBytes int64,
+) TempStorageConfig {
+	tsc := TempStorageConfig{
+		ParentDir:    parentDir,
+		MaxSizeBytes: maxSizeBytes,
+	}
+
+	if tsc.ParentDir == "" {
+		if firstStore.InMemory {
+			// parentDir is unspecified and the store is in-memory:
+			// the temp storage will be in-memory as well.
+			tsc.InMemory = true
+		} else {
+			// parentDir is unspecified but the store is on-disk:
+			// default the temp storage's parent directory to be
+			// the store's path.
+			tsc.ParentDir = firstStore.Path
+		}
+	}
+
+	return tsc
+}
