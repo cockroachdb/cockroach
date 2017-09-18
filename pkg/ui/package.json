@@ -46,6 +46,7 @@
     "combokeys": "^2.4.6",
     "css-loader": "^0.28.0",
     "d3": "<4.0.0",
+    "dagre-layout": "^0.8.0",
     "enzyme": "^2.8.2",
     "express": "^4.15.2",
     "favicons-webpack-plugin": "^0.0.7",
