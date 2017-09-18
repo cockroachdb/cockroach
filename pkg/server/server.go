@@ -341,6 +341,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.node = NewNode(storeCfg, s.recorder, s.registry, s.stopper, txnMetrics, sql.MakeEventLogger(s.leaseMgr))
 	roachpb.RegisterInternalServer(s.grpc, s.node)
 	storage.RegisterConsistencyServer(s.grpc, s.node.storesServer)
+	serverpb.RegisterInitServer(s.grpc, &noopInitServer{clusterID: s.ClusterID})
 
 	s.sessionRegistry = sql.MakeSessionRegistry()
 	s.jobRegistry = jobs.MakeRegistry(
