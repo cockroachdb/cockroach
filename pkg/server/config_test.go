@@ -15,7 +15,9 @@
 package server
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -28,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -205,35 +208,99 @@ func TestFilterGossipBootstrapResolvers(t *testing.T) {
 func TestTempStoreDerivation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	storeDir, storeDirCleanup := testutils.TempDir(t)
+	defer storeDirCleanup()
+
+	tempDir, tempDirCleanup := testutils.TempDir(t)
+	defer tempDirCleanup()
+
 	testCases := []struct {
+		name             string
 		firstStoreArg    string
+		tempStoreDir     string
 		expectedTempSpec base.StoreSpec
 	}{
 		{
+			name:             "InMemoryNoTempPath",
 			firstStoreArg:    "type=mem,size=1GiB",
 			expectedTempSpec: base.StoreSpec{InMemory: true},
 		},
 		{
+			name:             "InMemoryWithTempPath",
+			firstStoreArg:    "type=mem,size=1GiB",
+			tempStoreDir:     "foo",
+			expectedTempSpec: base.StoreSpec{InMemory: true},
+		},
+		{
+			name:             "InMemoryWithAttributes",
 			firstStoreArg:    "type=mem,size=1GiB,attrs=garbage:moregarbage",
 			expectedTempSpec: base.StoreSpec{InMemory: true},
 		},
 		{
-			firstStoreArg:    "path=/foo/bar",
-			expectedTempSpec: base.StoreSpec{Path: "/foo/bar/local"},
+			name:             "StorePathNoTempPath",
+			firstStoreArg:    fmt.Sprintf("path=%s", storeDir),
+			expectedTempSpec: base.StoreSpec{Path: fmt.Sprintf("%s", filepath.Join(storeDir, "cockroach-temp*"))},
+		},
+		{
+			name:             "StorePathWithTempPath",
+			firstStoreArg:    fmt.Sprintf("path=%s", storeDir),
+			tempStoreDir:     tempDir,
+			expectedTempSpec: base.StoreSpec{Path: fmt.Sprintf("%s", filepath.Join(tempDir, "cockroach-temp*"))},
+		},
+		{
+			name:             "StorePathWithAttributes",
+			firstStoreArg:    fmt.Sprintf("path=%s,size=1GiB,attrs=garbage:moregarbage", storeDir),
+			expectedTempSpec: base.StoreSpec{Path: fmt.Sprintf("%s", filepath.Join(storeDir, "cockroach-temp*"))},
 		},
 	}
 
-	for i, tc := range testCases {
-		spec, err := base.NewStoreSpec(tc.firstStoreArg)
-		if err != nil {
-			t.Fatal(err)
-		}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			spec, err := base.NewStoreSpec(tc.firstStoreArg)
+			if err != nil {
+				t.Fatal(err)
+			}
 
-		if e, a := tc.expectedTempSpec, MakeTempStoreSpecFromStoreSpec(spec); e.String() != a.String() {
-			t.Fatalf(
-				"%d: temp store spec did not match expected:\n%s",
-				i, strings.Join(pretty.Diff(e, a), "\n"),
-			)
-		}
+			actual, err := MakeTempStoreSpecFromStoreSpec(tc.tempStoreDir, spec)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			pathMatched, err := filepath.Match(tc.expectedTempSpec.Path, actual.Path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Replace expected path with the temporary path generated and perform an equality
+			// check on the rest of the StoreSpec's fields.
+			tc.expectedTempSpec.Path = actual.Path
+			specMatched := tc.expectedTempSpec.String() == actual.String()
+
+			if !pathMatched || !specMatched {
+				t.Fatalf(
+					"temp store spec did not match expected:\n%s",
+					strings.Join(pretty.Diff(tc.expectedTempSpec, actual), "\n"),
+				)
+			}
+
+		})
+	}
+}
+
+func TestTempStoreCleanup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tempDir, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		TempStoreSpec: base.StoreSpec{Path: tempDir},
+	})
+
+	s.Stopper().Stop(context.TODO())
+
+	if _, err := os.Stat(tempDir); err == nil {
+		t.Fatalf("temporary directory not cleaned up after stopping server")
 	}
 }
