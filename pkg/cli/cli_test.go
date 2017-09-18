@@ -1873,3 +1873,38 @@ func Example_in_memory() {
 	// 1
 	// # 1 row
 }
+
+func Example_pretty_print_numerical_strings() {
+	c := newCLITest(cliTestParams{})
+	defer c.cleanup()
+
+	// All strings in pretty-print output should be aligned to left regardless of their contents
+	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.t (s string, d string);"})
+	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'0', 'positive numerical string')"})
+	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'-1', 'negative numerical string')"})
+	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'1.0', 'decimal numerical string')"})
+	c.RunWithArgs([]string{"sql", "-e", "insert into t.t values (e'aaaaa', 'non-numerical string')"})
+	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "select * from t.t"})
+
+	// Output:
+	// sql -e create database t; create table t.t (s string, d string);
+	// CREATE TABLE
+	// sql -e insert into t.t values (e'0', 'positive numerical string')
+	// INSERT 1
+	// sql -e insert into t.t values (e'-1', 'negative numerical string')
+	// INSERT 1
+	// sql -e insert into t.t values (e'1.0', 'decimal numerical string')
+	// INSERT 1
+	// sql -e insert into t.t values (e'aaaaa', 'non-numerical string')
+	// INSERT 1
+	// sql --format=pretty -e select * from t.t
+	// +-------+---------------------------+
+	// |   s   |             d             |
+	// +-------+---------------------------+
+	// | 0     | positive numerical string |
+	// | -1    | negative numerical string |
+	// | 1.0   | decimal numerical string  |
+	// | aaaaa | non-numerical string      |
+	// +-------+---------------------------+
+	// (4 rows)
+}

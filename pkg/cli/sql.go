@@ -319,7 +319,7 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 		}
 		err := printQueryOutput(os.Stdout,
 			[]string{"Option", "Value", "Description"},
-			newRowSliceIter(optData))
+			newRowSliceIter(optData, "lll" /*align*/))
 		if err != nil {
 			panic(err)
 		}
