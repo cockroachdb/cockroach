@@ -1740,16 +1740,25 @@ func TestTxnAutoRetriesDisabledAfterResultsHaveBeenSentToClient(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	tests := []struct {
-		name                  string
-		clientDirectedRetries bool
+		name                              string
+		autoCommit                        bool
+		clientDirectedRetry               bool
+		expectedTxnStateAfterRetriableErr sql.TxnStateEnum
 	}{
 		{
-			name: "client_directed_retries",
-			clientDirectedRetries: true,
+			name:                              "client_directed_retries",
+			clientDirectedRetry:               true,
+			expectedTxnStateAfterRetriableErr: sql.RestartWait,
 		},
 		{
-			name: "no_client_directed_retries",
-			clientDirectedRetries: false,
+			name:                              "no_client_directed_retries",
+			clientDirectedRetry:               false,
+			expectedTxnStateAfterRetriableErr: sql.Aborted,
+		},
+		{
+			name:                              "autocommit",
+			autoCommit:                        true,
+			expectedTxnStateAfterRetriableErr: sql.NoTxn,
 		},
 	}
 	for _, tc := range tests {
@@ -1762,40 +1771,50 @@ func TestTxnAutoRetriesDisabledAfterResultsHaveBeenSentToClient(t *testing.T) {
 			// incorrect, as there's no guarantee that the state check at the end will
 			// happen on the right connection.
 			defer func() {
+				if tc.autoCommit {
+					// No cleanup necessary.
+					return
+				}
 				if _, err := sqlDB.Exec("ROLLBACK"); err != nil {
 					t.Fatal(err)
 				}
 			}()
 
 			var savepoint string
-			if tc.clientDirectedRetries {
+			if tc.clientDirectedRetry {
 				savepoint = "SAVEPOINT cockroach_restart;"
 			}
+
+			var prefix, suffix string
+			if !tc.autoCommit {
+				prefix = "BEGIN; " + savepoint
+				suffix = "COMMIT;"
+			}
+
 			// We'll run a statement that produces enough results to overflow the
 			// buffers and start streaming results to the client before the retriable
-			// error is injected.
+			// error is injected. We do this through a single statement (a UNION)
+			// instead of two separate statements in order to support the autoCommit
+			// test which needs a single statement.
+			// In the UNION we put the error first and the data second because,
+			// surprisingly, the order of the UNION results is <right operand>, <left
+			// operand>. TODO(knz): invert this once we invert the UNION results.
 			sql := fmt.Sprintf(`
-				BEGIN TRANSACTION;
 				%s
-				SELECT generate_series(1, 10000);
-				SELECT crdb_internal.force_retry('1s');
-				COMMIT TRANSACTION;`, savepoint)
+				SELECT crdb_internal.force_retry('1s')
+				  UNION ALL SELECT generate_series(1, 10000);
+				%s`,
+				prefix, suffix)
 			_, err := sqlDB.Exec(sql)
 			if !isRetryableErr(err) {
 				t.Fatalf("expected retriable error, got: %v", err)
-			}
-			var expectedState string
-			if tc.clientDirectedRetries {
-				expectedState = "RestartWait"
-			} else {
-				expectedState = "Aborted"
 			}
 			var state string
 			if err := sqlDB.QueryRow("SHOW TRANSACTION STATUS").Scan(&state); err != nil {
 				t.Fatal(err)
 			}
-			if state != expectedState {
-				t.Fatalf("expected state %s, got: %s", expectedState, state)
+			if expStateStr := tc.expectedTxnStateAfterRetriableErr.String(); state != expStateStr {
+				t.Fatalf("expected state %s, got: %s", expStateStr, state)
 			}
 		})
 	}
