@@ -19,12 +19,14 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
+	"strings"
 	"testing"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -277,5 +279,71 @@ func TestTrace(t *testing.T) {
 				})
 			}
 		})
+	}
+}
+
+func TestBracketInTracetags(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	query := "SELECT 42"
+
+	params := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				BeforeExecute: func(ctx context.Context, stmt string, isParallel bool) {
+					if strings.Contains(stmt, query) {
+						taggedCtx := log.WithLogTag(ctx, "hello", "[::666]")
+						log.Event(taggedCtx, "world")
+					}
+				},
+			},
+		},
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	sqlDB.SetMaxOpenConns(1)
+
+	if _, err := sqlDB.Exec("SET tracing = ON"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(query); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec("SET tracing = OFF"); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := sqlDB.Query(`SELECT message, context FROM [SHOW TRACE FOR SESSION];`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+
+	ok := false
+	for rows.Next() {
+		var msg, ct []byte
+		if err := rows.Scan(&msg, &ct); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("received trace: %q // %q", msg, ct)
+		if len(ct) > 0 && ct[0] == '[' {
+			if ct[len(ct)-1] != ']' {
+				t.Errorf("context starts with open bracket but does not close it: %q", ct)
+			}
+		}
+		c1 := strings.Count(string(ct), "[")
+		c2 := strings.Count(string(ct), "]")
+		if c1 != c2 {
+			t.Errorf("mismatched brackets: %q", ct)
+		}
+		if string(msg) == "world" && strings.Contains(string(ct), "hello=[::666]") {
+			ok = true
+		}
+	}
+	if !ok {
+		t.Fatal("expected message not found in trace")
 	}
 }
