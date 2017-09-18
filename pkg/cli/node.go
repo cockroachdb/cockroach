@@ -70,7 +70,7 @@ func runLsNodes(cmd *cobra.Command, args []string) error {
 		})
 	}
 
-	return printQueryOutput(os.Stdout, lsNodesColumnHeaders, newRowSliceIter(rows))
+	return printQueryOutput(os.Stdout, lsNodesColumnHeaders, newRowSliceIter(rows, "r"))
 }
 
 var baseNodeColumnHeaders = []string{
@@ -122,7 +122,8 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	return printQueryOutput(os.Stdout, getStatusNodeHeaders(), newRowSliceIter(nodeStatusesToRows(nodeStatuses, decommissionStatusResp)))
+	sliceIter := newRowSliceIter(nodeStatusesToRows(nodeStatuses, decommissionStatusResp), getStatusNodeAlignment())
+	return printQueryOutput(os.Stdout, getStatusNodeHeaders(), sliceIter)
 }
 
 func runStatusNodeInner(
@@ -228,6 +229,20 @@ func getStatusNodeHeaders() []string {
 		headers = append(headers, statusNodesColumnHeadersForDecommission...)
 	}
 	return headers
+}
+
+func getStatusNodeAlignment() string {
+	align := "rllll"
+	if nodeCtx.statusShowAll || nodeCtx.statusShowRanges {
+		align += "rrrrrr"
+	}
+	if nodeCtx.statusShowAll || nodeCtx.statusShowStats {
+		align += "rrrrrr"
+	}
+	if nodeCtx.statusShowAll || nodeCtx.statusShowDecommission {
+		align += decommissionResponseAlignment()
+	}
+	return align
 }
 
 // nodeStatusesToRows converts NodeStatuses to SQL-like result rows, so that we can pretty-print
@@ -395,6 +410,10 @@ func runDecommissionNodeImpl(
 	return errors.New("maximum number of retries exceeded")
 }
 
+func decommissionResponseAlignment() string {
+	return "rcrcc"
+}
+
 // decommissionResponseValueToRows converts DecommissionStatusResponse_Status to
 // SQL-like result rows, so that we can pretty-print them.
 func decommissionResponseValueToRows(
@@ -427,7 +446,7 @@ effect and the nodes will participate in the cluster as regular nodes.
 
 func printDecommissionStatus(resp serverpb.DecommissionStatusResponse) error {
 	return printQueryOutput(os.Stdout, decommissionNodesColumnHeaders,
-		newRowSliceIter(decommissionResponseValueToRows(resp.Status)))
+		newRowSliceIter(decommissionResponseValueToRows(resp.Status), decommissionResponseAlignment()))
 }
 
 func runRecommissionNode(cmd *cobra.Command, args []string) error {
