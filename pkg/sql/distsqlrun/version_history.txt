@@ -4,4 +4,9 @@
     sent by the server-side of FlowStream informing the producer of the
     consumer's status. The messages would cause a server running the previous
     version to erroneously think that the consumer has sent a drain signal,
-    therefor MinAcceptedVersion was increased.
+    therefore MinAcceptedVersion was increased.
+- Version: 7 (MinAcceptedVersion: 6)
+  - Three new aggregations (SQRDIFF, FINAL_VARIANCE, FINAL_STDDEV) were
+    introduced to support local and final aggregation of the builtin
+    functions STDDEV and VARIANCE. The enum Func under message AggregatorSpec
+    has expanded in processors.proto to include these new aggregation types.
