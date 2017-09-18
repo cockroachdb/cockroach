@@ -51,8 +51,21 @@ class CommandQueue extends React.Component<CommandQueueProps, {}> {
     const rangeID = this.props.params[rangeIDAttr];
 
     return (
-      <div className="section">
+      <div className="section command-queue">
         <h1>Command queue report for r{rangeID.toString()}</h1>
+        <div className="command-queue__key">
+          Key:
+          <div
+            className="command-queue__key__read"
+            style={{marginLeft: 5, marginRight: 5, backgroundColor: "lightgreen"}}>
+            Read
+          </div>
+          <div
+            className="command-queue__key__write"
+            style={{backgroundColor: "pink"}}>
+            Write
+          </div>
+        </div>
         <h2>Local Scope</h2>
         {this.props.commandQueue
           ? <CommandQueueViz queue={this.props.commandQueue.queues.localScope} />

@@ -41,9 +41,6 @@ const testData: CommandQueueVizProps = {
   },
 };
 
-const VIZ_WIDTH = 500;
-const VIZ_HEIGHT = VIZ_WIDTH / 2;
-
 const COMMAND_WIDTH = 60;
 const COMMAND_HEIGHT = 40;
 
@@ -52,10 +49,13 @@ export default class CommandQueueViz extends React.Component<CommandQueueVizProp
   render() {
     const g = new dagre.graphlib.Graph();
 
-    g.setGraph({});
+    g.setGraph({
+      marginx: 20,
+      marginy: 20,
+    });
     g.setDefaultEdgeLabel((_label: string) => ({}));
 
-    testData.queue.commands.forEach((command) => {
+    this.props.queue.commands.forEach((command) => {
       g.setNode(command.id.toString(), {
         width: COMMAND_WIDTH,
         height: COMMAND_HEIGHT,
@@ -75,8 +75,18 @@ export default class CommandQueueViz extends React.Component<CommandQueueVizProp
     const edges = g.edges().map((edgeId) => (
       g.edge(edgeId)
     ));
+
+    if (nodes.length === 0) {
+      return (
+        <p>No commands in queue</p>
+      );
+    }
+
     return (
-      <svg width={VIZ_WIDTH} height={VIZ_HEIGHT}>
+      <svg
+        width={g.graph().width}
+        height={g.graph().height}
+        style={{border: "1px solid black"}}>
         {nodes.map((node) => (
           <rect
             key={node.command.id.toString()}
@@ -84,7 +94,7 @@ export default class CommandQueueViz extends React.Component<CommandQueueVizProp
             y={node.y - COMMAND_HEIGHT / 2}
             width={node.width}
             height={node.height}
-            style={{fill: "lightblue", stroke: "black"}} />
+            style={{fill: node.command.readonly ? "lightgreen" : "pink", stroke: "black"}} />
         ))}
         {nodes.map((node) => (
           <text
