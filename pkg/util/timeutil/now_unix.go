@@ -20,4 +20,6 @@ import (
 	"time"
 )
 
-var now = time.Now
+func now() time.Time {
+	return time.Now()
+}
