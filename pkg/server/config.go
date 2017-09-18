@@ -31,8 +31,6 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
-	"path/filepath"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -63,7 +61,6 @@ const (
 	defaultScanMaxIdleTime                = 200 * time.Millisecond
 	defaultMetricsSampleInterval          = 10 * time.Second
 	defaultStorePath                      = "cockroach-data"
-	defaultTempStoreRelativePath          = "local"
 	defaultEventLogEnabled                = true
 	defaultEnableWebSessionAuthentication = false
 	defaultTempStoreMaxSizeBytes          = 32 * 1024 * 1024 * 1024 /* 32GB */
@@ -344,21 +341,38 @@ func SetOpenFileLimitForOneStore() (uint64, error) {
 	return setOpenFileLimit(1)
 }
 
-// MakeTempStoreSpecFromStoreSpec creates a spec for a temporary store under
-// the given StoreSpec's path. If the given spec specifies an in-memory store,
-// the temporary store will be in-memory as well. The Attributes field of the
-// given spec is intentionally not propagated to the temporary store.
-//
-// TODO(arjun): Add a CLI flag to override this.
-func MakeTempStoreSpecFromStoreSpec(spec base.StoreSpec) base.StoreSpec {
-	if spec.InMemory {
+// MakeTempStoreSpecFromStoreSpec creates a spec for a temporary store. If the desiredDir
+// is not specified with the --temp-dir flag, then a subdirectory under the firstStore's path
+// will be used for the temporary store.
+// The Attributes field of the given spec is intentionally not propagated to the temporary store.
+func MakeTempStoreSpecFromStoreSpec(
+	desiredDir string, firstStore base.StoreSpec,
+) (base.StoreSpec, error) {
+	if firstStore.InMemory {
 		return base.StoreSpec{
 			InMemory: true,
-		}
+		}, nil
 	}
-	return base.StoreSpec{
-		Path: filepath.Join(spec.Path, defaultTempStoreRelativePath),
+
+	// No temporary directory specified in CLI flag:
+	// default temporary subdirectory under firstStore's path.
+	if desiredDir == "" {
+		desiredDir = firstStore.Path
 	}
+
+	// Guaranteed to always generate a unique temporary directory with the
+	// prefix "cockroach-temp".
+	tempPath, err := ioutil.TempDir(desiredDir, "cockroach-temp")
+	if err != nil {
+		log.Errorf(
+			context.TODO(),
+			"could not create temporary subdirectory under the specified path %s\n",
+			desiredDir,
+		)
+		return base.StoreSpec{}, err
+	}
+
+	return base.StoreSpec{Path: tempPath}, nil
 }
 
 // MakeConfig returns a Context with default values.
@@ -382,7 +396,7 @@ func MakeConfig(st *cluster.Settings) Config {
 		Stores: base.StoreSpecList{
 			Specs: []base.StoreSpec{storeSpec},
 		},
-		TempStoreSpec:         MakeTempStoreSpecFromStoreSpec(storeSpec),
+		TempStoreSpec:         base.StoreSpec{},
 		TempStoreMaxSizeBytes: defaultTempStoreMaxSizeBytes,
 	}
 	cfg.AmbientCtx.Tracer = st.Tracer

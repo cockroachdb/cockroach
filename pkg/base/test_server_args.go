@@ -55,9 +55,14 @@ type TestServerArgs struct {
 
 	// StoreSpecs define the stores for this server. If you want more than one
 	// store per node, populate this array with StoreSpecs each representing a
-	// store. If no StoreSpecs are provided than a single DefaultTestStoreSpec
+	// store. If no StoreSpecs are provided then a single DefaultTestStoreSpec
 	// will be used.
 	StoreSpecs []StoreSpec
+
+	// TempStoreSpec specifies the temporary directory which
+	// will be used as working memory for distributed operations.
+	// If no TempStoreSpecs are provided then DefaultTestStoreSpec will be used.
+	TempStoreSpec StoreSpec
 
 	// Fields copied to the server.Config.
 	Insecure                 bool
