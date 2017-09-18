@@ -433,6 +433,19 @@ Also, if you use equal signs in the file path to a store, you must use the
 "path" field label.`,
 	}
 
+	TempStore = FlagInfo{
+		Name: "temp-store",
+		Description: `
+The file path for temporary files and storage. The specified file path
+may or may not be located on any of the persistent stores.
+<PRE>
+
+  --temp-store=/mnt/ssd01/temp
+
+</PRE>
+Note one should NOT use the "path" label.`,
+	}
+
 	URL = FlagInfo{
 		Name:   "url",
 		EnvVar: "COCKROACH_URL",

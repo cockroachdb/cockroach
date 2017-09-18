@@ -322,7 +322,10 @@ func runStart(cmd *cobra.Command, args []string) error {
 	serverCfg.SSLCertsDir = startCtx.serverSSLCertsDir
 	serverCfg.User = security.NodeUser
 
-	serverCfg.TempStore = server.MakeTempStoreSpecFromStoreSpec(serverCfg.Stores.Specs[0])
+	// If a temporary path was not specified via a CLI flag, default one under store 1.
+	if serverCfg.TempStore.Path == "" {
+		serverCfg.TempStore = server.MakeTempStoreSpecFromStoreSpec(serverCfg.Stores.Specs[0])
+	}
 
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)

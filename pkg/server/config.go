@@ -339,8 +339,6 @@ func SetOpenFileLimitForOneStore() (uint64, error) {
 // the given StoreSpec's path. If the given spec specifies an in-memory store,
 // the temporary store will be in-memory as well. The Attributes field of the
 // given spec is intentionally not propagated to the temporary store.
-//
-// TODO(arjun): Add a CLI flag to override this.
 func MakeTempStoreSpecFromStoreSpec(spec base.StoreSpec) base.StoreSpec {
 	if spec.InMemory {
 		return base.StoreSpec{
