@@ -82,12 +82,24 @@ func (p *planner) UnionClause(
 		}
 	}
 
+	inverted := false
+	if n.Type != parser.ExceptOp {
+		// The logic below reads the rows from the right operand first,
+		// because for EXCEPT in particular this is what we need to match.
+		// However for the other operators (UNION, INTERSECT) it is
+		// actually confusing to see the right values come up first in the
+		// results. So invert this here, to reduce surprise by users.
+		left, right = right, left
+		inverted = true
+	}
+
 	node := &unionNode{
-		right:   right,
-		left:    left,
-		emitAll: emitAll,
-		emit:    emit,
-		scratch: make([]byte, 0),
+		right:    right,
+		left:     left,
+		inverted: inverted,
+		emitAll:  emitAll,
+		emit:     emit,
+		scratch:  make([]byte, 0),
 	}
 	return node, nil
 }
@@ -131,6 +143,7 @@ type unionNode struct {
 	emitAll     bool // emitAll is a performance optimization for UNION ALL.
 	emit        unionNodeEmit
 	scratch     []byte
+	inverted    bool
 }
 
 func (n *unionNode) Values() parser.Datums {

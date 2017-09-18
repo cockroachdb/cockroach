@@ -111,8 +111,11 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 	case *limitNode:
 		return getPlanColumns(n.plan, mut)
 	case *unionNode:
-		return getPlanColumns(n.left, mut)
-
+		if n.inverted {
+			return getPlanColumns(n.right, mut)
+		} else {
+			return getPlanColumns(n.left, mut)
+		}
 	}
 
 	// Every other node has no columns in their results.
