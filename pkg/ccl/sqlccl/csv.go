@@ -161,10 +161,21 @@ func doLocalCSVTransform(
 	// of pre-computed data improves overall performance.
 	const chanSize = 10000
 
-	group, gCtx := errgroup.WithContext(ctx)
 	recordCh := make(chan csvRecord, chanSize)
 	kvCh := make(chan roachpb.KeyValue, chanSize)
 	contentCh := make(chan sstContent)
+	var backupDesc *BackupDescriptor
+	conf, err := storageccl.ExportStorageConfFromURI(dest)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	es, err := storageccl.MakeExportStorage(ctx, conf)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	defer es.Close()
+
+	group, gCtx := errgroup.WithContext(ctx)
 	group.Go(func() error {
 		defer close(recordCh)
 		var err error
@@ -184,11 +195,6 @@ func doLocalCSVTransform(
 	})
 	group.Go(func() error {
 		defer close(contentCh)
-		// TODO(mjibson): this error may be swalloed if the goroutine below returns first
-		// (with a "no files in backup error"). Need to refactor this code so that this
-		// error is always surfaced first.
-		//
-		// See https://github.com/cockroachdb/cockroach/issues/17336#issuecomment-328380578.
 		var err error
 		kvCount, err = writeRocksDB(gCtx, kvCh, tempEngine, sstMaxSize, contentCh, walltime)
 		if job != nil {
@@ -200,10 +206,16 @@ func doLocalCSVTransform(
 	})
 	group.Go(func() error {
 		var err error
-		sstCount, err = makeBackup(gCtx, parentID, tableDesc, dest, contentCh, walltime, execCfg)
+		backupDesc, err = makeBackup(gCtx, contentCh, walltime, es)
 		return err
 	})
-	return csvCount, kvCount, sstCount, group.Wait()
+	if err := group.Wait(); err != nil {
+		return 0, 0, 0, err
+	}
+	err = finalizeCSVBackup(ctx, backupDesc, parentID, tableDesc, es, execCfg)
+	sstCount = int64(len(backupDesc.Files))
+
+	return csvCount, kvCount, sstCount, err
 }
 
 const (
@@ -586,42 +598,26 @@ func writeRocksDB(
 	return count, nil
 }
 
-// makeBackup writes sst files from contents to destDir and creates a backup
-// descriptor. It returns the number of SST files written.
+// makeBackup writes SST files from contents to es and creates a backup
+// descriptor populated with the written SST files.
 func makeBackup(
-	ctx context.Context,
-	parentID sqlbase.ID,
-	tableDesc *sqlbase.TableDescriptor,
-	destDir string,
-	contentCh <-chan sstContent,
-	walltime int64,
-	execCfg *sql.ExecutorConfig,
-) (int64, error) {
+	ctx context.Context, contentCh <-chan sstContent, walltime int64, es storageccl.ExportStorage,
+) (*BackupDescriptor, error) {
 	backupDesc := BackupDescriptor{
-		EndTime: hlc.Timestamp{WallTime: walltime},
+		FormatVersion: BackupFormatInitialVersion,
+		EndTime:       hlc.Timestamp{WallTime: walltime},
 	}
-
-	conf, err := storageccl.ExportStorageConfFromURI(destDir)
-	if err != nil {
-		return 0, err
-	}
-	es, err := storageccl.MakeExportStorage(ctx, conf)
-	if err != nil {
-		return 0, err
-	}
-	defer es.Close()
-
 	i := 0
 	for sst := range contentCh {
 		backupDesc.EntryCounts.DataSize += sst.size
 		checksum, err := storageccl.SHA512ChecksumData(sst.data)
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
 		i++
 		name := fmt.Sprintf("%d.sst", i)
 		if err := es.WriteFile(ctx, name, bytes.NewReader(sst.data)); err != nil {
-			return 0, err
+			return nil, err
 		}
 
 		backupDesc.Files = append(backupDesc.Files, BackupDescriptor_File{
@@ -630,9 +626,7 @@ func makeBackup(
 			Sha512: checksum,
 		})
 	}
-
-	err = finalizeCSVBackup(ctx, &backupDesc, parentID, tableDesc, es, execCfg)
-	return int64(len(backupDesc.Files)), err
+	return &backupDesc, nil
 }
 
 const csvDatabaseName = "csv"
