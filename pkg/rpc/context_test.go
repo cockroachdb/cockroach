@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -262,19 +263,24 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 		remoteClockMonitor: serverCtx.RemoteClocks,
 	})
 
-	ln, err := net.Listen("tcp", util.TestAddr.String())
-	if err != nil {
-		t.Fatal(err)
-	}
 	mu := struct {
 		syncutil.Mutex
 		conns []net.Conn
 	}{}
-	ln = &interceptingListener{Listener: ln, connCB: func(conn net.Conn) {
-		mu.Lock()
-		mu.conns = append(mu.conns, conn)
-		mu.Unlock()
-	}}
+	ln := func() *interceptingListener {
+		ln, err := net.Listen("tcp", util.TestAddr.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &interceptingListener{
+			Listener: ln,
+			connCB: func(conn net.Conn) {
+				mu.Lock()
+				mu.conns = append(mu.conns, conn)
+				mu.Unlock()
+			}}
+	}()
+
 	stopper.RunWorker(context.TODO(), func(context.Context) {
 		<-stopper.ShouldQuiesce()
 		netutil.FatalIfUnexpected(ln.Close())
@@ -299,26 +305,35 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 		return clientCtx.ConnHealth(remoteAddr)
 	})
 
-	closeConns := func() error {
+	closeConns := func() (numClosed int, _ error) {
 		mu.Lock()
 		defer mu.Unlock()
-
-		for i := len(mu.conns) - 1; i >= 0; i-- {
+		n := len(mu.conns)
+		for i := n - 1; i >= 0; i-- {
 			if err := mu.conns[i].Close(); err != nil {
-				return err
+				return 0, err
 			}
 			mu.conns = mu.conns[:i]
 		}
-		return nil
+		return n, nil
+	}
+
+	isUnhealthy := func(err error) bool {
+		// The expected code here is Unavailable, but at least on OSX you can also get
+		//
+		// rpc error: code = Internal desc = connection error: desc = "transport: authentication
+		// handshake failed: write tcp 127.0.0.1:53936->127.0.0.1:53934: write: broken pipe".
+		code := grpc.Code(err)
+		return code == codes.Unavailable || code == codes.Internal
 	}
 
 	testutils.SucceedsSoon(t, func() error {
 		// Close all the connections until we see a failure.
-		if err := closeConns(); err != nil {
+		if _, err := closeConns(); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := clientCtx.ConnHealth(remoteAddr); grpc.Code(err) != codes.Unavailable {
+		if err := clientCtx.ConnHealth(remoteAddr); !isUnhealthy(err) {
 			return errors.Errorf("unexpected error: %v", err)
 		}
 		return nil
@@ -331,33 +346,42 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 
 	// Close the listener and all the connections.
 	//
-	// NB: Closing the connections is done in the retry loop below because
+	// NB: Closing the connections is done in the retry loops below because
 	// sometimes the call to `ln.Close` interleaves with a connection attempt in
-	// such a way that a connection manages to slip through.
+	// such a way that a connection manages to slip through. This is because
+	// closing the listener does not terminate existing connections.
 	if err := ln.Close(); err != nil {
 		t.Fatal(err)
 	}
 
 	// Should become unhealthy again now that the connection was closed.
 	testutils.SucceedsSoon(t, func() error {
-		if err := closeConns(); err != nil {
+		if _, err := closeConns(); err != nil {
 			t.Fatal(err)
 		}
+		err := clientCtx.ConnHealth(remoteAddr)
 
-		if err := clientCtx.ConnHealth(remoteAddr); grpc.Code(err) != codes.Unavailable {
+		if !isUnhealthy(err) {
 			return errors.Errorf("unexpected error: %v", err)
 		}
 		return nil
 	})
 
 	// Should stay unhealthy despite reconnection attempts.
-	errUnhealthy := errors.New("connection is still unhealthy")
-	if err := util.RetryForDuration(100*clientCtx.heartbeatInterval, func() error {
-		if err := clientCtx.ConnHealth(remoteAddr); grpc.Code(err) != codes.Unavailable {
-			return errors.Errorf("unexpected error: %v", err)
+	for then := timeutil.Now(); timeutil.Since(then) < 50*clientCtx.heartbeatInterval; {
+		err := clientCtx.ConnHealth(remoteAddr)
+		if isUnhealthy(err) {
+			// What we expected. Let's keep checking that it remains that way.
+			continue
 		}
-		return errUnhealthy
-	}); err != errUnhealthy {
+		if n, closeErr := closeConns(); closeErr != nil {
+			t.Fatal(closeErr)
+		} else if n > 0 && err == nil {
+			// Connection raced its way in even though we closed the listener.
+			// We made it go away and we can't possibly run into this all the
+			// time, so try again.
+			continue
+		}
 		t.Fatal(err)
 	}
 }
