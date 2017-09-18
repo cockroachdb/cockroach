@@ -40576,6 +40576,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @typedef cockroach.sql.jobs.RestoreDetails$Properties
                  * @type {Object}
                  * @property {Uint8Array} [low_water_mark] RestoreDetails low_water_mark.
+                 * @property {cockroach.util.hlc.Timestamp$Properties} [end_time] RestoreDetails end_time.
                  * @property {Object.<string,cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties>} [table_rewrites] RestoreDetails table_rewrites.
                  * @property {Array.<string>} [uris] RestoreDetails uris.
                  */
@@ -40600,6 +40601,12 @@ export const cockroach = $root.cockroach = (() => {
                  * @type {Uint8Array}
                  */
                 RestoreDetails.prototype.low_water_mark = $util.newBuffer([]);
+
+                /**
+                 * RestoreDetails end_time.
+                 * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
+                 */
+                RestoreDetails.prototype.end_time = null;
 
                 /**
                  * RestoreDetails table_rewrites.
@@ -40641,6 +40648,8 @@ export const cockroach = $root.cockroach = (() => {
                     if (message.uris != null && message.uris.length)
                         for (let i = 0; i < message.uris.length; ++i)
                             writer.uint32(/* id 3, wireType 2 =*/26).string(message.uris[i]);
+                    if (message.end_time != null && message.hasOwnProperty("end_time"))
+                        $root.cockroach.util.hlc.Timestamp.encode(message.end_time, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
                     return writer;
                 };
 
@@ -40671,6 +40680,9 @@ export const cockroach = $root.cockroach = (() => {
                         switch (tag >>> 3) {
                         case 1:
                             message.low_water_mark = reader.bytes();
+                            break;
+                        case 4:
+                            message.end_time = $root.cockroach.util.hlc.Timestamp.decode(reader, reader.uint32());
                             break;
                         case 2:
                             reader.skip().pos++;
@@ -40717,6 +40729,11 @@ export const cockroach = $root.cockroach = (() => {
                     if (message.low_water_mark != null && message.hasOwnProperty("low_water_mark"))
                         if (!(message.low_water_mark && typeof message.low_water_mark.length === "number" || $util.isString(message.low_water_mark)))
                             return "low_water_mark: buffer expected";
+                    if (message.end_time != null && message.hasOwnProperty("end_time")) {
+                        let error = $root.cockroach.util.hlc.Timestamp.verify(message.end_time);
+                        if (error)
+                            return "end_time." + error;
+                    }
                     if (message.table_rewrites != null && message.hasOwnProperty("table_rewrites")) {
                         if (!$util.isObject(message.table_rewrites))
                             return "table_rewrites: object expected";
@@ -40753,6 +40770,11 @@ export const cockroach = $root.cockroach = (() => {
                             $util.base64.decode(object.low_water_mark, message.low_water_mark = $util.newBuffer($util.base64.length(object.low_water_mark)), 0);
                         else if (object.low_water_mark.length)
                             message.low_water_mark = object.low_water_mark;
+                    if (object.end_time != null) {
+                        if (typeof object.end_time !== "object")
+                            throw TypeError(".cockroach.sql.jobs.RestoreDetails.end_time: object expected");
+                        message.end_time = $root.cockroach.util.hlc.Timestamp.fromObject(object.end_time);
+                    }
                     if (object.table_rewrites) {
                         if (typeof object.table_rewrites !== "object")
                             throw TypeError(".cockroach.sql.jobs.RestoreDetails.table_rewrites: object expected");
@@ -40796,8 +40818,10 @@ export const cockroach = $root.cockroach = (() => {
                         object.uris = [];
                     if (options.objects || options.defaults)
                         object.table_rewrites = {};
-                    if (options.defaults)
+                    if (options.defaults) {
                         object.low_water_mark = options.bytes === String ? "" : [];
+                        object.end_time = null;
+                    }
                     if (message.low_water_mark != null && message.hasOwnProperty("low_water_mark"))
                         object.low_water_mark = options.bytes === String ? $util.base64.encode(message.low_water_mark, 0, message.low_water_mark.length) : options.bytes === Array ? Array.prototype.slice.call(message.low_water_mark) : message.low_water_mark;
                     let keys2;
@@ -40811,6 +40835,8 @@ export const cockroach = $root.cockroach = (() => {
                         for (let j = 0; j < message.uris.length; ++j)
                             object.uris[j] = message.uris[j];
                     }
+                    if (message.end_time != null && message.hasOwnProperty("end_time"))
+                        object.end_time = $root.cockroach.util.hlc.Timestamp.toObject(message.end_time, options);
                     return object;
                 };
 

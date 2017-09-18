@@ -882,6 +882,11 @@ message WriteBatchResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+enum MVCCFilter {
+  Latest = 0;
+  All = 1;
+}
+
 // ExportRequest is the argument to the Export() method, to dump a keyrange into
 // files under a basepath.
 message ExportRequest {
@@ -890,6 +895,7 @@ message ExportRequest {
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   optional ExportStorage storage = 2 [(gogoproto.nullable) = false];
   optional util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
+  optional MVCCFilter mvcc_filter = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "MVCCFilter"];
 }
 
 message BulkOpSummary {
@@ -936,6 +942,9 @@ message ImportRequest {
   repeated File files = 2 [(gogoproto.nullable) = false];
   // DataSpan is the pre-rewrite keyrange of the data in `Files`.
   optional Span data_span = 3 [(gogoproto.nullable) = false];
+  // EndTime, if not the zero value, will cause only entries before it to be
+  // imported.
+  optional util.hlc.Timestamp end_time = 6 [(gogoproto.nullable) = false];
   reserved 4;
   message TableRekey {
     option (gogoproto.equal) = true;

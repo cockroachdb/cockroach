@@ -778,6 +778,7 @@ func restore(
 	db *client.DB,
 	gossip *gossip.Gossip,
 	backupDescs []BackupDescriptor,
+	endTime hlc.Timestamp,
 	sqlDescs []sqlbase.Descriptor,
 	tableRewrites tableRewriteMap,
 	job *jobs.Job,
@@ -787,6 +788,15 @@ func restore(
 	// out work get their individual contexts.
 
 	failed := roachpb.BulkOpSummary{}
+
+	if endTime != (hlc.Timestamp{}) {
+		for _, b := range backupDescs {
+			if b.StartTime.Less(endTime) && endTime.Less(b.EndTime) && b.MVCCFilter != MVCCFilter_All {
+				return failed, errors.Errorf(
+					"incompatible RESTORE timestamp (BACKUP needs option '%s')", backupOptRevisionHistory)
+			}
+		}
+	}
 
 	var databases []*sqlbase.DatabaseDescriptor
 	var tables []*sqlbase.TableDescriptor
@@ -938,6 +948,7 @@ func restore(
 			Span:     roachpb.Span{Key: newSpan.Key},
 			DataSpan: readyForImportSpan.Span,
 			Files:    readyForImportSpan.files,
+			EndTime:  endTime,
 			Rekeys:   rekeys,
 		}
 
@@ -1050,11 +1061,22 @@ func restorePlanHook(
 		if err != nil {
 			return err
 		}
+		var endTime hlc.Timestamp
+		if restoreStmt.AsOf.Expr != nil {
+			// Use Now() for the max timestamp because Restore does its own
+			// (more restrictive) check.
+			var err error
+			endTime, err = sql.EvalAsOfTimestamp(nil, restoreStmt.AsOf, p.ExecCfg().Clock.Now())
+			if err != nil {
+				return err
+			}
+		}
+
 		opts, err := optsFn()
 		if err != nil {
 			return err
 		}
-		return doRestorePlan(ctx, restoreStmt, p, from, opts, resultsCh)
+		return doRestorePlan(ctx, restoreStmt, p, from, endTime, opts, resultsCh)
 	}
 	return fn, restoreHeader, nil
 }
@@ -1064,6 +1086,7 @@ func doRestorePlan(
 	restoreStmt *parser.Restore,
 	p sql.PlanHookState,
 	from []string,
+	endTime hlc.Timestamp,
 	opts map[string]string,
 	resultsCh chan<- parser.Datums,
 ) error {
@@ -1096,6 +1119,7 @@ func doRestorePlan(
 			return sqlDescIDs
 		}(),
 		Details: jobs.RestoreDetails{
+			EndTime:       endTime,
 			TableRewrites: tableRewrites,
 			URIs:          from,
 		},
@@ -1105,6 +1129,7 @@ func doRestorePlan(
 		p.ExecCfg().DB,
 		p.ExecCfg().Gossip,
 		backupDescs,
+		endTime,
 		sqlDescs,
 		tableRewrites,
 		job,
@@ -1156,6 +1181,7 @@ func restoreResumeHook(
 			job.DB(),
 			job.Gossip(),
 			backupDescs,
+			details.EndTime,
 			sqlDescs,
 			details.TableRewrites,
 			job,
