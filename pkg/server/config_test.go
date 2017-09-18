@@ -17,7 +17,6 @@ package server
 import (
 	"os"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -199,41 +198,5 @@ func TestFilterGossipBootstrapResolvers(t *testing.T) {
 		t.Fatalf("expected one resolver; got %+v", filtered)
 	} else if filtered[0].Addr() != resolverSpecs[1] {
 		t.Fatalf("expected resolver to be %q; got %q", resolverSpecs[1], filtered[0].Addr())
-	}
-}
-
-func TestTempStoreDerivation(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	testCases := []struct {
-		firstStoreArg    string
-		expectedTempSpec base.StoreSpec
-	}{
-		{
-			firstStoreArg:    "type=mem,size=1GiB",
-			expectedTempSpec: base.StoreSpec{InMemory: true},
-		},
-		{
-			firstStoreArg:    "type=mem,size=1GiB,attrs=garbage:moregarbage",
-			expectedTempSpec: base.StoreSpec{InMemory: true},
-		},
-		{
-			firstStoreArg:    "path=/foo/bar",
-			expectedTempSpec: base.StoreSpec{Path: "/foo/bar/local"},
-		},
-	}
-
-	for i, tc := range testCases {
-		spec, err := base.NewStoreSpec(tc.firstStoreArg)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if e, a := tc.expectedTempSpec, MakeTempStoreSpecFromStoreSpec(spec); e.String() != a.String() {
-			t.Fatalf(
-				"%d: temp store spec did not match expected:\n%s",
-				i, strings.Join(pretty.Diff(e, a), "\n"),
-			)
-		}
 	}
 }

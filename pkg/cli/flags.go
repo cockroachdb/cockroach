@@ -253,6 +253,7 @@ func init() {
 		// the stores flag has been parsed and the storage device that a percentage
 		// refers to becomes known.
 		varFlag(f, diskTempStorageSizeValue, cliflags.SQLTempStorage)
+		stringFlag(f, &serverCfg.TempStorageConfig.ParentDir, cliflags.TempDir, "")
 	}
 
 	for _, cmd := range certCmds {
