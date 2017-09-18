@@ -21,10 +21,11 @@ import "cockroach/pkg/util/hlc/timestamp.proto";
 
 message CommandQueueCommand {
   int64 id = 1;
-  roachpb.Span span = 2;
-  bool readonly = 3;
-  util.hlc.Timestamp timestamp = 4;
-  repeated int64 prereqs = 5;
+  string key = 2;
+  string end_key = 3;
+  bool readonly = 4;
+  util.hlc.Timestamp timestamp = 5;
+  repeated int64 prereqs = 6;
 }
 
 // would be called CommandQueue but that's already taken by the struct in command_queue.go

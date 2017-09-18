@@ -38266,7 +38266,8 @@ export const cockroach = $root.cockroach = (() => {
              * @typedef cockroach.storage.CommandQueueCommand$Properties
              * @type {Object}
              * @property {Long} [id] CommandQueueCommand id.
-             * @property {cockroach.roachpb.Span$Properties} [span] CommandQueueCommand span.
+             * @property {string} [key] CommandQueueCommand key.
+             * @property {string} [end_key] CommandQueueCommand end_key.
              * @property {boolean} [readonly] CommandQueueCommand readonly.
              * @property {cockroach.util.hlc.Timestamp$Properties} [timestamp] CommandQueueCommand timestamp.
              * @property {Array.<Long>} [prereqs] CommandQueueCommand prereqs.
@@ -38293,10 +38294,16 @@ export const cockroach = $root.cockroach = (() => {
             CommandQueueCommand.prototype.id = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
             /**
-             * CommandQueueCommand span.
-             * @type {(cockroach.roachpb.Span$Properties|null)}
+             * CommandQueueCommand key.
+             * @type {string}
              */
-            CommandQueueCommand.prototype.span = null;
+            CommandQueueCommand.prototype.key = "";
+
+            /**
+             * CommandQueueCommand end_key.
+             * @type {string}
+             */
+            CommandQueueCommand.prototype.end_key = "";
 
             /**
              * CommandQueueCommand readonly.
@@ -38336,14 +38343,16 @@ export const cockroach = $root.cockroach = (() => {
                     writer = $Writer.create();
                 if (message.id != null && message.hasOwnProperty("id"))
                     writer.uint32(/* id 1, wireType 0 =*/8).int64(message.id);
-                if (message.span != null && message.hasOwnProperty("span"))
-                    $root.cockroach.roachpb.Span.encode(message.span, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+                if (message.key != null && message.hasOwnProperty("key"))
+                    writer.uint32(/* id 2, wireType 2 =*/18).string(message.key);
+                if (message.end_key != null && message.hasOwnProperty("end_key"))
+                    writer.uint32(/* id 3, wireType 2 =*/26).string(message.end_key);
                 if (message.readonly != null && message.hasOwnProperty("readonly"))
-                    writer.uint32(/* id 3, wireType 0 =*/24).bool(message.readonly);
+                    writer.uint32(/* id 4, wireType 0 =*/32).bool(message.readonly);
                 if (message.timestamp != null && message.hasOwnProperty("timestamp"))
-                    $root.cockroach.util.hlc.Timestamp.encode(message.timestamp, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
+                    $root.cockroach.util.hlc.Timestamp.encode(message.timestamp, writer.uint32(/* id 5, wireType 2 =*/42).fork()).ldelim();
                 if (message.prereqs != null && message.prereqs.length) {
-                    writer.uint32(/* id 5, wireType 2 =*/42).fork();
+                    writer.uint32(/* id 6, wireType 2 =*/50).fork();
                     for (let i = 0; i < message.prereqs.length; ++i)
                         writer.int64(message.prereqs[i]);
                     writer.ldelim();
@@ -38380,15 +38389,18 @@ export const cockroach = $root.cockroach = (() => {
                         message.id = reader.int64();
                         break;
                     case 2:
-                        message.span = $root.cockroach.roachpb.Span.decode(reader, reader.uint32());
+                        message.key = reader.string();
                         break;
                     case 3:
-                        message.readonly = reader.bool();
+                        message.end_key = reader.string();
                         break;
                     case 4:
-                        message.timestamp = $root.cockroach.util.hlc.Timestamp.decode(reader, reader.uint32());
+                        message.readonly = reader.bool();
                         break;
                     case 5:
+                        message.timestamp = $root.cockroach.util.hlc.Timestamp.decode(reader, reader.uint32());
+                        break;
+                    case 6:
                         if (!(message.prereqs && message.prereqs.length))
                             message.prereqs = [];
                         if ((tag & 7) === 2) {
@@ -38430,11 +38442,12 @@ export const cockroach = $root.cockroach = (() => {
                 if (message.id != null && message.hasOwnProperty("id"))
                     if (!$util.isInteger(message.id) && !(message.id && $util.isInteger(message.id.low) && $util.isInteger(message.id.high)))
                         return "id: integer|Long expected";
-                if (message.span != null && message.hasOwnProperty("span")) {
-                    let error = $root.cockroach.roachpb.Span.verify(message.span);
-                    if (error)
-                        return "span." + error;
-                }
+                if (message.key != null && message.hasOwnProperty("key"))
+                    if (!$util.isString(message.key))
+                        return "key: string expected";
+                if (message.end_key != null && message.hasOwnProperty("end_key"))
+                    if (!$util.isString(message.end_key))
+                        return "end_key: string expected";
                 if (message.readonly != null && message.hasOwnProperty("readonly"))
                     if (typeof message.readonly !== "boolean")
                         return "readonly: boolean expected";
@@ -38471,11 +38484,10 @@ export const cockroach = $root.cockroach = (() => {
                         message.id = object.id;
                     else if (typeof object.id === "object")
                         message.id = new $util.LongBits(object.id.low >>> 0, object.id.high >>> 0).toNumber();
-                if (object.span != null) {
-                    if (typeof object.span !== "object")
-                        throw TypeError(".cockroach.storage.CommandQueueCommand.span: object expected");
-                    message.span = $root.cockroach.roachpb.Span.fromObject(object.span);
-                }
+                if (object.key != null)
+                    message.key = String(object.key);
+                if (object.end_key != null)
+                    message.end_key = String(object.end_key);
                 if (object.readonly != null)
                     message.readonly = Boolean(object.readonly);
                 if (object.timestamp != null) {
@@ -38527,7 +38539,8 @@ export const cockroach = $root.cockroach = (() => {
                         object.id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
                     } else
                         object.id = options.longs === String ? "0" : 0;
-                    object.span = null;
+                    object.key = "";
+                    object.end_key = "";
                     object.readonly = false;
                     object.timestamp = null;
                 }
@@ -38536,8 +38549,10 @@ export const cockroach = $root.cockroach = (() => {
                         object.id = options.longs === String ? String(message.id) : message.id;
                     else
                         object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber() : message.id;
-                if (message.span != null && message.hasOwnProperty("span"))
-                    object.span = $root.cockroach.roachpb.Span.toObject(message.span, options);
+                if (message.key != null && message.hasOwnProperty("key"))
+                    object.key = message.key;
+                if (message.end_key != null && message.hasOwnProperty("end_key"))
+                    object.end_key = message.end_key;
                 if (message.readonly != null && message.hasOwnProperty("readonly"))
                     object.readonly = message.readonly;
                 if (message.timestamp != null && message.hasOwnProperty("timestamp"))

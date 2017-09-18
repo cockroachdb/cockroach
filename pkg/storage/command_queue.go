@@ -823,7 +823,8 @@ func appendCommandsFromTree(
 			Id:        currentCmd.id,
 			Readonly:  currentCmd.readOnly,
 			Timestamp: &currentCmd.timestamp,
-			Span:      roachpb.AsSpan(currentCmd.key),
+			Key:       prettyKey(currentCmd.key.Start),
+			EndKey:    prettyKey(currentCmd.key.End),
 		}
 		for _, prereqCmd := range *currentCmd.prereqs {
 			command.Prereqs = append(command.Prereqs, prereqCmd.id)
@@ -832,4 +833,12 @@ func appendCommandsFromTree(
 		return false
 	})
 	return commandsSoFar
+}
+
+func prettyKey(key []byte) string {
+	rkey, err := keys.Addr(roachpb.Key(key))
+	if err != nil {
+		return "<error in keys.Addr>"
+	}
+	return rkey.String()
 }
