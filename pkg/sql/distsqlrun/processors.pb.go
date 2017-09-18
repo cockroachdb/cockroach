@@ -657,7 +657,7 @@ func (*ReadCSVSpec) ProtoMessage()               {}
 func (*ReadCSVSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{16} }
 
 // SSTWriterSpec is the specification for a processor that consumes rows,
-// uses tempStorage to sort them, then writes them all to a single SST file
+// uses tempEngine to sort them, then writes them all to a single SST file
 // at uri/name. walltime is used as the MVCC timestamp. It outputs a single
 // row containing the file name, size, checksum, observed start and end keys.
 // See ccs/sqlccl/csv.go for implementation.

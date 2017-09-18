@@ -47,9 +47,9 @@ type sorter struct {
 	// testingKnobMemLimit is used in testing to set a limit on the memory that
 	// should be used by the sortAllStrategy. Minimum value to enable is 1.
 	testingKnobMemLimit int64
-	// tempStorage is used to store rows when the working set is larger than can
+	// tempEngine is used to store rows when the working set is larger than can
 	// be stored in memory.
-	tempStorage engine.Engine
+	tempEngine engine.Engine
 }
 
 var _ Processor = &sorter{}
@@ -64,13 +64,13 @@ func newSorter(
 		count = int64(post.Limit) + int64(post.Offset)
 	}
 	s := &sorter{
-		flowCtx:     flowCtx,
-		input:       MakeNoMetadataRowSource(input, output),
-		rawInput:    input,
-		ordering:    convertToColumnOrdering(spec.OutputOrdering),
-		matchLen:    spec.OrderingMatchLen,
-		count:       count,
-		tempStorage: flowCtx.TempStorage,
+		flowCtx:    flowCtx,
+		input:      MakeNoMetadataRowSource(input, output),
+		rawInput:   input,
+		ordering:   convertToColumnOrdering(spec.OutputOrdering),
+		matchLen:   spec.OrderingMatchLen,
+		count:      count,
+		tempEngine: flowCtx.TempEngine,
 	}
 	if err := s.out.Init(post, input.Types(), &flowCtx.EvalCtx, output); err != nil {
 		return nil, err

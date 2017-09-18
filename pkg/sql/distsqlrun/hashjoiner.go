@@ -320,7 +320,7 @@ func (h *hashJoiner) bufferPhase(
 
 	log.VEventf(ctx, 2, "buffer phase falling back to disk")
 
-	storedDiskRows := makeHashDiskRowContainer(h.flowCtx.diskMonitor, h.flowCtx.TempStorage)
+	storedDiskRows := makeHashDiskRowContainer(h.flowCtx.diskMonitor, h.flowCtx.TempEngine)
 	if err := storedDiskRows.Init(
 		ctx,
 		shouldEmitUnmatchedRow(h.storedSide, h.joinType),

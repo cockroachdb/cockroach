@@ -75,7 +75,7 @@ func (ss *sortAllStrategy) Execute(ctx context.Context, s *sorter) error {
 	}
 	log.VEventf(ctx, 2, "falling back to disk")
 	diskContainer := makeDiskRowContainer(
-		ctx, s.flowCtx.diskMonitor, ss.rows.types, ss.rows.ordering, s.tempStorage,
+		ctx, s.flowCtx.diskMonitor, ss.rows.types, ss.rows.ordering, s.tempEngine,
 	)
 	defer diskContainer.Close(ctx)
 

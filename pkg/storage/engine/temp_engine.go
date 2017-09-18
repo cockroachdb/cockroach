@@ -15,35 +15,73 @@
 package engine
 
 import (
+	"bufio"
+	"bytes"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
+
+const (
+	defaultTempStorageDirPrefix = "cockroach-temp"
+	// TempStorageDirsRecordFilename is the filename for the record file
+	// that keeps track of the paths of the temporary directories created.
+	// This file will be stored under the recordPath directory (which
+	// is defaulted to the first store's root).
+	TempStorageDirsRecordFilename = "temp-storage-dirs.txt"
+)
+
+func tempStorageDirsRecordFilepath(recordPath string) string {
+	return filepath.Join(recordPath, TempStorageDirsRecordFilename)
+}
+
+// Use a mutex to synchronize writing to the temp store record file by the
+// asynchronous cleanup goroutine (when a directory fails to delete) and
+// writing the new temporary directory path to the record file.
+var mu syncutil.Mutex
 
 // NewTempEngine creates a new engine for DistSQL processors to use when the
 // working set is larger than can be stored in memory. It returns nil if it
 // could not set up a temporary Engine. When closed, it destroys the
 // underlying data.
-func NewTempEngine(ctx context.Context, storeCfg base.StoreSpec) (Engine, error) {
-	if storeCfg.SizeInBytes != 0 {
-		return nil, errors.Errorf("spec.SizeInBytes specified for temp store. " +
-			"That's not allowed as the setting doesn't do anything.")
-	}
-
-	if storeCfg.InMemory {
+// One can optionally pass in a WaitGroup wg that waits for the cleanup
+// routine for abandoned temporary directories to finish.
+func NewTempEngine(
+	ctx context.Context, tempStorage base.TempStorage, wg *sync.WaitGroup,
+) (Engine, error) {
+	if tempStorage.InMemory {
 		// TODO(arjun): Limit the size of the store once #16750 is addressed.
-		return NewInMem(storeCfg.Attributes, 0 /* cacheSize */), nil
+		// Technically we do not pass any attributes to emporary store.
+		return NewInMem(roachpb.Attributes{} /* attrs */, 0 /* cacheSize */), nil
 	}
 
-	if err := cleanupTempStorageDirs(ctx, storeCfg.Path, nil /* *WaitGroup */); err != nil {
+	// We generate a unique temporary directory with the prefix defaultTempStorageDirPrefix.
+	tempPath, err := ioutil.TempDir(tempStorage.ParentDir, defaultTempStorageDirPrefix)
+	if err != nil {
+		return nil, errors.Wrapf(
+			err,
+			"could not create temporary subdirectory under the specified path %s\n",
+			tempStorage.ParentDir,
+		)
+	}
+
+	tempFullPath, err := filepath.Abs(tempPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cleanup any abandoned temp storage directories from before.
+	if err := cleanupTempStorageDirs(ctx, tempStorage.RecordPath, wg /* *WaitGroup */); err != nil {
 		return nil, err
 	}
 
@@ -53,56 +91,156 @@ func NewTempEngine(ctx context.Context, storeCfg base.StoreSpec) (Engine, error)
 	rocksDBCfg := RocksDBConfig{
 		Settings: st,
 		Attrs:    roachpb.Attributes{},
-		Dir:      storeCfg.Path,
-		// MaxSizeBytes doesn't matter for temp stores - it's not enforced in any way.
+		Dir:      tempFullPath,
+		// MaxSizeBytes doesn't matter for temp storage - it's not
+		// enforced in any way.
 		MaxSizeBytes: 0,
 		MaxOpenFiles: 128, // TODO(arjun): Revisit this.
 	}
 	rocksDBCache := NewRocksDBCache(0)
 	rocksdb, err := NewRocksDB(rocksDBCfg, rocksDBCache)
-	return &tempEngine{RocksDB: rocksdb}, err
+	if err != nil {
+		return nil, err
+	}
+	// Append the new, current temp storage directory to the record file.
+	if err = appendTempStorageDir(tempStorage.RecordPath, tempFullPath); err != nil {
+		return nil, err
+	}
+
+	return &tempEngine{
+		RocksDB:    rocksdb,
+		recordPath: tempStorage.RecordPath,
+	}, nil
 }
 
 type tempEngine struct {
 	*RocksDB
+	// The path where the temporary directory record path is stored.
+	recordPath string
 }
 
 func (e *tempEngine) Close() {
 	e.RocksDB.Close()
+	// We could call cleanupTempStorageDirs here, but since we prefer faster
+	// shutdowns (whereas node start-up allow more time for us to cleanup
+	// asynchronously) we simply remove our current temporary store.
 	dir := e.RocksDB.cfg.Dir
 	if dir == "" {
 		return
 	}
 	if err := os.RemoveAll(dir); err != nil {
-		log.Errorf(context.TODO(), "could not remove rocksdb dir: %v", err)
+		log.Errorf(context.TODO(), "could not remove temporary store directory: %v", err.Error())
+	}
+	// Perform a synchronous (with respect to Close()) removable of the
+	// record from the file.
+	if err := removeTempStorageDirRecord(e.recordPath, dir); err != nil {
+		log.Errorf(context.TODO(), "could not remove temporary store from record file: %v", err.Error())
 	}
 }
 
-// wg is allowed to be nil, if the caller does not want to wait on the cleanup.
-func cleanupTempStorageDirs(ctx context.Context, path string, wg *sync.WaitGroup) error {
-	// Removing existing contents might be slow. Instead we rename it to a new
-	// name, and spawn a goroutine to clean it up asynchronously.
-	if err := os.MkdirAll(path, 0755); err != nil {
-		return err
+// removeTempStorageDirRecord scans through the temporary store record file and
+// removes the specified temporary path from the record.
+func removeTempStorageDirRecord(recordPath, tempPath string) error {
+	mu.Lock()
+	defer mu.Unlock()
+	f, err := os.OpenFile(tempStorageDirsRecordFilepath(recordPath), os.O_RDWR, 0644)
+	// The record file does not exist, nothing to remove.
+	if os.IsNotExist(err) {
+		return nil
 	}
-	deletionDir, err := ioutil.TempDir(path, "TO-DELETE-")
 	if err != nil {
 		return err
 	}
+	defer f.Close()
 
-	filesToDelete, err := ioutil.ReadDir(path)
-	if err != nil {
-		return err
-	}
-
-	for _, fileToDelete := range filesToDelete {
-		toDeleteFull := filepath.Join(path, fileToDelete.Name())
-		if toDeleteFull != deletionDir {
-			if err := os.Rename(toDeleteFull, filepath.Join(deletionDir, fileToDelete.Name())); err != nil {
-				return err
-			}
+	// Scan the file and only write back filepaths that are not the
+	// one being removed.
+	s := bufio.NewScanner(f)
+	var writeBack bytes.Buffer
+	for s.Scan() {
+		if s.Text() != tempPath {
+			writeBack.Write(append(s.Bytes(), '\n'))
 		}
 	}
+	if err = s.Err(); err != nil {
+		return err
+	}
+
+	// Clear file content first.
+	if err = f.Truncate(0); err != nil {
+		return err
+	}
+	// Write at offset 0 to overwrite NULL bytes left over from Truncate.
+	if _, err = f.WriteAt(writeBack.Bytes(), 0); err != nil {
+		return err
+	}
+	return f.Sync()
+}
+
+// appendTempStorageDir records the location of the temporary directory in a log
+// file for cleanup on startup if necessary.
+func appendTempStorageDir(recordPath, tempPath string) error {
+	return appendTempStorageDirs(recordPath, append([]byte(tempPath), '\n'))
+}
+
+// appendTempStorageDirs appends tempPaths (list of temporary directory paths) to
+// a record file for cleanup on startup if necessary.
+// tempPaths is a POSIX newline-ending byte slice of paths to the temporary
+// store directories.
+func appendTempStorageDirs(recordPath string, tempPaths []byte) error {
+	mu.Lock()
+	defer mu.Unlock()
+	// If the file does not exist, create it, or append to the file.
+	f, err := os.OpenFile(tempStorageDirsRecordFilepath(recordPath), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	// Append the path to the new temporary directory to the record file.
+	if _, err = f.Write(tempPaths); err != nil {
+		return err
+	}
+	return f.Sync()
+}
+
+// cleanupTempStorageDirs is invoked on startup to clean up abandoned temp
+// store directories from previous startups. It reads from the temporary store
+// record file to figure out which temporary stores need to be cleaned up.
+// wg is allowed to be nil, if the caller does not want to wait on the cleanup.
+// Removing existing temporary directories might be slow.  We spawn a
+// goroutine to clean it up asynchronously.
+func cleanupTempStorageDirs(ctx context.Context, recordPath string, wg *sync.WaitGroup) error {
+	// We must read the contents of the record file first. This is because we
+	// later record our new temporary directory and we need to retrieve all
+	// previous temporary directories for deletion before we record our new
+	// one.
+	// Reading the entire file into memory shouldn't be a problem since
+	// it is extremely rare for this record file to contain more than a few
+	// entries.
+	mu.Lock()
+	defer mu.Unlock()
+	f, err := os.OpenFile(tempStorageDirsRecordFilepath(recordPath), os.O_RDWR, 0644)
+	// There is no existing record file and thus nothing to cleanup.
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	content, err := ioutil.ReadAll(f)
+	if err != nil {
+		return err
+	}
+	// Clear out the file now that we've stored all records in memory.
+	if err = f.Truncate(0); err != nil {
+		return err
+	}
+	if err = f.Sync(); err != nil {
+		return err
+	}
+
 	if wg != nil {
 		wg.Add(1)
 	}
@@ -110,10 +248,31 @@ func cleanupTempStorageDirs(ctx context.Context, path string, wg *sync.WaitGroup
 		if wg != nil {
 			defer wg.Done()
 		}
-		if err := os.RemoveAll(deletionDir); err != nil {
-			log.Warningf(ctx, "could not clear old TempEngine files: %v", err.Error())
-			// Even if this errors, this is safe since it's in the marked-for-deletion subdirectory.
-			return
+		tempDirs := strings.Split(string(content), "\n")
+		// Keep track of which directories could not be cleared.  We
+		// need to write this back to our record file after for the next
+		// cleanup.
+		var remainingDirs bytes.Buffer
+
+		// Iterate through each temporary directory path and remove
+		// the directory.
+		for _, path := range tempDirs {
+			if path == "" {
+				continue
+			}
+			// If path/directory does not exist, error is nil.
+			if err := os.RemoveAll(path); err != nil {
+				log.Warningf(ctx, "could not remove old temporary store directory: %v", err.Error())
+				// Write always returns a nil error. It will
+				// panic if memory runs out.
+				remainingDirs.Write(append([]byte(path), '\n'))
+			}
+		}
+		// Write back to record file.
+		if remainingDirs.Len() != 0 {
+			if err := appendTempStorageDirs(recordPath, remainingDirs.Bytes()); err != nil {
+				log.Warningf(ctx, "could not record non-removable temporary store directories to record file: %v", err.Error())
+			}
 		}
 	}()
 

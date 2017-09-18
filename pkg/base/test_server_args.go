@@ -53,11 +53,15 @@ type TestServerArgs struct {
 	// will be set to the the address of the cluster's first node.
 	JoinAddr string
 
-	// StoreSpecs define the stores for this server. If you want more than one
-	// store per node, populate this array with StoreSpecs each representing a
-	// store. If no StoreSpecs are provided than a single DefaultTestStoreSpec
-	// will be used.
+	// StoreSpecs define the stores for this server. If you want more than
+	// one store per node, populate this array with StoreSpecs each
+	// representing a store. If no StoreSpecs are provided then a single
+	// DefaultTestStoreSpec will be used.
 	StoreSpecs []StoreSpec
+
+	// TempStorage defines parameters for the temp storage used as
+	// working memory for distributed operations and CSV importing.
+	TempStorage *TempStorage
 
 	// Fields copied to the server.Config.
 	Insecure                 bool
@@ -111,11 +115,19 @@ type TestClusterArgs struct {
 	ServerArgsPerNode map[int]TestServerArgs
 }
 
-// DefaultTestStoreSpec is just a single in memory store of 100 MiB with no
-// special attributes.
-var DefaultTestStoreSpec = StoreSpec{
-	InMemory: true,
-}
+var (
+	// DefaultTestStoreSpec is just a single in memory store of 100 MiB
+	// with no special attributes.
+	DefaultTestStoreSpec = StoreSpec{
+		InMemory: true,
+	}
+	// DefaultTestTempStorage is the associated temp
+	// storage for DefaultTestStoreSpec that is
+	// in-memory and and has a maximum size of 100MiB.
+	DefaultTestTempStorage = TempStorage{
+		InMemory: true,
+	}
+)
 
 // TestClusterReplicationMode represents the replication settings for a TestCluster.
 type TestClusterReplicationMode int

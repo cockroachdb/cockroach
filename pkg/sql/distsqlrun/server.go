@@ -116,9 +116,9 @@ type ServerConfig struct {
 
 	ParentMemoryMonitor *mon.BytesMonitor
 
-	// TempStorage is used by some DistSQL processors to store rows when the
+	// TempEngine is used by some DistSQL processors to store rows when the
 	// working set is larger than can be stored in memory.
-	TempStorage             engine.Engine
+	TempEngine              engine.Engine
 	TempStorageMaxSizeBytes int64
 
 	Metrics *DistSQLMetrics
@@ -141,9 +141,9 @@ type ServerImpl struct {
 	flowScheduler *flowScheduler
 	memMonitor    mon.BytesMonitor
 	regexpCache   *parser.RegexpCache
-	// tempStorage is used by some DistSQL processors to store working sets
+	// tempEngine is used by some DistSQL processors to store working sets
 	// larger than memory.
-	tempStorage engine.Engine
+	tempEngine engine.Engine
 	// diskMonitor is used to monitor temporary storage disk usage. Actual disk
 	// space used will be a small multiple (~1.1) of this because of RocksDB
 	// space amplification.
@@ -167,7 +167,7 @@ func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
 			-1, /* increment: use default block size */
 			noteworthyMemoryUsageBytes,
 		),
-		tempStorage: cfg.TempStorage,
+		tempEngine: cfg.TempEngine,
 	}
 	ds.memMonitor.Start(ctx, cfg.ParentMemoryMonitor, mon.BoundAccount{})
 
@@ -295,7 +295,7 @@ func (ds *ServerImpl) setupFlow(
 		clientDB:       ds.DB,
 		testingKnobs:   ds.TestingKnobs,
 		nodeID:         nodeID,
-		TempStorage:    ds.tempStorage,
+		TempEngine:     ds.tempEngine,
 		diskMonitor:    &ds.diskMonitor,
 		JobRegistry:    ds.ServerConfig.JobRegistry,
 	}

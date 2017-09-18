@@ -507,7 +507,7 @@ func TestHashJoiner(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	tempEngine, err := engine.NewTempEngine(ctx, base.DefaultTestStoreSpec)
+	tempEngine, err := engine.NewTempEngine(ctx, base.DefaultTestTempStorage, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -536,7 +536,7 @@ func TestHashJoiner(t *testing.T) {
 			flowCtx := FlowCtx{
 				Settings:    cluster.MakeTestingClusterSettings(),
 				EvalCtx:     evalCtx,
-				TempStorage: tempEngine,
+				TempEngine:  tempEngine,
 				diskMonitor: &diskMonitor,
 			}
 

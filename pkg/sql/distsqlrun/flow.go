@@ -72,9 +72,9 @@ type FlowCtx struct {
 	nodeID       roachpb.NodeID
 	testingKnobs TestingKnobs
 
-	// TempStorage is used by some DistSQL processors to store Rows when the
+	// TempEngine is used by some DistSQL processors to store Rows when the
 	// working set is larger than can be stored in memory.
-	TempStorage engine.Engine
+	TempEngine engine.Engine
 	// diskMonitor is used to monitor temporary storage disk usage.
 	diskMonitor *mon.BytesMonitor
 

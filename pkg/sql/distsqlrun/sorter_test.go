@@ -180,7 +180,7 @@ func TestSorter(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	tempEngine, err := engine.NewTempEngine(ctx, base.DefaultTestStoreSpec)
+	tempEngine, err := engine.NewTempEngine(ctx, base.DefaultTestTempStorage, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +201,7 @@ func TestSorter(t *testing.T) {
 	flowCtx := FlowCtx{
 		EvalCtx:     evalCtx,
 		Settings:    cluster.MakeTestingClusterSettings(),
-		TempStorage: tempEngine,
+		TempEngine:  tempEngine,
 		diskMonitor: &diskMonitor,
 	}
 

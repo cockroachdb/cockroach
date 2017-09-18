@@ -418,6 +418,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	// The temp store size can depend on the location of the first regular store
 	// (if it's expressed as a percentage), so we resolve that flag here.
 	var tempStorePercentageResolver percentResolverFunc
+	var err error
 	if !serverCfg.Stores.Specs[0].InMemory {
 		dir := serverCfg.Stores.Specs[0].Path
 		// Create the store dir, if it doesn't exist. The dir is required to exist
@@ -425,7 +426,6 @@ func runStart(cmd *cobra.Command, args []string) error {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return errors.Wrapf(err, "failed to create dir for first store: %s", dir)
 		}
-		var err error
 		tempStorePercentageResolver, err = diskPercentResolverFactory(dir)
 		if err != nil {
 			return errors.Wrapf(err, "failed to create resolver for: %s", dir)
@@ -434,14 +434,14 @@ func runStart(cmd *cobra.Command, args []string) error {
 		tempStorePercentageResolver = memoryPercentResolver
 	}
 	if err := diskTempStorageSizeValue.Resolve(
-		&serverCfg.TempStoreMaxSizeBytes, tempStorePercentageResolver,
+		&serverCfg.TempStorage.MaxSizeBytes, tempStorePercentageResolver,
 	); err != nil {
 		return err
 	}
 	if serverCfg.Stores.Specs[0].InMemory && !diskTempStorageSizeValue.IsSet() {
 		// The default temp store size is different when the first store (and thus
 		// also the temp storage) is in memory.
-		serverCfg.TempStoreMaxSizeBytes = server.DefaultTempStoreMaxSizeBytesInMemStore
+		serverCfg.TempStorage.MaxSizeBytes = server.DefaultTempStorageMaxSizeBytesInMemStore
 	}
 
 	// Use the server-specific values for some flags and settings.
@@ -449,7 +449,14 @@ func runStart(cmd *cobra.Command, args []string) error {
 	serverCfg.SSLCertsDir = startCtx.serverSSLCertsDir
 	serverCfg.User = security.NodeUser
 
-	serverCfg.TempStoreSpec = server.MakeTempStoreSpecFromStoreSpec(serverCfg.Stores.Specs[0])
+	// Re-initialize temp storage based on the current attributes
+	// (initialized from cli flags) and the first store's spec (for default
+	// initialization).
+	if serverCfg.TempStorage, err = serverCfg.TempStorage.Reinitialize(
+		serverCfg.Stores.Specs[0],
+	); err != nil {
+		return err
+	}
 
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)

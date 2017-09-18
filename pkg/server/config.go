@@ -31,8 +31,6 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
-	"path/filepath"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -63,13 +61,12 @@ const (
 	defaultScanMaxIdleTime                = 200 * time.Millisecond
 	defaultMetricsSampleInterval          = 10 * time.Second
 	defaultStorePath                      = "cockroach-data"
-	defaultTempStoreRelativePath          = "local"
 	defaultEventLogEnabled                = true
 	defaultEnableWebSessionAuthentication = false
-	defaultTempStoreMaxSizeBytes          = 32 * 1024 * 1024 * 1024 /* 32GB */
-	// default size of the "disk" temp storage when the first store is in memory.
+	defaultTempStorageMaxSizeBytes        = 32 * 1024 * 1024 * 1024 /* 32GB */
+	// Default size of the "disk" temp storage when the first store is in memory.
 	// In this case, the temp storage will also be in memory.
-	DefaultTempStoreMaxSizeBytesInMemStore = 100 * 1024 * 1024 /* 100MB */
+	DefaultTempStorageMaxSizeBytesInMemStore = 100 * 1024 * 1024 /* 100MB */
 
 	maximumMaxClockOffset = 5 * time.Second
 
@@ -127,13 +124,9 @@ type Config struct {
 	// Stores is specified to enable durable key-value storage.
 	Stores base.StoreSpecList
 
-	// TempStoreSpec is used to store ephemeral data when processing large queries.
-	TempStoreSpec base.StoreSpec
-	// TempStoreMaxSizeBytes is the limit on the disk capacity to be used for temp
-	// storage. Note that TempStoreSpec.SizeInBytes is not used for this purpose;
-	// that spec setting is only used for regular stores for rebalancing purposes,
-	// and not particularly enforced, so we opt for our own setting.
-	TempStoreMaxSizeBytes int64
+	// TempStorage is used to store ephemeral data when processing large
+	// queries.
+	TempStorage base.TempStorage
 
 	// Attrs specifies a colon-separated list of node topography or machine
 	// capabilities, used to match capabilities or location preferences specified
@@ -344,23 +337,6 @@ func SetOpenFileLimitForOneStore() (uint64, error) {
 	return setOpenFileLimit(1)
 }
 
-// MakeTempStoreSpecFromStoreSpec creates a spec for a temporary store under
-// the given StoreSpec's path. If the given spec specifies an in-memory store,
-// the temporary store will be in-memory as well. The Attributes field of the
-// given spec is intentionally not propagated to the temporary store.
-//
-// TODO(arjun): Add a CLI flag to override this.
-func MakeTempStoreSpecFromStoreSpec(spec base.StoreSpec) base.StoreSpec {
-	if spec.InMemory {
-		return base.StoreSpec{
-			InMemory: true,
-		}
-	}
-	return base.StoreSpec{
-		Path: filepath.Join(spec.Path, defaultTempStoreRelativePath),
-	}
-}
-
 // MakeConfig returns a Context with default values.
 func MakeConfig(st *cluster.Settings) Config {
 	storeSpec, err := base.NewStoreSpec(defaultStorePath)
@@ -382,8 +358,11 @@ func MakeConfig(st *cluster.Settings) Config {
 		Stores: base.StoreSpecList{
 			Specs: []base.StoreSpec{storeSpec},
 		},
-		TempStoreSpec:         MakeTempStoreSpecFromStoreSpec(storeSpec),
-		TempStoreMaxSizeBytes: defaultTempStoreMaxSizeBytes,
+		TempStorage: base.NewTempStorage(
+			defaultTempStorageMaxSizeBytes,
+			DefaultTempStorageMaxSizeBytesInMemStore,
+			storeSpec,
+		),
 	}
 	cfg.AmbientCtx.Tracer = st.Tracer
 

@@ -1021,7 +1021,7 @@ func importPlanHook(
 			_, _, _, importErr = doLocalCSVTransform(
 				ctx, job, parentID, tableDesc, temp, files,
 				comma, comment, nullif, sstSize,
-				p.ExecCfg().DistSQLSrv.TempStorage,
+				p.ExecCfg().DistSQLSrv.TempEngine,
 				walltime, p.ExecCfg(),
 			)
 		}
@@ -1320,7 +1320,7 @@ func newSSTWriterProcessor(
 		walltimeNanos: spec.WalltimeNanos,
 		input:         input,
 		output:        output,
-		tempStorage:   flowCtx.TempStorage,
+		tempEngine:    flowCtx.TempEngine,
 	}
 	if err := sp.out.Init(&distsqlrun.PostProcessSpec{}, sstOutputTypes, &flowCtx.EvalCtx, output); err != nil {
 		return nil, err
@@ -1335,7 +1335,7 @@ type sstWriter struct {
 	input         distsqlrun.RowSource
 	out           distsqlrun.ProcOutputHelper
 	output        distsqlrun.RowReceiver
-	tempStorage   engine.Engine
+	tempEngine    engine.Engine
 }
 
 var _ distsqlrun.Processor = &sstWriter{}
@@ -1360,7 +1360,7 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 		// NewRocksDBMap to write the rows, then fetch them in order using an iterator.
 		input := distsqlrun.MakeNoMetadataRowSource(sp.input, sp.output)
 		alloc := &sqlbase.DatumAlloc{}
-		store := engine.NewRocksDBMultiMap(sp.tempStorage)
+		store := engine.NewRocksDBMultiMap(sp.tempEngine)
 		defer store.Close(ctx)
 		batch := store.NewBatchWriter()
 		var key, val []byte

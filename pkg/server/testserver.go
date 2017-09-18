@@ -67,8 +67,10 @@ func makeTestConfig(st *cluster.Settings) Config {
 	// Test servers start in secure mode by default.
 	cfg.Insecure = false
 
-	// Override the DistSQL local store with an in-memory store.
-	cfg.TempStoreSpec = base.DefaultTestStoreSpec
+	// Configure the default in-memory temp storage for all tests unless
+	// otherwise configured.
+	cfg.TempStorage = base.DefaultTestTempStorage
+	cfg.TempStorage.MaxSizeBytes = DefaultTempStorageMaxSizeBytesInMemStore
 
 	// Load test certs. In addition, the tests requiring certs
 	// need to call security.SetAssetLoader(securitytest.EmbeddedAssets)
@@ -184,6 +186,11 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	}
 	// Copy over the store specs.
 	cfg.Stores = base.StoreSpecList{Specs: params.StoreSpecs}
+	// Copy over temp storage.
+	if params.TempStorage != nil {
+		cfg.TempStorage = *params.TempStorage
+	}
+
 	if cfg.TestingKnobs.Store == nil {
 		cfg.TestingKnobs.Store = &storage.StoreTestingKnobs{}
 	}
