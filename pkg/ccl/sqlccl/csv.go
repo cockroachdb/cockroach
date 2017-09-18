@@ -524,9 +524,23 @@ func writeRocksDB(
 
 	var kv engine.MVCCKeyValue
 	kv.Key.Timestamp.WallTime = walltime
+	// firstKey is always the first key of the span. lastKey, if nil, means the
+	// current SST hasn't yet filled up. Once the SST has filled up, lastKey is
+	// set to the key at which to stop adding KVs. We have to do this because
+	// all column families for a row must be in one SST and the SST may have
+	// filled up with only some of the KVs from the column families being added.
 	var firstKey, lastKey roachpb.Key
 	var count int64
-	for it.Rewind(); ; it.Next() {
+
+	it.Rewind()
+	if ok, err := it.Valid(); err != nil {
+		return 0, err
+	} else if !ok {
+		return 0, errors.New("could not get first key")
+	}
+	firstKey = it.Key()
+
+	for ; ; it.Next() {
 		if ok, err := it.Valid(); err != nil {
 			return 0, err
 		} else if !ok {
@@ -534,34 +548,34 @@ func writeRocksDB(
 		}
 		count++
 
-		// Save the first key for the span.
-		if firstKey == nil {
-			firstKey = it.Key()
-
-			// Ensure the first key doesn't match the last key of the previous SST.
-			if firstKey.Equal(lastKey) {
-				return 0, errors.Errorf("duplicate key: %s", firstKey)
-			}
-		}
-
 		kv.Key.Key = it.UnsafeKey()
 		kv.Value = it.UnsafeValue()
+		if lastKey != nil {
+			if kv.Key.Key.Compare(lastKey) >= 0 {
+				if err := writeSST(firstKey, lastKey); err != nil {
+					return 0, err
+				}
+				firstKey = it.Key()
+				lastKey = nil
 
+				sst, err = engine.MakeRocksDBSstFileWriter()
+				if err != nil {
+					return 0, err
+				}
+				defer sst.Close()
+			}
+		}
 		if err := sst.Add(kv); err != nil {
 			return 0, errors.Wrapf(err, errSSTCreationMaybeDuplicateTemplate, kv.Key.Key)
 		}
-		if sst.DataSize > sstMaxSize {
-			if err := writeSST(firstKey, kv.Key.Key.Next()); err != nil {
-				return 0, err
-			}
-			firstKey = nil
-			lastKey = append([]byte(nil), kv.Key.Key...)
-
-			sst, err = engine.MakeRocksDBSstFileWriter()
+		if sst.DataSize > sstMaxSize && lastKey == nil {
+			// When we would like to split the file, proceed until we aren't in the
+			// middle of a row. Start by finding the next safe split key.
+			lastKey, err = keys.EnsureSafeSplitKey(kv.Key.Key)
 			if err != nil {
 				return 0, err
 			}
-			defer sst.Close()
+			lastKey = lastKey.PrefixEnd()
 		}
 	}
 	if sst.DataSize > 0 {
