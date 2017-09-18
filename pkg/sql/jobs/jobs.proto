@@ -51,6 +51,7 @@ message RestoreDetails {
     ];
   }
   bytes low_water_mark = 1;
+  util.hlc.Timestamp end_time = 4 [(gogoproto.nullable) = false];
   map<uint32, TableRewrite> table_rewrites = 2 [
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
   ];

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -219,16 +220,31 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 	iter := engineccl.MakeMultiIterator(iters)
 	defer iter.Close()
 	var keyScratch, valueScratch []byte
-	for iter.Seek(startKeyMVCC); ; iter.NextKey() {
+
+	for iter.Seek(startKeyMVCC); ; {
 		ok, err := iter.Valid()
 		if err != nil {
 			return nil, err
 		}
+		if !ok {
+			break
+		}
+
+		if args.EndTime != (hlc.Timestamp{}) {
+			// TODO(dan): If we have to skip past a lot of versions to find the
+			// latest one before args.EndTime, then this could be slow.
+			if args.EndTime.Less(iter.UnsafeKey().Timestamp) {
+				iter.Next()
+				continue
+			}
+		}
+
 		if !ok || !iter.UnsafeKey().Less(endKeyMVCC) {
 			break
 		}
 		if len(iter.UnsafeValue()) == 0 {
 			// Value is deleted.
+			iter.NextKey()
 			continue
 		}
 
@@ -236,6 +252,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 		valueScratch = append(valueScratch[:0], iter.UnsafeValue()...)
 		key := engine.MVCCKey{Key: keyScratch, Timestamp: iter.UnsafeKey().Timestamp}
 		value := roachpb.Value{RawBytes: valueScratch}
+		iter.NextKey()
 
 		key.Key, ok, err = kr.RewriteKey(key.Key)
 		if err != nil {
