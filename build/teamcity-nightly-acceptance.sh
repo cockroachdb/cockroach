@@ -5,8 +5,6 @@
 # 2. Set the ARM_SUBSCRIPTION_ID, ARM_CLIENT_ID, ARM_CLIENT_SECRET, and
 #    ARM_TENANT_ID variables as documented here:
 #  https://www.terraform.io/docs/providers/azurerm/#argument-reference
-# 3. If running on your local machine, have a symlink to `cat` named
-#    `go-test-teamcity` on your PATH.
 
 # Example use:
 #
@@ -119,4 +117,4 @@ build/builder.sh make TYPE=$TYPE testbuild PKG=$PKG
 cd $PKG
 # shellcheck disable=SC2086
 ./${PKG##*/}.test -l "$TMPDIR" -test.v -test.timeout $TESTTIMEOUT -show-logs -remote -key-name terraform \
-  $COCKROACH_EXTRA_FLAGS | go-test-teamcity
+  $COCKROACH_EXTRA_FLAGS | "$(command -v go-test-teamcity 2>/dev/null || echo cat)"
