@@ -42,7 +42,7 @@ var importRequestLimiter = makeConcurrentRequestLimiter(importRequestLimit)
 var importBatchSize = settings.RegisterByteSizeSetting(
 	"kv.import.batch_size",
 	"",
-	32<<20,
+	63<<20,
 )
 
 // AddSSTableEnabled wraps "kv.import.experimental_addsstable.enabled".
@@ -86,7 +86,8 @@ func maxImportBatchSize(st *cluster.Settings) int64 {
 
 type importBatcher interface {
 	Add(engine.MVCCKey, []byte) error
-	Size() int64
+	DataSize() int64
+	FileSize() int64
 	Finish(context.Context, *client.DB) error
 	Close()
 }
@@ -113,7 +114,11 @@ func (b *writeBatcher) Add(key engine.MVCCKey, value []byte) error {
 	return nil
 }
 
-func (b *writeBatcher) Size() int64 {
+func (b *writeBatcher) DataSize() int64 {
+	return int64(b.batch.Len())
+}
+
+func (b *writeBatcher) FileSize() int64 {
 	return int64(b.batch.Len())
 }
 
@@ -166,7 +171,11 @@ func (b *sstBatcher) Add(key engine.MVCCKey, value []byte) error {
 	return b.sstWriter.Add(engine.MVCCKeyValue{Key: key, Value: value})
 }
 
-func (b *sstBatcher) Size() int64 {
+func (b *sstBatcher) FileSize() int64 {
+	return b.sstWriter.FileSize()
+}
+
+func (b *sstBatcher) DataSize() int64 {
 	return b.sstWriter.DataSize
 }
 
@@ -341,7 +350,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 			return nil, errors.Wrapf(err, "adding to batch: %s -> %s", key, value.PrettyPrint())
 		}
 
-		if size := batcher.Size(); size > maxImportBatchSize(cArgs.EvalCtx.ClusterSettings()) {
+		if size := batcher.FileSize(); size > maxImportBatchSize(cArgs.EvalCtx.ClusterSettings()) {
 			finishBatcher := batcher
 			batcher = nil
 			log.Eventf(gCtx, "triggering finish of batch of size %s", humanizeutil.IBytes(size))
@@ -356,7 +365,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 		}
 	}
 	// Flush out the last batch.
-	if batcher.Size() > 0 {
+	if batcher.DataSize() > 0 {
 		g.Go(func() error {
 			defer log.Event(ctx, "finished batch")
 			defer batcher.Close()

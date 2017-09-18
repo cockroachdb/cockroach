@@ -2063,6 +2063,9 @@ type RocksDBSstFileWriter struct {
 	fw *C.DBSstFileWriter
 	// DataSize tracks the total key and value bytes added so far.
 	DataSize int64
+	// fileSize tracks the total size of the SST file. It is typically larger than
+	// DataSize as it includes the overhead from the metadata and encoding scheme.
+	fileSize C.uint64_t
 }
 
 // MakeRocksDBSstFileWriter creates a new RocksDBSstFileWriter with the default
@@ -2081,7 +2084,13 @@ func (fw *RocksDBSstFileWriter) Add(kv MVCCKeyValue) error {
 		return errors.New("cannot call Open on a closed writer")
 	}
 	fw.DataSize += int64(len(kv.Key.Key)) + int64(len(kv.Value))
-	return statusToError(C.DBSstFileWriterAdd(fw.fw, goToCKey(kv.Key), goToCSlice(kv.Value)))
+	return statusToError(C.DBSstFileWriterAdd(
+		fw.fw, goToCKey(kv.Key), goToCSlice(kv.Value), &fw.fileSize))
+}
+
+// FileSize returns the current size of the SST file in bytes.
+func (fw *RocksDBSstFileWriter) FileSize() int64 {
+	return int64(fw.fileSize)
 }
 
 // Finish finalizes the writer and returns the constructed file's contents. At
