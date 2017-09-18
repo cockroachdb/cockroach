@@ -149,7 +149,7 @@ func (c *sqlConn) checkServerMetadata() error {
 		// (`build.Info.Short()`). This is because we don't care if they're
 		// different platforms/build tools/timestamps. The important bit exposed by
 		// a version mismatch is the wire protocol and SQL dialect.
-		if client := build.GetInfo(); c.serverVersion != client.VersionedTag() {
+		if client := build.GetInfo(); c.serverVersion != client.Tag {
 			fmt.Println("# Client version:", client.Short())
 		} else {
 			isSame = " (same version as client)"
