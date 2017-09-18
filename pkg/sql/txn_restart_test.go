@@ -1741,6 +1741,7 @@ func TestTxnAutoRetriesDisabledAfterResultsHaveBeenSentToClient(t *testing.T) {
 
 	tests := []struct {
 		name                              string
+		autoCommit                        bool
 		clientDirectedRetry               bool
 		expectedTxnStateAfterRetriableErr sql.TxnStateEnum
 	}{
@@ -1754,6 +1755,11 @@ func TestTxnAutoRetriesDisabledAfterResultsHaveBeenSentToClient(t *testing.T) {
 			clientDirectedRetry:               false,
 			expectedTxnStateAfterRetriableErr: sql.Aborted,
 		},
+		{
+			name:                              "autocommit",
+			autoCommit:                        true,
+			expectedTxnStateAfterRetriableErr: sql.NoTxn,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1765,6 +1771,10 @@ func TestTxnAutoRetriesDisabledAfterResultsHaveBeenSentToClient(t *testing.T) {
 			// incorrect, as there's no guarantee that the state check at the end will
 			// happen on the right connection.
 			defer func() {
+				if tc.autoCommit {
+					// No cleanup necessary.
+					return
+				}
 				if _, err := sqlDB.Exec("ROLLBACK"); err != nil {
 					t.Fatal(err)
 				}
@@ -1774,15 +1784,27 @@ func TestTxnAutoRetriesDisabledAfterResultsHaveBeenSentToClient(t *testing.T) {
 			if tc.clientDirectedRetry {
 				savepoint = "SAVEPOINT cockroach_restart;"
 			}
+
+			var prefix, suffix string
+			if !tc.autoCommit {
+				prefix = "BEGIN; " + savepoint
+				suffix = "COMMIT;"
+			}
+
 			// We'll run a statement that produces enough results to overflow the
 			// buffers and start streaming results to the client before the retriable
-			// error is injected.
+			// error is injected. We do this through a single statement (a UNION)
+			// instead of two separate statements in order to support the autoCommit
+			// test which needs a single statement.
+			// In the UNION we put the error first and the data second because,
+			// surprisingly, the order of the UNION results is <right operand>, <left
+			// operand>. TODO(knz): invert this once we invert the UNION results.
 			sql := fmt.Sprintf(`
-				BEGIN TRANSACTION;
 				%s
-				SELECT generate_series(1, 10000);
-				SELECT crdb_internal.force_retry('1s');
-				COMMIT TRANSACTION;`, savepoint)
+				SELECT crdb_internal.force_retry('1s')
+				  UNION ALL SELECT generate_series(1, 10000);
+				%s`,
+				prefix, suffix)
 			_, err := sqlDB.Exec(sql)
 			if !isRetryableErr(err) {
 				t.Fatalf("expected retriable error, got: %v", err)
