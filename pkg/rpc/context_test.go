@@ -17,7 +17,6 @@ package rpc
 import (
 	"math"
 	"net"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -240,10 +239,6 @@ func (ln *interceptingListener) Accept() (net.Conn, error) {
 func TestHeartbeatHealthTransport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	if runtime.GOOS == "windows" {
-		t.Skip("TODO(tamird): remove in Go 1.9; https://github.com/golang/go/commit/03d1aa6")
-	}
-
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 
@@ -368,21 +363,29 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	})
 
 	// Should stay unhealthy despite reconnection attempts.
+	var waitUnhealthy bool
 	for then := timeutil.Now(); timeutil.Since(then) < 50*clientCtx.heartbeatInterval; {
 		err := clientCtx.ConnHealth(remoteAddr)
 		if isUnhealthy(err) {
 			// What we expected. Let's keep checking that it remains that way.
+			waitUnhealthy = false
 			continue
 		}
 		if n, closeErr := closeConns(); closeErr != nil {
 			t.Fatal(closeErr)
-		} else if n > 0 && err == nil {
+		} else if waitUnhealthy || (n > 0 && err == nil) {
 			// Connection raced its way in even though we closed the listener.
 			// We made it go away and we can't possibly run into this all the
 			// time, so try again.
+			// After a connection snuck in, remote will be healthy for a bit,
+			// so we stay in this branch until it's become unhealthy.
+			waitUnhealthy = true
 			continue
 		}
 		t.Fatal(err)
+	}
+	if waitUnhealthy {
+		t.Fatal("connection did not become unhealthy")
 	}
 }
 
