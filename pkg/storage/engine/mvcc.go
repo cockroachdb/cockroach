@@ -1861,7 +1861,44 @@ func mvccResolveWriteIntent(
 	}
 	// For cases where there's no write intent to resolve, or one exists
 	// which we can't resolve, this is a noop.
-	if !ok || meta.Txn == nil || intent.Txn.ID != meta.Txn.ID {
+	if !ok {
+		if intent.Status == roachpb.COMMITTED {
+			log.Warningf(ctx, "unable to find value for %s @ %s",
+				intent.Key, intent.Txn.Timestamp)
+		}
+		return nil
+	}
+	if meta.Txn == nil || intent.Txn.ID != meta.Txn.ID {
+		if intent.Status == roachpb.COMMITTED {
+			// The intent is being committed. Verify that it was already committed by
+			// looking for a value at the transaction timestamp. Note that this check
+			// has false positives, but such false positives should be very rare. See
+			// #9399 for details.
+			//
+			// Note that we hit this code path relatively frequently when during end
+			// transaction processing for locally resolved intents. In those cases,
+			// meta.Txn == nil but the subsequent call to mvccGetInternal will avoid
+			// any additional seeks because the iterator is already positioned
+			// correctly.
+			gbuf := newGetBuffer()
+			defer gbuf.release()
+			gbuf.meta = buf.meta
+
+			v, _, _, err := mvccGetInternal(ctx, iter, metaKey,
+				intent.Txn.Timestamp, false, unsafeValue, nil, gbuf)
+			if err != nil {
+				log.Warningf(ctx, "unable to find value for %s @ %s: %v ",
+					intent.Key, intent.Txn.Timestamp, err)
+			} else if !v.IsPresent() {
+				// NB: This shouldn't happen as mvccGetMetadata returned ok=true above,
+				// but best to check.
+				log.Warningf(ctx, "unable to find value for %s @ %s",
+					intent.Key, intent.Txn.Timestamp)
+			} else if v.Timestamp != intent.Txn.Timestamp {
+				log.Warningf(ctx, "unable to find value for %s @ %s: %s",
+					intent.Key, intent.Txn.Timestamp, v.Timestamp)
+			}
+		}
 		return nil
 	}
 
