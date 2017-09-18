@@ -284,8 +284,8 @@ SELECT timestamp,
        operation,
        span
   FROM (SELECT timestamp,
-               regexp_replace(message, e'^.*\\[[^]]*\\] ', '') AS message,
-               regexp_extract(message, e'^.*\\[[^]]*\\]') AS context,
+               regexp_replace(message, e'^\\[(?:[^][]|\\[[^]]*\\])*\\] ', '') AS message,
+               regexp_extract(message, e'^\\[(?:[^][]|\\[[^]]*\\])*\\]') AS context,
                first_value(operation) OVER (PARTITION BY txn_idx, span_idx ORDER BY message_idx) as operation,
                (txn_idx, span_idx) AS span
           FROM crdb_internal.session_trace)
