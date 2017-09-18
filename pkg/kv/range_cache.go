@@ -65,6 +65,7 @@ type RangeDescriptorDB interface {
 		key roachpb.RKey,
 		desc *roachpb.RangeDescriptor,
 		useReverseScan bool,
+		continuation bool,
 	) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error)
 	// FirstRange returns the descriptor for the first Range. This is the
 	// Range containing all meta1 entries.
@@ -427,8 +428,88 @@ func (rdc *RangeDescriptorCache) performRangeLookup(
 		}
 	}
 	// Tag inner operations.
-	ctx = log.WithLogTag(ctx, "range-lookup", nil)
-	return rdc.db.RangeLookup(ctx, metadataKey, desc, useReverseScan)
+	ctx = log.WithLogTag(ctx, "range-lookup", metadataKey)
+	descs, prefetched, err := rdc.db.RangeLookup(
+		ctx, metadataKey, desc, useReverseScan, false /* continuation */)
+	if err == nil && len(descs) == 0 {
+		var extraPrefetched []roachpb.RangeDescriptor
+		descs, extraPrefetched, err = rdc.performRangeLookupContinuation(ctx, metadataKey, desc)
+		prefetched = append(prefetched, extraPrefetched...)
+	}
+	return descs, prefetched, err
+}
+
+// performRangeLookupContinuation performs a "continuation" RangeLookup on the
+// range directly after a previous range that returned no matching descriptors.
+// A RangeLookupRequest can return no matching RangeDescriptors when meta2 ranges
+// split. Remember that the range addressing keys are generated from the end key
+// of a range descriptor, not the start key. With this in mind, consider the
+// scenario:
+//
+//   range 1 [a, d):
+//     b -> [a, b)
+//     c -> [b, c)
+//     d -> [c, d)
+//   range 2 [d, g):
+//     e -> [d, e)
+//     f -> [e, f)
+//     g -> [f, g)
+//
+// Now consider looking up the range containing key `d`. The RangeDescriptorDB
+// routing logic would send the RangeLookup request to range 1 since `d` lies
+// within the bounds of that range. But notice that the range descriptor containing
+// `d` lies in range 2. This means that no matching RangeDescriptors will be
+// found on range 1 and returned from the first RangeLookup. In fact, a RangeLookup
+// for any key between ['c','d') will create this scenerio.
+//
+// Our solution is to send a "continuation" RangeLookupRequest to the range
+// directly following the one that resulted in the lookup miss, in this case
+// range 2. This "continuation" lookup will begin scanning directly at the
+// range's StartKey and will be guaranteed to find the descriptor.
+//
+//
+// See #16266 and #17565 for further discussion. Notably, it is not possible to
+// pick meta2 boundaries such that we will never run into this issue. The only
+// way to avoid this completely would be to store RangeDescriptors at
+// RangeMetaKey(desc.StartKey) and only allow meta2 split boundaries at
+// RangeMetaKey(existingSplitBoundary)
+func (rdc *RangeDescriptorCache) performRangeLookupContinuation(
+	ctx context.Context, origMetaKey roachpb.RKey, lastDesc *roachpb.RangeDescriptor,
+) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
+	nextKey := lastDesc.EndKey
+	ctx = log.WithLogTag(ctx, "range-lookup-continuation", nextKey)
+
+	// FOR REVIEW: is it worth worrying about empty meta ranges and scanning
+	// potentially over multiple ranges?
+
+	// Lookup the descriptor for the next meta range. In our example above,
+	// lastDesc is the descriptor for range 1 and nextDesc is the descriptor
+	// for range 2.
+	nextDesc, _, err := rdc.LookupRangeDescriptor(ctx, nextKey, nil, false /* reverse */)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Perform the RangeLookup on the next range, which should give us the
+	// desired descriptor. If not, there's a more serious issue, so we log
+	// a fatal error.
+	descs, prefetched, err := rdc.db.RangeLookup(
+		ctx, nextKey, nextDesc, false /* useReverseScan */, true /* continuation */)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(descs) == 0 {
+		log.Fatalf(ctx, "range lookup of meta key '%s' found only non-matching ranges on both "+
+			"original range %v and continuation range %v", origMetaKey, lastDesc, nextDesc)
+	}
+	return descs, prefetched, nil
+}
+
+// Clear clears all RangeDescriptors from the RangeDescriptorCache.
+func (rdc *RangeDescriptorCache) Clear() {
+	rdc.rangeCache.Lock()
+	defer rdc.rangeCache.Unlock()
+	rdc.rangeCache.cache.Clear()
 }
 
 // EvictCachedRangeDescriptor will evict any cached range descriptors

@@ -281,7 +281,11 @@ func (ds *DistSender) LeaseHolderCache() *LeaseHolderCache {
 // retry logic here; this is not an issue since the lookup performs a
 // single inconsistent read only.
 func (ds *DistSender) RangeLookup(
-	ctx context.Context, key roachpb.RKey, desc *roachpb.RangeDescriptor, useReverseScan bool,
+	ctx context.Context,
+	key roachpb.RKey,
+	desc *roachpb.RangeDescriptor,
+	useReverseScan bool,
+	continuation bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
@@ -291,8 +295,9 @@ func (ds *DistSender) RangeLookup(
 			// lookup; those are never local.
 			Key: key.AsRawKey(),
 		},
-		MaxRanges: ds.rangeLookupMaxRanges,
-		Reverse:   useReverseScan,
+		MaxRanges:    ds.rangeLookupMaxRanges,
+		Reverse:      useReverseScan,
+		Continuation: continuation,
 	})
 	replicas := NewReplicaSlice(ds.gossip, desc)
 	shuffle.Shuffle(replicas)

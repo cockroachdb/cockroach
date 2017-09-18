@@ -62,6 +62,30 @@ var (
 			},
 		},
 	}
+	// left side of split meta2 range with one replica.
+	testMetaSplitLeftRangeDescriptor = roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKeyMin,
+		EndKey:   mustMeta(roachpb.RKey("m")),
+		Replicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+	// right side of split meta2 range with one replica.
+	testMetaSplitRightRangeDescriptor = roachpb.RangeDescriptor{
+		RangeID:  3,
+		StartKey: mustMeta(roachpb.RKey("m")),
+		EndKey:   testMetaEndKey,
+		Replicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
 
 	//
 	// User-Space RangeDescriptors
@@ -385,29 +409,34 @@ func TestSendRPCOrder(t *testing.T) {
 type MockRangeDescriptorDB func(roachpb.RKey, bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error)
 
 func (mdb MockRangeDescriptorDB) RangeLookup(
-	ctx context.Context, key roachpb.RKey, desc *roachpb.RangeDescriptor, useReverseScan bool,
+	ctx context.Context,
+	key roachpb.RKey,
+	desc *roachpb.RangeDescriptor,
+	useReverseScan,
+	continuation bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 	descs, prefetched, err := mdb(keys.UserKey(key), useReverseScan)
 	if err != nil {
 		return nil, nil, err
 	}
+	return filterDescs(ctx, desc, descs), filterDescs(ctx, desc, prefetched), nil
+}
 
-	// filterDescs filters the provided slice to only descriptors who would be
-	// stored within the bounds of the range this RangeLookup was sent to. This
-	// simulates how real RangeLookupRequests behave without needing to inform
-	// mdb about desc.
-	filterDescs := func(retDescs []roachpb.RangeDescriptor) []roachpb.RangeDescriptor {
-		var containedDescs []roachpb.RangeDescriptor
-		for _, retDesc := range retDescs {
-			if desc.ContainsKey(mustMeta(retDesc.EndKey)) {
-				containedDescs = append(containedDescs, retDesc)
-			} else {
-				log.Infof(ctx, "filtering descriptor %v from RangeLookup on range %v", retDesc, desc)
-			}
+// filterDescs filters the provided slice to only descriptors who would be
+// stored within the bounds of the range this RangeLookup was sent to. This
+// simulates how real RangeLookupRequests behave.
+func filterDescs(
+	ctx context.Context, metaDesc *roachpb.RangeDescriptor, descs []roachpb.RangeDescriptor,
+) []roachpb.RangeDescriptor {
+	var containedDescs []roachpb.RangeDescriptor
+	for _, desc := range descs {
+		if metaDesc.ContainsKey(mustMeta(desc.EndKey)) {
+			containedDescs = append(containedDescs, desc)
+		} else {
+			log.Infof(ctx, "filtering descriptor %v from RangeLookup on range %v", desc, metaDesc)
 		}
-		return containedDescs
 	}
-	return filterDescs(descs), filterDescs(prefetched), nil
+	return containedDescs
 }
 
 func (mdb MockRangeDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, error) {
@@ -448,6 +477,11 @@ var defaultMockRangeDescriptorDB = mockRangeDescriptorDBForDescs(
 var threeReplicaMockRangeDescriptorDB = mockRangeDescriptorDBForDescs(
 	testMetaRangeDescriptor,
 	testUserRangeDescriptor3Replicas,
+)
+var splitMeta2MockRangeDescriptorDB = mockRangeDescriptorDBForDescs(
+	testMetaSplitLeftRangeDescriptor,
+	testMetaSplitRightRangeDescriptor,
+	testUserRangeDescriptor,
 )
 
 func TestOwnNodeCertain(t *testing.T) {
@@ -1424,6 +1458,49 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	sr := reply.(*roachpb.ScanResponse)
 	if !reflect.DeepEqual(existingKVs, sr.Rows) {
 		t.Fatalf("expect get %v, actual get %v", existingKVs, sr.Rows)
+	}
+}
+
+// TestSplitMeta2LookupContinuation simulates the situation in which meta2
+// ranges have split. In this case, it is possible that a lookup for a key whose
+// descriptor is stored on the right meta2 range will initially go to the left
+// meta2 range. This is expected, and the lookup scan should continue onto the
+// second meta2 range through a second RangeLookupRequest. See the comment on
+// RangeDescriptorCache.performRangeLookupContinuation.
+func TestSplitMeta2LookupContinuation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	g, clock := makeGossip(t, stopper)
+	cfg := DistSenderConfig{
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Clock:      clock,
+		TestingKnobs: DistSenderTestingKnobs{
+			TransportFactory: adaptLegacyTransport(stubRPCSendFn),
+		},
+		RangeDescriptorDB: splitMeta2MockRangeDescriptorDB,
+	}
+
+	for _, tc := range []struct {
+		key roachpb.Key
+	}{
+		// RangeLookup will go to left meta2 range first and requires a
+		// continuation RangeLookup.
+		{key: roachpb.Key("a")},
+		// RangeLookup will go to right meta2 range first.
+		{key: roachpb.Key("m")},
+		// RangeLookup will go to right meta2 range first.
+		{key: roachpb.Key("y")},
+	} {
+		t.Run(tc.key.String(), func(t *testing.T) {
+			ds := NewDistSender(cfg, g)
+
+			put := roachpb.NewPut(tc.key, roachpb.MakeValueFromString("value"))
+			if _, pErr := client.SendWrapped(context.Background(), ds, put); pErr != nil {
+				t.Errorf("put encountered unexpected error: %s", pErr)
+			}
+		})
 	}
 }
 

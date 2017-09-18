@@ -34,12 +34,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -2326,5 +2328,66 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 		if bpr.P10 == bpr.P90 {
 			t.Errorf("expected BytesPerReplica p10 and p90 to be different with 2 replicas, got %+v", bpr)
 		}
+	}
+}
+
+// TestRangeLookupAfterMeta2Split verifies that RangeLookups succeed even when
+// user ranges span the boundary of two split meta2 ranges.
+func TestRangeLookupAfterMeta2Split(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s := srv.(*server.TestServer)
+	defer s.Stopper().Stop(ctx)
+
+	// Create a split at /Table/48 and /Meta2/Table/50. This creates:
+	//   meta ranges [/Min-/Meta2/Table/50) and [/Meta2/Table/50-/System)
+	//   user ranges [/Table/19-/Table/48)  and [/Table/48-/Max)
+	//
+	// Note that the two boundaries are offset such that a lookup for key /Table/49
+	// will first search for meta(/Table/49) which is on the left meta2 range. However,
+	// the user range [/Table/48-/Max) is stored on the right meta2 range, so the lookup
+	// will require a continuation. See RangeDescriptorCache.RangeDescriptorCache for
+	// details on how we handle this.
+	const tableID = keys.MaxReservedDescID + 1
+	splitReq := adminSplitArgs(keys.MakeTablePrefix(tableID - 2))
+	if _, pErr := client.SendWrapped(ctx, s.DistSender(), splitReq); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	metaKey := keys.RangeMetaKey(keys.MakeTablePrefix(tableID))
+	splitReq = adminSplitArgs(metaKey)
+	if _, pErr := client.SendWrapped(ctx, s.DistSender(), splitReq); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	for _, rev := range []bool{false, true} {
+		t.Run(fmt.Sprintf("reverse=%t", rev), func(t *testing.T) {
+			// Clear the RangeDescriptorCache so that no cached descriptors are
+			// available from previous lookups.
+			s.DistSender().RangeDescriptorCache().Clear()
+
+			// Scan from [/Table/49-/Table/50) both forwards and backwards.
+			// Either way, the resulting RangeLookup will be forced to perform a
+			// continuation lookup.
+			scanStart := roachpb.Key(keys.MakeTablePrefix(tableID - 1))
+			scanEnd := scanStart.PrefixEnd()
+			span := roachpb.Span{
+				Key:    scanStart,
+				EndKey: scanEnd,
+			}
+
+			var lookupReq roachpb.Request
+			if rev {
+				// A ReverseScanRequest will trigger a reverse RangeLookupRequest.
+				lookupReq = &roachpb.ReverseScanRequest{Span: span}
+			} else {
+				lookupReq = &roachpb.ScanRequest{Span: span}
+			}
+			if _, err := client.SendWrapped(ctx, s.DistSender(), lookupReq); err != nil {
+				t.Fatalf("%T %v", err.GoError(), err)
+			}
+		})
 	}
 }

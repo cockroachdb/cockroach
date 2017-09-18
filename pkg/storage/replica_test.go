@@ -6359,9 +6359,11 @@ func TestRangeLookup(t *testing.T) {
 
 	expected := []roachpb.RangeDescriptor{*tc.repl.Desc()}
 	testCases := []struct {
-		key      roachpb.RKey
-		reverse  bool
-		expected []roachpb.RangeDescriptor
+		key          roachpb.RKey
+		reverse      bool
+		continuation bool
+		expected     []roachpb.RangeDescriptor
+		expectedErr  string
 	}{
 
 		// Test with the first range (StartKey==KeyMin). Normally we look
@@ -6372,29 +6374,38 @@ func TestRangeLookup(t *testing.T) {
 		// Test with the last key in a meta prefix. This is an edge case in the
 		// implementation.
 		{key: keys.MustAddr(keys.Meta1KeyMax), reverse: false, expected: expected},
-		{key: keys.MustAddr(keys.Meta2KeyMax), reverse: false, expected: nil},
+		{key: keys.MustAddr(keys.Meta2KeyMax), reverse: false, expectedErr: "not valid range metadata key"},
 		{key: keys.MustAddr(keys.Meta1KeyMax), reverse: true, expected: expected},
 		{key: keys.MustAddr(keys.Meta2KeyMax), reverse: true, expected: expected},
+		// Tests error cases with continuation lookups.
+		{key: keys.MustAddr(keys.Meta1KeyMax), reverse: true, continuation: true, expectedErr: "a reverse RangeLookupRequest cannot be a continuation"},
 	}
 
 	for i, c := range testCases {
-		resp, pErr := tc.SendWrapped(&roachpb.RangeLookupRequest{
-			Span: roachpb.Span{
-				Key: c.key.AsRawKey(),
-			},
-			MaxRanges: 1,
-			Reverse:   c.reverse,
+		name := fmt.Sprintf("key=%s,reverse=%t,continuation=%t", c.key, c.reverse, c.continuation)
+		t.Run(name, func(t *testing.T) {
+			resp, pErr := tc.SendWrapped(&roachpb.RangeLookupRequest{
+				Span: roachpb.Span{
+					Key: c.key.AsRawKey(),
+				},
+				MaxRanges:    1,
+				Reverse:      c.reverse,
+				Continuation: c.continuation,
+			})
+			if pErr != nil {
+				if c.expectedErr == "" || !testutils.IsPError(pErr, c.expectedErr) {
+					t.Fatalf("expected error %q, found %v", c.expectedErr, pErr)
+				}
+			} else {
+				if c.expectedErr != "" {
+					t.Fatalf("expected error %q, found no error", c.expectedErr)
+				}
+				reply := resp.(*roachpb.RangeLookupResponse)
+				if !reflect.DeepEqual(reply.Ranges, c.expected) {
+					t.Errorf("%d: expected %+v, got %+v", i, c.expected, reply.Ranges)
+				}
+			}
 		})
-		if pErr != nil {
-			if c.expected != nil {
-				t.Fatal(pErr)
-			}
-		} else {
-			reply := resp.(*roachpb.RangeLookupResponse)
-			if !reflect.DeepEqual(reply.Ranges, c.expected) {
-				t.Errorf("%d: expected %+v, got %+v", i, c.expected, reply.Ranges)
-			}
-		}
 	}
 }
 
