@@ -587,11 +587,11 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR VALUES (1, 2), (1, 1), (1, 2), (2, 1), (2, 1) UNION VALUES (1, 3), (3, 4), (1, 1)]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
+output row: [1 2]
+output row: [1 1]
+output row: [2 1]
 output row: [1 3]
 output row: [3 4]
-output row: [1 1]
-output row: [1 2]
-output row: [2 1]
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM abc EXCEPT SELECT * FROM abc WHERE b > 'p']
@@ -610,12 +610,12 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM ab WHERE a > 1 INTERSECT SELECT * FROM ab WHERE b > 1]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-fetched: /ab/primary/1/4 -> NULL
-fetched: /ab/primary/1/5 -> NULL
 fetched: /ab/primary/2/1 -> NULL
 fetched: /ab/primary/2/2 -> NULL
 fetched: /ab/primary/2/6 -> NULL
 fetched: /ab/primary/3/9 -> NULL
+fetched: /ab/primary/1/4 -> NULL
+fetched: /ab/primary/1/5 -> NULL
 fetched: /ab/primary/2/1 -> NULL
 fetched: /ab/primary/2/2 -> NULL
 output row: [2 2]

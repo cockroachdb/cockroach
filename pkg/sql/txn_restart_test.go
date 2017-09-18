@@ -1796,13 +1796,11 @@ func TestTxnAutoRetriesDisabledAfterResultsHaveBeenSentToClient(t *testing.T) {
 			// error is injected. We do this through a single statement (a UNION)
 			// instead of two separate statements in order to support the autoCommit
 			// test which needs a single statement.
-			// In the UNION we put the error first and the data second because,
-			// surprisingly, the order of the UNION results is <right operand>, <left
-			// operand>. TODO(knz): invert this once we invert the UNION results.
 			sql := fmt.Sprintf(`
 				%s
-				SELECT crdb_internal.force_retry('1s')
-				  UNION ALL SELECT generate_series(1, 10000);
+				SELECT generate_series(1, 10000)
+				UNION ALL
+				SELECT crdb_internal.force_retry('1s');
 				%s`,
 				prefix, suffix)
 			_, err := sqlDB.Exec(sql)
