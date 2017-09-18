@@ -950,7 +950,12 @@ func (e *Executor) execParsed(
 // returned as remainingStmts.
 // txnPrefix: Set if stmtsToExec corresponds to the start of the current
 // transaction. Used to trap nested BEGINs.
-// autoCommit: Set if the transction should be committed at the end of the
+// autoCommit: If set, the transaction will be committed after running the
+//   statement. If set, stmtsToExec can only contain a single statement.
+//   If set, the transaction state will always be NoTxn when this function
+//   returns, regardless of errors.
+//   Errors encountered when committing are reported to the caller and are
+//   indistinguishable from errors encountered while running the query.
 // protoTS: If not nil, the transaction proto sets its Orig and Max timestamps
 // to it each retry.
 //
@@ -1104,6 +1109,10 @@ func runWithAutoRetry(
 				e.TxnAbortCount.Inc(1)
 				txnState.mu.txn.CleanupOnError(session.Ctx(), err)
 				txnState.resetStateAndTxn(Aborted)
+				// autoCommit always leaves the transaction in NoTxn.
+				if autoCommit {
+					txnState.resetStateAndTxn(NoTxn)
+				}
 			}
 		}
 
@@ -1584,7 +1593,7 @@ func (e *Executor) execStmtInOpenTxn(
 			// Force an auto-retry by returning a retryable error to the higher
 			// levels.
 			err = roachpb.NewHandledRetryableTxnError(
-				"serializable transaction timestamp pushed (detected by sql Executor)",
+				"serializable transaction timestamp pushed (detected by SQL Executor)",
 				txnState.mu.txn.ID(),
 				// No updated transaction required; we've already manually updated our
 				// client.Txn.
