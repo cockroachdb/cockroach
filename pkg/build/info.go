@@ -42,8 +42,8 @@ const TimeFormat = "2006/01/02 15:04:05"
 var (
 	// These variables are initialized via the linker -X flag in the
 	// top-level Makefile when compiling release binaries.
-	tag         = "unknown" // Tag of this build (git describe --exact-match)
-	baseBranch  = "unknown" // Base branch of this build (git describe)
+	tag         = "unknown" // Tag of this build (git describe --tags w/ optional '-dirty' suffix)
+	baseBranch  = "unknown" // Base branch of this build (git describe --tags --abbrev=0)
 	utcTime     string      // Build time in UTC (year/month/day hour:min:sec)
 	rev         string      // SHA-1 of this build (git rev-parse)
 	cgoCompiler = C.GoString(C.compilerVersion())
