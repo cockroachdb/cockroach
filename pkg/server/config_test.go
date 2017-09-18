@@ -16,6 +16,7 @@ package server
 
 import (
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -205,35 +206,84 @@ func TestFilterGossipBootstrapResolvers(t *testing.T) {
 func TestTempStoreDerivation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	testCases := []struct {
-		firstStoreArg    string
+		name             string
+		storeArgs        []string
+		tempStoreDir     string
 		expectedTempSpec base.StoreSpec
 	}{
 		{
-			firstStoreArg:    "type=mem,size=1GiB",
+			name:             "InMemoryNoTempPath",
+			storeArgs:        []string{"type=mem,size=1GiB"},
 			expectedTempSpec: base.StoreSpec{InMemory: true},
 		},
 		{
-			firstStoreArg:    "type=mem,size=1GiB,attrs=garbage:moregarbage",
+			name:             "InMemoryWithTempPath",
+			storeArgs:        []string{"type=mem,size=1GiB"},
+			tempStoreDir:     "foo",
 			expectedTempSpec: base.StoreSpec{InMemory: true},
 		},
 		{
-			firstStoreArg:    "path=/foo/bar",
+			name:             "InMemoryWithAttributes",
+			storeArgs:        []string{"type=mem,size=1GiB,attrs=garbage:moregarbage"},
+			expectedTempSpec: base.StoreSpec{InMemory: true},
+		},
+		{
+			name:             "StorePathNoTempPath",
+			storeArgs:        []string{"path=/foo/bar"},
 			expectedTempSpec: base.StoreSpec{Path: "/foo/bar/local"},
+		},
+		{
+			name:             "StorePathWithTempPath",
+			storeArgs:        []string{"path=/foo/bar"},
+			tempStoreDir:     "/foo",
+			expectedTempSpec: base.StoreSpec{Path: "/foo"},
+		},
+		{
+			name:             "CollidingTempPath",
+			storeArgs:        []string{"path=/bar", "path=/foo", "path=/foobar"},
+			tempStoreDir:     "/foo",
+			expectedTempSpec: base.StoreSpec{Path: "/foo/local"},
+		},
+		{
+			name:             "CollidingDefaultTempPath",
+			storeArgs:        []string{"path=/foo", "path=/foo/local", "path=/foo/local/local"},
+			expectedTempSpec: base.StoreSpec{Path: "/foo/local/local/local"},
+		},
+		{
+			name:             "CollidingRelativeTempPath",
+			storeArgs:        []string{"path=/foo", "path=" + filepath.Join(cwd, "foo")},
+			tempStoreDir:     "foo",
+			expectedTempSpec: base.StoreSpec{Path: "foo/local"},
 		},
 	}
 
-	for i, tc := range testCases {
-		spec, err := base.NewStoreSpec(tc.firstStoreArg)
-		if err != nil {
-			t.Fatal(err)
-		}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			specs := make([]base.StoreSpec, len(tc.storeArgs))
+			var err error
+			for i, arg := range tc.storeArgs {
+				if specs[i], err = base.NewStoreSpec(arg); err != nil {
+					t.Fatal(err)
+				}
+			}
 
-		if e, a := tc.expectedTempSpec, MakeTempStoreSpecFromStoreSpec(spec); e.String() != a.String() {
-			t.Fatalf(
-				"%d: temp store spec did not match expected:\n%s",
-				i, strings.Join(pretty.Diff(e, a), "\n"),
-			)
-		}
+			actual, err := MakeTempStoreSpecFromStoreSpecs(tc.tempStoreDir, specs)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if tc.expectedTempSpec.String() != actual.String() {
+				t.Fatalf(
+					"temp store spec did not match expected:\n%s",
+					strings.Join(pretty.Diff(tc.expectedTempSpec, actual), "\n"),
+				)
+			}
+		})
 	}
 }

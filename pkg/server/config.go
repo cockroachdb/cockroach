@@ -335,28 +335,74 @@ func SetOpenFileLimitForOneStore() (uint64, error) {
 	return setOpenFileLimit(1)
 }
 
-// MakeTempStoreSpecFromStoreSpec creates a spec for a temporary store under
-// the given StoreSpec's path. If the given spec specifies an in-memory store,
-// the temporary store will be in-memory as well. The Attributes field of the
-// given spec is intentionally not propagated to the temporary store.
-//
-// TODO(arjun): Add a CLI flag to override this.
-func MakeTempStoreSpecFromStoreSpec(spec base.StoreSpec) base.StoreSpec {
-	if spec.InMemory {
+// MakeTempStoreSpecFromStoreSpecs creates a spec for a temporary store. The initial
+// temporary store desiredPath must be passed in with the StoreSpecs of the other stores.
+// If the initial desiredPath is empty (not specified with the --temp-store flag)
+// the spec defaults to a subdirectory nested within the first store.
+// If the specified desiredPath or the default nested path collides with the root of
+// any existing stores, a recursive call is made where we try to nest the temporary
+// path one level deeper until no paths collide.
+// The Attributes field of the given spec is intentionally not propagated to the temporary store.
+func MakeTempStoreSpecFromStoreSpecs(
+	desiredPath string, storeSpecs []base.StoreSpec,
+) (base.StoreSpec, error) {
+	if len(storeSpecs) == 0 {
+		panic("no store specs were found when creating temporary store spec")
+	}
+
+	// TODO(richardwu): Handle the case where there may exist both in-memory and on-disk stores.
+	if storeSpecs[0].InMemory {
 		return base.StoreSpec{
 			// TODO(arjun): Set the size in a principled fashion from the main store
 			// after #16750 is addressed.
 			InMemory: true,
+		}, nil
+	}
+
+	// No path specified in CLI flag: location specified under first store's path.
+	if desiredPath == "" {
+		desiredPath = filepath.Join(storeSpecs[0].Path, defaultTempStoreRelativePath)
+	}
+
+	// Ensure that the desired path for the temporary store does not collide with
+	// existing stores.
+	for _, spec := range storeSpecs {
+		fullStorePath, err := filepath.Abs(spec.Path)
+		if err != nil {
+			return base.StoreSpec{}, err
+		}
+		fullTempPath, err := filepath.Abs(desiredPath)
+		if err != nil {
+			return base.StoreSpec{}, err
+		}
+		// If the desired path for the temporary store collides with a store,
+		// we recusirvely default the temporary store to a new subdirectory within
+		// the offending store's path.
+		if fullStorePath == fullTempPath {
+			newPath := filepath.Join(desiredPath, defaultTempStoreRelativePath)
+			log.Warningf(
+				context.Background(),
+				"temporary store path %s collides with store path %s, defaulting to %s instead",
+				fullTempPath,
+				fullStorePath,
+				newPath,
+			)
+			return MakeTempStoreSpecFromStoreSpecs(newPath, storeSpecs)
 		}
 	}
-	return base.StoreSpec{
-		Path: filepath.Join(spec.Path, defaultTempStoreRelativePath),
-	}
+
+	// Return spec with a non-colliding path.
+	return base.StoreSpec{Path: desiredPath}, nil
 }
 
 // MakeConfig returns a Context with default values.
 func MakeConfig(st *cluster.Settings) Config {
 	storeSpec, err := base.NewStoreSpec(defaultStorePath)
+	if err != nil {
+		panic(err)
+	}
+	storeSpecs := []base.StoreSpec{storeSpec}
+	tempSpec, err := MakeTempStoreSpecFromStoreSpecs("", storeSpecs)
 	if err != nil {
 		panic(err)
 	}
@@ -373,9 +419,9 @@ func MakeConfig(st *cluster.Settings) Config {
 		EventLogEnabled:                defaultEventLogEnabled,
 		EnableWebSessionAuthentication: defaultEnableWebSessionAuthentication,
 		Stores: base.StoreSpecList{
-			Specs: []base.StoreSpec{storeSpec},
+			Specs: storeSpecs,
 		},
-		TempStore: MakeTempStoreSpecFromStoreSpec(storeSpec),
+		TempStore: tempSpec,
 	}
 	cfg.AmbientCtx.Tracer = st.Tracer
 
