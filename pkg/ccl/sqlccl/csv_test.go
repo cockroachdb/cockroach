@@ -153,12 +153,8 @@ func TestLoadCSVUniqueDuplicate(t *testing.T) {
 	}
 
 	_, _, _, err := sqlccl.LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, nil /* nullif */, testSSTMaxSize, tmp)
-	// Really expect the first of these errors, but see:
-	// https://github.com/cockroachdb/cockroach/issues/17336#issuecomment-328380578
-	//
-	// TODO(mjibson): refactor so that the first error is always returned.
-	if !testutils.IsError(err, "duplicate key|no files in backup") {
-		t.Fatalf("unexpected error: %v", err)
+	if !testutils.IsError(err, "duplicate key") {
+		t.Fatalf("unexpected error: %+v", err)
 	}
 }
 
@@ -196,12 +192,8 @@ func TestLoadCSVPrimaryDuplicate(t *testing.T) {
 	}
 
 	_, _, _, err := sqlccl.LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, nil /* nullif */, testSSTMaxSize, tmp)
-	// Really expect the first of these errors, but see:
-	// https://github.com/cockroachdb/cockroach/issues/17336#issuecomment-328380578
-	//
-	// TODO(mjibson): refactor so that the first error is always returned.
-	if !testutils.IsError(err, "duplicate key|no files in backup") {
-		t.Fatalf("unexpected error: %v", err)
+	if !testutils.IsError(err, "duplicate key") {
+		t.Fatalf("unexpected error: %+v", err)
 	}
 }
 
