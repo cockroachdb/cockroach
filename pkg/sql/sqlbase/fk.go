@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // TableLookupsByID maps table IDs to looked up descriptors or, for tables that
@@ -110,16 +111,18 @@ func makeFKInsertHelper(
 	return fks, nil
 }
 
-func (fks fkInsertHelper) checkAll(ctx context.Context, row parser.Datums) error {
+func (fks fkInsertHelper) checkAll(ctx context.Context, row parser.Datums, traceKV bool) error {
 	for idx := range fks {
-		if err := fks.checkIdx(ctx, idx, row); err != nil {
+		if err := fks.checkIdx(ctx, idx, row, traceKV); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (fks fkInsertHelper) checkIdx(ctx context.Context, idx IndexID, row parser.Datums) error {
+func (fks fkInsertHelper) checkIdx(
+	ctx context.Context, idx IndexID, row parser.Datums, traceKV bool,
+) error {
 	for _, fk := range fks[idx] {
 		nulls := true
 		for _, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
@@ -133,7 +136,7 @@ func (fks fkInsertHelper) checkIdx(ctx context.Context, idx IndexID, row parser.
 			continue
 		}
 
-		found, err := fk.check(ctx, row)
+		found, err := fk.check(ctx, row, traceKV)
 		if err != nil {
 			return err
 		}
@@ -193,18 +196,20 @@ func makeFKDeleteHelper(
 	return fks, nil
 }
 
-func (fks fkDeleteHelper) checkAll(ctx context.Context, row parser.Datums) error {
+func (fks fkDeleteHelper) checkAll(ctx context.Context, row parser.Datums, traceKV bool) error {
 	for idx := range fks {
-		if err := fks.checkIdx(ctx, idx, row); err != nil {
+		if err := fks.checkIdx(ctx, idx, row, traceKV); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (fks fkDeleteHelper) checkIdx(ctx context.Context, idx IndexID, row parser.Datums) error {
+func (fks fkDeleteHelper) checkIdx(
+	ctx context.Context, idx IndexID, row parser.Datums, traceKV bool,
+) error {
 	for _, fk := range fks[idx] {
-		found, err := fk.check(ctx, row)
+		found, err := fk.check(ctx, row, traceKV)
 		if err != nil {
 			return err
 		}
@@ -259,12 +264,12 @@ func makeFKUpdateHelper(
 }
 
 func (fks fkUpdateHelper) checkIdx(
-	ctx context.Context, idx IndexID, oldValues, newValues parser.Datums,
+	ctx context.Context, idx IndexID, oldValues, newValues parser.Datums, traceKV bool,
 ) error {
-	if err := fks.inbound.checkIdx(ctx, idx, oldValues); err != nil {
+	if err := fks.inbound.checkIdx(ctx, idx, oldValues, traceKV); err != nil {
 		return err
 	}
-	return fks.outbound.checkIdx(ctx, idx, newValues)
+	return fks.outbound.checkIdx(ctx, idx, newValues, traceKV)
 }
 
 // CollectSpans implements the FkSpanCollector interface.
@@ -350,16 +355,21 @@ func makeBaseFKHelper(
 }
 
 // TODO(dt): Batch checks of many rows.
-func (f baseFKHelper) check(ctx context.Context, values parser.Datums) (parser.Datums, error) {
+func (f baseFKHelper) check(
+	ctx context.Context, values parser.Datums, traceKV bool,
+) (parser.Datums, error) {
 	span, err := f.spanForValues(values)
 	if err != nil {
 		return nil, err
+	}
+	if traceKV {
+		log.VEventf(ctx, 2, "Scan %s -> %s", span.Key, span.EndKey)
 	}
 	err = f.rf.StartScan(ctx, f.txn, roachpb.Spans{span}, true /* limit batches */, 1)
 	if err != nil {
 		return nil, err
 	}
-	return f.rf.NextRowDecoded(ctx, false /* traceKV */)
+	return f.rf.NextRowDecoded(ctx, traceKV)
 }
 
 func (f baseFKHelper) spanForValues(values parser.Datums) (roachpb.Span, error) {
