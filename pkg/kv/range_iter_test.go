@@ -38,7 +38,7 @@ var alphaRangeDescriptorDB = MockRangeDescriptorDB(func(
 		return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
 	}
 	var index int
-	if len(key) > 0 {
+	if !key.Equal(roachpb.KeyMin) {
 		if useReverseScan {
 			index = int(key[0] - byte('a'))
 		} else {

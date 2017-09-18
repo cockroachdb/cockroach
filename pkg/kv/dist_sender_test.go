@@ -372,10 +372,11 @@ type MockRangeDescriptorDB func(roachpb.RKey, bool) ([]roachpb.RangeDescriptor, 
 func (mdb MockRangeDescriptorDB) RangeLookup(
 	_ context.Context, key roachpb.RKey, _ *roachpb.RangeDescriptor, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
-	return mdb(stripMeta(key), useReverseScan)
+	return mdb(keys.UserKey(key), useReverseScan)
 }
+
 func (mdb MockRangeDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, error) {
-	rs, _, err := mdb.RangeLookup(context.Background(), nil, nil, false /* useReverseScan */)
+	rs, _, err := mdb(roachpb.RKey(roachpb.KeyMin), false)
 	if err != nil || len(rs) == 0 {
 		return nil, err
 	}
@@ -598,7 +599,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 			// Return next error and truncate the prefix of the errors array.
 			var err error
-			if key != nil {
+			if !key.Equal(roachpb.KeyMin) {
 				err = errs[0]
 				errs = errs[1:]
 				if bytes.HasPrefix(key, keys.Meta2Prefix) {
@@ -1405,7 +1406,7 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 			TransportFactory: adaptLegacyTransport(testFn),
 		},
 		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, useReverseScan bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
-			if len(key) > 0 && !useReverseScan {
+			if !key.Equal(roachpb.KeyMin) && !useReverseScan {
 				t.Fatalf("expected UseReverseScan to be set")
 			}
 			if bytes.HasPrefix(key, keys.Meta2Prefix) {

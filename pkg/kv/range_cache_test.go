@@ -117,18 +117,7 @@ func (db *testDescriptorDB) RangeLookup(
 		return nil, nil, ctx.Err()
 	}
 	atomic.AddInt64(&db.lookupCount, 1)
-	return db.getDescriptors(stripMeta(key), useReverseScan)
-}
-
-func stripMeta(key roachpb.RKey) roachpb.RKey {
-	switch {
-	case bytes.HasPrefix(key, keys.Meta1Prefix):
-		return testutils.MakeKey(roachpb.RKey(keys.Meta2Prefix), key[len(keys.Meta1Prefix):])
-	case bytes.HasPrefix(key, keys.Meta2Prefix):
-		return key[len(keys.Meta2Prefix):]
-	}
-	// First range.
-	return nil
+	return db.getDescriptors(keys.UserKey(key), useReverseScan)
 }
 
 func (db *testDescriptorDB) splitRange(t *testing.T, key roachpb.RKey) {
