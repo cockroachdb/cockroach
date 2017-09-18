@@ -119,4 +119,4 @@ build/builder.sh make TYPE=$TYPE testbuild PKG=$PKG
 cd $PKG
 # shellcheck disable=SC2086
 ./${PKG##*/}.test -l "$TMPDIR" -test.v -test.timeout $TESTTIMEOUT -show-logs -remote -key-name terraform \
-  $COCKROACH_EXTRA_FLAGS | go-test-teamcity
+  $COCKROACH_EXTRA_FLAGS | $(command -v go-test-teamcity 2>/dev/null || echo cat)
