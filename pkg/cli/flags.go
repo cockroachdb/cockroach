@@ -222,6 +222,7 @@ func init() {
 		varFlag(f, &serverCfg.Locality, cliflags.Locality)
 
 		varFlag(f, &serverCfg.Stores, cliflags.Store)
+		stringFlag(f, &serverCfg.TempStore.Path, cliflags.TempDir, "")
 		varFlag(f, &serverCfg.MaxOffset, cliflags.MaxOffset)
 
 		// Usage for the unix socket is odd as we use a real file, whereas
