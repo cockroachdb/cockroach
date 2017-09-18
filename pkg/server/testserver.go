@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"reflect"
 	"sync"
 	"time"
 
@@ -184,6 +185,10 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	}
 	// Copy over the store specs.
 	cfg.Stores = base.StoreSpecList{Specs: params.StoreSpecs}
+	// Assign TempStore spec if specified in the params.
+	if !reflect.DeepEqual(params.TempStoreSpec, base.StoreSpec{}) {
+		cfg.TempStore = params.TempStoreSpec
+	}
 	if cfg.TestingKnobs.Store == nil {
 		cfg.TestingKnobs.Store = &storage.StoreTestingKnobs{}
 	}
