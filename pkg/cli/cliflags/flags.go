@@ -458,6 +458,24 @@ Also, if you use equal signs in the file path to a store, you must use the
 "path" field label.`,
 	}
 
+	TempDir = FlagInfo{
+		Name: "temp-dir",
+		Description: `
+The parent directory path where a temporary subdirectory will be created to be used for temporary files.
+This path must exist or the node will not start.
+The temporary subdirectory is used primarily as working memory for distributed computations
+and CSV importing.
+For example, the following will generate an arbitrary, temporary subdirectory
+"/mnt/ssd01/temp/cockroach-temp<NUMBER>":
+<PRE>
+
+  --temp-dir=/mnt/ssd01/temp
+
+</PRE>
+If this flag is unspecified, the temporary subdirectory will be located under
+the root of the first store.`,
+	}
+
 	URL = FlagInfo{
 		Name:   "url",
 		EnvVar: "COCKROACH_URL",

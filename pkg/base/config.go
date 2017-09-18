@@ -390,3 +390,81 @@ func DefaultRetryOptions() retry.Options {
 		Multiplier:     2,
 	}
 }
+
+const (
+	// DefaultTempStorageMaxSizeBytes is the default maximum budget
+	// for temp storage.
+	DefaultTempStorageMaxSizeBytes = 32 * 1024 * 1024 * 1024 /* 32GB */
+	// DefaultInMemTempStorageMaxSizeBytes  is the default maximum budget
+	// for temp storages that are in-memory. The temp storage will be
+	// in-memory if and only if the first store is in-memory.
+	DefaultInMemTempStorageMaxSizeBytes = 100 * 1024 * 1024 /* 100MB */
+)
+
+// TempStorageConfig contains the details that can be specified in the cli
+// pertaining to temp storage flags, specifically --temp-dir and
+// --max-disk-temp-storage.
+type TempStorageConfig struct {
+	// InMemory specifies whether the temporary storage will remain
+	// in-memory or occupy a temporary subdirectory on-disk.
+	InMemory bool
+	// ParentDir is the path to the parent directory where the temporary
+	// subdirectory for temp storage will be created.
+	// If InMemory is set to true, ParentDir is ignored.
+	ParentDir string
+	// MaxSizeBytes is the space budget allocated for temp storage. This
+	// will either be a limit in-memory (if InMemory is true) or on-disk.
+	// If the budget is exceeded, no further allocations on temp storage
+	// will be permitted unless space is freed from previous allocations.
+	MaxSizeBytes int64
+	// RecordDir is the path to the directory of the record file which
+	// records the path of the temporary directory created on node startup.
+	// Previous temporary directories that could not be cleaned up may
+	// also be recorded. The record file will be read on startup and these
+	// abandoned temporary directories will be cleaned up.
+	// The record file is meant to be kept together with the first store,
+	// thus RecordDir should be the first store's path.
+	// If InMemory is set to true, nothing will be written to the record
+	// file.
+	RecordDir string
+}
+
+// TempStorageConfigFromEnv creates a TempStorageConfig that aligns with the
+// parentDir (for the temp storage) and the first store's spec.
+//
+// If the first store is in-memory, the temp storage must be in-memory (since
+// the record file needs to be retrievable). TODO(richardwu): we can
+// keep the path to the temporary directory in-memory, which may cause
+// unremovable subdirectories to linger during subsequent startups.
+//
+// If the first store is on-disk, then...
+// If parentDir is not specified (empty), TempStorageConfig.ParentDir is
+// defaulted to the first store's path.
+// TempStorageConfig.RecordDir is always set to the first store's path such
+// that the record file is always located with the first store.
+func TempStorageConfigFromEnv(
+	firstStore StoreSpec, parentDir string, maxSizeBytes int64,
+) TempStorageConfig {
+	// First store is in-memory so we must also make the temp storage
+	// in-memory. See TODO in function comment.
+	if firstStore.InMemory {
+		return TempStorageConfig{
+			InMemory:     true,
+			MaxSizeBytes: maxSizeBytes,
+		}
+	}
+
+	tsc := TempStorageConfig{
+		ParentDir:    parentDir,
+		MaxSizeBytes: maxSizeBytes,
+		// The record directory is always defaulted to the first store's path
+		// such that subsequent node startups can retrieve the records of
+		// abandoned temporary subdirectories.
+		RecordDir: firstStore.Path,
+	}
+	// If no parent directory was set, default it to the first store's path.
+	if tsc.ParentDir == "" {
+		tsc.ParentDir = firstStore.Path
+	}
+	return tsc
+}
