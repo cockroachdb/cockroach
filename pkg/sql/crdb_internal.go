@@ -193,9 +193,13 @@ CREATE TABLE crdb_internal.tables (
 			if !ok || !userCanSeeDescriptor(table, p.session.User) {
 				continue
 			}
-			dbName := dbNames[table.ParentID]
+			dbName := dbNames[table.GetParentID()]
 			if dbName == "" {
-				return errors.Errorf("could not find database %d", table.ParentID)
+				// The parent database was deleted. This is possible e.g. when
+				// a database is dropped with CASCADE, and someone queries
+				// this virtual table before the dropped table descriptors are
+				// effectively deleted.
+				dbName = fmt.Sprintf("[%d]", table.GetParentID())
 			}
 			leaseNodeDatum := parser.DNull
 			leaseExpDatum := parser.DNull
@@ -207,7 +211,7 @@ CREATE TABLE crdb_internal.tables (
 			}
 			if err := addRow(
 				parser.NewDInt(parser.DInt(int64(table.ID))),
-				parser.NewDInt(parser.DInt(int64(table.ParentID))),
+				parser.NewDInt(parser.DInt(int64(table.GetParentID()))),
 				parser.NewDString(table.Name),
 				parser.NewDString(dbName),
 				parser.NewDInt(parser.DInt(int64(table.Version))),
@@ -251,7 +255,7 @@ CREATE TABLE crdb_internal.schema_changes (
 				continue
 			}
 			tableID := parser.NewDInt(parser.DInt(int64(table.ID)))
-			parentID := parser.NewDInt(parser.DInt(int64(table.ParentID)))
+			parentID := parser.NewDInt(parser.DInt(int64(table.GetParentID())))
 			tableName := parser.NewDString(table.Name)
 			for _, mut := range table.Mutations {
 				mutType := "UNKNOWN"
@@ -325,7 +329,7 @@ CREATE TABLE crdb_internal.leases (
 						nodeID,
 						tableID,
 						parser.NewDString(state.Name),
-						parser.NewDInt(parser.DInt(int64(state.ParentID))),
+						parser.NewDInt(parser.DInt(int64(state.GetParentID()))),
 						&expCopy,
 						dropped,
 					); err != nil {

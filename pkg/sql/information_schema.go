@@ -743,6 +743,11 @@ func forEachTableDescWithTableLookupInternal(
 		if table, ok := desc.(*sqlbase.TableDescriptor); ok && !table.Dropped() {
 			dbName, ok := dbIDsToName[table.GetParentID()]
 			if !ok {
+				// Contrary from `crdb_internal.tables`, where dropped tables
+				// can appear and thus can miss a parent database (because the
+				// parent descriptor has already been deleted), here we are
+				// excluding dropped tables so the parent database must always
+				// exist.
 				return errors.Errorf("no database with ID %d found", table.GetParentID())
 			}
 			dbTables := databases[dbName]
