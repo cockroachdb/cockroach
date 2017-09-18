@@ -52,6 +52,14 @@ const (
 	BackupFormatInitialVersion uint32 = 0
 )
 
+const (
+	backupOptMVCCAll = "mvcc_all"
+)
+
+var backupOptionExpectValues = map[string]bool{
+	backupOptMVCCAll: false,
+}
+
 // BackupCheckpointInterval is the interval at which backup progress is saved
 // to durable storage.
 var BackupCheckpointInterval = time.Minute
@@ -332,6 +340,7 @@ func makeBackupDescriptor(
 	p sql.PlanHookState,
 	startTime, endTime hlc.Timestamp,
 	targets parser.TargetList,
+	opts map[string]string,
 ) (BackupDescriptor, error) {
 	var err error
 	var sqlDescs []sqlbase.Descriptor
@@ -396,9 +405,15 @@ func makeBackupDescriptor(
 		}
 	}
 
+	mvccFilter := MVCCFilter_Latest
+	if _, ok := opts[backupOptMVCCAll]; ok {
+		mvccFilter = MVCCFilter_All
+	}
+
 	return BackupDescriptor{
 		StartTime:     startTime,
 		EndTime:       endTime,
+		MVCCFilter:    mvccFilter,
 		Descriptors:   sqlDescs,
 		Spans:         spansForAllTableIndexes(tables),
 		FormatVersion: BackupFormatInitialVersion,
@@ -520,9 +535,10 @@ func backup(
 			defer func() { <-exportsSem }()
 
 			req := &roachpb.ExportRequest{
-				Span:      span,
-				Storage:   exportStore.Conf(),
-				StartTime: backupDesc.StartTime,
+				Span:       span,
+				Storage:    exportStore.Conf(),
+				StartTime:  backupDesc.StartTime,
+				MVCCFilter: roachpb.MVCCFilter(backupDesc.MVCCFilter),
 			}
 			res, pErr := client.SendWrappedWith(gCtx, db.GetSender(), header, req)
 			if pErr != nil {
@@ -616,6 +632,10 @@ func backupPlanHook(
 	if err != nil {
 		return nil, nil, err
 	}
+	optsFn, err := p.TypeAsStringOpts(backupStmt.Options, backupOptionExpectValues)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	header := sqlbase.ResultColumns{
 		{Name: "job_id", Typ: parser.TypeInt},
@@ -679,7 +699,14 @@ func backupPlanHook(
 			}
 		}
 
-		backupDesc, err := makeBackupDescriptor(ctx, p, startTime, endTime, backupStmt.Targets)
+		opts, err := optsFn()
+		if err != nil {
+			return err
+		}
+
+		backupDesc, err := makeBackupDescriptor(
+			ctx, p, startTime, endTime, backupStmt.Targets, opts,
+		)
 		if err != nil {
 			return err
 		}

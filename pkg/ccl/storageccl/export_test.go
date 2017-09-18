@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func TestExport(t *testing.T) {
+func TestExportCmd(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
@@ -36,10 +36,11 @@ func TestExport(t *testing.T) {
 	defer dirCleanupFn()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(t, tc.Conns[0])
 	kvDB := tc.Server(0).KVClient().(*client.DB)
 
-	exportAndSlurp := func(start hlc.Timestamp) (hlc.Timestamp, []string, []engine.MVCCKeyValue) {
+	exportAndSlurpOne := func(
+		start hlc.Timestamp, mvccFilter roachpb.MVCCFilter,
+	) ([]string, []engine.MVCCKeyValue) {
 		req := &roachpb.ExportRequest{
 			Span:      roachpb.Span{Key: keys.UserTableDataMin, EndKey: keys.MaxKey},
 			StartTime: start,
@@ -47,12 +48,12 @@ func TestExport(t *testing.T) {
 				Provider:  roachpb.ExportStorageProvider_LocalFile,
 				LocalFile: roachpb.ExportStorage_LocalFilePath{Path: dir},
 			},
+			MVCCFilter: mvccFilter,
 		}
 		res, pErr := client.SendWrapped(ctx, kvDB.GetSender(), req)
 		if pErr != nil {
 			t.Fatalf("%+v", pErr)
 		}
-		ts := hlc.NewClock(hlc.UnixNano, time.Nanosecond).Now()
 
 		var paths []string
 		var kvs []engine.MVCCKeyValue
@@ -79,50 +80,97 @@ func TestExport(t *testing.T) {
 			}
 		}
 
-		return ts, paths, kvs
+		return paths, kvs
+	}
+	type ExportAndSlurpResult struct {
+		end             hlc.Timestamp
+		mvccLatestFiles []string
+		mvccLatestKVs   []engine.MVCCKeyValue
+		mvccAllFiles    []string
+		mvccAllKVs      []engine.MVCCKeyValue
+	}
+	exportAndSlurp := func(start hlc.Timestamp) ExportAndSlurpResult {
+		var ret ExportAndSlurpResult
+		ret.end = hlc.NewClock(hlc.UnixNano, time.Nanosecond).Now()
+		ret.mvccLatestFiles, ret.mvccLatestKVs = exportAndSlurpOne(start, roachpb.MVCCFilter_Latest)
+		ret.mvccAllFiles, ret.mvccAllKVs = exportAndSlurpOne(start, roachpb.MVCCFilter_All)
+		return ret
 	}
 
-	sqlDB.Exec(`CREATE DATABASE export`)
-	sqlDB.Exec(`CREATE TABLE export.export (id INT PRIMARY KEY)`)
-	sqlDB.Exec(`INSERT INTO export.export VALUES (1), (3)`)
-	ts1, paths1, kvs1 := exportAndSlurp(hlc.Timestamp{})
-	if expected := 1; len(paths1) != expected {
-		t.Fatalf("expected %d files in export got %d", expected, len(paths1))
-	}
-	if expected := 2; len(kvs1) != expected {
-		t.Fatalf("expected %d kvs in export got %d", expected, len(kvs1))
-	}
-
-	// If nothing has changed, nothing should be exported.
-	ts2, paths2, _ := exportAndSlurp(ts1)
-	if expected := 0; len(paths2) != expected {
-		t.Fatalf("expected %d files in export got %d", expected, len(paths2))
-	}
-
-	sqlDB.Exec(`INSERT INTO export.export VALUES (2)`)
-	ts3, _, kvs3 := exportAndSlurp(ts2)
-	if expected := 1; len(kvs3) != expected {
-		t.Fatalf("expected %d kvs in export got %d", expected, len(kvs3))
+	expect := func(
+		t *testing.T, res ExportAndSlurpResult,
+		mvccLatestFilesLen int, mvccLatestKVsLen int, mvccAllFilesLen int, mvccAllKVsLen int,
+	) {
+		if len(res.mvccLatestFiles) != mvccLatestFilesLen {
+			t.Errorf("expected %d files in latest export got %d", mvccLatestFilesLen, len(res.mvccLatestFiles))
+		}
+		if len(res.mvccLatestKVs) != mvccLatestKVsLen {
+			t.Errorf("expected %d kvs in latest export got %d", mvccLatestKVsLen, len(res.mvccLatestKVs))
+		}
+		if len(res.mvccAllFiles) != mvccAllFilesLen {
+			t.Errorf("expected %d files in all export got %d", mvccAllFilesLen, len(res.mvccAllFiles))
+		}
+		if len(res.mvccAllKVs) != mvccAllKVsLen {
+			t.Errorf("expected %d kvs in all export got %d", mvccAllKVsLen, len(res.mvccAllKVs))
+		}
 	}
 
-	sqlDB.Exec(`DELETE FROM export.export WHERE id = 3`)
-	_, _, kvs4 := exportAndSlurp(ts3)
-	if expected := 1; len(kvs4) != expected {
-		t.Fatalf("expected %d kvs in export got %d", expected, len(kvs4))
-	}
-	if len(kvs4[0].Value) != 0 {
-		v := roachpb.Value{RawBytes: kvs4[0].Value}
-		t.Fatalf("expected a deletion tombstone got %s", v.PrettyPrint())
-	}
+	sqlDB := sqlutils.MakeSQLRunner(t, tc.Conns[0])
+	sqlDB.Exec(`CREATE DATABASE mvcclatest`)
+	sqlDB.Exec(`CREATE TABLE mvcclatest.export (id INT PRIMARY KEY, value INT)`)
 
-	sqlDB.Exec(`ALTER TABLE export.export SPLIT AT VALUES (2)`)
-	_, paths5, kvs5 := exportAndSlurp(hlc.Timestamp{})
-	if expected := 2; len(paths5) != expected {
-		t.Fatalf("expected %d files in export got %d", expected, len(paths5))
-	}
-	if expected := 2; len(kvs5) != expected {
-		t.Fatalf("expected %d kvs in export got %d", expected, len(kvs5))
-	}
+	var res1 ExportAndSlurpResult
+	t.Run("ts1", func(t *testing.T) {
+		// When run with MVCCFilter_Latest and a startTime of 0 (full backup of
+		// only the latest values), Export special cases and skips keys that are
+		// deleted before the export timestamp.
+		sqlDB := sqlutils.MakeSQLRunner(t, tc.Conns[0])
+		sqlDB.Exec(`INSERT INTO mvcclatest.export VALUES (1, 1), (3, 3), (4, 4)`)
+		sqlDB.Exec(`DELETE from mvcclatest.export WHERE id = 4`)
+		res1 = exportAndSlurp(hlc.Timestamp{})
+		expect(t, res1, 1, 2, 1, 4)
+	})
+
+	var res2 ExportAndSlurpResult
+	t.Run("ts2", func(t *testing.T) {
+		// If nothing has changed, nothing should be exported.
+		res2 = exportAndSlurp(res1.end)
+		expect(t, res2, 0, 0, 0, 0)
+	})
+
+	var res3 ExportAndSlurpResult
+	t.Run("ts3", func(t *testing.T) {
+		// MVCCFilter_All saves all values.
+		sqlDB := sqlutils.MakeSQLRunner(t, tc.Conns[0])
+		sqlDB.Exec(`INSERT INTO mvcclatest.export VALUES (2, 2)`)
+		sqlDB.Exec(`UPSERT INTO mvcclatest.export VALUES (2, 8)`)
+		res3 = exportAndSlurp(res2.end)
+		expect(t, res3, 1, 1, 1, 2)
+	})
+
+	var res4 ExportAndSlurpResult
+	t.Run("ts4", func(t *testing.T) {
+		sqlDB := sqlutils.MakeSQLRunner(t, tc.Conns[0])
+		sqlDB.Exec(`DELETE FROM mvcclatest.export WHERE id = 3`)
+		res4 = exportAndSlurp(res3.end)
+		expect(t, res4, 1, 1, 1, 1)
+		if len(res4.mvccLatestKVs[0].Value) != 0 {
+			v := roachpb.Value{RawBytes: res4.mvccLatestKVs[0].Value}
+			t.Errorf("expected a deletion tombstone got %s", v.PrettyPrint())
+		}
+		if len(res4.mvccAllKVs[0].Value) != 0 {
+			v := roachpb.Value{RawBytes: res4.mvccAllKVs[0].Value}
+			t.Errorf("expected a deletion tombstone got %s", v.PrettyPrint())
+		}
+	})
+
+	var res5 ExportAndSlurpResult
+	t.Run("ts5", func(t *testing.T) {
+		sqlDB := sqlutils.MakeSQLRunner(t, tc.Conns[0])
+		sqlDB.Exec(`ALTER TABLE mvcclatest.export SPLIT AT VALUES (2)`)
+		res5 = exportAndSlurp(hlc.Timestamp{})
+		expect(t, res5, 2, 2, 2, 7)
+	})
 }
 
 func TestExportGCThreshold(t *testing.T) {

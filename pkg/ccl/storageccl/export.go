@@ -140,12 +140,25 @@ func evalExport(
 	}
 	defer sst.Close()
 
+	var skipTombstones bool
+	var iterFn func(*engineccl.MVCCIncrementalIterator)
+	switch args.MVCCFilter {
+	case roachpb.MVCCFilter_Latest:
+		skipTombstones = true
+		iterFn = (*engineccl.MVCCIncrementalIterator).NextKey
+	case roachpb.MVCCFilter_All:
+		skipTombstones = false
+		iterFn = (*engineccl.MVCCIncrementalIterator).Next
+	default:
+		return storage.EvalResult{}, errors.Errorf("unknown MVCC filter: %s", args.MVCCFilter)
+	}
+
 	var rows rowCounter
 	// TODO(dan): Move all this iteration into cpp to avoid the cgo calls.
 	// TODO(dan): Consider checking ctx periodically during the MVCCIterate call.
 	iter := engineccl.NewMVCCIncrementalIterator(batch, args.StartTime, h.Timestamp)
 	defer iter.Close()
-	for iter.Seek(engine.MakeMVCCMetadataKey(args.Key)); ; iter.NextKey() {
+	for iter.Seek(engine.MakeMVCCMetadataKey(args.Key)); ; iterFn(iter) {
 		ok, err := iter.Valid()
 		if err != nil {
 			// The error may be a WriteIntentError. In which case, returning it will
@@ -154,6 +167,13 @@ func evalExport(
 		}
 		if !ok || iter.UnsafeKey().Key.Compare(args.EndKey) >= 0 {
 			break
+		}
+
+		// Skip tombstone (len=0) records when startTime is zero
+		// (non-incremental) and we're not exporting all versions.
+		if skipTombstones && (args.StartTime == hlc.Timestamp{}) && len(iter.UnsafeValue()) == 0 {
+			iter.NextKey()
+			continue
 		}
 
 		if log.V(3) {
