@@ -433,6 +433,30 @@ Also, if you use equal signs in the file path to a store, you must use the
 "path" field label.`,
 	}
 
+	TempDir = FlagInfo{
+		Name: "temp-dir",
+		Description: `
+The directory to generate a subdirectory to be used for temporary files.
+This subdirectory is used primarily as working memory for distributed computations.
+For example, the following will generate an arbitrary, temporary subdirectory
+"/mnt/ssd01/temp/cockroach-temp<NUMBER>":
+<PRE>
+
+  --temp-dir=/mnt/ssd01/temp
+
+</PRE>
+If this flag is unspecified, the temporary subdirectory will be located under
+the root of store 1.
+
+Unlike the --store flag, one should NOT include any named labels like "path=" or "attrs=".
+For example, the following will be interpreted as the undesirable, relative path "./path=foo":
+<PRE>
+
+  --temp-dir=path=foo
+
+</PRE>`,
+	}
+
 	URL = FlagInfo{
 		Name:   "url",
 		EnvVar: "COCKROACH_URL",
