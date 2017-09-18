@@ -76,9 +76,15 @@ func init() {
 	}
 }
 
+// VersionedTag prefixes the tag with VersionPrefix.
+func (b Info) VersionedTag() string {
+	return VersionPrefix() + "-" + b.Tag
+}
+
 // Short returns a pretty printed build and version summary.
 func (b Info) Short() string {
-	return fmt.Sprintf("CockroachDB %s %s (%s, built %s, %s)", b.Distribution, b.Tag, b.Platform, b.Time, b.GoVersion)
+	return fmt.Sprintf("CockroachDB %s %s (%s, built %s, %s)",
+		b.Distribution, b.VersionedTag(), b.Platform, b.Time, b.GoVersion)
 }
 
 // Timestamp parses the utcTime string and returns the number of seconds since epoch.
