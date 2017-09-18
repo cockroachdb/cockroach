@@ -589,11 +589,11 @@ func getAllRowStrings(rows *sqlRows, showMoreChars bool) ([][]string, error) {
 
 	for {
 		rowStrings, err := getNextRowStrings(rows, showMoreChars)
+		if err == io.EOF {
+			break
+		}
 		if err != nil {
 			return nil, err
-		}
-		if rowStrings == nil {
-			break
 		}
 		allRows = append(allRows, rowStrings)
 	}
@@ -601,26 +601,30 @@ func getAllRowStrings(rows *sqlRows, showMoreChars bool) ([][]string, error) {
 	return allRows, nil
 }
 
-func getNextRowStrings(rows *sqlRows, showMoreChars bool) ([]string, error) {
+func getNextRow(rows *sqlRows) ([]driver.Value, error) {
 	cols := rows.Columns()
 	var vals []driver.Value
 	if len(cols) > 0 {
 		vals = make([]driver.Value, len(cols))
 	}
-
 	err := rows.Next(vals)
-	if err == io.EOF {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
+	return vals, err
+}
 
-	rowStrings := make([]string, len(cols))
+func formatRow(vals []driver.Value, showMoreChars bool) []string {
+	rowStrings := make([]string, len(vals))
 	for i, v := range vals {
 		rowStrings[i] = formatVal(v, showMoreChars, showMoreChars)
 	}
-	return rowStrings, nil
+	return rowStrings
+}
+
+func getNextRowStrings(rows *sqlRows, showMoreChars bool) ([]string, error) {
+	vals, err := getNextRow(rows)
+	if err != nil {
+		return nil, err
+	}
+	return formatRow(vals, showMoreChars), nil
 }
 
 // expandTabsAndNewLines ensures that multi-line row strings that may

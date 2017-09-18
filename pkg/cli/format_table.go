@@ -73,14 +73,11 @@ type rowIter struct {
 }
 
 func (iter *rowIter) Next() (row []string, err error) {
-	nextRowString, err := getNextRowStrings(iter.rows, iter.showMoreChars)
+	nextRow, err := getNextRow(iter.rows)
 	if err != nil {
 		return nil, err
 	}
-	if nextRowString == nil {
-		return nil, io.EOF
-	}
-	return nextRowString, nil
+	return formatRow(nextRow, iter.showMoreChars), nil
 }
 
 func (iter *rowIter) ToSlice() ([][]string, error) {
