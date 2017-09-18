@@ -89,6 +89,8 @@ export default class CommandQueueViz extends React.Component<CommandQueueVizProp
         {nodes.map((node) => (
           <text
             key={node.command.id.toString()}
+            textAnchor="middle"
+            dominantBaseline="middle"
             x={node.x}
             y={node.y}>
             {node.command.id.toString()}
