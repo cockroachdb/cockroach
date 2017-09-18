@@ -1101,7 +1101,7 @@ func (s *adminServer) QueryPlan(
 	}
 
 	explain := fmt.Sprintf(
-		"SELECT JSON FROM [EXPLAIN (distsql) %s]",
+		"SELECT \"JSON\" FROM [EXPLAIN (distsql) %s]",
 		strings.Trim(req.Query, ";"))
 	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, explain, nil, 1)
 	if err != nil {
