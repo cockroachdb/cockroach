@@ -836,9 +836,5 @@ func appendCommandsFromTree(
 }
 
 func prettyKey(key []byte) string {
-	rkey, err := keys.Addr(roachpb.Key(key))
-	if err != nil {
-		return "<error in keys.Addr>"
-	}
-	return rkey.String()
+	return roachpb.Key(key).String()
 }
