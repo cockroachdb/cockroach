@@ -153,12 +153,8 @@ func TestLoadCSVUniqueDuplicate(t *testing.T) {
 	}
 
 	_, _, _, err := sqlccl.LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, nil /* nullif */, testSSTMaxSize, tmp)
-	// Really expect the first of these errors, but see:
-	// https://github.com/cockroachdb/cockroach/issues/17336#issuecomment-328380578
-	//
-	// TODO(mjibson): refactor so that the first error is always returned.
-	if !testutils.IsError(err, "duplicate key|no files in backup") {
-		t.Fatalf("unexpected error: %v", err)
+	if !testutils.IsError(err, "duplicate key") {
+		t.Fatalf("unexpected error: %+v", err)
 	}
 }
 
@@ -196,12 +192,8 @@ func TestLoadCSVPrimaryDuplicate(t *testing.T) {
 	}
 
 	_, _, _, err := sqlccl.LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, nil /* nullif */, testSSTMaxSize, tmp)
-	// Really expect the first of these errors, but see:
-	// https://github.com/cockroachdb/cockroach/issues/17336#issuecomment-328380578
-	//
-	// TODO(mjibson): refactor so that the first error is always returned.
-	if !testutils.IsError(err, "duplicate key|no files in backup") {
-		t.Fatalf("unexpected error: %v", err)
+	if !testutils.IsError(err, "duplicate key") {
+		t.Fatalf("unexpected error: %+v", err)
 	}
 }
 
@@ -307,6 +299,61 @@ N|N
 	}
 	if sst != 2 {
 		t.Fatalf("created %d SSTs, expected %d", sst, 2)
+	}
+}
+
+// TestLoadCSVSplit ensures that a split cannot happen in the middle of a row.
+func TestLoadCSVSplit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tmp, tmpCleanup := testutils.TempDir(t)
+	defer tmpCleanup()
+	ctx := context.Background()
+
+	const (
+		tableName   = "t"
+		csvName     = tableName + ".dat"
+		tableCreate = `
+			CREATE TABLE ` + tableName + ` (
+				i int primary key,
+				s string,
+				b int,
+				c int,
+				index (s),
+				index (i, s),
+				family (i, b),
+				family (s, c)
+			)
+		`
+		tableCSV = `5,STRING,7,9`
+	)
+
+	tablePath := filepath.Join(tmp, tableName)
+	dataPath := filepath.Join(tmp, csvName)
+
+	if err := ioutil.WriteFile(tablePath, []byte(tableCreate), 0666); err != nil {
+		t.Fatal(err)
+	}
+	if err := ioutil.WriteFile(dataPath, []byte(tableCSV), 0666); err != nil {
+		t.Fatal(err)
+	}
+	// sstMaxSize = 1 should put each index (could be more than one KV due to
+	// column families) in its own SST.
+	csv, kv, sst, err := sqlccl.LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, nil /* nullif */, 1 /* sstMaxSize */, tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Only a single input row.
+	if csv != 1 {
+		t.Fatalf("read %d rows, expected %d", csv, 1)
+	}
+	// Should produce 4 kvs: 2 families on PK + 2 indexes.
+	if kv != 4 {
+		t.Fatalf("created %d KVs, expected %d", kv, 4)
+	}
+	// But only 3 SSTs because the first 2 KVs should be in same SST.
+	if sst != 3 {
+		t.Fatalf("created %d SSTs, expected %d", sst, 3)
 	}
 }
 

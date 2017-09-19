@@ -525,7 +525,7 @@ func (p *planner) CreateTable(ctx context.Context, n *parser.CreateTable) (planN
 		return nil, err
 	}
 
-	hoistConstraints(n)
+	HoistConstraints(n)
 	for _, def := range n.Defs {
 		switch t := def.(type) {
 		case *parser.ForeignKeyConstraintTableDef:
@@ -559,12 +559,12 @@ func (p *planner) CreateTable(ctx context.Context, n *parser.CreateTable) (planN
 	return &createTableNode{n: n, dbDesc: dbDesc, sourcePlan: sourcePlan}, nil
 }
 
-// hoistConstraints finds column constraints defined inline with the columns
+// HoistConstraints finds column constraints defined inline with the columns
 // and moves them into n.Defs as constraints. For example, the foreign key
 // constraint in `CREATE TABLE foo (a INT REFERENCES bar(a))` gets pulled into
 // a top level fk constraint like
 // `CREATE TABLE foo (a int CONSTRAINT .. FOREIGN KEY(a) REFERENCES bar(a)`.
-func hoistConstraints(n *parser.CreateTable) {
+func HoistConstraints(n *parser.CreateTable) {
 	for _, d := range n.Defs {
 		if col, ok := d.(*parser.ColumnTableDef); ok {
 			for _, checkExpr := range col.CheckExprs {
