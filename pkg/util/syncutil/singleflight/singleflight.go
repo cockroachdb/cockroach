@@ -71,8 +71,10 @@ func (g *Group) Do(
 }
 
 // DoChan is like Do but returns a channel that will receive the
-// results when they are ready.
-func (g *Group) DoChan(key string, fn func() (interface{}, error)) <-chan Result {
+// results when they are ready. The method also returns a boolean
+// specifying whether the caller's fn function will be called or
+// not.
+func (g *Group) DoChan(key string, fn func() (interface{}, error)) (<-chan Result, bool) {
 	ch := make(chan Result, 1)
 	g.mu.Lock()
 	if g.m == nil {
@@ -82,7 +84,7 @@ func (g *Group) DoChan(key string, fn func() (interface{}, error)) <-chan Result
 		c.dups++
 		c.chans = append(c.chans, ch)
 		g.mu.Unlock()
-		return ch
+		return ch, false
 	}
 	c := &call{chans: []chan<- Result{ch}}
 	c.wg.Add(1)
@@ -91,7 +93,7 @@ func (g *Group) DoChan(key string, fn func() (interface{}, error)) <-chan Result
 
 	go g.doCall(c, key, fn)
 
-	return ch
+	return ch, true
 }
 
 // doCall handles the single call for a key.
