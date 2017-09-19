@@ -6449,6 +6449,7 @@ col_name_keyword:
 type_func_name_keyword:
   COLLATION
 | CROSS
+| FAMILY
 | FULL
 | INNER
 | ILIKE
@@ -6500,7 +6501,6 @@ reserved_keyword:
 | END
 | EXCEPT
 | FALSE
-| FAMILY
 | FETCH
 | FOR
 | FOREIGN
