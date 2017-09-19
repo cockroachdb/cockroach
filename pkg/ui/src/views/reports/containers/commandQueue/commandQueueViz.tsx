@@ -2,7 +2,7 @@ import React from "react";
 
 import Long from "long";
 import Print from "src/views/reports/containers/range/print";
-import * as dagre from "dagre-layout";
+import * as dagre from "dagre";
 
 import * as protos from "src/js/protos";
 
@@ -34,7 +34,6 @@ export default class CommandQueueViz extends React.Component<QueueVizProps, Queu
       marginy: 20,
       nodesep: 10,
     });
-    g.setDefaultEdgeLabel((_label: string) => ({}));
 
     this.props.queue.commands.forEach((command) => {
       g.setNode(command.id.toString(), {
@@ -128,8 +127,10 @@ export default class CommandQueueViz extends React.Component<QueueVizProps, Queu
             return (
               <polyline
                 key={idx}
-                points={edge.points.map(({x, y}) => (`${x},${y}`)).join(" ")}
-                // TODO: line ending: arrow (copy from DistSQL plan viz)
+                points={
+                  (edge.points as Array<{x: number, y: number}>)
+                    .map(({x, y}) => (`${x},${y}`)).join(" ")
+                }
                 style={{stroke: "black", fill: "none"}} />
             );
           })}

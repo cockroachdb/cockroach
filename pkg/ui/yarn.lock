@@ -104,6 +104,10 @@
   version "3.5.38"
   resolved "https://registry.yarnpkg.com/@types/d3/-/d3-3.5.38.tgz#76f8f2e9159ae562965b2fa0e6fbee1aa643a1bc"
 
+"@types/dagre@^0.7.36":
+  version "0.7.36"
+  resolved "https://registry.yarnpkg.com/@types/dagre/-/dagre-0.7.36.tgz#a1ebaf108ed5861801a0946922a3587a16f5e220"
+
 "@types/enzyme@^2.7.6":
   version "2.7.7"
   resolved "https://registry.yarnpkg.com/@types/enzyme/-/enzyme-2.7.7.tgz#52688e130fe55185f14844919ec559961488f53d"
@@ -1875,12 +1879,12 @@ d@1:
   dependencies:
     es5-ext "^0.10.9"
 
-dagre-layout@^0.8.0:
-  version "0.8.0"
-  resolved "https://registry.yarnpkg.com/dagre-layout/-/dagre-layout-0.8.0.tgz#7147b6afb655602f855158dfea171db9aa98d4ff"
+dagre@^0.7.4:
+  version "0.7.4"
+  resolved "https://registry.yarnpkg.com/dagre/-/dagre-0.7.4.tgz#de72f0e74a550ce11ce638f0a136fed712398022"
   dependencies:
-    graphlib "^2.1.1"
-    lodash "^4.17.4"
+    graphlib "^1.0.5"
+    lodash "^3.10.0"
 
 dashdash@^1.12.0:
   version "1.14.1"
@@ -2870,17 +2874,11 @@ graphlib-dot@^0.6.2:
     graphlib "^1.0.1"
     lodash "^2.4.1"
 
-graphlib@^1.0.1:
+graphlib@^1.0.1, graphlib@^1.0.5:
   version "1.0.7"
   resolved "https://registry.yarnpkg.com/graphlib/-/graphlib-1.0.7.tgz#0cab2df0ffe6abe070b2625bfa1edb6ec967b8b1"
   dependencies:
     lodash "^3.10.0"
-
-graphlib@^2.1.1:
-  version "2.1.1"
-  resolved "https://registry.yarnpkg.com/graphlib/-/graphlib-2.1.1.tgz#42352c52ba2f4d035cb566eb91f7395f76ebc951"
-  dependencies:
-    lodash "^4.11.1"
 
 growl@1.9.2:
   version "1.9.2"
