@@ -1,0 +1,861 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="Docutils 0.14: http://docutils.sourceforge.net/" />
+<title>Replays in CRDB</title>
+<meta name="authors" content="original author: Andrei Matei" />
+<link rel="stylesheet" href="aux/all.css" type="text/css" />
+</head>
+<body>
+<div class="document" id="replays-in-crdb">
+<h1 class="title">Replays in CRDB</h1>
+<table class="docinfo" frame="void" rules="none">
+<col class="docinfo-name" />
+<col class="docinfo-content" />
+<tbody valign="top">
+<tr><th class="docinfo-name">Authors:</th>
+<td>original author: Andrei Matei</td></tr>
+</tbody>
+</table>
+<div class="contents topic" id="contents">
+<p class="topic-title first">Contents</p>
+<ul class="simple">
+<li><a class="reference internal" href="#introduction" id="id15">Introduction</a></li>
+<li><a class="reference internal" href="#terminology" id="id16">Terminology</a></li>
+<li><a class="reference internal" href="#raft-level-issues" id="id17">Raft-level Issues</a><ul>
+<li><a class="reference internal" href="#raft-command-reproposals" id="id18">Raft command reproposals</a><ul>
+<li><a class="reference internal" href="#what-could-go-wrong-because-of-double-applications" id="id19">What could go wrong because of double applications?</a><ul>
+<li><a class="reference internal" href="#what-could-go-wrong-because-of-double-applications-with-reordering" id="id20">What could go wrong because of double applications with reordering?</a></li>
+<li><a class="reference internal" href="#what-could-go-wrong-because-of-double-applications-without-reordering" id="id21">What could go wrong because of double applications without reordering?</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#the-solution-to-the-hazards-the-leaseappliedindex" id="id22">The solution to the hazards: the <tt class="docutils literal">LeaseAppliedIndex</tt></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#re-evaluations-of-kv-requests" id="id23">Re-evaluations of KV requests</a><ul>
+<li><a class="reference internal" href="#how-does-mvcc-detect-previous-applications-of-commands-during-evaluation" id="id24">How does MVCC detect previous applications of commands during evaluation?</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#logic-for-triggering-reproposals-and-re-evaluations" id="id25">Logic for triggering reproposals and re-evaluations</a></li>
+<li><a class="reference internal" href="#notes" id="id26">Notes</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#distsender-retries" id="id27"><tt class="docutils literal">DistSender</tt> retries</a></li>
+<li><a class="reference internal" href="#conflict-resolution-retries" id="id28">Conflict resolution retries</a></li>
+<li><a class="reference internal" href="#ambiguouserror" id="id29">AmbiguousError</a></li>
+<li><a class="reference internal" href="#misc" id="id30">Misc</a></li>
+</ul>
+</div>
+<div class="section" id="introduction">
+<h1><a class="toc-backref" href="#id15">Introduction</a></h1>
+<p>This note talks about the different kinds of retries in CRDB, the hazards they
+introduce, and the way we protect against them to maintain correctness. There
+are four types of retries we're going to be discussing: reproposals of Raft
+commands, re-evaluations of KV requests, retries of KV requests after conflict
+resolution and retries of KV requests by the <tt class="docutils literal">DistSender</tt> on RPC errors.</p>
+<p>These are all actions that the code does consciously; none of them are
+introduced transparently by a network transport or such. Executing things twice,
+or executing them at a later point in time then when we intended the execution -
+perhaps (but not necessarily) with some other operations having executed in the
+meantime - can clearly lead to problems (e.g. a write executing at a later point
+than it was intended can overwrite data that it was not intended to overwrite).
+CRDB’s use of MVCC storage limits the consequences of such executions in some
+ways (e.g. a write at a set timestamp cannot overwrite another write at a newer
+timestamp), but that’s not sufficient for the semantics we need from our
+operations. We’ll discuss how the batch sequence numbers and the Raft
+<tt class="docutils literal">LeaseAppliedIndex</tt> prevent the hazards, and how losing track of an answer to
+an operation can lead to an <tt class="docutils literal">AmbiguousResultError</tt>/<tt class="docutils literal">AmbiguousCommitError</tt>.</p>
+</div>
+<div class="section" id="terminology">
+<h1><a class="toc-backref" href="#id16">Terminology</a></h1>
+<p>First of all, this note does not use the word &quot;replay&quot;, even though our code has
+used that word historically: in colloquial speech &quot;replay&quot; refers generally to
+any kind of operation being executed a second (or 3rd, etc.) time. Of course,
+operations in CRDB are not generally executed more than once out of thin air -
+that’d be a terrible world to program in. Specific operations are attempted a
+second time when we choose to do so. Different cases of repeated execution have
+different consequences, and the code has different means of preventing the bad
+ones, so we’ll refer specifically to the type of execution and the operation in
+question when describing them.</p>
+<p>This note will discuss the following types of retries, in different sections. They are ordered by the level at which they happen, from lowest level to highest.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">Words have specific meaning in what follows; if you’re not familiar with
+terms like requests/commands/proposals/applications, see <a class="reference external" href="https://paper.dropbox.com/doc/Codelab-SQLKV-hacking-Ts6diBSjt89JDnJZ4uQRo#:uid=779028144703169196250253&amp;h2=Intermezzo-3:-Terminology">the terminology
+section in this codelab</a>.</p>
+</div>
+<dl class="docutils">
+<dt>Raft reproposal</dt>
+<dd>There are cases where we’ve <em>proposed</em> a
+command, it hasn’t <em>applied</em> yet, and we’ve grown impatient waiting for
+it to apply (or we suspect that it will never apply, but are not sure).
+In these cases, we will <em>repropose the command</em>: simply propose the
+command to Raft again. One thing to remember is that results of
+reproposals are not ambiguous: responses for the reproposals are
+indistinguishable for responses for the original proposal, and they
+represent the result of the <strong>first application of the command</strong>.</dd>
+<dt>Re-evaluation of requests</dt>
+<dd>There are cases where we had previously proposed a command but something went
+wrong and the proposer finds out the the command cannot apply in the future
+(however, in some cases it's unclear whether it has applied in the past or
+not). In these cases we have to fully <em>re-evaluate the request</em> that generated
+the command, and propose the new command that resulted from the re-evaluation.</dd>
+<dt>Conflict resolution retries</dt>
+<dd>FIXME - the Store retries replica.Send() upon a conflict having been resolved.</dd>
+<dt><tt class="docutils literal">DistSender</tt> retries</dt>
+<dd>The <tt class="docutils literal">DistSender</tt> sends <em>requests</em> to a remote node for <em>evaluation</em> (and the
+proposal and application). In case of network errors, we don’t know if the
+remote node has performed all this, or not (depending on the error, sometimes
+we know that it hasn’t (e.g. failure to connect)). So, the DistSender sends
+the request again, to a different node (it’s true that generally a single
+node -  the lease holder of the respective range - can service any given
+request, but it’s also true that a <tt class="docutils literal">DistSender</tt> doesn’t generally know with
+certainty which node that is - and in fact the lease can change hands when
+nodes go down - so retries may help).</dd>
+</dl>
+</div>
+<div class="section" id="raft-level-issues">
+<h1><a class="toc-backref" href="#id17">Raft-level Issues</a></h1>
+<p>The lowest level of retries happen because of Raft-level conditions. These
+retries are of two types: reproposals and re-evaluations. Both of them are
+triggered by Raft processing; they're triggered by
+<tt class="docutils literal">`replica.handleRaftReady()</tt>. Reproposals are lower-level operation - they're
+handled at this <tt class="docutils literal">`handleRaftReady()</tt> level. Re-evaluations are handled at a
+higher level - <tt class="docutils literal">replica.executeWriteBatch()</tt>.</p>
+<p>Let's discuss when they happen (more technicalities will follow in the <a class="reference internal" href="#logic-for-triggering-reproposals-and-re-evaluations">Logic
+for triggering reproposals and re-evaluations</a> section):</p>
+<ol class="arabic simple">
+<li>When commands have been proposed but never made it to the leader (usually
+because we didn’t know who the leader is - think initial leader election
+after a range split). When we do find out about a new leader, we <em>repropose</em>
+pending commands.</li>
+<li>When it’s been too long since a command was proposed and we haven’t heard
+back. In such cases, we <em>repropose</em>.</li>
+<li>When the proposer finds out about a command attempting to apply out of order.
+In this case, we <em>re-evaluate</em> the request.</li>
+<li>When the leaseholder replica has just applied a snapshot and the snapshot
+contained commands with log positions above the positions of some of our
+pending proposals. We don’t know what was inside the snapshot, so we don’t
+know which of the pending proposals have been applied. We’ll <em>re-evaluate</em>
+the request. Note that this snapshot case requires that the Raft leader be
+divorced from the leaseholder (otherwise, a leader doesn’t apply snapshots),
+so it should hopefully be rare because we try to colocate the two.</li>
+</ol>
+<p>Next we'll discuss reproposals and re-evaluations in more detail.</p>
+<div class="section" id="raft-command-reproposals">
+<h2><a class="toc-backref" href="#id18">Raft command reproposals</a></h2>
+<div class="sidebar">
+<p class="first sidebar-title">Raft commands reminder</p>
+<p class="last">Raft commands contain serialized RocksDB “batches” - low-level write
+instructions (e.g. “set value of key <em>k</em> to <em>v</em>” or “delete key <em>k”).</em> These
+batches have been produced by the evaluation process starting from a given
+Rocksdb snapshot. At least given the way we use them, these batches can, as
+far as RocksDB is concerned, be applied on top of a snapshot that diverged
+from the snapshot on top of which they were produced - no error will be
+generated and there’s no need to “merge changes”. So RocksDB does not protect
+us from overwriting values we didn’t intend to overwrite. Also keep in mind
+that most of the keys we write to contain a timestamp.</p>
+</div>
+<p>Let’s discuss Raft reproposals first. They're conceptually simple: we previously proposed a command, we haven't applied it yet, and for various reasons we decide that we don't want to wait any more and so <em>we propose the same command</em> again, hoping for a better outcome. As described above, this can happen either because the proposer found out about a new Raft leader or simply because it's been a while since we proposed and we grew impatient.</p>
+<p>Since we're proposing the command again, there's now two identical proposals in
+flight. Unless we took special precautions, we generally wouldn't know that both
+of them would not apply. Even worse, we wouldn't know that <em>one of them wouldn't
+apply at an arbitrary later time</em> (in particular, a point in time after we've
+taken the respective request out of the <tt class="docutils literal">CommandQueue</tt>; see below), since we're
+only going to be waiting for one application of either of the two proposals
+before returning control to the higher layers. Would these double applications
+be bad?</p>
+<div class="section" id="what-could-go-wrong-because-of-double-applications">
+<h3><a class="toc-backref" href="#id19">What could go wrong because of double applications?</a></h3>
+<p>The type of bad things that can happen because of double application differs based on whether the second application happens while the request is in the <tt class="docutils literal">CommandQueue</tt>.</p>
+<div class="section" id="what-could-go-wrong-because-of-double-applications-with-reordering">
+<h4><a class="toc-backref" href="#id20">What could go wrong because of double applications with reordering?</a></h4>
+<p>The clearer to see case is when the second application happens after the request
+has been taken out of the <tt class="docutils literal">CommandQueue</tt>: command applications at arbitrary
+times is bad because it can overwrite data that it was not supposed to
+overwrite. Consider:</p>
+<ol class="arabic simple">
+<li>While executing request R1, we propose command A which writes (RocksDB)
+key/val K=V1.</li>
+<li>The proposer waits a while, doesn't hear anything back about the application
+of A, and so it reproposes it as command B (A and B are equivalent; the have
+the same <cite>CommandKey</cite>).</li>
+<li>We hear back and apply one of them, A or B (we can tell which).</li>
+<li>The stack is unwound and R1 is taken out of the <tt class="docutils literal">CommandQueue</tt>.</li>
+<li>We execute request R2, which applies command C, which writes K=V2 (note that
+this could not happen while R1 is still in the <tt class="docutils literal">CommandQueue</tt> because R1
+and R2 are overlapping).</li>
+<li>The other application of A/B happens at this point, writing K=V1.</li>
+<li>We're now in an unintended state: K=V1 when we should have K=V2.</li>
+</ol>
+<p>What we see here is that double application of a command <em>combined with the
+reordering of the second application wrt other commands</em> can create problems.
+The first question that comes to mind is whether such commands A/B and C can
+actually exist. Given that our MVCC layer translates KV keys into RocksDB keys
+by appending a timestamp to them, doesn't that guarantee that keys at the
+RocksDB level are unique between commands? The answer is no, for several
+reasons:</p>
+<ul class="simple">
+<li>Meta-keys don't have timestamps. Meta-keys exist when intents are present on a
+KV key. Two writes to a meta-key that are reordered, (or a write and a delete)
+would be bad.</li>
+<li>Within a transaction, different requests can modify the same key (because they
+operate at the same timestamp).</li>
+<li>The <tt class="docutils literal">GCQueue</tt> deletes tombstones. If these deletes would be reordered with
+the writing of the tombstone, that'd be bad.</li>
+</ul>
+<p>The second question that comes to mind is how exactly can command C run before
+the second application of A/B, given that C was proposed later? The explanation
+requires the Raft message flow sidebar.</p>
+<div class="sidebar">
+<p class="first sidebar-title">Raft message flow</p>
+<ol class="last arabic simple">
+<li>A <em>range leaseholder</em> <em>proposes</em> a command by sending a <em>propose</em>
+Raft message. This messages makes its way from the leaseholder to the
+<em>Raft leader</em> using the <em>Raft transport</em>.</li>
+<li>Once it arrives on the leader, the leader assigns it a <em>log
+position,</em> appends it to its own copy of the log, and sends <em>append</em>
+messages to all the <em>followers</em>.</li>
+<li>The followers agree on that log position, and when enough of them do,
+the command is considered committed and replicas begin <em>applying</em> it.</li>
+</ol>
+</div>
+<p>With respect to reorderings or Raft commands, we have some things go in our
+favor: once a leader has assigned a log position, it will never assign a lower
+log position to another command. So, once commands make it to the leader,
+there’s no more risk of reordering. There is, however, a risk of reordering
+<em>before</em> commands make it to the leader: when the leaseholder and the Raft
+leader are not collocated, the process of <em>proposal forwarding</em> is employed:
+commands are sent using the Raft transport protocol, which is not currently
+under CRDB control and does not make any ordering guarantees. So, a leaseholder
+may propose/forward command A, then give up on waiting and propose/forward B,
+then apply A/B (at which point the stack unwinds and the request that generated
+A is taken out of the CommandQueue), then propose C (which relies on the
+ordering with A/B), B gets applied, and then, at an arbitrary later point, the
+<em>propose message</em> for A gets to the leader, which appends it to the log at the
+wrong position. We've just gotten the reordering that we were affraid of.</p>
+<p>What happened here is that the <em>Raft transport</em> (the communication protocol used
+for proposal forwarding) failed to ensure ordering for the messages it
+transported. We could devise a transport protocol without this shortcoming:
+something like sequentially going through a series of TCP connections and
+ensuring that once connection 2 starts being consumed, connection 1 is not
+consumed any more. If we were to do it, we wouldn’t need to worry about
+reorderings at the Raft level any more.</p>
+<p>We should emphasize once more that reorderings are only a problem if a command
+is allowed to &quot;escape&quot; the <tt class="docutils literal">CommandQueue</tt> (i.e. apply after the respective
+request has been taken out of the <tt class="docutils literal">CommandQueue</tt>). Reorderings while a request
+is in the <tt class="docutils literal">CommandQueue</tt> would not cause any problems: the whole point of the
+<tt class="docutils literal">CommandQueue</tt> is to allow parallel execution of non-overlapping requests. Their
+commands could be allowed to execute in any order without problems. We should
+also emphasize that reorderings require the Raft leader to be divorced from the
+proposer (i.e. the leaseholder); that's the only case in which the Raft
+transport's lack of ordered delivery comes into play.</p>
+<p>This all points to an invariant we need around the <tt class="docutils literal">CommandQueue</tt>: we have to
+ensure somehow that, once a request has been taken out of the <tt class="docutils literal">CommandQueue</tt>,
+no proposal of the command that was generated on behalf of that request will be
+applied. How we guarantee this we'll see later. We should note that commands
+escaping the <tt class="docutils literal">CommandQueue</tt> happen excusively in conjunction with reproposals:
+a request is only taken out of the <tt class="docutils literal">CommandQueue</tt> once a result is produced
+for one of its command's reproposals (so, once the application of one of them is
+applied). This means that, if there are no reproposals, we only take the request
+out of the <tt class="docutils literal">CommandQueue</tt> when we get a result for the application of the (one
+and only) proposal. We take care for this to be true - for example, in the event
+of a <tt class="docutils literal">Context</tt> cancellation, we will spawn a goroutine for the sole purpose of
+waiting for one of the reproposals to complete and only then removing the
+request from the CommandQueue. However, as we'll see when we discuss ambiguous
+errors, we might take a request out of the <tt class="docutils literal">CommandQueue</tt> even though we're
+unsure whether the command was applied successfully or not. FIXME: reference the
+right section for ambiguous errors.</p>
+</div>
+<div class="section" id="what-could-go-wrong-because-of-double-applications-without-reordering">
+<h4><a class="toc-backref" href="#id21">What could go wrong because of double applications without reordering?</a></h4>
+<p>We’ve just seen how a command generated by a request <em>R</em> could be applied after
+<em>R</em> has been taken out of the <tt class="docutils literal">CommandQueue</tt> and why that would be bad (if we
+hadn't build special protection against it). So, we’re afraid of commands coming
+back from the dead at arbitrary times, causing reorderings. We’re also afraid of
+a special case: the double application of a command in quick succession (without
+other overlapping commands in between). This is a hazard that doesn’t involve
+requests being taken out of the <tt class="docutils literal">CommandQueue</tt> in order to happen; it can
+happen while the respective request is in the <tt class="docutils literal">CommandQueue</tt>. It simply
+requires us to propose a command twice (which we do, as we've seen).</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">Double application of commands could happen even if we had
+an ordered Raft transport; as long as we propose commands twice, the
+transport's guarantees don't matter in this respect. What it would take from
+the transport to obviate the need to propose commands twice would be
+reliable <em>exactly once delivery</em> semantics, which we're unlikely to get from
+a transport layer (except if we'd make the commands idempotent; see below).</p>
+</div>
+<p>What could go wrong if a command is applied twice, but there’s no risk of
+unwillingly overwriting keys? Why aren’t commands idempotent if nothing
+significant sneaked in between the two applications? The answer is that a number
+of things make commands not be idempotent; this is all because of the
+<tt class="docutils literal">ReplicatedEvalResult</tt> structure - a payload that commands have besides the
+RocksDB <tt class="docutils literal">WriteBatch</tt>. This payload is interpreted downstream of Raft and
+affects changes to the replica state:</p>
+<ul class="simple">
+<li>Each command carries an <tt class="docutils literal">MVCCStats</tt> delta which is added to the range's MVCC
+statistics upon application. Add the delta twice and you have corrupt stats.</li>
+<li>Similarly, each command carries a <tt class="docutils literal">RaftLogDelta</tt> having to do with Raft
+statistics.</li>
+<li>Other special commands carry other special side-effects (splits, merges,
+rebalances, leases, log truncation). Some of these are currently not
+idempotent.</li>
+</ul>
+<p>The question that comes to mind is whether we could overcome the problems
+introduced by these side-effects and make commands idempotent. For each special
+command there's likely ways to detect a previous application <a class="footnote-reference" href="#allornothing" id="id1">[1]</a>.
+For the stats, we could replace the delta with absolute values. This implies
+that each command would imply the successful execution of all commands proposed
+previously (and so, once the application of some command fails, we'd need a
+mechanism to &quot;flush the pipeline&quot;). If this would allow us to stop caring about
+double application, that'd be a win <a class="footnote-reference" href="#assuming" id="id2">[2]</a>. More importantly, <strong>making
+requests idempotent would obviate the need for re-evaluations</strong>: as we'll see in
+a future section, the point of re-evaluations is detecting whether a previous
+attempt applied; if requests were idempotent, then by definition we wouldn't
+care if it succeeded or not. The cost, though, would be, arguably, less
+concurrency in the request evaluation phase: for requests that have been allowed
+in the <tt class="docutils literal">CommandQueue</tt> at the same time, evaluation can run in parallel. In
+fact, even the application of these commands could in theory run in parallel
+(although we don't currently do that) <a class="footnote-reference" href="#btw" id="id3">[3]</a>. If we had to compute absolute
+values for the statistics, then we'd need to synchronize proposing the commands
+so that the stats after every single command are correct <a class="footnote-reference" href="#but" id="id4">[4]</a>.</p>
+<table class="docutils footnote" frame="void" id="allornothing" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id1">[1]</a></td><td>Note that we probably don't need to make all commands
+idempotent to get benefits: even if the &quot;special&quot; commands are not idempotent
+but all the &quot;regular&quot; commands are, we'd still have solved the problem of
+ambiguous errors related to re-evaluations bubbling to SQL clients.</td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="assuming" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id2">[2]</a></td><td>Assuming we would also do something to get rid of the hazards
+related to reorderings discussed in the previous section. Otherwise, the
+<tt class="docutils literal">LeaseAppliedIndex</tt> sequence numbers introduced to protect against those
+give us protection against double application for free.</td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="btw" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id3">[3]</a></td><td>By the way, if we're evaluating requests in parallel, we could
+actually propose a single Raft command representing the sum of all the
+respective commands (i.e. <tt class="docutils literal">WriteBatches</tt>) if these commands are produced
+close in time to one another. That might save some Raft work at the cost of
+increased latency for some of the requests. This optimization would be
+possible with or without absolute values for the statistics.</td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="but" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id4">[4]</a></td><td>However, the <tt class="docutils literal">LeaseAppliedIndex</tt> mechanism already requires some
+degree of synchronization between proposals, for assigning the sequence
+number and for proposing in the sequence number order. So it's not clear to
+the author if the we'd lose any parallelism if we'd also assign the stats
+values in order.</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="section" id="the-solution-to-the-hazards-the-leaseappliedindex">
+<h3><a class="toc-backref" href="#id22">The solution to the hazards: the <tt class="docutils literal">LeaseAppliedIndex</tt></a></h3>
+<p>The solution CRDB has for all these hazards is the <tt class="docutils literal">LeaseAppliedIndex</tt>
+mechanism: each proposed command gets tagged with the proposer's current lease
+and with a desired log position (relative to a lease command, which is related
+to the point where the proposer can change), and replicas maintain the highest
+such number that was applied. The <tt class="docutils literal">command.MaxLeaseIndex</tt> is assigned at
+propose time. At application time, the current lease is checked to be the same
+as the one under which the command was proposed (so, when the lease changes, all
+commands that are still in the pipeline are instantly invalidated <a class="footnote-reference" href="#evenif" id="id5">[5]</a>),
+and the <tt class="docutils literal">MaxLeaseIndex</tt> is checked against <tt class="docutils literal">replica.LeaseAppliedIndex</tt> and
+application is only allowed if <tt class="docutils literal">MaxLeaseIndex &gt; LeaseAppliedIndex</tt>. So, the
+<tt class="docutils literal">LeaseAppliedIndex</tt> prevents commands from being applied beyond their intended
+log position. When we repropose commands, we repropose them with the same
+<tt class="docutils literal">MaxLeaseIndex</tt> as the original proposal. When a command attempts to apply
+beyond it's intended position and is rejected, we have the option of
+re-evaluating the request (see <a class="reference internal" href="#re-evaluations-of-kv-requests">Re-evaluations of KV requests</a>); we'll take
+this option if we're still waiting for the application result for the command in
+question (i.e. if we previously got a result for a reproposal, we will not take
+this option). We do not have the option of simply reproposing (the reproposal
+would keep failing in the same way).</p>
+<p>The <tt class="docutils literal">LeaseAppliedIndex</tt> mechanism prevents both reordering and double
+applications (since reproposals have the same <tt class="docutils literal">MaxLeaseIndex</tt> as the original
+proposal). Again, if we had an ordered Raft transport, that would solve the
+reordering problem but not the double application problem.</p>
+<p>One thing to note is that the <tt class="docutils literal">LeaseAppliedIndex</tt> has the effect of
+serializing command application more than we really need: commands proposed by
+requests that were part of the command queue at the same time (or, in fact,
+requests that could have been in the <tt class="docutils literal">CommandQueue</tt> at the same time) don't
+need this serialization.</p>
+<p>Another thing to note is that the <tt class="docutils literal">MaxLeaseIndex &gt; LeaseAppliedIndex</tt>
+comparison only prevents application of commands <em>beyond</em> their intended log
+position. It does not prevent commands from applying <em>before</em> their intended log
+position. Should it, considering that a command applying earlier than intended
+implies a type of reordering? The answer is no, considering that our commands
+have been crafted such that they don't depend on the successful application of
+commands concurrent with them in the <tt class="docutils literal">CommandQueue</tt>. However, whenever we
+apply a command before it's intended position, we're likely to cause other
+commands to fail to apply because they will now be considered to have missed
+their position.</p>
+<table class="docutils footnote" frame="void" id="evenif" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id5">[5]</a></td><td>Note that this is true even if the leaseholder moves and then comes
+back to the original node while a command is in the pipeline - that command
+will not be allowed to apply.</td></tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">Reminder that reproposals never introduce any ambiguity: we only repropose when we know that the original proposal has not been applied yet.</p>
+</div>
+</div>
+</div>
+<div class="section" id="re-evaluations-of-kv-requests">
+<h2><a class="toc-backref" href="#id23">Re-evaluations of KV requests</a></h2>
+<p>As we've seen in the previous section, commands cannot apply past their assigned
+<tt class="docutils literal">MaxLeaseIndex</tt>. So, what happens when a reordering causes a command to fail
+that check? We saw that we can't just repropose (well, in fact, I believe
+sometimes we could, see <a class="reference internal" href="#todo-repropose-on-proposalillegalleaseindex">TODO_repropose_on_proposalIllegalLeaseIndex</a>). We have a
+couple of options:</p>
+<ul class="simple">
+<li>If we know for a fact that the proposal did not apply, we can do a variant of reproposing: propose the same command but with an updated <tt class="docutils literal">MaxLeaseIndex</tt> and a new <tt class="docutils literal">CommandKey</tt>. We know that the command has not applied and also that no reproposal that we may have made (if any) will also not apply, we know that no overlapping command has been proposed yet (we're still in the <tt class="docutils literal">CommandQueue</tt>), so we can just propose the command again at a new log position.</li>
+<li>If we don't know whether the proposal applied or not:<ul>
+<li>We could raise our hands and return an error to the client. The error would
+be ambiguous, though, reflecting the fact that we don't know if data has been
+written or not. If the command was transactional but it was not committing
+the transaction, a higher layer could translate it into a retriable
+transaction error (although we never do that now, see
+<a class="reference internal" href="#todo-convert-to-retriable">TODO_convert_to_retriable</a>). This option is quite unfortunate.</li>
+<li>We could attempt to resolve the ambiguity in one direction: we can evaluate
+the request again and, if the evaluation succeeds, conclude that the command
+did not apply <a class="footnote-reference" href="#noreverse" id="id6">[6]</a>. The reasoning allowing this conclusion will be
+presented in the <a class="reference internal" href="#how-does-mvcc-detect-previous-applications-of-commands-during-evaluation">How does MVCC detect previous applications of commands
+during evaluation?</a> section.</li>
+</ul>
+</li>
+</ul>
+<p>While writing this note, the author has come to think of re-evaluations as
+fundamentally being about (and only about) attempting to prove that a command
+did not previously apply in the hope that we can avoid bubbling up an ambiguous
+error. Everything else about them is noise. Another interesting point is that
+re-evaluations don't introduce any reordering hazards like reproposals do: once
+we decide to re-evaluate something, the original proposal can no longer apply
+(in case it hasn't applied already).</p>
+<p>These were abstract considerations. Now let's see what the code actually
+does. First of all, it doesn't take advantage of the fact that re-evaluation is
+not needed when we know that the command did not apply; we do the re-evaluation
+anyway, meaning that we have cases where re-evaluations can result in ambiguous
+errors and cases where they don't. This should be improved: only the ambiguous
+case should remain.</p>
+<p>The interesting case is the ambiguous one. The code attempts to resolve the
+ambiguity as described in our final option. If it can't (because re-evaluation
+fails), an ambiguous error is bubbled up and will currently make its way to the
+client (although it sometimes could be turned into a retriable error, as
+described).</p>
+<p>A good question is how exactly does the ambiguity appear in the first place?
+We're doing reproposals when we're waiting for a command to apply and we've
+heard that a command with a higher lease index has applied. Can't we conclude
+from this that the command we've been waiting for has not applied? If it had,
+wouldn't the proposer have known about it (because the proposer is one of the
+replicas in the respective group)?  Well, that reasoning almost holds, except in
+one case: if the local replica has just applied a snapshot (and so moved up it’s
+<tt class="docutils literal">LeaseAppliedIndex</tt> that way), then it’s possible that the snapshot contained
+the commands in question and the proposer wouldn’t have received a result (we
+don’t notify the proposers when applying a snapshot, as we don’t know what’s
+inside a snapshot). This snapshot applied case is the only case where
+re-evaluations are truly necessary.</p>
+<div class="sidebar">
+<p class="first sidebar-title">Re-evaluation is too heavy weight?</p>
+<p>We've said that the point of re-evaluations, fundamentally, is to detect
+whether the command has been previously applied by running the MVCC code. If
+the command did not, in fact, apply previously then we expect to end up with
+the <em>exact same Raft command as before</em> as the result of evaluation (modulo
+caveats noted below). The structure of our code, however, currently does not
+make that clear: when we do re-evaluations, we lose any context of the
+previous attempt, except the information that the error returned to client
+must be ambiguous if the re-evaluation fails. In the author's ideal world,
+we'd structure the code such that MVCC checks are divorced from Raft command
+generation (i.e. <tt class="docutils literal">WriteBatch</tt> generation). Besides making this point
+apparent, this kind of structure could perhaps provide some performance
+improvements by saving on work - no duplicate <tt class="docutils literal">WriteBatch</tt>, no duplicate
+RocksDB snapshot (we'd use the original snapshot).</p>
+<p class="last">Unfortunately, there's a complication that we've previously hinted to:
+because we take the request out of the <tt class="docutils literal">CommandQueue</tt> and we re-insert it
+with every re-evaluation, we open the door to other overlapping requests
+sneaking in. This means that re-evaluations can actually legitimately result
+in different results. That's unfortunate; for this and other reasons I think
+we should keep requests in the <tt class="docutils literal">CommandQueue</tt> throughout re-evaluations.
+One interesting point, though, is that prop-eval-KV has opened the door to
+introducing non-deterministic requests in the future. Whether that'd be sane
+and, even assuming that it is, whether we'd want such requests to actually
+produce different results on re-evaluations may be questionable.</p>
+</div>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">One important thing to note is that re-proposals are done at a high
+level in the <tt class="docutils literal">replica</tt> code, in <a class="reference external" href="https://github.com/cockroachdb/cockroach/blob/eac867158e1cb6864046b7b5a14c1c7e62f6f62b/pkg/storage/replica.go#L2489">replica.executeWriteBatch()</a>.
+This means that they're done without the request staying in the
+<tt class="docutils literal">CommandQueue</tt> continuously throughout all the re-evaluations. I think
+that's unfortunate, as it opens the door to other overlapping requests
+sneaking in and causing ambiguity (see <a class="reference internal" href="#todo-remove-snapshot-ambiguity">TODO_remove_snapshot_ambiguity</a>).
+This fact also causes re-evaluations to be needed in a way that they
+shouldn't be, muddying the conceptual waters; see the &quot;Re-evaluation is too
+heavy weight?&quot; sidebar. Also, by
+keeping the request in the CommandQueue we’d arguably also get a more
+favorable ordering of the commands - the arrival order, which resembles
+the timestamp order (so WriteTooOld errors could be reduced).</p>
+</div>
+<table class="docutils footnote" frame="void" id="noreverse" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id6">[6]</a></td><td>The reverse does not hold, though: if the re-evaluation
+fails, then we can not currently conclude that the command applied. The
+re-evaluation may fail because of other commands that have been applied since
+the original proposal. See also <a class="reference internal" href="#todo-remove-snapshot-ambiguity">TODO_remove_snapshot_ambiguity</a>.</td></tr>
+</tbody>
+</table>
+<div class="section" id="how-does-mvcc-detect-previous-applications-of-commands-during-evaluation">
+<h3><a class="toc-backref" href="#id24">How does MVCC detect previous applications of commands during evaluation?</a></h3>
+<p>We're owing an argument after the previous section; we've seen that
+re-evaluations are done in order to try to remove the ambiguity about whether a
+command applied or not by performing the evaluation again and hoping that it
+succeeds. Why exactly is it that a successful evaluation proves that the command
+did not previously apply? What's preventing the re-evaluation from succeeding
+even if the command had previously apply? The answer depends on the type of the
+request. But the point is that we've made sure there's always something that
+makes this true:</p>
+<ul class="simple">
+<li>A non-transactional batch (or a 1PC transaction) relies on MVCC: a second
+evaluation will get a <tt class="docutils literal">WriteTooOldError</tt>. In some cases, there's no data to
+generate a <tt class="docutils literal">WriteTooOldError</tt>: for example, if the batch only consists of
+<tt class="docutils literal">DelRange</tt> requests and don't write anything (because there was no data to
+delete). In such cases, we rely on hitting the timestamp cache check and
+refusing the second application that way? But I'm not sure about this -
+depending on when exactly we populate the timestamp cache, wouldn't we either
+hit it when we do the re-evaluation regardless of whether the first one
+applied or not or, if we populate it late, would it ever be populated by the
+first application?  Perhaps nothing prevents such commands from applying twice
+(and that's OK because they really are idempotent)? On the other hand, if a
+request doesn't write any data that would generate a <tt class="docutils literal">WriteTooOldError</tt> on
+re-evaluation, do we even need to propose such commands to Raft? FIXME.</li>
+<li>A batch containing a <tt class="docutils literal">BeginTransaction</tt> request relies on the transaction
+entry already existing (a second application would get a
+<tt class="docutils literal">TransactionStatusError</tt>).</li>
+<li>If there's an <tt class="docutils literal">EndTransaction</tt> in the batch, then the transaction
+record might have been cleaned up by a previous application. In this case, we
+rely on the <tt class="docutils literal">TimestampCache</tt> entry that the <tt class="docutils literal">EndTransaction</tt> purposefully
+leaves behind for this purpose <a class="footnote-reference" href="#id10" id="id7">[7]</a> <a class="footnote-reference" href="#id11" id="id8">[8]</a>. I think we could also rely on the
+transaction status check: if the <tt class="docutils literal">EndTransaction</tt> previously applied but
+the txn record has not been cleaned up, then we can also rely on getting a
+<tt class="docutils literal">TransactionStatusError</tt>?</li>
+<li>Batches containing regular transactional writes rely on the sequence numbers
+mechanism (described later).</li>
+<li>Other special requests (leases, splits, etc.) rely on ad-hoc mechanism. Some
+of them are tied to an <tt class="docutils literal">EndTransaction</tt>, so they use its protections. The
+<tt class="docutils literal">ProposeLease</tt> command, for example, relies on the current lease verification <a class="footnote-reference" href="#id12" id="id9">[9]</a>.</li>
+</ul>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">The <tt class="docutils literal">LeaseAppliedIndex</tt> mechanism has nothing to do with protections
+in case of re-evaluations, as re-evaluations propose commands intended for
+different log positions than the original command.</p>
+</div>
+<table class="docutils footnote" frame="void" id="id10" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id7">[7]</a></td><td>If there's an <tt class="docutils literal">EndTransaction</tt> in the batch, that means we also wrote
+something in that transaction, so we could also rely on <tt class="docutils literal">WriteTooOldError</tt>
+on the second application. However, relying on this and not on the
+<tt class="docutils literal">TimestampCache</tt> entry would have the disadvantage that the second
+application would leave dangling intents and a dangling transaction record.</td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="id11" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id8">[8]</a></td><td>I made a note here that the <tt class="docutils literal">GCThreshold</tt> also somehow plays a role
+here but we should replace it with populating the timestamp cache, but now I
+can't reproduce what this was about. Since we have the <tt class="docutils literal">EndTransaction</tt>
+timestamp cache entry... Perhaps it was not about batches with
+<tt class="docutils literal">EndTransaction</tt>, but internal batches whose intents have been cleared.
+FIXME &#64;tschottdorf</td></tr>
+</tbody>
+</table>
+<table class="docutils footnote" frame="void" id="id12" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id9">[9]</a></td><td>The <tt class="docutils literal">ProposeLease</tt> command is really special because it can be proposed
+by any follower.</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="section" id="logic-for-triggering-reproposals-and-re-evaluations">
+<h2><a class="toc-backref" href="#id25">Logic for triggering reproposals and re-evaluations</a></h2>
+<p>This section discusses the mechanics of the code that decides about reproposals
+and re-evaluations.</p>
+<p>The code triggers re-evaluations when an <a class="reference external" href="https://github.com/cockroachdb/cockroach/blob/47287e0b94c99908515669866f71e9a3a704e4e6/pkg/storage/replica.go?utf8=%E2%9C%93#L4107">application returns a special error</a>
+and does both reproposals and re-evaluations when the pending proposals
+are “refreshed” for any number of reasons in the <a class="reference external" href="https://github.com/cockroachdb/cockroach/blob/47287e0b94c99908515669866f71e9a3a704e4e6/pkg/storage/replica.go#L3758)">replica.refreshProposalsLocked(reason)</a>
+method. This method is written in an open-loop manner; it inspects all
+pending proposals at points in time that can be considered arbitrary,
+and decides what to do for every single one. There’s a number of cases:</p>
+<ol class="arabic simple">
+<li>A proposal can still apply according to their lease index slot
+(<tt class="docutils literal">command.MaxLeaseIndex &gt; LeaseAppliedIndex</tt>). They can still apply
+and they might apply, but it’s also likely that they’ve been dropped
+on the floor. We repropose these commands. If the original proposal
+still applies, the lease index will prevent the 2nd application.
+After the reproposal, any application of the command (the original or
+the reproposed one) will provide a <tt class="docutils literal">proposalResult</tt> to the
+higher-level request’s control flow, which is blocked on receiving a
+result for the proposal. It doesn’t matter if the original gets
+applied; it’s all good. If the <tt class="docutils literal">proposalResult</tt> we get indicates an
+application error, <strong>there’s no ambiguity</strong> - it’s the result of the
+first attempt to apply.</li>
+<li>A proposal’s lease index slot was filled up: the proposal cannot be
+applied from this moment on (it’s application-time check will fail).
+These proposals are still pending, so they obviously haven’t received a
+result. We can't repropose (the reproposal would fail the lease index
+check), so we re-evaluate. If the reason why
+<tt class="docutils literal">replica.refreshProposalsLocked()</tt> was called is a snapshot application,
+we keep track of the fact that the status is ambiguous and, if the
+re-evaluation fails (so, we haven't managed to resolve the ambiguity), we
+wrap the error into an <tt class="docutils literal">AmbiguousResultError</tt>. In other cases the error is
+not ambiguous and is returned directly (but these other cases should really
+be handled by a special type of reproposal, as discussed before).</li>
+</ol>
+<p>The code that actually performs re-evaluations is, as we've discussed before, in <a class="reference external" href="https://github.com/cockroachdb/cockroach/blob/eac867158e1cb6864046b7b5a14c1c7e62f6f62b/pkg/storage/replica.go#L2489">replica.executeWriteBatch()</a>. This is a high-level function, and so
+each re-evaluation is done by re-entering the <tt class="docutils literal">CommandQueue</tt>.</p>
+</div>
+<div class="section" id="notes">
+<h2><a class="toc-backref" href="#id26">Notes</a></h2>
+<p>In this section we’ve only considered reorderings of commands pertaining to
+different KV requests (the <tt class="docutils literal">CommandQueue</tt> serializes KV requests). A question
+that might come to mind is whether there could be problems with reorderings of
+commands within a request: could request 1 generate commands A and B that need
+to be applied in this order? The answer here is that this is not a concern:
+below the <tt class="docutils literal">DistSender</tt> level, a request gets translated into a single command
+(modulo reproposals/re-evaluations). The <tt class="docutils literal">DistSender</tt> splits batch requests in
+smaller batches such that each batch can be translated into a single command. It
+does this by splitting the original batch at read points. There is one
+complications here around conflict resolution - when the evaluation of a request
+encounters a conflict, the conflict needs to be resolved by proposing some
+commands. So, in a way, this contradicts what we’ve said above: that a request
+evaluation results in a single command. The key here is that conflict
+resolutions happens at the <tt class="docutils literal">Store</tt> level, and request evaluation happens at
+the <tt class="docutils literal">Replica</tt> level: the request is taken out of the <tt class="docutils literal">CommandQueue</tt> while the
+conflict is being resolved, and put in the <tt class="docutils literal">CommandQueue</tt> again afterwards.</p>
+<p id="todo-repropose-on-proposalillegalleaseindex"><strong>TODO:</strong> in the <tt class="docutils literal">proposalIllegalLeaseIndex</tt> case (i.e. <tt class="docutils literal">command.MaxLeaseIndex &lt;
+LeaseAppliedIndex</tt> and <tt class="docutils literal">refreshReason != reasonSnapshotApplied</tt>), we should
+repropose instead of re-evaluate. But re-propose with a changed commandKey and
+lease index, and update the key on which the proposer is waiting for a result.
+We know that the original hasn’t applied and also that it will not apply, and we
+know that there haven’t been overlapping requests evaluated after we proposed
+(we’re still in the CommandQueue), so the re-evaluation is not needed.</p>
+<p><strong>TODO:</strong> <a class="reference external" href="https://github.com/cockroachdb/cockroach/blob/47287e0b94c99908515669866f71e9a3a704e4e6/pkg/storage/storagebase/proposer_kv.proto#L188">The comments on MaxLeaseIndex</a>
+say they should be updated when the CommandQueue has been fixed for
+prop-eval-KV. They point to
+<a class="reference external" href="https://github.com/cockroachdb/cockroach/issues/10413">#10413</a>,
+which has since been closed. Should they be re-written to
+mention arbitrary reorderings and corrupt statistics?</p>
+<p id="todo-convert-to-retriable"><strong>TODO:</strong> <tt class="docutils literal">AmbiguousResultErrors</tt> are never transformed to txn
+retry errors, as far as I can see. They’re converted in SQL to errors
+with a standard pg code: “statement completion unknown”. But this means
+that we don’t do automatic retries when we could (to hide some of these
+errors), and also that our documentation and client libraries don’t
+handle the retries properly when they could (when the error is not
+associated with a COMMIT). We should transform them to <tt class="docutils literal">TxnRestartError</tt> when
+no commit is involved.</p>
+<p id="todo-remove-snapshot-ambiguity"><strong>TODO</strong> If we did re-evaluations <em>while
+keeping the request in the CommandQueue</em> <strong>the snapshot applied case would not
+be ambiguous</strong>. We'd be able to compare the re-evaluation result with the result
+of the original evaluation and, if they're not exactly the same, then we could
+conclude that the original proposal was applied. This way we'd resolve the
+direction of the ambiguity that's currently unresolved. There may be difficulty
+with variance in some conditions that make evaluation non-deterministic (e.g.
+leases moving around and the timestamp cache overflowing), but it seems that at
+least a category of MVCC errors would be unambiguous.</p>
+</div>
+</div>
+<div class="section" id="distsender-retries">
+<h1><a class="toc-backref" href="#id27"><tt class="docutils literal">DistSender</tt> retries</a></h1>
+<div class="admonition warning">
+<p class="first admonition-title">Warning</p>
+<p class="last">EVERYTHING BELOW IS WIP, NOT READY FOR REVIEW</p>
+</div>
+<p>Besides Raft-level issues, the other big source of headaches around
+“executing things multiple times” is the <tt class="docutils literal">DistSender</tt>, which retries
+the sending of batches from one replica to another. Why does the
+<tt class="docutils literal">DistSender</tt> retry batches, you ask?</p>
+<p>Reminder: the <tt class="docutils literal">DistSender</tt> is responsible for splitting a
+<tt class="docutils literal">BatchRequest</tt> into range-specific batches and sending them to the
+respective lease holders. At any given time, there’s a single node that
+can evaluate a given request, but the idea is that the <tt class="docutils literal">DistSender</tt>
+doesn’t necessarily know who that node is (e.g. it might have stale
+lease information cached), and also that the lease holder can change
+when there’s trouble (so, a retry to a different replica might cause
+that replica to acquire the lease). Therefore, the <tt class="docutils literal">DistSender</tt> retries
+batches when they may execute successfully on another replica. The
+<tt class="docutils literal">DistSender</tt> may also attempt to execute batches on the same node multiple
+times. Currently, the policy around these retries seems more accidental
+than intended and I don’t think it currently helps anything - see below.
+But there are policies involving same-node retries that would make
+sense.</p>
+<p>Let’s talk specifics: the <tt class="docutils literal">DistSender</tt> sends an RPC and gets a RPC
+error (i.e. a network error). The error can be ambiguous about whether
+the original replica might have received the RPC or not (in fact, as of
+this writing, it would appear that <strong>all gRPC network errors</strong>
+********are ambiguous)**. So, what is the DistSender to do
+now? It has a few options:</p>
+<ol class="arabic simple">
+<li>Return the error to the client. The error should reflect the
+ambiguity about whether the batch (and, by extension, the respective
+SQL query) applied to the database or not, and so the client would
+have to deal with the pesky ambiguous error.</li>
+<li>If the batch was transactional <strong>but didn’t contain an
+EndTransaction</strong>, it could return a retriable error to the client.
+The transaction would be restarted and we wouldn’t care if the
+preceding batch executed or not.</li>
+<li>Try to resolve the ambiguity, at least in one direction: if we can
+figure out that the batch did not, in fact, execute, then we can (and
+should) attempt to execute it again.</li>
+</ol>
+<p>The DistSender implements a combination of all these options. On RPC
+errors, it first tries to prove that it hasn’t executed. Turns out that
+“proving that it hasn’t executed” and “attempting to execute it again”
+are merged: we attempt to prove that it hasn’t executed <em>by attempting
+to execute it again</em>. If attempting to execute again succeeds, that
+means that the previous attempt didn’t succeed (or, at least, that the
+previous attempt <em>hasn’t happened yet</em>). Why is that? This ties into the
+previous section on Raft-level retry behavior: that lower layer
+guarantees that a request being evaluated after it’s already been
+applied - reminder: these are commonly MVCC protections. We don’t need
+to worry about two concurrent evaluations because the CommandQueue will
+prevent them. So, the DistSender tries to execute the batch again.
+Currently, the attempt is always done on another replica !!! explain
+that if we never went back to the original replica, some problems would
+go away!!!. This can have a couple of outcomes:</p>
+<ul class="simple">
+<li>It succeeds. That’s great; we can tell the client that we succeeded.</li>
+</ul>
+<p>It proceeds to try the RPC on another replica. What problems can arise
+from executing the RPC twice, on two different replicas? The question is
+legitimate: the combination of isolation between transactional semantics
+and MVCC for timestamped writes makes the answer be non-obvious, at
+least for transactional writes. One problem is that a request such as
+increment is not idempotent (even considering that it operates at a
+fixed timestamp): if executed a 2nd time inside a transaction, it will
+increment the value a 2nd time (the transaction part is important
+because transactional requests see the writes previously performed in
+the same txn; if the increment is not transactional, I think a 2nd
+execution would fail because it tries to write at the existing
+timestamp?). Another problem is caused by request reordering. Consider
+the following scenario:</p>
+<ol class="arabic simple">
+<li>a client sends <em>Put(x, 1)</em></li>
+<li>DistSender sends it and gets a connection error. However, the server
+has received the request.</li>
+<li>DistSender sends the request again to a different replica, and this
+time the RPC succeeds.</li>
+<li>the client sends <em>Put(x, 2)</em></li>
+<li>DistSender sends it and succeeds</li>
+<li>the original <em>Put(x, 1)</em> comes back from the dead and is applied,
+thus overwriting the <em>x = 2</em></li>
+</ol>
+<p>CRDB protects against these hazards by attaching <em>sequence numbers</em> to
+batches. These are assigned by the DistSender and are increasing
+throughout a transaction. Writes persist their sequence number in
+intents and MVCC refuses to evaluate a read or write if it encounters
+data written by the same transaction at a lower or equal sequence
+number, concluding that it must be an out of order or repeated
+evaluation. So, in our example, the <em>Put(x, 1)</em> that comes from the dead
+will error out instead of resulting in a Raft command proposal.</p>
+<p>The problem with <tt class="docutils literal">DistSender</tt> doing retries in situations where it’s
+ambiguous whether a node it was trying to talk to received the RPC or
+not is that, if all the subsequent attempts fail (for example, with
+<tt class="docutils literal">NotLeaseHolderError</tt>) then the <tt class="docutils literal">DistSender</tt> has to return an
+ambiguous error to its client - we don’t know if the request will be
+applied or not.</p>
+<p>There’s also another hazard induced by <tt class="docutils literal">DistSender</tt> retries that’s not
+covered by the sequence numbers: the retry of a <tt class="docutils literal">BeginTxn</tt> can cause a
+transaction record to be recreated after it has been cleaned up. In
+turn, this can cause the transaction to be committed later on even
+though it’s missing some intended writes. Concretely, the risk is:</p>
+<ul class="simple">
+<li>the <tt class="docutils literal">DistSender</tt> sends a batch with a <tt class="docutils literal">BeginTxn</tt></li>
+<li>the transaction is abandoned for whatever reason, and the intents it
+had already written are cleaned up.</li>
+<li>the <tt class="docutils literal">DistSender</tt> retries the <tt class="docutils literal">BeginTxn</tt>, and creates the txn
+record again</li>
+<li>more intents are produced</li>
+<li>the transaction is successfully (but wrongly) committed</li>
+</ul>
+<p>The problem here is that the txn record has been recreated after it had
+been cleaned up. This is protected against by placing a special entry in
+the timestamp cache at <tt class="docutils literal">EndTxn</tt> time, preventing future attempts from
+writing that key. Note that the <tt class="docutils literal">AbortCache</tt> does not have !!!</p>
+<ul class="simple">
+<li>I should discuss splits and how that means that there’s two leases
+under which a request can be evaluated. But it’s OK because both of
+those leases are held by the same node (and the timestamp cache is
+shared); as soon as one is transferred, the timestamp cache is reset.</li>
+<li>can we get rid of SeqNums because a request can only apply under one
+lease (courtesy of the timestamp cache)? Assuming the DistSender
+doesn’t send the same request twice to a node.</li>
+<li>is there a subtle problem with CPut not updating the TimestampCache?
+Should that be discussed somewhere here? Or does it now update the
+TimestampCache, just like DelRange does? (see around here:
+<a class="reference external" href="https://github.com/cockroachdb/cockroach/issues/626#issuecomment-154159006">https://github.com/cockroachdb/cockroach/issues/626#issuecomment-154159006</a>)</li>
+</ul>
+</div>
+<div class="section" id="conflict-resolution-retries">
+<h1><a class="toc-backref" href="#id28">Conflict resolution retries</a></h1>
+</div>
+<div class="section" id="ambiguouserror">
+<h1><a class="toc-backref" href="#id29">AmbiguousError</a></h1>
+</div>
+<div class="section" id="misc">
+<h1><a class="toc-backref" href="#id30">Misc</a></h1>
+<ul class="simple">
+<li>AbortCache - protects against situations where reads miss previous
+writes because the intents have been cleaned up (txn has been
+aborted). Has nothing to do with retries.</li>
+</ul>
+<hr class="docutils" />
+<h3>Comments</h3>
+<div id="disqus_thread"></div>
+<script type="text/javascript">
+ var disqus_shortname = 'REPLACETHIS';
+ (function() {
+     var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+     dsq.src = 'http://' + disqus_shortname + '.disqus.com/embed.js';
+     (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+ })();
+</script>
+
+<noscript>Please enable JavaScript to view the <a
+href="http://disqus.com/?ref_noscript">comments powered by
+Disqus.</a></noscript>
+
+<script type="text/javascript">
+ var _gaq = _gaq || [];
+ _gaq.push(['_setAccount', 'YOURGOOGLEANALYTICSACCOUNT']);
+ _gaq.push(['_trackPageview']);
+ (function() {
+     var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+     ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+     var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+ })();
+</script></div>
+</div>
+</body>
+</html>
