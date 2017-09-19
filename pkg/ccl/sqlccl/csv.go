@@ -868,6 +868,7 @@ func importPlanHook(
 			_, importErr = doDistributedCSVTransform(
 				ctx, job, files, p, tableDesc, temp,
 				comma, comment, nullif, walltime,
+				sstSize,
 			)
 		} else {
 			_, _, _, importErr = doLocalCSVTransform(
@@ -920,6 +921,7 @@ func doDistributedCSVTransform(
 	comma, comment rune,
 	nullif *string,
 	walltime int64,
+	sstSize int64,
 ) (int64, error) {
 	evalCtx := p.EvalContext()
 
@@ -961,6 +963,7 @@ func doDistributedCSVTransform(
 		comma, comment,
 		nullif,
 		walltime,
+		sstSize,
 	); err != nil {
 		return 0, err
 	}

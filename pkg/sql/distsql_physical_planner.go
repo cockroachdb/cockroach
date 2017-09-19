@@ -16,6 +16,7 @@ package sql
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -910,12 +911,13 @@ func (l *DistLoader) LoadCSV(
 	comma, comment rune,
 	nullif *string,
 	walltime int64,
+	splitSize int64,
 ) error {
-	const (
-		splitSize  = 1024 * 1024 * 32 // 32MB
-		oversample = 3
-		sampleSize = splitSize / oversample
-	)
+	const oversample = 3
+	sampleSize := splitSize / oversample
+	if sampleSize > math.MaxInt32 {
+		return errors.Errorf("SST size must fit in an int32: %d", splitSize)
+	}
 
 	var p physicalPlan
 	colTypeBytes := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}
@@ -925,7 +927,7 @@ func (l *DistLoader) LoadCSV(
 	for i, input := range from {
 		// TODO(mjibson): attempt to intelligently schedule http files to matching cockroach nodes
 		rcs := distsqlrun.ReadCSVSpec{
-			SampleSize: sampleSize,
+			SampleSize: int32(sampleSize),
 			TableDesc:  *tableDesc,
 			Uri:        input,
 			Options: roachpb.CSVOptions{
