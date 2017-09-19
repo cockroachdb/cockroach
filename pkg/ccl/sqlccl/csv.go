@@ -324,6 +324,7 @@ func readCSV(
 	dataFiles []string,
 	recordCh chan<- csvRecord,
 ) (int64, error) {
+	const batchSize = 500
 	expectedColsExtra := expectedCols + 1
 	done := ctx.Done()
 	var count int64
@@ -336,6 +337,7 @@ func readCSV(
 			return 0, ctx.Err()
 		default:
 		}
+
 		err := func() error {
 			conf, err := storageccl.ExportStorageConfFromURI(dataFile)
 			if err != nil {
@@ -355,10 +357,30 @@ func readCSV(
 			cr.FieldsPerRecord = -1
 			cr.LazyQuotes = true
 			cr.Comment = comment
+
+			batch := csvRecord{
+				file:      dataFile,
+				rowOffset: 1,
+				r:         make([][]string, 0, batchSize),
+			}
+
 			for i := 1; ; i++ {
 				record, err := cr.Read()
-				if err == io.EOF {
-					break
+				if err == io.EOF || len(batch.r) >= batchSize {
+					// if the batch isn't empty, we need to flush it.
+					if len(batch.r) > 0 {
+						select {
+						case <-done:
+							return ctx.Err()
+						case recordCh <- batch:
+							count += int64(len(batch.r))
+						}
+					}
+					if err == io.EOF {
+						break
+					}
+					batch.rowOffset = i
+					batch.r = make([][]string, 0, batchSize)
 				}
 				if err != nil {
 					return errors.Wrapf(err, "row %d: reading CSV record", i)
@@ -371,17 +393,7 @@ func readCSV(
 				} else {
 					return errors.Errorf("row %d: expected %d fields, got %d", i, expectedCols, len(record))
 				}
-				cr := csvRecord{
-					r:    record,
-					file: dataFile,
-					row:  i,
-				}
-				select {
-				case <-done:
-					return ctx.Err()
-				case recordCh <- cr:
-					count++
-				}
+				batch.r = append(batch.r, record)
 			}
 			return nil
 		}()
@@ -393,9 +405,9 @@ func readCSV(
 }
 
 type csvRecord struct {
-	r    []string
-	file string
-	row  int
+	r         [][]string
+	file      string
+	rowOffset int
 }
 
 // convertRecord converts CSV records KV pairs and sends them on the kvCh chan.
@@ -408,8 +420,8 @@ func convertRecord(
 ) error {
 	done := ctx.Done()
 
-	const kvBatchSize = 500
-
+	const kvBatchSize = 1000
+	padding := 2 * (len(tableDesc.Indexes) + len(tableDesc.Families))
 	visibleCols := tableDesc.VisibleColumns()
 	keyDatums := make(sqlbase.EncDatumRow, len(tableDesc.PrimaryIndex.ColumnIDs))
 	// keyDatumIdx maps ColumnIDs to indexes in keyDatums.
@@ -440,39 +452,43 @@ func convertRecord(
 	}
 
 	datums := make([]parser.Datum, len(visibleCols))
-	kvBatch := make([]roachpb.KeyValue, 0, kvBatchSize)
+	kvBatch := make([]roachpb.KeyValue, 0, kvBatchSize+padding)
 
-	for record := range recordCh {
-		for i, r := range record.r {
-			if nullif != nil && r == *nullif {
-				datums[i] = parser.DNull
-			} else {
-				datums[i], err = parser.ParseStringAs(visibleCols[i].Type.ToDatumType(), r, time.UTC)
-				if err != nil {
-					return errors.Wrapf(err, "%s: row %d: parse %q as %s", record.file, record.row, visibleCols[i].Name, visibleCols[i].Type.SQLString())
+	for batch := range recordCh {
+		for batchIdx, record := range batch.r {
+			rowNum := batch.rowOffset + batchIdx
+			for i, v := range record {
+				col := visibleCols[i]
+				if nullif != nil && v == *nullif {
+					datums[i] = parser.DNull
+				} else {
+					datums[i], err = parser.ParseStringAs(col.Type.ToDatumType(), v, time.UTC)
+					if err != nil {
+						return errors.Wrapf(err, "%s: row %d: parse %q as %s", batch.file, rowNum, col.Name, col.Type.SQLString())
+					}
+				}
+				if idx, ok := keyDatumIdx[visibleCols[i].ID]; ok {
+					keyDatums[idx] = sqlbase.DatumToEncDatum(col.Type, datums[i])
 				}
 			}
-			if idx, ok := keyDatumIdx[visibleCols[i].ID]; ok {
-				keyDatums[idx] = sqlbase.DatumToEncDatum(visibleCols[i].Type, datums[i])
-			}
-		}
 
-		row, err := sql.GenerateInsertRow(defaultExprs, ri.InsertColIDtoRowIndex, cols, evalCtx, tableDesc, datums)
-		if err != nil {
-			return errors.Wrapf(err, "generate insert row: %s: row %d", record.file, record.row)
-		}
-		if err := ri.InsertRow(ctx, inserter(func(kv roachpb.KeyValue) {
-			kvBatch = append(kvBatch, kv)
-		}), row, true /* ignoreConflicts */, false /* traceKV */); err != nil {
-			return errors.Wrapf(err, "insert row: %s: row %d", record.file, record.row)
-		}
-		if len(kvBatch) > kvBatchSize {
-			select {
-			case kvCh <- kvBatch:
-			case <-done:
-				return ctx.Err()
+			row, err := sql.GenerateInsertRow(defaultExprs, ri.InsertColIDtoRowIndex, cols, evalCtx, tableDesc, datums)
+			if err != nil {
+				return errors.Wrapf(err, "generate insert row: %s: row %d", batch.file, rowNum)
 			}
-			kvBatch = make([]roachpb.KeyValue, 0, kvBatchSize)
+			if err := ri.InsertRow(ctx, inserter(func(kv roachpb.KeyValue) {
+				kvBatch = append(kvBatch, kv)
+			}), row, true /* ignoreConflicts */, false /* traceKV */); err != nil {
+				return errors.Wrapf(err, "insert row: %s: row %d", batch.file, rowNum)
+			}
+			if len(kvBatch) >= kvBatchSize {
+				select {
+				case kvCh <- kvBatch:
+				case <-done:
+					return ctx.Err()
+				}
+				kvBatch = make([]roachpb.KeyValue, 0, kvBatchSize+padding)
+			}
 		}
 	}
 	select {

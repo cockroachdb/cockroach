@@ -731,15 +731,25 @@ func BenchmarkConvertRecord(b *testing.B) {
 			return convertRecord(ctx, recordCh, kvCh, nil, tableDesc)
 		})
 	}
+	const batchSize = 500
+
+	batch := csvRecord{
+		file:      "some/path/to/some/file/of/csv/data.tbl",
+		rowOffset: 1,
+		r:         make([][]string, 0, batchSize),
+	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		recordCh <- csvRecord{
-			file: "some/path/to/some/file/of/csv/data.tbl",
-			row:  i,
-			r:    tpchLineItemDataRows[i%len(tpchLineItemDataRows)],
+		if len(batch.r) > batchSize {
+			recordCh <- batch
+			batch.r = make([][]string, 0, batchSize)
+			batch.rowOffset = i
 		}
+
+		batch.r = append(batch.r, tpchLineItemDataRows[i%len(tpchLineItemDataRows)])
 	}
+	recordCh <- batch
 	close(recordCh)
 
 	if err := group.Wait(); err != nil {
