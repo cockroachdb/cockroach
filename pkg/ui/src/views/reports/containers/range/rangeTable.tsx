@@ -1,6 +1,7 @@
 import _ from "lodash";
 import Long from "long";
 import moment from "moment";
+import { Link } from "react-router";
 import React from "react";
 
 import * as protos from "src/js/protos";
@@ -447,6 +448,14 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
                 )
               ))
             }
+            <tr>
+              <td className="range-table__cell range-table__cell--header">
+                CmdQ State
+              </td>
+              <td className="range-table__cell">
+                <Link to={`/reports/range/${rangeID}/cmdqueue`}>Visualize</Link>
+              </td>
+            </tr>
             {
               _.map(replicas, (replica, key) => (
                 this.renderRangeReplicaRow(
