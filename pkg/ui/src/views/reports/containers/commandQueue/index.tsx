@@ -7,6 +7,7 @@ import * as protos from "src/js/protos";
 import { refreshCommandQueue } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { rangeIDAttr } from "src/util/constants";
+import { LongToMoment } from "src/util/convert";
 import CommandQueueViz from "src/views/reports/containers/commandQueue/commandQueueViz";
 
 interface CommandQueueOwnProps {
@@ -53,6 +54,14 @@ class CommandQueue extends React.Component<CommandQueueProps, {}> {
     return (
       <div className="section command-queue">
         <h1>Command queue report for r{rangeID.toString()}</h1>
+        <div className="command-queue__timestamp">
+          {this.props.commandQueue
+            ? <span>
+                Snapshot taken at
+                {" "}{LongToMoment(this.props.commandQueue.queues.timestamp).toISOString()}
+              </span>
+            : <span>Loading...</span>}
+        </div>
         <div className="command-queue__key">
           Key:
           <div

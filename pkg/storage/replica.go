@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
-	"os"
 	"reflect"
 	"sort"
 	"sync/atomic"
@@ -28,7 +27,6 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/gogo/protobuf/proto"
 	"github.com/google/btree"
 	"github.com/kr/pretty"
 	"github.com/opentracing/opentracing-go"
@@ -302,8 +300,7 @@ type Replica struct {
 		// Last index/term persisted to the raft log (not necessarily
 		// committed). Note that lastTerm may be 0 (and thus invalid) even when
 		// lastIndex is known, in which case the term will have to be retrieved
-		// from the Raft log entry. Use the invalidLastTerm constant for this
-		// case.
+		// from the Raft log entry.
 		lastIndex, lastTerm uint64
 		// The most recent commit index seen in a message from the leader. Used by
 		// the follower to estimate the number of Raft log entries it is
@@ -675,7 +672,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	if err != nil {
 		return err
 	}
-	r.mu.lastTerm = invalidLastTerm
+	r.mu.lastTerm = 0
 
 	pErr, err := r.mu.stateLoader.loadReplicaDestroyedError(ctx, r.store.Engine())
 	if err != nil {
@@ -828,6 +825,15 @@ func (r *Replica) setReplicaID(replicaID roachpb.ReplicaID) error {
 }
 
 func (r *Replica) setReplicaIDRaftMuLockedMuLocked(replicaID roachpb.ReplicaID) error {
+	if r.raftMu.sideloaded == nil || r.mu.replicaID != replicaID {
+		var err error
+		if r.raftMu.sideloaded, err = newDiskSideloadStorage(
+			r.store.cfg.Settings, r.mu.state.Desc.RangeID, replicaID, r.store.Engine().GetAuxiliaryDir(),
+		); err != nil {
+			return errors.Wrap(err, "while initializing sideloaded storage")
+		}
+	}
+
 	if r.mu.replicaID == replicaID {
 		// The common case: the replica ID is unchanged.
 		return nil
@@ -848,41 +854,8 @@ func (r *Replica) setReplicaIDRaftMuLockedMuLocked(replicaID roachpb.ReplicaID) 
 	// 	// TODO(bdarnell): clean up previous raftGroup (update peers)
 	// }
 
-	// Initialize or update the sideloaded storage. If the sideloaded storage
-	// already exists (which is iff the previous replicaID was non-zero), then
-	// we have to move the contained files over (this corresponds to the case in
-	// which our replica is removed and re-added to the range, without having
-	// the replica GC'ed in the meantime).
-	//
-	// Note that we can't race with a concurrent replicaGC here because both that
-	// and this is under raftMu.
-	var prevSideloadedDir string
-	if ss := r.raftMu.sideloaded; ss != nil {
-		prevSideloadedDir = ss.Dir()
-	}
-	var err error
-	if r.raftMu.sideloaded, err = newDiskSideloadStorage(
-		r.store.cfg.Settings, r.mu.state.Desc.RangeID, replicaID, r.store.Engine().GetAuxiliaryDir(),
-	); err != nil {
-		return errors.Wrap(err, "while initializing sideloaded storage")
-	}
-	if prevSideloadedDir != "" {
-		if _, err := os.Stat(prevSideloadedDir); err != nil {
-			if !os.IsNotExist(err) {
-				return err
-			}
-			// Old directory not found.
-		} else {
-			// Old directory found, so we have something to move over to the new one.
-			if err := os.Rename(prevSideloadedDir, r.raftMu.sideloaded.Dir()); err != nil {
-				return errors.Wrap(err, "while moving sideloaded directory")
-			}
-		}
-	}
-
 	previousReplicaID := r.mu.replicaID
 	r.mu.replicaID = replicaID
-
 	if replicaID >= r.mu.minReplicaID {
 		r.mu.minReplicaID = replicaID + 1
 	}
@@ -3283,15 +3256,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			return stats, expl, errors.Wrap(err, expl)
 		}
 
-		// r.mu.lastIndex, r.mu.lastTerm and r.mu.raftLogSize were updated in
-		// applySnapshot, but we also want to make sure we reflect these changes in
-		// the local variables we're tracking here.
-		r.mu.RLock()
-		lastIndex = r.mu.lastIndex
-		lastTerm = r.mu.lastTerm
-		raftLogSize = r.mu.raftLogSize
-		r.mu.RUnlock()
-
+		if lastIndex, err = r.raftMu.stateLoader.loadLastIndex(ctx, r.store.Engine()); err != nil {
+			return stats, err
+		}
 		// We refresh pending commands after applying a snapshot because this
 		// replica may have been temporarily partitioned from the Raft group and
 		// missed leadership changes that occurred. Suppose node A is the leader,
@@ -3375,9 +3342,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 	}
 
-	// Update protected state (last index, last term, raft log size and raft
-	// leader ID) and set raft log entry cache. We clear any older, uncommitted
-	// log entries and cache the latest ones.
+	// Update protected state (last index, raft log size and raft leader ID) and
+	// set raft log entry cache. We clear any older, uncommitted log entries and
+	// cache the latest ones.
 	//
 	// Note also that we're likely to send messages related to the Entries we
 	// just appended, and these entries need to be inlined when sending them to
@@ -5648,6 +5615,7 @@ func (r *Replica) GetCommandQueueState() *CommandQueuesForReplica {
 	r.cmdQMu.Lock()
 	defer r.cmdQMu.Unlock()
 	resp := &CommandQueuesForReplica{
+		Timestamp:   time.Now().UnixNano(),
 		LocalScope:  r.cmdQMu.queues[spanLocal].GetCommandQueueState(),
 		GlobalScope: r.cmdQMu.queues[spanGlobal].GetCommandQueueState(),
 	}
