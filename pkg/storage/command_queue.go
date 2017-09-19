@@ -813,26 +813,36 @@ func (cq *CommandQueue) GetCommandQueueState() *CommandQueueSnapshot {
 }
 
 func appendCommandsFromTree(
-	commandsSoFar []*CommandQueueCommand,
-	tree interval.Tree,
+	commandsSoFar []*CommandQueueCommand, tree interval.Tree,
 ) []*CommandQueueCommand {
-	// TODO(vilterp) flatten out child commands
+	result := commandsSoFar
 	tree.Do(func(item interval.Interface) (done bool) {
 		currentCmd := item.(*cmd)
-		command := &CommandQueueCommand{
-			Id:        currentCmd.id,
-			Readonly:  currentCmd.readOnly,
-			Timestamp: &currentCmd.timestamp,
-			Key:       prettyKey(currentCmd.key.Start),
-			EndKey:    prettyKey(currentCmd.key.End),
-		}
-		for _, prereqCmd := range *currentCmd.prereqs {
-			command.Prereqs = append(command.Prereqs, prereqCmd.id)
-		}
-		commandsSoFar = append(commandsSoFar, command)
+		result = copyCommandsAndChildren(result, currentCmd)
 		return false
 	})
-	return commandsSoFar
+	return result
+}
+
+func copyCommandsAndChildren(
+	commandsSoFar []*CommandQueueCommand, command *cmd,
+) []*CommandQueueCommand {
+	result := commandsSoFar
+	commandProto := &CommandQueueCommand{
+		Id:        command.id,
+		Readonly:  command.readOnly,
+		Timestamp: &command.timestamp,
+		Key:       prettyKey(command.key.Start),
+		EndKey:    prettyKey(command.key.End),
+	}
+	for _, prereqCmd := range *command.prereqs {
+		commandProto.Prereqs = append(commandProto.Prereqs, prereqCmd.id)
+	}
+	result = append(commandsSoFar, commandProto)
+	for _, childCmd := range command.children {
+		result = copyCommandsAndChildren(result, &childCmd)
+	}
+	return result
 }
 
 func prettyKey(key []byte) string {
