@@ -162,7 +162,7 @@ func doLocalCSVTransform(
 	const chanSize = 10000
 
 	recordCh := make(chan csvRecord, chanSize)
-	kvCh := make(chan roachpb.KeyValue, chanSize)
+	kvCh := make(chan []roachpb.KeyValue, chanSize)
 	contentCh := make(chan sstContent)
 	var backupDesc *BackupDescriptor
 	conf, err := storageccl.ExportStorageConfFromURI(dest)
@@ -402,11 +402,13 @@ type csvRecord struct {
 func convertRecord(
 	ctx context.Context,
 	recordCh <-chan csvRecord,
-	kvCh chan<- roachpb.KeyValue,
+	kvCh chan<- []roachpb.KeyValue,
 	nullif *string,
 	tableDesc *sqlbase.TableDescriptor,
 ) error {
 	done := ctx.Done()
+
+	const kvBatchSize = 500
 
 	visibleCols := tableDesc.VisibleColumns()
 	keyDatums := make(sqlbase.EncDatumRow, len(tableDesc.PrimaryIndex.ColumnIDs))
@@ -438,7 +440,8 @@ func convertRecord(
 	}
 
 	datums := make([]parser.Datum, len(visibleCols))
-	var insertErr error
+	kvBatch := make([]roachpb.KeyValue, 0, kvBatchSize)
+
 	for record := range recordCh {
 		for i, r := range record.r {
 			if nullif != nil && r == *nullif {
@@ -458,19 +461,24 @@ func convertRecord(
 		if err != nil {
 			return errors.Wrapf(err, "generate insert row: %s: row %d", record.file, record.row)
 		}
-		insertErr = nil
 		if err := ri.InsertRow(ctx, inserter(func(kv roachpb.KeyValue) {
-			select {
-			case kvCh <- kv:
-			case <-done:
-				insertErr = ctx.Err()
-			}
+			kvBatch = append(kvBatch, kv)
 		}), row, true /* ignoreConflicts */, false /* traceKV */); err != nil {
 			return errors.Wrapf(err, "insert row: %s: row %d", record.file, record.row)
 		}
-		if insertErr != nil {
-			return insertErr
+		if len(kvBatch) > kvBatchSize {
+			select {
+			case kvCh <- kvBatch:
+			case <-done:
+				return ctx.Err()
+			}
+			kvBatch = make([]roachpb.KeyValue, 0, kvBatchSize)
 		}
+	}
+	select {
+	case kvCh <- kvBatch:
+	case <-done:
+		return ctx.Err()
 	}
 	return nil
 }
@@ -488,7 +496,7 @@ const errSSTCreationMaybeDuplicateTemplate = "SST creation error at %s; this can
 // and sent on contents. It returns the number of KV pairs created.
 func writeRocksDB(
 	ctx context.Context,
-	kvCh <-chan roachpb.KeyValue,
+	kvCh <-chan []roachpb.KeyValue,
 	tempEngine engine.Engine,
 	sstMaxSize int64,
 	contentCh chan<- sstContent,
@@ -496,9 +504,11 @@ func writeRocksDB(
 ) (int64, error) {
 	store := engine.NewRocksDBMultiMap(tempEngine)
 	writer := store.NewBatchWriter()
-	for kv := range kvCh {
-		if err := writer.Put(kv.Key, kv.Value.RawBytes); err != nil {
-			return 0, err
+	for kvBatch := range kvCh {
+		for _, kv := range kvBatch {
+			if err := writer.Put(kv.Key, kv.Value.RawBytes); err != nil {
+				return 0, err
+			}
 		}
 	}
 	if err := writer.Close(ctx); err != nil {
@@ -1051,7 +1061,7 @@ func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 	group, gCtx := errgroup.WithContext(ctx)
 	done := gCtx.Done()
 	recordCh := make(chan csvRecord)
-	kvCh := make(chan roachpb.KeyValue)
+	kvCh := make(chan []roachpb.KeyValue)
 	sampleCh := make(chan sqlbase.EncDatumRow)
 
 	// Read CSV into CSV records
@@ -1090,16 +1100,18 @@ func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 			fn = sr.sample
 		}
 		typeBytes := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}
-		for kv := range kvCh {
-			if fn(kv) {
-				row := sqlbase.EncDatumRow{
-					sqlbase.DatumToEncDatum(typeBytes, parser.NewDBytes(parser.DBytes(kv.Key))),
-					sqlbase.DatumToEncDatum(typeBytes, parser.NewDBytes(parser.DBytes(kv.Value.RawBytes))),
-				}
-				select {
-				case <-done:
-					return sCtx.Err()
-				case sampleCh <- row:
+		for kvBatch := range kvCh {
+			for _, kv := range kvBatch {
+				if fn(kv) {
+					row := sqlbase.EncDatumRow{
+						sqlbase.DatumToEncDatum(typeBytes, parser.NewDBytes(parser.DBytes(kv.Key))),
+						sqlbase.DatumToEncDatum(typeBytes, parser.NewDBytes(parser.DBytes(kv.Value.RawBytes))),
+					}
+					select {
+					case <-done:
+						return sCtx.Err()
+					case sampleCh <- row:
+					}
 				}
 			}
 		}
