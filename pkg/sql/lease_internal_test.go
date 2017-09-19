@@ -515,6 +515,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 // is still valid. They are able to reacquire a lease if needed.
 func TestParallelLeaseAcquireWithImmediateRelease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	// FIXME(joey): Test no goroutines are blocking.
 	testingKnobs := base.TestingKnobs{
 		SQLLeaseManager: &LeaseManagerTestingKnobs{
 			LeaseStoreTestingKnobs: LeaseStoreTestingKnobs{
