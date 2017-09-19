@@ -24,11 +24,6 @@ import (
 // assuming any bound on the clock drift.
 const ClocklessMaxOffset = math.MaxInt64
 
-// Now returns the current local time.
-func Now() time.Time {
-	return now()
-}
-
 // Since returns the time elapsed since t.
 // It is shorthand for Now().Sub(t).
 func Since(t time.Time) time.Duration {
