@@ -91,6 +91,33 @@ SELECT ARRAY[]:::int[]
 ----
 {}
 
+# casting strings to arrays
+
+query T
+SELECT '{1,2,3}'::INT[]
+----
+{1,2,3}
+
+query T
+SELECT '{hello,"hello"}'::STRING[]
+----
+{"hello","hello"}
+
+query T
+SELECT e'{he\\\\llo}'::STRING[]
+----
+{"he\\llo"}
+
+query T
+SELECT '{"abc\nxyz"}'::STRING[]
+----
+{"abcnxyz"}
+
+query T
+SELECT '{hello}'::VARCHAR(2)[]
+----
+{"he"}
+
 # array subscript access
 
 query T
