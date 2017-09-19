@@ -20,6 +20,7 @@ import (
 	"time"
 )
 
-func now() time.Time {
+// Now returns the current local time.
+func Now() time.Time {
 	return time.Now()
 }
