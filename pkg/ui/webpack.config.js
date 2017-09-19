@@ -39,7 +39,7 @@ module.exports = {
     // the resolution behavior used by node.js for "node_modules", which checks
     // for a "node_modules" child directory located in either the current
     // directory *or in any parent directory*.
-    modules: [path.resolve(__dirname), path.resolve(__dirname, "node_modules")],
+    modules: [path.resolve(__dirname), "node_modules"],
   },
 
   module: {
