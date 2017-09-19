@@ -13,8 +13,8 @@ interface QueueVizState {
   hoveredNode: Long;
 }
 
-const COMMAND_WIDTH = 60;
-const COMMAND_HEIGHT = 40;
+const COMMAND_RADIUS = 10;
+const COMMAND_DIAMETER = COMMAND_RADIUS * 2;
 
 export default class CommandQueueViz extends React.Component<QueueVizProps, QueueVizState> {
 
@@ -31,13 +31,14 @@ export default class CommandQueueViz extends React.Component<QueueVizProps, Queu
     g.setGraph({
       marginx: 20,
       marginy: 20,
+      nodesep: 10,
     });
     g.setDefaultEdgeLabel((_label: string) => ({}));
 
     this.props.queue.commands.forEach((command) => {
       g.setNode(command.id.toString(), {
-        width: COMMAND_WIDTH,
-        height: COMMAND_HEIGHT,
+        width: COMMAND_DIAMETER,
+        height: COMMAND_DIAMETER,
         command: command,
       });
       command.prereqs.forEach((prereq) => {
@@ -102,28 +103,17 @@ export default class CommandQueueViz extends React.Component<QueueVizProps, Queu
           height={g.graph().height}
           style={{border: "1px solid black"}}>
           {nodes.map((node) => (
-            <rect
+            <circle
               key={node.command.id.toString()}
-              x={node.x - COMMAND_WIDTH / 2}
-              y={node.y - COMMAND_HEIGHT / 2}
+              cx={node.x}
+              cy={node.y}
+              r={COMMAND_RADIUS}
               onMouseEnter={() => { this.setState({ hoveredNode: node.command.id }); }}
-              width={node.width}
-              height={node.height}
               style={{
                 fill: node.command.readonly ? "lightgreen" : "pink",
                 stroke: (this.state.hoveredNode !== null && node.command.id.equals(this.state.hoveredNode))
                   ? "red" : "black",
               }} />
-          ))}
-          {nodes.map((node) => (
-            <text
-              key={node.command.id.toString()}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              x={node.x}
-              y={node.y}>
-              {node.command.id.toString()}
-            </text>
           ))}
           {edges.map((edge, idx: number) => {
             return (
