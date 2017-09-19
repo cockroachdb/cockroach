@@ -435,7 +435,7 @@ func convertRecord(
 	}
 
 	parse := parser.Parser{}
-	evalCtx := parser.EvalContext{}
+	evalCtx := parser.EvalContext{Location: &time.UTC}
 	// Although we don't yet support DEFAULT expressions on visible columns,
 	// we do on hidden columns (which is only the default _rowid one). This
 	// allows those expressions to run.
@@ -451,7 +451,7 @@ func convertRecord(
 			if nullif != nil && r == *nullif {
 				datums[i] = parser.DNull
 			} else {
-				datums[i], err = parser.ParseStringAs(visibleCols[i].Type.ToDatumType(), r, time.UTC)
+				datums[i], err = parser.ParseStringAs(visibleCols[i].Type.ToDatumType(), r, &evalCtx)
 				if err != nil {
 					return errors.Wrapf(err, "%s: row %d: parse %q as %s", record.file, record.row, visibleCols[i].Name, visibleCols[i].Type.SQLString())
 				}

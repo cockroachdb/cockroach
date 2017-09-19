@@ -194,7 +194,8 @@ func (n *copyNode) addRow(ctx context.Context, line []byte) error {
 				return err
 			}
 		}
-		d, err := parser.ParseStringAs(n.resultColumns[i].Typ, s, n.session.Location)
+		evalCtx := n.session.evalCtx()
+		d, err := parser.ParseStringAs(n.resultColumns[i].Typ, s, &evalCtx)
 		if err != nil {
 			return err
 		}
