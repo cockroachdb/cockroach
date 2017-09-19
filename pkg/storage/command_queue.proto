@@ -36,6 +36,8 @@ message CommandQueueSnapshot {
 }
 
 message CommandQueuesForReplica {
-  CommandQueueSnapshot localScope = 1;
-  CommandQueueSnapshot globalScope = 2;
+  // Timestamp in nanoseconds when this snapshot was taken
+  int64 timestamp = 1;
+  CommandQueueSnapshot localScope = 2;
+  CommandQueueSnapshot globalScope = 3;
 }

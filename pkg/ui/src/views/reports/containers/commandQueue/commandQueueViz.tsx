@@ -106,19 +106,24 @@ export default class CommandQueueViz extends React.Component<QueueVizProps, Queu
           width={g.graph().width}
           height={g.graph().height}
           style={{border: "1px solid black"}}>
-          {nodes.map((node) => (
-            <circle
-              key={node.command.id.toString()}
-              cx={node.x}
-              cy={node.y}
-              r={COMMAND_RADIUS}
-              onMouseEnter={() => { this.setState({ hoveredNode: node.command.id }); }}
-              style={{
-                fill: node.command.readonly ? "lightgreen" : "pink",
-                stroke: (this.state.hoveredNode !== null && node.command.id.equals(this.state.hoveredNode))
-                  ? "red" : "black",
-              }} />
-          ))}
+          {nodes.map((node) => {
+            if (!node.command) {
+              console.log("no command", node);
+            }
+            return (
+              <circle
+                key={node.command.id.toString()}
+                cx={node.x}
+                cy={node.y}
+                r={COMMAND_RADIUS}
+                onMouseEnter={() => { this.setState({ hoveredNode: node.command.id }); }}
+                style={{
+                  fill: node.command.readonly ? "lightgreen" : "pink",
+                  stroke: (this.state.hoveredNode !== null && node.command.id.equals(this.state.hoveredNode))
+                    ? "red" : "black",
+                }} />
+            );
+          })}
           {edges.map((edge, idx: number) => {
             return (
               <polyline

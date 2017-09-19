@@ -142,11 +142,8 @@ export default combineReducers<APIReducersState>({
   [certificatesReducerObj.actionNamespace]: certificatesReducerObj.reducer,
   [rangeReducerObj.actionNamespace]: rangeReducerObj.reducer,
   [allocatorRangeReducerObj.actionNamespace]: allocatorRangeReducerObj.reducer,
-<<<<<<< HEAD
   [rangeLogReducerObj.actionNamespace]: rangeLogReducerObj.reducer,
-=======
   [commandQueueReducerObj.actionNamespace]: commandQueueReducerObj.reducer,
->>>>>>> hit CommandQueue api from JS; render resulting JSON
 });
 
 export {CachedDataReducerState, KeyedCachedDataReducerState};

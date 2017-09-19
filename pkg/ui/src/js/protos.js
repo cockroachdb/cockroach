@@ -38789,6 +38789,7 @@ export const cockroach = $root.cockroach = (() => {
              * Properties of a CommandQueuesForReplica.
              * @typedef cockroach.storage.CommandQueuesForReplica$Properties
              * @type {Object}
+             * @property {Long} [timestamp] CommandQueuesForReplica timestamp.
              * @property {cockroach.storage.CommandQueueSnapshot$Properties} [localScope] CommandQueuesForReplica localScope.
              * @property {cockroach.storage.CommandQueueSnapshot$Properties} [globalScope] CommandQueuesForReplica globalScope.
              */
@@ -38805,6 +38806,12 @@ export const cockroach = $root.cockroach = (() => {
                         if (properties[keys[i]] != null)
                             this[keys[i]] = properties[keys[i]];
             }
+
+            /**
+             * CommandQueuesForReplica timestamp.
+             * @type {Long}
+             */
+            CommandQueuesForReplica.prototype.timestamp = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
             /**
              * CommandQueuesForReplica localScope.
@@ -38836,10 +38843,12 @@ export const cockroach = $root.cockroach = (() => {
             CommandQueuesForReplica.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
+                if (message.timestamp != null && message.hasOwnProperty("timestamp"))
+                    writer.uint32(/* id 1, wireType 0 =*/8).int64(message.timestamp);
                 if (message.localScope != null && message.hasOwnProperty("localScope"))
-                    $root.cockroach.storage.CommandQueueSnapshot.encode(message.localScope, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+                    $root.cockroach.storage.CommandQueueSnapshot.encode(message.localScope, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
                 if (message.globalScope != null && message.hasOwnProperty("globalScope"))
-                    $root.cockroach.storage.CommandQueueSnapshot.encode(message.globalScope, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+                    $root.cockroach.storage.CommandQueueSnapshot.encode(message.globalScope, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
                 return writer;
             };
 
@@ -38869,9 +38878,12 @@ export const cockroach = $root.cockroach = (() => {
                     let tag = reader.uint32();
                     switch (tag >>> 3) {
                     case 1:
-                        message.localScope = $root.cockroach.storage.CommandQueueSnapshot.decode(reader, reader.uint32());
+                        message.timestamp = reader.int64();
                         break;
                     case 2:
+                        message.localScope = $root.cockroach.storage.CommandQueueSnapshot.decode(reader, reader.uint32());
+                        break;
+                    case 3:
                         message.globalScope = $root.cockroach.storage.CommandQueueSnapshot.decode(reader, reader.uint32());
                         break;
                     default:
@@ -38903,6 +38915,9 @@ export const cockroach = $root.cockroach = (() => {
             CommandQueuesForReplica.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
+                if (message.timestamp != null && message.hasOwnProperty("timestamp"))
+                    if (!$util.isInteger(message.timestamp) && !(message.timestamp && $util.isInteger(message.timestamp.low) && $util.isInteger(message.timestamp.high)))
+                        return "timestamp: integer|Long expected";
                 if (message.localScope != null && message.hasOwnProperty("localScope")) {
                     let error = $root.cockroach.storage.CommandQueueSnapshot.verify(message.localScope);
                     if (error)
@@ -38925,6 +38940,15 @@ export const cockroach = $root.cockroach = (() => {
                 if (object instanceof $root.cockroach.storage.CommandQueuesForReplica)
                     return object;
                 let message = new $root.cockroach.storage.CommandQueuesForReplica();
+                if (object.timestamp != null)
+                    if ($util.Long)
+                        (message.timestamp = $util.Long.fromValue(object.timestamp)).unsigned = false;
+                    else if (typeof object.timestamp === "string")
+                        message.timestamp = parseInt(object.timestamp, 10);
+                    else if (typeof object.timestamp === "number")
+                        message.timestamp = object.timestamp;
+                    else if (typeof object.timestamp === "object")
+                        message.timestamp = new $util.LongBits(object.timestamp.low >>> 0, object.timestamp.high >>> 0).toNumber();
                 if (object.localScope != null) {
                     if (typeof object.localScope !== "object")
                         throw TypeError(".cockroach.storage.CommandQueuesForReplica.localScope: object expected");
@@ -38958,9 +38982,19 @@ export const cockroach = $root.cockroach = (() => {
                     options = {};
                 let object = {};
                 if (options.defaults) {
+                    if ($util.Long) {
+                        let long = new $util.Long(0, 0, false);
+                        object.timestamp = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                    } else
+                        object.timestamp = options.longs === String ? "0" : 0;
                     object.localScope = null;
                     object.globalScope = null;
                 }
+                if (message.timestamp != null && message.hasOwnProperty("timestamp"))
+                    if (typeof message.timestamp === "number")
+                        object.timestamp = options.longs === String ? String(message.timestamp) : message.timestamp;
+                    else
+                        object.timestamp = options.longs === String ? $util.Long.prototype.toString.call(message.timestamp) : options.longs === Number ? new $util.LongBits(message.timestamp.low >>> 0, message.timestamp.high >>> 0).toNumber() : message.timestamp;
                 if (message.localScope != null && message.hasOwnProperty("localScope"))
                     object.localScope = $root.cockroach.storage.CommandQueueSnapshot.toObject(message.localScope, options);
                 if (message.globalScope != null && message.hasOwnProperty("globalScope"))

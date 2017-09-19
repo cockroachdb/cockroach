@@ -20873,6 +20873,7 @@ export namespace cockroach {
         }
 
         type CommandQueuesForReplica$Properties = {
+            timestamp?: Long;
             localScope?: cockroach.storage.CommandQueueSnapshot$Properties;
             globalScope?: cockroach.storage.CommandQueueSnapshot$Properties;
         };
@@ -20892,6 +20893,12 @@ export namespace cockroach {
              * @param {cockroach.storage.CommandQueuesForReplica$Properties=} [properties] Properties to set
              */
             constructor(properties?: cockroach.storage.CommandQueuesForReplica$Properties);
+
+            /**
+             * CommandQueuesForReplica timestamp.
+             * @type {Long}
+             */
+            public timestamp: Long;
 
             /**
              * CommandQueuesForReplica localScope.
