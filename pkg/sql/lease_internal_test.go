@@ -19,16 +19,20 @@ package sql
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/pkg/errors"
 )
 
 func TestTableSet(t *testing.T) {
@@ -557,4 +561,78 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	wg.Wait()
+}
+
+// This test makes sure the lease gets renewed automatically in the background.
+func TestLeaseRefreshedAutomatically(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var testAcquiredCount int32
+	testingKnobs := base.TestingKnobs{
+		SQLLeaseManager: &LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: LeaseStoreTestingKnobs{
+				// We want to track what leases get acquired,
+				LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, _ error) {
+					if table.Name == "test" {
+						atomic.AddInt32(&testAcquiredCount, 1)
+					}
+				},
+			},
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{Knobs: testingKnobs})
+	defer s.Stopper().Stop(context.TODO())
+	leaseManager := s.LeaseManager().(*LeaseManager)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+	now := s.Clock().Now()
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
+	// Acquire the first lease. This begins the refreshing routine.
+	_, e1, err := leaseManager.Acquire(context.TODO(), now, tableDesc.ID)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Set the lease duration to be higher so that the new refreshed lease will
+	// be guaranteed to have a higher expiry time, otherwise jitter may cause it
+	// to have a lower expiry time than the previous lease. We also need to set
+	// the LeaseRenewalTimeout to be high so we renew immediately.
+	savedLeaseDuration := LeaseDuration
+	savedLeaseRenewalTimeout := LeaseRenewalTimeout
+
+	defer func() {
+		LeaseDuration = savedLeaseDuration
+		LeaseRenewalTimeout = savedLeaseRenewalTimeout
+	}()
+	LeaseDuration = 2 * LeaseDuration
+	LeaseRenewalTimeout = 2 * LeaseDuration
+
+	ts := leaseManager.mu.tables[tableDesc.ID]
+	// Force a lease refresh to occur the refreshing sequence
+	ts.mu.Lock()
+	ts.mu.timer.Reset(time.Nanosecond)
+	ts.mu.Unlock()
+
+	// Keep checking for a new lease to be acquired by the refreshing routine.
+	testutils.SucceedsSoon(t, func() error {
+		// Acquire the newer lease.
+		_, e2, err := leaseManager.Acquire(context.TODO(), now, tableDesc.ID)
+		if err != nil {
+			t.Error(err)
+		}
+
+		if e2.WallTime <= e1.WallTime {
+			return errors.Errorf("expected new lease expiration (%s) to be after old lease expiration (%s)",
+				e2, e1)
+		} else if testAcquiredCount != 2 {
+			return errors.Errorf("expected the lease to only be acquired twice, but got acquired %d times",
+				testAcquiredCount)
+		}
+		return nil
+	})
 }

@@ -40,14 +40,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-// TODO(pmattis): Periodically renew leases for tables that were used recently and
-// for which the lease will expire soon.
-
 var (
 	// LeaseDuration is the mean duration a lease will be acquired for. The
 	// actual duration is jittered in the range
 	// [0.75,1.25]*LeaseDuration. Exported for testing purposes only.
 	LeaseDuration = 5 * time.Minute
+	// LeaseRenewalTimeout is the duration for when we renew the lease early.
+	// This is specifically less than LeaseDuration * 0.75 (~3.75m), to be sure
+	// not to let the lease expire before renewing. Exported for testing purposes.
+	// TODO(joey): We can make the timeout an offset from the actual expiration,
+	// after jitter.
+	LeaseRenewalTimeout = 3*time.Minute + 30*time.Second
 )
 
 // tableVersionState holds the state for a table version. This includes
@@ -562,6 +565,14 @@ type tableState struct {
 		// If set, leases are released from the store as soon as their
 		// refcount drops to 0, as opposed to waiting until they expire.
 		dropped bool
+		// Timer for refreshing the lease before it expires. Once a lease has been
+		// acquired once, a timer continuously runs to refresh the lease on a
+		// separate routine after LeaseRenewalTimeout time.
+		timer *time.Timer
+		// The error that was thrown on the last acquision.
+		// FIXME(joey): Should the first caller return the last async error or
+		// instead try to synchronously get the lease?
+		lastAcquisitionErr error
 	}
 }
 
@@ -573,18 +584,49 @@ func (t *tableState) acquire(
 ) (*tableVersionState, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	// Wait for any existing lease acquisition.
+
+	// Block and wait for the new lease to be acquired on another routine.
 	t.acquireWait()
 
-	// Acquire a lease if no lease exists or if the latest lease is
-	// about to expire.
+	// Ensure a lease is acquired. Even though we finished waiting, another
+	// routine which finished acquiring a lease could have released it by now.
 	if s := t.mu.active.findNewest(); s == nil || s.hasExpired(timestamp) {
 		if err := t.acquireNodeLease(ctx, m, hlc.Timestamp{}); err != nil {
 			return nil, err
 		}
 	}
 
+	if t.mu.timer == nil {
+		t.startRefreshingRoutine(ctx, m)
+	}
+
 	return t.findForTimestamp(ctx, timestamp, m)
+}
+
+// startRefreshingRoutine begins the goroutine responsible for refreshing a
+// table lease.
+// TODO(joey): Currently this routine will run forever for each table
+// descriptor. Ideally, we stop the routine if the table descriptor hasn't been
+// used recently.
+//
+// t.mu needs to be locked.
+func (t *tableState) startRefreshingRoutine(ctx context.Context, m *LeaseManager) {
+	t.mu.timer = time.NewTimer(LeaseRenewalTimeout)
+	if !t.mu.timer.Stop() {
+		<-t.mu.timer.C
+	}
+	t.stopper.RunWorker(ctx, func(ctx context.Context) {
+		for {
+			select {
+			case <-t.mu.timer.C:
+				t.mu.Lock()
+				t.mu.lastAcquisitionErr = t.acquireNodeLease(ctx, m, hlc.Timestamp{})
+				t.mu.Unlock()
+			case <-t.stopper.ShouldStop():
+				return
+			}
+		}
+	})
 }
 
 // ensureVersion ensures that the latest version >= minVersion. It will
@@ -800,6 +842,10 @@ func (t *tableState) acquireNodeLease(
 	}
 	t.upsertLocked(ctx, table, m)
 	t.tableNameCache.insert(table)
+	if t.mu.timer != nil {
+		// TODO(joey): Set the renewal timeout to be a function of the expiration.
+		t.mu.timer.Reset(LeaseRenewalTimeout)
+	}
 	return nil
 }
 
