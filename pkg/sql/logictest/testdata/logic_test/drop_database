@@ -22,6 +22,11 @@ DROP DATABASE "foo-bar" RESTRICT
 statement ok
 DROP DATABASE "foo-bar" CASCADE
 
+query TTT
+SELECT name, database_name, state FROM crdb_internal.tables WHERE name = 't'
+----
+t  [51]  DROP
+
 query T
 SHOW DATABASES
 ----
