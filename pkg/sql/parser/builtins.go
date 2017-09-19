@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -396,6 +397,154 @@ var Builtins = map[string][]Builtin{
 			},
 			Info: "Converts the byte string representation of a UUID to its character string " +
 				"representation.",
+		},
+	},
+
+	"abbrev": {
+		Builtin{
+			Types:      ArgTypes{{"val", TypeINet}},
+			ReturnType: fixedReturnType(TypeString),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				dIPAddr := MustBeDIPAddr(args[0])
+				return NewDString(dIPAddr.IPAddr.String()), nil
+			},
+			Info: "Abbreviated display format as text",
+		},
+	},
+
+	"broadcast": {
+		Builtin{
+			Types:      ArgTypes{{"val", TypeINet}},
+			ReturnType: fixedReturnType(TypeINet),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				dIPAddr := MustBeDIPAddr(args[0])
+				broadcastIPAddr := dIPAddr.IPAddr.Broadcast()
+				return &DIPAddr{IPAddr: broadcastIPAddr}, nil
+			},
+			Info: "Broadcast address for network",
+		},
+	},
+
+	"ip_family": {
+		Builtin{
+			Types:      ArgTypes{{"val", TypeINet}},
+			ReturnType: fixedReturnType(TypeInt),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				dIPAddr := MustBeDIPAddr(args[0])
+				if dIPAddr.Family == ipaddr.IPv4family {
+					return NewDInt(DInt(4)), nil
+				}
+				return NewDInt(DInt(6)), nil
+			},
+			Info: "Extract family of address; 4 for IPv4, 6 for IPv6",
+		},
+	},
+
+	"host": {
+		Builtin{
+			Types:      ArgTypes{{"val", TypeINet}},
+			ReturnType: fixedReturnType(TypeString),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				dIPAddr := MustBeDIPAddr(args[0])
+				s := dIPAddr.IPAddr.String()
+				if i := strings.IndexByte(s, '/'); i != -1 {
+					return NewDString(s[:i]), nil
+				}
+				return NewDString(s), nil
+			},
+			Info: "Extract IP address as text",
+		},
+	},
+
+	"hostmask": {
+		Builtin{
+			Types:      ArgTypes{{"val", TypeINet}},
+			ReturnType: fixedReturnType(TypeINet),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				dIPAddr := MustBeDIPAddr(args[0])
+				ipAddr := dIPAddr.IPAddr.Hostmask()
+				return &DIPAddr{ipAddr}, nil
+			},
+			Info: "Construct host mask for network",
+		},
+	},
+
+	"masklen": {
+		Builtin{
+			Types:      ArgTypes{{"val", TypeINet}},
+			ReturnType: fixedReturnType(TypeInt),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				dIPAddr := MustBeDIPAddr(args[0])
+				return NewDInt(DInt(dIPAddr.Mask)), nil
+			},
+			Info: "Extract netmask length",
+		},
+	},
+
+	"netmask": {
+		Builtin{
+			Types:      ArgTypes{{"val", TypeINet}},
+			ReturnType: fixedReturnType(TypeINet),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				dIPAddr := MustBeDIPAddr(args[0])
+				ipAddr := dIPAddr.IPAddr.Netmask()
+				return &DIPAddr{ipAddr}, nil
+			},
+			Info: "Construct netmask for network",
+		},
+	},
+
+	"set_masklen": {
+		Builtin{
+			Types: ArgTypes{
+				{"val", TypeINet},
+				{"mask", TypeInt},
+			},
+			ReturnType: fixedReturnType(TypeINet),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				dIPAddr := MustBeDIPAddr(args[0])
+				mask := int(MustBeDInt(args[1]))
+
+				if !(dIPAddr.Family == ipaddr.IPv4family && mask >= 0 && mask <= 32) && !(dIPAddr.Family == ipaddr.IPv6family && mask >= 0 && mask <= 128) {
+					return nil, pgerror.NewErrorf(
+						pgerror.CodeInvalidParameterValueError, "invalid mask length: %d", mask)
+				}
+				return &DIPAddr{IPAddr: ipaddr.IPAddr{Family: dIPAddr.Family, Addr: dIPAddr.Addr, Mask: byte(mask)}}, nil
+			},
+			Info: "Set netmask length for inet value",
+		},
+	},
+
+	"text": {
+		Builtin{
+			Types:      ArgTypes{{"val", TypeINet}},
+			ReturnType: fixedReturnType(TypeString),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				dIPAddr := MustBeDIPAddr(args[0])
+				s := dIPAddr.IPAddr.String()
+				// Ensure the string has a "/mask" suffix.
+				if strings.IndexByte(s, '/') == -1 {
+					s += "/" + strconv.Itoa(int(dIPAddr.Mask))
+				}
+				return NewDString(s), nil
+			},
+			Info: "Extract IP address and netmask length as text",
+		},
+	},
+
+	"inet_same_family": {
+		Builtin{
+			Types: ArgTypes{
+				{"val", TypeINet},
+				{"val", TypeINet},
+			},
+			ReturnType: fixedReturnType(TypeBool),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				first := MustBeDIPAddr(args[0])
+				other := MustBeDIPAddr(args[1])
+				return MakeDBool(DBool(first.Family == other.Family)), nil
+			},
+			Info: "Check if the addresses from the same family",
 		},
 	},
 

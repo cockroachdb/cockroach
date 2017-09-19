@@ -280,3 +280,316 @@ SELECT * FROM arrays
 {}
 {192.168.0.1/10,::1}
 {192.168.0.1,192.168.0.1/10,::1,::ffff:1.2.3.4}
+
+
+# Testing builtins
+
+# Test abbrev
+
+query T
+SELECT abbrev('10.1.0.0/16'::INET)
+----
+10.1.0.0/16
+
+query T
+SELECT abbrev('192.168.0.1/16'::INET)
+----
+192.168.0.1/16
+
+query T
+SELECT abbrev('192.168.0.1'::INET)
+----
+192.168.0.1
+
+query T
+SELECT abbrev('192.168.0.1/32'::INET)
+----
+192.168.0.1
+
+query T
+SELECT abbrev('::ffff:192.168.0.1'::INET)
+----
+::ffff:192.168.0.1
+
+query T
+SELECT abbrev('::ffff:192.168.0.1/24'::INET)
+----
+::ffff:192.168.0.1/24
+
+# Test broadcast
+
+query T
+SELECT broadcast('10.1.0.0/16'::INET)
+----
+10.1.255.255/16
+
+query T
+SELECT broadcast('192.168.0.1/16'::INET)
+----
+192.168.255.255/16
+
+query T
+SELECT broadcast('192.168.0.1'::INET)
+----
+192.168.0.1
+
+query T
+SELECT broadcast('192.168.0.1/32'::INET)
+----
+192.168.0.1
+
+query T
+SELECT broadcast('::ffff:192.168.0.1'::INET)
+----
+::ffff:192.168.0.1
+
+query T
+SELECT broadcast('::ffff:1.2.3.1/20'::INET)
+----
+0:fff:ffff:ffff:ffff:ffff:ffff:ffff/20
+
+query T
+SELECT broadcast('2001:4f8:3:ba::/64'::INET)
+----
+2001:4f8:3:ba:ffff:ffff:ffff:ffff/64
+
+# Test ip_family
+
+query I
+SELECT ip_family('10.1.0.0/16'::INET)
+----
+4
+
+query I
+SELECT ip_family('192.168.0.1/16'::INET)
+----
+4
+
+query I
+SELECT ip_family('192.168.0.1'::INET)
+----
+4
+
+query I
+SELECT ip_family('::ffff:192.168.0.1'::INET)
+----
+6
+
+query I
+SELECT ip_family('::ffff:1.2.3.1/20'::INET)
+----
+6
+
+query I
+SELECT ip_family('2001:4f8:3:ba::/64'::INET)
+----
+6
+
+# Test host
+
+query T
+SELECT host('10.1.0.0/16'::INET)
+----
+10.1.0.0
+
+query T
+SELECT host('192.168.0.1/16'::INET)
+----
+192.168.0.1
+
+query T
+SELECT host('192.168.0.1'::INET)
+----
+192.168.0.1
+
+query T
+SELECT host('192.168.0.1/32'::INET)
+----
+192.168.0.1
+
+query T
+SELECT host('::ffff:192.168.0.1'::INET)
+----
+::ffff:192.168.0.1
+
+query T
+SELECT host('::ffff:192.168.0.1/24'::INET)
+----
+::ffff:192.168.0.1
+
+# Test hostmask
+
+query T
+SELECT hostmask('192.168.1.2'::INET)
+----
+0.0.0.0
+
+query T
+SELECT hostmask('192.168.1.2/16'::INET)
+----
+0.0.255.255
+
+query T
+SELECT hostmask('192.168.1.2/10'::INET)
+----
+0.63.255.255
+
+query T
+SELECT hostmask('2001:4f8:3:ba::/64'::INET)
+----
+::ffff:ffff:ffff:ffff
+
+# Test masklen
+
+query I
+SELECT masklen('192.168.1.2'::INET)
+----
+32
+
+query I
+SELECT masklen('192.168.1.2/16'::INET)
+----
+16
+
+query I
+SELECT masklen('192.168.1.2/10'::INET)
+----
+10
+
+query I
+SELECT masklen('2001:4f8:3:ba::/64'::INET)
+----
+64
+
+query I
+SELECT masklen('2001:4f8:3:ba::'::INET)
+----
+128
+
+# Test netmask
+
+query T
+SELECT netmask('192.168.1.2'::INET)
+----
+255.255.255.255
+
+query T
+SELECT netmask('192.168.1.2/16'::INET)
+----
+255.255.0.0
+
+query T
+SELECT netmask('192.168.1.2/10'::INET)
+----
+255.192.0.0
+
+query T
+SELECT netmask('192.168.1.2/0'::INET)
+----
+0.0.0.0
+
+query T
+SELECT netmask('2001:4f8:3:ba::/64'::INET)
+----
+ffff:ffff:ffff:ffff::
+
+query T
+SELECT netmask('2001:4f8:3:ba::/0'::INET)
+----
+::
+
+query T
+SELECT netmask('2001:4f8:3:ba:2e0:81ff:fe22:d1f1/128'::INET)
+----
+ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+
+query T
+SELECT netmask('::ffff:1.2.3.1/120'::INET)
+----
+ffff:ffff:ffff:ffff:ffff:ffff:ffff:ff00
+
+query T
+SELECT netmask('::ffff:1.2.3.1/20'::INET)
+----
+ffff:f000::
+
+# Test set_masklen
+
+query T
+SELECT set_masklen('10.1.0.0/16'::INET, 10)
+----
+10.1.0.0/10
+
+query T
+SELECT set_masklen('192.168.0.1/16'::INET, 32)
+----
+192.168.0.1
+
+statement error invalid mask length
+SELECT set_masklen('192.168.0.1'::INET, 100)
+
+statement error invalid mask length
+SELECT set_masklen('192.168.0.1'::INET, 33)
+
+statement error invalid mask length
+SELECT set_masklen('192.168.0.1'::INET, -1)
+
+query T
+SELECT set_masklen('192.168.0.1'::INET, 0)
+----
+192.168.0.1/0
+
+query T
+SELECT set_masklen('::ffff:192.168.0.1'::INET, 100)
+----
+::ffff:192.168.0.1/100
+
+statement error invalid mask length
+SELECT set_masklen('::ffff:192.168.0.1'::INET, -1)
+
+statement error invalid mask length
+SELECT set_masklen('::ffff:192.168.0.1'::INET, 129)
+
+query T
+SELECT set_masklen('::ffff:192.168.0.1/24'::INET, 0)
+----
+::ffff:192.168.0.1/0
+
+# Test text
+
+query T
+SELECT text('10.1.0.0/16'::INET)
+----
+10.1.0.0/16
+
+query T
+SELECT text('192.168.0.1/16'::INET)
+----
+192.168.0.1/16
+
+query T
+SELECT text('192.168.0.1'::INET)
+----
+192.168.0.1/32
+
+query T
+SELECT text('192.168.0.1/32'::INET)
+----
+192.168.0.1/32
+
+query T
+SELECT text('::ffff:192.168.0.1'::INET)
+----
+::ffff:192.168.0.1/128
+
+query T
+SELECT text('::ffff:192.168.0.1/24'::INET)
+----
+::ffff:192.168.0.1/24
+
+# Test inet_same_family
+
+query T
+SELECT text('::ffff:192.168.0.1/24'::INET)
+----
+::ffff:192.168.0.1/24

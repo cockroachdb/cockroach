@@ -14,7 +14,9 @@
 
 package parser
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestCategory(t *testing.T) {
 	if expected, actual := categoryString, Builtins["lower"][0].Category(); expected != actual {
