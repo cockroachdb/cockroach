@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -396,6 +397,177 @@ var Builtins = map[string][]Builtin{
 			},
 			Info: "Converts the byte string representation of a UUID to its character string " +
 				"representation.",
+		},
+	},
+
+	// The following functions are all part of the NET address functions. They can
+	// be found in the postgres reference at https://www.postgresql.org/docs/9.6/static/functions-net.html#CIDR-INET-FUNCTIONS-TABLE
+	// This includes:
+	// - abbrev
+	// - broadcast
+	// - ip_family
+	// - host
+	// - hostmask
+	// - masklen
+	// - netmask
+	// - set_masklen
+	// - text(inet)
+	// - inet_same_family
+
+	"abbrev": {
+		Builtin{
+			Types:      ArgTypes{{"val", TypeINet}},
+			ReturnType: fixedReturnType(TypeString),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				dIPAddr := MustBeDIPAddr(args[0])
+				return NewDString(dIPAddr.IPAddr.String()), nil
+			},
+			Info: "Converts the combined IP address and prefix length to an abbreviated display format as text." +
+				"For INET types, this will omit the prefix length if it's not the default (32 or IPv4, 128 for IPv6)" +
+				"\n\nFor example, `abbrev('192.168.1.2/24')` returns `'192.168.1.2/24'`",
+		},
+	},
+
+	"broadcast": {
+		Builtin{
+			Types:      ArgTypes{{"val", TypeINet}},
+			ReturnType: fixedReturnType(TypeINet),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				dIPAddr := MustBeDIPAddr(args[0])
+				broadcastIPAddr := dIPAddr.IPAddr.Broadcast()
+				return &DIPAddr{IPAddr: broadcastIPAddr}, nil
+			},
+			Info: "Gets the broadcast address for the network address represented by the value." +
+				"\n\nFor example, `broadcast('192.168.1.2/24')` returns `'192.168.1.255/24'`",
+		},
+	},
+
+	"family": {
+		Builtin{
+			Types:      ArgTypes{{"val", TypeINet}},
+			ReturnType: fixedReturnType(TypeInt),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				dIPAddr := MustBeDIPAddr(args[0])
+				if dIPAddr.Family == ipaddr.IPv4family {
+					return NewDInt(DInt(4)), nil
+				}
+				return NewDInt(DInt(6)), nil
+			},
+			Info: "Extracts the IP family of the value; 4 for IPv4, 6 for IPv6." +
+				"\n\nFor example, `family('::1')` returns `6`",
+		},
+	},
+
+	"host": {
+		Builtin{
+			Types:      ArgTypes{{"val", TypeINet}},
+			ReturnType: fixedReturnType(TypeString),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				dIPAddr := MustBeDIPAddr(args[0])
+				s := dIPAddr.IPAddr.String()
+				if i := strings.IndexByte(s, '/'); i != -1 {
+					return NewDString(s[:i]), nil
+				}
+				return NewDString(s), nil
+			},
+			Info: "Extracts the address part of the combined address/prefixlen value as text." +
+				"\n\nFor example, `host('192.168.1.2/16')` returns `'192.168.1.2'`",
+		},
+	},
+
+	"hostmask": {
+		Builtin{
+			Types:      ArgTypes{{"val", TypeINet}},
+			ReturnType: fixedReturnType(TypeINet),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				dIPAddr := MustBeDIPAddr(args[0])
+				ipAddr := dIPAddr.IPAddr.Hostmask()
+				return &DIPAddr{ipAddr}, nil
+			},
+			Info: "Creates an IP host mask corresponding to the prefix length in the value." +
+				"\n\nFor example, `hostmask('192.168.1.2/16')` returns `'0.0.255.255'`",
+		},
+	},
+
+	"masklen": {
+		Builtin{
+			Types:      ArgTypes{{"val", TypeINet}},
+			ReturnType: fixedReturnType(TypeInt),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				dIPAddr := MustBeDIPAddr(args[0])
+				return NewDInt(DInt(dIPAddr.Mask)), nil
+			},
+			Info: "Retrieves the prefix length stored in the value." +
+				"\n\nFor example, `masklen('192.168.1.2/16')` returns `16`",
+		},
+	},
+
+	"netmask": {
+		Builtin{
+			Types:      ArgTypes{{"val", TypeINet}},
+			ReturnType: fixedReturnType(TypeINet),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				dIPAddr := MustBeDIPAddr(args[0])
+				ipAddr := dIPAddr.IPAddr.Netmask()
+				return &DIPAddr{ipAddr}, nil
+			},
+			Info: "Creates an IP network mask corresponding to the prefix length in the value." +
+				"\n\nFor example, `netmask('192.168.1.2/16')` returns `'255.255.0.0'`",
+		},
+	},
+
+	"set_masklen": {
+		Builtin{
+			Types: ArgTypes{
+				{"val", TypeINet},
+				{"prefixlen", TypeInt},
+			},
+			ReturnType: fixedReturnType(TypeINet),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				dIPAddr := MustBeDIPAddr(args[0])
+				mask := int(MustBeDInt(args[1]))
+
+				if !(dIPAddr.Family == ipaddr.IPv4family && mask >= 0 && mask <= 32) && !(dIPAddr.Family == ipaddr.IPv6family && mask >= 0 && mask <= 128) {
+					return nil, pgerror.NewErrorf(
+						pgerror.CodeInvalidParameterValueError, "invalid mask length: %d", mask)
+				}
+				return &DIPAddr{IPAddr: ipaddr.IPAddr{Family: dIPAddr.Family, Addr: dIPAddr.Addr, Mask: byte(mask)}}, nil
+			},
+			Info: "Sets the prefix length of `val` to `prefixlen`.\n\n" +
+				"For example, `set_masklen('192.168.1.2', 16)` returns `'192.168.1.2/16'`.",
+		},
+	},
+
+	"text": {
+		Builtin{
+			Types:      ArgTypes{{"val", TypeINet}},
+			ReturnType: fixedReturnType(TypeString),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				dIPAddr := MustBeDIPAddr(args[0])
+				s := dIPAddr.IPAddr.String()
+				// Ensure the string has a "/mask" suffix.
+				if strings.IndexByte(s, '/') == -1 {
+					s += "/" + strconv.Itoa(int(dIPAddr.Mask))
+				}
+				return NewDString(s), nil
+			},
+			Info: "Converts the IP address and prefix length to text.",
+		},
+	},
+
+	"inet_same_family": {
+		Builtin{
+			Types: ArgTypes{
+				{"val", TypeINet},
+				{"val", TypeINet},
+			},
+			ReturnType: fixedReturnType(TypeBool),
+			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+				first := MustBeDIPAddr(args[0])
+				other := MustBeDIPAddr(args[1])
+				return MakeDBool(DBool(first.Family == other.Family)), nil
+			},
+			Info: "Checks if two IP addresses are of the same IP family.",
 		},
 	},
 
