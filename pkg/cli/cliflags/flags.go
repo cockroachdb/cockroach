@@ -159,6 +159,12 @@ results of each SQL statement are printed on the standard output.`,
 Reveal the SQL statements sent implicitly by the command-line utility.`,
 	}
 
+	EscapeSpecialChars = FlagInfo{
+		Name: "escape-special-chars",
+		Description: `
+Escape non-graphical Unicode characters and whitespace in output data.`,
+	}
+
 	UnsafeUpdates = FlagInfo{
 		Name: "unsafe-updates",
 		Description: `

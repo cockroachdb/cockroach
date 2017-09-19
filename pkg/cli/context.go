@@ -55,6 +55,10 @@ type cliContext struct {
 
 	// showTimes indicates whether to display query times after each result line.
 	showTimes bool
+
+	// escapeSpecialChars indicates whether special unicode characters
+	// and whitespace should be printed in the output of commands.
+	escapeSpecialChars bool
 }
 
 var serverCfg = func() server.Config {
