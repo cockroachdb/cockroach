@@ -236,6 +236,8 @@ func ParseStringAs(t Type, s string, location *time.Location) (Datum, error) {
 		d, err = ParseDTimestampTZ(s, location, time.Microsecond)
 	case TypeUUID:
 		d, err = ParseDUuidFromString(s)
+	case TypeINet:
+		d, err = ParseDIPAddrFromINetString(s)
 	default:
 		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unknown type %s", t)
 	}

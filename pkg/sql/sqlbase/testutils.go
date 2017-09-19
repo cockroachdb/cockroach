@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -95,6 +96,9 @@ func RandDatum(rng *rand.Rand, typ ColumnType, null bool) parser.Datum {
 		}}
 	case ColumnType_UUID:
 		return parser.NewDUuid(parser.DUuid{UUID: uuid.MakeV4()})
+	case ColumnType_INET:
+		ipAddr := ipaddr.RandIPAddr(rng)
+		return parser.NewDIPAddr(parser.DIPAddr{IPAddr: ipAddr})
 	case ColumnType_STRING:
 		// Generate a random ASCII string.
 		p := make([]byte, rng.Intn(10))

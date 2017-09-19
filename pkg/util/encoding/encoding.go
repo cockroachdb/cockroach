@@ -30,6 +30,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -859,6 +860,9 @@ const (
 	False
 	UUID
 	Array
+	IPAddr
+	// Do not change SentinelType from 15. This value is specifically used for bit
+	// manipulation in EncodeValueTag.
 	SentinelType Type = 15 // Used in the Value encoding.
 )
 
@@ -1296,6 +1300,19 @@ func EncodeUntaggedUUIDValue(appendTo []byte, u uuid.UUID) []byte {
 	return append(appendTo, u.GetBytes()...)
 }
 
+// EncodeIPAddrValue encodes a ipaddr.IPAddr value with its value tag, appends
+// it to the supplied buffer, and returns the final buffer.
+func EncodeIPAddrValue(appendTo []byte, colID uint32, u ipaddr.IPAddr) []byte {
+	appendTo = EncodeValueTag(appendTo, colID, IPAddr)
+	return EncodeUntaggedIPAddrValue(appendTo, u)
+}
+
+// EncodeUntaggedIPAddrValue encodes a ipaddr.IPAddr value, appends it to the
+// supplied buffer, and returns the final buffer.
+func EncodeUntaggedIPAddrValue(appendTo []byte, u ipaddr.IPAddr) []byte {
+	return u.ToBuffer(appendTo)
+}
+
 // DecodeValueTag decodes a value encoded by EncodeValueTag, used as a prefix in
 // each of the other EncodeFooValue methods.
 //
@@ -1328,6 +1345,7 @@ func DecodeValueTag(b []byte) (typeOffset int, dataOffset int, colID uint32, typ
 		return 0, 0, 0, Unknown, err
 	}
 	colID = uint32(tag >> 4)
+
 	typ = Type(tag & 0xf)
 	typeOffset = n - 1
 	dataOffset = n
@@ -1504,6 +1522,21 @@ func DecodeUntaggedUUIDValue(b []byte) (remaining []byte, u uuid.UUID, err error
 	return b[uuidValueEncodedLength:], u, nil
 }
 
+// DecodeIPAddrValue decodes a value encoded by EncodeIPAddrValue.
+func DecodeIPAddrValue(b []byte) (remaining []byte, u ipaddr.IPAddr, err error) {
+	b, err = decodeValueTypeAssert(b, IPAddr)
+	if err != nil {
+		return b, u, err
+	}
+	return DecodeUntaggedIPAddrValue(b)
+}
+
+// DecodeUntaggedIPAddrValue decodes a value encoded by EncodeUntaggedIPAddrValue.
+func DecodeUntaggedIPAddrValue(b []byte) (remaining []byte, u ipaddr.IPAddr, err error) {
+	remaining, err = u.FromBuffer(b)
+	return remaining, u, err
+}
+
 func decodeValueTypeAssert(b []byte, expected Type) ([]byte, error) {
 	_, dataOffset, _, typ, err := DecodeValueTag(b)
 	if err != nil {
@@ -1561,6 +1594,14 @@ func PeekValueLength(b []byte) (typeOffset int, length int, err error) {
 		return typeOffset, dataOffset + n, err
 	case UUID:
 		return typeOffset, dataOffset + uuidValueEncodedLength, err
+	case IPAddr:
+		family := ipaddr.IPFamily(b[0])
+		if family == ipaddr.IPv4family {
+			return typeOffset, dataOffset + ipaddr.IPv4size, err
+		} else if family == ipaddr.IPv6family {
+			return typeOffset, dataOffset + ipaddr.IPv6size, err
+		}
+		return 0, 0, errors.Errorf("got invalid INET IP family: %d", family)
 	default:
 		return 0, 0, errors.Errorf("unknown type %s", typ)
 	}
@@ -1669,6 +1710,13 @@ func PrettyPrintValueEncoded(b []byte) ([]byte, string, error) {
 			return b, "", err
 		}
 		return b, u.String(), nil
+	case IPAddr:
+		var ipAddr ipaddr.IPAddr
+		b, ipAddr, err = DecodeIPAddrValue(b)
+		if err != nil {
+			return b, "", err
+		}
+		return b, ipAddr.String(), nil
 	default:
 		return b, "", errors.Errorf("unknown type %s", typ)
 	}

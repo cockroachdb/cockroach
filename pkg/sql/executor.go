@@ -2258,6 +2258,7 @@ func checkResultType(typ parser.Type) error {
 	case parser.TypeTimestampTZ:
 	case parser.TypeInterval:
 	case parser.TypeUUID:
+	case parser.TypeINet:
 	case parser.TypeNameArray:
 	case parser.TypeOid:
 	case parser.TypeRegClass:
