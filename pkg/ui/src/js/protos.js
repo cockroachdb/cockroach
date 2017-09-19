@@ -1323,6 +1323,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @property {cockroach.config.ZoneConfig$Properties} [zone_config] TableDetailsResponse zone_config.
                  * @property {cockroach.server.serverpb.ZoneConfigurationLevel} [zone_config_level] TableDetailsResponse zone_config_level.
                  * @property {Long} [descriptor_id] TableDetailsResponse descriptor_id.
+                 * @property {Long} [index_count] TableDetailsResponse index_count.
                  */
 
                 /**
@@ -1390,6 +1391,12 @@ export const cockroach = $root.cockroach = (() => {
                 TableDetailsResponse.prototype.descriptor_id = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
                 /**
+                 * TableDetailsResponse index_count.
+                 * @type {Long}
+                 */
+                TableDetailsResponse.prototype.index_count = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                /**
                  * Creates a new TableDetailsResponse instance using the specified properties.
                  * @param {cockroach.server.serverpb.TableDetailsResponse$Properties=} [properties] Properties to set
                  * @returns {cockroach.server.serverpb.TableDetailsResponse} TableDetailsResponse instance
@@ -1426,6 +1433,8 @@ export const cockroach = $root.cockroach = (() => {
                         writer.uint32(/* id 7, wireType 0 =*/56).uint32(message.zone_config_level);
                     if (message.descriptor_id != null && message.hasOwnProperty("descriptor_id"))
                         writer.uint32(/* id 8, wireType 0 =*/64).int64(message.descriptor_id);
+                    if (message.index_count != null && message.hasOwnProperty("index_count"))
+                        writer.uint32(/* id 9, wireType 0 =*/72).int64(message.index_count);
                     return writer;
                 };
 
@@ -1483,6 +1492,9 @@ export const cockroach = $root.cockroach = (() => {
                             break;
                         case 8:
                             message.descriptor_id = reader.int64();
+                            break;
+                        case 9:
+                            message.index_count = reader.int64();
                             break;
                         default:
                             reader.skipType(tag & 7);
@@ -1564,6 +1576,9 @@ export const cockroach = $root.cockroach = (() => {
                     if (message.descriptor_id != null && message.hasOwnProperty("descriptor_id"))
                         if (!$util.isInteger(message.descriptor_id) && !(message.descriptor_id && $util.isInteger(message.descriptor_id.low) && $util.isInteger(message.descriptor_id.high)))
                             return "descriptor_id: integer|Long expected";
+                    if (message.index_count != null && message.hasOwnProperty("index_count"))
+                        if (!$util.isInteger(message.index_count) && !(message.index_count && $util.isInteger(message.index_count.low) && $util.isInteger(message.index_count.high)))
+                            return "index_count: integer|Long expected";
                     return null;
                 };
 
@@ -1649,6 +1664,15 @@ export const cockroach = $root.cockroach = (() => {
                             message.descriptor_id = object.descriptor_id;
                         else if (typeof object.descriptor_id === "object")
                             message.descriptor_id = new $util.LongBits(object.descriptor_id.low >>> 0, object.descriptor_id.high >>> 0).toNumber();
+                    if (object.index_count != null)
+                        if ($util.Long)
+                            (message.index_count = $util.Long.fromValue(object.index_count)).unsigned = false;
+                        else if (typeof object.index_count === "string")
+                            message.index_count = parseInt(object.index_count, 10);
+                        else if (typeof object.index_count === "number")
+                            message.index_count = object.index_count;
+                        else if (typeof object.index_count === "object")
+                            message.index_count = new $util.LongBits(object.index_count.low >>> 0, object.index_count.high >>> 0).toNumber();
                     return message;
                 };
 
@@ -1690,6 +1714,11 @@ export const cockroach = $root.cockroach = (() => {
                             object.descriptor_id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
                         } else
                             object.descriptor_id = options.longs === String ? "0" : 0;
+                        if ($util.Long) {
+                            let long = new $util.Long(0, 0, false);
+                            object.index_count = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                        } else
+                            object.index_count = options.longs === String ? "0" : 0;
                     }
                     if (message.grants && message.grants.length) {
                         object.grants = [];
@@ -1722,6 +1751,11 @@ export const cockroach = $root.cockroach = (() => {
                             object.descriptor_id = options.longs === String ? String(message.descriptor_id) : message.descriptor_id;
                         else
                             object.descriptor_id = options.longs === String ? $util.Long.prototype.toString.call(message.descriptor_id) : options.longs === Number ? new $util.LongBits(message.descriptor_id.low >>> 0, message.descriptor_id.high >>> 0).toNumber() : message.descriptor_id;
+                    if (message.index_count != null && message.hasOwnProperty("index_count"))
+                        if (typeof message.index_count === "number")
+                            object.index_count = options.longs === String ? String(message.index_count) : message.index_count;
+                        else
+                            object.index_count = options.longs === String ? $util.Long.prototype.toString.call(message.index_count) : options.longs === Number ? new $util.LongBits(message.index_count.low >>> 0, message.index_count.high >>> 0).toNumber() : message.index_count;
                     return object;
                 };
 

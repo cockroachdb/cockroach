@@ -763,6 +763,7 @@ export namespace cockroach {
                 zone_config?: cockroach.config.ZoneConfig$Properties;
                 zone_config_level?: cockroach.server.serverpb.ZoneConfigurationLevel;
                 descriptor_id?: Long;
+                index_count?: Long;
             };
 
             /**
@@ -828,6 +829,12 @@ export namespace cockroach {
                  * @type {Long}
                  */
                 public descriptor_id: Long;
+
+                /**
+                 * TableDetailsResponse index_count.
+                 * @type {Long}
+                 */
+                public index_count: Long;
 
                 /**
                  * Creates a new TableDetailsResponse instance using the specified properties.

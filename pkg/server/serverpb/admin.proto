@@ -164,6 +164,10 @@ message TableDetailsResponse {
   // It can be used to find events pertaining to this table by filtering on
   // the 'target_id' field of events.
   int64 descriptor_id = 8 [(gogoproto.customname) = "DescriptorID"];
+  // index_count is the number of indexes in the table. This is a summary
+  // of the information in indexes, where there is one entry per column
+  // per index and not simply one entry per index. (See SHOW INDEXES.)
+  int64 index_count = 9;
 }
 
 // TableStatsRequest is a request for detailed, computationally expensive

@@ -367,12 +367,18 @@ func (s *adminServer) TableDetails(
 			implicitCol  = "Implicit"
 		)
 		scanner := makeResultScanner(r.ResultList[1].Columns)
+		indexCount := 0
+		lastIndexName := ""
 		for i, nRows := 0, r.ResultList[1].Rows.Len(); i < nRows; i++ {
 			row := r.ResultList[1].Rows.At(i)
 			// Marshal grant, splitting comma-separated privileges into a proper slice.
 			var index serverpb.TableDetailsResponse_Index
 			if err := scanner.Scan(row, nameCol, &index.Name); err != nil {
 				return nil, err
+			}
+			if index.Name != lastIndexName {
+				lastIndexName = index.Name
+				indexCount++
 			}
 			if err := scanner.Scan(row, uniqueCol, &index.Unique); err != nil {
 				return nil, err
@@ -394,6 +400,7 @@ func (s *adminServer) TableDetails(
 			}
 			resp.Indexes = append(resp.Indexes, index)
 		}
+		resp.IndexCount = int64(indexCount)
 	}
 
 	// Marshal SHOW GRANTS result.
