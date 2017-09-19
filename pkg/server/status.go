@@ -1104,18 +1104,7 @@ func (s *statusServer) Range(
 func (s *statusServer) CommandQueue(
 	ctx context.Context, req *serverpb.CommandQueueRequest,
 ) (*serverpb.CommandQueueResponse, error) {
-	var replica *storage.Replica
-
-	// TODO: move this into a `GetReplicaForRange` method on Store?
-	s.stores.VisitStores(func(store *storage.Store) error {
-		replicaFromStore, err := store.GetReplica(roachpb.RangeID(req.RangeId))
-
-		if err == nil {
-			replica = replicaFromStore
-		}
-		return nil
-	})
-
+	replica := s.stores.GetReplicaForRangeID(roachpb.RangeID(req.RangeId))
 	if replica == nil {
 		return nil, fmt.Errorf("replica not found for range %d", req.RangeId)
 	}
