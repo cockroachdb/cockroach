@@ -58,6 +58,7 @@ describe("basic cachedDataReducer", function () {
         state = reducer(state, testReducerObj.requestData());
         expected = new CachedDataReducerState<Response>();
         expected.inFlight = true;
+        expected.requestedAt = testMoment;
         assert.deepEqual(state, expected);
       });
 
@@ -113,6 +114,7 @@ describe("basic cachedDataReducer", function () {
           expected = new CachedDataReducerState<Response>();
           expected.valid = true;
           expected.data = new Response(testString);
+          expected.requestedAt = testMoment;
           expected.setAt = testMoment;
           expected.lastError = null;
           assert.deepEqual(state.cachedData.test, expected);
@@ -211,6 +213,7 @@ describe("keyed cachedDataReducer", function () {
         state = reducer(state, testReducerObj.cachedDataReducer.requestData(request));
         expected = new KeyedCachedDataReducerState<Response>();
         expected[id] = new CachedDataReducerState<Response>();
+        expected[id].requestedAt = testMoment;
         expected[id].inFlight = true;
         assert.deepEqual(state, expected);
       });

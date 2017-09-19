@@ -20,6 +20,14 @@ import { nullOfReturnType } from "src/util/types";
 export const deadTimeout = moment.duration(5, "m");
 
 /**
+ * A grace period for which a liveness record can be expired before being
+ * its node is considered suspect. This helps to avoid situations where liveness
+ * records are being updated correctly on the server, but are judged to be dead
+ * on the client due to clock skew.
+ */
+export const suspectGracePeriod = moment.duration(5, "s");
+
+/**
  * LivenessStatus is a convenience enumeration used to bucket node liveness
  * records into basic states.
  */
@@ -47,7 +55,7 @@ export enum LivenessStatus {
 // Functions to select data directly from the redux state.
 export const nodeStatusesSelector = (state: AdminUIState) => state.cachedData.nodes.data;
 const livenessesSelector = (state: AdminUIState) => state.cachedData.liveness.data;
-const livenessCheckedAtSelector = (state: AdminUIState) => state.cachedData.liveness.setAt;
+const livenessCheckedAtSelector = (state: AdminUIState) => state.cachedData.liveness.requestedAt;
 
 /**
  * livenessByNodeIDSelector returns a map from NodeID to the Liveness record for
@@ -77,7 +85,7 @@ const livenessStatusByNodeIDSelector = createSelector(
         const expiration = moment(NanoToMilli(l.expiration.wall_time.toNumber()));
         if (expiration.isBefore(deadCutoff)) {
           return l.decommissioning ? LivenessStatus.DECOMMISSIONED : LivenessStatus.DEAD;
-        } else if (expiration.isBefore(livenessCheckedAt)) {
+        } else if (expiration.clone().add(suspectGracePeriod).isBefore(livenessCheckedAt)) {
           return LivenessStatus.SUSPECT;
         }
         return LivenessStatus.HEALTHY;
