@@ -274,9 +274,7 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 		return desc, returnToken, nil
 	}
 
-	if log.V(3) {
-		log.Infof(ctx, "lookup range descriptor: key=%s\n%s", key, rdc.stringLocked())
-	} else if log.V(2) {
+	if log.V(2) {
 		log.Infof(ctx, "lookup range descriptor: key=%s", key)
 	}
 
@@ -464,10 +462,7 @@ func (rdc *RangeDescriptorCache) evictCachedRangeDescriptorLocked(
 	}
 
 	for {
-		if log.V(3) {
-			log.Infof(ctx, "evict cached descriptor: key=%s desc=%s\n%s",
-				descKey, cachedDesc, rdc.stringLocked())
-		} else if log.V(2) {
+		if log.V(2) {
 			log.Infof(ctx, "evict cached descriptor: key=%s desc=%s", descKey, cachedDesc)
 		}
 		rdc.rangeCache.cache.Del(rngKey)
