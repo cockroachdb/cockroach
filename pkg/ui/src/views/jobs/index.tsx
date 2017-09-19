@@ -47,6 +47,7 @@ const typeOptions = [
   { value: jobType.UNSPECIFIED.toString(), label: "All" },
   { value: jobType.BACKUP.toString(), label: "Backups" },
   { value: jobType.RESTORE.toString(), label: "Restores" },
+  { value: jobType.IMPORT.toString(), label: "Imports" },
   { value: jobType.SCHEMA_CHANGE.toString(), label: "Schema Changes" },
 ];
 
