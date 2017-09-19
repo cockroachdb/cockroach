@@ -981,6 +981,7 @@ func TestStyle(t *testing.T) {
 
 		checker := megaChecker{
 			checkers: []lint.Checker{
+				&timerChecker{},
 				simple.NewChecker(),
 				staticcheck.NewChecker(),
 				unused.NewLintChecker(unusedChecker),
@@ -1147,7 +1148,6 @@ func (m *megaChecker) Init(program *lint.Program) {
 func (m *megaChecker) Funcs() map[string]lint.Func {
 	funcs := map[string]lint.Func{
 		"FloatToUnsigned":   checkConvertFloatToUnsigned,
-		"TimeutilTimerRead": checkSetTimeutilTimerRead,
 	}
 	for _, checker := range m.checkers {
 		for k, v := range checker.Funcs() {
@@ -1217,7 +1217,7 @@ func checkConvertFloatToUnsigned(j *lint.Job) {
 	})
 }
 
-func walkForStmts(n ast.Node, fn func(s ast.Stmt) bool) bool {
+func walkForStmts(n ast.Node, fn func(ast.Stmt) bool) bool {
 	fr, ok := n.(*ast.ForStmt)
 	if !ok {
 		return true
@@ -1225,7 +1225,7 @@ func walkForStmts(n ast.Node, fn func(s ast.Stmt) bool) bool {
 	return walkStmts(fr.Body.List, fn)
 }
 
-func walkSelectStmts(n ast.Node, fn func(s ast.Stmt) bool) bool {
+func walkSelectStmts(n ast.Node, fn func(ast.Stmt) bool) bool {
 	sel, ok := n.(*ast.SelectStmt)
 	if !ok {
 		return true
@@ -1233,7 +1233,7 @@ func walkSelectStmts(n ast.Node, fn func(s ast.Stmt) bool) bool {
 	return walkStmts(sel.Body.List, fn)
 }
 
-func walkStmts(stmts []ast.Stmt, fn func(s ast.Stmt) bool) bool {
+func walkStmts(stmts []ast.Stmt, fn func(ast.Stmt) bool) bool {
 	for _, stmt := range stmts {
 		if !fn(stmt) {
 			return false
@@ -1242,14 +1242,14 @@ func walkStmts(stmts []ast.Stmt, fn func(s ast.Stmt) bool) bool {
 	return true
 }
 
-// checkSetTimeutilTimerRead assures that timeutil.Timer objects are used
-// correctly, to avoid race conditions and deadlocks. These timers require
-// callers to set their Read field to true when their channel has been received
-// on. If this field is not set and the timer's Reset method is called, we will
-// deadlock. This lint assures that the Read field is set in the most common
-// case where Reset is used, within a for-loop where each iteration blocks
-// on a select statement. The timers are usually used as timeouts on these
-// select statements, and need to be reset after each iteration.
+// timerChecker assures that timeutil.Timer objects are used correctly, to
+// avoid race conditions and deadlocks. These timers require callers to set
+// their Read field to true when their channel has been received on. If this
+// field is not set and the timer's Reset method is called, we will deadlock.
+// This lint assures that the Read field is set in the most common case where
+// Reset is used, within a for-loop where each iteration blocks on a select
+// statement. The timers are usually used as timeouts on these select
+// statements, and need to be reset after each iteration.
 //
 // for {
 //   timer.Reset(...)
@@ -1260,40 +1260,50 @@ func walkStmts(stmts []ast.Stmt, fn func(s ast.Stmt) bool) bool {
 //   }
 // }
 //
-func checkSetTimeutilTimerRead(j *lint.Job) {
-	var timerType *types.Named
-	func() {
-		for _, typVal := range j.Program.Info.Types {
-			if typ, ok := typVal.Type.(*types.Named); ok {
-				if typ.String() == "github.com/cockroachdb/cockroach/pkg/util/timeutil.Timer" {
-					timerType = typ
-					return
-				}
-			}
-		}
-		log.Fatal("no timeutil.Timer type found")
-	}()
+type timerChecker struct {
+	timerType types.Type
+}
 
-	const chanName = "C"
-	func() {
-		if typ, ok := timerType.Underlying().(*types.Struct); ok {
-			for i := 0; i < typ.NumFields(); i++ {
-				if typ.Field(i).Name() == chanName {
-					return
-				}
-			}
-		}
-		log.Fatalf("no field called %q in type %s", chanName, timerType)
-	}()
+const timerChanName = "C"
 
-	selectorIsTimer := func(s *ast.SelectorExpr) bool {
-		selTyp := j.Program.Info.TypeOf(s.X)
-		if ptr, ok := selTyp.(*types.Pointer); ok {
-			selTyp = ptr.Elem()
-		}
-		return selTyp == timerType
+func (m *timerChecker) Init(program *lint.Program) {
+	timeutilPkg := program.Prog.Package("github.com/cockroachdb/cockroach/pkg/util/timeutil")
+	if timeutilPkg == nil {
+		log.Fatal("timeutil package not found")
 	}
+	timerObject := timeutilPkg.Pkg.Scope().Lookup("Timer")
+	if timerObject == nil {
+		log.Fatal("timeutil.Timer type not found")
+	}
+	m.timerType = timerObject.Type()
 
+	func() {
+		if typ, ok := m.timerType.Underlying().(*types.Struct); ok {
+			for i := 0; i < typ.NumFields(); i++ {
+				if typ.Field(i).Name() == timerChanName {
+					return
+				}
+			}
+		}
+		log.Fatalf("no field called %q in type %s", timerChanName, m.timerType)
+	}()
+}
+
+func (m *timerChecker) Funcs() map[string]lint.Func {
+	return map[string]lint.Func{
+		"TimeutilTimerRead": m.checkSetTimeutilTimerRead,
+	}
+}
+
+func (m *timerChecker) selectorIsTimer(s *ast.SelectorExpr, info *types.Info) bool {
+	selTyp := info.TypeOf(s.X)
+	if ptr, ok := selTyp.(*types.Pointer); ok {
+		selTyp = ptr.Elem()
+	}
+	return selTyp == m.timerType
+}
+
+func (m *timerChecker) checkSetTimeutilTimerRead(j *lint.Job) {
 	forAllFiles(j, func(n ast.Node) bool {
 		return walkForStmts(n, func(s ast.Stmt) bool {
 			return walkSelectStmts(s, func(s ast.Stmt) bool {
@@ -1322,11 +1332,11 @@ func checkSetTimeutilTimerRead(j *lint.Job) {
 				if !ok {
 					return true
 				}
-				if !selectorIsTimer(selector) {
+				if !m.selectorIsTimer(selector,j.Program.Info) {
 					return true
 				}
 				selectorName := fmt.Sprint(selector.X)
-				if selector.Sel.String() != chanName {
+				if selector.Sel.String() != timerChanName {
 					return true
 				}
 
@@ -1344,7 +1354,7 @@ func checkSetTimeutilTimerRead(j *lint.Job) {
 						if !ok {
 							return true
 						}
-						if !selectorIsTimer(assignSelector) {
+						if !m.selectorIsTimer(assignSelector,j.Program.Info) {
 							return true
 						}
 						if fmt.Sprint(assignSelector.X) != selectorName {
