@@ -181,10 +181,10 @@ EXPLAIN (TYPES) VALUES (1) UNION VALUES (2)
 0  union   ·              ·                (column1 int)  ·
 1  values  ·              ·                (column1 int)  ·
 1  ·       size           1 column, 1 row  ·              ·
-1  ·       row 0, expr 0  (1)[int]         ·              ·
+1  ·       row 0, expr 0  (2)[int]         ·              ·
 1  values  ·              ·                (column1 int)  ·
 1  ·       size           1 column, 1 row  ·              ·
-1  ·       row 0, expr 0  (2)[int]         ·              ·
+1  ·       row 0, expr 0  (1)[int]         ·              ·
 
 query ITTTTT
 EXPLAIN (TYPES) SELECT DISTINCT k FROM t
