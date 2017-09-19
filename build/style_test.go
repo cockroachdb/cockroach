@@ -19,7 +19,13 @@ package build_test
 import (
 	"bufio"
 	"bytes"
+	"fmt"
+	"go/ast"
 	"go/build"
+	"go/parser"
+	"go/token"
+	"go/types"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,8 +35,14 @@ import (
 	"testing"
 
 	"github.com/ghemawat/stream"
+	"github.com/kisielk/gotool"
 	"github.com/pkg/errors"
 	"golang.org/x/tools/go/buildutil"
+	"golang.org/x/tools/go/loader"
+	"honnef.co/go/tools/lint"
+	"honnef.co/go/tools/simple"
+	"honnef.co/go/tools/staticcheck"
+	"honnef.co/go/tools/unused"
 )
 
 const cockroachDB = "github.com/cockroachdb/cockroach/pkg"
@@ -930,27 +942,64 @@ func TestStyle(t *testing.T) {
 		}
 	})
 
-	t.Run("TestMetacheck", func(t *testing.T) {
+	t.Run("TestMegacheck", func(t *testing.T) {
 		if testing.Short() {
 			t.Skip("short flag")
 		}
-		// metacheck uses 2.5GB of ram (as of 2017-02-18), so don't parallelize it.
-		cmd, stderr, filter, err := dirCmd(
-			pkg.Dir,
-			"metacheck",
-			"-ignore",
+		t.Parallel()
+		noCopyRe, err := regexp.Compile(`^(field no|type No)Copy is unused \(U1000\)$`)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-			strings.Join([]string{
-				"github.com/cockroachdb/cockroach/pkg/security/securitytest/embedded.go:S1013",
-				"github.com/cockroachdb/cockroach/pkg/ui/embedded.go:S1013",
+		ctx := gotool.DefaultContext
+		releaseTags := ctx.BuildContext.ReleaseTags
+		lastTag := releaseTags[len(releaseTags)-1]
+		dotIdx := strings.IndexByte(lastTag, '.')
+		goVersion, err := strconv.Atoi(lastTag[dotIdx+1:])
+		if err != nil {
+			t.Fatal(err)
+		}
+		// NB: this doesn't use `pkgScope` because `honnef.co/go/unused`
+		// produces many false positives unless it inspects all our packages.
+		paths := ctx.ImportPaths([]string{cockroachDB + "/..."})
+		conf := loader.Config{
+			Build:      &ctx.BuildContext,
+			ParserMode: parser.ParseComments,
+			ImportPkgs: make(map[string]bool, len(paths)),
+		}
+		for _, path := range paths {
+			conf.ImportPkgs[path] = true
+		}
+		lprog, err := conf.Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		unusedChecker := unused.NewChecker(unused.CheckAll)
+		unusedChecker.WholeProgram = true
+
+		checker := megaChecker{
+			checkers: []lint.Checker{
+				simple.NewChecker(),
+				staticcheck.NewChecker(),
+				unused.NewLintChecker(unusedChecker),
+			},
+		}
+
+		linter := lint.Linter{
+			Checker: &checker,
+			Ignores: []lint.Ignore{
+				{Pattern: "github.com/cockroachdb/cockroach/pkg/security/securitytest/embedded.go", Checks: []string{"S1013"}},
+				{Pattern: "github.com/cockroachdb/cockroach/pkg/ui/embedded.go", Checks: []string{"S1013"}},
 
 				// Intentionally compare an unsigned integer <= 0 to avoid knowledge
 				// of the type at the caller and for consistency with convention.
-				"github.com/cockroachdb/cockroach/pkg/storage/replica.go:SA4003",
+				{Pattern: "github.com/cockroachdb/cockroach/pkg/storage/replica.go", Checks: []string{"SA4003"}},
 				// Allow a comment to refer to an "unused" argument.
 				//
 				// TODO(bdarnell): remove when/if #8360 is fixed.
-				"github.com/cockroachdb/cockroach/pkg/storage/intent_resolver.go:SA4009",
+				{Pattern: "github.com/cockroachdb/cockroach/pkg/storage/intent_resolver.go", Checks: []string{"SA4009"}},
 				// The generated parser is full of `case` arms such as:
 				//
 				// case 1:
@@ -1011,49 +1060,33 @@ func TestStyle(t *testing.T) {
 				// which results in the unused warning:
 				//
 				// sql/parser/yaccpar:362:3: this value of sqlDollar is never used (SA4006)
-				"github.com/cockroachdb/cockroach/pkg/sql/parser/sql.go:SA4006",
+				{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/parser/sql.go", Checks: []string{"SA4006"}},
 				// sql/ir/irgen/parser/yaccpar:362:3: this value of irgenDollar is never used (SA4006)
-				"github.com/cockroachdb/cockroach/pkg/sql/ir/irgen/parser/irgen.go:SA4006",
+				{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/ir/irgen/parser/irgen.go", Checks: []string{"SA4006"}},
 				// sql/parser/yaccpar:14:6: type sqlParser is unused (U1000)
 				// sql/parser/yaccpar:15:2: func sqlParser.Parse is unused (U1000)
 				// sql/parser/yaccpar:16:2: func sqlParser.Lookahead is unused (U1000)
 				// sql/parser/yaccpar:29:6: func sqlNewParser is unused (U1000)
 				// sql/parser/yaccpar:152:6: func sqlParse is unused (U1000)
-				"github.com/cockroachdb/cockroach/pkg/sql/parser/sql.go:U1000",
-				"github.com/cockroachdb/cockroach/pkg/sql/irgen/parser/irgen.go:U1000",
+				{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/parser/sql.go", Checks: []string{"U1000"}},
+				{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/irgen/parser/irgen.go", Checks: []string{"U1000"}},
 				// Generated file containing many unused postgres error codes.
-				"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror/codes.go:U1000",
+				{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror/codes.go", Checks: []string{"U1000"}},
 				// Deprecated database/sql/driver interfaces not compatible with 1.7.
-				"github.com/cockroachdb/cockroach/pkg/sql/*.go:SA1019",
-				"github.com/cockroachdb/cockroach/pkg/cli/sql_util.go:SA1019",
+				{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/*.go", Checks: []string{"SA1019"}},
+				{Pattern: "github.com/cockroachdb/cockroach/pkg/cli/sql_util.go", Checks: []string{"SA1019"}},
 
 				// IR templates.
-				"github.com/cockroachdb/cockroach/pkg/sql/ir/base/*.go:U1000",
-			}, " "),
-			// NB: this doesn't use `pkgScope` because `honnef.co/go/unused`
-			// produces many false positives unless it inspects all our packages.
-			"./...",
-		)
-		if err != nil {
-			t.Fatal(err)
+				{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/ir/base/*.go", Checks: []string{"U1000"}},
+			},
+			GoVersion: goVersion,
 		}
 
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := stream.ForEach(stream.Sequence(
-			filter,
-			stream.GrepNot(`: (field no|type No)Copy is unused \(U1000\)$`),
-		), func(s string) {
-			t.Error(s)
-		}); err != nil {
-			t.Error(err)
-		}
-
-		if err := cmd.Wait(); err != nil {
-			if out := stderr.String(); len(out) > 0 {
-				t.Fatalf("err=%s, stderr=%s", err, out)
+		ps := linter.Lint(lprog)
+		for _, p := range ps {
+			if !noCopyRe.MatchString(p.Text) {
+				pos := lprog.Fset.Position(p.Position)
+				t.Errorf("%s: %s", pos, p.Text)
 			}
 		}
 	})
@@ -1096,5 +1129,247 @@ func TestStyle(t *testing.T) {
 				t.Fatalf("err=%s, stderr=%s", err, out)
 			}
 		}
+	})
+}
+
+type megaChecker struct {
+	checkers []lint.Checker
+}
+
+func (m *megaChecker) Init(program *lint.Program) {
+	for _, checker := range m.checkers {
+		checker.Init(program)
+	}
+}
+
+func (m *megaChecker) Funcs() map[string]lint.Func {
+	funcs := map[string]lint.Func{
+		"FloatToUnsigned":   checkConvertFloatToUnsigned,
+		"TimeutilTimerRead": checkSetTimeutilTimerRead,
+	}
+	for _, checker := range m.checkers {
+		for k, v := range checker.Funcs() {
+			if _, ok := funcs[k]; ok {
+				log.Fatalf("duplicate lint function %s", k)
+			} else {
+				funcs[k] = v
+			}
+		}
+	}
+	return funcs
+}
+
+func forAllFiles(j *lint.Job, fn func(node ast.Node) bool) {
+	for _, f := range j.Program.Files {
+		if !lint.IsGenerated(f) {
+			ast.Inspect(f, fn)
+		}
+	}
+}
+
+// @ianlancetaylor via golang-nuts[0]:
+//
+// For the record, the spec says, in https://golang.org/ref/spec#Conversions:
+// "In all non-constant conversions involving floating-point or complex
+// values, if the result type cannot represent the value the conversion
+// succeeds but the result value is implementation-dependent."  That is the
+// case that applies here: you are converting a negative floating point number
+// to uint64, which can not represent a negative value, so the result is
+// implementation-dependent.  The conversion to int64 works, of course. And
+// the conversion to int64 and then to uint64 succeeds in converting to int64,
+// and when converting to uint64 follows a different rule: "When converting
+// between integer types, if the value is a signed integer, it is sign
+// extended to implicit infinite precision; otherwise it is zero extended. It
+// is then truncated to fit in the result type's size."
+//
+// So, basically, don't convert a negative floating point number to an
+// unsigned integer type.
+//
+// [0] https://groups.google.com/d/msg/golang-nuts/LH2AO1GAIZE/PyygYRwLAwAJ
+//
+// TODO(tamird): upstream this.
+func checkConvertFloatToUnsigned(j *lint.Job) {
+	forAllFiles(j, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		castType, ok := j.Program.Info.TypeOf(call.Fun).(*types.Basic)
+		if !ok {
+			return true
+		}
+		if castType.Info()&types.IsUnsigned == 0 {
+			return true
+		}
+		for _, arg := range call.Args {
+			argType, ok := j.Program.Info.TypeOf(arg).(*types.Basic)
+			if !ok {
+				continue
+			}
+			if argType.Info()&types.IsFloat == 0 {
+				continue
+			}
+			j.Errorf(arg, "do not convert a floating point number to an unsigned integer type")
+		}
+		return true
+	})
+}
+
+func walkForStmts(n ast.Node, fn func(s ast.Stmt) bool) bool {
+	fr, ok := n.(*ast.ForStmt)
+	if !ok {
+		return true
+	}
+	return walkStmts(fr.Body.List, fn)
+}
+
+func walkSelectStmts(n ast.Node, fn func(s ast.Stmt) bool) bool {
+	sel, ok := n.(*ast.SelectStmt)
+	if !ok {
+		return true
+	}
+	return walkStmts(sel.Body.List, fn)
+}
+
+func walkStmts(stmts []ast.Stmt, fn func(s ast.Stmt) bool) bool {
+	for _, stmt := range stmts {
+		if !fn(stmt) {
+			return false
+		}
+	}
+	return true
+}
+
+// checkSetTimeutilTimerRead assures that timeutil.Timer objects are used
+// correctly, to avoid race conditions and deadlocks. These timers require
+// callers to set their Read field to true when their channel has been received
+// on. If this field is not set and the timer's Reset method is called, we will
+// deadlock. This lint assures that the Read field is set in the most common
+// case where Reset is used, within a for-loop where each iteration blocks
+// on a select statement. The timers are usually used as timeouts on these
+// select statements, and need to be reset after each iteration.
+//
+// for {
+//   timer.Reset(...)
+//   select {
+//     case <-timer.C:
+//       timer.Read = true   <--  lint verifies that this line is present
+//     case ...:
+//   }
+// }
+//
+func checkSetTimeutilTimerRead(j *lint.Job) {
+	var timerType *types.Named
+	func() {
+		for _, typVal := range j.Program.Info.Types {
+			if typ, ok := typVal.Type.(*types.Named); ok {
+				if typ.String() == "github.com/cockroachdb/cockroach/pkg/util/timeutil.Timer" {
+					timerType = typ
+					return
+				}
+			}
+		}
+		log.Fatal("no timeutil.Timer type found")
+	}()
+
+	const chanName = "C"
+	func() {
+		if typ, ok := timerType.Underlying().(*types.Struct); ok {
+			for i := 0; i < typ.NumFields(); i++ {
+				if typ.Field(i).Name() == chanName {
+					return
+				}
+			}
+		}
+		log.Fatalf("no field called %q in type %s", chanName, timerType)
+	}()
+
+	selectorIsTimer := func(s *ast.SelectorExpr) bool {
+		selTyp := j.Program.Info.TypeOf(s.X)
+		if ptr, ok := selTyp.(*types.Pointer); ok {
+			selTyp = ptr.Elem()
+		}
+		return selTyp == timerType
+	}
+
+	forAllFiles(j, func(n ast.Node) bool {
+		return walkForStmts(n, func(s ast.Stmt) bool {
+			return walkSelectStmts(s, func(s ast.Stmt) bool {
+				comm, ok := s.(*ast.CommClause)
+				if !ok || comm.Comm == nil /* default: */ {
+					return true
+				}
+
+				// if receiving on a timer's C chan.
+				var unary ast.Expr
+				switch v := comm.Comm.(type) {
+				case *ast.AssignStmt:
+					// case `now := <-timer.C:`
+					unary = v.Rhs[0]
+				case *ast.ExprStmt:
+					// case `<-timer.C:`
+					unary = v.X
+				default:
+					return true
+				}
+				chanRead, ok := unary.(*ast.UnaryExpr)
+				if !ok || chanRead.Op != token.ARROW {
+					return true
+				}
+				selector, ok := chanRead.X.(*ast.SelectorExpr)
+				if !ok {
+					return true
+				}
+				if !selectorIsTimer(selector) {
+					return true
+				}
+				selectorName := fmt.Sprint(selector.X)
+				if selector.Sel.String() != chanName {
+					return true
+				}
+
+				// Verify that the case body contains `timer.Read = true`.
+				noRead := walkStmts(comm.Body, func(s ast.Stmt) bool {
+					assign, ok := s.(*ast.AssignStmt)
+					if !ok || assign.Tok != token.ASSIGN {
+						return true
+					}
+					for i := range assign.Lhs {
+						l, r := assign.Lhs[i], assign.Rhs[i]
+
+						// if assignment to correct field in timer.
+						assignSelector, ok := l.(*ast.SelectorExpr)
+						if !ok {
+							return true
+						}
+						if !selectorIsTimer(assignSelector) {
+							return true
+						}
+						if fmt.Sprint(assignSelector.X) != selectorName {
+							return true
+						}
+						if assignSelector.Sel.String() != "Read" {
+							return true
+						}
+
+						// if assigning `true`.
+						val, ok := r.(*ast.Ident)
+						if !ok {
+							return true
+						}
+						if val.String() == "true" {
+							// returning false will short-circuit walkStmts and assign
+							// noRead to false instead of the default value of true.
+							return false
+						}
+					}
+					return true
+				})
+				if noRead {
+					j.Errorf(comm, "must set timer.Read = true after reading from timer.C (see timeutil/timer.go)")
+				}
+				return true
+			})
+		})
 	})
 }
