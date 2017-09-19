@@ -478,6 +478,29 @@ message QueryPlanResponse {
   string distsql_physical_query_plan = 1 [(gogoproto.customname) = "DistSQLPhysicalQueryPlan"];
 }
 
+// QueriesRequest requests system job information of the given status and type.
+message QueriesRequest {
+  int32 limit = 1;
+  string status = 2;
+  cockroach.sql.jobs.Type type = 3;
+}
+
+// QueriesResponse contains the job record for each matching job.
+message QueriesResponse {
+  message Query {
+    string query_id = 1 [(gogoproto.customname) = "QueryID"];
+    int64 node_id = 2 [(gogoproto.customname) = "NodeID"];
+    string username = 3;
+    google.protobuf.Timestamp start = 4 [(gogoproto.stdtime) = true];
+    string query = 5;
+    string client_address = 6 [(gogoproto.customname) = "ClientAddress"];
+    string application_name = 7 [(gogoproto.customname) = "ApplicationName"];
+    string distributed = 8;
+  }
+
+  repeated Query queries = 1 [(gogoproto.nullable) = false];
+}
+
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
 // REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
 service Admin {
@@ -605,6 +628,13 @@ service Admin {
   rpc QueryPlan(QueryPlanRequest) returns (QueryPlanResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/queryplan"
+    };
+  }
+
+  // Queries returns the query plans for a SQL string.
+  rpc Queries(QueriesRequest) returns (QueriesResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/queries"
     };
   }
 

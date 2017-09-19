@@ -10504,6 +10504,778 @@ export const cockroach = $root.cockroach = (() => {
                 return QueryPlanResponse;
             })();
 
+            serverpb.QueriesRequest = (function() {
+
+                /**
+                 * Properties of a QueriesRequest.
+                 * @typedef cockroach.server.serverpb.QueriesRequest$Properties
+                 * @type {Object}
+                 * @property {number} [limit] QueriesRequest limit.
+                 * @property {string} [status] QueriesRequest status.
+                 * @property {cockroach.sql.jobs.Type} [type] QueriesRequest type.
+                 */
+
+                /**
+                 * Constructs a new QueriesRequest.
+                 * @exports cockroach.server.serverpb.QueriesRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.QueriesRequest$Properties=} [properties] Properties to set
+                 */
+                function QueriesRequest(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * QueriesRequest limit.
+                 * @type {number}
+                 */
+                QueriesRequest.prototype.limit = 0;
+
+                /**
+                 * QueriesRequest status.
+                 * @type {string}
+                 */
+                QueriesRequest.prototype.status = "";
+
+                /**
+                 * QueriesRequest type.
+                 * @type {cockroach.sql.jobs.Type}
+                 */
+                QueriesRequest.prototype.type = 0;
+
+                /**
+                 * Creates a new QueriesRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.QueriesRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.QueriesRequest} QueriesRequest instance
+                 */
+                QueriesRequest.create = function create(properties) {
+                    return new QueriesRequest(properties);
+                };
+
+                /**
+                 * Encodes the specified QueriesRequest message. Does not implicitly {@link cockroach.server.serverpb.QueriesRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.QueriesRequest$Properties} message QueriesRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                QueriesRequest.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.limit != null && message.hasOwnProperty("limit"))
+                        writer.uint32(/* id 1, wireType 0 =*/8).int32(message.limit);
+                    if (message.status != null && message.hasOwnProperty("status"))
+                        writer.uint32(/* id 2, wireType 2 =*/18).string(message.status);
+                    if (message.type != null && message.hasOwnProperty("type"))
+                        writer.uint32(/* id 3, wireType 0 =*/24).uint32(message.type);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified QueriesRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.QueriesRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.QueriesRequest$Properties} message QueriesRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                QueriesRequest.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a QueriesRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.QueriesRequest} QueriesRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                QueriesRequest.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.QueriesRequest();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.limit = reader.int32();
+                            break;
+                        case 2:
+                            message.status = reader.string();
+                            break;
+                        case 3:
+                            message.type = reader.uint32();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a QueriesRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.QueriesRequest} QueriesRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                QueriesRequest.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a QueriesRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                QueriesRequest.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.limit != null && message.hasOwnProperty("limit"))
+                        if (!$util.isInteger(message.limit))
+                            return "limit: integer expected";
+                    if (message.status != null && message.hasOwnProperty("status"))
+                        if (!$util.isString(message.status))
+                            return "status: string expected";
+                    if (message.type != null && message.hasOwnProperty("type"))
+                        switch (message.type) {
+                        default:
+                            return "type: enum value expected";
+                        case 0:
+                        case 1:
+                        case 2:
+                        case 3:
+                        case 4:
+                            break;
+                        }
+                    return null;
+                };
+
+                /**
+                 * Creates a QueriesRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.QueriesRequest} QueriesRequest
+                 */
+                QueriesRequest.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.QueriesRequest)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.QueriesRequest();
+                    if (object.limit != null)
+                        message.limit = object.limit | 0;
+                    if (object.status != null)
+                        message.status = String(object.status);
+                    switch (object.type) {
+                    case "UNSPECIFIED":
+                    case 0:
+                        message.type = 0;
+                        break;
+                    case "BACKUP":
+                    case 1:
+                        message.type = 1;
+                        break;
+                    case "RESTORE":
+                    case 2:
+                        message.type = 2;
+                        break;
+                    case "SCHEMA_CHANGE":
+                    case 3:
+                        message.type = 3;
+                        break;
+                    case "IMPORT":
+                    case 4:
+                        message.type = 4;
+                        break;
+                    }
+                    return message;
+                };
+
+                /**
+                 * Creates a QueriesRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.QueriesRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.QueriesRequest} QueriesRequest
+                 */
+                QueriesRequest.from = QueriesRequest.fromObject;
+
+                /**
+                 * Creates a plain object from a QueriesRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.QueriesRequest} message QueriesRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                QueriesRequest.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults) {
+                        object.limit = 0;
+                        object.status = "";
+                        object.type = options.enums === String ? "UNSPECIFIED" : 0;
+                    }
+                    if (message.limit != null && message.hasOwnProperty("limit"))
+                        object.limit = message.limit;
+                    if (message.status != null && message.hasOwnProperty("status"))
+                        object.status = message.status;
+                    if (message.type != null && message.hasOwnProperty("type"))
+                        object.type = options.enums === String ? $root.cockroach.sql.jobs.Type[message.type] : message.type;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this QueriesRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                QueriesRequest.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this QueriesRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                QueriesRequest.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return QueriesRequest;
+            })();
+
+            serverpb.QueriesResponse = (function() {
+
+                /**
+                 * Properties of a QueriesResponse.
+                 * @typedef cockroach.server.serverpb.QueriesResponse$Properties
+                 * @type {Object}
+                 * @property {Array.<cockroach.server.serverpb.QueriesResponse.Query$Properties>} [queries] QueriesResponse queries.
+                 */
+
+                /**
+                 * Constructs a new QueriesResponse.
+                 * @exports cockroach.server.serverpb.QueriesResponse
+                 * @constructor
+                 * @param {cockroach.server.serverpb.QueriesResponse$Properties=} [properties] Properties to set
+                 */
+                function QueriesResponse(properties) {
+                    this.queries = [];
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * QueriesResponse queries.
+                 * @type {Array.<cockroach.server.serverpb.QueriesResponse.Query$Properties>}
+                 */
+                QueriesResponse.prototype.queries = $util.emptyArray;
+
+                /**
+                 * Creates a new QueriesResponse instance using the specified properties.
+                 * @param {cockroach.server.serverpb.QueriesResponse$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.QueriesResponse} QueriesResponse instance
+                 */
+                QueriesResponse.create = function create(properties) {
+                    return new QueriesResponse(properties);
+                };
+
+                /**
+                 * Encodes the specified QueriesResponse message. Does not implicitly {@link cockroach.server.serverpb.QueriesResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.QueriesResponse$Properties} message QueriesResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                QueriesResponse.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.queries != null && message.queries.length)
+                        for (let i = 0; i < message.queries.length; ++i)
+                            $root.cockroach.server.serverpb.QueriesResponse.Query.encode(message.queries[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified QueriesResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.QueriesResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.QueriesResponse$Properties} message QueriesResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                QueriesResponse.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a QueriesResponse message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.QueriesResponse} QueriesResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                QueriesResponse.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.QueriesResponse();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            if (!(message.queries && message.queries.length))
+                                message.queries = [];
+                            message.queries.push($root.cockroach.server.serverpb.QueriesResponse.Query.decode(reader, reader.uint32()));
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a QueriesResponse message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.QueriesResponse} QueriesResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                QueriesResponse.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a QueriesResponse message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                QueriesResponse.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.queries != null && message.hasOwnProperty("queries")) {
+                        if (!Array.isArray(message.queries))
+                            return "queries: array expected";
+                        for (let i = 0; i < message.queries.length; ++i) {
+                            let error = $root.cockroach.server.serverpb.QueriesResponse.Query.verify(message.queries[i]);
+                            if (error)
+                                return "queries." + error;
+                        }
+                    }
+                    return null;
+                };
+
+                /**
+                 * Creates a QueriesResponse message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.QueriesResponse} QueriesResponse
+                 */
+                QueriesResponse.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.QueriesResponse)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.QueriesResponse();
+                    if (object.queries) {
+                        if (!Array.isArray(object.queries))
+                            throw TypeError(".cockroach.server.serverpb.QueriesResponse.queries: array expected");
+                        message.queries = [];
+                        for (let i = 0; i < object.queries.length; ++i) {
+                            if (typeof object.queries[i] !== "object")
+                                throw TypeError(".cockroach.server.serverpb.QueriesResponse.queries: object expected");
+                            message.queries[i] = $root.cockroach.server.serverpb.QueriesResponse.Query.fromObject(object.queries[i]);
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Creates a QueriesResponse message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.QueriesResponse.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.QueriesResponse} QueriesResponse
+                 */
+                QueriesResponse.from = QueriesResponse.fromObject;
+
+                /**
+                 * Creates a plain object from a QueriesResponse message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.QueriesResponse} message QueriesResponse
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                QueriesResponse.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.arrays || options.defaults)
+                        object.queries = [];
+                    if (message.queries && message.queries.length) {
+                        object.queries = [];
+                        for (let j = 0; j < message.queries.length; ++j)
+                            object.queries[j] = $root.cockroach.server.serverpb.QueriesResponse.Query.toObject(message.queries[j], options);
+                    }
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this QueriesResponse message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                QueriesResponse.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this QueriesResponse to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                QueriesResponse.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                QueriesResponse.Query = (function() {
+
+                    /**
+                     * Properties of a Query.
+                     * @typedef cockroach.server.serverpb.QueriesResponse.Query$Properties
+                     * @type {Object}
+                     * @property {string} [query_id] Query query_id.
+                     * @property {Long} [node_id] Query node_id.
+                     * @property {string} [username] Query username.
+                     * @property {google.protobuf.Timestamp$Properties} [start] Query start.
+                     * @property {string} [query] Query query.
+                     * @property {string} [client_address] Query client_address.
+                     * @property {string} [application_name] Query application_name.
+                     * @property {string} [distributed] Query distributed.
+                     */
+
+                    /**
+                     * Constructs a new Query.
+                     * @exports cockroach.server.serverpb.QueriesResponse.Query
+                     * @constructor
+                     * @param {cockroach.server.serverpb.QueriesResponse.Query$Properties=} [properties] Properties to set
+                     */
+                    function Query(properties) {
+                        if (properties)
+                            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * Query query_id.
+                     * @type {string}
+                     */
+                    Query.prototype.query_id = "";
+
+                    /**
+                     * Query node_id.
+                     * @type {Long}
+                     */
+                    Query.prototype.node_id = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                    /**
+                     * Query username.
+                     * @type {string}
+                     */
+                    Query.prototype.username = "";
+
+                    /**
+                     * Query start.
+                     * @type {(google.protobuf.Timestamp$Properties|null)}
+                     */
+                    Query.prototype.start = null;
+
+                    /**
+                     * Query query.
+                     * @type {string}
+                     */
+                    Query.prototype.query = "";
+
+                    /**
+                     * Query client_address.
+                     * @type {string}
+                     */
+                    Query.prototype.client_address = "";
+
+                    /**
+                     * Query application_name.
+                     * @type {string}
+                     */
+                    Query.prototype.application_name = "";
+
+                    /**
+                     * Query distributed.
+                     * @type {string}
+                     */
+                    Query.prototype.distributed = "";
+
+                    /**
+                     * Creates a new Query instance using the specified properties.
+                     * @param {cockroach.server.serverpb.QueriesResponse.Query$Properties=} [properties] Properties to set
+                     * @returns {cockroach.server.serverpb.QueriesResponse.Query} Query instance
+                     */
+                    Query.create = function create(properties) {
+                        return new Query(properties);
+                    };
+
+                    /**
+                     * Encodes the specified Query message. Does not implicitly {@link cockroach.server.serverpb.QueriesResponse.Query.verify|verify} messages.
+                     * @param {cockroach.server.serverpb.QueriesResponse.Query$Properties} message Query message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    Query.encode = function encode(message, writer) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (message.query_id != null && message.hasOwnProperty("query_id"))
+                            writer.uint32(/* id 1, wireType 2 =*/10).string(message.query_id);
+                        if (message.node_id != null && message.hasOwnProperty("node_id"))
+                            writer.uint32(/* id 2, wireType 0 =*/16).int64(message.node_id);
+                        if (message.username != null && message.hasOwnProperty("username"))
+                            writer.uint32(/* id 3, wireType 2 =*/26).string(message.username);
+                        if (message.start != null && message.hasOwnProperty("start"))
+                            $root.google.protobuf.Timestamp.encode(message.start, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
+                        if (message.query != null && message.hasOwnProperty("query"))
+                            writer.uint32(/* id 5, wireType 2 =*/42).string(message.query);
+                        if (message.client_address != null && message.hasOwnProperty("client_address"))
+                            writer.uint32(/* id 6, wireType 2 =*/50).string(message.client_address);
+                        if (message.application_name != null && message.hasOwnProperty("application_name"))
+                            writer.uint32(/* id 7, wireType 2 =*/58).string(message.application_name);
+                        if (message.distributed != null && message.hasOwnProperty("distributed"))
+                            writer.uint32(/* id 8, wireType 2 =*/66).string(message.distributed);
+                        return writer;
+                    };
+
+                    /**
+                     * Encodes the specified Query message, length delimited. Does not implicitly {@link cockroach.server.serverpb.QueriesResponse.Query.verify|verify} messages.
+                     * @param {cockroach.server.serverpb.QueriesResponse.Query$Properties} message Query message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    Query.encodeDelimited = function encodeDelimited(message, writer) {
+                        return this.encode(message, writer).ldelim();
+                    };
+
+                    /**
+                     * Decodes a Query message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.server.serverpb.QueriesResponse.Query} Query
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    Query.decode = function decode(reader, length) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.QueriesResponse.Query();
+                        while (reader.pos < end) {
+                            let tag = reader.uint32();
+                            switch (tag >>> 3) {
+                            case 1:
+                                message.query_id = reader.string();
+                                break;
+                            case 2:
+                                message.node_id = reader.int64();
+                                break;
+                            case 3:
+                                message.username = reader.string();
+                                break;
+                            case 4:
+                                message.start = $root.google.protobuf.Timestamp.decode(reader, reader.uint32());
+                                break;
+                            case 5:
+                                message.query = reader.string();
+                                break;
+                            case 6:
+                                message.client_address = reader.string();
+                                break;
+                            case 7:
+                                message.application_name = reader.string();
+                                break;
+                            case 8:
+                                message.distributed = reader.string();
+                                break;
+                            default:
+                                reader.skipType(tag & 7);
+                                break;
+                            }
+                        }
+                        return message;
+                    };
+
+                    /**
+                     * Decodes a Query message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.server.serverpb.QueriesResponse.Query} Query
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    Query.decodeDelimited = function decodeDelimited(reader) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader(reader);
+                        return this.decode(reader, reader.uint32());
+                    };
+
+                    /**
+                     * Verifies a Query message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    Query.verify = function verify(message) {
+                        if (typeof message !== "object" || message === null)
+                            return "object expected";
+                        if (message.query_id != null && message.hasOwnProperty("query_id"))
+                            if (!$util.isString(message.query_id))
+                                return "query_id: string expected";
+                        if (message.node_id != null && message.hasOwnProperty("node_id"))
+                            if (!$util.isInteger(message.node_id) && !(message.node_id && $util.isInteger(message.node_id.low) && $util.isInteger(message.node_id.high)))
+                                return "node_id: integer|Long expected";
+                        if (message.username != null && message.hasOwnProperty("username"))
+                            if (!$util.isString(message.username))
+                                return "username: string expected";
+                        if (message.start != null && message.hasOwnProperty("start")) {
+                            let error = $root.google.protobuf.Timestamp.verify(message.start);
+                            if (error)
+                                return "start." + error;
+                        }
+                        if (message.query != null && message.hasOwnProperty("query"))
+                            if (!$util.isString(message.query))
+                                return "query: string expected";
+                        if (message.client_address != null && message.hasOwnProperty("client_address"))
+                            if (!$util.isString(message.client_address))
+                                return "client_address: string expected";
+                        if (message.application_name != null && message.hasOwnProperty("application_name"))
+                            if (!$util.isString(message.application_name))
+                                return "application_name: string expected";
+                        if (message.distributed != null && message.hasOwnProperty("distributed"))
+                            if (!$util.isString(message.distributed))
+                                return "distributed: string expected";
+                        return null;
+                    };
+
+                    /**
+                     * Creates a Query message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.server.serverpb.QueriesResponse.Query} Query
+                     */
+                    Query.fromObject = function fromObject(object) {
+                        if (object instanceof $root.cockroach.server.serverpb.QueriesResponse.Query)
+                            return object;
+                        let message = new $root.cockroach.server.serverpb.QueriesResponse.Query();
+                        if (object.query_id != null)
+                            message.query_id = String(object.query_id);
+                        if (object.node_id != null)
+                            if ($util.Long)
+                                (message.node_id = $util.Long.fromValue(object.node_id)).unsigned = false;
+                            else if (typeof object.node_id === "string")
+                                message.node_id = parseInt(object.node_id, 10);
+                            else if (typeof object.node_id === "number")
+                                message.node_id = object.node_id;
+                            else if (typeof object.node_id === "object")
+                                message.node_id = new $util.LongBits(object.node_id.low >>> 0, object.node_id.high >>> 0).toNumber();
+                        if (object.username != null)
+                            message.username = String(object.username);
+                        if (object.start != null) {
+                            if (typeof object.start !== "object")
+                                throw TypeError(".cockroach.server.serverpb.QueriesResponse.Query.start: object expected");
+                            message.start = $root.google.protobuf.Timestamp.fromObject(object.start);
+                        }
+                        if (object.query != null)
+                            message.query = String(object.query);
+                        if (object.client_address != null)
+                            message.client_address = String(object.client_address);
+                        if (object.application_name != null)
+                            message.application_name = String(object.application_name);
+                        if (object.distributed != null)
+                            message.distributed = String(object.distributed);
+                        return message;
+                    };
+
+                    /**
+                     * Creates a Query message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.server.serverpb.QueriesResponse.Query.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.server.serverpb.QueriesResponse.Query} Query
+                     */
+                    Query.from = Query.fromObject;
+
+                    /**
+                     * Creates a plain object from a Query message. Also converts values to other types if specified.
+                     * @param {cockroach.server.serverpb.QueriesResponse.Query} message Query
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    Query.toObject = function toObject(message, options) {
+                        if (!options)
+                            options = {};
+                        let object = {};
+                        if (options.defaults) {
+                            object.query_id = "";
+                            if ($util.Long) {
+                                let long = new $util.Long(0, 0, false);
+                                object.node_id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                            } else
+                                object.node_id = options.longs === String ? "0" : 0;
+                            object.username = "";
+                            object.start = null;
+                            object.query = "";
+                            object.client_address = "";
+                            object.application_name = "";
+                            object.distributed = "";
+                        }
+                        if (message.query_id != null && message.hasOwnProperty("query_id"))
+                            object.query_id = message.query_id;
+                        if (message.node_id != null && message.hasOwnProperty("node_id"))
+                            if (typeof message.node_id === "number")
+                                object.node_id = options.longs === String ? String(message.node_id) : message.node_id;
+                            else
+                                object.node_id = options.longs === String ? $util.Long.prototype.toString.call(message.node_id) : options.longs === Number ? new $util.LongBits(message.node_id.low >>> 0, message.node_id.high >>> 0).toNumber() : message.node_id;
+                        if (message.username != null && message.hasOwnProperty("username"))
+                            object.username = message.username;
+                        if (message.start != null && message.hasOwnProperty("start"))
+                            object.start = $root.google.protobuf.Timestamp.toObject(message.start, options);
+                        if (message.query != null && message.hasOwnProperty("query"))
+                            object.query = message.query;
+                        if (message.client_address != null && message.hasOwnProperty("client_address"))
+                            object.client_address = message.client_address;
+                        if (message.application_name != null && message.hasOwnProperty("application_name"))
+                            object.application_name = message.application_name;
+                        if (message.distributed != null && message.hasOwnProperty("distributed"))
+                            object.distributed = message.distributed;
+                        return object;
+                    };
+
+                    /**
+                     * Creates a plain object from this Query message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    Query.prototype.toObject = function toObject(options) {
+                        return this.constructor.toObject(this, options);
+                    };
+
+                    /**
+                     * Converts this Query to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    Query.prototype.toJSON = function toJSON() {
+                        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                    };
+
+                    return Query;
+                })();
+
+                return QueriesResponse;
+            })();
+
             serverpb.Admin = (function() {
 
                 /**
@@ -10907,6 +11679,33 @@ export const cockroach = $root.cockroach = (() => {
                  * @function
                  * @param {cockroach.server.serverpb.QueryPlanRequest|Object.<string,*>} request QueryPlanRequest message or plain object
                  * @returns {Promise<cockroach.server.serverpb.QueryPlanResponse>} Promise
+                 * @variation 2
+                 */
+
+                /**
+                 * Callback as used by {@link Admin#queries}.
+                 * @typedef Admin_queries_Callback
+                 * @type {function}
+                 * @param {?Error} error Error, if any
+                 * @param {cockroach.server.serverpb.QueriesResponse} [response] QueriesResponse
+                 */
+
+                /**
+                 * Calls Queries.
+                 * @param {cockroach.server.serverpb.QueriesRequest|Object.<string,*>} request QueriesRequest message or plain object
+                 * @param {Admin_queries_Callback} callback Node-style callback called with the error, if any, and QueriesResponse
+                 * @returns {undefined}
+                 */
+                Admin.prototype.queries = function queries(request, callback) {
+                    return this.rpcCall(queries, $root.cockroach.server.serverpb.QueriesRequest, $root.cockroach.server.serverpb.QueriesResponse, request, callback);
+                };
+
+                /**
+                 * Calls Queries.
+                 * @name Admin#queries
+                 * @function
+                 * @param {cockroach.server.serverpb.QueriesRequest|Object.<string,*>} request QueriesRequest message or plain object
+                 * @returns {Promise<cockroach.server.serverpb.QueriesResponse>} Promise
                  * @variation 2
                  */
 

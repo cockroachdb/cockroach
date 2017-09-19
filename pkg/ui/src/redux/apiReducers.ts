@@ -77,6 +77,15 @@ const jobsRequestKey = (req: api.JobsRequestMessage): string =>
 const jobsReducerObj = new KeyedCachedDataReducer(api.getJobs, "jobs", jobsRequestKey, moment.duration(10, "s"));
 export const refreshJobs = jobsReducerObj.refresh;
 
+export const queriesKey = (limit: number) =>
+  `${encodeURIComponent(limit.toString())}`;
+
+const queriesRequestKey = (req: api.QueriesRequestMessage): string =>
+  queriesKey(req.limit);
+
+const queriesReducerObj = new KeyedCachedDataReducer(api.getQueries, "queries", queriesRequestKey, moment.duration(30, "s"));
+export const refreshQueries = queriesReducerObj.refresh;
+
 export const queryToID = (req: api.QueryPlanRequestMessage): string => req.query;
 
 const queryPlanReducerObj = new CachedDataReducer(api.getQueryPlan, "queryPlan");
@@ -111,6 +120,7 @@ export interface APIReducersState {
   logs: CachedDataReducerState<api.LogEntriesResponseMessage>;
   liveness: CachedDataReducerState<api.LivenessResponseMessage>;
   jobs: KeyedCachedDataReducerState<api.JobsResponseMessage>;
+  queries: KeyedCachedDataReducerState<api.QueriesResponseMessage>;
   queryPlan: CachedDataReducerState<api.QueryPlanResponseMessage>;
   problemRanges: CachedDataReducerState<api.ProblemRangesResponseMessage>;
   certificates: CachedDataReducerState<api.CertificatesResponseMessage>;
@@ -133,6 +143,7 @@ export default combineReducers<APIReducersState>({
   [logsReducerObj.actionNamespace]: logsReducerObj.reducer,
   [livenessReducerObj.actionNamespace]: livenessReducerObj.reducer,
   [jobsReducerObj.actionNamespace]: jobsReducerObj.reducer,
+  [queriesReducerObj.actionNamespace]: queriesReducerObj.reducer,
   [queryPlanReducerObj.actionNamespace]: queryPlanReducerObj.reducer,
   [problemRangesReducerObj.actionNamespace]: problemRangesReducerObj.reducer,
   [certificatesReducerObj.actionNamespace]: certificatesReducerObj.reducer,
@@ -141,4 +152,4 @@ export default combineReducers<APIReducersState>({
   [rangeLogReducerObj.actionNamespace]: rangeLogReducerObj.reducer,
 });
 
-export {CachedDataReducerState, KeyedCachedDataReducerState};
+export { CachedDataReducerState, KeyedCachedDataReducerState };

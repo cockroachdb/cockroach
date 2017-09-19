@@ -54,6 +54,9 @@ export type LivenessResponseMessage = protos.cockroach.server.serverpb.LivenessR
 export type JobsRequestMessage = protos.cockroach.server.serverpb.JobsRequest;
 export type JobsResponseMessage = protos.cockroach.server.serverpb.JobsResponse;
 
+export type QueriesRequestMessage = protos.cockroach.server.serverpb.QueriesRequest;
+export type QueriesResponseMessage = protos.cockroach.server.serverpb.QueriesResponse;
+
 export type QueryPlanRequestMessage = protos.cockroach.server.serverpb.QueryPlanRequest;
 export type QueryPlanResponseMessage = protos.cockroach.server.serverpb.QueryPlanResponse;
 
@@ -213,6 +216,10 @@ export function getHealth(_req: HealthRequestMessage, timeout?: moment.Duration)
 
 export function getJobs(req: JobsRequestMessage, timeout?: moment.Duration): Promise<JobsResponseMessage> {
   return timeoutFetch(serverpb.JobsResponse, `${API_PREFIX}/jobs?status=${req.status}&type=${req.type}&limit=${req.limit}`, null, timeout);
+}
+
+export function getQueries(req: QueriesRequestMessage, timeout?: moment.Duration): Promise<QueriesResponseMessage> {
+  return timeoutFetch(serverpb.QueriesResponse, `${API_PREFIX}/queries?status=${req.status}&type=${req.type}&limit=${req.limit}`, null, timeout);
 }
 
 // getCluster gets info about the cluster

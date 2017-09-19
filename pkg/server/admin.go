@@ -1120,6 +1120,56 @@ func (s *adminServer) QueryPlan(
 	}, nil
 }
 
+// Queries returns a JSON representation of currently running queries
+// plan.
+func (s *adminServer) Queries(
+	ctx context.Context, req *serverpb.QueriesRequest,
+) (*serverpb.QueriesResponse, error) {
+	args := sql.SessionArgs{User: s.getUser(req)}
+	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
+	defer session.Finish(s.server.sqlExecutor)
+
+	q := makeSQLQuery()
+	q.Append(`
+			SELECT query_id, node_id, username, start, query, client_address,
+				application_name
+			FROM [SHOW CLUSTER QUERIES]
+			WHERE true
+	`)
+	q.Append("ORDER BY start DESC")
+	if req.Limit > 0 {
+		q.Append(" LIMIT $", parser.NewDInt(parser.DInt(req.Limit)))
+	}
+	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, q.String(), q.QueryArguments(), 1)
+	if err != nil {
+		return nil, s.serverError(err)
+	}
+	defer r.Close(ctx)
+
+	scanner := makeResultScanner(r.ResultList[0].Columns)
+	resp := serverpb.QueriesResponse{
+		Queries: make([]serverpb.QueriesResponse_Query, r.ResultList[0].Rows.Len()),
+	}
+	for i := 0; i < len(resp.Queries); i++ {
+		query := &resp.Queries[i]
+		if err := scanner.ScanAll(
+			r.ResultList[0].Rows.At(i),
+			&query.QueryID,
+			&query.NodeID,
+			&query.Username,
+			&query.Start,
+			&query.Query,
+			&query.ClientAddress,
+			&query.ApplicationName,
+			// &query.Distributed,
+		); err != nil {
+			return nil, s.serverError(err)
+		}
+	}
+
+	return &resp, nil
+}
+
 // Drain puts the node into the specified drain mode(s) and optionally
 // instructs the process to terminate.
 func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_DrainServer) error {

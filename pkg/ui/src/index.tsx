@@ -31,6 +31,7 @@ import { DatabaseTablesList, DatabaseGrantsList } from "src/views/databases/cont
 import TableDetails from "src/views/databases/containers/tableDetails";
 
 import JobsPage from "src/views/jobs";
+import QueriesPage from "src/views/queries";
 
 import NodesOverview from "src/views/cluster/containers/nodesOverview";
 import NodeOverview from "src/views/cluster/containers/nodeOverview";
@@ -85,7 +86,8 @@ ReactDOM.render(
           <Route path="grants" component={ DatabaseGrantsList } />
           <Route path={ `database/:${databaseNameAttr}/table/:${tableNameAttr}` } component={ TableDetails } />
         </Route>
-        <Route path="jobs" component={ JobsPage } />
+        <Route path="jobs" component={JobsPage} />
+        <Route path="queries" component={ QueriesPage } />
         <Route path="raft" component={ Raft }>
           <IndexRedirect to="ranges" />
           <Route path="ranges" component={ RaftRanges } />

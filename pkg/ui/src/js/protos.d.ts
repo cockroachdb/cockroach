@@ -5926,6 +5926,411 @@ export namespace cockroach {
                 public toJSON(): { [k: string]: any };
             }
 
+            type QueriesRequest$Properties = {
+                limit?: number;
+                status?: string;
+                type?: cockroach.sql.jobs.Type;
+            };
+
+            /**
+             * Constructs a new QueriesRequest.
+             * @exports cockroach.server.serverpb.QueriesRequest
+             * @constructor
+             * @param {cockroach.server.serverpb.QueriesRequest$Properties=} [properties] Properties to set
+             */
+            class QueriesRequest {
+
+                /**
+                 * Constructs a new QueriesRequest.
+                 * @exports cockroach.server.serverpb.QueriesRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.QueriesRequest$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.QueriesRequest$Properties);
+
+                /**
+                 * QueriesRequest limit.
+                 * @type {number}
+                 */
+                public limit: number;
+
+                /**
+                 * QueriesRequest status.
+                 * @type {string}
+                 */
+                public status: string;
+
+                /**
+                 * QueriesRequest type.
+                 * @type {cockroach.sql.jobs.Type}
+                 */
+                public type: cockroach.sql.jobs.Type;
+
+                /**
+                 * Creates a new QueriesRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.QueriesRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.QueriesRequest} QueriesRequest instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.QueriesRequest$Properties): cockroach.server.serverpb.QueriesRequest;
+
+                /**
+                 * Encodes the specified QueriesRequest message. Does not implicitly {@link cockroach.server.serverpb.QueriesRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.QueriesRequest$Properties} message QueriesRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.QueriesRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified QueriesRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.QueriesRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.QueriesRequest$Properties} message QueriesRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.QueriesRequest$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a QueriesRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.QueriesRequest} QueriesRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.QueriesRequest;
+
+                /**
+                 * Decodes a QueriesRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.QueriesRequest} QueriesRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.QueriesRequest;
+
+                /**
+                 * Verifies a QueriesRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a QueriesRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.QueriesRequest} QueriesRequest
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.QueriesRequest;
+
+                /**
+                 * Creates a QueriesRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.QueriesRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.QueriesRequest} QueriesRequest
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.QueriesRequest;
+
+                /**
+                 * Creates a plain object from a QueriesRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.QueriesRequest} message QueriesRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.QueriesRequest, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this QueriesRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this QueriesRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            type QueriesResponse$Properties = {
+                queries?: cockroach.server.serverpb.QueriesResponse.Query$Properties[];
+            };
+
+            /**
+             * Constructs a new QueriesResponse.
+             * @exports cockroach.server.serverpb.QueriesResponse
+             * @constructor
+             * @param {cockroach.server.serverpb.QueriesResponse$Properties=} [properties] Properties to set
+             */
+            class QueriesResponse {
+
+                /**
+                 * Constructs a new QueriesResponse.
+                 * @exports cockroach.server.serverpb.QueriesResponse
+                 * @constructor
+                 * @param {cockroach.server.serverpb.QueriesResponse$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.server.serverpb.QueriesResponse$Properties);
+
+                /**
+                 * QueriesResponse queries.
+                 * @type {Array.<cockroach.server.serverpb.QueriesResponse.Query$Properties>}
+                 */
+                public queries: cockroach.server.serverpb.QueriesResponse.Query$Properties[];
+
+                /**
+                 * Creates a new QueriesResponse instance using the specified properties.
+                 * @param {cockroach.server.serverpb.QueriesResponse$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.QueriesResponse} QueriesResponse instance
+                 */
+                public static create(properties?: cockroach.server.serverpb.QueriesResponse$Properties): cockroach.server.serverpb.QueriesResponse;
+
+                /**
+                 * Encodes the specified QueriesResponse message. Does not implicitly {@link cockroach.server.serverpb.QueriesResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.QueriesResponse$Properties} message QueriesResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.server.serverpb.QueriesResponse$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified QueriesResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.QueriesResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.QueriesResponse$Properties} message QueriesResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.server.serverpb.QueriesResponse$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a QueriesResponse message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.QueriesResponse} QueriesResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.QueriesResponse;
+
+                /**
+                 * Decodes a QueriesResponse message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.QueriesResponse} QueriesResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.QueriesResponse;
+
+                /**
+                 * Verifies a QueriesResponse message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a QueriesResponse message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.QueriesResponse} QueriesResponse
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.QueriesResponse;
+
+                /**
+                 * Creates a QueriesResponse message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.QueriesResponse.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.QueriesResponse} QueriesResponse
+                 */
+                public static from(object: { [k: string]: any }): cockroach.server.serverpb.QueriesResponse;
+
+                /**
+                 * Creates a plain object from a QueriesResponse message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.QueriesResponse} message QueriesResponse
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.server.serverpb.QueriesResponse, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this QueriesResponse message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this QueriesResponse to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            namespace QueriesResponse {
+
+                type Query$Properties = {
+                    query_id?: string;
+                    node_id?: Long;
+                    username?: string;
+                    start?: google.protobuf.Timestamp$Properties;
+                    query?: string;
+                    client_address?: string;
+                    application_name?: string;
+                    distributed?: string;
+                };
+
+                /**
+                 * Constructs a new Query.
+                 * @exports cockroach.server.serverpb.QueriesResponse.Query
+                 * @constructor
+                 * @param {cockroach.server.serverpb.QueriesResponse.Query$Properties=} [properties] Properties to set
+                 */
+                class Query {
+
+                    /**
+                     * Constructs a new Query.
+                     * @exports cockroach.server.serverpb.QueriesResponse.Query
+                     * @constructor
+                     * @param {cockroach.server.serverpb.QueriesResponse.Query$Properties=} [properties] Properties to set
+                     */
+                    constructor(properties?: cockroach.server.serverpb.QueriesResponse.Query$Properties);
+
+                    /**
+                     * Query query_id.
+                     * @type {string}
+                     */
+                    public query_id: string;
+
+                    /**
+                     * Query node_id.
+                     * @type {Long}
+                     */
+                    public node_id: Long;
+
+                    /**
+                     * Query username.
+                     * @type {string}
+                     */
+                    public username: string;
+
+                    /**
+                     * Query start.
+                     * @type {(google.protobuf.Timestamp$Properties|null)}
+                     */
+                    public start: (google.protobuf.Timestamp$Properties|null);
+
+                    /**
+                     * Query query.
+                     * @type {string}
+                     */
+                    public query: string;
+
+                    /**
+                     * Query client_address.
+                     * @type {string}
+                     */
+                    public client_address: string;
+
+                    /**
+                     * Query application_name.
+                     * @type {string}
+                     */
+                    public application_name: string;
+
+                    /**
+                     * Query distributed.
+                     * @type {string}
+                     */
+                    public distributed: string;
+
+                    /**
+                     * Creates a new Query instance using the specified properties.
+                     * @param {cockroach.server.serverpb.QueriesResponse.Query$Properties=} [properties] Properties to set
+                     * @returns {cockroach.server.serverpb.QueriesResponse.Query} Query instance
+                     */
+                    public static create(properties?: cockroach.server.serverpb.QueriesResponse.Query$Properties): cockroach.server.serverpb.QueriesResponse.Query;
+
+                    /**
+                     * Encodes the specified Query message. Does not implicitly {@link cockroach.server.serverpb.QueriesResponse.Query.verify|verify} messages.
+                     * @param {cockroach.server.serverpb.QueriesResponse.Query$Properties} message Query message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encode(message: cockroach.server.serverpb.QueriesResponse.Query$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Encodes the specified Query message, length delimited. Does not implicitly {@link cockroach.server.serverpb.QueriesResponse.Query.verify|verify} messages.
+                     * @param {cockroach.server.serverpb.QueriesResponse.Query$Properties} message Query message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encodeDelimited(message: cockroach.server.serverpb.QueriesResponse.Query$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Decodes a Query message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.server.serverpb.QueriesResponse.Query} Query
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.server.serverpb.QueriesResponse.Query;
+
+                    /**
+                     * Decodes a Query message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.server.serverpb.QueriesResponse.Query} Query
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.server.serverpb.QueriesResponse.Query;
+
+                    /**
+                     * Verifies a Query message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    public static verify(message: { [k: string]: any }): string;
+
+                    /**
+                     * Creates a Query message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.server.serverpb.QueriesResponse.Query} Query
+                     */
+                    public static fromObject(object: { [k: string]: any }): cockroach.server.serverpb.QueriesResponse.Query;
+
+                    /**
+                     * Creates a Query message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.server.serverpb.QueriesResponse.Query.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.server.serverpb.QueriesResponse.Query} Query
+                     */
+                    public static from(object: { [k: string]: any }): cockroach.server.serverpb.QueriesResponse.Query;
+
+                    /**
+                     * Creates a plain object from a Query message. Also converts values to other types if specified.
+                     * @param {cockroach.server.serverpb.QueriesResponse.Query} message Query
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public static toObject(message: cockroach.server.serverpb.QueriesResponse.Query, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Creates a plain object from this Query message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Converts this Query to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    public toJSON(): { [k: string]: any };
+                }
+            }
+
             /**
              * Constructs a new Admin service.
              * @exports cockroach.server.serverpb.Admin
@@ -6068,6 +6473,14 @@ export namespace cockroach {
                  * @returns {undefined}
                  */
                 public queryPlan(request: (cockroach.server.serverpb.QueryPlanRequest|{ [k: string]: any }), callback: Admin_queryPlan_Callback): void;
+
+                /**
+                 * Calls Queries.
+                 * @param {cockroach.server.serverpb.QueriesRequest|Object.<string,*>} request QueriesRequest message or plain object
+                 * @param {Admin_queries_Callback} callback Node-style callback called with the error, if any, and QueriesResponse
+                 * @returns {undefined}
+                 */
+                public queries(request: (cockroach.server.serverpb.QueriesRequest|{ [k: string]: any }), callback: Admin_queries_Callback): void;
 
                 /**
                  * Calls Drain.
@@ -26405,6 +26818,8 @@ type Admin_liveness_Callback = (error: Error, response?: cockroach.server.server
 type Admin_jobs_Callback = (error: Error, response?: cockroach.server.serverpb.JobsResponse) => void;
 
 type Admin_queryPlan_Callback = (error: Error, response?: cockroach.server.serverpb.QueryPlanResponse) => void;
+
+type Admin_queries_Callback = (error: Error, response?: cockroach.server.serverpb.QueriesResponse) => void;
 
 type Admin_drain_Callback = (error: Error, response?: cockroach.server.serverpb.DrainResponse) => void;
 
