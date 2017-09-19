@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // TableLookupsByID maps table IDs to looked up descriptors or, for tables that
@@ -359,10 +358,7 @@ func (f baseFKHelper) check(ctx context.Context, values parser.Datums, traceKV b
 	if err != nil {
 		return false, err
 	}
-	if traceKV {
-		log.VEventf(ctx, 2, "Scan %s -> %s", span.Key, span.EndKey)
-	}
-	err = f.rf.StartScan(ctx, f.txn, roachpb.Spans{span}, true /* limit batches */, 1)
+	err = f.rf.StartScan(ctx, f.txn, roachpb.Spans{span}, true /* limit batches */, 1, traceKV)
 	if err != nil {
 		return false, err
 	}

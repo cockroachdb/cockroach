@@ -173,6 +173,7 @@ query TTT
 SELECT span, operation, message FROM [SHOW KV TRACE FOR UPSERT INTO t.kv(k, v) VALUES (2,3)]
 ----
 (0,2)  consuming rows    output row: []
+(0,0)  sql txn implicit  Scan /Table/52/1/{2-3}
 (0,0)  sql txn implicit  querying next range at /Table/52/1/2
 (0,0)  sql txn implicit  r1: sending batch 1 Scan to (n1,s1):1
 (0,0)  sql txn implicit  CPut /Table/52/1/2/0 -> /TUPLE/2:2:Int/3
@@ -184,6 +185,7 @@ query TTT
 SELECT span, operation, message FROM [SHOW KV TRACE FOR UPSERT INTO t.kv(k, v) VALUES (1,2)]
 ----
 (0,2)  consuming rows    output row: []
+(0,0)  sql txn implicit  Scan /Table/52/1/{1-2}
 (0,0)  sql txn implicit  querying next range at /Table/52/1/1
 (0,0)  sql txn implicit  r1: sending batch 1 Scan to (n1,s1):1
 (0,0)  sql txn implicit  fetched: /kv/primary/1/v -> /2
@@ -195,6 +197,7 @@ query TTT
 SELECT span, operation, message FROM [SHOW KV TRACE FOR UPSERT INTO t.kv(k, v) VALUES (2,2)]
 ----
 (0,2)  consuming rows    output row: []
+(0,0)  sql txn implicit  Scan /Table/52/1/{2-3}
 (0,0)  sql txn implicit  querying next range at /Table/52/1/2
 (0,0)  sql txn implicit  r1: sending batch 1 Scan to (n1,s1):1
 (0,0)  sql txn implicit  fetched: /kv/primary/2/v -> /3
@@ -230,6 +233,7 @@ SELECT span, operation, regexp_replace(regexp_replace(message, 'wall_time:\d+', 
 (0,1)  starting plan  querying next range at /Table/3/1/1/2/1
 (0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
 (0,1)  starting plan  r1: sending batch 5 CPut to (n1,s1):1
+(0,1)  starting plan  Scan /Table/52/{1-2}
 (0,1)  starting plan  querying next range at /Table/52/1
 (0,1)  starting plan  r1: sending batch 1 Scan to (n1,s1):1
 (0,1)  starting plan  fetched: /kv/primary/1/v -> /2
@@ -243,6 +247,7 @@ query TTT
 SELECT span, operation, regexp_replace(message, '\d\d\d\d\d+', '...PK...') as message
   FROM [SHOW KV TRACE FOR UPDATE t.kv2 SET v = v + 2]
 ----
+(0,0)  sql txn implicit  Scan /Table/53/{1-2}
 (0,0)  sql txn implicit  querying next range at /Table/53/1
 (0,0)  sql txn implicit  r1: sending batch 1 Scan to (n1,s1):1
 (0,0)  sql txn implicit  fetched: /kv2/primary/...PK.../k/v -> /1/2
@@ -257,6 +262,7 @@ SELECT span, operation, regexp_replace(message, '\d\d\d\d\d+', '...PK...') as me
 query TTT
 SELECT span, operation, message FROM [SHOW KV TRACE FOR DELETE FROM t.kv2]
 ----
+(0,1)  starting plan   Scan /Table/53/{1-2}
 (0,1)  starting plan   querying next range at /Table/53/1
 (0,1)  starting plan   r1: sending batch 1 Scan to (n1,s1):1
 (0,1)  starting plan   DelRange /Table/53/1 - /Table/53/2
@@ -286,6 +292,7 @@ SELECT span, operation, regexp_replace(message, 'wall_time:\d+', 'wall_time:...'
 query TTT
 SELECT span, operation, message FROM [SHOW KV TRACE FOR DELETE FROM t.kv]
 ----
+(0,0)  sql txn implicit  Scan /Table/52/{1-2}
 (0,0)  sql txn implicit  querying next range at /Table/52/1
 (0,0)  sql txn implicit  r1: sending batch 1 Scan to (n1,s1):1
 (0,0)  sql txn implicit  fetched: /kv/primary/1/v -> /2

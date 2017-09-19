@@ -135,7 +135,7 @@ func (n *scanNode) Close(context.Context) {
 // initScan sets up the rowFetcher and starts a scan.
 func (n *scanNode) initScan(ctx context.Context) error {
 	limitHint := n.limitHint()
-	if err := n.fetcher.StartScan(ctx, n.p.txn, n.spans, !n.disableBatchLimits, limitHint); err != nil {
+	if err := n.fetcher.StartScan(ctx, n.p.txn, n.spans, !n.disableBatchLimits, limitHint, n.p.session.Tracing.KVTracingEnabled()); err != nil {
 		return err
 	}
 	n.scanInitialized = true

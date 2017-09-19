@@ -144,7 +144,7 @@ func (ib *indexBackfiller) runChunk(
 		// populated and deleted by the OLTP commands but not otherwise
 		// read or used
 		if err := ib.fetcher.StartScan(
-			ctx, txn, []roachpb.Span{sp}, true /* limitBatches */, chunkSize,
+			ctx, txn, []roachpb.Span{sp}, true /* limitBatches */, chunkSize, false, /* traceKV */
 		); err != nil {
 			log.Errorf(ctx, "scan error: %s", err)
 			return nil, err
