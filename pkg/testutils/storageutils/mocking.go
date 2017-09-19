@@ -17,11 +17,10 @@ package storageutils
 import (
 	"fmt"
 
-	"golang.org/x/sync/singleflight"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 )
 
 // raftCmdIDAndIndex identifies a batch and a command within it.
