@@ -134,6 +134,23 @@ func (ls *Stores) VisitStores(visitor func(s *Store) error) error {
 	return err
 }
 
+// GetReplicaForRangeID returns the replica which contains the specified range,
+// or nil if it's not found.
+func (ls *Stores) GetReplicaForRangeID(rangeID roachpb.RangeID) *Replica {
+	var replica *Replica
+
+	ls.VisitStores(func(store *Store) error {
+		replicaFromStore, err := store.GetReplica(roachpb.RangeID(rangeID))
+
+		if err == nil {
+			replica = replicaFromStore
+		}
+		return nil
+	})
+
+	return replica
+}
+
 // Send implements the client.Sender interface. The store is looked up from the
 // store map if specified by the request; otherwise, the command is being
 // executed locally, and the replica is determined via lookup through each

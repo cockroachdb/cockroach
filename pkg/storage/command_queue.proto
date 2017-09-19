@@ -28,9 +28,6 @@ message CommandQueueCommand {
   repeated int64 prereqs = 6;
 }
 
-// would be called CommandQueue but that's already taken by the struct in command_queue.go
-// TODO(vilterp): should we use the same proto to define that struct that we use for
-// serialization to the UI?
 message CommandQueueSnapshot {
   repeated CommandQueueCommand commands = 1;
 }
