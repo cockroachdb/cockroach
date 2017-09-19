@@ -265,7 +265,8 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 
 	mu := struct {
 		syncutil.Mutex
-		conns []net.Conn
+		conns     []net.Conn
+		autoClose bool
 	}{}
 	ln := func() *interceptingListener {
 		ln, err := net.Listen("tcp", util.TestAddr.String())
@@ -276,7 +277,11 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 			Listener: ln,
 			connCB: func(conn net.Conn) {
 				mu.Lock()
-				mu.conns = append(mu.conns, conn)
+				if mu.autoClose {
+					_ = conn.Close()
+				} else {
+					mu.conns = append(mu.conns, conn)
+				}
 				mu.Unlock()
 			}}
 	}()
@@ -344,21 +349,25 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 		return clientCtx.ConnHealth(remoteAddr)
 	})
 
-	// Close the listener and all the connections.
-	//
-	// NB: Closing the connections is done in the retry loops below because
-	// sometimes the call to `ln.Close` interleaves with a connection attempt in
-	// such a way that a connection manages to slip through. This is because
-	// closing the listener does not terminate existing connections.
+	// Close the listener and all the connections. Note that if we
+	// only closed the listener, recently-accepted-but-not-yet-handled
+	// connections could sneak in and randomly make the target healthy
+	// again. To avoid this, we flip the boolean below which is used in
+	// our handler callback to eagerly close any stragglers.
+	mu.Lock()
+	mu.autoClose = true
+	mu.Unlock()
 	if err := ln.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Also terminate any existing connections.
+	if _, err := closeConns(); err != nil {
 		t.Fatal(err)
 	}
 
 	// Should become unhealthy again now that the connection was closed.
 	testutils.SucceedsSoon(t, func() error {
-		if _, err := closeConns(); err != nil {
-			t.Fatal(err)
-		}
 		err := clientCtx.ConnHealth(remoteAddr)
 
 		if !isUnhealthy(err) {
@@ -370,19 +379,9 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	// Should stay unhealthy despite reconnection attempts.
 	for then := timeutil.Now(); timeutil.Since(then) < 50*clientCtx.heartbeatInterval; {
 		err := clientCtx.ConnHealth(remoteAddr)
-		if isUnhealthy(err) {
-			// What we expected. Let's keep checking that it remains that way.
-			continue
+		if !isUnhealthy(err) {
+			t.Fatal(err)
 		}
-		if n, closeErr := closeConns(); closeErr != nil {
-			t.Fatal(closeErr)
-		} else if n > 0 && err == nil {
-			// Connection raced its way in even though we closed the listener.
-			// We made it go away and we can't possibly run into this all the
-			// time, so try again.
-			continue
-		}
-		t.Fatal(err)
 	}
 }
 
