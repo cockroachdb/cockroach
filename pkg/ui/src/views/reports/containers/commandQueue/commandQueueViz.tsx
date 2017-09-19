@@ -7,7 +7,6 @@ import * as dagre from "dagre-layout";
 import * as protos from "src/js/protos";
 
 interface QueueVizProps {
-  // TODO(vilterp): doesn't compile without $Properties; not sure why
   queue: protos.cockroach.storage.CommandQueueSnapshot$Properties;
 }
 
@@ -116,11 +115,12 @@ export default class CommandQueueViz extends React.Component<QueueVizProps, Queu
                 cx={node.x}
                 cy={node.y}
                 r={COMMAND_RADIUS}
-                onMouseEnter={() => { this.setState({ hoveredNode: node.command.id }); }}
+                onClick={() => { this.setState({ hoveredNode: node.command.id }); }}
                 style={{
                   fill: node.command.readonly ? "lightgreen" : "pink",
                   stroke: (this.state.hoveredNode !== null && node.command.id.equals(this.state.hoveredNode))
                     ? "red" : "black",
+                  cursor: "pointer",
                 }} />
             );
           })}

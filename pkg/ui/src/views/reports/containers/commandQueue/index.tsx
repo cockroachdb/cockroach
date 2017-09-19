@@ -17,22 +17,6 @@ interface CommandQueueOwnProps {
 
 type CommandQueueProps = CommandQueueOwnProps & RouterState;
 
-// function ErrorPage(props: {
-//   rangeID: string,
-//   errorText: string,
-//   rangeResponse?: protos.cockroach.server.serverpb.RangeResponse;
-// }) {
-//   return (
-//     <div className="section">
-//       <h1>Range Report for r{props.rangeID}</h1>
-//       <h2>{props.errorText}</h2>
-//       {
-//         _.isNil(props.rangeResponse) ? null : <ConnectionsTable rangeResponse={props.rangeResponse} />
-//       }
-//     </div>
-//   );
-// }
-
 /**
  * Renders the Command Queue Report page.
  */
