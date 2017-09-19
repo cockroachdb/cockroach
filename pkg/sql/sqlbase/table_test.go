@@ -16,6 +16,7 @@ package sqlbase
 
 import (
 	"bytes"
+	"reflect"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -362,5 +364,120 @@ func BenchmarkArrayEncoding(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = encodeArray(&ary, nil)
+	}
+}
+
+func TestMarshalColumnValue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tests := []struct {
+		kind  ColumnType_SemanticType
+		datum parser.Datum
+		exp   roachpb.Value
+	}{
+		{
+			kind:  ColumnType_BOOL,
+			datum: parser.MakeDBool(true),
+			exp:   func() (v roachpb.Value) { v.SetBool(true); return }(),
+		},
+		{
+			kind:  ColumnType_BOOL,
+			datum: parser.MakeDBool(false),
+			exp:   func() (v roachpb.Value) { v.SetBool(false); return }(),
+		},
+		{
+			kind:  ColumnType_INT,
+			datum: parser.NewDInt(314159),
+			exp:   func() (v roachpb.Value) { v.SetInt(314159); return }(),
+		},
+		{
+			kind:  ColumnType_FLOAT,
+			datum: parser.NewDFloat(3.14159),
+			exp:   func() (v roachpb.Value) { v.SetFloat(3.14159); return }(),
+		},
+		{
+			kind: ColumnType_DECIMAL,
+			datum: func() (v parser.Datum) {
+				v, err := parser.ParseDDecimal("1234567890.123456890")
+				if err != nil {
+					t.Fatalf("Unexpected error while creating expected value: %s", err)
+				}
+				return
+			}(),
+			exp: func() (v roachpb.Value) {
+				dDecimal, err := parser.ParseDDecimal("1234567890.123456890")
+				if err != nil {
+					t.Fatalf("Unexpected error while creating expected value: %s", err)
+				}
+				err = v.SetDecimal(&dDecimal.Decimal)
+				if err != nil {
+					t.Fatalf("Unexpected error while creating expected value: %s", err)
+				}
+				return
+			}(),
+		},
+		{
+			kind:  ColumnType_STRING,
+			datum: parser.NewDString("testing123"),
+			exp:   func() (v roachpb.Value) { v.SetString("testing123"); return }(),
+		},
+		{
+			kind:  ColumnType_NAME,
+			datum: parser.NewDName("testingname123"),
+			exp:   func() (v roachpb.Value) { v.SetString("testingname123"); return }(),
+		},
+		{
+			kind:  ColumnType_BYTES,
+			datum: parser.NewDBytes(parser.DBytes([]byte{0x31, 0x41, 0x59})),
+			exp:   func() (v roachpb.Value) { v.SetBytes([]byte{0x31, 0x41, 0x59}); return }(),
+		},
+		{
+			kind: ColumnType_UUID,
+			datum: func() (v parser.Datum) {
+				v, err := parser.ParseDUuidFromString("63616665-6630-3064-6465-616462656562")
+				if err != nil {
+					t.Fatalf("Unexpected error while creating expected value: %s", err)
+				}
+				return
+			}(),
+			exp: func() (v roachpb.Value) {
+				dUUID, err := parser.ParseDUuidFromString("63616665-6630-3064-6465-616462656562")
+				if err != nil {
+					t.Fatalf("Unexpected error while creating expected value: %s", err)
+				}
+				v.SetBytes(dUUID.GetBytes())
+				return
+			}(),
+		},
+		{
+			kind: ColumnType_INET,
+			datum: func() (v parser.Datum) {
+				v, err := parser.ParseDIPAddrFromINetString("192.168.0.1")
+				if err != nil {
+					t.Fatalf("Unexpected error while creating expected value: %s", err)
+				}
+				return
+			}(),
+			exp: func() (v roachpb.Value) {
+				ipAddr, err := parser.ParseDIPAddrFromINetString("192.168.0.1")
+				if err != nil {
+					t.Fatalf("Unexpected error while creating expected value: %s", err)
+				}
+				data := ipAddr.ToBuffer(nil)
+				v.SetBytes(data)
+				return
+			}(),
+		},
+	}
+
+	for i, testCase := range tests {
+		typ := ColumnType{SemanticType: testCase.kind}
+		col := ColumnDescriptor{ID: ColumnID(testCase.kind + 1), Type: typ}
+
+		if actual, err := MarshalColumnValue(col, testCase.datum); err != nil {
+			t.Errorf("%d: unexpected error with column type %v: %v", i, typ, err)
+		} else if !reflect.DeepEqual(actual, testCase.exp) {
+			t.Errorf("%d: MarshalColumnValue() got %s, expected %v", i, actual, testCase.exp)
+		}
 	}
 }

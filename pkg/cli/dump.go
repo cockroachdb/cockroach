@@ -425,6 +425,11 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 						if err != nil {
 							return err
 						}
+					case "INET":
+						d, err = parser.ParseDIPAddrFromINetString(string(t))
+						if err != nil {
+							return err
+						}
 					default:
 						// STRING and DECIMAL types can have optional length
 						// suffixes, so only examine the prefix of the type.

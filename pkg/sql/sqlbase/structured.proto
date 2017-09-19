@@ -53,6 +53,7 @@ message ColumnType {
 
     UUID = 14;
     ARRAY = 15;
+    INET = 16;
 
     INT2VECTOR = 200;
   }
