@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -523,6 +524,26 @@ func TestStyle(t *testing.T) {
 
 	t.Run("TestForbiddenImports", func(t *testing.T) {
 		t.Parallel()
+
+		// forbiddenImportPkg -> permittedReplacementPkg
+		forbiddenImports := map[string]string{
+			"context": "golang.org/x/net/context",
+			"log":     "util/log",
+			"path":    "path/filepath",
+			"github.com/golang/protobuf/proto": "github.com/gogo/protobuf/proto",
+			"github.com/satori/go.uuid":        "util/uuid",
+			"golang.org/x/sync/singleflight":   "github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight",
+		}
+
+		// grepBuf creates a grep string that matches any forbidden import pkgs.
+		var grepBuf bytes.Buffer
+		grepBuf.WriteByte('(')
+		for forbiddenPkg := range forbiddenImports {
+			grepBuf.WriteByte('|')
+			grepBuf.WriteString(regexp.QuoteMeta(forbiddenPkg))
+		}
+		grepBuf.WriteString(")$")
+
 		filter := stream.FilterFunc(func(arg stream.Arg) error {
 			for _, useAllFiles := range []bool{false, true} {
 				buildContext := build.Default
@@ -559,8 +580,8 @@ func TestStyle(t *testing.T) {
 			filter,
 			stream.Sort(),
 			stream.Uniq(),
+			stream.Grep(`^`+settingsPkgPrefix+`: | `+grepBuf.String()),
 			stream.GrepNot(`cockroach/pkg/cmd/`),
-			stream.Grep(`^`+settingsPkgPrefix+`: | (github\.com/golang/protobuf/proto|github\.com/satori/go\.uuid|log|path|context|syscall)$`),
 			stream.GrepNot(`cockroach/pkg/(cli|security): syscall$`),
 			stream.GrepNot(`cockroach/pkg/(base|security|util/(log|randutil|stop)): log$`),
 			stream.GrepNot(`cockroach/pkg/(server/serverpb|ts/tspb): github\.com/golang/protobuf/proto$`),
@@ -568,22 +589,21 @@ func TestStyle(t *testing.T) {
 			stream.GrepNot(`cockroach/pkg/ccl/storageccl: path$`),
 			stream.GrepNot(`cockroach/pkg/util/uuid: github\.com/satori/go\.uuid$`),
 		), func(s string) {
-			switch {
-			case strings.HasSuffix(s, " path"):
-				t.Errorf(`%s <- please use "path/filepath" instead of "path"`, s)
-			case strings.HasSuffix(s, " log"):
-				t.Errorf(`%s <- please use "util/log" instead of "log"`, s)
-			case strings.HasSuffix(s, " github.com/golang/protobuf/proto"):
-				t.Errorf(`%s <- please use "github.com/gogo/protobuf/proto" instead of "github.com/golang/protobuf/proto"`, s)
-			case strings.HasSuffix(s, " github.com/satori/go.uuid"):
-				t.Errorf(`%s <- please use "util/uuid" instead of "github.com/satori/go.uuid"`, s)
-			case strings.HasSuffix(s, " context"):
-				t.Errorf(`%s <- please use "golang.org/x/net/context" instead of "context"`, s)
-			case strings.HasSuffix(s, " syscall"):
-				t.Errorf(`%s <- please use "golang.org/x/sys" instead of "syscall"`, s)
-			case strings.HasPrefix(s, settingsPkgPrefix+": github.com/cockroachdb/cockroach"):
-				if !strings.HasSuffix(s, "testutils") && !strings.HasSuffix(s, "humanizeutil") &&
-					!strings.HasSuffix(s, settingsPkgPrefix) {
+			pkgStr := strings.Split(s, ": ")
+			importingPkg, importedPkg := pkgStr[0], pkgStr[1]
+
+			// Test that a disallowed package is not imported.
+			if replPkg, ok := forbiddenImports[importedPkg]; ok {
+				t.Errorf(`%s <- please use %q instead of %q`, s, replPkg, importedPkg)
+			}
+
+			// Test that the settings package does not import CRDB dependencies.
+			if importingPkg == settingsPkgPrefix && strings.HasPrefix(importedPkg, cockroachDB) {
+				switch {
+				case strings.HasSuffix(s, "testutils"):
+				case strings.HasSuffix(s, "humanizeutil"):
+				case strings.HasSuffix(s, settingsPkgPrefix):
+				default:
 					t.Errorf("%s <- please don't add CRDB dependencies to settings pkg", s)
 				}
 			}
