@@ -659,7 +659,7 @@ func BenchmarkMVCCPutDelete_RocksDB(b *testing.B) {
 	rocksdb := setupMVCCInMemRocksDB(b, "put_delete")
 	defer rocksdb.Close()
 
-	r := rand.New(rand.NewSource(int64(timeutil.Now().UnixNano())))
+	r := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 	value := roachpb.MakeValueFromBytes(randutil.RandBytes(r, 10))
 	var blockNum int64
 

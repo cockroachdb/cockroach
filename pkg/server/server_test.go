@@ -273,7 +273,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	del := &roachpb.DeleteRangeRequest{
 		Span: roachpb.Span{
 			Key:    writes[0],
-			EndKey: roachpb.Key(writes[len(writes)-1]).Next(),
+			EndKey: writes[len(writes)-1].Next(),
 		},
 		ReturnKeys: true,
 	}

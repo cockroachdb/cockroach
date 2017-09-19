@@ -348,11 +348,11 @@ func TestSendRPCOrder(t *testing.T) {
 		}
 
 		ds.leaseHolderCache.Update(
-			context.TODO(), roachpb.RangeID(rangeID), roachpb.StoreID(0),
+			context.TODO(), rangeID, roachpb.StoreID(0),
 		)
 		if tc.leaseHolder > 0 {
 			ds.leaseHolderCache.Update(
-				context.TODO(), roachpb.RangeID(rangeID), descriptor.Replicas[tc.leaseHolder-1].StoreID,
+				context.TODO(), rangeID, descriptor.Replicas[tc.leaseHolder-1].StoreID,
 			)
 		}
 
@@ -1322,7 +1322,7 @@ func TestMultiRangeGapReverse(t *testing.T) {
 		TestingKnobs: DistSenderTestingKnobs{
 			TransportFactory: SenderTransportFactory(
 				tracing.NewTracer(),
-				client.SenderFunc(sender),
+				sender,
 			),
 		},
 	}
@@ -2075,9 +2075,9 @@ func TestMultiRangeSplitEndTransaction(t *testing.T) {
 		var ba roachpb.BatchRequest
 		ba.Txn = &roachpb.Transaction{Name: "test"}
 		val := roachpb.MakeValueFromString("val")
-		ba.Add(roachpb.NewPut(roachpb.Key(test.put1), val))
+		ba.Add(roachpb.NewPut(test.put1, val))
 		val = roachpb.MakeValueFromString("val")
-		ba.Add(roachpb.NewPut(roachpb.Key(test.put2), val))
+		ba.Add(roachpb.NewPut(test.put2, val))
 		ba.Add(&roachpb.EndTransactionRequest{Span: roachpb.Span{Key: test.et}})
 
 		if _, pErr := ds.Send(context.Background(), ba); pErr != nil {
@@ -2140,7 +2140,7 @@ func TestCountRanges(t *testing.T) {
 
 	// Verify counted ranges.
 	keyIn := func(desc roachpb.RangeDescriptor) roachpb.RKey {
-		return roachpb.RKey(append(desc.StartKey, 'a'))
+		return append(desc.StartKey, 'a')
 	}
 	testcases := []struct {
 		key    roachpb.RKey

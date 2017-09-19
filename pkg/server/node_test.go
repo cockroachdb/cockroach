@@ -555,7 +555,7 @@ func TestStatusSummaries(t *testing.T) {
 		t.Fatal(err)
 	}
 	testutils.SucceedsSoon(t, func() error {
-		for i := 1; i <= int(initialRanges); i++ {
+		for i := 1; i <= initialRanges; i++ {
 			if s.RaftStatus(roachpb.RangeID(i)) == nil {
 				return errors.Errorf("Store %d replica %d is not present in raft", s.StoreID(), i)
 			}

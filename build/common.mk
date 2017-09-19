@@ -175,7 +175,6 @@ endif
 		$(REPO_ROOT)/vendor/github.com/jteeuwen/go-bindata/go-bindata \
 		$(REPO_ROOT)/vendor/github.com/kisielk/errcheck \
 		$(REPO_ROOT)/vendor/github.com/mattn/goveralls \
-		$(REPO_ROOT)/vendor/github.com/mdempsky/unconvert \
 		$(REPO_ROOT)/vendor/github.com/mibk/dupl \
 		$(REPO_ROOT)/vendor/github.com/wadey/gocovmerge \
 		$(REPO_ROOT)/vendor/golang.org/x/perf/cmd/benchstat \

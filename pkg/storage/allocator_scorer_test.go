@@ -542,7 +542,7 @@ func TestDiversityScore(t *testing.T) {
 			for _, nodeID := range tc.existing {
 				for _, s := range testStores {
 					if s.Node.NodeID == nodeID {
-						existingNodeLocalities[roachpb.NodeID(s.Node.NodeID)] = s.Node.Locality
+						existingNodeLocalities[s.Node.NodeID] = s.Node.Locality
 					}
 				}
 			}
@@ -675,7 +675,7 @@ func TestRebalanceToDiversityScore(t *testing.T) {
 			for _, nodeID := range tc.existing {
 				for _, s := range testStores {
 					if s.Node.NodeID == nodeID {
-						existingNodeLocalities[roachpb.NodeID(s.Node.NodeID)] = s.Node.Locality
+						existingNodeLocalities[s.Node.NodeID] = s.Node.Locality
 					}
 				}
 			}
@@ -757,7 +757,7 @@ func TestDiversityRemovalScore(t *testing.T) {
 			existingNodeLocalities := make(map[roachpb.NodeID]roachpb.Locality)
 			for _, s := range testStores {
 				if _, ok := tc.expected[s.StoreID]; ok {
-					existingNodeLocalities[roachpb.NodeID(s.Node.NodeID)] = s.Node.Locality
+					existingNodeLocalities[s.Node.NodeID] = s.Node.Locality
 				}
 			}
 			for _, s := range testStores {
