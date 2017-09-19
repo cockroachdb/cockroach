@@ -100,7 +100,7 @@ type RowFetcher struct {
 }
 
 type kvFetcher interface {
-	nextKV(ctx context.Context) (bool, client.KeyValue, error)
+	nextKV(ctx context.Context, traceKV bool) (bool, client.KeyValue, error)
 	getRangesInfo() []roachpb.RangeInfo
 }
 
@@ -199,7 +199,12 @@ func (rf *RowFetcher) Init(
 // StartScan initializes and starts the key-value scan. Can be used multiple
 // times.
 func (rf *RowFetcher) StartScan(
-	ctx context.Context, txn *client.Txn, spans roachpb.Spans, limitBatches bool, limitHint int64,
+	ctx context.Context,
+	txn *client.Txn,
+	spans roachpb.Spans,
+	limitBatches bool,
+	limitHint int64,
+	traceKV bool,
 ) error {
 	if len(spans) == 0 {
 		panic("no spans")
@@ -221,26 +226,26 @@ func (rf *RowFetcher) StartScan(
 	if err != nil {
 		return err
 	}
-	return rf.StartScanFrom(ctx, &f)
+	return rf.StartScanFrom(ctx, &f, traceKV)
 }
 
 // StartScanFrom initializes and starts a scan from the given kvFetcher. Can be
 // used multiple times.
-func (rf *RowFetcher) StartScanFrom(ctx context.Context, f kvFetcher) error {
+func (rf *RowFetcher) StartScanFrom(ctx context.Context, f kvFetcher, traceKV bool) error {
 	rf.indexKey = nil
 	rf.kvFetcher = f
 	// Retrieve the first key.
-	_, err := rf.NextKey(ctx)
+	_, err := rf.NextKey(ctx, traceKV)
 	return err
 }
 
 // NextKey retrieves the next key/value and sets kv/kvEnd. Returns whether a row
 // has been completed.
-func (rf *RowFetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
+func (rf *RowFetcher) NextKey(ctx context.Context, traceKV bool) (rowDone bool, err error) {
 	var ok bool
 
 	for {
-		ok, rf.kv, err = rf.kvFetcher.nextKV(ctx)
+		ok, rf.kv, err = rf.kvFetcher.nextKV(ctx, traceKV)
 		if err != nil {
 			return false, err
 		}
@@ -571,7 +576,7 @@ func (rf *RowFetcher) NextRow(ctx context.Context, traceKV bool) (EncDatumRow, e
 		if traceKV {
 			log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyVal)
 		}
-		rowDone, err := rf.NextKey(ctx)
+		rowDone, err := rf.NextKey(ctx, traceKV)
 		if err != nil {
 			return nil, err
 		}

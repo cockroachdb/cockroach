@@ -219,7 +219,7 @@ type singleKVFetcher struct {
 	done bool
 }
 
-func (f *singleKVFetcher) nextKV(ctx context.Context) (bool, client.KeyValue, error) {
+func (f *singleKVFetcher) nextKV(ctx context.Context, traceKV bool) (bool, client.KeyValue, error) {
 	if f.done {
 		return false, client.KeyValue{}, nil
 	}
@@ -275,7 +275,7 @@ func ConvertBatchError(ctx context.Context, tableDesc *TableDescriptor, b *clien
 			return err
 		}
 		f := singleKVFetcher{kv: client.KeyValue{Key: key, Value: cErr.ActualValue}}
-		if err := rf.StartScanFrom(ctx, &f); err != nil {
+		if err := rf.StartScanFrom(ctx, &f, false /* traceKV */); err != nil {
 			return err
 		}
 		decodedVals, err := rf.NextRowDecoded(ctx, false /* traceKV */)

@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // PrettyKey pretty-prints the specified key, skipping over the first `skip`
@@ -204,7 +205,7 @@ func makeKVFetcher(
 }
 
 // fetch retrieves spans from the kv
-func (f *txnKVFetcher) fetch(ctx context.Context) error {
+func (f *txnKVFetcher) fetch(ctx context.Context, traceKV bool) error {
 	var ba roachpb.BatchRequest
 	ba.Header.MaxSpanRequestKeys = f.getBatchSize()
 	ba.Header.ReturnRangeInfo = f.returnRangeInfo
@@ -221,6 +222,18 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 			scans[i].Span = f.spans[i]
 			ba.Requests[i].MustSetInner(&scans[i])
 		}
+	}
+
+	if traceKV {
+		scanStr := "Scan "
+		for i, span := range f.spans {
+			if i != 0 {
+				scanStr += ", "
+			}
+			scanStr += span.String()
+		}
+
+		log.VEventf(ctx, 2, scanStr)
 	}
 
 	// Reset spans in preparation for adding resume-spans below.
@@ -279,7 +292,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 
 // nextKV returns the next key/value (initiating fetches as necessary). When
 // there are no more keys, returns false and an empty key/value.
-func (f *txnKVFetcher) nextKV(ctx context.Context) (bool, client.KeyValue, error) {
+func (f *txnKVFetcher) nextKV(ctx context.Context, traceKV bool) (bool, client.KeyValue, error) {
 	var kv client.KeyValue
 	for {
 		for len(f.kvs) == 0 && len(f.responses) > 0 {
@@ -300,7 +313,7 @@ func (f *txnKVFetcher) nextKV(ctx context.Context) (bool, client.KeyValue, error
 		if f.fetchEnd {
 			return false, kv, nil
 		}
-		if err := f.fetch(ctx); err != nil {
+		if err := f.fetch(ctx, traceKV); err != nil {
 			return false, kv, err
 		}
 	}
