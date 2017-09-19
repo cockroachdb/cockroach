@@ -184,6 +184,12 @@ results of each SQL statement are printed on the standard output.`,
 Reveal the SQL statements sent implicitly by the command-line utility.`,
 	}
 
+	EscapeNonASCII = FlagInfo{
+		Name: "escape-non-ascii",
+		Description: `
+Escape all non-ASCII characters when printing query output.`,
+	}
+
 	UnsafeUpdates = FlagInfo{
 		Name: "unsafe-updates",
 		Description: `

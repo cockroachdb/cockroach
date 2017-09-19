@@ -996,6 +996,13 @@ func Example_sql_table() {
 	c.RunWithArgs([]string{"sql", "--format=html", "-e", "select * from t.t"})
 	c.RunWithArgs([]string{"sql", "--format=raw", "-e", "select * from t.t"})
 	c.RunWithArgs([]string{"sql", "--format=records", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--escape-non-ascii", "--format=pretty", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--escape-non-ascii", "--format=tsv", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--escape-non-ascii", "--format=csv", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--escape-non-ascii", "--format=sql", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--escape-non-ascii", "--format=html", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--escape-non-ascii", "--format=raw", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--escape-non-ascii", "--format=records", "-e", "select * from t.t"})
 	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "select '  hai' as x"})
 	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "explain(indent) select s from t.t union all select s from t.t"})
 
@@ -1194,6 +1201,151 @@ func Example_sql_table() {
 	// -[ RECORD 9 ]
 	// s | a	b	c
 	//   | 12	123123213	12313
+	// d | tabs
+	// sql --escape-non-ascii --format=pretty -e select * from t.t
+	// +--------------------------------+--------------------------------+
+	// |               s                |               d                |
+	// +--------------------------------+--------------------------------+
+	// | foo                            | printable ASCII                |
+	// | \"foo                          | printable ASCII with quotes    |
+	// | \\foo                          | printable ASCII with backslash |
+	// | foo\nbar                       | non-printable ASCII            |
+	// | \u03ba\u1f79\u03c3\u03bc\u03b5 | printable UTF8                 |
+	// | \u00f1                         | printable UTF8 using escapes   |
+	// | \x01                           | non-printable UTF8 string      |
+	// | \u070885                       | UTF8 string with RTL char      |
+	// | a\tb\tc\n12\t123123213\t12313  | tabs                           |
+	// +--------------------------------+--------------------------------+
+	// (9 rows)
+	// sql --escape-non-ascii --format=tsv -e select * from t.t
+	// s	d
+	// foo	printable ASCII
+	// "\""foo"	printable ASCII with quotes
+	// \\foo	printable ASCII with backslash
+	// foo\nbar	non-printable ASCII
+	// \u03ba\u1f79\u03c3\u03bc\u03b5	printable UTF8
+	// \u00f1	printable UTF8 using escapes
+	// \x01	non-printable UTF8 string
+	// \u070885	UTF8 string with RTL char
+	// a\tb\tc\n12\t123123213\t12313	tabs
+	// # 9 rows
+	// sql --escape-non-ascii --format=csv -e select * from t.t
+	// s,d
+	// foo,printable ASCII
+	// "\""foo",printable ASCII with quotes
+	// \\foo,printable ASCII with backslash
+	// foo\nbar,non-printable ASCII
+	// \u03ba\u1f79\u03c3\u03bc\u03b5,printable UTF8
+	// \u00f1,printable UTF8 using escapes
+	// \x01,non-printable UTF8 string
+	// \u070885,UTF8 string with RTL char
+	// a\tb\tc\n12\t123123213\t12313,tabs
+	// # 9 rows
+	// sql --escape-non-ascii --format=sql -e select * from t.t
+	// CREATE TABLE results (
+	//   s STRING,
+	//   d STRING
+	// );
+	//
+	// INSERT INTO results VALUES ('foo', 'printable ASCII');
+	// INSERT INTO results VALUES (e'\\"foo', 'printable ASCII with quotes');
+	// INSERT INTO results VALUES (e'\\\\foo', 'printable ASCII with backslash');
+	// INSERT INTO results VALUES (e'foo\\nbar', 'non-printable ASCII');
+	// INSERT INTO results VALUES (e'\\u03ba\\u1f79\\u03c3\\u03bc\\u03b5', 'printable UTF8');
+	// INSERT INTO results VALUES (e'\\u00f1', 'printable UTF8 using escapes');
+	// INSERT INTO results VALUES (e'\\x01', 'non-printable UTF8 string');
+	// INSERT INTO results VALUES (e'\\u070885', 'UTF8 string with RTL char');
+	// INSERT INTO results VALUES (e'a\\tb\\tc\\n12\\t123123213\\t12313', 'tabs');
+	// sql --escape-non-ascii --format=html -e select * from t.t
+	// <table>
+	// <thead><tr><th>row</th><th>s</th><th>d</th></tr></head>
+	// <tbody>
+	// <tr><td>1</td><td>foo</td><td>printable ASCII</td></tr>
+	// <tr><td>2</td><td>\&#34;foo</td><td>printable ASCII with quotes</td></tr>
+	// <tr><td>3</td><td>\\foo</td><td>printable ASCII with backslash</td></tr>
+	// <tr><td>4</td><td>foo\nbar</td><td>non-printable ASCII</td></tr>
+	// <tr><td>5</td><td>\u03ba\u1f79\u03c3\u03bc\u03b5</td><td>printable UTF8</td></tr>
+	// <tr><td>6</td><td>\u00f1</td><td>printable UTF8 using escapes</td></tr>
+	// <tr><td>7</td><td>\x01</td><td>non-printable UTF8 string</td></tr>
+	// <tr><td>8</td><td>\u070885</td><td>UTF8 string with RTL char</td></tr>
+	// <tr><td>9</td><td>a\tb\tc\n12\t123123213\t12313</td><td>tabs</td></tr>
+	// </tbody>
+	// <tfoot><tr><td colspan=3>9 rows</td></tr></tfoot></table>
+	// sql --escape-non-ascii --format=raw -e select * from t.t
+	// # 2 columns
+	// # row 1
+	// ## 3
+	// foo
+	// ## 15
+	// printable ASCII
+	// # row 2
+	// ## 5
+	// \"foo
+	// ## 27
+	// printable ASCII with quotes
+	// # row 3
+	// ## 5
+	// \\foo
+	// ## 30
+	// printable ASCII with backslash
+	// # row 4
+	// ## 8
+	// foo\nbar
+	// ## 19
+	// non-printable ASCII
+	// # row 5
+	// ## 30
+	// \u03ba\u1f79\u03c3\u03bc\u03b5
+	// ## 14
+	// printable UTF8
+	// # row 6
+	// ## 6
+	// \u00f1
+	// ## 28
+	// printable UTF8 using escapes
+	// # row 7
+	// ## 4
+	// \x01
+	// ## 25
+	// non-printable UTF8 string
+	// # row 8
+	// ## 8
+	// \u070885
+	// ## 25
+	// UTF8 string with RTL char
+	// # row 9
+	// ## 29
+	// a\tb\tc\n12\t123123213\t12313
+	// ## 4
+	// tabs
+	// # 9 rows
+	// sql --escape-non-ascii --format=records -e select * from t.t
+	// -[ RECORD 1 ]
+	// s | foo
+	// d | printable ASCII
+	// -[ RECORD 2 ]
+	// s | \"foo
+	// d | printable ASCII with quotes
+	// -[ RECORD 3 ]
+	// s | \\foo
+	// d | printable ASCII with backslash
+	// -[ RECORD 4 ]
+	// s | foo\nbar
+	// d | non-printable ASCII
+	// -[ RECORD 5 ]
+	// s | \u03ba\u1f79\u03c3\u03bc\u03b5
+	// d | printable UTF8
+	// -[ RECORD 6 ]
+	// s | \u00f1
+	// d | printable UTF8 using escapes
+	// -[ RECORD 7 ]
+	// s | \x01
+	// d | non-printable UTF8 string
+	// -[ RECORD 8 ]
+	// s | \u070885
+	// d | UTF8 string with RTL char
+	// -[ RECORD 9 ]
+	// s | a\tb\tc\n12\t123123213\t12313
 	// d | tabs
 	// sql --format=pretty -e select '  hai' as x
 	// +-------+
