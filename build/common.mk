@@ -164,7 +164,7 @@ $(BOOTSTRAP_TARGET): $(GITHOOKS) $(REPO_ROOT)/Gopkg.lock
 ifneq ($(GIT_DIR),)
 	git submodule update --init
 endif
-	@$(GO_INSTALL) -v $(PKG_ROOT)/cmd/{metacheck,returncheck} \
+	@$(GO_INSTALL) -v $(PKG_ROOT)/cmd/returncheck \
 		$(REPO_ROOT)/vendor/github.com/golang/dep/cmd/dep \
 		$(REPO_ROOT)/vendor/github.com/client9/misspell/cmd/misspell \
 		$(REPO_ROOT)/vendor/github.com/cockroachdb/crlfmt \
