@@ -2232,8 +2232,11 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		return d, nil
 	}
 	d = UnwrapDatum(d)
+	return performCast(ctx, d, expr.Type)
+}
 
-	switch typ := expr.Type.(type) {
+func performCast(ctx *EvalContext, d Datum, t CastTargetType) (Datum, error) {
+	switch typ := t.(type) {
 	case *BoolColType:
 		switch v := d.(type) {
 		case *DBool:
@@ -2426,7 +2429,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		case *DOid:
 			s = t.name
 		}
-		switch c := expr.Type.(type) {
+		switch c := t.(type) {
 		case *StringColType:
 			// If the CHAR type specifies a limit we truncate to that limit:
 			//   'hello'::CHAR(2) -> 'he'
@@ -2543,6 +2546,10 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		case *DInterval:
 			return d, nil
 		}
+	case *ArrayColType:
+		if s, ok := d.(*DString); ok {
+			return ParseDArrayFromString(ctx, string(*s), typ.ParamType)
+		}
 	case *OidColType:
 		switch v := d.(type) {
 		case *DOid:
@@ -2649,7 +2656,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 	}
 
 	return nil, pgerror.NewErrorf(
-		pgerror.CodeCannotCoerceError, "invalid cast: %s -> %s", d.ResolvedType(), expr.Type)
+		pgerror.CodeCannotCoerceError, "invalid cast: %s -> %s", d.ResolvedType(), t)
 }
 
 // Eval implements the TypedExpr interface.
