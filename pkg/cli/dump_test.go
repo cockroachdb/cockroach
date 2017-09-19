@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 func TestDumpRow(t *testing.T) {
@@ -55,11 +56,12 @@ func TestDumpRow(t *testing.T) {
 		n interval,
 		o bool,
 		e decimal,
+		u uuid,
 		tz timestamptz,
 		e1 decimal(2),
 		e2 decimal(2, 1),
 		s1 string(1),
-		FAMILY "primary" (i, f, d, t, n, o, tz, e1, e2, s1, rowid),
+		FAMILY "primary" (i, f, d, t, n, o, u, tz, e1, e2, s1, rowid),
 		FAMILY fam_1_s (s),
 		FAMILY fam_2_b (b),
 		FAMILY fam_3_e (e)
@@ -72,6 +74,7 @@ func TestDumpRow(t *testing.T) {
 		'2h30m30s',
 		true,
 		1.2345,
+		'e9716c74-2638-443d-90ed-ffde7bea7d1d',
 		'2016-01-25 10:10:10',
 		3.4,
 		4.5,
@@ -105,22 +108,23 @@ CREATE TABLE t (
 	n INTERVAL NULL,
 	o BOOL NULL,
 	e DECIMAL NULL,
+	u UUID NULL,
 	tz TIMESTAMP WITH TIME ZONE NULL,
 	e1 DECIMAL(2) NULL,
 	e2 DECIMAL(2,1) NULL,
 	s1 STRING(1) NULL,
-	FAMILY "primary" (i, f, d, t, n, o, tz, e1, e2, s1, rowid),
+	FAMILY "primary" (i, f, d, t, n, o, u, tz, e1, e2, s1, rowid),
 	FAMILY fam_1_s (s),
 	FAMILY fam_2_b (b),
 	FAMILY fam_3_e (e)
 );
 
-INSERT INTO t (i, f, s, b, d, t, n, o, e, tz, e1, e2, s1) VALUES
-	(1, 2.3, 'striiing', b'a1b2c3', '2016-03-26', '2016-01-25 10:10:10+00:00', '2h30m30s', true, 1.2345, '2016-01-25 10:10:10+00:00', 3, 4.5, 's'),
-	(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-	(NULL, '+Inf', NULL, NULL, NULL, NULL, NULL, NULL, 'Infinity', NULL, NULL, NULL, NULL),
-	(NULL, '-Inf', NULL, NULL, NULL, NULL, NULL, NULL, '-Infinity', NULL, NULL, NULL, NULL),
-	(NULL, 'NaN', NULL, NULL, NULL, NULL, NULL, NULL, 'NaN', NULL, NULL, NULL, NULL);
+INSERT INTO t (i, f, s, b, d, t, n, o, e, u, tz, e1, e2, s1) VALUES
+	(1, 2.3, 'striiing', b'a1b2c3', '2016-03-26', '2016-01-25 10:10:10+00:00', '2h30m30s', true, 1.2345, 'e9716c74-2638-443d-90ed-ffde7bea7d1d', '2016-01-25 10:10:10+00:00', 3, 4.5, 's'),
+	(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(NULL, '+Inf', NULL, NULL, NULL, NULL, NULL, NULL, 'Infinity', NULL, NULL, NULL, NULL, NULL),
+	(NULL, '-Inf', NULL, NULL, NULL, NULL, NULL, NULL, '-Infinity', NULL, NULL, NULL, NULL, NULL),
+	(NULL, 'NaN', NULL, NULL, NULL, NULL, NULL, NULL, 'NaN', NULL, NULL, NULL, NULL, NULL);
 `
 
 	if string(out) != expect {
@@ -352,7 +356,8 @@ func TestDumpRandom(t *testing.T) {
 			e decimal,
 			s string,
 			b bytes,
-			PRIMARY KEY (rowid, i, f, d, m, n, o, e, s, b)
+			u uuid,
+			PRIMARY KEY (rowid, i, f, d, m, n, o, e, s, b, u)
 		);
 	`, nil); err != nil {
 		t.Fatal(err)
@@ -402,6 +407,15 @@ func TestDumpRandom(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			uuidBytes := make([]byte, 16)
+			if _, err := rnd.Read(b); err != nil {
+				t.Fatal(err)
+			}
+			u, err := uuid.FromBytes(uuidBytes)
+			if err != nil {
+				t.Fatal(err)
+			}
+
 			vals := []driver.Value{
 				_i,
 				i,
@@ -413,15 +427,16 @@ func TestDumpRandom(t *testing.T) {
 				[]byte(e), // decimals come out as `[]byte`s
 				string(s),
 				b,
+				[]byte(u.String()),
 			}
-			if err := conn.Exec("INSERT INTO d.t VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)", vals); err != nil {
+			if err := conn.Exec("INSERT INTO d.t VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)", vals); err != nil {
 				t.Fatal(err)
 			}
 			generatedRows = append(generatedRows, vals[1:])
 		}
 
 		check := func(table string) {
-			q := fmt.Sprintf("SELECT i, f, d, m, n, o, e, s, b FROM %s ORDER BY rowid", table)
+			q := fmt.Sprintf("SELECT i, f, d, m, n, o, e, s, b, u FROM %s ORDER BY rowid", table)
 			nrows, err := conn.Query(q, nil)
 			if err != nil {
 				t.Fatal(err)

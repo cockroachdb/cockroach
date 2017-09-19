@@ -459,6 +459,11 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 						}
 					case "BYTES":
 						d = parser.NewDBytes(parser.DBytes(t))
+					case "UUID":
+						d, err = parser.ParseDUuidFromString(string(t))
+						if err != nil {
+							return err
+						}
 					default:
 						// STRING and DECIMAL types can have optional length
 						// suffixes, so only examine the prefix of the type.
