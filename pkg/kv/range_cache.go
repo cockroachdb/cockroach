@@ -21,7 +21,6 @@ import (
 	"sync"
 
 	"github.com/biogo/store/llrb"
-	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // rangeCacheKey is the key type used to store and sort values in the
@@ -279,18 +279,10 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 	}
 
 	requestKey := makeLookupRequestKey(key, evictToken, useReverseScan)
-	resC := rdc.lookupRequests.DoChan(requestKey, func() (interface{}, error) {
-		// We're inside a goroutine here which makes it an error to use a span
-		// embedded inside ctx. But we want to remain hooked up to the parent
-		// context for cancellation. The nature of the singleflight interface
-		// prevents us from using tracing.ForkCtxSpan() because we're not
-		// guaranteed that this closure is run nor do we get a signal that the
-		// closure is not run. As a workaround, we hide the span in the context.
-		//
-		// TODO(nvanbenschoten): Figure out some way to not lose tracing continuity
-		// here.
+	resC, leader := rdc.lookupRequests.DoChan(requestKey, func() (interface{}, error) {
 		ctx := ctx // disable shadows linter
-		ctx = opentracing.ContextWithSpan(ctx, nil)
+		ctx, reqSpan := tracing.ForkCtxSpan(ctx, "range lookup")
+		defer tracing.FinishSpan(reqSpan)
 
 		rs, preRs, err := rdc.performRangeLookup(ctx, key, useReverseScan)
 		if err != nil {
@@ -350,11 +342,21 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 	rdc.rangeCache.RUnlock()
 	doneWg()
 
+	// We only want to wait on context cancellation here if we are not the
+	// leader of the lookupRequest. If we are the leader then we'll wait for
+	// lower levels to propagate the context cancellation error over resC. This
+	// assures that as the leader we always wait for the function passed to
+	// DoChan to return before returning from this method.
+	ctxDone := ctx.Done()
+	if leader {
+		ctxDone = nil
+	}
+
 	// Wait for the inflight request.
 	var res singleflight.Result
 	select {
 	case res = <-resC:
-	case <-ctx.Done():
+	case <-ctxDone:
 		return nil, nil, ctx.Err()
 	}
 

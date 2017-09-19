@@ -18,12 +18,20 @@ func TestDo(t *testing.T) {
 	v, _, err := g.Do("key", func() (interface{}, error) {
 		return "bar", nil
 	})
-	if got, want := fmt.Sprintf("%v (%T)", v, v), "bar (string)"; got != want {
-		t.Errorf("Do = %v; want %v", got, want)
+	res := Result{Val: v, Err: err}
+	assertRes(t, res, false)
+}
+
+func TestDoChan(t *testing.T) {
+	var g Group
+	resC, leader := g.DoChan("key", func() (interface{}, error) {
+		return "bar", nil
+	})
+	if !leader {
+		t.Errorf("DoChan returned not leader, expected leader")
 	}
-	if err != nil {
-		t.Errorf("Do error = %v", err)
-	}
+	res := <-resC
+	assertRes(t, res, false)
 }
 
 func TestDoErr(t *testing.T) {
@@ -83,5 +91,41 @@ func TestDoDupSuppress(t *testing.T) {
 	wg2.Wait()
 	if got := atomic.LoadInt32(&calls); got <= 0 || got >= n {
 		t.Errorf("number of calls = %d; want over 0 and less than %d", got, n)
+	}
+}
+
+func TestDoChanDupSuppress(t *testing.T) {
+	c := make(chan struct{})
+	fn := func() (interface{}, error) {
+		<-c
+		return "bar", nil
+	}
+
+	var g Group
+	resC1, leader1 := g.DoChan("key", fn)
+	if !leader1 {
+		t.Errorf("DoChan returned not leader, expected leader")
+	}
+
+	resC2, leader2 := g.DoChan("key", fn)
+	if leader2 {
+		t.Errorf("DoChan returned leader, expected not leader")
+	}
+
+	close(c)
+	for _, res := range []Result{<-resC1, <-resC2} {
+		assertRes(t, res, true)
+	}
+}
+
+func assertRes(t *testing.T, res Result, expectShared bool) {
+	if got, want := fmt.Sprintf("%v (%T)", res.Val, res.Val), "bar (string)"; got != want {
+		t.Errorf("Res.Val = %v; want %v", got, want)
+	}
+	if res.Err != nil {
+		t.Errorf("Res.Err = %v", res.Err)
+	}
+	if res.Shared != expectShared {
+		t.Errorf("Res.Shared = %t; want %t", res.Shared, expectShared)
 	}
 }
