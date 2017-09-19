@@ -246,6 +246,84 @@ func RandIPAddr(rng *rand.Rand) IPAddr {
 	return ipAddr
 }
 
+// Hostmask returns the host masked IP. This is defined as the IP address bits
+// that are not masked.
+func (ipAddr *IPAddr) Hostmask() IPAddr {
+	var newIPAddr IPAddr
+	newIPAddr.Family = ipAddr.Family
+	newIPAddr.Addr = ipAddr.Addr
+
+	if ipAddr.Family == IPv4family {
+		LoMask := ^uint32(0) >> ipAddr.Mask
+		newIPAddr.Addr.Lo = uint64(LoMask) | IPv4mappedIPv6prefix
+	} else if ipAddr.Mask <= 64 {
+		newIPAddr.Addr.Hi = ^uint64(0) >> ipAddr.Mask
+		newIPAddr.Addr.Lo = ^uint64(0)
+	} else {
+		newIPAddr.Addr.Hi = uint64(0)
+		newIPAddr.Addr.Lo = ^uint64(0) >> (ipAddr.Mask - 64)
+	}
+
+	if newIPAddr.Family == IPv4family {
+		newIPAddr.Mask = 32
+	} else {
+		newIPAddr.Mask = 128
+	}
+
+	return newIPAddr
+}
+
+// Netmask returns the network masked IP. This is defined as the IP address bits
+// that are masked.
+func (ipAddr *IPAddr) Netmask() IPAddr {
+	var newIPAddr IPAddr
+	newIPAddr.Family = ipAddr.Family
+	newIPAddr.Addr = ipAddr.Addr
+
+	if ipAddr.Family == IPv4family {
+		LoMask := ^uint32(0) << (32 - ipAddr.Mask)
+		newIPAddr.Addr.Lo = uint64(LoMask) | IPv4mappedIPv6prefix
+	} else if ipAddr.Mask <= 64 {
+		newIPAddr.Addr.Hi = ^uint64(0) << (64 - ipAddr.Mask)
+		newIPAddr.Addr.Lo = uint64(0)
+	} else {
+		newIPAddr.Addr.Hi = ^uint64(0)
+		newIPAddr.Addr.Lo = ^uint64(0) << (128 - ipAddr.Mask)
+	}
+
+	if newIPAddr.Family == IPv4family {
+		newIPAddr.Mask = 32
+	} else {
+		newIPAddr.Mask = 128
+	}
+
+	return newIPAddr
+}
+
+// Broadcast returns a new IPAddr where the host mask of the IP address is a
+// full mask, i.e. 0xFF bytes.
+func (ipAddr *IPAddr) Broadcast() IPAddr {
+	var newIPAddr IPAddr
+	newIPAddr.Family = ipAddr.Family
+	newIPAddr.Mask = ipAddr.Mask
+	newIPAddr.Addr = ipAddr.Addr
+
+	if newIPAddr.Family == IPv4family {
+		LoMask := ^uint64(0) >> (32 + newIPAddr.Mask)
+		newIPAddr.Addr.Lo = newIPAddr.Addr.Lo | LoMask
+	} else if newIPAddr.Mask < 64 {
+		LoMask := ^uint64(0)
+		HiMask := ^uint64(0) >> newIPAddr.Mask
+		newIPAddr.Addr.Lo = newIPAddr.Addr.Lo | LoMask
+		newIPAddr.Addr.Hi = newIPAddr.Addr.Hi | HiMask
+	} else {
+		LoMask := ^uint64(0) >> (newIPAddr.Mask - 64)
+		newIPAddr.Addr.Lo = newIPAddr.Addr.Lo | LoMask
+	}
+
+	return newIPAddr
+}
+
 // WriteIPv4Bytes writes the 4-byte IPv4 representation. If the IP is IPv6 then
 // the first 12-bytes are truncated.
 func (ip Addr) WriteIPv4Bytes(writer io.Writer) error {
@@ -279,4 +357,9 @@ func (ip Addr) Sub(o uint64) Addr {
 // Add wraps the Uint128 addition.
 func (ip Addr) Add(o uint64) Addr {
 	return Addr(uint128.Uint128(ip).Add(o))
+}
+
+// String wraps net.IP.String().
+func (ip Addr) String() string {
+	return net.IP(uint128.Uint128(ip).GetBytes()).String()
 }
