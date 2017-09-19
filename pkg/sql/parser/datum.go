@@ -248,6 +248,198 @@ func ParseDIPAddrFromINetString(s string) (*DIPAddr, error) {
 	return &d, nil
 }
 
+var enclosingError = pgerror.NewErrorf(pgerror.CodeInvalidTextRepresentationError, "array must be enclosed in { and }")
+var extraTextError = pgerror.NewErrorf(pgerror.CodeInvalidTextRepresentationError, "extra text after closing right brace")
+var nestedArraysNotSupportedError = pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "nested arrays not supported")
+var malformedError = pgerror.NewErrorf(pgerror.CodeInvalidTextRepresentationError, "malformed array")
+
+type arrayTokenType int
+
+const (
+	eofToken arrayTokenType = iota
+	openCurlyToken
+	closeCurlyToken
+	commaToken
+	elementToken
+)
+
+type arrayToken struct {
+	t        arrayTokenType
+	isNull   bool
+	contents string
+}
+
+var isQuoteChar = func(ch byte) bool {
+	return ch == '"'
+}
+
+var isControlChar = func(ch byte) bool {
+	return ch == '{' || ch == '}' || ch == ',' || ch == '"'
+}
+
+func gobbleString(in string, i int, isTerminatingChar func(ch byte) bool) (end int, out string) {
+	result := bytes.NewBuffer(nil)
+	start := i
+	for i < len(in) && !isTerminatingChar(in[i]) {
+		i++
+		if i < len(in) && in[i] == '\\' {
+			result.WriteString(in[start:i])
+			i++
+			if i < len(in) {
+				result.WriteByte(in[i])
+				i++
+			}
+			start = i
+		}
+	}
+	result.WriteString(in[start:i])
+	return i, result.String()
+}
+
+func tokenizeArrayString(s string) func() arrayToken {
+	i := 0
+	return func() arrayToken {
+		for i < len(s) && unicode.IsSpace(rune(s[i])) {
+			i++
+		}
+		if i >= len(s) {
+			return arrayToken{t: eofToken}
+		}
+		switch s[i] {
+		case '{':
+			i++
+			return arrayToken{t: openCurlyToken}
+		case '}':
+			i++
+			return arrayToken{t: closeCurlyToken}
+		case ',':
+			i++
+			return arrayToken{t: commaToken}
+		case '"':
+			i++
+			var result string
+			i, result = gobbleString(s, i, isQuoteChar)
+			i++
+			return arrayToken{t: elementToken, contents: result}
+		default:
+			var result string
+			i, result = gobbleString(s, i, isControlChar)
+			result = strings.TrimSpace(result)
+			return arrayToken{
+				t: elementToken,
+				// In unquoted strings, the string "NULL" refers to SQL NULL.
+				isNull:   strings.EqualFold(result, "null"),
+				contents: result,
+			}
+		}
+	}
+}
+
+type parsingContext struct {
+	t       ColumnType
+	result  *DArray
+	evalCtx *EvalContext
+}
+
+type parseStateFn func(parsingContext, func() arrayToken) (parseStateFn, error)
+
+func handleElement(ctx parsingContext, next arrayToken) (parseStateFn, error) {
+	if next.isNull {
+		if err := ctx.result.Append(DNull); err != nil {
+			return nil, err
+		}
+	} else {
+		d, err := performCast(ctx.evalCtx, NewDString(next.contents), ctx.t)
+		if err != nil {
+			return nil, err
+		}
+		if err := ctx.result.Append(d); err != nil {
+			return nil, err
+		}
+	}
+	return afterElementState, nil
+}
+
+// A `}` is valid when we would expect the very first element, but not when we would expect any others.
+func firstElementState(ctx parsingContext, nextToken func() arrayToken) (parseStateFn, error) {
+	next := nextToken()
+	switch next.t {
+	case closeCurlyToken:
+		return doneState, nil
+	case elementToken:
+		return handleElement(ctx, next)
+	case openCurlyToken:
+		return nil, nestedArraysNotSupportedError
+	default:
+		return nil, malformedError
+	}
+}
+
+func elementState(ctx parsingContext, nextToken func() arrayToken) (parseStateFn, error) {
+	next := nextToken()
+	switch next.t {
+	case elementToken:
+		return handleElement(ctx, next)
+	default:
+		return nil, malformedError
+	}
+}
+
+func afterElementState(_ parsingContext, nextToken func() arrayToken) (parseStateFn, error) {
+	next := nextToken()
+	switch next.t {
+	case closeCurlyToken:
+		return doneState, nil
+	case commaToken:
+		return elementState, nil
+	default:
+		return nil, malformedError
+	}
+}
+
+func doneState(ctx parsingContext, nextToken func() arrayToken) (parseStateFn, error) {
+	next := nextToken()
+	switch next.t {
+	case eofToken:
+		return nil, nil
+	default:
+		return nil, extraTextError
+	}
+}
+
+func startState(_ parsingContext, nextToken func() arrayToken) (parseStateFn, error) {
+	next := nextToken()
+	switch next.t {
+	case openCurlyToken:
+		return firstElementState, nil
+	default:
+		return nil, enclosingError
+	}
+}
+
+// ParseDArrayFromString parses the string-form of constructing arrays, handling
+// cases such as `'{1,2,3}'::INT[]`. The pattern here is adapted from
+// https://talks.golang.org/2011/lex.slide.
+func ParseDArrayFromString(evalCtx *EvalContext, s string, t ColumnType) (*DArray, error) {
+	resultElemType := CastTargetToDatumType(t)
+	ctx := parsingContext{
+		t:       t,
+		result:  NewDArray(resultElemType),
+		evalCtx: evalCtx,
+	}
+	nextToken := tokenizeArrayString(s)
+
+	state := startState
+	var err error
+	for state != nil && err == nil {
+		state, err = state(ctx, nextToken)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return ctx.result, nil
+}
+
 // GetBool gets DBool or an error (also treats NULL as false, not an error).
 func GetBool(d Datum) (DBool, error) {
 	if v, ok := d.(*DBool); ok {

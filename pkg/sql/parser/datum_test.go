@@ -445,3 +445,92 @@ func TestParseDTimestamp(t *testing.T) {
 		}
 	}
 }
+
+func TestParseArray(t *testing.T) {
+	testData := []struct {
+		str      string
+		typ      ColumnType
+		expected Datums
+	}{
+		{`{}`, intColTypeInt, Datums{}},
+		{`{1}`, intColTypeInt, Datums{NewDInt(1)}},
+		{`{1,2}`, intColTypeInt, Datums{NewDInt(1), NewDInt(2)}},
+		{`   { 1    ,  2  }  `, intColTypeInt, Datums{NewDInt(1), NewDInt(2)}},
+		{`   { 1    ,
+	"2"  }  `, intColTypeInt, Datums{NewDInt(1), NewDInt(2)}},
+		{`{1,2,3}`, intColTypeInt, Datums{NewDInt(1), NewDInt(2), NewDInt(3)}},
+		{`{"1"}`, intColTypeInt, Datums{NewDInt(1)}},
+		{` { "1" , "2"}`, intColTypeInt, Datums{NewDInt(1), NewDInt(2)}},
+		{` { "1" , 2}`, intColTypeInt, Datums{NewDInt(1), NewDInt(2)}},
+		{`{1,NULL}`, intColTypeInt, Datums{NewDInt(1), DNull}},
+
+		{`{hello}`, stringColTypeString, Datums{NewDString("hello")}},
+		{`{hel
+lo}`, stringColTypeString, Datums{NewDString("hel\nlo")}},
+		{`{hel,
+lo}`, stringColTypeString, Datums{NewDString("hel"), NewDString("lo")}},
+		{`{hel,lo}`, stringColTypeString, Datums{NewDString("hel"), NewDString("lo")}},
+		{`{  he llo  }`, stringColTypeString, Datums{NewDString("he llo")}},
+		{`{hell\\o}`, stringColTypeString, Datums{NewDString("hell\\o")}},
+		{`{"hell\\o"}`, stringColTypeString, Datums{NewDString("hell\\o")}},
+		{`{NULL,"NULL"}`, stringColTypeString, Datums{DNull, NewDString("NULL")}},
+		{`{"hello"}`, stringColTypeString, Datums{NewDString("hello")}},
+		{`{" hello "}`, stringColTypeString, Datums{NewDString(" hello ")}},
+		{`{"hel,lo"}`, stringColTypeString, Datums{NewDString("hel,lo")}},
+		{`{"hel\"lo"}`, stringColTypeString, Datums{NewDString("hel\"lo")}},
+		{`{"h\"el\"lo"}`, stringColTypeString, Datums{NewDString("h\"el\"lo")}},
+		{`{"hel\nlo"}`, stringColTypeString, Datums{NewDString("helnlo")}},
+		{`{"hel\\lo"}`, stringColTypeString, Datums{NewDString("hel\\lo")}},
+		{`{"he\,l\}l\{o"}`, stringColTypeString, Datums{NewDString("he,l}l{o")}},
+
+		{`{日本語}`, stringColTypeString, Datums{NewDString("日本語")}},
+	}
+	for _, td := range testData {
+		t.Run(td.str, func(t *testing.T) {
+			expected := NewDArray(CastTargetToDatumType(td.typ))
+			for _, d := range td.expected {
+				if err := expected.Append(d); err != nil {
+					t.Fatal(err)
+				}
+			}
+			actual, err := ParseDArrayFromString(NewTestingEvalContext(), td.str, td.typ)
+			if err != nil {
+				t.Fatalf("ARRAY %s: got error %s, expected %s", td.str, err.Error(), expected)
+			}
+			if actual.Compare(NewTestingEvalContext(), expected) != 0 {
+				t.Fatalf("ARRAY %s: got %s, expected %s", td.str, actual, expected)
+			}
+		})
+	}
+}
+
+func TestParseArrayError(t *testing.T) {
+	testData := []struct {
+		str           string
+		typ           ColumnType
+		expectedError string
+	}{
+		{"", intColTypeInt, "array must be enclosed in { and }"},
+		{"1", intColTypeInt, "array must be enclosed in { and }"},
+		{"1,2", intColTypeInt, "array must be enclosed in { and }"},
+		{"{", intColTypeInt, "malformed array"},
+		{"{}{}", intColTypeInt, "extra text after closing right brace"},
+		{"{} {}", intColTypeInt, "extra text after closing right brace"},
+		{"{{}}", intColTypeInt, "nested arrays not supported"},
+		{"{hello}", intColTypeInt, `could not parse "hello" as type int: strconv.ParseInt: parsing "hello": invalid syntax`},
+		{"{\"hello}", stringColTypeString, `malformed array`},
+		// It might be unnecessary to disallow this, but Postgres does.
+		{"{he\"lo}", stringColTypeString, "malformed array"},
+	}
+	for _, td := range testData {
+		t.Run(td.str, func(t *testing.T) {
+			_, err := ParseDArrayFromString(NewTestingEvalContext(), td.str, td.typ)
+			if err == nil {
+				t.Fatalf("expected %#v to error with message %#v", td.str, td.expectedError)
+			}
+			if err.Error() != td.expectedError {
+				t.Fatalf("ARRAY %s: got error %s, expected error %s", td.str, err.Error(), td.expectedError)
+			}
+		})
+	}
+}
