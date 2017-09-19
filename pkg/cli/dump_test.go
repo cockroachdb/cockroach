@@ -131,7 +131,7 @@ INSERT INTO t (i, f, s, b, d, t, n, o, e, u, ip, tz, e1, e2, s1) VALUES
 	(NULL, 'NaN', NULL, NULL, NULL, NULL, NULL, NULL, 'NaN', NULL, NULL, NULL, NULL, NULL, NULL);
 `
 
-	if string(out) != expect {
+	if out != expect {
 		t.Fatalf("expected: %s\ngot: %s", expect, out)
 	}
 }
@@ -158,7 +158,7 @@ CREATE TABLE f (
 INSERT INTO f (x, y) VALUES
 	(42, 69);
 `
-	if string(out) != expected {
+	if out != expected {
 		t.Fatalf("expected %s\ngot: %s", expected, out)
 	}
 
@@ -173,7 +173,7 @@ CREATE TABLE f (
 	FAMILY "primary" (x, y, rowid)
 );
 `
-	if string(out) != expected {
+	if out != expected {
 		t.Fatalf("expected %s\ngot: %s", expected, out)
 	}
 
@@ -186,7 +186,7 @@ CREATE TABLE f (
 INSERT INTO f (x, y) VALUES
 	(42, 69);
 `
-	if string(out) != expected {
+	if out != expected {
 		t.Fatalf("expected %s\ngot: %s", expected, out)
 	}
 }
@@ -224,7 +224,7 @@ INSERT INTO f (x, y) VALUES
 INSERT INTO g (x, y) VALUES
 	(3, 4);
 `
-	if string(out) != expected {
+	if out != expected {
 		t.Fatalf("expected %s\ngot: %s", expected, out)
 	}
 
@@ -252,7 +252,7 @@ INSERT INTO f (x, y) VALUES
 INSERT INTO g (x, y) VALUES
 	(3, 4);
 `
-	if string(out) != expected {
+	if out != expected {
 		t.Fatalf("expected %s\ngot: %s", expected, out)
 	}
 }
@@ -392,7 +392,7 @@ func TestDumpRandom(t *testing.T) {
 			}
 			n := dur.String()
 			o := rnd.Intn(2) == 1
-			e := apd.New(rnd.Int63(), int32(rnd.Int31n(20)-10)).String()
+			e := apd.New(rnd.Int63(), rnd.Int31n(20)-10).String()
 			sr := make([]byte, rnd.Intn(500))
 			if _, err := rnd.Read(sr); err != nil {
 				t.Fatal(err)
@@ -582,7 +582,7 @@ INSERT INTO t (i, j) VALUES
 
 	if out, err := c.RunWithCaptureArgs([]string{"dump", "d", "t", "--as-of", "2000-01-01 00:00:00"}); err != nil {
 		t.Fatal(err)
-	} else if !strings.Contains(string(out), "relation d.t does not exist") {
+	} else if !strings.Contains(out, "relation d.t does not exist") {
 		t.Fatalf("unexpected output: %s", out)
 	}
 }
@@ -604,14 +604,14 @@ func TestDumpIdentifiers(t *testing.T) {
 	if out, err := c.RunWithCaptureArgs([]string{"sql", "-e", create}); err != nil {
 		t.Fatal(err)
 	} else {
-		t.Log(string(out))
+		t.Log(out)
 	}
 
 	out, err := c.RunWithCaptureArgs([]string{"dump", "d"})
 	if err != nil {
 		t.Fatal(err)
 	} else {
-		t.Log(string(out))
+		t.Log(out)
 	}
 
 	const expect = `dump d
@@ -625,7 +625,7 @@ INSERT INTO ";" (";") VALUES
 	(1);
 `
 
-	if string(out) != expect {
+	if out != expect {
 		t.Fatalf("expected: %s\ngot: %s", expect, out)
 	}
 }
@@ -667,7 +667,7 @@ INSERT INTO c VALUES (1);
 	if out, err := c.RunWithCaptureArgs([]string{"sql", "-e", create}); err != nil {
 		t.Fatal(err)
 	} else {
-		t.Log(string(out))
+		t.Log(out)
 	}
 
 	out, err := c.RunWithCapture("dump d1")
@@ -751,12 +751,12 @@ INSERT INTO c (i) VALUES
 	(1);
 `
 
-	if string(out) != expectDump {
+	if out != expectDump {
 		t.Fatalf("expected: %s\ngot: %s", expectDump, out)
 	}
 
 	// Remove first line of output ("dump a").
-	dump := strings.SplitN(string(out), "\n", 2)[1]
+	dump := strings.SplitN(out, "\n", 2)[1]
 	out, err = c.RunWithCaptureArgs([]string{"sql", "-d", "d2", "-e", dump})
 	if err != nil {
 		t.Fatal(err)
@@ -786,7 +786,7 @@ i
 # 1 row
 `
 
-	if string(out) != expect {
+	if out != expect {
 		t.Fatalf("expected: %s\ngot: %s", expect, out)
 	}
 
@@ -824,7 +824,7 @@ INSERT INTO d (i, e, f) VALUES
 	(1, 1, 1);
 `
 
-	if string(out) != expectDump2 {
+	if out != expectDump2 {
 		t.Fatalf("expected: %s\ngot: %s", expectDump2, out)
 	}
 }
@@ -843,21 +843,21 @@ func TestDumpView(t *testing.T) {
 	if out, err := c.RunWithCaptureArgs([]string{"sql", "-e", create}); err != nil {
 		t.Fatal(err)
 	} else {
-		t.Log(string(out))
+		t.Log(out)
 	}
 
 	out, err := c.RunWithCaptureArgs([]string{"dump", "d"})
 	if err != nil {
 		t.Fatal(err)
 	} else {
-		t.Log(string(out))
+		t.Log(out)
 	}
 
 	const expect = `dump d
 CREATE VIEW bar ("1") AS SELECT 1;
 `
 
-	if string(out) != expect {
+	if out != expect {
 		t.Fatalf("expected: %s\ngot: %s", expect, out)
 	}
 }
@@ -897,7 +897,7 @@ INSERT INTO t (i) VALUES
 	(1);
 `
 
-	if string(out) != expect {
+	if out != expect {
 		t.Fatalf("expected: %s\ngot: %s", expect, out)
 	}
 }

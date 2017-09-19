@@ -526,12 +526,6 @@
   version = "v1.0.0"
 
 [[projects]]
-  branch = "master"
-  name = "github.com/mdempsky/unconvert"
-  packages = ["."]
-  revision = "beb68d938016d2dec1d1b078054f4d3db25f97be"
-
-[[projects]]
   name = "github.com/mibk/dupl"
   packages = [".","job","output","suffixtree","syntax","syntax/golang"]
   revision = "f008fcf5e62793d38bda510ee37aab8b0c68e76c"
@@ -761,7 +755,7 @@
 
 [[projects]]
   name = "golang.org/x/text"
-  packages = ["collate","collate/build","internal/colltab","internal/gen","internal/tag","internal/triegen","internal/ucd","language","secure/bidirule","transform","unicode/bidi","unicode/cldr","unicode/norm","unicode/rangetable","width"]
+  packages = ["collate","collate/build","internal/colltab","internal/gen","internal/tag","internal/triegen","internal/ucd","language","secure/bidirule","transform","unicode/bidi","unicode/cldr","unicode/norm","unicode/rangetable"]
   revision = "470f45bf29f4147d6fbd7dfd0a02a848e49f5bf4"
 
 [[projects]]
@@ -808,13 +802,13 @@
 
 [[projects]]
   name = "honnef.co/go/tools"
-  packages = ["callgraph","callgraph/static","functions","internal/sharedcheck","lint","lint/lintutil","simple","ssa","ssa/ssautil","staticcheck","staticcheck/vrp","unused","version"]
+  packages = ["callgraph","callgraph/static","functions","internal/sharedcheck","lint","simple","ssa","ssa/ssautil","staticcheck","staticcheck/vrp","unused"]
   revision = "e5147431c7c056bd6ef33ad2f23c846f835571dd"
   version = "2017.1"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "16fdf207f528a93b9f6d7977d0ceee76993f9c1b921f6e4a70d9a8794c0deb23"
+  inputs-digest = "034ab7fa506a52f7a2062b0f3bfe1b8ff8a231ab399ea77fff073a95507e4d41"
   solver-name = "gps-cdcl"
   solver-version = 1
