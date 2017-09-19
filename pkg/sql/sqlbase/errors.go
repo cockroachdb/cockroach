@@ -275,6 +275,8 @@ func ConvertBatchError(ctx context.Context, tableDesc *TableDescriptor, b *clien
 			return err
 		}
 		f := singleKVFetcher{kv: client.KeyValue{Key: key, Value: cErr.ActualValue}}
+		// Use the RowFetcher to decode the single kv pair above by passing in
+		// this singleKVFetcher implementation, which doesn't actually hit KV.
 		if err := rf.StartScanFrom(ctx, &f); err != nil {
 			return err
 		}
