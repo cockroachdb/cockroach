@@ -1,8 +1,10 @@
 import React from "react";
 
 import Long from "long";
-import * as protos from "src/js/protos";
+import Print from "src/views/reports/containers/range/print";
 import * as dagre from "dagre-layout";
+
+import * as protos from "src/js/protos";
 
 interface QueueVizProps {
   // TODO(vilterp): doesn't compile without $Properties; not sure why
@@ -70,8 +72,10 @@ export default class CommandQueueViz extends React.Component<QueueVizProps, Queu
           <tr>
             <td>Timestamp</td>
             <td>
-              {command.timestamp.logical} Logical{" "}
-              {command.timestamp.wall_time.toString()} Wall
+              <span title="wall">{command.timestamp.wall_time.toString()}</span>
+              .
+              <span title="logical">{command.timestamp.logical}</span>
+              {" "}({Print.Timestamp(command.timestamp)})
             </td>
           </tr>
         </tbody>
