@@ -236,7 +236,6 @@ func (rf *RowFetcher) StartScanFrom(ctx context.Context, f kvFetcher) error {
 
 // NextKey retrieves the next key/value and sets kv/kvEnd. Returns whether a row
 // has been completed.
-// TODO(andrei): change to return error
 func (rf *RowFetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 	var ok bool
 

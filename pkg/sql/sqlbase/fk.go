@@ -140,7 +140,7 @@ func (fks fkInsertHelper) checkIdx(
 		if err != nil {
 			return err
 		}
-		if found == nil {
+		if !found {
 			fkValues := make(parser.Datums, fk.prefixLen)
 			for i, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
 				fkValues[i] = row[fk.ids[colID]]
@@ -213,7 +213,7 @@ func (fks fkDeleteHelper) checkIdx(
 		if err != nil {
 			return err
 		}
-		if found != nil {
+		if found {
 			if row == nil {
 				return pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
 					"foreign key violation: non-empty columns %s referenced in table %q",
@@ -326,13 +326,9 @@ func makeBaseFKHelper(
 	}
 	b.searchIdx = searchIdx
 	ids := ColIDtoRowIndexFromCols(b.searchTable.Columns)
-	needed := make([]bool, len(ids))
-	for _, i := range searchIdx.ColumnIDs {
-		needed[ids[i]] = true
-	}
 	isSecondary := b.searchTable.PrimaryIndex.ID != searchIdx.ID
 	err = b.rf.Init(b.searchTable, ids, searchIdx, false, /* reverse */
-		isSecondary, b.searchTable.Columns, needed,
+		isSecondary, b.searchTable.Columns, nil,
 		false /* returnRangeInfo */, alloc)
 	if err != nil {
 		return b, err
@@ -354,22 +350,23 @@ func makeBaseFKHelper(
 	return b, nil
 }
 
+// check performs the foreign key constraint check that this baseFKHelper was
+// set up to perform, against the input datums. It returns true if a matching
+// foreign key was found.
 // TODO(dt): Batch checks of many rows.
-func (f baseFKHelper) check(
-	ctx context.Context, values parser.Datums, traceKV bool,
-) (parser.Datums, error) {
+func (f baseFKHelper) check(ctx context.Context, values parser.Datums, traceKV bool) (bool, error) {
 	span, err := f.spanForValues(values)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
 	if traceKV {
 		log.VEventf(ctx, 2, "Scan %s -> %s", span.Key, span.EndKey)
 	}
 	err = f.rf.StartScan(ctx, f.txn, roachpb.Spans{span}, true /* limit batches */, 1)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
-	return f.rf.NextRowDecoded(ctx, traceKV)
+	return !f.rf.kvEnd, nil
 }
 
 func (f baseFKHelper) spanForValues(values parser.Datums) (roachpb.Span, error) {
