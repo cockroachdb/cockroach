@@ -726,7 +726,10 @@ func formatVal(val driver.Value, showPrintableUnicode bool, showNewLinesAndTabs 
 				return t
 			}
 		}
-		return fmt.Sprintf("%+q", t)
+		s := fmt.Sprintf("%+q", t)
+		// Strip the start and final quotes. The surrounding display
+		// format (e.g. CSV/TSV) will add its own quotes.
+		return s[1 : len(s)-1]
 
 	case []byte:
 		if showPrintableUnicode {
@@ -742,7 +745,10 @@ func formatVal(val driver.Value, showPrintableUnicode bool, showNewLinesAndTabs 
 				return string(t)
 			}
 		}
-		return fmt.Sprintf("%+q", t)
+		// Strip the start and final quotes. The surrounding display
+		// format (e.g. CSV/TSV) will add its own quotes.
+		s := fmt.Sprintf("%+q", t)
+		return s[1 : len(s)-1]
 
 	case time.Time:
 		return t.Format(tree.TimestampOutputFormat)
