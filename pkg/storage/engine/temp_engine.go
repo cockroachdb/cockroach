@@ -15,6 +15,7 @@
 package engine
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -25,6 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"golang.org/x/net/context"
+)
+
+const (
+	// DefaultTempStorePrefix is the prefix for the directory
+	// used for the temporary store.
+	DefaultTempStorePrefix = "cockroach-temp"
 )
 
 // NewTempEngine creates a new engine for DistSQL processors to use when the
@@ -71,6 +78,11 @@ func (e *tempEngine) Close() {
 	}
 }
 
+// cleanupTempStorageDirs is invoked on startup to clean up abandoned temp store
+// directories from previous startups.
+// This cleanup only works if the --temp-dir flag-specified path
+// did not change
+// between startups.
 // wg is allowed to be nil, if the caller does not want to wait on the cleanup.
 func cleanupTempStorageDirs(ctx context.Context, path string, wg *sync.WaitGroup) error {
 	// Removing existing contents might be slow. Instead we rename it to a new
@@ -78,20 +90,44 @@ func cleanupTempStorageDirs(ctx context.Context, path string, wg *sync.WaitGroup
 	if err := os.MkdirAll(path, 0755); err != nil {
 		return err
 	}
+	// Create a temporary deletion directory (where we will "move" all abanadoned
+	// files to) for asynchronous deletion.
 	deletionDir, err := ioutil.TempDir(path, "TO-DELETE-")
 	if err != nil {
 		return err
 	}
 
-	filesToDelete, err := ioutil.ReadDir(path)
+	// Note path corresponds to the new temporary subdirectory for the temp store
+	// created from ioutil.TempDir(), hence we must take its
+	// parent directory and check for any hanging abandoned subdirectories.
+	parentDir := filepath.Dir(path)
+	filesToDelete, err := ioutil.ReadDir(parentDir)
 	if err != nil {
 		return err
 	}
 
 	for _, fileToDelete := range filesToDelete {
-		toDeleteFull := filepath.Join(path, fileToDelete.Name())
-		if toDeleteFull != deletionDir {
-			if err := os.Rename(toDeleteFull, filepath.Join(deletionDir, fileToDelete.Name())); err != nil {
+		filename := fileToDelete.Name()
+		isTempFile, err := filepath.Match(fmt.Sprintf("%s*", DefaultTempStorePrefix), filename)
+		if err != nil {
+			return err
+		}
+		// Only remove temporary store directories and files.
+		if !isTempFile {
+			continue
+		}
+
+		toDeleteFull, err := filepath.Abs(filepath.Join(parentDir, filename))
+		if err != nil {
+			return err
+		}
+		curTempFull, err := filepath.Abs(path)
+		if err != nil {
+			return err
+		}
+		// We do not want to remove our newly created temp directory.
+		if toDeleteFull != curTempFull {
+			if err := os.Rename(toDeleteFull, filepath.Join(deletionDir, filename)); err != nil {
 				return err
 			}
 		}
@@ -105,7 +141,8 @@ func cleanupTempStorageDirs(ctx context.Context, path string, wg *sync.WaitGroup
 		}
 		if err := os.RemoveAll(deletionDir); err != nil {
 			log.Warningf(ctx, "could not clear old TempEngine files: %v", err.Error())
-			// Even if this errors, this is safe since it's in the marked-for-deletion subdirectory.
+			// If this errors, this is only safe the --temp-dir flag
+			// does not change in between startups.
 			return
 		}
 	}()
