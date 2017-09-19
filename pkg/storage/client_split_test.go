@@ -192,19 +192,17 @@ func TestStoreRangeSplitInsideRow(t *testing.T) {
 
 	// Verify the two columns are still on the same range.
 	if !reflect.DeepEqual(repl1, repl2) {
-		t.Fatalf("%s: ranges differ: %+v vs %+v", roachpb.Key(col1Key), repl1, repl2)
+		t.Fatalf("%s: ranges differ: %+v vs %+v", col1Key, repl1, repl2)
 	}
 	// Verify we split on a row key.
 	if startKey := repl1.Desc().StartKey; !startKey.Equal(rowKey) {
-		t.Fatalf("%s: expected split on %s, but found %s",
-			roachpb.Key(col1Key), roachpb.Key(rowKey), startKey)
+		t.Fatalf("%s: expected split on %s, but found %s", col1Key, rowKey, startKey)
 	}
 
 	// Verify the previous range was split on a row key.
 	repl3 := store.LookupReplica(tableKey, nil)
 	if endKey := repl3.Desc().EndKey; !endKey.Equal(rowKey) {
-		t.Fatalf("%s: expected split on %s, but found %s",
-			roachpb.Key(col1Key), roachpb.Key(rowKey), endKey)
+		t.Fatalf("%s: expected split on %s, but found %s", col1Key, rowKey, endKey)
 	}
 }
 
@@ -975,7 +973,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 			testutils.MakeKey(keys.Meta2Prefix, keys.TableDataMin),
 		}
 		numReservedTables := schema.SystemDescriptorCount() - schema.SystemConfigDescriptorCount()
-		for i := 1; i <= int(numReservedTables); i++ {
+		for i := 1; i <= numReservedTables; i++ {
 			expKeys = append(expKeys,
 				testutils.MakeKey(keys.Meta2Prefix,
 					keys.MakeTablePrefix(keys.MaxSystemConfigDescID+uint32(i))),
@@ -1422,8 +1420,8 @@ func TestStoreSplitGCThreshold(t *testing.T) {
 	}
 	gcArgs := &roachpb.GCRequest{
 		Span: roachpb.Span{
-			Key:    roachpb.Key(leftKey),
-			EndKey: roachpb.Key(rightKey),
+			Key:    leftKey,
+			EndKey: rightKey,
 		},
 		Threshold:          specifiedGCThreshold,
 		TxnSpanGCThreshold: specifiedTxnSpanGCThreshold,

@@ -72,7 +72,7 @@ func TestDebugLogSpyOptions(t *testing.T) {
 			},
 			expOpts: logSpyOptions{
 				Count:    1,
-				Duration: durationAsString(logSpyMaxDuration),
+				Duration: logSpyMaxDuration,
 			},
 		},
 		{

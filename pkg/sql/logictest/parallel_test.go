@@ -241,7 +241,7 @@ func (t *parallelTest) setup(spec *parTestSpec) {
 func TestParallel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	glob := string(*paralleltestdata)
+	glob := *paralleltestdata
 	paths, err := filepath.Glob(glob)
 	if err != nil {
 		t.Fatal(err)

@@ -215,7 +215,7 @@ func BenchmarkAdversarialDelete(b *testing.B) {
 
 				if i%mapSize == 0 {
 					m.Range(func(k int64, _ unsafe.Pointer) bool {
-						m.Delete(int64(k))
+						m.Delete(k)
 						return false
 					})
 					m.Store(int64(i), v)
