@@ -86,7 +86,7 @@ func slurpSSTablesLatestKey(
 			var ok bool
 			kv.Key.Key, ok = kr.rewriteKey(kv.Key.Key)
 			if !ok {
-				return true, errors.Errorf("could not rewrite key: %s", roachpb.Key(kv.Key.Key))
+				return true, errors.Errorf("could not rewrite key: %s", kv.Key.Key)
 			}
 			v := roachpb.Value{RawBytes: kv.Value}
 			v.ClearChecksum()

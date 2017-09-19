@@ -100,7 +100,7 @@ func TestDiskRowContainer(t *testing.T) {
 		},
 	}
 
-	rng := rand.New(rand.NewSource(int64(timeutil.Now().UnixNano())))
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	evalCtx := parser.MakeTestingEvalContext()
 	diskMonitor := mon.MakeMonitor(

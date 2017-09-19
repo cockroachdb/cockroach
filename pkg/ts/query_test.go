@@ -205,10 +205,10 @@ func TestDataSpanIterator(t *testing.T) {
 		if !expectedValid {
 			return
 		}
-		if a, e := iter.offset(), int32(expectedOffset); a != e {
+		if a, e := iter.offset(), expectedOffset; a != e {
 			t.Fatalf("check %d: expected iterator to have offset %d, was %d", checkNum, e, a)
 		}
-		if a, e := iter.timestamp(), int64(expectedTimestamp); a != e {
+		if a, e := iter.timestamp(), expectedTimestamp; a != e {
 			t.Fatalf(
 				"check %d: expected iterator to have timestamp %d, was %d", checkNum, e, a,
 			)
@@ -368,15 +368,15 @@ func TestDownsamplingIterator(t *testing.T) {
 		if !expectedValid {
 			return
 		}
-		if a, e := iter.offset(), int32(expectedOffset); a != e {
+		if a, e := iter.offset(), expectedOffset; a != e {
 			t.Fatalf("check %d: expected iterator to have offset %d, was %d", checkNum, e, a)
 		}
-		if a, e := iter.timestamp(), int64(expectedTimestamp); a != e {
+		if a, e := iter.timestamp(), expectedTimestamp; a != e {
 			t.Fatalf(
 				"check %d: expected iterator to have timestamp %d, was %d", checkNum, e, a,
 			)
 		}
-		if a, e := iter.value(), float64(expectedValue); a != e {
+		if a, e := iter.value(), expectedValue; a != e {
 			t.Fatalf(
 				"check %d: expected iterator to have value %f, was %f", checkNum, e, a,
 			)

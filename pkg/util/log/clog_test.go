@@ -621,7 +621,7 @@ func TestGC(t *testing.T) {
 	defer func(previous int64) {
 		atomic.StoreInt64(&LogFilesCombinedMaxSize, previous)
 	}(LogFilesCombinedMaxSize)
-	atomic.StoreInt64(&LogFilesCombinedMaxSize, int64(maxTotalLogFileSize))
+	atomic.StoreInt64(&LogFilesCombinedMaxSize, maxTotalLogFileSize)
 
 	for i := 1; i < newLogFiles; i++ {
 		Infof(context.Background(), "%d", i)
