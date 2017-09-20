@@ -5582,17 +5582,16 @@ func EnableLeaseHistory(maxEntries int) func() {
 	}
 }
 
-// GetCommandQueues returns a snapshot of the command queue state for
+// GetCommandQueueState returns a snapshot of the command queue state for
 // this replica.
 func (r *Replica) GetCommandQueueState() *CommandQueuesForReplica {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	r.cmdQMu.Lock()
 	defer r.cmdQMu.Unlock()
-	resp := &CommandQueuesForReplica{
-		Timestamp:   time.Now().UnixNano(),
+	return &CommandQueuesForReplica{
+		Timestamp:   timeutil.Now().UnixNano(),
 		LocalScope:  r.cmdQMu.queues[spanLocal].GetCommandQueueState(),
 		GlobalScope: r.cmdQMu.queues[spanGlobal].GetCommandQueueState(),
 	}
-	return resp
 }

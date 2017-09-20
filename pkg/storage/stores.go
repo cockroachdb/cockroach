@@ -139,14 +139,18 @@ func (ls *Stores) VisitStores(visitor func(s *Store) error) error {
 func (ls *Stores) GetReplicaForRangeID(rangeID roachpb.RangeID) *Replica {
 	var replica *Replica
 
-	ls.VisitStores(func(store *Store) error {
-		replicaFromStore, err := store.GetReplica(roachpb.RangeID(rangeID))
+	err := ls.VisitStores(func(store *Store) error {
+		replicaFromStore, err := store.GetReplica(rangeID)
 
 		if err == nil {
 			replica = replicaFromStore
 		}
 		return nil
 	})
+
+	if err != nil {
+		panic(err)
+	}
 
 	return replica
 }
