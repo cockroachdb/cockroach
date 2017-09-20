@@ -651,7 +651,14 @@ func EnsureSafeSplitKey(key roachpb.Key) (roachpb.Key, error) {
 		// by SystemConfig.ComputeSplitKey).
 		return nil, errors.Errorf("%s: malformed table key", key)
 	}
-	return key[:len(key)-int(colIDLen)-1], nil
+	from := len(key) - int(colIDLen) - 1
+	if from > len(key) {
+		// TODO(petermattis): see TestEnsureSafeSplitKey. Before being caught here,
+		// this would index out-of-bounds below.
+		err := errors.Errorf("%s: unexpectedly malformed table key %q", key, key)
+		return nil, err
+	}
+	return key[:from], nil
 }
 
 // Range returns a key range encompassing all the keys in the Batch.
