@@ -3076,8 +3076,6 @@ func TestFindSplitKey(t *testing.T) {
 	if err := MVCCSetRangeStats(context.Background(), engine, rangeID, ms); err != nil {
 		t.Fatal(err)
 	}
-	snap := engine.NewSnapshot()
-	defer snap.Close()
 
 	testData := []struct {
 		targetSize int64
@@ -3090,7 +3088,7 @@ func TestFindSplitKey(t *testing.T) {
 
 	for i, td := range testData {
 		humanSplitKey, err := MVCCFindSplitKey(
-			context.Background(), snap, rangeID, roachpb.RKeyMin, roachpb.RKeyMax, td.targetSize)
+			context.Background(), engine, roachpb.RKeyMin, roachpb.RKeyMax, td.targetSize)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3198,48 +3196,47 @@ func TestFindValidSplitKeys(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		engine := createTestEngine()
-		defer engine.Close()
+		t.Run("", func(t *testing.T) {
+			engine := createTestEngine()
+			defer engine.Close()
 
-		ms := &enginepb.MVCCStats{}
-		val := roachpb.MakeValueFromString(strings.Repeat("X", 10))
-		for _, k := range test.keys {
-			if err := MVCCPut(context.Background(), engine, ms, []byte(k), hlc.Timestamp{Logical: 1}, val, nil); err != nil {
+			ms := &enginepb.MVCCStats{}
+			val := roachpb.MakeValueFromString(strings.Repeat("X", 10))
+			for _, k := range test.keys {
+				if err := MVCCPut(context.Background(), engine, ms, []byte(k), hlc.Timestamp{Logical: 1}, val, nil); err != nil {
+					t.Fatal(err)
+				}
+			}
+			// write stats
+			if err := MVCCSetRangeStats(context.Background(), engine, rangeID, ms); err != nil {
 				t.Fatal(err)
 			}
-		}
-		// write stats
-		if err := MVCCSetRangeStats(context.Background(), engine, rangeID, ms); err != nil {
-			t.Fatal(err)
-		}
-		snap := engine.NewSnapshot()
-		defer snap.Close()
-		rangeStart := test.keys[0]
-		rangeEnd := test.keys[len(test.keys)-1].Next()
-		rangeStartAddr, err := keys.Addr(rangeStart)
-		if err != nil {
-			t.Fatal(err)
-		}
-		rangeEndAddr, err := keys.Addr(rangeEnd)
-		if err != nil {
-			t.Fatal(err)
-		}
-		targetSize := (ms.KeyBytes + ms.ValBytes) / 2
-		splitKey, err := MVCCFindSplitKey(
-			context.Background(), snap, rangeID, rangeStartAddr, rangeEndAddr, targetSize)
-		if test.expError {
-			if !testutils.IsError(err, "has no valid splits") {
-				t.Errorf("%d: unexpected error: %v", i, err)
+			rangeStart := test.keys[0]
+			rangeEnd := test.keys[len(test.keys)-1].Next()
+			rangeStartAddr, err := keys.Addr(rangeStart)
+			if err != nil {
+				t.Fatal(err)
 			}
-			continue
-		}
-		if err != nil {
-			t.Errorf("%d; unexpected error: %s", i, err)
-			continue
-		}
-		if !splitKey.Equal(test.expSplit) {
-			t.Errorf("%d: expected split key %q; got %q", i, test.expSplit, splitKey)
-		}
+			rangeEndAddr, err := keys.Addr(rangeEnd)
+			if err != nil {
+				t.Fatal(err)
+			}
+			targetSize := (ms.KeyBytes + ms.ValBytes) / 2
+			splitKey, err := MVCCFindSplitKey(
+				context.Background(), engine, rangeStartAddr, rangeEndAddr, targetSize)
+			if test.expError {
+				if !testutils.IsError(err, "has no valid splits") {
+					t.Fatalf("%d: unexpected error: %v", i, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("%d; unexpected error: %s", i, err)
+			}
+			if !splitKey.Equal(test.expSplit) {
+				t.Errorf("%d: expected split key %q; got %q", i, test.expSplit, splitKey)
+			}
+		})
 	}
 }
 
@@ -3292,37 +3289,36 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 	}
 
 	for i, test := range testCases {
-		engine := createTestEngine()
-		defer engine.Close()
+		t.Run("", func(t *testing.T) {
+			engine := createTestEngine()
+			defer engine.Close()
 
-		ms := &enginepb.MVCCStats{}
-		var expKey roachpb.Key
-		for j, keySize := range test.keySizes {
-			key := roachpb.Key(fmt.Sprintf("%d%s", j, strings.Repeat("X", keySize)))
-			if test.expSplit == j {
-				expKey = key
+			ms := &enginepb.MVCCStats{}
+			var expKey roachpb.Key
+			for j, keySize := range test.keySizes {
+				key := roachpb.Key(fmt.Sprintf("%d%s", j, strings.Repeat("X", keySize)))
+				if test.expSplit == j {
+					expKey = key
+				}
+				val := roachpb.MakeValueFromString(strings.Repeat("X", test.valSizes[j]))
+				if err := MVCCPut(context.Background(), engine, ms, key, hlc.Timestamp{Logical: 1}, val, nil); err != nil {
+					t.Fatal(err)
+				}
 			}
-			val := roachpb.MakeValueFromString(strings.Repeat("X", test.valSizes[j]))
-			if err := MVCCPut(context.Background(), engine, ms, key, hlc.Timestamp{Logical: 1}, val, nil); err != nil {
+			// write stats
+			if err := MVCCSetRangeStats(context.Background(), engine, rangeID, ms); err != nil {
 				t.Fatal(err)
 			}
-		}
-		// write stats
-		if err := MVCCSetRangeStats(context.Background(), engine, rangeID, ms); err != nil {
-			t.Fatal(err)
-		}
-		snap := engine.NewSnapshot()
-		defer snap.Close()
-		targetSize := (ms.KeyBytes + ms.ValBytes) / 2
-		splitKey, err := MVCCFindSplitKey(
-			context.Background(), snap, rangeID, roachpb.RKey("\x02"), roachpb.RKeyMax, targetSize)
-		if err != nil {
-			t.Errorf("unexpected error: %s", err)
-			continue
-		}
-		if !splitKey.Equal(expKey) {
-			t.Errorf("%d: expected split key %q; got %q", i, expKey, splitKey)
-		}
+			targetSize := (ms.KeyBytes + ms.ValBytes) / 2
+			splitKey, err := MVCCFindSplitKey(
+				context.Background(), engine, roachpb.RKey("\x02"), roachpb.RKeyMax, targetSize)
+			if err != nil {
+				t.Fatalf("unexpected error: %s", err)
+			}
+			if !splitKey.Equal(expKey) {
+				t.Errorf("%d: expected split key %q; got %q", i, expKey, splitKey)
+			}
+		})
 	}
 }
 
