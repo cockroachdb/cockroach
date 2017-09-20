@@ -23,7 +23,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/dustin/go-humanize"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 
@@ -2294,7 +2293,6 @@ func IsValidSplitKey(key roachpb.Key) bool {
 func MVCCFindSplitKey(
 	ctx context.Context,
 	engine Reader,
-	rangeID roachpb.RangeID,
 	key,
 	endKey roachpb.RKey,
 	targetSize int64,
@@ -2306,33 +2304,29 @@ func MVCCFindSplitKey(
 	encStartKey := MakeMVCCMetadataKey(key.AsRawKey())
 	encEndKey := MakeMVCCMetadataKey(endKey.AsRawKey())
 
-	if log.V(2) {
-		log.Infof(ctx, "searching split key for %d [%s, %s)", rangeID, key, endKey)
-	}
-
-	// Get range size from stats.
-	ms, err := MVCCGetRangeStats(ctx, engine, rangeID)
-	if err != nil {
-		return nil, err
-	}
-
-	rangeSize := ms.KeyBytes + ms.ValBytes
-	if log.V(2) {
-		log.Infof(ctx, "range size: %s, targetSize %s",
-			humanize.IBytes(uint64(rangeSize)), humanize.IBytes(uint64(targetSize)))
-	}
-
 	sizeSoFar := int64(0)
 	bestSplitKey := encStartKey
 	bestSplitDiff := int64(math.MaxInt64)
 	var lastKey roachpb.Key
+	var lastKeyBuf []byte
+	var bestSplitKeyBuf []byte
 	var n int
 
-	if err := engine.Iterate(encStartKey, encEndKey, func(kv MVCCKeyValue) (bool, error) {
+	it := engine.NewIterator(false /* prefix */)
+	defer it.Close()
+
+	for it.Seek(encStartKey); ; it.Next() {
+		if ok, err := it.Valid(); err != nil {
+			return nil, err
+		} else if !ok || !it.Less(encEndKey) {
+			break
+		}
+		unsafeKey := it.UnsafeKey()
+
 		n++
 		// Is key within a legal key range? Note that we never choose the first key
 		// as the split key.
-		valid := n > 1 && IsValidSplitKey(kv.Key.Key)
+		valid := n > 1 && IsValidSplitKey(unsafeKey.Key)
 
 		// Determine if this key would make a better split than last "best" key.
 		diff := targetSize - sizeSoFar
@@ -2341,29 +2335,30 @@ func MVCCFindSplitKey(
 		}
 		if valid && diff < bestSplitDiff {
 			if log.V(2) {
-				log.Infof(ctx, "better split: diff %d at %s", diff, kv.Key)
+				log.Infof(ctx, "better split: diff %d at %s", diff, unsafeKey)
 			}
-			bestSplitKey = kv.Key
+			bestSplitKey = unsafeKey
+			bestSplitKey.Key = append(bestSplitKeyBuf, bestSplitKey.Key...)
+			bestSplitKeyBuf = bestSplitKey.Key[:0]
 			bestSplitDiff = diff
 		}
 
 		// Determine whether we've found best key and can exit iteration.
-		done := !bestSplitKey.Key.Equal(encStartKey.Key) && diff > bestSplitDiff
-		if done && log.V(2) {
-			log.Infof(ctx, "target size reached")
+		if !bestSplitKey.Key.Equal(encStartKey.Key) && diff > bestSplitDiff {
+			if log.V(2) {
+				log.Infof(ctx, "target size reached")
+			}
+			break
 		}
 
 		// Add this key/value to the size scanned so far.
-		if kv.Key.IsValue() && bytes.Equal(kv.Key.Key, lastKey) {
-			sizeSoFar += mvccVersionTimestampSize + int64(len(kv.Value))
+		if unsafeKey.IsValue() && bytes.Equal(unsafeKey.Key, lastKey) {
+			sizeSoFar += mvccVersionTimestampSize + int64(len(it.UnsafeValue()))
 		} else {
-			sizeSoFar += int64(kv.Key.EncodedSize() + len(kv.Value))
+			sizeSoFar += int64(unsafeKey.EncodedSize() + len(it.UnsafeValue()))
 		}
-		lastKey = kv.Key.Key
-
-		return done, nil
-	}); err != nil {
-		return nil, err
+		lastKey = append(lastKeyBuf, unsafeKey.Key...)
+		lastKeyBuf = lastKey[:0]
 	}
 
 	if bestSplitKey.Key.Equal(encStartKey.Key) {
