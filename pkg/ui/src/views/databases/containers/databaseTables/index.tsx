@@ -99,10 +99,6 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
                         cell: (tableInfo) => tableInfo.numIndices,
                         sort: (tableInfo) => tableInfo.numIndices,
                       },
-                      {
-                        title: "Schema Change",
-                        cell: (_tableInfo) => "",
-                      },
                     ]} />
               }
             </div>
