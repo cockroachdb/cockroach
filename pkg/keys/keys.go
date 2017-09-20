@@ -640,7 +640,9 @@ func EnsureSafeSplitKey(key roachpb.Key) (roachpb.Key, error) {
 	if err != nil {
 		return nil, err
 	}
-	if int(colIDLen)+1 > n {
+	// Note how this next comparison (and by extension the code after it) is overflow-safe. There
+	// are more intuitive ways of writing this that aren't as safe. See #18628.
+	if colIDLen > uint64(n-1) {
 		// The column ID length was impossible. colIDLen is the length of
 		// the encoded column ID suffix. We add 1 to account for the byte
 		// holding the length of the encoded column ID and if that total
