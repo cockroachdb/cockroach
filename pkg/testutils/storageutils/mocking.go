@@ -17,11 +17,10 @@ package storageutils
 import (
 	"fmt"
 
-	"golang.org/x/sync/singleflight"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 )
 
 // raftCmdIDAndIndex identifies a batch and a command within it.
@@ -87,7 +86,7 @@ func (c *ReplayProtectionFilterWrapper) run(args storagebase.FilterArgs) *roachp
 	// We use the singleflight.Group to coalesce replayed raft commands onto the
 	// same filter call. This allows concurrent access to the filter for
 	// different raft commands.
-	resC := c.inFlight.DoChan(mapKey.String(), func() (interface{}, error) {
+	resC, _ := c.inFlight.DoChan(mapKey.String(), func() (interface{}, error) {
 		pErr := c.filter(args)
 
 		c.Lock()
