@@ -30,9 +30,6 @@ func (m *CommandQueueCommand) String() string            { return proto.CompactT
 func (*CommandQueueCommand) ProtoMessage()               {}
 func (*CommandQueueCommand) Descriptor() ([]byte, []int) { return fileDescriptorCommandQueue, []int{0} }
 
-// would be called CommandQueue but that's already taken by the struct in command_queue.go
-// TODO(vilterp): should we use the same proto to define that struct that we use for
-// serialization to the UI?
 type CommandQueueSnapshot struct {
 	Commands []*CommandQueueCommand `protobuf:"bytes,1,rep,name=commands" json:"commands,omitempty"`
 }

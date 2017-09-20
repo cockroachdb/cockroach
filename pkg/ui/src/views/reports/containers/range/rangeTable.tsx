@@ -326,6 +326,31 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     );
   }
 
+  renderCommandQueueVizRow(
+    sortedStoreIDs: number[],
+    rangeID: Long,
+    leader: protos.cockroach.server.serverpb.RangeInfo$Properties,
+  ) {
+    return (
+      <tr className="range-table__row">
+        <th className="range-table__cell range-table__cell--header">
+          CmdQ State
+        </th>
+        {sortedStoreIDs.map((storeId) => (
+          <td className="range-table__cell" key={storeId}>
+            {storeId === leader.source_store_id
+              ? <Link
+                  to={`/reports/range/${rangeID}/cmdqueue`}
+                  className="debug-link">
+                  Visualize
+                </Link>
+              : "-"}
+          </td>
+        ))}
+      </tr>
+    );
+  }
+
   render() {
     const { infos, replicas } = this.props;
     const leader = _.head(infos);
@@ -448,14 +473,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
                 )
               ))
             }
-            <tr>
-              <td className="range-table__cell range-table__cell--header">
-                CmdQ State
-              </td>
-              <td className="range-table__cell">
-                <Link to={`/reports/range/${rangeID}/cmdqueue`}>Visualize</Link>
-              </td>
-            </tr>
+            {this.renderCommandQueueVizRow(sortedStoreIDs, rangeID, leader)}
             {
               _.map(replicas, (replica, key) => (
                 this.renderRangeReplicaRow(
