@@ -122,6 +122,28 @@ var (
 	datEncodingUTF8ShortName = NewDString("UTF8")
 )
 
+// Make a pg_get_viewdef function with the given arguments.
+func makePGGetViewDef(argTypes ArgTypes) Builtin {
+	return Builtin{
+		Types:            argTypes,
+		distsqlBlacklist: true,
+		ReturnType:       fixedReturnType(TypeString),
+		fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+			r, err := ctx.Planner.QueryRow(
+				ctx.Ctx(), "SELECT definition FROM pg_catalog.pg_views v JOIN pg_catalog.pg_class c ON "+
+					"c.relname=v.viewname WHERE oid=$1", args[0])
+			if err != nil {
+				return nil, err
+			}
+			if len(r) == 0 {
+				return DNull, nil
+			}
+			return r[0], nil
+		},
+		Info: notUsableInfo,
+	}
+}
+
 var pgBuiltins = map[string][]Builtin{
 	// See https://www.postgresql.org/docs/9.6/static/functions-info.html.
 	"pg_backend_pid": {
@@ -209,6 +231,13 @@ var pgBuiltins = map[string][]Builtin{
 		// The other overload for this function, pg_get_indexdef(index_oid,
 		// column_no, pretty_bool), is unimplemented, because it isn't used by
 		// supported ORMs.
+	},
+
+	// pg_get_viewdef functions like SHOW CREATE VIEW but returns the same format as
+	// PostgreSQL leaving out the actual 'CREATE VIEW table_name AS' portion of the statement.
+	"pg_get_viewdef": {
+		makePGGetViewDef(ArgTypes{{"view_oid", TypeOid}}),
+		makePGGetViewDef(ArgTypes{{"view_oid", TypeOid}, {"pretty_bool", TypeBool}}),
 	},
 
 	"pg_typeof": {
