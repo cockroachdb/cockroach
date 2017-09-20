@@ -1,3 +1,5 @@
+@require "~styl/base/palette.styl"
+
 .command-queue svg
   background-color white
 
@@ -12,12 +14,12 @@
   padding 5px
 
 .command-queue__key__read
-  background-color lightgreen
+  background-color $healthy-color
   margin-left 5px
   margin-right 5px
 
 .command-queue__key__write
-  background-color pink
+  background-color $alert-color
 
 .command-queue
   table
@@ -28,3 +30,16 @@
   
   td
     padding 5px
+
+.command-queue__node
+  stroke black
+  cursor: pointer
+
+  &.selected
+    stroke red
+
+  &.read
+    fill $healthy-color
+
+  &.write
+    fill $alert-color

@@ -5,14 +5,17 @@ import { connect } from "react-redux";
 import { RouterState } from "react-router";
 
 import * as protos from "src/js/protos";
+import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { refreshCommandQueue } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { rangeIDAttr } from "src/util/constants";
 import { LongToMoment } from "src/util/convert";
+import Print from "src/views/reports/containers/range/print";
 import CommandQueueViz from "src/views/reports/containers/commandQueue/commandQueueViz";
 
 interface CommandQueueOwnProps {
-  commandQueue: protos.cockroach.server.serverpb.CommandQueueResponse;
+  commandQueueReducerState:
+    CachedDataReducerState<protos.cockroach.server.serverpb.CommandQueueResponse>;
   refreshCommandQueue: typeof refreshCommandQueue;
 }
 
@@ -33,6 +36,32 @@ class CommandQueue extends React.Component<CommandQueueProps, {}> {
     this.refresh();
   }
 
+  renderReportBody() {
+    const commandQueue = this.props.commandQueueReducerState.data;
+
+    return (
+      <div>
+        <div className="command-queue__timestamp">
+          <span>
+            Snapshot taken at
+            {" "}{Print.Time(LongToMoment(commandQueue.queues.timestamp))}
+          </span>
+        </div>
+        <div className="command-queue__key">
+          Key:
+          <div className="command-queue__key__read">Read</div>
+          <div className="command-queue__key__write">Write</div>
+        </div>
+
+        <h2>Local Scope</h2>
+        <CommandQueueViz queue={commandQueue.queues.localScope} />
+
+        <h2>Global Scope</h2>
+        <CommandQueueViz queue={commandQueue.queues.globalScope} />
+      </div>
+    );
+  }
+
   render() {
     const rangeID = this.props.params[rangeIDAttr];
 
@@ -47,26 +76,8 @@ class CommandQueue extends React.Component<CommandQueueProps, {}> {
           {" "}>{" "}
           Command queue
         </h1>
-        <div className="command-queue__timestamp">
-          {this.props.commandQueue
-            ? <span>
-                Snapshot taken at
-                {" "}{LongToMoment(this.props.commandQueue.queues.timestamp).toISOString()}
-              </span>
-            : <span>Loading...</span>}
-        </div>
-        <div className="command-queue__key">
-          Key:
-          <div className="command-queue__key__read">Read</div>
-          <div className="command-queue__key__write">Write</div>
-        </div>
-        <h2>Local Scope</h2>
-        {this.props.commandQueue
-          ? <CommandQueueViz queue={this.props.commandQueue.queues.localScope} />
-          : <p>Loading...</p>}
-        <h2>Global Scope</h2>
-        {this.props.commandQueue
-          ? <CommandQueueViz queue={this.props.commandQueue.queues.globalScope} />
+        {this.props.commandQueueReducerState.setAt
+          ? this.renderReportBody()
           : <p>Loading...</p>}
       </div>
     );
@@ -75,7 +86,7 @@ class CommandQueue extends React.Component<CommandQueueProps, {}> {
 
 function mapStateToProps(state: AdminUIState) {
   return {
-    commandQueue: state.cachedData.commandQueue.data,
+    commandQueueReducerState: state.cachedData.commandQueue,
   };
 }
 

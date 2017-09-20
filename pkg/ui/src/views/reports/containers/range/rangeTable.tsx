@@ -331,6 +331,14 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     rangeID: Long,
     leader: protos.cockroach.server.serverpb.RangeInfo$Properties,
   ) {
+    const vizLink = (
+      <Link
+        to={`/reports/range/${rangeID}/cmdqueue`}
+        className="debug-link">
+        Visualize
+      </Link>
+    );
+
     return (
       <tr className="range-table__row">
         <th className="range-table__cell range-table__cell--header">
@@ -338,13 +346,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         </th>
         {sortedStoreIDs.map((storeId) => (
           <td className="range-table__cell" key={storeId}>
-            {storeId === leader.source_store_id
-              ? <Link
-                  to={`/reports/range/${rangeID}/cmdqueue`}
-                  className="debug-link">
-                  Visualize
-                </Link>
-              : "-"}
+            {storeId === leader.source_store_id ? vizLink : "-"}
           </td>
         ))}
       </tr>

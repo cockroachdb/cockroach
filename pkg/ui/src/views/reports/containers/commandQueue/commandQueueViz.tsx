@@ -1,17 +1,17 @@
 import React from "react";
-
 import Long from "long";
-import Print from "src/views/reports/containers/range/print";
+import classNames from "classnames";
 import * as dagre from "dagre";
 
 import * as protos from "src/js/protos";
+import Print from "src/views/reports/containers/range/print";
 
 interface QueueVizProps {
   queue: protos.cockroach.storage.CommandQueueSnapshot$Properties;
 }
 
 interface QueueVizState {
-  hoveredNode: Long;
+  selectedNodeID: Long;
 }
 
 const COMMAND_RADIUS = 10;
@@ -22,7 +22,7 @@ export default class CommandQueueViz extends React.Component<QueueVizProps, Queu
   constructor() {
     super();
     this.state = {
-      hoveredNode: null,
+      selectedNodeID: null,
     };
   }
 
@@ -51,24 +51,29 @@ export default class CommandQueueViz extends React.Component<QueueVizProps, Queu
     return g;
   }
 
-  detailsTable(command: protos.cockroach.storage.CommandQueueCommand$Properties) {
+  renderDetailsTable(graph: dagre.graphlib.Graph) {
+    if (this.state.selectedNodeID === null) {
+      return (<p>Click on a node to see details.</p>);
+    }
+
+    const command = graph.node(this.state.selectedNodeID.toString()).command;
     return (
       <table>
         <tbody>
           <tr>
-            <td>ID</td>
-            <td>{`${command.id.toString()}`}</td>
+            <th>ID</th>
+            <td>{command.id.toString()}</td>
           </tr>
           <tr>
-            <td>Read Only</td>
-            <td>{`${command.readonly}`}</td>
+            <th>Read Only</th>
+            <td>{command.readonly}</td>
           </tr>
           <tr>
-            <td>Key Range</td>
+            <th>Key Range</th>
             <td>{command.key} to {command.end_key}</td>
           </tr>
           <tr>
-            <td>Timestamp</td>
+            <th>Timestamp</th>
             <td>
               <span title="wall">{command.timestamp.wall_time.toString()}</span>
               .
@@ -81,16 +86,15 @@ export default class CommandQueueViz extends React.Component<QueueVizProps, Queu
     );
   }
 
+  nodeIsSelected(nodeID: Long) {
+    return this.state.selectedNodeID !== null && this.state.selectedNodeID.equals(nodeID);
+  }
+
   render() {
     const g = this.computeLayout();
 
-    const nodeIds = g.nodes() as Array<string>;
-    const nodes = nodeIds.map((nodeId) => (
-      g.node(nodeId)
-    ));
-    const edges = g.edges().map((edgeId) => (
-      g.edge(edgeId)
-    ));
+    const nodes = g.nodes().map((nodeId) => g.node(nodeId));
+    const edges = g.edges().map((edgeId) => g.edge(edgeId));
 
     if (nodes.length === 0) {
       return (
@@ -105,39 +109,30 @@ export default class CommandQueueViz extends React.Component<QueueVizProps, Queu
           height={g.graph().height}
           style={{border: "1px solid black"}}>
           {nodes.map((node) => {
-            if (!node.command) {
-              console.log("no command", node);
-            }
             return (
               <circle
                 key={node.command.id.toString()}
                 cx={node.x}
                 cy={node.y}
                 r={COMMAND_RADIUS}
-                onClick={() => { this.setState({ hoveredNode: node.command.id }); }}
-                style={{
-                  fill: node.command.readonly ? "lightgreen" : "pink",
-                  stroke: (this.state.hoveredNode !== null && node.command.id.equals(this.state.hoveredNode))
-                    ? "red" : "black",
-                  cursor: "pointer",
-                }} />
+                onClick={() => { this.setState({ selectedNodeID: node.command.id }); }}
+                className={classNames(
+                  "command-queue__node",
+                  node.command.readonly ? "read" : "write",
+                  { selected: this.nodeIsSelected(node.command.id) },
+                )} />
             );
           })}
-          {edges.map((edge, idx: number) => {
+          {edges.map((edge: { points: Array<{x: number, y: number}> }, idx: number) => {
             return (
               <polyline
                 key={idx}
-                points={
-                  (edge.points as Array<{x: number, y: number}>)
-                    .map(({x, y}) => (`${x},${y}`)).join(" ")
-                }
+                points={edge.points.map(({x, y}) => (`${x},${y}`)).join(" ")}
                 style={{stroke: "black", fill: "none"}} />
             );
           })}
         </svg>
-        {this.state.hoveredNode !== null
-          ? this.detailsTable(g.node(this.state.hoveredNode.toString()).command)
-          : null}
+        {this.renderDetailsTable(g)}
       </div>
     );
   }
