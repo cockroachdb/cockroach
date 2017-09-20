@@ -2660,12 +2660,10 @@ func (r *Replica) adminSplitWithDescriptor(
 		var foundSplitKey roachpb.Key
 		if len(args.SplitKey) == 0 {
 			// Find a key to split by size.
-			snap := r.store.engine.NewSnapshot()
-			defer snap.Close()
 			var err error
 			targetSize := r.GetMaxBytes() / 2
 			foundSplitKey, err = engine.MVCCFindSplitKey(
-				ctx, snap, desc.RangeID, desc.StartKey, desc.EndKey, targetSize)
+				ctx, r.store.engine, desc.StartKey, desc.EndKey, targetSize)
 			if err != nil {
 				return reply, false, roachpb.NewErrorf("unable to determine split key: %s", err)
 			}

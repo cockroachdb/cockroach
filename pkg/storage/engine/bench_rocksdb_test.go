@@ -80,6 +80,14 @@ func BenchmarkMVCCComputeStats_RocksDB(b *testing.B) {
 	}
 }
 
+func BenchmarkMVCCFindSplitKey_RocksDB(b *testing.B) {
+	for _, valueSize := range []int{32} {
+		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+			runMVCCFindSplitKey(setupMVCCRocksDB, valueSize, b)
+		})
+	}
+}
+
 func BenchmarkIterOnBatch_RocksDB(b *testing.B) {
 	for _, writes := range []int{10, 100, 1000, 10000} {
 		b.Run(fmt.Sprintf("writes=%d", writes), func(b *testing.B) {

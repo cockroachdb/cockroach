@@ -590,6 +590,28 @@ func runMVCCComputeStats(emk engineMaker, valueBytes int, b *testing.B) {
 	log.Infof(context.Background(), "live_bytes: %d", stats.LiveBytes)
 }
 
+// runMVCCCFindSplitKey benchmarks MVCCFindSplitKey on a 64MB range of data.
+func runMVCCFindSplitKey(emk engineMaker, valueBytes int, b *testing.B) {
+	const rangeBytes = 64 * 1024 * 1024
+	numKeys := rangeBytes / (overhead + valueBytes)
+	eng, _ := setupMVCCData(emk, 1, numKeys, valueBytes, b)
+	defer eng.Close()
+
+	b.SetBytes(rangeBytes)
+	b.ResetTimer()
+
+	var err error
+	for i := 0; i < b.N; i++ {
+		_, err = MVCCFindSplitKey(
+			context.Background(), eng, roachpb.RKeyMin, roachpb.RKeyMax, rangeBytes/2)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+
+	b.StopTimer()
+}
+
 func runBatchApplyBatchRepr(
 	emk engineMaker, writeOnly bool, valueSize, batchSize int, b *testing.B,
 ) {
