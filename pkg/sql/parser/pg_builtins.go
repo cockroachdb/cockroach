@@ -211,6 +211,51 @@ var pgBuiltins = map[string][]Builtin{
 		// supported ORMs.
 	},
 
+	// pg_get_viewdef functions like SHOW CREATE VIEW but returns the same format as
+	// PostgreSQL leaving out the actual 'CREATE VIEW table_name AS' portion of the statement.
+	"pg_get_viewdef": {
+		Builtin{
+			Types: ArgTypes{
+				{"view_oid", TypeOid},
+			},
+			distsqlBlacklist: true,
+			ReturnType:       fixedReturnType(TypeString),
+			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+				r, err := ctx.Planner.QueryRow(
+					ctx.Ctx(), "SELECT definition FROM pg_catalog.pg_views v JOIN pg_catalog.pg_class c ON "+
+						"c.relname=v.viewname WHERE oid=$1", args[0])
+				if err != nil {
+					return nil, err
+				}
+				if len(r) == 0 {
+					return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "unknown view (OID=%s)", args[0])
+				}
+				return r[0], nil
+			},
+			Info: notUsableInfo,
+		},
+		Builtin{
+			Types: ArgTypes{
+				{"view_oid", TypeOid}, {"pretty_bool", TypeBool},
+			},
+			distsqlBlacklist: true,
+			ReturnType:       fixedReturnType(TypeString),
+			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+				r, err := ctx.Planner.QueryRow(
+					ctx.Ctx(), "SELECT definition FROM pg_catalog.pg_views v JOIN pg_catalog.pg_class c ON "+
+						"c.relname=v.viewname WHERE oid=$1", args[0])
+				if err != nil {
+					return nil, err
+				}
+				if len(r) == 0 {
+					return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "unknown view (OID=%s)", args[0])
+				}
+				return r[0], nil
+			},
+			Info: notUsableInfo,
+		},
+	},
+
 	"pg_typeof": {
 		// TODO(knz): This is a proof-of-concept until TypeAny works
 		// properly.
