@@ -418,6 +418,11 @@ func (ir *intentResolver) resolveIntents(
 	if len(intents) == 0 {
 		return nil
 	}
+	// Avoid doing any work on behalf of expired contexts. See
+	// https://github.com/cockroachdb/cockroach/issues/15997.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	// We're doing async stuff below; those need new traces.
 	ctx, cleanup := tracing.EnsureContext(ctx, ir.store.Tracer(), "resolve intents")
 	defer cleanup()
