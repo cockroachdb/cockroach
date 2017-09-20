@@ -60,14 +60,6 @@ var slabDurationByResolution = map[Resolution]int64{
 	resolution1ns: 10, // 1ns resolution only for tests.
 }
 
-// pruneAgeByResolution maintains a suggested maximum age per resolution; data
-// which is older than the given threshold for a resolution is considered
-// eligible for deletion. Thresholds are specified in nanoseconds.
-var pruneThresholdByResolution = map[Resolution]int64{
-	Resolution10s: (30 * 24 * time.Hour).Nanoseconds(),
-	resolution1ns: time.Second.Nanoseconds(),
-}
-
 // SampleDuration returns the sample duration corresponding to this resolution
 // value, expressed in nanoseconds.
 func (r Resolution) SampleDuration() int64 {
@@ -87,15 +79,4 @@ func (r Resolution) SlabDuration() int64 {
 		panic(fmt.Sprintf("no slab duration found for resolution value %v", r))
 	}
 	return duration
-}
-
-// PruneThreshold returns the pruning threshold duration for this resolution,
-// expressed in nanoseconds. This duration determines how old time series data
-// must be before it is eligible for pruning.
-func (r Resolution) PruneThreshold() int64 {
-	threshold, ok := pruneThresholdByResolution[r]
-	if !ok {
-		panic(fmt.Sprintf("no prune threshold found for resolution value %v", r))
-	}
-	return threshold
 }

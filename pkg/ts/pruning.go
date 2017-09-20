@@ -55,11 +55,11 @@ func (tsdb *DB) PruneTimeSeries(
 	db *client.DB,
 	timestamp hlc.Timestamp,
 ) error {
-	series, err := findTimeSeries(snapshot, start, end, timestamp)
+	series, err := tsdb.findTimeSeries(snapshot, start, end, timestamp)
 	if err != nil {
 		return err
 	}
-	return pruneTimeSeries(ctx, db, series, timestamp)
+	return tsdb.pruneTimeSeries(ctx, db, series, timestamp)
 }
 
 // Assert that DB implements the necessary interface from the storage package.
@@ -79,7 +79,7 @@ type timeSeriesResolutionInfo struct {
 // An engine snapshot is used, rather than a client, because this function is
 // intended to be called by a storage queue which can inspect the local data for
 // a single range without the need for expensive network calls.
-func findTimeSeries(
+func (tsdb *DB) findTimeSeries(
 	snapshot engine.Reader, startKey, endKey roachpb.RKey, now hlc.Timestamp,
 ) ([]timeSeriesResolutionInfo, error) {
 	var results []timeSeriesResolutionInfo
@@ -103,7 +103,7 @@ func findTimeSeries(
 		end = lastTS
 	}
 
-	thresholds := computeThresholds(now.WallTime)
+	thresholds := tsdb.computeThresholds(now.WallTime)
 
 	for iter.Seek(next); ; iter.Seek(next) {
 		if ok, err := iter.Valid(); err != nil {
@@ -150,10 +150,10 @@ func findTimeSeries(
 //
 // As range deletion of inline data is an idempotent operation, it is safe to
 // run this operation concurrently on multiple nodes at the same time.
-func pruneTimeSeries(
+func (tsdb *DB) pruneTimeSeries(
 	ctx context.Context, db *client.DB, timeSeriesList []timeSeriesResolutionInfo, now hlc.Timestamp,
 ) error {
-	thresholds := computeThresholds(now.WallTime)
+	thresholds := tsdb.computeThresholds(now.WallTime)
 
 	b := &client.Batch{}
 	for _, timeSeries := range timeSeriesList {
@@ -185,15 +185,4 @@ func pruneTimeSeries(
 	}
 
 	return db.Run(ctx, b)
-}
-
-// computeThresholds returns a map of timestamps for each resolution supported
-// by the system. Data at a resolution which is older than the threshold
-// timestamp for that resolution is considered eligible for deletion.
-func computeThresholds(timestamp int64) map[Resolution]int64 {
-	result := make(map[Resolution]int64, len(pruneThresholdByResolution))
-	for k, v := range pruneThresholdByResolution {
-		result[k] = timestamp - v
-	}
-	return result
 }
