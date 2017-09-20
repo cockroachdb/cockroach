@@ -751,6 +751,13 @@ func RunGC(
 	txnMap := map[uuid.UUID]*roachpb.Transaction{}
 	intentSpanMap := map[uuid.UUID][]roachpb.Span{}
 
+	const (
+		intentBudgetBytes = 30 * 1 << 20 // 30mb
+		keyBudgetBytes    = 30 * 1 << 20 // 30mb
+	)
+
+	var intentBytes int
+	var keyBytes int
 	// processKeysAndValues is invoked with each key and its set of
 	// values. Intents older than the intent age threshold are sent for
 	// resolution and values after the MVCC metadata, and possible
@@ -767,8 +774,13 @@ func RunGC(
 				startIdx := 1
 				if meta.Txn != nil {
 					// Keep track of intent to resolve if older than the intent
-					// expiration threshold.
-					if meta.Timestamp.Less(intentExp) {
+					// expiration threshold. Don't do this if we've already collected
+					// a lot of potential intents (note that what we collect here is
+					// extremely likely to be collectable unless the user is running
+					// very large numbers of very long transactions). But the same
+					// consideration as the TODO below holds: we should be handling
+					// the chunk and resetting the budget.
+					if intentBytes <= intentBudgetBytes && meta.Timestamp.Less(intentExp) {
 						txnID := meta.Txn.ID
 						txn := &roachpb.Transaction{
 							TxnMeta: *meta.Txn,
@@ -776,19 +788,34 @@ func RunGC(
 						txnMap[txnID] = txn
 						infoMu.IntentsConsidered++
 						intentSpanMap[txnID] = append(intentSpanMap[txnID], roachpb.Span{Key: expBaseKey})
+						intentBytes += len(expBaseKey)
 					}
 					// With an active intent, GC ignores MVCC metadata & intent value.
 					startIdx = 2
 				}
+				if keyBytes > keyBudgetBytes {
+					// Stop considering keys for GC if we've already crashed the budget.
+					//
+					// TODO(tschottdorf): we already send multiple GCRequests if we have too many keys,
+					// but we should be dispatching them as we scan to avoid holding the whole chunk of
+					// keys in memory. Large Ranges should be the exception, but they can definitely be
+					// configured and even if not, they could conceivably exist.
+					return
+				}
 				// See if any values may be GC'd.
 				if gcTS := gc.Filter(keys[startIdx:], vals[startIdx:]); gcTS != (hlc.Timestamp{}) {
-					// TODO(spencer): need to split the requests up into
-					// multiple requests in the event that more than X keys
-					// are added to the request.
 					gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{Key: expBaseKey, Timestamp: gcTS})
+					keyBytes += len(expBaseKey)
 				}
 			}
 		}
+	}
+
+	if intentBytes > intentBudgetBytes {
+		log.ErrEventf(ctx, "intent GC budget (%s) exceeded; ignoring remaining intents", humanizeutil.IBytes(intentBudgetBytes))
+	}
+	if keyBytes > keyBudgetBytes {
+		log.ErrEventf(ctx, "key GC budget (%s) exceeded; ignoring remaining keys", humanizeutil.IBytes(keyBudgetBytes))
 	}
 
 	// Iterate through the keys and values of this replica's range.
