@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 func TestPrefixRewriter(t *testing.T) {
@@ -144,10 +145,7 @@ func TestKeyRewriter(t *testing.T) {
 }
 
 func mustMarshalDesc(t *testing.T, desc *sqlbase.TableDescriptor) []byte {
-	baseDesc := sqlbase.Descriptor{
-		Union: &sqlbase.Descriptor_Table{Table: desc},
-	}
-	bytes, err := baseDesc.Marshal()
+	bytes, err := protoutil.Marshal(sqlbase.WrapDescriptor(desc))
 	if err != nil {
 		t.Fatal(err)
 	}

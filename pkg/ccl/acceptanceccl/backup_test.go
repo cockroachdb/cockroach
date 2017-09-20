@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -58,8 +59,8 @@ type benchmarkTest struct {
 }
 
 func (bt *benchmarkTest) Start(ctx context.Context) {
-	licenseKey := os.Getenv("COCKROACH_DEV_LICENSE")
-	if licenseKey == "" {
+	licenseKey, ok := envutil.EnvString("COCKROACH_DEV_LICENSE", 0)
+	if !ok {
 		bt.b.Fatal("testing enterprise features requires setting COCKROACH_DEV_LICENSE")
 	}
 	bt.f = acceptance.MakeFarmer(bt.b, bt.prefix, acceptance.GetStopper())

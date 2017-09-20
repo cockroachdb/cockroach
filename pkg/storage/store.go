@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -3480,7 +3481,7 @@ func sendSnapshot(
 			}
 			// TODO(tschottdorf): it should be possible to reuse `logEntries[i]` here.
 			var err error
-			if logEntries[i], err = ent.Marshal(); err != nil {
+			if logEntries[i], err = protoutil.Marshal(&ent); err != nil {
 				return err
 			}
 		}

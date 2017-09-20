@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/gogo/protobuf/proto"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
@@ -347,7 +348,7 @@ func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request)
 }
 
 func encodeSessionCookie(sessionCookie *serverpb.SessionCookie) (*http.Cookie, error) {
-	cookieValueBytes, err := sessionCookie.Marshal()
+	cookieValueBytes, err := protoutil.Marshal(sessionCookie)
 	if err != nil {
 		return nil, errors.Wrap(err, "session cookie could not be encoded")
 	}

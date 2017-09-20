@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
@@ -658,7 +659,7 @@ func finalizeCSVBackup(
 		backupDesc.NodeID = execCfg.NodeID.Get()
 		backupDesc.ClusterID = execCfg.ClusterID()
 	}
-	descBuf, err := backupDesc.Marshal()
+	descBuf, err := protoutil.Marshal(backupDesc)
 	if err != nil {
 		return err
 	}

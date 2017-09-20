@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -210,7 +211,7 @@ func (b *Backup) NextKeyValues(
 
 	newDesc := *tableDesc
 	newDesc.ID = newTableID
-	newDescBytes, err := sqlbase.WrapDescriptor(&newDesc).Marshal()
+	newDescBytes, err := protoutil.Marshal(sqlbase.WrapDescriptor(&newDesc))
 	if err != nil {
 		return nil, roachpb.Span{}, err
 	}

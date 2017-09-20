@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -434,10 +435,10 @@ func populateVersionSetting(ctx context.Context, r runner) error {
 		v = cluster.VersionBase
 	}
 
-	b, err := (&cluster.ClusterVersion{
+	b, err := protoutil.Marshal(&cluster.ClusterVersion{
 		MinimumVersion: v,
 		UseVersion:     v,
-	}).Marshal()
+	})
 	if err != nil {
 		return errors.Wrap(err, "while marshaling version")
 	}

@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/kr/pretty"
 )
 
@@ -193,10 +194,10 @@ func TestRegistryResumeActiveLease(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	payload, err := (&jobs.Payload{
+	payload, err := protoutil.Marshal(&jobs.Payload{
 		Lease:   &jobs.Lease{NodeID: 1, Epoch: 1},
 		Details: jobs.WrapPayloadDetails(jobs.BackupDetails{}),
-	}).Marshal()
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
