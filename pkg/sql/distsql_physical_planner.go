@@ -546,7 +546,7 @@ func (dsp *distSQLPlanner) partitionSpans(
 					}
 					planCtx.nodeAddresses[nodeID] = addr
 				}
-				var compat bool
+				compat := true
 				if addr != "" {
 					// Check if the node's DistSQL version is compatible with this plan.
 					// If it isn't, we'll use the gateway.
