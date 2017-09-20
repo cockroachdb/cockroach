@@ -16,6 +16,7 @@ package sql
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -889,14 +890,8 @@ func (b *RowResultWriter) AddRow(ctx context.Context, row parser.Datums) error {
 	return err
 }
 
-// LoadCSV TODO(dan): This entire method is a placeholder to get the distsql
-// plumbing worked out while mjibson works on the new processors and router. The
-// intention is to manually create the distsql plan, so we can have control over
-// where the work is scheduled, but then use the normal distsql machinery for
-// everything else. Currently, it runs a very simple flow just to make sure
-// everything gets set up correctly. It is in no way representative of the
-// actual flow that will be used for csv -> BACKUP, but is enough to get the
-// flow setup worked out.
+// LoadCSV performs a distributed transformation of the CSV files at from
+// and stores them in enterprise backup format at to.
 func (l *DistLoader) LoadCSV(
 	ctx context.Context,
 	job *jobs.Job,
@@ -911,12 +906,25 @@ func (l *DistLoader) LoadCSV(
 	comma, comment rune,
 	nullif *string,
 	walltime int64,
+	splitSize int64,
 ) error {
-	const (
-		splitSize  = 1024 * 1024 * 32 // 32MB
-		oversample = 3
-		sampleSize = splitSize / oversample
-	)
+	// splitSize is the target number of bytes at which to create SST files. We
+	// attempt to do this by sampling, which is what the first DistSQL plan of this
+	// function does. CSV rows are converted into KVs. The total size of the KV is
+	// used to determine if we should sample it or not. For example, if we had a
+	// 100 byte KV and a 30MB splitSize, we would sample the KV with probability
+	// 100/30000000. Over many KVs, this produces samples at approximately the
+	// correct spacing, but obviously also with some error. We use oversample
+	// below to decrease the error. We divide the splitSize by oversample to
+	// produce the actual sampling rate. So in the example above, oversampling by a
+	// factor of 3 would sample the KV with probability 100/10000000 since we are
+	// sampling at 3x. Since we're now getting back 3x more samples than needed,
+	// we only use every 1/(oversample), or 1/3 here, in our final sampling.
+	const oversample = 3
+	sampleSize := splitSize / oversample
+	if sampleSize > math.MaxInt32 {
+		return errors.Errorf("SST size must fit in an int32: %d", splitSize)
+	}
 
 	var p physicalPlan
 	colTypeBytes := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}
@@ -926,7 +934,7 @@ func (l *DistLoader) LoadCSV(
 	for i, input := range from {
 		// TODO(mjibson): attempt to intelligently schedule http files to matching cockroach nodes
 		rcs := distsqlrun.ReadCSVSpec{
-			SampleSize: sampleSize,
+			SampleSize: int32(sampleSize),
 			TableDesc:  *tableDesc,
 			Uri:        input,
 			Options: roachpb.CSVOptions{
