@@ -235,8 +235,8 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 	seriesName := "test.metric"
 	sourceName := "source1"
 	now := tsrv.Clock().PhysicalNow()
-	nearPast := now - (ts.Resolution10s.PruneThreshold() * 2)
-	farPast := now - (ts.Resolution10s.PruneThreshold() * 4)
+	nearPast := now - (tsdb.PruneThreshold(ts.Resolution10s) * 2)
+	farPast := now - (tsdb.PruneThreshold(ts.Resolution10s) * 4)
 	sampleDuration := ts.Resolution10s.SampleDuration()
 	datapoints := []tspb.TimeSeriesDatapoint{
 		{

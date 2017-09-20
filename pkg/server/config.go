@@ -177,7 +177,7 @@ type Config struct {
 	// ReadWithinUncertaintyIntervalError.
 	MaxOffset MaxOffsetType
 
-	// MetricsSamplePeriod determines the time between records of
+	// MetricsSampleInterval determines the time between records of
 	// server internal metrics.
 	// Environment Variable: COCKROACH_METRICS_SAMPLE_INTERVAL
 	MetricsSampleInterval time.Duration
