@@ -1,4 +1,5 @@
 import Long from "long";
+import { Link } from "react-router";
 import React from "react";
 import { connect } from "react-redux";
 import { RouterState } from "react-router";
@@ -37,7 +38,15 @@ class CommandQueue extends React.Component<CommandQueueProps, {}> {
 
     return (
       <div className="section command-queue">
-        <h1>Command queue report for r{rangeID.toString()}</h1>
+        <h1>
+          <Link
+            to={`/reports/range/${rangeID.toString()}`}
+            className="debug-link">
+            r{rangeID.toString()}
+          </Link>
+          {" "}>{" "}
+          Command queue
+        </h1>
         <div className="command-queue__timestamp">
           {this.props.commandQueue
             ? <span>
@@ -48,16 +57,8 @@ class CommandQueue extends React.Component<CommandQueueProps, {}> {
         </div>
         <div className="command-queue__key">
           Key:
-          <div
-            className="command-queue__key__read"
-            style={{marginLeft: 5, marginRight: 5, backgroundColor: "lightgreen"}}>
-            Read
-          </div>
-          <div
-            className="command-queue__key__write"
-            style={{backgroundColor: "pink"}}>
-            Write
-          </div>
+          <div className="command-queue__key__read">Read</div>
+          <div className="command-queue__key__write">Write</div>
         </div>
         <h2>Local Scope</h2>
         {this.props.commandQueue
