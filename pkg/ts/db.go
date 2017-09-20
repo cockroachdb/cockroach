@@ -15,6 +15,7 @@
 package ts
 
 import (
+	"fmt"
 	"time"
 
 	"golang.org/x/net/context"
@@ -26,15 +27,32 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
+var (
+	resolution1nsDefaultPruneThreshold = time.Second
+
+	// DefaultMetricsStoreDurationDays defines number of days for storing metrics
+	DefaultMetricsStoreDurationDays int64 = 30
+)
+
 // DB provides Cockroach's Time Series API.
 type DB struct {
 	db *client.DB
+
+	// pruneAgeByResolution maintains a suggested maximum age per resolution; data
+	// which is older than the given threshold for a resolution is considered
+	// eligible for deletion. Thresholds are specified in nanoseconds.
+	pruneThresholdByResolution map[Resolution]int64
 }
 
 // NewDB creates a new DB instance.
-func NewDB(db *client.DB) *DB {
+func NewDB(db *client.DB, resolution10sPruneThresholdDays int64) *DB {
+	pruneThresholdByResolution := map[Resolution]int64{
+		Resolution10s: (time.Duration(resolution10sPruneThresholdDays) * 24 * time.Hour).Nanoseconds(),
+		resolution1ns: resolution1nsDefaultPruneThreshold.Nanoseconds(),
+	}
 	return &DB{
 		db: db,
+		pruneThresholdByResolution: pruneThresholdByResolution,
 	}
 }
 
@@ -152,4 +170,26 @@ func (db *DB) StoreData(ctx context.Context, r Resolution, data []tspb.TimeSerie
 	}
 
 	return db.db.Run(ctx, b)
+}
+
+// computeThresholds returns a map of timestamps for each resolution supported
+// by the system. Data at a resolution which is older than the threshold
+// timestamp for that resolution is considered eligible for deletion.
+func (db *DB) computeThresholds(timestamp int64) map[Resolution]int64 {
+	result := make(map[Resolution]int64, len(db.pruneThresholdByResolution))
+	for k, v := range db.pruneThresholdByResolution {
+		result[k] = timestamp - v
+	}
+	return result
+}
+
+// PruneThreshold returns the pruning threshold duration for this resolution,
+// expressed in nanoseconds. This duration determines how old time series data
+// must be before it is eligible for pruning.
+func (db *DB) PruneThreshold(r Resolution) int64 {
+	threshold, ok := db.pruneThresholdByResolution[r]
+	if !ok {
+		panic(fmt.Sprintf("no prune threshold found for resolution value %v", r))
+	}
+	return threshold
 }

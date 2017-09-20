@@ -170,7 +170,7 @@ func TestFindTimeSeries(t *testing.T) {
 		{
 			start:     roachpb.RKeyMin,
 			end:       roachpb.RKeyMax,
-			timestamp: hlc.Timestamp{WallTime: pruneThresholdByResolution[Resolution10s]},
+			timestamp: hlc.Timestamp{WallTime: tm.DB.PruneThreshold(Resolution10s)},
 			expected: []timeSeriesResolutionInfo{
 				{
 					Name:       metrics[0],
@@ -186,7 +186,7 @@ func TestFindTimeSeries(t *testing.T) {
 		{
 			start:     roachpb.RKeyMin,
 			end:       roachpb.RKeyMax,
-			timestamp: hlc.Timestamp{WallTime: pruneThresholdByResolution[Resolution10s] + 1},
+			timestamp: hlc.Timestamp{WallTime: tm.DB.PruneThreshold(Resolution10s) + 1},
 			expected: []timeSeriesResolutionInfo{
 				{
 					Name:       metrics[0],
@@ -277,7 +277,7 @@ func TestFindTimeSeries(t *testing.T) {
 		},
 	} {
 		snap := e.NewSnapshot()
-		actual, err := findTimeSeries(snap, tcase.start, tcase.end, tcase.timestamp)
+		actual, err := tm.DB.findTimeSeries(snap, tcase.start, tcase.end, tcase.timestamp)
 		snap.Close()
 		if err != nil {
 			t.Fatalf("case %d: unexpected error %q", i, err)

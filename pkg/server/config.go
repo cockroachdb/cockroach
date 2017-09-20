@@ -177,10 +177,15 @@ type Config struct {
 	// ReadWithinUncertaintyIntervalError.
 	MaxOffset MaxOffsetType
 
-	// MetricsSamplePeriod determines the time between records of
+	// MetricsSampleInterval determines the time between records of
 	// server internal metrics.
 	// Environment Variable: COCKROACH_METRICS_SAMPLE_INTERVAL
 	MetricsSampleInterval time.Duration
+
+	// MetricsStoreDurationDays determines how long server
+	// internal metrics are stored.
+	// Environment Variable: COCKROACH_METRICS_STORE_DURATION_DAYS
+	MetricsStoreDurationDays int64
 
 	// ScanInterval determines a duration during which each range should be
 	// visited approximately once by the range scanner. Set to 0 to disable.
@@ -370,6 +375,7 @@ func MakeConfig(st *cluster.Settings) Config {
 		ScanInterval:                   defaultScanInterval,
 		ScanMaxIdleTime:                defaultScanMaxIdleTime,
 		MetricsSampleInterval:          defaultMetricsSampleInterval,
+		MetricsStoreDurationDays:       ts.DefaultMetricsStoreDurationDays,
 		EventLogEnabled:                defaultEventLogEnabled,
 		EnableWebSessionAuthentication: defaultEnableWebSessionAuthentication,
 		Stores: base.StoreSpecList{
@@ -586,6 +592,7 @@ func (cfg *Config) readEnvironmentVariables() {
 	// cockroach-linearizable
 	cfg.Linearizable = envutil.EnvOrDefaultBool("COCKROACH_LINEARIZABLE", cfg.Linearizable)
 	cfg.MetricsSampleInterval = envutil.EnvOrDefaultDuration("COCKROACH_METRICS_SAMPLE_INTERVAL", cfg.MetricsSampleInterval)
+	cfg.MetricsStoreDurationDays = envutil.EnvOrDefaultInt64("COCKROACH_METRICS_STORE_DURATION_DAYS", cfg.MetricsStoreDurationDays)
 	cfg.ScanInterval = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_INTERVAL", cfg.ScanInterval)
 	cfg.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MAX_IDLE_TIME", cfg.ScanMaxIdleTime)
 }

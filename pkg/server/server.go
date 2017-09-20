@@ -301,7 +301,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.adminMemMetrics = sql.MakeMemMetrics("admin", cfg.HistogramWindowInterval())
 	s.registry.AddMetricStruct(s.adminMemMetrics)
 
-	s.tsDB = ts.NewDB(s.db)
+	s.tsDB = ts.NewDB(s.db, s.cfg.MetricsStoreDurationDays)
 	s.tsServer = ts.MakeServer(s.cfg.AmbientCtx, s.tsDB, s.cfg.TimeSeriesServerConfig, s.stopper)
 
 	sqlExecutor := sql.InternalExecutor{LeaseManager: s.leaseMgr}

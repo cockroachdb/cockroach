@@ -98,6 +98,9 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		if err := os.Unsetenv("COCKROACH_METRICS_SAMPLE_INTERVAL"); err != nil {
 			t.Fatal(err)
 		}
+		if err := os.Unsetenv("COCKROACH_METRICS_STORE_DURATION_DAYS"); err != nil {
+			t.Fatal(err)
+		}
 		if err := os.Unsetenv("COCKROACH_SCAN_INTERVAL"); err != nil {
 			t.Fatal(err)
 		}
@@ -135,6 +138,10 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfgExpected.MetricsSampleInterval = time.Hour + time.Minute*10
+	if err := os.Setenv("COCKROACH_METRICS_STORE_DURATION_DAYS", "4"); err != nil {
+		t.Fatal(err)
+	}
+	cfgExpected.MetricsStoreDurationDays = 4
 	if err := os.Setenv("COCKROACH_SCAN_INTERVAL", "48h"); err != nil {
 		t.Fatal(err)
 	}
@@ -153,6 +160,7 @@ func TestReadEnvironmentVariables(t *testing.T) {
 	for _, envVar := range []string{
 		"COCKROACH_LINEARIZABLE",
 		"COCKROACH_METRICS_SAMPLE_INTERVAL",
+		"COCKROACH_METRICS_STORE_DURATION_DAYS",
 		"COCKROACH_SCAN_INTERVAL",
 		"COCKROACH_SCAN_MAX_IDLE_TIME",
 	} {
