@@ -727,6 +727,36 @@ func TestCommandQueueTransitiveDependencies(t *testing.T) {
 	})
 }
 
+func TestGetCommandQueueState(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// test that read command buffer is flushed to interval tree
+	cq1 := NewCommandQueue(true /* covering optimization */)
+	add(cq1, roachpb.Key("a"), nil, true, nil)
+	add(cq1, roachpb.Key("a"), nil, true, nil)
+
+	snapshot1 := cq1.GetCommandQueueState()
+	if n1 := len(snapshot1.Commands); n1 != 2 {
+		t.Fatalf("expected 2 commands in snapshot; got %d", n1)
+	}
+
+	// test that children are extracted
+	cq2 := NewCommandQueue(true /* covering optimization */)
+	cmd1 := add(cq2, roachpb.Key("a"), nil, false, nil)
+	cmd2 := add(cq2, roachpb.Key("a"), nil, true, []*cmd{cmd1})
+	// the following creates a node with two children because it has two spans
+	// only the children show up in the snapshot.
+	cq2.add(true, zeroTS, []*cmd{cmd2}, []roachpb.Span{
+		{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+		{Key: roachpb.Key("d"), EndKey: roachpb.Key("f")},
+	})
+
+	snapshot2 := cq2.GetCommandQueueState()
+	if n2 := len(snapshot2.Commands); n2 != 4 {
+		t.Fatalf("expected 4 commands in shapshot; got %d", n2)
+	}
+}
+
 func BenchmarkCommandQueueGetPrereqsAllReadOnly(b *testing.B) {
 	// Test read-only getPrereqs performance for various number of command queue
 	// entries. See #13627 where a previous implementation of

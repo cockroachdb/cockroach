@@ -535,14 +535,7 @@ func (cq *CommandQueue) getOverlaps(
 	if !readOnly {
 		// Upon a write cmd, flush out cmds from readsBuffer to the read interval
 		// tree.
-		for cmd := range cq.readsBuffer {
-			cmd.buffered = false
-			cq.insertIntoTree(cmd)
-		}
-		if len(cq.readsBuffer) > 0 {
-			// Allocate a new map, thereby deleting all previous entries.
-			cq.readsBuffer = make(map[*cmd]struct{})
-		}
+		cq.flushReadsBuffer()
 
 		cq.reads.DoMatching(func(i interval.Interface) bool {
 			c := i.(*cmd)
@@ -570,6 +563,17 @@ func (cq *CommandQueue) getOverlaps(
 	overlaps := cq.overlaps
 	cq.overlaps = cq.overlaps[:0]
 	return overlaps
+}
+
+func (cq *CommandQueue) flushReadsBuffer() {
+	for cmd := range cq.readsBuffer {
+		cmd.buffered = false
+		cq.insertIntoTree(cmd)
+	}
+	if len(cq.readsBuffer) > 0 {
+		// Allocate a new map, thereby deleting all previous entries.
+		cq.readsBuffer = make(map[*cmd]struct{})
+	}
 }
 
 // overlapHeap is a max-heap ordered by cmd.id.
@@ -804,6 +808,8 @@ func (cq *CommandQueue) metrics() CommandQueueMetrics {
 
 // GetCommandQueueState returns a snapshot of this command queue's state.
 func (cq *CommandQueue) GetCommandQueueState() *CommandQueueSnapshot {
+	// make sure all operations are in the interval trees
+	cq.flushReadsBuffer()
 	result := []*CommandQueueCommand{}
 	result = appendCommandsFromTree(result, cq.reads)
 	result = appendCommandsFromTree(result, cq.writes)
@@ -828,6 +834,13 @@ func copyCommandsAndChildren(
 	commandsSoFar []*CommandQueueCommand, command *cmd,
 ) []*CommandQueueCommand {
 	result := commandsSoFar
+	if len(command.children) > 0 {
+		for _, childCmd := range command.children {
+			result = copyCommandsAndChildren(result, &childCmd)
+		}
+		return result
+	}
+
 	commandProto := &CommandQueueCommand{
 		Id:        command.id,
 		Readonly:  command.readOnly,
@@ -839,9 +852,6 @@ func copyCommandsAndChildren(
 		commandProto.Prereqs = append(commandProto.Prereqs, prereqCmd.id)
 	}
 	result = append(commandsSoFar, commandProto)
-	for _, childCmd := range command.children {
-		result = copyCommandsAndChildren(result, &childCmd)
-	}
 	return result
 }
 
