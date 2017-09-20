@@ -514,6 +514,9 @@ func TestEnsureSafeSplitKey(t *testing.T) {
 		{e(1, 200)[:2], "insufficient bytes to decode uvarint value"},
 		// The column ID suffix is invalid.
 		{e(1, 2, 200)[:3], "insufficient bytes to decode uvarint value"},
+		// Exercises a former overflow bug. We decode a uint(18446744073709551610) which, if casted
+		// to int carelessly, results in -6.
+		{encoding.EncodeVarintAscending(MakeTablePrefix(999), 322434), "malformed table key"},
 	}
 	for i, d := range errorData {
 		_, err := EnsureSafeSplitKey(d.in)
