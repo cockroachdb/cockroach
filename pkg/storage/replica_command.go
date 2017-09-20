@@ -1796,17 +1796,29 @@ func setAbortCache(
 	batch engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	txn enginepb.TxnMeta,
-	poison bool,
+	poisonType roachpb.PoisonType,
 ) error {
-	if !poison {
+	switch poisonType {
+	case roachpb.PoisonType_Clear:
 		return rec.AbortCache().Del(ctx, batch, ms, txn.ID)
+	case roachpb.PoisonType_Do:
+		entry := roachpb.AbortCacheEntry{
+			Key:       txn.Key,
+			Timestamp: txn.Timestamp,
+			Priority:  txn.Priority,
+		}
+		return rec.AbortCache().Put(ctx, batch, ms, txn.ID, &entry)
+	case roachpb.PoisonType_Noop:
+		return nil
+	default:
+		return errors.Errorf("unhandled PoisonType: %d", poisonType)
 	}
-	entry := roachpb.AbortCacheEntry{
-		Key:       txn.Key,
-		Timestamp: txn.Timestamp,
-		Priority:  txn.Priority,
-	}
-	return rec.AbortCache().Put(ctx, batch, ms, txn.ID, &entry)
+}
+
+func writesAbortCache(intentStatus roachpb.TransactionStatus, poisonType roachpb.PoisonType) bool {
+	return (intentStatus == roachpb.ABORTED && poisonType == roachpb.PoisonType_Do) ||
+		poisonType == roachpb.PoisonType_Clear
+
 }
 
 func declareKeysResolveIntent(
@@ -1814,7 +1826,22 @@ func declareKeysResolveIntent(
 ) {
 	DefaultDeclareKeys(desc, header, req, spans)
 	ri := req.(*roachpb.ResolveIntentRequest)
-	spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortCacheKey(header.RangeID, ri.IntentTxn.ID)})
+
+	if writesAbortCache(ri.Status, ri.Poison) {
+		spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortCacheKey(header.RangeID, ri.IntentTxn.ID)})
+	}
+}
+
+func fromDeprecatedPoison(poison roachpb.PoisonType, deprecatedPoison bool) roachpb.PoisonType {
+	if poison != roachpb.PoisonType_Deprecated {
+		return poison
+	}
+	if deprecatedPoison {
+		poison = roachpb.PoisonType_Do
+	} else {
+		poison = roachpb.PoisonType_Clear
+	}
+	return poison
 }
 
 // evalResolveIntent resolves a write intent from the specified key
@@ -1823,7 +1850,10 @@ func evalResolveIntent(
 	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (EvalResult, error) {
 	args := cArgs.Args.(*roachpb.ResolveIntentRequest)
+	args.Poison = fromDeprecatedPoison(args.Poison, args.DeprecatedPoison)
+
 	h := cArgs.Header
+
 	ms := cArgs.Stats
 
 	if h.Txn != nil {
@@ -1849,7 +1879,9 @@ func declareKeysResolveIntentRange(
 ) {
 	DefaultDeclareKeys(desc, header, req, spans)
 	ri := req.(*roachpb.ResolveIntentRangeRequest)
-	spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortCacheKey(header.RangeID, ri.IntentTxn.ID)})
+	if writesAbortCache(ri.Status, ri.Poison) {
+		spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortCacheKey(header.RangeID, ri.IntentTxn.ID)})
+	}
 }
 
 // evalResolveIntentRange resolves write intents in the specified
@@ -1858,6 +1890,8 @@ func evalResolveIntentRange(
 	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (EvalResult, error) {
 	args := cArgs.Args.(*roachpb.ResolveIntentRangeRequest)
+	args.Poison = fromDeprecatedPoison(args.Poison, args.DeprecatedPoison)
+
 	h := cArgs.Header
 	ms := cArgs.Stats
 

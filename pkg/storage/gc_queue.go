@@ -409,7 +409,8 @@ func processLocalKeyRange(
 				infoMu.Unlock() // intentional
 				defer infoMu.Lock()
 				if err := resolveIntents(roachpb.AsIntents(txn.Intents, &txn),
-					ResolveOptions{Wait: true, Poison: false}); err != nil {
+					// Contention between transactions is not a problem in this path, so use Clear.
+					ResolveOptions{Wait: true, Poison: roachpb.PoisonType_Clear}); err != nil {
 					log.Warningf(ctx, "failed to resolve intents of aborted txn on gc: %s", err)
 				}
 			}()
@@ -419,7 +420,8 @@ func processLocalKeyRange(
 			if err := func() error {
 				infoMu.Unlock() // intentional
 				defer infoMu.Lock()
-				return resolveIntents(roachpb.AsIntents(txn.Intents, &txn), ResolveOptions{Wait: true, Poison: false})
+				// Contention between transactions is not a problem in this path, so use Clear.
+				return resolveIntents(roachpb.AsIntents(txn.Intents, &txn), ResolveOptions{Wait: true, Poison: roachpb.PoisonType_Clear})
 			}(); err != nil {
 				log.Warningf(ctx, "unable to resolve intents of committed txn on gc: %s", err)
 				// Returning the error here would abort the whole GC run, and
@@ -871,7 +873,14 @@ func RunGC(
 		}
 	}
 
-	if err := resolveIntentsFn(intents, ResolveOptions{Wait: true, Poison: false}); err != nil {
+	// Note that we resolve with PoisonType_NOOP, meaning "leave the abort cache alone". This is
+	// helpful because it causes less command queue overlap between the various batches the intent
+	// resolver partitions our intents into (when many of the intents belong to the same
+	// transaction). The abort cache is cleared out below, so we're not missing anything major here.
+	//
+	// TODO(tschottdorf): the intent resolver *could* be smarter here and remember what it already
+	// cleared. Doubt it's worth it.
+	if err := resolveIntentsFn(intents, ResolveOptions{Wait: true, Poison: roachpb.PoisonType_Noop}); err != nil {
 		return nil, GCInfo{}, err
 	}
 
