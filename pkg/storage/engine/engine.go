@@ -94,6 +94,11 @@ type Iterator interface {
 	// The nowNanos arg specifies the wall time in nanoseconds since the
 	// epoch and is used to compute the total age of all intents.
 	ComputeStats(start, end MVCCKey, nowNanos int64) (enginepb.MVCCStats, error)
+	// FindSplitKey finds a split key from the given key range that aims to
+	// roughly cut into targetSize bytes the left-hand side of the split. The
+	// returned key will never be chosen from the key ranges listed in
+	// keys.NoSplitSpans.
+	FindSplitKey(start, end MVCCKey, targetSize int64) (MVCCKey, error)
 }
 
 // Reader is the read interface to an engine's data.
