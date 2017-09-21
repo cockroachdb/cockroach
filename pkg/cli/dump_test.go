@@ -435,7 +435,7 @@ func TestDumpRandom(t *testing.T) {
 				string(s),
 				b,
 				[]byte(u.String()),
-				ip,
+				[]byte(ip.String()),
 			}
 			if err := conn.Exec("INSERT INTO d.t VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)", vals); err != nil {
 				t.Fatal(err)
