@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/pkg/errors"
 )
 
 func initAggregateBuiltins() {
@@ -182,6 +183,35 @@ var Aggregates = map[string][]Builtin{
 			"Calculates the sum of the selected values."),
 	},
 
+	"sqrdiff": {
+		makeAggBuiltin([]Type{TypeInt}, TypeDecimal, newIntSqrDiffAggregate,
+			"Calculates the sum of squared differences from the mean of the selected values."),
+		makeAggBuiltin([]Type{TypeDecimal}, TypeDecimal, newDecimalSqrDiffAggregate,
+			"Calculates the sum of squared differences from the mean of the selected values."),
+		makeAggBuiltin([]Type{TypeFloat}, TypeFloat, newFloatSqrDiffAggregate,
+			"Calculates the sum of squared differences from the mean of the selected values."),
+	},
+
+	// final_(variance|stddev) computes the global (variance|standard deviation)
+	// from an arbitrary collection of local sums of squared difference from the mean.
+	// Adapted from https://www.johndcook.com/blog/skewness_kurtosis and
+	// https://github.com/cockroachdb/cockroach/pull/17728.
+
+	// The input signature is: SQDIFF, SUM, COUNT
+	"final_variance": {
+		makeAggBuiltin([]Type{TypeDecimal, TypeDecimal, TypeInt}, TypeDecimal, newDecimalFinalVarianceAggregate,
+			"Calculates the variance from the selected locally-computed squared difference values."),
+		makeAggBuiltin([]Type{TypeFloat, TypeFloat, TypeInt}, TypeFloat, newFloatFinalVarianceAggregate,
+			"Calculates the variance from the selected locally-computed squared difference values."),
+	},
+
+	"final_stddev": {
+		makeAggBuiltin([]Type{TypeDecimal, TypeDecimal, TypeInt}, TypeDecimal, newDecimalFinalStdDevAggregate,
+			"Calculates the standard deviation from the selected locally-computed squared difference values."),
+		makeAggBuiltin([]Type{TypeFloat, TypeFloat, TypeInt}, TypeFloat, newFloatFinalStdDevAggregate,
+			"Calculates the standard deviation from the selected locally-computed squared difference values."),
+	},
+
 	"variance": {
 		makeAggBuiltin([]Type{TypeInt}, TypeDecimal, newIntVarianceAggregate,
 			"Calculates the variance of the selected values."),
@@ -246,10 +276,15 @@ var _ AggregateFunc = &MinAggregate{}
 var _ AggregateFunc = &intSumAggregate{}
 var _ AggregateFunc = &decimalSumAggregate{}
 var _ AggregateFunc = &floatSumAggregate{}
-var _ AggregateFunc = &stdDevAggregate{}
-var _ AggregateFunc = &intVarianceAggregate{}
+var _ AggregateFunc = &intSqrDiffAggregate{}
+var _ AggregateFunc = &floatSqrDiffAggregate{}
+var _ AggregateFunc = &decimalSqrDiffAggregate{}
+var _ AggregateFunc = &floatSumSqrDiffsAggregate{}
+var _ AggregateFunc = &decimalSumSqrDiffsAggregate{}
 var _ AggregateFunc = &floatVarianceAggregate{}
 var _ AggregateFunc = &decimalVarianceAggregate{}
+var _ AggregateFunc = &floatStdDevAggregate{}
+var _ AggregateFunc = &decimalStdDevAggregate{}
 var _ AggregateFunc = &identAggregate{}
 var _ AggregateFunc = &concatAggregate{}
 var _ AggregateFunc = &bytesXorAggregate{}
@@ -813,19 +848,42 @@ func (a *intervalSumAggregate) Result() (Datum, error) {
 // Close is part of the AggregateFunc interface.
 func (a *intervalSumAggregate) Close(context.Context) {}
 
-type intVarianceAggregate struct {
-	agg *decimalVarianceAggregate
+// Read-only constants used for square difference computations.
+var (
+	decimalOne = apd.New(1, 0)
+	decimalTwo = apd.New(2, 0)
+)
+
+type intSqrDiffAggregate struct {
+	agg decimalSqrDiff
 	// Used for passing int64s as *apd.Decimal values.
 	tmpDec DDecimal
 }
 
-func newIntVarianceAggregate(_ []Type, _ *EvalContext) AggregateFunc {
-	return &intVarianceAggregate{
-		agg: newDecimalVariance(),
-	}
+func newIntSqrDiff() decimalSqrDiff {
+	return &intSqrDiffAggregate{agg: newDecimalSqrDiff()}
 }
 
-func (a *intVarianceAggregate) Add(ctx context.Context, datum Datum, _ ...Datum) error {
+func newIntSqrDiffAggregate(_ []Type, _ *EvalContext) AggregateFunc {
+	return newIntSqrDiff()
+}
+
+// Count is part of the decimalSqrDiff interface.
+func (a *intSqrDiffAggregate) Count() *apd.Decimal {
+	return a.agg.Count()
+}
+
+// Ed is part of the decimalSqrDiff interface.
+func (a *intSqrDiffAggregate) Ed() *apd.ErrDecimal {
+	return a.agg.Ed()
+}
+
+// Tmp is part of the decimalSqrDiff interface.
+func (a *intSqrDiffAggregate) Tmp() *apd.Decimal {
+	return a.agg.Tmp()
+}
+
+func (a *intSqrDiffAggregate) Add(ctx context.Context, datum Datum, _ ...Datum) error {
 	if datum == DNull {
 		return nil
 	}
@@ -834,50 +892,66 @@ func (a *intVarianceAggregate) Add(ctx context.Context, datum Datum, _ ...Datum)
 	return a.agg.Add(ctx, &a.tmpDec)
 }
 
-func (a *intVarianceAggregate) Result() (Datum, error) {
+func (a *intSqrDiffAggregate) Result() (Datum, error) {
 	return a.agg.Result()
 }
 
 // Close is part of the AggregateFunc interface.
-func (a *intVarianceAggregate) Close(context.Context) {}
+func (a *intSqrDiffAggregate) Close(context.Context) {}
 
-type floatVarianceAggregate struct {
-	count   int
+type floatSqrDiffAggregate struct {
+	count   int64
 	mean    float64
 	sqrDiff float64
 }
 
-func newFloatVarianceAggregate(_ []Type, _ *EvalContext) AggregateFunc {
-	return &floatVarianceAggregate{}
+func newFloatSqrDiff() floatSqrDiff {
+	return &floatSqrDiffAggregate{}
 }
 
-func (a *floatVarianceAggregate) Add(_ context.Context, datum Datum, _ ...Datum) error {
+func newFloatSqrDiffAggregate(_ []Type, _ *EvalContext) AggregateFunc {
+	return newFloatSqrDiff()
+}
+
+// Count is part of the floatSqrDiff interface.
+func (a *floatSqrDiffAggregate) Count() int64 {
+	return a.count
+}
+
+func (a *floatSqrDiffAggregate) Add(_ context.Context, datum Datum, _ ...Datum) error {
 	if datum == DNull {
 		return nil
 	}
 	f := float64(*datum.(*DFloat))
 
-	// Uses the Knuth/Welford method for accurately computing variance online in a
-	// single pass. See http://www.johndcook.com/blog/standard_deviation/ and
+	// Uses the Knuth/Welford method for accurately computing squared difference online in a
+	// single pass. Refer to squared difference calculations
+	// in http://www.johndcook.com/blog/standard_deviation/ and
 	// https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Online_algorithm.
 	a.count++
 	delta := f - a.mean
+	// We are converting an int64 number (with 63-bit precision)
+	// to a float64 (with 52-bit precision), thus in the worst cases,
+	// we may lose up to 11 bits of precision. This was deemed acceptable
+	// considering that we are losing 11 bits on a 52+-bit operation and
+	// that users dealing with floating points should be aware
+	// of floating-point imprecision.
 	a.mean += delta / float64(a.count)
 	a.sqrDiff += delta * (f - a.mean)
 	return nil
 }
 
-func (a *floatVarianceAggregate) Result() (Datum, error) {
-	if a.count < 2 {
+func (a *floatSqrDiffAggregate) Result() (Datum, error) {
+	if a.count < 1 {
 		return DNull, nil
 	}
-	return NewDFloat(DFloat(a.sqrDiff / (float64(a.count) - 1))), nil
+	return NewDFloat(DFloat(a.sqrDiff)), nil
 }
 
 // Close is part of the AggregateFunc interface.
-func (a *floatVarianceAggregate) Close(context.Context) {}
+func (a *floatSqrDiffAggregate) Close(context.Context) {}
 
-type decimalVarianceAggregate struct {
+type decimalSqrDiffAggregate struct {
 	// Variables used across iterations.
 	ed      *apd.ErrDecimal
 	count   apd.Decimal
@@ -889,36 +963,46 @@ type decimalVarianceAggregate struct {
 	tmp   apd.Decimal
 }
 
-func newDecimalVariance() *decimalVarianceAggregate {
-	// Use extra internal precision during variance and stddev to protect against
+func newDecimalSqrDiff() decimalSqrDiff {
+	// Use extra internal precision during squared difference to protect against
 	// order changes that can happen in dist SQL. The additional 3 here should
 	// allow for correctness up to 1000 more worst case inputs than non-worst
 	// case inputs. See #13689 for more analysis and other algorithms.
 	c := DecimalCtx.WithPrecision(DecimalCtx.Precision + 3)
 	ed := apd.MakeErrDecimal(c)
-	return &decimalVarianceAggregate{
+	return &decimalSqrDiffAggregate{
 		ed: &ed,
 	}
 }
 
-func newDecimalVarianceAggregate(_ []Type, _ *EvalContext) AggregateFunc {
-	return newDecimalVariance()
+func newDecimalSqrDiffAggregate(_ []Type, _ *EvalContext) AggregateFunc {
+	return newDecimalSqrDiff()
 }
 
-// Read-only constants used for compuation.
-var (
-	decimalOne = apd.New(1, 0)
-	decimalTwo = apd.New(2, 0)
-)
+// Count is part of the decimalSqrDiff interface.
+func (a *decimalSqrDiffAggregate) Count() *apd.Decimal {
+	return &a.count
+}
 
-func (a *decimalVarianceAggregate) Add(_ context.Context, datum Datum, _ ...Datum) error {
+// Ed is part of the decimalSqrDiff interface.
+func (a *decimalSqrDiffAggregate) Ed() *apd.ErrDecimal {
+	return a.ed
+}
+
+// Tmp is part of the decimalSqrDiff interface.
+func (a *decimalSqrDiffAggregate) Tmp() *apd.Decimal {
+	return &a.tmp
+}
+
+func (a *decimalSqrDiffAggregate) Add(_ context.Context, datum Datum, _ ...Datum) error {
 	if datum == DNull {
 		return nil
 	}
 	d := &datum.(*DDecimal).Decimal
 
-	// Uses the Knuth/Welford method for accurately computing variance online in a
-	// single pass. See http://www.johndcook.com/blog/standard_deviation/ and
+	// Uses the Knuth/Welford method for accurately computing squared difference online in a
+	// single pass. Refer to squared difference calculations
+	// in http://www.johndcook.com/blog/standard_deviation/ and
 	// https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Online_algorithm.
 	a.ed.Add(&a.count, &a.count, decimalOne)
 	a.ed.Sub(&a.delta, d, &a.mean)
@@ -930,17 +1014,11 @@ func (a *decimalVarianceAggregate) Add(_ context.Context, datum Datum, _ ...Datu
 	return a.ed.Err()
 }
 
-func (a *decimalVarianceAggregate) Result() (Datum, error) {
-	if a.count.Cmp(decimalTwo) < 0 {
+func (a *decimalSqrDiffAggregate) Result() (Datum, error) {
+	if a.count.Cmp(decimalOne) < 0 {
 		return DNull, nil
 	}
-	a.ed.Sub(&a.tmp, &a.count, decimalOne)
-	dd := &DDecimal{}
-	a.ed.Ctx = DecimalCtx
-	a.ed.Quo(&dd.Decimal, &a.sqrDiff, &a.tmp)
-	if err := a.ed.Err(); err != nil {
-		return nil, err
-	}
+	dd := &DDecimal{a.sqrDiff}
 	// Remove trailing zeros. Depending on the order in which the input
 	// is processed, some number of trailing zeros could be added to the
 	// output. Remove them so that the results are the same regardless of order.
@@ -949,29 +1027,335 @@ func (a *decimalVarianceAggregate) Result() (Datum, error) {
 }
 
 // Close is part of the AggregateFunc interface.
+func (a *decimalSqrDiffAggregate) Close(context.Context) {}
+
+type floatSumSqrDiffsAggregate struct {
+	count   int64
+	mean    float64
+	sqrDiff float64
+}
+
+func newFloatSumSqrDiffs() floatSqrDiff {
+	return &floatSumSqrDiffsAggregate{}
+}
+
+func (a *floatSumSqrDiffsAggregate) Count() int64 {
+	return a.count
+}
+
+// The signature for the datums is:
+//   SQRDIFF (float), SUM (float), COUNT(int)
+func (a *floatSumSqrDiffsAggregate) Add(
+	_ context.Context, sqrDiffD Datum, otherArgs ...Datum,
+) error {
+	sumD := otherArgs[0]
+	countD := otherArgs[1]
+	if sqrDiffD == DNull || sumD == DNull || countD == DNull {
+		return nil
+	}
+
+	sqrDiff := float64(*sqrDiffD.(*DFloat))
+	sum := float64(*sumD.(*DFloat))
+	count := int64(*countD.(*DInt))
+
+	mean := sum / float64(count)
+	delta := mean - a.mean
+
+	// Compute the sum of Knuth/Welford sum of squared differences from the
+	// mean in a single pass. Adapted from sum of RunningStats in
+	// https://www.johndcook.com/blog/skewness_kurtosis and our
+	// implementation of NumericStats
+	// https://github.com/cockroachdb/cockroach/pull/17728.
+	totalCount, ok := addWithOverflow(a.count, count)
+	if !ok {
+		return errors.Errorf("number of values in aggregate exceed max count of %d", math.MaxInt64)
+	}
+	// We are converting an int64 number (with 63-bit precision)
+	// to a float64 (with 52-bit precision), thus in the worst cases,
+	// we may lose up to 11 bits of precision. This was deemed acceptable
+	// considering that we are losing 11 bits on a 52+-bit operation and
+	// that users dealing with floating points should be aware
+	// of floating-point imprecision.
+	a.sqrDiff += sqrDiff + delta*delta*float64(count)*float64(a.count)/float64(totalCount)
+	a.count = totalCount
+	a.mean += delta * float64(count) / float64(a.count)
+	return nil
+}
+
+func (a *floatSumSqrDiffsAggregate) Result() (Datum, error) {
+	if a.count < 1 {
+		return DNull, nil
+	}
+	return NewDFloat(DFloat(a.sqrDiff)), nil
+}
+
+// Close is part of the AggregateFunc interface.
+func (a *floatSumSqrDiffsAggregate) Close(context.Context) {}
+
+type decimalSumSqrDiffsAggregate struct {
+	// Variables used across iterations.
+	ed      *apd.ErrDecimal
+	count   apd.Decimal
+	mean    apd.Decimal
+	sqrDiff apd.Decimal
+
+	// Variables used as scratch space within iterations.
+	tmpCount apd.Decimal
+	tmpMean  apd.Decimal
+	delta    apd.Decimal
+	tmp      apd.Decimal
+}
+
+func newDecimalSumSqrDiffs() decimalSqrDiff {
+	// Use extra internal precision during squared difference to protect against
+	// order changes that can happen in dist SQL. The additional 3 here should
+	// allow for correctness up to 1000 more worst case inputs than non-worst
+	// case inputs. See #13689 for more analysis and other algorithms.
+	c := DecimalCtx.WithPrecision(DecimalCtx.Precision + 3)
+	ed := apd.MakeErrDecimal(c)
+	return &decimalSumSqrDiffsAggregate{
+		ed: &ed,
+	}
+}
+
+// Count is part of the decimalSqrDiff interface.
+func (a *decimalSumSqrDiffsAggregate) Count() *apd.Decimal {
+	return &a.count
+}
+
+// Ed is part of the decimalSqrDiff interface.
+func (a *decimalSumSqrDiffsAggregate) Ed() *apd.ErrDecimal {
+	return a.ed
+}
+
+// Tmp is part of the decimalSumSqrDiffs interface.
+func (a *decimalSumSqrDiffsAggregate) Tmp() *apd.Decimal {
+	return &a.tmp
+}
+
+func (a *decimalSumSqrDiffsAggregate) Add(
+	_ context.Context, sqrDiffD Datum, otherArgs ...Datum,
+) error {
+	sumD := otherArgs[0]
+	countD := otherArgs[1]
+	if sqrDiffD == DNull || sumD == DNull || countD == DNull {
+		return nil
+	}
+	sqrDiff := &sqrDiffD.(*DDecimal).Decimal
+	sum := &sumD.(*DDecimal).Decimal
+	a.tmpCount.SetInt64(int64(*countD.(*DInt)))
+
+	a.ed.Quo(&a.tmpMean, sum, &a.tmpCount)
+	a.ed.Sub(&a.delta, &a.tmpMean, &a.mean)
+
+	// Compute the sum of Knuth/Welford sum of squared differences from the
+	// mean in a single pass. Adapted from sum of RunningStats in
+	// https://www.johndcook.com/blog/skewness_kurtosis and our
+	// implementation of NumericStats
+	// https://github.com/cockroachdb/cockroach/pull/17728.
+
+	// This is logically equivalent to
+	//   sqrDiff + delta * delta * tmpCount * a.count / (tmpCount + a.count)
+	// where the expression is computed from RIGHT to LEFT.
+	a.ed.Add(&a.tmp, &a.tmpCount, &a.count)
+	a.ed.Quo(&a.tmp, &a.count, &a.tmp)
+	a.ed.Mul(&a.tmp, &a.tmpCount, &a.tmp)
+	a.ed.Mul(&a.tmp, &a.delta, &a.tmp)
+	a.ed.Mul(&a.tmp, &a.delta, &a.tmp)
+	a.ed.Add(&a.tmp, sqrDiff, &a.tmp)
+	// Update running squared difference.
+	a.ed.Add(&a.sqrDiff, &a.sqrDiff, &a.tmp)
+
+	// Update total count.
+	a.ed.Add(&a.count, &a.count, &a.tmpCount)
+
+	// This is logically equivalent to
+	//   delta * tmpCount / a.count
+	// where the expression is computed from LEFT to RIGHT.
+	// Note `a.count` is now the total count (includes tmpCount).
+	a.ed.Mul(&a.tmp, &a.delta, &a.tmpCount)
+	a.ed.Quo(&a.tmp, &a.tmp, &a.count)
+	// Update running mean.
+	a.ed.Add(&a.mean, &a.mean, &a.tmp)
+
+	return a.ed.Err()
+}
+
+func (a *decimalSumSqrDiffsAggregate) Result() (Datum, error) {
+	if a.count.Cmp(decimalOne) < 0 {
+		return DNull, nil
+	}
+	dd := &DDecimal{a.sqrDiff}
+	// Remove trailing zeros. Depending on the order in which the input
+	// is processed, some number of trailing zeros could be added to the
+	// output. Remove them so that the results are the same regardless of order.
+	dd.Decimal.Reduce(&dd.Decimal)
+	return dd, nil
+}
+
+// Close is part of the AggregateFunc interface.
+func (a *decimalSumSqrDiffsAggregate) Close(context.Context) {}
+
+type floatSqrDiff interface {
+	AggregateFunc
+	Count() int64
+}
+
+type decimalSqrDiff interface {
+	AggregateFunc
+	Count() *apd.Decimal
+	Ed() *apd.ErrDecimal
+	Tmp() *apd.Decimal
+}
+
+type floatVarianceAggregate struct {
+	agg floatSqrDiff
+}
+
+type decimalVarianceAggregate struct {
+	agg decimalSqrDiff
+}
+
+// Both Variance and FinalVariance aggregators have the same codepath for
+// their AggregateFunc interface.
+// The key difference is that Variance employs SqrDiffAggregate which
+// has one input: VALUE; whereas FinalVariance employs SumSqrDiffsAggregate
+// which takes in three inputs: (local) SQRDIFF, SUM, COUNT.
+// FinalVariance is used for local/final aggregation in distsql.
+func newIntVarianceAggregate(params []Type, evalCtx *EvalContext) AggregateFunc {
+	return &decimalVarianceAggregate{agg: newIntSqrDiff()}
+}
+
+func newFloatVarianceAggregate(_ []Type, _ *EvalContext) AggregateFunc {
+	return &floatVarianceAggregate{agg: newFloatSqrDiff()}
+}
+
+func newDecimalVarianceAggregate(_ []Type, _ *EvalContext) AggregateFunc {
+	return &decimalVarianceAggregate{agg: newDecimalSqrDiff()}
+}
+
+func newFloatFinalVarianceAggregate(_ []Type, _ *EvalContext) AggregateFunc {
+	return &floatVarianceAggregate{agg: newFloatSumSqrDiffs()}
+}
+
+func newDecimalFinalVarianceAggregate(_ []Type, _ *EvalContext) AggregateFunc {
+	return &decimalVarianceAggregate{agg: newDecimalSumSqrDiffs()}
+}
+
+// Add is part of the AggregateFunc interface.
+//  Variance: VALUE(float)
+//  FinalVariance: SQRDIFF(float), SUM(float), COUNT(int)
+func (a *floatVarianceAggregate) Add(
+	ctx context.Context, firstArg Datum, otherArgs ...Datum,
+) error {
+	return a.agg.Add(ctx, firstArg, otherArgs...)
+}
+
+// Add is part of the AggregateFunc interface.
+//  Variance: VALUE(int|decimal)
+//  FinalVariance: SQRDIFF(decimal), SUM(decimal), COUNT(int)
+func (a *decimalVarianceAggregate) Add(
+	ctx context.Context, firstArg Datum, otherArgs ...Datum,
+) error {
+	return a.agg.Add(ctx, firstArg, otherArgs...)
+}
+
+// Result calculates the variance from the member square difference aggregator.
+func (a *floatVarianceAggregate) Result() (Datum, error) {
+	if a.agg.Count() < 2 {
+		return DNull, nil
+	}
+	sqrDiff, err := a.agg.Result()
+	if err != nil {
+		return nil, err
+	}
+	return NewDFloat(DFloat(float64(*sqrDiff.(*DFloat)) / (float64(a.agg.Count()) - 1))), nil
+}
+
+// Result calculates the variance from the member square difference aggregator.
+func (a *decimalVarianceAggregate) Result() (Datum, error) {
+	if a.agg.Count().Cmp(decimalTwo) < 0 {
+		return DNull, nil
+	}
+	sqrDiff, err := a.agg.Result()
+	if err != nil {
+		return nil, err
+	}
+	a.agg.Ed().Sub(a.agg.Tmp(), a.agg.Count(), decimalOne)
+	dd := &DDecimal{}
+	a.agg.Ed().Ctx = DecimalCtx
+	a.agg.Ed().Quo(&dd.Decimal, &sqrDiff.(*DDecimal).Decimal, a.agg.Tmp())
+	if err := a.agg.Ed().Err(); err != nil {
+		return nil, err
+	}
+	// Remove trailing zeros. Depending on the order in which the input is
+	// processed, some number of trailing zeros could be added to the
+	// output. Remove them so that the results are the same regardless of
+	// order.
+	dd.Decimal.Reduce(&dd.Decimal)
+	return dd, nil
+}
+
+// Close is part of the AggregateFunc interface.
+func (a *floatVarianceAggregate) Close(context.Context) {}
+
+// Close is part of the AggregateFunc interface.
 func (a *decimalVarianceAggregate) Close(context.Context) {}
 
-type stdDevAggregate struct {
+type floatStdDevAggregate struct {
 	agg AggregateFunc
 }
 
+type decimalStdDevAggregate struct {
+	agg AggregateFunc
+}
+
+// Both StdDev and FinalStdDev aggregators have the same codepath for
+// their AggregateFunc interface.
+// The key difference is that StdDev employs SqrDiffAggregate which
+// has one input: VALUE; whereas FinalStdDev employs SumSqrDiffsAggregate
+// which takes in three inputs: (local) SQRDIFF, SUM, COUNT.
+// FinalStdDev is used for local/final aggregation in distsql.
 func newIntStdDevAggregate(params []Type, evalCtx *EvalContext) AggregateFunc {
-	return &stdDevAggregate{agg: newIntVarianceAggregate(params, evalCtx)}
+	return &decimalStdDevAggregate{agg: newIntVarianceAggregate(params, evalCtx)}
 }
+
 func newFloatStdDevAggregate(params []Type, evalCtx *EvalContext) AggregateFunc {
-	return &stdDevAggregate{agg: newFloatVarianceAggregate(params, evalCtx)}
+	return &floatStdDevAggregate{agg: newFloatVarianceAggregate(params, evalCtx)}
 }
+
 func newDecimalStdDevAggregate(params []Type, evalCtx *EvalContext) AggregateFunc {
-	return &stdDevAggregate{agg: newDecimalVarianceAggregate(params, evalCtx)}
+	return &decimalStdDevAggregate{agg: newDecimalVarianceAggregate(params, evalCtx)}
+}
+
+func newFloatFinalStdDevAggregate(params []Type, evalCtx *EvalContext) AggregateFunc {
+	return &floatStdDevAggregate{agg: newFloatFinalVarianceAggregate(params, evalCtx)}
+}
+
+func newDecimalFinalStdDevAggregate(params []Type, evalCtx *EvalContext) AggregateFunc {
+	return &decimalStdDevAggregate{agg: newDecimalFinalVarianceAggregate(params, evalCtx)}
 }
 
 // Add implements the AggregateFunc interface.
-func (a *stdDevAggregate) Add(ctx context.Context, datum Datum, _ ...Datum) error {
-	return a.agg.Add(ctx, datum)
+// The signature of the datums is:
+//  StdDev: VALUE(float)
+//  FinalStdDev: SQRDIFF(float), SUM(float), COUNT(int)
+func (a *floatStdDevAggregate) Add(ctx context.Context, firstArg Datum, otherArgs ...Datum) error {
+	return a.agg.Add(ctx, firstArg, otherArgs...)
 }
 
-// Result computes the square root of the variance.
-func (a *stdDevAggregate) Result() (Datum, error) {
+// Add is part of the AggregateFunc interface.
+// The signature of the datums is:
+//  StdDev: VALUE(int|decimal)
+//  FinalStdDev: SQRDIFF(decimal), SUM(decimal), COUNT(int)
+func (a *decimalStdDevAggregate) Add(
+	ctx context.Context, firstArg Datum, otherArgs ...Datum,
+) error {
+	return a.agg.Add(ctx, firstArg, otherArgs...)
+}
+
+// Result computes the square root of the variance aggregator.
+func (a *floatStdDevAggregate) Result() (Datum, error) {
 	variance, err := a.agg.Result()
 	if err != nil {
 		return nil, err
@@ -979,18 +1363,28 @@ func (a *stdDevAggregate) Result() (Datum, error) {
 	if variance == DNull {
 		return variance, nil
 	}
-	switch t := variance.(type) {
-	case *DFloat:
-		return NewDFloat(DFloat(math.Sqrt(float64(*t)))), nil
-	case *DDecimal:
-		_, err := DecimalCtx.Sqrt(&t.Decimal, &t.Decimal)
-		return t, err
+	return NewDFloat(DFloat(math.Sqrt(float64(*variance.(*DFloat))))), nil
+}
+
+// Result computes the square root of the variance aggregator.
+func (a *decimalStdDevAggregate) Result() (Datum, error) {
+	variance, err := a.agg.Result()
+	if err != nil {
+		return nil, err
 	}
-	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected variance result type: %s", variance.ResolvedType())
+	if variance == DNull {
+		return variance, nil
+	}
+	varianceDec := variance.(*DDecimal)
+	_, err = DecimalCtx.Sqrt(&varianceDec.Decimal, &varianceDec.Decimal)
+	return varianceDec, err
 }
 
 // Close is part of the AggregateFunc interface.
-func (a *stdDevAggregate) Close(context.Context) {}
+func (a *floatStdDevAggregate) Close(context.Context) {}
+
+// Close is part of the AggregateFunc interface.
+func (a *decimalStdDevAggregate) Close(context.Context) {}
 
 var _ Visitor = &IsAggregateVisitor{}
 
