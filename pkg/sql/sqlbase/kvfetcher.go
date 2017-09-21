@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // PrettyKey pretty-prints the specified key, skipping over the first `skip`
@@ -102,6 +103,10 @@ type txnKVFetcher struct {
 	// rangeInfos are deduped, so they're not ordered in any particular way and
 	// they don't map to kvFetcher.spans in any particular way.
 	rangeInfos []roachpb.RangeInfo
+
+	// traceKV determines whether or not to emit a log message every time a Scan
+	// is sent.
+	traceKV bool
 }
 
 func (f *txnKVFetcher) getRangesInfo() []roachpb.RangeInfo {
@@ -167,6 +172,7 @@ func makeKVFetcher(
 	useBatchLimit bool,
 	firstBatchLimit int64,
 	returnRangeInfo bool,
+	traceKV bool,
 ) (txnKVFetcher, error) {
 	if firstBatchLimit < 0 || (!useBatchLimit && firstBatchLimit != 0) {
 		return txnKVFetcher{}, errors.Errorf("invalid batch limit %d (useBatchLimit: %t)",
@@ -200,6 +206,7 @@ func makeKVFetcher(
 		useBatchLimit:   useBatchLimit,
 		firstBatchLimit: firstBatchLimit,
 		returnRangeInfo: returnRangeInfo,
+		traceKV:         traceKV,
 	}, nil
 }
 
@@ -221,6 +228,18 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 			scans[i].Span = f.spans[i]
 			ba.Requests[i].MustSetInner(&scans[i])
 		}
+	}
+
+	if f.traceKV {
+		scanStr := "Scan "
+		for i, span := range f.spans {
+			if i != 0 {
+				scanStr += ", "
+			}
+			scanStr += span.String()
+		}
+
+		log.VEventf(ctx, 2, scanStr)
 	}
 
 	// Reset spans in preparation for adding resume-spans below.
