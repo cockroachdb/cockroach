@@ -123,8 +123,8 @@ type Config struct {
 	// Stores is specified to enable durable key-value storage.
 	Stores base.StoreSpecList
 
-	// TempStore is currently used to store local state when processing large queries.
-	TempStore base.StoreSpec
+	// TempStoreSpec is used to store ephemeral data when processing large queries.
+	TempStoreSpec base.StoreSpec
 
 	// Attrs specifies a colon-separated list of node topography or machine
 	// capabilities, used to match capabilities or location preferences specified
@@ -375,7 +375,7 @@ func MakeConfig(st *cluster.Settings) Config {
 		Stores: base.StoreSpecList{
 			Specs: []base.StoreSpec{storeSpec},
 		},
-		TempStore: MakeTempStoreSpecFromStoreSpec(storeSpec),
+		TempStoreSpec: MakeTempStoreSpecFromStoreSpec(storeSpec),
 	}
 	cfg.AmbientCtx.Tracer = st.Tracer
 
