@@ -22,7 +22,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -164,11 +163,10 @@ func (fr *flowRegistry) RegisterFlow(
 	}()
 	entry := fr.getEntryLocked(id)
 	if entry.flow != nil {
-		return util.UnexpectedWithIssueErrorf(
-			12876,
+		return errors.Errorf(
 			"flow already registered: current node ID: %d flowID: %d.\n"+
-				"Current flow:%+v\nExisting flow:%+v",
-			fr.nodeID, f.spec, entry.flow.spec)
+				"Current flow: %+v\nExisting flow: %+v",
+			fr.nodeID, f.spec.FlowID, f.spec, entry.flow.spec)
 	}
 	// Take a reference that will be removed by UnregisterFlow.
 	entry.refCount++

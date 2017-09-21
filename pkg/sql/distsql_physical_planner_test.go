@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
@@ -721,21 +722,45 @@ func TestPartitionSpans(t *testing.T) {
 		},
 	}
 
+	// We need a mock Gossip to contain addresses for the nodes. Otherwise the
+	// distSQLPlanner will not plan flows on them.
+	testStopper := stop.NewStopper()
+	defer testStopper.Stop(context.TODO())
+	mockGossip := gossip.NewTest(roachpb.NodeID(1), nil /* rpcContext */, nil, /* grpcServer */
+		testStopper, metric.NewRegistry())
+	var nodeDescs []*roachpb.NodeDescriptor
+	for i := 1; i <= 10; i++ {
+		nodeID := roachpb.NodeID(i)
+		desc := &roachpb.NodeDescriptor{
+			NodeID:  nodeID,
+			Address: util.UnresolvedAddr{AddressField: fmt.Sprintf("addr%d", i)},
+		}
+		if err := mockGossip.SetNodeDescriptor(desc); err != nil {
+			t.Fatal(err)
+		}
+		if err := mockGossip.AddInfoProto(
+			gossip.MakeDistSQLNodeVersionKey(nodeID),
+			&distsqlrun.DistSQLVersionGossipInfo{
+				MinAcceptedVersion: distsqlrun.MinAcceptedVersion,
+				Version:            distsqlrun.Version,
+			},
+			0, // ttl - no expiration
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		nodeDescs = append(nodeDescs, desc)
+	}
+
 	for testIdx, tc := range testCases {
 		t.Run(strconv.Itoa(testIdx), func(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(context.TODO())
 
-			tsp := &testSpanResolver{}
-			for i := 1; i <= 10; i++ {
-				tsp.nodes = append(tsp.nodes, &roachpb.NodeDescriptor{
-					NodeID: roachpb.NodeID(i),
-					Address: util.UnresolvedAddr{
-						AddressField: fmt.Sprintf("addr%d", i),
-					},
-				})
+			tsp := &testSpanResolver{
+				nodes:  nodeDescs,
+				ranges: tc.ranges,
 			}
-			tsp.ranges = tc.ranges
 
 			dsp := distSQLPlanner{
 				planVersion:  distsqlrun.Version,
@@ -743,6 +768,7 @@ func TestPartitionSpans(t *testing.T) {
 				nodeDesc:     *tsp.nodes[tc.gatewayNode-1],
 				stopper:      stopper,
 				spanResolver: tsp,
+				gossip:       mockGossip,
 				testingKnobs: DistSQLPlannerTestingKnobs{
 					OverrideHealthCheck: func(node roachpb.NodeID, addr string) error {
 						for _, n := range tc.deadNodes {
@@ -751,15 +777,6 @@ func TestPartitionSpans(t *testing.T) {
 							}
 						}
 						return nil
-					},
-					OverrideDistSQLVersionCheck: func(
-						node roachpb.NodeID) (distsqlrun.DistSQLVersionGossipInfo, error,
-					) {
-						// Accept any version.
-						return distsqlrun.DistSQLVersionGossipInfo{
-							MinAcceptedVersion: 0,
-							Version:            1000000,
-						}, nil
 					},
 				},
 			}
@@ -817,9 +834,10 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 		// The versions accepted by each node.
 		nodeVersions map[roachpb.NodeID]distsqlrun.DistSQLVersionGossipInfo
 
-		// nodesNotInGossip is the set of nodes for which we're going to pretend
-		// that gossip returns an error when queried about the DistSQL version.
-		nodesNotInGossip map[roachpb.NodeID]struct{}
+		// nodesNotAdvertisingDistSQLVersion is the set of nodes for which gossip is
+		// not going to have information about the supported DistSQL version. This
+		// is to simulate CRDB 1.0 nodes which don't advertise this information.
+		nodesNotAdvertisingDistSQLVersion map[roachpb.NodeID]struct{}
 
 		// expected result: a map of node to list of spans.
 		partitions map[roachpb.NodeID][][2]string
@@ -874,7 +892,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 					Version:            3,
 				},
 			},
-			nodesNotInGossip: map[roachpb.NodeID]struct{}{
+			nodesNotAdvertisingDistSQLVersion: map[roachpb.NodeID]struct{}{
 				1: {},
 			},
 			partitions: map[roachpb.NodeID][][2]string{
@@ -882,22 +900,47 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 			},
 		},
 	}
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 
 			stopper := stop.NewStopper()
 			defer stopper.Stop(context.TODO())
 
-			tsp := &testSpanResolver{}
+			// We need a mock Gossip to contain addresses for the nodes. Otherwise the
+			// distSQLPlanner will not plan flows on them. This Gossip will also
+			// reflect tc.nodesNotAdvertisingDistSQLVersion.
+			testStopper := stop.NewStopper()
+			defer testStopper.Stop(context.TODO())
+			mockGossip := gossip.NewTest(roachpb.NodeID(1), nil /* rpcContext */, nil, /* grpcServer */
+				testStopper, metric.NewRegistry())
+			var nodeDescs []*roachpb.NodeDescriptor
 			for i := 1; i <= 2; i++ {
-				tsp.nodes = append(tsp.nodes, &roachpb.NodeDescriptor{
-					NodeID: roachpb.NodeID(i),
-					Address: util.UnresolvedAddr{
-						AddressField: fmt.Sprintf("addr%d", i),
-					},
-				})
+				nodeID := roachpb.NodeID(i)
+				desc := &roachpb.NodeDescriptor{
+					NodeID:  nodeID,
+					Address: util.UnresolvedAddr{AddressField: fmt.Sprintf("addr%d", i)},
+				}
+				if err := mockGossip.SetNodeDescriptor(desc); err != nil {
+					t.Fatal(err)
+				}
+				if _, ok := tc.nodesNotAdvertisingDistSQLVersion[nodeID]; !ok {
+					verInfo := tc.nodeVersions[nodeID]
+					if err := mockGossip.AddInfoProto(
+						gossip.MakeDistSQLNodeVersionKey(nodeID),
+						&verInfo,
+						0, // ttl - no expiration
+					); err != nil {
+						t.Fatal(err)
+					}
+				}
+
+				nodeDescs = append(nodeDescs, desc)
 			}
-			tsp.ranges = ranges
+			tsp := &testSpanResolver{
+				nodes:  nodeDescs,
+				ranges: ranges,
+			}
 
 			dsp := distSQLPlanner{
 				planVersion:  tc.planVersion,
@@ -905,19 +948,11 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 				nodeDesc:     *tsp.nodes[gatewayNode-1],
 				stopper:      stopper,
 				spanResolver: tsp,
+				gossip:       mockGossip,
 				testingKnobs: DistSQLPlannerTestingKnobs{
 					OverrideHealthCheck: func(node roachpb.NodeID, addr string) error {
 						// All the nodes are healthy.
 						return nil
-					},
-					OverrideDistSQLVersionCheck: func(
-						nodeID roachpb.NodeID) (distsqlrun.DistSQLVersionGossipInfo, error,
-					) {
-						if _, ok := tc.nodesNotInGossip[nodeID]; ok {
-							return distsqlrun.DistSQLVersionGossipInfo{},
-								gossip.NewKeyNotPresentError(gossip.MakeDistSQLNodeVersionKey(nodeID))
-						}
-						return tc.nodeVersions[nodeID], nil
 					},
 				},
 			}
@@ -944,5 +979,98 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 				t.Errorf("expected partitions:\n  %v\ngot:\n  %v", tc.partitions, resMap)
 			}
 		})
+	}
+}
+
+// Test that a node whose descriptor info is not accessible through gossip is
+// not used. This is to simulate nodes that have been decomisioned and also
+// nodes that have been "replaced" by another node at the same address (which, I
+// guess, is also a type of decomissioning).
+func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// The spans that we're going to plan for.
+	span := roachpb.Span{Key: roachpb.Key("A"), EndKey: roachpb.Key("Z")}
+	gatewayNode := roachpb.NodeID(2)
+	ranges := []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}}
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	mockGossip := gossip.NewTest(roachpb.NodeID(1), nil /* rpcContext */, nil, /* grpcServer */
+		stopper, metric.NewRegistry())
+	var nodeDescs []*roachpb.NodeDescriptor
+	for i := 1; i <= 2; i++ {
+		nodeID := roachpb.NodeID(i)
+		desc := &roachpb.NodeDescriptor{
+			NodeID:  nodeID,
+			Address: util.UnresolvedAddr{AddressField: fmt.Sprintf("addr%d", i)},
+		}
+		if i == 2 {
+			if err := mockGossip.SetNodeDescriptor(desc); err != nil {
+				t.Fatal(err)
+			}
+		}
+		// All the nodes advertise their DistSQL versions. This is to simulate the
+		// "node overridden by another node at the same address" case mentioned in
+		// the test comment - for such a node, the descriptor would be taken out of
+		// the gossip data, but other datums it advertised are left in place.
+		if err := mockGossip.AddInfoProto(
+			gossip.MakeDistSQLNodeVersionKey(nodeID),
+			&distsqlrun.DistSQLVersionGossipInfo{
+				MinAcceptedVersion: distsqlrun.MinAcceptedVersion,
+				Version:            distsqlrun.Version,
+			},
+			0, // ttl - no expiration
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		nodeDescs = append(nodeDescs, desc)
+	}
+	tsp := &testSpanResolver{
+		nodes:  nodeDescs,
+		ranges: ranges,
+	}
+
+	dsp := distSQLPlanner{
+		planVersion:  distsqlrun.Version,
+		st:           cluster.MakeTestingClusterSettings(),
+		nodeDesc:     *tsp.nodes[gatewayNode-1],
+		stopper:      stopper,
+		spanResolver: tsp,
+		gossip:       mockGossip,
+		testingKnobs: DistSQLPlannerTestingKnobs{
+			OverrideHealthCheck: func(node roachpb.NodeID, addr string) error {
+				// All the nodes are healthy.
+				return nil
+			},
+		},
+	}
+
+	planCtx := dsp.NewPlanningCtx(context.Background(), nil /* txn */)
+	partitions, err := dsp.partitionSpans(&planCtx, roachpb.Spans{span})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resMap := make(map[roachpb.NodeID][][2]string)
+	for _, p := range partitions {
+		if _, ok := resMap[p.node]; ok {
+			t.Fatalf("node %d shows up in multiple partitions", p)
+		}
+		var spans [][2]string
+		for _, s := range p.spans {
+			spans = append(spans, [2]string{string(s.Key), string(s.EndKey)})
+		}
+		resMap[p.node] = spans
+	}
+
+	expectedPartitions :=
+		map[roachpb.NodeID][][2]string{
+			2: {{"A", "Z"}},
+		}
+	if !reflect.DeepEqual(resMap, expectedPartitions) {
+		t.Errorf("expected partitions:\n  %v\ngot:\n  %v", expectedPartitions, resMap)
 	}
 }

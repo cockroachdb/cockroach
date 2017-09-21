@@ -117,7 +117,7 @@ func (dsp *distSQLPlanner) Run(
 		return err
 	}
 
-	flows := plan.GenerateFlowSpecs(dsp.nodeDesc.NodeID)
+	flows := plan.GenerateFlowSpecs(dsp.nodeDesc.NodeID /* gateway */)
 
 	if logPlanDiagram {
 		log.VEvent(ctx, 1, "creating plan diagram")
