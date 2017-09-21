@@ -43,7 +43,10 @@ const MinimumStoreSize = 10 * 64 << 20
 // StoreSpec contains the details that can be specified in the cli pertaining
 // to the --store flag.
 type StoreSpec struct {
-	Path        string
+	Path string
+	// SizeInBytes is used for calculating free space and making rebalancing
+	// decisions. Zero indicates that there is no maximum size. This value is not
+	// actually used by the engine and thus not enforced.
 	SizeInBytes int64
 	SizePercent float64
 	InMemory    bool

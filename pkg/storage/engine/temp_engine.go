@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
@@ -32,6 +33,11 @@ import (
 // could not set up a temporary Engine. When closed, it destroys the
 // underlying data.
 func NewTempEngine(ctx context.Context, storeCfg base.StoreSpec) (Engine, error) {
+	if storeCfg.SizeInBytes != 0 {
+		return nil, errors.Errorf("spec.SizeInBytes specified for temp store. " +
+			"That's not allowed as the setting doesn't do anything.")
+	}
+
 	if storeCfg.InMemory {
 		// TODO(arjun): Limit the size of the store once #16750 is addressed.
 		return NewInMem(storeCfg.Attributes, 0 /* cacheSize */), nil
@@ -45,10 +51,11 @@ func NewTempEngine(ctx context.Context, storeCfg base.StoreSpec) (Engine, error)
 	st := cluster.MakeClusterSettings(cluster.BinaryServerVersion, cluster.BinaryServerVersion)
 
 	rocksDBCfg := RocksDBConfig{
-		Settings:     st,
-		Attrs:        roachpb.Attributes{},
-		Dir:          storeCfg.Path,
-		MaxSizeBytes: 0,   // TODO(arjun): Revisit this.
+		Settings: st,
+		Attrs:    roachpb.Attributes{},
+		Dir:      storeCfg.Path,
+		// MaxSizeBytes doesn't matter for temp stores - it's not enforced in any way.
+		MaxSizeBytes: 0,
 		MaxOpenFiles: 128, // TODO(arjun): Revisit this.
 	}
 	rocksDBCache := NewRocksDBCache(0)
