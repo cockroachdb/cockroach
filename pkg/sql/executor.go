@@ -1604,8 +1604,19 @@ func (e *Executor) execStmtInOpenTxn(
 		if err != nil {
 			return
 		}
-
-		if txnState.State() == AutoRetry && txnState.isSerializableRestart() {
+		// Generally, if the transaction is serializable and it has been pushed,
+		// we don't deal with it until commit time (when we return a retriable error).
+		// This is because we want the transaction to continue and lay down all the intents it wants,
+		// so that a future attempt is more likely to succeed.
+		// However, there are two situations when we do want to detect the push and restart early:
+		//
+		// 1. If we can still automatically retry the txn, we go ahead and retry now -
+		// if we'd execute further statements, we probably wouldn't be allowed to retry automatically any more.
+		//
+		// 2. If the client is not following the client-directed retries protocol,
+		// then technically there won't be any retries,
+		// so the client would not benefit from letting the transaction run more statements.
+		if txnState.isSerializableRestart() && (txnState.State() == AutoRetry || !txnState.retryIntent) {
 			// If we just ran a statement synchronously, then the parallel queue
 			// would have been synchronized first, so this would be a no-op.
 			// However, if we just ran a statement asynchronously, then the
@@ -1626,15 +1637,10 @@ func (e *Executor) execStmtInOpenTxn(
 					return
 				}
 			}
-
-			// If we can still automatically retry the txn, and we detect that the
-			// transaction won't be allowed to commit because its timestamp has been
-			// pushed, we go ahead and retry now - if we'd execute further statements,
-			// we probably wouldn't be allowed to retry automatically any more.
 			txnState.mu.txn.Proto().Restart(
 				0 /* userPriority */, 0 /* upgradePriority */, e.cfg.Clock.Now())
-			// Force an auto-retry by returning a retryable error to the higher
-			// levels.
+			// if we already knew the serializable transaction has been pushed by
+			// another transaction, we should return an retriable error to the higher level.
 			err = roachpb.NewHandledRetryableTxnError(
 				"serializable transaction timestamp pushed (detected by SQL Executor)",
 				txnState.mu.txn.ID(),
