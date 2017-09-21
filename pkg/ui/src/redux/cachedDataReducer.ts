@@ -107,7 +107,6 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
         state = _.clone(state);
         state.inFlight = false;
         state.lastError = error.data;
-        console.error(error);
         state.valid = false;
         return state;
       case this.INVALIDATE:
