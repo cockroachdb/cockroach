@@ -65,7 +65,7 @@ type RangeDescriptorDB interface {
 		key roachpb.RKey,
 		desc *roachpb.RangeDescriptor,
 		useReverseScan bool,
-	) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error)
+	) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error)
 	// FirstRange returns the descriptor for the first Range. This is the
 	// Range containing all meta1 entries.
 	FirstRange() (*roachpb.RangeDescriptor, error)
@@ -428,8 +428,7 @@ func (rdc *RangeDescriptorCache) performRangeLookup(
 	}
 	// Tag inner operations.
 	ctx = log.WithLogTag(ctx, "range-lookup", nil)
-	descs, prefetched, pErr := rdc.db.RangeLookup(ctx, metadataKey, desc, useReverseScan)
-	return descs, prefetched, pErr.GoError()
+	return rdc.db.RangeLookup(ctx, metadataKey, desc, useReverseScan)
 }
 
 // EvictCachedRangeDescriptor will evict any cached range descriptors
