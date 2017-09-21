@@ -1604,37 +1604,39 @@ func (e *Executor) execStmtInOpenTxn(
 		if err != nil {
 			return
 		}
-
-		if txnState.State() == AutoRetry && txnState.isSerializableRestart() {
-			// If we just ran a statement synchronously, then the parallel queue
-			// would have been synchronized first, so this would be a no-op.
-			// However, if we just ran a statement asynchronously, then the
-			// queue could still contain statements executing. So if we're in a
-			// SerializableRestart state, we synchronize to drain the rest of
-			// the stmts and clear the parallel batch's error-set before
-			// restarting. If we did not drain the parallel stmts then the
-			// txn.Reset call below might cause them to write at the wrong
-			// epoch.
-			//
-			// TODO(nvanbenschoten): like in Session.Finish, we should try to
-			// actively cancel these parallel queries instead of just waiting
-			// for them to finish.
-			if parErr := session.synchronizeParallelStmts(session.Ctx()); parErr != nil {
-				// If synchronizing results in a non-retryable error, it takes priority.
-				if _, ok := parErr.(*roachpb.HandledRetryableTxnError); !ok {
-					err = parErr
-					return
+		if txnState.isSerializableRestart() {
+			if txnState.State() == AutoRetry || !txnState.retryIntent {
+				// If we just ran a statement synchronously, then the parallel queue
+				// would have been synchronized first, so this would be a no-op.
+				// However, if we just ran a statement asynchronously, then the
+				// queue could still contain statements executing. So if we're in a
+				// SerializableRestart state, we synchronize to drain the rest of
+				// the stmts and clear the parallel batch's error-set before
+				// restarting. If we did not drain the parallel stmts then the
+				// txn.Reset call below might cause them to write at the wrong
+				// epoch.
+				//
+				// TODO(nvanbenschoten): like in Session.Finish, we should try to
+				// actively cancel these parallel queries instead of just waiting
+				// for them to finish.
+				if parErr := session.synchronizeParallelStmts(session.Ctx()); parErr != nil {
+					// If synchronizing results in a non-retryable error, it takes priority.
+					if _, ok := parErr.(*roachpb.HandledRetryableTxnError); !ok {
+						err = parErr
+						return
+					}
 				}
 			}
-
-			// If we can still automatically retry the txn, and we detect that the
-			// transaction won't be allowed to commit because its timestamp has been
-			// pushed, we go ahead and retry now - if we'd execute further statements,
-			// we probably wouldn't be allowed to retry automatically any more.
-			txnState.mu.txn.Proto().Restart(
-				0 /* userPriority */, 0 /* upgradePriority */, e.cfg.Clock.Now())
-			// Force an auto-retry by returning a retryable error to the higher
-			// levels.
+			if txnState.State() == AutoRetry {
+				// If we can still automatically retry the txn, and we detect that the
+				// transaction won't be allowed to commit because its timestamp has been
+				// pushed, we go ahead and retry now - if we'd execute further statements,
+				// we probably wouldn't be allowed to retry automatically any more.
+				txnState.mu.txn.Proto().Restart(
+					0 /* userPriority */, 0 /* upgradePriority */, e.cfg.Clock.Now())
+			}
+			// if we already knew the serializable transaction has been pushed by
+			// another transaction, we should return an retriable error to the higher level.
 			err = roachpb.NewHandledRetryableTxnError(
 				"serializable transaction timestamp pushed (detected by SQL Executor)",
 				txnState.mu.txn.ID(),

@@ -28,14 +28,13 @@ SELECT * FROM t
 
 user root
 
-# The insert increases the candidate timestamp, but a restart won't occur
-# until an EndTransaction.
-statement ok
+# The insert increases the candidate timestamp, and it will encounter a restart error.
+query error pq: restart transaction: HandledRetryableTxnError: serializable transaction timestamp pushed \(detected by SQL Executor\)
 INSERT INTO t(a) VALUES (1)
 
-# Commit will send an EndTransaction which will result in a retry error.
-statement error pgcode 40001 retry txn.*
-COMMIT
+# Rollback now.
+statement ok
+ROLLBACK
 
 # Check that the connection is usable after the failed COMMIT.
 query I
