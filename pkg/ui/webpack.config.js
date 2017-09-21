@@ -34,11 +34,23 @@ module.exports = {
     // Add resolvable extensions.
     extensions: [".ts", ".tsx", ".js", ".json", ".styl", ".css"],
     // Resolve modules from src directory or node_modules.
-    // The "path.resolve" is used to make these into absolute paths, meaning
+    // The "path.resolve" is used to make __dirname an absolute path, meaning
     // that only the exact directory is checked. A relative path would follow
     // the resolution behavior used by node.js for "node_modules", which checks
     // for a "node_modules" child directory located in either the current
     // directory *or in any parent directory*.
+    //
+    // This resolution strategy is mirrored in `tsconfig.json` for use by the typescript
+    // compiler. This is not needed for webpack builds, but *is* used by other tools that
+    // need to use our typescript code, such as IDEs.
+    //
+    // This strategy cannot be *exactly* matched by tsconfig.json, because tsconfig
+    // does not support mixing path resolution with node_modules style resolution
+    // (which checks ancestor directories).  Instead, compilations which use
+    // tsconfig.json will only check for non-relative paths in the root directory
+    // and the *root-level* node_modules directory. However, this is not currently
+    // a problem because our typescript code does not depend on library-specific
+    // node_modules directories.
     modules: [path.resolve(__dirname), "node_modules"],
   },
 

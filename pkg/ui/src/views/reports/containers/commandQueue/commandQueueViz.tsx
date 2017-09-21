@@ -34,7 +34,7 @@ export default class CommandQueueViz extends React.Component<QueueVizProps, Queu
       marginy: 20,
       nodesep: 10,
     });
-    g.setDefaultEdgeLabel(() => {});
+    g.setDefaultEdgeLabel(() => ({}));
 
     this.props.queue.commands.forEach((command) => {
       g.setNode(command.id.toString(), {
@@ -67,7 +67,7 @@ export default class CommandQueueViz extends React.Component<QueueVizProps, Queu
           </tr>
           <tr>
             <th>Read Only</th>
-            <td>{command.readonly}</td>
+            <td>{!!command.readonly}</td>
           </tr>
           <tr>
             <th>Key Range</th>
