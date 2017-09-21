@@ -15,13 +15,11 @@
 package kv
 
 import (
-	"bytes"
 	"reflect"
 	"testing"
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -29,37 +27,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-var alphaRangeDescriptors []*roachpb.RangeDescriptor
-
-var alphaRangeDescriptorDB = MockRangeDescriptorDB(func(key roachpb.RKey, useReverseScan bool) (
-	[]roachpb.RangeDescriptor,
-	[]roachpb.RangeDescriptor,
-	*roachpb.Error,
-) {
-	if bytes.HasPrefix(key, keys.Meta2Prefix) {
-		return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
-	}
-	var index int
-	if len(key) > 0 {
-		if useReverseScan {
-			index = int(key[0] - byte('a'))
-		} else {
-			index = int(key[0] - byte('a') + 1)
-		}
-	}
-	if index < 0 {
-		index = 0
-	} else if index >= len(alphaRangeDescriptors) {
-		index = len(alphaRangeDescriptors) - 1
-	}
-	return []roachpb.RangeDescriptor{*alphaRangeDescriptors[index]}, nil, nil
-})
+var alphaRangeDescriptors []roachpb.RangeDescriptor
+var alphaRangeDescriptorDB MockRangeDescriptorDB
 
 func init() {
-	lastKey := roachpb.RKey(keys.MinKey)
+	lastKey := testMetaEndKey
 	for i, b := 0, byte('a'); b <= byte('z'); i, b = i+1, b+1 {
 		key := roachpb.RKey([]byte{b})
-		alphaRangeDescriptors = append(alphaRangeDescriptors, &roachpb.RangeDescriptor{
+		alphaRangeDescriptors = append(alphaRangeDescriptors, roachpb.RangeDescriptor{
 			RangeID:  roachpb.RangeID(i + 2),
 			StartKey: lastKey,
 			EndKey:   key,
@@ -72,6 +47,9 @@ func init() {
 		})
 		lastKey = key
 	}
+	alphaRangeDescriptorDB = mockRangeDescriptorDBForDescs(
+		append(alphaRangeDescriptors, testMetaRangeDescriptor)...,
+	)
 }
 
 func TestRangeIterForward(t *testing.T) {
@@ -91,11 +69,11 @@ func TestRangeIterForward(t *testing.T) {
 	ri := NewRangeIterator(ds)
 	i := 0
 	span := roachpb.RSpan{
-		Key:    roachpb.RKey(roachpb.KeyMin),
+		Key:    testMetaEndKey,
 		EndKey: roachpb.RKey([]byte("z")),
 	}
 	for ri.Seek(ctx, span.Key, Ascending); ri.Valid(); ri.Next(ctx) {
-		if !reflect.DeepEqual(alphaRangeDescriptors[i], ri.Desc()) {
+		if !reflect.DeepEqual(alphaRangeDescriptors[i], *ri.Desc()) {
 			t.Fatalf("%d: expected %v; got %v", i, alphaRangeDescriptors[i], ri.Desc())
 		}
 		i++
@@ -121,8 +99,8 @@ func TestRangeIterSeekForward(t *testing.T) {
 
 	ri := NewRangeIterator(ds)
 	i := 0
-	for ri.Seek(ctx, roachpb.RKey(roachpb.KeyMin), Ascending); ri.Valid(); {
-		if !reflect.DeepEqual(alphaRangeDescriptors[i], ri.Desc()) {
+	for ri.Seek(ctx, testMetaEndKey, Ascending); ri.Valid(); {
+		if !reflect.DeepEqual(alphaRangeDescriptors[i], *ri.Desc()) {
 			t.Fatalf("%d: expected %v; got %v", i, alphaRangeDescriptors[i], ri.Desc())
 		}
 		i += 2
@@ -156,11 +134,11 @@ func TestRangeIterReverse(t *testing.T) {
 	ri := NewRangeIterator(ds)
 	i := len(alphaRangeDescriptors) - 1
 	span := roachpb.RSpan{
-		Key:    roachpb.RKey(roachpb.KeyMin),
+		Key:    testMetaEndKey,
 		EndKey: roachpb.RKey([]byte{'z'}),
 	}
 	for ri.Seek(ctx, span.EndKey, Descending); ri.Valid(); ri.Next(ctx) {
-		if !reflect.DeepEqual(alphaRangeDescriptors[i], ri.Desc()) {
+		if !reflect.DeepEqual(alphaRangeDescriptors[i], *ri.Desc()) {
 			t.Fatalf("%d: expected %v; got %v", i, alphaRangeDescriptors[i], ri.Desc())
 		}
 		i--
@@ -187,7 +165,7 @@ func TestRangeIterSeekReverse(t *testing.T) {
 	ri := NewRangeIterator(ds)
 	i := len(alphaRangeDescriptors) - 1
 	for ri.Seek(ctx, roachpb.RKey([]byte{'z'}), Descending); ri.Valid(); {
-		if !reflect.DeepEqual(alphaRangeDescriptors[i], ri.Desc()) {
+		if !reflect.DeepEqual(alphaRangeDescriptors[i], *ri.Desc()) {
 			t.Fatalf("%d: expected %v; got %v", i, alphaRangeDescriptors[i], ri.Desc())
 		}
 		i -= 2
