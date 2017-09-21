@@ -361,7 +361,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Stopper:    s.stopper,
 		NodeID:     &s.nodeIDContainer,
 
-		TempStorage: tempEngine,
+		TempStorage:             tempEngine,
+		TempStorageMaxSizeBytes: s.cfg.TempStoreMaxSizeBytes,
 
 		ParentMemoryMonitor: &rootSQLMemoryMonitor,
 
