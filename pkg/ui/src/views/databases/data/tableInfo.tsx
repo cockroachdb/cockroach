@@ -1,4 +1,5 @@
 import * as protos from "src/js/protos";
+import _ from "lodash";
 
 type TableDetailsResponse = protos.cockroach.server.serverpb.TableDetailsResponse;
 type TableStatsResponse = protos.cockroach.server.serverpb.TableStatsResponse;
@@ -18,7 +19,7 @@ export class TableInfo {
       this.name = name;
       this.id = details && details.descriptor_id.toNumber();
       this.numColumns = details && details.columns.length;
-      this.numIndices = details && details.indexes.length;
+      this.numIndices = details && _.uniqBy(details.indexes, idx => idx.name).length;
       this.rangeCount = stats && stats.range_count && stats.range_count.toNumber();
       this.createStatement = details && details.create_table_statement;
       this.grants = details && details.grants;
