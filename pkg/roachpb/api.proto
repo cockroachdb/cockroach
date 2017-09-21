@@ -430,6 +430,17 @@ message RangeLookupRequest {
   // Use a reverse scan to pre-fill the range descriptor cache instead
   // of an ascending scan.
   optional bool reverse = 4 [(gogoproto.nullable) = false];
+  // Continuation indicates that the lookup request is an extension of a
+  // previous RangeLookupRequest that failed to find the desired descriptor.
+  // This can happen if a user space range is split across two meta2 ranges
+  // and a RangeLookupRequest first goes to the left meta2 range. See
+  // comment on RangeDescriptorCache.performRangeLookupContinuation for more
+  // details. If continuation is set to true, then reverse must be false.
+  //
+  // DURING REVIEW: "continuation" is an overloaded term in CS. I think its
+  // standard meaning is appropriate here and that it's not confusing, but
+  // Lisp-enthusiasts may disagree. 
+  optional bool continuation = 5 [(gogoproto.nullable) = false];
 }
 
 // A RangeLookupResponse is the return value from the RangeLookup()

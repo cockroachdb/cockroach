@@ -1098,8 +1098,77 @@ func runCommitTrigger(
 func declareKeysRangeLookup(
 	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
 ) {
-	DefaultDeclareKeys(desc, header, req, spans)
+	lookupReq := req.(*roachpb.RangeLookupRequest)
+	continuation := lookupReq.Continuation
+
+	if keys.IsLocal(lookupReq.Key) {
+		// Error will be thrown during evaluation.
+
+		// DURING REVIEW: should we change the signature of DeclareKeys to
+		// return an error? Is this worth it?
+		return
+	}
+	key := roachpb.RKey(lookupReq.Key)
+
+	// RangeLookupRequests depend on the range descriptor because they need
+	// to determine which range descriptors are within the local range.
 	spans.Add(SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
+
+	// Both forward and reverse RangeLookupRequests scan forward initially. We are
+	// unable to bound this initial scan and further than from the lookup key to
+	// the end of the current descriptor.
+	scanBounds, err := rangeLookupScanBounds(&desc, key, false /* reverse */, continuation)
+	if err != nil {
+		// Errors will be caught during evaluation.
+		return
+	}
+	spans.Add(SpanReadOnly, roachpb.Span{
+		Key:    scanBounds.Key.AsRawKey(),
+		EndKey: scanBounds.EndKey.AsRawKey(),
+	})
+
+	if lookupReq.Reverse {
+		// A revese RangeLookupRequest also scans backwards.
+		revScanBounds, err := rangeLookupScanBounds(&desc, key, true /* reverse */, continuation)
+		if err != nil {
+			// Errors will be caught during evaluation.
+			return
+		}
+		spans.Add(SpanReadOnly, roachpb.Span{
+			Key:    revScanBounds.Key.AsRawKey(),
+			EndKey: revScanBounds.EndKey.AsRawKey(),
+		})
+	}
+}
+
+// rangeLookupScanBounds returns the range [start,end) within the bounds of the
+// provided RangeDescriptor which the desired meta record can be found by means
+// of an engine scan.
+func rangeLookupScanBounds(
+	desc *roachpb.RangeDescriptor, key roachpb.RKey, reverse, continuation bool,
+) (roachpb.RSpan, error) {
+	boundsFn := keys.MetaScanBounds
+	if reverse {
+		boundsFn = keys.MetaReverseScanBounds
+	}
+	span, err := boundsFn(key)
+	if err != nil {
+		return roachpb.RSpan{}, err
+	}
+
+	if continuation {
+		if reverse {
+			return roachpb.RSpan{}, errors.New("a reverse RangeLookupRequest cannot be a continuation")
+		}
+		// If the request is a RangeLookup continuation, we want to continue
+		// scanning from the beginning of the current range. If we didn't adjust
+		// the start key here, we might miss the desired descriptor even if
+		// desc.StartKey == key because keys.MetaScanBounds internally performs
+		// a key.Next call when constructing the span bounds.
+		span.Key = desc.StartKey
+	}
+
+	return span.Intersect(desc)
 }
 
 // evalRangeLookup is used to look up RangeDescriptors - a RangeDescriptor
@@ -1143,14 +1212,13 @@ func evalRangeLookup(
 	h := cArgs.Header
 	reply := resp.(*roachpb.RangeLookupResponse)
 
-	key, err := keys.Addr(args.Key)
-	if err != nil {
-		return EvalResult{}, err
-	}
-	if !key.Equal(args.Key) {
+	if keys.IsLocal(args.Key) {
 		return EvalResult{}, errors.Errorf("illegal lookup of range-local key %q", args.Key)
 	}
-	ts, txn, consistent, rangeCount := h.Timestamp, h.Txn, h.ReadConsistency != roachpb.INCONSISTENT, int64(args.MaxRanges)
+	key := roachpb.RKey(args.Key)
+
+	ts, txn, consistent := h.Timestamp, h.Txn, h.ReadConsistency != roachpb.INCONSISTENT
+	reverse, continuation, rangeCount := args.Reverse, args.Continuation, int64(args.MaxRanges)
 	if rangeCount < 1 {
 		return EvalResult{}, errors.Errorf("range lookup specified invalid maximum range count %d: must be > 0", rangeCount)
 	}
@@ -1164,7 +1232,7 @@ func evalRangeLookup(
 
 	var kvs []roachpb.KeyValue // kv descriptor pairs in scan order
 	var intents []roachpb.Intent
-	if !args.Reverse {
+	if !reverse {
 		// If scanning forward, there's no special "checking": Just decode the
 		// descriptor and return it.
 		checkAndUnmarshal = func(v roachpb.Value) (*roachpb.RangeDescriptor, error) {
@@ -1178,11 +1246,7 @@ func evalRangeLookup(
 		// We want to search for the metadata key greater than
 		// args.Key. Scan for both the requested key and the keys immediately
 		// afterwards, up to MaxRanges.
-		span, err := keys.MetaScanBounds(key)
-		if err != nil {
-			return EvalResult{}, err
-		}
-		span, err = span.Intersect(desc)
+		span, err := rangeLookupScanBounds(desc, key, false /* reverse */, continuation)
 		if err != nil {
 			return EvalResult{}, err
 		}
@@ -1236,11 +1300,7 @@ func evalRangeLookup(
 		}
 
 		if key.Less(roachpb.RKey(keys.Meta2KeyMax)) {
-			span, err := keys.MetaScanBounds(key)
-			if err != nil {
-				return EvalResult{}, err
-			}
-			span, err = span.Intersect(desc)
+			span, err := rangeLookupScanBounds(desc, key, false /* reverse */, continuation)
 			if err != nil {
 				return EvalResult{}, err
 			}
@@ -1255,11 +1315,7 @@ func evalRangeLookup(
 		// We want to search for the metadata key just less or equal to
 		// args.Key. Scan in reverse order for both the requested key and the
 		// keys immediately backwards, up to MaxRanges.
-		span, err := keys.MetaReverseScanBounds(key)
-		if err != nil {
-			return EvalResult{}, err
-		}
-		span, err = span.Intersect(desc)
+		span, err := rangeLookupScanBounds(desc, key, true /* reverse */, continuation)
 		if err != nil {
 			return EvalResult{}, err
 		}
@@ -1280,7 +1336,7 @@ func evalRangeLookup(
 
 	userKey := keys.UserKey(key)
 	containsFn := roachpb.RangeDescriptor.ContainsKey
-	if args.Reverse {
+	if reverse {
 		containsFn = roachpb.RangeDescriptor.ContainsExclusiveEndKey
 	}
 
@@ -1334,38 +1390,6 @@ func evalRangeLookup(
 				break
 			}
 		}
-	}
-
-	if len(reply.Ranges) == 0 {
-		// No matching results were returned from the scan. This can happen when
-		// meta2 ranges split (so for now such splitting is disabled). Remember
-		// that the range addressing keys are generated from the end key of a range
-		// descriptor, not the start key. Consider the scenario:
-		//
-		//   range 1 [a, e):
-		//     b -> [a, b)
-		//     c -> [b, c)
-		//     d -> [c, d)
-		//   range 2 [e, g):
-		//     e -> [d, e)
-		//     f -> [e, f)
-		//     g -> [f, g)
-		//
-		// Now consider looking up the range containing key `d`. The DistSender
-		// routing logic would send the RangeLookup request to range 1 since `d`
-		// lies within the bounds of that range. But notice that the range
-		// descriptor containing `d` lies in range 2. Boom! A real fix will involve
-		// additional logic in the RangeDescriptorCache range lookup state machine.
-		//
-		// See #16266.
-		var buf bytes.Buffer
-		fmt.Fprintf(&buf, "range lookup of meta key '%[1]s' [%[1]x] found only non-matching ranges:",
-			args.Key)
-		for _, desc := range reply.PrefetchedRanges {
-			buf.WriteByte('\n')
-			buf.WriteString(desc.String())
-		}
-		log.Fatal(ctx, buf.String())
 	}
 
 	if preCount := int64(len(reply.PrefetchedRanges)); 1+preCount > rangeCount {

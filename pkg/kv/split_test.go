@@ -105,11 +105,8 @@ func TestRangeSplitMeta(t *testing.T) {
 
 	ctx := context.TODO()
 
-	// TODO(peter): revert when we allow meta2 splitting. See #16266.
-	// splitKeys := []roachpb.RKey{roachpb.RKey("G"), mustMeta(roachpb.RKey("F")),
-	// 	mustMeta(roachpb.RKey("K")), mustMeta(roachpb.RKey("H"))}
-	splitKeys := []roachpb.RKey{roachpb.RKey("G"), roachpb.RKey("F"),
-		roachpb.RKey("K"), roachpb.RKey("H")}
+	splitKeys := []roachpb.RKey{roachpb.RKey("G"), mustMeta(roachpb.RKey("F")),
+		mustMeta(roachpb.RKey("K")), mustMeta(roachpb.RKey("H"))}
 
 	// Execute the consecutive splits.
 	for _, splitRKey := range splitKeys {

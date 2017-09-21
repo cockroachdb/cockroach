@@ -58,14 +58,34 @@ func (a testDescriptorNode) Compare(b llrb.Comparable) int {
 	return bytes.Compare(aKey, bKey)
 }
 
+// getDescriptors scans the testDescriptorDB starting at the provided key in the
+// specified direction and collects the first RangeDescriptors that it finds.
+//
+// The method takes a RangeDescriptor argument, which when set, limits the
+// returned descriptors to only those that could be stored within the bounds of
+// the descriptor. If the argument is nil, no filtering will be performed.
+//
+// It also takes a continuation flag and handles it as is specified for
+// RangeLookup requests. This means that it begins scanning forward at the
+// StartKey of the bounding descriptor.
 func (db *testDescriptorDB) getDescriptors(
-	key roachpb.RKey, useReverseScan bool,
-) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
-	rs := make([]roachpb.RangeDescriptor, 0, 1)
+	ctx context.Context,
+	key roachpb.RKey,
+	desc *roachpb.RangeDescriptor,
+	useReverseScan bool,
+	continuation bool,
+) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
+	if useReverseScan && continuation {
+		panic("continuation is not allowed when using a ReverseScan")
+	}
+
+	rs := make([]roachpb.RangeDescriptor, 0, 2)
 	preRs := make([]roachpb.RangeDescriptor, 0, 2)
 	for i := 0; i < 3; i++ {
 		var endKey roachpb.RKey
-		if useReverseScan {
+		if continuation && i == 0 {
+			endKey = keys.UserKey(desc.StartKey)
+		} else if useReverseScan {
 			endKey = key
 		} else {
 			endKey = key.Next()
@@ -101,7 +121,10 @@ func (db *testDescriptorDB) getDescriptors(
 			key = desc.EndKey
 		}
 	}
-	return rs, preRs, nil
+	if desc == nil {
+		return rs, preRs, nil
+	}
+	return filterDescs(ctx, desc, rs), filterDescs(ctx, desc, preRs), nil
 }
 
 func (db *testDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, error) {
@@ -109,26 +132,19 @@ func (db *testDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, error) {
 }
 
 func (db *testDescriptorDB) RangeLookup(
-	ctx context.Context, key roachpb.RKey, _ *roachpb.RangeDescriptor, useReverseScan bool,
-) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+	ctx context.Context,
+	key roachpb.RKey,
+	desc *roachpb.RangeDescriptor,
+	useReverseScan bool,
+	continuation bool,
+) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 	select {
 	case <-db.pauseChan:
 	case <-ctx.Done():
-		return nil, nil, roachpb.NewError(ctx.Err())
+		return nil, nil, ctx.Err()
 	}
 	atomic.AddInt64(&db.lookupCount, 1)
-	return db.getDescriptors(stripMeta(key), useReverseScan)
-}
-
-func stripMeta(key roachpb.RKey) roachpb.RKey {
-	switch {
-	case bytes.HasPrefix(key, keys.Meta1Prefix):
-		return testutils.MakeKey(roachpb.RKey(keys.Meta2Prefix), key[len(keys.Meta1Prefix):])
-	case bytes.HasPrefix(key, keys.Meta2Prefix):
-		return key[len(keys.Meta2Prefix):]
-	}
-	// First range.
-	return nil
+	return db.getDescriptors(ctx, keys.UserKey(key), desc, useReverseScan, continuation)
 }
 
 func (db *testDescriptorDB) splitRange(t *testing.T, key roachpb.RKey) {
@@ -185,8 +201,12 @@ func newTestDescriptorDB() *testDescriptorDB {
 func initTestDescriptorDB(t *testing.T) *testDescriptorDB {
 	db := newTestDescriptorDB()
 	for i, char := range "abcdefghijklmnopqrstuvwx" {
+		// Create splits on each character:
+		//   [min,a), [a,b), [b,c), [c,d), [d,e), etc.
 		db.splitRange(t, roachpb.RKey(string(char)))
 		if i > 0 && i%6 == 0 {
+			// Create meta2 splits on every 6th character:
+			//   [meta(min),meta(g)), [meta(g),meta(m)), [meta(m),meta(s)), etc.
 			db.splitRange(t, mustMeta(roachpb.RKey(string(char))))
 		}
 	}
@@ -251,46 +271,132 @@ func doLookupWithToken(
 }
 
 // TestDescriptorDBGetDescriptors verifies that getDescriptors returns correct descriptors.
+// Each test case provides a search key and a descriptor for a range to lookup the key in.
+// By specifying the range to search on, we can simulate meta2 splits.
 func TestDescriptorDBGetDescriptors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	db := initTestDescriptorDB(t)
+	ctx := context.TODO()
 
-	key := roachpb.RKey("k")
-	expectedRspansMap := map[bool][]roachpb.RSpan{
-		true: {
-			roachpb.RSpan{Key: roachpb.RKey("j"), EndKey: roachpb.RKey("k")}, // real
-			roachpb.RSpan{Key: roachpb.RKey("j"), EndKey: roachpb.RKey("k")}, // fake intent
-			roachpb.RSpan{Key: roachpb.RKey("i"), EndKey: roachpb.RKey("j")},
-			roachpb.RSpan{Key: roachpb.RKey("h"), EndKey: roachpb.RKey("i")},
+	testCases := []struct {
+		key               roachpb.RKey
+		continuation      bool
+		metaDesc          roachpb.RangeDescriptor
+		expectedRspansMap map[bool][]roachpb.RSpan
+	}{
+		{
+			key:          roachpb.RKey("k"),
+			continuation: false,
+			metaDesc: roachpb.RangeDescriptor{
+				StartKey: testutils.MakeKey(keys.Meta2Prefix, roachpb.RKeyMin),
+				EndKey:   testutils.MakeKey(keys.Meta2Prefix, roachpb.RKeyMax),
+			},
+			expectedRspansMap: map[bool][]roachpb.RSpan{
+				true: {
+					roachpb.RSpan{Key: roachpb.RKey("j"), EndKey: roachpb.RKey("k")}, // real
+					roachpb.RSpan{Key: roachpb.RKey("j"), EndKey: roachpb.RKey("k")}, // fake intent
+					roachpb.RSpan{Key: roachpb.RKey("i"), EndKey: roachpb.RKey("j")},
+					roachpb.RSpan{Key: roachpb.RKey("h"), EndKey: roachpb.RKey("i")},
+				},
+				false: {
+					roachpb.RSpan{Key: roachpb.RKey("k"), EndKey: roachpb.RKey("l")}, // real
+					roachpb.RSpan{Key: roachpb.RKey("k"), EndKey: roachpb.RKey("l")}, // fake intent
+					roachpb.RSpan{Key: roachpb.RKey("l"), EndKey: roachpb.RKey("m")},
+					roachpb.RSpan{Key: roachpb.RKey("m"), EndKey: roachpb.RKey("n")},
+				},
+			},
 		},
-		false: {
-			roachpb.RSpan{Key: roachpb.RKey("k"), EndKey: roachpb.RKey("l")}, // real
-			roachpb.RSpan{Key: roachpb.RKey("k"), EndKey: roachpb.RKey("l")}, // fake intent
-			roachpb.RSpan{Key: roachpb.RKey("l"), EndKey: roachpb.RKey("m")},
-			roachpb.RSpan{Key: roachpb.RKey("m"), EndKey: roachpb.RKey("n")},
+		{
+			key:          roachpb.RKey("k"),
+			continuation: false,
+			metaDesc: roachpb.RangeDescriptor{
+				StartKey: testutils.MakeKey(keys.Meta2Prefix, roachpb.RKeyMin),
+				EndKey:   testutils.MakeKey(keys.Meta2Prefix, roachpb.RKey("m")),
+			},
+			expectedRspansMap: map[bool][]roachpb.RSpan{
+				true: {
+					roachpb.RSpan{Key: roachpb.RKey("j"), EndKey: roachpb.RKey("k")}, // real
+					roachpb.RSpan{Key: roachpb.RKey("j"), EndKey: roachpb.RKey("k")}, // fake intent
+					roachpb.RSpan{Key: roachpb.RKey("i"), EndKey: roachpb.RKey("j")},
+					roachpb.RSpan{Key: roachpb.RKey("h"), EndKey: roachpb.RKey("i")},
+				},
+				false: {
+					roachpb.RSpan{Key: roachpb.RKey("k"), EndKey: roachpb.RKey("l")}, // real
+					roachpb.RSpan{Key: roachpb.RKey("k"), EndKey: roachpb.RKey("l")}, // fake intent
+					// Notice that if the metaDesc is split, we no longer see range [l,m).
+				},
+			},
+		},
+		{
+			key:          roachpb.RKey("m"),
+			continuation: false,
+			metaDesc: roachpb.RangeDescriptor{
+				StartKey: testutils.MakeKey(keys.Meta2Prefix, roachpb.RKey("m")),
+				EndKey:   testutils.MakeKey(keys.Meta2Prefix, roachpb.RKeyMax),
+			},
+			expectedRspansMap: map[bool][]roachpb.RSpan{
+				true: {
+					roachpb.RSpan{Key: roachpb.RKey("l"), EndKey: roachpb.RKey("m")}, // real
+					roachpb.RSpan{Key: roachpb.RKey("l"), EndKey: roachpb.RKey("m")}, // fake intent
+				},
+				false: {
+					// Notice that the descriptor for range [l,m) is not visible
+					// even though it is on this meta range. Thet's because this
+					// isn't a RangeLookup continuation.
+					roachpb.RSpan{Key: roachpb.RKey("m"), EndKey: roachpb.RKey("n")}, // real
+					roachpb.RSpan{Key: roachpb.RKey("m"), EndKey: roachpb.RKey("n")}, // fake intent
+					roachpb.RSpan{Key: roachpb.RKey("n"), EndKey: roachpb.RKey("o")},
+					roachpb.RSpan{Key: roachpb.RKey("o"), EndKey: roachpb.RKey("p")},
+				},
+			},
+		},
+		{
+			key:          roachpb.RKey("m"),
+			continuation: true,
+			metaDesc: roachpb.RangeDescriptor{
+				StartKey: testutils.MakeKey(keys.Meta2Prefix, roachpb.RKey("m")),
+				EndKey:   testutils.MakeKey(keys.Meta2Prefix, roachpb.RKeyMax),
+			},
+			expectedRspansMap: map[bool][]roachpb.RSpan{
+				false: {
+					roachpb.RSpan{Key: roachpb.RKey("l"), EndKey: roachpb.RKey("m")}, // real
+					roachpb.RSpan{Key: roachpb.RKey("l"), EndKey: roachpb.RKey("m")}, // fake intent
+					roachpb.RSpan{Key: roachpb.RKey("m"), EndKey: roachpb.RKey("n")},
+					roachpb.RSpan{Key: roachpb.RKey("n"), EndKey: roachpb.RKey("o")},
+				},
+			},
 		},
 	}
+	for _, tc := range testCases {
+		name := fmt.Sprintf("key=%s,continuation=%t,metaDesc=[%s,%s)",
+			tc.key, tc.continuation, tc.metaDesc.StartKey, tc.metaDesc.EndKey)
+		t.Run(name, func(t *testing.T) {
+			for useReverseScan, expectedRspans := range tc.expectedRspansMap {
+				if useReverseScan && tc.continuation {
+					// RangeLookup continuations are only supported with forward scans.
+					continue
+				}
+				descs, preDescs, pErr := db.getDescriptors(ctx, tc.key, &tc.metaDesc, useReverseScan, tc.continuation)
+				if pErr != nil {
+					t.Fatal(pErr)
+				}
 
-	for useReverseScan, expectedRspans := range expectedRspansMap {
-		descs, preDescs, pErr := db.getDescriptors(key, useReverseScan)
-		if pErr != nil {
-			t.Fatal(pErr)
-		}
-
-		descSpans := make([]roachpb.RSpan, len(descs))
-		for i := range descs {
-			descSpans[i] = descs[i].RSpan()
-		}
-		if !reflect.DeepEqual(descSpans, expectedRspans[:2]) {
-			t.Errorf("useReverseScan=%t: expected %s, got %s", useReverseScan, expectedRspans[:2], descSpans)
-		}
-		preDescSpans := make([]roachpb.RSpan, len(preDescs))
-		for i := range preDescs {
-			preDescSpans[i] = preDescs[i].RSpan()
-		}
-		if !reflect.DeepEqual(preDescSpans, expectedRspans[2:]) {
-			t.Errorf("useReverseScan=%t: expected %s, got %s", useReverseScan, expectedRspans[2:], preDescSpans)
-		}
+				descSpans := make([]roachpb.RSpan, len(descs))
+				for i := range descs {
+					descSpans[i] = descs[i].RSpan()
+				}
+				if !reflect.DeepEqual(descSpans, expectedRspans[:2]) {
+					t.Errorf("expected %s, got %s", expectedRspans[:2], descSpans)
+				}
+				preDescSpans := make([]roachpb.RSpan, len(preDescs))
+				for i := range preDescs {
+					preDescSpans[i] = preDescs[i].RSpan()
+				}
+				if !reflect.DeepEqual(preDescSpans, expectedRspans[2:]) {
+					t.Errorf("expected %s, got %s", expectedRspans[2:], preDescSpans)
+				}
+			}
+		})
 	}
 }
 
@@ -311,6 +417,9 @@ func TestRangeCache(t *testing.T) {
 	db := initTestDescriptorDB(t)
 	ctx := context.TODO()
 
+	// Totally uncached range.
+	//  Retrieves [meta(min),meta(g)) and [a,b)
+	//  Prefetches [b,c) and [c,d)
 	doLookup(ctx, t, db.cache, "aa")
 	db.assertLookupCountEq(t, 2, "aa")
 
@@ -323,31 +432,56 @@ func TestRangeCache(t *testing.T) {
 	db.assertLookupCountEq(t, 0, "cz")
 
 	// Metadata 2 ranges aren't cached, metadata 1 range is.
+	//  Retrieves [d,e)
+	//  Prefetches [e,f). [f,g) not on meta range so not prefetched
 	doLookup(ctx, t, db.cache, "d")
 	db.assertLookupCountEq(t, 1, "d")
+
+	// Totally uncached range.
+	//  Retrieves [meta(g),meta(m)) and [f,g)
+	//  Prefetches [g,h) and [h,i)
+	//
+	// Notice that the lookup key "fa" will not initially go to [meta(g),meta(m)),
+	// but instead will go to [meta(min),meta(g)). This is an example where
+	// RangeLookup continuation is required or an error will be thrown.
 	doLookup(ctx, t, db.cache, "fa")
-	db.assertLookupCountEq(t, 0, "fa")
+	db.assertLookupCountEq(t, 2, "fa")
 
 	// Metadata 2 ranges aren't cached, metadata 1 range is.
+	//  Retrieves [i,j)
+	//  Prefetches [j,k) and [k,l)
 	doLookup(ctx, t, db.cache, "ij")
 	db.assertLookupCountEq(t, 1, "ij")
 	doLookup(ctx, t, db.cache, "jk")
 	db.assertLookupCountEq(t, 0, "jk")
-	doLookup(ctx, t, db.cache, "pn")
-	db.assertLookupCountEq(t, 1, "pn")
 
-	// Totally uncached ranges
+	// Totally uncached range.
+	//  Retrieves [meta(m),meta(s)), [meta(s),meta(max)) and [r,s)
+	//  Prefetches [s,t) and [t,u)
+	//
+	// Notice that the lookup key "ra" will not initially go to [meta(s),meta(max)),
+	// but instead will go to [meta(m),meta(s)). This is also not cached, which is why
+	// this performs 3 lookups. This is another example where RangeLookup continuation
+	// is required or an error will be thrown.
+	doLookup(ctx, t, db.cache, "ra")
+	db.assertLookupCountEq(t, 3, "ra")
+
+	// Metadata 2 ranges aren't cached, metadata 1 range is.
+	//  Retrieves [v,w)
+	//  Prefetches [w,x) and [x,max)
 	doLookup(ctx, t, db.cache, "vu")
-	db.assertLookupCountEq(t, 2, "vu")
-	doLookup(ctx, t, db.cache, "xx")
-	db.assertLookupCountEq(t, 0, "xx")
+	db.assertLookupCountEq(t, 1, "vu")
 
 	// Evict clears one level 1 and one level 2 cache
+	//  Evicts [meta(min),meta(g)) and [d,e)
 	if err := db.cache.EvictCachedRangeDescriptor(ctx, roachpb.RKey("da"), nil, false); err != nil {
 		t.Fatal(err)
 	}
 	doLookup(ctx, t, db.cache, "fa")
 	db.assertLookupCountEq(t, 0, "fa")
+	// Totally uncached range.
+	//  Retrieves [meta(min),meta(g)) and [d,e)
+	//  Prefetches [e,f). [f,g) not on meta range so not prefetched
 	doLookup(ctx, t, db.cache, "da")
 	db.assertLookupCountEq(t, 2, "da")
 
@@ -365,9 +499,13 @@ func TestRangeCache(t *testing.T) {
 	db.assertLookupCountEq(t, 0, "cz")
 	// Now evict with the actual descriptor. The cache should clear the
 	// descriptor and the cached meta key.
+	//  Evicts [meta(min),meta(g)) and [c,d)
 	if err := evictToken.Evict(ctx); err != nil {
 		t.Fatal(err)
 	}
+	// Totally uncached range.
+	//  Retrieves [meta(min),meta(g)) and [c,d)
+	//  Prefetches [c,e) and [e,f)
 	doLookup(ctx, t, db.cache, "cz")
 	db.assertLookupCountEq(t, 2, "cz")
 }
@@ -396,11 +534,25 @@ func TestRangeCacheCoalescedRequests(t *testing.T) {
 		db.assertLookupCountEq(t, expected, key)
 	}
 
+	// Totally uncached range.
+	//  Retrieves [meta(min),meta(g)) and [a,b)
+	//  Prefetches [b,c) and [c,d)
 	pauseLookupResumeAndAssert("aa", 2)
 
 	// Metadata 2 ranges aren't cached, metadata 1 range is.
+	//  Retrieves [d,e)
+	//  Prefetches [e,f). [f,g) not on meta range so not prefetched
 	pauseLookupResumeAndAssert("d", 1)
-	pauseLookupResumeAndAssert("fa", 0)
+	pauseLookupResumeAndAssert("ea", 0)
+
+	// Totally uncached range.
+	//  Retrieves [meta(g),meta(m)) and [f,g)
+	//  Prefetches [g,h) and [h,i)
+	//
+	// Notice that the lookup key "fa" will not initially go to [meta(g),meta(m)),
+	// but instead will go to [meta(min),meta(g)). This is an example where
+	// RangeLookup continuation is required or an error will be thrown.
+	pauseLookupResumeAndAssert("fa", 2)
 }
 
 // TestRangeCacheContextCancellation tests the behavior that for an ongoing
@@ -528,7 +680,7 @@ func TestRangeCacheDetectSplit(t *testing.T) {
 	// such that a RangeKeyMismatchError is returned.
 	_, evictToken := doLookup(ctx, t, db.cache, "az")
 	// mismatchErrRange mocks out a RangeKeyMismatchError.Range response.
-	ranges, _, pErr := db.getDescriptors(roachpb.RKey("aa"), false)
+	ranges, _, pErr := db.getDescriptors(ctx, roachpb.RKey("aa"), nil, false, false)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -566,7 +718,7 @@ func TestRangeCacheDetectSplitReverseScan(t *testing.T) {
 	useReverseScan := true
 	_, evictToken := doLookupWithToken(ctx, t, db.cache, "az", nil, useReverseScan, nil)
 	// mismatchErrRange mocks out a RangeKeyMismatchError.Range response.
-	ranges, _, pErr := db.getDescriptors(roachpb.RKey("aa"), false)
+	ranges, _, pErr := db.getDescriptors(ctx, roachpb.RKey("aa"), nil, false, false)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -641,7 +793,7 @@ func testRangeCacheHandleDoubleSplit(t *testing.T, useReverseScan bool) {
 	// such that a RangeKeyMismatchError is returned.
 	_, evictToken := doLookup(ctx, t, db.cache, "az")
 	// mismatchErrRange mocks out a RangeKeyMismatchError.Range response.
-	ranges, _, pErr := db.getDescriptors(roachpb.RKey("aa"), false)
+	ranges, _, pErr := db.getDescriptors(ctx, roachpb.RKey("aa"), nil, false, false)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}

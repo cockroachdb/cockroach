@@ -208,6 +208,10 @@ func (rgcq *replicaGCQueue) process(
 	br := b.RawResponse()
 	reply := br.Responses[0].GetInner().(*roachpb.RangeLookupResponse)
 
+	// TODO DURING REVIEW: Do we need to consider this case? Do we need to make
+	// all clients who handle RangeLookupRequests smarter? If so, maybe the
+	// RangeDescriptorCache isn't the right place for the continuation logic.
+
 	if len(reply.Ranges) != 1 {
 		return errors.Errorf("expected 1 range descriptor, got %d", len(reply.Ranges))
 	}

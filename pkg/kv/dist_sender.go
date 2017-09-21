@@ -281,8 +281,12 @@ func (ds *DistSender) LeaseHolderCache() *LeaseHolderCache {
 // retry logic here; this is not an issue since the lookup performs a
 // single inconsistent read only.
 func (ds *DistSender) RangeLookup(
-	ctx context.Context, key roachpb.RKey, desc *roachpb.RangeDescriptor, useReverseScan bool,
-) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
+	ctx context.Context,
+	key roachpb.RKey,
+	desc *roachpb.RangeDescriptor,
+	useReverseScan bool,
+	continuation bool,
+) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Add(&roachpb.RangeLookupRequest{
@@ -291,17 +295,18 @@ func (ds *DistSender) RangeLookup(
 			// lookup; those are never local.
 			Key: key.AsRawKey(),
 		},
-		MaxRanges: ds.rangeLookupMaxRanges,
-		Reverse:   useReverseScan,
+		MaxRanges:    ds.rangeLookupMaxRanges,
+		Reverse:      useReverseScan,
+		Continuation: continuation,
 	})
 	replicas := NewReplicaSlice(ds.gossip, desc)
 	shuffle.Shuffle(replicas)
 	br, err := ds.sendRPC(ctx, desc.RangeID, replicas, ba)
 	if err != nil {
-		return nil, nil, roachpb.NewError(err)
+		return nil, nil, err
 	}
 	if br.Error != nil {
-		return nil, nil, br.Error
+		return nil, nil, br.Error.GoError()
 	}
 	resp := br.Responses[0].GetInner().(*roachpb.RangeLookupResponse)
 	return resp.Ranges, resp.PrefetchedRanges, nil

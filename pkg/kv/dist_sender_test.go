@@ -45,50 +45,84 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-var testMetaRangeDescriptor = roachpb.RangeDescriptor{
-	RangeID:  1,
-	StartKey: testutils.MakeKey(keys.Meta2Prefix, roachpb.RKey(roachpb.KeyMin)),
-	EndKey:   testutils.MakeKey(keys.Meta2Prefix, roachpb.RKey(roachpb.KeyMax)),
-	Replicas: []roachpb.ReplicaDescriptor{
-		{
-			NodeID:  1,
-			StoreID: 1,
+var (
+	//
+	// Meta RangeDescriptors
+	//
+	testMetaEndKey = roachpb.RKey(keys.SystemPrefix)
+	// single meta1 and meta2 range with one replica.
+	testMetaRangeDescriptor = roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKeyMin,
+		EndKey:   testMetaEndKey,
+		Replicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
 		},
-	},
-}
+	}
+	// left side of split meta2 range with one replica.
+	testMetaSplitLeftRangeDescriptor = roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKeyMin,
+		EndKey:   mustMeta(roachpb.RKey("m")),
+		Replicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
+	// right side of split meta2 range with one replica.
+	testMetaSplitRightRangeDescriptor = roachpb.RangeDescriptor{
+		RangeID:  3,
+		StartKey: mustMeta(roachpb.RKey("m")),
+		EndKey:   testMetaEndKey,
+		Replicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+	}
 
-var testRangeDescriptor = roachpb.RangeDescriptor{
-	RangeID:  2,
-	StartKey: roachpb.RKey("a"),
-	EndKey:   roachpb.RKey("z"),
-	Replicas: []roachpb.ReplicaDescriptor{
-		{
-			NodeID:  1,
-			StoreID: 1,
+	//
+	// User-Space RangeDescriptors
+	//
+	// single user-space descriptor with one replica.
+	testUserRangeDescriptor = roachpb.RangeDescriptor{
+		RangeID:  2,
+		StartKey: testMetaEndKey,
+		EndKey:   roachpb.RKeyMax,
+		Replicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
 		},
-	},
-}
-
-// test descriptor using three replicas.
-var testRangeDescriptor2 = roachpb.RangeDescriptor{
-	RangeID:  2,
-	StartKey: roachpb.RKey("a"),
-	EndKey:   roachpb.RKey("z"),
-	Replicas: []roachpb.ReplicaDescriptor{
-		{
-			NodeID:  1,
-			StoreID: 1,
+	}
+	// single user-space descriptor with three replica.
+	testUserRangeDescriptor3Replicas = roachpb.RangeDescriptor{
+		RangeID:  2,
+		StartKey: testMetaEndKey,
+		EndKey:   roachpb.RKeyMax,
+		Replicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+			{
+				NodeID:  2,
+				StoreID: 2,
+			},
+			{
+				NodeID:  3,
+				StoreID: 3,
+			},
 		},
-		{
-			NodeID:  2,
-			StoreID: 2,
-		},
-		{
-			NodeID:  3,
-			StoreID: 3,
-		},
-	},
-}
+	}
+)
 
 var testAddress = util.NewUnresolvedAddr("tcp", "node1")
 
@@ -100,6 +134,15 @@ type rpcSendFn func(
 	roachpb.BatchRequest,
 	*rpc.Context,
 ) (*roachpb.BatchResponse, error)
+
+// stubRPCSendFn is an rpcSendFn that simply creates a reply for the
+// BatchRequest without performing an RPC call or triggering any
+// test instrumentation.
+var stubRPCSendFn rpcSendFn = func(
+	_ context.Context, _ SendOptions, _ ReplicaSlice, args roachpb.BatchRequest, _ *rpc.Context,
+) (*roachpb.BatchResponse, error) {
+	return args.CreateReply(), nil
+}
 
 // adaptLegacyTransport converts the RPCSend functions used in these
 // tests to the newer transport interface.
@@ -265,7 +308,23 @@ func TestSendRPCOrder(t *testing.T) {
 		StartKey: roachpb.RKeyMin,
 		EndKey:   roachpb.RKeyMax,
 		RangeID:  rangeID,
-		Replicas: nil,
+	}
+	for i := int32(1); i <= 5; i++ {
+		addr := util.MakeUnresolvedAddr("tcp", fmt.Sprintf("node%d:1", i))
+		nd := &roachpb.NodeDescriptor{
+			NodeID:  roachpb.NodeID(i),
+			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
+			Attrs: roachpb.Attributes{
+				Attrs: nodeAttrs[i],
+			},
+		}
+		if err := g.AddInfoProto(gossip.MakeNodeIDKey(roachpb.NodeID(i)), nd, time.Hour); err != nil {
+			t.Fatal(err)
+		}
+		descriptor.Replicas = append(descriptor.Replicas, roachpb.ReplicaDescriptor{
+			NodeID:  roachpb.NodeID(i),
+			StoreID: roachpb.StoreID(i),
+		})
 	}
 
 	// Stub to be changed in each test case.
@@ -290,33 +349,13 @@ func TestSendRPCOrder(t *testing.T) {
 		TestingKnobs: DistSenderTestingKnobs{
 			TransportFactory: adaptLegacyTransport(testFn),
 		},
-		RangeDescriptorDB: MockRangeDescriptorDB(func(roachpb.RKey, bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
-			return []roachpb.RangeDescriptor{descriptor}, nil, nil
-		}),
+		RangeDescriptorDB: mockRangeDescriptorDBForDescs(descriptor),
 	}
 
 	ds := NewDistSender(cfg, g)
 
 	for n, tc := range testCases {
 		verifyCall = makeVerifier(tc.expReplica)
-		descriptor.Replicas = nil // could do this once above, but more convenient here
-		for i := int32(1); i <= 5; i++ {
-			addr := util.MakeUnresolvedAddr("tcp", fmt.Sprintf("node%d:1", i))
-			nd := &roachpb.NodeDescriptor{
-				NodeID:  roachpb.NodeID(i),
-				Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
-				Attrs: roachpb.Attributes{
-					Attrs: nodeAttrs[i],
-				},
-			}
-			if err := g.AddInfoProto(gossip.MakeNodeIDKey(roachpb.NodeID(i)), nd, time.Hour); err != nil {
-				t.Fatal(err)
-			}
-			descriptor.Replicas = append(descriptor.Replicas, roachpb.ReplicaDescriptor{
-				NodeID:  roachpb.NodeID(i),
-				StoreID: roachpb.StoreID(i),
-			})
-		}
 
 		{
 			// The local node needs to get its attributes during sendRPC.
@@ -367,34 +406,83 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 }
 
-type MockRangeDescriptorDB func(roachpb.RKey, bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error)
+type MockRangeDescriptorDB func(roachpb.RKey, bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error)
 
 func (mdb MockRangeDescriptorDB) RangeLookup(
-	_ context.Context, key roachpb.RKey, _ *roachpb.RangeDescriptor, useReverseScan bool,
-) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
-	return mdb(stripMeta(key), useReverseScan)
+	ctx context.Context,
+	key roachpb.RKey,
+	desc *roachpb.RangeDescriptor,
+	useReverseScan,
+	continuation bool,
+) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
+	descs, prefetched, err := mdb(keys.UserKey(key), useReverseScan)
+	if err != nil {
+		return nil, nil, err
+	}
+	return filterDescs(ctx, desc, descs), filterDescs(ctx, desc, prefetched), nil
 }
+
+// filterDescs filters the provided slice to only descriptors who would be
+// stored within the bounds of the range this RangeLookup was sent to. This
+// simulates how real RangeLookupRequests behave.
+func filterDescs(
+	ctx context.Context, metaDesc *roachpb.RangeDescriptor, descs []roachpb.RangeDescriptor,
+) []roachpb.RangeDescriptor {
+	var containedDescs []roachpb.RangeDescriptor
+	for _, desc := range descs {
+		if metaDesc.ContainsKey(mustMeta(desc.EndKey)) {
+			containedDescs = append(containedDescs, desc)
+		} else {
+			log.Infof(ctx, "filtering descriptor %v from RangeLookup on range %v", desc, metaDesc)
+		}
+	}
+	return containedDescs
+}
+
 func (mdb MockRangeDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, error) {
-	rs, _, err := mdb.RangeLookup(context.Background(), nil, nil, false /* useReverseScan */)
+	rs, _, err := mdb(roachpb.RKey(roachpb.KeyMin), false)
 	if err != nil || len(rs) == 0 {
-		return nil, err.GoError()
+		return nil, err
 	}
 	return &rs[0], nil
 }
 
-var defaultMockRangeDescriptorDB = MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
-	if bytes.HasPrefix(key, keys.Meta2Prefix) {
-		return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
-	}
-	return []roachpb.RangeDescriptor{testRangeDescriptor}, nil, nil
-})
+func mockRangeDescriptorDBForDescs(descs ...roachpb.RangeDescriptor) MockRangeDescriptorDB {
+	return MockRangeDescriptorDB(func(key roachpb.RKey, useReverseScan bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
+		var matchingDescs []roachpb.RangeDescriptor
+		for _, desc := range descs {
+			contains := desc.ContainsKey
+			if useReverseScan {
+				contains = desc.ContainsExclusiveEndKey
+			}
+			if contains(key) {
+				matchingDescs = append(matchingDescs, desc)
+			}
+		}
+		switch len(matchingDescs) {
+		case 0:
+			panic(fmt.Sprintf("found no matching descriptors for key %s", key))
+		case 1:
+			return matchingDescs, nil, nil
+		default:
+			panic(fmt.Sprintf("found multiple matching descriptors for key %s: %v", key, matchingDescs))
+		}
+	})
+}
 
-var threeReplicaMockRangeDescriptorDB = MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
-	if bytes.HasPrefix(key, keys.Meta2Prefix) {
-		return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
-	}
-	return []roachpb.RangeDescriptor{testRangeDescriptor2}, nil, nil
-})
+var defaultMockRangeDescriptorDB = mockRangeDescriptorDBForDescs(
+	testMetaRangeDescriptor,
+	testUserRangeDescriptor,
+)
+var threeReplicaMockRangeDescriptorDB = mockRangeDescriptorDBForDescs(
+	testMetaRangeDescriptor,
+	testUserRangeDescriptor3Replicas,
+)
+var splitMeta2MockRangeDescriptorDB = mockRangeDescriptorDBForDescs(
+	testMetaSplitLeftRangeDescriptor,
+	testMetaSplitRightRangeDescriptor,
+	testUserRangeDescriptor,
+)
 
 func TestOwnNodeCertain(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -573,18 +661,9 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	g, clock := makeGossip(t, stopper)
-	var testFn rpcSendFn = func(
-		_ context.Context,
-		_ SendOptions,
-		_ ReplicaSlice,
-		args roachpb.BatchRequest,
-		_ *rpc.Context,
-	) (*roachpb.BatchResponse, error) {
-		return args.CreateReply(), nil
-	}
 
-	pErrs := []*roachpb.Error{
-		roachpb.NewError(errors.New("boom")),
+	errs := []error{
+		errors.New("boom"),
 		nil,
 		nil,
 	}
@@ -593,19 +672,21 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
 		TestingKnobs: DistSenderTestingKnobs{
-			TransportFactory: adaptLegacyTransport(testFn),
+			TransportFactory: adaptLegacyTransport(stubRPCSendFn),
 		},
-		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
-			// Return next error and truncate the prefix of the errors array.
-			var pErr *roachpb.Error
-			if key != nil {
-				pErr = pErrs[0]
-				pErrs = pErrs[1:]
-				if bytes.HasPrefix(key, keys.Meta2Prefix) {
-					return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, pErr
-				}
+		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
+			// Don't return an error on the FirstRange lookup.
+			if key.Equal(roachpb.KeyMin) {
+				return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
 			}
-			return []roachpb.RangeDescriptor{testRangeDescriptor}, nil, pErr
+
+			// Return next error and truncate the prefix of the errors array.
+			err := errs[0]
+			errs = errs[1:]
+			if key.Less(testMetaRangeDescriptor.EndKey) {
+				return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, err
+			}
+			return []roachpb.RangeDescriptor{testUserRangeDescriptor}, nil, err
 		}),
 	}
 	ds := NewDistSender(cfg, g)
@@ -614,8 +695,8 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	if _, pErr := client.SendWrapped(context.Background(), ds, put); pErr != nil {
 		t.Errorf("unexpected error: %s", pErr)
 	}
-	if len(pErrs) != 0 {
-		t.Fatalf("expected more descriptor lookups, leftover pErrs: %+v", pErrs)
+	if len(errs) != 0 {
+		t.Fatalf("expected more descriptor lookups, leftover errs: %+v", errs)
 	}
 }
 
@@ -675,7 +756,7 @@ func TestEvictOnFirstRangeGossip(t *testing.T) {
 
 	var numFirstRange int32
 	rDB := MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) (
-		[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error,
+		[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error,
 	) {
 		if key.Equal(roachpb.KeyMin) {
 			atomic.AddInt32(&numFirstRange, 1)
@@ -826,7 +907,7 @@ func TestEvictCacheOnUnknownLeaseHolder(t *testing.T) {
 
 	g, clock := makeGossip(t, stopper)
 
-	// Gossip the two nodes referred to in testRangeDescriptor2.
+	// Gossip the two nodes referred to in testUserRangeDescriptor3Replicas.
 	for i := 2; i <= 3; i++ {
 		addr := util.MakeUnresolvedAddr("tcp", fmt.Sprintf("node%d", i))
 		nd := &roachpb.NodeDescriptor{
@@ -890,13 +971,13 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	g, clock := makeGossip(t, stopper)
-	if err := g.AddInfoProto(gossip.KeyFirstRangeDescriptor, &testRangeDescriptor, time.Hour); err != nil {
+	if err := g.AddInfoProto(gossip.KeyFirstRangeDescriptor, &testUserRangeDescriptor, time.Hour); err != nil {
 		t.Fatal(err)
 	}
 
 	// Updated below, after it has first been returned.
 	badStartKey := roachpb.RKey("m")
-	newRangeDescriptor := testRangeDescriptor
+	newRangeDescriptor := testUserRangeDescriptor
 	goodStartKey := newRangeDescriptor.StartKey
 	newRangeDescriptor.StartKey = badStartKey
 	descStale := true
@@ -976,13 +1057,13 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	g, clock := makeGossip(t, stopper)
-	if err := g.AddInfoProto(gossip.KeyFirstRangeDescriptor, &testRangeDescriptor, time.Hour); err != nil {
+	if err := g.AddInfoProto(gossip.KeyFirstRangeDescriptor, &testUserRangeDescriptor, time.Hour); err != nil {
 		t.Fatal(err)
 	}
 
 	// Updated below, after it has first been returned.
-	goodRangeDescriptor := testRangeDescriptor
-	badRangeDescriptor := testRangeDescriptor
+	goodRangeDescriptor := testUserRangeDescriptor
+	badRangeDescriptor := testUserRangeDescriptor
 	badRangeDescriptor.EndKey = roachpb.RKey("zBad")
 	badRangeDescriptor.RangeID++
 	firstLookup := true
@@ -1106,6 +1187,7 @@ func TestSendRPCRetry(t *testing.T) {
 	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 1}); err != nil {
 		t.Fatal(err)
 	}
+
 	// Fill RangeDescriptor with 2 replicas.
 	var descriptor = roachpb.RangeDescriptor{
 		RangeID:  1,
@@ -1127,6 +1209,11 @@ func TestSendRPCRetry(t *testing.T) {
 			StoreID: roachpb.StoreID(i),
 		})
 	}
+	descDB := mockRangeDescriptorDBForDescs(
+		testMetaRangeDescriptor,
+		descriptor,
+	)
+
 	var testFn rpcSendFn = func(
 		_ context.Context,
 		_ SendOptions,
@@ -1146,12 +1233,7 @@ func TestSendRPCRetry(t *testing.T) {
 		TestingKnobs: DistSenderTestingKnobs{
 			TransportFactory: adaptLegacyTransport(testFn),
 		},
-		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
-			if bytes.HasPrefix(key, keys.Meta2Prefix) {
-				return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
-			}
-			return []roachpb.RangeDescriptor{descriptor}, nil, nil
-		}),
+		RangeDescriptorDB: descDB,
 	}
 	ds := NewDistSender(cfg, g)
 	scan := roachpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
@@ -1223,7 +1305,7 @@ func TestMultiRangeGapReverse(t *testing.T) {
 		})
 
 	rdb := MockRangeDescriptorDB(func(key roachpb.RKey, reverse bool) (
-		[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error,
+		[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error,
 	) {
 		n := 0
 		if !bytes.HasPrefix(key, keys.Meta2Prefix) {
@@ -1290,7 +1372,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	merged := false
 	// The stale first range descriptor which is unaware of the merge.
 	var firstRange = roachpb.RangeDescriptor{
-		RangeID:  1,
+		RangeID:  2,
 		StartKey: roachpb.RKey("a"),
 		EndKey:   roachpb.RKey("b"),
 		Replicas: []roachpb.ReplicaDescriptor{
@@ -1303,7 +1385,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	// The merged descriptor, which will be looked up after having processed
 	// the stale range [a,b).
 	var mergedRange = roachpb.RangeDescriptor{
-		RangeID:  1,
+		RangeID:  2,
 		StartKey: roachpb.RKey("a"),
 		EndKey:   roachpb.RKeyMax,
 		Replicas: []roachpb.ReplicaDescriptor{
@@ -1351,8 +1433,8 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		TestingKnobs: DistSenderTestingKnobs{
 			TransportFactory: adaptLegacyTransport(testFn),
 		},
-		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
-			if bytes.HasPrefix(key, keys.Meta2Prefix) {
+		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
+			if key.Less(testMetaRangeDescriptor.EndKey) {
 				return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
 			}
 			if !merged {
@@ -1379,6 +1461,49 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 	}
 }
 
+// TestSplitMeta2LookupContinuation simulates the situation in which meta2
+// ranges have split. In this case, it is possible that a lookup for a key whose
+// descriptor is stored on the right meta2 range will initially go to the left
+// meta2 range. This is expected, and the lookup scan should continue onto the
+// second meta2 range through a second RangeLookupRequest. See the comment on
+// RangeDescriptorCache.performRangeLookupContinuation.
+func TestSplitMeta2LookupContinuation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	g, clock := makeGossip(t, stopper)
+	cfg := DistSenderConfig{
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Clock:      clock,
+		TestingKnobs: DistSenderTestingKnobs{
+			TransportFactory: adaptLegacyTransport(stubRPCSendFn),
+		},
+		RangeDescriptorDB: splitMeta2MockRangeDescriptorDB,
+	}
+
+	for _, tc := range []struct {
+		key roachpb.Key
+	}{
+		// RangeLookup will go to left meta2 range first and requires a
+		// continuation RangeLookup.
+		{key: roachpb.Key("a")},
+		// RangeLookup will go to right meta2 range first.
+		{key: roachpb.Key("m")},
+		// RangeLookup will go to right meta2 range first.
+		{key: roachpb.Key("y")},
+	} {
+		t.Run(tc.key.String(), func(t *testing.T) {
+			ds := NewDistSender(cfg, g)
+
+			put := roachpb.NewPut(tc.key, roachpb.MakeValueFromString("value"))
+			if _, pErr := client.SendWrapped(context.Background(), ds, put); pErr != nil {
+				t.Errorf("put encountered unexpected error: %s", pErr)
+			}
+		})
+	}
+}
+
 // TestRangeLookupOptionOnReverseScan verifies that a lookup triggered by a
 // ReverseScan request has the useReverseScan specified.
 func TestRangeLookupOptionOnReverseScan(t *testing.T) {
@@ -1387,31 +1512,20 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	g, clock := makeGossip(t, stopper)
-
-	var testFn rpcSendFn = func(
-		_ context.Context,
-		_ SendOptions,
-		_ ReplicaSlice,
-		args roachpb.BatchRequest,
-		_ *rpc.Context,
-	) (*roachpb.BatchResponse, error) {
-		return args.CreateReply(), nil
-	}
-
 	cfg := DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
 		TestingKnobs: DistSenderTestingKnobs{
-			TransportFactory: adaptLegacyTransport(testFn),
+			TransportFactory: adaptLegacyTransport(stubRPCSendFn),
 		},
-		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, useReverseScan bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
-			if len(key) > 0 && !useReverseScan {
+		RangeDescriptorDB: MockRangeDescriptorDB(func(key roachpb.RKey, useReverseScan bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
+			if !key.Equal(roachpb.KeyMin) && !useReverseScan {
 				t.Fatalf("expected UseReverseScan to be set")
 			}
-			if bytes.HasPrefix(key, keys.Meta2Prefix) {
+			if key.Less(testMetaRangeDescriptor.EndKey) {
 				return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
 			}
-			return []roachpb.RangeDescriptor{testRangeDescriptor}, nil, nil
+			return []roachpb.RangeDescriptor{testUserRangeDescriptor}, nil, nil
 		}),
 	}
 	ds := NewDistSender(cfg, g)
@@ -1499,8 +1613,8 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 	// descriptor whose range is ["a", "c") and partially overlaps
 	// with the first descriptor's range.
 	var descriptor1 = roachpb.RangeDescriptor{
-		RangeID:  1,
-		StartKey: roachpb.RKeyMin,
+		RangeID:  2,
+		StartKey: testMetaEndKey,
 		EndKey:   roachpb.RKey("b"),
 		Replicas: []roachpb.ReplicaDescriptor{
 			{
@@ -1510,7 +1624,7 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 		},
 	}
 	var descriptor2 = roachpb.RangeDescriptor{
-		RangeID:  2,
+		RangeID:  3,
 		StartKey: roachpb.RKey("a"),
 		EndKey:   roachpb.RKey("c"),
 		Replicas: []roachpb.ReplicaDescriptor{
@@ -1520,8 +1634,8 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 			},
 		},
 	}
-	descDB := MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
-		if bytes.HasPrefix(key, keys.Meta2Prefix) {
+	descDB := MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
+		if key.Less(testMetaRangeDescriptor.EndKey) {
 			return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
 		}
 		desc := descriptor1
@@ -1619,8 +1733,8 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 
 	// Fill MockRangeDescriptorDB with two descriptors.
 	var descriptor1 = roachpb.RangeDescriptor{
-		RangeID:  1,
-		StartKey: roachpb.RKeyMin,
+		RangeID:  2,
+		StartKey: testMetaEndKey,
 		EndKey:   roachpb.RKey("b"),
 		Replicas: []roachpb.ReplicaDescriptor{
 			{
@@ -1630,7 +1744,7 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 		},
 	}
 	var descriptor2 = roachpb.RangeDescriptor{
-		RangeID:  2,
+		RangeID:  3,
 		StartKey: roachpb.RKey("b"),
 		EndKey:   roachpb.RKey("c"),
 		Replicas: []roachpb.ReplicaDescriptor{
@@ -1641,7 +1755,7 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 		},
 	}
 	var descriptor3 = roachpb.RangeDescriptor{
-		RangeID:  3,
+		RangeID:  4,
 		StartKey: roachpb.RKey("c"),
 		EndKey:   roachpb.RKeyMax,
 		Replicas: []roachpb.ReplicaDescriptor{
@@ -1651,19 +1765,12 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 			},
 		},
 	}
-
-	descDB := MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
-		switch {
-		case bytes.HasPrefix(key, keys.Meta2Prefix):
-			return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
-		case !key.Less(roachpb.RKey("c")):
-			return []roachpb.RangeDescriptor{descriptor3}, nil, nil
-		case !key.Less(roachpb.RKey("b")):
-			return []roachpb.RangeDescriptor{descriptor2}, nil, nil
-		default:
-			return []roachpb.RangeDescriptor{descriptor1}, nil, nil
-		}
-	})
+	descDB := mockRangeDescriptorDBForDescs(
+		testMetaRangeDescriptor,
+		descriptor1,
+		descriptor2,
+		descriptor3,
+	)
 
 	// Define our rpcSend stub which checks the span of the batch
 	// requests.
@@ -1820,8 +1927,8 @@ func TestSequenceUpdateOnMultiRangeQueryLoop(t *testing.T) {
 
 	// Fill MockRangeDescriptorDB with two descriptors.
 	var descriptor1 = roachpb.RangeDescriptor{
-		RangeID:  1,
-		StartKey: roachpb.RKeyMin,
+		RangeID:  2,
+		StartKey: testMetaEndKey,
 		EndKey:   roachpb.RKey("b"),
 		Replicas: []roachpb.ReplicaDescriptor{
 			{
@@ -1831,9 +1938,9 @@ func TestSequenceUpdateOnMultiRangeQueryLoop(t *testing.T) {
 		},
 	}
 	var descriptor2 = roachpb.RangeDescriptor{
-		RangeID:  2,
+		RangeID:  3,
 		StartKey: roachpb.RKey("b"),
-		EndKey:   roachpb.RKey("c"),
+		EndKey:   roachpb.RKeyMax,
 		Replicas: []roachpb.ReplicaDescriptor{
 			{
 				NodeID:  1,
@@ -1841,16 +1948,11 @@ func TestSequenceUpdateOnMultiRangeQueryLoop(t *testing.T) {
 			},
 		},
 	}
-	descDB := MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
-		if bytes.HasPrefix(key, keys.Meta2Prefix) {
-			return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
-		}
-		desc := descriptor1
-		if key.Equal(roachpb.RKey("b")) {
-			desc = descriptor2
-		}
-		return []roachpb.RangeDescriptor{desc}, nil, nil
-	})
+	descDB := mockRangeDescriptorDBForDescs(
+		testMetaRangeDescriptor,
+		descriptor1,
+		descriptor2,
+	)
 
 	// Define our rpcSend stub which checks the span of the batch
 	// requests. Because of parallelization, the requests for the
@@ -1968,8 +2070,8 @@ func TestMultiRangeSplitEndTransaction(t *testing.T) {
 
 	// Fill MockRangeDescriptorDB with two descriptors.
 	var descriptor1 = roachpb.RangeDescriptor{
-		RangeID:  1,
-		StartKey: roachpb.RKeyMin,
+		RangeID:  2,
+		StartKey: testMetaEndKey,
 		EndKey:   roachpb.RKey("b"),
 		Replicas: []roachpb.ReplicaDescriptor{
 			{
@@ -1979,7 +2081,7 @@ func TestMultiRangeSplitEndTransaction(t *testing.T) {
 		},
 	}
 	var descriptor2 = roachpb.RangeDescriptor{
-		RangeID:  2,
+		RangeID:  3,
 		StartKey: roachpb.RKey("b"),
 		EndKey:   roachpb.RKeyMax,
 		Replicas: []roachpb.ReplicaDescriptor{
@@ -1989,16 +2091,11 @@ func TestMultiRangeSplitEndTransaction(t *testing.T) {
 			},
 		},
 	}
-	descDB := MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
-		if bytes.HasPrefix(key, keys.Meta2Prefix) {
-			return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
-		}
-		desc := descriptor1
-		if !key.Less(roachpb.RKey("b")) {
-			desc = descriptor2
-		}
-		return []roachpb.RangeDescriptor{desc}, nil, nil
-	})
+	descDB := mockRangeDescriptorDBForDescs(
+		testMetaRangeDescriptor,
+		descriptor1,
+		descriptor2,
+	)
 
 	for i, test := range testCases {
 		var mu syncutil.Mutex
@@ -2062,7 +2159,7 @@ func TestCountRanges(t *testing.T) {
 	const firstKeyBoundary = 'a'
 	var descriptors [numDescriptors]roachpb.RangeDescriptor
 	for i := range descriptors {
-		startKey := roachpb.RKeyMin
+		startKey := testMetaEndKey
 		if i > 0 {
 			startKey = roachpb.RKey(string(firstKeyBoundary + i - 1))
 		}
@@ -2072,7 +2169,7 @@ func TestCountRanges(t *testing.T) {
 		}
 
 		descriptors[i] = roachpb.RangeDescriptor{
-			RangeID:  roachpb.RangeID(i + 1),
+			RangeID:  roachpb.RangeID(i + 2),
 			StartKey: startKey,
 			EndKey:   endKey,
 			Replicas: []roachpb.ReplicaDescriptor{
@@ -2085,31 +2182,12 @@ func TestCountRanges(t *testing.T) {
 	}
 
 	// Mock out descriptor DB and sender function.
-	descDB := MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, *roachpb.Error) {
-		if bytes.HasPrefix(key, keys.Meta2Prefix) {
-			return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, nil
-		}
-		for _, desc := range descriptors {
-			if key.Less(desc.EndKey) {
-				return []roachpb.RangeDescriptor{desc}, nil, nil
-			}
-		}
-		return []roachpb.RangeDescriptor{descriptors[len(descriptors)-1]}, nil, nil
-	})
-	var testFn rpcSendFn = func(
-		_ context.Context,
-		_ SendOptions,
-		_ ReplicaSlice,
-		ba roachpb.BatchRequest,
-		_ *rpc.Context,
-	) (*roachpb.BatchResponse, error) {
-		return ba.CreateReply(), nil
-	}
+	descDB := mockRangeDescriptorDBForDescs(append(descriptors[:], testMetaRangeDescriptor)...)
 	cfg := DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
 		Clock:      clock,
 		TestingKnobs: DistSenderTestingKnobs{
-			TransportFactory: adaptLegacyTransport(testFn),
+			TransportFactory: adaptLegacyTransport(stubRPCSendFn),
 		},
 		RangeDescriptorDB: descDB,
 	}
@@ -2124,13 +2202,13 @@ func TestCountRanges(t *testing.T) {
 		endKey roachpb.RKey
 		count  int64
 	}{
-		{roachpb.RKeyMin, roachpb.RKey(string(firstKeyBoundary)), 1},
-		{roachpb.RKeyMin, keyIn(descriptors[0]), 1},
-		{roachpb.RKeyMin, descriptors[len(descriptors)-1].StartKey, numDescriptors - 1},
+		{testMetaEndKey, roachpb.RKey(string(firstKeyBoundary)), 1},
+		{testMetaEndKey, keyIn(descriptors[0]), 1},
+		{testMetaEndKey, descriptors[len(descriptors)-1].StartKey, numDescriptors - 1},
 		{descriptors[0].EndKey, roachpb.RKeyMax, numDescriptors - 1},
 		// Everything from the min key to a key within the last range.
-		{roachpb.RKeyMin, keyIn(descriptors[len(descriptors)-1]), numDescriptors},
-		{roachpb.RKeyMin, roachpb.RKeyMax, numDescriptors},
+		{testMetaEndKey, keyIn(descriptors[len(descriptors)-1]), numDescriptors},
+		{testMetaEndKey, roachpb.RKeyMax, numDescriptors},
 	}
 	for i, tc := range testcases {
 		count, pErr := ds.CountRanges(context.Background(), roachpb.RSpan{Key: tc.key, EndKey: tc.endKey})
