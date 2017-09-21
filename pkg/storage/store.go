@@ -764,6 +764,13 @@ type StoreTestingKnobs struct {
 	// only changes in the number of replicas can cause the store to gossip its
 	// capacity.
 	DisableLeaseCapacityGossip bool
+	// DisableRaftRespBeforeApplication disables the optimization to send
+	// responses for Raft commands to clients before applying them to the Raft
+	// state machine. This is often desired by tests that want to manipulate
+	// replicated state directly after receiving command responses. In those
+	// cases, disabling the optimization allows them to be sure that the
+	// acknowledged commands have applied before the tests reach below Raft.
+	DisableRaftRespBeforeApplication bool
 	// BootstrapVersion overrides the version the stores will be bootstrapped with.
 	BootstrapVersion *cluster.ClusterVersion
 }

@@ -160,6 +160,9 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 		cfg.Gossip = tc.gossip
 		cfg.Transport = tc.transport
 		cfg.StorePool = NewTestStorePool(cfg)
+		// We manipulate raft directly in most of these tests, so we want to be sure
+		// that all acknowledged commands apply before we reach below Raft.
+		cfg.TestingKnobs.DisableRaftRespBeforeApplication = true
 		// Create a test sender without setting a store. This is to deal with the
 		// circular dependency between the test sender and the store. The actual
 		// store will be passed to the sender after it is created and bootstrapped.
@@ -888,10 +891,15 @@ func TestReplicaNotLeaseHolderError(t *testing.T) {
 func TestReplicaLeaseCounters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer EnableLeaseHistory(100)()
+
+	tsc := TestStoreConfig(nil)
+	// We manipulate lease state, so we want to be sure that all
+	// acknowledged commands apply before we reach below Raft.
+	tsc.TestingKnobs.DisableRaftRespBeforeApplication = true
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
+	tc.StartWithStoreConfig(t, stopper, tsc)
 
 	assert := func(actual, min, max int64) error {
 		if actual < min || actual > max {
@@ -1060,12 +1068,19 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 // some point; now we're just testing the cache on the first replica.
 func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
 	tc := testContext{}
+	tc.manualClock = hlc.NewManualClock(123)
+	tsc := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+	// We manipulate the TS cache, so we want to be sure that all
+	// acknowledged commands apply before we reach below Raft.
+	tsc.TestingKnobs.DisableRaftRespBeforeApplication = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
+	tc.StartWithStoreConfig(t, stopper, tsc)
 	// Disable raft log truncation which confuses this test.
 	tc.store.SetRaftLogQueueActive(false)
+
 	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.TODO())
 	if err != nil {
 		t.Fatal(err)
@@ -1920,10 +1935,16 @@ func TestLeaseConcurrent(t *testing.T) {
 // timestamp cache.
 func TestReplicaUpdateTSCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
 	tc := testContext{}
+	tc.manualClock = hlc.NewManualClock(123)
+	tsc := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+	// We manipulate the TS cache, so we want to be sure that all
+	// acknowledged commands apply before we reach below Raft.
+	tsc.TestingKnobs.DisableRaftRespBeforeApplication = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
+	tc.StartWithStoreConfig(t, stopper, tsc)
 
 	startNanos := tc.Clock().Now().WallTime
 
@@ -2670,6 +2691,10 @@ func newCmdQCancelTest(t *testing.T) *cmdQCancelTest {
 		startingCmd:   make(chan struct{}),
 		cmds:          make(map[int]*testCmd),
 	}
+	// We use OnCommandQueueAction(action=CommandQueueFinishExecuting) to block
+	// client responses. This won't work if we allow responses before removing
+	// the command from the CommandQueue (and calling OnCommandQueueAction).
+	ct.tsc.TestingKnobs.DisableRaftRespBeforeApplication = true
 	ct.tsc.TestingKnobs.OnCommandQueueAction = ct.onCmdQAction
 	return ct
 }
@@ -5733,10 +5758,15 @@ func TestMerge(t *testing.T) {
 // inaccessible via Entries()).
 func TestTruncateLog(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	tsc := TestStoreConfig(nil)
+	// We manipulate raft entries, so we want to be sure that all
+	// acknowledged commands apply before we reach below Raft.
+	tsc.TestingKnobs.DisableRaftRespBeforeApplication = true
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
+	tc.StartWithStoreConfig(t, stopper, tsc)
 	tc.repl.store.SetRaftLogQueueActive(false)
 
 	// Populate the log with 10 entries. Save the LastIndex after each write.
@@ -5904,10 +5934,15 @@ func TestReplicaSetsEqual(t *testing.T) {
 
 func TestAppliedIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	tsc := TestStoreConfig(nil)
+	// We manipulate the RaftAppliedIndex directly, so we want to be sure that
+	// all acknowledged commands apply before we reach below Raft.
+	tsc.TestingKnobs.DisableRaftRespBeforeApplication = true
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
+	tc.StartWithStoreConfig(t, stopper, tsc)
 
 	var appliedIndex uint64
 	var sum int64
@@ -6661,10 +6696,15 @@ func TestQuotaPoolAccessOnDestroyedReplica(t *testing.T) {
 
 func TestEntries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	tsc := TestStoreConfig(nil)
+	// We manipulate raft entries, so we want to be sure that all
+	// acknowledged commands apply before we reach below Raft.
+	tsc.TestingKnobs.DisableRaftRespBeforeApplication = true
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
+	tc.StartWithStoreConfig(t, stopper, tsc)
 	tc.repl.store.SetRaftLogQueueActive(false)
 
 	repl := tc.repl
@@ -6830,10 +6870,15 @@ func TestEntries(t *testing.T) {
 
 func TestTerm(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	tsc := TestStoreConfig(nil)
+	// We manipulate raft entries, so we want to be sure that all
+	// acknowledged commands apply before we reach below Raft.
+	tsc.TestingKnobs.DisableRaftRespBeforeApplication = true
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
+	tc.StartWithStoreConfig(t, stopper, tsc)
 	tc.repl.store.SetRaftLogQueueActive(false)
 
 	repl := tc.repl
