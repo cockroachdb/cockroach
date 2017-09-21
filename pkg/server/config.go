@@ -66,6 +66,7 @@ const (
 	defaultTempStoreRelativePath          = "local"
 	defaultEventLogEnabled                = true
 	defaultEnableWebSessionAuthentication = false
+	defaultTempStoreMaxSizeBytes          = 32 * 1024 * 1024 * 1024 /* 32GB */
 
 	maximumMaxClockOffset = 5 * time.Second
 
@@ -125,6 +126,11 @@ type Config struct {
 
 	// TempStoreSpec is used to store ephemeral data when processing large queries.
 	TempStoreSpec base.StoreSpec
+	// TempStoreMaxSizeBytes is the limit on the disk capacity to be used for temp
+	// storage. Note that TempStoreSpec.SizeInBytes is not used for this purpose;
+	// that spec setting is only used for regular stores for rebalancing purposes,
+	// and not particularly enforced, so we opt for our own setting.
+	TempStoreMaxSizeBytes int64
 
 	// Attrs specifies a colon-separated list of node topography or machine
 	// capabilities, used to match capabilities or location preferences specified
@@ -344,8 +350,6 @@ func SetOpenFileLimitForOneStore() (uint64, error) {
 func MakeTempStoreSpecFromStoreSpec(spec base.StoreSpec) base.StoreSpec {
 	if spec.InMemory {
 		return base.StoreSpec{
-			// TODO(arjun): Set the size in a principled fashion from the main store
-			// after #16750 is addressed.
 			InMemory: true,
 		}
 	}
@@ -375,7 +379,8 @@ func MakeConfig(st *cluster.Settings) Config {
 		Stores: base.StoreSpecList{
 			Specs: []base.StoreSpec{storeSpec},
 		},
-		TempStoreSpec: MakeTempStoreSpecFromStoreSpec(storeSpec),
+		TempStoreSpec:         MakeTempStoreSpecFromStoreSpec(storeSpec),
+		TempStoreMaxSizeBytes: defaultTempStoreMaxSizeBytes,
 	}
 	cfg.AmbientCtx.Tracer = st.Tracer
 

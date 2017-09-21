@@ -32,7 +32,9 @@ func NewInMem(attrs roachpb.Attributes, cacheSize int64) InMem {
 	// from it adds another refcount, at which point we release one of them.
 	defer cache.Release()
 
-	rdb, err := newMemRocksDB(attrs, cache, 512<<20 /* 512 MB */)
+	// TODO(bdarnell): The hard-coded 512 MiB is wrong; see
+	// https://github.com/cockroachdb/cockroach/issues/16750
+	rdb, err := newMemRocksDB(attrs, cache, 512<<20 /* MaxSizeBytes: 512 MiB */)
 	if err != nil {
 		panic(err)
 	}
