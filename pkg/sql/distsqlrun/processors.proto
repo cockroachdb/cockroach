@@ -335,6 +335,9 @@ message AggregatorSpec {
     VARIANCE = 12;
     XOR_AGG = 13;
     COUNT_ROWS = 14;
+    SQRDIFF = 15;
+    FINAL_VARIANCE = 16;
+    FINAL_STDDEV = 17;
   }
 
   message Aggregation {
