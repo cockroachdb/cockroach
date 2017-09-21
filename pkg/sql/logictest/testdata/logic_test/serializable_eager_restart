@@ -13,6 +13,10 @@ GRANT ALL on t TO testuser
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
 
+# Without client-directed retries, the serializability violation would be detected early.
+statement ok
+SAVEPOINT cockroach_restart
+
 # The SELECT forces the timestamp to be chosen.
 query I
 SELECT * FROM t
@@ -33,9 +37,13 @@ user root
 statement ok
 INSERT INTO t(a) VALUES (1)
 
-# Commit will send an EndTransaction which will result in a retry error.
+# RELEASE will send an EndTransaction which will result in a retriable error.
 statement error pgcode 40001 retry txn.*
-COMMIT
+RELEASE SAVEPOINT cockroach_restart
+
+#ROLLBACK TO SAVEPOINT
+statement OK
+ROLLBACK TO SAVEPOINT cockroach_restart
 
 # Check that the connection is usable after the failed COMMIT.
 query I
