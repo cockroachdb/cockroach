@@ -37,7 +37,10 @@ func TestTrace(t *testing.T) {
 	defer s.Close(t)
 
 	// These are always appended, even without the test specifying it.
-	alwaysOptionalSpans := []string{"[async] storage.pendingLeaseRequest: requesting lease"}
+	alwaysOptionalSpans := []string{
+		"[async] storage.pendingLeaseRequest: requesting lease",
+		"range lookup",
+	}
 
 	testData := []struct {
 		name          string
