@@ -249,6 +249,10 @@ func init() {
 		// Engine flags.
 		varFlag(f, cacheSizeValue, cliflags.Cache)
 		varFlag(f, sqlSizeValue, cliflags.SQLMem)
+		// N.B. diskTempStorageSizeValue.ResolvePercentage() will be called after
+		// the stores flag has been parsed and the storage device that a percentage
+		// refers to becomes known.
+		varFlag(f, diskTempStorageSizeValue, cliflags.SQLTempStorage)
 	}
 
 	for _, cmd := range certCmds {
