@@ -1144,6 +1144,11 @@ func (r *rocksDBBatchIterator) ComputeStats(
 	return r.iter.ComputeStats(start, end, nowNanos)
 }
 
+func (r *rocksDBBatchIterator) FindSplitKey(start, end MVCCKey, targetSize int64) (MVCCKey, error) {
+	r.batch.flushMutations()
+	return r.iter.FindSplitKey(start, end, targetSize)
+}
+
 func (r *rocksDBBatchIterator) Key() MVCCKey {
 	return r.iter.Key()
 }
@@ -1740,6 +1745,15 @@ func (r *rocksDBIterator) ComputeStats(
 	return stats, err
 }
 
+func (r *rocksDBIterator) FindSplitKey(start, end MVCCKey, targetSize int64) (MVCCKey, error) {
+	var splitKey C.DBString
+	status := C.MVCCFindSplitKey(r.iter, goToCKey(start), goToCKey(end), C.int64_t(targetSize), &splitKey)
+	if err := statusToError(status); err != nil {
+		return MVCCKey{}, err
+	}
+	return MVCCKey{Key: cStringToGoBytes(splitKey)}, nil
+}
+
 func cStatsToGoStats(stats C.MVCCStatsResult, nowNanos int64) (enginepb.MVCCStats, error) {
 	ms := enginepb.MVCCStats{}
 	if err := statusToError(stats.status); err != nil {
@@ -2143,4 +2157,12 @@ func (r *RocksDB) IngestExternalFile(ctx context.Context, path string, move bool
 // WriteFile writes data to a file in this RocksDB's env.
 func (r *RocksDB) WriteFile(filename string, data []byte) error {
 	return statusToError(C.DBEnvWriteFile(r.rdb, goToCSlice([]byte(filename)), goToCSlice(data)))
+}
+
+// IsValidSplitKey returns whether the key is a valid split key. Certain key
+// ranges cannot be split (the meta1 span and the system DB span); split keys
+// chosen within any of these ranges are considered invalid. And a split key
+// equal to Meta2KeyMax (\x03\xff\xff) is considered invalid.
+func IsValidSplitKey(key roachpb.Key) bool {
+	return bool(C.MVCCIsValidSplitKey(goToCSlice(key)))
 }
