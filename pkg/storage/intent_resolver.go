@@ -471,8 +471,7 @@ func (ir *intentResolver) resolveIntents(
 			reqs = nil
 		}
 		wg.Add(1)
-		action := func() error {
-			// TODO(tschottdorf): no tracing here yet.
+		action := func(ctx context.Context) error {
 			return ir.store.DB().Run(ctx, b)
 		}
 		// NB: Don't wait for an async task slot as we might be configured with an
@@ -482,7 +481,7 @@ func (ir *intentResolver) resolveIntents(
 			func(ctx context.Context) {
 				defer wg.Done()
 
-				if err := action(); err != nil {
+				if err := action(ctx); err != nil {
 					// If we have a waiting caller, pass the first non-nil
 					// error out on the channel.
 					select {
@@ -498,7 +497,7 @@ func (ir *intentResolver) resolveIntents(
 			// Try async to not keep the caller waiting, but when draining
 			// just go ahead and do it synchronously. See #1684.
 			// TODO(tschottdorf): This is ripe for removal.
-			if err := action(); err != nil {
+			if err := action(ctx); err != nil {
 				return err
 			}
 		}
