@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -87,50 +88,34 @@ var ReportingSettingsSingleton atomic.Value // stores *setting.Values
 // real stderr a panic has occurred.
 func RecoverAndReportPanic(ctx context.Context, sv *settings.Values) {
 	if r := recover(); r != nil {
-		ReportPanic(ctx, sv, r, 1)
+		// The call stack here is usually:
+		// - ReportPanic
+		// - RecoverAndReport
+		// - panic.go
+		// - panic()
+		// so ReportPanic should pop four frames.
+		ReportPanic(ctx, sv, r, 4)
 		panic(r)
 	}
 }
 
-// A Safe panic can be reported verbatim, i.e. does not leak information.
+// A SafeType panic can be reported verbatim, i.e. does not leak information.
 //
 // TODO(dt): flesh out, see #15892.
-type Safe struct {
+type SafeType struct {
 	V interface{}
 }
 
-func format(r interface{}) string {
-	switch wrapped := r.(type) {
-	case *Safe:
-		return fmt.Sprintf("%+v", wrapped.V)
-	case Safe:
-		return fmt.Sprintf("%+v", wrapped.V)
-	}
-	return fmt.Sprintf("%T", r)
+// Safe constructs a SafeType.
+func Safe(v interface{}) SafeType {
+	return SafeType{V: v}
 }
 
 // ReportPanic reports a panic has occurred on the real stderr.
 func ReportPanic(ctx context.Context, sv *settings.Values, r interface{}, depth int) {
 	Shout(ctx, Severity_ERROR, "a panic has occurred!")
 
-	// TODO(dt,knz,sql-team): we need to audit all sprintf'ing of values into the
-	// errors and strings passed to panic, to ensure raw user data is kept
-	// separate and can thus be elided here. For now, the type is about all we can
-	// assume is safe to report, which combined with file and line info should be
-	// at least somewhat helpful in telling us where crashes are coming from.
-	// We capture the full stacktrace below, so we only need the short file and
-	// line here help uniquely identify the error.
-	// Some exceptions, like a runtime.Error, are assumed to be fine as-is.
-
-	var reportable interface{}
-	switch r.(type) {
-	case runtime.Error:
-		reportable = r
-	default:
-		file, line, _ := caller.Lookup(depth + 3)
-		reportable = fmt.Sprintf("%s %s:%d", format(r), filepath.Base(file), line)
-	}
-	sendCrashReport(ctx, sv, reportable, depth+3)
+	sendCrashReport(ctx, sv, depth+1, "", []interface{}{r})
 
 	// Ensure that the logs are flushed before letting a panic
 	// terminate the server.
@@ -203,21 +188,90 @@ func uptimeTag(now time.Time) string {
 	}
 }
 
-func sendCrashReport(ctx context.Context, sv *settings.Values, r interface{}, depth int) {
+type safeError struct {
+	message string
+}
+
+func (e *safeError) Error() string {
+	return e.message
+}
+
+func reportablesToSafeError(depth int, format string, reportables []interface{}) error {
+	if len(reportables) == 0 {
+		reportables = []interface{}{"nothing reported"}
+	}
+
+	file := "?"
+	var line int
+	if depth > 0 {
+		file, line, _ = caller.Lookup(depth)
+	}
+	// TODO(tschottdorf): many more errors could be admissible here, for example all known sentinel
+	// errors such as `context.Canceled`, and we can also "unspool" errors created via
+	// `errors.Wrap{,f}` and extract any format strings and safe errors/values that occur within.
+	censor := func(r interface{}) string {
+		switch t := r.(type) {
+		case runtime.Error:
+			return t.Error()
+		case *SafeType:
+			return fmt.Sprintf("%+v", t.V)
+		case SafeType:
+			return fmt.Sprintf("%+v", t.V)
+		default:
+			return fmt.Sprintf("<%T>", r)
+		}
+	}
+
+	if e, ok := reportables[0].(error); ok && format == "" && len(reportables) == 1 && censor(e) == e.Error() {
+		// Special case so that `panic(err)` for a safe `err` returns `err` (and doesn't wrap it in
+		// a `safeError`).
+		return e
+	}
+
+	redacted := make([]string, 0, len(reportables))
+	for i := range reportables {
+		redacted = append(redacted, censor(reportables[i]))
+	}
+	reportables = nil
+
+	var sep string
+	// TODO(tschottdorf): it would be nice to massage the format so that all of its verbs are replaced by %v
+	// (so that we could now call `fmt.Sprintf(newFormat, reportables...)`).
+	// This isn't trivial. For example, "%ss %.2f %#v %U+%04X %%" would become "%ss %s %s %s %%".
+	// The logic to do that is known to `fmt.Printf` but we'd have to copy it here.
+	if format != "" {
+		sep = " | "
+	}
+	err := &safeError{
+		message: fmt.Sprintf("%s:%d: %s%s%s", filepath.Base(file), line, format, sep, strings.Join(redacted, "; ")),
+	}
+	return err
+}
+
+// sendCrashReport posts to sentry. The `reportables` is essentially the `args...` in
+// `log.Fatalf(format, args...)` (similarly for `log.Fatal`) or `[]interface{}{arg}` in
+// `panic(arg)`.
+//
+// The format string and those items in `reportables` which are a) an error or b) (values of or
+// pointers to) `log.Safe` will be used verbatim to construct the error that is reported to sentry.
+//
+// TODO(dt,knz,sql-team): we need to audit all sprintf'ing of values into the errors and strings
+// passed to panic, to ensure raw user data is kept separate and can thus be elided here. For now,
+// the type is about all we can assume is safe to report, which combined with file and line info
+// should be at least somewhat helpful in telling us where crashes are coming from. We capture the
+// full stacktrace below, so we only need the short file and line here help uniquely identify the
+// error. Some exceptions, like a runtime.Error, are assumed to be fine as-is.
+func sendCrashReport(
+	ctx context.Context, sv *settings.Values, depth int, format string, reportables []interface{},
+) {
 	if !DiagnosticsReportingEnabled.Get(sv) || !CrashReports.Get(sv) {
 		return // disabled via settings.
 	}
-
 	if raven.DefaultClient == nil {
 		return // disabled via empty URL env var.
 	}
 
-	var err error
-	if e, ok := r.(error); ok {
-		err = e
-	} else {
-		err = fmt.Errorf("%v", r)
-	}
+	err := reportablesToSafeError(depth+1, format, reportables)
 
 	// This is close to inlining raven.CaptureErrorAndWait(), except it lets us
 	// control the stack depth of the collected trace.
