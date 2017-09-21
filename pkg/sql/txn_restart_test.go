@@ -1729,6 +1729,57 @@ CREATE TABLE t.test (k INT PRIMARY KEY);
 	}
 }
 
+func TestPushedTxnRetriableError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := createTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	pgURL, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), "TestPushedTxnRetriable", url.User(security.RootUser))
+	defer cleanup()
+
+	db, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	if _, err := sqlDB.Exec(`
+		CREATE DATABASE t;
+		CREATE TABLE t.test (k INT PRIMARY KEY, v string);
+		`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(fmt.Sprintf("INSERT INTO t.test VALUES (%d, '%s')", 1, "val1")); err != nil {
+		t.Fatal(err)
+	}
+
+	txn1, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := txn1.Exec(fmt.Sprintf("INSERT INTO t.test VALUES (%d, '%s')", 2, "val2")); err != nil {
+		t.Fatal(err)
+	}
+	txn2, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := txn2.Exec(fmt.Sprintf("SELECT * FROM t.test WHERE k = %d", 1)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := txn1.Exec(fmt.Sprintf("UPDATE t.test SET v = '%s' WHERE k = %d", "val11", 1)); !isRetryableErr(err) {
+		t.Fatalf("expected retryable error, got: %v", err)
+	}
+	if err := txn2.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if err := txn1.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // Test that, if we'd otherwise perform an auto-retry but results for the
 // current txn have already been streamed to the client, we don't do the
 // auto-restart.

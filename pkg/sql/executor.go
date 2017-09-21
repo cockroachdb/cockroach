@@ -1601,6 +1601,15 @@ func (e *Executor) execStmtInOpenTxn(
 				roachpb.Transaction{},
 			)
 			err = txnState.updateStateAndCleanupOnErr(err, e)
+		} else if txnState.State() != AutoRetry && !txnState.retryIntent && txnState.isSerializableRestart() {
+			err = roachpb.NewHandledRetryableTxnError(
+				"serializable transaction timestamp pushed (detected by SQL Executor)",
+				txnState.mu.txn.ID(),
+				// No updated transaction required; we've already manually updated our
+				// client.Txn.
+				roachpb.Transaction{},
+			)
+			err = txnState.updateStateAndCleanupOnErr(err, e)
 		}
 	}()
 
