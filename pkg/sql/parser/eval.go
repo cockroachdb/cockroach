@@ -2510,7 +2510,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		case *DTimestamp:
 			return d, nil
 		case *DTimestampTZ:
-			return MakeDTimestamp(d.Time, time.Microsecond), nil
+			return MakeDTimestamp(d.Time.In(ctx.GetLocation()), time.Microsecond), nil
 		}
 
 	case *TimestampTZColType:
@@ -2523,7 +2523,9 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		case *DDate:
 			return MakeDTimestampTZFromDate(ctx.GetLocation(), d), nil
 		case *DTimestamp:
-			return MakeDTimestampTZ(d.Time, time.Microsecond), nil
+			_, before := d.Time.Zone()
+			_, after := d.Time.In(ctx.GetLocation()).Zone()
+			return MakeDTimestampTZ(d.Time.Add(time.Duration(before-after)*time.Second), time.Microsecond), nil
 		case *DInt:
 			return MakeDTimestampTZ(time.Unix(int64(*d), 0).UTC(), time.Second), nil
 		case *DTimestampTZ:

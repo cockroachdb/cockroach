@@ -471,7 +471,17 @@ SELECT '2015-08-25 05:45:45.53453'::timestamptz
 query T
 SELECT '2015-08-25 05:45:45-01:00'::timestamp
 ----
-2015-08-25 06:45:45 +0000 +0000
+2015-08-25 05:45:45 +0000 +0000
+
+query T
+SELECT '2015-08-25 05:45:45-01:00'::timestamp::timestamptz
+----
+2015-08-25 05:45:45 +0100 +0100
+
+query T
+SELECT '2015-08-25 05:45:45-01:00'::timestamptz::timestamp
+----
+2015-08-25 07:45:45 +0000 +0000
 
 query T
 SELECT '2015-08-25 05:45:45-01:00'::timestamptz
@@ -504,7 +514,7 @@ SELECT '2015-08-24 23:45:45.53453 UTC'::timestamptz
 query T
 SELECT '2015-08-24 23:45:45.53453-02:00'::timestamp
 ----
-2015-08-25 01:45:45.53453 +0000 +0000
+2015-08-24 23:45:45.53453 +0000 +0000
 
 query T
 SELECT '2015-08-24 23:45:45.53453-02:00'::timestamptz
@@ -519,12 +529,38 @@ SELECT '2015-08-24 23:45:45.53453-05:00'::timestamptz
 query T
 SELECT '2015-08-24 23:45:45.534 -02:00'::timestamp
 ----
-2015-08-25 01:45:45.534 +0000 +0000
+2015-08-24 23:45:45.534 +0000 +0000
 
 query T
 SELECT '2015-08-24 23:45:45.534 -02:00'::timestamptz
 ----
 2015-08-24 20:45:45.534 -0500 -0500
+
+query T
+SELECT '2015-08-25 05:45:45-01:00'::timestamp::timestamptz
+----
+2015-08-25 05:45:45 -0500 -0500
+
+query T
+SELECT '2015-08-25 05:45:45-01:00'::timestamptz::timestamp
+----
+2015-08-25 01:45:45 +0000 +0000
+
+# using Eastern instead of fixed -5 should handle DST.
+statement ok
+SET TIME ZONE 'America/New_York'
+
+query T
+SELECT '2015-08-25 05:45:45-01:00'::timestamp::timestamptz
+----
+2015-08-25 05:45:45 -0400 -0400
+
+query T
+SELECT '2015-08-25 05:45:45-01:00'::timestamptz::timestamp
+----
+2015-08-25 02:45:45 +0000 +0000
+
+
 
 statement error cannot find time zone "foobar": timezone data cannot be found
 SET TIME ZONE 'foobar'
