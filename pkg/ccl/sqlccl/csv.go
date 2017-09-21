@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -125,13 +126,18 @@ func LoadCSV(
 		}
 	}()
 
+	fileLimit, err := server.SetOpenFileLimitForOneStore()
+	if err != nil {
+		return 0, 0, 0, err
+	}
+
 	cache := engine.NewRocksDBCache(0)
 	defer cache.Release()
 	r, err := engine.NewRocksDB(engine.RocksDBConfig{
 		Settings:     cluster.MakeTestingClusterSettings(),
 		Dir:          rocksdbDir,
 		MaxSizeBytes: 0,
-		MaxOpenFiles: 1024,
+		MaxOpenFiles: fileLimit,
 	}, cache)
 	if err != nil {
 		return 0, 0, 0, errors.Wrap(err, "create rocksdb instance")
