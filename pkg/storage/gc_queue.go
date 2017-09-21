@@ -405,14 +405,19 @@ func processLocalKeyRange(
 			// but instead by the coordinator - those will not have any intents
 			// persisted, though they still might exist in the system.
 			infoMu.TransactionSpanGCAborted++
-			func() {
+			if err := func() error {
 				infoMu.Unlock() // intentional
 				defer infoMu.Lock()
-				if err := resolveIntents(roachpb.AsIntents(txn.Intents, &txn),
-					ResolveOptions{Wait: true, Poison: false}); err != nil {
-					log.Warningf(ctx, "failed to resolve intents of aborted txn on gc: %s", err)
+				return resolveIntents(roachpb.AsIntents(txn.Intents, &txn),
+					ResolveOptions{Wait: true, Poison: false})
+			}(); err != nil {
+				// Ignore above error, but if context is expired, no point in keeping going.
+				if ctx.Err() != nil {
+					return errors.Wrap(err, "context timed out during local key range processing after")
 				}
-			}()
+				log.Warningf(ctx, "failed to resolve intents of aborted txn on gc (removing anyway): %s", err)
+				// Keep going.
+			}
 		case roachpb.COMMITTED:
 			// It's committed, so it doesn't need a push but we can only
 			// GC it after its intents are resolved.
@@ -421,9 +426,15 @@ func processLocalKeyRange(
 				defer infoMu.Lock()
 				return resolveIntents(roachpb.AsIntents(txn.Intents, &txn), ResolveOptions{Wait: true, Poison: false})
 			}(); err != nil {
-				log.Warningf(ctx, "unable to resolve intents of committed txn on gc: %s", err)
 				// Returning the error here would abort the whole GC run, and
 				// we don't want that. Instead, we simply don't GC this entry.
+				if ctx.Err() != nil {
+					// ... but if our context is expired, no need to keep going.
+					return errors.Wrap(err, "context timed out during local key range processing after")
+				}
+				log.Warningf(ctx, "unable to resolve intents of committed txn on gc; skipping: %s", err)
+				// Do not keep going, or we'll still remove this transaction, and we're not
+				// allowed to unless the intents are certifiably removed.
 				return nil
 			}
 			infoMu.TransactionSpanGCCommitted++
@@ -839,6 +850,14 @@ func RunGC(
 	gcKeys = append(gcKeys, localRangeKeys...)
 
 	// Process push transactions in parallel.
+	//
+	// TODO(tschottdorf): we first push all transactions before resolving intents.
+	// If we have too many transactions, that can lead to the case in which our context
+	// expires and we can't actually clean up any of the intents. Since we have hopefully
+	// succeeded in pushing a lot of transactions, the next time around we should have
+	// less work here and manage to get to the intents, but it would be better to let
+	// another goroutine resolve intents for transactions we've handled so that work that
+	// is prepared is executed right away.
 	log.Eventf(ctx, "pushing up to %d transactions (concurrency %d)", len(txnMap), gcTaskLimit)
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, gcTaskLimit)
@@ -855,10 +874,18 @@ func RunGC(
 				<-sem
 				wg.Done()
 			}()
+			if ctx.Err() != nil {
+				return // don't bother if already expired
+			}
 			pushTxnFn(now, txnCopy, roachpb.PUSH_ABORT)
 		}()
 	}
 	wg.Wait()
+
+	if err := ctx.Err(); err != nil {
+		// Don't bother if already expired.
+		return nil, GCInfo{}, err
+	}
 
 	// Resolve all intents.
 	log.Eventf(ctx, "resolving up to %d intents", len(txnMap))
