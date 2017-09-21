@@ -799,8 +799,60 @@ func (e *Executor) execParsed(
 		// transaction (implicit txn or explicit txn). We do the corresponding state
 		// reset.
 		if !inTxn {
-			// Detect implicit transactions - they need to be autocommitted.
-			if _, isBegin := stmts[0].AST.(*parser.BeginTransaction); !isBegin {
+			_, isBegin := stmts[0].AST.(*parser.BeginTransaction)
+
+			elide := false
+			if isBegin {
+				// Explicit transaction (BEGIN statement) - if
+				// the next two statements are (in order):
+				// 1. UPDATE/INSERT/UPSERT/whitelist statement
+				// 2. COMMIT statement
+				// Then we elide the BEGIN and COMMIT
+				// statements and execute #1 as an implicit
+				// transaction.
+				// #1 is whitelisted since there exists
+				// transaction-dependent statements (e.g.
+				// SHOW TRANSACTION STATUS) that may depend on
+				// our explicit BEGIN/END block.
+				// Whitelisting is chosen over blacklisting
+				// since the introduction of new transaction-
+				// dependent statements may crash the system.
+
+				// There must be at least 3 statements in our
+				// current batch for this elision.
+				if len(stmts) >= 3 {
+					if _, isCommit := stmts[2].AST.(*parser.CommitTransaction); isCommit {
+						// Permit only certain types
+						// of statements to be converted
+						// to an implicit statement.
+						// Note non-commit statements
+						// are irrelvant since they
+						// do not take advantage of
+						// auto-commit.
+						ast := stmts[1].AST
+						if traceStmt, ok := ast.(*parser.ShowTrace); ok {
+							ast = traceStmt.Statement
+						}
+						switch ast.(type) {
+						case *parser.Update:
+							elide = true
+						case *parser.Insert:
+							elide = true
+						}
+
+						// Do not execute BEGIN and
+						// COMMIT statement.
+						if elide {
+							stmts = append(stmts[1:2], stmts[3:]...)
+							stmtsToExec = stmts
+						}
+					}
+				}
+			}
+
+			if !isBegin || elide {
+				// Implicit or elided explicit transactions -
+				// they need to be autocommitted.
 				autoCommit = true
 				stmtsToExec = stmtsToExec[:1]
 				// Check for AS OF SYSTEM TIME. If it is present but not detected here,

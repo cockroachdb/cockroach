@@ -676,3 +676,37 @@ INSERT INTO bytes_t SELECT * FROM string_t
 
 query error value type bytes doesn't match type STRING of column "s"
 INSERT INTO string_t SELECT * FROM bytes_t
+
+# Test that only single-insert-statement, explicit transaction batches are
+# elided and executed as implicit transactions with 1PC.
+
+statement ok
+CREATE TABLE ab (
+  a STRING PRIMARY KEY,
+  b STRING
+)
+
+# 1 PC with one insert statement (final commit elided).
+query T
+SET TRACING=on;
+BEGIN; INSERT INTO ab VALUES ('foo1', 'bar1'); COMMIT;
+SET TRACING=off;
+SELECT message FROM [SHOW TRACE FOR SESSION]
+  WHERE MESSAGE LIKE 'executing _/_%';
+----
+executing 1/1: INSERT INTO ab VALUES ('foo1', 'bar1')
+executing 1/1: SET tracing = off
+
+# 2PC since there exists more than one statement.
+query T
+SET TRACING=on;
+BEGIN; INSERT INTO ab VALUES ('foo2', 'bar2'); INSERT INTO ab VALUES ('foo3', 'bar3'); COMMIT;
+SET TRACING=off;
+SELECT message FROM [SHOW TRACE FOR SESSION]
+  WHERE MESSAGE LIKE 'executing _/_%';
+----
+executing 1/6: BEGIN TRANSACTION
+executing 2/6: INSERT INTO ab VALUES ('foo2', 'bar2')
+executing 3/6: INSERT INTO ab VALUES ('foo3', 'bar3')
+executing 4/6: COMMIT TRANSACTION
+executing 1/1: SET tracing = off

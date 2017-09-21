@@ -432,3 +432,38 @@ SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM pks WHERE k1 = 2]
 fetched: /pks/primary/2/2 -> NULL
 fetched: /pks/primary/2/2/v -> 3
 output row: [2 2 3]
+
+
+# Test that only single-update-statement, explicit transaction batches are
+# elided and executed as implicit transactions with 1PC.
+
+statement ok
+CREATE TABLE ab (
+  a STRING PRIMARY KEY,
+  b STRING
+)
+
+# 1 PC with one update statement (final commit elided).
+query T
+SET TRACING=on;
+BEGIN; UPDATE ab SET a = '%s' WHERE b = '%s'; COMMIT;
+SET TRACING=off;
+SELECT message FROM [SHOW TRACE FOR SESSION]
+  WHERE MESSAGE LIKE 'executing _/_%';
+----
+executing 1/1: UPDATE ab SET a = '%s' WHERE b = '%s'
+executing 1/1: SET tracing = off
+
+# 2PC since there exists more than one statement.
+query T
+SET TRACING=on;
+BEGIN; UPDATE ab SET a = '%s' WHERE b = '%s'; UPDATE ab SET a = '%s' WHERE b = '%s'; COMMIT;
+SET TRACING=off;
+SELECT message FROM [SHOW TRACE FOR SESSION]
+  WHERE MESSAGE LIKE 'executing _/_%';
+----
+executing 1/6: BEGIN TRANSACTION
+executing 2/6: UPDATE ab SET a = '%s' WHERE b = '%s'
+executing 3/6: UPDATE ab SET a = '%s' WHERE b = '%s'
+executing 4/6: COMMIT TRANSACTION
+executing 1/1: SET tracing = off
