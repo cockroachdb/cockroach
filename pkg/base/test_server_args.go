@@ -114,8 +114,7 @@ type TestClusterArgs struct {
 // DefaultTestStoreSpec is just a single in memory store of 100 MiB with no
 // special attributes.
 var DefaultTestStoreSpec = StoreSpec{
-	SizeInBytes: 100 << 20,
-	InMemory:    true,
+	InMemory: true,
 }
 
 // TestClusterReplicationMode represents the replication settings for a TestCluster.
