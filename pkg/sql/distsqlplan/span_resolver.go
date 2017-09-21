@@ -320,6 +320,7 @@ func (it *spanResolverIterator) ReplicaInfo(ctx context.Context) (kv.ReplicaInfo
 				// Ignore the error; ask the oracle to pick another replica below.
 				log.VEventf(ctx, 2, "failed to resolve node %d: %s", nodeID, err)
 			} else {
+				repl.ReplicaDescriptor.NodeID = nodeID
 				repl.NodeDesc = nd
 				resolvedLH = true
 			}
