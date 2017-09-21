@@ -2268,33 +2268,10 @@ func MVCCGarbageCollect(
 	return nil
 }
 
-// IsValidSplitKey returns whether the key is a valid split key. Certain key
-// ranges cannot be split (the meta1 span and the system DB span); split keys
-// chosen within any of these ranges are considered invalid. And a split key
-// equal to Meta2KeyMax (\x03\xff\xff) is considered invalid.
-func IsValidSplitKey(key roachpb.Key) bool {
-	// TODO(peter): What is this restriction about? Document.
-	if keys.Meta2KeyMax.Equal(key) {
-		return false
-	}
-	for _, span := range keys.NoSplitSpans {
-		if bytes.Compare(key, span.Key) > 0 && bytes.Compare(key, span.EndKey) < 0 {
-			return false
-		}
-	}
-	return true
-}
-
-// MVCCFindSplitKey suggests a split key from the given user-space key
-// range that aims to roughly cut into half the total number of bytes
-// used (in raw key and value byte strings) in both subranges. Specify
-// a snapshot engine to safely invoke this method in a goroutine.
-//
-// The split key will never be chosen from the key ranges listed in
-// illegalSplitKeySpans.
-//
-// debugFn, if not nil, is used to print informational log messages about
-// the key finding process.
+// MVCCFindSplitKey finds a split key from the given key range that aims to
+// roughly cut into targetSize bytes the left-hand side of the split. The
+// returned key will never be chosen from the key ranges listed in
+// keys.NoSplitSpans.
 func MVCCFindSplitKey(
 	ctx context.Context, engine Reader, key, endKey roachpb.RKey, targetSize int64,
 ) (roachpb.Key, error) {
@@ -2302,72 +2279,18 @@ func MVCCFindSplitKey(
 		key = roachpb.RKey(keys.LocalMax)
 	}
 
-	encStartKey := MakeMVCCMetadataKey(key.AsRawKey())
-	encEndKey := MakeMVCCMetadataKey(endKey.AsRawKey())
-
-	sizeSoFar := int64(0)
-	bestSplitKey := encStartKey
-	bestSplitDiff := int64(math.MaxInt64)
-	var lastKey roachpb.Key
-	var lastKeyBuf []byte
-	var bestSplitKeyBuf []byte
-	var n int
-
 	it := engine.NewIterator(false /* prefix */)
 	defer it.Close()
 
-	for it.Seek(encStartKey); ; it.Next() {
-		if ok, err := it.Valid(); err != nil {
-			return nil, err
-		} else if !ok || !it.Less(encEndKey) {
-			break
-		}
-		unsafeKey := it.UnsafeKey()
-
-		n++
-		// Is key within a legal key range? Note that we never choose the first key
-		// as the split key.
-		valid := n > 1 && IsValidSplitKey(unsafeKey.Key)
-
-		// Determine if this key would make a better split than last "best" key.
-		diff := targetSize - sizeSoFar
-		if diff < 0 {
-			diff = -diff
-		}
-		if valid && diff < bestSplitDiff {
-			if log.V(2) {
-				log.Infof(ctx, "better split: diff %d at %s", diff, unsafeKey)
-			}
-			bestSplitKey = unsafeKey
-			bestSplitKey.Key = append(bestSplitKeyBuf, bestSplitKey.Key...)
-			bestSplitKeyBuf = bestSplitKey.Key[:0]
-			bestSplitDiff = diff
-		}
-
-		// Determine whether we've found best key and can exit iteration.
-		if !bestSplitKey.Key.Equal(encStartKey.Key) && diff > bestSplitDiff {
-			if log.V(2) {
-				log.Infof(ctx, "target size reached")
-			}
-			break
-		}
-
-		// Add this key/value to the size scanned so far.
-		if unsafeKey.IsValue() && bytes.Equal(unsafeKey.Key, lastKey) {
-			sizeSoFar += mvccVersionTimestampSize + int64(len(it.UnsafeValue()))
-		} else {
-			sizeSoFar += int64(unsafeKey.EncodedSize() + len(it.UnsafeValue()))
-		}
-		lastKey = append(lastKeyBuf, unsafeKey.Key...)
-		lastKeyBuf = lastKey[:0]
+	splitKey, err := it.FindSplitKey(
+		MakeMVCCMetadataKey(key.AsRawKey()),
+		MakeMVCCMetadataKey(endKey.AsRawKey()),
+		targetSize)
+	if err != nil {
+		return nil, err
 	}
-
-	if bestSplitKey.Key.Equal(encStartKey.Key) {
-		return nil, nil
-	}
-
 	// The family ID has been removed from this key, making it a valid split point.
-	return keys.EnsureSafeSplitKey(bestSplitKey.Key)
+	return keys.EnsureSafeSplitKey(splitKey.Key)
 }
 
 // willOverflow returns true iff adding both inputs would under- or overflow

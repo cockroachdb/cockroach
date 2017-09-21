@@ -34,6 +34,7 @@
 #include "db.h"
 #include "encoding.h"
 #include "eventlistener.h"
+#include "keys.h"
 
 extern "C" {
 static void __attribute__((noreturn)) die_missing_symbol(const char* name) {
@@ -197,12 +198,6 @@ struct DBSnapshot : public DBEngine {
 struct DBIterator {
   std::unique_ptr<rocksdb::Iterator> rep;
 };
-
-// NOTE: these constants must be kept in sync with the values in
-// storage/engine/keys.go. Both kKeyLocalRangeIDPrefix and
-// kKeyLocalRangePrefix are the mvcc-encoded prefixes.
-const rocksdb::Slice kKeyLocalRangeIDPrefix("\x01i", 2);
-const rocksdb::Slice kKeyLocalMax("\x02", 1);
 
 const DBStatus kSuccess = { NULL, 0 };
 
@@ -447,6 +442,21 @@ void SerializeProtoToValue(std::string *val, const google::protobuf::MessageLite
   std::fill(val->begin(), val->end(), 0);
   SetTag(val, cockroach::roachpb::BYTES);
   msg.AppendToString(val);
+}
+
+bool IsValidSplitKey(const rocksdb::Slice& key) {
+  for (auto span : kSortedNoSplitSpans) {
+    // kSortedNoSplitSpans are reverse sorted (largest to smallest) on
+    // the span end key which allows us to early exit if our key to
+    // check is above the end of the last no-split span.
+    if (key.compare(span.second) >= 0) {
+      return true;
+    }
+    if (key.compare(span.first) > 0) {
+      return false;
+    }
+  }
+  return (key != kMeta2KeyMax);
 }
 
 class DBComparator : public rocksdb::Comparator {
@@ -2303,7 +2313,7 @@ MVCCStatsResult MVCCComputeStatsInternal(
       break;
     }
 
-    const bool isSys = (rocksdb::Slice(decoded_key).compare(kKeyLocalMax) < 0);
+    const bool isSys = (rocksdb::Slice(decoded_key).compare(kLocalMax) < 0);
     const bool isValue = (wall_time != 0 || logical != 0);
     const bool implicitMeta = isValue && decoded_key != prev_key;
     prev_key.assign(decoded_key.data(), decoded_key.size());
@@ -2392,6 +2402,65 @@ MVCCStatsResult MVCCComputeStatsInternal(
 MVCCStatsResult MVCCComputeStats(
     DBIterator* iter, DBKey start, DBKey end, int64_t now_nanos) {
   return MVCCComputeStatsInternal(iter->rep.get(), start, end, now_nanos);
+}
+
+bool MVCCIsValidSplitKey(DBSlice key) {
+  return IsValidSplitKey(ToSlice(key));
+}
+
+DBStatus MVCCFindSplitKey(
+    DBIterator* iter, DBKey start, DBKey end, int64_t target_size, DBString* split_key) {
+  auto iter_rep = iter->rep.get();
+  std::string start_key = EncodeKey(start);
+  iter_rep->Seek(start_key);
+  const std::string end_key = EncodeKey(end);
+
+  int64_t size_so_far = 0;
+  std::string best_split_key = start_key;
+  int64_t best_split_diff = std::numeric_limits<int64_t>::max();
+  std::string prev_key;
+  int n = 0;
+
+  for (; iter_rep->Valid() && kComparator.Compare(iter_rep->key(), end_key) < 0;
+       iter_rep->Next()) {
+    const rocksdb::Slice key = iter_rep->key();
+    rocksdb::Slice decoded_key;
+    int64_t wall_time = 0;
+    int32_t logical = 0;
+    if (!DecodeKey(key, &decoded_key, &wall_time, &logical)) {
+      return FmtStatus("unable to decode key");
+    }
+
+    ++n;
+    const bool valid = n > 1 && IsValidSplitKey(decoded_key);
+    int64_t diff = target_size - size_so_far;
+    if (diff < 0) {
+      diff = -diff;
+    }
+    if (valid && diff < best_split_diff) {
+      best_split_key = decoded_key.ToString();
+      best_split_diff = diff;
+    }
+    if (diff > best_split_diff) {
+      break;
+    }
+
+    const bool is_value = (wall_time != 0 || logical != 0);
+    if (is_value && decoded_key == prev_key) {
+      size_so_far += kMVCCVersionTimestampSize + iter_rep->value().size();
+    } else {
+      size_so_far += decoded_key.size() + 1 + iter_rep->value().size();
+      if (is_value) {
+        size_so_far += kMVCCVersionTimestampSize;
+      }
+    }
+    prev_key.assign(decoded_key.data(), decoded_key.size());
+  }
+  if (best_split_key == start_key) {
+    return kSuccess;
+  }
+  *split_key = ToDBString(best_split_key);
+  return kSuccess;
 }
 
 // DBGetStats queries the given DBEngine for various operational stats and
