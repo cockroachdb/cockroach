@@ -16,7 +16,6 @@ syntax = "proto3";
 package cockroach.storage;
 option go_package = "storage";
 
-import "cockroach/pkg/roachpb/data.proto";
 import "cockroach/pkg/util/hlc/timestamp.proto";
 
 message CommandQueueCommand {
