@@ -24,7 +24,7 @@ var (
 	BinaryMinimumSupportedVersion = VersionBase
 
 	// BinaryServerVersion is the version of this binary.
-	BinaryServerVersion = VersionStatsBasedRebalancing
+	BinaryServerVersion = VersionRaftLastIndex
 )
 
 // List all historical versions here in reverse chronological order, with
@@ -33,6 +33,9 @@ var (
 // NB: when adding a version, don't forget to bump ServerVersion above (and
 // perhaps MinimumSupportedVersion, if necessary).
 var (
+	// VersionRaftLastIndex is https://github.com/cockroachdb/cockroach/pull/18717.
+	VersionRaftLastIndex = roachpb.Version{Major: 1, Minor: 1, Unstable: 1}
+
 	// VersionStatsBasedRebalancing is https://github.com/cockroachdb/cockroach/pull/16878.
 	VersionStatsBasedRebalancing = roachpb.Version{Major: 1, Minor: 0, Unstable: 3}
 
@@ -47,3 +50,9 @@ var (
 	// this version is used.
 	VersionBase = roachpb.Version{Major: 1}
 )
+
+// IsActive returns true if the features of the supplied version is active at
+// the running version.
+func (cv ClusterVersion) IsActive(v roachpb.Version) bool {
+	return !cv.UseVersion.Less(v)
+}

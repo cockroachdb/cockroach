@@ -136,8 +136,25 @@ func (ecv *ExposedClusterVersion) OnChange(f func(cv ClusterVersion)) {
 // effect. It must not be called until the setting has been initialized.
 func (ecv *ExposedClusterVersion) Version() ClusterVersion {
 	v := *ecv.baseVersion.Load().(*ClusterVersion)
+	// TODO(tschottdorf): This fires if I try to get the cluster version early in
+	// the process lifetime. Not sure what I should be doing.
+	//
 	if (v == ClusterVersion{}) {
 		log.Fatal(context.Background(), "Version() was called before having been initialized")
+	}
+	return v
+}
+
+// VersionOrMinimumSupported returns the minimum clusger version the caller may
+// assume is in effect. Unless Version, it is safe to call this method before
+// the setting has been initialized.
+func (ecv *ExposedClusterVersion) VersionOrMinimumSupported() ClusterVersion {
+	v := *ecv.baseVersion.Load().(*ClusterVersion)
+	if (v == ClusterVersion{}) {
+		v = ClusterVersion{
+			MinimumVersion: ecv.MinSupportedVersion,
+			UseVersion:     ecv.MinSupportedVersion,
+		}
 	}
 	return v
 }
@@ -150,10 +167,10 @@ func (ecv *ExposedClusterVersion) BootstrapVersion() ClusterVersion {
 	}
 }
 
-// IsActive returns true if the features of the supplied version are active at
+// IsActive returns true if the features of the supplied version is active at
 // the running version.
 func (ecv *ExposedClusterVersion) IsActive(v roachpb.Version) bool {
-	return !ecv.Version().UseVersion.Less(v)
+	return ecv.Version().IsActive(v)
 }
 
 // MakeTestingClusterSettings returns a Settings object that has had its version

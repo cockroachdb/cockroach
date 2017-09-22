@@ -502,7 +502,7 @@ func snapshot(
 		return OutgoingSnapshot{}, errors.Errorf("failed to fetch term of %d: %s", appliedIndex, err)
 	}
 
-	rsl := makeReplicaStateLoader(rangeID)
+	rsl := makeReplicaStateLoader(nil, rangeID)
 	state, err := rsl.load(ctx, snap, &desc)
 	if err != nil {
 		return OutgoingSnapshot{}, err
