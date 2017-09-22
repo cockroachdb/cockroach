@@ -584,7 +584,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		abortCache:     NewAbortCache(rangeID),
 		pushTxnQueue:   newPushTxnQueue(store),
 	}
-	r.mu.stateLoader = makeReplicaStateLoader(rangeID)
+	r.mu.stateLoader = makeReplicaStateLoader(r.store.cfg.Settings, rangeID)
 	if leaseHistoryMaxEntries > 0 {
 		r.leaseHistory = newLeaseHistory()
 	}
@@ -609,7 +609,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		},
 	)
 	r.raftMu.timedMutex = makeTimedMutex(raftMuLogger)
-	r.raftMu.stateLoader = makeReplicaStateLoader(rangeID)
+	r.raftMu.stateLoader = makeReplicaStateLoader(r.store.cfg.Settings, rangeID)
 	return r
 }
 

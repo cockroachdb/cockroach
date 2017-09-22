@@ -15,6 +15,9 @@
 package storage
 
 import (
+	"bytes"
+	"math"
+
 	"github.com/coreos/etcd/raft/raftpb"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -27,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -46,13 +50,23 @@ import (
 // struct with a mutex, and temporary loaders may be created when
 // locking is less desirable than an allocation.
 type replicaStateLoader struct {
+	version cluster.ClusterVersion
 	keys.RangeIDPrefixBuf
 }
 
-func makeReplicaStateLoader(rangeID roachpb.RangeID) replicaStateLoader {
-	return replicaStateLoader{
+func makeReplicaStateLoader(st *cluster.Settings, rangeID roachpb.RangeID) replicaStateLoader {
+	rsl := replicaStateLoader{
 		RangeIDPrefixBuf: keys.MakeRangeIDPrefixBuf(rangeID),
 	}
+	if st == nil {
+		rsl.version = cluster.ClusterVersion{
+			MinimumVersion: cluster.BinaryMinimumSupportedVersion,
+			UseVersion:     cluster.BinaryMinimumSupportedVersion,
+		}
+	} else {
+		rsl.version = st.Version.Version()
+	}
+	return rsl
 }
 
 // loadState loads a ReplicaState from disk. The exception is the Desc field,
@@ -157,7 +171,7 @@ func (rsl replicaStateLoader) setLease(
 func loadAppliedIndex(
 	ctx context.Context, reader engine.Reader, rangeID roachpb.RangeID,
 ) (uint64, uint64, error) {
-	rsl := makeReplicaStateLoader(rangeID)
+	rsl := makeReplicaStateLoader(nil, rangeID)
 	return rsl.loadAppliedIndex(ctx, reader)
 }
 
@@ -272,7 +286,7 @@ func (rsl replicaStateLoader) calcAppliedIndexSysBytes(
 func loadTruncatedState(
 	ctx context.Context, reader engine.Reader, rangeID roachpb.RangeID,
 ) (roachpb.RaftTruncatedState, error) {
-	rsl := makeReplicaStateLoader(rangeID)
+	rsl := makeReplicaStateLoader(nil, rangeID)
 	return rsl.loadTruncatedState(ctx, reader)
 }
 
@@ -363,26 +377,31 @@ func (rsl replicaStateLoader) setMVCCStats(
 func loadLastIndex(
 	ctx context.Context, reader engine.Reader, rangeID roachpb.RangeID,
 ) (uint64, error) {
-	rsl := makeReplicaStateLoader(rangeID)
+	rsl := makeReplicaStateLoader(nil, rangeID)
 	return rsl.loadLastIndex(ctx, reader)
 }
 
 func (rsl replicaStateLoader) loadLastIndex(
 	ctx context.Context, reader engine.Reader,
 ) (uint64, error) {
+	iter := reader.NewIterator(false)
+	defer iter.Close()
+
 	var lastIndex uint64
-	v, _, err := engine.MVCCGet(ctx, reader, rsl.RaftLastIndexKey(),
-		hlc.Timestamp{}, true /* consistent */, nil)
-	if err != nil {
-		return 0, err
-	}
-	if v != nil {
-		int64LastIndex, err := v.GetInt()
-		if err != nil {
-			return 0, err
+	iter.SeekReverse(engine.MakeMVCCMetadataKey(rsl.RaftLogKey(math.MaxUint64)))
+	if ok, _ := iter.Valid(); ok {
+		key := iter.Key()
+		prefix := rsl.RaftLogPrefix()
+		if bytes.HasPrefix(key.Key, prefix) {
+			var err error
+			_, lastIndex, err = encoding.DecodeUint64Ascending(key.Key[len(prefix):])
+			if err != nil {
+				log.Fatalf(ctx, "unable to decode Raft log index key: %s", key)
+			}
 		}
-		lastIndex = uint64(int64LastIndex)
-	} else {
+	}
+
+	if lastIndex == 0 {
 		// The log is empty, which means we are either starting from scratch
 		// or the entire log has been truncated away.
 		lastEnt, err := rsl.loadTruncatedState(ctx, reader)
@@ -397,6 +416,9 @@ func (rsl replicaStateLoader) loadLastIndex(
 func (rsl replicaStateLoader) setLastIndex(
 	ctx context.Context, eng engine.ReadWriter, lastIndex uint64,
 ) error {
+	if rsl.version.IsActive(cluster.VersionRaftLastIndex) {
+		return nil
+	}
 	var value roachpb.Value
 	value.SetInt(int64(lastIndex))
 	return engine.MVCCPut(ctx, eng, nil, rsl.RaftLastIndexKey(),
@@ -433,7 +455,7 @@ func (rsl replicaStateLoader) setReplicaDestroyedError(
 func loadHardState(
 	ctx context.Context, reader engine.Reader, rangeID roachpb.RangeID,
 ) (raftpb.HardState, error) {
-	rsl := makeReplicaStateLoader(rangeID)
+	rsl := makeReplicaStateLoader(nil, rangeID)
 	return rsl.loadHardState(ctx, reader)
 }
 
@@ -527,6 +549,7 @@ func (rsl replicaStateLoader) synthesizeHardState(
 // are returned.
 func writeInitialReplicaState(
 	ctx context.Context,
+	st *cluster.Settings,
 	eng engine.ReadWriter,
 	ms enginepb.MVCCStats,
 	desc roachpb.RangeDescriptor,
@@ -534,7 +557,7 @@ func writeInitialReplicaState(
 	gcThreshold hlc.Timestamp,
 	txnSpanGCThreshold hlc.Timestamp,
 ) (enginepb.MVCCStats, error) {
-	rsl := makeReplicaStateLoader(desc.RangeID)
+	rsl := makeReplicaStateLoader(st, desc.RangeID)
 
 	var s storagebase.ReplicaState
 	s.TruncatedState = &roachpb.RaftTruncatedState{
@@ -582,6 +605,7 @@ func writeInitialReplicaState(
 // state itself, and the updated stats are returned.
 func writeInitialState(
 	ctx context.Context,
+	st *cluster.Settings,
 	eng engine.ReadWriter,
 	ms enginepb.MVCCStats,
 	desc roachpb.RangeDescriptor,
@@ -589,11 +613,11 @@ func writeInitialState(
 	gcThreshold hlc.Timestamp,
 	txnSpanGCThreshold hlc.Timestamp,
 ) (enginepb.MVCCStats, error) {
-	newMS, err := writeInitialReplicaState(ctx, eng, ms, desc, lease, gcThreshold, txnSpanGCThreshold)
+	newMS, err := writeInitialReplicaState(ctx, st, eng, ms, desc, lease, gcThreshold, txnSpanGCThreshold)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-	if err := makeReplicaStateLoader(desc.RangeID).synthesizeRaftState(ctx, eng); err != nil {
+	if err := makeReplicaStateLoader(st, desc.RangeID).synthesizeRaftState(ctx, eng); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	return newMS, nil
@@ -611,6 +635,10 @@ type ReplicaEvalContext struct {
 // ClusterSettings returns the node's ClusterSettings.
 func (rec ReplicaEvalContext) ClusterSettings() *cluster.Settings {
 	return rec.repl.store.cfg.Settings
+}
+
+func (rec *ReplicaEvalContext) makeReplicaStateLoader() replicaStateLoader {
+	return makeReplicaStateLoader(rec.ClusterSettings(), rec.RangeID())
 }
 
 // In-memory state, immutable fields, and debugging methods are accessed directly.
