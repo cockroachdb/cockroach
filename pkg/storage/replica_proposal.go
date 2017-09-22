@@ -329,12 +329,12 @@ func (p *EvalResult) MergeAndDestroy(q EvalResult) error {
 	}
 	q.Replicated.ComputeChecksum = nil
 
-	if p.Replicated.RaftLogDelta == nil {
+	if p.Replicated.RaftLogDelta == 0 {
 		p.Replicated.RaftLogDelta = q.Replicated.RaftLogDelta
-	} else if q.Replicated.RaftLogDelta != nil {
+	} else if q.Replicated.RaftLogDelta != 0 {
 		return errors.New("conflicting RaftLogDelta")
 	}
-	q.Replicated.RaftLogDelta = nil
+	q.Replicated.RaftLogDelta = 0
 
 	if p.Replicated.AddSSTable == nil {
 		p.Replicated.AddSSTable = q.Replicated.AddSSTable
@@ -872,10 +872,10 @@ func (r *Replica) handleReplicatedEvalResult(
 		rResult.ComputeChecksum = nil
 	}
 
-	if rResult.RaftLogDelta != nil {
+	if rResult.RaftLogDelta != 0 {
 		r.mu.Lock()
-		r.mu.raftLogSize += *rResult.RaftLogDelta
-		r.mu.raftLogLastCheckSize += *rResult.RaftLogDelta
+		r.mu.raftLogSize += rResult.RaftLogDelta
+		r.mu.raftLogLastCheckSize += rResult.RaftLogDelta
 		// Ensure raftLog{,LastCheck}Size is not negative since it isn't persisted
 		// between server restarts.
 		if r.mu.raftLogSize < 0 {
@@ -885,7 +885,7 @@ func (r *Replica) handleReplicatedEvalResult(
 			r.mu.raftLogLastCheckSize = 0
 		}
 		r.mu.Unlock()
-		rResult.RaftLogDelta = nil
+		rResult.RaftLogDelta = 0
 	} else {
 		// Check for whether to queue the range for Raft log truncation if this is
 		// not a Raft log truncation command itself. We don't want to check the

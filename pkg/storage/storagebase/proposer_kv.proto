@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-syntax = "proto2";
+syntax = "proto3";
 package cockroach.storage.storagebase;
 option go_package = "storagebase";
 
@@ -33,12 +33,12 @@ import "gogoproto/gogo.proto";
 message Split {
   option (gogoproto.equal) = true;
 
-  optional roachpb.SplitTrigger trigger = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  roachpb.SplitTrigger trigger = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // RHSDelta holds the statistics for what was written to what is now the
   // right-hand side of the split during the batch which executed it.
   // The on-disk state of the right-hand side is already correct, but the
   // Store must learn about this delta to update its counters appropriately.
-  optional storage.engine.enginepb.MVCCStats rhs_delta = 2 [(gogoproto.nullable) = false,
+  storage.engine.enginepb.MVCCStats rhs_delta = 2 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "RHSDelta"];
 }
 
@@ -47,7 +47,7 @@ message Split {
 message Merge {
   option (gogoproto.equal) = true;
 
-  optional roachpb.MergeTrigger trigger = 1 [(gogoproto.nullable) = false,
+  roachpb.MergeTrigger trigger = 1 [(gogoproto.nullable) = false,
     (gogoproto.embed) = true];
 }
 
@@ -58,7 +58,7 @@ message ChangeReplicas {
 
   option (gogoproto.goproto_stringer) = false;
 
-  optional roachpb.ChangeReplicasTrigger trigger = 1 [(gogoproto.nullable) = false,
+  roachpb.ChangeReplicasTrigger trigger = 1 [(gogoproto.nullable) = false,
     (gogoproto.embed) = true];
 }
 
@@ -71,30 +71,30 @@ message ChangeReplicas {
 message ReplicatedEvalResult {
   option (gogoproto.equal) = true;
 
-  optional bytes start_key = 14 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
-  optional bytes end_key = 15 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
+  bytes start_key = 14 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
+  bytes end_key = 15 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
   // Whether to block concurrent readers while processing the proposal data.
-  optional bool block_reads = 1 [(gogoproto.nullable) = false];
+  bool block_reads = 1;
   // Updates to the Replica's ReplicaState. By convention and as outlined on
   // the comment on the ReplicaState message, this field is sparsely populated
   // and any field set overwrites the corresponding field in the state, perhaps
   // which additional side effects (for instance on a descriptor update).
-  optional storage.storagebase.ReplicaState state = 2;
-  optional Split split = 3;
-  optional Merge merge = 4;
-  optional roachpb.ComputeChecksumRequest compute_checksum = 5;
-  optional bool is_lease_request = 6 [(gogoproto.nullable) = false];
-  optional bool is_freeze = 7 [(gogoproto.nullable) = false];
+  storage.storagebase.ReplicaState state = 2;
+  Split split = 3;
+  Merge merge = 4;
+  roachpb.ComputeChecksumRequest compute_checksum = 5;
+  bool is_lease_request = 6;
+  bool is_freeze = 7;
   // Duplicates BatchRequest.Timestamp for proposer-evaluated KV. Used
   // to verify the validity of the command (for lease coverage and GC
   // threshold).
-  optional util.hlc.Timestamp timestamp = 8 [(gogoproto.nullable) = false];
-  optional bool is_consistency_related = 9 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp timestamp = 8 [(gogoproto.nullable) = false];
+  bool is_consistency_related = 9;
   // The stats delta corresponding to the data in this WriteBatch. On
   // a split, contains only the contributions to the left-hand side.
-  optional storage.engine.enginepb.MVCCNetworkStats delta = 10 [(gogoproto.nullable) = false];
-  optional ChangeReplicas change_replicas = 12;
-  optional int64 raft_log_delta = 13;
+  storage.engine.enginepb.MVCCNetworkStats delta = 10 [(gogoproto.nullable) = false];
+  ChangeReplicas change_replicas = 12;
+  int64 raft_log_delta = 13;
 
   // AddSSTable is a side effect that must execute before the Raft application
   // is committed. It must be idempotent to account for an ill-timed crash after
@@ -109,11 +109,11 @@ message ReplicatedEvalResult {
   message AddSSTable {
     option (gogoproto.equal) = true;
 
-    optional bytes data = 1;
-    optional uint32 crc32 = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "CRC32"];
+    bytes data = 1;
+    uint32 crc32 = 2 [(gogoproto.customname) = "CRC32"];
   }
   reserved 16;
-  optional AddSSTable add_sstable = 17 [(gogoproto.customname) = "AddSSTable"];
+  AddSSTable add_sstable = 17 [(gogoproto.customname) = "AddSSTable"];
 
   reserved 10001 to 10013;
 }
@@ -124,7 +124,7 @@ message ReplicatedEvalResult {
 // containing pointers to it can be compared with the == operator (we
 // rely on this in storage.EvalResult)
 message WriteBatch {
-  optional bytes data = 1;
+  bytes data = 1;
 }
 
 // RaftCommand is the message written to the raft log. It contains
@@ -138,7 +138,7 @@ message RaftCommand {
 
   // proposer_replica is the replica which proposed this command, to be
   // used for lease validation.
-  optional roachpb.ReplicaDescriptor proposer_replica = 2 [(gogoproto.nullable) = false];
+  roachpb.ReplicaDescriptor proposer_replica = 2 [(gogoproto.nullable) = false];
 
   // proposer_lease is provided to verify at raft command apply-time that
   // the lease under which the command was proposed remains in effect.
@@ -152,7 +152,7 @@ message RaftCommand {
   // - the command applies on replica 1
   // - replica 2 serves anomalous reads which don't see the write
   // - the command applies on replica 2
-  optional roachpb.Lease proposer_lease = 5 [(gogoproto.nullable) = false];
+  roachpb.Lease proposer_lease = 5 [(gogoproto.nullable) = false];
 
   // When the command is applied, its result is an error if the lease log
   // counter has already reached (or exceeded) max_lease_index.
@@ -186,19 +186,19 @@ message RaftCommand {
   // been added after it, and on removal, the assignment counters must be
   // updated accordingly. Managing retry of proposals becomes trickier as
   // well as that uproots whatever ordering was originally envisioned.
-  optional uint64 max_lease_index = 4 [(gogoproto.nullable) = false];
+  uint64 max_lease_index = 4;
 
   // testing_batch_request is the KV request that generated this Raft command.
   //
   // TODO(bdarnell): This used to be a pre-proposer-evaluated-kv field; we're
   // now exclusively proposer-evaluated, but it is still needed by certain tests
   // that use TestingEvalFilter. See #10493.
-  optional roachpb.BatchRequest testing_batch_request = 3;
+  roachpb.BatchRequest testing_batch_request = 3;
 
   // Proposer-evaluated KV mode.
 
-  optional ReplicatedEvalResult replicated_eval_result = 13 [(gogoproto.nullable) = false];
-  optional WriteBatch write_batch = 14;
+  ReplicatedEvalResult replicated_eval_result = 13 [(gogoproto.nullable) = false];
+  WriteBatch write_batch = 14;
 
   reserved 1, 10001 to 10014;
 }
