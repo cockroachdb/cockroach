@@ -17,10 +17,9 @@ package cockroach.storage.engine.enginepb;
 
 import "gogoproto/gogo.proto";
 
-// MVCCNetworkStats needs to be convertible to MVCCStats. The fields
-// and encodings are identical, except we're using proto3 vs
-// proto2. Zero-valued primitive types will not be encoded on the
-// wire.
+// MVCCNetworkStats is convertible to MVCCStats, but uses variable width
+// encodings for most fields. This makes the encodings incompatible. Note that
+// with proto3, zero-valued primitive types will not be encoded at all.
 message MVCCNetworkStats {
   option (gogoproto.equal) = true;
 
@@ -28,14 +27,14 @@ message MVCCNetworkStats {
   sfixed64 last_update_nanos = 1;
   sfixed64 intent_age = 2;
   sfixed64 gc_bytes_age = 3 [(gogoproto.customname) = "GCBytesAge"];
-  sfixed64 live_bytes = 4;
-  sfixed64 live_count = 5;
-  sfixed64 key_bytes = 6;
-  sfixed64 key_count = 7;
-  sfixed64 val_bytes = 8;
-  sfixed64 val_count = 9;
-  sfixed64 intent_bytes = 10;
-  sfixed64 intent_count = 11;
-  sfixed64 sys_bytes = 12;
-  sfixed64 sys_count = 13;
+  sint64 live_bytes = 4;
+  sint64 live_count = 5;
+  sint64 key_bytes = 6;
+  sint64 key_count = 7;
+  sint64 val_bytes = 8;
+  sint64 val_count = 9;
+  sint64 intent_bytes = 10;
+  sint64 intent_count = 11;
+  sint64 sys_bytes = 12;
+  sint64 sys_count = 13;
 }
