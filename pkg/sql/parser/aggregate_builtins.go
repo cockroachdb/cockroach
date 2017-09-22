@@ -873,11 +873,6 @@ func (a *intSqrDiffAggregate) Count() *apd.Decimal {
 	return a.agg.Count()
 }
 
-// Ed is part of the decimalSqrDiff interface.
-func (a *intSqrDiffAggregate) Ed() *apd.ErrDecimal {
-	return a.agg.Ed()
-}
-
 // Tmp is part of the decimalSqrDiff interface.
 func (a *intSqrDiffAggregate) Tmp() *apd.Decimal {
 	return a.agg.Tmp()
@@ -951,6 +946,25 @@ func (a *floatSqrDiffAggregate) Result() (Datum, error) {
 // Close is part of the AggregateFunc interface.
 func (a *floatSqrDiffAggregate) Close(context.Context) {}
 
+// intermediateApdCtx returns the apd context that should be used for all
+// intermediate decimal calculations.
+func intermediateApdCtx() *apd.Context {
+	// Use extra internal precision during intermediate calculations to
+	// protect against order changes that can happen in dist SQL. The
+	// additional 3 here should allow for correctness up to 1000 more worst
+	// case inputs than non-worst case inputs. See #13689 for more analysis
+	// and other algorithms.
+	// This was bumped to 5 to account for additional imprecision introduced
+	// by local/final aggregation of squared difference-related results.
+	return DecimalCtx.WithPrecision(DecimalCtx.Precision + 5)
+}
+
+// finalApdCtx returns the apd context that should be used for the final
+// decimal calculation that will be propagated to the user.
+func finalApdCtx() *apd.Context {
+	return DecimalCtx
+}
+
 type decimalSqrDiffAggregate struct {
 	// Variables used across iterations.
 	ed      *apd.ErrDecimal
@@ -964,15 +978,8 @@ type decimalSqrDiffAggregate struct {
 }
 
 func newDecimalSqrDiff() decimalSqrDiff {
-	// Use extra internal precision during squared difference to protect against
-	// order changes that can happen in dist SQL. The additional 3 here should
-	// allow for correctness up to 1000 more worst case inputs than non-worst
-	// case inputs. See #13689 for more analysis and other algorithms.
-	c := DecimalCtx.WithPrecision(DecimalCtx.Precision + 3)
-	ed := apd.MakeErrDecimal(c)
-	return &decimalSqrDiffAggregate{
-		ed: &ed,
-	}
+	ed := apd.MakeErrDecimal(intermediateApdCtx())
+	return &decimalSqrDiffAggregate{ed: &ed}
 }
 
 func newDecimalSqrDiffAggregate(_ []Type, _ *EvalContext) AggregateFunc {
@@ -982,11 +989,6 @@ func newDecimalSqrDiffAggregate(_ []Type, _ *EvalContext) AggregateFunc {
 // Count is part of the decimalSqrDiff interface.
 func (a *decimalSqrDiffAggregate) Count() *apd.Decimal {
 	return &a.count
-}
-
-// Ed is part of the decimalSqrDiff interface.
-func (a *decimalSqrDiffAggregate) Ed() *apd.ErrDecimal {
-	return a.ed
 }
 
 // Tmp is part of the decimalSqrDiff interface.
@@ -1107,25 +1109,13 @@ type decimalSumSqrDiffsAggregate struct {
 }
 
 func newDecimalSumSqrDiffs() decimalSqrDiff {
-	// Use extra internal precision during squared difference to protect against
-	// order changes that can happen in dist SQL. The additional 3 here should
-	// allow for correctness up to 1000 more worst case inputs than non-worst
-	// case inputs. See #13689 for more analysis and other algorithms.
-	c := DecimalCtx.WithPrecision(DecimalCtx.Precision + 3)
-	ed := apd.MakeErrDecimal(c)
-	return &decimalSumSqrDiffsAggregate{
-		ed: &ed,
-	}
+	ed := apd.MakeErrDecimal(intermediateApdCtx())
+	return &decimalSumSqrDiffsAggregate{ed: &ed}
 }
 
 // Count is part of the decimalSqrDiff interface.
 func (a *decimalSumSqrDiffsAggregate) Count() *apd.Decimal {
 	return &a.count
-}
-
-// Ed is part of the decimalSqrDiff interface.
-func (a *decimalSumSqrDiffsAggregate) Ed() *apd.ErrDecimal {
-	return a.ed
 }
 
 // Tmp is part of the decimalSumSqrDiffs interface.
@@ -1186,10 +1176,6 @@ func (a *decimalSumSqrDiffsAggregate) Result() (Datum, error) {
 		return DNull, nil
 	}
 	dd := &DDecimal{a.sqrDiff}
-	// Remove trailing zeros. Depending on the order in which the input
-	// is processed, some number of trailing zeros could be added to the
-	// output. Remove them so that the results are the same regardless of order.
-	dd.Decimal.Reduce(&dd.Decimal)
 	return dd, nil
 }
 
@@ -1204,7 +1190,6 @@ type floatSqrDiff interface {
 type decimalSqrDiff interface {
 	AggregateFunc
 	Count() *apd.Decimal
-	Ed() *apd.ErrDecimal
 	Tmp() *apd.Decimal
 }
 
@@ -1281,11 +1266,11 @@ func (a *decimalVarianceAggregate) Result() (Datum, error) {
 	if err != nil {
 		return nil, err
 	}
-	a.agg.Ed().Sub(a.agg.Tmp(), a.agg.Count(), decimalOne)
+	if _, err = intermediateApdCtx().Sub(a.agg.Tmp(), a.agg.Count(), decimalOne); err != nil {
+		return nil, err
+	}
 	dd := &DDecimal{}
-	a.agg.Ed().Ctx = DecimalCtx
-	a.agg.Ed().Quo(&dd.Decimal, &sqrDiff.(*DDecimal).Decimal, a.agg.Tmp())
-	if err := a.agg.Ed().Err(); err != nil {
+	if _, err = finalApdCtx().Quo(&dd.Decimal, &sqrDiff.(*DDecimal).Decimal, a.agg.Tmp()); err != nil {
 		return nil, err
 	}
 	// Remove trailing zeros. Depending on the order in which the input is
@@ -1368,6 +1353,12 @@ func (a *floatStdDevAggregate) Result() (Datum, error) {
 
 // Result computes the square root of the variance aggregator.
 func (a *decimalStdDevAggregate) Result() (Datum, error) {
+	// TODO(richardwu): both decimalVarianceAggregate and
+	// finalDecimalVarianceAggregate returns a decimal result with
+	// finalApdCtx precision. We want to be able to specify that the
+	// varianceAggregate use intermediateApdCtx (with the extra precision)
+	// to align final precision for STDDEV/VARIANCE results (we still need
+	// to do a Sqrt on the variance result).
 	variance, err := a.agg.Result()
 	if err != nil {
 		return nil, err
@@ -1376,7 +1367,7 @@ func (a *decimalStdDevAggregate) Result() (Datum, error) {
 		return variance, nil
 	}
 	varianceDec := variance.(*DDecimal)
-	_, err = DecimalCtx.Sqrt(&varianceDec.Decimal, &varianceDec.Decimal)
+	_, err = finalApdCtx().Sqrt(&varianceDec.Decimal, &varianceDec.Decimal)
 	return varianceDec, err
 }
 
