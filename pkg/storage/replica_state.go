@@ -114,7 +114,7 @@ func (rsl replicaStateLoader) load(
 func (rsl replicaStateLoader) save(
 	ctx context.Context, eng engine.ReadWriter, state storagebase.ReplicaState,
 ) (enginepb.MVCCStats, error) {
-	ms := &state.Stats
+	ms := state.Stats
 	if err := rsl.setLease(ctx, eng, ms, *state.Lease); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
@@ -123,19 +123,19 @@ func (rsl replicaStateLoader) save(
 	); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-	if err := rsl.setGCThreshold(ctx, eng, ms, &state.GCThreshold); err != nil {
+	if err := rsl.setGCThreshold(ctx, eng, ms, state.GCThreshold); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-	if err := rsl.setTxnSpanGCThreshold(ctx, eng, ms, &state.TxnSpanGCThreshold); err != nil {
+	if err := rsl.setTxnSpanGCThreshold(ctx, eng, ms, state.TxnSpanGCThreshold); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	if err := rsl.setTruncatedState(ctx, eng, ms, state.TruncatedState); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-	if err := rsl.setMVCCStats(ctx, eng, &state.Stats); err != nil {
+	if err := rsl.setMVCCStats(ctx, eng, ms); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-	return state.Stats, nil
+	return *ms, nil
 }
 
 func (rsl replicaStateLoader) loadLease(
@@ -303,11 +303,11 @@ func (rsl replicaStateLoader) setTruncatedState(
 
 func (rsl replicaStateLoader) loadGCThreshold(
 	ctx context.Context, reader engine.Reader,
-) (hlc.Timestamp, error) {
+) (*hlc.Timestamp, error) {
 	var t hlc.Timestamp
 	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeLastGCKey(),
 		hlc.Timestamp{}, true, nil, &t)
-	return t, err
+	return &t, err
 }
 
 func (rsl replicaStateLoader) setGCThreshold(
@@ -322,11 +322,11 @@ func (rsl replicaStateLoader) setGCThreshold(
 
 func (rsl replicaStateLoader) loadTxnSpanGCThreshold(
 	ctx context.Context, reader engine.Reader,
-) (hlc.Timestamp, error) {
+) (*hlc.Timestamp, error) {
 	var t hlc.Timestamp
 	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeTxnSpanGCThresholdKey(),
 		hlc.Timestamp{}, true, nil, &t)
-	return t, err
+	return &t, err
 }
 
 func (rsl replicaStateLoader) setTxnSpanGCThreshold(
@@ -342,10 +342,10 @@ func (rsl replicaStateLoader) setTxnSpanGCThreshold(
 
 func (rsl replicaStateLoader) loadMVCCStats(
 	ctx context.Context, reader engine.Reader,
-) (enginepb.MVCCStats, error) {
+) (*enginepb.MVCCStats, error) {
 	var ms enginepb.MVCCStats
 	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeStatsKey(), hlc.Timestamp{}, true, nil, &ms)
-	return ms, err
+	return &ms, err
 }
 
 func (rsl replicaStateLoader) setMVCCStats(
@@ -545,10 +545,10 @@ func writeInitialReplicaState(
 	s.Desc = &roachpb.RangeDescriptor{
 		RangeID: desc.RangeID,
 	}
-	s.Stats = ms
+	s.Stats = &ms
 	s.Lease = &lease
-	s.GCThreshold = gcThreshold
-	s.TxnSpanGCThreshold = txnSpanGCThreshold
+	s.GCThreshold = &gcThreshold
+	s.TxnSpanGCThreshold = &txnSpanGCThreshold
 
 	if existingLease, err := rsl.loadLease(ctx, eng); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading lease")
@@ -558,13 +558,13 @@ func writeInitialReplicaState(
 
 	if existingGCThreshold, err := rsl.loadGCThreshold(ctx, eng); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading GCThreshold")
-	} else if (existingGCThreshold != hlc.Timestamp{}) {
+	} else if (*existingGCThreshold != hlc.Timestamp{}) {
 		log.Fatalf(ctx, "expected trivial GChreshold, but found %+v", existingGCThreshold)
 	}
 
 	if existingTxnSpanGCThreshold, err := rsl.loadTxnSpanGCThreshold(ctx, eng); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading TxnSpanGCThreshold")
-	} else if (existingTxnSpanGCThreshold != hlc.Timestamp{}) {
+	} else if (*existingTxnSpanGCThreshold != hlc.Timestamp{}) {
 		log.Fatalf(ctx, "expected trivial TxnSpanGCThreshold, but found %+v", existingTxnSpanGCThreshold)
 	}
 
@@ -745,7 +745,7 @@ func (rec ReplicaEvalContext) GCThreshold() (hlc.Timestamp, error) {
 	}
 	rec.repl.mu.RLock()
 	defer rec.repl.mu.RUnlock()
-	return rec.repl.mu.state.GCThreshold, nil
+	return *rec.repl.mu.state.GCThreshold, nil
 }
 
 // TxnSpanGCThreshold returns the time of the Replica's last
@@ -760,7 +760,7 @@ func (rec ReplicaEvalContext) TxnSpanGCThreshold() (hlc.Timestamp, error) {
 	}
 	rec.repl.mu.RLock()
 	defer rec.repl.mu.RUnlock()
-	return rec.repl.mu.state.TxnSpanGCThreshold, nil
+	return *rec.repl.mu.state.TxnSpanGCThreshold, nil
 }
 
 // GetLastReplicaGCTimestamp returns the last time the Replica was

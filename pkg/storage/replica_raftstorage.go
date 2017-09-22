@@ -834,8 +834,8 @@ func (r *Replica) applySnapshot(
 	r.mu.lastTerm = lastTerm
 	r.mu.raftLogSize = raftLogSize
 	// Update the range and store stats.
-	r.store.metrics.subtractMVCCStats(r.mu.state.Stats)
-	r.store.metrics.addMVCCStats(s.Stats)
+	r.store.metrics.subtractMVCCStats(*r.mu.state.Stats)
+	r.store.metrics.addMVCCStats(*s.Stats)
 	r.mu.state = s
 	r.assertStateLocked(ctx, r.store.Engine())
 	r.mu.Unlock()
