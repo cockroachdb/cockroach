@@ -240,6 +240,13 @@ type Gossip struct {
 // The higher level manages the NodeIDContainer instance (which can be shared by
 // various server components). The ambient context is expected to already
 // contain the node ID.
+//
+// grpcServer: The server on which the new Gossip instance will register its RPC
+//   service. Can be nil, in which case the Gossip will not register the
+//   service.
+// rpcContext: The context used to connect to other nodes. Can be nil for tests
+//   that also specify a nil grpcServer and that plan on using the Gossip in a
+//   restricted way by populating it with data manually.
 func New(
 	ambient log.AmbientContext,
 	nodeID *base.NodeIDContainer,
@@ -277,12 +284,21 @@ func New(
 	g.mu.is.registerCallback(MakePrefixPattern(KeyNodeIDPrefix), g.updateNodeAddress)
 	g.mu.Unlock()
 
-	RegisterGossipServer(grpcServer, g.server)
+	if grpcServer != nil {
+		RegisterGossipServer(grpcServer, g.server)
+	}
 	return g
 }
 
 // NewTest is a simplified wrapper around New that creates the NodeIDContainer
 // internally. Used for testing.
+//
+// grpcServer: The server on which the new Gossip instance will register its RPC
+//   service. Can be nil, in which case the Gossip will not register the
+//   service.
+// rpcContext: The context used to connect to other nodes. Can be nil for tests
+//   that also specify a nil grpcServer and that plan on using the Gossip in a
+//   restricted way by populating it with data manually.
 func NewTest(
 	nodeID roachpb.NodeID,
 	rpcContext *rpc.Context,

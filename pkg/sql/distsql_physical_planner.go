@@ -532,22 +532,38 @@ func (dsp *distSQLPlanner) partitionSpans(
 				addr, inAddrMap := planCtx.nodeAddresses[nodeID]
 				if !inAddrMap {
 					addr = replInfo.NodeDesc.Address.String()
-					var err error
-					if dsp.testingKnobs.OverrideHealthCheck != nil {
-						err = dsp.testingKnobs.OverrideHealthCheck(replInfo.NodeDesc.NodeID, addr)
-					} else {
-						err = dsp.rpcContext.ConnHealth(addr)
+					checkNodeHealth := func() error {
+						// Check if the node is still in gossip - i.e. if it hasn't been
+						// decommissioned or overridden by another node at the same address.
+						if _, err := dsp.gossip.GetNodeIDAddress(nodeID); err != nil {
+							log.VEventf(ctx, 1, "not using n%d because gossip doesn't know about it. "+
+								"It might have gone away from the cluster. Gossip said: %s.", nodeID, err)
+							return err
+						}
+
+						var err error
+						if dsp.testingKnobs.OverrideHealthCheck != nil {
+							err = dsp.testingKnobs.OverrideHealthCheck(replInfo.NodeDesc.NodeID, addr)
+						} else {
+							err = dsp.rpcContext.ConnHealth(addr)
+						}
+						if err != nil && err != rpc.ErrNotConnected && err != rpc.ErrNotHeartbeated {
+							// This host is known to be unhealthy. Don't use it (use the gateway
+							// instead). Note: this can never happen for our nodeID (which
+							// always has its address in the nodeMap).
+							log.VEventf(ctx, 1, "marking n%d as unhealthy for this plan: %v", nodeID, err)
+							return err
+						}
+						return nil
 					}
-					if err != nil && err != rpc.ErrNotConnected && err != rpc.ErrNotHeartbeated {
-						// This host is known to be unhealthy. Don't use it (use the gateway
-						// instead). Note: this can never happen for our nodeID (which
-						// always has its address in the nodeMap).
+					if err := checkNodeHealth(); err != nil {
 						addr = ""
-						log.VEventf(ctx, 1, "marking node %d as unhealthy for this plan: %v", nodeID, err)
 					}
-					planCtx.nodeAddresses[nodeID] = addr
+					if err == nil && addr != "" {
+						planCtx.nodeAddresses[nodeID] = addr
+					}
 				}
-				var compat bool
+				compat := true
 				if addr != "" {
 					// Check if the node's DistSQL version is compatible with this plan.
 					// If it isn't, we'll use the gateway.
@@ -604,15 +620,8 @@ func (dsp *distSQLPlanner) nodeVersionIsCompatible(
 	nodeID roachpb.NodeID, planVer distsqlrun.DistSQLVersion,
 ) bool {
 	var v distsqlrun.DistSQLVersionGossipInfo
-	if hook := dsp.testingKnobs.OverrideDistSQLVersionCheck; hook != nil {
-		var err error
-		if v, err = hook(nodeID); err != nil {
-			return false
-		}
-	} else {
-		if err := dsp.gossip.GetInfoProto(gossip.MakeDistSQLNodeVersionKey(nodeID), &v); err != nil {
-			return false
-		}
+	if err := dsp.gossip.GetInfoProto(gossip.MakeDistSQLNodeVersionKey(nodeID), &v); err != nil {
+		return false
 	}
 	return distsqlrun.FlowVerIsCompatible(dsp.planVersion, v.MinAcceptedVersion, v.Version)
 }
