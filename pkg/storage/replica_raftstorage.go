@@ -80,7 +80,7 @@ func (r *replicaRaftStorage) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, e
 	readonly := r.store.Engine().NewReadOnly()
 	defer readonly.Close()
 	ctx := r.AnnotateCtx(context.TODO())
-	return entries(ctx, readonly, r.RangeID, r.store.raftEntryCache,
+	return entries(ctx, r.mu.stateLoader, readonly, r.RangeID, r.store.raftEntryCache,
 		r.raftMu.sideloaded, lo, hi, maxBytes)
 }
 
@@ -95,6 +95,7 @@ func (r *Replica) raftEntriesLocked(lo, hi, maxBytes uint64) ([]raftpb.Entry, er
 // loaded entries, and maxBytes will not be applied to the payloads.
 func entries(
 	ctx context.Context,
+	rsl replicaStateLoader,
 	e engine.Reader,
 	rangeID roachpb.RangeID,
 	eCache *raftEntryCache,
@@ -187,7 +188,7 @@ func entries(
 		}
 
 		// Was the missing index after the last index?
-		lastIndex, err := loadLastIndex(ctx, e, rangeID)
+		lastIndex, err := rsl.loadLastIndex(ctx, e)
 		if err != nil {
 			return nil, err
 		}
@@ -200,7 +201,7 @@ func entries(
 	}
 
 	// No results, was it due to unavailability or truncation?
-	ts, err := loadTruncatedState(ctx, e, rangeID)
+	ts, err := rsl.loadTruncatedState(ctx, e)
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +253,7 @@ func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
 	readonly := r.store.Engine().NewReadOnly()
 	defer readonly.Close()
 	ctx := r.AnnotateCtx(context.TODO())
-	return term(ctx, readonly, r.RangeID, r.store.raftEntryCache, i)
+	return term(ctx, r.mu.stateLoader, readonly, r.RangeID, r.store.raftEntryCache, i)
 }
 
 // raftTermLocked requires that r.mu is locked for reading.
@@ -261,13 +262,18 @@ func (r *Replica) raftTermRLocked(i uint64) (uint64, error) {
 }
 
 func term(
-	ctx context.Context, eng engine.Reader, rangeID roachpb.RangeID, eCache *raftEntryCache, i uint64,
+	ctx context.Context,
+	rsl replicaStateLoader,
+	eng engine.Reader,
+	rangeID roachpb.RangeID,
+	eCache *raftEntryCache,
+	i uint64,
 ) (uint64, error) {
 	// entries() accepts a `nil` sideloaded storage and will skip inlining of
 	// sideloaded entries. We only need the term, so this is what we do.
-	ents, err := entries(ctx, eng, rangeID, eCache, nil /* sideloaded */, i, i+1, 0)
+	ents, err := entries(ctx, rsl, eng, rangeID, eCache, nil /* sideloaded */, i, i+1, 0)
 	if err == raft.ErrCompacted {
-		ts, err := loadTruncatedState(ctx, eng, rangeID)
+		ts, err := rsl.loadTruncatedState(ctx, eng)
 		if err != nil {
 			return 0, err
 		}
@@ -408,7 +414,8 @@ func (r *Replica) GetSnapshot(
 		return fn(r.raftMu.sideloaded)
 	}
 	snapData, err := snapshot(
-		ctx, snapType, snap, rangeID, r.store.raftEntryCache, withSideloaded, startKey,
+		ctx, r.mu.stateLoader, snapType, snap, rangeID,
+		r.store.raftEntryCache, withSideloaded, startKey,
 	)
 	if err != nil {
 		log.Errorf(ctx, "error generating snapshot: %s", err)
@@ -460,6 +467,7 @@ type IncomingSnapshot struct {
 // given range. Note that snapshot() is called without Replica.raftMu held.
 func snapshot(
 	ctx context.Context,
+	rsl replicaStateLoader,
 	snapType string,
 	snap engine.Reader,
 	rangeID roachpb.RangeID,
@@ -486,7 +494,7 @@ func snapshot(
 
 	// Read the range metadata from the snapshot instead of the members
 	// of the Range struct because they might be changed concurrently.
-	appliedIndex, _, err := loadAppliedIndex(ctx, snap, rangeID)
+	appliedIndex, _, err := rsl.loadAppliedIndex(ctx, snap)
 	if err != nil {
 		return OutgoingSnapshot{}, err
 	}
@@ -497,12 +505,11 @@ func snapshot(
 		cs.Nodes = append(cs.Nodes, uint64(rep.ReplicaID))
 	}
 
-	term, err := term(ctx, snap, rangeID, eCache, appliedIndex)
+	term, err := term(ctx, rsl, snap, rangeID, eCache, appliedIndex)
 	if err != nil {
 		return OutgoingSnapshot{}, errors.Errorf("failed to fetch term of %d: %s", appliedIndex, err)
 	}
 
-	rsl := makeReplicaStateLoader(rangeID)
 	state, err := rsl.load(ctx, snap, &desc)
 	if err != nil {
 		return OutgoingSnapshot{}, err

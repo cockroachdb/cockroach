@@ -22,6 +22,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -57,7 +58,7 @@ func TestSynthesizeHardState(t *testing.T) {
 		func() {
 			batch := eng.NewBatch()
 			defer batch.Close()
-			rsl := makeReplicaStateLoader(1)
+			rsl := makeReplicaStateLoader(cluster.MakeTestingClusterSettings(), 1)
 
 			if test.OldHS != nil {
 				if err := rsl.setHardState(context.Background(), batch, *test.OldHS); err != nil {
