@@ -699,7 +699,7 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 		ProposerReplica: invalidLease.Replica,
 		ReplicatedEvalResult: storagebase.ReplicatedEvalResult{
 			IsLeaseRequest: true,
-			State: storagebase.ReplicaState{
+			State: &storagebase.ReplicaState{
 				Lease: &invalidLease,
 			},
 		},
