@@ -72,10 +72,15 @@ func TestCrashReportingPacket(t *testing.T) {
 
 	log.SetupCrashReporter(ctx, "test")
 
+	const (
+		panicPre  = "boom"
+		panicPost = "baam"
+	)
+
 	func() {
 		defer expectPanic("before server start")
 		defer log.RecoverAndReportPanic(ctx, &st.SV)
-		panic("oh te noes!")
+		panic(log.Safe(panicPre))
 	}()
 
 	func() {
@@ -83,37 +88,46 @@ func TestCrashReportingPacket(t *testing.T) {
 		defer log.RecoverAndReportPanic(ctx, &st.SV)
 		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 		s.Stopper().Stop(ctx)
-		panic("oh te noes!")
+		panic(log.Safe(panicPost))
 	}()
 
 	expectations := []struct {
 		serverID *regexp.Regexp
 		tagCount int
+		message  string
 	}{
-		{regexp.MustCompile(`^$`), 6},
-		{regexp.MustCompile(`^[a-z0-9]{8}-1$`), 9},
+		{regexp.MustCompile(`^$`), 6, "crash_reporting_packet_test.go:83: " + panicPre},
+		{regexp.MustCompile(`^[a-z0-9]{8}-1$`), 9, "crash_reporting_packet_test.go:91: " + panicPost},
 	}
 
 	if e, a := len(expectations), len(packets); e != a {
 		t.Fatalf("expected %d packets, but got %d", e, a)
 	}
 
-	for i := range expectations {
-		if e, a := "<redacted>", packets[i].ServerName; e != a {
-			t.Errorf("expected ServerName to be '<redacted>', but got '%s'", a)
-		}
+	for _, exp := range expectations {
+		p := packets[0]
+		packets = packets[1:]
+		t.Run("", func(t *testing.T) {
+			if e, a := "<redacted>", p.ServerName; e != a {
+				t.Errorf("expected ServerName to be '<redacted>', but got '%s'", a)
+			}
 
-		tags := make(map[string]string, len(packets[i].Tags))
-		for _, tag := range packets[i].Tags {
-			tags[tag.Key] = tag.Value
-		}
+			tags := make(map[string]string, len(p.Tags))
+			for _, tag := range p.Tags {
+				tags[tag.Key] = tag.Value
+			}
 
-		if e, a := expectations[i].tagCount, len(tags); e != a {
-			t.Errorf("%d: expected %d tags, but got %d", i, e, a)
-		}
+			if e, a := exp.tagCount, len(tags); e != a {
+				t.Errorf("expected %d tags, but got %d", e, a)
+			}
 
-		if serverID := tags["server_id"]; !expectations[i].serverID.MatchString(serverID) {
-			t.Errorf("%d: expected server_id '%s' to match %s", i, serverID, expectations[i].serverID)
-		}
+			if serverID := tags["server_id"]; !exp.serverID.MatchString(serverID) {
+				t.Errorf("expected server_id '%s' to match %s", serverID, exp.serverID)
+			}
+
+			if msg := p.Message; msg != exp.message {
+				t.Errorf("expected %s, got %s", exp.message, msg)
+			}
+		})
 	}
 }
