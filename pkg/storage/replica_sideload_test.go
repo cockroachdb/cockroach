@@ -738,8 +738,10 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 			if withSS {
 				ss = tc.repl.raftMu.sideloaded
 			}
+			rsl := makeReplicaStateLoader(tc.store.ClusterSettings(), tc.repl.RangeID)
 			entries, err := entries(
-				ctx, tc.store.Engine(), tc.repl.RangeID, tc.store.raftEntryCache, ss, sideloadedIndex, sideloadedIndex+1, 1<<20,
+				ctx, rsl, tc.store.Engine(), tc.repl.RangeID, tc.store.raftEntryCache,
+				ss, sideloadedIndex, sideloadedIndex+1, 1<<20,
 			)
 			if err != nil {
 				t.Fatal(err)

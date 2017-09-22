@@ -584,7 +584,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		abortCache:     NewAbortCache(rangeID),
 		pushTxnQueue:   newPushTxnQueue(store),
 	}
-	r.mu.stateLoader = makeReplicaStateLoader(rangeID)
+	r.mu.stateLoader = makeReplicaStateLoader(r.store.cfg.Settings, rangeID)
 	if leaseHistoryMaxEntries > 0 {
 		r.leaseHistory = newLeaseHistory()
 	}
@@ -609,7 +609,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		},
 	)
 	r.raftMu.timedMutex = makeTimedMutex(raftMuLogger)
-	r.raftMu.stateLoader = makeReplicaStateLoader(rangeID)
+	r.raftMu.stateLoader = makeReplicaStateLoader(r.store.cfg.Settings, rangeID)
 	return r
 }
 
@@ -4587,7 +4587,8 @@ func (r *Replica) applyRaftCommand(
 
 	var assertHS *raftpb.HardState
 	if util.RaceEnabled && rResult.Split != nil && r.store.cfg.Settings.Version.IsActive(cluster.VersionSplitHardStateBelowRaft) {
-		oldHS, err := loadHardState(ctx, r.store.Engine(), rResult.Split.RightDesc.RangeID)
+		rsl := makeReplicaStateLoader(r.store.cfg.Settings, rResult.Split.RightDesc.RangeID)
+		oldHS, err := rsl.loadHardState(ctx, r.store.Engine())
 		if err != nil {
 			log.Fatalf(ctx, "unable to load HardState: %s", err)
 		}
@@ -4600,7 +4601,8 @@ func (r *Replica) applyRaftCommand(
 
 	if assertHS != nil {
 		// Load the HardState that was just committed (if any).
-		newHS, err := loadHardState(ctx, r.store.Engine(), rResult.Split.RightDesc.RangeID)
+		rsl := makeReplicaStateLoader(r.store.cfg.Settings, rResult.Split.RightDesc.RangeID)
+		newHS, err := rsl.loadHardState(ctx, r.store.Engine())
 		if err != nil {
 			log.Fatalf(ctx, "unable to load HardState: %s", err)
 		}
