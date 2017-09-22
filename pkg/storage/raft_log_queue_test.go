@@ -262,7 +262,7 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 		valueSize int
 	}{
 		// Lots of small KVs.
-		{RaftLogQueueStaleThreshold * 3, 5},
+		{RaftLogQueueStaleSize / 100, 5},
 		// One big KV.
 		{1, RaftLogQueueStaleSize},
 	}
