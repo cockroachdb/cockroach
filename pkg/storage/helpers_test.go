@@ -251,7 +251,7 @@ func (r *Replica) DescLocked() *roachpb.RangeDescriptor {
 func (r *Replica) GetGCThreshold() hlc.Timestamp {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.state.GCThreshold
+	return *r.mu.state.GCThreshold
 }
 
 // GetTxnSpanGCThreshold returns the range's TxnSpanGCThreshold, acquiring a replica lock in
@@ -259,7 +259,7 @@ func (r *Replica) GetGCThreshold() hlc.Timestamp {
 func (r *Replica) GetTxnSpanGCThreshold() hlc.Timestamp {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.state.TxnSpanGCThreshold
+	return *r.mu.state.TxnSpanGCThreshold
 }
 
 func (r *Replica) AssertState(ctx context.Context, reader engine.Reader) {
