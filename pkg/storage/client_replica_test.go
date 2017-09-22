@@ -1002,7 +1002,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 			},
 			Lease: roachpb.Lease{
 				Start:      s.Clock().Now(),
-				Expiration: s.Clock().Now().Add(time.Second.Nanoseconds(), 0),
+				Expiration: s.Clock().Now().Add(time.Second.Nanoseconds(), 0).Clone(),
 				Replica:    repDesc,
 			},
 			PrevLease: curLease,

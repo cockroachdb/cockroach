@@ -554,17 +554,17 @@ func TestLeaseEquivalence(t *testing.T) {
 
 	epoch1 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(1)}
 	epoch2 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(2)}
-	expire1 := Lease{Replica: r1, Start: ts1, Expiration: ts2}
-	expire2 := Lease{Replica: r1, Start: ts1, Expiration: ts3}
+	expire1 := Lease{Replica: r1, Start: ts1, Expiration: ts2.Clone()}
+	expire2 := Lease{Replica: r1, Start: ts1, Expiration: ts3.Clone()}
 	epoch2TS2 := Lease{Replica: r2, Start: ts2, Epoch: proto.Int64(2)}
-	expire2TS2 := Lease{Replica: r2, Start: ts2, Expiration: ts3}
+	expire2TS2 := Lease{Replica: r2, Start: ts2, Expiration: ts3.Clone()}
 
-	proposed1 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(1), ProposedTS: &ts1}
-	proposed2 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(2), ProposedTS: &ts1}
-	proposed3 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(1), ProposedTS: &ts2}
+	proposed1 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(1), ProposedTS: ts1.Clone()}
+	proposed2 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(2), ProposedTS: ts1.Clone()}
+	proposed3 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(1), ProposedTS: ts2.Clone()}
 
-	stasis1 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(1), DeprecatedStartStasis: ts1}
-	stasis2 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(1), DeprecatedStartStasis: ts2}
+	stasis1 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(1), DeprecatedStartStasis: ts1.Clone()}
+	stasis2 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(1), DeprecatedStartStasis: ts2.Clone()}
 
 	testCases := []struct {
 		l, ol      Lease
