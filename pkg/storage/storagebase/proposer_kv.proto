@@ -20,6 +20,7 @@ import "cockroach/pkg/roachpb/api.proto";
 import "cockroach/pkg/roachpb/data.proto";
 import "cockroach/pkg/roachpb/metadata.proto";
 import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
+import "cockroach/pkg/storage/engine/enginepb/mvcc_network_stats.proto";
 import "cockroach/pkg/storage/storagebase/state.proto";
 import "cockroach/pkg/util/hlc/timestamp.proto";
 
@@ -91,7 +92,7 @@ message ReplicatedEvalResult {
   optional bool is_consistency_related = 9 [(gogoproto.nullable) = false];
   // The stats delta corresponding to the data in this WriteBatch. On
   // a split, contains only the contributions to the left-hand side.
-  optional storage.engine.enginepb.MVCCStats delta = 10 [(gogoproto.nullable) = false];
+  optional storage.engine.enginepb.MVCCNetworkStats delta = 10 [(gogoproto.nullable) = false];
   optional ChangeReplicas change_replicas = 12;
   optional int64 raft_log_delta = 13;
 
