@@ -24,7 +24,7 @@ var (
 	BinaryMinimumSupportedVersion = VersionBase
 
 	// BinaryServerVersion is the version of this binary.
-	BinaryServerVersion = VersionRaftLastIndex
+	BinaryServerVersion = VersionMVCCNetworkStats
 )
 
 // List all historical versions here in reverse chronological order, with
@@ -33,6 +33,9 @@ var (
 // NB: when adding a version, don't forget to bump ServerVersion above (and
 // perhaps MinimumSupportedVersion, if necessary).
 var (
+	// VersionMVCCNetworkStats is ...
+	VersionMVCCNetworkStats = roachpb.Version{Major: 1, Minor: 1, Unstable: 2}
+
 	// VersionRaftLastIndex is https://github.com/cockroachdb/cockroach/pull/18717.
 	VersionRaftLastIndex = roachpb.Version{Major: 1, Minor: 1, Unstable: 1}
 

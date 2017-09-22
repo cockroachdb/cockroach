@@ -4389,6 +4389,11 @@ func (r *Replica) processRaftCommand(
 			writeBatch = raftCmd.WriteBatch
 		}
 
+		if oldDelta := raftCmd.ReplicatedEvalResult.OldDelta; oldDelta != nil {
+			raftCmd.ReplicatedEvalResult.Delta = oldDelta.ToNetworkStats()
+			raftCmd.ReplicatedEvalResult.OldDelta = nil
+		}
+
 		// AddSSTable ingestions run before the actual batch. This makes sure
 		// that when the Raft command is applied, the ingestion has definitely
 		// succeeded. Note that we have taken precautions during command
@@ -4415,7 +4420,7 @@ func (r *Replica) processRaftCommand(
 		var delta enginepb.MVCCStats
 		delta, pErr = r.applyRaftCommand(
 			ctx, idKey, raftCmd.ReplicatedEvalResult, raftIndex, leaseIndex, writeBatch)
-		raftCmd.ReplicatedEvalResult.Delta = enginepb.MVCCNetworkStats(delta)
+		raftCmd.ReplicatedEvalResult.Delta = delta.ToNetworkStats()
 
 		if filter := r.store.cfg.TestingKnobs.TestingPostApplyFilter; pErr == nil && filter != nil {
 			pErr = filter(storagebase.ApplyFilterArgs{
@@ -4623,7 +4628,8 @@ func (r *Replica) applyRaftCommand(
 	// Special-cased MVCC stats handling to exploit commutativity of stats
 	// delta upgrades. Thanks to commutativity, the command queue does not
 	// have to serialize on the stats key.
-	ms.Add(enginepb.MVCCStats(rResult.Delta))
+	deltaStats := rResult.Delta.ToStats()
+	ms.Add(deltaStats)
 	if err := r.raftMu.stateLoader.setMVCCStats(ctx, writer, &ms); err != nil {
 		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
 			errors.Wrap(err, "unable to update MVCCStats")))
@@ -4667,7 +4673,7 @@ func (r *Replica) applyRaftCommand(
 
 	elapsed := timeutil.Since(start)
 	r.store.metrics.RaftCommandCommitLatency.RecordValue(elapsed.Nanoseconds())
-	return enginepb.MVCCStats(rResult.Delta), nil
+	return deltaStats, nil
 }
 
 // evaluateProposalInner executes the command in a batch engine and returns
@@ -4703,7 +4709,11 @@ func (r *Replica) evaluateProposalInner(
 		var ms enginepb.MVCCStats
 		var br *roachpb.BatchResponse
 		batch, ms, br, result, pErr = r.evaluateTxnWriteBatch(ctx, idKey, ba, spans)
-		result.Replicated.Delta = enginepb.MVCCNetworkStats(ms)
+		if r.store.cfg.Settings.Version.IsActive(cluster.VersionMVCCNetworkStats) {
+			result.Replicated.Delta = ms.ToNetworkStats()
+		} else {
+			result.Replicated.OldDelta = &ms
+		}
 		result.Local.Reply = br
 		result.Local.Err = pErr
 		if batch == nil {
