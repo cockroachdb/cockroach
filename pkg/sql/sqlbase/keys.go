@@ -47,10 +47,16 @@ func MakeDescMetadataKey(descID ID) roachpb.Key {
 	return keys.MakeFamilyKey(k, uint32(DescriptorTable.Columns[1].ID))
 }
 
-// MakeZoneKey returns the key for 'id's entry in the system.zones table.
-func MakeZoneKey(id ID) roachpb.Key {
+// MakeZoneKeyPrefix returns the key prefix for the 'id's row in the
+// system.zones table.
+func MakeZoneKeyPrefix(id ID) roachpb.Key {
 	k := keys.MakeTablePrefix(uint32(ZonesTable.ID))
 	k = encoding.EncodeUvarintAscending(k, uint64(ZonesTable.PrimaryIndex.ID))
-	k = encoding.EncodeUvarintAscending(k, uint64(id))
+	return encoding.EncodeUvarintAscending(k, uint64(id))
+}
+
+// MakeZoneKey returns the key for 'id's entry in the system.zones table.
+func MakeZoneKey(id ID) roachpb.Key {
+	k := MakeZoneKeyPrefix(id)
 	return keys.MakeFamilyKey(k, uint32(ZonesTable.Columns[1].ID))
 }
