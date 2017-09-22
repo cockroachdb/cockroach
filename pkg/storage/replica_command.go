@@ -1981,7 +1981,7 @@ func evalTruncateLog(
 	pd.Replicated.State = &storagebase.ReplicaState{
 		TruncatedState: tState,
 	}
-	pd.Replicated.RaftLogDelta = &ms.SysBytes
+	pd.Replicated.RaftLogDelta = ms.SysBytes
 
 	return pd, cArgs.EvalCtx.makeReplicaStateLoader().setTruncatedState(ctx, batch, cArgs.Stats, tState)
 }
