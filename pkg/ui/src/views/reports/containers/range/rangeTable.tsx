@@ -37,6 +37,7 @@ const rangeTableDisplayList: RangeTableRow[] = [
   { variable: "keyRange", display: "Key Range", compareToLeader: true },
   { variable: "problems", display: "Problems", compareToLeader: true },
   { variable: "raftState", display: "Raft State", compareToLeader: false },
+  { variable: "leaseState", display: "Lease State", compareToLeader: true },
   { variable: "leaseHolder", display: "Lease Holder", compareToLeader: true },
   { variable: "leaseType", display: "Lease Type", compareToLeader: true },
   { variable: "leaseEpoch", display: "Lease Epoch", compareToLeader: true },
@@ -74,6 +75,10 @@ const rangeTableDisplayList: RangeTableRow[] = [
 const rangeTableEmptyContent: RangeTableCellContent = {
   value: ["-"],
 };
+
+function convertLeaseState(leaseState: protos.cockroach.storage.LeaseState) {
+  return protos.cockroach.storage.LeaseState[leaseState].toLowerCase();
+}
 
 export default class RangeTable extends React.Component<RangeTableProps, {}> {
   cleanRaftState(state: string) {
@@ -184,10 +189,13 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     leaderCell?: RangeTableCellContent,
   ) {
     const title = _.join(_.isNil(cell.title) ? cell.value : cell.title, "\n");
-    const classNames = _.concat(cell.className, ["range-table__cell"]);
+    const classNames = ["range-table__cell"];
     if (dormant) {
       classNames.push("range-table__cell--dormant");
     } else {
+      if (!_.isNil(cell.className)) {
+        classNames.push(...cell.className);
+      }
       if (!_.isNil(leaderCell) && row.compareToLeader && !_.isEqual(cell.value, leaderCell.value)) {
         classNames.push("range-table__cell--different-from-leader-warning");
       }
@@ -358,6 +366,11 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         keyRange: this.createContent(`${info.span.start_key} to ${info.span.end_key}`),
         problems: this.contentProblems(info.problems),
         raftState: raftState,
+        leaseState: this.createContent(
+          convertLeaseState(info.lease_status.state),
+          info.lease_status.state === protos.cockroach.storage.LeaseState.VALID ? "" :
+            "range-table__cell--warning",
+        ),
         leaseHolder: this.createContent(
           Print.ReplicaID(rangeID, lease.replica),
           leaseHolder ? "range-table__cell--lease-holder" : "range-table__cell--lease-follower",
