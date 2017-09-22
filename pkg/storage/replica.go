@@ -3046,11 +3046,13 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
   RaftCommand.ProposerReplica:               %d
   RaftCommand.ProposerLease:                 %d
   RaftCommand.ReplicatedEvalResult:          %d
+  RaftCommand.ReplicatedEvalResult.Delta:    %d
   RaftCommand.WriteBatch:                    %d
 `, p.Request.Summary(), len(data),
 			p.command.ProposerReplica.Size(),
 			p.command.ProposerLease.Size(),
 			p.command.ReplicatedEvalResult.Size(),
+			p.command.ReplicatedEvalResult.Delta.Size(),
 			p.command.WriteBatch.Size(),
 		)
 	}
@@ -4410,8 +4412,10 @@ func (r *Replica) processRaftCommand(
 			raftCmd.ReplicatedEvalResult.AddSSTable = nil
 		}
 
-		raftCmd.ReplicatedEvalResult.Delta, pErr = r.applyRaftCommand(
+		var delta enginepb.MVCCStats
+		delta, pErr = r.applyRaftCommand(
 			ctx, idKey, raftCmd.ReplicatedEvalResult, raftIndex, leaseIndex, writeBatch)
+		raftCmd.ReplicatedEvalResult.Delta = enginepb.MVCCNetworkStats(delta)
 
 		if filter := r.store.cfg.TestingKnobs.TestingPostApplyFilter; pErr == nil && filter != nil {
 			pErr = filter(storagebase.ApplyFilterArgs{
@@ -4610,7 +4614,7 @@ func (r *Replica) applyRaftCommand(
 	// Special-cased MVCC stats handling to exploit commutativity of stats
 	// delta upgrades. Thanks to commutativity, the command queue does not
 	// have to serialize on the stats key.
-	ms.Add(rResult.Delta)
+	ms.Add(enginepb.MVCCStats(rResult.Delta))
 	if err := r.raftMu.stateLoader.setMVCCStats(ctx, writer, &ms); err != nil {
 		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
 			errors.Wrap(err, "unable to update MVCCStats")))
@@ -4652,7 +4656,7 @@ func (r *Replica) applyRaftCommand(
 
 	elapsed := timeutil.Since(start)
 	r.store.metrics.RaftCommandCommitLatency.RecordValue(elapsed.Nanoseconds())
-	return rResult.Delta, nil
+	return enginepb.MVCCStats(rResult.Delta), nil
 }
 
 // evaluateProposalInner executes the command in a batch engine and returns
@@ -4688,7 +4692,7 @@ func (r *Replica) evaluateProposalInner(
 		var ms enginepb.MVCCStats
 		var br *roachpb.BatchResponse
 		batch, ms, br, result, pErr = r.evaluateTxnWriteBatch(ctx, idKey, ba, spans)
-		result.Replicated.Delta = ms
+		result.Replicated.Delta = enginepb.MVCCNetworkStats(ms)
 		result.Local.Reply = br
 		result.Local.Err = pErr
 		if batch == nil {

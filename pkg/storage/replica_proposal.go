@@ -688,7 +688,7 @@ func (r *Replica) handleReplicatedEvalResult(
 
 	// Update MVCC stats and Raft portion of ReplicaState.
 	r.mu.Lock()
-	r.mu.state.Stats.Add(rResult.Delta)
+	r.mu.state.Stats.Add(enginepb.MVCCStats(rResult.Delta))
 	if raftAppliedIndex != 0 {
 		r.mu.state.RaftAppliedIndex = raftAppliedIndex
 	}
@@ -698,8 +698,8 @@ func (r *Replica) handleReplicatedEvalResult(
 	needsSplitBySize := r.needsSplitBySizeRLocked()
 	r.mu.Unlock()
 
-	r.store.metrics.addMVCCStats(rResult.Delta)
-	rResult.Delta = enginepb.MVCCStats{}
+	r.store.metrics.addMVCCStats(enginepb.MVCCStats(rResult.Delta))
+	rResult.Delta = enginepb.MVCCNetworkStats{}
 
 	if needsSplitBySize {
 		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
