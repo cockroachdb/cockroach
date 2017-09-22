@@ -130,6 +130,7 @@ func (d *diskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) 
 	}
 	for _, i := range d.valueIdxs {
 		var err error
+		// TODO(asubiotto): Should we use DatumEncoding_ASCENDING_KEY here instead?
 		d.scratchVal, err = row[i].Encode(&d.datumAlloc, sqlbase.DatumEncoding_VALUE, d.scratchVal)
 		if err != nil {
 			return err
