@@ -845,20 +845,19 @@ func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.TODO()
 
-	firstDesc := &roachpb.RangeDescriptor{
+	firstDesc := roachpb.RangeDescriptor{
 		StartKey: roachpb.RKeyMin,
 		EndKey:   roachpb.RKey("zzz"),
 	}
-	restDesc := &roachpb.RangeDescriptor{
-		StartKey: firstDesc.StartKey,
+	restDesc := roachpb.RangeDescriptor{
+		StartKey: firstDesc.EndKey,
 		EndKey:   roachpb.RKeyMax,
 	}
 
 	cache := NewRangeDescriptorCache(nil, staticSize(2<<10))
-	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(firstDesc.EndKey)),
-		firstDesc)
-	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(restDesc.EndKey)),
-		restDesc)
+	if err := cache.InsertRangeDescriptors(ctx, firstDesc, restDesc); err != nil {
+		t.Fatal(err)
+	}
 
 	// Add new range, corresponding to splitting the first range at a meta key.
 	metaSplitDesc := &roachpb.RangeDescriptor{
@@ -875,6 +874,72 @@ func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 			t.Fatal(err)
 		}
 	}()
+}
+
+// TestRangeCacheEvictMetaDescriptors tests that regardless of the eviction key
+// provided to EvictCachedRangeDescriptor, the meta ranges that store the key's
+// descriptor and its meta descriptors are properly evicted. This is related to
+// #18032.
+func TestRangeCacheEvictMetaDescriptors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.TODO()
+
+	meta1Desc := roachpb.RangeDescriptor{
+		StartKey: roachpb.RKeyMin,
+		EndKey:   keys.MustAddr(keys.Meta2Prefix),
+	}
+	meta2LeftDesc := roachpb.RangeDescriptor{
+		StartKey: meta1Desc.EndKey,
+		EndKey:   mustMeta(roachpb.RKey("m")),
+	}
+	meta2RightDesc := roachpb.RangeDescriptor{
+		StartKey: meta2LeftDesc.EndKey,
+		EndKey:   mustMeta(roachpb.RKey("zzz")),
+	}
+	restDesc := roachpb.RangeDescriptor{
+		StartKey: meta2RightDesc.EndKey,
+		EndKey:   roachpb.RKey("zz"),
+	}
+
+	testCases := []struct {
+		evictKey roachpb.RKey
+	}{
+		{evictKey: roachpb.RKey("a")},
+		{evictKey: roachpb.RKey("m")},
+		{evictKey: roachpb.RKey("z")},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.evictKey.String(), func(t *testing.T) {
+			if !restDesc.ContainsKey(tc.evictKey) {
+				t.Fatalf("restDesc must contain evictKey, found %v", tc.evictKey)
+			}
+
+			cache := NewRangeDescriptorCache(nil, staticSize(2<<10))
+			err := cache.InsertRangeDescriptors(ctx, meta1Desc, meta2LeftDesc, meta2RightDesc, restDesc)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Evict the user-space descriptor. This should result in the metaRightDesc
+			// being evicted as well, because that is where restDesc is stored. This
+			// is true even if meta(tc.evictKey) addresses into metaLeftDesc. In addition,
+			// the meta1Desc will be evicted, leaving only the meta2RightDesc.
+			err = cache.EvictCachedRangeDescriptor(ctx, tc.evictKey, nil, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			exp := []roachpb.RangeDescriptor{meta2LeftDesc}
+			found := []roachpb.RangeDescriptor{}
+			cache.rangeCache.cache.Do(func(k, v interface{}) bool {
+				found = append(found, *v.(*roachpb.RangeDescriptor))
+				return false
+			})
+			if !reflect.DeepEqual(exp, found) {
+				t.Errorf("expected remaining descriptors %v, found %v", exp, found)
+			}
+		})
+	}
 }
 
 // TestGetCachedRangeDescriptorInclusive verifies the correctness of the result
@@ -949,5 +1014,4 @@ func TestGetCachedRangeDescriptorInclusive(t *testing.T) {
 			t.Fatalf("expect cache key %v, actual get %v", test.cacheKey, cacheKey)
 		}
 	}
-
 }

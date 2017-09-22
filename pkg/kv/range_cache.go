@@ -323,8 +323,8 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 		defer rdc.rangeCache.Unlock()
 
 		// These need to be separate because we need to preserve the pointer to rs[0]
-		// so that the seenDesc logic works correctly in EvictCachedRangeDescriptor. An
-		// append could cause a copy, which would change the address of rs[0]. We insert
+		// so that the compare-and-evict logic works correctly in EvictCachedRangeDescriptor.
+		// An append could cause a copy, which would change the address of rs[0]. We insert
 		// the prefetched descriptors first to avoid any unintended overwriting. We then
 		// only insert the first desired descriptor, since any other descriptor in rs would
 		// overwrite rs[0]. Instead, these are handled with the evictToken.
@@ -432,13 +432,15 @@ func (rdc *RangeDescriptorCache) performRangeLookup(
 	return rdc.db.RangeLookup(ctx, metadataKey, desc, useReverseScan)
 }
 
-// EvictCachedRangeDescriptor will evict any cached range descriptors
-// for the given key. It is intended that this method be called from a
-// consumer of rangeDescriptorCache if the returned range descriptor is
-// discovered to be stale.
-// seenDesc should always be passed in and is used as the basis of a
-// compare-and-evict (as pointers); if it is nil, eviction is unconditional
-// but a warning will be logged.
+// EvictCachedRangeDescriptor will evict any cached user-space and meta range
+// descriptors for the given key. It is intended that this method be called from
+// a consumer of rangeDescriptorCache through the EvictionToken abstraction if
+// the returned range descriptor is discovered to be stale.
+//
+// seenDesc should always be passed in if available, and is used as the basis of
+// a pointer-based compare-and-evict strategy. This means that if the cache does
+// not contain the provided descriptor, no descriptor will be evicted. If
+// seenDesc is nil, eviction is unconditional.
 func (rdc *RangeDescriptorCache) EvictCachedRangeDescriptor(
 	ctx context.Context, descKey roachpb.RKey, seenDesc *roachpb.RangeDescriptor, inclusive bool,
 ) error {
@@ -447,13 +449,16 @@ func (rdc *RangeDescriptorCache) EvictCachedRangeDescriptor(
 	return rdc.evictCachedRangeDescriptorLocked(ctx, descKey, seenDesc, inclusive)
 }
 
+// evictCachedRangeDescriptorLocked is like evictCachedRangeDescriptor, but it
+// assumes that the caller holds a write lock on rdc.rangeCache.
 func (rdc *RangeDescriptorCache) evictCachedRangeDescriptorLocked(
 	ctx context.Context, descKey roachpb.RKey, seenDesc *roachpb.RangeDescriptor, inclusive bool,
 ) error {
 	cachedDesc, entry, err := rdc.getCachedRangeDescriptorLocked(descKey, inclusive)
-	if err != nil {
+	if err != nil || cachedDesc == nil {
 		return err
 	}
+
 	// Note that we're doing a "compare-and-erase": If seenDesc is not nil,
 	// we want to clean the cache only if it equals the cached range
 	// descriptor as a pointer. If not, then likely some other caller
@@ -472,11 +477,25 @@ func (rdc *RangeDescriptorCache) evictCachedRangeDescriptorLocked(
 		// Retrieve the metadata range key for the next level of metadata, and
 		// evict that key as well. This loop ends after the meta1 range, which
 		// returns KeyMin as its metadata key.
-		descKey, err = meta(descKey)
-		if err != nil {
-			return err
-		}
-		cachedDesc, entry, err = rdc.getCachedRangeDescriptorLocked(descKey, inclusive)
+		//
+		// Evicting 'meta(descKey)' instead of 'meta(cachedDesc.EndKey)' could be
+		// incorrect here because it could result in us evicting the wrong meta2
+		// descriptor. Imagine that descriptors are in the configuration:
+		//
+		// meta2 descs:  [/meta2/a,/meta2/m),  [/meta2/m,/meta2/z)
+		// user  descs:  [a,f),   [f,k),   [k,p),   [p,u),   [u,z)
+		//
+		// A lookup for the key 'l' would return the third user-space descriptor
+		// [k,p), after a continuation lookup. This descriptor is stored on the
+		// second meta2 range because its end key is p, which maps to /meta2/p.
+		// If we later want to evict this user-space descriptor, we also want to
+		// evict the meta2 descriptor for the range that contains it. However,
+		// if we naively evicted meta('l'), we'd end up evicting the first meta2
+		// descriptor. Instead, we want to evict meta('p'), since 'p' is the end
+		// key of the user-space descriptor.
+		//
+		// This is also why we pass inclusive=false down below.
+		descKey, err = meta(cachedDesc.EndKey)
 		if err != nil {
 			return err
 		}
@@ -487,6 +506,11 @@ func (rdc *RangeDescriptorCache) evictCachedRangeDescriptorLocked(
 		if bytes.Equal(descKey, roachpb.RKeyMin) {
 			break
 		}
+
+		cachedDesc, entry, err = rdc.getCachedRangeDescriptorLocked(descKey, false)
+		if err != nil || cachedDesc == nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -494,7 +518,7 @@ func (rdc *RangeDescriptorCache) evictCachedRangeDescriptorLocked(
 // GetCachedRangeDescriptor retrieves the descriptor of the range which contains
 // the given key. It returns nil if the descriptor is not found in the cache.
 //
-// `inclusive` determines the behaviour at the range boundary: If set to true
+// `inclusive` determines the behavior at the range boundary: If set to true
 // and `key` is the EndKey and StartKey of two adjacent ranges, the first range
 // is returned instead of the second (which technically contains the given key).
 func (rdc *RangeDescriptorCache) GetCachedRangeDescriptor(
