@@ -1524,14 +1524,14 @@ func evalGC(
 
 	pd.Replicated.State = &storagebase.ReplicaState{}
 	if newThreshold != (hlc.Timestamp{}) {
-		pd.Replicated.State.GCThreshold = newThreshold
+		pd.Replicated.State.GCThreshold = &newThreshold
 		if err := stateLoader.setGCThreshold(ctx, batch, cArgs.Stats, &newThreshold); err != nil {
 			return EvalResult{}, err
 		}
 	}
 
 	if newTxnSpanGCThreshold != (hlc.Timestamp{}) {
-		pd.Replicated.State.TxnSpanGCThreshold = newTxnSpanGCThreshold
+		pd.Replicated.State.TxnSpanGCThreshold = &newTxnSpanGCThreshold
 		if err := stateLoader.setTxnSpanGCThreshold(ctx, batch, cArgs.Stats, &newTxnSpanGCThreshold); err != nil {
 			return EvalResult{}, err
 		}
@@ -3114,7 +3114,7 @@ func splitTrigger(
 		if err != nil {
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to load GCThreshold")
 		}
-		if (gcThreshold == hlc.Timestamp{}) {
+		if (*gcThreshold == hlc.Timestamp{}) {
 			log.VEventf(ctx, 1, "LHS's GCThreshold of split is not set")
 		}
 
@@ -3122,7 +3122,7 @@ func splitTrigger(
 		if err != nil {
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to load TxnSpanGCThreshold")
 		}
-		if (txnSpanGCThreshold == hlc.Timestamp{}) {
+		if (*txnSpanGCThreshold == hlc.Timestamp{}) {
 			log.VEventf(ctx, 1, "LHS's TxnSpanGCThreshold of split is not set")
 		}
 
@@ -3157,7 +3157,7 @@ func splitTrigger(
 		// only.
 		rightMS, err = writeInitialReplicaState(
 			ctx, rec.ClusterSettings(), batch, rightMS, split.RightDesc,
-			rightLease, gcThreshold, txnSpanGCThreshold,
+			rightLease, *gcThreshold, *txnSpanGCThreshold,
 		)
 		if err != nil {
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to write initial Replica state")

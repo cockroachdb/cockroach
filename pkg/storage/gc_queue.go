@@ -167,8 +167,8 @@ func makeGCQueueScore(
 	ctx context.Context, repl *Replica, now hlc.Timestamp, sysCfg config.SystemConfig,
 ) gcQueueScore {
 	repl.mu.Lock()
-	ms := repl.mu.state.Stats
-	gcThreshold := repl.mu.state.GCThreshold
+	ms := *repl.mu.state.Stats
+	gcThreshold := *repl.mu.state.GCThreshold
 	repl.mu.Unlock()
 
 	desc := repl.Desc()

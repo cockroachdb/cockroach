@@ -89,7 +89,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		}
 
 		repl.mu.Lock()
-		repl.mu.state.Stats = enginepb.MVCCStats{KeyBytes: test.bytes}
+		repl.mu.state.Stats = &enginepb.MVCCStats{KeyBytes: test.bytes}
 		repl.mu.maxBytes = test.maxBytes
 		repl.mu.Unlock()
 
