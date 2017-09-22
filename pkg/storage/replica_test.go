@@ -751,7 +751,7 @@ func hasLease(repl *Replica, timestamp hlc.Timestamp) (owned bool, expired bool)
 	repl.mu.Lock()
 	defer repl.mu.Unlock()
 	status := repl.leaseStatus(*repl.mu.state.Lease, timestamp, repl.mu.minLeaseProposedTS)
-	return repl.mu.state.Lease.OwnedBy(repl.store.StoreID()), status.state != leaseValid
+	return repl.mu.state.Lease.OwnedBy(repl.store.StoreID()), status.State != LeaseState_VALID
 }
 
 func TestReplicaLease(t *testing.T) {
@@ -1351,7 +1351,7 @@ func TestReplicaNoGossipFromNonLeader(t *testing.T) {
 	// Increment the clock's timestamp to expire the range lease.
 	tc.manualClock.Set(leaseExpiry(tc.repl))
 	lease, _ := tc.repl.getLease()
-	if tc.repl.leaseStatus(lease, tc.Clock().Now(), hlc.Timestamp{}).state != leaseExpired {
+	if tc.repl.leaseStatus(lease, tc.Clock().Now(), hlc.Timestamp{}).State != LeaseState_EXPIRED {
 		t.Fatal("range lease should have been expired")
 	}
 
@@ -7604,7 +7604,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 
 			tc.repl.raftMu.Lock()
 			tc.repl.mu.Lock()
-			tc.repl.insertProposalLocked(cmd, repDesc, status.lease)
+			tc.repl.insertProposalLocked(cmd, repDesc, status.Lease)
 			chs = append(chs, cmd.doneCh)
 			tc.repl.mu.Unlock()
 			tc.repl.raftMu.Unlock()
