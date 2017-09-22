@@ -165,8 +165,10 @@ func doLocalCSVTransform(
 	execCfg *sql.ExecutorConfig,
 ) (csvCount, kvCount, sstCount int64, err error) {
 	// Some channels are buffered because reads happen in bursts, so having lots
-	// of pre-computed data improves overall performance.
-	const chanSize = 10000
+	// of pre-computed data improves overall performance. If this value is too
+	// high, it will decrease the accuracy of the progress estimation because
+	// of the hidden buffered work to be done.
+	const chanSize = 1000
 
 	recordCh := make(chan csvRecord, chanSize)
 	kvCh := make(chan []roachpb.KeyValue, chanSize)
@@ -182,16 +184,36 @@ func doLocalCSVTransform(
 	}
 	defer es.Close()
 
-	group, gCtx := errgroup.WithContext(ctx)
-	group.Go(func() error {
-		defer close(recordCh)
-		var err error
-		csvCount, err = readCSV(gCtx, comma, comment, len(tableDesc.VisibleColumns()), dataFiles, recordCh)
-		if job != nil {
-			if err := job.Progressed(ctx, 1.0/3.0, jobs.Noop); err != nil {
+	var readProgressFn, writeProgressFn func(float32)
+	if job != nil {
+		// These consts determine how much of the total progress the read csv and
+		// write sst groups take overall. 50% each is an approximation but kind of
+		// accurate based on my testing.
+		const (
+			readPct  = 0.5
+			writePct = 1.0 - readPct
+		)
+		// Both read and write progress funcs register their progress as 50% of total progress.
+		readProgressFn = func(pct float32) {
+			if err := job.Progressed(ctx, pct*readPct, jobs.Noop); err != nil {
 				log.Warningf(ctx, "failed to update job progress: %s", err)
 			}
 		}
+		writeProgressFn = func(pct float32) {
+			if err := job.Progressed(ctx, readPct+pct*writePct, jobs.Noop); err != nil {
+				log.Warningf(ctx, "failed to update job progress: %s", err)
+			}
+		}
+	}
+
+	// The first group reads the CSVs, converts them into KVs, and writes all
+	// KVs into a single RocksDB instance.
+	group, gCtx := errgroup.WithContext(ctx)
+	store := engine.NewRocksDBMultiMap(tempEngine)
+	group.Go(func() error {
+		defer close(recordCh)
+		var err error
+		csvCount, err = readCSV(gCtx, comma, comment, len(tableDesc.VisibleColumns()), dataFiles, recordCh, readProgressFn)
 		return err
 	})
 	group.Go(func() error {
@@ -201,15 +223,25 @@ func doLocalCSVTransform(
 		})
 	})
 	group.Go(func() error {
-		defer close(contentCh)
 		var err error
-		kvCount, err = writeRocksDB(gCtx, kvCh, tempEngine, sstMaxSize, contentCh, walltime)
+		kvCount, err = writeRocksDB(gCtx, kvCh, store.NewBatchWriter())
 		if job != nil {
 			if err := job.Progressed(ctx, 2.0/3.0, jobs.Noop); err != nil {
 				log.Warningf(ctx, "failed to update job progress: %s", err)
 			}
 		}
 		return err
+	})
+	if err := group.Wait(); err != nil {
+		return 0, 0, 0, err
+	}
+
+	// The second group iterates over the KVs in the RocksDB instance in sorted
+	// order, chunks them up into SST files, and writes them to storage.
+	group, gCtx = errgroup.WithContext(ctx)
+	group.Go(func() error {
+		defer close(contentCh)
+		return makeSSTs(gCtx, store.NewIterator(), sstMaxSize, contentCh, walltime, kvCount, writeProgressFn)
 	})
 	group.Go(func() error {
 		var err error
@@ -323,13 +355,20 @@ func groupWorkers(ctx context.Context, num int, f func(context.Context) error) e
 
 // readCSV sends records on ch from CSV listed by dataFiles. comma, if
 // non-zero, specifies the field separator. comment, if non-zero, specifies
-// the comment character. It returns the number of rows read.
+// the comment character. It returns the number of rows read. progressFn, if
+// not nil, is periodically invoked with a percentage of the total progress
+// of reading through all of the files. This percentage attempts to use
+// the Size() method of ExportStorage to determine how many bytes must be
+// read of the CSV files, and reports the percent of bytes read among all
+// dataFiles. If any Size() fails for any file, then progress is reported
+// only after each file has been read.
 func readCSV(
 	ctx context.Context,
 	comma, comment rune,
 	expectedCols int,
 	dataFiles []string,
 	recordCh chan<- csvRecord,
+	progressFn func(float32),
 ) (int64, error) {
 	const batchSize = 500
 	expectedColsExtra := expectedCols + 1
@@ -338,7 +377,30 @@ func readCSV(
 	if comma == 0 {
 		comma = ','
 	}
+
+	var totalBytes, readBytes int64
+	// Attempt to fetch total number of bytes for all files.
 	for _, dataFile := range dataFiles {
+		conf, err := storageccl.ExportStorageConfFromURI(dataFile)
+		if err != nil {
+			return 0, err
+		}
+		es, err := storageccl.MakeExportStorage(ctx, conf)
+		if err != nil {
+			return 0, err
+		}
+		sz, _ := es.Size(ctx, "")
+		es.Close()
+		if sz <= 0 {
+			totalBytes = 0
+			break
+		}
+		totalBytes += sz
+	}
+	updateFromFiles := progressFn != nil && totalBytes == 0
+	updateFromBytes := progressFn != nil && totalBytes > 0
+
+	for dataFileI, dataFile := range dataFiles {
 		select {
 		case <-done:
 			return 0, ctx.Err()
@@ -359,7 +421,8 @@ func readCSV(
 			if err != nil {
 				return err
 			}
-			cr := csv.NewReader(f)
+			bc := byteCounter{r: f}
+			cr := csv.NewReader(&bc)
 			cr.Comma = comma
 			cr.FieldsPerRecord = -1
 			cr.LazyQuotes = true
@@ -382,6 +445,12 @@ func readCSV(
 						case recordCh <- batch:
 							count += int64(len(batch.r))
 						}
+					}
+					const FiftyMiB = 50 << 20
+					if updateFromBytes && (err == io.EOF || bc.n > FiftyMiB) {
+						readBytes += bc.n
+						bc.n = 0
+						progressFn(float32(readBytes) / float32(totalBytes))
 					}
 					if err == io.EOF {
 						break
@@ -407,8 +476,22 @@ func readCSV(
 		if err != nil {
 			return 0, errors.Wrap(err, dataFile)
 		}
+		if updateFromFiles {
+			progressFn(float32(dataFileI+1) / float32(len(dataFiles)))
+		}
 	}
 	return count, nil
+}
+
+type byteCounter struct {
+	r io.Reader
+	n int64
+}
+
+func (b *byteCounter) Read(p []byte) (int, error) {
+	n, err := b.r.Read(p)
+	b.n += int64(n)
+	return n, err
 }
 
 type csvRecord struct {
@@ -515,19 +598,13 @@ type sstContent struct {
 const errSSTCreationMaybeDuplicateTemplate = "SST creation error at %s; this can happen when a primary or unique index has duplicate keys"
 
 // writeRocksDB writes kvs to a RocksDB instance that is created at
-// rocksdbDir. After kvs is closed, sst files are created of size maxSize
-// and sent on contents. It returns the number of KV pairs created.
+// rocksdbDir. It returns the number of KV pairs written.
 func writeRocksDB(
-	ctx context.Context,
-	kvCh <-chan []roachpb.KeyValue,
-	tempEngine engine.Engine,
-	sstMaxSize int64,
-	contentCh chan<- sstContent,
-	walltime int64,
+	ctx context.Context, kvCh <-chan []roachpb.KeyValue, writer engine.SortedDiskMapBatchWriter,
 ) (int64, error) {
-	store := engine.NewRocksDBMultiMap(tempEngine)
-	writer := store.NewBatchWriter()
+	var count int64
 	for kvBatch := range kvCh {
+		count += int64(len(kvBatch))
 		for _, kv := range kvBatch {
 			if err := writer.Put(kv.Key, kv.Value.RawBytes); err != nil {
 				return 0, err
@@ -537,14 +614,30 @@ func writeRocksDB(
 	if err := writer.Close(ctx); err != nil {
 		return 0, err
 	}
-	it := store.NewIterator()
+	return count, nil
+}
+
+// makeSSTs creates SST files in memory of size maxSize and sent on
+// contentCh. progressFn, if not nil, is periodically invoked with the
+// percentage of KVs that have been written to SSTs and sent on contentCh.
+func makeSSTs(
+	ctx context.Context,
+	it engine.SortedDiskMapIterator,
+	sstMaxSize int64,
+	contentCh chan<- sstContent,
+	walltime int64,
+	totalKVs int64,
+	progressFn func(float32),
+) error {
 	defer it.Close()
+
 	sst, err := engine.MakeRocksDBSstFileWriter()
 	if err != nil {
-		return 0, err
+		return err
 	}
 	defer sst.Close()
 
+	var writtenKVs int64
 	writeSST := func(key, endKey roachpb.Key) error {
 		data, err := sst.Finish()
 		if err != nil {
@@ -564,6 +657,9 @@ func writeRocksDB(
 			return ctx.Err()
 		}
 		sst.Close()
+		if progressFn != nil {
+			progressFn(float32(writtenKVs) / float32(totalKVs))
+		}
 		return nil
 	}
 
@@ -575,60 +671,59 @@ func writeRocksDB(
 	// all column families for a row must be in one SST and the SST may have
 	// filled up with only some of the KVs from the column families being added.
 	var firstKey, lastKey roachpb.Key
-	var count int64
 
 	it.Rewind()
 	if ok, err := it.Valid(); err != nil {
-		return 0, err
+		return err
 	} else if !ok {
-		return 0, errors.New("could not get first key")
+		return errors.New("could not get first key")
 	}
 	firstKey = it.Key()
 
 	for ; ; it.Next() {
 		if ok, err := it.Valid(); err != nil {
-			return 0, err
+			return err
 		} else if !ok {
 			break
 		}
-		count++
+		writtenKVs++
 
 		kv.Key.Key = it.UnsafeKey()
 		kv.Value = it.UnsafeValue()
 		if lastKey != nil {
 			if kv.Key.Key.Compare(lastKey) >= 0 {
 				if err := writeSST(firstKey, lastKey); err != nil {
-					return 0, err
+					return err
 				}
 				firstKey = it.Key()
 				lastKey = nil
 
 				sst, err = engine.MakeRocksDBSstFileWriter()
 				if err != nil {
-					return 0, err
+					return err
 				}
 				defer sst.Close()
 			}
 		}
 		if err := sst.Add(kv); err != nil {
-			return 0, errors.Wrapf(err, errSSTCreationMaybeDuplicateTemplate, kv.Key.Key)
+			return errors.Wrapf(err, errSSTCreationMaybeDuplicateTemplate, kv.Key.Key)
 		}
 		if sst.DataSize > sstMaxSize && lastKey == nil {
 			// When we would like to split the file, proceed until we aren't in the
 			// middle of a row. Start by finding the next safe split key.
 			lastKey, err = keys.EnsureSafeSplitKey(kv.Key.Key)
 			if err != nil {
-				return 0, err
+				return err
 			}
 			lastKey = lastKey.PrefixEnd()
 		}
 	}
 	if sst.DataSize > 0 {
 		if err := writeSST(firstKey, kv.Key.Key.Next()); err != nil {
-			return 0, err
+			return err
 		}
 	}
-	return count, nil
+	return nil
 }
 
 // makeBackup writes SST files from contents to es and creates a backup
@@ -1096,7 +1191,7 @@ func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 		defer tracing.FinishSpan(span)
 		defer close(recordCh)
 		_, err := readCSV(sCtx, cp.csvOptions.Comma, cp.csvOptions.Comment,
-			len(cp.tableDesc.VisibleColumns()), []string{cp.uri}, recordCh)
+			len(cp.tableDesc.VisibleColumns()), []string{cp.uri}, recordCh, nil)
 		return err
 	})
 	// Convert CSV records to KVs
