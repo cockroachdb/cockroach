@@ -196,6 +196,18 @@ export default function Debug() {
             note="/_admin/v1/rangelog/[range_id]?limit=100"
           />
         </DebugTableRow>
+        <DebugTableRow title="Allocator">
+          <DebugTableLink
+            name="Simulated Allocator Runs on a Specific Node"
+            url="/_status/allocator/node/local"
+            note="/_status/allocator/node/[node_id]"
+          />
+          <DebugTableLink
+            name="Simulated Allocator Runs on a Specific Range"
+            url="/_status/allocator/range/1"
+            note="/_status/allocator/range/[range_id]"
+          />
+        </DebugTableRow>
       </DebugTable>
     </div>
   );
