@@ -2032,7 +2032,7 @@ func evalRequestLease(
 
 	// MIGRATION(tschottdorf): needed to apply Raft commands which got proposed
 	// before the StartStasis field was introduced.
-	if args.Lease.DeprecatedStartStasis == (hlc.Timestamp{}) {
+	if args.Lease.DeprecatedStartStasis == nil {
 		args.Lease.DeprecatedStartStasis = args.Lease.Expiration
 	}
 	isExtension := prevLease.Replica.StoreID == args.Lease.Replica.StoreID
@@ -2065,9 +2065,9 @@ func evalRequestLease(
 			return newFailedLeaseTrigger(false /* isTransfer */), rErr
 		}
 		if args.Lease.Type() == roachpb.LeaseExpiration {
-			args.Lease.Expiration.Forward(prevLease.Expiration)
+			args.Lease.Expiration.Forward(prevLease.GetExpiration())
 		}
-	} else if prevLease.Type() == roachpb.LeaseExpiration && effectiveStart.Less(prevLease.Expiration) {
+	} else if prevLease.Type() == roachpb.LeaseExpiration && effectiveStart.Less(prevLease.GetExpiration()) {
 		rErr.Message = "requested lease overlaps previous lease"
 		return newFailedLeaseTrigger(false /* isTransfer */), rErr
 	}
@@ -2126,8 +2126,8 @@ func evalNewLease(
 	// a newFailedLeaseTrigger() to satisfy stats.
 
 	// Ensure either an Epoch is set or Start < Expiration.
-	if (lease.Type() == roachpb.LeaseExpiration && !lease.Start.Less(lease.Expiration)) ||
-		(lease.Type() == roachpb.LeaseEpoch && lease.Expiration != (hlc.Timestamp{})) {
+	if (lease.Type() == roachpb.LeaseExpiration && !lease.Start.Less(lease.GetExpiration())) ||
+		(lease.Type() == roachpb.LeaseEpoch && lease.Expiration != nil) {
 		// This amounts to a bug.
 		return newFailedLeaseTrigger(isTransfer),
 			&roachpb.LeaseRejectedError{

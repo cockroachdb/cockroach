@@ -1113,18 +1113,30 @@ func (l Lease) Type() LeaseType {
 func (l Lease) Equivalent(ol Lease) bool {
 	// Ignore proposed timestamp & deprecated start stasis.
 	l.ProposedTS, ol.ProposedTS = nil, nil
-	l.DeprecatedStartStasis = ol.DeprecatedStartStasis
+	l.DeprecatedStartStasis, ol.DeprecatedStartStasis = nil, nil
 	// If both leases are epoch-based, we must dereference the epochs
 	// and then set to nil.
-	if l.Type() == LeaseEpoch && ol.Type() == LeaseEpoch && *l.Epoch == *ol.Epoch {
-		l.Epoch, ol.Epoch = nil, nil
-	}
-	// For expiration-based leases, extensions are considered equivalent.
-	if l.Type() == LeaseExpiration && ol.Type() == LeaseExpiration &&
-		l.Expiration.Less(ol.Expiration) {
-		l.Expiration = ol.Expiration
+	switch l.Type() {
+	case LeaseEpoch:
+		if ol.Epoch != nil && *l.Epoch == *ol.Epoch {
+			l.Epoch, ol.Epoch = nil, nil
+		}
+	case LeaseExpiration:
+		// For expiration-based leases, extensions are considered equivalent.
+		if !ol.GetExpiration().Less(l.GetExpiration()) {
+			l.Expiration, ol.Expiration = nil, nil
+		}
 	}
 	return l == ol
+}
+
+// GetExpiration returns the lease expiration or the zero timestamp if the
+// receiver is not an expiration-based lease.
+func (l Lease) GetExpiration() hlc.Timestamp {
+	if l.Expiration == nil {
+		return hlc.Timestamp{}
+	}
+	return *l.Expiration
 }
 
 // AsIntents takes a slice of spans and returns it as a slice of intents for
