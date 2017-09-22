@@ -5411,6 +5411,7 @@ type ReplicaMetrics struct {
 	LeaseValid  bool
 	Leaseholder bool
 	LeaseType   roachpb.LeaseType
+	LeaseStatus LeaseStatus
 	Quiescent   bool
 	// Is this the replica which collects per-range metrics? This is done either
 	// on the leader or, if there is no leader, on the largest live replica ID.
@@ -5432,7 +5433,7 @@ func (r *Replica) Metrics(
 ) ReplicaMetrics {
 	r.mu.RLock()
 	raftStatus := r.raftStatusRLocked()
-	status := r.leaseStatus(*r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
+	leaseStatus := r.leaseStatus(*r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
 	quiescent := r.mu.quiescent || r.mu.internalRaftGroup == nil
 	desc := r.mu.state.Desc
 	selfBehindCount := r.getEstimatedBehindCountRLocked(raftStatus)
@@ -5449,7 +5450,7 @@ func (r *Replica) Metrics(
 		livenessMap,
 		desc,
 		raftStatus,
-		status,
+		leaseStatus,
 		r.store.StoreID(),
 		quiescent,
 		selfBehindCount,
@@ -5474,7 +5475,7 @@ func calcReplicaMetrics(
 	livenessMap map[roachpb.NodeID]bool,
 	desc *roachpb.RangeDescriptor,
 	raftStatus *raft.Status,
-	status LeaseStatus,
+	leaseStatus LeaseStatus,
 	storeID roachpb.StoreID,
 	quiescent bool,
 	selfBehindCount int64,
@@ -5484,10 +5485,11 @@ func calcReplicaMetrics(
 	var m ReplicaMetrics
 
 	var leaseOwner bool
-	if status.State == LeaseState_VALID {
+	m.LeaseStatus = leaseStatus
+	if leaseStatus.State == LeaseState_VALID {
 		m.LeaseValid = true
-		leaseOwner = status.Lease.OwnedBy(storeID)
-		m.LeaseType = status.Lease.Type()
+		leaseOwner = leaseStatus.Lease.OwnedBy(storeID)
+		m.LeaseType = leaseStatus.Lease.Type()
 	}
 	m.Leaseholder = m.LeaseValid && leaseOwner
 	m.Leader = isRaftLeader(raftStatus)
