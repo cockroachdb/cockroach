@@ -611,11 +611,11 @@ func declareKeysEndTransaction(
 				EndKey: rightRangeIDUnreplicatedPrefix.PrefixEnd(),
 			})
 
-			leftStateLoader := makeReplicaStateLoader(st.LeftDesc.RangeID)
+			leftStateLoader := makeReplicaStateLoader(nil, st.LeftDesc.RangeID)
 			spans.Add(SpanReadOnly, roachpb.Span{
 				Key: leftStateLoader.RangeLastReplicaGCTimestampKey(),
 			})
-			rightStateLoader := makeReplicaStateLoader(st.RightDesc.RangeID)
+			rightStateLoader := makeReplicaStateLoader(nil, st.RightDesc.RangeID)
 			spans.Add(SpanReadWrite, roachpb.Span{
 				Key: rightStateLoader.RangeLastReplicaGCTimestampKey(),
 			})
@@ -1518,7 +1518,7 @@ func evalGC(
 	}
 
 	var pd EvalResult
-	stateLoader := makeReplicaStateLoader(cArgs.EvalCtx.RangeID())
+	stateLoader := makeReplicaStateLoader(nil, cArgs.EvalCtx.RangeID())
 
 	// Don't write these keys unless we have to. We also don't declare these
 	// keys unless we have to (to allow the GC queue to batch requests more
@@ -1982,7 +1982,7 @@ func evalTruncateLog(
 	pd.Replicated.State.TruncatedState = tState
 	pd.Replicated.RaftLogDelta = &ms.SysBytes
 
-	return pd, makeReplicaStateLoader(cArgs.EvalCtx.RangeID()).setTruncatedState(ctx, batch, cArgs.Stats, tState)
+	return pd, makeReplicaStateLoader(nil, cArgs.EvalCtx.RangeID()).setTruncatedState(ctx, batch, cArgs.Stats, tState)
 }
 
 func newFailedLeaseTrigger(isTransfer bool) EvalResult {
@@ -1999,7 +1999,7 @@ func newFailedLeaseTrigger(isTransfer bool) EvalResult {
 func declareKeysRequestLease(
 	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
 ) {
-	loader := makeReplicaStateLoader(header.RangeID)
+	loader := makeReplicaStateLoader(nil, header.RangeID)
 	spans.Add(SpanReadWrite, roachpb.Span{Key: loader.RangeLeaseKey()})
 	spans.Add(SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 }
@@ -2150,7 +2150,7 @@ func evalNewLease(
 	}
 
 	// Store the lease to disk & in-memory.
-	if err := makeReplicaStateLoader(rec.RangeID()).setLease(ctx, batch, ms, lease); err != nil {
+	if err := makeReplicaStateLoader(nil, rec.RangeID()).setLease(ctx, batch, ms, lease); err != nil {
 		return newFailedLeaseTrigger(isTransfer), err
 	}
 
@@ -3090,7 +3090,7 @@ func splitTrigger(
 		//
 		// TODO(tschottdorf): why would this use r.store.Engine() and not the
 		// batch?
-		leftLease, err := makeReplicaStateLoader(rec.RangeID()).loadLease(ctx, rec.Engine())
+		leftLease, err := makeReplicaStateLoader(nil, rec.RangeID()).loadLease(ctx, rec.Engine())
 		if err != nil {
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to load lease")
 		}
@@ -3108,7 +3108,7 @@ func splitTrigger(
 		rightLease := leftLease
 		rightLease.Replica = replica
 
-		gcThreshold, err := makeReplicaStateLoader(rec.RangeID()).loadGCThreshold(ctx, rec.Engine())
+		gcThreshold, err := makeReplicaStateLoader(nil, rec.RangeID()).loadGCThreshold(ctx, rec.Engine())
 		if err != nil {
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to load GCThreshold")
 		}
@@ -3116,7 +3116,7 @@ func splitTrigger(
 			log.VEventf(ctx, 1, "LHS's GCThreshold of split is not set")
 		}
 
-		txnSpanGCThreshold, err := makeReplicaStateLoader(rec.RangeID()).loadTxnSpanGCThreshold(ctx, rec.Engine())
+		txnSpanGCThreshold, err := makeReplicaStateLoader(nil, rec.RangeID()).loadTxnSpanGCThreshold(ctx, rec.Engine())
 		if err != nil {
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to load TxnSpanGCThreshold")
 		}
@@ -3154,7 +3154,8 @@ func splitTrigger(
 		// writeInitialReplicaState which essentially writes a ReplicaState
 		// only.
 		rightMS, err = writeInitialReplicaState(
-			ctx, batch, rightMS, split.RightDesc, rightLease, gcThreshold, txnSpanGCThreshold,
+			ctx, rec.ClusterSettings(), batch, rightMS, split.RightDesc,
+			rightLease, gcThreshold, txnSpanGCThreshold,
 		)
 		if err != nil {
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to write initial Replica state")
@@ -3165,7 +3166,8 @@ func splitTrigger(
 			// clobber downstream simply because that's what 1.0 does and if we
 			// don't write it here, then a 1.0 version applying it as a follower
 			// won't write a HardState at all and is guaranteed to crash.
-			if err := makeReplicaStateLoader(split.RightDesc.RangeID).synthesizeRaftState(ctx, batch); err != nil {
+			rsl := makeReplicaStateLoader(rec.repl.store.cfg.Settings, split.RightDesc.RangeID)
+			if err := rsl.synthesizeRaftState(ctx, batch); err != nil {
 				return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to synthesize initial Raft state")
 			}
 		}
@@ -3387,7 +3389,7 @@ func mergeTrigger(
 	mergedMS.Add(msRange)
 
 	// Set stats for updated range.
-	if err := makeReplicaStateLoader(rec.RangeID()).setMVCCStats(ctx, batch, &mergedMS); err != nil {
+	if err := makeReplicaStateLoader(nil, rec.RangeID()).setMVCCStats(ctx, batch, &mergedMS); err != nil {
 		return EvalResult{}, errors.Errorf("unable to write MVCC stats: %s", err)
 	}
 

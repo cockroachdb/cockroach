@@ -57,7 +57,7 @@ func TestSynthesizeHardState(t *testing.T) {
 		func() {
 			batch := eng.NewBatch()
 			defer batch.Close()
-			rsl := makeReplicaStateLoader(1)
+			rsl := makeReplicaStateLoader(nil, 1)
 
 			if test.OldHS != nil {
 				if err := rsl.setHardState(context.Background(), batch, *test.OldHS); err != nil {
