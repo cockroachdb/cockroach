@@ -1586,7 +1586,7 @@ func (r *Replica) setLastReplicaDescriptors(req *RaftMessageRequest) {
 func (r *Replica) GetMVCCStats() enginepb.MVCCStats {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.state.Stats
+	return *r.mu.state.Stats
 }
 
 // ContainsKey returns whether this range contains the specified key.
@@ -4543,7 +4543,7 @@ func (r *Replica) applyRaftCommand(
 	r.mu.Lock()
 	oldRaftAppliedIndex := r.mu.state.RaftAppliedIndex
 	oldLeaseAppliedIndex := r.mu.state.LeaseAppliedIndex
-	ms := r.mu.state.Stats
+	ms := *r.mu.state.Stats
 	r.mu.Unlock()
 
 	if raftAppliedIndex != oldRaftAppliedIndex+1 {

@@ -2037,16 +2037,16 @@ func TestStoreGCThreshold(t *testing.T) {
 			t.Fatal(err)
 		}
 		repl.mu.Lock()
-		gcThreshold := repl.mu.state.GCThreshold
+		gcThreshold := *repl.mu.state.GCThreshold
 		pgcThreshold, err := repl.mu.stateLoader.loadGCThreshold(context.Background(), store.Engine())
 		repl.mu.Unlock()
 		if err != nil {
 			t.Fatal(err)
 		}
-		if gcThreshold != pgcThreshold {
+		if gcThreshold != *pgcThreshold {
 			t.Fatalf("persisted != in-memory threshold: %s vs %s", pgcThreshold, gcThreshold)
 		}
-		if pgcThreshold != ts {
+		if *pgcThreshold != ts {
 			t.Fatalf("expected timestamp %s, got %s", ts, pgcThreshold)
 		}
 	}
