@@ -8037,6 +8037,7 @@ export namespace cockroach {
                 stats?: cockroach.server.serverpb.RangeStatistics$Properties;
                 cmd_q_local?: cockroach.server.serverpb.CommandQueueMetrics$Properties;
                 cmd_q_global?: cockroach.server.serverpb.CommandQueueMetrics$Properties;
+                lease_status?: cockroach.storage.LeaseStatus$Properties;
             };
 
             /**
@@ -8120,6 +8121,12 @@ export namespace cockroach {
                  * @type {(cockroach.server.serverpb.CommandQueueMetrics$Properties|null)}
                  */
                 public cmd_q_global: (cockroach.server.serverpb.CommandQueueMetrics$Properties|null);
+
+                /**
+                 * RangeInfo lease_status.
+                 * @type {(cockroach.storage.LeaseStatus$Properties|null)}
+                 */
+                public lease_status: (cockroach.storage.LeaseStatus$Properties|null);
 
                 /**
                  * Creates a new RangeInfo instance using the specified properties.
@@ -20375,6 +20382,159 @@ export namespace cockroach {
                  */
                 public toJSON(): { [k: string]: any };
             }
+        }
+
+        /**
+         * LeaseState enum.
+         * @name LeaseState
+         * @memberof cockroach.storage
+         * @enum {number}
+         * @property {number} ERROR=0 ERROR value
+         * @property {number} VALID=1 VALID value
+         * @property {number} STASIS=2 STASIS value
+         * @property {number} EXPIRED=3 EXPIRED value
+         * @property {number} PROSCRIBED=4 PROSCRIBED value
+         */
+        enum LeaseState {
+            ERROR = 0,
+            VALID = 1,
+            STASIS = 2,
+            EXPIRED = 3,
+            PROSCRIBED = 4
+        }
+
+        type LeaseStatus$Properties = {
+            lease?: cockroach.roachpb.Lease$Properties;
+            timestamp?: cockroach.util.hlc.Timestamp$Properties;
+            state?: cockroach.storage.LeaseState;
+            liveness?: cockroach.storage.Liveness$Properties;
+        };
+
+        /**
+         * Constructs a new LeaseStatus.
+         * @exports cockroach.storage.LeaseStatus
+         * @constructor
+         * @param {cockroach.storage.LeaseStatus$Properties=} [properties] Properties to set
+         */
+        class LeaseStatus {
+
+            /**
+             * Constructs a new LeaseStatus.
+             * @exports cockroach.storage.LeaseStatus
+             * @constructor
+             * @param {cockroach.storage.LeaseStatus$Properties=} [properties] Properties to set
+             */
+            constructor(properties?: cockroach.storage.LeaseStatus$Properties);
+
+            /**
+             * LeaseStatus lease.
+             * @type {(cockroach.roachpb.Lease$Properties|null)}
+             */
+            public lease: (cockroach.roachpb.Lease$Properties|null);
+
+            /**
+             * LeaseStatus timestamp.
+             * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
+             */
+            public timestamp: (cockroach.util.hlc.Timestamp$Properties|null);
+
+            /**
+             * LeaseStatus state.
+             * @type {cockroach.storage.LeaseState}
+             */
+            public state: cockroach.storage.LeaseState;
+
+            /**
+             * LeaseStatus liveness.
+             * @type {(cockroach.storage.Liveness$Properties|null)}
+             */
+            public liveness: (cockroach.storage.Liveness$Properties|null);
+
+            /**
+             * Creates a new LeaseStatus instance using the specified properties.
+             * @param {cockroach.storage.LeaseStatus$Properties=} [properties] Properties to set
+             * @returns {cockroach.storage.LeaseStatus} LeaseStatus instance
+             */
+            public static create(properties?: cockroach.storage.LeaseStatus$Properties): cockroach.storage.LeaseStatus;
+
+            /**
+             * Encodes the specified LeaseStatus message. Does not implicitly {@link cockroach.storage.LeaseStatus.verify|verify} messages.
+             * @param {cockroach.storage.LeaseStatus$Properties} message LeaseStatus message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            public static encode(message: cockroach.storage.LeaseStatus$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified LeaseStatus message, length delimited. Does not implicitly {@link cockroach.storage.LeaseStatus.verify|verify} messages.
+             * @param {cockroach.storage.LeaseStatus$Properties} message LeaseStatus message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            public static encodeDelimited(message: cockroach.storage.LeaseStatus$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a LeaseStatus message from the specified reader or buffer.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {cockroach.storage.LeaseStatus} LeaseStatus
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.storage.LeaseStatus;
+
+            /**
+             * Decodes a LeaseStatus message from the specified reader or buffer, length delimited.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {cockroach.storage.LeaseStatus} LeaseStatus
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.storage.LeaseStatus;
+
+            /**
+             * Verifies a LeaseStatus message.
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {?string} `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): string;
+
+            /**
+             * Creates a LeaseStatus message from a plain object. Also converts values to their respective internal types.
+             * @param {Object.<string,*>} object Plain object
+             * @returns {cockroach.storage.LeaseStatus} LeaseStatus
+             */
+            public static fromObject(object: { [k: string]: any }): cockroach.storage.LeaseStatus;
+
+            /**
+             * Creates a LeaseStatus message from a plain object. Also converts values to their respective internal types.
+             * This is an alias of {@link cockroach.storage.LeaseStatus.fromObject}.
+             * @function
+             * @param {Object.<string,*>} object Plain object
+             * @returns {cockroach.storage.LeaseStatus} LeaseStatus
+             */
+            public static from(object: { [k: string]: any }): cockroach.storage.LeaseStatus;
+
+            /**
+             * Creates a plain object from a LeaseStatus message. Also converts values to other types if specified.
+             * @param {cockroach.storage.LeaseStatus} message LeaseStatus
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            public static toObject(message: cockroach.storage.LeaseStatus, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+            /**
+             * Creates a plain object from this LeaseStatus message. Also converts values to other types if specified.
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this LeaseStatus to JSON.
+             * @returns {Object.<string,*>} JSON object
+             */
+            public toJSON(): { [k: string]: any };
         }
 
         /**
