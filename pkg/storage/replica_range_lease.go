@@ -116,7 +116,8 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 	}
 
 	if repl.requiresExpiringLeaseRLocked() {
-		reqLease.Expiration = status.timestamp.Add(int64(repl.store.cfg.RangeLeaseActiveDuration()), 0)
+		reqLease.Expiration = &hlc.Timestamp{}
+		*reqLease.Expiration = status.timestamp.Add(int64(repl.store.cfg.RangeLeaseActiveDuration()), 0)
 	} else {
 		// Get the liveness for the next lease holder and set the epoch in the lease request.
 		liveness, err := repl.store.cfg.NodeLiveness.GetLiveness(nextLeaseHolder.NodeID)
@@ -339,7 +340,7 @@ func (r *Replica) leaseStatus(
 	status := LeaseStatus{timestamp: timestamp, lease: lease}
 	var expiration hlc.Timestamp
 	if lease.Type() == roachpb.LeaseExpiration {
-		expiration = lease.Expiration
+		expiration = lease.GetExpiration()
 	} else {
 		var err error
 		status.liveness, err = r.store.cfg.NodeLiveness.GetLiveness(lease.Replica.NodeID)
