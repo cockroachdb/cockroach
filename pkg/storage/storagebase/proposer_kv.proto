@@ -78,7 +78,7 @@ message ReplicatedEvalResult {
   // the comment on the ReplicaState message, this field is sparsely populated
   // and any field set overwrites the corresponding field in the state, perhaps
   // which additional side effects (for instance on a descriptor update).
-  optional storage.storagebase.ReplicaState state = 2 [(gogoproto.nullable) = false];
+  optional storage.storagebase.ReplicaState state = 2;
   optional Split split = 3;
   optional Merge merge = 4;
   optional roachpb.ComputeChecksumRequest compute_checksum = 5;

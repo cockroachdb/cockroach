@@ -1522,6 +1522,7 @@ func evalGC(
 	// keys unless we have to (to allow the GC queue to batch requests more
 	// efficiently), and we must honor what we declare.
 
+	pd.Replicated.State = &storagebase.ReplicaState{}
 	if newThreshold != (hlc.Timestamp{}) {
 		pd.Replicated.State.GCThreshold = newThreshold
 		if err := stateLoader.setGCThreshold(ctx, batch, cArgs.Stats, &newThreshold); err != nil {
@@ -1977,7 +1978,9 @@ func evalTruncateLog(
 	}
 
 	var pd EvalResult
-	pd.Replicated.State.TruncatedState = tState
+	pd.Replicated.State = &storagebase.ReplicaState{
+		TruncatedState: tState,
+	}
 	pd.Replicated.RaftLogDelta = &ms.SysBytes
 
 	return pd, cArgs.EvalCtx.makeReplicaStateLoader().setTruncatedState(ctx, batch, cArgs.Stats, tState)
@@ -2162,7 +2165,9 @@ func evalNewLease(
 	// TODO(tschottdorf): Maybe we shouldn't do this at all. Need to think
 	// through potential consequences.
 	pd.Replicated.BlockReads = !isExtension
-	pd.Replicated.State.Lease = &lease
+	pd.Replicated.State = &storagebase.ReplicaState{
+		Lease: &lease,
+	}
 	pd.Local.leaseMetricsResult = new(leaseMetricsType)
 	if isTransfer {
 		*pd.Local.leaseMetricsResult = leaseTransferSuccess
@@ -3446,7 +3451,9 @@ func changeReplicasTrigger(
 	cpy.NextReplicaID = change.NextReplicaID
 	// TODO(tschottdorf): duplication of Desc with the trigger below, should
 	// likely remove it from the trigger.
-	pd.Replicated.State.Desc = &cpy
+	pd.Replicated.State = &storagebase.ReplicaState{
+		Desc: &cpy,
+	}
 	pd.Replicated.ChangeReplicas = &storagebase.ChangeReplicas{
 		ChangeReplicasTrigger: *change,
 	}
