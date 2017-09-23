@@ -162,8 +162,9 @@ func (rdc *RangeDescriptorCache) String() string {
 
 func (rdc *RangeDescriptorCache) stringLocked() string {
 	var buf bytes.Buffer
-	rdc.rangeCache.cache.Do(func(k, v interface{}) {
+	rdc.rangeCache.cache.Do(func(k, v interface{}) bool {
 		fmt.Fprintf(&buf, "key=%s desc=%+v\n", roachpb.Key(k.(rangeCacheKey)), v)
+		return false
 	})
 	return buf.String()
 }
