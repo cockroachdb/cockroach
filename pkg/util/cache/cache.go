@@ -163,7 +163,7 @@ type cacheStore interface {
 	// add stores an entry.
 	add(e *Entry)
 	// del removes an entry.
-	del(key interface{})
+	del(e *Entry)
 	// len is number of items in store.
 	length() int
 }
@@ -282,7 +282,7 @@ func (bc *baseCache) access(e *Entry) {
 
 func (bc *baseCache) removeElement(e *Entry) {
 	bc.ll.remove(e)
-	bc.store.del(e.Key)
+	bc.store.del(e)
 	if bc.OnEvicted != nil {
 		bc.OnEvicted(e.Key, e.Value)
 	}
@@ -342,8 +342,8 @@ func (mc *UnorderedCache) get(key interface{}) *Entry {
 func (mc *UnorderedCache) add(e *Entry) {
 	mc.hmap[e.Key] = e
 }
-func (mc *UnorderedCache) del(key interface{}) {
-	delete(mc.hmap, key)
+func (mc *UnorderedCache) del(e *Entry) {
+	delete(mc.hmap, e.Key)
 }
 func (mc *UnorderedCache) length() int {
 	return len(mc.hmap)
@@ -385,8 +385,8 @@ func (oc *OrderedCache) get(key interface{}) *Entry {
 func (oc *OrderedCache) add(e *Entry) {
 	oc.llrb.Insert(e)
 }
-func (oc *OrderedCache) del(key interface{}) {
-	oc.llrb.Delete(&Entry{Key: key})
+func (oc *OrderedCache) del(e *Entry) {
+	oc.llrb.Delete(e)
 }
 func (oc *OrderedCache) length() int {
 	return oc.llrb.Len()
@@ -482,7 +482,6 @@ type IntervalCache struct {
 	// GetOverlaps.
 	getID      uintptr
 	getEntry   *Entry
-	tmpEntry   Entry
 	overlapKey IntervalKey
 	overlaps   []*Entry
 }
@@ -558,9 +557,8 @@ func (ic *IntervalCache) add(e *Entry) {
 	}
 }
 
-func (ic *IntervalCache) del(key interface{}) {
-	ic.tmpEntry.Key = key
-	if err := ic.tree.Delete(&ic.tmpEntry, false); err != nil {
+func (ic *IntervalCache) del(e *Entry) {
+	if err := ic.tree.Delete(e, false); err != nil {
 		log.Error(context.TODO(), err)
 	}
 }
