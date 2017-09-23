@@ -932,7 +932,7 @@ func TestGetCachedRangeDescriptorInclusive(t *testing.T) {
 
 	for _, test := range testCases {
 		cache.rangeCache.RLock()
-		cacheKey, targetRange, err := cache.getCachedRangeDescriptorLocked(
+		targetRange, entry, err := cache.getCachedRangeDescriptorLocked(
 			test.queryKey, true /* inclusive */)
 		cache.rangeCache.RUnlock()
 		if err != nil {
@@ -940,6 +940,10 @@ func TestGetCachedRangeDescriptorInclusive(t *testing.T) {
 		}
 		if !reflect.DeepEqual(targetRange, test.rng) {
 			t.Fatalf("expect range %v, actual get %v", test.rng, targetRange)
+		}
+		var cacheKey rangeCacheKey
+		if entry != nil {
+			cacheKey = entry.Key.(rangeCacheKey)
 		}
 		if !reflect.DeepEqual(cacheKey, test.cacheKey) {
 			t.Fatalf("expect cache key %v, actual get %v", test.cacheKey, cacheKey)
