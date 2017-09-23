@@ -61,6 +61,7 @@ const (
 	defaultScanMaxIdleTime                = 200 * time.Millisecond
 	defaultMetricsSampleInterval          = 10 * time.Second
 	defaultStorePath                      = "cockroach-data"
+	defaultTempStoreDirPrefix             = "cockroach-temp"
 	defaultEventLogEnabled                = true
 	defaultEnableWebSessionAuthentication = false
 	defaultTempStoreMaxSizeBytes          = 32 * 1024 * 1024 * 1024 /* 32GB */
@@ -346,7 +347,7 @@ func SetOpenFileLimitForOneStore() (uint64, error) {
 // will be used for the temporary store.
 // The Attributes field of the given spec is intentionally not propagated to the temporary store.
 func MakeTempStoreSpecFromStoreSpec(
-	desiredDir string, firstStore base.StoreSpec,
+	firstStore base.StoreSpec, desiredDir string,
 ) (base.StoreSpec, error) {
 	if firstStore.InMemory {
 		return base.StoreSpec{
@@ -361,8 +362,8 @@ func MakeTempStoreSpecFromStoreSpec(
 	}
 
 	// Guaranteed to always generate a unique temporary directory with the
-	// prefix "cockroach-temp".
-	tempPath, err := ioutil.TempDir(desiredDir, "cockroach-temp")
+	// prefix defaultTempStoreDirPrefix.
+	tempPath, err := ioutil.TempDir(desiredDir, defaultTempStoreDirPrefix)
 	if err != nil {
 		log.Errorf(
 			context.TODO(),

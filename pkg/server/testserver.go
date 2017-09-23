@@ -187,7 +187,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg.Stores = base.StoreSpecList{Specs: params.StoreSpecs}
 	// Assign TempStore spec if specified in the params.
 	if !reflect.DeepEqual(params.TempStoreSpec, base.StoreSpec{}) {
-		cfg.TempStore = params.TempStoreSpec
+		cfg.TempStoreSpec = params.TempStoreSpec
 	}
 	if cfg.TestingKnobs.Store == nil {
 		cfg.TestingKnobs.Store = &storage.StoreTestingKnobs{}

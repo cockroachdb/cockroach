@@ -463,7 +463,8 @@ Also, if you use equal signs in the file path to a store, you must use the
 		Description: `
 The path under which to create a temporary subdirectory to be used for temporary files.
 This path must exist or the node will not start.
-The temporary subdirectory is used primarily as working memory for distributed computations.
+The temporary subdirectory is used primarily as working memory for distributed computations
+and CSV importing.
 For example, the following will generate an arbitrary, temporary subdirectory
 "/mnt/ssd01/temp/cockroach-temp<NUMBER>":
 <PRE>

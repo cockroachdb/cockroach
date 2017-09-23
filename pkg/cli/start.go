@@ -452,7 +452,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	var err error
 	// Pass in current temporary store path initialized via CLI flags and
 	// the first store's spec (for default initialization).
-	if serverCfg.TempStoreSpec, err = server.MakeTempStoreSpecFromStoreSpec(serverCfg.TempStore.Path, serverCfg.Stores.Specs[0]); err != nil {
+	if serverCfg.TempStoreSpec, err = server.MakeTempStoreSpecFromStoreSpec(serverCfg.Stores.Specs[0], serverCfg.TempStoreSpec.Path); err != nil {
 		return err
 	}
 
