@@ -354,8 +354,8 @@ func MakeTempStoreSpecFromStoreSpec(
 	}
 
 	// Guaranteed to always generate a unique temporary directory with the
-	// prefix "cockroach-temp".
-	tempPath, err := ioutil.TempDir(desiredDir, "cockroach-temp")
+	// prefix engine.TempStoreDirPrefix.
+	tempPath, err := ioutil.TempDir(desiredDir, engine.TempStoreDirPrefix)
 	if err != nil {
 		log.Errorf(
 			context.TODO(),
