@@ -18,6 +18,7 @@ import (
 	"bytes"
 	gosql "database/sql"
 	"fmt"
+	"reflect"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
 
@@ -45,6 +47,24 @@ func zoneExists(sqlDB *gosql.DB, exists bool, id sqlbase.ID) error {
 	defer rows.Close()
 	if exists != rows.Next() {
 		return errors.Errorf("zone config exists = %v", exists)
+	}
+	// Ensure that the zone config is the default one.
+	if exists {
+		var storedID sqlbase.ID
+		var val []byte
+		if err := rows.Scan(&storedID, &val); err != nil {
+			return errors.Errorf("row scan failed: %s", err)
+		}
+		if storedID != id {
+			return errors.Errorf("e = %d, v = %d", id, storedID)
+		}
+		var cfg config.ZoneConfig
+		if err := proto.Unmarshal(val, &cfg); err != nil {
+			return err
+		}
+		if e := config.DefaultZoneConfig(); !reflect.DeepEqual(e, cfg) {
+			return errors.Errorf("e = %v, v = %v", e, cfg)
+		}
 	}
 	return nil
 }
