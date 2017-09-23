@@ -163,7 +163,7 @@ type cacheStore interface {
 	// add stores an entry.
 	add(e *Entry)
 	// del removes an entry.
-	del(key interface{})
+	del(e *Entry)
 	// len is number of items in store.
 	length() int
 }
@@ -282,7 +282,7 @@ func (bc *baseCache) access(e *Entry) {
 
 func (bc *baseCache) removeElement(e *Entry) {
 	bc.ll.remove(e)
-	bc.store.del(e.Key)
+	bc.store.del(e)
 	if bc.OnEvicted != nil {
 		bc.OnEvicted(e.Key, e.Value)
 	}
@@ -342,8 +342,8 @@ func (mc *UnorderedCache) get(key interface{}) *Entry {
 func (mc *UnorderedCache) add(e *Entry) {
 	mc.hmap[e.Key] = e
 }
-func (mc *UnorderedCache) del(key interface{}) {
-	delete(mc.hmap, key)
+func (mc *UnorderedCache) del(e *Entry) {
+	delete(mc.hmap, e.Key)
 }
 func (mc *UnorderedCache) length() int {
 	return len(mc.hmap)
@@ -385,45 +385,82 @@ func (oc *OrderedCache) get(key interface{}) *Entry {
 func (oc *OrderedCache) add(e *Entry) {
 	oc.llrb.Insert(e)
 }
-func (oc *OrderedCache) del(key interface{}) {
-	oc.llrb.Delete(&Entry{Key: key})
+func (oc *OrderedCache) del(e *Entry) {
+	oc.llrb.Delete(e)
 }
 func (oc *OrderedCache) length() int {
 	return oc.llrb.Len()
 }
 
-// Ceil returns the smallest cache entry greater than or equal to key.
-func (oc *OrderedCache) Ceil(key interface{}) (interface{}, interface{}, bool) {
+// CeilEntry returns the smallest cache entry greater than or equal to key.
+func (oc *OrderedCache) CeilEntry(key interface{}) (*Entry, bool) {
 	if e, ok := oc.llrb.Ceil(&Entry{Key: key}).(*Entry); ok {
+		return e, true
+	}
+	return nil, false
+}
+
+// Ceil returns the smallest key-value pair greater than or equal to key.
+func (oc *OrderedCache) Ceil(key interface{}) (interface{}, interface{}, bool) {
+	if e, ok := oc.CeilEntry(key); ok {
 		return e.Key, e.Value, true
 	}
 	return nil, nil, false
 }
 
-// Floor returns the greatest cache entry less than or equal to key.
-func (oc *OrderedCache) Floor(key interface{}) (interface{}, interface{}, bool) {
+// FloorEntry returns the greatest cache entry less than or equal to key.
+func (oc *OrderedCache) FloorEntry(key interface{}) (*Entry, bool) {
 	if e, ok := oc.llrb.Floor(&Entry{Key: key}).(*Entry); ok {
+		return e, true
+	}
+	return nil, false
+}
+
+// Floor returns the greatest key-value pair less than or equal to key.
+func (oc *OrderedCache) Floor(key interface{}) (interface{}, interface{}, bool) {
+	if e, ok := oc.FloorEntry(key); ok {
 		return e.Key, e.Value, true
 	}
 	return nil, nil, false
 }
 
-// Do invokes f on all of the entries in the cache.
-func (oc *OrderedCache) Do(f func(k, v interface{})) {
-	oc.llrb.Do(func(e llrb.Comparable) (done bool) {
-		f(e.(*Entry).Key, e.(*Entry).Value)
-		return
+// DoEntry invokes f on all cache entries in the cache. f returns a boolean
+// indicating the traversal is done. If f returns true, the DoEntry loop will
+// exit; false, it will continue. DoEntry returns whether the iteration exited
+// early.
+func (oc *OrderedCache) DoEntry(f func(e *Entry) bool) bool {
+	return oc.llrb.Do(func(e llrb.Comparable) bool {
+		return f(e.(*Entry))
 	})
 }
 
-// DoRange invokes f on all cache entries in the range of from -> to.
-// f returns a boolean indicating the traversal is done. If f returns
-// true, the DoRange loop will exit; false, it will continue. DoRange
-// returns whether the iteration exited early.
-func (oc *OrderedCache) DoRange(f func(k, v interface{}) bool, from, to interface{}) bool {
+// Do invokes f on all key-value pairs in the cache. f returns a boolean
+// indicating the traversal is done. If f returns true, the Do loop will exit;
+// false, it will continue. Do returns whether the iteration exited early.
+func (oc *OrderedCache) Do(f func(k, v interface{}) bool) bool {
+	return oc.DoEntry(func(e *Entry) bool {
+		return f(e.Key, e.Value)
+	})
+}
+
+// DoRangeEntry invokes f on all cache entries in the range of from -> to. f
+// returns a boolean indicating the traversal is done. If f returns true, the
+// DoRangeEntry loop will exit; false, it will continue. DoRangeEntry returns
+// whether the iteration exited early.
+func (oc *OrderedCache) DoRangeEntry(f func(e *Entry) bool, from, to interface{}) bool {
 	return oc.llrb.DoRange(func(e llrb.Comparable) bool {
-		return f(e.(*Entry).Key, e.(*Entry).Value)
+		return f(e.(*Entry))
 	}, &Entry{Key: from}, &Entry{Key: to})
+}
+
+// DoRange invokes f on all key-value pairs in the range of from -> to. f
+// returns a boolean indicating the traversal is done. If f returns true, the
+// DoRange loop will exit; false, it will continue. DoRange returns whether the
+// iteration exited early.
+func (oc *OrderedCache) DoRange(f func(k, v interface{}) bool, from, to interface{}) bool {
+	return oc.DoRangeEntry(func(e *Entry) bool {
+		return f(e.Key, e.Value)
+	}, from, to)
 }
 
 // IntervalCache is a cache which supports querying of intervals which
@@ -445,7 +482,6 @@ type IntervalCache struct {
 	// GetOverlaps.
 	getID      uintptr
 	getEntry   *Entry
-	tmpEntry   Entry
 	overlapKey IntervalKey
 	overlaps   []*Entry
 }
@@ -521,9 +557,8 @@ func (ic *IntervalCache) add(e *Entry) {
 	}
 }
 
-func (ic *IntervalCache) del(key interface{}) {
-	ic.tmpEntry.Key = key
-	if err := ic.tree.Delete(&ic.tmpEntry, false); err != nil {
+func (ic *IntervalCache) del(e *Entry) {
+	if err := ic.tree.Delete(e, false); err != nil {
 		log.Error(context.TODO(), err)
 	}
 }

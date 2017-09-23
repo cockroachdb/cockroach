@@ -18,9 +18,10 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/coreos/etcd/raft/raftpb"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/coreos/etcd/raft/raftpb"
 )
 
 func newEntry(index, size uint64) raftpb.Entry {
@@ -136,5 +137,22 @@ func TestEntryCacheEviction(t *testing.T) {
 	ents, _, hi = rec.getEntries(nil, rangeID, 2, 4, 0)
 	if len(ents) != 2 || hi != 4 {
 		t.Errorf("expected only two entries; got %+v, %d", ents, hi)
+	}
+}
+
+func BenchmarkEntryCacheClearTo(b *testing.B) {
+	rangeID := roachpb.RangeID(1)
+	ents := make([]raftpb.Entry, 1000)
+	for i := range ents {
+		ents[i] = newEntry(uint64(i+1), 8)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		rec := newRaftEntryCache(uint64(len(ents) * len(ents[0].Data)))
+		rec.addEntries(rangeID, ents)
+		b.StartTimer()
+		rec.clearTo(rangeID, uint64(len(ents)-10))
 	}
 }
