@@ -3179,9 +3179,9 @@ func (s *Store) processRaftRequest(
 		return roachpb.NewError(err)
 	}
 
-	if _, err := r.handleRaftReadyRaftMuLocked(inSnap); err != nil {
-		// mimic the behavior in processRaft.
-		log.Fatal(ctx, err)
+	if _, expl, err := r.handleRaftReadyRaftMuLocked(inSnap); err != nil {
+		// Mimic the behavior in processRaft.
+		log.Fatalf(ctx, "%s: %s", log.Safe(expl), err) // TODO(bdarnell)
 	}
 	removePlaceholder = false
 	return nil
@@ -3565,9 +3565,9 @@ func (s *Store) processReady(ctx context.Context, rangeID roachpb.RangeID) {
 
 	start := timeutil.Now()
 	r := (*Replica)(value)
-	stats, err := r.handleRaftReady(IncomingSnapshot{})
+	stats, expl, err := r.handleRaftReady(IncomingSnapshot{})
 	if err != nil {
-		log.Fatal(ctx, err) // TODO(bdarnell)
+		log.Fatalf(ctx, "%s: %s", log.Safe(expl), err) // TODO(bdarnell)
 	}
 	elapsed := timeutil.Since(start)
 	s.metrics.RaftWorkingDurationNanos.Inc(elapsed.Nanoseconds())
