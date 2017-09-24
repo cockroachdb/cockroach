@@ -212,7 +212,7 @@ func (ed *EncDatum) Encoding() (DatumEncoding, bool) {
 // a column ID so they should not be used to test for equality.
 func (ed *EncDatum) Encode(a *DatumAlloc, enc DatumEncoding, appendTo []byte) ([]byte, error) {
 	if ed.encoded != nil && enc == ed.encoding {
-		// We already have an encoding that matches
+		// We already have an encoding that matches that we can use.
 		return append(appendTo, ed.encoded...), nil
 	}
 	if err := ed.EnsureDecoded(a); err != nil {
