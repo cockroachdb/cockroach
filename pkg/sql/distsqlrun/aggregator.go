@@ -385,7 +385,7 @@ func (ag *aggregator) encode(
 	appendTo []byte, row sqlbase.EncDatumRow,
 ) (encoding []byte, err error) {
 	for _, colIdx := range ag.groupCols {
-		appendTo, err = row[colIdx].Encode(&ag.datumAlloc, sqlbase.DatumEncoding_VALUE, appendTo)
+		appendTo, err = row[colIdx].Encode(&ag.datumAlloc, sqlbase.DatumEncoding_ASCENDING_KEY, appendTo)
 		if err != nil {
 			return appendTo, err
 		}

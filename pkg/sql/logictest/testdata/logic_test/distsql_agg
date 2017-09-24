@@ -528,3 +528,17 @@ query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, '222'), (2, '444')) t1(a,b) JOIN (VALUES (1, 100.0), (3, 32.0)) t2(a,b) ON t1.a = t2.a]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJykkDFrwzAQhff-CnNTAjfYTuggKJhOTYemdOhSNBjrapu6OqOToBD834ulIXVoWkI26e6-e-_eASwbeqo_SUC9QQEaYXTckAi7uZQGduYLVI7Q2zH4uawRGnYE6gC-9wOBgtd6CCSAYMjX_ZD2bbP7bFVmTRfsh6xBTwgc_HGJ-LolUPmEVwrdXit03B8sO0OOzEJCz-R_I7-4faile-Tekls6Hujdr6pifef6tosvQNgHr7KqwKrEaoPV9uwdxSWBvZCMbIVO7zmTkEYg01IKRTi4hp4dN1EmffeRiwVD4lO3TJ-dja1o8CdcXACXp3D5J7xZwPmkp5vvAAAA__-HZe5E
+
+statement ok
+CREATE TABLE nullables (a INT, b INT, c INT, PRIMARY KEY (a))
+
+statement ok
+INSERT INTO nullables VALUES (1,1,1)
+
+statement ok
+INSERT INTO nullables VALUES (2,NULL,1)
+
+query II
+SELECT c, COUNT(*) FROM nullables GROUP BY c;
+----
+1 2
