@@ -632,6 +632,9 @@ func (ru *RowUpdater) UpdateRow(
 		if err := ru.Fks.outbound.checker.runCheck(ctx, nil, ru.newValues); err != nil {
 			return nil, err
 		}
+		if err := ru.Fks.inbound.checker.runCheck(ctx, oldValues, nil); err != nil {
+			return nil, err
+		}
 
 		if err := ru.rd.DeleteRow(ctx, b, oldValues, traceKV); err != nil {
 			return nil, err
@@ -766,6 +769,9 @@ func (ru *RowUpdater) UpdateRow(
 		}
 	}
 	if err := ru.Fks.outbound.checker.runCheck(ctx, nil, ru.newValues); err != nil {
+		return nil, err
+	}
+	if err := ru.Fks.inbound.checker.runCheck(ctx, oldValues, nil); err != nil {
 		return nil, err
 	}
 
