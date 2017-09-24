@@ -629,6 +629,9 @@ func (ru *RowUpdater) UpdateRow(
 				}
 			}
 		}
+		if err := ru.Fks.outbound.checker.runCheck(ctx, nil, ru.newValues); err != nil {
+			return nil, err
+		}
 
 		if err := ru.rd.DeleteRow(ctx, b, oldValues, traceKV); err != nil {
 			return nil, err
@@ -761,6 +764,9 @@ func (ru *RowUpdater) UpdateRow(
 			}
 			b.CPut(newSecondaryIndexEntry.Key, &newSecondaryIndexEntry.Value, expValue)
 		}
+	}
+	if err := ru.Fks.outbound.checker.runCheck(ctx, nil, ru.newValues); err != nil {
+		return nil, err
 	}
 
 	return ru.newValues, nil
