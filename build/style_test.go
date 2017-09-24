@@ -263,6 +263,31 @@ func TestStyle(t *testing.T) {
 		}
 	})
 
+	t.Run("TestErrors", func(t *testing.T) {
+		t.Parallel()
+		// TODO(justin): we should expand the packages this applies to as possible.
+		cmd, stderr, filter, err := dirCmd(pkg.Dir, "git", "grep", "-nE", `(fmt|errors).Errorf`, "--", "sql/parser/*.go")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter, func(s string) {
+			t.Errorf(`%s <- forbidden; use "pgerror.NewErrorf" instead`, s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
 	t.Run("TestProtoClone", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(pkg.Dir, "git", "grep", "-nE", `\.Clone\([^)]+\)`, "--", "*.go")
