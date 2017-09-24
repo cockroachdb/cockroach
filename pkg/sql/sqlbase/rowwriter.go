@@ -629,10 +629,7 @@ func (ru *RowUpdater) UpdateRow(
 				}
 			}
 		}
-		if err := ru.Fks.outbound.checker.runCheck(ctx, nil, ru.newValues); err != nil {
-			return nil, err
-		}
-		if err := ru.Fks.inbound.checker.runCheck(ctx, oldValues, nil); err != nil {
+		if err := ru.Fks.checker.runCheck(ctx, oldValues, ru.newValues); err != nil {
 			return nil, err
 		}
 
@@ -768,10 +765,7 @@ func (ru *RowUpdater) UpdateRow(
 			b.CPut(newSecondaryIndexEntry.Key, &newSecondaryIndexEntry.Value, expValue)
 		}
 	}
-	if err := ru.Fks.outbound.checker.runCheck(ctx, nil, ru.newValues); err != nil {
-		return nil, err
-	}
-	if err := ru.Fks.inbound.checker.runCheck(ctx, oldValues, nil); err != nil {
+	if err := ru.Fks.checker.runCheck(ctx, oldValues, ru.newValues); err != nil {
 		return nil, err
 	}
 

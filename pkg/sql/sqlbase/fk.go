@@ -363,6 +363,8 @@ func (h fkDeleteHelper) CollectSpansForValues(values parser.Datums) (roachpb.Spa
 type fkUpdateHelper struct {
 	inbound  fkDeleteHelper // Check old values are not referenced.
 	outbound fkInsertHelper // Check rows referenced by new values still exist.
+
+	checker *fkBatchChecker
 }
 
 func makeFKUpdateHelper(
@@ -378,6 +380,8 @@ func makeFKUpdateHelper(
 		return ret, err
 	}
 	ret.outbound, err = makeFKInsertHelper(txn, table, otherTables, colMap, alloc)
+	ret.outbound.checker = ret.inbound.checker
+	ret.checker = ret.inbound.checker
 	return ret, err
 }
 
