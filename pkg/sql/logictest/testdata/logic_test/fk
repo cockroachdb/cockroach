@@ -100,7 +100,7 @@ CREATE DATABASE "user content"
 
 # "reviews" makes "products" have multiple inbound references, as well as making
 # "orders" have both directions, and makes sure that we're handling escaping and
-# cross-database referenced.
+# cross-database references.
 statement ok
 CREATE TABLE "user content"."customer reviews" (
   id INT PRIMARY KEY,
