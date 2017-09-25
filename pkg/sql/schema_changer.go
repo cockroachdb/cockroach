@@ -233,7 +233,8 @@ func DropTableName(
 func DropTableDesc(
 	ctx context.Context, tableDesc *sqlbase.TableDescriptor, db *client.DB, traceKV bool,
 ) error {
-	zoneKey, _, descKey := GetKeysForTableDescriptor(tableDesc)
+	descKey := sqlbase.MakeDescMetadataKey(tableDesc.ID)
+	zoneKeyPrefix := sqlbase.MakeZoneKeyPrefix(tableDesc.ID)
 
 	// Finished deleting all the table data, now delete the table meta data.
 	return db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -241,11 +242,12 @@ func DropTableDesc(
 		b := &client.Batch{}
 		if traceKV {
 			log.VEventf(ctx, 2, "Del %s", descKey)
-			log.VEventf(ctx, 2, "Del %s", zoneKey)
+			log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
 		}
+		// Delete the descriptor.
 		b.Del(descKey)
 		// Delete the zone config entry for this table.
-		b.Del(zoneKey)
+		b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
 		}
