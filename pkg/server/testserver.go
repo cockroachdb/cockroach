@@ -68,7 +68,7 @@ func makeTestConfig(st *cluster.Settings) Config {
 	cfg.Insecure = false
 
 	// Override the DistSQL local store with an in-memory store.
-	cfg.TempStore = base.DefaultTestStoreSpec
+	cfg.TempStoreSpec = base.DefaultTestStoreSpec
 
 	// Load test certs. In addition, the tests requiring certs
 	// need to call security.SetAssetLoader(securitytest.EmbeddedAssets)

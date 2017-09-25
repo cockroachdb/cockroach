@@ -15,7 +15,6 @@
 package distsqlrun
 
 import (
-	"fmt"
 	"io"
 	"time"
 
@@ -91,26 +90,8 @@ var settingUseTempStorageJoins = settings.RegisterBoolSetting(
 
 var settingWorkMemBytes = settings.RegisterByteSizeSetting(
 	"sql.distsql.temp_storage.workmem",
-	"maximum amount of memory in bytes a processor can use before falling back to temp storage (requires restart)",
+	"maximum amount of memory in bytes a processor can use before falling back to temp storage",
 	64*1024*1024, /* 64MB */
-)
-
-var settingDiskBudgetPercent = settings.RegisterValidatedIntSetting(
-	"sql.distsql.temp_storage.max_percent",
-	"maximum amount of disk space used for queries (as a percentage of the total capacity; requires restart); also see sql.distsql.temp_storage.max_bytes",
-	10,
-	func(val int64) error {
-		if val < 1 || val > 100 {
-			return fmt.Errorf("value must be between 1 and 100")
-		}
-		return nil
-	},
-)
-
-var settingDiskBudgetAbsolute = settings.RegisterByteSizeSetting(
-	"sql.distsql.temp_storage.max_bytes",
-	"maximum amount of disk space used for queries (in bytes; requires restart); also see sql.distsql.temp_storage.max_percent",
-	32*1024*1024*1024, /* 32GB */
 )
 
 var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_DISTSQL_MEMORY_USAGE", 1024*1024 /* 1MB */)
@@ -137,7 +118,8 @@ type ServerConfig struct {
 
 	// TempStorage is used by some DistSQL processors to store rows when the
 	// working set is larger than can be stored in memory.
-	TempStorage engine.Engine
+	TempStorage             engine.Engine
+	TempStorageMaxSizeBytes int64
 
 	Metrics *DistSQLMetrics
 
@@ -189,28 +171,15 @@ func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
 	}
 	ds.memMonitor.Start(ctx, cfg.ParentMemoryMonitor, mon.BoundAccount{})
 
-	capacity, err := ds.tempStorage.Capacity()
-	if err != nil {
-		log.Fatal(
-			ctx,
-			errors.Wrap(err, "could not get temporary storage capacity"),
-		)
-	}
-	// We limit the disk usage to both a percentage of the total capacity and an
-	// absolute value (whichever is smaller).
-	diskMonitorBudget := capacity.Capacity * 100 / settingDiskBudgetPercent.Get(&ds.Settings.SV)
-	if maxBytes := settingDiskBudgetAbsolute.Get(&ds.Settings.SV); maxBytes < diskMonitorBudget {
-		diskMonitorBudget = maxBytes
-	}
 	ds.diskMonitor = mon.MakeMonitor(
 		"distsql-tempstorage",
 		mon.DiskResource,
-		nil,                  /* curCount */
-		nil,                  /* maxHist */
-		64*1024*1024,         /* increment */
-		diskMonitorBudget/10, /* noteworthy */
+		nil,                            /* curCount */
+		nil,                            /* maxHist */
+		64*1024*1024,                   /* increment */
+		cfg.TempStorageMaxSizeBytes/10, /* noteworthy */
 	)
-	ds.diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(diskMonitorBudget))
+	ds.diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(cfg.TempStorageMaxSizeBytes))
 	return ds
 }
 

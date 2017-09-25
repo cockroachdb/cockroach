@@ -291,7 +291,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	rootSQLMemoryMonitor.Start(context.Background(), nil, mon.MakeStandaloneBudget(s.cfg.SQLMemoryPoolSize))
 
 	// Set up the DistSQL temp engine.
-	tempEngine, err := engine.NewTempEngine(ctx, s.cfg.TempStore)
+	tempEngine, err := engine.NewTempEngine(ctx, s.cfg.TempStoreSpec)
 	if err != nil {
 		log.Fatalf(ctx, "could not create temporary store: %v", err)
 	}
@@ -361,7 +361,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Stopper:    s.stopper,
 		NodeID:     &s.nodeIDContainer,
 
-		TempStorage: tempEngine,
+		TempStorage:             tempEngine,
+		TempStorageMaxSizeBytes: s.cfg.TempStoreMaxSizeBytes,
 
 		ParentMemoryMonitor: &rootSQLMemoryMonitor,
 

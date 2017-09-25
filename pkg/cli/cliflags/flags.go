@@ -92,11 +92,36 @@ accept requests.`,
 	SQLMem = FlagInfo{
 		Name: "max-sql-memory",
 		Description: `
-Total size in bytes available for use to store temporary data for SQL
-clients, including prepared queries and intermediate data rows during
-query execution. Size suffixes are supported (e.g. 1GB and 1GiB). If
-left unspecified, defaults to 128MiB. A percentage of physical memory
-can also be specified (e.g. 25%).`,
+Maximum memory capacity available to store temporary data for SQL clients,
+including prepared queries and intermediate data rows during query execution.
+Accepts numbers interpreted as bytes, size suffixes (e.g. 1GB and 1GiB) or a
+percentage of physical memory (e.g. 25%).
+If left unspecified, defaults to 128MiB.
+`,
+	}
+
+	SQLTempStorage = FlagInfo{
+		Name: "max-disk-temp-storage",
+		Description: `
+Maximum storage capacity available to store temporary disk-based data for SQL
+queries that exceed the memory budget (e.g. join, sorts, etc are sometimes able
+to spill intermediate results to disk).
+Accepts numbers interpreted as bytes, size suffixes (e.g. 32GB and 32GiB) or a
+percentage of disk size (e.g. 10%).
+If left unspecified, defaults to 32GiB.
+
+The location of the temporary files is within the first store dir (see --store).
+If expressed as a percentage, --max-disk-temp-storage is interpreted relative to
+the size of the storage device on which the first store is placed. The temp
+space usage is never counted towards any store usage (although it does share the
+device with the first store) so, when configuring this, make sure that the size
+of this temp storage plus the size of the first store don't exceed the capacity
+of the storage device.
+If the first store is an in-memory one (i.e. type=mem), then this temporary "disk"
+data is also kept in-memory. A percentage value is interpreted as a percentage
+of the available internal memory. If not specified, the default shifts to 100MiB
+when the first store is in-memory.
+`,
 	}
 
 	Cache = FlagInfo{

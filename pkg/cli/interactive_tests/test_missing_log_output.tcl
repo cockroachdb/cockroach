@@ -27,7 +27,10 @@ system "grep -F 'log: exiting because of error: write /dev/stderr: broken pipe' 
 end_test
 
 start_test "Check that a broken log file prints a message to stderr."
-send "$argv start -s=path=/dev/null --insecure --logtostderr\r"
+# The path that we pass to the --log-dir will already exist as a file.
+system "mkdir -p logs"
+system "touch logs/broken"
+send "$argv start -s=path=logs/db --log-dir=logs/broken --insecure --logtostderr\r"
 eexpect "log: exiting because of error: log: cannot create log: open"
 eexpect "not a directory"
 eexpect ":/# "
