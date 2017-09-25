@@ -978,6 +978,7 @@ func (c *v3Conn) sendInternalError(errToSend string) error {
 }
 
 func (c *v3Conn) sendError(err error) error {
+	c.executor.RecordError(err)
 	if c.doingExtendedQueryMessage {
 		c.ignoreTillSync = true
 	}
