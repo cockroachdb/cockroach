@@ -125,8 +125,18 @@ func TestReportUsage(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
+		if _, err := db.Exec(`SELECT 1::INTERVAL(1)`); !testutils.IsError(
+			err, "unimplemented",
+		) {
+			t.Fatal(err)
+		}
 		if _, err := db.Exec(`ALTER TABLE foo RENAME CONSTRAINT x TO y`); !testutils.IsError(
 			err, "unimplemented",
+		) {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(`CREATE TABLE somestring.foo (a INT PRIMARY KEY, b INT, INDEX (b) INTERLEAVE IN PARENT foo (b))`); !testutils.IsError(
+			err, "unimplemented: use CREATE INDEX to make interleaved indexes",
 		) {
 			t.Fatal(err)
 		}
@@ -245,17 +255,19 @@ func TestReportUsage(t *testing.T) {
 			t.Fatalf("reported table %d does not match: expected\n%+v got\n%+v", tbl.ID, tbl, r)
 		}
 	}
-	if expected, actual := 1, len(r.last.UnimplementedErrors); expected != actual {
+	if expected, actual := 3, len(r.last.UnimplementedErrors); expected != actual {
 		t.Fatalf("expected %d unimplemented feature errors, got %d", expected, actual)
 	}
-	if expected, actual := int64(10), r.last.UnimplementedErrors["alter table rename constraint"]; expected != actual {
-		t.Fatalf(
-			"unexpected %d hits to unimplemented alter table rename constrain, got %d from %v",
-			expected, actual, r.last.UnimplementedErrors,
-		)
+	for _, feat := range []string{"alter table rename constraint", "simple_type const_interval", "#9148"} {
+		if expected, actual := int64(10), r.last.UnimplementedErrors[feat]; expected != actual {
+			t.Fatalf(
+				"unexpected %d hits to unimplemented %q, got %d from %v",
+				expected, feat, actual, r.last.UnimplementedErrors,
+			)
+		}
 	}
 
-	if expected, actual := 8, len(r.last.SqlStats); expected != actual {
+	if expected, actual := 9, len(r.last.SqlStats); expected != actual {
 		t.Fatalf("expected %d queries in stats report, got %d", expected, actual)
 	}
 
@@ -272,6 +284,7 @@ func TestReportUsage(t *testing.T) {
 		"": {
 			`CREATE DATABASE _`,
 			`CREATE TABLE _ (_ INT, CONSTRAINT _ CHECK (_ > _))`,
+			`CREATE TABLE _ (_ INT PRIMARY KEY, _ INT, INDEX (_) INTERLEAVE IN PARENT _ (_))`,
 			`INSERT INTO _ VALUES (length($1::STRING))`,
 			`INSERT INTO _ VALUES (_)`,
 			`SELECT * FROM _ WHERE (_ = length($1::STRING)) OR (_ = $2)`,
@@ -286,7 +299,7 @@ func TestReportUsage(t *testing.T) {
 			t.Fatalf("missing stats for default app")
 		} else {
 			if actual, expected := len(app), len(expectedStatements); expected != actual {
-				t.Fatalf("expected %d statements in app %s report, got %d", expected, appName, actual)
+				t.Fatalf("expected %d statements in app %q report, got %d: %+v", expected, appName, actual, app)
 			}
 			keys := make(map[string]struct{})
 			for _, q := range app {
