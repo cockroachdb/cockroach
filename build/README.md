@@ -28,11 +28,18 @@ running CockroachDB. It is based on Debian Jessie and contains only the main
 CockroachDB binary. To fetch this image, run `docker pull
 cockroachdb/cockroach` in the usual fashion.
 
-To build the image yourself, use `./build-docker-deploy.sh`. The script will
-build and run a development container. The CockroachDB binary will be built
-inside of that container. That binary is built into our minimal container. The
+To build the image yourself, use the Dockerfile in the `deploy` directory after
+building a release version of the binary with the development image described in
+the previous section. The CockroachDB binary will be built inside of that
+development container, then placed into the minimal deployment container. The
 resulting image `cockroachdb/cockroach` can be run via `docker run` in the
-usual fashion.
+usual fashion. To be more specific, the steps to do this are:
+
+```
+go/src/github.com/cockroachdb/cockroach $ ./build/builder.sh make build TYPE=release-linux-gnu
+go/src/github.com/cockroachdb/cockroach $ cp ./cockroach build/deploy/cockroach
+go/src/github.com/cockroachdb/cockroach $ cd build/deploy && docker build -t cockroachdb/cockroach .
+```
 
 #  Dependencies
 
