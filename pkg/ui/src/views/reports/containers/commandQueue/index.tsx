@@ -1,3 +1,4 @@
+import _ from "lodash";
 import Long from "long";
 import { Link } from "react-router";
 import React from "react";
@@ -36,6 +37,10 @@ class CommandQueue extends React.Component<CommandQueueProps, {}> {
   }
 
   renderReportBody() {
+    if (_.isNil(this.props.commandQueueReducerState.data)) {
+      return (<p>Loading...</p>);
+    }
+
     const snapshot = this.props.commandQueueReducerState.data.snapshot;
 
     return (
@@ -75,9 +80,7 @@ class CommandQueue extends React.Component<CommandQueueProps, {}> {
           {" "}>{" "}
           Command queue
         </h1>
-        {this.props.commandQueueReducerState.setAt
-          ? this.renderReportBody()
-          : <p>Loading...</p>}
+        {this.renderReportBody()}
       </div>
     );
   }
