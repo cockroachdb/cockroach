@@ -340,7 +340,10 @@ func makeBackupDescriptor(
 	db := p.ExecCfg().DB
 
 	{
-		txn := client.NewTxn(db)
+		// TODO(andrei): Plumb a gatewayNodeID in here and also find a way to
+		// express that whatever this txn does should not count towards lease
+		// placement stats.
+		txn := client.NewTxn(db, 0 /* getwayNodeID */)
 		opt := client.TxnExecOptions{AutoRetry: true, AutoCommit: true}
 		err := txn.Exec(ctx, opt, func(ctx context.Context, txn *client.Txn, opt *client.TxnExecOptions) error {
 			var err error
@@ -746,7 +749,10 @@ func backupResumeHook(typ jobs.Type) func(context.Context, *jobs.Job) error {
 		var tables []*sqlbase.TableDescriptor
 
 		{
-			txn := client.NewTxn(job.DB())
+			// TODO(andrei): Plumb a gatewayNodeID in here and also find a way to
+			// express that whatever this txn does should not count towards lease
+			// placement stats.
+			txn := client.NewTxn(job.DB(), 0 /* gatewayNodeID */)
 			opt := client.TxnExecOptions{AutoRetry: true, AutoCommit: true}
 			if err := txn.Exec(ctx, opt, func(ctx context.Context, txn *client.Txn, opt *client.TxnExecOptions) error {
 				txn.SetFixedTimestamp(details.EndTime)
