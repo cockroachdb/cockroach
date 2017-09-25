@@ -15,10 +15,11 @@
 package parser
 
 import (
-	"errors"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
@@ -328,7 +329,7 @@ func TestScanError(t *testing.T) {
 		if id != ERROR {
 			t.Errorf("%s: expected ERROR, but found %d", d.sql, id)
 		}
-		if !testutils.IsError(errors.New(lval.str), d.err) {
+		if !testutils.IsError(pgerror.NewError(pgerror.CodeInternalError, lval.str), d.err) {
 			t.Errorf("%s: expected %s, but found %v", d.sql, d.err, lval.str)
 		}
 	}
