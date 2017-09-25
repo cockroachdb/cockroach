@@ -39,10 +39,10 @@ import (
 )
 
 var (
-	errZeroModulus     = errors.New("zero modulus")
-	errDivByZero       = errors.New("division by zero")
-	errIntOutOfRange   = errors.New("integer out of range")
-	errFloatOutOfRange = errors.New("float out of range")
+	errZeroModulus     = pgerror.NewError(pgerror.CodeDivisionByZeroError, "zero modulus")
+	errDivByZero       = pgerror.NewError(pgerror.CodeDivisionByZeroError, "division by zero")
+	errIntOutOfRange   = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "integer out of range")
+	errFloatOutOfRange = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "float out of range")
 
 	big10E6  = big.NewInt(1e6)
 	big10E10 = big.NewInt(1e10)

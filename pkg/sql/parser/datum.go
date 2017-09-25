@@ -30,7 +30,6 @@ import (
 	"unsafe"
 
 	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
 	"golang.org/x/text/collate"
 	"golang.org/x/text/language"
 
@@ -2374,7 +2373,7 @@ func (d *DArray) Size() uintptr {
 	return sz
 }
 
-var errNonHomogeneousArray = errors.New("multidimensional arrays must have array expressions with matching dimensions")
+var errNonHomogeneousArray = pgerror.NewError(pgerror.CodeArraySubscriptError, "multidimensional arrays must have array expressions with matching dimensions")
 
 // Append appends a Datum to the array, whose parameterized type must be
 // consistent with the type of the Datum.
