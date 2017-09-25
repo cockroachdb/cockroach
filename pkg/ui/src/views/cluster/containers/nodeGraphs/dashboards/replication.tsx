@@ -36,7 +36,13 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Leaseholders per Store" tooltip={`The number of replicas on each store.`}>
+    <LineGraph
+      title="Leaseholders per Store"
+      tooltip={
+          `The number of leaseholder replicas on each store. A leaseholder replica is the one that
+          receives and coordinates all read and write requests for its range.`
+      }
+    >
       <Axis>
         {
           _.map(nodeIDs, (nid) => (
