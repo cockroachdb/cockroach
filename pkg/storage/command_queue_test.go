@@ -791,6 +791,29 @@ func TestCommandQueueGetSnapshotWithChildren(t *testing.T) {
 	}
 }
 
+func TestCommandQueueGetSnapshotWithDisappearingPrereq(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	cq := NewCommandQueue(true /* covering optimization */)
+	cmd1 := add(cq, roachpb.Key("a"), nil, false, nil)
+	cmdNotInQueue := &cmd{
+		id: 55,
+	}
+	add(cq, roachpb.Key("b"), nil, false, []*cmd{cmd1, cmdNotInQueue}) // a nonexistent prereq
+
+	snapshot := cq.GetCommandQueueSnapshot()
+	if n2 := len(snapshot); n2 != 2 {
+		t.Fatalf("expected 2 commands in shapshot; got %d", n2)
+	}
+	snapshotCommands := map[int64]storagebase.CommandQueueCommand{}
+	for _, command := range snapshot {
+		snapshotCommands[command.Id] = command
+	}
+	if len(snapshotCommands[2].Prereqs) != 1 || snapshotCommands[2].Prereqs[0] != 1 {
+		t.Fatalf("expected commands[2].Prereqs to be [1]; got %v", snapshotCommands[2].Prereqs)
+	}
+}
+
 func BenchmarkCommandQueueGetPrereqsAllReadOnly(b *testing.B) {
 	// Test read-only getPrereqs performance for various number of command queue
 	// entries. See #13627 where a previous implementation of

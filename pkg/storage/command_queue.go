@@ -814,49 +814,64 @@ func (cq *CommandQueue) GetCommandQueueSnapshot() []storagebase.CommandQueueComm
 	// Before taking the snapshot, ensure all commands have been flushed into
 	// the interval trees.
 	cq.flushReadsBuffer()
-	result := make([]storagebase.CommandQueueCommand, 0, cq.reads.Len()+cq.writes.Len())
-	result = appendCommandsFromTree(result, cq.reads)
-	result = appendCommandsFromTree(result, cq.writes)
+	commandMap := make(map[int64]*storagebase.CommandQueueCommand)
+	addCommandsFromTree(commandMap, cq.reads)
+	addCommandsFromTree(commandMap, cq.writes)
+	removeNonexistentPrereqs(commandMap)
+	result := make([]storagebase.CommandQueueCommand, 0, len(commandMap))
+	for _, command := range commandMap {
+		result = append(result, *command)
+	}
 	return result
 }
 
-func appendCommandsFromTree(
-	commandsSoFar []storagebase.CommandQueueCommand, tree interval.Tree,
-) []storagebase.CommandQueueCommand {
+func addCommandsFromTree(
+	commandsSoFar map[int64]*storagebase.CommandQueueCommand, tree interval.Tree,
+) {
 	tree.Do(func(item interval.Interface) (done bool) {
 		currentCmd := item.(*cmd)
-		commandsSoFar = appendCommand(commandsSoFar, *currentCmd)
+		addCommand(commandsSoFar, *currentCmd)
 		return false
 	})
-	return commandsSoFar
 }
 
-// appendCommand appends the given command to the given slice, if it has no
-// children. If it has children, it doesn't append the given command, but
-// calls itself on each child. Thus, only leaf commands are appended.
-func appendCommand(
-	commandsSoFar []storagebase.CommandQueueCommand, command cmd,
-) []storagebase.CommandQueueCommand {
+// addCommand adds the given command to the given map, if it has no
+// children. If it has children, it doesn't add the given command, but
+// calls itself on each child. Thus, only leaf commands are added.
+func addCommand(commandsSoFar map[int64]*storagebase.CommandQueueCommand, command cmd) {
 	if len(command.children) > 0 {
 		for i := range command.children {
-			commandsSoFar = appendCommand(commandsSoFar, command.children[i])
+			addCommand(commandsSoFar, command.children[i])
 		}
-		return commandsSoFar
+		return
 	}
 
-	commandProto := storagebase.CommandQueueCommand{
+	commandProto := &storagebase.CommandQueueCommand{
 		Id:        command.id,
 		Readonly:  command.readOnly,
 		Timestamp: command.timestamp,
-		Key:       prettyKey(command.key.Start),
-		EndKey:    prettyKey(command.key.End),
+		Key:       roachpb.Key(command.key.Start).String(),
+		EndKey:    roachpb.Key(command.key.End).String(),
 	}
 	for _, prereqCmd := range *command.prereqs {
 		commandProto.Prereqs = append(commandProto.Prereqs, prereqCmd.id)
 	}
-	return append(commandsSoFar, commandProto)
+	commandsSoFar[command.id] = commandProto
 }
 
-func prettyKey(key []byte) string {
-	return roachpb.Key(key).String()
+// removeNonexistentPrereqs removes prereqs which point at commands that
+// are no longer in the queue. This can happen e.g. if command C has prereqs
+// A and B, but B finishes and is removed from the queue while C is still
+// waiting on A.
+func removeNonexistentPrereqs(commandMap map[int64]*storagebase.CommandQueueCommand) {
+	for _, command := range commandMap {
+		filteredPrereqs := make([]int64, 0, len(command.Prereqs))
+		for _, prereq := range command.Prereqs {
+			_, ok := commandMap[prereq]
+			if ok {
+				filteredPrereqs = append(filteredPrereqs, prereq)
+			}
+		}
+		command.Prereqs = filteredPrereqs
+	}
 }
