@@ -615,12 +615,11 @@ func MakeFamilyKey(key []byte, famID uint32) []byte {
 	return encoding.EncodeUvarintAscending(key, uint64(len(key)-size))
 }
 
-// EnsureSafeSplitKey transforms an SQL table key such that it is a valid split key
-// (i.e. does not occur in the middle of a row).
-func EnsureSafeSplitKey(key roachpb.Key) (roachpb.Key, error) {
+// findFamilyIndex returns the index of the column family varint in a key. If
+// the key is not a table key, the index returned is the end of the key.
+func findFamilyIndex(key roachpb.Key) (int, error) {
 	if encoding.PeekType(key) != encoding.Int {
-		// Not a table key, so already a split key.
-		return key, nil
+		return len(key), nil
 	}
 
 	n := len(key)
@@ -630,7 +629,7 @@ func EnsureSafeSplitKey(key roachpb.Key) (roachpb.Key, error) {
 	buf := key[n-1:]
 	if encoding.PeekType(buf) != encoding.Int {
 		// The last byte is not a valid column ID suffix.
-		return nil, errors.Errorf("%s: not a valid table key", key)
+		return 0, errors.Errorf("%s: not a valid table key", key)
 	}
 
 	// Strip off the family ID / column ID suffix from the buf. The last byte of the buf
@@ -638,7 +637,7 @@ func EnsureSafeSplitKey(key roachpb.Key) (roachpb.Key, error) {
 	// does not contain a column ID suffix).
 	_, colIDLen, err := encoding.DecodeUvarintAscending(buf)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	// Note how this next comparison (and by extension the code after it) is overflow-safe. There
 	// are more intuitive ways of writing this that aren't as safe. See #18628.
@@ -651,9 +650,29 @@ func EnsureSafeSplitKey(key roachpb.Key) (roachpb.Key, error) {
 		// EnsureSafeSplitKey can be called on keys that look like table
 		// keys but which do not have a column ID length suffix (e.g
 		// by SystemConfig.ComputeSplitKey).
-		return nil, errors.Errorf("%s: malformed table key", key)
+		return 0, errors.Errorf("%s: malformed table key", key)
 	}
-	return key[:len(key)-int(colIDLen)-1], nil
+	return len(key) - int(colIDLen) - 1, nil
+}
+
+// GetFamilySuffix returns a byte slice of the input table key containing just
+// the family id/column id length suffix.
+func GetFamilySuffix(key roachpb.Key) ([]byte, error) {
+	idx, err := findFamilyIndex(key)
+	if err != nil {
+		return nil, err
+	}
+	return key[idx:], nil
+}
+
+// EnsureSafeSplitKey transforms an SQL table key such that it is a valid split key
+// (i.e. does not occur in the middle of a row).
+func EnsureSafeSplitKey(key roachpb.Key) (roachpb.Key, error) {
+	idx, err := findFamilyIndex(key)
+	if err != nil {
+		return nil, err
+	}
+	return key[:idx], nil
 }
 
 // Range returns a key range encompassing all the keys in the Batch.

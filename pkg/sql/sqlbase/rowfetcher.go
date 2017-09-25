@@ -22,6 +22,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -265,6 +266,13 @@ func (rf *RowFetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 				// The key did not match the descriptor, which means it's
 				// interleaved data from some other table or index.
 				continue
+			}
+		} else {
+			// We still need to consume the key until the family id, so processKV can
+			// know whether we've finished a row or not.
+			rf.keyRemainingBytes, err = keys.GetFamilySuffix(rf.kv.Key)
+			if err != nil {
+				return false, err
 			}
 		}
 

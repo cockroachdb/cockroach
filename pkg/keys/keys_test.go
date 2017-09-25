@@ -499,6 +499,15 @@ func TestEnsureSafeSplitKey(t *testing.T) {
 		if !d.expected.Equal(out) {
 			t.Fatalf("%d: %s: expected %s, but got %s", i, d.in, d.expected, out)
 		}
+
+		suffix, err := GetFamilySuffix(d.in)
+		if err != nil {
+			t.Fatalf("%d: %s: unexpected error: %v", i, d.in, err)
+		}
+		expectedSuffix := d.in[len(d.expected):]
+		if !bytes.Equal(suffix, expectedSuffix) {
+			t.Fatalf("%d: %s: expected %s, but got %s", i, d.in, expectedSuffix, suffix)
+		}
 	}
 
 	errorData := []struct {
