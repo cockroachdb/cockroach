@@ -466,7 +466,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 		}
 		for i, orderBy := range expr.WindowDef.OrderBy {
 			if orderBy.OrderType != OrderByColumn {
-				return nil, errors.New("ORDER BY INDEX in window definition is not supported")
+				return nil, pgerror.NewError(pgerror.CodeFeatureNotSupportedError, "ORDER BY INDEX in window definition is not supported")
 			}
 			typedOrderBy, err := orderBy.Expr.TypeCheck(ctx, TypeAny)
 			if err != nil {
@@ -633,7 +633,7 @@ func (expr *ColumnItem) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, erro
 
 // TypeCheck implements the Expr interface.
 func (expr UnqualifiedStar) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) {
-	return nil, errors.New("cannot use \"*\" in this context")
+	return nil, pgerror.NewError(pgerror.CodeSyntaxError, "cannot use \"*\" in this context")
 }
 
 // TypeCheck implements the Expr interface.
@@ -714,7 +714,7 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, err
 	return expr, nil
 }
 
-var errInvalidDefaultUsage = errors.New("DEFAULT can only appear in a VALUES list within INSERT or on the right side of a SET")
+var errInvalidDefaultUsage = pgerror.NewError(pgerror.CodeSyntaxError, "DEFAULT can only appear in a VALUES list within INSERT or on the right side of a SET")
 
 // TypeCheck implements the Expr interface.
 func (expr DefaultVal) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) {

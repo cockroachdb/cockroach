@@ -16,7 +16,6 @@ package parser
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -120,19 +119,19 @@ func (node *TransactionModes) Format(buf *bytes.Buffer, f FmtFlags) {
 func (node *TransactionModes) merge(other TransactionModes) error {
 	if other.Isolation != UnspecifiedIsolation {
 		if node.Isolation != UnspecifiedIsolation {
-			return errors.New("isolation level specified multiple times")
+			return pgerror.NewError(pgerror.CodeSyntaxError, "isolation level specified multiple times")
 		}
 		node.Isolation = other.Isolation
 	}
 	if other.UserPriority != UnspecifiedUserPriority {
 		if node.UserPriority != UnspecifiedUserPriority {
-			return errors.New("user priority specified multiple times")
+			return pgerror.NewError(pgerror.CodeSyntaxError, "user priority specified multiple times")
 		}
 		node.UserPriority = other.UserPriority
 	}
 	if other.ReadWriteMode != UnspecifiedReadWriteMode {
 		if node.ReadWriteMode != UnspecifiedReadWriteMode {
-			return errors.New("read mode specified multiple times")
+			return pgerror.NewError(pgerror.CodeSyntaxError, "read mode specified multiple times")
 		}
 		node.ReadWriteMode = other.ReadWriteMode
 	}
