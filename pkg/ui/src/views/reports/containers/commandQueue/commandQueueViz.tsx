@@ -7,7 +7,7 @@ import * as protos from "src/js/protos";
 import Print from "src/views/reports/containers/range/print";
 
 interface QueueVizProps {
-  queue: protos.cockroach.storage.CommandQueueSnapshot$Properties;
+  queue: Array<protos.cockroach.storage.storagebase.CommandQueueCommand$Properties>;
 }
 
 interface QueueVizState {
@@ -36,7 +36,7 @@ export default class CommandQueueViz extends React.Component<QueueVizProps, Queu
     });
     g.setDefaultEdgeLabel(() => ({}));
 
-    this.props.queue.commands.forEach((command) => {
+    this.props.queue.forEach((command) => {
       g.setNode(command.id.toString(), {
         width: COMMAND_DIAMETER,
         height: COMMAND_DIAMETER,
@@ -67,7 +67,7 @@ export default class CommandQueueViz extends React.Component<QueueVizProps, Queu
           </tr>
           <tr>
             <th>Read Only</th>
-            <td>{!!command.readonly}</td>
+            <td>{(!!command.readonly).toString()}</td>
           </tr>
           <tr>
             <th>Key Range</th>

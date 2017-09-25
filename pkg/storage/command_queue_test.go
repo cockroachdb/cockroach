@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -727,33 +728,66 @@ func TestCommandQueueTransitiveDependencies(t *testing.T) {
 	})
 }
 
-func TestGetCommandQueueState(t *testing.T) {
+// TestCommandQueueGetSnapshotWithReadBuffer commands in the read buffer are
+// returned in the snapshot.
+func TestCommandQueueGetSnapshotWithReadBuffer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// test that read command buffer is flushed to interval tree
-	cq1 := NewCommandQueue(true /* covering optimization */)
-	add(cq1, roachpb.Key("a"), nil, true, nil)
-	add(cq1, roachpb.Key("a"), nil, true, nil)
+	cq := NewCommandQueue(true /* covering optimization */)
+	add(cq, roachpb.Key("a"), nil, true, nil)
+	add(cq, roachpb.Key("a"), nil, true, nil)
 
-	snapshot1 := cq1.GetCommandQueueState()
-	if n1 := len(snapshot1.Commands); n1 != 2 {
+	snapshot := cq.GetCommandQueueSnapshot()
+	if n1 := len(snapshot); n1 != 2 {
 		t.Fatalf("expected 2 commands in snapshot; got %d", n1)
 	}
+	snapshotCommands := map[int64]storagebase.CommandQueueCommand{}
+	for _, command := range snapshot {
+		snapshotCommands[command.Id] = command
+	}
+	if len(snapshotCommands[0].Prereqs) != 0 {
+		t.Fatalf("expected commands[0].Prereqs to be []; got %v", snapshotCommands[0].Prereqs)
+	}
+	if len(snapshotCommands[1].Prereqs) != 0 {
+		t.Fatalf("expected commands[1].Prereqs to be []; got %v", snapshotCommands[1].Prereqs)
+	}
+}
 
-	// test that children are extracted
-	cq2 := NewCommandQueue(true /* covering optimization */)
-	cmd1 := add(cq2, roachpb.Key("a"), nil, false, nil)
-	cmd2 := add(cq2, roachpb.Key("a"), nil, true, []*cmd{cmd1})
+// TestCommandQueueGetSnapshotWithChildren verifies that child commands are
+// returned in the snapshot.
+func TestCommandQueueGetSnapshotWithChildren(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	cq := NewCommandQueue(true /* covering optimization */)
+	cmd1 := add(cq, roachpb.Key("a"), nil, false, nil)
+	cmd2 := add(cq, roachpb.Key("a"), nil, true, []*cmd{cmd1})
 	// the following creates a node with two children because it has two spans
 	// only the children show up in the snapshot.
-	cq2.add(true, zeroTS, []*cmd{cmd2}, []roachpb.Span{
+	cq.add(true, zeroTS, []*cmd{cmd2}, []roachpb.Span{
 		{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
 		{Key: roachpb.Key("d"), EndKey: roachpb.Key("f")},
 	})
 
-	snapshot2 := cq2.GetCommandQueueState()
-	if n2 := len(snapshot2.Commands); n2 != 4 {
+	snapshot := cq.GetCommandQueueSnapshot()
+	if n2 := len(snapshot); n2 != 4 {
 		t.Fatalf("expected 4 commands in shapshot; got %d", n2)
+	}
+	snapshotCommands := map[int64]storagebase.CommandQueueCommand{}
+	for _, command := range snapshot {
+		snapshotCommands[command.Id] = command
+	}
+	if len(snapshotCommands[0].Prereqs) != 0 {
+		t.Fatalf("expected commands[0].Prereqs to be []; got %v", snapshotCommands[0].Prereqs)
+	}
+	if len(snapshotCommands[1].Prereqs) != 0 {
+		t.Fatalf("expected commands[1].Prereqs to be []; got %v", snapshotCommands[1].Prereqs)
+	}
+	if len(snapshotCommands[2].Prereqs) != 1 || snapshotCommands[2].Prereqs[0] != 1 {
+		t.Fatalf("expected commands[2].Prereqs to be [1]; got %v", snapshotCommands[2].Prereqs)
+	}
+	if len(snapshotCommands[3].Prereqs) != 0 {
+		t.Fatalf("expected commands[3].Prereqs to be []; got %v", snapshotCommands[3].Prereqs)
 	}
 }
 
