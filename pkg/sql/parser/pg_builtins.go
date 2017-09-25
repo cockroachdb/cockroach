@@ -15,7 +15,6 @@
 package parser
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -81,13 +80,17 @@ func initPGBuiltins() {
 	}
 }
 
+var errUnimplemented = pgerror.NewError(pgerror.CodeFeatureNotSupportedError, "unimplemented")
+
 func makeTypeIOBuiltin(argTypes typeList, returnType Type) []Builtin {
 	return []Builtin{
 		{
 			Types:      argTypes,
 			ReturnType: fixedReturnType(returnType),
-			fn:         func(_ *EvalContext, _ Datums) (Datum, error) { return nil, errors.New("unimplemented") },
-			Info:       notUsableInfo,
+			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
+				return nil, errUnimplemented
+			},
+			Info: notUsableInfo,
 		},
 	}
 }

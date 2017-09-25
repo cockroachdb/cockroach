@@ -21,7 +21,6 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/pkg/errors"
 )
 
 // CastTargetType represents a type that is a valid cast target.
@@ -108,7 +107,10 @@ var (
 	intColTypeBigSerial   = &IntColType{Name: "BIGSERIAL"}
 )
 
-var errBitLengthNotPositive = errors.New("length for type bit must be at least 1")
+var (
+	errBitLengthNotPositive = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "length for type bit must be at least 1")
+	errScaleOutOfRange      = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "scale out of range")
+)
 
 func newIntBitType(width int) (*IntColType, error) {
 	if width < 1 {
@@ -207,7 +209,7 @@ func LimitDecimalWidth(d *apd.Decimal, precision, scale int) error {
 	}
 	// Use +1 here because it is inverted later.
 	if scale < math.MinInt32+1 || scale > math.MaxInt32 {
-		return errors.New("scale out of range")
+		return errScaleOutOfRange
 	}
 	if scale > precision {
 		return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "scale (%d) must be between 0 and precision (%d)", scale, precision)
