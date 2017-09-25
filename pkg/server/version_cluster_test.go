@@ -108,13 +108,13 @@ func setupMixedCluster(
 	return testClusterWithHelpers{t, tc}
 }
 
-func TestClusterVersionUpgrade1_0To1_1(t *testing.T) {
+func TestClusterVersionUpgrade1_0To1_2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	// Four nodes that are all compatible with 1.0, but are really 1.1. This is
-	// what the official v1.1 binary will look like.
-	versions := [][2]string{{"1.0", "1.1"}, {"1.0", "1.1"}, {"1.0", "1.1"}, {"1.0", "1.1"}}
+	// Four nodes that are all compatible with 1.0, but are really 1.2. This is
+	// what the official v1.2 binary will look like.
+	versions := [][2]string{{"1.0", "1.2"}, {"1.0", "1.2"}, {"1.0", "1.2"}, {"1.0", "1.2"}}
 
 	// Start by running 1.0.
 	bootstrapVersion := cluster.ClusterVersion{
@@ -135,6 +135,7 @@ func TestClusterVersionUpgrade1_0To1_1(t *testing.T) {
 		bootstrapVersion.MinimumVersion, // v1.0
 		{Major: 1, Unstable: 500},
 		{Major: 1, Minor: 1},
+		{Major: 1, Minor: 2},
 	} {
 		curVersion := tc.getVersionFromSelect(0)
 		isNoopUpdate := curVersion == newVersion.String()
