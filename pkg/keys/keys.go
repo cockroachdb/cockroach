@@ -615,22 +615,24 @@ func MakeFamilyKey(key []byte, famID uint32) []byte {
 	return encoding.EncodeUvarintAscending(key, uint64(len(key)-size))
 }
 
-// EnsureSafeSplitKey transforms an SQL table key such that it is a valid split key
-// (i.e. does not occur in the middle of a row).
-func EnsureSafeSplitKey(key roachpb.Key) (roachpb.Key, error) {
-	if encoding.PeekType(key) != encoding.Int {
-		// Not a table key, so already a split key.
-		return key, nil
-	}
-
+// GetRowPrefixLength returns the length of the row prefix of the key. A table
+// key's row prefix is defined as the maximal prefix of the key that is also a
+// prefix of every key for the same row. (Any key with this maximal prefix is
+// also guaranteed to be part of the input key's row.)
+// For secondary index keys, the row prefix is defined as the entire key.
+func GetRowPrefixLength(key roachpb.Key) (int, error) {
 	n := len(key)
+	if encoding.PeekType(key) != encoding.Int {
+		// Not a table key, so the row prefix is the entire key.
+		return n, nil
+	}
 	// The column ID length is encoded as a varint and we take advantage of the
 	// fact that the column ID itself will be encoded in 0-9 bytes and thus the
 	// length of the column ID data will fit in a single byte.
 	buf := key[n-1:]
 	if encoding.PeekType(buf) != encoding.Int {
 		// The last byte is not a valid column ID suffix.
-		return nil, errors.Errorf("%s: not a valid table key", key)
+		return 0, errors.Errorf("%s: not a valid table key", key)
 	}
 
 	// Strip off the family ID / column ID suffix from the buf. The last byte of the buf
@@ -638,7 +640,7 @@ func EnsureSafeSplitKey(key roachpb.Key) (roachpb.Key, error) {
 	// does not contain a column ID suffix).
 	_, colIDLen, err := encoding.DecodeUvarintAscending(buf)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	// Note how this next comparison (and by extension the code after it) is overflow-safe. There
 	// are more intuitive ways of writing this that aren't as safe. See #18628.
@@ -651,9 +653,23 @@ func EnsureSafeSplitKey(key roachpb.Key) (roachpb.Key, error) {
 		// EnsureSafeSplitKey can be called on keys that look like table
 		// keys but which do not have a column ID length suffix (e.g
 		// by SystemConfig.ComputeSplitKey).
-		return nil, errors.Errorf("%s: malformed table key", key)
+		return 0, errors.Errorf("%s: malformed table key", key)
 	}
-	return key[:len(key)-int(colIDLen)-1], nil
+	return len(key) - int(colIDLen) - 1, nil
+}
+
+// EnsureSafeSplitKey transforms an SQL table key such that it is a valid split key
+// (i.e. does not occur in the middle of a row).
+func EnsureSafeSplitKey(key roachpb.Key) (roachpb.Key, error) {
+	// The row prefix for a key is unique to keys in its row - no key without the
+	// row prefix will be in the key's row. Therefore, we can be certain that
+	// using the row prefix for a key as a split key is safe: it doesn't occur in
+	// the middle of a row.
+	idx, err := GetRowPrefixLength(key)
+	if err != nil {
+		return nil, err
+	}
+	return key[:idx], nil
 }
 
 // Range returns a key range encompassing all the keys in the Batch.
