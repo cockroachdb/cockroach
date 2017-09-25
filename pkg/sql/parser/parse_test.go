@@ -916,6 +916,11 @@ func TestParse2(t *testing.T) {
 		{`SELECT a FROM t INTERSECT DISTINCT SELECT 1 FROM t`,
 			`SELECT a FROM t INTERSECT SELECT 1 FROM t`},
 
+		// Pretty printing the FAMILY INET function is not normal due to the grammar
+		// definition of FAMILY.
+		{`SELECT FAMILY(x)`,
+			`SELECT "family"(x)`},
+
 		{`SET TIME ZONE 'pst8pdt'`,
 			`SET "time zone" = 'pst8pdt'`},
 		{`SET TIME ZONE 'Europe/Rome'`,
@@ -1165,6 +1170,10 @@ CREATE TABLE test (
 )
 ^
 `},
+		{`SELECT family FROM test`, `syntax error at or near "from"
+SELECT family FROM test
+              ^
+HINT: try \h SELECT`},
 		{`CREATE TABLE test (
   foo INT NOT NULL NULL
 )`, `conflicting NULL/NOT NULL declarations for column "foo" at or near ")"
