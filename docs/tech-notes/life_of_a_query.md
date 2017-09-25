@@ -377,7 +377,7 @@ which initiates the processing, and
 [`Next`](https://github.com/cockroachdb/cockroach/blob/a83c960a0547720a3179e05eb54ea5b67d107d10/pkg/sql/plan.go#L149),
 which is called repeatedly to produce the next row.
 
-To tie this to the [SQL Executor](https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/life_of_a_query.md#sql-executor) section above,
+To tie this to the [SQL Executor](#sql-executor) section above,
 [`executor.execClassic()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/executor.go#L1251),
 the method responsible for executing one statement, calls
 `plan.Next()` repeatedly and accumulates the results.
