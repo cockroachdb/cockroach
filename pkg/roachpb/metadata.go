@@ -26,6 +26,7 @@ import (
 )
 
 // NodeID is a custom type for a cockroach node ID. (not a raft node ID)
+// 0 is not a valid NodeID.
 type NodeID int32
 
 // String implements the fmt.Stringer interface.

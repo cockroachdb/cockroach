@@ -61,7 +61,7 @@ func TestServer(t *testing.T) {
 		OutputColumns: []uint32{0, 1}, // a
 	}
 
-	txn := client.NewTxn(kvDB)
+	txn := client.NewTxn(kvDB, s.NodeID())
 
 	req := &SetupFlowRequest{Version: Version, Txn: *txn.Proto()}
 	req.Flow = FlowSpec{
