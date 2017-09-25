@@ -174,7 +174,7 @@ context of a KV transaction.
 
 ### Building execution plans
 
-Now that we'have figured out what (KV) transaction we're running inside
+Now that we have figured out what (KV) transaction we're running inside
 of, we are concerned with executing SQL statements one at a
 time. `runTxnAttempt()` has a few layers below it dealing with the
 various states a SQL transaction can be in
@@ -353,9 +353,6 @@ our execution planning more in the future).
       for function calls and operators.
 4. replacing sub-query syntax nodes by a `sql.subquery` execution plan
    node.
-5. resolving names (the `colA` in `select colA from MyTable` needs to
-   be replaced by an index within the rows produced by the underlying
-   data source (usually a `scanNode`)).
 
 A note about sub-queries: consider a query like `select * from
 Employees where DepartmentID in (select DepartmentID from Departments
@@ -380,7 +377,7 @@ which initiates the processing, and
 [`Next`](https://github.com/cockroachdb/cockroach/blob/a83c960a0547720a3179e05eb54ea5b67d107d10/pkg/sql/plan.go#L149),
 which is called repeatedly to produce the next row.
 
-To tie this to the [SQL Executor](#SQL Executor) section above,
+To tie this to the [SQL Executor](#sql-executor) section above,
 [`executor.execClassic()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/executor.go#L1251),
 the method responsible for executing one statement, calls
 `plan.Next()` repeatedly and accumulates the results.
