@@ -412,9 +412,8 @@ func formatTs(t time.Time, offset *time.Location, tmp []byte) (b []byte) {
 	// Beware, "0000" in ISO is "1 BC", "-0001" is "2 BC" and so on
 	if offset != nil {
 		t = t.In(offset)
-	} else {
-		t = t.UTC()
 	}
+
 	bc := false
 	if t.Year() <= 0 {
 		// flip year sign, and add 1, e.g: "0" will be "1", and "-10" will be "11"
