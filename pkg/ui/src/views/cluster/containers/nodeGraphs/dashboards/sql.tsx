@@ -37,8 +37,8 @@ export default function (props: GraphDashboardProps) {
       title="SQL Queries"
       sources={nodeSources}
       tooltip={
-        `The total number of SELECT, INSERT, UPDATE, and DELETE statements
-           per second ${tooltipSelection}.`
+        `A ten-second moving average of the # of SELECT, INSERT, UPDATE, and DELETE operations
+        started per second ${tooltipSelection}.`
       }
     >
       <Axis>
