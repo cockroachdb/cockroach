@@ -399,6 +399,13 @@ func (expr *ExistsExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, er
 	return expr, nil
 }
 
+var (
+	errOrderByIndexInWindow = pgerror.NewError(pgerror.CodeFeatureNotSupportedError, "ORDER BY INDEX in window definition is not supported")
+	errFilterWithinWindow   = pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "FILTER within a window function call is not yet supported")
+	errStarNotAllowed       = pgerror.NewError(pgerror.CodeSyntaxError, "cannot use \"*\" in this context")
+	errInvalidDefaultUsage  = pgerror.NewError(pgerror.CodeSyntaxError, "DEFAULT can only appear in a VALUES list within INSERT or on the right side of a SET")
+)
+
 // TypeCheck implements the Expr interface.
 func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
 	var searchPath SearchPath
@@ -466,7 +473,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 		}
 		for i, orderBy := range expr.WindowDef.OrderBy {
 			if orderBy.OrderType != OrderByColumn {
-				return nil, errors.New("ORDER BY INDEX in window definition is not supported")
+				return nil, errOrderByIndexInWindow
 			}
 			typedOrderBy, err := orderBy.Expr.TypeCheck(ctx, TypeAny)
 			if err != nil {
@@ -497,7 +504,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 		}
 
 		if expr.Filter != nil {
-			return nil, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "FILTER within a window function call is not yet supported")
+			return nil, errFilterWithinWindow
 		}
 	} else {
 		// Make sure the window function builtins are used as window function applications.
@@ -633,7 +640,7 @@ func (expr *ColumnItem) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, erro
 
 // TypeCheck implements the Expr interface.
 func (expr UnqualifiedStar) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) {
-	return nil, errors.New("cannot use \"*\" in this context")
+	return nil, errStarNotAllowed
 }
 
 // TypeCheck implements the Expr interface.
@@ -713,8 +720,6 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, err
 	expr.typ = unaryOp.returnType()(typedSubExprs)
 	return expr, nil
 }
-
-var errInvalidDefaultUsage = errors.New("DEFAULT can only appear in a VALUES list within INSERT or on the right side of a SET")
 
 // TypeCheck implements the Expr interface.
 func (expr DefaultVal) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) {

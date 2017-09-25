@@ -149,8 +149,8 @@ func (expr *NumVal) ShouldBeInt64() bool {
 
 // These errors are statically allocated, because they are returned in the
 // common path of AsInt64.
-var errConstNotInt = errors.New("cannot represent numeric constant as an int")
-var errConstOutOfRange = errors.New("numeric constant out of int64 range")
+var errConstNotInt = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "cannot represent numeric constant as an int")
+var errConstOutOfRange = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "numeric constant out of int64 range")
 
 // AsInt64 returns the value as a 64-bit integer if possible, or returns an
 // error if not possible. The method will set expr.resInt to the value of

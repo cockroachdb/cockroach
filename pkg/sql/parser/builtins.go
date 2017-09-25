@@ -51,14 +51,15 @@ import (
 )
 
 var (
-	errEmptyInputString = errors.New("the input string must not be empty")
-	errAbsOfMinInt64    = errors.New("abs of min integer value (-9223372036854775808) not defined")
-	errSqrtOfNegNumber  = errors.New("cannot take square root of a negative number")
-	errLogOfNegNumber   = errors.New("cannot take logarithm of a negative number")
-	errLogOfZero        = errors.New("cannot take logarithm of zero")
-	errInsufficientArgs = errors.New("unknown signature: concat_ws()")
-	errZeroIP           = errors.New("zero length IP")
+	errEmptyInputString = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "the input string must not be empty")
+	errAbsOfMinInt64    = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "abs of min integer value (-9223372036854775808) not defined")
+	errSqrtOfNegNumber  = pgerror.NewError(pgerror.CodeInvalidArgumentForPowerFunctionError, "cannot take square root of a negative number")
+	errLogOfNegNumber   = pgerror.NewError(pgerror.CodeInvalidArgumentForLogarithmError, "cannot take logarithm of a negative number")
+	errLogOfZero        = pgerror.NewError(pgerror.CodeInvalidArgumentForLogarithmError, "cannot take logarithm of zero")
+	errZeroIP           = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "zero length IP")
 )
+
+const errInsufficientArgsFmtString = "unknown signature: %s()"
 
 // FunctionClass specifies the class of the builtin function.
 type FunctionClass int
@@ -334,7 +335,7 @@ var Builtins = map[string][]Builtin{
 			nullableArgs: true,
 			fn: func(evalCtx *EvalContext, args Datums) (Datum, error) {
 				if len(args) == 0 {
-					return nil, errInsufficientArgs
+					return nil, pgerror.NewErrorf(pgerror.CodeUndefinedFunctionError, errInsufficientArgsFmtString, "concat_ws")
 				}
 				if args[0] == DNull {
 					return DNull, nil
