@@ -530,7 +530,7 @@ func writeRocksDB(
 	writer := store.NewBatchWriter()
 	for kvBatch := range kvCh {
 		for _, kv := range kvBatch {
-			if err := writer.Put(kv.Key, kv.Value.RawBytes); err != nil {
+			if err := writer.Put(ctx, kv.Key, kv.Value.RawBytes); err != nil {
 				return 0, err
 			}
 		}
@@ -1291,7 +1291,7 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 					val = b
 				}
 			}
-			if err := batch.Put(key, val); err != nil {
+			if err := batch.Put(ctx, key, val); err != nil {
 				return err
 			}
 		}

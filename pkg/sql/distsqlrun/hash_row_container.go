@@ -490,7 +490,7 @@ func (i hashDiskRowBucketIterator) Mark(ctx context.Context, mark bool) error {
 	// These marks only matter when using a hashDiskRowIterator to iterate over
 	// unmarked rows. The writes are flushed when creating a NewIterator() in
 	// NewUnmarkedIterator().
-	return i.hashDiskRowContainer.bufferedRows.Put(i.Key(), rowVal)
+	return i.hashDiskRowContainer.bufferedRows.Put(ctx, i.Key(), rowVal)
 }
 
 // hashDiskRowIterator iterates over all unmarked rows in a

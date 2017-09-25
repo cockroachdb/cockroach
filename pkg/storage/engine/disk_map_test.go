@@ -71,7 +71,7 @@ func TestRocksDBMap(t *testing.T) {
 				t.Fatalf("expected %v for value of key %v but got %v", v, k, b)
 			}
 		} else {
-			if err := batchWriter.Put(k, v); err != nil {
+			if err := batchWriter.Put(ctx, k, v); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -79,7 +79,7 @@ func TestRocksDBMap(t *testing.T) {
 
 	sort.StringSlice(keys).Sort()
 
-	if err := batchWriter.Flush(); err != nil {
+	if err := batchWriter.Flush(ctx); err != nil {
 		t.Fatal(err)
 	}
 
@@ -272,9 +272,9 @@ func TestRocksDBStore(t *testing.T) {
 			_ = diskStore.Put(k1, v1)
 			_ = diskStore.Put(k1, v1)
 			_ = diskStore.Put(k1, v2)
-			_ = batchWriter.Put(k1, v2)
-			_ = batchWriter.Put(k1, v1)
-			_ = batchWriter.Put(k1, v1)
+			_ = batchWriter.Put(ctx, k1, v2)
+			_ = batchWriter.Put(ctx, k1, v1)
+			_ = batchWriter.Put(ctx, k1, v1)
 			if err := batchWriter.Close(ctx); err != nil {
 				t.Fatal(err)
 			}
@@ -337,7 +337,7 @@ func BenchmarkRocksDBMapWrite(b *testing.B) {
 					for j := 0; j < inputSize; j++ {
 						k := fmt.Sprintf("%d", rng.Int())
 						v := fmt.Sprintf("%d", rng.Int())
-						if err := batchWriter.Put([]byte(k), []byte(v)); err != nil {
+						if err := batchWriter.Put(ctx, []byte(k), []byte(v)); err != nil {
 							b.Fatal(err)
 						}
 					}
