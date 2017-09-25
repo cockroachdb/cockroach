@@ -952,7 +952,7 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	txn := client.NewTxn(db)
+	txn := client.NewTxn(db, 0 /* gatewayNodeID */)
 	opts := client.TxnExecOptions{
 		AutoRetry:  false,
 		AutoCommit: true,
