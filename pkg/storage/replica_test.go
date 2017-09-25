@@ -196,6 +196,7 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 			testDesc := testRangeDescriptor()
 			if _, err := writeInitialState(
 				ctx,
+				tc.store.ClusterSettings(),
 				tc.store.Engine(),
 				enginepb.MVCCStats{},
 				*testDesc,

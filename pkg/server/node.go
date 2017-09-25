@@ -194,6 +194,9 @@ func bootstrapCluster(
 	sender := kv.NewTxnCoordSender(cfg.AmbientCtx, cfg.Settings, stores, cfg.Clock, false, stopper, txnMetrics)
 	cfg.DB = client.NewDB(sender, cfg.Clock)
 	cfg.Transport = storage.NewDummyRaftTransport(cfg.Settings)
+	if err := cfg.Settings.InitializeVersion(bootstrapVersion); err != nil {
+		return uuid.UUID{}, errors.Wrap(err, "while initializing cluster version")
+	}
 	for i, eng := range engines {
 		sIdent := roachpb.StoreIdent{
 			ClusterID: clusterID,
