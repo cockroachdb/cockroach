@@ -23,6 +23,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -154,6 +155,33 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Reset: func(*Session) error { return nil },
+	},
+
+	`decimal_round`: {
+		Get: func(session *Session) string {
+			if session.RoundCtx == nil {
+				return ""
+			}
+			return session.RoundCtx.Rounding
+		},
+		Set: func(_ context.Context, session *Session, values []parser.TypedExpr) error {
+			s, err := getStringVal(session, `decimal_round`, values)
+			if err != nil {
+				return err
+			}
+			s = strings.ToLower(s)
+			if _, ok := apd.Roundings[s]; !ok {
+				return fmt.Errorf("unknown rounding: %s", s)
+			}
+			dc := *parser.HighPrecisionCtx
+			dc.Rounding = s
+			session.RoundCtx = &dc
+			return nil
+		},
+		Reset: func(session *Session) error {
+			session.RoundCtx = nil
+			return nil
+		},
 	},
 
 	`default_transaction_isolation`: {
