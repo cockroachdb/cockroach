@@ -77,8 +77,8 @@ import (
 )
 
 var (
-	// Allocation pool for gzip writers.
-	gzipWriterPool sync.Pool
+	// Allocation pool for gzipResponseWriters.
+	gzipResponseWriterPool sync.Pool
 
 	// GracefulDrainModes is the standard succession of drain modes entered
 	// for a graceful shutdown.
@@ -1235,19 +1235,24 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type gzipResponseWriter struct {
-	gz *gzip.Writer
+	gz gzip.Writer
 	http.ResponseWriter
 }
 
-func newGzipResponseWriter(w http.ResponseWriter) *gzipResponseWriter {
-	var gz *gzip.Writer
-	if gzI := gzipWriterPool.Get(); gzI == nil {
-		gz = gzip.NewWriter(w)
+func newGzipResponseWriter(rw http.ResponseWriter) *gzipResponseWriter {
+	var w *gzipResponseWriter
+	if wI := gzipResponseWriterPool.Get(); wI == nil {
+		w = new(gzipResponseWriter)
 	} else {
-		gz = gzI.(*gzip.Writer)
-		gz.Reset(w)
+		w = wI.(*gzipResponseWriter)
 	}
-	return &gzipResponseWriter{gz: gz, ResponseWriter: w}
+	w.Reset(rw)
+	return w
+}
+
+func (w *gzipResponseWriter) Reset(rw http.ResponseWriter) {
+	w.gz.Reset(rw)
+	w.ResponseWriter = rw
 }
 
 func (w *gzipResponseWriter) Write(b []byte) (int, error) {
@@ -1268,14 +1273,12 @@ func (w *gzipResponseWriter) Flush() {
 	}
 }
 
+// Close implements the io.Closer interface. It is not safe to use the
+// writer after calling Close.
 func (w *gzipResponseWriter) Close() error {
-	if w.gz == nil {
-		return nil
-	}
-
 	err := w.gz.Close()
-	gzipWriterPool.Put(w.gz)
-	w.gz = nil
+	w.Reset(nil) // release ResponseWriter reference.
+	gzipResponseWriterPool.Put(w)
 	return err
 }
 
