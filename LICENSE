@@ -16,10 +16,10 @@ CockroachDB Community License Agreement
      Agreement, the terms below have the following meanings.
 
     (a) "CockroachDB" shall mean the SQL database software provided by Cockroach
-        Labs, including both CockroachDB Community and CockroachDB Enterprise
+        Labs, including both CockroachDB Core and CockroachDB Enterprise
         editions, as defined below.
 
-    (b) "CockroachDB Community Edition" shall mean the open source version of
+    (b) "CockroachDB Core" shall mean the open source version of
         CockroachDB, available free of charge at
 
             https://github.com/cockroachdb/cockroach
@@ -93,17 +93,17 @@ CockroachDB Community License Agreement
 
   2. Licenses.
 
-    (a) License to CockroachDB Community Edition.  The License for CockroachDB
-        Community Edition is the Apache License, Version 2.0 ("Apache License").
+    (a) License to CockroachDB Core.  The License for CockroachDB
+        Core is the Apache License, Version 2.0 ("Apache License").
         The Apache License includes a grant of patent license, as well as
         redistribution rights that are contingent on several requirements.
         Please see
 
             http://www.apache.org/licenses/LICENSE-2.0
 
-        for full terms.  CockroachDB Community Edition is a no-cost, entry-level
+        for full terms.  CockroachDB Core is a no-cost, entry-level
         license and as such, contains the following disclaimers: NOTWITHSTANDING
-        ANYTHING TO THE CONTRARY HEREIN, COCKROACHDB COMMUNITY EDITION IS
+        ANYTHING TO THE CONTRARY HEREIN, COCKROACHDB CORE IS
         PROVIDED "AS IS" AND "AS AVAILABLE", AND ALL EXPRESS OR IMPLIED
         WARRANTIES ARE EXCLUDED AND DISCLAIMED, INCLUDING WITHOUT LIMITATION THE
         IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
@@ -111,7 +111,7 @@ CockroachDB Community License Agreement
         LAW OR FROM COURSE OF DEALING, COURSE OF PERFORMANCE, OR USE IN TRADE.
         For clarity, the terms of this Agreement, other than the relevant
         definitions in Section 1 and this Section 2(a) do not apply to
-        CockroachDB Community Edition.
+        CockroachDB Core.
 
     (b) License to CockroachDB Enterprise Edition.
 
