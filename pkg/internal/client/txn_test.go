@@ -153,7 +153,7 @@ func TestInitPut(t *testing.T) {
 		return br, nil
 	}), clock)
 
-	txn := NewTxn(db)
+	txn := NewTxn(db, 0 /* gatewayNodeID */)
 	if pErr := txn.InitPut(context.Background(), "a", "b", false); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -192,7 +192,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 		return br, nil
 	}), clock)
 
-	txn := NewTxn(db)
+	txn := NewTxn(db, 0 /* gatewayNodeID */)
 
 	for testIdx = range testCases {
 		if _, pErr := txn.Send(context.Background(), ba); pErr != nil {
@@ -625,7 +625,7 @@ func TestTransactionStatus(t *testing.T) {
 	db := NewDB(newTestSender(nil), clock)
 	for _, write := range []bool{true, false} {
 		for _, commit := range []bool{true, false} {
-			txn := NewTxn(db)
+			txn := NewTxn(db, 0 /* gatewayNodeID */)
 
 			if _, pErr := txn.Get(context.Background(), "a"); pErr != nil {
 				t.Fatal(pErr)
@@ -658,10 +658,10 @@ func TestCommitInBatchWrongTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	clock := hlc.NewClock(hlc.UnixNano, 0)
 	db := NewDB(newTestSender(nil), clock)
-	txn := NewTxn(db)
+	txn := NewTxn(db, 0 /* gatewayNodeID */)
 
 	b1 := &Batch{}
-	txn2 := NewTxn(db)
+	txn2 := NewTxn(db, 0 /* gatewayNodeID */)
 	b2 := txn2.NewBatch()
 
 	for _, b := range []*Batch{b1, b2} {
@@ -678,7 +678,7 @@ func TestTimestampSelectionInOptions(t *testing.T) {
 	mc := hlc.NewManualClock(100)
 	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
 	db := NewDB(newTestSender(nil), clock)
-	txn := NewTxn(db)
+	txn := NewTxn(db, 0 /* gatewayNodeID */)
 
 	refTimestamp := clock.Now()
 
@@ -720,7 +720,7 @@ func TestSetPriority(t *testing.T) {
 
 	// Verify the normal priority setting path.
 	expected = roachpb.NormalUserPriority
-	txn := NewTxn(db)
+	txn := NewTxn(db, 0 /* gatewayNodeID */)
 	if err := txn.SetUserPriority(expected); err != nil {
 		t.Fatal(err)
 	}
@@ -730,7 +730,7 @@ func TestSetPriority(t *testing.T) {
 
 	// Verify the internal (fixed value) priority setting path.
 	expected = roachpb.UserPriority(-13)
-	txn = NewTxn(db)
+	txn = NewTxn(db, 0 /* gatewayNodeID */)
 	txn.InternalSetPriority(13)
 	if _, pErr := txn.Send(context.Background(), roachpb.BatchRequest{}); pErr != nil {
 		t.Fatal(pErr)
@@ -765,7 +765,7 @@ func TestWrongTxnRetry(t *testing.T) {
 			return roachpb.NewHandledRetryableTxnError(
 				"test error", innerTxn.Proto().ID, *innerTxn.Proto())
 		}
-		innerTxn := NewTxn(db)
+		innerTxn := NewTxn(db, 0 /* gatewayNodeID */)
 		err := innerTxn.Exec(ctx, execOpt, innerClosure)
 		if !testutils.IsError(err, "test error") {
 			t.Fatalf("unexpected inner failure: %v", err)
@@ -798,7 +798,7 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	clock := hlc.NewClock(hlc.UnixNano, 0)
 	db := NewDB(newTestSender(nil), clock)
-	txn := NewTxn(db)
+	txn := NewTxn(db, 0 /* gatewayNodeID */)
 
 	if txn.deadline != nil {
 		t.Errorf("unexpected initial deadline: %s", txn.deadline)

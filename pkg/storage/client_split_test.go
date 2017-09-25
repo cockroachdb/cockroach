@@ -1299,7 +1299,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 	ctx = tc.Server(0).Stopper().WithCancel(ctx)
 
 	// This transaction will try to write "under" a served read.
-	txnOld := client.NewTxn(db)
+	txnOld := client.NewTxn(db, 0 /* gatewayNodeID */)
 
 	// Do something with txnOld so that its timestamp gets set.
 	if _, err := txnOld.Scan(ctx, "a", "b", 0); err != nil {
@@ -1992,7 +1992,7 @@ func TestDistributedTxnCleanup(t *testing.T) {
 				// Run a distributed transaction involving the lhsKey and rhsKey.
 				var txnKey roachpb.Key
 				ctx := context.Background()
-				txn := client.NewTxn(store.DB())
+				txn := client.NewTxn(store.DB(), 0 /* gatewayNodeID */)
 				opts := client.TxnExecOptions{
 					AutoCommit: true,
 					AutoRetry:  false,

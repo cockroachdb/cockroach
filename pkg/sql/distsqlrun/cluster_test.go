@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -27,7 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -491,4 +494,67 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 		t.Errorf("unexpected metadata (%d): %+v", len(metas), metas)
 	}
 	// TODO(radu): verify the results (should be the same with rightRows)
+}
+
+// Test that DistSQL reads fill the BatchRequest.Header.GatewayNodeID field with
+// the ID of the gateway (as opposed to the ID of the node that created the
+// batch). Important to lease follow-the-sun transfers.
+func TestDistSQLReadsFillGatewayID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// We're going to distribute a table and then read it, and we'll expect all
+	// the ScanRequests (produced by the different nodes) to identify the one and
+	// only gateway.
+
+	var foundReq int64 // written atomically
+	var expectedGateway roachpb.NodeID
+
+	tc := serverutils.StartTestCluster(t, 3, /* numNodes */
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				UseDatabase: "test",
+				Knobs: base.TestingKnobs{Store: &storage.StoreTestingKnobs{
+					TestingEvalFilter: func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+						scanReq, ok := filterArgs.Req.(*roachpb.ScanRequest)
+						if !ok {
+							return nil
+						}
+						if !strings.HasPrefix(scanReq.Span.Key.String(), "/Table/51/1") {
+							return nil
+						}
+
+						atomic.StoreInt64(&foundReq, 1)
+						if gw := filterArgs.Hdr.GatewayNodeID; gw != expectedGateway {
+							return roachpb.NewErrorf(
+								"expected all scans to have gateway 3, found: %d",
+								gw)
+						}
+						return nil
+					},
+				}},
+			},
+		})
+	defer tc.Stopper().Stop(context.TODO())
+
+	db := tc.ServerConn(0)
+	sqlutils.CreateTable(t, db, "t",
+		"num INT PRIMARY KEY",
+		0, /* numRows */
+		sqlutils.ToRowFn(sqlutils.RowIdxFn))
+
+	if _, err := db.Exec(`
+ALTER TABLE t SPLIT AT VALUES (1), (2), (3);
+ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	expectedGateway = tc.Server(2).NodeID()
+	if _, err := tc.ServerConn(2).Exec("SELECT * FROM t"); err != nil {
+		t.Fatal(err)
+	}
+	if atomic.LoadInt64(&foundReq) != 1 {
+		t.Fatal("TestingEvalFilter failed to find any requests")
+	}
 }

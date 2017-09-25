@@ -497,7 +497,10 @@ func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) err
 	// (https://github.com/cockroachdb/cockroach/issues/10511).
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	txn := NewTxn(db)
+	// TODO(andrei): Plumb a gatewayNodeID here. If we pass 0, then the gateway
+	// field will be filled in by the DistSender which will assume that the
+	// current node is the gateway.
+	txn := NewTxn(db, 0 /* gatewayNodeID */)
 	txn.SetDebugName("unnamed")
 	opts := TxnExecOptions{
 		AutoCommit: true,
