@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
@@ -711,6 +712,14 @@ func importJobDescription(
 	return parser.AsStringWithFlags(&stmt, parser.FmtSimpleQualified), nil
 }
 
+const importCSVEnabledSetting = "experimental.importcsv.enabled"
+
+var importCSVEnabled = settings.RegisterBoolSetting(
+	importCSVEnabledSetting,
+	"enable experimental IMPORT CSV statement",
+	false,
+)
+
 func importPlanHook(
 	stmt parser.Statement, p sql.PlanHookState,
 ) (func(context.Context, chan<- parser.Datums) error, sqlbase.ResultColumns, error) {
@@ -718,7 +727,15 @@ func importPlanHook(
 	if !ok {
 		return nil, nil, nil
 	}
-	// No enterprise check here: IMPORT is always available.
+
+	if !importCSVEnabled.Get(&p.ExecCfg().Settings.SV) {
+		return nil, nil, errors.Errorf(
+			`IMPORT is an experimental feature and is disabled by default; `+
+				`enable by executing: SET CLUSTER SETTING %s = true`,
+			importCSVEnabledSetting,
+		)
+	}
+
 	if err := p.RequireSuperUser("IMPORT"); err != nil {
 		return nil, nil, err
 	}

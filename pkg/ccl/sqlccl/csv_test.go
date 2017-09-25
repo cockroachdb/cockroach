@@ -431,6 +431,10 @@ func TestImportStmt(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.Conns[0]
 
+	if _, err := conn.Exec(`SET CLUSTER SETTING experimental.importcsv.enabled = true`); err != nil {
+		t.Fatal(err)
+	}
+
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 	tablePath := filepath.Join(dir, "table")
