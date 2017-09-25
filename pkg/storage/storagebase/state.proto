@@ -101,3 +101,19 @@ message RangeInfo {
   // Approximately the amount of quota available.
   int64 approximate_proposal_quota = 7;
 }
+
+message CommandQueueCommand {
+  int64 id = 1;
+  string key = 2;
+  string end_key = 3;
+  bool readonly = 4;
+  util.hlc.Timestamp timestamp = 5 [(gogoproto.nullable) = false];
+  repeated int64 prereqs = 6;
+}
+
+message CommandQueuesSnapshot {
+  // Timestamp in nanoseconds when this snapshot was taken
+  util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
+  repeated CommandQueueCommand localScope = 2 [(gogoproto.nullable) = false];
+  repeated CommandQueueCommand globalScope = 3 [(gogoproto.nullable) = false];
+}

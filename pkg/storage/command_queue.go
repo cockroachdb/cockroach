@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -309,6 +310,19 @@ func (cq *CommandQueue) expand(c *cmd, isInserted bool) bool {
 	return true
 }
 
+// flushReadsBuffer moves read commands from the reads buffer to the `reads`
+// interval tree.
+func (cq *CommandQueue) flushReadsBuffer() {
+	for cmd := range cq.readsBuffer {
+		cmd.buffered = false
+		cq.insertIntoTree(cmd)
+	}
+	if len(cq.readsBuffer) > 0 {
+		// Allocate a new map, thereby deleting all previous entries.
+		cq.readsBuffer = make(map[*cmd]struct{})
+	}
+}
+
 // getPrereqs returns a slice of the prerequisite commands which overlap the
 // specified key ranges. The caller should invoke add() to add the keys to the
 // command queue and then wait for confirmation that all gating commands have
@@ -565,17 +579,6 @@ func (cq *CommandQueue) getOverlaps(
 	return overlaps
 }
 
-func (cq *CommandQueue) flushReadsBuffer() {
-	for cmd := range cq.readsBuffer {
-		cmd.buffered = false
-		cq.insertIntoTree(cmd)
-	}
-	if len(cq.readsBuffer) > 0 {
-		// Allocate a new map, thereby deleting all previous entries.
-		cq.readsBuffer = make(map[*cmd]struct{})
-	}
-}
-
 // overlapHeap is a max-heap ordered by cmd.id.
 type overlapHeap []*cmd
 
@@ -806,53 +809,52 @@ func (cq *CommandQueue) metrics() CommandQueueMetrics {
 	}
 }
 
-// GetCommandQueueState returns a snapshot of this command queue's state.
-func (cq *CommandQueue) GetCommandQueueState() *CommandQueueSnapshot {
-	// make sure all operations are in the interval trees
+// GetCommandQueueSnapshot returns a snapshot of this command queue's state.
+func (cq *CommandQueue) GetCommandQueueSnapshot() []storagebase.CommandQueueCommand {
+	// Before taking the snapshot, ensure all commands have been flushed into
+	// the interval trees.
 	cq.flushReadsBuffer()
-	result := []*CommandQueueCommand{}
+	result := make([]storagebase.CommandQueueCommand, 0, cq.reads.Len()+cq.writes.Len())
 	result = appendCommandsFromTree(result, cq.reads)
 	result = appendCommandsFromTree(result, cq.writes)
-	return &CommandQueueSnapshot{
-		Commands: result,
-	}
-}
-
-func appendCommandsFromTree(
-	commandsSoFar []*CommandQueueCommand, tree interval.Tree,
-) []*CommandQueueCommand {
-	result := commandsSoFar
-	tree.Do(func(item interval.Interface) (done bool) {
-		currentCmd := item.(*cmd)
-		result = copyCommandsAndChildren(result, currentCmd)
-		return false
-	})
 	return result
 }
 
-func copyCommandsAndChildren(
-	commandsSoFar []*CommandQueueCommand, command *cmd,
-) []*CommandQueueCommand {
-	result := commandsSoFar
+func appendCommandsFromTree(
+	commandsSoFar []storagebase.CommandQueueCommand, tree interval.Tree,
+) []storagebase.CommandQueueCommand {
+	tree.Do(func(item interval.Interface) (done bool) {
+		currentCmd := item.(*cmd)
+		commandsSoFar = appendCommand(commandsSoFar, *currentCmd)
+		return false
+	})
+	return commandsSoFar
+}
+
+// appendCommand appends the given command to the given slice, if it has no
+// children. If it has children, it doesn't append the given command, but
+// calls itself on each child. Thus, only leaf commands are appended.
+func appendCommand(
+	commandsSoFar []storagebase.CommandQueueCommand, command cmd,
+) []storagebase.CommandQueueCommand {
 	if len(command.children) > 0 {
-		for _, childCmd := range command.children {
-			result = copyCommandsAndChildren(result, &childCmd)
+		for i := range command.children {
+			commandsSoFar = appendCommand(commandsSoFar, command.children[i])
 		}
-		return result
+		return commandsSoFar
 	}
 
-	commandProto := &CommandQueueCommand{
+	commandProto := storagebase.CommandQueueCommand{
 		Id:        command.id,
 		Readonly:  command.readOnly,
-		Timestamp: &command.timestamp,
+		Timestamp: command.timestamp,
 		Key:       prettyKey(command.key.Start),
 		EndKey:    prettyKey(command.key.End),
 	}
 	for _, prereqCmd := range *command.prereqs {
 		commandProto.Prereqs = append(commandProto.Prereqs, prereqCmd.id)
 	}
-	result = append(commandsSoFar, commandProto)
-	return result
+	return append(commandsSoFar, commandProto)
 }
 
 func prettyKey(key []byte) string {

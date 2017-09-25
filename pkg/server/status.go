@@ -1101,21 +1101,24 @@ func (s *statusServer) Range(
 	return response, nil
 }
 
+// ListLocalSessions returns a snapshot of the command queue state for the
+// specified range.
 func (s *statusServer) CommandQueue(
 	ctx context.Context, req *serverpb.CommandQueueRequest,
 ) (*serverpb.CommandQueueResponse, error) {
-	replica := s.stores.GetReplicaForRangeID(roachpb.RangeID(req.RangeId))
+	rangeID := roachpb.RangeID(req.RangeId)
+	replica, err := s.stores.GetReplicaForRangeID(rangeID)
+	if err != nil {
+		return nil, err
+	}
+
 	if replica == nil {
-		return nil, fmt.Errorf("replica not found for range %d", req.RangeId)
+		return nil, roachpb.NewRangeNotFoundError(rangeID)
 	}
 
-	queueState := replica.GetCommandQueueState()
-
-	response := &serverpb.CommandQueueResponse{
-		Queues: queueState,
-	}
-
-	return response, nil
+	return &serverpb.CommandQueueResponse{
+		Snapshot: replica.GetCommandQueueSnapshot(),
+	}, nil
 }
 
 // ListLocalSessions returns a list of SQL sessions on this node.

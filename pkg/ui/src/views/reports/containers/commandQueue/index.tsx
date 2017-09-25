@@ -9,7 +9,6 @@ import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { refreshCommandQueue } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { rangeIDAttr } from "src/util/constants";
-import { LongToMoment } from "src/util/convert";
 import Print from "src/views/reports/containers/range/print";
 import CommandQueueViz from "src/views/reports/containers/commandQueue/commandQueueViz";
 
@@ -37,14 +36,14 @@ class CommandQueue extends React.Component<CommandQueueProps, {}> {
   }
 
   renderReportBody() {
-    const commandQueue = this.props.commandQueueReducerState.data;
+    const snapshot = this.props.commandQueueReducerState.data.snapshot;
 
     return (
       <div>
         <div className="command-queue__timestamp">
           <span>
             Snapshot taken at
-            {" "}{Print.Time(LongToMoment(commandQueue.queues.timestamp))}
+            {" "}{Print.Timestamp(snapshot.timestamp)}
           </span>
         </div>
         <div className="command-queue__key">
@@ -54,10 +53,10 @@ class CommandQueue extends React.Component<CommandQueueProps, {}> {
         </div>
 
         <h2>Local Scope</h2>
-        <CommandQueueViz queue={commandQueue.queues.localScope} />
+        <CommandQueueViz queue={snapshot.localScope} />
 
         <h2>Global Scope</h2>
-        <CommandQueueViz queue={commandQueue.queues.globalScope} />
+        <CommandQueueViz queue={snapshot.globalScope} />
       </div>
     );
   }
