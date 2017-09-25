@@ -413,9 +413,12 @@ func (r *Replica) GetSnapshot(
 		defer r.raftMu.Unlock()
 		return fn(r.raftMu.sideloaded)
 	}
+	// NB: We have Replica.mu read-locked, but we need ot write-locked in order
+	// to use Replica.mu.stateLoader. This call is not performance sensitive, so
+	// create a new state loader.
 	snapData, err := snapshot(
-		ctx, r.mu.stateLoader, snapType, snap, rangeID,
-		r.store.raftEntryCache, withSideloaded, startKey,
+		ctx, makeReplicaStateLoader(r.store.cfg.Settings, rangeID), snapType,
+		snap, rangeID, r.store.raftEntryCache, withSideloaded, startKey,
 	)
 	if err != nil {
 		log.Errorf(ctx, "error generating snapshot: %s", err)
