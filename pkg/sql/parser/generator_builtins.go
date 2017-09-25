@@ -15,8 +15,9 @@
 package parser
 
 import (
-	"errors"
 	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
 // Table generators, also called "set-generating functions", are
@@ -158,7 +159,7 @@ type seriesValueGenerator struct {
 	nextOK                   bool
 }
 
-var errStepCannotBeZero = errors.New("step cannot be 0")
+var errStepCannotBeZero = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "step cannot be 0")
 
 func makeSeriesGenerator(_ *EvalContext, args Datums) (ValueGenerator, error) {
 	start := int64(MustBeDInt(args[0]))
