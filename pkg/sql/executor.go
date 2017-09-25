@@ -738,11 +738,6 @@ func (e *Executor) execRequest(
 	session.phaseTimes[sessionEndParse] = timeutil.Now()
 
 	if err != nil {
-		if pgErr, ok := pgerror.GetPGCause(err); ok {
-			if pgErr.Code == pgerror.CodeFeatureNotSupportedError {
-				e.recordUnimplementedFeature(pgErr.InternalCommand)
-			}
-		}
 		if log.V(2) || logStatementsExecuteEnabled.Get(&e.cfg.Settings.SV) {
 			log.Infof(session.Ctx(), "execRequest: error: %v", err)
 		}
@@ -755,6 +750,20 @@ func (e *Executor) execRequest(
 		return err
 	}
 	return e.execParsed(session, stmts, pinfo, copymsg)
+}
+
+// RecordError is called by the common error handling routine in pgwire. Since
+// all pgwire errors are returned via a single helper, this is easier than
+// trying to log errors in the executor itself before they're returned.
+func (e *Executor) RecordError(err error) {
+	if err == nil {
+		return
+	}
+	if pgErr, ok := pgerror.GetPGCause(err); ok {
+		if pgErr.Code == pgerror.CodeFeatureNotSupportedError {
+			e.recordUnimplementedFeature(pgErr.InternalCommand)
+		}
+	}
 }
 
 // execParsed executes a batch of statements received as a unit from the client
