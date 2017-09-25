@@ -18,6 +18,7 @@ import (
 	"bytes"
 	gosql "database/sql"
 	"fmt"
+	"reflect"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -33,8 +34,53 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
+
+// Returns an error if a zone config "exists" for the table id.
+func zoneExists(sqlDB *gosql.DB, exists bool, id sqlbase.ID) error {
+	rows, err := sqlDB.Query(`SELECT * FROM system.zones WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	if exists != rows.Next() {
+		return errors.Errorf("zone config exists = %v", exists)
+	}
+	// Ensure that the zone config is the default one.
+	if exists {
+		var storedID sqlbase.ID
+		var val []byte
+		if err := rows.Scan(&storedID, &val); err != nil {
+			return errors.Errorf("row scan failed: %s", err)
+		}
+		if storedID != id {
+			return errors.Errorf("e = %d, v = %d", id, storedID)
+		}
+		var cfg config.ZoneConfig
+		if err := proto.Unmarshal(val, &cfg); err != nil {
+			return err
+		}
+		if e := config.DefaultZoneConfig(); !reflect.DeepEqual(e, cfg) {
+			return errors.Errorf("e = %v, v = %v", e, cfg)
+		}
+	}
+	return nil
+}
+
+// Returns an error if a descriptor "exists" for the table id.
+func descExists(sqlDB *gosql.DB, exists bool, id sqlbase.ID) error {
+	rows, err := sqlDB.Query(`SELECT * FROM system.descriptor WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	if exists != rows.Next() {
+		return errors.Errorf("descriptor exists = %v", exists)
+	}
+	return nil
+}
 
 func TestDropDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -102,17 +148,11 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
-	tbZoneKey := sqlbase.MakeZoneKey(tbDesc.ID)
-	dbZoneKey := sqlbase.MakeZoneKey(dbDesc.ID)
-	if gr, err := kvDB.Get(ctx, tbZoneKey); err != nil {
+	if err := zoneExists(sqlDB, true, tbDesc.ID); err != nil {
 		t.Fatal(err)
-	} else if !gr.Exists() {
-		t.Fatalf("table zone config entry not found")
 	}
-	if gr, err := kvDB.Get(ctx, dbZoneKey); err != nil {
+	if err := zoneExists(sqlDB, true, dbDesc.ID); err != nil {
 		t.Fatal(err)
-	} else if !gr.Exists() {
-		t.Fatalf("database zone config entry not found")
 	}
 
 	tableSpan := tbDesc.TableSpan()
@@ -138,10 +178,8 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
 	}
 
-	if gr, err := kvDB.Get(ctx, tbDescKey); err != nil {
+	if err := descExists(sqlDB, true, tbDesc.ID); err != nil {
 		t.Fatal(err)
-	} else if !gr.Exists() {
-		t.Fatalf("table descriptor doesn't exist after database is dropped: %q", tbDescKey)
 	}
 
 	if gr, err := kvDB.Get(ctx, tbNameKey); err != nil {
@@ -150,10 +188,11 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatalf("table descriptor key still exists after database is dropped")
 	}
 
-	if gr, err := kvDB.Get(ctx, dbDescKey); err != nil {
+	if err := descExists(sqlDB, false, dbDesc.ID); err != nil {
 		t.Fatal(err)
-	} else if gr.Exists() {
-		t.Fatalf("database descriptor still exists after database is dropped")
+	}
+	if err := zoneExists(sqlDB, false, dbDesc.ID); err != nil {
+		t.Fatal(err)
 	}
 
 	if gr, err := kvDB.Get(ctx, dbNameKey); err != nil {
@@ -162,16 +201,8 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatalf("database descriptor key still exists after database is dropped")
 	}
 
-	if gr, err := kvDB.Get(ctx, tbZoneKey); err != nil {
+	if err := zoneExists(sqlDB, true, tbDesc.ID); err != nil {
 		t.Fatal(err)
-	} else if !gr.Exists() {
-		t.Fatalf("table zone config entry doesn't exist after the database is dropped")
-	}
-
-	if gr, err := kvDB.Get(ctx, dbZoneKey); err != nil {
-		t.Fatal(err)
-	} else if gr.Exists() {
-		t.Fatalf("database zone config entry still exists after the database is dropped")
 	}
 }
 
@@ -241,17 +272,11 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 
-	tbZoneKey := sqlbase.MakeZoneKey(tbDesc.ID)
-	dbZoneKey := sqlbase.MakeZoneKey(dbDesc.ID)
-	if gr, err := kvDB.Get(ctx, tbZoneKey); err != nil {
+	if err := zoneExists(sqlDB, true, tbDesc.ID); err != nil {
 		t.Fatal(err)
-	} else if !gr.Exists() {
-		t.Fatalf("table zone config entry not found")
 	}
-	if gr, err := kvDB.Get(ctx, dbZoneKey); err != nil {
+	if err := zoneExists(sqlDB, true, dbDesc.ID); err != nil {
 		t.Fatal(err)
-	} else if !gr.Exists() {
-		t.Fatalf("database zone config entry not found")
 	}
 
 	tableSpan := tbDesc.TableSpan()
@@ -271,18 +296,11 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		if gr, err := kvDB.Get(ctx, tbDescKey); err != nil {
+		if err := descExists(sqlDB, false, tbDesc.ID); err != nil {
 			return err
-		} else if gr.Exists() {
-			return errors.Errorf("table descriptor exists after database is dropped: %q", tbDescKey)
 		}
 
-		if gr, err := kvDB.Get(ctx, tbZoneKey); err != nil {
-			return err
-		} else if gr.Exists() {
-			return errors.Errorf("table zone config entry still exists after the database is dropped")
-		}
-		return nil
+		return zoneExists(sqlDB, false, tbDesc.ID)
 	})
 
 	// Data is deleted.
@@ -512,8 +530,6 @@ func TestDropTable(t *testing.T) {
 		t.Fatalf("Name entry %q does not exist", nameKey)
 	}
 
-	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
-
 	// Add a zone config for the table.
 	cfg := config.DefaultZoneConfig()
 	buf, err := protoutil.Marshal(&cfg)
@@ -524,11 +540,8 @@ func TestDropTable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	zoneKey := sqlbase.MakeZoneKey(tableDesc.ID)
-	if gr, err := kvDB.Get(ctx, zoneKey); err != nil {
+	if err := zoneExists(sqlDB, true, tableDesc.ID); err != nil {
 		t.Fatal(err)
-	} else if !gr.Exists() {
-		t.Fatalf("zone config entry not found")
 	}
 
 	tableSpan := tableDesc.TableSpan()
@@ -561,16 +574,12 @@ func TestDropTable(t *testing.T) {
 	// asynchronous path.
 	checkKeyCount(t, kvDB, tableSpan, 3*numRows)
 
-	if gr, err := kvDB.Get(ctx, descKey); err != nil {
+	if err := descExists(sqlDB, true, tableDesc.ID); err != nil {
 		t.Fatal(err)
-	} else if !gr.Exists() {
-		t.Fatalf("table descriptor doesnt exist after the table is dropped")
 	}
 
-	if gr, err := kvDB.Get(ctx, zoneKey); err != nil {
+	if err := zoneExists(sqlDB, true, tableDesc.ID); err != nil {
 		t.Fatal(err)
-	} else if !gr.Exists() {
-		t.Fatalf("zone config entry doesn't exist after the table is dropped")
 	}
 }
 
@@ -603,8 +612,6 @@ func TestDropTableDeleteData(t *testing.T) {
 		t.Fatalf("Name entry %q does not exist", nameKey)
 	}
 
-	descKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
-
 	// Add a zone config for the table.
 	cfg := config.DefaultZoneConfig()
 	buf, err := protoutil.Marshal(&cfg)
@@ -615,11 +622,8 @@ func TestDropTableDeleteData(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	zoneKey := sqlbase.MakeZoneKey(tableDesc.ID)
-	if gr, err := kvDB.Get(ctx, zoneKey); err != nil {
+	if err := zoneExists(sqlDB, true, tableDesc.ID); err != nil {
 		t.Fatal(err)
-	} else if !gr.Exists() {
-		t.Fatalf("zone config entry not found")
 	}
 
 	tableSpan := tableDesc.TableSpan()
@@ -629,18 +633,11 @@ func TestDropTableDeleteData(t *testing.T) {
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		if gr, err := kvDB.Get(ctx, descKey); err != nil {
+		if err := descExists(sqlDB, false, tableDesc.ID); err != nil {
 			return err
-		} else if gr.Exists() {
-			return errors.Errorf("table descriptor still exists after the table is dropped")
 		}
 
-		if gr, err := kvDB.Get(ctx, zoneKey); err != nil {
-			return err
-		} else if gr.Exists() {
-			return errors.Errorf("zone config entry still exists after the table is dropped")
-		}
-		return nil
+		return zoneExists(sqlDB, false, tableDesc.ID)
 	})
 
 	checkKeyCount(t, kvDB, tableSpan, 0)
@@ -680,14 +677,8 @@ func TestDropTableInterleavedDeleteData(t *testing.T) {
 		t.Fatalf("different error than expected: %v", err)
 	}
 
-	descKey := sqlbase.MakeDescMetadataKey(tableDescInterleaved.ID)
 	testutils.SucceedsSoon(t, func() error {
-		if gr, err := kvDB.Get(context.TODO(), descKey); err != nil {
-			return err
-		} else if gr.Exists() {
-			return errors.Errorf("table descriptor still exists after the table is dropped")
-		}
-		return nil
+		return descExists(sqlDB, false, tableDescInterleaved.ID)
 	})
 
 	checkKeyCount(t, kvDB, tableSpan, numRows)
