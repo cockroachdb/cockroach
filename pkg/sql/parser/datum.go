@@ -1124,6 +1124,30 @@ func NewDIPAddr(d DIPAddr) *DIPAddr {
 	return &d
 }
 
+// AsDIPAddr attempts to retrieve a *DIPAddr from an Expr, returning a *DIPAddr and
+// a flag signifying whether the assertion was successful. The function should
+// be used instead of direct type assertions wherever a *DIPAddr wrapped by a
+// *DOidWrapper is possible.
+func AsDIPAddr(e Expr) (DIPAddr, bool) {
+	switch t := e.(type) {
+	case *DIPAddr:
+		return *t, true
+	case *DOidWrapper:
+		return AsDIPAddr(t.Wrapped)
+	}
+	return DIPAddr{}, false
+}
+
+// MustBeDIPAddr attempts to retrieve a DIPAddr from an Expr, panicking if the
+// assertion fails.
+func MustBeDIPAddr(e Expr) DIPAddr {
+	i, ok := AsDIPAddr(e)
+	if !ok {
+		panic(pgerror.NewErrorf(pgerror.CodeInternalError, "expected *DIPAddr, found %T", e))
+	}
+	return i
+}
+
 // ResolvedType implements the TypedExpr interface.
 func (*DIPAddr) ResolvedType() Type {
 	return TypeINet

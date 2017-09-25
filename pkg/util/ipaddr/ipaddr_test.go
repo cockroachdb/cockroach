@@ -267,3 +267,102 @@ func TestIPAddrString(t *testing.T) {
 		}
 	}
 }
+
+func TestIPAddrBroadcast(t *testing.T) {
+	testCases := []struct {
+		s   string
+		exp string
+	}{
+		// Basic IPv4
+		{"192.168.1.2", "192.168.1.2"},
+		{"192.168.1.2/16", "192.168.255.255/16"},
+		{"192.168.1.2/10", "192.191.255.255/10"},
+		{"192.0.0.0/10", "192.63.255.255/10"},
+		// Basic IPv6
+		{"2001:4f8:3:ba::/64", "2001:4f8:3:ba:ffff:ffff:ffff:ffff/64"},
+		{"2001:4f8:3:ba:2e0:81ff:fe22:d1f1/128", "2001:4f8:3:ba:2e0:81ff:fe22:d1f1"},
+		{"::ffff:1.2.3.1/120", "::ffff:1.2.3.255/120"},
+		{"::ffff:1.2.3.1/128", "::ffff:1.2.3.1"},
+		{"::ffff:1.2.3.1/20", "0:fff:ffff:ffff:ffff:ffff:ffff:ffff/20"},
+		{"::1", "::1"},
+	}
+	for i, testCase := range testCases {
+		var ip IPAddr
+		if err := ParseINet(testCase.s, &ip); err != nil {
+			t.Fatalf("%d: bad test case: %s got error %s", i, testCase.s, err)
+		}
+		actual := ip.Broadcast()
+		if actual.String() != testCase.exp {
+			t.Errorf("%d: Broadcast(%s) actual:%s does not match expected:%s", i, testCase.s, actual.String(),
+				testCase.exp)
+		}
+	}
+}
+
+func TestIPAddrHostmask(t *testing.T) {
+	testCases := []struct {
+		s   string
+		exp string
+	}{
+		// Basic IPv4
+		{"192.168.1.2", "0.0.0.0"},
+		{"192.168.1.2/16", "0.0.255.255"},
+		{"192.168.1.2/10", "0.63.255.255"},
+		{"192.168.1.2/0", "255.255.255.255"},
+		// Basic IPv6
+		{"2001:4f8:3:ba::/64", "::ffff:ffff:ffff:ffff"},
+		{"2001:4f8:3:ba::/0", "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"},
+		{"2001:4f8:3:ba:2e0:81ff:fe22:d1f1/128", "::"},
+		{"::ffff:1.2.3.1/120", "::ff"},
+		{"::ffff:1.2.3.1/128", "::"},
+		{"::ffff:1.2.3.1/20", "0:fff:ffff:ffff:ffff:ffff:ffff:ffff"},
+	}
+	for i, testCase := range testCases {
+		var ip IPAddr
+		if err := ParseINet(testCase.s, &ip); err != nil {
+			t.Fatalf("%d: bad test case: %s got error %s", i, testCase.s, err)
+		}
+
+		var expIP IPAddr
+		if err := ParseINet(testCase.exp, &expIP); err != nil {
+			t.Fatalf("%d: bad test case: %s got error %s", i, testCase.exp, err)
+		}
+
+		actual := ip.Hostmask()
+		if actual.String() != testCase.exp {
+			t.Errorf("%d: Hostmask(%s) actual:%#v does not match expected:%#v", i, testCase.s, actual,
+				expIP)
+		}
+	}
+}
+
+func TestIPAddrNetmask(t *testing.T) {
+	testCases := []struct {
+		s   string
+		exp string
+	}{
+		// Basic IPv4
+		{"192.168.1.2", "255.255.255.255"},
+		{"192.168.1.2/16", "255.255.0.0"},
+		{"192.168.1.2/10", "255.192.0.0"},
+		{"192.168.1.2/0", "0.0.0.0"},
+		// Basic IPv6
+		{"2001:4f8:3:ba::/64", "ffff:ffff:ffff:ffff::"},
+		{"2001:4f8:3:ba::/0", "::"},
+		{"2001:4f8:3:ba:2e0:81ff:fe22:d1f1/128", "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"},
+		{"::ffff:1.2.3.1/120", "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ff00"},
+		{"::ffff:1.2.3.1/20", "ffff:f000::"},
+	}
+	for i, testCase := range testCases {
+		var ip IPAddr
+		if err := ParseINet(testCase.s, &ip); err != nil {
+			t.Fatalf("%d: bad test case: %s got error %s", i, testCase.s, err)
+		}
+
+		actual := ip.Netmask()
+		if actual.String() != testCase.exp {
+			t.Errorf("%d: Netmask(%s) actual:%s does not match expected:%s", i, testCase.s, actual,
+				testCase.exp)
+		}
+	}
+}
