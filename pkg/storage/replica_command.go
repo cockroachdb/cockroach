@@ -2029,11 +2029,12 @@ func evalRequestLease(
 
 	// MIGRATION(tschottdorf): needed to apply Raft commands which got proposed
 	// before the StartStasis field was introduced.
-	if args.Lease.DeprecatedStartStasis == nil {
-		args.Lease.DeprecatedStartStasis = args.Lease.Expiration
+	newLease := args.Lease
+	if newLease.DeprecatedStartStasis == nil {
+		newLease.DeprecatedStartStasis = newLease.Expiration
 	}
-	isExtension := prevLease.Replica.StoreID == args.Lease.Replica.StoreID
-	effectiveStart := args.Lease.Start
+	isExtension := prevLease.Replica.StoreID == newLease.Replica.StoreID
+	effectiveStart := newLease.Start
 
 	// Wind the start timestamp back as far towards the previous lease as we
 	// can. That'll make sure that when multiple leases are requested out of
@@ -2061,16 +2062,20 @@ func evalRequestLease(
 			rErr.Message = "extension moved start timestamp backwards"
 			return newFailedLeaseTrigger(false /* isTransfer */), rErr
 		}
-		if args.Lease.Type() == roachpb.LeaseExpiration {
-			args.Lease.Expiration.Forward(prevLease.GetExpiration())
+		if newLease.Type() == roachpb.LeaseExpiration {
+			// NB: Avoid mutating pointers in the argument which might be shared with
+			// the caller.
+			t := *newLease.Expiration
+			newLease.Expiration = &t
+			newLease.Expiration.Forward(prevLease.GetExpiration())
 		}
 	} else if prevLease.Type() == roachpb.LeaseExpiration && effectiveStart.Less(prevLease.GetExpiration()) {
 		rErr.Message = "requested lease overlaps previous lease"
 		return newFailedLeaseTrigger(false /* isTransfer */), rErr
 	}
-	args.Lease.Start = effectiveStart
+	newLease.Start = effectiveStart
 	return evalNewLease(ctx, cArgs.EvalCtx, batch, cArgs.Stats,
-		args.Lease, prevLease, isExtension, false /* isTransfer */)
+		newLease, prevLease, isExtension, false /* isTransfer */)
 }
 
 // TransferLease sets the lease holder for the range.
