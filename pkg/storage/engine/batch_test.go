@@ -244,8 +244,14 @@ func TestBatchRepr(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
-		if count, expected := r.Count(), 3; count != expected {
-			t.Fatalf("bad count: expected %d, but found %d", expected, count)
+		const expectedCount = 3
+		if count := r.Count(); count != expectedCount {
+			t.Fatalf("bad count: RocksDBBatchReader.Count expected %d, but found %d", expectedCount, count)
+		}
+		if count, err := RocksDBBatchCount(repr); err != nil {
+			t.Fatal(err)
+		} else if count != expectedCount {
+			t.Fatalf("bad count: RocksDBBatchCount expected %d, but found %d", expectedCount, count)
 		}
 
 		var ops []string
