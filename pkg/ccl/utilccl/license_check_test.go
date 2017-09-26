@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -22,7 +23,7 @@ func TestSettingAndCheckingLicense(t *testing.T) {
 	idA, _ := uuid.FromString("A0000000-0000-0000-0000-00000000000A")
 	idB, _ := uuid.FromString("B0000000-0000-0000-0000-00000000000B")
 
-	t0 := time.Unix(0, 0)
+	t0 := timeutil.Unix(0, 0)
 
 	licA, _ := licenseccl.License{
 		ClusterID:         []uuid.UUID{idA},

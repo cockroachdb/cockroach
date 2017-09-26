@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // byTimeAndName is a slice of tspb.TimeSeriesData.
@@ -156,7 +157,7 @@ func TestMetricsRecorder(t *testing.T) {
 	// as the test expects time to not advance too far which would age the actual
 	// data (e.g. in histogram's) unexpectedly.
 	defer metric.TestingSetNow(func() time.Time {
-		return time.Unix(0, manual.UnixNano()).UTC()
+		return timeutil.Unix(0, manual.UnixNano()).UTC()
 	})()
 
 	// ========================================

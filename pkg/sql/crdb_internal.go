@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 const crdbInternalName = "crdb_internal"
@@ -206,7 +207,7 @@ CREATE TABLE crdb_internal.tables (
 			if table.Lease != nil {
 				leaseNodeDatum = parser.NewDInt(parser.DInt(int64(table.Lease.NodeID)))
 				leaseExpDatum = parser.MakeDTimestamp(
-					time.Unix(0, table.Lease.ExpirationTime), time.Nanosecond,
+					timeutil.Unix(0, table.Lease.ExpirationTime), time.Nanosecond,
 				)
 			}
 			if err := addRow(
@@ -215,7 +216,7 @@ CREATE TABLE crdb_internal.tables (
 				parser.NewDString(table.Name),
 				parser.NewDString(dbName),
 				parser.NewDInt(parser.DInt(int64(table.Version))),
-				parser.MakeDTimestamp(time.Unix(0, table.ModificationTime.WallTime), time.Microsecond),
+				parser.MakeDTimestamp(timeutil.Unix(0, table.ModificationTime.WallTime), time.Microsecond),
 				parser.TimestampToDecimal(table.ModificationTime),
 				parser.NewDString(table.FormatVersion.String()),
 				parser.NewDString(table.State.String()),
@@ -381,7 +382,7 @@ CREATE TABLE crdb_internal.jobs (
 				if micros == 0 {
 					return parser.DNull
 				}
-				ts := time.Unix(0, micros*time.Microsecond.Nanoseconds())
+				ts := timeutil.Unix(0, micros*time.Microsecond.Nanoseconds())
 				return parser.MakeDTimestamp(ts, time.Microsecond)
 			}
 			descriptorIDs := parser.NewDArray(parser.TypeInt)

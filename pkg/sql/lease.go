@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // TODO(pmattis): Periodically renew leases for tables that were used recently and
@@ -107,7 +108,7 @@ func (s *tableVersionState) incRefcountLocked() {
 // hlc.Timestamp, so we're using this method to give us the stored
 // type: parser.DTimestamp.
 func (s *tableVersionState) leaseExpiration() parser.DTimestamp {
-	return parser.DTimestamp{Time: time.Unix(0, s.expiration.WallTime).Round(time.Microsecond)}
+	return parser.DTimestamp{Time: timeutil.Unix(0, s.expiration.WallTime).Round(time.Microsecond)}
 }
 
 // LeaseStore implements the operations for acquiring and releasing leases and

@@ -34,7 +34,7 @@ func (*PingRequest) GetUser() string {
 }
 
 func (r RemoteOffset) measuredAt() time.Time {
-	return time.Unix(0, r.MeasuredAt).UTC()
+	return timeutil.Unix(0, r.MeasuredAt).UTC()
 }
 
 // String formats the RemoteOffset for human readability.
