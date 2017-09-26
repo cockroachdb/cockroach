@@ -253,7 +253,7 @@ SELECT * FROM [SHOW TRACE FOR SELECT 1] LIMIT 0
 ----
 timestamp age message context operation span
 
-query ITTTTTTTTTRTI colnames
+query ITTTTTTTTRTI colnames
 SELECT * FROM [SHOW JOBS] LIMIT 0
 ----
-id  type  description  username  descriptor_ids  status  created  started  finished  modified  fraction_completed  error  coordinator_id
+id  type  description  username  status  created  started  finished  modified  fraction_completed  error  coordinator_id
