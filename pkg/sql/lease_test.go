@@ -759,6 +759,15 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Set the isolation level to Snapshot. This is because the test wants to
+	// check that this "old" transaction will not be allowed to commit at a new
+	// timestamp because of the "deadline" set according to its lease. So, the
+	// test will make sure that the txn is pushed. If the transaction were
+	// Serializable, then the push would cause it to restart regardless of the
+	// deadline.
+	if _, err := tx.Exec("SET TRANSACTION ISOLATION LEVEL SNAPSHOT"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Insert an entry so that the transaction is guaranteed to be
 	// assigned a timestamp.
@@ -795,8 +804,8 @@ INSERT INTO t.timestamp VALUES ('a', 'b');
 		}
 	}
 
-	// This INSERT is disallowed because a retryable error is returned on
-	// the Commit() below.
+	// This INSERT will cause the transaction to be pushed past its deadline,
+	// which will be detected when we attempt to Commit() below.
 	if _, err := tx.Exec(`INSERT INTO t.kv VALUES ('c', 'd');`); err != nil {
 		t.Fatal(err)
 	}

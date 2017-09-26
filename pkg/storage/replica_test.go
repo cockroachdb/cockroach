@@ -3571,6 +3571,87 @@ func TestEndTransactionDeadline(t *testing.T) {
 	}
 }
 
+// Test that, when a pushed Snapshot txn would get a "deadline exceeded" error,
+// a Serializable one would get a serializable restart instead. In other words,
+// for Serializable transactions, regular push retriable errors take precedence
+// over the deadline check.
+func TestSerializableDeadline(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc.Start(t, stopper)
+
+	const expectedTransactionStatusError int = 1
+	const expectedTransactionRestartError int = 2
+
+	tests := []struct {
+		isoLevel        enginepb.IsolationType
+		expectedErrType int
+		expectedErrMsg  string
+	}{{
+		isoLevel:        enginepb.SNAPSHOT,
+		expectedErrType: expectedTransactionStatusError,
+		expectedErrMsg:  "TransactionStatusError: transaction deadline exceeded",
+	}, {
+		isoLevel:        enginepb.SERIALIZABLE,
+		expectedErrType: expectedTransactionRestartError,
+		expectedErrMsg:  "TransactionRetryError: retry txn \\(RETRY_SERIALIZABLE\\)",
+	}}
+	for i, test := range tests {
+		t.Run(test.isoLevel.String(), func(t *testing.T) {
+			key := roachpb.Key("key: " + strconv.Itoa(i))
+			// Start our txn. It will be pushed next.
+			txn := newTransaction("test txn", key, roachpb.MinUserPriority,
+				test.isoLevel, tc.Clock())
+			beginTxn, header := beginTxnArgs(key, txn)
+			if _, pErr := tc.SendWrappedWith(header, &beginTxn); pErr != nil {
+				t.Fatal(pErr.GoError())
+			}
+
+			tc.manualClock.Increment(100)
+			pusher := newTransaction(
+				"test pusher", key, roachpb.MaxUserPriority,
+				enginepb.SERIALIZABLE, tc.Clock())
+			pushReq := pushTxnArgs(pusher, txn, roachpb.PUSH_TIMESTAMP)
+			pushReq.Now = tc.Clock().Now()
+			resp, pErr := tc.SendWrapped(&pushReq)
+			if pErr != nil {
+				t.Fatal(pErr)
+			}
+			updatedPushee := resp.(*roachpb.PushTxnResponse).PusheeTxn
+			if updatedPushee.Status != roachpb.PENDING {
+				t.Fatalf("expected pushee to still be alive, but got %+v", updatedPushee)
+			}
+
+			// Send an EndTransaction with a deadline below the point where the txn
+			// has been pushed.
+			etArgs, etHeader := endTxnArgs(txn, true /* commit */)
+			deadline := updatedPushee.Timestamp
+			deadline.Logical--
+			etArgs.Deadline = &deadline
+			_, pErr = tc.SendWrappedWith(etHeader, &etArgs)
+			if pErr == nil {
+				t.Fatalf("expected %q, got: nil", test.expectedErrMsg)
+			}
+			err := pErr.GoError()
+			if test.expectedErrType == expectedTransactionStatusError {
+				if _, ok := err.(*roachpb.TransactionStatusError); !ok ||
+					!testutils.IsError(err, test.expectedErrMsg) {
+					t.Fatalf("expected %q, got: %s (%T)", test.expectedErrMsg,
+						err, err)
+				}
+			} else {
+				if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok ||
+					!testutils.IsError(err, test.expectedErrMsg) {
+					t.Fatalf("expected %q, got: %s (%T)", test.expectedErrMsg,
+						err, pErr.GetDetail())
+				}
+			}
+		})
+	}
+}
+
 // TestTxnSpanGCThreshold verifies that aborting transactions which haven't
 // written their initial txn record yet does not lead to anomalies. Precisely,
 // verify that if the GC queue could potentially have removed a txn record
