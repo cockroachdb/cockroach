@@ -371,7 +371,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 		t.Fatalf("make replica error : %s", err)
 	}
 	replica.mu.Lock()
-	replica.mu.state.Stats = enginepb.MVCCStats{
+	replica.mu.state.Stats = &enginepb.MVCCStats{
 		KeyBytes: 2,
 		ValBytes: 4,
 	}
