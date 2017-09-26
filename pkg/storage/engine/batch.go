@@ -498,3 +498,12 @@ func (r *RocksDBBatchReader) varstring() ([]byte, error) {
 	}
 	return s, nil
 }
+
+// RocksDBBatchCount provides an efficient way to get the count of mutations
+// in a RocksDB Batch representation.
+func RocksDBBatchCount(repr []byte) (int, error) {
+	if len(repr) < headerSize {
+		return 0, errors.Errorf("batch repr too small: %d < %d", len(repr), headerSize)
+	}
+	return int(binary.LittleEndian.Uint32(repr[countPos:headerSize])), nil
+}
