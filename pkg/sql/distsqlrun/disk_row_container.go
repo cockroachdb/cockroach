@@ -142,7 +142,7 @@ func (d *diskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) 
 	if err := d.diskAcc.Grow(ctx, int64(len(d.scratchKey)+len(d.scratchVal))); err != nil {
 		return err
 	}
-	if err := d.bufferedRows.Put(d.scratchKey, d.scratchVal); err != nil {
+	if err := d.bufferedRows.Put(ctx, d.scratchKey, d.scratchVal); err != nil {
 		return err
 	}
 	d.scratchKey = d.scratchKey[:0]
@@ -203,7 +203,7 @@ type diskRowIterator struct {
 var _ rowIterator = diskRowIterator{}
 
 func (d *diskRowContainer) NewIterator(ctx context.Context) rowIterator {
-	if err := d.bufferedRows.Flush(); err != nil {
+	if err := d.bufferedRows.Flush(ctx); err != nil {
 		log.Fatal(ctx, err)
 	}
 	return diskRowIterator{rowContainer: d, SortedDiskMapIterator: d.diskMap.NewIterator()}

@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/pkg/errors"
 )
 
@@ -65,7 +66,7 @@ func (ss *diskSideloadStorage) Dir() string {
 func (ss *diskSideloadStorage) PutIfNotExists(
 	ctx context.Context, index, term uint64, contents []byte,
 ) error {
-	limitBulkIOWrite(ctx, ss.st, len(contents))
+	engine.LimitBulkIOWrite(ctx, ss.st, len(contents))
 
 	filename := ss.filename(ctx, index, term)
 	if _, err := os.Stat(filename); err == nil {

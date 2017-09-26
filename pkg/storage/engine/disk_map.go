@@ -75,10 +75,10 @@ type SortedDiskMapBatchWriter interface {
 	// Put writes the given key/value pair to the batch. The write to the
 	// underlying store happens on Flush(), Close(), or when the batch writer
 	// reaches its capacity.
-	Put(k []byte, v []byte) error
+	Put(ctx context.Context, k []byte, v []byte) error
 	// Flush flushes all writes to the underlying store. The batch can be reused
 	// after a call to Flush().
-	Flush() error
+	Flush(context.Context) error
 
 	// Close flushes all writes to the underlying store and frees up resources
 	// held by the batch writer.
@@ -120,6 +120,7 @@ type RocksDBMapBatchWriter struct {
 	makeKey func(k []byte) MVCCKey
 	batch   Batch
 	store   Engine
+	limiter func(context.Context, int)
 }
 
 // RocksDBMapIterator iterates over the keys of a RocksDBMap in sorted order.
@@ -239,11 +240,18 @@ func (r *RocksDBMap) NewBatchWriterCapacity(capacityBytes int) SortedDiskMapBatc
 	if r.allowDuplicates {
 		makeKey = r.makeKeyWithTimestamp
 	}
+	var limiter func(context.Context, int)
+	if rocksdb, ok := r.store.(*RocksDB); ok {
+		limiter = func(ctx context.Context, cost int) {
+			LimitBulkIOWrite(ctx, rocksdb.cfg.Settings, cost)
+		}
+	}
 	return &RocksDBMapBatchWriter{
 		capacity: capacityBytes,
 		makeKey:  makeKey,
 		batch:    r.store.NewWriteOnlyBatch(),
 		store:    r.store,
+		limiter:  limiter,
 	}
 }
 
@@ -311,20 +319,24 @@ func (i *RocksDBMapIterator) Close() {
 }
 
 // Put implements the SortedDiskMapBatchWriter interface.
-func (b *RocksDBMapBatchWriter) Put(k []byte, v []byte) error {
+func (b *RocksDBMapBatchWriter) Put(ctx context.Context, k []byte, v []byte) error {
 	if err := b.batch.Put(b.makeKey(k), v); err != nil {
 		return err
 	}
 	if len(b.batch.Repr()) >= b.capacity {
-		return b.Flush()
+		return b.Flush(ctx)
 	}
 	return nil
 }
 
 // Flush implements the SortedDiskMapBatchWriter interface.
-func (b *RocksDBMapBatchWriter) Flush() error {
-	if len(b.batch.Repr()) < 1 {
+func (b *RocksDBMapBatchWriter) Flush(ctx context.Context) error {
+	n := len(b.batch.Repr())
+	if n < 1 {
 		return nil
+	}
+	if b.limiter != nil {
+		b.limiter(ctx, n)
 	}
 	if err := b.batch.Commit(false /* syncCommit */); err != nil {
 		return err
@@ -335,7 +347,7 @@ func (b *RocksDBMapBatchWriter) Flush() error {
 
 // Close implements the SortedDiskMapBatchWriter interface.
 func (b *RocksDBMapBatchWriter) Close(ctx context.Context) error {
-	err := b.Flush()
+	err := b.Flush(ctx)
 	b.batch.Close()
 	return err
 }
