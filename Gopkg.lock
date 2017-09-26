@@ -143,7 +143,7 @@
   branch = "master"
   name = "github.com/cockroachdb/stress"
   packages = ["."]
-  revision = "60f5b5fa410fdfd786059ccb56d468691f2305aa"
+  revision = "29b5d31b4c3a949cb3a726750bc34c4d58ec15e8"
 
 [[projects]]
   name = "github.com/codahale/hdrhistogram"
@@ -616,7 +616,7 @@
 
 [[projects]]
   name = "golang.org/x/sync"
-  packages = ["errgroup","singleflight","syncmap"]
+  packages = ["errgroup","syncmap"]
   revision = "f52d1811a62927559de87708c8913c1650ce4f26"
 
 [[projects]]
@@ -673,6 +673,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "b91ad64e984d1dc807522ec2a35cf1b198abb4cc4f2ffa3e5fdc9fe91c20d87a"
+  inputs-digest = "0c4cdc41e60e9405fc2dab5b883635e3c5b6f15afef358d81d488091edea9e40"
   solver-name = "gps-cdcl"
   solver-version = 1
