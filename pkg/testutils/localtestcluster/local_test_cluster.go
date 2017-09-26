@@ -117,6 +117,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initSende
 	if ltc.StoreTestingKnobs == nil {
 		cfg.TestingKnobs.DisableScanner = true
 		cfg.TestingKnobs.DisableSplitQueue = true
+		cfg.TestingKnobs.DisableRaftRespBeforeApplication = true
 	} else {
 		cfg.TestingKnobs = *ltc.StoreTestingKnobs
 	}

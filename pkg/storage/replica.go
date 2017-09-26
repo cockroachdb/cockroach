@@ -4309,13 +4309,19 @@ func (r *Replica) processRaftCommand(
 	r.mu.Lock()
 	proposal, proposedLocally := r.mu.proposals[idKey]
 
-	// TODO(tschottdorf): consider the Trace situation here.
 	if proposedLocally {
 		// We initiated this command, so use the caller-supplied context.
 		ctx = proposal.ctx
 		proposal.ctx = nil // avoid confusion
 		delete(r.mu.proposals, idKey)
 	}
+
+	// Since we're responding to the Raft command before it's application, we
+	// need to make sure that out tracing Span is not finished before we're done
+	// with our work here.
+	var sp opentracing.Span
+	ctx, sp = tracing.ForkCtxSpan(ctx, "raft application")
+	defer tracing.FinishSpan(sp)
 
 	leaseIndex, proposalRetry, forcedErr := r.checkForcedErrLocked(ctx, idKey, raftCmd, proposal, proposedLocally)
 
@@ -4343,7 +4349,6 @@ func (r *Replica) processRaftCommand(
 	}
 
 	var response proposalResult
-	var writeBatch *storagebase.WriteBatch
 	{
 		if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; forcedErr == nil && filter != nil {
 			forcedErr = filter(storagebase.ApplyFilterArgs{
@@ -4354,6 +4359,53 @@ func (r *Replica) processRaftCommand(
 			})
 		}
 
+		// Update the node clock with the serviced request. This maintains
+		// a high water mark for all ops serviced, so that received ops without
+		// a timestamp specified are guaranteed one higher than any op already
+		// executed for overlapping keys.
+		r.store.Clock().Update(ts)
+
+		var lResult *LocalEvalResult
+		if proposedLocally {
+			if proposalRetry != proposalNoRetry {
+				response.ProposalRetry = proposalRetry
+				if forcedErr == nil {
+					log.Fatalf(ctx, "proposal with nontrivial retry behavior, but no error: %+v", proposal)
+				}
+			}
+
+			if forcedErr != nil {
+				// A forced error was set (i.e. we did not apply the proposal,
+				// for instance due to its log position).
+				response.Err = forcedErr
+			} else if proposal.Local.Err != nil {
+				// Everything went as expected, but this proposal should return
+				// an error to the client.
+				response.Err = proposal.Local.Err
+			} else if proposal.Local.Reply != nil {
+				response.Reply = proposal.Local.Reply
+			} else {
+				log.Fatalf(ctx, "proposal must return either a reply or an error: %+v", proposal)
+			}
+			response.Intents = proposal.Local.detachIntents(response.Err != nil)
+			if !r.store.cfg.TestingKnobs.DisableRaftRespBeforeApplication && false {
+				// If not disabled by tests, we can return the response to the
+				// client here, before actually performing the Raft command
+				// application. This is valid because at this point the command has
+				// been replicated in the Raft log and therefore must apply to all
+				// replicated state machines. In addition, all error handling that
+				// is deterministic across replicas has already been performed in
+				// checkForcedErrLocked. Any error handling that will differ between
+				// replicas should not be reflected in the response (ie.
+				// ReplicaCorruptionError).
+				//
+				// For more discussion, see #17500.
+				proposal.maybeRespondToClient(response)
+			}
+
+			lResult = proposal.Local
+		}
+
 		if forcedErr != nil {
 			// Apply an empty entry.
 			raftCmd.ReplicatedEvalResult = storagebase.ReplicatedEvalResult{}
@@ -4361,17 +4413,6 @@ func (r *Replica) processRaftCommand(
 		}
 		raftCmd.ReplicatedEvalResult.State.RaftAppliedIndex = index
 		raftCmd.ReplicatedEvalResult.State.LeaseAppliedIndex = leaseIndex
-
-		// Update the node clock with the serviced request. This maintains
-		// a high water mark for all ops serviced, so that received ops without
-		// a timestamp specified are guaranteed one higher than any op already
-		// executed for overlapping keys.
-		r.store.Clock().Update(ts)
-
-		var pErr *roachpb.Error
-		if raftCmd.WriteBatch != nil {
-			writeBatch = raftCmd.WriteBatch
-		}
 
 		// AddSSTable ingestions run before the actual batch. This makes sure
 		// that when the Raft command is applied, the ingestion has definitely
@@ -4396,11 +4437,17 @@ func (r *Replica) processRaftCommand(
 			raftCmd.ReplicatedEvalResult.AddSSTable = nil
 		}
 
-		raftCmd.ReplicatedEvalResult.Delta, pErr = r.applyRaftCommand(
+		var applyErr *roachpb.Error
+		var writeBatch *storagebase.WriteBatch
+		if raftCmd.WriteBatch != nil {
+			writeBatch = raftCmd.WriteBatch
+		}
+
+		raftCmd.ReplicatedEvalResult.Delta, applyErr = r.applyRaftCommand(
 			ctx, idKey, raftCmd.ReplicatedEvalResult, writeBatch)
 
-		if filter := r.store.cfg.TestingKnobs.TestingPostApplyFilter; pErr == nil && filter != nil {
-			pErr = filter(storagebase.ApplyFilterArgs{
+		if filter := r.store.cfg.TestingKnobs.TestingPostApplyFilter; applyErr == nil && filter != nil {
+			applyErr = filter(storagebase.ApplyFilterArgs{
 				CmdID:                idKey,
 				ReplicatedEvalResult: raftCmd.ReplicatedEvalResult,
 				StoreID:              r.store.StoreID(),
@@ -4408,42 +4455,33 @@ func (r *Replica) processRaftCommand(
 			})
 		}
 
-		pErr = r.maybeSetCorrupt(ctx, pErr)
-		if pErr == nil {
-			pErr = forcedErr
-		}
-
-		var lResult *LocalEvalResult
-		if proposedLocally {
-			if proposalRetry != proposalNoRetry {
-				response.ProposalRetry = proposalRetry
-				if pErr == nil {
-					log.Fatalf(ctx, "proposal with nontrivial retry behavior, but no error: %+v", proposal)
-				}
+		if applyErr = r.maybeSetCorrupt(ctx, applyErr); applyErr != nil {
+			switch applyErr.GetDetail().(type) {
+			case *roachpb.ReplicaCorruptionError:
+				// We already logged the error in maybeSetCorrupt. It is ok that we
+				// don't send these errors to the client immediately as they will be
+				// caught later now that the replica is marked as corrupt.
+				//
+				// On a more fundamental level, returning an error to the client
+				// here would actually be incorrect, because the entry has already
+				// been replicated through Raft. This means that a local
+				// ReplicaCorruptionError doesn't mean that all replicas are
+				// corrupted or that the command failed to commit. Once a command
+				// has been committed, the state machine application, even with
+				// respect to error handling, needs to be deterministic across all
+				// replicas.
+			default:
+				// If the error is not a ReplicaCorruptionError then we should
+				// have returned it to the client.
+				log.Fatalf(ctx, "found unexpected error during Raft application: %v", applyErr)
 			}
-			if pErr != nil {
-				// A forced error was set (i.e. we did not apply the proposal,
-				// for instance due to its log position) or the Replica is now
-				// corrupted.
-				response.Err = pErr
-			} else if proposal.Local.Err != nil {
-				// Everything went as expected, but this proposal should return
-				// an error to the client.
-				response.Err = proposal.Local.Err
-			} else if proposal.Local.Reply != nil {
-				response.Reply = proposal.Local.Reply
-			} else {
-				log.Fatalf(ctx, "proposal must return either a reply or an error: %+v", proposal)
-			}
-			response.Intents = proposal.Local.detachIntents(response.Err != nil)
-			lResult = proposal.Local
 		}
 
 		// Handle the EvalResult, executing any side effects of the last
 		// state machine transition.
 		//
 		// Note that this must happen after committing (the engine.Batch), but
-		// before notifying a potentially waiting client.
+		// before finishing the Raft application and calling endCmds.done.
 		r.handleEvalResultRaftMuLocked(ctx, lResult, raftCmd.ReplicatedEvalResult)
 	}
 

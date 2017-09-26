@@ -79,7 +79,7 @@ type ProposalData struct {
 	// proposalResult come from LocalEvalResult).
 	//
 	// Attention: this channel is not to be signaled directly downstream of Raft.
-	// Always use ProposalData.finishRaftApplication().
+	// Always use ProposalData.maybeRespondToClient or finishRaftApplication.
 	doneCh chan proposalResult
 
 	// Local contains the results of evaluating the request
@@ -99,28 +99,43 @@ type ProposalData struct {
 }
 
 // finishRaftApplication is called downstream of Raft when a command application
-// has finished. proposal.doneCh is signaled with pr so that the proposer is
-// unblocked.
+// has finished. Replica state is updated so that future proposals see the
+// effect of this proposal, notably on the timestamp cache and command queue.
+// After this, proposal.doneCh is signaled with pr so that the proposer is
+// unblocked and free to respond to the client if it hasn't been already.
 //
-// It first invokes the endCmds function and then sends the specified
-// proposalResult on the proposal's done channel. endCmds is invoked here in
-// order to allow the original client to be cancelled and possibly no longer
-// listening to this done channel, and so can't be counted on to invoke endCmds
-// itself.
+// Because the update to the command queue will allow dependent commands to
+// begin proposing, proposer evaluated kv requires that all desired effects of
+// this proposal be reflected in the underlying state machine (i.e. the engine)
+// before this method is called. See Replica.applyRaftCommand.
 //
-// Note: this should not be called upstream of Raft because, in case pr.Err is
-// set, it clears the intents from pr before sending it on the channel. This
-// clearing should not be done upstream of Raft because, in cases of errors
-// encountered upstream of Raft, we might still want to resolve intents:
-// upstream of Raft, pr.intents represent intents encountered by a request, not
-// the current txn's intents.
+// Note: this should not be called upstream of Raft.
 func (proposal *ProposalData) finishRaftApplication(pr proposalResult) {
 	if proposal.endCmds != nil {
 		proposal.endCmds.done(pr.Reply, pr.Err, pr.ProposalRetry)
 		proposal.endCmds = nil
 	}
-	proposal.doneCh <- pr
-	close(proposal.doneCh)
+	proposal.maybeRespondToClient(pr)
+}
+
+// maybeRespondToClient is called downstream of Raft when a command result can
+// be delivered to the client RPC. proposal.doneCh is signaled with pr so that
+// the proposer is unblocked.
+//
+// It is possible that this is called ahead of finishRaftApplication, in which
+// case the future call to that method will not also respond to the client. This
+// is because there are cases where it is valid to respond to the client with a
+// proposal result before actually applying the proposal to the Raft state
+// machine. However, it is not valid to call endCmds.done until after the state
+// machine update.
+//
+// Note: this should not be called upstream of Raft.
+func (proposal *ProposalData) maybeRespondToClient(pr proposalResult) {
+	if proposal.doneCh != nil {
+		proposal.doneCh <- pr
+		close(proposal.doneCh)
+		proposal.doneCh = nil
+	}
 }
 
 // LocalEvalResult is data belonging to an evaluated command that is

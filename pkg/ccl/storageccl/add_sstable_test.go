@@ -102,7 +102,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB) {
 		if err := testutils.MatchInOrder(tracing.FormatRecordedSpans(collect()),
 			"evaluating AddSSTable",
 			"sideloadable proposal detected",
-			"ingested SSTable at index",
+			// "ingested SSTable at index",
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -153,7 +153,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB) {
 				"evaluating AddSSTable",
 				"target key range not empty, will merge existing data with sstable",
 				"sideloadable proposal detected",
-				"ingested SSTable at index",
+				// "ingested SSTable at index",
 			); err != nil {
 				t.Fatal(err)
 			}

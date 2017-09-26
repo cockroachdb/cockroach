@@ -121,6 +121,7 @@ func createTestStoreWithEngine(
 		nodeDesc.NodeID, rpcContext, server, stopper, metric.NewRegistry(),
 	)
 	storeCfg.ScanMaxIdleTime = 1 * time.Second
+	storeCfg.TestingKnobs.DisableRaftRespBeforeApplication = true
 	stores := storage.NewStores(ac, storeCfg.Clock, storeCfg.Settings.Version.MinSupportedVersion, storeCfg.Settings.Version.ServerVersion)
 
 	if err := storeCfg.Gossip.SetNodeDescriptor(nodeDesc); err != nil {
@@ -620,6 +621,7 @@ func (m *multiTestContext) makeStoreConfig(i int) storage.StoreConfig {
 	cfg.Gossip = m.gossips[i]
 	cfg.TestingKnobs.DisableSplitQueue = true
 	cfg.TestingKnobs.ReplicateQueueAcceptsUnsplit = true
+	cfg.TestingKnobs.DisableRaftRespBeforeApplication = true
 	return cfg
 }
 

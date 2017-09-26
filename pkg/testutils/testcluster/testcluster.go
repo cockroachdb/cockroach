@@ -325,9 +325,12 @@ func (tc *TestCluster) changeReplicas(
 	changeType roachpb.ReplicaChangeType, startKey roachpb.RKey, targets ...roachpb.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
 	ctx := context.TODO()
-	if err := tc.Servers[0].DB().AdminChangeReplicas(
-		ctx, startKey.AsRawKey(), changeType, targets,
-	); err != nil {
+	// AdminChangeReplicas can fail in the case of a concurrent transaction.
+	if err := util.RetryForDuration(time.Second*5, func() error {
+		return tc.Servers[0].DB().AdminChangeReplicas(
+			ctx, startKey.AsRawKey(), changeType, targets,
+		)
+	}); err != nil {
 		return roachpb.RangeDescriptor{}, errors.Wrap(err, "AdminChangeReplicas error")
 	}
 	var rangeDesc roachpb.RangeDescriptor
