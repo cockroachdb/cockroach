@@ -1174,7 +1174,7 @@ func (r *Replica) OwnsValidLease(ts hlc.Timestamp) bool {
 
 func (r *Replica) ownsValidLeaseRLocked(ts hlc.Timestamp) bool {
 	return r.mu.state.Lease.OwnedBy(r.store.StoreID()) &&
-		r.leaseStatus(*r.mu.state.Lease, ts, r.mu.minLeaseProposedTS).state == leaseValid
+		r.leaseStatus(*r.mu.state.Lease, ts, r.mu.minLeaseProposedTS).State == LeaseState_VALID
 }
 
 // IsLeaseValid returns true if the replica's lease is owned by this
@@ -1186,7 +1186,7 @@ func (r *Replica) IsLeaseValid(lease roachpb.Lease, ts hlc.Timestamp) bool {
 }
 
 func (r *Replica) isLeaseValidRLocked(lease roachpb.Lease, ts hlc.Timestamp) bool {
-	return r.leaseStatus(lease, ts, r.mu.minLeaseProposedTS).state == leaseValid
+	return r.leaseStatus(lease, ts, r.mu.minLeaseProposedTS).State == LeaseState_VALID
 }
 
 // newNotLeaseHolderError returns a NotLeaseHolderError initialized with the
@@ -1231,15 +1231,12 @@ func (r *Replica) leaseGoodToGo(ctx context.Context) (LeaseStatus, bool) {
 	}
 
 	status := r.leaseStatus(*r.mu.state.Lease, timestamp, r.mu.minLeaseProposedTS)
-	switch status.state {
-	case leaseValid:
-		if status.lease.OwnedBy(r.store.StoreID()) {
-			// We own the lease...
-			if repDesc, err := r.getReplicaDescriptorRLocked(); err == nil {
-				if _, ok := r.mu.pendingLeaseRequest.TransferInProgress(repDesc.ReplicaID); !ok {
-					// ...and there is no transfer pending.
-					return status, true
-				}
+	if status.State == LeaseState_VALID && status.Lease.OwnedBy(r.store.StoreID()) {
+		// We own the lease...
+		if repDesc, err := r.getReplicaDescriptorRLocked(); err == nil {
+			if _, ok := r.mu.pendingLeaseRequest.TransferInProgress(repDesc.ReplicaID); !ok {
+				// ...and there is no transfer pending.
+				return status, true
 			}
 		}
 	}
@@ -1274,16 +1271,16 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 			defer r.mu.Unlock()
 
 			status = r.leaseStatus(*r.mu.state.Lease, timestamp, r.mu.minLeaseProposedTS)
-			switch status.state {
-			case leaseError:
+			switch status.State {
+			case LeaseState_ERROR:
 				// Lease state couldn't be determined.
 				log.VEventf(ctx, 2, "lease state couldn't be determined")
 				return nil, roachpb.NewError(
 					newNotLeaseHolderError(nil, r.store.StoreID(), r.mu.state.Desc))
 
-			case leaseValid, leaseStasis:
-				if !status.lease.OwnedBy(r.store.StoreID()) {
-					_, stillMember := r.mu.state.Desc.GetReplicaDescriptor(status.lease.Replica.StoreID)
+			case LeaseState_VALID, LeaseState_STASIS:
+				if !status.Lease.OwnedBy(r.store.StoreID()) {
+					_, stillMember := r.mu.state.Desc.GetReplicaDescriptor(status.Lease.Replica.StoreID)
 					if !stillMember {
 						// This would be the situation in which the lease holder gets removed when
 						// holding the lease, or in which a lease request erroneously gets accepted
@@ -1315,12 +1312,12 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 						// makes sure that lease requests for a replica not in the descriptor are
 						// bounced.
 						log.Fatalf(ctx, "lease %s owned by replica %+v that no longer exists",
-							status.lease, status.lease.Replica)
+							status.Lease, status.Lease.Replica)
 					}
 					// Otherwise, if the lease is currently held by another replica, redirect
 					// to the holder.
 					return nil, roachpb.NewError(
-						newNotLeaseHolderError(&status.lease, r.store.StoreID(), r.mu.state.Desc))
+						newNotLeaseHolderError(&status.Lease, r.store.StoreID(), r.mu.state.Desc))
 				}
 				// Check that we're not in the process of transferring the lease away.
 				// If we are transferring the lease away, we can't serve reads or
@@ -1342,7 +1339,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 				// renewed the lease, so we return the channel to block on renewal.
 				// Otherwise, we don't need to wait for the extension and simply
 				// ignore the returned channel (which is buffered) and continue.
-				if status.state == leaseStasis {
+				if status.State == LeaseState_STASIS {
 					return r.requestLeaseLocked(ctx, status), nil
 				}
 
@@ -1351,10 +1348,10 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 				// already an extension pending.
 				_, requestPending := r.mu.pendingLeaseRequest.RequestPending()
 				if !requestPending && r.requiresExpiringLeaseRLocked() {
-					renewal := status.lease.Expiration.Add(-r.store.cfg.RangeLeaseRenewalDuration().Nanoseconds(), 0)
+					renewal := status.Lease.Expiration.Add(-r.store.cfg.RangeLeaseRenewalDuration().Nanoseconds(), 0)
 					if !timestamp.Less(renewal) {
 						if log.V(2) {
-							log.Infof(ctx, "extending lease %s at %s", status.lease, timestamp)
+							log.Infof(ctx, "extending lease %s at %s", status.Lease, timestamp)
 						}
 						// We had an active lease to begin with, but we want to trigger
 						// a lease extension. We explicitly ignore the returned channel
@@ -1367,22 +1364,22 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 					}
 				}
 
-			case leaseExpired:
+			case LeaseState_EXPIRED:
 				// No active lease: Request renewal if a renewal is not already pending.
 				log.VEventf(ctx, 2, "request range lease (attempt #%d)", attempt)
 				return r.requestLeaseLocked(ctx, status), nil
 
-			case leaseProscribed:
+			case LeaseState_PROSCRIBED:
 				// Lease proposed timestamp is earlier than the min proposed
 				// timestamp limit this replica must observe. If this store
 				// owns the lease, re-request. Otherwise, redirect.
-				if status.lease.OwnedBy(r.store.StoreID()) {
+				if status.Lease.OwnedBy(r.store.StoreID()) {
 					log.VEventf(ctx, 2, "request range lease (attempt #%d)", attempt)
 					return r.requestLeaseLocked(ctx, status), nil
 				}
 				// If lease is currently held by another, redirect to holder.
 				return nil, roachpb.NewError(
-					newNotLeaseHolderError(&status.lease, r.store.StoreID(), r.mu.state.Desc))
+					newNotLeaseHolderError(&status.Lease, r.store.StoreID(), r.mu.state.Desc))
 			}
 
 			// Return a nil chan to signal that we have a valid lease.
@@ -1438,7 +1435,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 						}
 						return pErr
 					}
-					log.Eventf(ctx, "lease acquisition succeeded: %+v", status.lease)
+					log.Eventf(ctx, "lease acquisition succeeded: %+v", status.Lease)
 					return nil
 				case <-slowTimer.C:
 					slowTimer.Read = true
@@ -1746,7 +1743,8 @@ func (r *Replica) maybeInitializeRaftGroup(ctx context.Context) {
 	// will only campaign if it's been idle for >= election timeout,
 	// so there's most likely been no traffic to the range.
 	shouldCampaignOnCreation := r.mu.state.Lease.OwnedBy(r.store.StoreID()) ||
-		r.leaseStatus(*r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS).state != leaseValid
+		r.leaseStatus(*r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS).State !=
+			LeaseState_VALID
 	if err := r.withRaftGroupLocked(shouldCampaignOnCreation, func(raftGroup *raft.RawNode) (bool, error) {
 		return true, nil
 	}); err != nil {
@@ -2607,7 +2605,7 @@ func (r *Replica) tryExecuteWriteBatch(
 		if status, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
 			return nil, pErr, proposalNoRetry
 		}
-		lease = status.lease
+		lease = status.Lease
 	}
 
 	// Examine the read and write timestamp caches for preceding
@@ -5458,6 +5456,7 @@ type ReplicaMetrics struct {
 	LeaseValid  bool
 	Leaseholder bool
 	LeaseType   roachpb.LeaseType
+	LeaseStatus LeaseStatus
 	Quiescent   bool
 	// Is this the replica which collects per-range metrics? This is done either
 	// on the leader or, if there is no leader, on the largest live replica ID.
@@ -5479,7 +5478,7 @@ func (r *Replica) Metrics(
 ) ReplicaMetrics {
 	r.mu.RLock()
 	raftStatus := r.raftStatusRLocked()
-	status := r.leaseStatus(*r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
+	leaseStatus := r.leaseStatus(*r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
 	quiescent := r.mu.quiescent || r.mu.internalRaftGroup == nil
 	desc := r.mu.state.Desc
 	selfBehindCount := r.getEstimatedBehindCountRLocked(raftStatus)
@@ -5496,7 +5495,7 @@ func (r *Replica) Metrics(
 		livenessMap,
 		desc,
 		raftStatus,
-		status,
+		leaseStatus,
 		r.store.StoreID(),
 		quiescent,
 		selfBehindCount,
@@ -5521,7 +5520,7 @@ func calcReplicaMetrics(
 	livenessMap map[roachpb.NodeID]bool,
 	desc *roachpb.RangeDescriptor,
 	raftStatus *raft.Status,
-	status LeaseStatus,
+	leaseStatus LeaseStatus,
 	storeID roachpb.StoreID,
 	quiescent bool,
 	selfBehindCount int64,
@@ -5531,10 +5530,11 @@ func calcReplicaMetrics(
 	var m ReplicaMetrics
 
 	var leaseOwner bool
-	if status.state == leaseValid {
+	m.LeaseStatus = leaseStatus
+	if leaseStatus.State == LeaseState_VALID {
 		m.LeaseValid = true
-		leaseOwner = status.lease.OwnedBy(storeID)
-		m.LeaseType = status.lease.Type()
+		leaseOwner = leaseStatus.Lease.OwnedBy(storeID)
+		m.LeaseType = leaseStatus.Lease.Type()
 	}
 	m.Leaseholder = m.LeaseValid && leaseOwner
 	m.Leader = isRaftLeader(raftStatus)

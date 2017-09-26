@@ -47,7 +47,7 @@ export enum LivenessStatus {
    */
   DEAD,
   /**
-   * DEAD, but the liveness record has the decomissioning flag set.
+   * DEAD, but the liveness record has the decommissioning flag set.
    */
   DECOMMISSIONED,
 }
