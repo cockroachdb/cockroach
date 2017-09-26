@@ -70,7 +70,7 @@ var gcBatchSize = settings.RegisterIntSetting("kv.gc.batch_size",
 // would probably require removing the EvalCtx field due to import order
 // constraints).
 type CommandArgs struct {
-	EvalCtx ReplicaEvalContext
+	EvalCtx ReplicaEvalContextI
 	Header  roachpb.Header
 	Args    roachpb.Request
 
@@ -162,7 +162,7 @@ func evaluateCommand(
 	raftCmdID storagebase.CmdIDKey,
 	index int,
 	batch engine.ReadWriter,
-	rec ReplicaEvalContext,
+	rec *ReplicaEvalContext,
 	ms *enginepb.MVCCStats,
 	h roachpb.Header,
 	maxKeys int64,
@@ -1025,7 +1025,7 @@ func intersectSpan(
 
 func runCommitTrigger(
 	ctx context.Context,
-	rec ReplicaEvalContext,
+	rec ReplicaEvalContextI,
 	batch engine.Batch,
 	ms *enginepb.MVCCStats,
 	args roachpb.EndTransactionRequest,
@@ -1793,7 +1793,7 @@ func evalQueryTxn(
 // spuriously succeeding on this range.
 func setAbortCache(
 	ctx context.Context,
-	rec ReplicaEvalContext,
+	rec ReplicaEvalContextI,
 	batch engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	txn enginepb.TxnMeta,
@@ -1948,7 +1948,7 @@ func evalTruncateLog(
 	end := engine.MakeMVCCMetadataKey(keys.RaftLogKey(cArgs.EvalCtx.RangeID(), args.Index))
 
 	var ms enginepb.MVCCStats
-	if cArgs.EvalCtx.repl.store.cfg.Settings.Version.IsActive(cluster.VersionRaftLogTruncationBelowRaft) {
+	if cArgs.EvalCtx.ClusterSettings().Version.IsActive(cluster.VersionRaftLogTruncationBelowRaft) {
 		// Compute the stats delta that were to occur should the log entries be
 		// purged. We do this as a side effect of seeing a new TruncatedState,
 		// downstream of Raft. A follower may not run the side effect in the event
@@ -2113,7 +2113,7 @@ func evalTransferLease(
 // sense to minimize the amount of code intolerant of rolling updates.
 func evalNewLease(
 	ctx context.Context,
-	rec ReplicaEvalContext,
+	rec ReplicaEvalContextI,
 	batch engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	lease roachpb.Lease,
@@ -2966,7 +2966,7 @@ func (r *Replica) adminSplitWithDescriptor(
 // returned trigger and is handled by the Store.
 func splitTrigger(
 	ctx context.Context,
-	rec ReplicaEvalContext,
+	rec ReplicaEvalContextI,
 	batch engine.Batch,
 	bothDeltaMS enginepb.MVCCStats,
 	split *roachpb.SplitTrigger,
@@ -3165,12 +3165,13 @@ func splitTrigger(
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to write initial Replica state")
 		}
 
-		if !rec.repl.store.cfg.Settings.Version.IsActive(cluster.VersionSplitHardStateBelowRaft) {
+		st := rec.ClusterSettings()
+		if !st.Version.IsActive(cluster.VersionSplitHardStateBelowRaft) {
 			// Write an initial state upstream of Raft even though it might
 			// clobber downstream simply because that's what 1.0 does and if we
 			// don't write it here, then a 1.0 version applying it as a follower
 			// won't write a HardState at all and is guaranteed to crash.
-			rsl := stateloader.Make(rec.repl.store.cfg.Settings, split.RightDesc.RangeID)
+			rsl := stateloader.Make(st, split.RightDesc.RangeID)
 			if err := rsl.SynthesizeRaftState(ctx, batch); err != nil {
 				return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to synthesize initial Raft state")
 			}
@@ -3324,7 +3325,7 @@ func (r *Replica) AdminMerge(
 // in splitTrigger.
 func mergeTrigger(
 	ctx context.Context,
-	rec ReplicaEvalContext,
+	rec ReplicaEvalContextI,
 	batch engine.Batch,
 	ms *enginepb.MVCCStats,
 	merge *roachpb.MergeTrigger,
@@ -3419,7 +3420,7 @@ func mergeTrigger(
 
 func changeReplicasTrigger(
 	ctx context.Context,
-	rec ReplicaEvalContext,
+	rec ReplicaEvalContextI,
 	batch engine.Batch,
 	change *roachpb.ChangeReplicasTrigger,
 ) EvalResult {

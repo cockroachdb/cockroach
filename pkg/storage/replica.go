@@ -2374,7 +2374,7 @@ func (r *Replica) executeAdminBatch(
 
 	case *roachpb.ImportRequest:
 		cArgs := CommandArgs{
-			EvalCtx: ReplicaEvalContext{r, nil},
+			EvalCtx: &ReplicaEvalContext{r, nil},
 			Header:  ba.Header,
 			Args:    args,
 		}
@@ -2455,7 +2455,7 @@ func (r *Replica) executeReadOnlyBatch(
 	// that holding readOnlyCmdMu throughout is important to avoid reads from the
 	// "wrong" key range being served after the range has been split.
 	var result EvalResult
-	rec := ReplicaEvalContext{r, spans}
+	rec := &ReplicaEvalContext{r, spans}
 	readOnly := r.store.Engine().NewReadOnly()
 	defer readOnly.Close()
 	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), readOnly, rec, nil, ba)
@@ -4747,7 +4747,7 @@ func (r *Replica) evaluateProposalInner(
 // transaction. In case the transaction has been aborted, return a
 // transaction abort error.
 func checkIfTxnAborted(
-	ctx context.Context, rec ReplicaEvalContext, b engine.Reader, txn roachpb.Transaction,
+	ctx context.Context, rec *ReplicaEvalContext, b engine.Reader, txn roachpb.Transaction,
 ) *roachpb.Error {
 	var entry roachpb.AbortCacheEntry
 	aborted, err := rec.AbortCache().Get(ctx, b, txn.ID, &entry)
@@ -4807,7 +4807,7 @@ func (r *Replica) evaluateTxnWriteBatch(
 		if util.RaceEnabled && spans != nil {
 			batch = makeSpanSetBatch(batch, spans)
 		}
-		rec := ReplicaEvalContext{r, spans}
+		rec := &ReplicaEvalContext{r, spans}
 		br, result, pErr := evaluateBatch(ctx, idKey, batch, rec, &ms, strippedBa)
 		if pErr == nil && ba.Timestamp == br.Timestamp {
 			clonedTxn := ba.Txn.Clone()
@@ -4859,7 +4859,7 @@ func (r *Replica) evaluateTxnWriteBatch(
 	if util.RaceEnabled && spans != nil {
 		batch = makeSpanSetBatch(batch, spans)
 	}
-	rec := ReplicaEvalContext{r, spans}
+	rec := &ReplicaEvalContext{r, spans}
 	br, result, pErr := evaluateBatch(ctx, idKey, batch, rec, &ms, ba)
 	return batch, ms, br, result, pErr
 }
@@ -4997,7 +4997,7 @@ func evaluateBatch(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
 	batch engine.ReadWriter,
-	rec ReplicaEvalContext,
+	rec *ReplicaEvalContext,
 	ms *enginepb.MVCCStats,
 	ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, EvalResult, *roachpb.Error) {
@@ -5305,7 +5305,7 @@ func (r *Replica) maybeGossipNodeLiveness(ctx context.Context, span roachpb.Span
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.ScanRequest{Span: span})
 	// Call evaluateBatch instead of Send to avoid command queue reentrance.
-	rec := ReplicaEvalContext{r, nil}
+	rec := &ReplicaEvalContext{r, nil}
 	br, result, pErr :=
 		evaluateBatch(ctx, storagebase.CmdIDKey(""), r.store.Engine(), rec, nil, ba)
 	if pErr != nil {
@@ -5385,7 +5385,7 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (config.SystemConfig, er
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.ScanRequest{Span: keys.SystemConfigSpan})
 	// Call evaluateBatch instead of Send to avoid command queue reentrance.
-	rec := ReplicaEvalContext{r, nil}
+	rec := &ReplicaEvalContext{r, nil}
 	br, result, pErr := evaluateBatch(
 		ctx, storagebase.CmdIDKey(""), r.store.Engine(), rec, nil, ba,
 	)
