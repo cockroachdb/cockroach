@@ -21,20 +21,20 @@ INSERT INTO data SELECT a, b, c, d FROM
    GENERATE_SERIES(1, 10) AS D(d)
 
 # Verify data placement.
-query TTTI colnames
+query TTITI colnames
 SHOW TESTING_RANGES FROM TABLE data
 ----
-Start Key  End Key  Replicas  Lease Holder
-NULL       /1       {1}       1
-/1         /2       {2}       2
-/2         /3       {3}       3
-/3         /4       {4}       4
-/4         /5       {5}       5
-/5         /6       {1}       1
-/6         /7       {2}       2
-/7         /8       {3}       3
-/8         /9       {4}       4
-/9         NULL     {5}       5
+Start Key  End Key  Range ID  Replicas  Lease Holder
+NULL       /1       1         {1}       1
+/1         /2       2         {2}       2
+/2         /3       3         {3}       3
+/3         /4       4         {4}       4
+/4         /5       5         {5}       5
+/5         /6       6         {1}       1
+/6         /7       7         {2}       2
+/7         /8       8         {3}       3
+/8         /9       9         {4}       4
+/9         NULL     10        {5}       5
 
 # Ready to roll!
 statement ok

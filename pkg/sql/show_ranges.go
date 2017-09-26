@@ -72,6 +72,10 @@ var showRangesColumns = sqlbase.ResultColumns{
 		Typ:  parser.TypeString,
 	},
 	{
+		Name: "Range ID",
+		Typ:  parser.TypeInt,
+	},
+	{
 		Name: "Replicas",
 		// The INTs in the array are Store IDs.
 		Typ: parser.TArray{Typ: parser.TypeInt},
@@ -110,6 +114,8 @@ func (n *showRangesNode) Next(params runParams) (bool, error) {
 		n.values[1] = parser.NewDString(sqlbase.PrettyKey(desc.EndKey.AsRawKey(), 2))
 	}
 
+	n.values[2] = parser.NewDInt(parser.DInt(desc.RangeID))
+
 	var replicas []int
 	for _, rd := range desc.Replicas {
 		replicas = append(replicas, int(rd.StoreID))
@@ -121,7 +127,7 @@ func (n *showRangesNode) Next(params runParams) (bool, error) {
 	for i, r := range replicas {
 		replicaArr.Array[i] = parser.NewDInt(parser.DInt(r))
 	}
-	n.values[2] = replicaArr
+	n.values[3] = replicaArr
 
 	// Get the lease holder.
 	// TODO(radu): this will be slow if we have a lot of ranges; find a way to
@@ -136,7 +142,7 @@ func (n *showRangesNode) Next(params runParams) (bool, error) {
 		return false, errors.Wrap(err, "error getting lease info")
 	}
 	resp := b.RawResponse().Responses[0].GetInner().(*roachpb.LeaseInfoResponse)
-	n.values[3] = parser.NewDInt(parser.DInt(resp.Lease.Replica.StoreID))
+	n.values[4] = parser.NewDInt(parser.DInt(resp.Lease.Replica.StoreID))
 
 	n.rowIdx++
 	return true, nil

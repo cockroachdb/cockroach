@@ -231,17 +231,17 @@ username
 testuser
 
 
-query TTTI colnames
+query TTITI colnames
 SELECT * FROM [SHOW TESTING_RANGES FROM TABLE system.descriptor]
 ----
-Start Key  End Key  Replicas  Lease Holder
-NULL       NULL     {1}       1
+Start Key  End Key  Range ID  Replicas  Lease Holder
+NULL       NULL     1         {1}       1
 
-query TTTI colnames
+query TTITI colnames
 CREATE INDEX ix ON foo(x); SELECT * FROM [SHOW TESTING_RANGES FROM INDEX foo@ix]
 ----
-Start Key  End Key  Replicas  Lease Holder
-NULL       NULL     {1}       1
+Start Key  End Key  Range ID  Replicas  Lease Holder
+NULL       NULL     1         {1}       1
 
 query TTTTTT colnames
 SELECT * FROM [SHOW TRACE FOR SESSION]
