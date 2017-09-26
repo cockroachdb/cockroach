@@ -28,6 +28,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -2404,6 +2405,20 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
+	// Add a zone config.
+	cfg := config.DefaultZoneConfig()
+	buf, err := protoutil.Marshal(&cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, buf); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := zoneExists(sqlDB, true, tableDesc.ID); err != nil {
+		t.Fatal(err)
+	}
+
 	if _, err := sqlDB.Exec("TRUNCATE TABLE t.test"); err != nil {
 		t.Error(err)
 	}
@@ -2416,6 +2431,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 	newTableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	if !newTableDesc.Adding() {
 		t.Fatalf("bad state = %s", newTableDesc.State)
+	}
+	if err := zoneExists(sqlDB, true, newTableDesc.ID); err != nil {
+		t.Fatal(err)
 	}
 
 	// Ensure that the table data hasn't been deleted.
@@ -2482,6 +2500,20 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
+	// Add a zone config.
+	cfg := config.DefaultZoneConfig()
+	buf, err := protoutil.Marshal(&cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, buf); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := zoneExists(sqlDB, true, tableDesc.ID); err != nil {
+		t.Fatal(err)
+	}
+
 	if _, err := sqlDB.Exec("TRUNCATE TABLE t.test"); err != nil {
 		t.Error(err)
 	}
@@ -2511,6 +2543,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 	if newTableDesc.Adding() {
 		t.Fatalf("bad state = %s", newTableDesc.State)
 	}
+	if err := zoneExists(sqlDB, true, newTableDesc.ID); err != nil {
+		t.Fatal(err)
+	}
 
 	// Wait until the older descriptor has been deleted.
 	testutils.SucceedsSoon(t, func() error {
@@ -2526,6 +2561,10 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 		}
 		return errors.Errorf("table descriptor exists after table is truncated: %d", tableDesc.ID)
 	})
+
+	if err := zoneExists(sqlDB, false, tableDesc.ID); err != nil {
+		t.Fatal(err)
+	}
 
 	// Ensure that the table data has been deleted.
 	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
