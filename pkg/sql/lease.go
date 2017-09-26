@@ -239,34 +239,55 @@ func (s LeaseStore) release(ctx context.Context, stopper *stop.Stopper, table *t
 func (s LeaseStore) WaitForOneVersion(
 	ctx context.Context, tableID sqlbase.ID, retryOpts retry.Options,
 ) (sqlbase.DescriptorVersion, error) {
-	desc := &sqlbase.Descriptor{}
 	descKey := sqlbase.MakeDescMetadataKey(tableID)
-	var tableDesc *sqlbase.TableDescriptor
+	errNotOneVersion := errors.New("not one version")
 	for r := retry.Start(retryOpts); r.Next(); {
-		// Get the current version of the table descriptor non-transactionally.
-		//
-		// TODO(pmattis): Do an inconsistent read here?
-		if err := s.db.GetProto(context.TODO(), descKey, desc); err != nil {
+		var version sqlbase.DescriptorVersion
+		err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			desc := &sqlbase.Descriptor{}
+			if err := txn.GetProto(ctx, descKey, desc); err != nil {
+				return err
+			}
+			tableDesc := desc.GetTable()
+			if tableDesc == nil {
+				return errors.Errorf("ID %d is not a table", tableID)
+			}
+			version = tableDesc.Version
+
+			p := makeInternalPlanner("leases-count", txn, security.RootUser, s.memMetrics)
+			defer finishInternalPlanner(p)
+			const countLeases = `SELECT COUNT(version) FROM system.lease ` +
+				`WHERE "descID" = $1 AND version = $2 AND expiration > $3`
+			// Use a more conservative expiration time by subtracting a
+			// second. The expiration time stored in the store is rounded
+			// to the closest microsecond. There is no harm in allowing a
+			// lease to take more time to expire.
+			expiration := parser.DTimestamp{
+				Time: time.Unix(0, txn.OrigTimestamp().WallTime).Add(-time.Second),
+			}
+			values, err := p.QueryRow(ctx, countLeases, tableID, int(version-1), &expiration)
+			if err != nil {
+				return err
+			}
+			count := int(parser.MustBeDInt(values[0]))
+			log.Infof(context.TODO(), "publish (count leases): descID=%d name=%s version=%d count=%d",
+				tableID, tableDesc.Name, version-1, count)
+			if count != 0 {
+				return errNotOneVersion
+			}
+			return nil
+		})
+		switch err {
+		case nil:
+			return version, nil
+		case errNotOneVersion:
+			// will loop around to retry
+		default:
 			return 0, err
 		}
-		tableDesc = desc.GetTable()
-		if tableDesc == nil {
-			return 0, errors.Errorf("ID %d is not a table", tableID)
-		}
-		// Check to see if there are any leases that still exist on the previous
-		// version of the descriptor.
-		now := s.clock.Now()
-		count, err := s.countLeases(ctx, tableDesc.ID, tableDesc.Version-1, now.GoTime())
-		if err != nil {
-			return 0, err
-		}
-		if count == 0 {
-			break
-		}
-		log.Infof(context.TODO(), "publish (count leases): descID=%d name=%s version=%d count=%d",
-			tableDesc.ID, tableDesc.Name, tableDesc.Version-1, count)
 	}
-	return tableDesc.Version, nil
+
+	panic("not reached")
 }
 
 var errDidntUpdateDescriptor = errors.New("didn't update the table descriptor")
@@ -379,27 +400,6 @@ func (s LeaseStore) Publish(
 	}
 
 	panic("not reached")
-}
-
-// countLeases returns the number of unexpired leases for a particular version
-// of a descriptor.
-func (s LeaseStore) countLeases(
-	ctx context.Context, descID sqlbase.ID, version sqlbase.DescriptorVersion, expiration time.Time,
-) (int, error) {
-	var count int
-	err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		p := makeInternalPlanner("leases-count", txn, security.RootUser, s.memMetrics)
-		defer finishInternalPlanner(p)
-		const countLeases = `SELECT COUNT(version) FROM system.lease ` +
-			`WHERE "descID" = $1 AND version = $2 AND expiration > $3`
-		values, err := p.QueryRow(ctx, countLeases, descID, int(version), expiration)
-		if err != nil {
-			return err
-		}
-		count = int(parser.MustBeDInt(values[0]))
-		return nil
-	})
-	return count, err
 }
 
 // Get the table descriptor valid for the expiration time from the store.
