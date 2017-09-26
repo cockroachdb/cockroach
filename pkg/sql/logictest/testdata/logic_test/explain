@@ -90,8 +90,9 @@ EXPLAIN DROP DATABASE foo
 query ITTT
 EXPLAIN SHOW JOBS
 ----
-0  values  ·     ·
-0  ·       size  13 columns, 0 rows
+0  render  ·     ·
+1  values  ·     ·
+1  ·       size  13 columns, 0 rows
 
 statement ok
 CREATE INDEX a ON foo(x)

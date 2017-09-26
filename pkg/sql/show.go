@@ -601,7 +601,11 @@ func (p *planner) ShowQueries(ctx context.Context, n *parser.ShowQueries) (planN
 // ShowJobs returns all the jobs.
 // Privileges: None.
 func (p *planner) ShowJobs(ctx context.Context, n *parser.ShowJobs) (planNode, error) {
-	return p.delegateQuery(ctx, "SHOW JOBS", "TABLE crdb_internal.jobs", nil, nil)
+	return p.delegateQuery(ctx, "SHOW JOBS",
+		`SELECT id, type, description, username, status, created, started, finished, modified,
+            fraction_completed, error, coordinator_id
+       FROM crdb_internal.jobs`,
+		nil, nil)
 }
 
 func (p *planner) ShowSessions(ctx context.Context, n *parser.ShowSessions) (planNode, error) {
