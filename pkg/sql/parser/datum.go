@@ -1373,7 +1373,7 @@ func (d *DDate) Format(buf *bytes.Buffer, f FmtFlags) {
 	if !f.bareStrings {
 		buf.WriteByte('\'')
 	}
-	buf.WriteString(timeutil.Unix(int64(*d)*secondsInDay, 0).UTC().Format(dateFormat))
+	buf.WriteString(timeutil.Unix(int64(*d)*secondsInDay, 0).Format(dateFormat))
 	if !f.bareStrings {
 		buf.WriteByte('\'')
 	}
@@ -1628,7 +1628,7 @@ func MakeDTimestampTZ(t time.Time, precision time.Duration) *DTimestampTZ {
 
 // MakeDTimestampTZFromDate creates a DTimestampTZ from a DDate.
 func MakeDTimestampTZFromDate(loc *time.Location, d *DDate) *DTimestampTZ {
-	year, month, day := timeutil.Unix(int64(*d)*secondsInDay, 0).UTC().Date()
+	year, month, day := timeutil.Unix(int64(*d)*secondsInDay, 0).Date()
 	return MakeDTimestampTZ(time.Date(year, month, day, 0, 0, 0, 0, loc), time.Microsecond)
 }
 
