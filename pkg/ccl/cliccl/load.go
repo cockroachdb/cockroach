@@ -173,8 +173,8 @@ func runLoadShow(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	start := timeutil.Unix(0, desc.StartTime.WallTime).UTC().Format(time.RFC3339Nano)
-	end := timeutil.Unix(0, desc.EndTime.WallTime).UTC().Format(time.RFC3339Nano)
+	start := timeutil.Unix(0, desc.StartTime.WallTime).Format(time.RFC3339Nano)
+	end := timeutil.Unix(0, desc.EndTime.WallTime).Format(time.RFC3339Nano)
 	fmt.Printf("StartTime: %s (%s)\n", start, desc.StartTime)
 	fmt.Printf("EndTime: %s (%s)\n", end, desc.EndTime)
 	fmt.Printf("DataSize: %d (%s)\n", desc.EntryCounts.DataSize, humanizeutil.IBytes(desc.EntryCounts.DataSize))
