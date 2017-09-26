@@ -726,7 +726,10 @@ func RunAndWaitForTerminalState(
 		var status Status
 		var jobErr gosql.NullString
 		var fractionCompleted float64
-		err := sqlDB.QueryRow(`SELECT status, error, fraction_completed FROM [SHOW JOBS] WHERE id = $1`, jobID).Scan(
+		err := sqlDB.QueryRow(`
+       SELECT status, error, fraction_completed
+         FROM [SHOW JOBS]
+        WHERE id = $1`, jobID).Scan(
 			&status, &jobErr, &fractionCompleted,
 		)
 		if err != nil {

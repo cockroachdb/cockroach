@@ -465,8 +465,8 @@ func TestShowQueries(t *testing.T) {
 }
 
 // TestShowJobs manually inserts a row into system.jobs and checks that the
-// encoded protobuf payload is properly decoded and visible in both SHOW JOBS
-// and crdb_internal.jobs.
+// encoded protobuf payload is properly decoded and visible in
+// crdb_internal.jobs.
 func TestShowJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -475,7 +475,7 @@ func TestShowJobs(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(t, rawSQLDB)
 	defer s.Stopper().Stop(context.TODO())
 
-	// row represents a row returned from crdb_internal.jobs or SHOW JOBS, but
+	// row represents a row returned from crdb_internal.jobs, but
 	// *not* a row in system.jobs.
 	type row struct {
 		id                int64
@@ -542,21 +542,17 @@ func TestShowJobs(t *testing.T) {
 		in.id, in.status, in.created, inPayload,
 	)
 
-	for _, source := range []string{"[SHOW JOBS]", "crdb_internal.jobs"} {
-		var out row
-		sqlDB.QueryRow(fmt.Sprintf(`
-			SELECT
-				id, type, status, created, description, started, finished, modified,
-				fraction_completed, username, descriptor_ids, error, coordinator_id
-			FROM %s`, source),
-		).Scan(
-			&out.id, &out.typ, &out.status, &out.created, &out.description, &out.started,
-			&out.finished, &out.modified, &out.fractionCompleted, &out.username, &out.descriptorIDs,
-			&out.err, &out.coordinatorID,
-		)
-		if !reflect.DeepEqual(in, out) {
-			diff := strings.Join(pretty.Diff(in, out), "\n")
-			t.Fatalf("in job did not match out job:\n%s", diff)
-		}
+	var out row
+	sqlDB.QueryRow(`
+      SELECT id, type, status, created, description, started, finished, modified,
+             fraction_completed, username, error, coordinator_id
+        FROM crdb_internal.jobs`).Scan(
+		&out.id, &out.typ, &out.status, &out.created, &out.description, &out.started,
+		&out.finished, &out.modified, &out.fractionCompleted, &out.username, &out.descriptorIDs,
+		&out.err, &out.coordinatorID,
+	)
+	if !reflect.DeepEqual(in, out) {
+		diff := strings.Join(pretty.Diff(in, out), "\n")
+		t.Fatalf("in job did not match out job:\n%s", diff)
 	}
 }
