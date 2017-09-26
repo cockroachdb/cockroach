@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/abortcache"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -639,7 +640,7 @@ func TestProcessRangeDescriptorUpdate(t *testing.T) {
 	r := &Replica{
 		RangeID:    desc.RangeID,
 		store:      store,
-		abortCache: NewAbortCache(desc.RangeID),
+		abortCache: abortcache.New(desc.RangeID),
 	}
 	r.raftMu.timedMutex = makeTimedMutex(nil)
 	if err := r.init(desc, store.Clock(), 0); err != nil {
@@ -2039,7 +2040,7 @@ func TestStoreGCThreshold(t *testing.T) {
 		}
 		repl.mu.Lock()
 		gcThreshold := repl.mu.state.GCThreshold
-		pgcThreshold, err := repl.mu.stateLoader.loadGCThreshold(context.Background(), store.Engine())
+		pgcThreshold, err := repl.mu.stateLoader.LoadGCThreshold(context.Background(), store.Engine())
 		repl.mu.Unlock()
 		if err != nil {
 			t.Fatal(err)

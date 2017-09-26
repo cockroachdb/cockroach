@@ -23,6 +23,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -45,7 +46,7 @@ func TrackRaftProtos() func() []reflect.Type {
 		funcName((*gossip.Gossip).AddInfoProto),
 		// Replica destroyed errors are written to disk, but they are
 		// deliberately per-replica values.
-		funcName((replicaStateLoader).setReplicaDestroyedError),
+		funcName((stateloader.Instance).SetReplicaDestroyedError),
 	}
 
 	belowRaftProtos := struct {

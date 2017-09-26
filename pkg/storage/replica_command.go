@@ -36,8 +36,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/abortcache"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -619,8 +621,8 @@ func declareKeysEndTransaction(
 			})
 
 			spans.Add(SpanReadOnly, roachpb.Span{
-				Key:    abortCacheMinKey(header.RangeID),
-				EndKey: abortCacheMaxKey(header.RangeID)})
+				Key:    abortcache.MinKey(header.RangeID),
+				EndKey: abortcache.MaxKey(header.RangeID)})
 		}
 		if mt := et.InternalCommitTrigger.MergeTrigger; mt != nil {
 			// Merges write to the left side and delete and read from the right.
@@ -1524,14 +1526,14 @@ func evalGC(
 
 	if newThreshold != (hlc.Timestamp{}) {
 		pd.Replicated.State.GCThreshold = newThreshold
-		if err := stateLoader.setGCThreshold(ctx, batch, cArgs.Stats, &newThreshold); err != nil {
+		if err := stateLoader.SetGCThreshold(ctx, batch, cArgs.Stats, &newThreshold); err != nil {
 			return EvalResult{}, err
 		}
 	}
 
 	if newTxnSpanGCThreshold != (hlc.Timestamp{}) {
 		pd.Replicated.State.TxnSpanGCThreshold = newTxnSpanGCThreshold
-		if err := stateLoader.setTxnSpanGCThreshold(ctx, batch, cArgs.Stats, &newTxnSpanGCThreshold); err != nil {
+		if err := stateLoader.SetTxnSpanGCThreshold(ctx, batch, cArgs.Stats, &newTxnSpanGCThreshold); err != nil {
 			return EvalResult{}, err
 		}
 	}
@@ -1980,7 +1982,7 @@ func evalTruncateLog(
 	pd.Replicated.State.TruncatedState = tState
 	pd.Replicated.RaftLogDelta = &ms.SysBytes
 
-	return pd, cArgs.EvalCtx.makeReplicaStateLoader().setTruncatedState(ctx, batch, cArgs.Stats, tState)
+	return pd, cArgs.EvalCtx.makeReplicaStateLoader().SetTruncatedState(ctx, batch, cArgs.Stats, tState)
 }
 
 func newFailedLeaseTrigger(isTransfer bool) EvalResult {
@@ -2147,7 +2149,7 @@ func evalNewLease(
 	}
 
 	// Store the lease to disk & in-memory.
-	if err := rec.makeReplicaStateLoader().setLease(ctx, batch, ms, lease); err != nil {
+	if err := rec.makeReplicaStateLoader().SetLease(ctx, batch, ms, lease); err != nil {
 		return newFailedLeaseTrigger(isTransfer), err
 	}
 
@@ -3087,7 +3089,7 @@ func splitTrigger(
 		//
 		// TODO(tschottdorf): why would this use r.store.Engine() and not the
 		// batch?
-		leftLease, err := rec.makeReplicaStateLoader().loadLease(ctx, rec.Engine())
+		leftLease, err := rec.makeReplicaStateLoader().LoadLease(ctx, rec.Engine())
 		if err != nil {
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to load lease")
 		}
@@ -3105,7 +3107,7 @@ func splitTrigger(
 		rightLease := leftLease
 		rightLease.Replica = replica
 
-		gcThreshold, err := rec.makeReplicaStateLoader().loadGCThreshold(ctx, rec.Engine())
+		gcThreshold, err := rec.makeReplicaStateLoader().LoadGCThreshold(ctx, rec.Engine())
 		if err != nil {
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to load GCThreshold")
 		}
@@ -3113,7 +3115,7 @@ func splitTrigger(
 			log.VEventf(ctx, 1, "LHS's GCThreshold of split is not set")
 		}
 
-		txnSpanGCThreshold, err := rec.makeReplicaStateLoader().loadTxnSpanGCThreshold(ctx, rec.Engine())
+		txnSpanGCThreshold, err := rec.makeReplicaStateLoader().LoadTxnSpanGCThreshold(ctx, rec.Engine())
 		if err != nil {
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to load TxnSpanGCThreshold")
 		}
@@ -3163,8 +3165,8 @@ func splitTrigger(
 			// clobber downstream simply because that's what 1.0 does and if we
 			// don't write it here, then a 1.0 version applying it as a follower
 			// won't write a HardState at all and is guaranteed to crash.
-			rsl := makeReplicaStateLoader(rec.repl.store.cfg.Settings, split.RightDesc.RangeID)
-			if err := rsl.synthesizeRaftState(ctx, batch); err != nil {
+			rsl := stateloader.Make(rec.repl.store.cfg.Settings, split.RightDesc.RangeID)
+			if err := rsl.SynthesizeRaftState(ctx, batch); err != nil {
 				return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to synthesize initial Raft state")
 			}
 		}
@@ -3386,7 +3388,7 @@ func mergeTrigger(
 	mergedMS.Add(msRange)
 
 	// Set stats for updated range.
-	if err := rec.makeReplicaStateLoader().setMVCCStats(ctx, batch, &mergedMS); err != nil {
+	if err := rec.makeReplicaStateLoader().SetMVCCStats(ctx, batch, &mergedMS); err != nil {
 		return EvalResult{}, errors.Errorf("unable to write MVCC stats: %s", err)
 	}
 
