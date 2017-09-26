@@ -104,7 +104,8 @@ func (se *StreamEncoder) AddRow(row sqlbase.EncDatumRow) error {
 			if !ok {
 				enc = preferredEncoding
 			}
-			if enc != sqlbase.DatumEncoding_VALUE && sqlbase.HasCompositeKeyEncoding(row[i].Type.SemanticType) {
+			if enc != sqlbase.DatumEncoding_VALUE && (sqlbase.HasCompositeKeyEncoding(row[i].Type.SemanticType) ||
+				sqlbase.MustBeValueEncoded(row[i].Type.SemanticType)) {
 				// Force VALUE encoding for composite types (key encodings may lose data).
 				enc = sqlbase.DatumEncoding_VALUE
 			}

@@ -10,6 +10,23 @@ SELECT ARRAY[1, 2, 3]
 ----
 {1,2,3}
 
+statement ok
+CREATE TABLE k (
+  k INT PRIMARY KEY
+)
+
+statement ok
+INSERT INTO k VALUES (1), (2), (3), (4), (5)
+
+query T rowsort
+SELECT ARRAY[k] FROM k
+----
+{1}
+{2}
+{3}
+{4}
+{5}
+
 query error expected 1 to be of type bool, found type int
 SELECT ARRAY['a', true, 1]
 
@@ -270,6 +287,16 @@ CREATE TABLE badtable (b INT[] PRIMARY KEY)
 statement error column b is of type ARRAY and thus is not indexable
 CREATE TABLE a (b INT[] UNIQUE)
 
+
+# Regression test for #18745
+
+statement ok
+CREATE TABLE ident (x INT)
+
+query T
+SELECT ARRAY[ROW()] FROM ident
+----
+
 statement error column b is of type ARRAY and thus is not indexable
 CREATE TABLE a (
   b INT[],
@@ -387,7 +414,7 @@ DELETE FROM a
 statement ok
 INSERT INTO a VALUES (ARRAY[NULL::INT]), (ARRAY[NULL::INT, 1]), (ARRAY[1, NULL::INT]), (ARRAY[NULL::INT, NULL::INT])
 
-query T
+query T rowsort
 SELECT * FROM a
 ----
 {NULL}
@@ -456,7 +483,7 @@ CREATE TABLE a (b BOOL[])
 statement ok
 INSERT INTO a VALUES (ARRAY[]), (ARRAY[TRUE]), (ARRAY[FALSE]), (ARRAY[TRUE, TRUE]), (ARRAY[FALSE, TRUE])
 
-query T
+query T rowsort
 SELECT b FROM a
 ----
 {}
@@ -604,7 +631,7 @@ CREATE TABLE a (b STRING[] COLLATE en)
 statement ok
 INSERT INTO a VALUES (ARRAY['hello' COLLATE en]), (ARRAY['goodbye' COLLATE en])
 
-query T
+query T rowsort
 SELECT * FROM a
 ----
 {"hello"}
