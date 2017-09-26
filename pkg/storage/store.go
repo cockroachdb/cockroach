@@ -655,6 +655,7 @@ type StoreTestingKnobs struct {
 	// ReplayProtectionFilterWrapper.
 	// TODO(bdarnell,tschottdorf): Migrate existing tests which use this
 	// to one of the other filters. See #10493
+	// TODO(andrei): Provide guidance on what to use instead for trapping reads.
 	TestingEvalFilter storagebase.ReplicaCommandFilter
 
 	// TestingApplyFilter is called before applying the results of a

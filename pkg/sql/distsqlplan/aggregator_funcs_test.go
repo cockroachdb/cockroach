@@ -131,7 +131,7 @@ func checkDistAggregationInfo(
 		}
 	}
 
-	txn := client.NewTxn(srv.KVClient().(*client.DB))
+	txn := client.NewTxn(srv.KVClient().(*client.DB), srv.NodeID())
 
 	// First run a flow that aggregates all the rows without any local stages.
 
