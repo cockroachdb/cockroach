@@ -160,6 +160,9 @@ type ExportStorage interface {
 
 	// Delete removes the named file from the store.
 	Delete(ctx context.Context, basename string) error
+
+	// Size returns the length of the named file in bytes.
+	Size(ctx context.Context, basename string) (int64, error)
 }
 
 type localFileStorage struct {
@@ -221,6 +224,14 @@ func (l *localFileStorage) Delete(_ context.Context, basename string) error {
 	return os.Remove(filepath.Join(l.base, basename))
 }
 
+func (l *localFileStorage) Size(_ context.Context, basename string) (int64, error) {
+	fi, err := os.Stat(filepath.Join(l.base, basename))
+	if err != nil {
+		return 0, err
+	}
+	return fi.Size(), nil
+}
+
 func (*localFileStorage) Close() error {
 	return nil
 }
@@ -255,7 +266,11 @@ func (h *httpStorage) Conf() roachpb.ExportStorage {
 }
 
 func (h *httpStorage) ReadFile(_ context.Context, basename string) (io.ReadCloser, error) {
-	return h.req("GET", basename, nil)
+	resp, err := h.req("GET", basename, nil)
+	if err != nil {
+		return nil, err
+	}
+	return resp.Body, nil
 }
 
 func (h *httpStorage) WriteFile(_ context.Context, basename string, content io.ReadSeeker) error {
@@ -268,11 +283,22 @@ func (h *httpStorage) Delete(_ context.Context, basename string) error {
 	return err
 }
 
+func (h *httpStorage) Size(_ context.Context, basename string) (int64, error) {
+	resp, err := h.req("HEAD", basename, nil)
+	if err != nil {
+		return 0, err
+	}
+	if resp.ContentLength < 0 {
+		return 0, errors.Errorf("bad ContentLength: %d", resp.ContentLength)
+	}
+	return resp.ContentLength, nil
+}
+
 func (h *httpStorage) Close() error {
 	return nil
 }
 
-func (h *httpStorage) req(method, file string, body io.Reader) (io.ReadCloser, error) {
+func (h *httpStorage) req(method, file string, body io.Reader) (*http.Response, error) {
 	dest := *h.base
 	if hosts := len(h.hosts); hosts > 1 {
 		if file == "" {
@@ -299,7 +325,7 @@ func (h *httpStorage) req(method, file string, body io.Reader) (io.ReadCloser, e
 		_ = resp.Body.Close()
 		return nil, errors.Errorf("error response from server: %s %q", resp.Status, body)
 	}
-	return resp.Body, nil
+	return resp, nil
 }
 
 type s3Storage struct {
@@ -347,6 +373,11 @@ func (s *s3Storage) ReadFile(_ context.Context, basename string) (io.ReadCloser,
 
 func (s *s3Storage) Delete(_ context.Context, basename string) error {
 	return s.bucket.Delete(path.Join(s.prefix, basename))
+}
+
+func (s *s3Storage) Size(_ context.Context, basename string) (int64, error) {
+	// TODO(mjibson): https://github.com/rlmcpherson/s3gof3r/issues/124
+	return 0, errors.New("Size unsupported for S3")
 }
 
 func (s *s3Storage) Close() error {
@@ -408,6 +439,16 @@ func (g *gcsStorage) ReadFile(ctx context.Context, basename string) (io.ReadClos
 
 func (g *gcsStorage) Delete(ctx context.Context, basename string) error {
 	return g.bucket.Object(path.Join(g.prefix, basename)).Delete(ctx)
+}
+
+func (g *gcsStorage) Size(ctx context.Context, basename string) (int64, error) {
+	r, err := g.bucket.Object(path.Join(g.prefix, basename)).NewReader(ctx)
+	if err != nil {
+		return 0, err
+	}
+	sz := r.Size()
+	_ = r.Close()
+	return sz, nil
 }
 
 func (g *gcsStorage) Close() error {
@@ -556,6 +597,14 @@ func (s *azureStorage) Delete(_ context.Context, basename string) error {
 		s.client.DeleteBlob(s.conf.Container, path.Join(s.prefix, basename), nil),
 		"deleting blob",
 	)
+}
+
+func (s *azureStorage) Size(_ context.Context, basename string) (int64, error) {
+	b, err := s.client.GetBlobProperties(s.conf.Container, path.Join(s.prefix, basename))
+	if err != nil {
+		return 0, errors.Wrap(err, "get blob properties")
+	}
+	return b.ContentLength, nil
 }
 
 func (s *azureStorage) Close() error {
