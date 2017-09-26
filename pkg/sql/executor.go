@@ -526,7 +526,7 @@ func (e *Executor) Prepare(
 		// TODO(vivek): perhaps we should be more consistent and update
 		// session.TxnState.mu.txn, but more thought needs to be put into whether that
 		// is really needed.
-		txn = client.NewTxn(e.cfg.DB)
+		txn = client.NewTxn(e.cfg.DB, e.cfg.NodeID.Get())
 		if err := txn.SetIsolation(session.DefaultIsolationLevel); err != nil {
 			panic(fmt.Errorf("cannot set up txn for prepare %q: %v", stmtStr, err))
 		}

@@ -104,7 +104,7 @@ func TestJoinReader(t *testing.T) {
 				EvalCtx:  evalCtx,
 				Settings: cluster.MakeTestingClusterSettings(),
 				// Pass a DB without a TxnCoordSender.
-				txn: client.NewTxn(client.NewDB(s.DistSender(), s.Clock())),
+				txn: client.NewTxn(client.NewDB(s.DistSender(), s.Clock()), s.NodeID()),
 			}
 
 			in := &RowBuffer{}
@@ -176,7 +176,7 @@ func TestJoinReaderDrain(t *testing.T) {
 		EvalCtx:  evalCtx,
 		Settings: s.ClusterSettings(),
 		// Pass a DB without a TxnCoordSender.
-		txn: client.NewTxn(client.NewDB(s.DistSender(), s.Clock())),
+		txn: client.NewTxn(client.NewDB(s.DistSender(), s.Clock()), s.NodeID()),
 	}
 
 	encRow := make(sqlbase.EncDatumRow, 1)

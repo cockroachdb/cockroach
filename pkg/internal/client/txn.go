@@ -36,6 +36,11 @@ import (
 // concurrent use by multiple goroutines.
 type Txn struct {
 	db *DB
+	// gatewayNodeID, if != 0, is the ID of the node on whose behalf this
+	// transaction is running. Normally this is the current node, but in the case
+	// of Txns created on remote nodes by DistSQL this will be the gateway.
+	// It will be attached to all requests sent through this transaction.
+	gatewayNodeID roachpb.NodeID
 
 	// The following fields are not safe for concurrent modification.
 	// They should be set before operating on the transaction.
@@ -98,8 +103,15 @@ type Txn struct {
 }
 
 // NewTxn returns a new txn.
-func NewTxn(db *DB) *Txn {
-	return NewTxnWithProto(db, roachpb.MakeTransaction(
+//
+// gatewayNodeID: If != 0, this is the ID of the node on whose behalf this
+//   transaction is running. Normally this is the current node, but in the case
+//   of Txns created on remote nodes by DistSQL this will be the gateway.
+//   If 0 is passed, then no value is going to be filled in the batches sent
+//   through this txn. This will have the effect that the DistSender will fill
+//   in the batch with the current node's ID.
+func NewTxn(db *DB, gatewayNodeID roachpb.NodeID) *Txn {
+	return NewTxnWithProto(db, gatewayNodeID, roachpb.MakeTransaction(
 		"unnamed",
 		nil, // baseKey
 		roachpb.NormalUserPriority,
@@ -109,14 +121,15 @@ func NewTxn(db *DB) *Txn {
 	))
 }
 
-// NewTxnWithProto returns a new txn with the provided Transaction proto.
-// This allows a client.Txn to be created with an already initialized proto.
-func NewTxnWithProto(db *DB, proto roachpb.Transaction) *Txn {
+// NewTxnWithProto is like NewTxn, except it returns a new txn with the provided
+// Transaction proto. This allows a client.Txn to be created with an already
+// initialized proto.
+func NewTxnWithProto(db *DB, gatewayNodeID roachpb.NodeID, proto roachpb.Transaction) *Txn {
 	if db == nil {
 		log.Fatalf(context.TODO(), "attempting to create txn with nil db for Transaction: %s", proto)
 	}
 	proto.AssertInitialized(context.TODO())
-	txn := &Txn{db: db}
+	txn := &Txn{db: db, gatewayNodeID: gatewayNodeID}
 	txn.mu.Proto = proto
 	return txn
 }
@@ -832,6 +845,15 @@ func (txn *Txn) Send(
 	if ba.ReadConsistency != roachpb.CONSISTENT {
 		return nil, roachpb.NewErrorf("cannot use %s ReadConsistency in txn",
 			ba.ReadConsistency)
+	}
+
+	// Fill in the GatewayNodeID on the batch if the txn knows it.
+	// NOTE(andrei): It seems a bit ugly that we're filling in the batches here as
+	// opposed to the point where the requests are being created, but
+	// unfortunately requests are being created in many ways and this was the best
+	// place I found to set this field.
+	if txn.gatewayNodeID != 0 {
+		ba.Header.GatewayNodeID = txn.gatewayNodeID
 	}
 
 	lastIndex := len(ba.Requests) - 1
