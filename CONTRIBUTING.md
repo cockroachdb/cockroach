@@ -8,23 +8,35 @@
 
 ## Prerequisites
 
-Before you start contributing, review these [basic guidelines](https://www.cockroachlabs.com/docs/stable/contribute-to-cockroachdb.html) on finding a project, determining its complexity, and learning what to expect in your collaboration with the Cockroach Labs team.
+Before you start contributing, review these [basic
+guidelines](https://www.cockroachlabs.com/docs/stable/contribute-to-cockroachdb.html)
+on finding a project, determining its complexity, and learning what to
+expect in your collaboration with the Cockroach Labs team.
 
 ## Getting and Building
 
 1. Install the following prerequisites, as necessary:
-   - A C++ compiler that supports C++11. Note that GCC prior to 6.0 doesn't
-    work due to https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48891
-   - A Go environment with a recent 64-bit version of the toolchain. Note that
-    the Makefile enforces the specific version required, as it is updated
-    frequently.
-   - Git 1.9+
-   - Bash (4+ is preferred)
-   - GNU Make (3.81+ is known to work)
-   - CMake 3.1+
-   - Autoconf 2.68+
-   - Optional: NodeJS 6.x and Yarn 0.22.0+. Required when compiling protocol
-    buffers.
+
+   - Either a working Docker install able to run GNU/Linux binaries
+     (e.g. Docker on Linux, macOS, Windows), so you can reuse our
+     pre-populated Docker image with all necessary development
+     dependencies; or
+
+   - The tools needed to build CockroachDB from scratch:
+
+     - A C++ compiler that supports C++11. Note that GCC prior to 6.0 doesn't
+       work due to https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48891
+     - The standard C/C++ development headers on your system.
+     - A Go environment with a recent 64-bit version of the toolchain. Note that
+       the Makefile enforces the specific version required, as it is updated
+       frequently.
+     - Git 1.9+
+     - Bash (4+ is preferred)
+     - GNU Make (3.81+ is known to work)
+     - CMake 3.1+
+     - Autoconf 2.68+
+     - Optional: NodeJS 6.x and Yarn 0.22.0+. Required when compiling protocol
+       buffers.
 
     Note that at least 4GB of RAM is required to build from source and run tests.
 
@@ -33,31 +45,35 @@ Before you start contributing, review these [basic guidelines](https://www.cockr
    ```shell
    go get -d github.com/cockroachdb/cockroach
    cd $GOPATH/src/github.com/cockroachdb/cockroach
-	 ```
+   ```
 
-3. Run `make build`, `make test`, or anything else our Makefile offers. Note
-that the first time you run `make`, it can take some time to download and
-install various dependencies. After running `make build`, the `cockroach`
-executable will be in your current directory and can be run as shown in the
-[README](README.md).
+3. Run `make build`, `make test`, or anything else our Makefile offers.
+
+If you wish to reuse our builder image instead of installing all the
+dependencies manually, prefix the `make` command with
+`build/builder.sh`; for example `build/builder.sh make build`.
+
+Note that the first time you run `make`, it can take some time to
+download and install various dependencies. After running `make build`,
+the `cockroach` executable will be in your current directory and can
+be run as shown in the [README](README.md).
 
 ### Other Considerations
 
-- The default binary contains core open-source functionally covered by the
-  Apache License 2 (APL2) and enterprise functionality covered by the
-  CockroachDB Community License (CCL). To build a pure open-source (APL2)
-  version excluding enterprise functionality, use `make buildoss`. See this
-  [blog post] for more details.
+- The default binary contains core open-source functionally covered by
+  the Apache License 2 (APL2) and enterprise functionality covered by
+  the CockroachDB Community License (CCL). To build a pure open-source
+  (APL2) version excluding enterprise functionality, use `make
+  buildoss`. See this [blog post] for more details.
 
   [blog post]: https://www.cockroachlabs.com/blog/how-were-building-a-business-to-last/
 
-- If you edit a `.proto` or `.ts` file, you will need to manually regenerate
-  the associated `.pb.{go,cc,h}` or `.js` files using `make generate`.
+- If you edit a `.proto` or `.ts` file, you will need to manually
+  regenerate the associated `.pb.{go,cc,h}` or `.js` files using `make
+  generate`.
 
-- We advise to run `make generate` using our embedded Docker setup.
-  `build/builder.sh` is a wrapper script designed to make this convenient. You
-  can run `build/builder.sh make generate` from the repository root to get the
-  intended result.
+- You can also run `build/builder.sh make generate` from the
+  repository root to get the intended result.
 
 - If you plan on working on the UI, check out [the UI README](pkg/ui).
 
@@ -69,15 +85,18 @@ executable will be in your current directory and can be run as shown in the
 
 ## Style Guide
 
-[Style Guide](STYLE.md)
+See our separate [style Guide](STYLE.md) document.
 
 ## Code Review Workflow
 
-- All contributors need to sign the [Contributor License Agreement](https://cla-assistant.io/cockroachdb/cockroach).
+- All contributors need to sign the [Contributor License
+  Agreement](https://cla-assistant.io/cockroachdb/cockroach).
 
-- Create a local feature branch to do work on, ideally on one thing at a time.
-  If you are working on your own fork, see [this tip](http://blog.campoy.cat/2014/03/github-and-go-forking-pull-requests-and.html)
-  on forking in Go, which ensures that Go import paths will be correct.
+- Create a local feature branch to do work on, ideally on one thing at
+  a time.  If you are working on your own fork, see [this
+  tip](http://blog.campoy.cat/2014/03/github-and-go-forking-pull-requests-and.html)
+  on forking in Go, which ensures that Go import paths will be
+  correct.
 
   ```shell
   git checkout -b update-readme
@@ -125,7 +144,7 @@ executable will be in your current directory and can be run as shown in the
 
 - Run the linters, code generators, and unit test suites locally:
 
-  ``` shell
+  ```shell
   make pre-push
   ````
 
@@ -142,34 +161,39 @@ executable will be in your current directory and can be run as shown in the
   git push -u <yourfork> update-readme
   ```
 
-- Then [create a pull request using GitHub’s UI](https://help.github.com/articles/creating-a-pull-request). If you know of
-  another GitHub user particularly suited to reviewing your pull request, be
-  sure to mention them in the pull request body. If you possess the necessary
-  GitHub privileges, please also [assign them to the pull request using
-  GitHub's UI](https://help.github.com/articles/assigning-issues-and-pull-requests-to-other-github-users/).
+- Then [create a pull request using GitHub’s
+  UI](https://help.github.com/articles/creating-a-pull-request). If
+  you know of another GitHub user particularly suited to reviewing
+  your pull request, be sure to mention them in the pull request
+  body. If you possess the necessary GitHub privileges, please also
+  [assign them to the pull request using GitHub's
+  UI](https://help.github.com/articles/assigning-issues-and-pull-requests-to-other-github-users/).
   This will help focus and expedite the code review process.
 
-- Address test failures and feedback by amending your commits. If your change
-  contains multiple commits, address each piece of feedback by amending that
-  commit to which the particular feedback is aimed. Wait (or ask) for new
-  feedback on those commits if they are not straightforward. An `LGTM` ("looks
-  good to me") by someone qualified is usually posted when you're free to go
-  ahead and merge. Most new contributors aren't allowed to merge themselves;
-  in that case, we'll do it for you.
+- Address test failures and feedback by amending your commits. If your
+  change contains multiple commits, address each piece of feedback by
+  amending that commit to which the particular feedback is aimed. Wait
+  (or ask) for new feedback on those commits if they are not
+  straightforward. An `LGTM` ("looks good to me") by someone qualified
+  is usually posted when you're free to go ahead and merge. Most new
+  contributors aren't allowed to merge themselves; in that case, we'll
+  do it for you.
 
 ## Debugging
 
 Peeking into a running cluster can be done in several ways:
 
-- the [net/trace](https://godoc.org/golang.org/x/net/trace) endpoint at
-  `/debug/requests`.  It has a breakdown of the recent traced requests, in
-  particularly slow ones. Two families are traced: `node` and `coord`, the
-  former (and likely more interesting one) containing what happens inside of
-  `Node`/`Store`/`Replica` and the other inside of the coordinator
-  (`TxnCoordSender`).
-- [pprof](https://golang.org/pkg/net/http/pprof/) gives us (among other things)
-  heap and cpu profiles; [this golang blog post](http://blog.golang.org/profiling-go-programs) explains it extremely well and
-  [this one by Dmitry Vuykov](https://software.intel.com/en-us/blogs/2014/05/10/debugging-performance-issues-in-go-programs)
+- the [net/trace](https://godoc.org/golang.org/x/net/trace) endpoint
+  at `/debug/requests`.  It has a breakdown of the recent traced
+  requests, in particularly slow ones. Two families are traced: `node`
+  and `coord`, the former (and likely more interesting one) containing
+  what happens inside of `Node`/`Store`/`Replica` and the other inside
+  of the coordinator (`TxnCoordSender`).
+- [pprof](https://golang.org/pkg/net/http/pprof/) gives us (among
+  other things) heap and cpu profiles; [this golang blog
+  post](http://blog.golang.org/profiling-go-programs) explains it
+  extremely well and [this one by Dmitry
+  Vuykov](https://software.intel.com/en-us/blogs/2014/05/10/debugging-performance-issues-in-go-programs)
   goes into even more detail.
 
 An easy way to locally run a workload against a cluster are the acceptance
