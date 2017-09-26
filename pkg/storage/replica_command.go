@@ -2062,6 +2062,10 @@ func evalRequestLease(
 			return newFailedLeaseTrigger(false /* isTransfer */), rErr
 		}
 		if args.Lease.Type() == roachpb.LeaseExpiration {
+			// NB: Avoid mutating pointers in the argument which might be shared with
+			// the caller.
+			t := *args.Lease.Expiration
+			args.Lease.Expiration = &t
 			args.Lease.Expiration.Forward(prevLease.GetExpiration())
 		}
 	} else if prevLease.Type() == roachpb.LeaseExpiration && effectiveStart.Less(prevLease.GetExpiration()) {
