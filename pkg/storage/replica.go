@@ -591,6 +591,8 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	if store.cfg.StorePool != nil {
 		r.leaseholderStats = newReplicaStats(store.Clock(), store.cfg.StorePool.getNodeLocalityString)
 	}
+	// Pass nil for the localityOracle because we intentionally don't track the
+	// origin locality of write load.
 	r.writeStats = newReplicaStats(store.Clock(), nil)
 
 	// Init rangeStr with the range ID.
@@ -4547,7 +4549,16 @@ func (r *Replica) applyRaftCommand(
 	if rResult.State.RaftAppliedIndex <= 0 {
 		log.Fatalf(ctx, "raft command index is <= 0")
 	}
-	r.writeStats.recordCount(math.Max(float64(rResult.Delta.KeyCount), 1), 0)
+	if writeBatch != nil && len(writeBatch.Data) > 0 {
+		// Record the write activity, passing a 0 nodeID because replica.writeStats
+		// intentionally doesn't track the origin of the writes.
+		mutationCount, err := engine.RocksDBBatchCount(writeBatch.Data)
+		if err != nil {
+			log.Errorf(ctx, "unable to read header of committed WriteBatch: %s", err)
+		} else {
+			r.writeStats.recordCount(float64(mutationCount), 0 /* nodeID */)
+		}
+	}
 
 	r.mu.Lock()
 	oldRaftAppliedIndex := r.mu.state.RaftAppliedIndex
