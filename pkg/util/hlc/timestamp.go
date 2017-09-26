@@ -46,6 +46,11 @@ func (t Timestamp) Add(wallTime int64, logical int32) Timestamp {
 	}
 }
 
+// Clone return a new timestamp that has the same contents as the receiver.
+func (t Timestamp) Clone() *Timestamp {
+	return &t
+}
+
 // Next returns the timestamp with the next later timestamp.
 func (t Timestamp) Next() Timestamp {
 	if t.Logical == math.MaxInt32 {

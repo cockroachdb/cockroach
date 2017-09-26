@@ -1586,7 +1586,7 @@ func (r *Replica) setLastReplicaDescriptors(req *RaftMessageRequest) {
 func (r *Replica) GetMVCCStats() enginepb.MVCCStats {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.state.Stats
+	return *r.mu.state.Stats
 }
 
 // ContainsKey returns whether this range contains the specified key.
@@ -3039,6 +3039,24 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 	}
 	defer r.store.enqueueRaftUpdateCheck(r.RangeID)
 
+	// Too verbose even for verbose logging, so manually enable if you want to
+	// debug proposal sizes.
+	if false {
+		log.Infof(p.ctx, `%s: proposal: %d
+  RaftCommand.ProposerReplica:               %d
+  RaftCommand.ProposerLease:                 %d
+  RaftCommand.ReplicatedEvalResult:          %d
+  RaftCommand.ReplicatedEvalResult.Delta:    %d
+  RaftCommand.WriteBatch:                    %d
+`, p.Request.Summary(), len(data),
+			p.command.ProposerReplica.Size(),
+			p.command.ProposerLease.Size(),
+			p.command.ReplicatedEvalResult.Size(),
+			p.command.ReplicatedEvalResult.Delta.Size(),
+			p.command.WriteBatch.Size(),
+		)
+	}
+
 	const largeProposalEventThresholdBytes = 2 << 19 // 512kb
 
 	// Log an event if this is a large proposal. These are more likely to cause
@@ -4285,10 +4303,10 @@ func (r *Replica) checkForcedErrLocked(
 func (r *Replica) processRaftCommand(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
-	term, index uint64,
+	term, raftIndex uint64,
 	raftCmd storagebase.RaftCommand,
 ) bool {
-	if index == 0 {
+	if raftIndex == 0 {
 		log.Fatalf(ctx, "processRaftCommand requires a non-zero index")
 	}
 
@@ -4359,8 +4377,6 @@ func (r *Replica) processRaftCommand(
 			raftCmd.ReplicatedEvalResult = storagebase.ReplicatedEvalResult{}
 			raftCmd.WriteBatch = nil
 		}
-		raftCmd.ReplicatedEvalResult.State.RaftAppliedIndex = index
-		raftCmd.ReplicatedEvalResult.State.LeaseAppliedIndex = leaseIndex
 
 		// Update the node clock with the serviced request. This maintains
 		// a high water mark for all ops serviced, so that received ops without
@@ -4387,7 +4403,7 @@ func (r *Replica) processRaftCommand(
 				r.store.engine,
 				r.raftMu.sideloaded,
 				term,
-				index,
+				raftIndex,
 				raftCmd.ReplicatedEvalResult.StartKey,
 				raftCmd.ReplicatedEvalResult.EndKey,
 				*raftCmd.ReplicatedEvalResult.AddSSTable,
@@ -4396,8 +4412,10 @@ func (r *Replica) processRaftCommand(
 			raftCmd.ReplicatedEvalResult.AddSSTable = nil
 		}
 
-		raftCmd.ReplicatedEvalResult.Delta, pErr = r.applyRaftCommand(
-			ctx, idKey, raftCmd.ReplicatedEvalResult, writeBatch)
+		var delta enginepb.MVCCStats
+		delta, pErr = r.applyRaftCommand(
+			ctx, idKey, raftCmd.ReplicatedEvalResult, raftIndex, leaseIndex, writeBatch)
+		raftCmd.ReplicatedEvalResult.Delta = enginepb.MVCCNetworkStats(delta)
 
 		if filter := r.store.cfg.TestingKnobs.TestingPostApplyFilter; pErr == nil && filter != nil {
 			pErr = filter(storagebase.ApplyFilterArgs{
@@ -4444,7 +4462,8 @@ func (r *Replica) processRaftCommand(
 		//
 		// Note that this must happen after committing (the engine.Batch), but
 		// before notifying a potentially waiting client.
-		r.handleEvalResultRaftMuLocked(ctx, lResult, raftCmd.ReplicatedEvalResult)
+		r.handleEvalResultRaftMuLocked(ctx, lResult,
+			raftCmd.ReplicatedEvalResult, raftIndex, leaseIndex)
 	}
 
 	if proposedLocally {
@@ -4542,9 +4561,10 @@ func (r *Replica) applyRaftCommand(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
 	rResult storagebase.ReplicatedEvalResult,
+	raftAppliedIndex, leaseAppliedIndex uint64,
 	writeBatch *storagebase.WriteBatch,
 ) (enginepb.MVCCStats, *roachpb.Error) {
-	if rResult.State.RaftAppliedIndex <= 0 {
+	if raftAppliedIndex <= 0 {
 		log.Fatalf(ctx, "raft command index is <= 0")
 	}
 	r.writeStats.recordCount(math.Max(float64(rResult.Delta.KeyCount), 1), 0)
@@ -4552,16 +4572,16 @@ func (r *Replica) applyRaftCommand(
 	r.mu.Lock()
 	oldRaftAppliedIndex := r.mu.state.RaftAppliedIndex
 	oldLeaseAppliedIndex := r.mu.state.LeaseAppliedIndex
-	ms := r.mu.state.Stats
+	ms := *r.mu.state.Stats
 	r.mu.Unlock()
 
-	if rResult.State.RaftAppliedIndex != oldRaftAppliedIndex+1 {
+	if raftAppliedIndex != oldRaftAppliedIndex+1 {
 		// If we have an out of order index, there's corruption. No sense in
 		// trying to update anything or running the command. Simply return
 		// a corruption error.
 		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
 			errors.Errorf("applied index jumped from %d to %d",
-				oldRaftAppliedIndex, rResult.State.RaftAppliedIndex)))
+				oldRaftAppliedIndex, raftAppliedIndex)))
 	}
 
 	batch := r.store.Engine().NewWriteOnlyBatch()
@@ -4584,7 +4604,7 @@ func (r *Replica) applyRaftCommand(
 	// requires a little additional work in order maintain the MVCC stats.
 	var appliedIndexNewMS enginepb.MVCCStats
 	if err := r.raftMu.stateLoader.setAppliedIndexBlind(ctx, writer, &appliedIndexNewMS,
-		rResult.State.RaftAppliedIndex, rResult.State.LeaseAppliedIndex); err != nil {
+		raftAppliedIndex, leaseAppliedIndex); err != nil {
 		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
 			errors.Wrap(err, "unable to set applied index")))
 	}
@@ -4594,7 +4614,7 @@ func (r *Replica) applyRaftCommand(
 	// Special-cased MVCC stats handling to exploit commutativity of stats
 	// delta upgrades. Thanks to commutativity, the command queue does not
 	// have to serialize on the stats key.
-	ms.Add(rResult.Delta)
+	ms.Add(enginepb.MVCCStats(rResult.Delta))
 	if err := r.raftMu.stateLoader.setMVCCStats(ctx, writer, &ms); err != nil {
 		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
 			errors.Wrap(err, "unable to update MVCCStats")))
@@ -4638,7 +4658,7 @@ func (r *Replica) applyRaftCommand(
 
 	elapsed := timeutil.Since(start)
 	r.store.metrics.RaftCommandCommitLatency.RecordValue(elapsed.Nanoseconds())
-	return rResult.Delta, nil
+	return enginepb.MVCCStats(rResult.Delta), nil
 }
 
 // evaluateProposalInner executes the command in a batch engine and returns
@@ -4674,7 +4694,7 @@ func (r *Replica) evaluateProposalInner(
 		var ms enginepb.MVCCStats
 		var br *roachpb.BatchResponse
 		batch, ms, br, result, pErr = r.evaluateTxnWriteBatch(ctx, idKey, ba, spans)
-		result.Replicated.Delta = ms
+		result.Replicated.Delta = enginepb.MVCCNetworkStats(ms)
 		result.Local.Reply = br
 		result.Local.Err = pErr
 		if batch == nil {

@@ -55,7 +55,7 @@ func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 		repl := &Replica{
 			RangeID: desc.RangeID,
 		}
-		repl.mu.state.Stats = enginepb.MVCCStats{
+		repl.mu.state.Stats = &enginepb.MVCCStats{
 			KeyBytes:  1,
 			ValBytes:  2,
 			KeyCount:  1,

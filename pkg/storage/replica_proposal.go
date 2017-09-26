@@ -240,40 +240,62 @@ func coalesceBool(lhs *bool, rhs *bool) {
 //
 // The passed EvalResult must not be used once passed to Merge.
 func (p *EvalResult) MergeAndDestroy(q EvalResult) error {
-	if q.Replicated.State.RaftAppliedIndex != 0 {
-		return errors.New("must not specify RaftApplyIndex")
-	}
-	if q.Replicated.State.LeaseAppliedIndex != 0 {
-		return errors.New("must not specify RaftApplyIndex")
-	}
-	if p.Replicated.State.Desc == nil {
-		p.Replicated.State.Desc = q.Replicated.State.Desc
-	} else if q.Replicated.State.Desc != nil {
-		return errors.New("conflicting RangeDescriptor")
-	}
-	q.Replicated.State.Desc = nil
+	if q.Replicated.State != nil {
+		if q.Replicated.State.RaftAppliedIndex != 0 {
+			return errors.New("must not specify RaftApplyIndex")
+		}
+		if q.Replicated.State.LeaseAppliedIndex != 0 {
+			return errors.New("must not specify RaftApplyIndex")
+		}
+		if p.Replicated.State == nil {
+			p.Replicated.State = &storagebase.ReplicaState{}
+		}
+		if p.Replicated.State.Desc == nil {
+			p.Replicated.State.Desc = q.Replicated.State.Desc
+		} else if q.Replicated.State.Desc != nil {
+			return errors.New("conflicting RangeDescriptor")
+		}
+		q.Replicated.State.Desc = nil
 
-	if p.Replicated.State.Lease == nil {
-		p.Replicated.State.Lease = q.Replicated.State.Lease
-	} else if q.Replicated.State.Lease != nil {
-		return errors.New("conflicting Lease")
-	}
-	q.Replicated.State.Lease = nil
+		if p.Replicated.State.Lease == nil {
+			p.Replicated.State.Lease = q.Replicated.State.Lease
+		} else if q.Replicated.State.Lease != nil {
+			return errors.New("conflicting Lease")
+		}
+		q.Replicated.State.Lease = nil
 
-	if p.Replicated.State.TruncatedState == nil {
-		p.Replicated.State.TruncatedState = q.Replicated.State.TruncatedState
-	} else if q.Replicated.State.TruncatedState != nil {
-		return errors.New("conflicting TruncatedState")
-	}
-	q.Replicated.State.TruncatedState = nil
+		if p.Replicated.State.TruncatedState == nil {
+			p.Replicated.State.TruncatedState = q.Replicated.State.TruncatedState
+		} else if q.Replicated.State.TruncatedState != nil {
+			return errors.New("conflicting TruncatedState")
+		}
+		q.Replicated.State.TruncatedState = nil
 
-	p.Replicated.State.GCThreshold.Forward(q.Replicated.State.GCThreshold)
-	q.Replicated.State.GCThreshold = hlc.Timestamp{}
-	p.Replicated.State.TxnSpanGCThreshold.Forward(q.Replicated.State.TxnSpanGCThreshold)
-	q.Replicated.State.TxnSpanGCThreshold = hlc.Timestamp{}
+		if q.Replicated.State.GCThreshold != nil {
+			if p.Replicated.State.GCThreshold == nil {
+				p.Replicated.State.GCThreshold = q.Replicated.State.GCThreshold
+			} else {
+				p.Replicated.State.GCThreshold.Forward(*q.Replicated.State.GCThreshold)
+			}
+			q.Replicated.State.GCThreshold = nil
+		}
+		if q.Replicated.State.TxnSpanGCThreshold != nil {
+			if p.Replicated.State.TxnSpanGCThreshold == nil {
+				p.Replicated.State.TxnSpanGCThreshold = q.Replicated.State.TxnSpanGCThreshold
+			} else {
+				p.Replicated.State.TxnSpanGCThreshold.Forward(*q.Replicated.State.TxnSpanGCThreshold)
+			}
+			q.Replicated.State.TxnSpanGCThreshold = nil
+		}
 
-	if (q.Replicated.State.Stats != enginepb.MVCCStats{}) {
-		return errors.New("must not specify Stats")
+		if q.Replicated.State.Stats != nil {
+			return errors.New("must not specify Stats")
+		}
+		if (*q.Replicated.State != storagebase.ReplicaState{}) {
+			log.Fatalf(context.TODO(), "unhandled EvalResult: %s",
+				pretty.Diff(*q.Replicated.State, storagebase.ReplicaState{}))
+		}
+		q.Replicated.State = nil
 	}
 
 	p.Replicated.BlockReads = p.Replicated.BlockReads || q.Replicated.BlockReads
@@ -307,12 +329,12 @@ func (p *EvalResult) MergeAndDestroy(q EvalResult) error {
 	}
 	q.Replicated.ComputeChecksum = nil
 
-	if p.Replicated.RaftLogDelta == nil {
+	if p.Replicated.RaftLogDelta == 0 {
 		p.Replicated.RaftLogDelta = q.Replicated.RaftLogDelta
-	} else if q.Replicated.RaftLogDelta != nil {
+	} else if q.Replicated.RaftLogDelta != 0 {
 		return errors.New("conflicting RaftLogDelta")
 	}
-	q.Replicated.RaftLogDelta = nil
+	q.Replicated.RaftLogDelta = 0
 
 	if p.Replicated.AddSSTable == nil {
 		p.Replicated.AddSSTable = q.Replicated.AddSSTable
@@ -644,7 +666,9 @@ func (r *Replica) maybeTransferRaftLeadership(ctx context.Context, target roachp
 }
 
 func (r *Replica) handleReplicatedEvalResult(
-	ctx context.Context, rResult storagebase.ReplicatedEvalResult,
+	ctx context.Context,
+	rResult storagebase.ReplicatedEvalResult,
+	raftAppliedIndex, leaseAppliedIndex uint64,
 ) (shouldAssert bool) {
 	// Fields for which no action is taken in this method are zeroed so that
 	// they don't trigger an assertion at the end of the method (which checks
@@ -664,26 +688,22 @@ func (r *Replica) handleReplicatedEvalResult(
 
 	// Update MVCC stats and Raft portion of ReplicaState.
 	r.mu.Lock()
-	r.mu.state.Stats.Add(rResult.Delta)
-	if rResult.State.RaftAppliedIndex != 0 {
-		r.mu.state.RaftAppliedIndex = rResult.State.RaftAppliedIndex
+	r.mu.state.Stats.Add(enginepb.MVCCStats(rResult.Delta))
+	if raftAppliedIndex != 0 {
+		r.mu.state.RaftAppliedIndex = raftAppliedIndex
 	}
-	if rResult.State.LeaseAppliedIndex != 0 {
-		r.mu.state.LeaseAppliedIndex = rResult.State.LeaseAppliedIndex
+	if leaseAppliedIndex != 0 {
+		r.mu.state.LeaseAppliedIndex = leaseAppliedIndex
 	}
 	needsSplitBySize := r.needsSplitBySizeRLocked()
 	r.mu.Unlock()
 
-	r.store.metrics.addMVCCStats(rResult.Delta)
-	rResult.Delta = enginepb.MVCCStats{}
+	r.store.metrics.addMVCCStats(enginepb.MVCCStats(rResult.Delta))
+	rResult.Delta = enginepb.MVCCNetworkStats{}
 
 	if needsSplitBySize {
 		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
-
-	rResult.State.Stats = enginepb.MVCCStats{}
-	rResult.State.LeaseAppliedIndex = 0
-	rResult.State.RaftAppliedIndex = 0
 
 	// The above are always present, so we assert only if there are
 	// "nontrivial" actions below.
@@ -703,7 +723,7 @@ func (r *Replica) handleReplicatedEvalResult(
 		{
 			r.mu.Lock()
 			r.mu.state.Stats.ContainsEstimates = false
-			stats := r.mu.state.Stats
+			stats := *r.mu.state.Stats
 			r.mu.Unlock()
 			if err := r.raftMu.stateLoader.setMVCCStats(ctx, r.store.Engine(), &stats); err != nil {
 				log.Fatal(ctx, errors.Wrap(err, "unable to write MVCC stats"))
@@ -731,17 +751,114 @@ func (r *Replica) handleReplicatedEvalResult(
 
 	// Update the remaining ReplicaState.
 
-	if newDesc := rResult.State.Desc; newDesc != nil {
-		if err := r.setDesc(newDesc); err != nil {
-			// Log the error. There's not much we can do because the commit may
-			// have already occurred at this point.
-			log.Fatalf(
-				ctx,
-				"failed to update range descriptor to %+v: %s",
-				newDesc, err,
-			)
+	if rResult.State != nil {
+		if newDesc := rResult.State.Desc; newDesc != nil {
+			if err := r.setDesc(newDesc); err != nil {
+				// Log the error. There's not much we can do because the commit may
+				// have already occurred at this point.
+				log.Fatalf(
+					ctx,
+					"failed to update range descriptor to %+v: %s",
+					newDesc, err,
+				)
+			}
+			rResult.State.Desc = nil
 		}
-		rResult.State.Desc = nil
+
+		if newLease := rResult.State.Lease; newLease != nil {
+			rResult.State.Lease = nil // for assertion
+
+			r.leasePostApply(ctx, *newLease)
+		}
+
+		if newTruncState := rResult.State.TruncatedState; newTruncState != nil {
+			rResult.State.TruncatedState = nil // for assertion
+
+			r.mu.Lock()
+			r.mu.state.TruncatedState = newTruncState
+			r.mu.Unlock()
+
+			// TODO(tschottdorf): everything below doesn't need to be on this
+			// goroutine. Worth moving out -- truncations are frequent and missing
+			// one of the side effects below doesn't matter. Need to be careful
+			// about the interaction with `evalTruncateLog` though, which computes
+			// some stats based on the log entries it sees. Also, sideloaded storage
+			// needs to hold the raft mu. Perhaps it should just get its own mutex
+			// (which is usually held together with raftMu, except when accessing
+			// the storage for a truncation). Or, even better, make use of the fact
+			// that all we need to synchronize is disk i/o, and there is no overlap
+			// between files *removed* during truncation and those active in Raft.
+
+			if r.store.cfg.Settings.Version.IsActive(cluster.VersionRaftLogTruncationBelowRaft) {
+				// Truncate the Raft log.
+				batch := r.store.Engine().NewWriteOnlyBatch()
+				// We know that all of the deletions from here forward will be to distinct keys.
+				writer := batch.Distinct()
+				start := engine.MakeMVCCMetadataKey(keys.RaftLogKey(r.RangeID, 0))
+				end := engine.MakeMVCCMetadataKey(
+					keys.RaftLogKey(r.RangeID, newTruncState.Index).PrefixEnd(),
+				)
+				iter := r.store.Engine().NewIterator(false /* !prefix */)
+				// Clear the log entries. Intentionally don't use range deletion
+				// tombstones (ClearRange()) due to performance concerns connected
+				// to having many range deletion tombstones. There is a chance that
+				// ClearRange will perform well here because the tombstones could be
+				// "collapsed", but it is hardly worth the risk at this point.
+				if err := writer.ClearIterRange(iter, start, end); err != nil {
+					log.Errorf(ctx, "unable to clear truncated Raft entries for %+v: %s", newTruncState, err)
+				}
+				iter.Close()
+				writer.Close()
+
+				if err := batch.Commit(false); err != nil {
+					log.Errorf(ctx, "unable to clear truncated Raft entries for %+v: %s", newTruncState, err)
+				}
+				batch.Close()
+			}
+
+			// Clear any entries in the Raft log entry cache for this range up
+			// to and including the most recently truncated index.
+			r.store.raftEntryCache.clearTo(r.RangeID, newTruncState.Index+1)
+
+			// Truncate the sideloaded storage. Note that this is safe only if the new truncated state
+			// is durably on disk (i.e.) synced. This is true at the time of writing but unfortunately
+			// could rot.
+			{
+				log.Eventf(ctx, "truncating sideloaded storage up to (and including) index %d", newTruncState.Index)
+				if err := r.raftMu.sideloaded.TruncateTo(ctx, newTruncState.Index+1); err != nil {
+					// We don't *have* to remove these entries for correctness. Log a
+					// loud error, but keep humming along.
+					log.Errorf(ctx, "while removing sideloaded files during log truncation: %s", err)
+				}
+			}
+		}
+
+		if newThresh := rResult.State.GCThreshold; newThresh != nil {
+			r.mu.Lock()
+			r.mu.state.GCThreshold = newThresh
+			r.mu.Unlock()
+			rResult.State.GCThreshold = nil
+		}
+
+		if newThresh := rResult.State.TxnSpanGCThreshold; newThresh != nil {
+			r.mu.Lock()
+			r.mu.state.TxnSpanGCThreshold = newThresh
+			r.mu.Unlock()
+			rResult.State.TxnSpanGCThreshold = nil
+		}
+
+		// ReplicaState.Stats was previously non-nullable which caused nodes to
+		// send a zero-value MVCCStats structure. If the proposal was generated by
+		// an old node, we'll have decoded that zero-value structure setting
+		// ReplicaState.Stats to a non-nil value which would trigger the "unhandled
+		// field in ReplicatedEvalResult" assertion to fire if we didn't clear it.
+		if rResult.State.Stats != nil && (*rResult.State.Stats == enginepb.MVCCStats{}) {
+			rResult.State.Stats = nil
+		}
+
+		if (*rResult.State == storagebase.ReplicaState{}) {
+			rResult.State = nil
+		}
 	}
 
 	if change := rResult.ChangeReplicas; change != nil {
@@ -759,97 +876,15 @@ func (r *Replica) handleReplicatedEvalResult(
 		rResult.ChangeReplicas = nil
 	}
 
-	if newLease := rResult.State.Lease; newLease != nil {
-		rResult.State.Lease = nil // for assertion
-
-		r.leasePostApply(ctx, *newLease)
-	}
-
-	if newTruncState := rResult.State.TruncatedState; newTruncState != nil {
-		rResult.State.TruncatedState = nil // for assertion
-
-		r.mu.Lock()
-		r.mu.state.TruncatedState = newTruncState
-		r.mu.Unlock()
-
-		// TODO(tschottdorf): everything below doesn't need to be on this
-		// goroutine. Worth moving out -- truncations are frequent and missing
-		// one of the side effects below doesn't matter. Need to be careful
-		// about the interaction with `evalTruncateLog` though, which computes
-		// some stats based on the log entries it sees. Also, sideloaded storage
-		// needs to hold the raft mu. Perhaps it should just get its own mutex
-		// (which is usually held together with raftMu, except when accessing
-		// the storage for a truncation). Or, even better, make use of the fact
-		// that all we need to synchronize is disk i/o, and there is no overlap
-		// between files *removed* during truncation and those active in Raft.
-
-		if r.store.cfg.Settings.Version.IsActive(cluster.VersionRaftLogTruncationBelowRaft) {
-			// Truncate the Raft log.
-			batch := r.store.Engine().NewWriteOnlyBatch()
-			// We know that all of the deletions from here forward will be to distinct keys.
-			writer := batch.Distinct()
-			start := engine.MakeMVCCMetadataKey(keys.RaftLogKey(r.RangeID, 0))
-			end := engine.MakeMVCCMetadataKey(
-				keys.RaftLogKey(r.RangeID, newTruncState.Index).PrefixEnd(),
-			)
-			iter := r.store.Engine().NewIterator(false /* !prefix */)
-			// Clear the log entries. Intentionally don't use range deletion
-			// tombstones (ClearRange()) due to performance concerns connected
-			// to having many range deletion tombstones. There is a chance that
-			// ClearRange will perform well here because the tombstones could be
-			// "collapsed", but it is hardly worth the risk at this point.
-			if err := writer.ClearIterRange(iter, start, end); err != nil {
-				log.Errorf(ctx, "unable to clear truncated Raft entries for %+v: %s", newTruncState, err)
-			}
-			iter.Close()
-			writer.Close()
-
-			if err := batch.Commit(false); err != nil {
-				log.Errorf(ctx, "unable to clear truncated Raft entries for %+v: %s", newTruncState, err)
-			}
-			batch.Close()
-		}
-
-		// Clear any entries in the Raft log entry cache for this range up
-		// to and including the most recently truncated index.
-		r.store.raftEntryCache.clearTo(r.RangeID, newTruncState.Index+1)
-
-		// Truncate the sideloaded storage. Note that this is safe only if the new truncated state
-		// is durably on disk (i.e.) synced. This is true at the time of writing but unfortunately
-		// could rot.
-		{
-			log.Eventf(ctx, "truncating sideloaded storage up to (and including) index %d", newTruncState.Index)
-			if err := r.raftMu.sideloaded.TruncateTo(ctx, newTruncState.Index+1); err != nil {
-				// We don't *have* to remove these entries for correctness. Log a
-				// loud error, but keep humming along.
-				log.Errorf(ctx, "while removing sideloaded files during log truncation: %s", err)
-			}
-		}
-	}
-
-	if newThresh := rResult.State.GCThreshold; newThresh != (hlc.Timestamp{}) {
-		r.mu.Lock()
-		r.mu.state.GCThreshold = newThresh
-		r.mu.Unlock()
-		rResult.State.GCThreshold = hlc.Timestamp{}
-	}
-
-	if newThresh := rResult.State.TxnSpanGCThreshold; newThresh != (hlc.Timestamp{}) {
-		r.mu.Lock()
-		r.mu.state.TxnSpanGCThreshold = newThresh
-		r.mu.Unlock()
-		rResult.State.TxnSpanGCThreshold = hlc.Timestamp{}
-	}
-
 	if rResult.ComputeChecksum != nil {
 		r.computeChecksumPostApply(ctx, *rResult.ComputeChecksum)
 		rResult.ComputeChecksum = nil
 	}
 
-	if rResult.RaftLogDelta != nil {
+	if rResult.RaftLogDelta != 0 {
 		r.mu.Lock()
-		r.mu.raftLogSize += *rResult.RaftLogDelta
-		r.mu.raftLogLastCheckSize += *rResult.RaftLogDelta
+		r.mu.raftLogSize += rResult.RaftLogDelta
+		r.mu.raftLogLastCheckSize += rResult.RaftLogDelta
 		// Ensure raftLog{,LastCheck}Size is not negative since it isn't persisted
 		// between server restarts.
 		if r.mu.raftLogSize < 0 {
@@ -859,7 +894,7 @@ func (r *Replica) handleReplicatedEvalResult(
 			r.mu.raftLogLastCheckSize = 0
 		}
 		r.mu.Unlock()
-		rResult.RaftLogDelta = nil
+		rResult.RaftLogDelta = 0
 	} else {
 		// Check for whether to queue the range for Raft log truncation if this is
 		// not a Raft log truncation command itself. We don't want to check the
@@ -976,9 +1011,12 @@ func (r *Replica) handleLocalEvalResult(ctx context.Context, lResult LocalEvalRe
 }
 
 func (r *Replica) handleEvalResultRaftMuLocked(
-	ctx context.Context, lResult *LocalEvalResult, rResult storagebase.ReplicatedEvalResult,
+	ctx context.Context,
+	lResult *LocalEvalResult,
+	rResult storagebase.ReplicatedEvalResult,
+	raftAppliedIndex, leaseAppliedIndex uint64,
 ) {
-	shouldAssert := r.handleReplicatedEvalResult(ctx, rResult)
+	shouldAssert := r.handleReplicatedEvalResult(ctx, rResult, raftAppliedIndex, leaseAppliedIndex)
 	if lResult != nil {
 		r.handleLocalEvalResult(ctx, *lResult)
 	}
