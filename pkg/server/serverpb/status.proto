@@ -500,6 +500,14 @@ message RangeResponse {
   reserved 4; // Previously used.
 }
 
+message CommandQueueRequest {
+  int64 range_id = 1;
+}
+
+message CommandQueueResponse {
+  storage.storagebase.CommandQueuesSnapshot snapshot = 1 [(gogoproto.nullable) = false];
+}
+
 service Status {
   rpc Certificates(CertificatesRequest) returns (CertificatesResponse) {
     option (google.api.http) = {
@@ -610,6 +618,11 @@ service Status {
   rpc Range(RangeRequest) returns (RangeResponse) {
     option (google.api.http) = {
       get: "/_status/range/{range_id}"
+    };
+  }
+  rpc CommandQueue(CommandQueueRequest) returns (CommandQueueResponse) {
+    option (google.api.http) = {
+      get: "/_status/range/{range_id}/cmdqueue"
     };
   }
 }

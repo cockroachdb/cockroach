@@ -1,6 +1,7 @@
 import _ from "lodash";
 import Long from "long";
 import moment from "moment";
+import { Link } from "react-router";
 import React from "react";
 
 import * as protos from "src/js/protos";
@@ -333,6 +334,33 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     );
   }
 
+  renderCommandQueueVizRow(
+    sortedStoreIDs: number[],
+    rangeID: Long,
+    leader: protos.cockroach.server.serverpb.RangeInfo$Properties,
+  ) {
+    const vizLink = (
+      <Link
+        to={`/reports/range/${rangeID}/cmdqueue`}
+        className="debug-link">
+        Visualize
+      </Link>
+    );
+
+    return (
+      <tr className="range-table__row">
+        <th className="range-table__cell range-table__cell--header">
+          CmdQ State
+        </th>
+        {sortedStoreIDs.map((storeId) => (
+          <td className="range-table__cell" key={storeId}>
+            {storeId === leader.source_store_id ? vizLink : "-"}
+          </td>
+        ))}
+      </tr>
+    );
+  }
+
   render() {
     const { infos, replicas } = this.props;
     const leader = _.head(infos);
@@ -460,6 +488,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
                 )
               ))
             }
+            {this.renderCommandQueueVizRow(sortedStoreIDs, rangeID, leader)}
             {
               _.map(replicas, (replica, key) => (
                 this.renderRangeReplicaRow(

@@ -5670,3 +5670,17 @@ func EnableLeaseHistory(maxEntries int) func() {
 		leaseHistoryMaxEntries = originalValue
 	}
 }
+
+// GetCommandQueueSnapshot returns a snapshot of the command queue state for
+// this replica.
+func (r *Replica) GetCommandQueueSnapshot() storagebase.CommandQueuesSnapshot {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	r.cmdQMu.Lock()
+	defer r.cmdQMu.Unlock()
+	return storagebase.CommandQueuesSnapshot{
+		Timestamp:   r.store.Clock().Now(),
+		LocalScope:  r.cmdQMu.queues[spanLocal].GetSnapshot(),
+		GlobalScope: r.cmdQMu.queues[spanGlobal].GetSnapshot(),
+	}
+}

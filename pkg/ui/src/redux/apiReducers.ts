@@ -97,6 +97,9 @@ export const refreshAllocatorRange = allocatorRangeReducerObj.refresh;
 const rangeLogReducerObj = new CachedDataReducer(api.getRangeLog, "rangeLog", moment.duration(10, "m"));
 export const refreshRangeLog = rangeLogReducerObj.refresh;
 
+const commandQueueReducerObj = new CachedDataReducer(api.getCommandQueue, "commandQueue", moment.duration(10, "s"));
+export const refreshCommandQueue = commandQueueReducerObj.refresh;
+
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
   events: CachedDataReducerState<api.EventsResponseMessage>;
@@ -117,6 +120,7 @@ export interface APIReducersState {
   range: CachedDataReducerState<api.RangeResponseMessage>;
   allocatorRange: CachedDataReducerState<api.AllocatorRangeResponseMessage>;
   rangeLog: CachedDataReducerState<api.RangeLogResponseMessage>;
+  commandQueue: CachedDataReducerState<api.CommandQueueResponseMessage>;
 }
 
 export default combineReducers<APIReducersState>({
@@ -139,6 +143,7 @@ export default combineReducers<APIReducersState>({
   [rangeReducerObj.actionNamespace]: rangeReducerObj.reducer,
   [allocatorRangeReducerObj.actionNamespace]: allocatorRangeReducerObj.reducer,
   [rangeLogReducerObj.actionNamespace]: rangeLogReducerObj.reducer,
+  [commandQueueReducerObj.actionNamespace]: commandQueueReducerObj.reducer,
 });
 
 export {CachedDataReducerState, KeyedCachedDataReducerState};
