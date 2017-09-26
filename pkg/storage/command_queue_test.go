@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -725,6 +726,94 @@ func TestCommandQueueTransitiveDependencies(t *testing.T) {
 			})
 		})
 	})
+}
+
+// TestCommandQueueGetSnapshotWithReadBuffer commands in the read buffer are
+// returned in the snapshot.
+func TestCommandQueueGetSnapshotWithReadBuffer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// test that read command buffer is flushed to interval tree
+	cq := NewCommandQueue(true /* covering optimization */)
+	add(cq, roachpb.Key("a"), nil, true, nil)
+	add(cq, roachpb.Key("a"), nil, true, nil)
+
+	snapshot := cq.GetSnapshot()
+	if n := len(snapshot); n != 2 {
+		t.Fatalf("expected 2 commands in snapshot; got %d", n)
+	}
+
+	assertExpectedPrereqs(t, snapshot, map[int64][]int64{
+		1: {},
+		2: {},
+	})
+}
+
+// TestCommandQueueGetSnapshotWithChildren verifies that child commands are
+// returned in the snapshot.
+func TestCommandQueueGetSnapshotWithChildren(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	cq := NewCommandQueue(true /* covering optimization */)
+	cmd1 := add(cq, roachpb.Key("a"), nil, false, nil)
+	cmd2 := add(cq, roachpb.Key("a"), nil, true, []*cmd{cmd1})
+	// the following creates a node with two children because it has two spans
+	// only the children show up in the snapshot.
+	cq.add(true, zeroTS, []*cmd{cmd2}, []roachpb.Span{
+		{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+		{Key: roachpb.Key("d"), EndKey: roachpb.Key("f")},
+	})
+
+	snapshot := cq.GetSnapshot()
+	if n := len(snapshot); n != 4 {
+		t.Fatalf("expected 4 commands in shapshot; got %d", n)
+	}
+
+	assertExpectedPrereqs(t, snapshot, map[int64][]int64{
+		1: {},
+		2: {1},
+		4: {2},
+		5: {2},
+	})
+}
+
+func TestCommandQueueGetSnapshotWithDisappearingPrereq(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	cq := NewCommandQueue(true /* covering optimization */)
+	cmd1 := add(cq, roachpb.Key("a"), nil, false, nil)
+	cmdNotInQueue := &cmd{
+		id: 55,
+	}
+	add(cq, roachpb.Key("b"), nil, false, []*cmd{cmd1, cmdNotInQueue})
+
+	snapshot := cq.GetSnapshot()
+	if n := len(snapshot); n != 2 {
+		t.Fatalf("expected 2 commands in shapshot; got %d", n)
+	}
+
+	assertExpectedPrereqs(t, snapshot, map[int64][]int64{
+		1: {},
+		2: {1},
+	})
+}
+
+func assertExpectedPrereqs(
+	t *testing.T, commands []storagebase.CommandQueueCommand, expectedPrereqs map[int64][]int64,
+) {
+	commandsMap := map[int64]storagebase.CommandQueueCommand{}
+	for _, command := range commands {
+		commandsMap[command.Id] = command
+	}
+	for commandID, expectedPrereqs := range expectedPrereqs {
+		command, ok := commandsMap[commandID]
+		if !ok {
+			t.Fatalf("expected command with id %v; none returned", commandID)
+		}
+		if !reflect.DeepEqual(expectedPrereqs, command.Prereqs) {
+			t.Fatalf("expected commands[%v].Prereqs to be %v, got %v", commandID, expectedPrereqs, command.Prereqs)
+		}
+	}
 }
 
 func BenchmarkCommandQueueGetPrereqsAllReadOnly(b *testing.B) {

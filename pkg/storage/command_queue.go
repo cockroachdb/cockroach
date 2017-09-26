@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -309,6 +310,19 @@ func (cq *CommandQueue) expand(c *cmd, isInserted bool) bool {
 	return true
 }
 
+// flushReadsBuffer moves read commands from the reads buffer to the `reads`
+// interval tree.
+func (cq *CommandQueue) flushReadsBuffer() {
+	for cmd := range cq.readsBuffer {
+		cmd.buffered = false
+		cq.insertIntoTree(cmd)
+	}
+	if len(cq.readsBuffer) > 0 {
+		// Allocate a new map, thereby deleting all previous entries.
+		cq.readsBuffer = make(map[*cmd]struct{})
+	}
+}
+
 // getPrereqs returns a slice of the prerequisite commands which overlap the
 // specified key ranges. The caller should invoke add() to add the keys to the
 // command queue and then wait for confirmation that all gating commands have
@@ -535,14 +549,7 @@ func (cq *CommandQueue) getOverlaps(
 	if !readOnly {
 		// Upon a write cmd, flush out cmds from readsBuffer to the read interval
 		// tree.
-		for cmd := range cq.readsBuffer {
-			cmd.buffered = false
-			cq.insertIntoTree(cmd)
-		}
-		if len(cq.readsBuffer) > 0 {
-			// Allocate a new map, thereby deleting all previous entries.
-			cq.readsBuffer = make(map[*cmd]struct{})
-		}
+		cq.flushReadsBuffer()
 
 		cq.reads.DoMatching(func(i interval.Interface) bool {
 			c := i.(*cmd)
@@ -800,4 +807,70 @@ func (cq *CommandQueue) metrics() CommandQueueMetrics {
 		MaxOverlapsSeen: cq.localMetrics.maxOverlapsSeen,
 		TreeSize:        int32(cq.treeSize()),
 	}
+}
+
+// GetSnapshot returns a snapshot of this command queue's state.
+func (cq *CommandQueue) GetSnapshot() []storagebase.CommandQueueCommand {
+	// Before taking the snapshot, ensure all commands have been flushed into
+	// the interval trees.
+	cq.flushReadsBuffer()
+	commandMap := make(map[int64]storagebase.CommandQueueCommand)
+	addCommandsFromTree(commandMap, cq.reads)
+	addCommandsFromTree(commandMap, cq.writes)
+	return filterNonexistentPrereqs(commandMap)
+}
+
+func addCommandsFromTree(
+	commandsSoFar map[int64]storagebase.CommandQueueCommand, tree interval.Tree,
+) {
+	tree.Do(func(item interval.Interface) (done bool) {
+		currentCmd := item.(*cmd)
+		addCommand(commandsSoFar, *currentCmd)
+		return false
+	})
+}
+
+// addCommand adds the given command to the given map, if it has no
+// children. If it has children, it doesn't add the given command, but
+// calls itself on each child. Thus, only leaf commands are added.
+func addCommand(commandsSoFar map[int64]storagebase.CommandQueueCommand, command cmd) {
+	if len(command.children) > 0 {
+		for i := range command.children {
+			addCommand(commandsSoFar, command.children[i])
+		}
+		return
+	}
+
+	commandProto := storagebase.CommandQueueCommand{
+		Id:        command.id,
+		Readonly:  command.readOnly,
+		Timestamp: command.timestamp,
+		Key:       roachpb.Key(command.key.Start).String(),
+		EndKey:    roachpb.Key(command.key.End).String(),
+	}
+	for _, prereqCmd := range *command.prereqs {
+		commandProto.Prereqs = append(commandProto.Prereqs, prereqCmd.id)
+	}
+	commandsSoFar[command.id] = commandProto
+}
+
+// filterNonexistentPrereqs removes prereqs which point at commands that
+// are no longer in the queue. This can happen e.g. if command C has prereqs
+// A and B, but B finishes and is removed from the queue while C is still
+// waiting on A.
+func filterNonexistentPrereqs(
+	commandMap map[int64]storagebase.CommandQueueCommand,
+) []storagebase.CommandQueueCommand {
+	result := make([]storagebase.CommandQueueCommand, 0, len(commandMap))
+	for _, command := range commandMap {
+		filteredPrereqs := make([]int64, 0, len(command.Prereqs))
+		for _, prereq := range command.Prereqs {
+			if _, ok := commandMap[prereq]; ok {
+				filteredPrereqs = append(filteredPrereqs, prereq)
+			}
+		}
+		command.Prereqs = filteredPrereqs
+		result = append(result, command)
+	}
+	return result
 }
