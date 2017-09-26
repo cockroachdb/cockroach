@@ -239,6 +239,15 @@ func newQueryNotSupportedErrorf(format string, args ...interface{}) error {
 var mutationsNotSupportedError = newQueryNotSupportedError("mutations not supported")
 var setNotSupportedError = newQueryNotSupportedError("SET / SET CLUSTER SETTING should never distribute")
 
+// leafType returns the element type if the given type is an array, and the type
+// itself otherwise.
+func leafType(t parser.Type) parser.Type {
+	if a, ok := t.(parser.TArray); ok {
+		return leafType(a.Typ)
+	}
+	return t
+}
+
 // checkSupportForNode returns a distRecommendation (as described above) or an
 // error if the plan subtree is not supported by DistSQL.
 // TODO(radu): add tests for this.
@@ -252,7 +261,8 @@ func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 
 	case *renderNode:
 		for i, e := range n.render {
-			if typ := n.columns[i].Typ; typ.FamilyEqual(parser.TypeTuple) {
+			typ := n.columns[i].Typ
+			if leafType(typ).FamilyEqual(parser.TypeTuple) {
 				return 0, newQueryNotSupportedErrorf("unsupported render type %s", typ)
 			}
 			if err := dsp.checkExpr(e); err != nil {
