@@ -21,7 +21,7 @@ import "cockroach/pkg/gossip/gossip.proto";
 import "cockroach/pkg/roachpb/data.proto";
 import "cockroach/pkg/server/status/status.proto";
 import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
-import "cockroach/pkg/storage/log.proto";
+import "cockroach/pkg/storage/lease_status.proto";
 import "cockroach/pkg/storage/storagebase/state.proto";
 import "cockroach/pkg/util/log/log.proto";
 import "cockroach/pkg/util/unresolved_addr.proto";
@@ -175,6 +175,7 @@ message RangeInfo {
   RangeStatistics stats = 10 [(gogoproto.nullable) = false];
   CommandQueueMetrics cmd_q_local = 11 [(gogoproto.nullable) = false];
   CommandQueueMetrics cmd_q_global = 12 [(gogoproto.nullable) = false];
+  storage.LeaseStatus lease_status = 13 [(gogoproto.nullable) = false];
 }
 
 message RangesRequest {

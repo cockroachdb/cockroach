@@ -14597,6 +14597,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @property {cockroach.server.serverpb.RangeStatistics$Properties} [stats] RangeInfo stats.
                  * @property {cockroach.server.serverpb.CommandQueueMetrics$Properties} [cmd_q_local] RangeInfo cmd_q_local.
                  * @property {cockroach.server.serverpb.CommandQueueMetrics$Properties} [cmd_q_global] RangeInfo cmd_q_global.
+                 * @property {cockroach.storage.LeaseStatus$Properties} [lease_status] RangeInfo lease_status.
                  */
 
                 /**
@@ -14680,6 +14681,12 @@ export const cockroach = $root.cockroach = (() => {
                 RangeInfo.prototype.cmd_q_global = null;
 
                 /**
+                 * RangeInfo lease_status.
+                 * @type {(cockroach.storage.LeaseStatus$Properties|null)}
+                 */
+                RangeInfo.prototype.lease_status = null;
+
+                /**
                  * Creates a new RangeInfo instance using the specified properties.
                  * @param {cockroach.server.serverpb.RangeInfo$Properties=} [properties] Properties to set
                  * @returns {cockroach.server.serverpb.RangeInfo} RangeInfo instance
@@ -14720,6 +14727,8 @@ export const cockroach = $root.cockroach = (() => {
                         $root.cockroach.server.serverpb.CommandQueueMetrics.encode(message.cmd_q_local, writer.uint32(/* id 11, wireType 2 =*/90).fork()).ldelim();
                     if (message.cmd_q_global != null && message.hasOwnProperty("cmd_q_global"))
                         $root.cockroach.server.serverpb.CommandQueueMetrics.encode(message.cmd_q_global, writer.uint32(/* id 12, wireType 2 =*/98).fork()).ldelim();
+                    if (message.lease_status != null && message.hasOwnProperty("lease_status"))
+                        $root.cockroach.storage.LeaseStatus.encode(message.lease_status, writer.uint32(/* id 13, wireType 2 =*/106).fork()).ldelim();
                     return writer;
                 };
 
@@ -14782,6 +14791,9 @@ export const cockroach = $root.cockroach = (() => {
                             break;
                         case 12:
                             message.cmd_q_global = $root.cockroach.server.serverpb.CommandQueueMetrics.decode(reader, reader.uint32());
+                            break;
+                        case 13:
+                            message.lease_status = $root.cockroach.storage.LeaseStatus.decode(reader, reader.uint32());
                             break;
                         default:
                             reader.skipType(tag & 7);
@@ -14865,6 +14877,11 @@ export const cockroach = $root.cockroach = (() => {
                         if (error)
                             return "cmd_q_global." + error;
                     }
+                    if (message.lease_status != null && message.hasOwnProperty("lease_status")) {
+                        let error = $root.cockroach.storage.LeaseStatus.verify(message.lease_status);
+                        if (error)
+                            return "lease_status." + error;
+                    }
                     return null;
                 };
 
@@ -14928,6 +14945,11 @@ export const cockroach = $root.cockroach = (() => {
                             throw TypeError(".cockroach.server.serverpb.RangeInfo.cmd_q_global: object expected");
                         message.cmd_q_global = $root.cockroach.server.serverpb.CommandQueueMetrics.fromObject(object.cmd_q_global);
                     }
+                    if (object.lease_status != null) {
+                        if (typeof object.lease_status !== "object")
+                            throw TypeError(".cockroach.server.serverpb.RangeInfo.lease_status: object expected");
+                        message.lease_status = $root.cockroach.storage.LeaseStatus.fromObject(object.lease_status);
+                    }
                     return message;
                 };
 
@@ -14963,6 +14985,7 @@ export const cockroach = $root.cockroach = (() => {
                         object.stats = null;
                         object.cmd_q_local = null;
                         object.cmd_q_global = null;
+                        object.lease_status = null;
                     }
                     if (message.span != null && message.hasOwnProperty("span"))
                         object.span = $root.cockroach.server.serverpb.PrettySpan.toObject(message.span, options);
@@ -14989,6 +15012,8 @@ export const cockroach = $root.cockroach = (() => {
                         object.cmd_q_local = $root.cockroach.server.serverpb.CommandQueueMetrics.toObject(message.cmd_q_local, options);
                     if (message.cmd_q_global != null && message.hasOwnProperty("cmd_q_global"))
                         object.cmd_q_global = $root.cockroach.server.serverpb.CommandQueueMetrics.toObject(message.cmd_q_global, options);
+                    if (message.lease_status != null && message.hasOwnProperty("lease_status"))
+                        object.lease_status = $root.cockroach.storage.LeaseStatus.toObject(message.lease_status, options);
                     return object;
                 };
 
@@ -37863,6 +37888,305 @@ export const cockroach = $root.cockroach = (() => {
             })();
 
             return RangeLogEvent;
+        })();
+
+        /**
+         * LeaseState enum.
+         * @name LeaseState
+         * @memberof cockroach.storage
+         * @enum {number}
+         * @property {number} ERROR=0 ERROR value
+         * @property {number} VALID=1 VALID value
+         * @property {number} STASIS=2 STASIS value
+         * @property {number} EXPIRED=3 EXPIRED value
+         * @property {number} PROSCRIBED=4 PROSCRIBED value
+         */
+        storage.LeaseState = (function() {
+            const valuesById = {}, values = Object.create(valuesById);
+            values[valuesById[0] = "ERROR"] = 0;
+            values[valuesById[1] = "VALID"] = 1;
+            values[valuesById[2] = "STASIS"] = 2;
+            values[valuesById[3] = "EXPIRED"] = 3;
+            values[valuesById[4] = "PROSCRIBED"] = 4;
+            return values;
+        })();
+
+        storage.LeaseStatus = (function() {
+
+            /**
+             * Properties of a LeaseStatus.
+             * @typedef cockroach.storage.LeaseStatus$Properties
+             * @type {Object}
+             * @property {cockroach.roachpb.Lease$Properties} [lease] LeaseStatus lease.
+             * @property {cockroach.util.hlc.Timestamp$Properties} [timestamp] LeaseStatus timestamp.
+             * @property {cockroach.storage.LeaseState} [state] LeaseStatus state.
+             * @property {cockroach.storage.Liveness$Properties} [liveness] LeaseStatus liveness.
+             */
+
+            /**
+             * Constructs a new LeaseStatus.
+             * @exports cockroach.storage.LeaseStatus
+             * @constructor
+             * @param {cockroach.storage.LeaseStatus$Properties=} [properties] Properties to set
+             */
+            function LeaseStatus(properties) {
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * LeaseStatus lease.
+             * @type {(cockroach.roachpb.Lease$Properties|null)}
+             */
+            LeaseStatus.prototype.lease = null;
+
+            /**
+             * LeaseStatus timestamp.
+             * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
+             */
+            LeaseStatus.prototype.timestamp = null;
+
+            /**
+             * LeaseStatus state.
+             * @type {cockroach.storage.LeaseState}
+             */
+            LeaseStatus.prototype.state = 0;
+
+            /**
+             * LeaseStatus liveness.
+             * @type {(cockroach.storage.Liveness$Properties|null)}
+             */
+            LeaseStatus.prototype.liveness = null;
+
+            /**
+             * Creates a new LeaseStatus instance using the specified properties.
+             * @param {cockroach.storage.LeaseStatus$Properties=} [properties] Properties to set
+             * @returns {cockroach.storage.LeaseStatus} LeaseStatus instance
+             */
+            LeaseStatus.create = function create(properties) {
+                return new LeaseStatus(properties);
+            };
+
+            /**
+             * Encodes the specified LeaseStatus message. Does not implicitly {@link cockroach.storage.LeaseStatus.verify|verify} messages.
+             * @param {cockroach.storage.LeaseStatus$Properties} message LeaseStatus message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            LeaseStatus.encode = function encode(message, writer) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (message.lease != null && message.hasOwnProperty("lease"))
+                    $root.cockroach.roachpb.Lease.encode(message.lease, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+                if (message.timestamp != null && message.hasOwnProperty("timestamp"))
+                    $root.cockroach.util.hlc.Timestamp.encode(message.timestamp, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+                if (message.state != null && message.hasOwnProperty("state"))
+                    writer.uint32(/* id 3, wireType 0 =*/24).uint32(message.state);
+                if (message.liveness != null && message.hasOwnProperty("liveness"))
+                    $root.cockroach.storage.Liveness.encode(message.liveness, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
+                return writer;
+            };
+
+            /**
+             * Encodes the specified LeaseStatus message, length delimited. Does not implicitly {@link cockroach.storage.LeaseStatus.verify|verify} messages.
+             * @param {cockroach.storage.LeaseStatus$Properties} message LeaseStatus message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            LeaseStatus.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a LeaseStatus message from the specified reader or buffer.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {cockroach.storage.LeaseStatus} LeaseStatus
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            LeaseStatus.decode = function decode(reader, length) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.storage.LeaseStatus();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    switch (tag >>> 3) {
+                    case 1:
+                        message.lease = $root.cockroach.roachpb.Lease.decode(reader, reader.uint32());
+                        break;
+                    case 2:
+                        message.timestamp = $root.cockroach.util.hlc.Timestamp.decode(reader, reader.uint32());
+                        break;
+                    case 3:
+                        message.state = reader.uint32();
+                        break;
+                    case 4:
+                        message.liveness = $root.cockroach.storage.Liveness.decode(reader, reader.uint32());
+                        break;
+                    default:
+                        reader.skipType(tag & 7);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a LeaseStatus message from the specified reader or buffer, length delimited.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {cockroach.storage.LeaseStatus} LeaseStatus
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            LeaseStatus.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a LeaseStatus message.
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {?string} `null` if valid, otherwise the reason why it is not
+             */
+            LeaseStatus.verify = function verify(message) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (message.lease != null && message.hasOwnProperty("lease")) {
+                    let error = $root.cockroach.roachpb.Lease.verify(message.lease);
+                    if (error)
+                        return "lease." + error;
+                }
+                if (message.timestamp != null && message.hasOwnProperty("timestamp")) {
+                    let error = $root.cockroach.util.hlc.Timestamp.verify(message.timestamp);
+                    if (error)
+                        return "timestamp." + error;
+                }
+                if (message.state != null && message.hasOwnProperty("state"))
+                    switch (message.state) {
+                    default:
+                        return "state: enum value expected";
+                    case 0:
+                    case 1:
+                    case 2:
+                    case 3:
+                    case 4:
+                        break;
+                    }
+                if (message.liveness != null && message.hasOwnProperty("liveness")) {
+                    let error = $root.cockroach.storage.Liveness.verify(message.liveness);
+                    if (error)
+                        return "liveness." + error;
+                }
+                return null;
+            };
+
+            /**
+             * Creates a LeaseStatus message from a plain object. Also converts values to their respective internal types.
+             * @param {Object.<string,*>} object Plain object
+             * @returns {cockroach.storage.LeaseStatus} LeaseStatus
+             */
+            LeaseStatus.fromObject = function fromObject(object) {
+                if (object instanceof $root.cockroach.storage.LeaseStatus)
+                    return object;
+                let message = new $root.cockroach.storage.LeaseStatus();
+                if (object.lease != null) {
+                    if (typeof object.lease !== "object")
+                        throw TypeError(".cockroach.storage.LeaseStatus.lease: object expected");
+                    message.lease = $root.cockroach.roachpb.Lease.fromObject(object.lease);
+                }
+                if (object.timestamp != null) {
+                    if (typeof object.timestamp !== "object")
+                        throw TypeError(".cockroach.storage.LeaseStatus.timestamp: object expected");
+                    message.timestamp = $root.cockroach.util.hlc.Timestamp.fromObject(object.timestamp);
+                }
+                switch (object.state) {
+                case "ERROR":
+                case 0:
+                    message.state = 0;
+                    break;
+                case "VALID":
+                case 1:
+                    message.state = 1;
+                    break;
+                case "STASIS":
+                case 2:
+                    message.state = 2;
+                    break;
+                case "EXPIRED":
+                case 3:
+                    message.state = 3;
+                    break;
+                case "PROSCRIBED":
+                case 4:
+                    message.state = 4;
+                    break;
+                }
+                if (object.liveness != null) {
+                    if (typeof object.liveness !== "object")
+                        throw TypeError(".cockroach.storage.LeaseStatus.liveness: object expected");
+                    message.liveness = $root.cockroach.storage.Liveness.fromObject(object.liveness);
+                }
+                return message;
+            };
+
+            /**
+             * Creates a LeaseStatus message from a plain object. Also converts values to their respective internal types.
+             * This is an alias of {@link cockroach.storage.LeaseStatus.fromObject}.
+             * @function
+             * @param {Object.<string,*>} object Plain object
+             * @returns {cockroach.storage.LeaseStatus} LeaseStatus
+             */
+            LeaseStatus.from = LeaseStatus.fromObject;
+
+            /**
+             * Creates a plain object from a LeaseStatus message. Also converts values to other types if specified.
+             * @param {cockroach.storage.LeaseStatus} message LeaseStatus
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            LeaseStatus.toObject = function toObject(message, options) {
+                if (!options)
+                    options = {};
+                let object = {};
+                if (options.defaults) {
+                    object.lease = null;
+                    object.timestamp = null;
+                    object.state = options.enums === String ? "ERROR" : 0;
+                    object.liveness = null;
+                }
+                if (message.lease != null && message.hasOwnProperty("lease"))
+                    object.lease = $root.cockroach.roachpb.Lease.toObject(message.lease, options);
+                if (message.timestamp != null && message.hasOwnProperty("timestamp"))
+                    object.timestamp = $root.cockroach.util.hlc.Timestamp.toObject(message.timestamp, options);
+                if (message.state != null && message.hasOwnProperty("state"))
+                    object.state = options.enums === String ? $root.cockroach.storage.LeaseState[message.state] : message.state;
+                if (message.liveness != null && message.hasOwnProperty("liveness"))
+                    object.liveness = $root.cockroach.storage.Liveness.toObject(message.liveness, options);
+                return object;
+            };
+
+            /**
+             * Creates a plain object from this LeaseStatus message. Also converts values to other types if specified.
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            LeaseStatus.prototype.toObject = function toObject(options) {
+                return this.constructor.toObject(this, options);
+            };
+
+            /**
+             * Converts this LeaseStatus to JSON.
+             * @returns {Object.<string,*>} JSON object
+             */
+            LeaseStatus.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            return LeaseStatus;
         })();
 
         storage.storagebase = (function() {
