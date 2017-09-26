@@ -166,10 +166,11 @@ func TestScatter(t *testing.T) {
 	// See showRangesColumns for the schema.
 	if cols, err := rows.Columns(); err != nil {
 		t.Fatal(err)
-	} else if len(cols) != 4 {
+	} else if len(cols) != 5 {
 		t.Fatalf("expected 4 columns, got %#v", cols)
 	}
 	vals := []interface{}{
+		new(interface{}),
 		new(interface{}),
 		new(interface{}),
 		new(interface{}),
@@ -181,7 +182,7 @@ func TestScatter(t *testing.T) {
 		if err := rows.Scan(vals...); err != nil {
 			t.Fatal(err)
 		}
-		leaseHolder := *vals[3].(*int)
+		leaseHolder := *vals[4].(*int)
 		if leaseHolder < 1 || leaseHolder > numHosts {
 			t.Fatalf("invalid lease holder value: %d", leaseHolder)
 		}
