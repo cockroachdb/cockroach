@@ -20,7 +20,7 @@ import (
 	"time"
 )
 
-// Now returns the current local time.
+// Now returns the current UTC time.
 func Now() time.Time {
-	return time.Now()
+	return time.Now().UTC()
 }

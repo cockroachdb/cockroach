@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
-	"time"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // Load converts r into SSTables and backup descriptors. database is the name
@@ -53,7 +53,7 @@ func Load(
 	}
 
 	parse := parser.Parser{}
-	curTime := time.Unix(0, ts.WallTime).UTC()
+	curTime := timeutil.Unix(0, ts.WallTime).UTC()
 	evalCtx := parser.EvalContext{}
 	evalCtx.SetTxnTimestamp(curTime)
 	evalCtx.SetStmtTimestamp(curTime)

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/kr/pretty"
 )
 
@@ -499,10 +500,10 @@ func TestShowJobs(t *testing.T) {
 		// lib/pq returns time.Time objects with goofy locations, which breaks
 		// reflect.DeepEqual without this time.FixedZone song and dance.
 		// See: https://github.com/lib/pq/issues/329
-		created:           time.Unix(1, 0).In(time.FixedZone("", 0)),
-		started:           time.Unix(2, 0).In(time.FixedZone("", 0)),
-		finished:          time.Unix(3, 0).In(time.FixedZone("", 0)),
-		modified:          time.Unix(4, 0).In(time.FixedZone("", 0)),
+		created:           timeutil.Unix(1, 0).In(time.FixedZone("", 0)),
+		started:           timeutil.Unix(2, 0).In(time.FixedZone("", 0)),
+		finished:          timeutil.Unix(3, 0).In(time.FixedZone("", 0)),
+		modified:          timeutil.Unix(4, 0).In(time.FixedZone("", 0)),
 		fractionCompleted: 0.42,
 		coordinatorID:     7,
 	}

@@ -2477,10 +2477,10 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		case *DCollatedString:
 			return ParseDTimestamp(d.Contents, time.Microsecond)
 		case *DDate:
-			year, month, day := time.Unix(int64(*d)*secondsInDay, 0).UTC().Date()
+			year, month, day := timeutil.Unix(int64(*d)*secondsInDay, 0).UTC().Date()
 			return MakeDTimestamp(time.Date(year, month, day, 0, 0, 0, 0, time.UTC), time.Microsecond), nil
 		case *DInt:
-			return MakeDTimestamp(time.Unix(int64(*d), 0).UTC(), time.Second), nil
+			return MakeDTimestamp(timeutil.Unix(int64(*d), 0).UTC(), time.Second), nil
 		case *DTimestamp:
 			return d, nil
 		case *DTimestampTZ:
@@ -2501,7 +2501,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 			_, after := d.Time.In(ctx.GetLocation()).Zone()
 			return MakeDTimestampTZ(d.Time.Add(time.Duration(before-after)*time.Second), time.Microsecond), nil
 		case *DInt:
-			return MakeDTimestampTZ(time.Unix(int64(*d), 0).UTC(), time.Second), nil
+			return MakeDTimestampTZ(timeutil.Unix(int64(*d), 0).UTC(), time.Second), nil
 		case *DTimestampTZ:
 			return d, nil
 		}

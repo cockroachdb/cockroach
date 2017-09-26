@@ -116,10 +116,10 @@ func (expected *expectation) verify(id *int64, expectedStatus jobs.Status) error
 		return verifyModifiedAgainst("created", created)
 	}
 
-	if started == timeutil.UnixEpoch && status == jobs.StatusSucceeded {
+	if started.Equal(timeutil.UnixEpoch) && status == jobs.StatusSucceeded {
 		return errors.Errorf("started time is empty but job claims to be successful")
 	}
-	if started != timeutil.UnixEpoch && created.After(started) {
+	if !started.Equal(timeutil.UnixEpoch) && created.After(started) {
 		return errors.Errorf("created time %v is after started time %v", created, started)
 	}
 	if status == jobs.StatusRunning {

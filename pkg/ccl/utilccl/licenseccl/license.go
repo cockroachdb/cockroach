@@ -16,6 +16,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -69,7 +70,7 @@ func (l *License) Check(at time.Time, cluster uuid.UUID, org, feature string) er
 	// We extend some grace period to enterprise license holders rather than
 	// suddenly throwing errors at them.
 	if l.ValidUntilUnixSec > 0 && l.Type != License_Enterprise {
-		if expiration := time.Unix(l.ValidUntilUnixSec, 0); at.After(expiration) {
+		if expiration := timeutil.Unix(l.ValidUntilUnixSec, 0); at.After(expiration) {
 			return errors.Errorf("license expired at %s", expiration.String())
 		}
 	}

@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"fmt"
 	"math/rand"
-	"time"
 	"unicode"
 
 	"golang.org/x/net/context"
@@ -28,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -85,7 +85,7 @@ func RandDatum(rng *rand.Rand, typ ColumnType, null bool) parser.Datum {
 	case ColumnType_DATE:
 		return parser.NewDDate(parser.DDate(rng.Intn(10000)))
 	case ColumnType_TIMESTAMP:
-		return &parser.DTimestamp{Time: time.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
+		return &parser.DTimestamp{Time: timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
 	case ColumnType_INTERVAL:
 		sign := 1 - rng.Int63n(2)*2
 		return &parser.DInterval{Duration: duration.Duration{
@@ -107,7 +107,7 @@ func RandDatum(rng *rand.Rand, typ ColumnType, null bool) parser.Datum {
 		_, _ = rng.Read(p)
 		return parser.NewDBytes(parser.DBytes(p))
 	case ColumnType_TIMESTAMPTZ:
-		return &parser.DTimestampTZ{Time: time.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
+		return &parser.DTimestampTZ{Time: timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
 	case ColumnType_COLLATEDSTRING:
 		if typ.Locale == nil {
 			panic("locale is required for COLLATEDSTRING")
