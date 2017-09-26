@@ -214,11 +214,13 @@ func errHasCode(err error, code string) bool {
 	return false
 }
 
+// singleKVFetcher is a kvFetcher that returns a single kv.
 type singleKVFetcher struct {
 	kv   client.KeyValue
 	done bool
 }
 
+// nextKV implements the kvFetcher interface.
 func (f *singleKVFetcher) nextKV(ctx context.Context) (bool, client.KeyValue, error) {
 	if f.done {
 		return false, client.KeyValue{}, nil
@@ -227,6 +229,7 @@ func (f *singleKVFetcher) nextKV(ctx context.Context) (bool, client.KeyValue, er
 	return true, f.kv, nil
 }
 
+// getRangesInfo implements the kvFetcher interface.
 func (f *singleKVFetcher) getRangesInfo() []roachpb.RangeInfo {
 	panic("getRangesInfo() called on singleKVFetcher")
 }
