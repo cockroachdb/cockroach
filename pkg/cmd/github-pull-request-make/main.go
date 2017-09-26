@@ -126,6 +126,31 @@ func pkgsFromDiff(r io.Reader) (map[string]pkg, error) {
 	}
 }
 
+func findPullRequest(
+	ctx context.Context, client *github.Client, org, repo, sha string,
+) *github.PullRequest {
+	opts := &github.PullRequestListOptions{
+		ListOptions: github.ListOptions{PerPage: 100},
+	}
+	for {
+		pulls, resp, err := client.PullRequests.List(ctx, org, repo, opts)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		for _, pull := range pulls {
+			if *pull.Head.SHA == sha {
+				return pull
+			}
+		}
+
+		if resp.NextPage == 0 {
+			return nil
+		}
+		opts.Page = resp.NextPage
+	}
+}
+
 func main() {
 	sha, ok := os.LookupEnv(teamcityVCSNumberEnv)
 	if !ok {
@@ -157,17 +182,7 @@ func main() {
 	}
 	client := github.NewClient(httpClient)
 
-	pulls, _, err := client.PullRequests.List(ctx, org, repo, nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-	var currentPull *github.PullRequest
-	for _, pull := range pulls {
-		if *pull.Head.SHA == sha {
-			currentPull = pull
-			break
-		}
-	}
+	currentPull := findPullRequest(ctx, client, org, repo, sha)
 	if currentPull == nil {
 		log.Printf("SHA %s not found in open pull requests, skipping stress", sha)
 		return
