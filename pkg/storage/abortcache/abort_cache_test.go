@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package storage
+package abortcache
 
 import (
 	"reflect"
@@ -38,7 +38,6 @@ func uuidFromString(input string) uuid.UUID {
 
 var (
 	testTxnID        = uuidFromString("0ce61c17-5eb4-4587-8c36-dcf4062ada4c")
-	testTxnID2       = uuidFromString("9855a1ef-8eb9-4c06-a106-cab1dda78a2b")
 	testTxnKey       = []byte("a")
 	testTxnTimestamp = hlc.Timestamp{WallTime: 123, Logical: 456}
 	testTxnPriority  = int32(123)
@@ -48,10 +47,10 @@ var (
 // returns a abort cache using the supplied Range ID.
 func createTestAbortCache(
 	t *testing.T, rangeID roachpb.RangeID, stopper *stop.Stopper,
-) (*AbortCache, engine.Engine) {
+) (*Instance, engine.Engine) {
 	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(eng)
-	return NewAbortCache(rangeID), eng
+	return New(rangeID), eng
 }
 
 // TestAbortCachePutGetClearData tests basic get & put functionality as well as
@@ -137,7 +136,7 @@ func TestAbortCacheCopyInto(t *testing.T) {
 	} else if expCount := 1; count != expCount {
 		t.Errorf("unexpected number of copied entries: %d", count)
 	}
-	for _, cache := range []*AbortCache{rc1, rc2} {
+	for _, cache := range []*Instance{rc1, rc2} {
 		var actual roachpb.AbortCacheEntry
 		// Get should return 1 for both caches.
 		if aborted, readErr := cache.Get(context.Background(), e, testTxnID, &actual); !aborted || readErr != nil {
@@ -174,7 +173,7 @@ func TestAbortCacheCopyFrom(t *testing.T) {
 	}
 
 	// Get should hit both caches.
-	for i, cache := range []*AbortCache{rc1, rc2} {
+	for i, cache := range []*Instance{rc1, rc2} {
 		var actual roachpb.AbortCacheEntry
 		if aborted, readErr := cache.Get(context.Background(), e, testTxnID, &actual); !aborted || readErr != nil {
 			t.Fatalf("%d: unexpected read error: %t, %s", i, aborted, readErr)
