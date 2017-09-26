@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -260,7 +261,7 @@ type Replica struct {
 
 		// Note that there are two replicaStateLoaders, in raftMu and mu,
 		// depending on which lock is being held.
-		stateLoader replicaStateLoader
+		stateLoader stateloader.Instance
 		// on-disk storage for sideloaded SSTables. nil when there's no ReplicaID.
 		sideloaded sideloadStorage
 	}
@@ -447,7 +448,7 @@ type Replica struct {
 
 		// Note that there are two replicaStateLoaders, in raftMu and mu,
 		// depending on which lock is being held.
-		stateLoader replicaStateLoader
+		stateLoader stateloader.Instance
 	}
 
 	unreachablesMu struct {
@@ -584,7 +585,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		abortCache:     NewAbortCache(rangeID),
 		pushTxnQueue:   newPushTxnQueue(store),
 	}
-	r.mu.stateLoader = makeReplicaStateLoader(r.store.cfg.Settings, rangeID)
+	r.mu.stateLoader = stateloader.Make(r.store.cfg.Settings, rangeID)
 	if leaseHistoryMaxEntries > 0 {
 		r.leaseHistory = newLeaseHistory()
 	}
@@ -609,7 +610,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		},
 	)
 	r.raftMu.timedMutex = makeTimedMutex(raftMuLogger)
-	r.raftMu.stateLoader = makeReplicaStateLoader(r.store.cfg.Settings, rangeID)
+	r.raftMu.stateLoader = stateloader.Make(r.store.cfg.Settings, rangeID)
 	return r
 }
 
@@ -666,18 +667,18 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 
 	var err error
 
-	if r.mu.state, err = r.mu.stateLoader.load(ctx, r.store.Engine(), desc); err != nil {
+	if r.mu.state, err = r.mu.stateLoader.Load(ctx, r.store.Engine(), desc); err != nil {
 		return err
 	}
 	r.rangeStr.store(0, r.mu.state.Desc)
 
-	r.mu.lastIndex, err = r.mu.stateLoader.loadLastIndex(ctx, r.store.Engine())
+	r.mu.lastIndex, err = r.mu.stateLoader.LoadLastIndex(ctx, r.store.Engine())
 	if err != nil {
 		return err
 	}
 	r.mu.lastTerm = invalidLastTerm
 
-	pErr, err := r.mu.stateLoader.loadReplicaDestroyedError(ctx, r.store.Engine())
+	pErr, err := r.mu.stateLoader.LoadReplicaDestroyedError(ctx, r.store.Engine())
 	if err != nil {
 		return err
 	}
@@ -1703,7 +1704,7 @@ func (r *Replica) State() storagebase.RangeInfo {
 //
 // TODO(tschottdorf): Consider future removal (for example, when #7224 is resolved).
 func (r *Replica) assertStateLocked(ctx context.Context, reader engine.Reader) {
-	diskState, err := r.mu.stateLoader.load(ctx, reader, r.mu.state.Desc)
+	diskState, err := r.mu.stateLoader.Load(ctx, reader, r.mu.state.Desc)
 	if err != nil {
 		log.Fatal(ctx, err)
 	}
@@ -3348,7 +3349,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 	}
 	if !raft.IsEmptyHardState(rd.HardState) {
-		if err := r.raftMu.stateLoader.setHardState(ctx, writer, rd.HardState); err != nil {
+		if err := r.raftMu.stateLoader.SetHardState(ctx, writer, rd.HardState); err != nil {
 			const expl = "during setHardState"
 			return stats, expl, errors.Wrap(err, expl)
 		}
@@ -4603,19 +4604,19 @@ func (r *Replica) applyRaftCommand(
 	// reading the previous applied index keys on every write operation. This
 	// requires a little additional work in order maintain the MVCC stats.
 	var appliedIndexNewMS enginepb.MVCCStats
-	if err := r.raftMu.stateLoader.setAppliedIndexBlind(ctx, writer, &appliedIndexNewMS,
+	if err := r.raftMu.stateLoader.SetAppliedIndexBlind(ctx, writer, &appliedIndexNewMS,
 		raftAppliedIndex, leaseAppliedIndex); err != nil {
 		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
 			errors.Wrap(err, "unable to set applied index")))
 	}
 	rResult.Delta.SysBytes += appliedIndexNewMS.SysBytes -
-		r.raftMu.stateLoader.calcAppliedIndexSysBytes(oldRaftAppliedIndex, oldLeaseAppliedIndex)
+		r.raftMu.stateLoader.CalcAppliedIndexSysBytes(oldRaftAppliedIndex, oldLeaseAppliedIndex)
 
 	// Special-cased MVCC stats handling to exploit commutativity of stats
 	// delta upgrades. Thanks to commutativity, the command queue does not
 	// have to serialize on the stats key.
 	ms.Add(enginepb.MVCCStats(rResult.Delta))
-	if err := r.raftMu.stateLoader.setMVCCStats(ctx, writer, &ms); err != nil {
+	if err := r.raftMu.stateLoader.SetMVCCStats(ctx, writer, &ms); err != nil {
 		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
 			errors.Wrap(err, "unable to update MVCCStats")))
 	}
@@ -4630,8 +4631,8 @@ func (r *Replica) applyRaftCommand(
 
 	var assertHS *raftpb.HardState
 	if util.RaceEnabled && rResult.Split != nil && r.store.cfg.Settings.Version.IsActive(cluster.VersionSplitHardStateBelowRaft) {
-		rsl := makeReplicaStateLoader(r.store.cfg.Settings, rResult.Split.RightDesc.RangeID)
-		oldHS, err := rsl.loadHardState(ctx, r.store.Engine())
+		rsl := stateloader.Make(r.store.cfg.Settings, rResult.Split.RightDesc.RangeID)
+		oldHS, err := rsl.LoadHardState(ctx, r.store.Engine())
 		if err != nil {
 			log.Fatalf(ctx, "unable to load HardState: %s", err)
 		}
@@ -4644,8 +4645,8 @@ func (r *Replica) applyRaftCommand(
 
 	if assertHS != nil {
 		// Load the HardState that was just committed (if any).
-		rsl := makeReplicaStateLoader(r.store.cfg.Settings, rResult.Split.RightDesc.RangeID)
-		newHS, err := rsl.loadHardState(ctx, r.store.Engine())
+		rsl := stateloader.Make(r.store.cfg.Settings, rResult.Split.RightDesc.RangeID)
+		newHS, err := rsl.LoadHardState(ctx, r.store.Engine())
 		if err != nil {
 			log.Fatalf(ctx, "unable to load HardState: %s", err)
 		}
@@ -5365,7 +5366,7 @@ func (r *Replica) maybeSetCorrupt(ctx context.Context, pErr *roachpb.Error) *roa
 
 		// Try to persist the destroyed error message. If the underlying store is
 		// corrupted the error won't be processed and a panic will occur.
-		if err := r.mu.stateLoader.setReplicaDestroyedError(ctx, r.store.Engine(), pErr); err != nil {
+		if err := r.mu.stateLoader.SetReplicaDestroyedError(ctx, r.store.Engine(), pErr); err != nil {
 			cErr.Processed = false
 			return roachpb.NewError(cErr)
 		}
