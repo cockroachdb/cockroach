@@ -40,7 +40,8 @@
 
 /pkg/sql/schema*             @cockroachdb/sql-async-prs
 /pkg/sql/lease*              @cockroachdb/sql-async-prs
-/pkg/sql/jobs/               @cockroachdb/sql-async-prs
+
+/pkg/sql/jobs/               @cockroachdb/cluster-jobs-prs
 
 /pkg/sql/distsql*.go         @cockroachdb/distsql-prs @cockroachdb/sql-planning-prs
 /pkg/sql/distsqlplan/        @cockroachdb/distsql-prs @cockroachdb/sql-planning-prs
