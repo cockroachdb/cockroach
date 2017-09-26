@@ -727,6 +727,84 @@ func TestCommandQueueTransitiveDependencies(t *testing.T) {
 	})
 }
 
+// TestCommandQueueGetSnapshotWithReadBuffer commands in the read buffer are
+// returned in the snapshot.
+func TestCommandQueueGetSnapshotWithReadBuffer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// test that read command buffer is flushed to interval tree
+	cq := NewCommandQueue(true /* covering optimization */)
+	add(cq, roachpb.Key("a"), nil, true, nil)
+	add(cq, roachpb.Key("a"), nil, true, nil)
+
+	snapshot := cq.GetSnapshot()
+
+	assertExpectedPrereqs(t, snapshot, map[int64][]int64{
+		1: {},
+		2: {},
+	})
+}
+
+// TestCommandQueueGetSnapshotWithChildren verifies that child commands are
+// returned in the snapshot.
+func TestCommandQueueGetSnapshotWithChildren(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	cq := NewCommandQueue(true /* covering optimization */)
+	cmd1 := add(cq, roachpb.Key("a"), nil, false, nil)
+	cmd2 := add(cq, roachpb.Key("a"), nil, true, []*cmd{cmd1})
+	// the following creates a node with two children because it has two spans
+	// only the children show up in the snapshot.
+	cq.add(true, zeroTS, []*cmd{cmd2}, []roachpb.Span{
+		{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+		{Key: roachpb.Key("d"), EndKey: roachpb.Key("f")},
+	})
+
+	snapshot := cq.GetSnapshot()
+
+	assertExpectedPrereqs(t, snapshot, map[int64][]int64{
+		1: {},
+		2: {1},
+		4: {2},
+		5: {2},
+	})
+}
+
+func TestCommandQueueGetSnapshotWithDisappearingPrereq(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	cq := NewCommandQueue(true /* covering optimization */)
+	cmd1 := add(cq, roachpb.Key("a"), nil, false, nil)
+	cmdNotInQueue := &cmd{
+		id: 55,
+	}
+	add(cq, roachpb.Key("b"), nil, false, []*cmd{cmd1, cmdNotInQueue})
+
+	snapshot := cq.GetSnapshot()
+
+	assertExpectedPrereqs(t, snapshot, map[int64][]int64{
+		1: {},
+		2: {1},
+	})
+}
+
+func assertExpectedPrereqs(
+	t *testing.T, snapshot CommandQueueSnapshot, expectedPrereqs map[int64][]int64,
+) {
+	if len(snapshot) != len(expectedPrereqs) {
+		t.Fatalf("expected %d commands; got %d", len(expectedPrereqs), len(snapshot))
+	}
+	for commandID, expectedPrereqs := range expectedPrereqs {
+		command, ok := snapshot[commandID]
+		if !ok {
+			t.Fatalf("expected command with id %v; none returned", commandID)
+		}
+		if !reflect.DeepEqual(expectedPrereqs, command.Prereqs) {
+			t.Fatalf("expected commands[%v].Prereqs to be %v, got %v", commandID, expectedPrereqs, command.Prereqs)
+		}
+	}
+}
+
 func BenchmarkCommandQueueGetPrereqsAllReadOnly(b *testing.B) {
 	// Test read-only getPrereqs performance for various number of command queue
 	// entries. See #13627 where a previous implementation of
