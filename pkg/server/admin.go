@@ -1032,9 +1032,9 @@ func (s *adminServer) Jobs(
 
 	q := makeSQLQuery()
 	q.Append(`
-			SELECT id, type, description, username, descriptor_ids, status,
+			SELECT id, type, description, username, status, descriptor_ids,
 				created, started, finished, modified, fraction_completed, error
-			FROM [SHOW JOBS]
+			FROM crdb_internal.jobs
 			WHERE true
 	`)
 	if req.Status != "" {
