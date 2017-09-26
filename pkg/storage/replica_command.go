@@ -853,16 +853,16 @@ func isEndTransactionTriggeringRetryError(
 
 	isTxnPushed := currentTxn.Timestamp != headerTxn.OrigTimestamp
 
-	// If pushing requires a retry and the transaction was pushed, retry.
-	if headerTxn.RetryOnPush && isTxnPushed {
-		return true, roachpb.RETRY_DELETE_RANGE
-	}
-
 	// If the isolation level is SERIALIZABLE, return a transaction
 	// retry error if the commit timestamp isn't equal to the txn
 	// timestamp.
 	if headerTxn.Isolation == enginepb.SERIALIZABLE && isTxnPushed {
 		return true, roachpb.RETRY_SERIALIZABLE
+	}
+
+	// If pushing requires a retry and the transaction was pushed, retry.
+	if headerTxn.RetryOnPush && isTxnPushed {
+		return true, roachpb.RETRY_DELETE_RANGE
 	}
 
 	return false, 0
