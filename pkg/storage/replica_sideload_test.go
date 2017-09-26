@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -738,7 +739,7 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 			if withSS {
 				ss = tc.repl.raftMu.sideloaded
 			}
-			rsl := makeReplicaStateLoader(tc.store.ClusterSettings(), tc.repl.RangeID)
+			rsl := stateloader.Make(tc.store.ClusterSettings(), tc.repl.RangeID)
 			entries, err := entries(
 				ctx, rsl, tc.store.Engine(), tc.repl.RangeID, tc.store.raftEntryCache,
 				ss, sideloadedIndex, sideloadedIndex+1, 1<<20,

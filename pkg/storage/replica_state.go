@@ -15,10 +15,6 @@
 package storage
 
 import (
-	"bytes"
-	"math"
-
-	"github.com/coreos/etcd/raft/raftpb"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -29,481 +25,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
-
-// replicaStateLoader contains accessor methods to read or write the
-// fields of storagebase.ReplicaState. It contains an internal buffer
-// which is reused to avoid an allocation on frequently-accessed code
-// paths.
-//
-// Because of this internal buffer, this struct is not safe for
-// concurrent use, and the return values of methods that return keys
-// are invalidated the next time any method is called.
-//
-// It is safe to have multiple replicaStateLoaders for the same
-// Replica. Reusable replicaStateLoaders are typically found in a
-// struct with a mutex, and temporary loaders may be created when
-// locking is less desirable than an allocation.
-type replicaStateLoader struct {
-	st *cluster.Settings
-	keys.RangeIDPrefixBuf
-}
-
-func makeReplicaStateLoader(st *cluster.Settings, rangeID roachpb.RangeID) replicaStateLoader {
-	rsl := replicaStateLoader{
-		st:               st,
-		RangeIDPrefixBuf: keys.MakeRangeIDPrefixBuf(rangeID),
-	}
-	return rsl
-}
-
-// loadState loads a ReplicaState from disk. The exception is the Desc field,
-// which is updated transactionally, and is populated from the supplied
-// RangeDescriptor under the convention that that is the latest committed
-// version.
-func (rsl replicaStateLoader) load(
-	ctx context.Context, reader engine.Reader, desc *roachpb.RangeDescriptor,
-) (storagebase.ReplicaState, error) {
-	var s storagebase.ReplicaState
-	// TODO(tschottdorf): figure out whether this is always synchronous with
-	// on-disk state (likely iffy during Split/ChangeReplica triggers).
-	s.Desc = protoutil.Clone(desc).(*roachpb.RangeDescriptor)
-	// Read the range lease.
-	lease, err := rsl.loadLease(ctx, reader)
-	if err != nil {
-		return storagebase.ReplicaState{}, err
-	}
-	s.Lease = &lease
-
-	if s.GCThreshold, err = rsl.loadGCThreshold(ctx, reader); err != nil {
-		return storagebase.ReplicaState{}, err
-	}
-
-	if s.TxnSpanGCThreshold, err = rsl.loadTxnSpanGCThreshold(ctx, reader); err != nil {
-		return storagebase.ReplicaState{}, err
-	}
-
-	if s.RaftAppliedIndex, s.LeaseAppliedIndex, err = rsl.loadAppliedIndex(ctx, reader); err != nil {
-		return storagebase.ReplicaState{}, err
-	}
-
-	if s.Stats, err = rsl.loadMVCCStats(ctx, reader); err != nil {
-		return storagebase.ReplicaState{}, err
-	}
-
-	// The truncated state should not be optional (i.e. the pointer is
-	// pointless), but it is and the migration is not worth it.
-	truncState, err := rsl.loadTruncatedState(ctx, reader)
-	if err != nil {
-		return storagebase.ReplicaState{}, err
-	}
-	s.TruncatedState = &truncState
-
-	return s, nil
-}
-
-// save persists the given ReplicaState to disk. It assumes that the contained
-// Stats are up-to-date and returns the stats which result from writing the
-// updated State.
-//
-// As an exception to the rule, the Desc field (whose on-disk state is special
-// in that it's a full MVCC value and updated transactionally) is only used for
-// its RangeID.
-//
-// TODO(tschottdorf): test and assert that none of the optional values are
-// missing whenever save is called. Optional values should be reserved
-// strictly for use in EvalResult. Do before merge.
-func (rsl replicaStateLoader) save(
-	ctx context.Context, eng engine.ReadWriter, state storagebase.ReplicaState,
-) (enginepb.MVCCStats, error) {
-	ms := &state.Stats
-	if err := rsl.setLease(ctx, eng, ms, *state.Lease); err != nil {
-		return enginepb.MVCCStats{}, err
-	}
-	if err := rsl.setAppliedIndex(
-		ctx, eng, ms, state.RaftAppliedIndex, state.LeaseAppliedIndex,
-	); err != nil {
-		return enginepb.MVCCStats{}, err
-	}
-	if err := rsl.setGCThreshold(ctx, eng, ms, &state.GCThreshold); err != nil {
-		return enginepb.MVCCStats{}, err
-	}
-	if err := rsl.setTxnSpanGCThreshold(ctx, eng, ms, &state.TxnSpanGCThreshold); err != nil {
-		return enginepb.MVCCStats{}, err
-	}
-	if err := rsl.setTruncatedState(ctx, eng, ms, state.TruncatedState); err != nil {
-		return enginepb.MVCCStats{}, err
-	}
-	if err := rsl.setMVCCStats(ctx, eng, &state.Stats); err != nil {
-		return enginepb.MVCCStats{}, err
-	}
-	return state.Stats, nil
-}
-
-func (rsl replicaStateLoader) loadLease(
-	ctx context.Context, reader engine.Reader,
-) (roachpb.Lease, error) {
-	var lease roachpb.Lease
-	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeLeaseKey(),
-		hlc.Timestamp{}, true, nil, &lease)
-	return lease, err
-}
-
-func (rsl replicaStateLoader) setLease(
-	ctx context.Context, eng engine.ReadWriter, ms *enginepb.MVCCStats, lease roachpb.Lease,
-) error {
-	return engine.MVCCPutProto(ctx, eng, ms, rsl.RangeLeaseKey(),
-		hlc.Timestamp{}, nil, &lease)
-}
-
-// loadAppliedIndex returns the Raft applied index and the lease applied index.
-func (rsl replicaStateLoader) loadAppliedIndex(
-	ctx context.Context, reader engine.Reader,
-) (uint64, uint64, error) {
-	var appliedIndex uint64
-	v, _, err := engine.MVCCGet(ctx, reader, rsl.RaftAppliedIndexKey(),
-		hlc.Timestamp{}, true, nil)
-	if err != nil {
-		return 0, 0, err
-	}
-	if v != nil {
-		int64AppliedIndex, err := v.GetInt()
-		if err != nil {
-			return 0, 0, err
-		}
-		appliedIndex = uint64(int64AppliedIndex)
-	}
-	// TODO(tschottdorf): code duplication.
-	var leaseAppliedIndex uint64
-	v, _, err = engine.MVCCGet(ctx, reader, rsl.LeaseAppliedIndexKey(),
-		hlc.Timestamp{}, true, nil)
-	if err != nil {
-		return 0, 0, err
-	}
-	if v != nil {
-		int64LeaseAppliedIndex, err := v.GetInt()
-		if err != nil {
-			return 0, 0, err
-		}
-		leaseAppliedIndex = uint64(int64LeaseAppliedIndex)
-	}
-
-	return appliedIndex, leaseAppliedIndex, nil
-}
-
-// setAppliedIndex sets the {raft,lease} applied index values, properly
-// accounting for existing keys in the returned stats.
-func (rsl replicaStateLoader) setAppliedIndex(
-	ctx context.Context,
-	eng engine.ReadWriter,
-	ms *enginepb.MVCCStats,
-	appliedIndex,
-	leaseAppliedIndex uint64,
-) error {
-	var value roachpb.Value
-	value.SetInt(int64(appliedIndex))
-	if err := engine.MVCCPut(ctx, eng, ms,
-		rsl.RaftAppliedIndexKey(),
-		hlc.Timestamp{},
-		value,
-		nil /* txn */); err != nil {
-		return err
-	}
-	value.SetInt(int64(leaseAppliedIndex))
-	return engine.MVCCPut(ctx, eng, ms,
-		rsl.LeaseAppliedIndexKey(),
-		hlc.Timestamp{},
-		value,
-		nil /* txn */)
-}
-
-// setAppliedIndexBlind sets the {raft,lease} applied index values using a
-// "blind" put which ignores any existing keys. This is identical to
-// setAppliedIndex but is used to optimize the writing of the applied index
-// values during write operations where we definitively know the size of the
-// previous values.
-func (rsl replicaStateLoader) setAppliedIndexBlind(
-	ctx context.Context,
-	eng engine.ReadWriter,
-	ms *enginepb.MVCCStats,
-	appliedIndex,
-	leaseAppliedIndex uint64,
-) error {
-	var value roachpb.Value
-	value.SetInt(int64(appliedIndex))
-	if err := engine.MVCCBlindPut(ctx, eng, ms,
-		rsl.RaftAppliedIndexKey(),
-		hlc.Timestamp{},
-		value,
-		nil /* txn */); err != nil {
-		return err
-	}
-	value.SetInt(int64(leaseAppliedIndex))
-	return engine.MVCCBlindPut(ctx, eng, ms,
-		rsl.LeaseAppliedIndexKey(),
-		hlc.Timestamp{},
-		value,
-		nil /* txn */)
-}
-
-func inlineValueIntEncodedSize(v int64) int {
-	var value roachpb.Value
-	value.SetInt(v)
-	meta := enginepb.MVCCMetadata{RawBytes: value.RawBytes}
-	return meta.Size()
-}
-
-// Calculate the size (MVCCStats.SysBytes) of the {raft,lease} applied index
-// keys/values.
-func (rsl replicaStateLoader) calcAppliedIndexSysBytes(
-	appliedIndex, leaseAppliedIndex uint64,
-) int64 {
-	return int64(engine.MakeMVCCMetadataKey(rsl.RaftAppliedIndexKey()).EncodedSize() +
-		engine.MakeMVCCMetadataKey(rsl.LeaseAppliedIndexKey()).EncodedSize() +
-		inlineValueIntEncodedSize(int64(appliedIndex)) +
-		inlineValueIntEncodedSize(int64(leaseAppliedIndex)))
-}
-
-func (rsl replicaStateLoader) loadTruncatedState(
-	ctx context.Context, reader engine.Reader,
-) (roachpb.RaftTruncatedState, error) {
-	var truncState roachpb.RaftTruncatedState
-	if _, err := engine.MVCCGetProto(ctx, reader,
-		rsl.RaftTruncatedStateKey(), hlc.Timestamp{}, true,
-		nil, &truncState); err != nil {
-		return roachpb.RaftTruncatedState{}, err
-	}
-	return truncState, nil
-}
-
-func (rsl replicaStateLoader) setTruncatedState(
-	ctx context.Context,
-	eng engine.ReadWriter,
-	ms *enginepb.MVCCStats,
-	truncState *roachpb.RaftTruncatedState,
-) error {
-	if (*truncState == roachpb.RaftTruncatedState{}) {
-		return errors.New("cannot persist empty RaftTruncatedState")
-	}
-	return engine.MVCCPutProto(ctx, eng, ms,
-		rsl.RaftTruncatedStateKey(), hlc.Timestamp{}, nil, truncState)
-}
-
-func (rsl replicaStateLoader) loadGCThreshold(
-	ctx context.Context, reader engine.Reader,
-) (hlc.Timestamp, error) {
-	var t hlc.Timestamp
-	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeLastGCKey(),
-		hlc.Timestamp{}, true, nil, &t)
-	return t, err
-}
-
-func (rsl replicaStateLoader) setGCThreshold(
-	ctx context.Context, eng engine.ReadWriter, ms *enginepb.MVCCStats, threshold *hlc.Timestamp,
-) error {
-	if threshold == nil {
-		return errors.New("cannot persist nil GCThreshold")
-	}
-	return engine.MVCCPutProto(ctx, eng, ms,
-		rsl.RangeLastGCKey(), hlc.Timestamp{}, nil, threshold)
-}
-
-func (rsl replicaStateLoader) loadTxnSpanGCThreshold(
-	ctx context.Context, reader engine.Reader,
-) (hlc.Timestamp, error) {
-	var t hlc.Timestamp
-	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeTxnSpanGCThresholdKey(),
-		hlc.Timestamp{}, true, nil, &t)
-	return t, err
-}
-
-func (rsl replicaStateLoader) setTxnSpanGCThreshold(
-	ctx context.Context, eng engine.ReadWriter, ms *enginepb.MVCCStats, threshold *hlc.Timestamp,
-) error {
-	if threshold == nil {
-		return errors.New("cannot persist nil TxnSpanGCThreshold")
-	}
-
-	return engine.MVCCPutProto(ctx, eng, ms,
-		rsl.RangeTxnSpanGCThresholdKey(), hlc.Timestamp{}, nil, threshold)
-}
-
-func (rsl replicaStateLoader) loadMVCCStats(
-	ctx context.Context, reader engine.Reader,
-) (enginepb.MVCCStats, error) {
-	var ms enginepb.MVCCStats
-	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeStatsKey(), hlc.Timestamp{}, true, nil, &ms)
-	return ms, err
-}
-
-func (rsl replicaStateLoader) setMVCCStats(
-	ctx context.Context, eng engine.ReadWriter, newMS *enginepb.MVCCStats,
-) error {
-	return engine.MVCCPutProto(ctx, eng, nil, rsl.RangeStatsKey(), hlc.Timestamp{}, nil, newMS)
-}
-
-// The rest is not technically part of ReplicaState.
-// TODO(tschottdorf): more consolidation of ad-hoc structures: last index and
-// hard state. These are closely coupled with ReplicaState (and in particular
-// with its TruncatedState) but are different in that they are not consistently
-// updated through Raft.
-
-func (rsl replicaStateLoader) loadLastIndex(
-	ctx context.Context, reader engine.Reader,
-) (uint64, error) {
-	iter := reader.NewIterator(false)
-	defer iter.Close()
-
-	var lastIndex uint64
-	iter.SeekReverse(engine.MakeMVCCMetadataKey(rsl.RaftLogKey(math.MaxUint64)))
-	if ok, _ := iter.Valid(); ok {
-		key := iter.Key()
-		prefix := rsl.RaftLogPrefix()
-		if bytes.HasPrefix(key.Key, prefix) {
-			var err error
-			_, lastIndex, err = encoding.DecodeUint64Ascending(key.Key[len(prefix):])
-			if err != nil {
-				log.Fatalf(ctx, "unable to decode Raft log index key: %s", key)
-			}
-		}
-	}
-
-	if lastIndex == 0 {
-		// The log is empty, which means we are either starting from scratch
-		// or the entire log has been truncated away.
-		lastEnt, err := rsl.loadTruncatedState(ctx, reader)
-		if err != nil {
-			return 0, err
-		}
-		lastIndex = lastEnt.Index
-	}
-	return lastIndex, nil
-}
-
-func (rsl replicaStateLoader) setLastIndex(
-	ctx context.Context, eng engine.ReadWriter, lastIndex uint64,
-) error {
-	if rsl.st.Version.IsActive(cluster.VersionRaftLastIndex) {
-		return nil
-	}
-	var value roachpb.Value
-	value.SetInt(int64(lastIndex))
-	return engine.MVCCPut(ctx, eng, nil, rsl.RaftLastIndexKey(),
-		hlc.Timestamp{}, value, nil /* txn */)
-}
-
-// loadReplicaDestroyedError loads the replica destroyed error for the specified
-// range. If there is no error, nil is returned.
-func (rsl replicaStateLoader) loadReplicaDestroyedError(
-	ctx context.Context, reader engine.Reader,
-) (*roachpb.Error, error) {
-	var v roachpb.Error
-	found, err := engine.MVCCGetProto(ctx, reader,
-		rsl.RangeReplicaDestroyedErrorKey(),
-		hlc.Timestamp{}, true /* consistent */, nil, &v)
-	if err != nil {
-		return nil, err
-	}
-	if !found {
-		return nil, nil
-	}
-	return &v, nil
-}
-
-// setReplicaDestroyedError sets an error indicating that the replica has been
-// destroyed.
-func (rsl replicaStateLoader) setReplicaDestroyedError(
-	ctx context.Context, eng engine.ReadWriter, err *roachpb.Error,
-) error {
-	return engine.MVCCPutProto(ctx, eng, nil,
-		rsl.RangeReplicaDestroyedErrorKey(), hlc.Timestamp{}, nil /* txn */, err)
-}
-
-func (rsl replicaStateLoader) loadHardState(
-	ctx context.Context, reader engine.Reader,
-) (raftpb.HardState, error) {
-	var hs raftpb.HardState
-	found, err := engine.MVCCGetProto(ctx, reader,
-		rsl.RaftHardStateKey(),
-		hlc.Timestamp{}, true, nil, &hs)
-
-	if !found || err != nil {
-		return raftpb.HardState{}, err
-	}
-	return hs, nil
-}
-
-func (rsl replicaStateLoader) setHardState(
-	ctx context.Context, batch engine.ReadWriter, st raftpb.HardState,
-) error {
-	return engine.MVCCPutProto(ctx, batch, nil,
-		rsl.RaftHardStateKey(), hlc.Timestamp{}, nil, &st)
-}
-
-// synthesizeRaftState creates a Raft state which synthesizes both a HardState
-// and a lastIndex from pre-seeded data in the engine (typically created via
-// writeInitialReplicaState and, on a split, perhaps the activity of an
-// uninitialized Raft group)
-func (rsl replicaStateLoader) synthesizeRaftState(
-	ctx context.Context, eng engine.ReadWriter,
-) error {
-	hs, err := rsl.loadHardState(ctx, eng)
-	if err != nil {
-		return err
-	}
-	truncState, err := rsl.loadTruncatedState(ctx, eng)
-	if err != nil {
-		return err
-	}
-	raftAppliedIndex, _, err := rsl.loadAppliedIndex(ctx, eng)
-	if err != nil {
-		return err
-	}
-	if err := rsl.synthesizeHardState(ctx, eng, hs, truncState, raftAppliedIndex); err != nil {
-		return err
-	}
-	return rsl.setLastIndex(ctx, eng, truncState.Index)
-}
-
-// synthesizeHardState synthesizes an on-disk HardState from the given input,
-// taking care that a HardState compatible with the existing data is written.
-func (rsl replicaStateLoader) synthesizeHardState(
-	ctx context.Context,
-	eng engine.ReadWriter,
-	oldHS raftpb.HardState,
-	truncState roachpb.RaftTruncatedState,
-	raftAppliedIndex uint64,
-) error {
-	newHS := raftpb.HardState{
-		Term: truncState.Term,
-		// Note that when applying a Raft snapshot, the applied index is
-		// equal to the Commit index represented by the snapshot.
-		Commit: raftAppliedIndex,
-	}
-
-	if oldHS.Commit > newHS.Commit {
-		return errors.Errorf("can't decrease HardState.Commit from %d to %d",
-			oldHS.Commit, newHS.Commit)
-	}
-	if oldHS.Term > newHS.Term {
-		// The existing HardState is allowed to be ahead of us, which is
-		// relevant in practice for the split trigger. We already checked above
-		// that we're not rewinding the acknowledged index, and we haven't
-		// updated votes yet.
-		newHS.Term = oldHS.Term
-	}
-	// If the existing HardState voted in this term, remember that.
-	if oldHS.Term == newHS.Term {
-		newHS.Vote = oldHS.Vote
-	}
-	err := rsl.setHardState(ctx, eng, newHS)
-	return errors.Wrapf(err, "writing HardState %+v", &newHS)
-}
 
 // writeInitialReplicaState sets up a new Range, but without writing an
 // associated Raft state (which must be written separately via
@@ -522,7 +48,7 @@ func writeInitialReplicaState(
 	gcThreshold hlc.Timestamp,
 	txnSpanGCThreshold hlc.Timestamp,
 ) (enginepb.MVCCStats, error) {
-	rsl := makeReplicaStateLoader(st, desc.RangeID)
+	rsl := stateloader.Make(st, desc.RangeID)
 
 	var s storagebase.ReplicaState
 	s.TruncatedState = &roachpb.RaftTruncatedState{
@@ -538,25 +64,25 @@ func writeInitialReplicaState(
 	s.GCThreshold = gcThreshold
 	s.TxnSpanGCThreshold = txnSpanGCThreshold
 
-	if existingLease, err := rsl.loadLease(ctx, eng); err != nil {
+	if existingLease, err := rsl.LoadLease(ctx, eng); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading lease")
 	} else if (existingLease != roachpb.Lease{}) {
 		log.Fatalf(ctx, "expected trivial lease, but found %+v", existingLease)
 	}
 
-	if existingGCThreshold, err := rsl.loadGCThreshold(ctx, eng); err != nil {
+	if existingGCThreshold, err := rsl.LoadGCThreshold(ctx, eng); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading GCThreshold")
 	} else if (existingGCThreshold != hlc.Timestamp{}) {
 		log.Fatalf(ctx, "expected trivial GChreshold, but found %+v", existingGCThreshold)
 	}
 
-	if existingTxnSpanGCThreshold, err := rsl.loadTxnSpanGCThreshold(ctx, eng); err != nil {
+	if existingTxnSpanGCThreshold, err := rsl.LoadTxnSpanGCThreshold(ctx, eng); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading TxnSpanGCThreshold")
 	} else if (existingTxnSpanGCThreshold != hlc.Timestamp{}) {
 		log.Fatalf(ctx, "expected trivial TxnSpanGCThreshold, but found %+v", existingTxnSpanGCThreshold)
 	}
 
-	newMS, err := rsl.save(ctx, eng, s)
+	newMS, err := rsl.Save(ctx, eng, s)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}
@@ -582,7 +108,7 @@ func writeInitialState(
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-	if err := makeReplicaStateLoader(st, desc.RangeID).synthesizeRaftState(ctx, eng); err != nil {
+	if err := stateloader.Make(st, desc.RangeID).SynthesizeRaftState(ctx, eng); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	return newMS, nil
@@ -602,8 +128,8 @@ func (rec ReplicaEvalContext) ClusterSettings() *cluster.Settings {
 	return rec.repl.store.cfg.Settings
 }
 
-func (rec *ReplicaEvalContext) makeReplicaStateLoader() replicaStateLoader {
-	return makeReplicaStateLoader(rec.ClusterSettings(), rec.RangeID())
+func (rec *ReplicaEvalContext) makeReplicaStateLoader() stateloader.Instance {
+	return stateloader.Make(rec.ClusterSettings(), rec.RangeID())
 }
 
 // In-memory state, immutable fields, and debugging methods are accessed directly.
