@@ -17,6 +17,7 @@ package timeutil
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 
 	"golang.org/x/sys/windows"
@@ -41,5 +42,5 @@ func init() {
 func Now() time.Time {
 	var ft windows.Filetime
 	windows.GetSystemTimePreciseAsFileTime(&ft)
-	return time.Unix(0, ft.Nanoseconds())
+	return timeutil.Unix(0, ft.Nanoseconds())
 }

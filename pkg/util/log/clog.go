@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/petermattis/goid"
 )
 
@@ -554,7 +555,7 @@ func (buf *buffer) someDigits(i, d int) int {
 }
 
 func formatLogEntry(entry Entry, stacks []byte, colors *colorProfile) *buffer {
-	buf := formatHeader(entry.Severity, time.Unix(0, entry.Time),
+	buf := formatHeader(entry.Severity, timeutil.Unix(0, entry.Time),
 		int(entry.Goroutine), entry.File, int(entry.Line), colors)
 	_, _ = buf.WriteString(entry.Message)
 	if buf.Bytes()[buf.Len()-1] != '\n' {

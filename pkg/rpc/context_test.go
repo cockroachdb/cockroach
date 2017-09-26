@@ -67,7 +67,7 @@ func TestHeartbeatCB(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(context.TODO())
 
-			clock := hlc.NewClock(time.Unix(0, 20).UnixNano, time.Nanosecond)
+			clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
 			serverCtx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clock, stopper)
 			serverCtx.rpcCompression = compression
 			s := newTestServer(t, serverCtx, true)
@@ -121,7 +121,7 @@ func TestHeartbeatHealth(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	// Can't be zero because that'd be an empty offset.
-	clock := hlc.NewClock(time.Unix(0, 1).UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(timeutil.Unix(0, 1).UnixNano, time.Nanosecond)
 
 	serverCtx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clock, stopper)
 	s := newTestServer(t, serverCtx, true)
@@ -248,7 +248,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	// Can't be zero because that'd be an empty offset.
-	clock := hlc.NewClock(time.Unix(0, 1).UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(timeutil.Unix(0, 1).UnixNano, time.Nanosecond)
 
 	serverCtx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clock, stopper)
 	// newTestServer with a custom listener.
@@ -391,7 +391,7 @@ func TestOffsetMeasurement(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 
-	serverTime := time.Unix(0, 20)
+	serverTime := timeutil.Unix(0, 20)
 	serverClock := hlc.NewClock(serverTime.UnixNano, time.Nanosecond)
 	serverCtx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), serverClock, stopper)
 	s := newTestServer(t, serverCtx, true)
@@ -407,7 +407,7 @@ func TestOffsetMeasurement(t *testing.T) {
 	remoteAddr := ln.Addr().String()
 
 	// Create a client clock that is behind the server clock.
-	clientAdvancing := AdvancingClock{time: time.Unix(0, 10)}
+	clientAdvancing := AdvancingClock{time: timeutil.Unix(0, 10)}
 	clientClock := hlc.NewClock(clientAdvancing.UnixNano, time.Nanosecond)
 	clientCtx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clientClock, stopper)
 	// Make the interval shorter to speed up the test.
@@ -453,7 +453,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	// Can't be zero because that'd be an empty offset.
-	clock := hlc.NewClock(time.Unix(0, 1).UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(timeutil.Unix(0, 1).UnixNano, time.Nanosecond)
 
 	serverCtx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clock, stopper)
 	s := newTestServer(t, serverCtx, true)
@@ -525,7 +525,7 @@ func (ac *AdvancingClock) UnixNano() int64 {
 	time := ac.time
 	ac.time = time.Add(ac.getAdvancementInterval())
 	ac.Unlock()
-	return time.UnixNano()
+	return timeutil.UnixNano()
 }
 
 func TestRemoteOffsetUnhealthy(t *testing.T) {
@@ -622,7 +622,7 @@ func TestGRPCKeepaliveFailureFailsInflightRPCs(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 
-	clock := hlc.NewClock(time.Unix(0, 20).UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
 	serverCtx := NewContext(
 		log.AmbientContext{Tracer: tracing.NewTracer()},
 		testutils.NewNodeTestBaseContext(),

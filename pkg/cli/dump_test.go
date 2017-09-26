@@ -384,8 +384,8 @@ func TestDumpRandom(t *testing.T) {
 			// Generate a random number of random inserts.
 			i := rnd.Int63()
 			f := rnd.Float64()
-			d := time.Unix(0, rnd.Int63()).Round(time.Hour * 24).UTC()
-			m := time.Unix(0, rnd.Int63()).Round(time.Microsecond).UTC()
+			d := timeutil.Unix(0, rnd.Int63()).Round(time.Hour * 24).UTC()
+			m := timeutil.Unix(0, rnd.Int63()).Round(time.Microsecond).UTC()
 			sign := 1 - rnd.Int63n(2)*2
 			dur := duration.Duration{
 				Months: sign * rnd.Int63n(1000),

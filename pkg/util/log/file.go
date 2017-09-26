@@ -36,6 +36,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // LogFileMaxSize is the maximum size of a log file in bytes.
@@ -222,7 +223,7 @@ func create(
 		unix = lastRotation + 1
 	}
 	updatedRotation = unix
-	t = time.Unix(unix, 0)
+	t = timeutil.Unix(unix, 0)
 
 	// Generate the file name.
 	name, link := logName(t)

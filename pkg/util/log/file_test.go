@@ -19,6 +19,8 @@ package log
 import (
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // TestLogFilenameParsing ensures that logName and parseLogFilename work as
@@ -36,7 +38,7 @@ func TestLogFilenameParsing(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if a, e := time.Unix(0, details.Time).Format(time.RFC3339), testCase.Format(time.RFC3339); a != e {
+		if a, e := timeutil.Unix(0, details.Time).Format(time.RFC3339), testCase.Format(time.RFC3339); a != e {
 			t.Errorf("%d: Times do not match, expected:%s - actual:%s", i, e, a)
 		}
 	}

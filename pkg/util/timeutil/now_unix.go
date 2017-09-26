@@ -22,5 +22,5 @@ import (
 
 // Now returns the current local time.
 func Now() time.Time {
-	return time.Now()
+	return time.Now().UTC()
 }

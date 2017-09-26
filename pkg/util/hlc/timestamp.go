@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"math"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // Timestamp constant values.
@@ -98,5 +100,5 @@ func (t *Timestamp) Backward(s Timestamp) {
 
 // GoTime converts the timestamp to a time.Time.
 func (t Timestamp) GoTime() time.Time {
-	return time.Unix(0, t.WallTime)
+	return timeutil.Unix(0, t.WallTime)
 }
