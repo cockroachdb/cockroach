@@ -264,8 +264,6 @@ type Stats struct {
 	BlockCachePinnedUsage          int64
 	BloomFilterPrefixChecked       int64
 	BloomFilterPrefixUseful        int64
-	MemtableHits                   int64
-	MemtableMisses                 int64
 	MemtableTotalSize              int64
 	Flushes                        int64
 	Compactions                    int64

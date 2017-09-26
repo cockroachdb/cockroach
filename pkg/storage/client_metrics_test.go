@@ -148,8 +148,6 @@ func verifyRocksDBStats(t *testing.T, s *storage.Store) {
 		{m.RdbBlockCachePinnedUsage, 0},
 		{m.RdbBloomFilterPrefixChecked, 20},
 		{m.RdbBloomFilterPrefixUseful, 20},
-		{m.RdbMemtableHits, 0},
-		{m.RdbMemtableMisses, 0},
 		{m.RdbMemtableTotalSize, 5000},
 		{m.RdbFlushes, 1},
 		{m.RdbCompactions, 0},
