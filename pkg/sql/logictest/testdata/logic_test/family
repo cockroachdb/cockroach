@@ -26,6 +26,9 @@ abcd  CREATE TABLE abcd (
       )
 
 statement ok
+CREATE INDEX d_idx ON abcd(d)
+
+statement ok
 INSERT INTO abcd VALUES (1, 2, 3, 4), (5, 6, 7, 8)
 
 query IIII rowsort
@@ -33,6 +36,16 @@ SELECT * FROM abcd
 ----
 1 2 3 4
 5 6 7 8
+
+query I
+SELECT COUNT(*) FROM abcd
+----
+2
+
+query I
+SELECT COUNT(*) FROM abcd@d_idx
+----
+2
 
 statement ok
 UPDATE abcd SET b = 9, d = 10, c = NULL where c = 7
@@ -117,6 +130,7 @@ abcd  CREATE TABLE abcd (
       i INT NULL,
       j INT NULL,
       CONSTRAINT "primary" PRIMARY KEY (a ASC),
+      INDEX d_idx (d ASC),
       FAMILY f1 (a, b, e, f),
       FAMILY fam_1_c_d (c, d),
       FAMILY fam_2_g (g),
