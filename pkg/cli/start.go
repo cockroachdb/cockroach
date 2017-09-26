@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"net"
 	"net/url"
 	"os"
@@ -33,6 +34,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	humanize "github.com/dustin/go-humanize"
+	"github.com/elastic/gosigar"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -263,34 +266,126 @@ func initBlockProfile() {
 // can change this.
 var ErrorCode = 1
 
+type percentResolverFunc func(percent int) (int64, error)
+
+// bytesOrPercentageValue is a flag that accepts an integer value, an integer
+// plus a unit (e.g. 32GB or 32GiB) or a percentage (e.g. 32%). In all these
+// cases, it transforms the string flag input into an int64 value.
+//
+// Since it accepts a percentage, instances need to be configured with
+// instructions on how to resolve a percentage to a number (i.e. the answer to
+// the question "a percentage of what?"). This is done by taking in a
+// percentResolverFunc. There are predefined ones: memoryPercentResolver and
+// diskPercentResolverFactory.
+//
+// bytesOrPercentageValue can be used in two ways:
+// 1. Upon flag parsing, it can write an int64 value through a pointer specified
+// by the caller.
+// 2. It can store the flag value as a string and only convert it to an int64 on
+// a subsequent Resolve() call. Input validation still happens at flag parsing
+// time.
+//
+// Option 2 is useful when percentages cannot be resolved at flag parsing time.
+// For example, we have flags that can be expressed as percentages of the
+// capacity of storage device. Which storage device is in question might only be
+// known once other flags are parsed (e.g. --max-disk-temp-storage=10% depends
+// on --store).
 type bytesOrPercentageValue struct {
 	val  *int64
 	bval *humanizeutil.BytesValue
+
+	origVal string
+
+	// percentResolver is used to turn a percent string into a value. See
+	// memoryPercentResolver() and diskPercentResolverFactory().
+	percentResolver percentResolverFunc
 }
 
-func newBytesOrPercentageValue(v *int64) *bytesOrPercentageValue {
+// memoryPercentResolver turns a percent into the respective fraction of the
+// system's internal memory.
+func memoryPercentResolver(percent int) (int64, error) {
+	sizeBytes, err := server.GetTotalMemory(context.TODO())
+	if err != nil {
+		return 0, err
+	}
+	return (sizeBytes * int64(percent)) / 100, nil
+}
+
+// diskPercentResolverFactory takes in a path and produces a percentResolverFunc
+// bound to the respective storage device.
+//
+// An error is returned if dir does not exist.
+func diskPercentResolverFactory(dir string) (percentResolverFunc, error) {
+	fileSystemUsage := gosigar.FileSystemUsage{}
+	if err := fileSystemUsage.Get(dir); err != nil {
+		return nil, err
+	}
+	if fileSystemUsage.Total > math.MaxInt64 {
+		return nil, fmt.Errorf("unsupported disk size %s, max supported size is %s",
+			humanize.IBytes(fileSystemUsage.Total), humanizeutil.IBytes(math.MaxInt64))
+	}
+	deviceCapacity := int64(fileSystemUsage.Total)
+
+	return func(percent int) (int64, error) {
+		return (deviceCapacity * int64(percent)) / 100, nil
+	}, nil
+}
+
+// newBytesOrPercentageValue creates a bytesOrPercentageValue.
+//
+// v and percentResolver can be nil (either they're both specified or they're
+// both nil). If they're nil, then Resolve() has to be called later to get the
+// passed-in value.
+func newBytesOrPercentageValue(
+	v *int64, percentResolver func(percent int) (int64, error),
+) *bytesOrPercentageValue {
+	if v == nil {
+		v = new(int64)
+	}
 	return &bytesOrPercentageValue{
-		val:  v,
-		bval: humanizeutil.NewBytesValue(v),
+		val:             v,
+		bval:            humanizeutil.NewBytesValue(v),
+		percentResolver: percentResolver,
 	}
 }
 
 func (b *bytesOrPercentageValue) Set(s string) error {
+	b.origVal = s
 	if strings.HasSuffix(s, "%") {
 		percent, err := strconv.Atoi(s[:len(s)-1])
 		if err != nil {
 			return err
 		}
 		if percent < 0 || percent > 99 {
-			return fmt.Errorf("percentage out of range")
+			return fmt.Errorf("percentage %s out of range 0%% - 99%%", s)
 		}
-		size, err := server.GetTotalMemory(context.Background())
+
+		if b.percentResolver == nil {
+			// percentResolver not set means that this flag is not yet supposed to set
+			// any value.
+			return nil
+		}
+
+		absVal, err := b.percentResolver(percent)
 		if err != nil {
 			return err
 		}
-		s = fmt.Sprint((size * int64(percent)) / 100)
+		s = fmt.Sprint(absVal)
 	}
 	return b.bval.Set(s)
+}
+
+// Resolve can be called to get the flag's value (if any). If the flag had been
+// previously set, *v will be written.
+func (b *bytesOrPercentageValue) Resolve(v *int64, percentResolver percentResolverFunc) error {
+	// The flag was not passed on the command line.
+	if b.origVal == "" {
+		return nil
+	}
+	b.percentResolver = percentResolver
+	b.val = v
+	b.bval = humanizeutil.NewBytesValue(v)
+	return b.Set(b.origVal)
 }
 
 func (b *bytesOrPercentageValue) Type() string {
@@ -305,8 +400,9 @@ func (b *bytesOrPercentageValue) IsSet() bool {
 	return b.bval.IsSet()
 }
 
-var cacheSizeValue = newBytesOrPercentageValue(&serverCfg.CacheSize)
-var sqlSizeValue = newBytesOrPercentageValue(&serverCfg.SQLMemoryPoolSize)
+var cacheSizeValue = newBytesOrPercentageValue(&serverCfg.CacheSize, memoryPercentResolver)
+var sqlSizeValue = newBytesOrPercentageValue(&serverCfg.SQLMemoryPoolSize, memoryPercentResolver)
+var diskTempStorageSizeValue = newBytesOrPercentageValue(nil /* v */, nil /* percentResolver */)
 
 // runStart starts the cockroach node using --store as the list of
 // storage devices ("stores") on this machine and --join as the list
@@ -322,12 +418,43 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Deal with flags that may depend on other flags.
+
+	// The temp store size can depend on the location of the first regular store
+	// (if it's expressed as a percentage), so we resolve that flag here.
+	var tempStorePercentageResolver percentResolverFunc
+	if !serverCfg.Stores.Specs[0].InMemory {
+		dir := serverCfg.Stores.Specs[0].Path
+		// Create the store dir, if it doesn't exist. The dir is required to exist
+		// by diskPercentResolverFactory.
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return errors.Wrapf(err, "failed to create dir for first store: %s", dir)
+		}
+		var err error
+		tempStorePercentageResolver, err = diskPercentResolverFactory(dir)
+		if err != nil {
+			return errors.Wrapf(err, "failed to create resolver for: %s", dir)
+		}
+	} else {
+		tempStorePercentageResolver = memoryPercentResolver
+	}
+	if err := diskTempStorageSizeValue.Resolve(
+		&serverCfg.TempStoreMaxSizeBytes, tempStorePercentageResolver,
+	); err != nil {
+		return err
+	}
+	if serverCfg.Stores.Specs[0].InMemory && !diskTempStorageSizeValue.IsSet() {
+		// The default temp store size is different when the first store (and thus
+		// also the temp storage) is in memory.
+		serverCfg.TempStoreMaxSizeBytes = server.DefaultTempStoreMaxSizeBytesInMemStore
+	}
+
 	// Use the server-specific values for some flags and settings.
 	serverCfg.Insecure = startCtx.serverInsecure
 	serverCfg.SSLCertsDir = startCtx.serverSSLCertsDir
 	serverCfg.User = security.NodeUser
 
-	serverCfg.TempStore = server.MakeTempStoreSpecFromStoreSpec(serverCfg.Stores.Specs[0])
+	serverCfg.TempStoreSpec = server.MakeTempStoreSpecFromStoreSpec(serverCfg.Stores.Specs[0])
 
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
