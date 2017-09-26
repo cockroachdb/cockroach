@@ -818,6 +818,7 @@ func populateSessionsTable(
 				parser.DNull,
 				parser.DNull,
 				parser.DNull,
+				parser.DNull,
 			); err != nil {
 				return err
 			}
