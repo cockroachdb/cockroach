@@ -145,7 +145,7 @@ func (bt *benchmarkTest) Start(ctx context.Context) {
 	// On Azure, if we don't limit our disk throughput, we'll quickly cause node
 	// liveness failures. This limit was determined experimentally on
 	// Standard_D3_v2 instances.
-	sqlDB.Exec(`SET CLUSTER SETTING kv.bulk_io_write.max_rate = '30MB'`)
+	//sqlDB.Exec(`SET CLUSTER SETTING kv.bulk_io_write.max_rate = '30MB'`)
 	// Stats-based replica and lease rebalancing interacts badly with restore's
 	// splits and scatters.
 	//
