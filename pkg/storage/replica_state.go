@@ -124,39 +124,13 @@ type ReplicaEvalContext struct {
 	ss   *SpanSet
 }
 
-// ReplicaEvalContextI .
-type ReplicaEvalContextI interface {
-	ClusterSettings() *cluster.Settings
-	TxnSpanGCThreshold() (hlc.Timestamp, error)
-	GCThreshold() (hlc.Timestamp, error)
-	Desc() (*roachpb.RangeDescriptor, error)
-	StoreTestingKnobs() StoreTestingKnobs
-	ContainsKey(roachpb.Key) (bool, error)
-	AbortCache() *AbortCache
-	RangeID() roachpb.RangeID
-	FirstIndex() (uint64, error)
-	Term(uint64) (uint64, error)
-	GetLease() (roachpb.Lease, *roachpb.Lease, error)
-	Tracer() opentracing.Tracer
-	GetMVCCStats() (enginepb.MVCCStats, error)
-	GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error)
-	Engine() engine.Engine
-	IsFirstRange() bool
-
-	// Used from storageccl
-	NodeID() roachpb.NodeID
-	DB() *client.DB
-
-	makeReplicaStateLoader() replicaStateLoader
-	pushTxnQueue() *pushTxnQueue
-}
-
 // ClusterSettings returns the node's ClusterSettings.
 func (rec ReplicaEvalContext) ClusterSettings() *cluster.Settings {
 	return rec.repl.store.cfg.Settings
 }
 
-func (rec *ReplicaEvalContext) makeReplicaStateLoader() stateloader.Instance {
+// MakeReplicaStateLoader makes a stateloader.Instance using the local RangeID().
+func (rec *ReplicaEvalContext) MakeReplicaStateLoader() stateloader.Instance {
 	return stateloader.Make(rec.ClusterSettings(), rec.RangeID())
 }
 

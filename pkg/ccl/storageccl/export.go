@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -98,8 +99,8 @@ func (r *rowCounter) count(key roachpb.Key) error {
 // evalExport dumps the requested keys into files of non-overlapping key ranges
 // in a format suitable for bulk ingest.
 func evalExport(
-	ctx context.Context, batch engine.ReadWriter, cArgs storage.CommandArgs, resp roachpb.Response,
-) (storage.EvalResult, error) {
+	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
+) (batcheval.Result, error) {
 	args := cArgs.Args.(*roachpb.ExportRequest)
 	h := cArgs.Header
 	reply := resp.(*roachpb.ExportResponse)
@@ -114,29 +115,29 @@ func evalExport(
 	// deletions in the incremental backup.
 	gcThreshold, err := cArgs.EvalCtx.GCThreshold()
 	if err != nil {
-		return storage.EvalResult{}, err
+		return batcheval.Result{}, err
 	}
 	if args.StartTime != (hlc.Timestamp{}) {
 		if !gcThreshold.Less(args.StartTime) {
-			return storage.EvalResult{}, errors.Errorf("start timestamp %v must be after replica GC threshold %v", args.StartTime, gcThreshold)
+			return batcheval.Result{}, errors.Errorf("start timestamp %v must be after replica GC threshold %v", args.StartTime, gcThreshold)
 		}
 	}
 
 	if err := exportRequestLimiter.beginLimitedRequest(ctx); err != nil {
-		return storage.EvalResult{}, err
+		return batcheval.Result{}, err
 	}
 	defer exportRequestLimiter.endLimitedRequest()
 	log.Infof(ctx, "export [%s,%s)", args.Key, args.EndKey)
 
 	exportStore, err := MakeExportStorage(ctx, args.Storage)
 	if err != nil {
-		return storage.EvalResult{}, err
+		return batcheval.Result{}, err
 	}
 	defer exportStore.Close()
 
 	sst, err := engine.MakeRocksDBSstFileWriter()
 	if err != nil {
-		return storage.EvalResult{}, err
+		return batcheval.Result{}, err
 	}
 	defer sst.Close()
 
@@ -150,7 +151,7 @@ func evalExport(
 		if err != nil {
 			// The error may be a WriteIntentError. In which case, returning it will
 			// cause this command to be retried.
-			return storage.EvalResult{}, err
+			return batcheval.Result{}, err
 		}
 		if !ok || iter.UnsafeKey().Key.Compare(args.EndKey) >= 0 {
 			break
@@ -162,34 +163,34 @@ func evalExport(
 		}
 
 		if err := rows.count(iter.UnsafeKey().Key); err != nil {
-			return storage.EvalResult{}, errors.Wrapf(err, "decoding %s", iter.UnsafeKey())
+			return batcheval.Result{}, errors.Wrapf(err, "decoding %s", iter.UnsafeKey())
 		}
 		if err := sst.Add(engine.MVCCKeyValue{Key: iter.UnsafeKey(), Value: iter.UnsafeValue()}); err != nil {
-			return storage.EvalResult{}, errors.Wrapf(err, "adding key %s", iter.UnsafeKey())
+			return batcheval.Result{}, errors.Wrapf(err, "adding key %s", iter.UnsafeKey())
 		}
 	}
 
 	if sst.DataSize == 0 {
 		// Let the defer Close the sstable.
 		reply.Files = []roachpb.ExportResponse_File{}
-		return storage.EvalResult{}, nil
+		return batcheval.Result{}, nil
 	}
 	rows.BulkOpSummary.DataSize = sst.DataSize
 
 	sstContents, err := sst.Finish()
 	if err != nil {
-		return storage.EvalResult{}, err
+		return batcheval.Result{}, err
 	}
 
 	// Compute the checksum before we upload and remove the local file.
 	checksum, err := SHA512ChecksumData(sstContents)
 	if err != nil {
-		return storage.EvalResult{}, err
+		return batcheval.Result{}, err
 	}
 
 	filename := fmt.Sprintf("%d.sst", parser.GenerateUniqueInt(cArgs.EvalCtx.NodeID()))
 	if err := exportStore.WriteFile(ctx, filename, bytes.NewReader(sstContents)); err != nil {
-		return storage.EvalResult{}, err
+		return batcheval.Result{}, err
 	}
 
 	reply.Files = []roachpb.ExportResponse_File{{
@@ -199,7 +200,7 @@ func evalExport(
 		Sha512:   checksum,
 	}}
 
-	return storage.EvalResult{}, nil
+	return batcheval.Result{}, nil
 }
 
 // SHA512ChecksumData returns the SHA512 checksum of data.

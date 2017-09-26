@@ -18,6 +18,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -25,7 +26,7 @@ import (
 func TestEvalResultIsZero(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var p EvalResult
+	var p batcheval.Result
 	if !p.IsZero() {
 		t.Fatalf("%v unexpectedly non-zero", p)
 	}
@@ -38,9 +39,9 @@ func TestEvalResultIsZero(t *testing.T) {
 				vf = vf.Addr()
 			}
 			switch f := vf.Interface().(type) {
-			case *LocalEvalResult:
-				f.gossipFirstRange = true
-				defer func() { f.gossipFirstRange = false }()
+			case *batcheval.LocalResult:
+				f.GossipFirstRange = true
+				defer func() { f.GossipFirstRange = false }()
 			case *storagebase.ReplicatedEvalResult:
 				f.IsLeaseRequest = true
 				defer func() { f.IsLeaseRequest = false }()
