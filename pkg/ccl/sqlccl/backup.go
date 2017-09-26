@@ -868,7 +868,7 @@ func showBackupPlanHook(
 		}
 		start := parser.DNull
 		if desc.StartTime.WallTime != 0 {
-			start = parser.MakeDTimestamp(time.Unix(0, desc.StartTime.WallTime), time.Nanosecond)
+			start = parser.MakeDTimestamp(timeutil.Unix(0, desc.StartTime.WallTime), time.Nanosecond)
 		}
 		for _, descriptor := range desc.Descriptors {
 			if table := descriptor.GetTable(); table != nil {
@@ -877,7 +877,7 @@ func showBackupPlanHook(
 					parser.NewDString(dbName),
 					parser.NewDString(table.Name),
 					start,
-					parser.MakeDTimestamp(time.Unix(0, desc.EndTime.WallTime), time.Nanosecond),
+					parser.MakeDTimestamp(timeutil.Unix(0, desc.EndTime.WallTime), time.Nanosecond),
 					parser.NewDInt(parser.DInt(descSizes[table.ID].DataSize)),
 					parser.NewDInt(parser.DInt(descSizes[table.ID].Rows)),
 				}

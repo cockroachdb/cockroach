@@ -28,7 +28,7 @@ func init() {
 	}
 }
 
-// Now returns the current local time.
+// Now returns the current UTC time.
 //
 // This has a higher precision than time.Now in go1.8, but is much slower
 // (~2000x) and requires Windows 8+.
@@ -41,5 +41,5 @@ func init() {
 func Now() time.Time {
 	var ft windows.Filetime
 	windows.GetSystemTimePreciseAsFileTime(&ft)
-	return time.Unix(0, ft.Nanoseconds())
+	return time.Unix(0, ft.Nanoseconds()).UTC()
 }

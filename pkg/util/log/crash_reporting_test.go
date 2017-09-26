@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"golang.org/x/net/context"
 )
 
@@ -83,30 +84,30 @@ func TestingSetCrashReportingURL(url string) func() {
 }
 
 func TestUptimeTag(t *testing.T) {
-	startTime = time.Unix(0, 0)
+	startTime = timeutil.Unix(0, 0)
 	testCases := []struct {
 		crashTime time.Time
 		expected  string
 	}{
-		{time.Unix(0, 0), "<1s"},
-		{time.Unix(0, 0), "<1s"},
-		{time.Unix(1, 0), "<10s"},
-		{time.Unix(9, 0), "<10s"},
-		{time.Unix(10, 0), "<1m"},
-		{time.Unix(59, 0), "<1m"},
-		{time.Unix(60, 0), "<10m"},
-		{time.Unix(9*60, 0), "<10m"},
-		{time.Unix(10*60, 0), "<1h"},
-		{time.Unix(59*60, 0), "<1h"},
-		{time.Unix(60*60, 0), "<10h"},
-		{time.Unix(9*60*60, 0), "<10h"},
-		{time.Unix(10*60*60, 0), "<1d"},
-		{time.Unix(23*60*60, 0), "<1d"},
-		{time.Unix(24*60*60, 0), "<2d"},
-		{time.Unix(47*60*60, 0), "<2d"},
-		{time.Unix(119*60*60, 0), "<5d"},
-		{time.Unix(10*24*60*60, 0), "<11d"},
-		{time.Unix(365*24*60*60, 0), "<366d"},
+		{timeutil.Unix(0, 0), "<1s"},
+		{timeutil.Unix(0, 0), "<1s"},
+		{timeutil.Unix(1, 0), "<10s"},
+		{timeutil.Unix(9, 0), "<10s"},
+		{timeutil.Unix(10, 0), "<1m"},
+		{timeutil.Unix(59, 0), "<1m"},
+		{timeutil.Unix(60, 0), "<10m"},
+		{timeutil.Unix(9*60, 0), "<10m"},
+		{timeutil.Unix(10*60, 0), "<1h"},
+		{timeutil.Unix(59*60, 0), "<1h"},
+		{timeutil.Unix(60*60, 0), "<10h"},
+		{timeutil.Unix(9*60*60, 0), "<10h"},
+		{timeutil.Unix(10*60*60, 0), "<1d"},
+		{timeutil.Unix(23*60*60, 0), "<1d"},
+		{timeutil.Unix(24*60*60, 0), "<2d"},
+		{timeutil.Unix(47*60*60, 0), "<2d"},
+		{timeutil.Unix(119*60*60, 0), "<5d"},
+		{timeutil.Unix(10*24*60*60, 0), "<11d"},
+		{timeutil.Unix(365*24*60*60, 0), "<366d"},
 	}
 	for _, tc := range testCases {
 		if a, e := uptimeTag(tc.crashTime), tc.expected; a != e {
