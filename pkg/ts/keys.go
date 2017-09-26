@@ -125,7 +125,7 @@ func prettyPrintKey(key roachpb.Key) string {
 		return encoding.PrettyPrintValue(key, "/")
 	}
 	return fmt.Sprintf("/%s/%s/%s/%s", name, source, resolution,
-		timeutil.Unix(0, timestamp).UTC().Format(time.RFC3339Nano))
+		timeutil.Unix(0, timestamp).Format(time.RFC3339Nano))
 }
 
 func init() {

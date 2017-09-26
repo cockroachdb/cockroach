@@ -55,7 +55,7 @@ func Load(
 	}
 
 	parse := parser.Parser{}
-	curTime := timeutil.Unix(0, ts.WallTime).UTC()
+	curTime := timeutil.Unix(0, ts.WallTime)
 	evalCtx := parser.EvalContext{}
 	evalCtx.SetTxnTimestamp(curTime)
 	evalCtx.SetStmtTimestamp(curTime)
