@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package storage
+package abortcache
 
 import (
 	"golang.org/x/net/context"
@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-// The AbortCache sets markers for aborted transactions to provide
+// The AbortCache Instance sets markers for aborted transactions to provide
 // protection against an aborted but active transaction not reading
 // values it wrote (due to its intents having been removed).
 //
@@ -36,7 +36,7 @@ import (
 // is cleared from a range, and is consulted before read commands are processed
 // on a range.
 //
-// The AbortCache stores responses in the underlying engine, using keys derived
+// The Instance stores responses in the underlying engine, using keys derived
 // from Range ID and txn ID.
 // Note that the epoch number is not used to query the cache: once aborted, even
 // higher epochs are prohibited from reading data. That's because, for better or
@@ -44,20 +44,20 @@ import (
 // than the txn meta used for clearing (see engine.MVCCResolveWriteIntent), and
 // this clearing can race with the new epoch laying intents.
 //
-// A AbortCache is not thread safe. Access to it is serialized
+// A Instance is not thread safe. Access to it is serialized
 // through Raft.
 //
 // TODO(tschottdorf): we seem to have made a half-hearted attempt at naming
 // this the "AbortSpan" instead, but large parts of the code still call this
-// "AbortCache". We should settle for one and rename everything post-yellow.
-type AbortCache struct {
+// "Instance". We should settle for one and rename everything post-yellow.
+type Instance struct {
 	rangeID roachpb.RangeID
 }
 
-// NewAbortCache returns a new abort cache. Every range replica
+// New returns a new abort cache. Every range replica
 // maintains an abort cache, not just the lease holder.
-func NewAbortCache(rangeID roachpb.RangeID) *AbortCache {
-	return &AbortCache{
+func New(rangeID roachpb.RangeID) *Instance {
+	return &Instance{
 		rangeID: rangeID,
 	}
 }
@@ -73,24 +73,24 @@ func fillUUID(b byte) uuid.UUID {
 var txnIDMin = fillUUID('\x00')
 var txnIDMax = fillUUID('\xff')
 
-func abortCacheMinKey(rangeID roachpb.RangeID) roachpb.Key {
+func MinKey(rangeID roachpb.RangeID) roachpb.Key {
 	return keys.AbortCacheKey(rangeID, txnIDMin)
 }
 
-func (sc *AbortCache) min() roachpb.Key {
-	return abortCacheMinKey(sc.rangeID)
+func (sc *Instance) min() roachpb.Key {
+	return MinKey(sc.rangeID)
 }
 
-func abortCacheMaxKey(rangeID roachpb.RangeID) roachpb.Key {
+func MaxKey(rangeID roachpb.RangeID) roachpb.Key {
 	return keys.AbortCacheKey(rangeID, txnIDMax)
 }
 
-func (sc *AbortCache) max() roachpb.Key {
-	return abortCacheMaxKey(sc.rangeID)
+func (sc *Instance) max() roachpb.Key {
+	return MaxKey(sc.rangeID)
 }
 
 // ClearData removes all persisted items stored in the cache.
-func (sc *AbortCache) ClearData(e engine.Engine) error {
+func (sc *Instance) ClearData(e engine.Engine) error {
 	iter := e.NewIterator(false)
 	defer iter.Close()
 	b := e.NewWriteOnlyBatch()
@@ -105,7 +105,7 @@ func (sc *AbortCache) ClearData(e engine.Engine) error {
 
 // Get looks up an abort cache entry recorded for this transaction ID.
 // Returns whether an abort record was found and any error.
-func (sc *AbortCache) Get(
+func (sc *Instance) Get(
 	ctx context.Context, e engine.Reader, txnID uuid.UUID, entry *roachpb.AbortCacheEntry,
 ) (bool, error) {
 
@@ -119,7 +119,7 @@ func (sc *AbortCache) Get(
 // each unmarshaled entry with the key, the transaction ID and the decoded
 // entry.
 // TODO(tschottdorf): should not use a pointer to UUID.
-func (sc *AbortCache) Iterate(
+func (sc *Instance) Iterate(
 	ctx context.Context, e engine.Reader, f func([]byte, roachpb.AbortCacheEntry),
 ) {
 	_, _ = engine.MVCCIterate(ctx, e, sc.min(), sc.max(), hlc.Timestamp{},
@@ -185,7 +185,7 @@ func copySeqCache(
 // CopyInto copies all the results from this abort cache into the destRangeID
 // abort cache. Failures decoding individual cache entries return an error.
 // On success, returns the number of entries (key-value pairs) copied.
-func (sc *AbortCache) CopyInto(
+func (sc *Instance) CopyInto(
 	e engine.ReadWriter, ms *enginepb.MVCCStats, destRangeID roachpb.RangeID,
 ) (int, error) {
 	return copySeqCache(e, ms, sc.rangeID, destRangeID,
@@ -198,7 +198,7 @@ func (sc *AbortCache) CopyInto(
 // entries return an error. The copy is done directly using the engine
 // instead of interpreting values through MVCC for efficiency.
 // On success, returns the number of entries (key-value pairs) copied.
-func (sc *AbortCache) CopyFrom(
+func (sc *Instance) CopyFrom(
 	ctx context.Context, e engine.ReadWriter, ms *enginepb.MVCCStats, originRangeID roachpb.RangeID,
 ) (int, error) {
 	originMin := engine.MakeMVCCMetadataKey(keys.AbortCacheKey(originRangeID, txnIDMin))
@@ -207,7 +207,7 @@ func (sc *AbortCache) CopyFrom(
 }
 
 // Del removes all abort cache entries for the given transaction.
-func (sc *AbortCache) Del(
+func (sc *Instance) Del(
 	ctx context.Context, e engine.ReadWriter, ms *enginepb.MVCCStats, txnID uuid.UUID,
 ) error {
 	key := keys.AbortCacheKey(sc.rangeID, txnID)
@@ -215,7 +215,7 @@ func (sc *AbortCache) Del(
 }
 
 // Put writes an entry for the specified transaction ID.
-func (sc *AbortCache) Put(
+func (sc *Instance) Put(
 	ctx context.Context,
 	e engine.ReadWriter,
 	ms *enginepb.MVCCStats,
