@@ -23170,6 +23170,373 @@ export const cockroach = $root.cockroach = (() => {
                 return RangeResponse;
             })();
 
+            serverpb.CommandQueueRequest = (function() {
+
+                /**
+                 * Properties of a CommandQueueRequest.
+                 * @typedef cockroach.server.serverpb.CommandQueueRequest$Properties
+                 * @type {Object}
+                 * @property {Long} [range_id] CommandQueueRequest range_id.
+                 */
+
+                /**
+                 * Constructs a new CommandQueueRequest.
+                 * @exports cockroach.server.serverpb.CommandQueueRequest
+                 * @constructor
+                 * @param {cockroach.server.serverpb.CommandQueueRequest$Properties=} [properties] Properties to set
+                 */
+                function CommandQueueRequest(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * CommandQueueRequest range_id.
+                 * @type {Long}
+                 */
+                CommandQueueRequest.prototype.range_id = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                /**
+                 * Creates a new CommandQueueRequest instance using the specified properties.
+                 * @param {cockroach.server.serverpb.CommandQueueRequest$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.CommandQueueRequest} CommandQueueRequest instance
+                 */
+                CommandQueueRequest.create = function create(properties) {
+                    return new CommandQueueRequest(properties);
+                };
+
+                /**
+                 * Encodes the specified CommandQueueRequest message. Does not implicitly {@link cockroach.server.serverpb.CommandQueueRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CommandQueueRequest$Properties} message CommandQueueRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                CommandQueueRequest.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.range_id != null && message.hasOwnProperty("range_id"))
+                        writer.uint32(/* id 1, wireType 0 =*/8).int64(message.range_id);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified CommandQueueRequest message, length delimited. Does not implicitly {@link cockroach.server.serverpb.CommandQueueRequest.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CommandQueueRequest$Properties} message CommandQueueRequest message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                CommandQueueRequest.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a CommandQueueRequest message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.CommandQueueRequest} CommandQueueRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                CommandQueueRequest.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.CommandQueueRequest();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.range_id = reader.int64();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a CommandQueueRequest message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.CommandQueueRequest} CommandQueueRequest
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                CommandQueueRequest.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a CommandQueueRequest message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                CommandQueueRequest.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.range_id != null && message.hasOwnProperty("range_id"))
+                        if (!$util.isInteger(message.range_id) && !(message.range_id && $util.isInteger(message.range_id.low) && $util.isInteger(message.range_id.high)))
+                            return "range_id: integer|Long expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a CommandQueueRequest message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CommandQueueRequest} CommandQueueRequest
+                 */
+                CommandQueueRequest.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.CommandQueueRequest)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.CommandQueueRequest();
+                    if (object.range_id != null)
+                        if ($util.Long)
+                            (message.range_id = $util.Long.fromValue(object.range_id)).unsigned = false;
+                        else if (typeof object.range_id === "string")
+                            message.range_id = parseInt(object.range_id, 10);
+                        else if (typeof object.range_id === "number")
+                            message.range_id = object.range_id;
+                        else if (typeof object.range_id === "object")
+                            message.range_id = new $util.LongBits(object.range_id.low >>> 0, object.range_id.high >>> 0).toNumber();
+                    return message;
+                };
+
+                /**
+                 * Creates a CommandQueueRequest message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.CommandQueueRequest.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CommandQueueRequest} CommandQueueRequest
+                 */
+                CommandQueueRequest.from = CommandQueueRequest.fromObject;
+
+                /**
+                 * Creates a plain object from a CommandQueueRequest message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.CommandQueueRequest} message CommandQueueRequest
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                CommandQueueRequest.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults)
+                        if ($util.Long) {
+                            let long = new $util.Long(0, 0, false);
+                            object.range_id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                        } else
+                            object.range_id = options.longs === String ? "0" : 0;
+                    if (message.range_id != null && message.hasOwnProperty("range_id"))
+                        if (typeof message.range_id === "number")
+                            object.range_id = options.longs === String ? String(message.range_id) : message.range_id;
+                        else
+                            object.range_id = options.longs === String ? $util.Long.prototype.toString.call(message.range_id) : options.longs === Number ? new $util.LongBits(message.range_id.low >>> 0, message.range_id.high >>> 0).toNumber() : message.range_id;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this CommandQueueRequest message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                CommandQueueRequest.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this CommandQueueRequest to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                CommandQueueRequest.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return CommandQueueRequest;
+            })();
+
+            serverpb.CommandQueueResponse = (function() {
+
+                /**
+                 * Properties of a CommandQueueResponse.
+                 * @typedef cockroach.server.serverpb.CommandQueueResponse$Properties
+                 * @type {Object}
+                 * @property {cockroach.storage.storagebase.CommandQueuesSnapshot$Properties} [snapshot] CommandQueueResponse snapshot.
+                 */
+
+                /**
+                 * Constructs a new CommandQueueResponse.
+                 * @exports cockroach.server.serverpb.CommandQueueResponse
+                 * @constructor
+                 * @param {cockroach.server.serverpb.CommandQueueResponse$Properties=} [properties] Properties to set
+                 */
+                function CommandQueueResponse(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * CommandQueueResponse snapshot.
+                 * @type {(cockroach.storage.storagebase.CommandQueuesSnapshot$Properties|null)}
+                 */
+                CommandQueueResponse.prototype.snapshot = null;
+
+                /**
+                 * Creates a new CommandQueueResponse instance using the specified properties.
+                 * @param {cockroach.server.serverpb.CommandQueueResponse$Properties=} [properties] Properties to set
+                 * @returns {cockroach.server.serverpb.CommandQueueResponse} CommandQueueResponse instance
+                 */
+                CommandQueueResponse.create = function create(properties) {
+                    return new CommandQueueResponse(properties);
+                };
+
+                /**
+                 * Encodes the specified CommandQueueResponse message. Does not implicitly {@link cockroach.server.serverpb.CommandQueueResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CommandQueueResponse$Properties} message CommandQueueResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                CommandQueueResponse.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.snapshot != null && message.hasOwnProperty("snapshot"))
+                        $root.cockroach.storage.storagebase.CommandQueuesSnapshot.encode(message.snapshot, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified CommandQueueResponse message, length delimited. Does not implicitly {@link cockroach.server.serverpb.CommandQueueResponse.verify|verify} messages.
+                 * @param {cockroach.server.serverpb.CommandQueueResponse$Properties} message CommandQueueResponse message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                CommandQueueResponse.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a CommandQueueResponse message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.server.serverpb.CommandQueueResponse} CommandQueueResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                CommandQueueResponse.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.server.serverpb.CommandQueueResponse();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.snapshot = $root.cockroach.storage.storagebase.CommandQueuesSnapshot.decode(reader, reader.uint32());
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a CommandQueueResponse message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.server.serverpb.CommandQueueResponse} CommandQueueResponse
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                CommandQueueResponse.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a CommandQueueResponse message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                CommandQueueResponse.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.snapshot != null && message.hasOwnProperty("snapshot")) {
+                        let error = $root.cockroach.storage.storagebase.CommandQueuesSnapshot.verify(message.snapshot);
+                        if (error)
+                            return "snapshot." + error;
+                    }
+                    return null;
+                };
+
+                /**
+                 * Creates a CommandQueueResponse message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CommandQueueResponse} CommandQueueResponse
+                 */
+                CommandQueueResponse.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.server.serverpb.CommandQueueResponse)
+                        return object;
+                    let message = new $root.cockroach.server.serverpb.CommandQueueResponse();
+                    if (object.snapshot != null) {
+                        if (typeof object.snapshot !== "object")
+                            throw TypeError(".cockroach.server.serverpb.CommandQueueResponse.snapshot: object expected");
+                        message.snapshot = $root.cockroach.storage.storagebase.CommandQueuesSnapshot.fromObject(object.snapshot);
+                    }
+                    return message;
+                };
+
+                /**
+                 * Creates a CommandQueueResponse message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.server.serverpb.CommandQueueResponse.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.server.serverpb.CommandQueueResponse} CommandQueueResponse
+                 */
+                CommandQueueResponse.from = CommandQueueResponse.fromObject;
+
+                /**
+                 * Creates a plain object from a CommandQueueResponse message. Also converts values to other types if specified.
+                 * @param {cockroach.server.serverpb.CommandQueueResponse} message CommandQueueResponse
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                CommandQueueResponse.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults)
+                        object.snapshot = null;
+                    if (message.snapshot != null && message.hasOwnProperty("snapshot"))
+                        object.snapshot = $root.cockroach.storage.storagebase.CommandQueuesSnapshot.toObject(message.snapshot, options);
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this CommandQueueResponse message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                CommandQueueResponse.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this CommandQueueResponse to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                CommandQueueResponse.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return CommandQueueResponse;
+            })();
+
             serverpb.Status = (function() {
 
                 /**
@@ -23735,6 +24102,33 @@ export const cockroach = $root.cockroach = (() => {
                  * @function
                  * @param {cockroach.server.serverpb.RangeRequest|Object.<string,*>} request RangeRequest message or plain object
                  * @returns {Promise<cockroach.server.serverpb.RangeResponse>} Promise
+                 * @variation 2
+                 */
+
+                /**
+                 * Callback as used by {@link Status#commandQueue}.
+                 * @typedef Status_commandQueue_Callback
+                 * @type {function}
+                 * @param {?Error} error Error, if any
+                 * @param {cockroach.server.serverpb.CommandQueueResponse} [response] CommandQueueResponse
+                 */
+
+                /**
+                 * Calls CommandQueue.
+                 * @param {cockroach.server.serverpb.CommandQueueRequest|Object.<string,*>} request CommandQueueRequest message or plain object
+                 * @param {Status_commandQueue_Callback} callback Node-style callback called with the error, if any, and CommandQueueResponse
+                 * @returns {undefined}
+                 */
+                Status.prototype.commandQueue = function commandQueue(request, callback) {
+                    return this.rpcCall(commandQueue, $root.cockroach.server.serverpb.CommandQueueRequest, $root.cockroach.server.serverpb.CommandQueueResponse, request, callback);
+                };
+
+                /**
+                 * Calls CommandQueue.
+                 * @name Status#commandQueue
+                 * @function
+                 * @param {cockroach.server.serverpb.CommandQueueRequest|Object.<string,*>} request CommandQueueRequest message or plain object
+                 * @returns {Promise<cockroach.server.serverpb.CommandQueueResponse>} Promise
                  * @variation 2
                  */
 
@@ -39148,6 +39542,615 @@ export const cockroach = $root.cockroach = (() => {
                 };
 
                 return RangeInfo;
+            })();
+
+            storagebase.CommandQueuesSnapshot = (function() {
+
+                /**
+                 * Properties of a CommandQueuesSnapshot.
+                 * @typedef cockroach.storage.storagebase.CommandQueuesSnapshot$Properties
+                 * @type {Object}
+                 * @property {cockroach.util.hlc.Timestamp$Properties} [timestamp] CommandQueuesSnapshot timestamp.
+                 * @property {Object.<string,cockroach.storage.storagebase.CommandQueuesSnapshot.Command$Properties>} [localScope] CommandQueuesSnapshot localScope.
+                 * @property {Object.<string,cockroach.storage.storagebase.CommandQueuesSnapshot.Command$Properties>} [globalScope] CommandQueuesSnapshot globalScope.
+                 */
+
+                /**
+                 * Constructs a new CommandQueuesSnapshot.
+                 * @exports cockroach.storage.storagebase.CommandQueuesSnapshot
+                 * @constructor
+                 * @param {cockroach.storage.storagebase.CommandQueuesSnapshot$Properties=} [properties] Properties to set
+                 */
+                function CommandQueuesSnapshot(properties) {
+                    this.localScope = {};
+                    this.globalScope = {};
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * CommandQueuesSnapshot timestamp.
+                 * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
+                 */
+                CommandQueuesSnapshot.prototype.timestamp = null;
+
+                /**
+                 * CommandQueuesSnapshot localScope.
+                 * @type {Object.<string,cockroach.storage.storagebase.CommandQueuesSnapshot.Command$Properties>}
+                 */
+                CommandQueuesSnapshot.prototype.localScope = $util.emptyObject;
+
+                /**
+                 * CommandQueuesSnapshot globalScope.
+                 * @type {Object.<string,cockroach.storage.storagebase.CommandQueuesSnapshot.Command$Properties>}
+                 */
+                CommandQueuesSnapshot.prototype.globalScope = $util.emptyObject;
+
+                /**
+                 * Creates a new CommandQueuesSnapshot instance using the specified properties.
+                 * @param {cockroach.storage.storagebase.CommandQueuesSnapshot$Properties=} [properties] Properties to set
+                 * @returns {cockroach.storage.storagebase.CommandQueuesSnapshot} CommandQueuesSnapshot instance
+                 */
+                CommandQueuesSnapshot.create = function create(properties) {
+                    return new CommandQueuesSnapshot(properties);
+                };
+
+                /**
+                 * Encodes the specified CommandQueuesSnapshot message. Does not implicitly {@link cockroach.storage.storagebase.CommandQueuesSnapshot.verify|verify} messages.
+                 * @param {cockroach.storage.storagebase.CommandQueuesSnapshot$Properties} message CommandQueuesSnapshot message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                CommandQueuesSnapshot.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.timestamp != null && message.hasOwnProperty("timestamp"))
+                        $root.cockroach.util.hlc.Timestamp.encode(message.timestamp, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+                    if (message.localScope != null && message.hasOwnProperty("localScope"))
+                        for (let keys = Object.keys(message.localScope), i = 0; i < keys.length; ++i) {
+                            writer.uint32(/* id 2, wireType 2 =*/18).fork().uint32(/* id 1, wireType 0 =*/8).int64(keys[i]);
+                            $root.cockroach.storage.storagebase.CommandQueuesSnapshot.Command.encode(message.localScope[keys[i]], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim().ldelim();
+                        }
+                    if (message.globalScope != null && message.hasOwnProperty("globalScope"))
+                        for (let keys = Object.keys(message.globalScope), i = 0; i < keys.length; ++i) {
+                            writer.uint32(/* id 3, wireType 2 =*/26).fork().uint32(/* id 1, wireType 0 =*/8).int64(keys[i]);
+                            $root.cockroach.storage.storagebase.CommandQueuesSnapshot.Command.encode(message.globalScope[keys[i]], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim().ldelim();
+                        }
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified CommandQueuesSnapshot message, length delimited. Does not implicitly {@link cockroach.storage.storagebase.CommandQueuesSnapshot.verify|verify} messages.
+                 * @param {cockroach.storage.storagebase.CommandQueuesSnapshot$Properties} message CommandQueuesSnapshot message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                CommandQueuesSnapshot.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a CommandQueuesSnapshot message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.storage.storagebase.CommandQueuesSnapshot} CommandQueuesSnapshot
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                CommandQueuesSnapshot.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.storage.storagebase.CommandQueuesSnapshot(), key;
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.timestamp = $root.cockroach.util.hlc.Timestamp.decode(reader, reader.uint32());
+                            break;
+                        case 2:
+                            reader.skip().pos++;
+                            if (message.localScope === $util.emptyObject)
+                                message.localScope = {};
+                            key = reader.int64();
+                            reader.pos++;
+                            message.localScope[typeof key === "object" ? $util.longToHash(key) : key] = $root.cockroach.storage.storagebase.CommandQueuesSnapshot.Command.decode(reader, reader.uint32());
+                            break;
+                        case 3:
+                            reader.skip().pos++;
+                            if (message.globalScope === $util.emptyObject)
+                                message.globalScope = {};
+                            key = reader.int64();
+                            reader.pos++;
+                            message.globalScope[typeof key === "object" ? $util.longToHash(key) : key] = $root.cockroach.storage.storagebase.CommandQueuesSnapshot.Command.decode(reader, reader.uint32());
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a CommandQueuesSnapshot message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.storage.storagebase.CommandQueuesSnapshot} CommandQueuesSnapshot
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                CommandQueuesSnapshot.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a CommandQueuesSnapshot message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                CommandQueuesSnapshot.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.timestamp != null && message.hasOwnProperty("timestamp")) {
+                        let error = $root.cockroach.util.hlc.Timestamp.verify(message.timestamp);
+                        if (error)
+                            return "timestamp." + error;
+                    }
+                    if (message.localScope != null && message.hasOwnProperty("localScope")) {
+                        if (!$util.isObject(message.localScope))
+                            return "localScope: object expected";
+                        let key = Object.keys(message.localScope);
+                        for (let i = 0; i < key.length; ++i) {
+                            if (!$util.key64Re.test(key[i]))
+                                return "localScope: integer|Long key{k:int64} expected";
+                            let error = $root.cockroach.storage.storagebase.CommandQueuesSnapshot.Command.verify(message.localScope[key[i]]);
+                            if (error)
+                                return "localScope." + error;
+                        }
+                    }
+                    if (message.globalScope != null && message.hasOwnProperty("globalScope")) {
+                        if (!$util.isObject(message.globalScope))
+                            return "globalScope: object expected";
+                        let key = Object.keys(message.globalScope);
+                        for (let i = 0; i < key.length; ++i) {
+                            if (!$util.key64Re.test(key[i]))
+                                return "globalScope: integer|Long key{k:int64} expected";
+                            let error = $root.cockroach.storage.storagebase.CommandQueuesSnapshot.Command.verify(message.globalScope[key[i]]);
+                            if (error)
+                                return "globalScope." + error;
+                        }
+                    }
+                    return null;
+                };
+
+                /**
+                 * Creates a CommandQueuesSnapshot message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.storage.storagebase.CommandQueuesSnapshot} CommandQueuesSnapshot
+                 */
+                CommandQueuesSnapshot.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.storage.storagebase.CommandQueuesSnapshot)
+                        return object;
+                    let message = new $root.cockroach.storage.storagebase.CommandQueuesSnapshot();
+                    if (object.timestamp != null) {
+                        if (typeof object.timestamp !== "object")
+                            throw TypeError(".cockroach.storage.storagebase.CommandQueuesSnapshot.timestamp: object expected");
+                        message.timestamp = $root.cockroach.util.hlc.Timestamp.fromObject(object.timestamp);
+                    }
+                    if (object.localScope) {
+                        if (typeof object.localScope !== "object")
+                            throw TypeError(".cockroach.storage.storagebase.CommandQueuesSnapshot.localScope: object expected");
+                        message.localScope = {};
+                        for (let keys = Object.keys(object.localScope), i = 0; i < keys.length; ++i) {
+                            if (typeof object.localScope[keys[i]] !== "object")
+                                throw TypeError(".cockroach.storage.storagebase.CommandQueuesSnapshot.localScope: object expected");
+                            message.localScope[keys[i]] = $root.cockroach.storage.storagebase.CommandQueuesSnapshot.Command.fromObject(object.localScope[keys[i]]);
+                        }
+                    }
+                    if (object.globalScope) {
+                        if (typeof object.globalScope !== "object")
+                            throw TypeError(".cockroach.storage.storagebase.CommandQueuesSnapshot.globalScope: object expected");
+                        message.globalScope = {};
+                        for (let keys = Object.keys(object.globalScope), i = 0; i < keys.length; ++i) {
+                            if (typeof object.globalScope[keys[i]] !== "object")
+                                throw TypeError(".cockroach.storage.storagebase.CommandQueuesSnapshot.globalScope: object expected");
+                            message.globalScope[keys[i]] = $root.cockroach.storage.storagebase.CommandQueuesSnapshot.Command.fromObject(object.globalScope[keys[i]]);
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Creates a CommandQueuesSnapshot message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.storage.storagebase.CommandQueuesSnapshot.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.storage.storagebase.CommandQueuesSnapshot} CommandQueuesSnapshot
+                 */
+                CommandQueuesSnapshot.from = CommandQueuesSnapshot.fromObject;
+
+                /**
+                 * Creates a plain object from a CommandQueuesSnapshot message. Also converts values to other types if specified.
+                 * @param {cockroach.storage.storagebase.CommandQueuesSnapshot} message CommandQueuesSnapshot
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                CommandQueuesSnapshot.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.objects || options.defaults) {
+                        object.localScope = {};
+                        object.globalScope = {};
+                    }
+                    if (options.defaults)
+                        object.timestamp = null;
+                    if (message.timestamp != null && message.hasOwnProperty("timestamp"))
+                        object.timestamp = $root.cockroach.util.hlc.Timestamp.toObject(message.timestamp, options);
+                    let keys2;
+                    if (message.localScope && (keys2 = Object.keys(message.localScope)).length) {
+                        object.localScope = {};
+                        for (let j = 0; j < keys2.length; ++j)
+                            object.localScope[keys2[j]] = $root.cockroach.storage.storagebase.CommandQueuesSnapshot.Command.toObject(message.localScope[keys2[j]], options);
+                    }
+                    if (message.globalScope && (keys2 = Object.keys(message.globalScope)).length) {
+                        object.globalScope = {};
+                        for (let j = 0; j < keys2.length; ++j)
+                            object.globalScope[keys2[j]] = $root.cockroach.storage.storagebase.CommandQueuesSnapshot.Command.toObject(message.globalScope[keys2[j]], options);
+                    }
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this CommandQueuesSnapshot message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                CommandQueuesSnapshot.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this CommandQueuesSnapshot to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                CommandQueuesSnapshot.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                CommandQueuesSnapshot.Command = (function() {
+
+                    /**
+                     * Properties of a Command.
+                     * @typedef cockroach.storage.storagebase.CommandQueuesSnapshot.Command$Properties
+                     * @type {Object}
+                     * @property {Long} [id] Command id.
+                     * @property {string} [key] Command key.
+                     * @property {string} [end_key] Command end_key.
+                     * @property {boolean} [readonly] Command readonly.
+                     * @property {cockroach.util.hlc.Timestamp$Properties} [timestamp] Command timestamp.
+                     * @property {Array.<Long>} [prereqs] Command prereqs.
+                     */
+
+                    /**
+                     * Constructs a new Command.
+                     * @exports cockroach.storage.storagebase.CommandQueuesSnapshot.Command
+                     * @constructor
+                     * @param {cockroach.storage.storagebase.CommandQueuesSnapshot.Command$Properties=} [properties] Properties to set
+                     */
+                    function Command(properties) {
+                        this.prereqs = [];
+                        if (properties)
+                            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * Command id.
+                     * @type {Long}
+                     */
+                    Command.prototype.id = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                    /**
+                     * Command key.
+                     * @type {string}
+                     */
+                    Command.prototype.key = "";
+
+                    /**
+                     * Command end_key.
+                     * @type {string}
+                     */
+                    Command.prototype.end_key = "";
+
+                    /**
+                     * Command readonly.
+                     * @type {boolean}
+                     */
+                    Command.prototype.readonly = false;
+
+                    /**
+                     * Command timestamp.
+                     * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
+                     */
+                    Command.prototype.timestamp = null;
+
+                    /**
+                     * Command prereqs.
+                     * @type {Array.<Long>}
+                     */
+                    Command.prototype.prereqs = $util.emptyArray;
+
+                    /**
+                     * Creates a new Command instance using the specified properties.
+                     * @param {cockroach.storage.storagebase.CommandQueuesSnapshot.Command$Properties=} [properties] Properties to set
+                     * @returns {cockroach.storage.storagebase.CommandQueuesSnapshot.Command} Command instance
+                     */
+                    Command.create = function create(properties) {
+                        return new Command(properties);
+                    };
+
+                    /**
+                     * Encodes the specified Command message. Does not implicitly {@link cockroach.storage.storagebase.CommandQueuesSnapshot.Command.verify|verify} messages.
+                     * @param {cockroach.storage.storagebase.CommandQueuesSnapshot.Command$Properties} message Command message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    Command.encode = function encode(message, writer) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (message.id != null && message.hasOwnProperty("id"))
+                            writer.uint32(/* id 1, wireType 0 =*/8).int64(message.id);
+                        if (message.key != null && message.hasOwnProperty("key"))
+                            writer.uint32(/* id 2, wireType 2 =*/18).string(message.key);
+                        if (message.end_key != null && message.hasOwnProperty("end_key"))
+                            writer.uint32(/* id 3, wireType 2 =*/26).string(message.end_key);
+                        if (message.readonly != null && message.hasOwnProperty("readonly"))
+                            writer.uint32(/* id 4, wireType 0 =*/32).bool(message.readonly);
+                        if (message.timestamp != null && message.hasOwnProperty("timestamp"))
+                            $root.cockroach.util.hlc.Timestamp.encode(message.timestamp, writer.uint32(/* id 5, wireType 2 =*/42).fork()).ldelim();
+                        if (message.prereqs != null && message.prereqs.length) {
+                            writer.uint32(/* id 6, wireType 2 =*/50).fork();
+                            for (let i = 0; i < message.prereqs.length; ++i)
+                                writer.int64(message.prereqs[i]);
+                            writer.ldelim();
+                        }
+                        return writer;
+                    };
+
+                    /**
+                     * Encodes the specified Command message, length delimited. Does not implicitly {@link cockroach.storage.storagebase.CommandQueuesSnapshot.Command.verify|verify} messages.
+                     * @param {cockroach.storage.storagebase.CommandQueuesSnapshot.Command$Properties} message Command message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    Command.encodeDelimited = function encodeDelimited(message, writer) {
+                        return this.encode(message, writer).ldelim();
+                    };
+
+                    /**
+                     * Decodes a Command message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.storage.storagebase.CommandQueuesSnapshot.Command} Command
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    Command.decode = function decode(reader, length) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.storage.storagebase.CommandQueuesSnapshot.Command();
+                        while (reader.pos < end) {
+                            let tag = reader.uint32();
+                            switch (tag >>> 3) {
+                            case 1:
+                                message.id = reader.int64();
+                                break;
+                            case 2:
+                                message.key = reader.string();
+                                break;
+                            case 3:
+                                message.end_key = reader.string();
+                                break;
+                            case 4:
+                                message.readonly = reader.bool();
+                                break;
+                            case 5:
+                                message.timestamp = $root.cockroach.util.hlc.Timestamp.decode(reader, reader.uint32());
+                                break;
+                            case 6:
+                                if (!(message.prereqs && message.prereqs.length))
+                                    message.prereqs = [];
+                                if ((tag & 7) === 2) {
+                                    let end2 = reader.uint32() + reader.pos;
+                                    while (reader.pos < end2)
+                                        message.prereqs.push(reader.int64());
+                                } else
+                                    message.prereqs.push(reader.int64());
+                                break;
+                            default:
+                                reader.skipType(tag & 7);
+                                break;
+                            }
+                        }
+                        return message;
+                    };
+
+                    /**
+                     * Decodes a Command message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.storage.storagebase.CommandQueuesSnapshot.Command} Command
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    Command.decodeDelimited = function decodeDelimited(reader) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader(reader);
+                        return this.decode(reader, reader.uint32());
+                    };
+
+                    /**
+                     * Verifies a Command message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    Command.verify = function verify(message) {
+                        if (typeof message !== "object" || message === null)
+                            return "object expected";
+                        if (message.id != null && message.hasOwnProperty("id"))
+                            if (!$util.isInteger(message.id) && !(message.id && $util.isInteger(message.id.low) && $util.isInteger(message.id.high)))
+                                return "id: integer|Long expected";
+                        if (message.key != null && message.hasOwnProperty("key"))
+                            if (!$util.isString(message.key))
+                                return "key: string expected";
+                        if (message.end_key != null && message.hasOwnProperty("end_key"))
+                            if (!$util.isString(message.end_key))
+                                return "end_key: string expected";
+                        if (message.readonly != null && message.hasOwnProperty("readonly"))
+                            if (typeof message.readonly !== "boolean")
+                                return "readonly: boolean expected";
+                        if (message.timestamp != null && message.hasOwnProperty("timestamp")) {
+                            let error = $root.cockroach.util.hlc.Timestamp.verify(message.timestamp);
+                            if (error)
+                                return "timestamp." + error;
+                        }
+                        if (message.prereqs != null && message.hasOwnProperty("prereqs")) {
+                            if (!Array.isArray(message.prereqs))
+                                return "prereqs: array expected";
+                            for (let i = 0; i < message.prereqs.length; ++i)
+                                if (!$util.isInteger(message.prereqs[i]) && !(message.prereqs[i] && $util.isInteger(message.prereqs[i].low) && $util.isInteger(message.prereqs[i].high)))
+                                    return "prereqs: integer|Long[] expected";
+                        }
+                        return null;
+                    };
+
+                    /**
+                     * Creates a Command message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.storage.storagebase.CommandQueuesSnapshot.Command} Command
+                     */
+                    Command.fromObject = function fromObject(object) {
+                        if (object instanceof $root.cockroach.storage.storagebase.CommandQueuesSnapshot.Command)
+                            return object;
+                        let message = new $root.cockroach.storage.storagebase.CommandQueuesSnapshot.Command();
+                        if (object.id != null)
+                            if ($util.Long)
+                                (message.id = $util.Long.fromValue(object.id)).unsigned = false;
+                            else if (typeof object.id === "string")
+                                message.id = parseInt(object.id, 10);
+                            else if (typeof object.id === "number")
+                                message.id = object.id;
+                            else if (typeof object.id === "object")
+                                message.id = new $util.LongBits(object.id.low >>> 0, object.id.high >>> 0).toNumber();
+                        if (object.key != null)
+                            message.key = String(object.key);
+                        if (object.end_key != null)
+                            message.end_key = String(object.end_key);
+                        if (object.readonly != null)
+                            message.readonly = Boolean(object.readonly);
+                        if (object.timestamp != null) {
+                            if (typeof object.timestamp !== "object")
+                                throw TypeError(".cockroach.storage.storagebase.CommandQueuesSnapshot.Command.timestamp: object expected");
+                            message.timestamp = $root.cockroach.util.hlc.Timestamp.fromObject(object.timestamp);
+                        }
+                        if (object.prereqs) {
+                            if (!Array.isArray(object.prereqs))
+                                throw TypeError(".cockroach.storage.storagebase.CommandQueuesSnapshot.Command.prereqs: array expected");
+                            message.prereqs = [];
+                            for (let i = 0; i < object.prereqs.length; ++i)
+                                if ($util.Long)
+                                    (message.prereqs[i] = $util.Long.fromValue(object.prereqs[i])).unsigned = false;
+                                else if (typeof object.prereqs[i] === "string")
+                                    message.prereqs[i] = parseInt(object.prereqs[i], 10);
+                                else if (typeof object.prereqs[i] === "number")
+                                    message.prereqs[i] = object.prereqs[i];
+                                else if (typeof object.prereqs[i] === "object")
+                                    message.prereqs[i] = new $util.LongBits(object.prereqs[i].low >>> 0, object.prereqs[i].high >>> 0).toNumber();
+                        }
+                        return message;
+                    };
+
+                    /**
+                     * Creates a Command message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.storage.storagebase.CommandQueuesSnapshot.Command.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.storage.storagebase.CommandQueuesSnapshot.Command} Command
+                     */
+                    Command.from = Command.fromObject;
+
+                    /**
+                     * Creates a plain object from a Command message. Also converts values to other types if specified.
+                     * @param {cockroach.storage.storagebase.CommandQueuesSnapshot.Command} message Command
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    Command.toObject = function toObject(message, options) {
+                        if (!options)
+                            options = {};
+                        let object = {};
+                        if (options.arrays || options.defaults)
+                            object.prereqs = [];
+                        if (options.defaults) {
+                            if ($util.Long) {
+                                let long = new $util.Long(0, 0, false);
+                                object.id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                            } else
+                                object.id = options.longs === String ? "0" : 0;
+                            object.key = "";
+                            object.end_key = "";
+                            object.readonly = false;
+                            object.timestamp = null;
+                        }
+                        if (message.id != null && message.hasOwnProperty("id"))
+                            if (typeof message.id === "number")
+                                object.id = options.longs === String ? String(message.id) : message.id;
+                            else
+                                object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber() : message.id;
+                        if (message.key != null && message.hasOwnProperty("key"))
+                            object.key = message.key;
+                        if (message.end_key != null && message.hasOwnProperty("end_key"))
+                            object.end_key = message.end_key;
+                        if (message.readonly != null && message.hasOwnProperty("readonly"))
+                            object.readonly = message.readonly;
+                        if (message.timestamp != null && message.hasOwnProperty("timestamp"))
+                            object.timestamp = $root.cockroach.util.hlc.Timestamp.toObject(message.timestamp, options);
+                        if (message.prereqs && message.prereqs.length) {
+                            object.prereqs = [];
+                            for (let j = 0; j < message.prereqs.length; ++j)
+                                if (typeof message.prereqs[j] === "number")
+                                    object.prereqs[j] = options.longs === String ? String(message.prereqs[j]) : message.prereqs[j];
+                                else
+                                    object.prereqs[j] = options.longs === String ? $util.Long.prototype.toString.call(message.prereqs[j]) : options.longs === Number ? new $util.LongBits(message.prereqs[j].low >>> 0, message.prereqs[j].high >>> 0).toNumber() : message.prereqs[j];
+                        }
+                        return object;
+                    };
+
+                    /**
+                     * Creates a plain object from this Command message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    Command.prototype.toObject = function toObject(options) {
+                        return this.constructor.toObject(this, options);
+                    };
+
+                    /**
+                     * Converts this Command to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    Command.prototype.toJSON = function toJSON() {
+                        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                    };
+
+                    return Command;
+                })();
+
+                return CommandQueuesSnapshot;
             })();
 
             return storagebase;

@@ -1103,6 +1103,26 @@ func (s *statusServer) Range(
 	return response, nil
 }
 
+// CommandQueue returns a snapshot of the command queue state for the
+// specified range.
+func (s *statusServer) CommandQueue(
+	ctx context.Context, req *serverpb.CommandQueueRequest,
+) (*serverpb.CommandQueueResponse, error) {
+	rangeID := roachpb.RangeID(req.RangeId)
+	replica, err := s.stores.GetReplicaForRangeID(rangeID)
+	if err != nil {
+		return nil, err
+	}
+
+	if replica == nil {
+		return nil, roachpb.NewRangeNotFoundError(rangeID)
+	}
+
+	return &serverpb.CommandQueueResponse{
+		Snapshot: replica.GetCommandQueueSnapshot(),
+	}, nil
+}
+
 // ListLocalSessions returns a list of SQL sessions on this node.
 func (s *statusServer) ListLocalSessions(
 	ctx context.Context, req *serverpb.ListSessionsRequest,
