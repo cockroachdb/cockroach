@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/abortcache"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
@@ -227,8 +228,8 @@ type Replica struct {
 	RangeID roachpb.RangeID // Should only be set by the constructor.
 
 	store        *Store
-	abortCache   *AbortCache   // Avoids anomalous reads after abort
-	pushTxnQueue *pushTxnQueue // Queues push txn attempts by txn ID
+	abortCache   *abortcache.Instance // Avoids anomalous reads after abort
+	pushTxnQueue *pushTxnQueue        // Queues push txn attempts by txn ID
 
 	// leaseholderStats tracks all incoming BatchRequests to the replica and which
 	// localities they come from in order to aid in lease rebalancing decisions.
@@ -582,7 +583,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		AmbientContext: store.cfg.AmbientCtx,
 		RangeID:        rangeID,
 		store:          store,
-		abortCache:     NewAbortCache(rangeID),
+		abortCache:     abortcache.New(rangeID),
 		pushTxnQueue:   newPushTxnQueue(store),
 	}
 	r.mu.stateLoader = stateloader.Make(r.store.cfg.Settings, rangeID)

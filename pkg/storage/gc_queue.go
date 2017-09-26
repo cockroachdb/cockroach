@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/abortcache"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -499,7 +500,7 @@ func processAbortCache(
 	pushTxn pushFunc,
 ) []roachpb.GCRequest_GCKey {
 	var gcKeys []roachpb.GCRequest_GCKey
-	abortCache := NewAbortCache(rangeID)
+	abortCache := abortcache.New(rangeID)
 	infoMu.Lock()
 	defer infoMu.Unlock()
 	abortCache.Iterate(ctx, snap, func(key []byte, v roachpb.AbortCacheEntry) {

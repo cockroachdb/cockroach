@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/abortcache"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
@@ -620,8 +621,8 @@ func declareKeysEndTransaction(
 			})
 
 			spans.Add(SpanReadOnly, roachpb.Span{
-				Key:    abortCacheMinKey(header.RangeID),
-				EndKey: abortCacheMaxKey(header.RangeID)})
+				Key:    abortcache.MinKey(header.RangeID),
+				EndKey: abortcache.MaxKey(header.RangeID)})
 		}
 		if mt := et.InternalCommitTrigger.MergeTrigger; mt != nil {
 			// Merges write to the left side and delete and read from the right.

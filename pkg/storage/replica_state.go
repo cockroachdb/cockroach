@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/abortcache"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
@@ -182,7 +183,7 @@ func (rec ReplicaEvalContext) Engine() engine.Engine {
 }
 
 // AbortCache returns the Replica's AbortCache.
-func (rec ReplicaEvalContext) AbortCache() *AbortCache {
+func (rec ReplicaEvalContext) AbortCache() *abortcache.Instance {
 	// Despite its name, the abort cache doesn't hold on-disk data in
 	// memory. It just provides methods that take a Batch, so SpanSet
 	// declarations are enforced there.
