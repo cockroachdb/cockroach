@@ -184,12 +184,6 @@ var (
 	metaRdbBloomFilterPrefixUseful = metric.Metadata{
 		Name: "rocksdb.bloom.filter.prefix.useful",
 		Help: "Number of times the bloom filter helped avoid iterator creation"}
-	metaRdbMemtableHits = metric.Metadata{
-		Name: "rocksdb.memtable.hits",
-		Help: "Number of memtable hits"}
-	metaRdbMemtableMisses = metric.Metadata{
-		Name: "rocksdb.memtable.misses",
-		Help: "Number of memtable misses"}
 	metaRdbMemtableTotalSize = metric.Metadata{
 		Name: "rocksdb.memtable.total-size",
 		Help: "Current size of memtable"}
@@ -539,8 +533,6 @@ type StoreMetrics struct {
 	RdbBlockCachePinnedUsage    *metric.Gauge
 	RdbBloomFilterPrefixChecked *metric.Gauge
 	RdbBloomFilterPrefixUseful  *metric.Gauge
-	RdbMemtableHits             *metric.Gauge
-	RdbMemtableMisses           *metric.Gauge
 	RdbMemtableTotalSize        *metric.Gauge
 	RdbFlushes                  *metric.Gauge
 	RdbCompactions              *metric.Gauge
@@ -732,8 +724,6 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RdbBlockCachePinnedUsage:    metric.NewGauge(metaRdbBlockCachePinnedUsage),
 		RdbBloomFilterPrefixChecked: metric.NewGauge(metaRdbBloomFilterPrefixChecked),
 		RdbBloomFilterPrefixUseful:  metric.NewGauge(metaRdbBloomFilterPrefixUseful),
-		RdbMemtableHits:             metric.NewGauge(metaRdbMemtableHits),
-		RdbMemtableMisses:           metric.NewGauge(metaRdbMemtableMisses),
 		RdbMemtableTotalSize:        metric.NewGauge(metaRdbMemtableTotalSize),
 		RdbFlushes:                  metric.NewGauge(metaRdbFlushes),
 		RdbCompactions:              metric.NewGauge(metaRdbCompactions),
@@ -910,8 +900,6 @@ func (sm *StoreMetrics) updateRocksDBStats(stats engine.Stats) {
 	sm.RdbBlockCachePinnedUsage.Update(stats.BlockCachePinnedUsage)
 	sm.RdbBloomFilterPrefixUseful.Update(stats.BloomFilterPrefixUseful)
 	sm.RdbBloomFilterPrefixChecked.Update(stats.BloomFilterPrefixChecked)
-	sm.RdbMemtableHits.Update(stats.MemtableHits)
-	sm.RdbMemtableMisses.Update(stats.MemtableMisses)
 	sm.RdbMemtableTotalSize.Update(stats.MemtableTotalSize)
 	sm.RdbFlushes.Update(stats.Flushes)
 	sm.RdbCompactions.Update(stats.Compactions)

@@ -229,8 +229,6 @@ typedef struct {
   size_t  block_cache_pinned_usage;
   int64_t bloom_filter_prefix_checked;
   int64_t bloom_filter_prefix_useful;
-  int64_t memtable_hits;
-  int64_t memtable_misses;
   int64_t memtable_total_size;
   int64_t flushes;
   int64_t compactions;
