@@ -1522,15 +1522,16 @@ func evalGC(
 	// keys unless we have to (to allow the GC queue to batch requests more
 	// efficiently), and we must honor what we declare.
 
+	pd.Replicated.State = &storagebase.ReplicaState{}
 	if newThreshold != (hlc.Timestamp{}) {
-		pd.Replicated.State.GCThreshold = newThreshold
+		pd.Replicated.State.GCThreshold = &newThreshold
 		if err := stateLoader.setGCThreshold(ctx, batch, cArgs.Stats, &newThreshold); err != nil {
 			return EvalResult{}, err
 		}
 	}
 
 	if newTxnSpanGCThreshold != (hlc.Timestamp{}) {
-		pd.Replicated.State.TxnSpanGCThreshold = newTxnSpanGCThreshold
+		pd.Replicated.State.TxnSpanGCThreshold = &newTxnSpanGCThreshold
 		if err := stateLoader.setTxnSpanGCThreshold(ctx, batch, cArgs.Stats, &newTxnSpanGCThreshold); err != nil {
 			return EvalResult{}, err
 		}
@@ -1977,8 +1978,10 @@ func evalTruncateLog(
 	}
 
 	var pd EvalResult
-	pd.Replicated.State.TruncatedState = tState
-	pd.Replicated.RaftLogDelta = &ms.SysBytes
+	pd.Replicated.State = &storagebase.ReplicaState{
+		TruncatedState: tState,
+	}
+	pd.Replicated.RaftLogDelta = ms.SysBytes
 
 	return pd, cArgs.EvalCtx.makeReplicaStateLoader().setTruncatedState(ctx, batch, cArgs.Stats, tState)
 }
@@ -2026,7 +2029,7 @@ func evalRequestLease(
 
 	// MIGRATION(tschottdorf): needed to apply Raft commands which got proposed
 	// before the StartStasis field was introduced.
-	if args.Lease.DeprecatedStartStasis == (hlc.Timestamp{}) {
+	if args.Lease.DeprecatedStartStasis == nil {
 		args.Lease.DeprecatedStartStasis = args.Lease.Expiration
 	}
 	isExtension := prevLease.Replica.StoreID == args.Lease.Replica.StoreID
@@ -2059,9 +2062,9 @@ func evalRequestLease(
 			return newFailedLeaseTrigger(false /* isTransfer */), rErr
 		}
 		if args.Lease.Type() == roachpb.LeaseExpiration {
-			args.Lease.Expiration.Forward(prevLease.Expiration)
+			args.Lease.Expiration.Forward(prevLease.GetExpiration())
 		}
-	} else if prevLease.Type() == roachpb.LeaseExpiration && effectiveStart.Less(prevLease.Expiration) {
+	} else if prevLease.Type() == roachpb.LeaseExpiration && effectiveStart.Less(prevLease.GetExpiration()) {
 		rErr.Message = "requested lease overlaps previous lease"
 		return newFailedLeaseTrigger(false /* isTransfer */), rErr
 	}
@@ -2120,8 +2123,8 @@ func evalNewLease(
 	// a newFailedLeaseTrigger() to satisfy stats.
 
 	// Ensure either an Epoch is set or Start < Expiration.
-	if (lease.Type() == roachpb.LeaseExpiration && !lease.Start.Less(lease.Expiration)) ||
-		(lease.Type() == roachpb.LeaseEpoch && lease.Expiration != (hlc.Timestamp{})) {
+	if (lease.Type() == roachpb.LeaseExpiration && !lease.Start.Less(lease.GetExpiration())) ||
+		(lease.Type() == roachpb.LeaseEpoch && lease.Expiration != nil) {
 		// This amounts to a bug.
 		return newFailedLeaseTrigger(isTransfer),
 			&roachpb.LeaseRejectedError{
@@ -2162,7 +2165,9 @@ func evalNewLease(
 	// TODO(tschottdorf): Maybe we shouldn't do this at all. Need to think
 	// through potential consequences.
 	pd.Replicated.BlockReads = !isExtension
-	pd.Replicated.State.Lease = &lease
+	pd.Replicated.State = &storagebase.ReplicaState{
+		Lease: &lease,
+	}
 	pd.Local.leaseMetricsResult = new(leaseMetricsType)
 	if isTransfer {
 		*pd.Local.leaseMetricsResult = leaseTransferSuccess
@@ -3109,7 +3114,7 @@ func splitTrigger(
 		if err != nil {
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to load GCThreshold")
 		}
-		if (gcThreshold == hlc.Timestamp{}) {
+		if (*gcThreshold == hlc.Timestamp{}) {
 			log.VEventf(ctx, 1, "LHS's GCThreshold of split is not set")
 		}
 
@@ -3117,7 +3122,7 @@ func splitTrigger(
 		if err != nil {
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to load TxnSpanGCThreshold")
 		}
-		if (txnSpanGCThreshold == hlc.Timestamp{}) {
+		if (*txnSpanGCThreshold == hlc.Timestamp{}) {
 			log.VEventf(ctx, 1, "LHS's TxnSpanGCThreshold of split is not set")
 		}
 
@@ -3152,7 +3157,7 @@ func splitTrigger(
 		// only.
 		rightMS, err = writeInitialReplicaState(
 			ctx, rec.ClusterSettings(), batch, rightMS, split.RightDesc,
-			rightLease, gcThreshold, txnSpanGCThreshold,
+			rightLease, *gcThreshold, *txnSpanGCThreshold,
 		)
 		if err != nil {
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to write initial Replica state")
@@ -3446,7 +3451,9 @@ func changeReplicasTrigger(
 	cpy.NextReplicaID = change.NextReplicaID
 	// TODO(tschottdorf): duplication of Desc with the trigger below, should
 	// likely remove it from the trigger.
-	pd.Replicated.State.Desc = &cpy
+	pd.Replicated.State = &storagebase.ReplicaState{
+		Desc: &cpy,
+	}
 	pd.Replicated.ChangeReplicas = &storagebase.ChangeReplicas{
 		ChangeReplicasTrigger: *change,
 	}
