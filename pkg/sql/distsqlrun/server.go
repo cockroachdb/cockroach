@@ -251,7 +251,7 @@ func (ds *ServerImpl) setupFlow(
 	acc := monitor.MakeBoundAccount()
 
 	// The flow will run in a Txn that bypasses the local TxnCoordSender.
-	txn := client.NewTxnWithProto(ds.FlowDB, req.Txn)
+	txn := client.NewTxnWithProto(ds.FlowDB, req.Flow.Gateway, req.Txn)
 	// DistSQL transactions get retryable errors that would otherwise be handled
 	// by the TxnCoordSender.
 	txn.AcceptUnhandledRetryableErrors()
