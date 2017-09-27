@@ -632,6 +632,14 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 			return errors.Errorf("expected at least 3 leases to be acquired, but only acquired %d times",
 				count)
 		}
+
+		// Stop the renewal goroutine before ending to prevent a race condition with
+		// recovering the constants modified during testing.
+		t := leaseManager.findTableState(tableDesc.ID, true)
+		t.mu.Lock()
+		t.mu.timer.Stop()
+		t.mu.Unlock()
+
 		return nil
 	})
 }
