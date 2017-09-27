@@ -15,6 +15,7 @@
 package parser
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"math/big"
@@ -2440,11 +2441,10 @@ func performCast(ctx *EvalContext, d Datum, t CastTargetType) (Datum, error) {
 		case *DCollatedString:
 			s = t.Contents
 		case *DBytes:
-			if !utf8.ValidString(string(*t)) {
-				return nil, pgerror.NewErrorf(
-					pgerror.CodeCharacterNotInRepertoireError, "invalid UTF-8: %q", string(*t))
-			}
-			s = string(*t)
+			var buf bytes.Buffer
+			buf.WriteString("\\x")
+			hexEncodeString(&buf, string(*t))
+			s = buf.String()
 		case *DOid:
 			s = t.name
 		}
@@ -2470,7 +2470,7 @@ func performCast(ctx *EvalContext, d Datum, t CastTargetType) (Datum, error) {
 	case *BytesColType:
 		switch t := d.(type) {
 		case *DString:
-			return ParseDByte(string(*t))
+			return ParseDByte(string(*t), true)
 		case *DCollatedString:
 			return NewDBytes(DBytes(t.Contents)), nil
 		case *DUuid:
