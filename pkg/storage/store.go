@@ -3201,19 +3201,25 @@ func (s *Store) processRaftRequest(
 	return nil
 }
 
-// HandleRaftResponse implements the RaftMessageHandler interface.
+// HandleRaftResponse implements the RaftMessageHandler interface. Per the
+// interface specification, an error is returned if and only if the underlying
+// Raft connection should be closed.
 // It requires that s.mu is not held.
 func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageResponse) error {
 	ctx = s.AnnotateCtx(ctx)
+	repl, replErr := s.GetReplica(resp.RangeID)
+	if replErr == nil {
+		// Best-effort context annotation of replica.
+		ctx = repl.AnnotateCtx(ctx)
+	}
 	switch val := resp.Union.GetValue().(type) {
 	case *roachpb.Error:
 		switch tErr := val.GetDetail().(type) {
 		case *roachpb.ReplicaTooOldError:
-			repl, err := s.GetReplica(resp.RangeID)
-			if err != nil {
+			if replErr != nil {
 				// RangeNotFoundErrors are expected here; nothing else is.
-				if _, ok := err.(*roachpb.RangeNotFoundError); !ok {
-					log.Error(ctx, err)
+				if _, ok := replErr.(*roachpb.RangeNotFoundError); !ok {
+					log.Error(ctx, replErr)
 				}
 				return nil
 			}
@@ -3228,26 +3234,24 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 				repl.cancelPendingCommandsLocked()
 			}
 			repl.mu.Unlock()
-			replCtx := repl.AnnotateCtx(ctx)
 			added, err := s.replicaGCQueue.Add(
 				repl, replicaGCPriorityRemoved,
 			)
 			if err != nil {
-				log.Errorf(replCtx, "unable to add to replica GC queue: %s", err)
+				log.Errorf(ctx, "unable to add to replica GC queue: %s", err)
 			} else if added {
-				log.Infof(replCtx, "added to replica GC queue (peer suggestion)")
+				log.Infof(ctx, "added to replica GC queue (peer suggestion)")
 			}
 		case *roachpb.StoreNotFoundError:
 			log.Warningf(ctx, "raft error: node %d claims to not contain store %d for replica %s: %s",
 				resp.FromReplica.NodeID, resp.FromReplica.StoreID, resp.FromReplica, val)
-			return val.GetDetail()
+			return val.GetDetail() // close Raft connection.
 		default:
 			log.Warningf(ctx, "got error from r%d, replica %s: %s",
 				resp.RangeID, resp.FromReplica, val)
 		}
-
 	default:
-		log.Infof(ctx, "got unknown raft response type %T from replica %s: %s", val, resp.FromReplica, val)
+		log.Warningf(ctx, "got unknown raft response type %T from replica %s: %s", val, resp.FromReplica, val)
 	}
 	return nil
 }
