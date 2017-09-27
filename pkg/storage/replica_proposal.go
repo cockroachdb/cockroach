@@ -834,16 +834,20 @@ func (r *Replica) handleReplicatedEvalResult(
 		}
 
 		if newThresh := rResult.State.GCThreshold; newThresh != nil {
-			r.mu.Lock()
-			r.mu.state.GCThreshold = newThresh
-			r.mu.Unlock()
+			if (*newThresh != hlc.Timestamp{}) {
+				r.mu.Lock()
+				r.mu.state.GCThreshold = newThresh
+				r.mu.Unlock()
+			}
 			rResult.State.GCThreshold = nil
 		}
 
 		if newThresh := rResult.State.TxnSpanGCThreshold; newThresh != nil {
-			r.mu.Lock()
-			r.mu.state.TxnSpanGCThreshold = newThresh
-			r.mu.Unlock()
+			if (*newThresh != hlc.Timestamp{}) {
+				r.mu.Lock()
+				r.mu.state.TxnSpanGCThreshold = newThresh
+				r.mu.Unlock()
+			}
 			rResult.State.TxnSpanGCThreshold = nil
 		}
 
