@@ -38,7 +38,6 @@ import NodeGraphs from "src/views/cluster/containers/nodeGraphs";
 import NodeLogs from "src/views/cluster/containers/nodeLogs";
 import { EventPage } from "src/views/cluster/containers/events";
 
-import QueryPlan from "src/views/devtools/containers/queryPlan";
 import Raft from "src/views/devtools/containers/raft";
 import RaftRanges from "src/views/devtools/containers/raftRanges";
 import RaftMessages from "src/views/devtools/containers/raftMessages";
@@ -92,7 +91,6 @@ ReactDOM.render(
           <Route path="messages/all" component={ RaftMessages } />
           <Route path={`messages/node/:${nodeIDAttr}`} component={ RaftMessages } />
         </Route>
-        <Route path="queryplan" component={ QueryPlan } />
         <Route path="clusterviz" component={ ClusterViz } />
         <Route path="debug" component={ Debug } />
         <Route path="reports">
