@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/pkg/errors"
 )
 
 func initAggregateBuiltins() {
@@ -1051,7 +1050,7 @@ func (a *floatSumSqrDiffsAggregate) Add(
 	// https://github.com/cockroachdb/cockroach/pull/17728.
 	totalCount, ok := addWithOverflow(a.count, count)
 	if !ok {
-		return errors.Errorf("number of values in aggregate exceed max count of %d", math.MaxInt64)
+		return pgerror.NewErrorf(pgerror.CodeNumericValueOutOfRangeError, "number of values in aggregate exceed max count of %d", math.MaxInt64)
 	}
 	// We are converting an int64 number (with 63-bit precision)
 	// to a float64 (with 52-bit precision), thus in the worst cases,
