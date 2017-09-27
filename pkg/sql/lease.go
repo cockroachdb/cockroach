@@ -47,17 +47,14 @@ var (
 	// Exported for testing purposes only.
 	LeaseDuration = 5 * time.Minute
 	// LeaseJitterMultiplier is the factor that we use to randomly jitter the lease
-	// duration when acquiring a new lease. The range of the actual lease duration will
-	// be [(1-LeaseJitterMultiplier) * LeaseDuration, (1-LeaseJitterMultiplier) * LeaseDuration]
+	// duration when acquiring a new lease and the lease renewal timeout. The
+	// range of the actual lease duration will be
+	// [(1-LeaseJitterMultiplier) * LeaseDuration, (1-LeaseJitterMultiplier) * LeaseDuration]
 	// Exported for testing purposes only.
 	LeaseJitterMultiplier = 0.25
-	// LeaseRenewalTimeout is the duration for when we renew the lease early.
-	// This is specifically 30 seconds less than the minimum LeaseDuration, to be
-	// sure not to let the lease expire before renewing. Exported for testing
-	// purposes.
-	// TODO(joey): We can make the timeout an offset from the actual expiration,
-	// after jitter.
-	LeaseRenewalTimeout = LeaseDuration - time.Duration(float64(LeaseDuration)*LeaseJitterMultiplier) - 30*time.Second
+	// LeaseRenewalTimeout is the time until expiry when we want to acquire a new
+	// lease.
+	LeaseRenewalTimeout = 1 * time.Minute
 )
 
 // tableVersionState holds the state for a table version. This includes
@@ -99,6 +96,12 @@ func (s *tableVersionState) String() string {
 // at the given timestamp
 func (s *tableVersionState) hasExpired(timestamp hlc.Timestamp) bool {
 	return !timestamp.Less(s.expiration)
+}
+
+// willExpired checks if the table is within the renewal deadline for the
+// transaction.
+func (s *tableVersionState) willExpire(timestamp hlc.Timestamp) bool {
+	return !timestamp.Add(int64(LeaseRenewalTimeout), 0).Less(s.expiration)
 }
 
 func (s *tableVersionState) incRefcount() {
@@ -572,10 +575,8 @@ type tableState struct {
 		// If set, leases are released from the store as soon as their
 		// refcount drops to 0, as opposed to waiting until they expire.
 		dropped bool
-		// Timer for refreshing the lease before it expires. Once a lease has been
-		// acquired once, a timer continuously runs to refresh the lease on a
-		// separate routine after LeaseRenewalTimeout time.
-		timer *time.Timer
+		// A flag to denote that we have already started a renewal.
+		renewalInProgress bool
 	}
 }
 
@@ -597,46 +598,39 @@ func (t *tableState) acquire(
 		if err := t.acquireNodeLease(ctx, m, hlc.Timestamp{}); err != nil {
 			return nil, err
 		}
+	} else if !t.mu.renewalInProgress && s.willExpire(timestamp) {
+		// We need to set a flag denoting we have already begun acquisition in order
+		// to prevent this from happening multiple times.
+		t.mu.renewalInProgress = true
+		go t.acquireAlways(m)
 	}
 
 	return t.findForTimestamp(ctx, timestamp, m)
 }
 
-// acquireAlways ensures a new lease is acquired. This is used for making sure a
-// new lease moves forward when refreshing the lease.
-func (t *tableState) acquireAlways(ctx context.Context, m *LeaseManager) error {
+// acquireAlways will acquire a new lease. This is used for acquiring a new
+// lease asynchronously before our previous one has expired.
+func (t *tableState) acquireAlways(m *LeaseManager) {
+	ctx := context.TODO()
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	defer func() {
+		t.mu.renewalInProgress = false
+	}()
 
 	// Block and wait for the new lease to be acquired on another routine to
 	// prevent a race condition of entering acquireNodeLease
 	t.acquireWait()
 
-	// Ensure a lease is acquired.
-	return t.acquireNodeLease(ctx, m, hlc.Timestamp{})
-}
+	// Attempt to acquire a new lease
+	err := t.acquireNodeLease(ctx, m, hlc.Timestamp{})
+	if err != nil {
+		log.Error(ctx, errors.Wrapf(err, "Asynchronous acquireAlways failed"))
+	}
 
-// startRefreshingRoutine begins the goroutine responsible for refreshing a
-// table lease.
-// TODO(joey): Currently this routine will run forever for each table
-// descriptor. Ideally, we stop the routine if the table descriptor hasn't been
-// used recently.
-//
-// t.mu needs to be locked.
-func (t *tableState) startRefreshingRoutine(m *LeaseManager) {
-	ctx := context.TODO()
-	t.stopper.RunWorker(ctx, func(ctx context.Context) {
-		for {
-			select {
-			case <-t.mu.timer.C:
-				if err := t.acquireAlways(ctx, m); err != nil {
-					log.Error(ctx, err)
-				}
-			case <-t.stopper.ShouldStop():
-				return
-			}
-		}
-	})
+	if m.LeaseStore.testingKnobs.LeaseRenewalAcquiredEvent != nil {
+		m.LeaseStore.testingKnobs.LeaseRenewalAcquiredEvent(err)
+	}
 }
 
 // ensureVersion ensures that the latest version >= minVersion. It will
@@ -853,16 +847,6 @@ func (t *tableState) acquireNodeLease(
 	t.upsertLocked(ctx, table, m)
 	t.tableNameCache.insert(table)
 
-	// Either begin a new routine to start refreshing the lease asynchronously or
-	// or reset the timer for it. After the first lease acquisition, we should
-	// always have a routine actively renewing the lease. If a descriptor is
-	// dropped LeaseStore.acquire() will fail and the timer will not be set.
-	if t.mu.timer == nil {
-		t.mu.timer = time.NewTimer(LeaseRenewalTimeout)
-		t.startRefreshingRoutine(m)
-	} else {
-		t.mu.timer.Reset(LeaseRenewalTimeout)
-	}
 	return nil
 }
 
@@ -994,6 +978,9 @@ type LeaseStoreTestingKnobs struct {
 	LeaseReleasedEvent func(table sqlbase.TableDescriptor, err error)
 	// Called after a lease is acquired, with any operation error.
 	LeaseAcquiredEvent func(table sqlbase.TableDescriptor, err error)
+	// Called after a lease is acquired through the renewal routine, with any
+	// operation error.
+	LeaseRenewalAcquiredEvent func(err error)
 	// RemoveOnceDereferenced forces leases to be removed
 	// as soon as they are dereferenced.
 	RemoveOnceDereferenced bool
