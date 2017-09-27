@@ -675,7 +675,16 @@ type EndTransactionRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	// False to abort and rollback.
 	Commit bool `protobuf:"varint,2,opt,name=commit" json:"commit"`
-	// The deadline by which the transaction must commit, if present.
+	// If set, deadline represents the maximum timestamp at which the transaction
+	// can commit (i.e. the maximum timestamp for the txn's writes). If
+	// EndTransaction(Commit=true) finds that the txn's timestamp has been pushed
+	// above this deadline, an error will be returned and the client is supposed
+	// to rollback the txn.
+	// N.B. Assuming that the deadline was valid to begin with (i.e. it was higher
+	// than the txn's OrigTimestamp), only Snapshot transactions can get in
+	// trouble with the deadline check. A Serializable txn that has had its
+	// timestamp pushed has already lost before the deadline check: it will be
+	// forced to restart.
 	Deadline *cockroach_util_hlc.Timestamp `protobuf:"bytes,3,opt,name=deadline" json:"deadline,omitempty"`
 	// Optional commit triggers. Note that commit triggers are for
 	// internal use only and will cause an error if requested through the
