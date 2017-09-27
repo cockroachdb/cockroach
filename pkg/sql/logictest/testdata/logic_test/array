@@ -565,7 +565,7 @@ INSERT INTO a VALUES (ARRAY['foo','bar','baz'])
 query T
 SELECT b FROM a
 ----
-{b'foo',b'bar',b'baz'}
+{b'\x666f6f',b'\x626172',b'\x62617a'}
 
 statement ok
 DROP TABLE a
