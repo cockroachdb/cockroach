@@ -590,6 +590,29 @@ func TestLeaseEquivalence(t *testing.T) {
 			t.Errorf("%d: expected success? %t; got %t", i, tc.expSuccess, ok)
 		}
 	}
+
+	// #18689 changed the nullability of the DeprecatedStartStasis, ProposedTS, and Expiration
+	// field. It introduced a bug whose regression is caught below where a zero Expiration and a nil
+	// Expiration in an epoch-based lease led to mistakenly considering leases non-equivalent.
+	epoch := int64(123)
+	prePRLease := Lease{
+		Start: hlc.Timestamp{WallTime: 10},
+		Epoch: &epoch,
+
+		// The bug-trigger.
+		Expiration: new(hlc.Timestamp),
+
+		// Similar potential bug triggers, but these were actually handled correctly.
+		DeprecatedStartStasis: new(hlc.Timestamp),
+		ProposedTS:            &hlc.Timestamp{WallTime: 10},
+	}
+	postPRLease := prePRLease
+	postPRLease.DeprecatedStartStasis = nil
+	postPRLease.Expiration = nil
+
+	if !postPRLease.Equivalent(prePRLease) || !prePRLease.Equivalent(postPRLease) {
+		t.Fatalf("leases not equivalent but should be despite diff(pre,post) = %s", pretty.Diff(prePRLease, postPRLease))
+	}
 }
 
 func TestSpanOverlaps(t *testing.T) {

@@ -4238,6 +4238,7 @@ func (r *Replica) checkForcedErrLocked(
 			forcedErr = roachpb.NewError(&roachpb.LeaseRejectedError{
 				Existing:  *r.mu.state.Lease,
 				Requested: requestedLease,
+				Message:   "proposed under invalid lease",
 			})
 		}
 	} else if isLeaseRequest {
