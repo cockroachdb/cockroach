@@ -78,8 +78,8 @@ type DistAggregationInfo struct {
 	// Instead of defining a canonical non-typed expression and then tweaking it
 	// with visitors, we use a function that directly creates a typed expression
 	// on demand. The expression will refer to the final stage results using
-	// IndexedVars, with indices shifted by varIdxOffset.
-	FinalRendering func(h *parser.IndexedVarHelper, varIdxOffset int) (parser.TypedExpr, error)
+	// IndexedVars, with indices specified by varIdxs (1-1 mapping).
+	FinalRendering func(h *parser.IndexedVarHelper, varIdxs []int) (parser.TypedExpr, error)
 }
 
 // Convenient value for FinalStageInfo.LocalIdxs when there is only one aggregation
@@ -202,9 +202,12 @@ var DistAggregationTable = map[distsqlrun.AggregatorSpec_Func]DistAggregationInf
 				LocalIdxs: []uint32{1},
 			},
 		},
-		FinalRendering: func(h *parser.IndexedVarHelper, varIdxOffset int) (parser.TypedExpr, error) {
-			sum := h.IndexedVar(varIdxOffset)
-			count := h.IndexedVar(varIdxOffset + 1)
+		FinalRendering: func(h *parser.IndexedVarHelper, varIdxs []int) (parser.TypedExpr, error) {
+			if len(varIdxs) < 2 {
+				panic("fewer than two final aggregation values passed into final render")
+			}
+			sum := h.IndexedVar(varIdxs[0])
+			count := h.IndexedVar(varIdxs[1])
 
 			expr := &parser.BinaryExpr{
 				Operator: parser.Div,

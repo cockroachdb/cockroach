@@ -1413,15 +1413,18 @@ func (dsp *distSQLPlanner) addAggregators(
 			}
 		}
 
-		// We alloc the maximum possible number of unique local
-		// aggregations but do not initialize any local aggregations
-		// since we can de-duplicate equivalent local aggregations.
+		// We alloc the maximum possible number of unique local and final
+		// aggregations but do not initialize any aggregations
+		// since we can de-duplicate equivalent local and final aggregations.
 		localAggs := make([]distsqlrun.AggregatorSpec_Aggregation, 0, nLocalAgg+len(groupCols))
 		intermediateTypes := make([]sqlbase.ColumnType, 0, nLocalAgg+len(groupCols))
-		// TODO(richardwu): De-duplicate final aggregations similar to
-		// how we de-duplicate local aggregations.
-		finalAggs := make([]distsqlrun.AggregatorSpec_Aggregation, nFinalAgg)
+		finalAggs := make([]distsqlrun.AggregatorSpec_Aggregation, 0, nFinalAgg)
+		// finalIdxMap maps the index i of the final aggregation (with
+		// respect to the i-th final aggregation out of all final
+		// aggregations) to its index in the finalAggs slice.
+		finalIdxMap := make([]uint32, nFinalAgg)
 		finalGroupCols := make([]uint32, len(groupCols))
+
 		var finalPreRenderTypes []sqlbase.ColumnType
 		if needRender {
 			finalPreRenderTypes = make([]sqlbase.ColumnType, nFinalAgg)
@@ -1430,7 +1433,8 @@ func (dsp *distSQLPlanner) addAggregators(
 		// Each aggregation can have multiple aggregations in the
 		// local/final stages. We concatenate all these into
 		// localAggs/finalAggs.
-		// finalIdx is an index inside finalAggs.
+		// finalIdx is the index of the final aggregation with respect
+		// to all final aggregations.
 		finalIdx := 0
 		for _, e := range aggregations {
 			info := distsqlplan.DistAggregationTable[e.Func]
@@ -1459,11 +1463,11 @@ func (dsp *distSQLPlanner) addAggregators(
 				isNewAgg := true
 				for j, prevLocalAgg := range localAggs {
 					if localAgg.Equals(prevLocalAgg) {
+						// Found existing, equivalent local agg.
 						// Map the relative index (i)
-						// for the current local stage
+						// for the current local agg
 						// to the absolute index (j) of
-						// the existing, equivalent
-						// local agg.
+						// the existing local agg.
 						relToAbsLocalIdx[i] = uint32(j)
 						isNewAgg = false
 						break
@@ -1476,12 +1480,12 @@ func (dsp *distSQLPlanner) addAggregators(
 					relToAbsLocalIdx[i] = uint32(len(localAggs))
 					localAggs = append(localAggs, localAgg)
 
+					// Keep track of the new local
+					// aggregation's output type.
 					argTypes := make([]sqlbase.ColumnType, len(e.ColIdx))
 					for j, c := range e.ColIdx {
 						argTypes[j] = inputTypes[c]
 					}
-					// Keep track of the new local
-					// aggregation's output type.
 					_, outputType, err := distsqlrun.GetAggregateInfo(localFunc, argTypes...)
 					if err != nil {
 						return err
@@ -1502,9 +1506,29 @@ func (dsp *distSQLPlanner) addAggregators(
 				for i, relIdx := range finalInfo.LocalIdxs {
 					argIdxs[i] = relToAbsLocalIdx[relIdx]
 				}
-				finalAggs[finalIdx] = distsqlrun.AggregatorSpec_Aggregation{
+				finalAgg := distsqlrun.AggregatorSpec_Aggregation{
 					Func:   finalInfo.Fn,
 					ColIdx: argIdxs,
+				}
+
+				isNewAgg := true
+				for i, prevFinalAgg := range finalAggs {
+					if finalAgg.Equals(prevFinalAgg) {
+						// Found existing, equivalent
+						// final agg.  Map the finalIdx
+						// for the current final agg to
+						// its index (i) in finalAggs.
+						finalIdxMap[finalIdx] = uint32(i)
+						isNewAgg = false
+						break
+					}
+				}
+
+				// Append the final agg if there is no existing
+				// equivalent.
+				if isNewAgg {
+					finalIdxMap[finalIdx] = uint32(len(finalAggs))
+					finalAggs = append(finalAggs, finalAgg)
 				}
 
 				if needRender {
@@ -1535,7 +1559,8 @@ func (dsp *distSQLPlanner) addAggregators(
 				Func:   distsqlrun.AggregatorSpec_IDENT,
 				ColIdx: []uint32{groupColIdx},
 			}
-			// See if there already is an aggregation like the one we want to add.
+			// See if there already is an aggregation like the one
+			// we want to add.
 			idx := -1
 			for j := range localAggs {
 				if localAggs[j].Equals(agg) {
@@ -1580,9 +1605,26 @@ func (dsp *distSQLPlanner) addAggregators(
 			for i, e := range aggregations {
 				info := distsqlplan.DistAggregationTable[e.Func]
 				if info.FinalRendering == nil {
-					renderExprs[i] = distsqlplan.MakeExpression(h.IndexedVar(finalIdx), nil)
+					// mappedIdx corresponds to the index
+					// location of the result for this
+					// final aggregation in finalAggs. This
+					// is necessary since we re-use final
+					// aggregations if they are equivalent
+					// across and within stages.
+					mappedIdx := int(finalIdxMap[finalIdx])
+					renderExprs[i] = distsqlplan.MakeExpression(h.IndexedVar(mappedIdx), nil)
 				} else {
-					expr, err := info.FinalRendering(&h, finalIdx)
+					// We have multiple final aggregation
+					// values that we need to be mapped to
+					// their corresponding index in
+					// finalAggs for FinalRendering.
+					mappedIdxs := make([]int, len(info.FinalStage))
+					for j := range info.FinalStage {
+						mappedIdxs[j] = int(finalIdxMap[finalIdx+j])
+					}
+					// Map the final aggrgation values
+					// to their corresponding
+					expr, err := info.FinalRendering(&h, mappedIdxs)
 					if err != nil {
 						return err
 					}
