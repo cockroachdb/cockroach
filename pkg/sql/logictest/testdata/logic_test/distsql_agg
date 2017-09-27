@@ -161,7 +161,7 @@ SELECT VARIANCE(a+b+c+d) FROM data
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT SUM(a), AVG(b), SUM(c), AVG(d), STDDEV(a), VARIANCE(b), SUM(a+b+c+d) FROM data]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzcVk-Lo04Qvf8-hdTJkIJJq_nnqcJkAsJvMrsmmcsig5suJJCxQ2tglyHffVF3NiqbdiGXkFt1Vz3fq3oF7QekSvIyfucM_G8gAMEBBBcQPEAYQoRw0GrLWaZ0UVIBAvkD_AHCLj0c8-I6QtgqzeB_QL7L9ww-rOPvew45lqwBQXIe7_YlyUHv3mP9k2Scx4AQcipZ-xYJtMhBi1y0yEPLtkn0yen1ye31yYPohKCO-Zkwy-OEwRcn_HdRsyTRnMS5amlabZ5tEj3AKnKK6PFls1z_jstb90_k1fJlvPoazoPFov4NUasRjRqng2fYu9isc7HZc4_HVGnJmmWjxeh05ThWm-e3oBDaGsOn5FrFqDgtguXs_7fVej5_erVpjDRBmp4Tr7MwmC0fn2wSAyQhkMR5AqLkaG7Gw-di0PCBRmjRGC2aoEXTi9NyG9MSt7ivHaLua1-dW3SgQ9R9OeDeogMdou7LAe8WHegQdV8OdPwihJwdVJpx6_X8-5cHxavKMuHqCc7UUW_5i1bbkqY6vpS48kJylldZUR2CtEoVAutgYQQ7DbBogx0zcwe1a0R7ZrB3je6hETwyM4-uYR4bwRMz8-Qa5qnZq0HHmpiXrM0dnf77FQAA__-t0YJ8
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzUVU-L4k4Qvf8-RahTggVjJ_FfTiXjCIHfOLtR57KEIWsXQXDS0omwy-B3X5I4q2bXzoIXvVV39av36nVBfUCmJM-Sd84h-AYCEFxA8ADBB4QexAhbrVac50qXT2pAKH9A0EVYZ9tdUV7HCCulGYIPKNbFhiGARfJ9wxEnkjUgSC6S9aYi2er1e6J_kkyKBBAiziTrwCKBFrlokYcW-WjZNokOuU6HPKdDPsR7BLUrjoR5kaQMgdjjv4sap6nmNClUQ9N8-WyTcADryC2jx5flbHGIq1vvd-Sf5Kt4_jWahNPpocYhI84yxzo952Iz7sVmjj3sMqUla5ZnLcT7K9udL5_fwlJ2o81PyScv-uVpGs7G_7_NF5PJ06tNAySBNDwmXsdROJ49Ptk0QnLxpKroOn98-8Pnr1Pvgfpo0QAtGqJFo4tWeWdWiVscxhZR9zWM7i063CLqvhz2btHhFlH35bB_iw63iLovh1v2b8T5VmU5N1bX3yt3y5XGMuV6_-Vqp1f8RatVRVMfXypcdSE5L-qsqA9hVqdKgadgYQS7Z2DRBLtm5hZqz4j2zWD_Gt09I7hvZu5fwzwwgodm5uE1zCPzX3VbxsQ8ZE3ueP_frwAAAP__rz1esg==
 
 query RRRRRRR
 SELECT SUM(a), AVG(b), SUM(c), AVG(d), STDDEV(a), VARIANCE(b), SUM(a+b+c+d) FROM data
@@ -177,6 +177,37 @@ query RIIIRRR
 SELECT SUM(a), MIN(b), MAX(c), COUNT(d), AVG(a+b+c+d), STDDEV(a+b), VARIANCE(c+d) FROM data
 ----
 55000 1 10 10000 22 4.0622223185119375800 16.50165016501650165
+
+# Verify that local aggregation is correctly shared and de-duplicated.
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT SUM(a), STDDEV(a), AVG(a) FILTER (WHERE a > 5), COUNT(b), AVG(b), VARIANCE(b) FILTER (WHERE b < 8) FROM data]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzcVl2Lm0AUfe-vkPuUhQvrqElcnyZsEhC2bmvcfWllsc5FAlknjAotS_57UbdJtJuxNC8hD4HMmXvuOfcDxjfIpaAgeaUCvG_AAMECBBsQHEAYQ4ywVTKlopCqDmkJvvgJnomwzrdVWcMxQioVgfcG5brcEHgQJT82FFIiSAGCoDJZbxqRrVq_JuoXF0mZAEJIuSDlGZyhwdn3yjRtGnue5wcRGtyqfw2Yui0I8Q5BVuVBuSiTjMBjO_x3d7MsU5QlpeyZWz19HnF2Awirr-HcXy7fT_ePT0H056aNMZb-Q7QIDW4d33-E2nuW3clsH6KdQ0QH22c4Qk81wDrZgEPdVS6VIEWiU3a8-68WLf1g9vCyiubzxfOIW8gZHtXqvP978esKxp3TZB81_Rtv0z7PQn8W3C9G3EV-h5yZN_1tqZfDvuUOGnyMBp_c8ika3D3ZILvTIHbR-zvg7vr317ro8Qy4u_7x2Bc9ngF31z8e56LHM-Du-scz8HUSUrGVeUG9R_rjzGb9eJPIqH3pC1mplL4omTYy7fGx4TWAoKJsb1l78PP2qjZ4TGZastUhsz7Z0isPSNtatqMnO-f4HmvJE73y5BzlqZbs6pXdc5Tv9LMyB9ZEv2R97Xj36XcAAAD__9ZIsW0=
+
+query RRRIRR
+SELECT SUM(a), STDDEV(a), AVG(a) FILTER (WHERE a > 5), COUNT(b), AVG(b), VARIANCE(b) FILTER (WHERE b < 8) FROM data
+----
+55000 2.8724249481071304094 8 10000 5.5 4.0005715102157451064
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT SUM(a), AVG(DISTINCT a), VARIANCE(a) FILTER (WHERE a > 0) FROM data]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzMk8GKo0AQhu_7FPKfstAHW5M99EnJZhdh112Mk8uMhx67ECGxpbuFGYLvPqiHTEIyw5CLx66qz_9Dqo5otKJUHshCPIKDIQBDCIYlGFYoGFqjS7JWm2FkAhL1AuEz1E3buaFcMJTaEMQRrnZ7gkAun_eUkVRkwKDIyXo_hrSmPkjzGinpJBgyahQZ4UWceRF_6nw_JF8IkaQ5ip5Bd-4UYp2sCIL37IbIKb9rtFFkSJ2lF_0V1biqDFXS6QvT7cPfRcS_gyHe_V78TLZ5kq5zbyrt4iyJ0_VmmPB-JX_yTeZFwU3l4EyZz-XfBXMRCecispyLyCf3lZFtdWPpYr2vf9kf1p5URdONWN2Zkv4bXY4x0_PfyI0FRdZNXT49kmZsjYLvYf4h_OMM9i_h4J7k8B54eQ-8-hJc9N_eAgAA__-4kr3a
+
+query RRR
+SELECT SUM(a), AVG(DISTINCT a), VARIANCE(a) FILTER (WHERE a > 0) FROM data
+----
+55000 5.5 8.2508250825082508251
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT SUM(a), AVG(a), COUNT(a), STDDEV(a), VARIANCE(a) FROM data]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzElFFr2zAQx9_3Kcw9dXCwyHayzk8KTQOGLdmctC_DFC06jCG1jCTDRvF3H7YHrb1GHgup33w6__W7_524JyiUpI14JAPRd2CA4ANCAAghIMwhRSi1OpAxSje_dIJY_oRohpAXZWWb4xThoDRB9AQ2t0eCCPbix5ESEpI0IEiyIj-2kFLnj0L_4lJYAQjbykYeZ5DWCKqyzxcaKzKCiNX479BllmnKhFUD5u7uyxVn7wHhZnu32f_53n1LVvF63Uan8P5J_DO1KpSWpEn2oGn9XwX2vh7iplj_72gdb5afH3b71er2_ooHyBm-TNwvk3i5ubntpRIqJOmm2ehx_wMP0OMhenyOHl-cbEDQawCbYugj0EsP3Z_C8wj00p6DKTyPQC_tOZzC8wj0LRfaK_iETKkKQ4PF9vrNs2bhkcyo245GVfpAX7U6tJgu3La69kCSsV2WdUFcdKmmwJdi5hT7PTEbin03eQQdONWhWxyeU_fcKV64yYtzyB-d4ms3-foc8if3rGYjz8T9yIbstH73OwAA__-7q92w
+
+query RRIRR
+SELECT SUM(a), AVG(a), COUNT(a), STDDEV(a), VARIANCE(a) FROM data
+----
+55000 5.5 10000 2.8724249481071304094 8.2508250825082508251
 
 # planNode recursion figures out that DISTINCT can take advantage of orderings,
 # and so it retains the primary key ordering, which is why we don't need to
@@ -451,7 +482,7 @@ SELECT SUM(a), SUM(b), SUM(c) FROM data GROUP BY d HAVING SUM(a+b) > 10
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT AVG(a+b), c FROM data GROUP BY c, d HAVING c = d]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzcls9r2zAUx-_7K8w7tUxjlX9krWGgsR-QQ9ORNqdhhho9XENqGVmBlZL_fcg-OE5bvRb1kORmy_r4Pfnz5eFHqLXCmbzHFvI_wIFBDAwSYJACgwwKBo3RS2xbbdyWHpiqf5CfMajqZm3dcsFgqQ1C_gi2siuEHG7k7QrnKBUaYKDQymrVFWlMdS_Ng1DSSmDwq1pZNHkkkuhrJFzVOdaqX2GRSFkk-EcRQ7FhoNd2KNhaWSLkfMNe39S3sjRYSqt3ehKcCXfw6Y-fs5sTwU-H69hdXy8uT0Tirr5fLdxqcjraPW5uqHf7EN3J9u65YsVmOEP84hmGV61rbRQaVKOXdW95_1NeLy7_Tt16urUnOx3J-dy5yV4Uk7zvoWb6k252tj1fOB0V5vsYU6Kpg4gpP8aYxvuYFqKpg0hLfIxpSfYxLURTB5GW5BjTku5jWoimDiIt6TGmhfiTnWPb6LrFV_0RnblDoyqx_0KtXpsl_jZ62ZXpb686rltQ2Nr-Ke9vpnX_yDW4DfNdmG_D8Qjmb4MnIfBFCMyD-uaZn4693zvxw4lf1sRvK_XSmR_OQlT7YUK1HyZU-2FKNUETqichqr944XO_rPMQWX6YkOWHCVl-mJJF0ISsixBZnJii1BgNm6NhgzRskgaO0rBZyoOGKSemaUpIezJO3yTNT1PS_DQlzU-T0gickvZkqHqlFZsP_wMAAP__ALeCAg==
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzclk1r3DAQhu_9FWZOWarSyB_bxFBQ6QfsIZuyyZ6KKcpqcAwby8haaAj734vsg7NOoklQDmZvtuxHM_LzMvgBaq1wKe-whfwPcGAQA4MEGKTAIIOCQWP0BttWG_dKDyzUP8hPGVR1s7NuuWCw0QYhfwBb2S1CDtfyZosrlAoNMFBoZbXtijSmupPmXihpJTD4VW0tmjwSSfQ1Eq7qCmvVr7BIpCwS_KOIodgz0Ds7FGytLBFyvmevb-pbWRospdWjngRnwh188ePn8vpE8NlwHbvrq_XFiUjc1ffLtVtNZqOGhho399GtbG-fK1Dsh77jF_settrV2ig0qA4263Z5_5NdrS_-Ltx6Ohu9Pwj53PnIXpSRvO-hlvqTbkavPV84PSjMpxhNoqnJRpMfYzTjKSaEaGqyCYmPMSHJFBNCNDXZhCTHmJB0igkhmppsQtJjTAjxN7rCttF1i6_6wzl1h0ZVYv-FWr0zG_xt9KYr099edly3oLC1_VPe3yzq_pFr8DHMxzB_DMcHMH8bPA-Bz0NgHtQ3z_x07P3eiR9O_LLmflupl878cBai2g8Tqv0wodoPU6oJmlA9D1H9xQuf-WWdhcjyw4QsP0zI8sOULIImZJ2HyOLEFKXGaNgcDRukYZM0cJSGzVIeNEw5MU1TQtqTcfomaX6akuanKWl-mpRG4JS0J0PVK63Yf_gfAAD__y4VdLA=
 
 query RI rowsort
 SELECT AVG(a+b), c FROM data GROUP BY c, d HAVING c = d
