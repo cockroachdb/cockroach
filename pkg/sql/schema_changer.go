@@ -123,7 +123,7 @@ func (sc *SchemaChanger) AcquireLease(
 		expirationTimeUncertainty := time.Second
 
 		if tableDesc.Lease != nil {
-			if time.Unix(0, tableDesc.Lease.ExpirationTime).Add(expirationTimeUncertainty).After(timeutil.Now()) {
+			if timeutil.Unix(0, tableDesc.Lease.ExpirationTime).Add(expirationTimeUncertainty).After(timeutil.Now()) {
 				return errExistingSchemaChangeLease
 			}
 			log.Infof(ctx, "Overriding existing expired lease %v", tableDesc.Lease)
@@ -178,7 +178,7 @@ func (sc *SchemaChanger) ExtendLease(
 ) error {
 	// Check if there is still time on this lease.
 	minDesiredExpiration := timeutil.Now().Add(MinSchemaChangeLeaseDuration)
-	if time.Unix(0, existingLease.ExpirationTime).After(minDesiredExpiration) {
+	if timeutil.Unix(0, existingLease.ExpirationTime).After(minDesiredExpiration) {
 		return nil
 	}
 	// Update lease.
@@ -1126,8 +1126,8 @@ func createSchemaChangeEvalCtx(ts hlc.Timestamp) parser.EvalContext {
 	// TODO(andrei): Figure out if this is what we want, and whether the
 	// timestamp from the session that enqueued the schema change
 	// is/should be used for impure functions like now().
-	evalCtx.SetTxnTimestamp(time.Unix(0 /* sec */, ts.WallTime))
-	evalCtx.SetStmtTimestamp(time.Unix(0 /* sec */, ts.WallTime))
+	evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, ts.WallTime))
+	evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, ts.WallTime))
 	evalCtx.SetClusterTimestamp(ts)
 
 	return evalCtx

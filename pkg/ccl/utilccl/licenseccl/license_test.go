@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -24,7 +25,7 @@ func TestLicense(t *testing.T) {
 
 	clustersA, clustersB := []uuid.UUID{clusterA}, []uuid.UUID{clusterB}
 
-	t0 := time.Unix(0, 0)
+	t0 := timeutil.Unix(0, 0)
 	ts := t0.AddDate(40, 0, 0)
 	after := ts.Add(time.Hour * 24)
 	before := ts.Add(time.Hour * -24)

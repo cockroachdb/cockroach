@@ -465,7 +465,7 @@ func (ctx *Context) runHeartbeat(meta *connMeta, target string) error {
 				// now.
 				request.Offset.MeasuredAt = receiveTime.UnixNano()
 				request.Offset.Uncertainty = (pingDuration / 2).Nanoseconds()
-				remoteTimeNow := time.Unix(0, response.ServerTime).Add(pingDuration / 2)
+				remoteTimeNow := timeutil.Unix(0, response.ServerTime).Add(pingDuration / 2)
 				request.Offset.Offset = remoteTimeNow.Sub(receiveTime).Nanoseconds()
 			}
 			ctx.RemoteClocks.UpdateOffset(ctx.masterCtx, target, request.Offset, pingDuration)

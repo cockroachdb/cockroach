@@ -31,13 +31,13 @@ func Since(t time.Time) time.Duration {
 }
 
 // UnixEpoch represents the Unix epoch, January 1, 1970 UTC.
-var UnixEpoch = time.Unix(0, 0)
+var UnixEpoch = time.Unix(0, 0).UTC()
 
-// FromUnixMicros returns the local time.Time corresponding to the given Unix
+// FromUnixMicros returns the UTC time.Time corresponding to the given Unix
 // time, usec microseconds since UnixEpoch. In Go's current time.Time
 // implementation, all possible values for us can be represented as a time.Time.
 func FromUnixMicros(us int64) time.Time {
-	return time.Unix(us/1e6, (us%1e6)*1e3)
+	return time.Unix(us/1e6, (us%1e6)*1e3).UTC()
 }
 
 // ToUnixMicros returns t as the number of microseconds elapsed since UnixEpoch.
@@ -46,4 +46,9 @@ func FromUnixMicros(us int64) time.Time {
 // cannot be represented by an int64.
 func ToUnixMicros(t time.Time) int64 {
 	return t.Unix()*1e6 + int64(t.Round(time.Microsecond).Nanosecond())/1e3
+}
+
+// Unix wraps time.Unix ensuring that the result is in UTC instead of Local.
+func Unix(sec, nsec int64) time.Time {
+	return time.Unix(sec, nsec).UTC()
 }
