@@ -1118,10 +1118,19 @@ func (l Lease) Equivalent(ol Lease) bool {
 	// and then set to nil.
 	switch l.Type() {
 	case LeaseEpoch:
+		// Ignore expirations. This seems benign but since we changed the
+		// nullability of this field in the 1.2 cycle, it's crucial and
+		// tested in TestLeaseEquivalence.
+		l.Expiration, ol.Expiration = nil, nil
+
 		if ol.Epoch != nil && *l.Epoch == *ol.Epoch {
 			l.Epoch, ol.Epoch = nil, nil
 		}
 	case LeaseExpiration:
+		// See the comment above, though this field's nullability wasn't
+		// changed. We nil it out for completeness only.
+		l.Epoch, ol.Epoch = nil, nil
+
 		// For expiration-based leases, extensions are considered equivalent.
 		if !ol.GetExpiration().Less(l.GetExpiration()) {
 			l.Expiration, ol.Expiration = nil, nil
