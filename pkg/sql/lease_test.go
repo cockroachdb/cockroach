@@ -884,3 +884,91 @@ INSERT INTO t.timestamp VALUES ('a', 'b');
 		t.Fatal(err)
 	}
 }
+
+// This test makes sure the lease gets renewed automatically in the background
+// if the lease is about to expire.
+func TestLeaseRefreshedAutomatically(testingT *testing.T) {
+	defer leaktest.AfterTest(testingT)()
+	var testAcquiredCount int32
+	var testRenewalAcquiredCount int32
+	params, _ := createTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: sql.LeaseStoreTestingKnobs{
+				// We want to track when leases get acquired and when they are renewed.
+				LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, err error) {
+					if err != nil {
+						testingT.Fatal(err)
+					}
+					atomic.AddInt32(&testAcquiredCount, 1)
+				},
+				LeaseRenewalAcquiredEvent: func(err error) {
+					if err != nil {
+						testingT.Fatal(err)
+					}
+					atomic.AddInt32(&testRenewalAcquiredCount, 1)
+				},
+			},
+		},
+	}
+
+	t := newLeaseTest(testingT, params)
+	defer t.cleanup()
+
+	const descID = keys.LeaseTableID
+
+	// We set LeaseRenewalTimeout to be low so it will refresh frequently, and the
+	// LeaseJitterMultiplier to ensure any newer leases will have a higher
+	// expiration timestamp.
+	savedLeaseDuration := sql.LeaseDuration
+	savedLeaseRenewalTimeout := sql.LeaseRenewalTimeout
+	savedLeaseJitterMultiplier := sql.LeaseJitterMultiplier
+	defer func() {
+		sql.LeaseDuration = savedLeaseDuration
+		sql.LeaseRenewalTimeout = savedLeaseRenewalTimeout
+		sql.LeaseJitterMultiplier = savedLeaseJitterMultiplier
+	}()
+	sql.LeaseDuration = 5 * time.Millisecond
+	sql.LeaseRenewalTimeout = 2 * time.Millisecond
+	sql.LeaseJitterMultiplier = 0
+
+	// Acquire the first lease.
+	ts, e1 := t.mustAcquire(1, descID)
+	if err := t.release(1, ts); err != nil {
+		t.Fatal(err)
+	}
+	if count := atomic.LoadInt32(&testAcquiredCount); count != 1 {
+		t.Fatalf("expected 1 lease to be acquired, but acquired %d times",
+			count)
+	} else if count := atomic.LoadInt32(&testRenewalAcquiredCount); count != 0 {
+		t.Fatalf("expected no leases to be acquired by renewal, but acquired %d times by renewal",
+			count)
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		// Acquire the same lease. This will eventually start the process for
+		// acquiring a third lease.
+		ts, e2 := t.mustAcquire(1, descID)
+
+		defer func() {
+			if err := t.release(1, ts); err != nil {
+				t.Fatal(err)
+			}
+		}()
+
+		// We check for the new expiry time because if our past acquire triggered
+		// the background refresh, the next lease we get will be the result of the
+		// background refresh.
+		if e2.WallTime <= e1.WallTime {
+			return errors.Errorf("expected new lease expiration (%s) to be after old lease expiration (%s)",
+				e2, e1)
+		} else if count := atomic.LoadInt32(&testAcquiredCount); count != 2 {
+			return errors.Errorf("expected 2 leases to be acquired, but acquired %d times",
+				count)
+		} else if count := atomic.LoadInt32(&testRenewalAcquiredCount); count != 1 {
+			return errors.Errorf("expected 1 lease to be acquired by renewal, but acquired %d times by renewal",
+				count)
+		}
+		return nil
+	})
+}
