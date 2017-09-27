@@ -77,8 +77,8 @@ import (
 )
 
 var (
-	// Allocation pool for gzip writers.
-	gzipWriterPool sync.Pool
+	// Allocation pool for gzipResponseWriters.
+	gzipResponseWriterPool sync.Pool
 
 	// GracefulDrainModes is the standard succession of drain modes entered
 	// for a graceful shutdown.
@@ -1242,43 +1242,63 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case strings.Contains(ae, httputil.GzipEncoding):
 		w.Header().Set(httputil.ContentEncodingHeader, httputil.GzipEncoding)
 		gzw := newGzipResponseWriter(w)
-		defer gzw.Close()
+		defer func() {
+			if err := gzw.Close(); err != nil {
+				ctx := s.AnnotateCtx(r.Context())
+				log.Warningf(ctx, "error closing gzip response writer: %v", err)
+			}
+		}()
 		w = gzw
 	}
 	s.mux.ServeHTTP(w, r)
 }
 
 type gzipResponseWriter struct {
-	io.WriteCloser
+	gz gzip.Writer
 	http.ResponseWriter
+}
+
+func newGzipResponseWriter(rw http.ResponseWriter) *gzipResponseWriter {
+	var w *gzipResponseWriter
+	if wI := gzipResponseWriterPool.Get(); wI == nil {
+		w = new(gzipResponseWriter)
+	} else {
+		w = wI.(*gzipResponseWriter)
+	}
+	w.Reset(rw)
+	return w
+}
+
+func (w *gzipResponseWriter) Reset(rw http.ResponseWriter) {
+	w.gz.Reset(rw)
+	w.ResponseWriter = rw
+}
+
+func (w *gzipResponseWriter) Write(b []byte) (int, error) {
+	return w.gz.Write(b)
 }
 
 // Flush implements http.Flusher as required by grpc-gateway for clients
 // which access streaming endpoints (as exercised by the acceptance tests
 // at time of writing).
-func (*gzipResponseWriter) Flush() {}
-
-func newGzipResponseWriter(w http.ResponseWriter) *gzipResponseWriter {
-	var gz *gzip.Writer
-	if gzI := gzipWriterPool.Get(); gzI == nil {
-		gz = gzip.NewWriter(w)
-	} else {
-		gz = gzI.(*gzip.Writer)
-		gz.Reset(w)
+func (w *gzipResponseWriter) Flush() {
+	// If Flush returns an error, we'll see it on the next call to Write or
+	// Close as well, so we can ignore it here.
+	if err := w.gz.Flush(); err == nil {
+		// Flush the wrapped ResponseWriter as well, if possible.
+		if f, ok := w.ResponseWriter.(http.Flusher); ok {
+			f.Flush()
+		}
 	}
-	return &gzipResponseWriter{WriteCloser: gz, ResponseWriter: w}
 }
 
-func (w *gzipResponseWriter) Write(b []byte) (int, error) {
-	return w.WriteCloser.Write(b)
-}
-
-func (w *gzipResponseWriter) Close() {
-	if w.WriteCloser != nil {
-		w.WriteCloser.Close()
-		gzipWriterPool.Put(w.WriteCloser)
-		w.WriteCloser = nil
-	}
+// Close implements the io.Closer interface. It is not safe to use the
+// writer after calling Close.
+func (w *gzipResponseWriter) Close() error {
+	err := w.gz.Close()
+	w.Reset(nil) // release ResponseWriter reference.
+	gzipResponseWriterPool.Put(w)
+	return err
 }
 
 func officialAddr(
