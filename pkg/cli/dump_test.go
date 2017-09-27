@@ -72,7 +72,7 @@ func TestDumpRow(t *testing.T) {
 		1,
 		2.3,
 		'striiing',
-		b'\141\061\142\062\143\063', '2016-03-26', '2016-01-25 10:10:10' ,
+		'\x613162326333', '2016-03-26', '2016-01-25 10:10:10' ,
 		'2h30m30s',
 		true,
 		1.2345,
@@ -124,7 +124,7 @@ CREATE TABLE t (
 );
 
 INSERT INTO t (i, f, s, b, d, t, n, o, e, u, ip, tz, e1, e2, s1) VALUES
-	(1, 2.3, 'striiing', b'a1b2c3', '2016-03-26', '2016-01-25 10:10:10+00:00', '2h30m30s', true, 1.2345, 'e9716c74-2638-443d-90ed-ffde7bea7d1d', '192.168.0.1', '2016-01-25 10:10:10+00:00', 3, 4.5, 's'),
+	(1, 2.3, 'striiing', '\x613162326333', '2016-03-26', '2016-01-25 10:10:10+00:00', '2h30m30s', true, 1.2345, 'e9716c74-2638-443d-90ed-ffde7bea7d1d', '192.168.0.1', '2016-01-25 10:10:10+00:00', 3, 4.5, 's'),
 	(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 	(NULL, '+Inf', NULL, NULL, NULL, NULL, NULL, NULL, 'Infinity', NULL, NULL, NULL, NULL, NULL, NULL),
 	(NULL, '-Inf', NULL, NULL, NULL, NULL, NULL, NULL, '-Infinity', NULL, NULL, NULL, NULL, NULL, NULL),
@@ -334,8 +334,6 @@ func init() {
 // round-trippable.
 func TestDumpRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/17969")
 
 	c := newCLITest(cliTestParams{t: t})
 	defer c.cleanup()
