@@ -43,8 +43,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/abortcache"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -163,7 +166,7 @@ type proposalResult struct {
 	Reply         *roachpb.BatchResponse
 	Err           *roachpb.Error
 	ProposalRetry proposalRetryReason
-	Intents       []intentsWithArg
+	Intents       []batcheval.IntentsWithArg
 }
 
 type replicaChecksum struct {
@@ -226,8 +229,8 @@ type Replica struct {
 	RangeID roachpb.RangeID // Should only be set by the constructor.
 
 	store        *Store
-	abortCache   *AbortCache   // Avoids anomalous reads after abort
-	pushTxnQueue *pushTxnQueue // Queues push txn attempts by txn ID
+	abortCache   *abortcache.Instance // Avoids anomalous reads after abort
+	pushTxnQueue *pushTxnQueue        // Queues push txn attempts by txn ID
 
 	// leaseholderStats tracks all incoming BatchRequests to the replica and which
 	// localities they come from in order to aid in lease rebalancing decisions.
@@ -260,7 +263,7 @@ type Replica struct {
 
 		// Note that there are two replicaStateLoaders, in raftMu and mu,
 		// depending on which lock is being held.
-		stateLoader replicaStateLoader
+		stateLoader stateloader.Instance
 		// on-disk storage for sideloaded SSTables. nil when there's no ReplicaID.
 		sideloaded sideloadStorage
 	}
@@ -447,7 +450,7 @@ type Replica struct {
 
 		// Note that there are two replicaStateLoaders, in raftMu and mu,
 		// depending on which lock is being held.
-		stateLoader replicaStateLoader
+		stateLoader stateloader.Instance
 	}
 
 	unreachablesMu struct {
@@ -581,10 +584,10 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		AmbientContext: store.cfg.AmbientCtx,
 		RangeID:        rangeID,
 		store:          store,
-		abortCache:     NewAbortCache(rangeID),
+		abortCache:     abortcache.New(rangeID),
 		pushTxnQueue:   newPushTxnQueue(store),
 	}
-	r.mu.stateLoader = makeReplicaStateLoader(r.store.cfg.Settings, rangeID)
+	r.mu.stateLoader = stateloader.Make(r.store.cfg.Settings, rangeID)
 	if leaseHistoryMaxEntries > 0 {
 		r.leaseHistory = newLeaseHistory()
 	}
@@ -611,7 +614,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		},
 	)
 	r.raftMu.timedMutex = makeTimedMutex(raftMuLogger)
-	r.raftMu.stateLoader = makeReplicaStateLoader(r.store.cfg.Settings, rangeID)
+	r.raftMu.stateLoader = stateloader.Make(r.store.cfg.Settings, rangeID)
 	return r
 }
 
@@ -668,18 +671,18 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 
 	var err error
 
-	if r.mu.state, err = r.mu.stateLoader.load(ctx, r.store.Engine(), desc); err != nil {
+	if r.mu.state, err = r.mu.stateLoader.Load(ctx, r.store.Engine(), desc); err != nil {
 		return err
 	}
 	r.rangeStr.store(0, r.mu.state.Desc)
 
-	r.mu.lastIndex, err = r.mu.stateLoader.loadLastIndex(ctx, r.store.Engine())
+	r.mu.lastIndex, err = r.mu.stateLoader.LoadLastIndex(ctx, r.store.Engine())
 	if err != nil {
 		return err
 	}
 	r.mu.lastTerm = invalidLastTerm
 
-	pErr, err := r.mu.stateLoader.loadReplicaDestroyedError(ctx, r.store.Engine())
+	pErr, err := r.mu.stateLoader.LoadReplicaDestroyedError(ctx, r.store.Engine())
 	if err != nil {
 		return err
 	}
@@ -1702,7 +1705,7 @@ func (r *Replica) State() storagebase.RangeInfo {
 //
 // TODO(tschottdorf): Consider future removal (for example, when #7224 is resolved).
 func (r *Replica) assertStateLocked(ctx context.Context, reader engine.Reader) {
-	diskState, err := r.mu.stateLoader.load(ctx, reader, r.mu.state.Desc)
+	diskState, err := r.mu.stateLoader.Load(ctx, reader, r.mu.state.Desc)
 	if err != nil {
 		log.Fatal(ctx, err)
 	}
@@ -2371,8 +2374,8 @@ func (r *Replica) executeAdminBatch(
 		resp = &reply
 
 	case *roachpb.ImportRequest:
-		cArgs := CommandArgs{
-			EvalCtx: ReplicaEvalContext{r, nil},
+		cArgs := batcheval.CommandArgs{
+			EvalCtx: &ReplicaEvalContext{r, nil},
 			Header:  ba.Header,
 			Args:    args,
 		}
@@ -2452,13 +2455,13 @@ func (r *Replica) executeReadOnlyBatch(
 	// Evaluate read-only batch command. It checks for matching key range; note
 	// that holding readOnlyCmdMu throughout is important to avoid reads from the
 	// "wrong" key range being served after the range has been split.
-	var result EvalResult
-	rec := ReplicaEvalContext{r, spans}
+	var result batcheval.Result
+	rec := &ReplicaEvalContext{r, spans}
 	readOnly := r.store.Engine().NewReadOnly()
 	defer readOnly.Close()
 	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), readOnly, rec, nil, ba)
 
-	if intents := result.Local.detachIntents(pErr != nil); len(intents) > 0 {
+	if intents := result.Local.DetachIntents(pErr != nil); len(intents) > 0 {
 		log.Eventf(ctx, "submitting %d intents to asynchronous processing", len(intents))
 		// Do not allow synchronous intent resolution for RangeLookup requests as
 		// doing so can deadlock if the request originated from the local node
@@ -2733,7 +2736,7 @@ func (r *Replica) requestToProposal(
 		Request: &ba,
 	}
 	var pErr *roachpb.Error
-	var result *EvalResult
+	var result *batcheval.Result
 	result, pErr = r.evaluateProposal(ctx, idKey, ba, spans)
 
 	// Fill out the results even if pErr != nil; we'll return the error below.
@@ -2767,11 +2770,11 @@ func (r *Replica) requestToProposal(
 // Replica.mu must not be held.
 func (r *Replica) evaluateProposal(
 	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest, spans *SpanSet,
-) (*EvalResult, *roachpb.Error) {
+) (*batcheval.Result, *roachpb.Error) {
 	// Note that we don't hold any locks at this point. This is important
 	// since evaluating a proposal is expensive (at least under proposer-
 	// evaluated KV).
-	var result EvalResult
+	var result batcheval.Result
 
 	if ba.Timestamp == (hlc.Timestamp{}) {
 		return nil, roachpb.NewErrorf("can't propose Raft command with zero timestamp")
@@ -2782,10 +2785,10 @@ func (r *Replica) evaluateProposal(
 	if result.Local.Err != nil {
 		// Failed proposals (whether they're failfast or not) can't have any
 		// EvalResult except what's whitelisted here.
-		result.Local = LocalEvalResult{
-			intentsAlways:      result.Local.intentsAlways,
+		result.Local = batcheval.LocalResult{
+			IntentsAlways:      result.Local.IntentsAlways,
 			Err:                r.maybeSetCorrupt(ctx, result.Local.Err),
-			leaseMetricsResult: result.Local.leaseMetricsResult,
+			LeaseMetricsResult: result.Local.LeaseMetricsResult,
 		}
 		if result.WriteBatch == nil {
 			result.Replicated.Reset()
@@ -2902,7 +2905,7 @@ func (r *Replica) propose(
 			return nil, nil, noop, roachpb.NewError(errors.Errorf(
 				"requestToProposal returned error %s without eval results", pErr))
 		}
-		intents := proposal.Local.detachIntents(true /* hasError */)
+		intents := proposal.Local.DetachIntents(true /* hasError */)
 		if proposal.Local != nil {
 			r.handleLocalEvalResult(ctx, *proposal.Local)
 		}
@@ -3348,7 +3351,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 	}
 	if !raft.IsEmptyHardState(rd.HardState) {
-		if err := r.raftMu.stateLoader.setHardState(ctx, writer, rd.HardState); err != nil {
+		if err := r.raftMu.stateLoader.SetHardState(ctx, writer, rd.HardState); err != nil {
 			const expl = "during setHardState"
 			return stats, expl, errors.Wrap(err, expl)
 		}
@@ -4432,7 +4435,7 @@ func (r *Replica) processRaftCommand(
 			pErr = forcedErr
 		}
 
-		var lResult *LocalEvalResult
+		var lResult *batcheval.LocalResult
 		if proposedLocally {
 			if proposalRetry != proposalNoRetry {
 				response.ProposalRetry = proposalRetry
@@ -4454,7 +4457,7 @@ func (r *Replica) processRaftCommand(
 			} else {
 				log.Fatalf(ctx, "proposal must return either a reply or an error: %+v", proposal)
 			}
-			response.Intents = proposal.Local.detachIntents(response.Err != nil)
+			response.Intents = proposal.Local.DetachIntents(response.Err != nil)
 			lResult = proposal.Local
 		}
 
@@ -4613,19 +4616,19 @@ func (r *Replica) applyRaftCommand(
 	// reading the previous applied index keys on every write operation. This
 	// requires a little additional work in order maintain the MVCC stats.
 	var appliedIndexNewMS enginepb.MVCCStats
-	if err := r.raftMu.stateLoader.setAppliedIndexBlind(ctx, writer, &appliedIndexNewMS,
+	if err := r.raftMu.stateLoader.SetAppliedIndexBlind(ctx, writer, &appliedIndexNewMS,
 		raftAppliedIndex, leaseAppliedIndex); err != nil {
 		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
 			errors.Wrap(err, "unable to set applied index")))
 	}
 	rResult.Delta.SysBytes += appliedIndexNewMS.SysBytes -
-		r.raftMu.stateLoader.calcAppliedIndexSysBytes(oldRaftAppliedIndex, oldLeaseAppliedIndex)
+		r.raftMu.stateLoader.CalcAppliedIndexSysBytes(oldRaftAppliedIndex, oldLeaseAppliedIndex)
 
 	// Special-cased MVCC stats handling to exploit commutativity of stats
 	// delta upgrades. Thanks to commutativity, the command queue does not
 	// have to serialize on the stats key.
 	ms.Add(enginepb.MVCCStats(rResult.Delta))
-	if err := r.raftMu.stateLoader.setMVCCStats(ctx, writer, &ms); err != nil {
+	if err := r.raftMu.stateLoader.SetMVCCStats(ctx, writer, &ms); err != nil {
 		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
 			errors.Wrap(err, "unable to update MVCCStats")))
 	}
@@ -4640,8 +4643,8 @@ func (r *Replica) applyRaftCommand(
 
 	var assertHS *raftpb.HardState
 	if util.RaceEnabled && rResult.Split != nil && r.store.cfg.Settings.Version.IsActive(cluster.VersionSplitHardStateBelowRaft) {
-		rsl := makeReplicaStateLoader(r.store.cfg.Settings, rResult.Split.RightDesc.RangeID)
-		oldHS, err := rsl.loadHardState(ctx, r.store.Engine())
+		rsl := stateloader.Make(r.store.cfg.Settings, rResult.Split.RightDesc.RangeID)
+		oldHS, err := rsl.LoadHardState(ctx, r.store.Engine())
 		if err != nil {
 			log.Fatalf(ctx, "unable to load HardState: %s", err)
 		}
@@ -4654,8 +4657,8 @@ func (r *Replica) applyRaftCommand(
 
 	if assertHS != nil {
 		// Load the HardState that was just committed (if any).
-		rsl := makeReplicaStateLoader(r.store.cfg.Settings, rResult.Split.RightDesc.RangeID)
-		newHS, err := rsl.loadHardState(ctx, r.store.Engine())
+		rsl := stateloader.Make(r.store.cfg.Settings, rResult.Split.RightDesc.RangeID)
+		newHS, err := rsl.LoadHardState(ctx, r.store.Engine())
 		if err != nil {
 			log.Fatalf(ctx, "unable to load HardState: %s", err)
 		}
@@ -4688,14 +4691,14 @@ func (r *Replica) applyRaftCommand(
 // is no longer a clear distinction between them.
 func (r *Replica) evaluateProposalInner(
 	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest, spans *SpanSet,
-) EvalResult {
+) batcheval.Result {
 	// Keep track of original txn Writing state to sanitize txn
 	// reported with any error except TransactionRetryError.
 	wasWriting := ba.Txn != nil && ba.Txn.Writing
 
 	// Evaluate the commands. If this returns without an error, the batch should
 	// be committed.
-	var result EvalResult
+	var result batcheval.Result
 	var batch engine.Batch
 	{
 		// TODO(tschottdorf): absorb all returned values in `pd` below this point
@@ -4755,7 +4758,7 @@ func (r *Replica) evaluateProposalInner(
 // transaction. In case the transaction has been aborted, return a
 // transaction abort error.
 func checkIfTxnAborted(
-	ctx context.Context, rec ReplicaEvalContext, b engine.Reader, txn roachpb.Transaction,
+	ctx context.Context, rec *ReplicaEvalContext, b engine.Reader, txn roachpb.Transaction,
 ) *roachpb.Error {
 	var entry roachpb.AbortCacheEntry
 	aborted, err := rec.AbortCache().Get(ctx, b, txn.ID, &entry)
@@ -4777,11 +4780,6 @@ func checkIfTxnAborted(
 	return nil
 }
 
-type intentsWithArg struct {
-	args    roachpb.Request
-	intents []roachpb.Intent
-}
-
 // evaluateTxnWriteBatch attempts to execute transactional batches on
 // the 1-phase-commit path as just an atomic, non-transactional batch
 // of write commands. One phase commit batches contain transactional
@@ -4795,7 +4793,7 @@ type intentsWithArg struct {
 // to lay down intents and return an appropriate retryable error.
 func (r *Replica) evaluateTxnWriteBatch(
 	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest, spans *SpanSet,
-) (engine.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, EvalResult, *roachpb.Error) {
+) (engine.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, batcheval.Result, *roachpb.Error) {
 	ms := enginepb.MVCCStats{}
 	// If not transactional or there are indications that the batch's txn will
 	// require restart or retry, execute as normal.
@@ -4815,7 +4813,7 @@ func (r *Replica) evaluateTxnWriteBatch(
 		if util.RaceEnabled && spans != nil {
 			batch = makeSpanSetBatch(batch, spans)
 		}
-		rec := ReplicaEvalContext{r, spans}
+		rec := &ReplicaEvalContext{r, spans}
 		br, result, pErr := evaluateBatch(ctx, idKey, batch, rec, &ms, strippedBa)
 		if pErr == nil && ba.Timestamp == br.Timestamp {
 			clonedTxn := ba.Txn.Clone()
@@ -4852,10 +4850,10 @@ func (r *Replica) evaluateTxnWriteBatch(
 		// Handle the case of a required one phase commit transaction.
 		if etArg.Require1PC {
 			if pErr != nil {
-				return nil, ms, nil, EvalResult{}, pErr
+				return nil, ms, nil, batcheval.Result{}, pErr
 			} else if ba.Timestamp != br.Timestamp {
 				err := roachpb.NewTransactionRetryError(roachpb.RETRY_REASON_UNKNOWN)
-				return nil, ms, nil, EvalResult{}, roachpb.NewError(err)
+				return nil, ms, nil, batcheval.Result{}, roachpb.NewError(err)
 			}
 			log.Fatal(ctx, "unreachable")
 		}
@@ -4867,7 +4865,7 @@ func (r *Replica) evaluateTxnWriteBatch(
 	if util.RaceEnabled && spans != nil {
 		batch = makeSpanSetBatch(batch, spans)
 	}
-	rec := ReplicaEvalContext{r, spans}
+	rec := &ReplicaEvalContext{r, spans}
 	br, result, pErr := evaluateBatch(ctx, idKey, batch, rec, &ms, ba)
 	return batch, ms, br, result, pErr
 }
@@ -5005,10 +5003,10 @@ func evaluateBatch(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
 	batch engine.ReadWriter,
-	rec ReplicaEvalContext,
+	rec *ReplicaEvalContext,
 	ms *enginepb.MVCCStats,
 	ba roachpb.BatchRequest,
-) (*roachpb.BatchResponse, EvalResult, *roachpb.Error) {
+) (*roachpb.BatchResponse, batcheval.Result, *roachpb.Error) {
 	br := ba.CreateReply()
 
 	maxKeys := int64(math.MaxInt64)
@@ -5040,12 +5038,12 @@ func evaluateBatch(
 		// this check in that case.
 		if ba.IsTransactionWrite() || ba.Txn.Writing {
 			if pErr := checkIfTxnAborted(ctx, rec, batch, *ba.Txn); pErr != nil {
-				return nil, EvalResult{}, pErr
+				return nil, batcheval.Result{}, pErr
 			}
 		}
 	}
 
-	var result EvalResult
+	var result batcheval.Result
 	for index, union := range ba.Requests {
 		// Execute the command.
 		args := union.GetInner()
@@ -5313,14 +5311,14 @@ func (r *Replica) maybeGossipNodeLiveness(ctx context.Context, span roachpb.Span
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.ScanRequest{Span: span})
 	// Call evaluateBatch instead of Send to avoid command queue reentrance.
-	rec := ReplicaEvalContext{r, nil}
+	rec := &ReplicaEvalContext{r, nil}
 	br, result, pErr :=
 		evaluateBatch(ctx, storagebase.CmdIDKey(""), r.store.Engine(), rec, nil, ba)
 	if pErr != nil {
 		return errors.Wrapf(pErr.GoError(), "couldn't scan node liveness records in span %s", span)
 	}
-	if result.Local.intents != nil && len(*result.Local.intents) > 0 {
-		return errors.Errorf("unexpected intents on node liveness span %s: %+v", span, *result.Local.intents)
+	if result.Local.Intents != nil && len(*result.Local.Intents) > 0 {
+		return errors.Errorf("unexpected intents on node liveness span %s: %+v", span, *result.Local.Intents)
 	}
 	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
 	log.VEventf(ctx, 2, "gossiping %d node liveness record(s) from span %s", len(kvs), span)
@@ -5375,7 +5373,7 @@ func (r *Replica) maybeSetCorrupt(ctx context.Context, pErr *roachpb.Error) *roa
 
 		// Try to persist the destroyed error message. If the underlying store is
 		// corrupted the error won't be processed and a panic will occur.
-		if err := r.mu.stateLoader.setReplicaDestroyedError(ctx, r.store.Engine(), pErr); err != nil {
+		if err := r.mu.stateLoader.SetReplicaDestroyedError(ctx, r.store.Engine(), pErr); err != nil {
 			cErr.Processed = false
 			return roachpb.NewError(cErr)
 		}
@@ -5393,14 +5391,14 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (config.SystemConfig, er
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.ScanRequest{Span: keys.SystemConfigSpan})
 	// Call evaluateBatch instead of Send to avoid command queue reentrance.
-	rec := ReplicaEvalContext{r, nil}
+	rec := &ReplicaEvalContext{r, nil}
 	br, result, pErr := evaluateBatch(
 		ctx, storagebase.CmdIDKey(""), r.store.Engine(), rec, nil, ba,
 	)
 	if pErr != nil {
 		return config.SystemConfig{}, pErr.GoError()
 	}
-	if intents := result.Local.detachIntents(false /* !hasError */); len(intents) > 0 {
+	if intents := result.Local.DetachIntents(false /* !hasError */); len(intents) > 0 {
 		// There were intents, so what we read may not be consistent. Attempt
 		// to nudge the intents in case they're expired; next time around we'll
 		// hopefully have more luck.

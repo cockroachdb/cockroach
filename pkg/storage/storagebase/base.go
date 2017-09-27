@@ -82,3 +82,14 @@ const (
 	// has finished executing and will remove itself from the CommandQueue.
 	CommandQueueFinishExecuting
 )
+
+// LeaseMetricsType is used to distinguish between various lease
+// operations and potentially outcomes.
+type LeaseMetricsType int
+
+const (
+	LeaseRequestSuccess LeaseMetricsType = iota
+	LeaseRequestError
+	LeaseTransferSuccess
+	LeaseTransferError
+)

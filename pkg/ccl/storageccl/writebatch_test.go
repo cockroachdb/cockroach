@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -133,7 +133,7 @@ func TestWriteBatchMVCCStats(t *testing.T) {
 		}
 	}
 
-	cArgs := storage.CommandArgs{
+	cArgs := batcheval.CommandArgs{
 		Args: &roachpb.WriteBatchRequest{
 			Span:     span,
 			DataSpan: span,
