@@ -69,7 +69,8 @@ func (p hashJoinPhase) String() string {
 //     choose the right stream and read it and buffer it until the end.
 //
 //  2. Build phase: in this phase we build the buckets from the rows stored
-//     in the first phase.
+//     in the first phase. If temp storage is enabled and we ran out of memory
+//     in the buffer phase, this phase falls back to disk.
 //
 //  3. Probe phase: in this phase we process all the rows from the other stream
 //     and look for matching rows from the stored stream using the map.
@@ -176,16 +177,10 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 		limitedMon.Start(ctx, rowContainerMon, mon.BoundAccount{})
 		defer limitedMon.Stop(ctx)
 
-		// Override initialBufferSize to be a third of this processor's memory
+		// Override initialBufferSize to be half of this processor's memory
 		// limit. We consume up to h.initialBufferSize bytes from each input
-		// stream. If the chosen stream is fully consumed and does not go over
-		// this limit, h.initialBufferSize bytes (the last third) are budgeted
-		// to construct a hash map from these rows. We do not expect the hash
-		// map structure to consume more than the memory used to store the rows
-		// themselves.
-		// This assumption allows us to only worry about falling back to disk in
-		// the buffer phase.
-		h.initialBufferSize = limit / 3
+		// stream.
+		h.initialBufferSize = limit / 2
 
 		rowContainerMon = &limitedMon
 	}
@@ -195,51 +190,60 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 	defer h.rows[leftSide].Close(ctx)
 	defer h.rows[rightSide].Close(ctx)
 
-	var storedRows hashRowContainer
-	defer func() {
-		if storedRows != nil {
-			storedRows.Close(ctx)
-		}
-	}()
+	row, earlyExit, err := h.bufferPhase(ctx)
 
-	if earlyExit, err := h.bufferPhase(ctx, useTempStorage, &storedRows); earlyExit || err != nil {
+	bufferPhaseOom := false
+	if pgErr, ok := pgerror.GetPGCause(err); ok && pgErr.Code == pgerror.CodeOutOfMemoryError {
+		bufferPhaseOom = true
+	}
+
+	// Exit if earlyExit is true or we received an error that is not a memory
+	// error.
+	if earlyExit || !(err == nil || bufferPhaseOom) {
 		if err != nil {
 			// We got an error. We still want to drain. Any error encountered while
 			// draining will be swallowed, and the original error will be forwarded to
 			// the consumer.
-			log.Infof(ctx, "initial buffering phase error %s", err)
+			log.Infof(ctx, "buffer phase error %s", err)
 		}
 		DrainAndClose(ctx, h.out.output, err /* cause */, h.leftSource, h.rightSource)
 		return
+	}
+
+	// Build hashRowContainer. If we didn't get an oom error in the buffer
+	// phase, the build phase will attempt to build an in-memory representation,
+	// falling back to disk according to useTempStorage.
+	storedRows, earlyExit, err := h.buildPhase(
+		ctx, useTempStorage, !bufferPhaseOom, /* attemptMemoryBuild */
+	)
+	if earlyExit || err != nil {
+		if err != nil {
+			// We got an error. We still want to drain. Any error encountered while
+			// draining will be swallowed, and the original error will be forwarded to
+			// the consumer.
+			log.Infof(ctx, "build phase error %s", err)
+		}
+		DrainAndClose(ctx, h.out.output, err /* cause */, h.leftSource, h.rightSource)
+		return
+	}
+	defer storedRows.Close(ctx)
+
+	// If the buffer phase returned a row, this row has not been added to any
+	// row container, since it is the row that caused a memory error. We add
+	// this row to our built container (which is a hashDiskRowContainer in this
+	// case).
+	if row != nil {
+		if err := storedRows.AddRow(ctx, row); err != nil {
+			log.Infof(ctx, "unable to add row to disk %s", err)
+			DrainAndClose(ctx, h.out.output, err /* cause */, h.leftSource, h.rightSource)
+			return
+		}
 	}
 
 	// From this point, we are done with the source for h.storedSide.
 	srcToClose := h.leftSource
 	if h.storedSide == leftSide {
 		srcToClose = h.rightSource
-	}
-
-	// If storedRows is not nil, there was a memory limit reached in the buffer
-	// phase so we have already fallen back to a disk-based hashRowContainer.
-	// Otherwise, we have to build an in-memory hashRowContainer from
-	// h.rows[h.storedSide].
-	if storedRows == nil {
-		storedMemRows := makeHashMemRowContainer(&h.rows[h.storedSide])
-		if err := storedMemRows.Init(
-			ctx,
-			shouldEmitUnmatchedRow(h.storedSide, h.joinType),
-			h.rows[h.storedSide].types,
-			h.eqCols[h.storedSide],
-		); err != nil {
-			// We got an error. We still want to drain. Any error encountered
-			// while draining will be swallowed, and the original error will be
-			// forwarded to the consumer.
-			err = errors.Wrap(err, "error creating hash row container")
-			log.Info(ctx, err)
-			DrainAndClose(ctx, h.out.output, err /* cause */, h.leftSource, h.rightSource)
-			return
-		}
-		storedRows = &storedMemRows
 	}
 
 	log.VEventf(ctx, 1, "build phase complete")
@@ -300,25 +304,58 @@ func (h *hashJoiner) receiveRow(
 	}
 }
 
-// bufferPhase attempts to read a portion of both streams into memory (up to
-// h.initialBufferSize) in the hope that one of them is small and should be used
-// as h.storedSide. The phase attempts to consume all the rows from the chosen
-// side and falls back to disk if useTempStorage is true and the rows do not
-// fit in memory. In this case, an on-disk hash table is constructed from the
-// rows and storedRows is set to this hashRowContainer.
-// A successful initial buffering phase sets h.storedSide.
-func (h *hashJoiner) bufferPhase(
-	ctx context.Context, useTempStorage bool, storedRows *hashRowContainer,
-) (earlyExit bool, _ error) {
-	row, earlyExit, err := h.bufferPhaseImpl(ctx)
-	if pgErr, ok := pgerror.GetPGCause(err); earlyExit || !(ok && pgErr.Code == pgerror.CodeOutOfMemoryError) {
-		return earlyExit, err
-	}
-	if !useTempStorage {
-		return false, errors.Wrap(err, "external storage for large queries disabled")
+// buildPhase constructs our internal hash map of rows seen. This is done
+// entirely from one stream: h.storedSide (chosen during initial buffering).
+// Arguments:
+//  - useTempStorage specifies whether the build phase can fall back to temp
+//    storage if necessary.
+//  - attemptMemoryBuild specifies whether the build phase should attempt to
+//    build an in-memory hashRowContainer representation as opposed to
+//    immediately building an on-disk hashRowContainer.
+func (h *hashJoiner) buildPhase(
+	ctx context.Context, useTempStorage bool, attemptMemoryBuild bool,
+) (_ hashRowContainer, earlyExit bool, _ error) {
+	if attemptMemoryBuild {
+		storedMemRows := makeHashMemRowContainer(&h.rows[h.storedSide])
+		shouldMark := shouldEmitUnmatchedRow(h.storedSide, h.joinType)
+		if err := storedMemRows.Init(
+			ctx,
+			shouldMark,
+			h.rows[h.storedSide].types,
+			h.eqCols[h.storedSide],
+		); err != nil {
+			return nil, false, err
+		}
+		if !shouldMark {
+			return &storedMemRows, false, nil
+		}
+		// If we should mark, we pre-reserve the memory needed to mark
+		// in-memory rows in this phase to not have to worry about hitting a
+		// memory limit in the probe phase.
+		err := storedMemRows.reserveMarkMemoryMaybe(ctx)
+		if h.testingKnobMemFailPoint == build && rand.Float64() < h.testingKnobFailProbability {
+			err = pgerror.NewErrorf(
+				pgerror.CodeOutOfMemoryError,
+				"%s test induced error",
+				h.testingKnobMemFailPoint,
+			)
+		}
+		if err == nil {
+			return &storedMemRows, false, nil
+		}
+		storedMemRows.Close(ctx)
+		if pgErr, ok := pgerror.GetPGCause(err); !(ok && pgErr.Code == pgerror.CodeOutOfMemoryError) {
+			return nil, false, err
+		}
 	}
 
-	log.VEventf(ctx, 2, "buffer phase falling back to disk")
+	if !useTempStorage {
+		return nil, false, errors.New(
+			"attempted to fall back to disk but external storage for large queries disabled",
+		)
+	}
+
+	log.VEventf(ctx, 2, "build phase falling back to disk")
 
 	storedDiskRows := makeHashDiskRowContainer(h.flowCtx.diskMonitor, h.flowCtx.TempStorage)
 	if err := storedDiskRows.Init(
@@ -327,14 +364,7 @@ func (h *hashJoiner) bufferPhase(
 		h.rows[h.storedSide].types,
 		h.eqCols[h.storedSide],
 	); err != nil {
-		return false, err
-	}
-
-	// Add the row that caused the memory error.
-	if row != nil {
-		if err := storedDiskRows.AddRow(ctx, row); err != nil {
-			return false, err
-		}
+		return nil, false, err
 	}
 
 	// Transfer rows from memory.
@@ -342,23 +372,21 @@ func (h *hashJoiner) bufferPhase(
 	defer i.Close()
 	for i.Rewind(); ; i.Next() {
 		if err := h.cancelChecker.Check(); err != nil {
-			return false, err
+			return nil, false, err
 		}
 		if ok, err := i.Valid(); err != nil {
-			return false, err
+			return nil, false, err
 		} else if !ok {
 			break
 		}
 		memRow, err := i.Row()
 		if err != nil {
-			return false, err
+			return nil, false, err
 		}
 		if err := storedDiskRows.AddRow(ctx, memRow); err != nil {
-			return false, err
+			return nil, false, err
 		}
 	}
-
-	*storedRows = &storedDiskRows
 
 	// Finish consuming the chosen source.
 	source := h.rightSource
@@ -367,23 +395,25 @@ func (h *hashJoiner) bufferPhase(
 	}
 	for {
 		if err := h.cancelChecker.Check(); err != nil {
-			return false, err
+			return nil, false, err
 		}
 		row, earlyExit, err := h.receiveRow(ctx, source, h.storedSide)
 		if row == nil {
 			if err != nil {
-				return false, err
+				return nil, false, err
 			}
-			return earlyExit, nil
+			// Done consuming rows.
+			return &storedDiskRows, earlyExit, nil
 		}
 		if err := storedDiskRows.AddRow(ctx, row); err != nil {
-			return false, err
+			return nil, false, err
 		}
 	}
 }
 
-// bufferPhaseImpl is an initial phase where we read a portion of both streams,
-// in the hope that one of them is small.
+// bufferPhase reads a portion of both streams into memory (up to
+// h.initialBufferSize) in the hope that one of them is small and should be used
+// as h.storedSide. The phase consumes all the rows from the chosen side.
 //
 // Rows that contain NULLs on equality columns go straight to the output if it's
 // an outer join; otherwise they are discarded.
@@ -396,7 +426,7 @@ func (h *hashJoiner) bufferPhase(
 // row would have been added to.
 //
 // If earlyExit is set, the output doesn't need more rows.
-func (h *hashJoiner) bufferPhaseImpl(
+func (h *hashJoiner) bufferPhase(
 	ctx context.Context,
 ) (row sqlbase.EncDatumRow, earlyExit bool, _ error) {
 	srcs := [2]RowSource{h.leftSource, h.rightSource}
