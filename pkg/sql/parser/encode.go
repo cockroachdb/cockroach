@@ -41,7 +41,10 @@ var (
 		'{': true,
 		'}': true,
 	}
+	// hexMap is a mapping from each byte to the `\x%%` hex form as a []byte.
 	hexMap [256][]byte
+	// rawHexMap is a mapping from each byte to the `%%` hex form as a []byte.
+	rawHexMap [256][]byte
 )
 
 // encodeSQLString writes a string literal to buf. All unicode and
@@ -57,6 +60,12 @@ func EscapeSQLString(in string) string {
 	var buf bytes.Buffer
 	encodeSQLString(&buf, in)
 	return buf.String()
+}
+
+func hexEncodeString(buf *bytes.Buffer, in string) {
+	for i := 0; i < len(in); i++ {
+		buf.Write(rawHexMap[in[i]])
+	}
 }
 
 // encodeEscapedChar is used internally to write out a character from a larger
@@ -239,7 +248,29 @@ func init() {
 		}
 	}
 
-	for i := range hexMap {
-		hexMap[i] = []byte(fmt.Sprintf("\\x%02x", i))
+	// underlyingHexMap contains the string "\x00\x01\x02..." which hexMap and
+	// rawHexMap then index into.
+	var underlyingHexMap bytes.Buffer
+	underlyingHexMap.Grow(1024)
+
+	for i := 0; i < 256; i++ {
+		underlyingHexMap.WriteString("\\x")
+		writeHexDigit(&underlyingHexMap, i/16)
+		writeHexDigit(&underlyingHexMap, i%16)
+	}
+
+	underlyingHexBytes := underlyingHexMap.Bytes()
+
+	for i := 0; i < 256; i++ {
+		hexMap[i] = underlyingHexBytes[i*4 : i*4+4]
+		rawHexMap[i] = underlyingHexBytes[i*4+2 : i*4+4]
+	}
+}
+
+func writeHexDigit(buf *bytes.Buffer, v int) {
+	if v < 10 {
+		buf.WriteByte('0' + byte(v))
+	} else {
+		buf.WriteByte('a' + byte(v-10))
 	}
 }
