@@ -131,7 +131,7 @@ func TestFormatExpr(t *testing.T) {
 		{`'abc'`, FmtShowTypes,
 			`('abc')[string]`},
 		{`b'abc'`, FmtShowTypes,
-			`(b'abc')[bytes]`},
+			`(b'\x61\x62\x63')[bytes]`},
 		{`interval '3s'`, FmtShowTypes,
 			`('3s')[interval]`},
 		{`date '2003-01-01'`, FmtShowTypes,

@@ -83,7 +83,7 @@ func TestDatumOrdering(t *testing.T) {
 		{`e'\x00'`, noPrev, `e'\x00\x00'`, `''`, noMax},
 		{`'abc':::string`, noPrev, `e'abc\x00'`, `''`, noMax},
 		{`'':::bytes`, valIsMin, `b'\x00'`, `b''`, noMax},
-		{`'abc':::bytes`, noPrev, `b'abc\x00'`, `b''`, noMax},
+		{`'abc':::bytes`, noPrev, `b'\x61\x62\x63\x00'`, `b''`, noMax},
 
 		// Dates
 		{`'2006-01-02':::date`, `'2006-01-01'`, `'2006-01-03'`, noMin, noMax},

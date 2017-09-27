@@ -206,8 +206,8 @@ func ParseDBool(s string) (*DBool, error) {
 }
 
 // ParseDByte parses a string representation of hex encoded binary data.
-func ParseDByte(s string) (*DBytes, error) {
-	if len(s) > 2 && (s[0] == '\\' && (s[1] == 'x' || s[1] == 'X')) {
+func ParseDByte(s string, allowBackslashXFormat bool) (*DBytes, error) {
+	if allowBackslashXFormat && len(s) >= 2 && (s[0] == '\\' && (s[1] == 'x' || s[1] == 'X')) {
 		hexstr, err := hex.DecodeString(s[2:])
 		if err != nil {
 			return nil, makeParseError(s, TypeBytes, err)
@@ -1015,7 +1015,12 @@ func (*DBytes) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
 func (d *DBytes) Format(buf *bytes.Buffer, f FmtFlags) {
-	encodeSQLBytes(buf, string(*d))
+	buf.WriteString("b'")
+	b := string(*d)
+	for i := 0; i < len(b); i++ {
+		buf.Write(hexMap[b[i]])
+	}
+	buf.WriteByte('\'')
 }
 
 // Size implements the Datum interface.

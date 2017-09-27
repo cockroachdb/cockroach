@@ -664,6 +664,39 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
+	"encode": {
+		Builtin{
+			Types:      ArgTypes{{"data", TypeBytes}, {"format", TypeString}},
+			ReturnType: fixedReturnType(TypeString),
+			fn: func(evalCtx *EvalContext, args Datums) (_ Datum, err error) {
+				data, format := string(*args[0].(*DBytes)), string(MustBeDString(args[1]))
+				if format != "hex" {
+					return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError, "only 'hex' format is supported for ENCODE")
+				}
+				if !utf8.ValidString(data) {
+					return nil, pgerror.NewError(pgerror.CodeCharacterNotInRepertoireError, "invalid UTF-8 sequence")
+				}
+				return NewDString(data), nil
+			},
+		},
+	},
+
+	"decode": {
+		Builtin{
+			Types:      ArgTypes{{"text", TypeString}, {"format", TypeString}},
+			ReturnType: fixedReturnType(TypeString),
+			fn: func(evalCtx *EvalContext, args Datums) (_ Datum, err error) {
+				data, format := string(MustBeDString(args[0])), string(MustBeDString(args[1]))
+				if format != "hex" {
+					return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError, "only 'hex' format is supported for DECODE")
+				}
+				var buf bytes.Buffer
+				hexEncodeString(&buf, data)
+				return NewDString(buf.String()), nil
+			},
+		},
+	},
+
 	"ascii": {stringBuiltin1(func(_ *EvalContext, s string) (Datum, error) {
 		for _, ch := range s {
 			return NewDInt(DInt(ch)), nil

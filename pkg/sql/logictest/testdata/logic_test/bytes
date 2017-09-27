@@ -1,0 +1,41 @@
+# LogicTest: default
+
+query T
+SELECT 'non-escaped-string':::BYTES::STRING
+----
+\x6e6f6e2d657363617065642d737472696e67
+
+query T
+SELECT '\Xabcd':::BYTES::STRING
+----
+\xabcd
+
+query T
+SELECT b'\x5c\x78':::BYTES
+----
+\x
+
+query T
+SELECT b'\x5c\x78':::BYTES::STRING
+----
+\x5c78
+
+query T
+SELECT b'\x5c\x58':::BYTES::STRING
+----
+\x5c58
+
+query T
+SELECT e'\x5c\x78'::STRING
+----
+\x
+
+query T
+SELECT '\X':::BYTES::STRING
+----
+\x
+
+query T
+SELECT '日本語':::STRING::BYTES::STRING
+----
+\xe697a5e69cace8aa9e
