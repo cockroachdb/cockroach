@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 const (
@@ -69,7 +70,7 @@ func newReplicaStats(clock *hlc.Clock, getNodeLocality localityOracle) *replicaS
 		getNodeLocality: getNodeLocality,
 	}
 	rs.mu.requests[rs.mu.idx] = make(perLocalityCounts)
-	rs.mu.lastRotate = time.Unix(0, rs.clock.PhysicalNow())
+	rs.mu.lastRotate = timeutil.Unix(0, rs.clock.PhysicalNow())
 	rs.mu.lastReset = rs.mu.lastRotate
 	return rs
 }
@@ -114,7 +115,7 @@ func (rs *replicaStats) recordCount(count float64, nodeID roachpb.NodeID) {
 	if rs.getNodeLocality != nil {
 		locality = rs.getNodeLocality(nodeID)
 	}
-	now := time.Unix(0, rs.clock.PhysicalNow())
+	now := timeutil.Unix(0, rs.clock.PhysicalNow())
 
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
@@ -140,7 +141,7 @@ func (rs *replicaStats) rotateLocked() {
 // Note that the QPS stats are exponentially decayed such that newer requests
 // are weighted more heavily than older requests.
 func (rs *replicaStats) perLocalityDecayingQPS() (perLocalityCounts, time.Duration) {
-	now := time.Unix(0, rs.clock.PhysicalNow())
+	now := timeutil.Unix(0, rs.clock.PhysicalNow())
 
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
@@ -185,7 +186,7 @@ func (rs *replicaStats) perLocalityDecayingQPS() (perLocalityCounts, time.Durati
 // one way or the the other, but not decaying makes the average more stable,
 // which is probably better for avoiding rebalance thrashing).
 func (rs *replicaStats) avgQPS() (float64, time.Duration) {
-	now := time.Unix(0, rs.clock.PhysicalNow())
+	now := timeutil.Unix(0, rs.clock.PhysicalNow())
 
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
@@ -224,6 +225,6 @@ func (rs *replicaStats) resetRequestCounts() {
 		rs.mu.requests[i] = nil
 	}
 	rs.mu.requests[rs.mu.idx] = make(perLocalityCounts)
-	rs.mu.lastRotate = time.Unix(0, rs.clock.PhysicalNow())
+	rs.mu.lastRotate = timeutil.Unix(0, rs.clock.PhysicalNow())
 	rs.mu.lastReset = rs.mu.lastRotate
 }

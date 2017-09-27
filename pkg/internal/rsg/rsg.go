@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -225,7 +226,7 @@ func (r *RSG) GenerateRandomArg(typ parser.Type) string {
 	case parser.TypeBytes:
 		v = fmt.Sprintf("b%s", stringArgs[r.Intn(len(stringArgs))])
 	case parser.TypeTimestamp, parser.TypeTimestampTZ:
-		t := time.Unix(0, r.Int63())
+		t := timeutil.Unix(0, r.Int63())
 		v = fmt.Sprintf(`'%s'`, t.Format(time.RFC3339Nano))
 	case parser.TypeBool:
 		v = boolArgs[r.Intn(2)]
