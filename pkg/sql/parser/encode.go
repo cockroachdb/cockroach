@@ -41,7 +41,10 @@ var (
 		'{': true,
 		'}': true,
 	}
+	// hexMap is a mapping from each byte to the `\x%%` hex form as a []byte.
 	hexMap [256][]byte
+	// rawHexMap is a mapping from each byte to the `%%` hex form as a []byte.
+	rawHexMap [256][]byte
 )
 
 // encodeSQLString writes a string literal to buf. All unicode and
@@ -56,6 +59,14 @@ func encodeSQLString(buf *bytes.Buffer, in string) {
 func EscapeSQLString(in string) string {
 	var buf bytes.Buffer
 	encodeSQLString(&buf, in)
+	return buf.String()
+}
+
+func hexEncodeString(in string) string {
+	var buf bytes.Buffer
+	for i := 0; i < len(in); i++ {
+		buf.Write(rawHexMap[in[i]])
+	}
 	return buf.String()
 }
 
@@ -241,5 +252,6 @@ func init() {
 
 	for i := range hexMap {
 		hexMap[i] = []byte(fmt.Sprintf("\\x%02x", i))
+		rawHexMap[i] = []byte(fmt.Sprintf("%02x", i))
 	}
 }

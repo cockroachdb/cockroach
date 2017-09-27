@@ -2421,11 +2421,7 @@ func performCast(ctx *EvalContext, d Datum, t CastTargetType) (Datum, error) {
 		case *DCollatedString:
 			s = t.Contents
 		case *DBytes:
-			if !utf8.ValidString(string(*t)) {
-				return nil, pgerror.NewErrorf(
-					pgerror.CodeCharacterNotInRepertoireError, "invalid UTF-8: %q", string(*t))
-			}
-			s = string(*t)
+			s = "\\x" + hexEncodeString(string(*t))
 		case *DOid:
 			s = t.name
 		}
