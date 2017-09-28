@@ -210,7 +210,7 @@ func ParseType(sql string) (CastTargetType, error) {
 }
 
 // ParseStringAs parses s as type t.
-func ParseStringAs(t Type, s string, location *time.Location) (Datum, error) {
+func ParseStringAs(t Type, s string, evalCtx *EvalContext) (Datum, error) {
 	var d Datum
 	var err error
 	switch t {
@@ -219,7 +219,7 @@ func ParseStringAs(t Type, s string, location *time.Location) (Datum, error) {
 	case TypeBytes:
 		d = NewDBytes(DBytes(s))
 	case TypeDate:
-		d, err = ParseDDate(s, location)
+		d, err = ParseDDate(s, evalCtx.GetLocation())
 	case TypeDecimal:
 		d, err = ParseDDecimal(s)
 	case TypeFloat:
@@ -233,11 +233,22 @@ func ParseStringAs(t Type, s string, location *time.Location) (Datum, error) {
 	case TypeTimestamp:
 		d, err = ParseDTimestamp(s, time.Microsecond)
 	case TypeTimestampTZ:
-		d, err = ParseDTimestampTZ(s, location, time.Microsecond)
+		d, err = ParseDTimestampTZ(s, evalCtx.GetLocation(), time.Microsecond)
 	case TypeUUID:
 		d, err = ParseDUuidFromString(s)
 	default:
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unknown type %s", t)
+		if a, ok := t.(TArray); ok {
+			typ, err := DatumTypeToColumnType(a.Typ)
+			if err != nil {
+				return nil, err
+			}
+			d, err = ParseDArrayFromString(evalCtx, s, typ)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unknown type %s", t)
+		}
 	}
 	return d, err
 }
