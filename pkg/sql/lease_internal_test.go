@@ -19,16 +19,20 @@ package sql
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/pkg/errors"
 )
 
 func TestTableSet(t *testing.T) {
@@ -557,4 +561,110 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	wg.Wait()
+}
+
+// This test makes sure the lease gets renewed automatically in the background
+// if the lease is about to expire.
+func TestLeaseRefreshedAutomatically(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var testAcquiredCount int32
+	var testRenewalAcquiredCount int32
+
+	testingKnobs := base.TestingKnobs{
+		SQLLeaseManager: &LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: LeaseStoreTestingKnobs{
+				// We want to track when leases get acquired and when they are renewed.
+				LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, _ error) {
+					atomic.AddInt32(&testAcquiredCount, 1)
+				},
+				LeaseRenewalAcquiredEvent: func(_ error) {
+					atomic.AddInt32(&testRenewalAcquiredCount, 1)
+				},
+			},
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{Knobs: testingKnobs})
+	defer s.Stopper().Stop(context.TODO())
+	leaseManager := s.LeaseManager().(*LeaseManager)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	descID := tableDesc.ID
+
+	// We set LeaseRenewalTimeout to be very close to the duration, so we
+	// renew on access almost immediately. LeaseJitterMultiplier is set to
+	// ensure any newer leases will have a higher expiration timestamp.
+	savedLeaseDuration := LeaseDuration
+	savedLeaseRenewalTimeout := LeaseRenewalTimeout
+	savedLeaseJitterMultiplier := LeaseJitterMultiplier
+	defer func() {
+		// Unfortunately, locking is required in order to recover the internal
+		// constants without a data race. This happens because of a goroutine that
+		// is finishing an async acquisition after we've passed test conditions.
+		leaseManager.mu.Lock()
+		defer leaseManager.mu.Unlock()
+		ts := leaseManager.mu.tables[descID]
+		ts.mu.Lock()
+		defer ts.mu.Unlock()
+
+		LeaseDuration = savedLeaseDuration
+		LeaseRenewalTimeout = savedLeaseRenewalTimeout
+		LeaseJitterMultiplier = savedLeaseJitterMultiplier
+	}()
+	LeaseDuration = 5 * time.Minute
+	LeaseRenewalTimeout = 5*time.Minute - 1*time.Nanosecond
+	LeaseJitterMultiplier = 0
+
+	// Acquire the first lease.
+	ts, e1, err := leaseManager.Acquire(context.TODO(), s.Clock().Now(), descID)
+	if err != nil {
+		t.Fatal(err)
+	} else if err := leaseManager.Release(ts); err != nil {
+		t.Fatal(err)
+	}
+
+	if count := atomic.LoadInt32(&testAcquiredCount); count != 1 {
+		t.Fatalf("expected 1 lease to be acquired, but acquired %d times",
+			count)
+	} else if count := atomic.LoadInt32(&testRenewalAcquiredCount); count != 0 {
+		t.Fatalf("expected no leases to be acquired by renewal, but acquired %d times by renewal",
+			count)
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		// Acquire the same lease. This will eventually start the process for
+		// acquiring a third lease.
+		_, e2, err := leaseManager.Acquire(context.TODO(), s.Clock().Now(), descID)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		defer func() {
+			if err := leaseManager.Release(ts); err != nil {
+				t.Fatal(err)
+			}
+		}()
+
+		// We check for the new expiry time because if our past acquire triggered
+		// the background refresh, the next lease we get will be the result of the
+		// background refresh.
+		if e2.WallTime <= e1.WallTime {
+			return errors.Errorf("expected new lease expiration (%s) to be after old lease expiration (%s)",
+				e2, e1)
+		} else if count := atomic.LoadInt32(&testAcquiredCount); count < 2 {
+			return errors.Errorf("expected at least 2 leases to be acquired, but acquired %d times",
+				count)
+		} else if count := atomic.LoadInt32(&testRenewalAcquiredCount); count < 1 {
+			return errors.Errorf("expected at least 1 lease to be acquired by renewal, but acquired %d times by renewal",
+				count)
+		} else if hasBlockedDuringAcquisition := leaseManager.mu.tables[descID].mu.hasBlockedDuringAcquisition; hasBlockedDuringAcquisition {
+			t.Fatalf("expected repeated lease acquisition to not block, but hasBlockedDuringAcquisition is true")
+		}
+		return nil
+	})
 }
