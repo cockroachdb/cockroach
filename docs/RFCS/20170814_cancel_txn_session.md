@@ -38,8 +38,9 @@ root@:26257/> SHOW SESSIONS;
 (1 row)
 ```
 
-Extending this functionality with transaction and session cancellation
-would be a logical next step.
+Transaction and session cancellation is essential for DBMS administration and 
+currently it is only possible to view them, so extending this functionality 
+with cancellation would be a logical next step.
 
 Virtually all current popular DBMS include transaction and/or session cancellation.
 
@@ -49,6 +50,7 @@ Both transaction and session cancellation have different motivations and use cas
 
 Transaction cancellation would involve canceling any active queries(if any) under the transaction,
 in addition to rolling it back and cleaning up intents held by the transaction.  
+A common use case is to cancel a transaction which uses too much of cluster resources.
 Note that currently, query cancellation cancels the underlying transaction too.  
 However, canceling an idle transaction is impossible using the query cancellation mechanism; 
 and even if there is a query in progress, canceling it races with the query finishing; so one 
@@ -58,7 +60,11 @@ as canceling the transaction.
 #### Session cancellation
 Session cancellation would involve canceling the current transaction (if any),
 followed by closing the client connection.  
-A particular useful use case would be revoking unauthorized access to the DB.
+A common use case is to cancel a session which uses too much of cluster resources.
+A particular useful use case would be revoking unauthorized access to the DB.  
+Also, the existence of cluster settings that don't take effect until all sessions 
+have been restarted is a good argument for session cancellation.  
+Cancelling all active sessions would be less disruptive than restarting all client processes.
 
 _Both MySQL and Postgres support session cancellation._
 
@@ -81,24 +87,24 @@ Session 2 (DB admin wishing to cancel the txn above):
 
 ```sql
 root@:26257/> SELECT node_id, kv_txn, active_queries FROM [SHOW CLUSTER SESSIONS];
-+---------+--------------------------------------+-------------------------------------------------------+
-| node_id | kv_txn                               | active_queries                                        | 
-+---------+--------------------------------------+-------------------------------------------------------+
-| 1       | 14e58aab-9046-1f2d-0000-000000000001 | SHOW TRACE FOR SELECT * FROM generate_series(1,20000) |
-| 2       | 14e58aac-50cf-3cfc-0000-000000000002 | SHOW CLUSTER SESSIONS                                 |
-+---------+--------------------------------------+-------------------------------------------------------+
++---------+----------------------------------+-------------------------------------------------------+
+| node_id | kv_txn                           | active_queries                                        | 
++---------+----------------------------------+-------------------------------------------------------+
+| 1       | 14e58aab90461f2d0000000000000001 | SHOW TRACE FOR SELECT * FROM generate_series(1,20000) |
+| 2       | 14e58aac50cf3cfc0000000000000002 | SHOW CLUSTER SESSIONS                                 |
++---------+----------------------------------+-------------------------------------------------------+
 (2 rows)
 
 root@:26257/> CANCEL TRANSACTION '14e58aab-9046-1f2d-0000-000000000001';
 CANCEL TRANSACTION
 
 root@:26257/> SELECT node_id, kv_txn, active_queries FROM [SHOW CLUSTER SESSIONS];
-+---------+--------------------------------------+-------------------------------------------------------+
-| node_id | kv_txn                               | active_queries                                        | 
-+---------+--------------------------------------+-------------------------------------------------------+
-| 1       | NULL                                 |                                                       |
-| 2       | 14e58ffc-23cf-3f3c-0000-000000000002 | SHOW CLUSTER SESSIONS                                 |
-+---------+--------------------------------------+-------------------------------------------------------+
++---------+----------------------------------+-------------------------------------------------------+
+| node_id | kv_txn                           | active_queries                                        | 
++---------+----------------------------------+-------------------------------------------------------+
+| 1       | NULL                             |                                                       |
+| 2       | 14e58ffc23cf3f3c0000000000000002 | SHOW CLUSTER SESSIONS                                 |
++---------+----------------------------------+-------------------------------------------------------+
 (2 rows)
 ```
 
@@ -121,23 +127,23 @@ Session 2 (DB admin wishing to cancel session 1)
 
 ```sql
 root@:26257/> SELECT node_id, session_id FROM [SHOW CLUSTER SESSIONS];
-+---------+--------------------------------------+
-| node_id | session_id                           | 
-+---------+--------------------------------------+
-| 1       | 14e58aac-50cf-3cfc-0000-000000000001 |
-| 2       | 14e22aab-9046-1f2d-0000-000000000002 |
-+---------+--------------------------------------+
++---------+----------------------------------+
+| node_id | session_id                       | 
++---------+----------------------------------+
+| 1       | 14e58aac50cf3cfc0000000000000001 |
+| 2       | 14e22aab90461f2d0000000000000002 |
++---------+----------------------------------+
 (2 rows)
 
 root@:26257/> CANCEL SESSION '14e58aac-50cf-3cfc-0000-000000000001';
 CANCEL SESSION
 
 root@:26257/> SELECT node_id, session_id FROM [SHOW CLUSTER SESSIONS];
-+---------+--------------------------------------+
-| node_id | session_id                           | 
-+---------+--------------------------------------+
-| 2       | 14e22aab-9046-1f2d-0000-000000000002 |
-+---------+--------------------------------------+
++---------+----------------------------------+
+| node_id | session_id                       | 
++---------+----------------------------------+
+| 2       | 14e22aab90461f2d0000000000000002 |
++---------+----------------------------------+
 (1 rows)
 ```
 
@@ -184,12 +190,12 @@ Example output of `SHOW SESSIONS` with transaction IDs (see the `kv_txn` column)
 
 ```sql
 root@:26257/> SELECT node_id, kv_txn, active_queries FROM [SHOW CLUSTER SESSIONS];
-+---------+--------------------------------------+-------------------------------------------------------+
-| node_id | kv_txn                               | active_queries                                        | 
-+---------+--------------------------------------+-------------------------------------------------------+
-| 1       | 14e58aab-9046-1f2d-0000-000000000001 | SHOW TRACE FOR SELECT * FROM generate_series(1,20000) |
-| 2       | 14e58aac-50cf-3cfc-0000-000000000002 | SHOW CLUSTER SESSIONS                                 |
-+---------+--------------------------------------+-------------------------------------------------------+
++---------+----------------------------------+-------------------------------------------------------+
+| node_id | kv_txn                           | active_queries                                        | 
++---------+----------------------------------+-------------------------------------------------------+
+| 1       | 14e58aab90461f2d0000000000000001 | SHOW TRACE FOR SELECT * FROM generate_series(1,20000) |
+| 2       | 14e58aac50cf3cfc0000000000000002 | SHOW CLUSTER SESSIONS                                 |
++---------+----------------------------------+-------------------------------------------------------+
 (2 rows)
 ```
 
