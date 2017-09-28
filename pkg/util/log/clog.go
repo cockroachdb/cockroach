@@ -344,7 +344,7 @@ func (d *EntryDecoder) Decode(entry *Entry) error {
 			continue
 		}
 		entry.Severity = Severity(strings.IndexByte(severityChar, m[1][0]) + 1)
-		t, err := time.ParseInLocation("060102 15:04:05.999999", string(m[2]), time.Local)
+		t, err := time.Parse("060102 15:04:05.999999", string(m[2]))
 		if err != nil {
 			return err
 		}
