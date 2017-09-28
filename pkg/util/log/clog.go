@@ -717,7 +717,7 @@ func (l *loggingT) putBuffer(b *buffer) {
 // are added to the entry before marshaling.
 func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string) {
 	// Set additional details in log entry.
-	now := time.Now()
+	now := timeutil.Now()
 	entry := MakeEntry(s, now.UnixNano(), file, line, msg)
 
 	if f, ok := l.interceptor.Load().(InterceptorFn); ok && f != nil {
@@ -878,7 +878,7 @@ func (sb *syncBuffer) Sync() error {
 
 func (sb *syncBuffer) Write(p []byte) (n int, err error) {
 	if sb.nbytes+int64(len(p)) >= atomic.LoadInt64(&LogFileMaxSize) {
-		if err := sb.rotateFile(time.Now()); err != nil {
+		if err := sb.rotateFile(timeutil.Now()); err != nil {
 			sb.logger.exit(err)
 		}
 	}
@@ -976,7 +976,7 @@ func (l *loggingT) closeFileLocked() error {
 // createFile creates the log file.
 // l.mu is held.
 func (l *loggingT) createFile() error {
-	now := time.Now()
+	now := timeutil.Now()
 	if l.file == nil {
 		sb := &syncBuffer{
 			logger: l,
