@@ -77,8 +77,9 @@
 
 [[projects]]
   name = "github.com/aws/aws-sdk-go"
-  packages = ["aws","aws/awserr","aws/awsutil","aws/client","aws/client/metadata","aws/corehandlers","aws/credentials","aws/credentials/ec2rolecreds","aws/credentials/endpointcreds","aws/credentials/stscreds","aws/defaults","aws/ec2metadata","aws/endpoints","aws/request","aws/session","aws/signer/v4","private/protocol","private/protocol/query","private/protocol/query/queryutil","private/protocol/rest","private/protocol/restxml","private/protocol/xml/xmlutil","service/s3","service/sts"]
-  revision = "0032dd29f2a063a66a9f4b44bf6664da3a5b71cc"
+  packages = ["aws","aws/awserr","aws/awsutil","aws/client","aws/client/metadata","aws/corehandlers","aws/credentials","aws/credentials/ec2rolecreds","aws/credentials/endpointcreds","aws/credentials/stscreds","aws/defaults","aws/ec2metadata","aws/endpoints","aws/request","aws/session","aws/signer/v4","internal/shareddefaults","private/protocol","private/protocol/query","private/protocol/query/queryutil","private/protocol/rest","private/protocol/restxml","private/protocol/xml/xmlutil","service/s3","service/s3/s3iface","service/s3/s3manager","service/sts"]
+  revision = "c652f9369083515c3ddf1fbaf6df68da2c101545"
+  version = "v1.12.1"
 
 [[projects]]
   name = "github.com/backtrace-labs/go-bcd"
@@ -246,6 +247,7 @@
   name = "github.com/go-ini/ini"
   packages = ["."]
   revision = "e7fea39b01aea8d5671f6858f0532f56e8bff3a5"
+  version = "v1.27.0"
 
 [[projects]]
   name = "github.com/go-logfmt/logfmt"
@@ -364,7 +366,7 @@
 [[projects]]
   name = "github.com/jmespath/go-jmespath"
   packages = ["."]
-  revision = "bd40a432e4c76585ef6b72d3fd96fb9b6dc7b68d"
+  revision = "0b12d6b5"
 
 [[projects]]
   name = "github.com/jteeuwen/go-bindata"
@@ -544,11 +546,6 @@
   revision = "1f30fe9094a513ce4c700b9a54458bbb0c96996c"
 
 [[projects]]
-  name = "github.com/rlmcpherson/s3gof3r"
-  packages = ["."]
-  revision = "864ae0bf7cf2e20c0002b7ea17f4d84fec1abc14"
-
-[[projects]]
   name = "github.com/rubyist/circuitbreaker"
   packages = ["."]
   revision = "2074adba5ddc7d5f7559448a9c3066573521c5bf"
@@ -673,6 +670,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "0c4cdc41e60e9405fc2dab5b883635e3c5b6f15afef358d81d488091edea9e40"
+  inputs-digest = "2d6d1479ade4dc9a000922497ffed2f15864882d0b45c5adb586fad8038d3b73"
   solver-name = "gps-cdcl"
   solver-version = 1
