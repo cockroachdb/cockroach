@@ -20,6 +20,8 @@ namespace engine {
 namespace enginepb {
 class TxnMetaDefaultTypeInternal : public ::google::protobuf::internal::ExplicitlyConstructed<TxnMeta> {
 } _TxnMeta_default_instance_;
+class LegacyTimestampDefaultTypeInternal : public ::google::protobuf::internal::ExplicitlyConstructed<LegacyTimestamp> {
+} _LegacyTimestamp_default_instance_;
 class MVCCMetadataDefaultTypeInternal : public ::google::protobuf::internal::ExplicitlyConstructed<MVCCMetadata> {
 } _MVCCMetadata_default_instance_;
 class MVCCStatsDefaultTypeInternal : public ::google::protobuf::internal::ExplicitlyConstructed<MVCCStats> {
@@ -41,11 +43,13 @@ PROTOBUF_CONSTEXPR_VAR ::google::protobuf::internal::ParseTable const
   { NULL, NULL, 0, -1, -1, false },
   { NULL, NULL, 0, -1, -1, false },
   { NULL, NULL, 0, -1, -1, false },
+  { NULL, NULL, 0, -1, -1, false },
 };
 
 
 void TableStruct::Shutdown() {
   _TxnMeta_default_instance_.Shutdown();
+  _LegacyTimestamp_default_instance_.Shutdown();
   _MVCCMetadata_default_instance_.Shutdown();
   _MVCCStats_default_instance_.Shutdown();
 }
@@ -56,16 +60,17 @@ void TableStruct::InitDefaultsImpl() {
   ::google::protobuf::internal::InitProtobufDefaults();
   ::cockroach::util::hlc::protobuf_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto::InitDefaults();
   _TxnMeta_default_instance_.DefaultConstruct();
+  _LegacyTimestamp_default_instance_.DefaultConstruct();
   _MVCCMetadata_default_instance_.DefaultConstruct();
   _MVCCStats_default_instance_.DefaultConstruct();
   _TxnMeta_default_instance_.get_mutable()->timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
   _MVCCMetadata_default_instance_.get_mutable()->txn_ = const_cast< ::cockroach::storage::engine::enginepb::TxnMeta*>(
       ::cockroach::storage::engine::enginepb::TxnMeta::internal_default_instance());
-  _MVCCMetadata_default_instance_.get_mutable()->timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
-      ::cockroach::util::hlc::Timestamp::internal_default_instance());
-  _MVCCMetadata_default_instance_.get_mutable()->merge_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
-      ::cockroach::util::hlc::Timestamp::internal_default_instance());
+  _MVCCMetadata_default_instance_.get_mutable()->timestamp_ = const_cast< ::cockroach::storage::engine::enginepb::LegacyTimestamp*>(
+      ::cockroach::storage::engine::enginepb::LegacyTimestamp::internal_default_instance());
+  _MVCCMetadata_default_instance_.get_mutable()->merge_timestamp_ = const_cast< ::cockroach::storage::engine::enginepb::LegacyTimestamp*>(
+      ::cockroach::storage::engine::enginepb::LegacyTimestamp::internal_default_instance());
 }
 
 void InitDefaults() {
@@ -838,6 +843,288 @@ void TxnMeta::set_batch_index(::google::protobuf::int32 value) {
 // ===================================================================
 
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int LegacyTimestamp::kWallTimeFieldNumber;
+const int LegacyTimestamp::kLogicalFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+LegacyTimestamp::LegacyTimestamp()
+  : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
+  if (GOOGLE_PREDICT_TRUE(this != internal_default_instance())) {
+    protobuf_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto::InitDefaults();
+  }
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.storage.engine.enginepb.LegacyTimestamp)
+}
+LegacyTimestamp::LegacyTimestamp(const LegacyTimestamp& from)
+  : ::google::protobuf::MessageLite(),
+      _internal_metadata_(NULL),
+      _has_bits_(from._has_bits_),
+      _cached_size_(0) {
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::memcpy(&wall_time_, &from.wall_time_,
+    reinterpret_cast<char*>(&logical_) -
+    reinterpret_cast<char*>(&wall_time_) + sizeof(logical_));
+  // @@protoc_insertion_point(copy_constructor:cockroach.storage.engine.enginepb.LegacyTimestamp)
+}
+
+void LegacyTimestamp::SharedCtor() {
+  _cached_size_ = 0;
+  ::memset(&wall_time_, 0, reinterpret_cast<char*>(&logical_) -
+    reinterpret_cast<char*>(&wall_time_) + sizeof(logical_));
+}
+
+LegacyTimestamp::~LegacyTimestamp() {
+  // @@protoc_insertion_point(destructor:cockroach.storage.engine.enginepb.LegacyTimestamp)
+  SharedDtor();
+}
+
+void LegacyTimestamp::SharedDtor() {
+}
+
+void LegacyTimestamp::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
+const LegacyTimestamp& LegacyTimestamp::default_instance() {
+  protobuf_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto::InitDefaults();
+  return *internal_default_instance();
+}
+
+LegacyTimestamp* LegacyTimestamp::New(::google::protobuf::Arena* arena) const {
+  LegacyTimestamp* n = new LegacyTimestamp;
+  if (arena != NULL) {
+    arena->Own(n);
+  }
+  return n;
+}
+
+void LegacyTimestamp::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.storage.engine.enginepb.LegacyTimestamp)
+  if (_has_bits_[0 / 32] & 3u) {
+    ::memset(&wall_time_, 0, reinterpret_cast<char*>(&logical_) -
+      reinterpret_cast<char*>(&wall_time_) + sizeof(logical_));
+  }
+  _has_bits_.Clear();
+  _internal_metadata_.Clear();
+}
+
+bool LegacyTimestamp::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  ::google::protobuf::io::LazyStringOutputStream unknown_fields_string(
+      ::google::protobuf::NewPermanentCallback(&_internal_metadata_,
+          &::google::protobuf::internal::InternalMetadataWithArenaLite::
+              mutable_unknown_fields));
+  ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
+      &unknown_fields_string, false);
+  // @@protoc_insertion_point(parse_start:cockroach.storage.engine.enginepb.LegacyTimestamp)
+  for (;;) {
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      case 1: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(8u)) {
+          set_has_wall_time();
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &wall_time_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 2: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(16u)) {
+          set_has_logical();
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &logical_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0 ||
+            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormatLite::SkipField(
+            input, tag, &unknown_fields_stream));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.storage.engine.enginepb.LegacyTimestamp)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.storage.engine.enginepb.LegacyTimestamp)
+  return false;
+#undef DO_
+}
+
+void LegacyTimestamp::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.storage.engine.enginepb.LegacyTimestamp)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = _has_bits_[0];
+  if (cached_has_bits & 0x00000001u) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(1, this->wall_time(), output);
+  }
+
+  if (cached_has_bits & 0x00000002u) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(2, this->logical(), output);
+  }
+
+  output->WriteRaw(unknown_fields().data(),
+                   static_cast<int>(unknown_fields().size()));
+  // @@protoc_insertion_point(serialize_end:cockroach.storage.engine.enginepb.LegacyTimestamp)
+}
+
+size_t LegacyTimestamp::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.storage.engine.enginepb.LegacyTimestamp)
+  size_t total_size = 0;
+
+  total_size += unknown_fields().size();
+
+  if (_has_bits_[0 / 32] & 3u) {
+    if (has_wall_time()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int64Size(
+          this->wall_time());
+    }
+
+    if (has_logical()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int32Size(
+          this->logical());
+    }
+
+  }
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = cached_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  return total_size;
+}
+
+void LegacyTimestamp::CheckTypeAndMergeFrom(
+    const ::google::protobuf::MessageLite& from) {
+  MergeFrom(*::google::protobuf::down_cast<const LegacyTimestamp*>(&from));
+}
+
+void LegacyTimestamp::MergeFrom(const LegacyTimestamp& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.storage.engine.enginepb.LegacyTimestamp)
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = from._has_bits_[0];
+  if (cached_has_bits & 3u) {
+    if (cached_has_bits & 0x00000001u) {
+      wall_time_ = from.wall_time_;
+    }
+    if (cached_has_bits & 0x00000002u) {
+      logical_ = from.logical_;
+    }
+    _has_bits_[0] |= cached_has_bits;
+  }
+}
+
+void LegacyTimestamp::CopyFrom(const LegacyTimestamp& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.storage.engine.enginepb.LegacyTimestamp)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool LegacyTimestamp::IsInitialized() const {
+  return true;
+}
+
+void LegacyTimestamp::Swap(LegacyTimestamp* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void LegacyTimestamp::InternalSwap(LegacyTimestamp* other) {
+  std::swap(wall_time_, other->wall_time_);
+  std::swap(logical_, other->logical_);
+  std::swap(_has_bits_[0], other->_has_bits_[0]);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+  std::swap(_cached_size_, other->_cached_size_);
+}
+
+::std::string LegacyTimestamp::GetTypeName() const {
+  return "cockroach.storage.engine.enginepb.LegacyTimestamp";
+}
+
+#if PROTOBUF_INLINE_NOT_IN_HEADERS
+// LegacyTimestamp
+
+bool LegacyTimestamp::has_wall_time() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+void LegacyTimestamp::set_has_wall_time() {
+  _has_bits_[0] |= 0x00000001u;
+}
+void LegacyTimestamp::clear_has_wall_time() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+void LegacyTimestamp::clear_wall_time() {
+  wall_time_ = GOOGLE_LONGLONG(0);
+  clear_has_wall_time();
+}
+::google::protobuf::int64 LegacyTimestamp::wall_time() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.LegacyTimestamp.wall_time)
+  return wall_time_;
+}
+void LegacyTimestamp::set_wall_time(::google::protobuf::int64 value) {
+  set_has_wall_time();
+  wall_time_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.LegacyTimestamp.wall_time)
+}
+
+bool LegacyTimestamp::has_logical() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+void LegacyTimestamp::set_has_logical() {
+  _has_bits_[0] |= 0x00000002u;
+}
+void LegacyTimestamp::clear_has_logical() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+void LegacyTimestamp::clear_logical() {
+  logical_ = 0;
+  clear_has_logical();
+}
+::google::protobuf::int32 LegacyTimestamp::logical() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.LegacyTimestamp.logical)
+  return logical_;
+}
+void LegacyTimestamp::set_logical(::google::protobuf::int32 value) {
+  set_has_logical();
+  logical_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.LegacyTimestamp.logical)
+}
+
+#endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
+
+// ===================================================================
+
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int MVCCMetadata::kTxnFieldNumber;
 const int MVCCMetadata::kTimestampFieldNumber;
 const int MVCCMetadata::kDeletedFieldNumber;
@@ -871,12 +1158,12 @@ MVCCMetadata::MVCCMetadata(const MVCCMetadata& from)
     txn_ = NULL;
   }
   if (from.has_timestamp()) {
-    timestamp_ = new ::cockroach::util::hlc::Timestamp(*from.timestamp_);
+    timestamp_ = new ::cockroach::storage::engine::enginepb::LegacyTimestamp(*from.timestamp_);
   } else {
     timestamp_ = NULL;
   }
   if (from.has_merge_timestamp()) {
-    merge_timestamp_ = new ::cockroach::util::hlc::Timestamp(*from.merge_timestamp_);
+    merge_timestamp_ = new ::cockroach::storage::engine::enginepb::LegacyTimestamp(*from.merge_timestamp_);
   } else {
     merge_timestamp_ = NULL;
   }
@@ -942,11 +1229,11 @@ void MVCCMetadata::Clear() {
     }
     if (has_timestamp()) {
       GOOGLE_DCHECK(timestamp_ != NULL);
-      timestamp_->::cockroach::util::hlc::Timestamp::Clear();
+      timestamp_->::cockroach::storage::engine::enginepb::LegacyTimestamp::Clear();
     }
     if (has_merge_timestamp()) {
       GOOGLE_DCHECK(merge_timestamp_ != NULL);
-      merge_timestamp_->::cockroach::util::hlc::Timestamp::Clear();
+      merge_timestamp_->::cockroach::storage::engine::enginepb::LegacyTimestamp::Clear();
     }
   }
   if (_has_bits_[0 / 32] & 112u) {
@@ -1047,7 +1334,7 @@ bool MVCCMetadata::MergePartialFromCodedStream(
         break;
       }
 
-      // optional .cockroach.util.hlc.Timestamp merge_timestamp = 7;
+      // optional .cockroach.storage.engine.enginepb.LegacyTimestamp merge_timestamp = 7;
       case 7: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(58u)) {
@@ -1117,7 +1404,7 @@ void MVCCMetadata::SerializeWithCachedSizes(
       6, this->raw_bytes(), output);
   }
 
-  // optional .cockroach.util.hlc.Timestamp merge_timestamp = 7;
+  // optional .cockroach.storage.engine.enginepb.LegacyTimestamp merge_timestamp = 7;
   if (cached_has_bits & 0x00000008u) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       7, *this->merge_timestamp_, output);
@@ -1155,7 +1442,7 @@ size_t MVCCMetadata::ByteSizeLong() const {
           *this->timestamp_);
     }
 
-    // optional .cockroach.util.hlc.Timestamp merge_timestamp = 7;
+    // optional .cockroach.storage.engine.enginepb.LegacyTimestamp merge_timestamp = 7;
     if (has_merge_timestamp()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -1208,10 +1495,10 @@ void MVCCMetadata::MergeFrom(const MVCCMetadata& from) {
       mutable_txn()->::cockroach::storage::engine::enginepb::TxnMeta::MergeFrom(from.txn());
     }
     if (cached_has_bits & 0x00000004u) {
-      mutable_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.timestamp());
+      mutable_timestamp()->::cockroach::storage::engine::enginepb::LegacyTimestamp::MergeFrom(from.timestamp());
     }
     if (cached_has_bits & 0x00000008u) {
-      mutable_merge_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.merge_timestamp());
+      mutable_merge_timestamp()->::cockroach::storage::engine::enginepb::LegacyTimestamp::MergeFrom(from.merge_timestamp());
     }
     if (cached_has_bits & 0x00000010u) {
       key_bytes_ = from.key_bytes_;
@@ -1316,30 +1603,30 @@ void MVCCMetadata::clear_has_timestamp() {
   _has_bits_[0] &= ~0x00000004u;
 }
 void MVCCMetadata::clear_timestamp() {
-  if (timestamp_ != NULL) timestamp_->::cockroach::util::hlc::Timestamp::Clear();
+  if (timestamp_ != NULL) timestamp_->::cockroach::storage::engine::enginepb::LegacyTimestamp::Clear();
   clear_has_timestamp();
 }
-const ::cockroach::util::hlc::Timestamp& MVCCMetadata::timestamp() const {
+const ::cockroach::storage::engine::enginepb::LegacyTimestamp& MVCCMetadata::timestamp() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCMetadata.timestamp)
   return timestamp_ != NULL ? *timestamp_
-                         : *::cockroach::util::hlc::Timestamp::internal_default_instance();
+                         : *::cockroach::storage::engine::enginepb::LegacyTimestamp::internal_default_instance();
 }
-::cockroach::util::hlc::Timestamp* MVCCMetadata::mutable_timestamp() {
+::cockroach::storage::engine::enginepb::LegacyTimestamp* MVCCMetadata::mutable_timestamp() {
   set_has_timestamp();
   if (timestamp_ == NULL) {
-    timestamp_ = new ::cockroach::util::hlc::Timestamp;
+    timestamp_ = new ::cockroach::storage::engine::enginepb::LegacyTimestamp;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCMetadata.timestamp)
   return timestamp_;
 }
-::cockroach::util::hlc::Timestamp* MVCCMetadata::release_timestamp() {
+::cockroach::storage::engine::enginepb::LegacyTimestamp* MVCCMetadata::release_timestamp() {
   // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCMetadata.timestamp)
   clear_has_timestamp();
-  ::cockroach::util::hlc::Timestamp* temp = timestamp_;
+  ::cockroach::storage::engine::enginepb::LegacyTimestamp* temp = timestamp_;
   timestamp_ = NULL;
   return temp;
 }
-void MVCCMetadata::set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp) {
+void MVCCMetadata::set_allocated_timestamp(::cockroach::storage::engine::enginepb::LegacyTimestamp* timestamp) {
   delete timestamp_;
   timestamp_ = timestamp;
   if (timestamp) {
@@ -1482,7 +1769,7 @@ void MVCCMetadata::set_allocated_raw_bytes(::std::string* raw_bytes) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCMetadata.raw_bytes)
 }
 
-// optional .cockroach.util.hlc.Timestamp merge_timestamp = 7;
+// optional .cockroach.storage.engine.enginepb.LegacyTimestamp merge_timestamp = 7;
 bool MVCCMetadata::has_merge_timestamp() const {
   return (_has_bits_[0] & 0x00000008u) != 0;
 }
@@ -1493,30 +1780,30 @@ void MVCCMetadata::clear_has_merge_timestamp() {
   _has_bits_[0] &= ~0x00000008u;
 }
 void MVCCMetadata::clear_merge_timestamp() {
-  if (merge_timestamp_ != NULL) merge_timestamp_->::cockroach::util::hlc::Timestamp::Clear();
+  if (merge_timestamp_ != NULL) merge_timestamp_->::cockroach::storage::engine::enginepb::LegacyTimestamp::Clear();
   clear_has_merge_timestamp();
 }
-const ::cockroach::util::hlc::Timestamp& MVCCMetadata::merge_timestamp() const {
+const ::cockroach::storage::engine::enginepb::LegacyTimestamp& MVCCMetadata::merge_timestamp() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCMetadata.merge_timestamp)
   return merge_timestamp_ != NULL ? *merge_timestamp_
-                         : *::cockroach::util::hlc::Timestamp::internal_default_instance();
+                         : *::cockroach::storage::engine::enginepb::LegacyTimestamp::internal_default_instance();
 }
-::cockroach::util::hlc::Timestamp* MVCCMetadata::mutable_merge_timestamp() {
+::cockroach::storage::engine::enginepb::LegacyTimestamp* MVCCMetadata::mutable_merge_timestamp() {
   set_has_merge_timestamp();
   if (merge_timestamp_ == NULL) {
-    merge_timestamp_ = new ::cockroach::util::hlc::Timestamp;
+    merge_timestamp_ = new ::cockroach::storage::engine::enginepb::LegacyTimestamp;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCMetadata.merge_timestamp)
   return merge_timestamp_;
 }
-::cockroach::util::hlc::Timestamp* MVCCMetadata::release_merge_timestamp() {
+::cockroach::storage::engine::enginepb::LegacyTimestamp* MVCCMetadata::release_merge_timestamp() {
   // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCMetadata.merge_timestamp)
   clear_has_merge_timestamp();
-  ::cockroach::util::hlc::Timestamp* temp = merge_timestamp_;
+  ::cockroach::storage::engine::enginepb::LegacyTimestamp* temp = merge_timestamp_;
   merge_timestamp_ = NULL;
   return temp;
 }
-void MVCCMetadata::set_allocated_merge_timestamp(::cockroach::util::hlc::Timestamp* merge_timestamp) {
+void MVCCMetadata::set_allocated_merge_timestamp(::cockroach::storage::engine::enginepb::LegacyTimestamp* merge_timestamp) {
   delete merge_timestamp_;
   merge_timestamp_ = merge_timestamp;
   if (merge_timestamp) {

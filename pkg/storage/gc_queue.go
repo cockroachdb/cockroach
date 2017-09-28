@@ -779,7 +779,7 @@ func RunGC(
 				if meta.Txn != nil {
 					// Keep track of intent to resolve if older than the intent
 					// expiration threshold.
-					if meta.Timestamp.Less(intentExp) {
+					if hlc.Timestamp(meta.Timestamp).Less(intentExp) {
 						txnID := meta.Txn.ID
 						txn := &roachpb.Transaction{
 							TxnMeta: *meta.Txn,
