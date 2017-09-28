@@ -13,6 +13,7 @@ build/builder.sh env \
 	github-pull-request-make
 
 build/builder.sh env \
+	TZ=America/New_York \
 	make test \
 	TESTFLAGS='-v' \
 	2>&1 \
