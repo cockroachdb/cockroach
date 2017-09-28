@@ -766,23 +766,29 @@ func evalEndTransaction(
 	// a transaction is always set to the txn's original timestamp.
 	reply.Txn.Timestamp.Forward(h.Txn.Timestamp)
 
-	if isEndTransactionExceedingDeadline(reply.Txn.Timestamp, *args) {
-		// If the deadline has lapsed return an error and rely on the client
-		// issuing a Rollback() that aborts the transaction and cleans up
-		// intents. Unfortunately, we're returning an error and unable to
-		// write on error (see #1989): we can't write ABORTED into the master
-		// transaction record which remains PENDING, and thus rely on the
-		// client to issue a Rollback() for cleanup.
-		return EvalResult{}, roachpb.NewTransactionStatusError(
-			"transaction deadline exceeded")
-	}
-
 	// Set transaction status to COMMITTED or ABORTED as per the
 	// args.Commit parameter.
 	if args.Commit {
 		if retry, reason := isEndTransactionTriggeringRetryError(h.Txn, reply.Txn); retry {
 			return EvalResult{}, roachpb.NewTransactionRetryError(reason)
 		}
+
+		if isEndTransactionExceedingDeadline(reply.Txn.Timestamp, *args) {
+			// If the deadline has lapsed return an error and rely on the client
+			// issuing a Rollback() that aborts the transaction and cleans up
+			// intents. Unfortunately, we're returning an error and unable to
+			// write on error (see #1989): we can't write ABORTED into the master
+			// transaction record which remains PENDING, and thus rely on the
+			// client to issue a Rollback() for cleanup.
+			//
+			// N.B. This deadline test is expected to be a Noop for Serializable
+			// transactions; unless the client misconfigured the txn, the deadline can
+			// only be expired if the txn has been pushed, and pushed Serializable
+			// transactions are detected above.
+			return EvalResult{}, roachpb.NewTransactionStatusError(
+				"transaction deadline exceeded")
+		}
+
 		reply.Txn.Status = roachpb.COMMITTED
 	} else {
 		reply.Txn.Status = roachpb.ABORTED
@@ -855,16 +861,16 @@ func isEndTransactionTriggeringRetryError(
 
 	isTxnPushed := currentTxn.Timestamp != headerTxn.OrigTimestamp
 
-	// If pushing requires a retry and the transaction was pushed, retry.
-	if headerTxn.RetryOnPush && isTxnPushed {
-		return true, roachpb.RETRY_DELETE_RANGE
-	}
-
 	// If the isolation level is SERIALIZABLE, return a transaction
 	// retry error if the commit timestamp isn't equal to the txn
 	// timestamp.
 	if headerTxn.Isolation == enginepb.SERIALIZABLE && isTxnPushed {
 		return true, roachpb.RETRY_SERIALIZABLE
+	}
+
+	// If pushing requires a retry and the transaction was pushed, retry.
+	if headerTxn.RetryOnPush && isTxnPushed {
+		return true, roachpb.RETRY_DELETE_RANGE
 	}
 
 	return false, 0
