@@ -1680,9 +1680,6 @@ func (e *Executor) execStmtInOpenTxn(
 			txnState.mu.txn.Proto().Restart(
 				0 /* userPriority */, 0 /* upgradePriority */, hlc.Timestamp{})
 		}
-		if err != nil {
-			return err
-		}
 		return nil
 
 	case *parser.Prepare:
@@ -1784,7 +1781,10 @@ func stmtAllowedInImplicitTxn(stmt Statement) bool {
 }
 
 // rollbackSQLTransaction executes a ROLLBACK statement. The transaction is
-// rolled-back results are written to res. All errors are swallowed.
+// rolled-back and the statement result is written to res.
+//
+// No matter what happens with the statement execution, the session state is
+// moved to NoTxn.
 func rollbackSQLTransaction(txnState *txnState, res StatementResult) error {
 	if !txnState.TxnIsOpen() && txnState.State() != RestartWait {
 		panic(fmt.Sprintf("rollbackSQLTransaction called on txn in wrong state: %s (txn: %s)",
