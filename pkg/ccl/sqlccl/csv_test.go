@@ -649,6 +649,8 @@ func BenchmarkImport(b *testing.B) {
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(b, tc.Conns[0])
 
+	sqlDB.Exec(`SET CLUSTER SETTING experimental.importcsv.enabled = true`)
+
 	dir, cleanup := testutils.TempDir(b)
 	defer cleanup()
 	files, _, _ := makeCSVData(b, dir, numFiles, b.N*100)
