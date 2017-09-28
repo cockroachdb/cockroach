@@ -51,9 +51,9 @@ const (
 // Please keep /docs/cloud-resources.md up-to-date if you change these.
 const (
 	fixtureStore1s = "store-dumps/1node-17gb-841ranges"
-	fixtureStore1m = "store-dumps/1node-108gb-2065ranges"
+	fixtureStore1m = "store-dumps/1node-113gb-9595ranges"
 	fixtureStore3s = "store-dumps/3nodes-17gb-841ranges"
-	fixtureStore6m = "store-dumps/6nodes-56gb-1038ranges"
+	fixtureStore6m = "store-dumps/6nodes-67gb-9588ranges"
 )
 
 type allocatorTest struct {

@@ -47,11 +47,11 @@ case $TESTNAME in
     ;;
   TestSteady_6Medium)
     TESTTIMEOUT=24h
-    COCKROACH_EXTRA_FLAGS+=' -tf.cockroach-env=COCKROACH_PREEMPTIVE_SNAPSHOT_RATE=8388608 -tf.cockroach-flags="--vmodule=allocator=5,allocator_scorer=5,replicate_queue=5" -at.std-dev 100'
+    COCKROACH_EXTRA_FLAGS+=' -tf.cockroach-env=COCKROACH_PREEMPTIVE_SNAPSHOT_RATE=8388608 -tf.cockroach-flags="--vmodule=allocator=5,allocator_scorer=5,replicate_queue=5" -at.std-dev 960'
     ;;
   TestUpreplicate_1To6Medium)
     TESTTIMEOUT=18h
-    COCKROACH_EXTRA_FLAGS+=' -tf.cockroach-env=COCKROACH_PREEMPTIVE_SNAPSHOT_RATE=8388608 -tf.cockroach-flags="--vmodule=allocator=5,allocator_scorer=5,replicate_queue=5" -at.std-dev 52'
+    COCKROACH_EXTRA_FLAGS+=' -tf.cockroach-env=COCKROACH_PREEMPTIVE_SNAPSHOT_RATE=8388608 -tf.cockroach-flags="--vmodule=allocator=5,allocator_scorer=5,replicate_queue=5" -at.std-dev 960'
     ;;
   TestContinuousLoad_BlockWriter)
     TESTTIMEOUT=6h

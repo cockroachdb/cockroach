@@ -20,14 +20,14 @@ hierarchy looks like this:
   * **backups/** — the output of `BACKUP... TO 'azure://roachfixtures/backups/FOO'`,
                    used to test `RESTORE` without manually running a backup.
     * **2tb/**
-    * **tpch{1,5,10}/**
+    * **tpch{1,5,10,100}/**
   * **store-dumps/** — gzipped tarballs of raw stores (i.e., `cockroach-data`
                        directories), used to test allocator rebalancing and
                        backups without manually inserting gigabytes of data.
     * **1node-17gb-841ranges/** - source: `RESTORE` of `tpch10`
-    * **1node-108gb-2065ranges/**
+    * **1node-113gb-9595ranges/** - source: `tpch100 IMPORT`
     * **3nodes-17gb-841ranges/** - source: `RESTORE` of `tpch10`
-    * **6nodes-56gb-1038ranges/**
+    * **6nodes-67gb-9588ranges/** - source: `RESTORE` of `tpch100`
     * **10nodes-2tb-50000ranges/**
   * **csvs/** — huge CSVs used to test distributed CSV import (`IMPORT...`).
 
