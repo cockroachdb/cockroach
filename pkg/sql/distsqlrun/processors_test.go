@@ -284,3 +284,93 @@ func TestPostProcess(t *testing.T) {
 		})
 	}
 }
+
+func TestAggregatorSpecAggregationEquals(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Used for FilterColIdx *uint32.
+	colIdx1 := uint32(0)
+	colIdx2 := uint32(1)
+
+	for i, tc := range []struct {
+		a, b     AggregatorSpec_Aggregation
+		expected bool
+	}{
+		// Func tests.
+		{
+			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT},
+			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT},
+			expected: true,
+		},
+		{
+			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT},
+			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_AVG},
+			expected: false,
+		},
+
+		// ColIdx tests.
+		{
+			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, ColIdx: []uint32{1, 2}},
+			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, ColIdx: []uint32{1, 2}},
+			expected: true,
+		},
+		{
+			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, ColIdx: []uint32{1}},
+			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, ColIdx: []uint32{1, 3}},
+			expected: false,
+		},
+		{
+			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, ColIdx: []uint32{1, 2}},
+			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, ColIdx: []uint32{1, 3}},
+			expected: false,
+		},
+
+		// FilterColIdx tests.
+		{
+			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, FilterColIdx: &colIdx1},
+			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, FilterColIdx: &colIdx1},
+			expected: true,
+		},
+		{
+			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, FilterColIdx: &colIdx1},
+			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT},
+			expected: false,
+		},
+		{
+			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, FilterColIdx: &colIdx1},
+			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, FilterColIdx: &colIdx2},
+			expected: false,
+		},
+
+		// Distinct tests.
+		{
+			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, Distinct: true},
+			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, Distinct: true},
+			expected: true,
+		},
+		{
+			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, Distinct: false},
+			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, Distinct: false},
+			expected: true,
+		},
+		{
+			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, Distinct: false},
+			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT},
+			expected: true,
+		},
+		{
+			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, Distinct: true},
+			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT},
+			expected: false,
+		},
+	} {
+		if actual := tc.a.Equals(tc.b); tc.expected != actual {
+			t.Fatalf("case %d: incorrect result from %#v.Equals(%#v), expected %t, actual %t", i, tc.a, tc.b, tc.expected, actual)
+		}
+
+		// Reflexive case.
+		if actual := tc.b.Equals(tc.a); tc.expected != actual {
+			t.Fatalf("case %d: incorrect result from %#v.Equals(%#v), expected %t, actual %t", i, tc.b, tc.a, tc.expected, actual)
+		}
+	}
+}
