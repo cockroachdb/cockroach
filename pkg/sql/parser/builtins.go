@@ -959,7 +959,7 @@ CockroachDB supports the following flags:
 			ReturnType: fixedReturnType(TypeString),
 			category:   categoryDateAndTime,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
-				fromTime := time.Unix(int64(*args[0].(*DDate))*secondsInDay, 0).UTC()
+				fromTime := timeutil.Unix(int64(*args[0].(*DDate))*secondsInDay, 0).UTC()
 				format := string(MustBeDString(args[1]))
 				t, err := strtime.Strftime(fromTime, format)
 				if err != nil {

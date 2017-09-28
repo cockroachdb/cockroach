@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 const (
@@ -210,9 +211,9 @@ func nodeStatusesToRows(
 	var rows [][]string
 	for i, nodeStatus := range statuses {
 		hostPort := nodeStatus.Desc.Address.AddressField
-		updatedAt := time.Unix(0, nodeStatus.UpdatedAt)
+		updatedAt := timeutil.Unix(0, nodeStatus.UpdatedAt)
 		updatedAtStr := updatedAt.Format(localTimeFormat)
-		startedAt := time.Unix(0, nodeStatus.StartedAt)
+		startedAt := timeutil.Unix(0, nodeStatus.StartedAt)
 		startedAtStr := startedAt.Format(localTimeFormat)
 		build := nodeStatus.BuildInfo.Tag
 

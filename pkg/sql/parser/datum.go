@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -1197,7 +1198,7 @@ func (d *DDate) Format(buf *bytes.Buffer, f FmtFlags) {
 	if !f.bareStrings {
 		buf.WriteByte('\'')
 	}
-	buf.WriteString(time.Unix(int64(*d)*secondsInDay, 0).UTC().Format(dateFormat))
+	buf.WriteString(timeutil.Unix(int64(*d)*secondsInDay, 0).UTC().Format(dateFormat))
 	if !f.bareStrings {
 		buf.WriteByte('\'')
 	}
@@ -1450,7 +1451,7 @@ func MakeDTimestampTZ(t time.Time, precision time.Duration) *DTimestampTZ {
 
 // MakeDTimestampTZFromDate creates a DTimestampTZ from a DDate.
 func MakeDTimestampTZFromDate(loc *time.Location, d *DDate) *DTimestampTZ {
-	year, month, day := time.Unix(int64(*d)*secondsInDay, 0).UTC().Date()
+	year, month, day := timeutil.Unix(int64(*d)*secondsInDay, 0).UTC().Date()
 	return MakeDTimestampTZ(time.Date(year, month, day, 0, 0, 0, 0, loc), time.Microsecond)
 }
 

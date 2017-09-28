@@ -681,7 +681,7 @@ func TestEncodeDecodeNull(t *testing.T) {
 }
 
 func TestEncodeDecodeTime(t *testing.T) {
-	zeroTime := time.Unix(0, 0)
+	zeroTime := timeutil.Unix(0, 0)
 
 	// test cases are negative, increasing, duration offsets from the
 	// zeroTime. The positive, increasing, duration offsets are automatically
@@ -885,7 +885,7 @@ func (rd randData) decimal() *apd.Decimal {
 }
 
 func (rd randData) time() time.Time {
-	return time.Unix(rd.Int63n(1000000), rd.Int63n(1000000))
+	return timeutil.Unix(rd.Int63n(1000000), rd.Int63n(1000000))
 }
 
 func (rd randData) duration() duration.Duration {

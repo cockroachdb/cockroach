@@ -30,6 +30,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -724,7 +725,7 @@ func DecodeTimeAscending(b []byte) ([]byte, time.Time, error) {
 	if err != nil {
 		return b, time.Time{}, err
 	}
-	return b, time.Unix(sec, nsec), nil
+	return b, timeutil.Unix(sec, nsec), nil
 }
 
 // DecodeTimeDescending is the descending version of DecodeTimeAscending.
@@ -733,7 +734,7 @@ func DecodeTimeDescending(b []byte) ([]byte, time.Time, error) {
 	if err != nil {
 		return b, time.Time{}, err
 	}
-	return b, time.Unix(^sec, ^nsec), nil
+	return b, timeutil.Unix(^sec, ^nsec), nil
 }
 
 func decodeTime(b []byte) (r []byte, sec int64, nsec int64, err error) {
@@ -1432,7 +1433,7 @@ func DecodeUntaggedTimeValue(b []byte) (remaining []byte, t time.Time, err error
 	if err != nil {
 		return b, time.Time{}, err
 	}
-	return b, time.Unix(sec, nsec), nil
+	return b, timeutil.Unix(sec, nsec), nil
 }
 
 // DecodeDecimalValue decodes a value encoded by EncodeDecimalValue.

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/lib/pq"
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
@@ -145,7 +146,7 @@ func (b *writeBuffer) writeTextDatum(
 		b.writeLengthPrefixedString(v.Contents)
 
 	case *parser.DDate:
-		t := time.Unix(int64(*v)*secondsInDay, 0)
+		t := timeutil.Unix(int64(*v)*secondsInDay, 0)
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
 		s := formatTs(t, nil, b.putbuf[4:4])
 		b.putInt32(int32(len(s)))
@@ -371,9 +372,8 @@ func formatTs(t time.Time, offset *time.Location, tmp []byte) (b []byte) {
 	// Beware, "0000" in ISO is "1 BC", "-0001" is "2 BC" and so on
 	if offset != nil {
 		t = t.In(offset)
-	} else {
-		t = t.UTC()
 	}
+
 	bc := false
 	if t.Year() <= 0 {
 		// flip year sign, and add 1, e.g: "0" will be "1", and "-10" will be "11"
