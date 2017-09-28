@@ -222,7 +222,7 @@ func TestStyle(t *testing.T) {
 
 		if err := stream.ForEach(stream.Sequence(
 			filter,
-			stream.GrepNot(`^util/(log|syncutil|timeutil|tracing)/\w+\.go\b`),
+			stream.GrepNot(`^util/(syncutil|timeutil|tracing)/\w+\.go\b`),
 		), func(s string) {
 			t.Errorf(`%s <- forbidden; use "timeutil" instead`, s)
 		}); err != nil {
