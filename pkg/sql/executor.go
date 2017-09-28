@@ -1402,7 +1402,13 @@ func (e *Executor) execStmtInAbortedTxn(
 	switch s := stmt.AST.(type) {
 	case *parser.CommitTransaction, *parser.RollbackTransaction:
 		if txnState.State() == RestartWait {
-			return rollbackSQLTransaction(txnState, res)
+			transition := rollbackSQLTransaction(txnState, res)
+			if transition.transitionDependentOnErrType {
+				log.Fatal(session.Ctx(), "transitionDependentOnErrType should not be "+
+					"returned by rollbackSQLTransaction")
+			}
+			txnState.resetStateAndTxn(transition.targetState)
+			return transition.err
 		}
 		// Reset the state to allow new transactions to start.
 		// The KV txn has already been rolled back when we entered the Aborted state.
@@ -1547,6 +1553,9 @@ func (e *Executor) execStmtInOpenTxn(
 
 	sessionEventf(session, "%s", stmt)
 
+	var explicitStateTransition bool
+	var transition stateTransition
+
 	// Do not double count automatically retried transactions.
 	if automaticRetryCount == 0 {
 		e.updateStmtCounts(stmt)
@@ -1554,7 +1563,28 @@ func (e *Executor) execStmtInOpenTxn(
 
 	// After the statement is executed, we might have to do state transitions.
 	defer func() {
-		if err != nil {
+		// There's two cases to handle, depending on the two categories of
+		// statements we have:
+		// - Some statements (COMMIT, ROLLBACK) explicitly decide what state
+		// transition they want. For them, explicitStateTransition is set and
+		// transition is filled in, and so we obey their instructions.
+		// - Most statements don't set explicitStateTransition. For them we do state
+		// transitions based on the error they returned (if any).
+
+		if explicitStateTransition {
+			if err != nil {
+				panic(fmt.Sprintf("unexpected return err when explicitStateTransition is set: %s", err))
+			}
+			err = transition.err
+			if transition.transitionDependentOnErrType {
+				if err == nil {
+					panic(fmt.Sprintf("missing err when transitionDependentOnErrType is set"))
+				}
+				err = txnState.updateStateAndCleanupOnErr(err, e)
+			} else {
+				txnState.resetStateAndTxn(transition.targetState)
+			}
+		} else if err != nil {
 			if !txnState.TxnIsOpen() {
 				panic(fmt.Sprintf("unexpected txnState when cleaning up: %v", txnState.State()))
 			}
@@ -1563,9 +1593,17 @@ func (e *Executor) execStmtInOpenTxn(
 			if firstInTxn && isBegin(stmt) {
 				// A failed BEGIN statement that was starting a txn doesn't leave the
 				// txn in the Aborted state; we transition back to NoTxn.
+				//
+				// TODO(andrei): BEGIN should use the explicitStateTransition mechanism.
 				txnState.resetStateAndTxn(NoTxn)
 			}
-		} else if txnState.State() == AutoRetry && txnState.isSerializableRestart() {
+		}
+
+		if err != nil {
+			return
+		}
+
+		if txnState.State() == AutoRetry && txnState.isSerializableRestart() {
 			// If we just ran a statement synchronously, then the parallel queue
 			// would have been synchronized first, so this would be a no-op.
 			// However, if we just ran a statement asynchronously, then the
@@ -1630,7 +1668,9 @@ func (e *Executor) execStmtInOpenTxn(
 	case *parser.CommitTransaction:
 		// CommitTransaction is executed fully here; there's no planNode for it
 		// and a planner is not involved at all.
-		return commitSQLTransaction(txnState, commit, res)
+		transition = commitSQLTransaction(txnState, commit, res)
+		explicitStateTransition = true
+		return nil
 
 	case *parser.ReleaseSavepoint:
 		if err := parser.ValidateRestartCheckpoint(s.Savepoint); err != nil {
@@ -1638,7 +1678,9 @@ func (e *Executor) execStmtInOpenTxn(
 		}
 		// ReleaseSavepoint is executed fully here; there's no planNode for it
 		// and a planner is not involved at all.
-		return commitSQLTransaction(txnState, release, res)
+		transition = commitSQLTransaction(txnState, release, res)
+		explicitStateTransition = true
+		return nil
 
 	case *parser.RollbackTransaction:
 		// Turn off test verification of metadata changes made by the
@@ -1646,7 +1688,9 @@ func (e *Executor) execStmtInOpenTxn(
 		session.testingVerifyMetadataFn = nil
 		// RollbackTransaction is executed fully here; there's no planNode for it
 		// and a planner is not involved at all.
-		return rollbackSQLTransaction(txnState, res)
+		transition = rollbackSQLTransaction(txnState, res)
+		explicitStateTransition = true
+		return nil
 
 	case *parser.Savepoint:
 		if err := parser.ValidateRestartCheckpoint(s.Name); err != nil {
@@ -1789,12 +1833,35 @@ func stmtAllowedInImplicitTxn(stmt Statement) bool {
 	return false
 }
 
+// stateTransition allows statement execution to request state transitions as a
+// side-effect of their execution. Currently only specific statements use this
+// mechanism; the majority rely on the handling of the errors they return to
+// affect state transitions.
+type stateTransition struct {
+	// transitionDependentOnErrType, if set, means that the error should be
+	// interpreted to decide on the state transition (e.g. retriable errors may
+	// cause different transitions than non-retriable errors).
+	// If set, err must also be set, and targetSet is ignored.
+	transitionDependentOnErrType bool
+	// err is used by statements to inform that their execution encountered an
+	// error. The error will be eventually passed to pgwire, which serializes it
+	// to the client.
+	// The error can be a communication error (e.g. sending results to the client
+	// failed); these errors will be recognized by pgwire and the connection will
+	// be terminated.
+	err error
+
+	// targetState is the state to which we'll transition.
+	targetState TxnStateEnum
+}
+
 // rollbackSQLTransaction executes a ROLLBACK statement. The transaction is
 // rolled-back and the statement result is written to res.
 //
-// No matter what happens with the statement execution, the session state is
-// moved to NoTxn.
-func rollbackSQLTransaction(txnState *txnState, res StatementResult) error {
+// Returns the desired state transition. Since ROLLBACK is not concerned with
+// retriable errors, stateTransition.transitionDependentOnErrType is guaranteed
+// to be false.
+func rollbackSQLTransaction(txnState *txnState, res StatementResult) stateTransition {
 	if !txnState.TxnIsOpen() && txnState.State() != RestartWait {
 		panic(fmt.Sprintf("rollbackSQLTransaction called on txn in wrong state: %s (txn: %s)",
 			txnState.State(), txnState.mu.txn.Proto()))
@@ -1802,17 +1869,18 @@ func rollbackSQLTransaction(txnState *txnState, res StatementResult) error {
 	err := txnState.mu.txn.Rollback(txnState.Ctx)
 	if err != nil {
 		log.Warningf(txnState.Ctx, "txn rollback failed: %s", err)
-		txnState.resetStateAndTxn(NoTxn)
-		res.BeginResult((*parser.RollbackTransaction)(nil))
-		if closeErr := res.CloseResult(); closeErr != nil {
-			return closeErr
-		}
-		return err
 	}
 	// We're done with this txn.
-	txnState.resetStateAndTxn(NoTxn)
 	res.BeginResult((*parser.RollbackTransaction)(nil))
-	return res.CloseResult()
+	if closeErr := res.CloseResult(); closeErr != nil {
+		return stateTransition{
+			targetState: Aborted,
+			err:         closeErr,
+		}
+	}
+	return stateTransition{
+		targetState: NoTxn,
+	}
 }
 
 type commitType int
@@ -1822,9 +1890,12 @@ const (
 	release
 )
 
-// commitSqlTransaction executes a COMMIT or RELEASE SAVEPOINT statement. The
-// transaction is committed and results are writtern to res.
-func commitSQLTransaction(txnState *txnState, commitType commitType, res StatementResult) error {
+// commitSQLTransaction executes a COMMIT or RELEASE SAVEPOINT statement. The
+// transaction is committed and the statement result is written to res.
+func commitSQLTransaction(
+	txnState *txnState, commitType commitType, res StatementResult,
+) stateTransition {
+
 	if !txnState.TxnIsOpen() {
 		panic(fmt.Sprintf("commitSqlTransaction called on non-open txn: %+v", txnState.mu.txn))
 	}
@@ -1835,21 +1906,40 @@ func commitSQLTransaction(txnState *txnState, commitType commitType, res Stateme
 		// Errors on COMMIT need special handling: if the errors is not handled by
 		// auto-retry, COMMIT needs to finalize the transaction (it can't leave it
 		// in Aborted or RestartWait). Higher layers will handle this with the help
-		// of `txnState.commitSeen`, set above.
-		return err
+		// of `txnState.commitSeen`, set above. As far as the layer interpreting our
+		// stateTransition is concerned, transitionDependentOnErrType is the right
+		// thing to do without concern for the special nature of COMMIT.
+		return stateTransition{
+			transitionDependentOnErrType: true,
+			err: err,
+		}
 	}
 
+	var transition stateTransition
 	switch commitType {
 	case release:
 		// We'll now be waiting for a COMMIT.
-		txnState.resetStateAndTxn(CommitWait)
+		transition.targetState = CommitWait
 	case commit:
 		// We're done with this txn.
-		txnState.resetStateAndTxn(NoTxn)
+		transition.targetState = NoTxn
 	}
 
 	res.BeginResult((*parser.CommitTransaction)(nil))
-	return res.CloseResult()
+	if err := res.CloseResult(); err != nil {
+		transition = stateTransition{
+			err: err,
+			// The state after a communication error doesn't really matter, as the
+			// session will not receive more statements. We're using Aborted for
+			// consistency with most error code paths which don't have special
+			// handling for communication errors at the Executor level.
+			//
+			// TODO(andrei): Introduce a dedicated state to represent broken sessions
+			// that should not accept any statement anymore.
+			targetState: Aborted,
+		}
+	}
+	return transition
 }
 
 // exectDistSQL converts a classic plan to a distributed SQL physical plan and
