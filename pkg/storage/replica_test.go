@@ -6229,9 +6229,12 @@ func TestRangeLookupAsyncResolveIntent(t *testing.T) {
 	cfg := TestStoreConfig(nil)
 	cfg.IntentResolverTaskLimit = -1
 	cfg.TestingKnobs.TestingProposalFilter =
-		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-			if filterArgs.Req.Method() == roachpb.PushTxn {
-				<-blockPushTxn
+		func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+			for _, union := range args.Req.Requests {
+				if union.GetInner().Method() == roachpb.PushTxn {
+					<-blockPushTxn
+					break
+				}
 			}
 			return nil
 		}
@@ -6609,6 +6612,45 @@ func TestBatchErrorWithIndex(t *testing.T) {
 		t.Fatal("expected an error")
 	} else if pErr.Index == nil || pErr.Index.Index != 1 || !testutils.IsPError(pErr, "unexpected value") {
 		t.Fatalf("invalid index or error type: %s", pErr)
+	}
+}
+
+func TestProposalOverhead(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var overhead uint32
+
+	cfg := TestStoreConfig(nil)
+	cfg.TestingKnobs.TestingProposalFilter =
+		func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+			for _, union := range args.Req.Requests {
+				if union.GetInner().Method() == roachpb.Put {
+					atomic.StoreUint32(&overhead, uint32(args.Cmd.Size()-args.Cmd.WriteBatch.Size()))
+					break
+				}
+			}
+			return nil
+		}
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc.StartWithStoreConfig(t, stopper, cfg)
+
+	ba := roachpb.BatchRequest{}
+	ba.Add(&roachpb.PutRequest{
+		Span:  roachpb.Span{Key: roachpb.Key("k")},
+		Value: roachpb.MakeValueFromString("v"),
+	})
+	if _, pErr := tc.Sender().Send(context.Background(), ba); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// NB: the expected overhead reflects the space overhead currently present in
+	// Raft commands. This test will fail if that overhead changes. Try to make
+	// this number go down and not up.
+	const expectedOverhead = 117
+	if v := atomic.LoadUint32(&overhead); expectedOverhead != v {
+		t.Fatalf("expected overhead of %d, but found %d", expectedOverhead, v)
 	}
 }
 
@@ -7076,9 +7118,12 @@ func TestReplicaCancelRaft(t *testing.T) {
 			cfg := TestStoreConfig(nil)
 			if !cancelEarly {
 				cfg.TestingKnobs.TestingProposalFilter =
-					func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-						if filterArgs.Req.Header().Key.Equal(key) {
-							cancel()
+					func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+						for _, union := range args.Req.Requests {
+							if union.GetInner().Header().Key.Equal(key) {
+								cancel()
+								break
+							}
 						}
 						return nil
 					}

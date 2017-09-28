@@ -644,7 +644,7 @@ type StoreConfig struct {
 // an error (which aborts all further processing for the command).
 type StoreTestingKnobs struct {
 	// TestingProposalFilter is called before proposing each command.
-	TestingProposalFilter storagebase.ReplicaCommandFilter
+	TestingProposalFilter storagebase.ReplicaProposalFilter
 
 	// TestingEvalFilter is called before evaluating each command. The
 	// number of times this callback is run depends on the propEvalKV

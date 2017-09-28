@@ -32,6 +32,14 @@ type FilterArgs struct {
 	Hdr   roachpb.Header
 }
 
+// ProposalFilterArgs groups the arguments to ReplicaProposalFilter.
+type ProposalFilterArgs struct {
+	Ctx   context.Context
+	Cmd   RaftCommand
+	CmdID CmdIDKey
+	Req   roachpb.BatchRequest
+}
+
 // ApplyFilterArgs groups the arguments to a ReplicaApplyFilter.
 type ApplyFilterArgs struct {
 	ReplicatedEvalResult
@@ -51,6 +59,10 @@ func (f *FilterArgs) InRaftCmd() bool {
 // nil to continue with regular processing or non-nil to terminate processing
 // with the returned error.
 type ReplicaCommandFilter func(args FilterArgs) *roachpb.Error
+
+// ReplicaProposalFilter can be used in testing to influence the error returned
+// from proposals after a request is evaluated but before it is proposed.
+type ReplicaProposalFilter func(args ProposalFilterArgs) *roachpb.Error
 
 // A ReplicaApplyFilter can be used in testing to influence the error returned
 // from proposals after they apply.

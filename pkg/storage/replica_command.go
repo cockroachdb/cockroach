@@ -174,8 +174,14 @@ func evaluateCommand(
 
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.
 	if filter := rec.StoreTestingKnobs().TestingEvalFilter; filter != nil {
-		filterArgs := storagebase.FilterArgs{Ctx: ctx, CmdID: raftCmdID, Index: index,
-			Sid: rec.StoreID(), Req: args, Hdr: h}
+		filterArgs := storagebase.FilterArgs{
+			Ctx:   ctx,
+			CmdID: raftCmdID,
+			Index: index,
+			Sid:   rec.StoreID(),
+			Req:   args,
+			Hdr:   h,
+		}
 		if pErr := filter(filterArgs); pErr != nil {
 			log.Infof(ctx, "test injecting error: %s", pErr)
 			return EvalResult{}, pErr
