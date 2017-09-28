@@ -60,11 +60,14 @@ variable "azure_vhd_storage_account" {
   # Using a static storage account name also has the benefit of making it
   # easier to expunge leaked VHDs, which continue to occur as of 2017-08-09.
   # Only lowercase letters and numbers are allowed by Azure.
-  default = "cockroachnightlyvhd"
+  #
+  # N.B. Keep this in sync with build/teamcity-reset-nightlies.sh.
+  default = "cockroachnightlyeastvhd"
 }
 
 variable "vhd_storage_container" {
-  # Must belong to ${var.azure_vhd_storage_account}.
+  # Must belong to ${var.azure_vhd_storage_account}. Keep this in sync with
+  # build/teamcity-reset-nightlies.sh.
   default = "vhds"
 }
 
