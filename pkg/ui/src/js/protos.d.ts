@@ -8038,6 +8038,7 @@ export namespace cockroach {
                 cmd_q_local?: cockroach.server.serverpb.CommandQueueMetrics$Properties;
                 cmd_q_global?: cockroach.server.serverpb.CommandQueueMetrics$Properties;
                 lease_status?: cockroach.storage.LeaseStatus$Properties;
+                quiescent?: boolean;
             };
 
             /**
@@ -8127,6 +8128,12 @@ export namespace cockroach {
                  * @type {(cockroach.storage.LeaseStatus$Properties|null)}
                  */
                 public lease_status: (cockroach.storage.LeaseStatus$Properties|null);
+
+                /**
+                 * RangeInfo quiescent.
+                 * @type {boolean}
+                 */
+                public quiescent: boolean;
 
                 /**
                  * Creates a new RangeInfo instance using the specified properties.
