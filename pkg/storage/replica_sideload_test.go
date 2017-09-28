@@ -17,8 +17,10 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"sort"
@@ -43,9 +45,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
-	"math"
-	"os"
-	"path/filepath"
 )
 
 func entryEq(l, r raftpb.Entry) error {
