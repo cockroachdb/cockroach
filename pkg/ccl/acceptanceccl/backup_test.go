@@ -84,7 +84,8 @@ func (bt *benchmarkTest) Start(ctx context.Context) {
 		// [0]: https://docs.microsoft.com/en-us/azure/virtual-machines/linux/sizes
 		"-var", "azure_vm_size=Standard_L4s",
 		"-var", "azure_location=westus",
-		"-var", "azure_vhd_storage_account=cockroachnightlywestvhds",
+		// Keep this in sync with build/teamcity-reset-nightlies.sh.
+		"-var", "azure_vhd_storage_account=cockroachnightlywestvhd",
 	}
 
 	log.Infof(ctx, "creating cluster with %d node(s)", bt.nodes)
