@@ -27,9 +27,9 @@ import (
 // advertised.
 func TestLogFilenameParsing(t *testing.T) {
 	testCases := []time.Time{
-		time.Now(),
-		time.Now().AddDate(-10, 0, 0),
-		time.Now().AddDate(0, 0, -1),
+		timeutil.Now(),
+		timeutil.Now().AddDate(-10, 0, 0),
+		timeutil.Now().AddDate(0, 0, -1),
 	}
 
 	for i, testCase := range testCases {

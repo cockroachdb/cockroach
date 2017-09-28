@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 var (
@@ -63,7 +64,7 @@ var (
 
 	// startTime records when the process started so that crash reports can
 	// include the server's uptime as an extra tag.
-	startTime = time.Now()
+	startTime = timeutil.Now()
 )
 
 // TODO(dt): this should be split from the report interval.
@@ -284,7 +285,7 @@ func sendCrashReport(
 	// automatically fill in the machine's hostname.
 	packet.ServerName = "<redacted>"
 	tags := map[string]string{
-		"uptime": uptimeTag(time.Now()),
+		"uptime": uptimeTag(timeutil.Now()),
 	}
 	eventID, ch := raven.DefaultClient.Capture(packet, tags)
 	select {
