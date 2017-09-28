@@ -2918,17 +2918,18 @@ func (r *Replica) propose(
 	// TODO(irfansharif): This int cast indicates that if someone configures a
 	// very large max proposal size, there is weird overflow behavior and it
 	// will not work the way it should.
-	if proposal.command.Size() > int(MaxCommandSize.Get(&r.store.cfg.Settings.SV)) {
+	proposalSize := proposal.command.Size()
+	if proposalSize > int(MaxCommandSize.Get(&r.store.cfg.Settings.SV)) {
 		// Once a command is written to the raft log, it must be loaded
 		// into memory and replayed on all replicas. If a command is
 		// too big, stop it here.
 		return nil, nil, noop, roachpb.NewError(errors.Errorf(
 			"command is too large: %d bytes (max: %d)",
-			proposal.command.Size(), MaxCommandSize.Get(&r.store.cfg.Settings.SV),
+			proposalSize, MaxCommandSize.Get(&r.store.cfg.Settings.SV),
 		))
 	}
 
-	if err := r.maybeAcquireProposalQuota(ctx, int64(proposal.command.Size())); err != nil {
+	if err := r.maybeAcquireProposalQuota(ctx, int64(proposalSize)); err != nil {
 		return nil, nil, noop, roachpb.NewError(err)
 	}
 
@@ -2949,31 +2950,15 @@ func (r *Replica) propose(
 
 	// Add size of proposal to commandSizes map.
 	if r.mu.commandSizes != nil {
-		r.mu.commandSizes[proposal.idKey] = proposal.command.Size()
+		r.mu.commandSizes[proposal.idKey] = proposalSize
 	}
 	undoQuotaAcquisition := func() {
 		r.mu.Lock()
 		if r.mu.commandSizes != nil && r.mu.proposalQuota != nil {
 			delete(r.mu.commandSizes, proposal.idKey)
-			r.mu.proposalQuota.add(int64(proposal.command.Size()))
+			r.mu.proposalQuota.add(int64(proposalSize))
 		}
 		r.mu.Unlock()
-	}
-
-	if filter := r.store.TestingKnobs().TestingProposalFilter; filter != nil {
-		for index, union := range ba.Requests {
-			filterArgs := storagebase.FilterArgs{
-				Ctx:   ctx,
-				CmdID: idKey,
-				Index: index,
-				Sid:   r.store.StoreID(),
-				Req:   union.GetInner(),
-				Hdr:   ba.Header,
-			}
-			if pErr := filter(filterArgs); pErr != nil {
-				return nil, nil, undoQuotaAcquisition, pErr
-			}
-		}
 	}
 
 	// NB: We need to check Replica.mu.destroyed again in case the Replica has
@@ -2989,6 +2974,19 @@ func (r *Replica) propose(
 		return nil, nil, undoQuotaAcquisition, roachpb.NewError(err)
 	}
 	r.insertProposalLocked(proposal, repDesc, lease)
+
+	if filter := r.store.TestingKnobs().TestingProposalFilter; filter != nil {
+		filterArgs := storagebase.ProposalFilterArgs{
+			Ctx:   ctx,
+			Cmd:   proposal.command,
+			CmdID: idKey,
+			Req:   ba,
+		}
+		if pErr := filter(filterArgs); pErr != nil {
+			delete(r.mu.proposals, idKey)
+			return nil, nil, undoQuotaAcquisition, pErr
+		}
+	}
 
 	if err := r.submitProposalLocked(proposal); err != nil {
 		delete(r.mu.proposals, proposal.idKey)
