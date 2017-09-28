@@ -41,23 +41,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
+// TODO(pmattis): Periodically renew leases for tables that were used recently and
+// for which the lease will expire soon.
+
 var (
 	// LeaseDuration is the mean duration a lease will be acquired for. The
-	// actual duration is jittered using LeaseJitterMultiplier.
-	// Exported for testing purposes only.
+	// actual duration is jittered in the range
+	// [0.75,1.25]*LeaseDuration. Exported for testing purposes only.
 	LeaseDuration = 5 * time.Minute
-	// LeaseJitterMultiplier is the factor that we use to randomly jitter the lease
-	// duration when acquiring a new lease. The range of the actual lease duration will
-	// be [(1-LeaseJitterMultiplier) * LeaseDuration, (1-LeaseJitterMultiplier) * LeaseDuration]
-	// Exported for testing purposes only.
-	LeaseJitterMultiplier = 0.25
-	// LeaseRenewalTimeout is the duration for when we renew the lease early.
-	// This is specifically 30 seconds less than the minimum LeaseDuration, to be
-	// sure not to let the lease expire before renewing. Exported for testing
-	// purposes.
-	// TODO(joey): We can make the timeout an offset from the actual expiration,
-	// after jitter.
-	LeaseRenewalTimeout = LeaseDuration - time.Duration(float64(LeaseDuration)*LeaseJitterMultiplier) - 30*time.Second
 )
 
 // tableVersionState holds the state for a table version. This includes
@@ -132,9 +123,9 @@ type LeaseStore struct {
 }
 
 // jitteredLeaseDuration returns a randomly jittered duration from the interval
-// [(1-LeaseJitterMultiplier) * leaseDuration, (1+LeaseJitterMultiplier) * leaseDuration].
+// [0.75 * leaseDuration, 1.25 * leaseDuration].
 func jitteredLeaseDuration() time.Duration {
-	return time.Duration(float64(LeaseDuration) * (1 - LeaseJitterMultiplier + 2*LeaseJitterMultiplier*rand.Float64()))
+	return time.Duration(float64(LeaseDuration) * (0.75 + 0.5*rand.Float64()))
 }
 
 // acquire a lease on the most recent version of a table descriptor.
@@ -572,10 +563,6 @@ type tableState struct {
 		// If set, leases are released from the store as soon as their
 		// refcount drops to 0, as opposed to waiting until they expire.
 		dropped bool
-		// Timer for refreshing the lease before it expires. Once a lease has been
-		// acquired once, a timer continuously runs to refresh the lease on a
-		// separate routine after LeaseRenewalTimeout time.
-		timer *time.Timer
 	}
 }
 
@@ -587,12 +574,11 @@ func (t *tableState) acquire(
 ) (*tableVersionState, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-
-	// Block and wait for the new lease to be acquired on another routine.
+	// Wait for any existing lease acquisition.
 	t.acquireWait()
 
-	// Ensure a lease is acquired. Even though we finished waiting, another
-	// routine which finished acquiring a lease could have released it by now.
+	// Acquire a lease if no lease exists or if the latest lease is
+	// about to expire.
 	if s := t.mu.active.findNewest(); s == nil || s.hasExpired(timestamp) {
 		if err := t.acquireNodeLease(ctx, m, hlc.Timestamp{}); err != nil {
 			return nil, err
@@ -600,43 +586,6 @@ func (t *tableState) acquire(
 	}
 
 	return t.findForTimestamp(ctx, timestamp, m)
-}
-
-// acquireAlways ensures a new lease is acquired. This is used for making sure a
-// new lease moves forward when refreshing the lease.
-func (t *tableState) acquireAlways(ctx context.Context, m *LeaseManager) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	// Block and wait for the new lease to be acquired on another routine to
-	// prevent a race condition of entering acquireNodeLease
-	t.acquireWait()
-
-	// Ensure a lease is acquired.
-	return t.acquireNodeLease(ctx, m, hlc.Timestamp{})
-}
-
-// startRefreshingRoutine begins the goroutine responsible for refreshing a
-// table lease.
-// TODO(joey): Currently this routine will run forever for each table
-// descriptor. Ideally, we stop the routine if the table descriptor hasn't been
-// used recently.
-//
-// t.mu needs to be locked.
-func (t *tableState) startRefreshingRoutine(m *LeaseManager) {
-	ctx := context.TODO()
-	t.stopper.RunWorker(ctx, func(ctx context.Context) {
-		for {
-			select {
-			case <-t.mu.timer.C:
-				if err := t.acquireAlways(ctx, m); err != nil {
-					log.Error(ctx, err)
-				}
-			case <-t.stopper.ShouldStop():
-				return
-			}
-		}
-	})
 }
 
 // ensureVersion ensures that the latest version >= minVersion. It will
@@ -852,17 +801,6 @@ func (t *tableState) acquireNodeLease(
 	}
 	t.upsertLocked(ctx, table, m)
 	t.tableNameCache.insert(table)
-
-	// Either begin a new routine to start refreshing the lease asynchronously or
-	// or reset the timer for it. After the first lease acquisition, we should
-	// always have a routine actively renewing the lease. If a descriptor is
-	// dropped LeaseStore.acquire() will fail and the timer will not be set.
-	if t.mu.timer == nil {
-		t.mu.timer = time.NewTimer(LeaseRenewalTimeout)
-		t.startRefreshingRoutine(m)
-	} else {
-		t.mu.timer.Reset(LeaseRenewalTimeout)
-	}
 	return nil
 }
 
