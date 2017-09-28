@@ -117,7 +117,7 @@ func (i *MVCCIncrementalIterator) NextKey() {
 		unsafeMetaKey := i.iter.UnsafeKey()
 		if unsafeMetaKey.IsValue() {
 			i.meta.Reset()
-			i.meta.Timestamp = unsafeMetaKey.Timestamp
+			i.meta.Timestamp = enginepb.LegacyTimestamp(unsafeMetaKey.Timestamp)
 		} else {
 			if i.err = i.iter.ValueProto(&i.meta); i.err != nil {
 				i.valid = false
@@ -134,8 +134,9 @@ func (i *MVCCIncrementalIterator) NextKey() {
 			return
 		}
 
+		metaTimestamp := hlc.Timestamp(i.meta.Timestamp)
 		if i.meta.Txn != nil {
-			if !i.endTime.Less(i.meta.Timestamp) {
+			if !i.endTime.Less(metaTimestamp) {
 				i.err = &roachpb.WriteIntentError{
 					Intents: []roachpb.Intent{{
 						Span:   roachpb.Span{Key: i.iter.Key().Key},
@@ -150,11 +151,11 @@ func (i *MVCCIncrementalIterator) NextKey() {
 			continue
 		}
 
-		if i.endTime.Less(i.meta.Timestamp) {
+		if i.endTime.Less(metaTimestamp) {
 			i.iter.Next()
 			continue
 		}
-		if !i.startTime.Less(i.meta.Timestamp) {
+		if !i.startTime.Less(metaTimestamp) {
 			i.iter.NextKey()
 			continue
 		}
