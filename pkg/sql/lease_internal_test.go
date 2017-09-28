@@ -558,3 +558,84 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 	wg.Wait()
 }
+
+// This test checks that routines don't get blocked when leases are renewed
+// in the background.
+func TestLeaseRefreshDoesntBlock(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var testAcquiredCount int32
+	var testRenewalAcquiredCount int32
+ 
+	testingKnobs := base.TestingKnobs{
+		SQLLeaseManager: &LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: LeaseStoreTestingKnobs{
+				// We want to track when leases get acquired and when they are renewed.
+				LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, _ error) {
+					atomic.AddInt32(&testAcquiredCount, 1)
+				},
+				LeaseRenewalAcquiredEvent: func(_ error) {
+					atomic.AddInt32(&testRenewalAcquiredCount, 1)
+				},
+			},
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{Knobs: testingKnobs})
+	defer s.Stopper().Stop(context.TODO())
+	leaseManager := s.LeaseManager().(*LeaseManager)
+ 
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	descID := tableDesc.ID
+ 
+	// Acquire the first lease. This begins the refreshing routine.
+	ts, _, err := leaseManager.Acquire(context.TODO(), s.Clock().Now(), descID)
+	if err != nil {
+		t.Fatal(err)
+	}
+ 
+	if err := leaseManager.Release(ts); err != nil {
+		t.Fatal(err)
+	}
+ 
+	if count := atomic.LoadInt32(&testAcquiredCount); count != 1 {
+		t.Fatalf("expected 1 lease to be acquired, but acquired %d times",
+			count)
+	} else if count := atomic.LoadInt32(&testRenewalAcquiredCount); count != 0 {
+		t.Fatalf("expected no leases to be acquired by renewal, but acquired %d times by renewal",
+			count)
+	}
+ 
+	var wg sync.WaitGroup
+	numRoutines := 20
+	wg.Add(numRoutines)
+	for i := 0; i < numRoutines; i++ {
+		go func() {
+			defer wg.Done()
+			ts, _, err := leaseManager.Acquire(context.TODO(), s.Clock().Now(), descID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() {
+				if err := leaseManager.Release(ts); err != nil {
+					t.Fatal(err)
+				}
+			}()
+		}()
+	}
+	wg.Wait()
+ 
+	if count := atomic.LoadInt32(&testAcquiredCount); count != 1 {
+		t.Fatalf("expected 1 lease to be acquired, but acquired %d times",
+			count)
+	} else if count := atomic.LoadInt32(&testRenewalAcquiredCount); count != 0 {
+		t.Fatalf("expected no leases to be acquired by renewal, but acquired %d times by renewal",
+			count)
+	} else if blockCount := leaseManager.mu.tables[descID].mu.blockCount; blockCount > 0 {
+		t.Fatalf("expected repeated lease acquisition to not block, had a blockCount of %d", blockCount)
+	}
+}
