@@ -50,7 +50,7 @@ Both transaction and session cancellation have different motivations and use cas
 
 Transaction cancellation would involve canceling any active queries(if any) under the transaction,
 in addition to rolling it back and cleaning up intents held by the transaction.  
-A common use case is to cancel a transaction which uses too much of cluster resources.
+A common use case is to cancel a transaction which uses too much of cluster resources.  
 Note that currently, query cancellation cancels the underlying transaction too.  
 However, canceling an idle transaction is impossible using the query cancellation mechanism; 
 and even if there is a query in progress, canceling it races with the query finishing; so one 
@@ -60,7 +60,7 @@ as canceling the transaction.
 #### Session cancellation
 Session cancellation would involve canceling the current transaction (if any),
 followed by closing the client connection.  
-A common use case is to cancel a session which uses too much of cluster resources.
+A common use case is to cancel a session which uses too much of cluster resources.  
 A particular useful use case would be revoking unauthorized access to the DB.  
 Also, the existence of cluster settings that don't take effect until all sessions 
 have been restarted is a good argument for session cancellation.  
