@@ -7,7 +7,19 @@ import { LongToMoment, TimestampToMoment } from "src/util/convert";
 
 export const dateFormat = "Y-MM-DD HH:mm:ss";
 
-export function PrintReplicaID(rangeID: Long, rep: protos.cockroach.roachpb.ReplicaDescriptor$Properties) {
+// PrintReplicaID prints our standard replica identifier. If the replica is nil,
+// it uses the store and node IDs instead.
+export function PrintReplicaID(
+  rangeID: Long,
+  rep: protos.cockroach.roachpb.ReplicaDescriptor$Properties,
+  nodeID?: number,
+  storeID?: number,
+) {
+  if (_.isNil(rep)) {
+    const actualNodeID = _.isNil(nodeID) ? "?" : nodeID.toString();
+    const actualStoreID = _.isNil(storeID) ? "?" : storeID.toString();
+    return `n${actualNodeID} s${actualStoreID} r${rangeID.toString()}/?`;
+  }
   return `n${rep.node_id} s${rep.store_id} r${rangeID.toString()}/${rep.replica_id}`;
 }
 
