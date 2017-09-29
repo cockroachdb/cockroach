@@ -206,7 +206,7 @@ func (ib *indexBackfiller) runChunk(
 
 	var entries []sqlbase.IndexEntry
 	if err := ib.flowCtx.clientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		txn.SetFixedTimestamp(readAsOf)
+		txn.SetFixedTimestamp(ctx, readAsOf)
 
 		var err error
 		entries, err = buildIndexEntries(ctx, txn)

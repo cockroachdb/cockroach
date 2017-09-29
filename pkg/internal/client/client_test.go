@@ -23,7 +23,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
@@ -45,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // testUser has valid client certs.
@@ -941,7 +939,8 @@ func TestInconsistentReads(t *testing.T) {
 }
 
 // TestReadOnlyTxnObeysDeadline tests that read-only transactions obey the
-// deadline.
+// deadline. Read-only transactions have their EndTransaction elided, so the
+// enforcement of the deadline is done in the client.
 func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -953,16 +952,27 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 	}
 
 	txn := client.NewTxn(db, 0 /* gatewayNodeID */)
+	// Only snapshot transactions can observe deadline errors; serializable ones
+	// get a restart error before the deadline check.
+	if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
+		t.Fatal(err)
+	}
 	opts := client.TxnExecOptions{
 		AutoRetry:  false,
 		AutoCommit: true,
 	}
-	if err := txn.Exec(context.TODO(), opts, func(ctx context.Context, txn *client.Txn, _ *client.TxnExecOptions) error {
-		// Set deadline to sometime in the past.
-		txn.UpdateDeadlineMaybe(hlc.Timestamp{WallTime: timeutil.Now().Add(-time.Second).UnixNano()})
-		_, err := txn.Get(ctx, "k")
-		return err
-	}); !testutils.IsError(err, "txn aborted") {
+	if err := txn.Exec(
+		context.TODO(), opts,
+		func(ctx context.Context, txn *client.Txn, _ *client.TxnExecOptions) error {
+			// Set a deadline, then set a higher commit timestamp for the txn.
+			txn.UpdateDeadlineMaybe(ctx, s.Clock().Now())
+			txn.Proto().Timestamp.Forward(s.Clock().Now())
+			_, err := txn.Get(ctx, "k")
+			return err
+		}); !testutils.IsError(err, "txn aborted") {
+		// We test for TransactionAbortedError. If this was not a read-only txn,
+		// the error returned by the server would have been different - a
+		// TransactionStatusError. This inconsistency is unfortunate.
 		t.Fatal(err)
 	}
 }
