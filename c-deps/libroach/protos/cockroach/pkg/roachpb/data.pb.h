@@ -41,9 +41,6 @@ extern AbortCacheEntryDefaultTypeInternal _AbortCacheEntry_default_instance_;
 class Attributes;
 class AttributesDefaultTypeInternal;
 extern AttributesDefaultTypeInternal _Attributes_default_instance_;
-class CSVOptions;
-class CSVOptionsDefaultTypeInternal;
-extern CSVOptionsDefaultTypeInternal _CSVOptions_default_instance_;
 class ChangeReplicasTrigger;
 class ChangeReplicasTriggerDefaultTypeInternal;
 extern ChangeReplicasTriggerDefaultTypeInternal _ChangeReplicasTrigger_default_instance_;
@@ -176,7 +173,9 @@ enum ValueType {
   DELIMITED_DECIMAL = 9,
   DURATION = 6,
   TUPLE = 10,
-  TIMESERIES = 100
+  TIMESERIES = 100,
+  ValueType_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
+  ValueType_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
 };
 bool ValueType_IsValid(int value);
 const ValueType ValueType_MIN = UNKNOWN;
@@ -185,7 +184,9 @@ const int ValueType_ARRAYSIZE = ValueType_MAX + 1;
 
 enum ReplicaChangeType {
   ADD_REPLICA = 0,
-  REMOVE_REPLICA = 1
+  REMOVE_REPLICA = 1,
+  ReplicaChangeType_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
+  ReplicaChangeType_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
 };
 bool ReplicaChangeType_IsValid(int value);
 const ReplicaChangeType ReplicaChangeType_MIN = ADD_REPLICA;
@@ -195,7 +196,9 @@ const int ReplicaChangeType_ARRAYSIZE = ReplicaChangeType_MAX + 1;
 enum TransactionStatus {
   PENDING = 0,
   COMMITTED = 1,
-  ABORTED = 2
+  ABORTED = 2,
+  TransactionStatus_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
+  TransactionStatus_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
 };
 bool TransactionStatus_IsValid(int value);
 const TransactionStatus TransactionStatus_MIN = PENDING;
@@ -214,14 +217,6 @@ class Span : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(
   inline Span& operator=(const Span& from) {
     CopyFrom(from);
     return *this;
-  }
-
-  inline const ::std::string& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-
-  inline ::std::string* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
   }
 
   static const Span& default_instance();
@@ -274,7 +269,6 @@ class Span : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(
 
   // accessors -------------------------------------------------------
 
-  bool has_key() const;
   void clear_key();
   static const int kKeyFieldNumber = 3;
   const ::std::string& key() const;
@@ -288,7 +282,6 @@ class Span : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(
   ::std::string* release_key();
   void set_allocated_key(::std::string* key);
 
-  bool has_end_key() const;
   void clear_end_key();
   static const int kEndKeyFieldNumber = 4;
   const ::std::string& end_key() const;
@@ -304,16 +297,11 @@ class Span : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Span)
  private:
-  void set_has_key();
-  void clear_has_key();
-  void set_has_end_key();
-  void clear_has_end_key();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::internal::HasBits<1> _has_bits_;
-  mutable int _cached_size_;
   ::google::protobuf::internal::ArenaStringPtr key_;
   ::google::protobuf::internal::ArenaStringPtr end_key_;
+  mutable int _cached_size_;
   friend struct protobuf_cockroach_2fpkg_2froachpb_2fdata_2eproto::TableStruct;
 };
 // -------------------------------------------------------------------
@@ -328,14 +316,6 @@ class Value : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
   inline Value& operator=(const Value& from) {
     CopyFrom(from);
     return *this;
-  }
-
-  inline const ::std::string& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-
-  inline ::std::string* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
   }
 
   static const Value& default_instance();
@@ -388,8 +368,7 @@ class Value : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
 
   // accessors -------------------------------------------------------
 
-  // optional bytes raw_bytes = 1;
-  bool has_raw_bytes() const;
+  // bytes raw_bytes = 1;
   void clear_raw_bytes();
   static const int kRawBytesFieldNumber = 1;
   const ::std::string& raw_bytes() const;
@@ -413,16 +392,11 @@ class Value : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Value)
  private:
-  void set_has_raw_bytes();
-  void clear_has_raw_bytes();
-  void set_has_timestamp();
-  void clear_has_timestamp();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::internal::HasBits<1> _has_bits_;
-  mutable int _cached_size_;
   ::google::protobuf::internal::ArenaStringPtr raw_bytes_;
   ::cockroach::util::hlc::Timestamp* timestamp_;
+  mutable int _cached_size_;
   friend struct protobuf_cockroach_2fpkg_2froachpb_2fdata_2eproto::TableStruct;
 };
 // -------------------------------------------------------------------
@@ -437,14 +411,6 @@ class KeyValue : public ::google::protobuf::MessageLite /* @@protoc_insertion_po
   inline KeyValue& operator=(const KeyValue& from) {
     CopyFrom(from);
     return *this;
-  }
-
-  inline const ::std::string& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-
-  inline ::std::string* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
   }
 
   static const KeyValue& default_instance();
@@ -497,7 +463,6 @@ class KeyValue : public ::google::protobuf::MessageLite /* @@protoc_insertion_po
 
   // accessors -------------------------------------------------------
 
-  bool has_key() const;
   void clear_key();
   static const int kKeyFieldNumber = 1;
   const ::std::string& key() const;
@@ -521,16 +486,11 @@ class KeyValue : public ::google::protobuf::MessageLite /* @@protoc_insertion_po
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.KeyValue)
  private:
-  void set_has_key();
-  void clear_has_key();
-  void set_has_value();
-  void clear_has_value();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::internal::HasBits<1> _has_bits_;
-  mutable int _cached_size_;
   ::google::protobuf::internal::ArenaStringPtr key_;
   ::cockroach::roachpb::Value* value_;
+  mutable int _cached_size_;
   friend struct protobuf_cockroach_2fpkg_2froachpb_2fdata_2eproto::TableStruct;
 };
 // -------------------------------------------------------------------
@@ -545,14 +505,6 @@ class StoreIdent : public ::google::protobuf::MessageLite /* @@protoc_insertion_
   inline StoreIdent& operator=(const StoreIdent& from) {
     CopyFrom(from);
     return *this;
-  }
-
-  inline const ::std::string& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-
-  inline ::std::string* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
   }
 
   static const StoreIdent& default_instance();
@@ -605,7 +557,6 @@ class StoreIdent : public ::google::protobuf::MessageLite /* @@protoc_insertion_
 
   // accessors -------------------------------------------------------
 
-  bool has_cluster_id() const;
   void clear_cluster_id();
   static const int kClusterIdFieldNumber = 1;
   const ::std::string& cluster_id() const;
@@ -619,13 +570,11 @@ class StoreIdent : public ::google::protobuf::MessageLite /* @@protoc_insertion_
   ::std::string* release_cluster_id();
   void set_allocated_cluster_id(::std::string* cluster_id);
 
-  bool has_node_id() const;
   void clear_node_id();
   static const int kNodeIdFieldNumber = 2;
   ::google::protobuf::int32 node_id() const;
   void set_node_id(::google::protobuf::int32 value);
 
-  bool has_store_id() const;
   void clear_store_id();
   static const int kStoreIdFieldNumber = 3;
   ::google::protobuf::int32 store_id() const;
@@ -633,19 +582,12 @@ class StoreIdent : public ::google::protobuf::MessageLite /* @@protoc_insertion_
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.StoreIdent)
  private:
-  void set_has_cluster_id();
-  void clear_has_cluster_id();
-  void set_has_node_id();
-  void clear_has_node_id();
-  void set_has_store_id();
-  void clear_has_store_id();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::internal::HasBits<1> _has_bits_;
-  mutable int _cached_size_;
   ::google::protobuf::internal::ArenaStringPtr cluster_id_;
   ::google::protobuf::int32 node_id_;
   ::google::protobuf::int32 store_id_;
+  mutable int _cached_size_;
   friend struct protobuf_cockroach_2fpkg_2froachpb_2fdata_2eproto::TableStruct;
 };
 // -------------------------------------------------------------------
@@ -660,14 +602,6 @@ class SplitTrigger : public ::google::protobuf::MessageLite /* @@protoc_insertio
   inline SplitTrigger& operator=(const SplitTrigger& from) {
     CopyFrom(from);
     return *this;
-  }
-
-  inline const ::std::string& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-
-  inline ::std::string* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
   }
 
   static const SplitTrigger& default_instance();
@@ -738,16 +672,11 @@ class SplitTrigger : public ::google::protobuf::MessageLite /* @@protoc_insertio
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.SplitTrigger)
  private:
-  void set_has_left_desc();
-  void clear_has_left_desc();
-  void set_has_right_desc();
-  void clear_has_right_desc();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::internal::HasBits<1> _has_bits_;
-  mutable int _cached_size_;
   ::cockroach::roachpb::RangeDescriptor* left_desc_;
   ::cockroach::roachpb::RangeDescriptor* right_desc_;
+  mutable int _cached_size_;
   friend struct protobuf_cockroach_2fpkg_2froachpb_2fdata_2eproto::TableStruct;
 };
 // -------------------------------------------------------------------
@@ -762,14 +691,6 @@ class MergeTrigger : public ::google::protobuf::MessageLite /* @@protoc_insertio
   inline MergeTrigger& operator=(const MergeTrigger& from) {
     CopyFrom(from);
     return *this;
-  }
-
-  inline const ::std::string& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-
-  inline ::std::string* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
   }
 
   static const MergeTrigger& default_instance();
@@ -840,16 +761,11 @@ class MergeTrigger : public ::google::protobuf::MessageLite /* @@protoc_insertio
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.MergeTrigger)
  private:
-  void set_has_left_desc();
-  void clear_has_left_desc();
-  void set_has_right_desc();
-  void clear_has_right_desc();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::internal::HasBits<1> _has_bits_;
-  mutable int _cached_size_;
   ::cockroach::roachpb::RangeDescriptor* left_desc_;
   ::cockroach::roachpb::RangeDescriptor* right_desc_;
+  mutable int _cached_size_;
   friend struct protobuf_cockroach_2fpkg_2froachpb_2fdata_2eproto::TableStruct;
 };
 // -------------------------------------------------------------------
@@ -864,14 +780,6 @@ class ChangeReplicasTrigger : public ::google::protobuf::MessageLite /* @@protoc
   inline ChangeReplicasTrigger& operator=(const ChangeReplicasTrigger& from) {
     CopyFrom(from);
     return *this;
-  }
-
-  inline const ::std::string& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-
-  inline ::std::string* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
   }
 
   static const ChangeReplicasTrigger& default_instance();
@@ -943,13 +851,12 @@ class ChangeReplicasTrigger : public ::google::protobuf::MessageLite /* @@protoc
   ::cockroach::roachpb::ReplicaDescriptor* release_replica();
   void set_allocated_replica(::cockroach::roachpb::ReplicaDescriptor* replica);
 
-  bool has_change_type() const;
+  // .cockroach.roachpb.ReplicaChangeType change_type = 1;
   void clear_change_type();
   static const int kChangeTypeFieldNumber = 1;
   ::cockroach::roachpb::ReplicaChangeType change_type() const;
   void set_change_type(::cockroach::roachpb::ReplicaChangeType value);
 
-  bool has_next_replica_id() const;
   void clear_next_replica_id();
   static const int kNextReplicaIdFieldNumber = 4;
   ::google::protobuf::int32 next_replica_id() const;
@@ -957,20 +864,13 @@ class ChangeReplicasTrigger : public ::google::protobuf::MessageLite /* @@protoc
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.ChangeReplicasTrigger)
  private:
-  void set_has_change_type();
-  void clear_has_change_type();
-  void set_has_replica();
-  void clear_has_replica();
-  void set_has_next_replica_id();
-  void clear_has_next_replica_id();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::internal::HasBits<1> _has_bits_;
-  mutable int _cached_size_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ReplicaDescriptor > updated_replicas_;
   ::cockroach::roachpb::ReplicaDescriptor* replica_;
   int change_type_;
   ::google::protobuf::int32 next_replica_id_;
+  mutable int _cached_size_;
   friend struct protobuf_cockroach_2fpkg_2froachpb_2fdata_2eproto::TableStruct;
 };
 // -------------------------------------------------------------------
@@ -985,14 +885,6 @@ class ModifiedSpanTrigger : public ::google::protobuf::MessageLite /* @@protoc_i
   inline ModifiedSpanTrigger& operator=(const ModifiedSpanTrigger& from) {
     CopyFrom(from);
     return *this;
-  }
-
-  inline const ::std::string& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-
-  inline ::std::string* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
   }
 
   static const ModifiedSpanTrigger& default_instance();
@@ -1045,7 +937,7 @@ class ModifiedSpanTrigger : public ::google::protobuf::MessageLite /* @@protoc_i
 
   // accessors -------------------------------------------------------
 
-  // optional .cockroach.roachpb.Span node_liveness_span = 2;
+  // .cockroach.roachpb.Span node_liveness_span = 2;
   bool has_node_liveness_span() const;
   void clear_node_liveness_span();
   static const int kNodeLivenessSpanFieldNumber = 2;
@@ -1054,7 +946,7 @@ class ModifiedSpanTrigger : public ::google::protobuf::MessageLite /* @@protoc_i
   ::cockroach::roachpb::Span* release_node_liveness_span();
   void set_allocated_node_liveness_span(::cockroach::roachpb::Span* node_liveness_span);
 
-  bool has_system_config_span() const;
+  // bool system_config_span = 1;
   void clear_system_config_span();
   static const int kSystemConfigSpanFieldNumber = 1;
   bool system_config_span() const;
@@ -1062,16 +954,11 @@ class ModifiedSpanTrigger : public ::google::protobuf::MessageLite /* @@protoc_i
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.ModifiedSpanTrigger)
  private:
-  void set_has_system_config_span();
-  void clear_has_system_config_span();
-  void set_has_node_liveness_span();
-  void clear_has_node_liveness_span();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::internal::HasBits<1> _has_bits_;
-  mutable int _cached_size_;
   ::cockroach::roachpb::Span* node_liveness_span_;
   bool system_config_span_;
+  mutable int _cached_size_;
   friend struct protobuf_cockroach_2fpkg_2froachpb_2fdata_2eproto::TableStruct;
 };
 // -------------------------------------------------------------------
@@ -1086,14 +973,6 @@ class InternalCommitTrigger : public ::google::protobuf::MessageLite /* @@protoc
   inline InternalCommitTrigger& operator=(const InternalCommitTrigger& from) {
     CopyFrom(from);
     return *this;
-  }
-
-  inline const ::std::string& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-
-  inline ::std::string* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
   }
 
   static const InternalCommitTrigger& default_instance();
@@ -1146,7 +1025,7 @@ class InternalCommitTrigger : public ::google::protobuf::MessageLite /* @@protoc
 
   // accessors -------------------------------------------------------
 
-  // optional .cockroach.roachpb.SplitTrigger split_trigger = 1;
+  // .cockroach.roachpb.SplitTrigger split_trigger = 1;
   bool has_split_trigger() const;
   void clear_split_trigger();
   static const int kSplitTriggerFieldNumber = 1;
@@ -1155,7 +1034,7 @@ class InternalCommitTrigger : public ::google::protobuf::MessageLite /* @@protoc
   ::cockroach::roachpb::SplitTrigger* release_split_trigger();
   void set_allocated_split_trigger(::cockroach::roachpb::SplitTrigger* split_trigger);
 
-  // optional .cockroach.roachpb.MergeTrigger merge_trigger = 2;
+  // .cockroach.roachpb.MergeTrigger merge_trigger = 2;
   bool has_merge_trigger() const;
   void clear_merge_trigger();
   static const int kMergeTriggerFieldNumber = 2;
@@ -1164,7 +1043,7 @@ class InternalCommitTrigger : public ::google::protobuf::MessageLite /* @@protoc
   ::cockroach::roachpb::MergeTrigger* release_merge_trigger();
   void set_allocated_merge_trigger(::cockroach::roachpb::MergeTrigger* merge_trigger);
 
-  // optional .cockroach.roachpb.ChangeReplicasTrigger change_replicas_trigger = 3;
+  // .cockroach.roachpb.ChangeReplicasTrigger change_replicas_trigger = 3;
   bool has_change_replicas_trigger() const;
   void clear_change_replicas_trigger();
   static const int kChangeReplicasTriggerFieldNumber = 3;
@@ -1173,7 +1052,7 @@ class InternalCommitTrigger : public ::google::protobuf::MessageLite /* @@protoc
   ::cockroach::roachpb::ChangeReplicasTrigger* release_change_replicas_trigger();
   void set_allocated_change_replicas_trigger(::cockroach::roachpb::ChangeReplicasTrigger* change_replicas_trigger);
 
-  // optional .cockroach.roachpb.ModifiedSpanTrigger modified_span_trigger = 4;
+  // .cockroach.roachpb.ModifiedSpanTrigger modified_span_trigger = 4;
   bool has_modified_span_trigger() const;
   void clear_modified_span_trigger();
   static const int kModifiedSpanTriggerFieldNumber = 4;
@@ -1184,22 +1063,13 @@ class InternalCommitTrigger : public ::google::protobuf::MessageLite /* @@protoc
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.InternalCommitTrigger)
  private:
-  void set_has_split_trigger();
-  void clear_has_split_trigger();
-  void set_has_merge_trigger();
-  void clear_has_merge_trigger();
-  void set_has_change_replicas_trigger();
-  void clear_has_change_replicas_trigger();
-  void set_has_modified_span_trigger();
-  void clear_has_modified_span_trigger();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::internal::HasBits<1> _has_bits_;
-  mutable int _cached_size_;
   ::cockroach::roachpb::SplitTrigger* split_trigger_;
   ::cockroach::roachpb::MergeTrigger* merge_trigger_;
   ::cockroach::roachpb::ChangeReplicasTrigger* change_replicas_trigger_;
   ::cockroach::roachpb::ModifiedSpanTrigger* modified_span_trigger_;
+  mutable int _cached_size_;
   friend struct protobuf_cockroach_2fpkg_2froachpb_2fdata_2eproto::TableStruct;
 };
 // -------------------------------------------------------------------
@@ -1214,14 +1084,6 @@ class ObservedTimestamp : public ::google::protobuf::MessageLite /* @@protoc_ins
   inline ObservedTimestamp& operator=(const ObservedTimestamp& from) {
     CopyFrom(from);
     return *this;
-  }
-
-  inline const ::std::string& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-
-  inline ::std::string* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
   }
 
   static const ObservedTimestamp& default_instance();
@@ -1282,7 +1144,6 @@ class ObservedTimestamp : public ::google::protobuf::MessageLite /* @@protoc_ins
   ::cockroach::util::hlc::Timestamp* release_timestamp();
   void set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp);
 
-  bool has_node_id() const;
   void clear_node_id();
   static const int kNodeIdFieldNumber = 1;
   ::google::protobuf::int32 node_id() const;
@@ -1290,16 +1151,11 @@ class ObservedTimestamp : public ::google::protobuf::MessageLite /* @@protoc_ins
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.ObservedTimestamp)
  private:
-  void set_has_node_id();
-  void clear_has_node_id();
-  void set_has_timestamp();
-  void clear_has_timestamp();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::internal::HasBits<1> _has_bits_;
-  mutable int _cached_size_;
   ::cockroach::util::hlc::Timestamp* timestamp_;
   ::google::protobuf::int32 node_id_;
+  mutable int _cached_size_;
   friend struct protobuf_cockroach_2fpkg_2froachpb_2fdata_2eproto::TableStruct;
 };
 // -------------------------------------------------------------------
@@ -1314,14 +1170,6 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   inline Transaction& operator=(const Transaction& from) {
     CopyFrom(from);
     return *this;
-  }
-
-  inline const ::std::string& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-
-  inline ::std::string* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
   }
 
   static const Transaction& default_instance();
@@ -1396,7 +1244,7 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
       intents() const;
 
-  bool has_name() const;
+  // string name = 2;
   void clear_name();
   static const int kNameFieldNumber = 2;
   const ::std::string& name() const;
@@ -1442,25 +1290,25 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   ::cockroach::util::hlc::Timestamp* release_max_timestamp();
   void set_allocated_max_timestamp(::cockroach::util::hlc::Timestamp* max_timestamp);
 
-  bool has_status() const;
+  // .cockroach.roachpb.TransactionStatus status = 4;
   void clear_status();
   static const int kStatusFieldNumber = 4;
   ::cockroach::roachpb::TransactionStatus status() const;
   void set_status(::cockroach::roachpb::TransactionStatus value);
 
-  bool has_writing() const;
+  // bool writing = 9;
   void clear_writing();
   static const int kWritingFieldNumber = 9;
   bool writing() const;
   void set_writing(bool value);
 
-  bool has_write_too_old() const;
+  // bool write_too_old = 12;
   void clear_write_too_old();
   static const int kWriteTooOldFieldNumber = 12;
   bool write_too_old() const;
   void set_write_too_old(bool value);
 
-  bool has_retry_on_push() const;
+  // bool retry_on_push = 13;
   void clear_retry_on_push();
   static const int kRetryOnPushFieldNumber = 13;
   bool retry_on_push() const;
@@ -1468,28 +1316,8 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Transaction)
  private:
-  void set_has_meta();
-  void clear_has_meta();
-  void set_has_name();
-  void clear_has_name();
-  void set_has_status();
-  void clear_has_status();
-  void set_has_last_heartbeat();
-  void clear_has_last_heartbeat();
-  void set_has_orig_timestamp();
-  void clear_has_orig_timestamp();
-  void set_has_max_timestamp();
-  void clear_has_max_timestamp();
-  void set_has_writing();
-  void clear_has_writing();
-  void set_has_write_too_old();
-  void clear_has_write_too_old();
-  void set_has_retry_on_push();
-  void clear_has_retry_on_push();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::internal::HasBits<1> _has_bits_;
-  mutable int _cached_size_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ObservedTimestamp > observed_timestamps_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > intents_;
   ::google::protobuf::internal::ArenaStringPtr name_;
@@ -1501,6 +1329,7 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   bool writing_;
   bool write_too_old_;
   bool retry_on_push_;
+  mutable int _cached_size_;
   friend struct protobuf_cockroach_2fpkg_2froachpb_2fdata_2eproto::TableStruct;
 };
 // -------------------------------------------------------------------
@@ -1515,14 +1344,6 @@ class Intent : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
   inline Intent& operator=(const Intent& from) {
     CopyFrom(from);
     return *this;
-  }
-
-  inline const ::std::string& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-
-  inline ::std::string* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
   }
 
   static const Intent& default_instance();
@@ -1591,7 +1412,7 @@ class Intent : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
   ::cockroach::storage::engine::enginepb::TxnMeta* release_txn();
   void set_allocated_txn(::cockroach::storage::engine::enginepb::TxnMeta* txn);
 
-  bool has_status() const;
+  // .cockroach.roachpb.TransactionStatus status = 3;
   void clear_status();
   static const int kStatusFieldNumber = 3;
   ::cockroach::roachpb::TransactionStatus status() const;
@@ -1599,19 +1420,12 @@ class Intent : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Intent)
  private:
-  void set_has_span();
-  void clear_has_span();
-  void set_has_txn();
-  void clear_has_txn();
-  void set_has_status();
-  void clear_has_status();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::internal::HasBits<1> _has_bits_;
-  mutable int _cached_size_;
   ::cockroach::roachpb::Span* span_;
   ::cockroach::storage::engine::enginepb::TxnMeta* txn_;
   int status_;
+  mutable int _cached_size_;
   friend struct protobuf_cockroach_2fpkg_2froachpb_2fdata_2eproto::TableStruct;
 };
 // -------------------------------------------------------------------
@@ -1626,14 +1440,6 @@ class Lease : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
   inline Lease& operator=(const Lease& from) {
     CopyFrom(from);
     return *this;
-  }
-
-  inline const ::std::string& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-
-  inline ::std::string* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
   }
 
   static const Lease& default_instance();
@@ -1694,7 +1500,7 @@ class Lease : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
   ::cockroach::util::hlc::Timestamp* release_start();
   void set_allocated_start(::cockroach::util::hlc::Timestamp* start);
 
-  // optional .cockroach.util.hlc.Timestamp expiration = 2;
+  // .cockroach.util.hlc.Timestamp expiration = 2;
   bool has_expiration() const;
   void clear_expiration();
   static const int kExpirationFieldNumber = 2;
@@ -1711,7 +1517,7 @@ class Lease : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
   ::cockroach::roachpb::ReplicaDescriptor* release_replica();
   void set_allocated_replica(::cockroach::roachpb::ReplicaDescriptor* replica);
 
-  // optional .cockroach.util.hlc.Timestamp deprecated_start_stasis = 4;
+  // .cockroach.util.hlc.Timestamp deprecated_start_stasis = 4;
   bool has_deprecated_start_stasis() const;
   void clear_deprecated_start_stasis();
   static const int kDeprecatedStartStasisFieldNumber = 4;
@@ -1728,7 +1534,7 @@ class Lease : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
   ::cockroach::util::hlc::Timestamp* release_proposed_ts();
   void set_allocated_proposed_ts(::cockroach::util::hlc::Timestamp* proposed_ts);
 
-  bool has_epoch() const;
+  // int64 epoch = 6;
   void clear_epoch();
   static const int kEpochFieldNumber = 6;
   ::google::protobuf::int64 epoch() const;
@@ -1736,28 +1542,15 @@ class Lease : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Lease)
  private:
-  void set_has_start();
-  void clear_has_start();
-  void set_has_expiration();
-  void clear_has_expiration();
-  void set_has_replica();
-  void clear_has_replica();
-  void set_has_deprecated_start_stasis();
-  void clear_has_deprecated_start_stasis();
-  void set_has_proposed_ts();
-  void clear_has_proposed_ts();
-  void set_has_epoch();
-  void clear_has_epoch();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::internal::HasBits<1> _has_bits_;
-  mutable int _cached_size_;
   ::cockroach::util::hlc::Timestamp* start_;
   ::cockroach::util::hlc::Timestamp* expiration_;
   ::cockroach::roachpb::ReplicaDescriptor* replica_;
   ::cockroach::util::hlc::Timestamp* deprecated_start_stasis_;
   ::cockroach::util::hlc::Timestamp* proposed_ts_;
   ::google::protobuf::int64 epoch_;
+  mutable int _cached_size_;
   friend struct protobuf_cockroach_2fpkg_2froachpb_2fdata_2eproto::TableStruct;
 };
 // -------------------------------------------------------------------
@@ -1772,14 +1565,6 @@ class AbortCacheEntry : public ::google::protobuf::MessageLite /* @@protoc_inser
   inline AbortCacheEntry& operator=(const AbortCacheEntry& from) {
     CopyFrom(from);
     return *this;
-  }
-
-  inline const ::std::string& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-
-  inline ::std::string* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
   }
 
   static const AbortCacheEntry& default_instance();
@@ -1832,7 +1617,6 @@ class AbortCacheEntry : public ::google::protobuf::MessageLite /* @@protoc_inser
 
   // accessors -------------------------------------------------------
 
-  bool has_key() const;
   void clear_key();
   static const int kKeyFieldNumber = 1;
   const ::std::string& key() const;
@@ -1854,7 +1638,7 @@ class AbortCacheEntry : public ::google::protobuf::MessageLite /* @@protoc_inser
   ::cockroach::util::hlc::Timestamp* release_timestamp();
   void set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp);
 
-  bool has_priority() const;
+  // int32 priority = 3;
   void clear_priority();
   static const int kPriorityFieldNumber = 3;
   ::google::protobuf::int32 priority() const;
@@ -1862,134 +1646,12 @@ class AbortCacheEntry : public ::google::protobuf::MessageLite /* @@protoc_inser
 
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.AbortCacheEntry)
  private:
-  void set_has_key();
-  void clear_has_key();
-  void set_has_timestamp();
-  void clear_has_timestamp();
-  void set_has_priority();
-  void clear_has_priority();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::internal::HasBits<1> _has_bits_;
-  mutable int _cached_size_;
   ::google::protobuf::internal::ArenaStringPtr key_;
   ::cockroach::util::hlc::Timestamp* timestamp_;
   ::google::protobuf::int32 priority_;
-  friend struct protobuf_cockroach_2fpkg_2froachpb_2fdata_2eproto::TableStruct;
-};
-// -------------------------------------------------------------------
-
-class CSVOptions : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.CSVOptions) */ {
- public:
-  CSVOptions();
-  virtual ~CSVOptions();
-
-  CSVOptions(const CSVOptions& from);
-
-  inline CSVOptions& operator=(const CSVOptions& from) {
-    CopyFrom(from);
-    return *this;
-  }
-
-  inline const ::std::string& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-
-  inline ::std::string* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
-  }
-
-  static const CSVOptions& default_instance();
-
-  static inline const CSVOptions* internal_default_instance() {
-    return reinterpret_cast<const CSVOptions*>(
-               &_CSVOptions_default_instance_);
-  }
-  static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    14;
-
-  void Swap(CSVOptions* other);
-
-  // implements Message ----------------------------------------------
-
-  inline CSVOptions* New() const PROTOBUF_FINAL { return New(NULL); }
-
-  CSVOptions* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
-  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
-    PROTOBUF_FINAL;
-  void CopyFrom(const CSVOptions& from);
-  void MergeFrom(const CSVOptions& from);
-  void Clear() PROTOBUF_FINAL;
-  bool IsInitialized() const PROTOBUF_FINAL;
-
-  size_t ByteSizeLong() const PROTOBUF_FINAL;
-  bool MergePartialFromCodedStream(
-      ::google::protobuf::io::CodedInputStream* input) PROTOBUF_FINAL;
-  void SerializeWithCachedSizes(
-      ::google::protobuf::io::CodedOutputStream* output) const PROTOBUF_FINAL;
-  void DiscardUnknownFields();
-  int GetCachedSize() const PROTOBUF_FINAL { return _cached_size_; }
-  private:
-  void SharedCtor();
-  void SharedDtor();
-  void SetCachedSize(int size) const;
-  void InternalSwap(CSVOptions* other);
-  private:
-  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
-    return NULL;
-  }
-  inline void* MaybeArenaPtr() const {
-    return NULL;
-  }
-  public:
-
-  ::std::string GetTypeName() const PROTOBUF_FINAL;
-
-  // nested types ----------------------------------------------------
-
-  // accessors -------------------------------------------------------
-
-  bool has_nullif() const;
-  void clear_nullif();
-  static const int kNullifFieldNumber = 3;
-  const ::std::string& nullif() const;
-  void set_nullif(const ::std::string& value);
-  #if LANG_CXX11
-  void set_nullif(::std::string&& value);
-  #endif
-  void set_nullif(const char* value);
-  void set_nullif(const char* value, size_t size);
-  ::std::string* mutable_nullif();
-  ::std::string* release_nullif();
-  void set_allocated_nullif(::std::string* nullif);
-
-  bool has_comma() const;
-  void clear_comma();
-  static const int kCommaFieldNumber = 1;
-  ::google::protobuf::int32 comma() const;
-  void set_comma(::google::protobuf::int32 value);
-
-  bool has_comment() const;
-  void clear_comment();
-  static const int kCommentFieldNumber = 2;
-  ::google::protobuf::int32 comment() const;
-  void set_comment(::google::protobuf::int32 value);
-
-  // @@protoc_insertion_point(class_scope:cockroach.roachpb.CSVOptions)
- private:
-  void set_has_comma();
-  void clear_has_comma();
-  void set_has_comment();
-  void clear_has_comment();
-  void set_has_nullif();
-  void clear_has_nullif();
-
-  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::internal::HasBits<1> _has_bits_;
   mutable int _cached_size_;
-  ::google::protobuf::internal::ArenaStringPtr nullif_;
-  ::google::protobuf::int32 comma_;
-  ::google::protobuf::int32 comment_;
   friend struct protobuf_cockroach_2fpkg_2froachpb_2fdata_2eproto::TableStruct;
 };
 // ===================================================================
@@ -2000,31 +1662,21 @@ class CSVOptions : public ::google::protobuf::MessageLite /* @@protoc_insertion_
 #if !PROTOBUF_INLINE_NOT_IN_HEADERS
 // Span
 
-inline bool Span::has_key() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void Span::set_has_key() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void Span::clear_has_key() {
-  _has_bits_[0] &= ~0x00000001u;
-}
 inline void Span::clear_key() {
   key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  clear_has_key();
 }
 inline const ::std::string& Span::key() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Span.key)
   return key_.GetNoArena();
 }
 inline void Span::set_key(const ::std::string& value) {
-  set_has_key();
+  
   key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Span.key)
 }
 #if LANG_CXX11
 inline void Span::set_key(::std::string&& value) {
-  set_has_key();
+  
   key_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
   // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.Span.key)
@@ -2032,61 +1684,51 @@ inline void Span::set_key(::std::string&& value) {
 #endif
 inline void Span::set_key(const char* value) {
   GOOGLE_DCHECK(value != NULL);
-  set_has_key();
+  
   key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
   // @@protoc_insertion_point(field_set_char:cockroach.roachpb.Span.key)
 }
 inline void Span::set_key(const void* value, size_t size) {
-  set_has_key();
+  
   key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
   // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.Span.key)
 }
 inline ::std::string* Span::mutable_key() {
-  set_has_key();
+  
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Span.key)
   return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline ::std::string* Span::release_key() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.Span.key)
-  clear_has_key();
+  
   return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline void Span::set_allocated_key(::std::string* key) {
   if (key != NULL) {
-    set_has_key();
+    
   } else {
-    clear_has_key();
+    
   }
   key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), key);
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Span.key)
 }
 
-inline bool Span::has_end_key() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void Span::set_has_end_key() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void Span::clear_has_end_key() {
-  _has_bits_[0] &= ~0x00000002u;
-}
 inline void Span::clear_end_key() {
   end_key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  clear_has_end_key();
 }
 inline const ::std::string& Span::end_key() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Span.end_key)
   return end_key_.GetNoArena();
 }
 inline void Span::set_end_key(const ::std::string& value) {
-  set_has_end_key();
+  
   end_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Span.end_key)
 }
 #if LANG_CXX11
 inline void Span::set_end_key(::std::string&& value) {
-  set_has_end_key();
+  
   end_key_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
   // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.Span.end_key)
@@ -2094,31 +1736,31 @@ inline void Span::set_end_key(::std::string&& value) {
 #endif
 inline void Span::set_end_key(const char* value) {
   GOOGLE_DCHECK(value != NULL);
-  set_has_end_key();
+  
   end_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
   // @@protoc_insertion_point(field_set_char:cockroach.roachpb.Span.end_key)
 }
 inline void Span::set_end_key(const void* value, size_t size) {
-  set_has_end_key();
+  
   end_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
   // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.Span.end_key)
 }
 inline ::std::string* Span::mutable_end_key() {
-  set_has_end_key();
+  
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Span.end_key)
   return end_key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline ::std::string* Span::release_end_key() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.Span.end_key)
-  clear_has_end_key();
+  
   return end_key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline void Span::set_allocated_end_key(::std::string* end_key) {
   if (end_key != NULL) {
-    set_has_end_key();
+    
   } else {
-    clear_has_end_key();
+    
   }
   end_key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), end_key);
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Span.end_key)
@@ -2128,32 +1770,22 @@ inline void Span::set_allocated_end_key(::std::string* end_key) {
 
 // Value
 
-// optional bytes raw_bytes = 1;
-inline bool Value::has_raw_bytes() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void Value::set_has_raw_bytes() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void Value::clear_has_raw_bytes() {
-  _has_bits_[0] &= ~0x00000001u;
-}
+// bytes raw_bytes = 1;
 inline void Value::clear_raw_bytes() {
   raw_bytes_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  clear_has_raw_bytes();
 }
 inline const ::std::string& Value::raw_bytes() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Value.raw_bytes)
   return raw_bytes_.GetNoArena();
 }
 inline void Value::set_raw_bytes(const ::std::string& value) {
-  set_has_raw_bytes();
+  
   raw_bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Value.raw_bytes)
 }
 #if LANG_CXX11
 inline void Value::set_raw_bytes(::std::string&& value) {
-  set_has_raw_bytes();
+  
   raw_bytes_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
   // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.Value.raw_bytes)
@@ -2161,48 +1793,42 @@ inline void Value::set_raw_bytes(::std::string&& value) {
 #endif
 inline void Value::set_raw_bytes(const char* value) {
   GOOGLE_DCHECK(value != NULL);
-  set_has_raw_bytes();
+  
   raw_bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
   // @@protoc_insertion_point(field_set_char:cockroach.roachpb.Value.raw_bytes)
 }
 inline void Value::set_raw_bytes(const void* value, size_t size) {
-  set_has_raw_bytes();
+  
   raw_bytes_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
   // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.Value.raw_bytes)
 }
 inline ::std::string* Value::mutable_raw_bytes() {
-  set_has_raw_bytes();
+  
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Value.raw_bytes)
   return raw_bytes_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline ::std::string* Value::release_raw_bytes() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.Value.raw_bytes)
-  clear_has_raw_bytes();
+  
   return raw_bytes_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline void Value::set_allocated_raw_bytes(::std::string* raw_bytes) {
   if (raw_bytes != NULL) {
-    set_has_raw_bytes();
+    
   } else {
-    clear_has_raw_bytes();
+    
   }
   raw_bytes_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), raw_bytes);
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Value.raw_bytes)
 }
 
 inline bool Value::has_timestamp() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void Value::set_has_timestamp() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void Value::clear_has_timestamp() {
-  _has_bits_[0] &= ~0x00000002u;
+  return this != internal_default_instance() && timestamp_ != NULL;
 }
 inline void Value::clear_timestamp() {
-  if (timestamp_ != NULL) timestamp_->::cockroach::util::hlc::Timestamp::Clear();
-  clear_has_timestamp();
+  if (GetArenaNoVirtual() == NULL && timestamp_ != NULL) delete timestamp_;
+  timestamp_ = NULL;
 }
 inline const ::cockroach::util::hlc::Timestamp& Value::timestamp() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Value.timestamp)
@@ -2210,7 +1836,7 @@ inline const ::cockroach::util::hlc::Timestamp& Value::timestamp() const {
                          : *::cockroach::util::hlc::Timestamp::internal_default_instance();
 }
 inline ::cockroach::util::hlc::Timestamp* Value::mutable_timestamp() {
-  set_has_timestamp();
+  
   if (timestamp_ == NULL) {
     timestamp_ = new ::cockroach::util::hlc::Timestamp;
   }
@@ -2219,7 +1845,7 @@ inline ::cockroach::util::hlc::Timestamp* Value::mutable_timestamp() {
 }
 inline ::cockroach::util::hlc::Timestamp* Value::release_timestamp() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.Value.timestamp)
-  clear_has_timestamp();
+  
   ::cockroach::util::hlc::Timestamp* temp = timestamp_;
   timestamp_ = NULL;
   return temp;
@@ -2228,9 +1854,9 @@ inline void Value::set_allocated_timestamp(::cockroach::util::hlc::Timestamp* ti
   delete timestamp_;
   timestamp_ = timestamp;
   if (timestamp) {
-    set_has_timestamp();
+    
   } else {
-    clear_has_timestamp();
+    
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Value.timestamp)
 }
@@ -2239,31 +1865,21 @@ inline void Value::set_allocated_timestamp(::cockroach::util::hlc::Timestamp* ti
 
 // KeyValue
 
-inline bool KeyValue::has_key() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void KeyValue::set_has_key() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void KeyValue::clear_has_key() {
-  _has_bits_[0] &= ~0x00000001u;
-}
 inline void KeyValue::clear_key() {
   key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  clear_has_key();
 }
 inline const ::std::string& KeyValue::key() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.KeyValue.key)
   return key_.GetNoArena();
 }
 inline void KeyValue::set_key(const ::std::string& value) {
-  set_has_key();
+  
   key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
   // @@protoc_insertion_point(field_set:cockroach.roachpb.KeyValue.key)
 }
 #if LANG_CXX11
 inline void KeyValue::set_key(::std::string&& value) {
-  set_has_key();
+  
   key_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
   // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.KeyValue.key)
@@ -2271,48 +1887,42 @@ inline void KeyValue::set_key(::std::string&& value) {
 #endif
 inline void KeyValue::set_key(const char* value) {
   GOOGLE_DCHECK(value != NULL);
-  set_has_key();
+  
   key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
   // @@protoc_insertion_point(field_set_char:cockroach.roachpb.KeyValue.key)
 }
 inline void KeyValue::set_key(const void* value, size_t size) {
-  set_has_key();
+  
   key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
   // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.KeyValue.key)
 }
 inline ::std::string* KeyValue::mutable_key() {
-  set_has_key();
+  
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.KeyValue.key)
   return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline ::std::string* KeyValue::release_key() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.KeyValue.key)
-  clear_has_key();
+  
   return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline void KeyValue::set_allocated_key(::std::string* key) {
   if (key != NULL) {
-    set_has_key();
+    
   } else {
-    clear_has_key();
+    
   }
   key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), key);
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.KeyValue.key)
 }
 
 inline bool KeyValue::has_value() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void KeyValue::set_has_value() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void KeyValue::clear_has_value() {
-  _has_bits_[0] &= ~0x00000002u;
+  return this != internal_default_instance() && value_ != NULL;
 }
 inline void KeyValue::clear_value() {
-  if (value_ != NULL) value_->::cockroach::roachpb::Value::Clear();
-  clear_has_value();
+  if (GetArenaNoVirtual() == NULL && value_ != NULL) delete value_;
+  value_ = NULL;
 }
 inline const ::cockroach::roachpb::Value& KeyValue::value() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.KeyValue.value)
@@ -2320,7 +1930,7 @@ inline const ::cockroach::roachpb::Value& KeyValue::value() const {
                          : *::cockroach::roachpb::Value::internal_default_instance();
 }
 inline ::cockroach::roachpb::Value* KeyValue::mutable_value() {
-  set_has_value();
+  
   if (value_ == NULL) {
     value_ = new ::cockroach::roachpb::Value;
   }
@@ -2329,7 +1939,7 @@ inline ::cockroach::roachpb::Value* KeyValue::mutable_value() {
 }
 inline ::cockroach::roachpb::Value* KeyValue::release_value() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.KeyValue.value)
-  clear_has_value();
+  
   ::cockroach::roachpb::Value* temp = value_;
   value_ = NULL;
   return temp;
@@ -2338,9 +1948,9 @@ inline void KeyValue::set_allocated_value(::cockroach::roachpb::Value* value) {
   delete value_;
   value_ = value;
   if (value) {
-    set_has_value();
+    
   } else {
-    clear_has_value();
+    
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.KeyValue.value)
 }
@@ -2349,31 +1959,21 @@ inline void KeyValue::set_allocated_value(::cockroach::roachpb::Value* value) {
 
 // StoreIdent
 
-inline bool StoreIdent::has_cluster_id() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void StoreIdent::set_has_cluster_id() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void StoreIdent::clear_has_cluster_id() {
-  _has_bits_[0] &= ~0x00000001u;
-}
 inline void StoreIdent::clear_cluster_id() {
   cluster_id_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  clear_has_cluster_id();
 }
 inline const ::std::string& StoreIdent::cluster_id() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.StoreIdent.cluster_id)
   return cluster_id_.GetNoArena();
 }
 inline void StoreIdent::set_cluster_id(const ::std::string& value) {
-  set_has_cluster_id();
+  
   cluster_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
   // @@protoc_insertion_point(field_set:cockroach.roachpb.StoreIdent.cluster_id)
 }
 #if LANG_CXX11
 inline void StoreIdent::set_cluster_id(::std::string&& value) {
-  set_has_cluster_id();
+  
   cluster_id_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
   // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.StoreIdent.cluster_id)
@@ -2381,78 +1981,58 @@ inline void StoreIdent::set_cluster_id(::std::string&& value) {
 #endif
 inline void StoreIdent::set_cluster_id(const char* value) {
   GOOGLE_DCHECK(value != NULL);
-  set_has_cluster_id();
+  
   cluster_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
   // @@protoc_insertion_point(field_set_char:cockroach.roachpb.StoreIdent.cluster_id)
 }
 inline void StoreIdent::set_cluster_id(const void* value, size_t size) {
-  set_has_cluster_id();
+  
   cluster_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
   // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.StoreIdent.cluster_id)
 }
 inline ::std::string* StoreIdent::mutable_cluster_id() {
-  set_has_cluster_id();
+  
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.StoreIdent.cluster_id)
   return cluster_id_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline ::std::string* StoreIdent::release_cluster_id() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.StoreIdent.cluster_id)
-  clear_has_cluster_id();
+  
   return cluster_id_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline void StoreIdent::set_allocated_cluster_id(::std::string* cluster_id) {
   if (cluster_id != NULL) {
-    set_has_cluster_id();
+    
   } else {
-    clear_has_cluster_id();
+    
   }
   cluster_id_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), cluster_id);
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.StoreIdent.cluster_id)
 }
 
-inline bool StoreIdent::has_node_id() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void StoreIdent::set_has_node_id() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void StoreIdent::clear_has_node_id() {
-  _has_bits_[0] &= ~0x00000002u;
-}
 inline void StoreIdent::clear_node_id() {
   node_id_ = 0;
-  clear_has_node_id();
 }
 inline ::google::protobuf::int32 StoreIdent::node_id() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.StoreIdent.node_id)
   return node_id_;
 }
 inline void StoreIdent::set_node_id(::google::protobuf::int32 value) {
-  set_has_node_id();
+  
   node_id_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.StoreIdent.node_id)
 }
 
-inline bool StoreIdent::has_store_id() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void StoreIdent::set_has_store_id() {
-  _has_bits_[0] |= 0x00000004u;
-}
-inline void StoreIdent::clear_has_store_id() {
-  _has_bits_[0] &= ~0x00000004u;
-}
 inline void StoreIdent::clear_store_id() {
   store_id_ = 0;
-  clear_has_store_id();
 }
 inline ::google::protobuf::int32 StoreIdent::store_id() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.StoreIdent.store_id)
   return store_id_;
 }
 inline void StoreIdent::set_store_id(::google::protobuf::int32 value) {
-  set_has_store_id();
+  
   store_id_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.StoreIdent.store_id)
 }
@@ -2462,17 +2042,11 @@ inline void StoreIdent::set_store_id(::google::protobuf::int32 value) {
 // SplitTrigger
 
 inline bool SplitTrigger::has_left_desc() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void SplitTrigger::set_has_left_desc() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void SplitTrigger::clear_has_left_desc() {
-  _has_bits_[0] &= ~0x00000001u;
+  return this != internal_default_instance() && left_desc_ != NULL;
 }
 inline void SplitTrigger::clear_left_desc() {
-  if (left_desc_ != NULL) left_desc_->::cockroach::roachpb::RangeDescriptor::Clear();
-  clear_has_left_desc();
+  if (GetArenaNoVirtual() == NULL && left_desc_ != NULL) delete left_desc_;
+  left_desc_ = NULL;
 }
 inline const ::cockroach::roachpb::RangeDescriptor& SplitTrigger::left_desc() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.SplitTrigger.left_desc)
@@ -2480,7 +2054,7 @@ inline const ::cockroach::roachpb::RangeDescriptor& SplitTrigger::left_desc() co
                          : *::cockroach::roachpb::RangeDescriptor::internal_default_instance();
 }
 inline ::cockroach::roachpb::RangeDescriptor* SplitTrigger::mutable_left_desc() {
-  set_has_left_desc();
+  
   if (left_desc_ == NULL) {
     left_desc_ = new ::cockroach::roachpb::RangeDescriptor;
   }
@@ -2489,7 +2063,7 @@ inline ::cockroach::roachpb::RangeDescriptor* SplitTrigger::mutable_left_desc() 
 }
 inline ::cockroach::roachpb::RangeDescriptor* SplitTrigger::release_left_desc() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.SplitTrigger.left_desc)
-  clear_has_left_desc();
+  
   ::cockroach::roachpb::RangeDescriptor* temp = left_desc_;
   left_desc_ = NULL;
   return temp;
@@ -2498,25 +2072,19 @@ inline void SplitTrigger::set_allocated_left_desc(::cockroach::roachpb::RangeDes
   delete left_desc_;
   left_desc_ = left_desc;
   if (left_desc) {
-    set_has_left_desc();
+    
   } else {
-    clear_has_left_desc();
+    
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.SplitTrigger.left_desc)
 }
 
 inline bool SplitTrigger::has_right_desc() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void SplitTrigger::set_has_right_desc() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void SplitTrigger::clear_has_right_desc() {
-  _has_bits_[0] &= ~0x00000002u;
+  return this != internal_default_instance() && right_desc_ != NULL;
 }
 inline void SplitTrigger::clear_right_desc() {
-  if (right_desc_ != NULL) right_desc_->::cockroach::roachpb::RangeDescriptor::Clear();
-  clear_has_right_desc();
+  if (GetArenaNoVirtual() == NULL && right_desc_ != NULL) delete right_desc_;
+  right_desc_ = NULL;
 }
 inline const ::cockroach::roachpb::RangeDescriptor& SplitTrigger::right_desc() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.SplitTrigger.right_desc)
@@ -2524,7 +2092,7 @@ inline const ::cockroach::roachpb::RangeDescriptor& SplitTrigger::right_desc() c
                          : *::cockroach::roachpb::RangeDescriptor::internal_default_instance();
 }
 inline ::cockroach::roachpb::RangeDescriptor* SplitTrigger::mutable_right_desc() {
-  set_has_right_desc();
+  
   if (right_desc_ == NULL) {
     right_desc_ = new ::cockroach::roachpb::RangeDescriptor;
   }
@@ -2533,7 +2101,7 @@ inline ::cockroach::roachpb::RangeDescriptor* SplitTrigger::mutable_right_desc()
 }
 inline ::cockroach::roachpb::RangeDescriptor* SplitTrigger::release_right_desc() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.SplitTrigger.right_desc)
-  clear_has_right_desc();
+  
   ::cockroach::roachpb::RangeDescriptor* temp = right_desc_;
   right_desc_ = NULL;
   return temp;
@@ -2542,9 +2110,9 @@ inline void SplitTrigger::set_allocated_right_desc(::cockroach::roachpb::RangeDe
   delete right_desc_;
   right_desc_ = right_desc;
   if (right_desc) {
-    set_has_right_desc();
+    
   } else {
-    clear_has_right_desc();
+    
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.SplitTrigger.right_desc)
 }
@@ -2554,17 +2122,11 @@ inline void SplitTrigger::set_allocated_right_desc(::cockroach::roachpb::RangeDe
 // MergeTrigger
 
 inline bool MergeTrigger::has_left_desc() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void MergeTrigger::set_has_left_desc() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void MergeTrigger::clear_has_left_desc() {
-  _has_bits_[0] &= ~0x00000001u;
+  return this != internal_default_instance() && left_desc_ != NULL;
 }
 inline void MergeTrigger::clear_left_desc() {
-  if (left_desc_ != NULL) left_desc_->::cockroach::roachpb::RangeDescriptor::Clear();
-  clear_has_left_desc();
+  if (GetArenaNoVirtual() == NULL && left_desc_ != NULL) delete left_desc_;
+  left_desc_ = NULL;
 }
 inline const ::cockroach::roachpb::RangeDescriptor& MergeTrigger::left_desc() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.MergeTrigger.left_desc)
@@ -2572,7 +2134,7 @@ inline const ::cockroach::roachpb::RangeDescriptor& MergeTrigger::left_desc() co
                          : *::cockroach::roachpb::RangeDescriptor::internal_default_instance();
 }
 inline ::cockroach::roachpb::RangeDescriptor* MergeTrigger::mutable_left_desc() {
-  set_has_left_desc();
+  
   if (left_desc_ == NULL) {
     left_desc_ = new ::cockroach::roachpb::RangeDescriptor;
   }
@@ -2581,7 +2143,7 @@ inline ::cockroach::roachpb::RangeDescriptor* MergeTrigger::mutable_left_desc() 
 }
 inline ::cockroach::roachpb::RangeDescriptor* MergeTrigger::release_left_desc() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.MergeTrigger.left_desc)
-  clear_has_left_desc();
+  
   ::cockroach::roachpb::RangeDescriptor* temp = left_desc_;
   left_desc_ = NULL;
   return temp;
@@ -2590,25 +2152,19 @@ inline void MergeTrigger::set_allocated_left_desc(::cockroach::roachpb::RangeDes
   delete left_desc_;
   left_desc_ = left_desc;
   if (left_desc) {
-    set_has_left_desc();
+    
   } else {
-    clear_has_left_desc();
+    
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.MergeTrigger.left_desc)
 }
 
 inline bool MergeTrigger::has_right_desc() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void MergeTrigger::set_has_right_desc() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void MergeTrigger::clear_has_right_desc() {
-  _has_bits_[0] &= ~0x00000002u;
+  return this != internal_default_instance() && right_desc_ != NULL;
 }
 inline void MergeTrigger::clear_right_desc() {
-  if (right_desc_ != NULL) right_desc_->::cockroach::roachpb::RangeDescriptor::Clear();
-  clear_has_right_desc();
+  if (GetArenaNoVirtual() == NULL && right_desc_ != NULL) delete right_desc_;
+  right_desc_ = NULL;
 }
 inline const ::cockroach::roachpb::RangeDescriptor& MergeTrigger::right_desc() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.MergeTrigger.right_desc)
@@ -2616,7 +2172,7 @@ inline const ::cockroach::roachpb::RangeDescriptor& MergeTrigger::right_desc() c
                          : *::cockroach::roachpb::RangeDescriptor::internal_default_instance();
 }
 inline ::cockroach::roachpb::RangeDescriptor* MergeTrigger::mutable_right_desc() {
-  set_has_right_desc();
+  
   if (right_desc_ == NULL) {
     right_desc_ = new ::cockroach::roachpb::RangeDescriptor;
   }
@@ -2625,7 +2181,7 @@ inline ::cockroach::roachpb::RangeDescriptor* MergeTrigger::mutable_right_desc()
 }
 inline ::cockroach::roachpb::RangeDescriptor* MergeTrigger::release_right_desc() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.MergeTrigger.right_desc)
-  clear_has_right_desc();
+  
   ::cockroach::roachpb::RangeDescriptor* temp = right_desc_;
   right_desc_ = NULL;
   return temp;
@@ -2634,9 +2190,9 @@ inline void MergeTrigger::set_allocated_right_desc(::cockroach::roachpb::RangeDe
   delete right_desc_;
   right_desc_ = right_desc;
   if (right_desc) {
-    set_has_right_desc();
+    
   } else {
-    clear_has_right_desc();
+    
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.MergeTrigger.right_desc)
 }
@@ -2645,42 +2201,26 @@ inline void MergeTrigger::set_allocated_right_desc(::cockroach::roachpb::RangeDe
 
 // ChangeReplicasTrigger
 
-inline bool ChangeReplicasTrigger::has_change_type() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void ChangeReplicasTrigger::set_has_change_type() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void ChangeReplicasTrigger::clear_has_change_type() {
-  _has_bits_[0] &= ~0x00000002u;
-}
+// .cockroach.roachpb.ReplicaChangeType change_type = 1;
 inline void ChangeReplicasTrigger::clear_change_type() {
   change_type_ = 0;
-  clear_has_change_type();
 }
 inline ::cockroach::roachpb::ReplicaChangeType ChangeReplicasTrigger::change_type() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ChangeReplicasTrigger.change_type)
   return static_cast< ::cockroach::roachpb::ReplicaChangeType >(change_type_);
 }
 inline void ChangeReplicasTrigger::set_change_type(::cockroach::roachpb::ReplicaChangeType value) {
-  assert(::cockroach::roachpb::ReplicaChangeType_IsValid(value));
-  set_has_change_type();
+  
   change_type_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.ChangeReplicasTrigger.change_type)
 }
 
 inline bool ChangeReplicasTrigger::has_replica() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void ChangeReplicasTrigger::set_has_replica() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void ChangeReplicasTrigger::clear_has_replica() {
-  _has_bits_[0] &= ~0x00000001u;
+  return this != internal_default_instance() && replica_ != NULL;
 }
 inline void ChangeReplicasTrigger::clear_replica() {
-  if (replica_ != NULL) replica_->::cockroach::roachpb::ReplicaDescriptor::Clear();
-  clear_has_replica();
+  if (GetArenaNoVirtual() == NULL && replica_ != NULL) delete replica_;
+  replica_ = NULL;
 }
 inline const ::cockroach::roachpb::ReplicaDescriptor& ChangeReplicasTrigger::replica() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ChangeReplicasTrigger.replica)
@@ -2688,7 +2228,7 @@ inline const ::cockroach::roachpb::ReplicaDescriptor& ChangeReplicasTrigger::rep
                          : *::cockroach::roachpb::ReplicaDescriptor::internal_default_instance();
 }
 inline ::cockroach::roachpb::ReplicaDescriptor* ChangeReplicasTrigger::mutable_replica() {
-  set_has_replica();
+  
   if (replica_ == NULL) {
     replica_ = new ::cockroach::roachpb::ReplicaDescriptor;
   }
@@ -2697,7 +2237,7 @@ inline ::cockroach::roachpb::ReplicaDescriptor* ChangeReplicasTrigger::mutable_r
 }
 inline ::cockroach::roachpb::ReplicaDescriptor* ChangeReplicasTrigger::release_replica() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.ChangeReplicasTrigger.replica)
-  clear_has_replica();
+  
   ::cockroach::roachpb::ReplicaDescriptor* temp = replica_;
   replica_ = NULL;
   return temp;
@@ -2706,9 +2246,9 @@ inline void ChangeReplicasTrigger::set_allocated_replica(::cockroach::roachpb::R
   delete replica_;
   replica_ = replica;
   if (replica) {
-    set_has_replica();
+    
   } else {
-    clear_has_replica();
+    
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ChangeReplicasTrigger.replica)
 }
@@ -2742,25 +2282,15 @@ ChangeReplicasTrigger::updated_replicas() const {
   return updated_replicas_;
 }
 
-inline bool ChangeReplicasTrigger::has_next_replica_id() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void ChangeReplicasTrigger::set_has_next_replica_id() {
-  _has_bits_[0] |= 0x00000004u;
-}
-inline void ChangeReplicasTrigger::clear_has_next_replica_id() {
-  _has_bits_[0] &= ~0x00000004u;
-}
 inline void ChangeReplicasTrigger::clear_next_replica_id() {
   next_replica_id_ = 0;
-  clear_has_next_replica_id();
 }
 inline ::google::protobuf::int32 ChangeReplicasTrigger::next_replica_id() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ChangeReplicasTrigger.next_replica_id)
   return next_replica_id_;
 }
 inline void ChangeReplicasTrigger::set_next_replica_id(::google::protobuf::int32 value) {
-  set_has_next_replica_id();
+  
   next_replica_id_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.ChangeReplicasTrigger.next_replica_id)
 }
@@ -2769,42 +2299,27 @@ inline void ChangeReplicasTrigger::set_next_replica_id(::google::protobuf::int32
 
 // ModifiedSpanTrigger
 
-inline bool ModifiedSpanTrigger::has_system_config_span() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void ModifiedSpanTrigger::set_has_system_config_span() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void ModifiedSpanTrigger::clear_has_system_config_span() {
-  _has_bits_[0] &= ~0x00000002u;
-}
+// bool system_config_span = 1;
 inline void ModifiedSpanTrigger::clear_system_config_span() {
   system_config_span_ = false;
-  clear_has_system_config_span();
 }
 inline bool ModifiedSpanTrigger::system_config_span() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ModifiedSpanTrigger.system_config_span)
   return system_config_span_;
 }
 inline void ModifiedSpanTrigger::set_system_config_span(bool value) {
-  set_has_system_config_span();
+  
   system_config_span_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.ModifiedSpanTrigger.system_config_span)
 }
 
-// optional .cockroach.roachpb.Span node_liveness_span = 2;
+// .cockroach.roachpb.Span node_liveness_span = 2;
 inline bool ModifiedSpanTrigger::has_node_liveness_span() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void ModifiedSpanTrigger::set_has_node_liveness_span() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void ModifiedSpanTrigger::clear_has_node_liveness_span() {
-  _has_bits_[0] &= ~0x00000001u;
+  return this != internal_default_instance() && node_liveness_span_ != NULL;
 }
 inline void ModifiedSpanTrigger::clear_node_liveness_span() {
-  if (node_liveness_span_ != NULL) node_liveness_span_->::cockroach::roachpb::Span::Clear();
-  clear_has_node_liveness_span();
+  if (GetArenaNoVirtual() == NULL && node_liveness_span_ != NULL) delete node_liveness_span_;
+  node_liveness_span_ = NULL;
 }
 inline const ::cockroach::roachpb::Span& ModifiedSpanTrigger::node_liveness_span() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ModifiedSpanTrigger.node_liveness_span)
@@ -2812,7 +2327,7 @@ inline const ::cockroach::roachpb::Span& ModifiedSpanTrigger::node_liveness_span
                          : *::cockroach::roachpb::Span::internal_default_instance();
 }
 inline ::cockroach::roachpb::Span* ModifiedSpanTrigger::mutable_node_liveness_span() {
-  set_has_node_liveness_span();
+  
   if (node_liveness_span_ == NULL) {
     node_liveness_span_ = new ::cockroach::roachpb::Span;
   }
@@ -2821,7 +2336,7 @@ inline ::cockroach::roachpb::Span* ModifiedSpanTrigger::mutable_node_liveness_sp
 }
 inline ::cockroach::roachpb::Span* ModifiedSpanTrigger::release_node_liveness_span() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.ModifiedSpanTrigger.node_liveness_span)
-  clear_has_node_liveness_span();
+  
   ::cockroach::roachpb::Span* temp = node_liveness_span_;
   node_liveness_span_ = NULL;
   return temp;
@@ -2830,9 +2345,9 @@ inline void ModifiedSpanTrigger::set_allocated_node_liveness_span(::cockroach::r
   delete node_liveness_span_;
   node_liveness_span_ = node_liveness_span;
   if (node_liveness_span) {
-    set_has_node_liveness_span();
+    
   } else {
-    clear_has_node_liveness_span();
+    
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ModifiedSpanTrigger.node_liveness_span)
 }
@@ -2841,19 +2356,13 @@ inline void ModifiedSpanTrigger::set_allocated_node_liveness_span(::cockroach::r
 
 // InternalCommitTrigger
 
-// optional .cockroach.roachpb.SplitTrigger split_trigger = 1;
+// .cockroach.roachpb.SplitTrigger split_trigger = 1;
 inline bool InternalCommitTrigger::has_split_trigger() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void InternalCommitTrigger::set_has_split_trigger() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void InternalCommitTrigger::clear_has_split_trigger() {
-  _has_bits_[0] &= ~0x00000001u;
+  return this != internal_default_instance() && split_trigger_ != NULL;
 }
 inline void InternalCommitTrigger::clear_split_trigger() {
-  if (split_trigger_ != NULL) split_trigger_->::cockroach::roachpb::SplitTrigger::Clear();
-  clear_has_split_trigger();
+  if (GetArenaNoVirtual() == NULL && split_trigger_ != NULL) delete split_trigger_;
+  split_trigger_ = NULL;
 }
 inline const ::cockroach::roachpb::SplitTrigger& InternalCommitTrigger::split_trigger() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.InternalCommitTrigger.split_trigger)
@@ -2861,7 +2370,7 @@ inline const ::cockroach::roachpb::SplitTrigger& InternalCommitTrigger::split_tr
                          : *::cockroach::roachpb::SplitTrigger::internal_default_instance();
 }
 inline ::cockroach::roachpb::SplitTrigger* InternalCommitTrigger::mutable_split_trigger() {
-  set_has_split_trigger();
+  
   if (split_trigger_ == NULL) {
     split_trigger_ = new ::cockroach::roachpb::SplitTrigger;
   }
@@ -2870,7 +2379,7 @@ inline ::cockroach::roachpb::SplitTrigger* InternalCommitTrigger::mutable_split_
 }
 inline ::cockroach::roachpb::SplitTrigger* InternalCommitTrigger::release_split_trigger() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.InternalCommitTrigger.split_trigger)
-  clear_has_split_trigger();
+  
   ::cockroach::roachpb::SplitTrigger* temp = split_trigger_;
   split_trigger_ = NULL;
   return temp;
@@ -2879,26 +2388,20 @@ inline void InternalCommitTrigger::set_allocated_split_trigger(::cockroach::roac
   delete split_trigger_;
   split_trigger_ = split_trigger;
   if (split_trigger) {
-    set_has_split_trigger();
+    
   } else {
-    clear_has_split_trigger();
+    
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.InternalCommitTrigger.split_trigger)
 }
 
-// optional .cockroach.roachpb.MergeTrigger merge_trigger = 2;
+// .cockroach.roachpb.MergeTrigger merge_trigger = 2;
 inline bool InternalCommitTrigger::has_merge_trigger() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void InternalCommitTrigger::set_has_merge_trigger() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void InternalCommitTrigger::clear_has_merge_trigger() {
-  _has_bits_[0] &= ~0x00000002u;
+  return this != internal_default_instance() && merge_trigger_ != NULL;
 }
 inline void InternalCommitTrigger::clear_merge_trigger() {
-  if (merge_trigger_ != NULL) merge_trigger_->::cockroach::roachpb::MergeTrigger::Clear();
-  clear_has_merge_trigger();
+  if (GetArenaNoVirtual() == NULL && merge_trigger_ != NULL) delete merge_trigger_;
+  merge_trigger_ = NULL;
 }
 inline const ::cockroach::roachpb::MergeTrigger& InternalCommitTrigger::merge_trigger() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.InternalCommitTrigger.merge_trigger)
@@ -2906,7 +2409,7 @@ inline const ::cockroach::roachpb::MergeTrigger& InternalCommitTrigger::merge_tr
                          : *::cockroach::roachpb::MergeTrigger::internal_default_instance();
 }
 inline ::cockroach::roachpb::MergeTrigger* InternalCommitTrigger::mutable_merge_trigger() {
-  set_has_merge_trigger();
+  
   if (merge_trigger_ == NULL) {
     merge_trigger_ = new ::cockroach::roachpb::MergeTrigger;
   }
@@ -2915,7 +2418,7 @@ inline ::cockroach::roachpb::MergeTrigger* InternalCommitTrigger::mutable_merge_
 }
 inline ::cockroach::roachpb::MergeTrigger* InternalCommitTrigger::release_merge_trigger() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.InternalCommitTrigger.merge_trigger)
-  clear_has_merge_trigger();
+  
   ::cockroach::roachpb::MergeTrigger* temp = merge_trigger_;
   merge_trigger_ = NULL;
   return temp;
@@ -2924,26 +2427,20 @@ inline void InternalCommitTrigger::set_allocated_merge_trigger(::cockroach::roac
   delete merge_trigger_;
   merge_trigger_ = merge_trigger;
   if (merge_trigger) {
-    set_has_merge_trigger();
+    
   } else {
-    clear_has_merge_trigger();
+    
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.InternalCommitTrigger.merge_trigger)
 }
 
-// optional .cockroach.roachpb.ChangeReplicasTrigger change_replicas_trigger = 3;
+// .cockroach.roachpb.ChangeReplicasTrigger change_replicas_trigger = 3;
 inline bool InternalCommitTrigger::has_change_replicas_trigger() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void InternalCommitTrigger::set_has_change_replicas_trigger() {
-  _has_bits_[0] |= 0x00000004u;
-}
-inline void InternalCommitTrigger::clear_has_change_replicas_trigger() {
-  _has_bits_[0] &= ~0x00000004u;
+  return this != internal_default_instance() && change_replicas_trigger_ != NULL;
 }
 inline void InternalCommitTrigger::clear_change_replicas_trigger() {
-  if (change_replicas_trigger_ != NULL) change_replicas_trigger_->::cockroach::roachpb::ChangeReplicasTrigger::Clear();
-  clear_has_change_replicas_trigger();
+  if (GetArenaNoVirtual() == NULL && change_replicas_trigger_ != NULL) delete change_replicas_trigger_;
+  change_replicas_trigger_ = NULL;
 }
 inline const ::cockroach::roachpb::ChangeReplicasTrigger& InternalCommitTrigger::change_replicas_trigger() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.InternalCommitTrigger.change_replicas_trigger)
@@ -2951,7 +2448,7 @@ inline const ::cockroach::roachpb::ChangeReplicasTrigger& InternalCommitTrigger:
                          : *::cockroach::roachpb::ChangeReplicasTrigger::internal_default_instance();
 }
 inline ::cockroach::roachpb::ChangeReplicasTrigger* InternalCommitTrigger::mutable_change_replicas_trigger() {
-  set_has_change_replicas_trigger();
+  
   if (change_replicas_trigger_ == NULL) {
     change_replicas_trigger_ = new ::cockroach::roachpb::ChangeReplicasTrigger;
   }
@@ -2960,7 +2457,7 @@ inline ::cockroach::roachpb::ChangeReplicasTrigger* InternalCommitTrigger::mutab
 }
 inline ::cockroach::roachpb::ChangeReplicasTrigger* InternalCommitTrigger::release_change_replicas_trigger() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.InternalCommitTrigger.change_replicas_trigger)
-  clear_has_change_replicas_trigger();
+  
   ::cockroach::roachpb::ChangeReplicasTrigger* temp = change_replicas_trigger_;
   change_replicas_trigger_ = NULL;
   return temp;
@@ -2969,26 +2466,20 @@ inline void InternalCommitTrigger::set_allocated_change_replicas_trigger(::cockr
   delete change_replicas_trigger_;
   change_replicas_trigger_ = change_replicas_trigger;
   if (change_replicas_trigger) {
-    set_has_change_replicas_trigger();
+    
   } else {
-    clear_has_change_replicas_trigger();
+    
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.InternalCommitTrigger.change_replicas_trigger)
 }
 
-// optional .cockroach.roachpb.ModifiedSpanTrigger modified_span_trigger = 4;
+// .cockroach.roachpb.ModifiedSpanTrigger modified_span_trigger = 4;
 inline bool InternalCommitTrigger::has_modified_span_trigger() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
-}
-inline void InternalCommitTrigger::set_has_modified_span_trigger() {
-  _has_bits_[0] |= 0x00000008u;
-}
-inline void InternalCommitTrigger::clear_has_modified_span_trigger() {
-  _has_bits_[0] &= ~0x00000008u;
+  return this != internal_default_instance() && modified_span_trigger_ != NULL;
 }
 inline void InternalCommitTrigger::clear_modified_span_trigger() {
-  if (modified_span_trigger_ != NULL) modified_span_trigger_->::cockroach::roachpb::ModifiedSpanTrigger::Clear();
-  clear_has_modified_span_trigger();
+  if (GetArenaNoVirtual() == NULL && modified_span_trigger_ != NULL) delete modified_span_trigger_;
+  modified_span_trigger_ = NULL;
 }
 inline const ::cockroach::roachpb::ModifiedSpanTrigger& InternalCommitTrigger::modified_span_trigger() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.InternalCommitTrigger.modified_span_trigger)
@@ -2996,7 +2487,7 @@ inline const ::cockroach::roachpb::ModifiedSpanTrigger& InternalCommitTrigger::m
                          : *::cockroach::roachpb::ModifiedSpanTrigger::internal_default_instance();
 }
 inline ::cockroach::roachpb::ModifiedSpanTrigger* InternalCommitTrigger::mutable_modified_span_trigger() {
-  set_has_modified_span_trigger();
+  
   if (modified_span_trigger_ == NULL) {
     modified_span_trigger_ = new ::cockroach::roachpb::ModifiedSpanTrigger;
   }
@@ -3005,7 +2496,7 @@ inline ::cockroach::roachpb::ModifiedSpanTrigger* InternalCommitTrigger::mutable
 }
 inline ::cockroach::roachpb::ModifiedSpanTrigger* InternalCommitTrigger::release_modified_span_trigger() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.InternalCommitTrigger.modified_span_trigger)
-  clear_has_modified_span_trigger();
+  
   ::cockroach::roachpb::ModifiedSpanTrigger* temp = modified_span_trigger_;
   modified_span_trigger_ = NULL;
   return temp;
@@ -3014,9 +2505,9 @@ inline void InternalCommitTrigger::set_allocated_modified_span_trigger(::cockroa
   delete modified_span_trigger_;
   modified_span_trigger_ = modified_span_trigger;
   if (modified_span_trigger) {
-    set_has_modified_span_trigger();
+    
   } else {
-    clear_has_modified_span_trigger();
+    
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.InternalCommitTrigger.modified_span_trigger)
 }
@@ -3025,41 +2516,25 @@ inline void InternalCommitTrigger::set_allocated_modified_span_trigger(::cockroa
 
 // ObservedTimestamp
 
-inline bool ObservedTimestamp::has_node_id() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void ObservedTimestamp::set_has_node_id() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void ObservedTimestamp::clear_has_node_id() {
-  _has_bits_[0] &= ~0x00000002u;
-}
 inline void ObservedTimestamp::clear_node_id() {
   node_id_ = 0;
-  clear_has_node_id();
 }
 inline ::google::protobuf::int32 ObservedTimestamp::node_id() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ObservedTimestamp.node_id)
   return node_id_;
 }
 inline void ObservedTimestamp::set_node_id(::google::protobuf::int32 value) {
-  set_has_node_id();
+  
   node_id_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.ObservedTimestamp.node_id)
 }
 
 inline bool ObservedTimestamp::has_timestamp() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void ObservedTimestamp::set_has_timestamp() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void ObservedTimestamp::clear_has_timestamp() {
-  _has_bits_[0] &= ~0x00000001u;
+  return this != internal_default_instance() && timestamp_ != NULL;
 }
 inline void ObservedTimestamp::clear_timestamp() {
-  if (timestamp_ != NULL) timestamp_->::cockroach::util::hlc::Timestamp::Clear();
-  clear_has_timestamp();
+  if (GetArenaNoVirtual() == NULL && timestamp_ != NULL) delete timestamp_;
+  timestamp_ = NULL;
 }
 inline const ::cockroach::util::hlc::Timestamp& ObservedTimestamp::timestamp() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.ObservedTimestamp.timestamp)
@@ -3067,7 +2542,7 @@ inline const ::cockroach::util::hlc::Timestamp& ObservedTimestamp::timestamp() c
                          : *::cockroach::util::hlc::Timestamp::internal_default_instance();
 }
 inline ::cockroach::util::hlc::Timestamp* ObservedTimestamp::mutable_timestamp() {
-  set_has_timestamp();
+  
   if (timestamp_ == NULL) {
     timestamp_ = new ::cockroach::util::hlc::Timestamp;
   }
@@ -3076,7 +2551,7 @@ inline ::cockroach::util::hlc::Timestamp* ObservedTimestamp::mutable_timestamp()
 }
 inline ::cockroach::util::hlc::Timestamp* ObservedTimestamp::release_timestamp() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.ObservedTimestamp.timestamp)
-  clear_has_timestamp();
+  
   ::cockroach::util::hlc::Timestamp* temp = timestamp_;
   timestamp_ = NULL;
   return temp;
@@ -3085,9 +2560,9 @@ inline void ObservedTimestamp::set_allocated_timestamp(::cockroach::util::hlc::T
   delete timestamp_;
   timestamp_ = timestamp;
   if (timestamp) {
-    set_has_timestamp();
+    
   } else {
-    clear_has_timestamp();
+    
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ObservedTimestamp.timestamp)
 }
@@ -3097,17 +2572,11 @@ inline void ObservedTimestamp::set_allocated_timestamp(::cockroach::util::hlc::T
 // Transaction
 
 inline bool Transaction::has_meta() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void Transaction::set_has_meta() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void Transaction::clear_has_meta() {
-  _has_bits_[0] &= ~0x00000002u;
+  return this != internal_default_instance() && meta_ != NULL;
 }
 inline void Transaction::clear_meta() {
-  if (meta_ != NULL) meta_->::cockroach::storage::engine::enginepb::TxnMeta::Clear();
-  clear_has_meta();
+  if (GetArenaNoVirtual() == NULL && meta_ != NULL) delete meta_;
+  meta_ = NULL;
 }
 inline const ::cockroach::storage::engine::enginepb::TxnMeta& Transaction::meta() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.meta)
@@ -3115,7 +2584,7 @@ inline const ::cockroach::storage::engine::enginepb::TxnMeta& Transaction::meta(
                          : *::cockroach::storage::engine::enginepb::TxnMeta::internal_default_instance();
 }
 inline ::cockroach::storage::engine::enginepb::TxnMeta* Transaction::mutable_meta() {
-  set_has_meta();
+  
   if (meta_ == NULL) {
     meta_ = new ::cockroach::storage::engine::enginepb::TxnMeta;
   }
@@ -3124,7 +2593,7 @@ inline ::cockroach::storage::engine::enginepb::TxnMeta* Transaction::mutable_met
 }
 inline ::cockroach::storage::engine::enginepb::TxnMeta* Transaction::release_meta() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.Transaction.meta)
-  clear_has_meta();
+  
   ::cockroach::storage::engine::enginepb::TxnMeta* temp = meta_;
   meta_ = NULL;
   return temp;
@@ -3133,38 +2602,29 @@ inline void Transaction::set_allocated_meta(::cockroach::storage::engine::engine
   delete meta_;
   meta_ = meta;
   if (meta) {
-    set_has_meta();
+    
   } else {
-    clear_has_meta();
+    
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Transaction.meta)
 }
 
-inline bool Transaction::has_name() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void Transaction::set_has_name() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void Transaction::clear_has_name() {
-  _has_bits_[0] &= ~0x00000001u;
-}
+// string name = 2;
 inline void Transaction::clear_name() {
   name_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  clear_has_name();
 }
 inline const ::std::string& Transaction::name() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.name)
   return name_.GetNoArena();
 }
 inline void Transaction::set_name(const ::std::string& value) {
-  set_has_name();
+  
   name_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.name)
 }
 #if LANG_CXX11
 inline void Transaction::set_name(::std::string&& value) {
-  set_has_name();
+  
   name_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
   // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.Transaction.name)
@@ -3172,72 +2632,56 @@ inline void Transaction::set_name(::std::string&& value) {
 #endif
 inline void Transaction::set_name(const char* value) {
   GOOGLE_DCHECK(value != NULL);
-  set_has_name();
+  
   name_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
   // @@protoc_insertion_point(field_set_char:cockroach.roachpb.Transaction.name)
 }
 inline void Transaction::set_name(const char* value, size_t size) {
-  set_has_name();
+  
   name_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
   // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.Transaction.name)
 }
 inline ::std::string* Transaction::mutable_name() {
-  set_has_name();
+  
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.name)
   return name_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline ::std::string* Transaction::release_name() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.Transaction.name)
-  clear_has_name();
+  
   return name_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline void Transaction::set_allocated_name(::std::string* name) {
   if (name != NULL) {
-    set_has_name();
+    
   } else {
-    clear_has_name();
+    
   }
   name_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), name);
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Transaction.name)
 }
 
-inline bool Transaction::has_status() const {
-  return (_has_bits_[0] & 0x00000020u) != 0;
-}
-inline void Transaction::set_has_status() {
-  _has_bits_[0] |= 0x00000020u;
-}
-inline void Transaction::clear_has_status() {
-  _has_bits_[0] &= ~0x00000020u;
-}
+// .cockroach.roachpb.TransactionStatus status = 4;
 inline void Transaction::clear_status() {
   status_ = 0;
-  clear_has_status();
 }
 inline ::cockroach::roachpb::TransactionStatus Transaction::status() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.status)
   return static_cast< ::cockroach::roachpb::TransactionStatus >(status_);
 }
 inline void Transaction::set_status(::cockroach::roachpb::TransactionStatus value) {
-  assert(::cockroach::roachpb::TransactionStatus_IsValid(value));
-  set_has_status();
+  
   status_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.status)
 }
 
 inline bool Transaction::has_last_heartbeat() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void Transaction::set_has_last_heartbeat() {
-  _has_bits_[0] |= 0x00000004u;
-}
-inline void Transaction::clear_has_last_heartbeat() {
-  _has_bits_[0] &= ~0x00000004u;
+  return this != internal_default_instance() && last_heartbeat_ != NULL;
 }
 inline void Transaction::clear_last_heartbeat() {
-  if (last_heartbeat_ != NULL) last_heartbeat_->::cockroach::util::hlc::Timestamp::Clear();
-  clear_has_last_heartbeat();
+  if (GetArenaNoVirtual() == NULL && last_heartbeat_ != NULL) delete last_heartbeat_;
+  last_heartbeat_ = NULL;
 }
 inline const ::cockroach::util::hlc::Timestamp& Transaction::last_heartbeat() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.last_heartbeat)
@@ -3245,7 +2689,7 @@ inline const ::cockroach::util::hlc::Timestamp& Transaction::last_heartbeat() co
                          : *::cockroach::util::hlc::Timestamp::internal_default_instance();
 }
 inline ::cockroach::util::hlc::Timestamp* Transaction::mutable_last_heartbeat() {
-  set_has_last_heartbeat();
+  
   if (last_heartbeat_ == NULL) {
     last_heartbeat_ = new ::cockroach::util::hlc::Timestamp;
   }
@@ -3254,7 +2698,7 @@ inline ::cockroach::util::hlc::Timestamp* Transaction::mutable_last_heartbeat() 
 }
 inline ::cockroach::util::hlc::Timestamp* Transaction::release_last_heartbeat() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.Transaction.last_heartbeat)
-  clear_has_last_heartbeat();
+  
   ::cockroach::util::hlc::Timestamp* temp = last_heartbeat_;
   last_heartbeat_ = NULL;
   return temp;
@@ -3263,25 +2707,19 @@ inline void Transaction::set_allocated_last_heartbeat(::cockroach::util::hlc::Ti
   delete last_heartbeat_;
   last_heartbeat_ = last_heartbeat;
   if (last_heartbeat) {
-    set_has_last_heartbeat();
+    
   } else {
-    clear_has_last_heartbeat();
+    
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Transaction.last_heartbeat)
 }
 
 inline bool Transaction::has_orig_timestamp() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
-}
-inline void Transaction::set_has_orig_timestamp() {
-  _has_bits_[0] |= 0x00000008u;
-}
-inline void Transaction::clear_has_orig_timestamp() {
-  _has_bits_[0] &= ~0x00000008u;
+  return this != internal_default_instance() && orig_timestamp_ != NULL;
 }
 inline void Transaction::clear_orig_timestamp() {
-  if (orig_timestamp_ != NULL) orig_timestamp_->::cockroach::util::hlc::Timestamp::Clear();
-  clear_has_orig_timestamp();
+  if (GetArenaNoVirtual() == NULL && orig_timestamp_ != NULL) delete orig_timestamp_;
+  orig_timestamp_ = NULL;
 }
 inline const ::cockroach::util::hlc::Timestamp& Transaction::orig_timestamp() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.orig_timestamp)
@@ -3289,7 +2727,7 @@ inline const ::cockroach::util::hlc::Timestamp& Transaction::orig_timestamp() co
                          : *::cockroach::util::hlc::Timestamp::internal_default_instance();
 }
 inline ::cockroach::util::hlc::Timestamp* Transaction::mutable_orig_timestamp() {
-  set_has_orig_timestamp();
+  
   if (orig_timestamp_ == NULL) {
     orig_timestamp_ = new ::cockroach::util::hlc::Timestamp;
   }
@@ -3298,7 +2736,7 @@ inline ::cockroach::util::hlc::Timestamp* Transaction::mutable_orig_timestamp() 
 }
 inline ::cockroach::util::hlc::Timestamp* Transaction::release_orig_timestamp() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.Transaction.orig_timestamp)
-  clear_has_orig_timestamp();
+  
   ::cockroach::util::hlc::Timestamp* temp = orig_timestamp_;
   orig_timestamp_ = NULL;
   return temp;
@@ -3307,25 +2745,19 @@ inline void Transaction::set_allocated_orig_timestamp(::cockroach::util::hlc::Ti
   delete orig_timestamp_;
   orig_timestamp_ = orig_timestamp;
   if (orig_timestamp) {
-    set_has_orig_timestamp();
+    
   } else {
-    clear_has_orig_timestamp();
+    
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Transaction.orig_timestamp)
 }
 
 inline bool Transaction::has_max_timestamp() const {
-  return (_has_bits_[0] & 0x00000010u) != 0;
-}
-inline void Transaction::set_has_max_timestamp() {
-  _has_bits_[0] |= 0x00000010u;
-}
-inline void Transaction::clear_has_max_timestamp() {
-  _has_bits_[0] &= ~0x00000010u;
+  return this != internal_default_instance() && max_timestamp_ != NULL;
 }
 inline void Transaction::clear_max_timestamp() {
-  if (max_timestamp_ != NULL) max_timestamp_->::cockroach::util::hlc::Timestamp::Clear();
-  clear_has_max_timestamp();
+  if (GetArenaNoVirtual() == NULL && max_timestamp_ != NULL) delete max_timestamp_;
+  max_timestamp_ = NULL;
 }
 inline const ::cockroach::util::hlc::Timestamp& Transaction::max_timestamp() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.max_timestamp)
@@ -3333,7 +2765,7 @@ inline const ::cockroach::util::hlc::Timestamp& Transaction::max_timestamp() con
                          : *::cockroach::util::hlc::Timestamp::internal_default_instance();
 }
 inline ::cockroach::util::hlc::Timestamp* Transaction::mutable_max_timestamp() {
-  set_has_max_timestamp();
+  
   if (max_timestamp_ == NULL) {
     max_timestamp_ = new ::cockroach::util::hlc::Timestamp;
   }
@@ -3342,7 +2774,7 @@ inline ::cockroach::util::hlc::Timestamp* Transaction::mutable_max_timestamp() {
 }
 inline ::cockroach::util::hlc::Timestamp* Transaction::release_max_timestamp() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.Transaction.max_timestamp)
-  clear_has_max_timestamp();
+  
   ::cockroach::util::hlc::Timestamp* temp = max_timestamp_;
   max_timestamp_ = NULL;
   return temp;
@@ -3351,9 +2783,9 @@ inline void Transaction::set_allocated_max_timestamp(::cockroach::util::hlc::Tim
   delete max_timestamp_;
   max_timestamp_ = max_timestamp;
   if (max_timestamp) {
-    set_has_max_timestamp();
+    
   } else {
-    clear_has_max_timestamp();
+    
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Transaction.max_timestamp)
 }
@@ -3387,71 +2819,44 @@ Transaction::observed_timestamps() const {
   return observed_timestamps_;
 }
 
-inline bool Transaction::has_writing() const {
-  return (_has_bits_[0] & 0x00000040u) != 0;
-}
-inline void Transaction::set_has_writing() {
-  _has_bits_[0] |= 0x00000040u;
-}
-inline void Transaction::clear_has_writing() {
-  _has_bits_[0] &= ~0x00000040u;
-}
+// bool writing = 9;
 inline void Transaction::clear_writing() {
   writing_ = false;
-  clear_has_writing();
 }
 inline bool Transaction::writing() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.writing)
   return writing_;
 }
 inline void Transaction::set_writing(bool value) {
-  set_has_writing();
+  
   writing_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.writing)
 }
 
-inline bool Transaction::has_write_too_old() const {
-  return (_has_bits_[0] & 0x00000080u) != 0;
-}
-inline void Transaction::set_has_write_too_old() {
-  _has_bits_[0] |= 0x00000080u;
-}
-inline void Transaction::clear_has_write_too_old() {
-  _has_bits_[0] &= ~0x00000080u;
-}
+// bool write_too_old = 12;
 inline void Transaction::clear_write_too_old() {
   write_too_old_ = false;
-  clear_has_write_too_old();
 }
 inline bool Transaction::write_too_old() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.write_too_old)
   return write_too_old_;
 }
 inline void Transaction::set_write_too_old(bool value) {
-  set_has_write_too_old();
+  
   write_too_old_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.write_too_old)
 }
 
-inline bool Transaction::has_retry_on_push() const {
-  return (_has_bits_[0] & 0x00000100u) != 0;
-}
-inline void Transaction::set_has_retry_on_push() {
-  _has_bits_[0] |= 0x00000100u;
-}
-inline void Transaction::clear_has_retry_on_push() {
-  _has_bits_[0] &= ~0x00000100u;
-}
+// bool retry_on_push = 13;
 inline void Transaction::clear_retry_on_push() {
   retry_on_push_ = false;
-  clear_has_retry_on_push();
 }
 inline bool Transaction::retry_on_push() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.retry_on_push)
   return retry_on_push_;
 }
 inline void Transaction::set_retry_on_push(bool value) {
-  set_has_retry_on_push();
+  
   retry_on_push_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.retry_on_push)
 }
@@ -3490,17 +2895,11 @@ Transaction::intents() const {
 // Intent
 
 inline bool Intent::has_span() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void Intent::set_has_span() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void Intent::clear_has_span() {
-  _has_bits_[0] &= ~0x00000001u;
+  return this != internal_default_instance() && span_ != NULL;
 }
 inline void Intent::clear_span() {
-  if (span_ != NULL) span_->::cockroach::roachpb::Span::Clear();
-  clear_has_span();
+  if (GetArenaNoVirtual() == NULL && span_ != NULL) delete span_;
+  span_ = NULL;
 }
 inline const ::cockroach::roachpb::Span& Intent::span() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Intent.span)
@@ -3508,7 +2907,7 @@ inline const ::cockroach::roachpb::Span& Intent::span() const {
                          : *::cockroach::roachpb::Span::internal_default_instance();
 }
 inline ::cockroach::roachpb::Span* Intent::mutable_span() {
-  set_has_span();
+  
   if (span_ == NULL) {
     span_ = new ::cockroach::roachpb::Span;
   }
@@ -3517,7 +2916,7 @@ inline ::cockroach::roachpb::Span* Intent::mutable_span() {
 }
 inline ::cockroach::roachpb::Span* Intent::release_span() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.Intent.span)
-  clear_has_span();
+  
   ::cockroach::roachpb::Span* temp = span_;
   span_ = NULL;
   return temp;
@@ -3526,25 +2925,19 @@ inline void Intent::set_allocated_span(::cockroach::roachpb::Span* span) {
   delete span_;
   span_ = span;
   if (span) {
-    set_has_span();
+    
   } else {
-    clear_has_span();
+    
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Intent.span)
 }
 
 inline bool Intent::has_txn() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void Intent::set_has_txn() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void Intent::clear_has_txn() {
-  _has_bits_[0] &= ~0x00000002u;
+  return this != internal_default_instance() && txn_ != NULL;
 }
 inline void Intent::clear_txn() {
-  if (txn_ != NULL) txn_->::cockroach::storage::engine::enginepb::TxnMeta::Clear();
-  clear_has_txn();
+  if (GetArenaNoVirtual() == NULL && txn_ != NULL) delete txn_;
+  txn_ = NULL;
 }
 inline const ::cockroach::storage::engine::enginepb::TxnMeta& Intent::txn() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Intent.txn)
@@ -3552,7 +2945,7 @@ inline const ::cockroach::storage::engine::enginepb::TxnMeta& Intent::txn() cons
                          : *::cockroach::storage::engine::enginepb::TxnMeta::internal_default_instance();
 }
 inline ::cockroach::storage::engine::enginepb::TxnMeta* Intent::mutable_txn() {
-  set_has_txn();
+  
   if (txn_ == NULL) {
     txn_ = new ::cockroach::storage::engine::enginepb::TxnMeta;
   }
@@ -3561,7 +2954,7 @@ inline ::cockroach::storage::engine::enginepb::TxnMeta* Intent::mutable_txn() {
 }
 inline ::cockroach::storage::engine::enginepb::TxnMeta* Intent::release_txn() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.Intent.txn)
-  clear_has_txn();
+  
   ::cockroach::storage::engine::enginepb::TxnMeta* temp = txn_;
   txn_ = NULL;
   return temp;
@@ -3570,33 +2963,23 @@ inline void Intent::set_allocated_txn(::cockroach::storage::engine::enginepb::Tx
   delete txn_;
   txn_ = txn;
   if (txn) {
-    set_has_txn();
+    
   } else {
-    clear_has_txn();
+    
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Intent.txn)
 }
 
-inline bool Intent::has_status() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void Intent::set_has_status() {
-  _has_bits_[0] |= 0x00000004u;
-}
-inline void Intent::clear_has_status() {
-  _has_bits_[0] &= ~0x00000004u;
-}
+// .cockroach.roachpb.TransactionStatus status = 3;
 inline void Intent::clear_status() {
   status_ = 0;
-  clear_has_status();
 }
 inline ::cockroach::roachpb::TransactionStatus Intent::status() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Intent.status)
   return static_cast< ::cockroach::roachpb::TransactionStatus >(status_);
 }
 inline void Intent::set_status(::cockroach::roachpb::TransactionStatus value) {
-  assert(::cockroach::roachpb::TransactionStatus_IsValid(value));
-  set_has_status();
+  
   status_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Intent.status)
 }
@@ -3606,17 +2989,11 @@ inline void Intent::set_status(::cockroach::roachpb::TransactionStatus value) {
 // Lease
 
 inline bool Lease::has_start() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void Lease::set_has_start() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void Lease::clear_has_start() {
-  _has_bits_[0] &= ~0x00000001u;
+  return this != internal_default_instance() && start_ != NULL;
 }
 inline void Lease::clear_start() {
-  if (start_ != NULL) start_->::cockroach::util::hlc::Timestamp::Clear();
-  clear_has_start();
+  if (GetArenaNoVirtual() == NULL && start_ != NULL) delete start_;
+  start_ = NULL;
 }
 inline const ::cockroach::util::hlc::Timestamp& Lease::start() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Lease.start)
@@ -3624,7 +3001,7 @@ inline const ::cockroach::util::hlc::Timestamp& Lease::start() const {
                          : *::cockroach::util::hlc::Timestamp::internal_default_instance();
 }
 inline ::cockroach::util::hlc::Timestamp* Lease::mutable_start() {
-  set_has_start();
+  
   if (start_ == NULL) {
     start_ = new ::cockroach::util::hlc::Timestamp;
   }
@@ -3633,7 +3010,7 @@ inline ::cockroach::util::hlc::Timestamp* Lease::mutable_start() {
 }
 inline ::cockroach::util::hlc::Timestamp* Lease::release_start() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.Lease.start)
-  clear_has_start();
+  
   ::cockroach::util::hlc::Timestamp* temp = start_;
   start_ = NULL;
   return temp;
@@ -3642,26 +3019,20 @@ inline void Lease::set_allocated_start(::cockroach::util::hlc::Timestamp* start)
   delete start_;
   start_ = start;
   if (start) {
-    set_has_start();
+    
   } else {
-    clear_has_start();
+    
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Lease.start)
 }
 
-// optional .cockroach.util.hlc.Timestamp expiration = 2;
+// .cockroach.util.hlc.Timestamp expiration = 2;
 inline bool Lease::has_expiration() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void Lease::set_has_expiration() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void Lease::clear_has_expiration() {
-  _has_bits_[0] &= ~0x00000002u;
+  return this != internal_default_instance() && expiration_ != NULL;
 }
 inline void Lease::clear_expiration() {
-  if (expiration_ != NULL) expiration_->::cockroach::util::hlc::Timestamp::Clear();
-  clear_has_expiration();
+  if (GetArenaNoVirtual() == NULL && expiration_ != NULL) delete expiration_;
+  expiration_ = NULL;
 }
 inline const ::cockroach::util::hlc::Timestamp& Lease::expiration() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Lease.expiration)
@@ -3669,7 +3040,7 @@ inline const ::cockroach::util::hlc::Timestamp& Lease::expiration() const {
                          : *::cockroach::util::hlc::Timestamp::internal_default_instance();
 }
 inline ::cockroach::util::hlc::Timestamp* Lease::mutable_expiration() {
-  set_has_expiration();
+  
   if (expiration_ == NULL) {
     expiration_ = new ::cockroach::util::hlc::Timestamp;
   }
@@ -3678,7 +3049,7 @@ inline ::cockroach::util::hlc::Timestamp* Lease::mutable_expiration() {
 }
 inline ::cockroach::util::hlc::Timestamp* Lease::release_expiration() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.Lease.expiration)
-  clear_has_expiration();
+  
   ::cockroach::util::hlc::Timestamp* temp = expiration_;
   expiration_ = NULL;
   return temp;
@@ -3687,25 +3058,19 @@ inline void Lease::set_allocated_expiration(::cockroach::util::hlc::Timestamp* e
   delete expiration_;
   expiration_ = expiration;
   if (expiration) {
-    set_has_expiration();
+    
   } else {
-    clear_has_expiration();
+    
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Lease.expiration)
 }
 
 inline bool Lease::has_replica() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void Lease::set_has_replica() {
-  _has_bits_[0] |= 0x00000004u;
-}
-inline void Lease::clear_has_replica() {
-  _has_bits_[0] &= ~0x00000004u;
+  return this != internal_default_instance() && replica_ != NULL;
 }
 inline void Lease::clear_replica() {
-  if (replica_ != NULL) replica_->::cockroach::roachpb::ReplicaDescriptor::Clear();
-  clear_has_replica();
+  if (GetArenaNoVirtual() == NULL && replica_ != NULL) delete replica_;
+  replica_ = NULL;
 }
 inline const ::cockroach::roachpb::ReplicaDescriptor& Lease::replica() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Lease.replica)
@@ -3713,7 +3078,7 @@ inline const ::cockroach::roachpb::ReplicaDescriptor& Lease::replica() const {
                          : *::cockroach::roachpb::ReplicaDescriptor::internal_default_instance();
 }
 inline ::cockroach::roachpb::ReplicaDescriptor* Lease::mutable_replica() {
-  set_has_replica();
+  
   if (replica_ == NULL) {
     replica_ = new ::cockroach::roachpb::ReplicaDescriptor;
   }
@@ -3722,7 +3087,7 @@ inline ::cockroach::roachpb::ReplicaDescriptor* Lease::mutable_replica() {
 }
 inline ::cockroach::roachpb::ReplicaDescriptor* Lease::release_replica() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.Lease.replica)
-  clear_has_replica();
+  
   ::cockroach::roachpb::ReplicaDescriptor* temp = replica_;
   replica_ = NULL;
   return temp;
@@ -3731,26 +3096,20 @@ inline void Lease::set_allocated_replica(::cockroach::roachpb::ReplicaDescriptor
   delete replica_;
   replica_ = replica;
   if (replica) {
-    set_has_replica();
+    
   } else {
-    clear_has_replica();
+    
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Lease.replica)
 }
 
-// optional .cockroach.util.hlc.Timestamp deprecated_start_stasis = 4;
+// .cockroach.util.hlc.Timestamp deprecated_start_stasis = 4;
 inline bool Lease::has_deprecated_start_stasis() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
-}
-inline void Lease::set_has_deprecated_start_stasis() {
-  _has_bits_[0] |= 0x00000008u;
-}
-inline void Lease::clear_has_deprecated_start_stasis() {
-  _has_bits_[0] &= ~0x00000008u;
+  return this != internal_default_instance() && deprecated_start_stasis_ != NULL;
 }
 inline void Lease::clear_deprecated_start_stasis() {
-  if (deprecated_start_stasis_ != NULL) deprecated_start_stasis_->::cockroach::util::hlc::Timestamp::Clear();
-  clear_has_deprecated_start_stasis();
+  if (GetArenaNoVirtual() == NULL && deprecated_start_stasis_ != NULL) delete deprecated_start_stasis_;
+  deprecated_start_stasis_ = NULL;
 }
 inline const ::cockroach::util::hlc::Timestamp& Lease::deprecated_start_stasis() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Lease.deprecated_start_stasis)
@@ -3758,7 +3117,7 @@ inline const ::cockroach::util::hlc::Timestamp& Lease::deprecated_start_stasis()
                          : *::cockroach::util::hlc::Timestamp::internal_default_instance();
 }
 inline ::cockroach::util::hlc::Timestamp* Lease::mutable_deprecated_start_stasis() {
-  set_has_deprecated_start_stasis();
+  
   if (deprecated_start_stasis_ == NULL) {
     deprecated_start_stasis_ = new ::cockroach::util::hlc::Timestamp;
   }
@@ -3767,7 +3126,7 @@ inline ::cockroach::util::hlc::Timestamp* Lease::mutable_deprecated_start_stasis
 }
 inline ::cockroach::util::hlc::Timestamp* Lease::release_deprecated_start_stasis() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.Lease.deprecated_start_stasis)
-  clear_has_deprecated_start_stasis();
+  
   ::cockroach::util::hlc::Timestamp* temp = deprecated_start_stasis_;
   deprecated_start_stasis_ = NULL;
   return temp;
@@ -3776,25 +3135,19 @@ inline void Lease::set_allocated_deprecated_start_stasis(::cockroach::util::hlc:
   delete deprecated_start_stasis_;
   deprecated_start_stasis_ = deprecated_start_stasis;
   if (deprecated_start_stasis) {
-    set_has_deprecated_start_stasis();
+    
   } else {
-    clear_has_deprecated_start_stasis();
+    
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Lease.deprecated_start_stasis)
 }
 
 inline bool Lease::has_proposed_ts() const {
-  return (_has_bits_[0] & 0x00000010u) != 0;
-}
-inline void Lease::set_has_proposed_ts() {
-  _has_bits_[0] |= 0x00000010u;
-}
-inline void Lease::clear_has_proposed_ts() {
-  _has_bits_[0] &= ~0x00000010u;
+  return this != internal_default_instance() && proposed_ts_ != NULL;
 }
 inline void Lease::clear_proposed_ts() {
-  if (proposed_ts_ != NULL) proposed_ts_->::cockroach::util::hlc::Timestamp::Clear();
-  clear_has_proposed_ts();
+  if (GetArenaNoVirtual() == NULL && proposed_ts_ != NULL) delete proposed_ts_;
+  proposed_ts_ = NULL;
 }
 inline const ::cockroach::util::hlc::Timestamp& Lease::proposed_ts() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Lease.proposed_ts)
@@ -3802,7 +3155,7 @@ inline const ::cockroach::util::hlc::Timestamp& Lease::proposed_ts() const {
                          : *::cockroach::util::hlc::Timestamp::internal_default_instance();
 }
 inline ::cockroach::util::hlc::Timestamp* Lease::mutable_proposed_ts() {
-  set_has_proposed_ts();
+  
   if (proposed_ts_ == NULL) {
     proposed_ts_ = new ::cockroach::util::hlc::Timestamp;
   }
@@ -3811,7 +3164,7 @@ inline ::cockroach::util::hlc::Timestamp* Lease::mutable_proposed_ts() {
 }
 inline ::cockroach::util::hlc::Timestamp* Lease::release_proposed_ts() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.Lease.proposed_ts)
-  clear_has_proposed_ts();
+  
   ::cockroach::util::hlc::Timestamp* temp = proposed_ts_;
   proposed_ts_ = NULL;
   return temp;
@@ -3820,32 +3173,23 @@ inline void Lease::set_allocated_proposed_ts(::cockroach::util::hlc::Timestamp* 
   delete proposed_ts_;
   proposed_ts_ = proposed_ts;
   if (proposed_ts) {
-    set_has_proposed_ts();
+    
   } else {
-    clear_has_proposed_ts();
+    
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Lease.proposed_ts)
 }
 
-inline bool Lease::has_epoch() const {
-  return (_has_bits_[0] & 0x00000020u) != 0;
-}
-inline void Lease::set_has_epoch() {
-  _has_bits_[0] |= 0x00000020u;
-}
-inline void Lease::clear_has_epoch() {
-  _has_bits_[0] &= ~0x00000020u;
-}
+// int64 epoch = 6;
 inline void Lease::clear_epoch() {
   epoch_ = GOOGLE_LONGLONG(0);
-  clear_has_epoch();
 }
 inline ::google::protobuf::int64 Lease::epoch() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.Lease.epoch)
   return epoch_;
 }
 inline void Lease::set_epoch(::google::protobuf::int64 value) {
-  set_has_epoch();
+  
   epoch_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Lease.epoch)
 }
@@ -3854,31 +3198,21 @@ inline void Lease::set_epoch(::google::protobuf::int64 value) {
 
 // AbortCacheEntry
 
-inline bool AbortCacheEntry::has_key() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void AbortCacheEntry::set_has_key() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void AbortCacheEntry::clear_has_key() {
-  _has_bits_[0] &= ~0x00000001u;
-}
 inline void AbortCacheEntry::clear_key() {
   key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  clear_has_key();
 }
 inline const ::std::string& AbortCacheEntry::key() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.AbortCacheEntry.key)
   return key_.GetNoArena();
 }
 inline void AbortCacheEntry::set_key(const ::std::string& value) {
-  set_has_key();
+  
   key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
   // @@protoc_insertion_point(field_set:cockroach.roachpb.AbortCacheEntry.key)
 }
 #if LANG_CXX11
 inline void AbortCacheEntry::set_key(::std::string&& value) {
-  set_has_key();
+  
   key_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
   // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.AbortCacheEntry.key)
@@ -3886,48 +3220,42 @@ inline void AbortCacheEntry::set_key(::std::string&& value) {
 #endif
 inline void AbortCacheEntry::set_key(const char* value) {
   GOOGLE_DCHECK(value != NULL);
-  set_has_key();
+  
   key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
   // @@protoc_insertion_point(field_set_char:cockroach.roachpb.AbortCacheEntry.key)
 }
 inline void AbortCacheEntry::set_key(const void* value, size_t size) {
-  set_has_key();
+  
   key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
   // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.AbortCacheEntry.key)
 }
 inline ::std::string* AbortCacheEntry::mutable_key() {
-  set_has_key();
+  
   // @@protoc_insertion_point(field_mutable:cockroach.roachpb.AbortCacheEntry.key)
   return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline ::std::string* AbortCacheEntry::release_key() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.AbortCacheEntry.key)
-  clear_has_key();
+  
   return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 inline void AbortCacheEntry::set_allocated_key(::std::string* key) {
   if (key != NULL) {
-    set_has_key();
+    
   } else {
-    clear_has_key();
+    
   }
   key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), key);
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.AbortCacheEntry.key)
 }
 
 inline bool AbortCacheEntry::has_timestamp() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void AbortCacheEntry::set_has_timestamp() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void AbortCacheEntry::clear_has_timestamp() {
-  _has_bits_[0] &= ~0x00000002u;
+  return this != internal_default_instance() && timestamp_ != NULL;
 }
 inline void AbortCacheEntry::clear_timestamp() {
-  if (timestamp_ != NULL) timestamp_->::cockroach::util::hlc::Timestamp::Clear();
-  clear_has_timestamp();
+  if (GetArenaNoVirtual() == NULL && timestamp_ != NULL) delete timestamp_;
+  timestamp_ = NULL;
 }
 inline const ::cockroach::util::hlc::Timestamp& AbortCacheEntry::timestamp() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.AbortCacheEntry.timestamp)
@@ -3935,7 +3263,7 @@ inline const ::cockroach::util::hlc::Timestamp& AbortCacheEntry::timestamp() con
                          : *::cockroach::util::hlc::Timestamp::internal_default_instance();
 }
 inline ::cockroach::util::hlc::Timestamp* AbortCacheEntry::mutable_timestamp() {
-  set_has_timestamp();
+  
   if (timestamp_ == NULL) {
     timestamp_ = new ::cockroach::util::hlc::Timestamp;
   }
@@ -3944,7 +3272,7 @@ inline ::cockroach::util::hlc::Timestamp* AbortCacheEntry::mutable_timestamp() {
 }
 inline ::cockroach::util::hlc::Timestamp* AbortCacheEntry::release_timestamp() {
   // @@protoc_insertion_point(field_release:cockroach.roachpb.AbortCacheEntry.timestamp)
-  clear_has_timestamp();
+  
   ::cockroach::util::hlc::Timestamp* temp = timestamp_;
   timestamp_ = NULL;
   return temp;
@@ -3953,151 +3281,28 @@ inline void AbortCacheEntry::set_allocated_timestamp(::cockroach::util::hlc::Tim
   delete timestamp_;
   timestamp_ = timestamp;
   if (timestamp) {
-    set_has_timestamp();
+    
   } else {
-    clear_has_timestamp();
+    
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.AbortCacheEntry.timestamp)
 }
 
-inline bool AbortCacheEntry::has_priority() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void AbortCacheEntry::set_has_priority() {
-  _has_bits_[0] |= 0x00000004u;
-}
-inline void AbortCacheEntry::clear_has_priority() {
-  _has_bits_[0] &= ~0x00000004u;
-}
+// int32 priority = 3;
 inline void AbortCacheEntry::clear_priority() {
   priority_ = 0;
-  clear_has_priority();
 }
 inline ::google::protobuf::int32 AbortCacheEntry::priority() const {
   // @@protoc_insertion_point(field_get:cockroach.roachpb.AbortCacheEntry.priority)
   return priority_;
 }
 inline void AbortCacheEntry::set_priority(::google::protobuf::int32 value) {
-  set_has_priority();
+  
   priority_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.AbortCacheEntry.priority)
 }
 
-// -------------------------------------------------------------------
-
-// CSVOptions
-
-inline bool CSVOptions::has_comma() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void CSVOptions::set_has_comma() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void CSVOptions::clear_has_comma() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void CSVOptions::clear_comma() {
-  comma_ = 0;
-  clear_has_comma();
-}
-inline ::google::protobuf::int32 CSVOptions::comma() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.CSVOptions.comma)
-  return comma_;
-}
-inline void CSVOptions::set_comma(::google::protobuf::int32 value) {
-  set_has_comma();
-  comma_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.CSVOptions.comma)
-}
-
-inline bool CSVOptions::has_comment() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void CSVOptions::set_has_comment() {
-  _has_bits_[0] |= 0x00000004u;
-}
-inline void CSVOptions::clear_has_comment() {
-  _has_bits_[0] &= ~0x00000004u;
-}
-inline void CSVOptions::clear_comment() {
-  comment_ = 0;
-  clear_has_comment();
-}
-inline ::google::protobuf::int32 CSVOptions::comment() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.CSVOptions.comment)
-  return comment_;
-}
-inline void CSVOptions::set_comment(::google::protobuf::int32 value) {
-  set_has_comment();
-  comment_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.CSVOptions.comment)
-}
-
-inline bool CSVOptions::has_nullif() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void CSVOptions::set_has_nullif() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void CSVOptions::clear_has_nullif() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-inline void CSVOptions::clear_nullif() {
-  nullif_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  clear_has_nullif();
-}
-inline const ::std::string& CSVOptions::nullif() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.CSVOptions.nullif)
-  return nullif_.GetNoArena();
-}
-inline void CSVOptions::set_nullif(const ::std::string& value) {
-  set_has_nullif();
-  nullif_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.CSVOptions.nullif)
-}
-#if LANG_CXX11
-inline void CSVOptions::set_nullif(::std::string&& value) {
-  set_has_nullif();
-  nullif_.SetNoArena(
-    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.CSVOptions.nullif)
-}
-#endif
-inline void CSVOptions::set_nullif(const char* value) {
-  GOOGLE_DCHECK(value != NULL);
-  set_has_nullif();
-  nullif_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.CSVOptions.nullif)
-}
-inline void CSVOptions::set_nullif(const char* value, size_t size) {
-  set_has_nullif();
-  nullif_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
-      ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.CSVOptions.nullif)
-}
-inline ::std::string* CSVOptions::mutable_nullif() {
-  set_has_nullif();
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.CSVOptions.nullif)
-  return nullif_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline ::std::string* CSVOptions::release_nullif() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.CSVOptions.nullif)
-  clear_has_nullif();
-  return nullif_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline void CSVOptions::set_allocated_nullif(::std::string* nullif) {
-  if (nullif != NULL) {
-    set_has_nullif();
-  } else {
-    clear_has_nullif();
-  }
-  nullif_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), nullif);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.CSVOptions.nullif)
-}
-
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
-// -------------------------------------------------------------------
-
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

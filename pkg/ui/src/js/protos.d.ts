@@ -16351,133 +16351,6 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        type CSVOptions$Properties = {
-            comma?: number;
-            comment?: number;
-            nullif?: string;
-        };
-
-        /**
-         * Constructs a new CSVOptions.
-         * @exports cockroach.roachpb.CSVOptions
-         * @constructor
-         * @param {cockroach.roachpb.CSVOptions$Properties=} [properties] Properties to set
-         */
-        class CSVOptions {
-
-            /**
-             * Constructs a new CSVOptions.
-             * @exports cockroach.roachpb.CSVOptions
-             * @constructor
-             * @param {cockroach.roachpb.CSVOptions$Properties=} [properties] Properties to set
-             */
-            constructor(properties?: cockroach.roachpb.CSVOptions$Properties);
-
-            /**
-             * CSVOptions comma.
-             * @type {number}
-             */
-            public comma: number;
-
-            /**
-             * CSVOptions comment.
-             * @type {number}
-             */
-            public comment: number;
-
-            /**
-             * CSVOptions nullif.
-             * @type {string}
-             */
-            public nullif: string;
-
-            /**
-             * Creates a new CSVOptions instance using the specified properties.
-             * @param {cockroach.roachpb.CSVOptions$Properties=} [properties] Properties to set
-             * @returns {cockroach.roachpb.CSVOptions} CSVOptions instance
-             */
-            public static create(properties?: cockroach.roachpb.CSVOptions$Properties): cockroach.roachpb.CSVOptions;
-
-            /**
-             * Encodes the specified CSVOptions message. Does not implicitly {@link cockroach.roachpb.CSVOptions.verify|verify} messages.
-             * @param {cockroach.roachpb.CSVOptions$Properties} message CSVOptions message or plain object to encode
-             * @param {$protobuf.Writer} [writer] Writer to encode to
-             * @returns {$protobuf.Writer} Writer
-             */
-            public static encode(message: cockroach.roachpb.CSVOptions$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
-
-            /**
-             * Encodes the specified CSVOptions message, length delimited. Does not implicitly {@link cockroach.roachpb.CSVOptions.verify|verify} messages.
-             * @param {cockroach.roachpb.CSVOptions$Properties} message CSVOptions message or plain object to encode
-             * @param {$protobuf.Writer} [writer] Writer to encode to
-             * @returns {$protobuf.Writer} Writer
-             */
-            public static encodeDelimited(message: cockroach.roachpb.CSVOptions$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
-
-            /**
-             * Decodes a CSVOptions message from the specified reader or buffer.
-             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-             * @param {number} [length] Message length if known beforehand
-             * @returns {cockroach.roachpb.CSVOptions} CSVOptions
-             * @throws {Error} If the payload is not a reader or valid buffer
-             * @throws {$protobuf.util.ProtocolError} If required fields are missing
-             */
-            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.roachpb.CSVOptions;
-
-            /**
-             * Decodes a CSVOptions message from the specified reader or buffer, length delimited.
-             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-             * @returns {cockroach.roachpb.CSVOptions} CSVOptions
-             * @throws {Error} If the payload is not a reader or valid buffer
-             * @throws {$protobuf.util.ProtocolError} If required fields are missing
-             */
-            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.roachpb.CSVOptions;
-
-            /**
-             * Verifies a CSVOptions message.
-             * @param {Object.<string,*>} message Plain object to verify
-             * @returns {?string} `null` if valid, otherwise the reason why it is not
-             */
-            public static verify(message: { [k: string]: any }): string;
-
-            /**
-             * Creates a CSVOptions message from a plain object. Also converts values to their respective internal types.
-             * @param {Object.<string,*>} object Plain object
-             * @returns {cockroach.roachpb.CSVOptions} CSVOptions
-             */
-            public static fromObject(object: { [k: string]: any }): cockroach.roachpb.CSVOptions;
-
-            /**
-             * Creates a CSVOptions message from a plain object. Also converts values to their respective internal types.
-             * This is an alias of {@link cockroach.roachpb.CSVOptions.fromObject}.
-             * @function
-             * @param {Object.<string,*>} object Plain object
-             * @returns {cockroach.roachpb.CSVOptions} CSVOptions
-             */
-            public static from(object: { [k: string]: any }): cockroach.roachpb.CSVOptions;
-
-            /**
-             * Creates a plain object from a CSVOptions message. Also converts values to other types if specified.
-             * @param {cockroach.roachpb.CSVOptions} message CSVOptions
-             * @param {$protobuf.ConversionOptions} [options] Conversion options
-             * @returns {Object.<string,*>} Plain object
-             */
-            public static toObject(message: cockroach.roachpb.CSVOptions, options?: $protobuf.ConversionOptions): { [k: string]: any };
-
-            /**
-             * Creates a plain object from this CSVOptions message. Also converts values to other types if specified.
-             * @param {$protobuf.ConversionOptions} [options] Conversion options
-             * @returns {Object.<string,*>} Plain object
-             */
-            public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
-
-            /**
-             * Converts this CSVOptions to JSON.
-             * @returns {Object.<string,*>} JSON object
-             */
-            public toJSON(): { [k: string]: any };
-        }
-
         type Attributes$Properties = {
             attrs?: string[];
         };
@@ -18166,6 +18039,133 @@ export namespace cockroach {
 
             /**
              * Converts this Version to JSON.
+             * @returns {Object.<string,*>} JSON object
+             */
+            public toJSON(): { [k: string]: any };
+        }
+
+        type CSVOptions$Properties = {
+            comma?: number;
+            comment?: number;
+            nullif?: string;
+        };
+
+        /**
+         * Constructs a new CSVOptions.
+         * @exports cockroach.roachpb.CSVOptions
+         * @constructor
+         * @param {cockroach.roachpb.CSVOptions$Properties=} [properties] Properties to set
+         */
+        class CSVOptions {
+
+            /**
+             * Constructs a new CSVOptions.
+             * @exports cockroach.roachpb.CSVOptions
+             * @constructor
+             * @param {cockroach.roachpb.CSVOptions$Properties=} [properties] Properties to set
+             */
+            constructor(properties?: cockroach.roachpb.CSVOptions$Properties);
+
+            /**
+             * CSVOptions comma.
+             * @type {number}
+             */
+            public comma: number;
+
+            /**
+             * CSVOptions comment.
+             * @type {number}
+             */
+            public comment: number;
+
+            /**
+             * CSVOptions nullif.
+             * @type {string}
+             */
+            public nullif: string;
+
+            /**
+             * Creates a new CSVOptions instance using the specified properties.
+             * @param {cockroach.roachpb.CSVOptions$Properties=} [properties] Properties to set
+             * @returns {cockroach.roachpb.CSVOptions} CSVOptions instance
+             */
+            public static create(properties?: cockroach.roachpb.CSVOptions$Properties): cockroach.roachpb.CSVOptions;
+
+            /**
+             * Encodes the specified CSVOptions message. Does not implicitly {@link cockroach.roachpb.CSVOptions.verify|verify} messages.
+             * @param {cockroach.roachpb.CSVOptions$Properties} message CSVOptions message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            public static encode(message: cockroach.roachpb.CSVOptions$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified CSVOptions message, length delimited. Does not implicitly {@link cockroach.roachpb.CSVOptions.verify|verify} messages.
+             * @param {cockroach.roachpb.CSVOptions$Properties} message CSVOptions message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            public static encodeDelimited(message: cockroach.roachpb.CSVOptions$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a CSVOptions message from the specified reader or buffer.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {cockroach.roachpb.CSVOptions} CSVOptions
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.roachpb.CSVOptions;
+
+            /**
+             * Decodes a CSVOptions message from the specified reader or buffer, length delimited.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {cockroach.roachpb.CSVOptions} CSVOptions
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.roachpb.CSVOptions;
+
+            /**
+             * Verifies a CSVOptions message.
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {?string} `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): string;
+
+            /**
+             * Creates a CSVOptions message from a plain object. Also converts values to their respective internal types.
+             * @param {Object.<string,*>} object Plain object
+             * @returns {cockroach.roachpb.CSVOptions} CSVOptions
+             */
+            public static fromObject(object: { [k: string]: any }): cockroach.roachpb.CSVOptions;
+
+            /**
+             * Creates a CSVOptions message from a plain object. Also converts values to their respective internal types.
+             * This is an alias of {@link cockroach.roachpb.CSVOptions.fromObject}.
+             * @function
+             * @param {Object.<string,*>} object Plain object
+             * @returns {cockroach.roachpb.CSVOptions} CSVOptions
+             */
+            public static from(object: { [k: string]: any }): cockroach.roachpb.CSVOptions;
+
+            /**
+             * Creates a plain object from a CSVOptions message. Also converts values to other types if specified.
+             * @param {cockroach.roachpb.CSVOptions} message CSVOptions
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            public static toObject(message: cockroach.roachpb.CSVOptions, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+            /**
+             * Creates a plain object from this CSVOptions message. Also converts values to other types if specified.
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this CSVOptions to JSON.
              * @returns {Object.<string,*>} JSON object
              */
             public toJSON(): { [k: string]: any };
