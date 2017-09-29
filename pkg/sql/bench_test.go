@@ -509,16 +509,25 @@ func runBenchmarkScan(b *testing.B, db *gosql.DB, count int, limit int) {
 		b.Fatal(err)
 	}
 
-	var buf bytes.Buffer
-	buf.WriteString(`INSERT INTO bench.scan VALUES `)
-	for i := 0; i < count; i++ {
-		if i > 0 {
-			buf.WriteString(", ")
+	inserted := 0
+	for inserted < count {
+		const maxInsertSize = 100000
+		insertBatch := count - inserted
+		if insertBatch > maxInsertSize {
+			insertBatch = maxInsertSize
 		}
-		fmt.Fprintf(&buf, "(%d)", i)
-	}
-	if _, err := db.Exec(buf.String()); err != nil {
-		b.Fatal(err)
+		var buf bytes.Buffer
+		buf.WriteString(`INSERT INTO bench.scan VALUES `)
+		for i := 0; i < insertBatch; i++ {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			fmt.Fprintf(&buf, "(%d)", i+inserted)
+		}
+		if _, err := db.Exec(buf.String()); err != nil {
+			b.Fatal(err)
+		}
+		inserted += insertBatch
 	}
 
 	query := `SELECT * FROM bench.scan`
@@ -553,7 +562,7 @@ func runBenchmarkScan(b *testing.B, db *gosql.DB, count int, limit int) {
 
 func BenchmarkScan(b *testing.B) {
 	forEachDB(b, func(b *testing.B, db *gosql.DB) {
-		for _, count := range []int{1, 10, 100, 1000, 10000} {
+		for _, count := range []int{1, 10, 100, 1000, 10000, 100000, 1000000} {
 			b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
 				for _, limit := range []int{0, 1, 10, 100} {
 					b.Run(fmt.Sprintf("limit=%d", limit), func(b *testing.B) {
