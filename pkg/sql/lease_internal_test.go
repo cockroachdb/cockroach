@@ -411,7 +411,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 	// Try to trigger the race repeatedly: race an AcquireByName against a
 	// Release.
-	// tableChan acts as a barrier, synchornizing the two routines at every
+	// tableChan acts as a barrier, synchronizing the two routines at every
 	// iteration.
 	tableChan := make(chan *sqlbase.TableDescriptor)
 	errChan := make(chan error)
@@ -557,4 +557,257 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	wg.Wait()
+}
+
+// Test for a race where after acquiring a lease with acquireFreshestFromStore and
+// acquire simultaneously, acquire releases the lease before
+// acquireFreshestFromStore completes. This happens because of the lock handoff
+// to the async acquireNodeLease.
+// The error manifests as a panic in acquireFreshestFromStore.
+func TestLeaseReleaseImmediatelyWithAcquireFreshestFromStore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	removalTracker := NewLeaseRemovalTracker()
+	testingKnobs := base.TestingKnobs{
+		SQLLeaseManager: &LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: LeaseStoreTestingKnobs{
+				LeaseReleasedEvent: removalTracker.LeaseRemovedNotification,
+			},
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(
+		t, base.TestServerArgs{Knobs: testingKnobs})
+	defer s.Stopper().Stop(context.TODO())
+	leaseManager := s.LeaseManager().(*LeaseManager)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
+	// Populate the name cache.
+	ctx := context.TODO()
+	table, _, err := leaseManager.AcquireByName(ctx, leaseManager.clock.Now(), tableDesc.ParentID, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := leaseManager.Release(table); err != nil {
+		t.Fatal(err)
+	}
+
+	// Pretend the table has been dropped, so that when we release leases on it,
+	// they are removed from the tableNameCache too.
+	tableState := leaseManager.findTableState(tableDesc.ID, true)
+	tableState.mu.Lock()
+	tableState.mu.dropped = true
+	tableState.mu.Unlock()
+
+	// Try to trigger the race repeatedly: race an acquireFreshestFromStore
+	// against a AquireByName and Release.
+	// tableChan acts as a barrier, synchronizing the two routines at every
+	// iteration.
+	tableChan := make(chan bool)
+	type Result struct {
+		table *sqlbase.TableDescriptor
+		err   error
+	}
+	resultChan := make(chan Result)
+	go func() {
+		for range tableChan {
+			result := Result{}
+			tableByName, _, err := leaseManager.AcquireByName(ctx, leaseManager.clock.Now(), tableDesc.ParentID, "test")
+			if err != nil {
+				// Move errors to the main goroutine.
+				result.err = err
+				resultChan <- result
+			}
+			result.table = tableByName
+
+			// Move errors to the main goroutine.
+			result.err = leaseManager.Release(tableByName)
+			resultChan <- result
+		}
+	}()
+
+	for i := 0; i < 50; i++ {
+		ctx := context.TODO()
+
+		// This test will need to wait until leases are removed from the store
+		// before creating new leases because the jitter used in the leases'
+		// expiration causes duplicate key errors when trying to create new
+		// leases. This is not a problem in production, since leases are not
+		// removed from the store until they expire, and the jitter is small
+		// compared to their lifetime, but it is a problem in this test because
+		// we churn through leases quickly.
+		tracker := removalTracker.TrackRemoval(table)
+		// Start the race: signal the other guy to release, and we do a
+		// acquireFreshestFromStore at the same time.
+		tableChan <- true
+		freshestTable, _, err := leaseManager.acquireFreshestFromStore(ctx, tableDesc.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tracker2 := removalTracker.TrackRemoval(freshestTable)
+		// See if there was an error releasing lease.
+		result := <-resultChan
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Depending on how the race went, there are a few cases:
+		// - acquireFreshestFromStore began, then AcquireByName got the finished lease
+		//   and released it before acquireFreshestFromStore finished. This is the
+		//   race we are testing for.
+		// - acquireFreshestFromStore finished before Release was called.
+		// - AcquireByName ran first, got a leaase then acquireFreshestFromStore got
+		//   a different lease. We don't care about Release as it released a different
+		//   lease.
+		if freshestTable.ID == result.table.ID {
+			// Case 1 and 2
+			if err := leaseManager.Release(freshestTable); err != nil {
+				t.Fatal(err)
+			}
+			if err := tracker.WaitForRemoval(); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			// Case 3
+			if err := leaseManager.Release(freshestTable); err != nil {
+				t.Fatal(err)
+			}
+			if err := tracker2.WaitForRemoval(); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	close(tableChan)
+}
+
+// Test for a race where after acquiring a lease with two acquires
+// simultaneously, one routine releases the lease before the other completes.
+// This happens because of the lock handoff to the async acquireNodeLease.
+// The error manifests as a panic in tableState.acquire from findForTimestamp.
+func TestLeaseReleaseImmediatelyWithConcurrentAcquires(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	removalTracker := NewLeaseRemovalTracker()
+	testingKnobs := base.TestingKnobs{
+		SQLLeaseManager: &LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: LeaseStoreTestingKnobs{
+				LeaseReleasedEvent: removalTracker.LeaseRemovedNotification,
+			},
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(
+		t, base.TestServerArgs{Knobs: testingKnobs})
+	defer s.Stopper().Stop(context.TODO())
+	leaseManager := s.LeaseManager().(*LeaseManager)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
+	// Populate the name cache.
+	ctx := context.TODO()
+	table, _, err := leaseManager.AcquireByName(ctx, leaseManager.clock.Now(), tableDesc.ParentID, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := leaseManager.Release(table); err != nil {
+		t.Fatal(err)
+	}
+
+	// Pretend the table has been dropped, so that when we release leases on it,
+	// they are removed from the tableNameCache too.
+	tableState := leaseManager.findTableState(tableDesc.ID, true)
+	tableState.mu.Lock()
+	tableState.mu.dropped = true
+	tableState.mu.Unlock()
+
+	// Try to trigger the race repeatedly: race a second AcquireByName
+	// against a AquireByName and Release.
+	// tableChan acts as a barrier, synchronizing the two routines at every
+	// iteration.
+	tableChan := make(chan bool)
+	type Result struct {
+		table *sqlbase.TableDescriptor
+		err   error
+	}
+	resultChan := make(chan Result)
+	go func() {
+		for range tableChan {
+			result := Result{}
+			tableByName, _, err := leaseManager.AcquireByName(ctx, leaseManager.clock.Now(), tableDesc.ParentID, "test")
+			if err != nil {
+				// Move errors to the main goroutine.
+				result.err = err
+				resultChan <- result
+			}
+			result.table = tableByName
+
+			// Move errors to the main goroutine.
+			result.err = leaseManager.Release(tableByName)
+			resultChan <- result
+		}
+	}()
+
+	for i := 0; i < 50; i++ {
+		ctx := context.TODO()
+
+		// This test will need to wait until leases are removed from the store
+		// before creating new leases because the jitter used in the leases'
+		// expiration causes duplicate key errors when trying to create new
+		// leases. This is not a problem in production, since leases are not
+		// removed from the store until they expire, and the jitter is small
+		// compared to their lifetime, but it is a problem in this test because
+		// we churn through leases quickly.
+		tracker := removalTracker.TrackRemoval(table)
+		// Start the race: signal the other guy to release, and we do a
+		// acquireFreshestFromStore at the same time.
+		tableChan <- true
+		tableByName, _, err := leaseManager.AcquireByName(ctx, leaseManager.clock.Now(), tableDesc.ParentID, "test")
+		// If we failed to handle the race condition, this call will error when
+		// calling t.findForTimestamp as no valid lease exists.
+		if err != nil {
+			t.Fatal(err)
+		}
+		tracker2 := removalTracker.TrackRemoval(tableByName)
+		// See if there was an error releasing lease.
+		result := <-resultChan
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Depending on how the race went, there are a few cases:
+		// - One acquire begins, then the second acquire begins, completes, and
+		//   releases before the first finishes. This is the
+		//   race we are testing for.
+		// - One acquire begins and completes before the second is able to release
+		//   the lease.
+		if tableByName.ID == result.table.ID {
+			// Case 1. In a succesfull case, we've gotten a different lease.
+			if err := leaseManager.Release(tableByName); err != nil {
+				t.Fatal(err)
+			}
+			if err := tracker.WaitForRemoval(); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			// Case 2.
+			if err := leaseManager.Release(tableByName); err != nil {
+				t.Fatal(err)
+			}
+			if err := tracker2.WaitForRemoval(); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	close(tableChan)
 }
