@@ -15,6 +15,8 @@ build/builder.sh env \
 
 build/builder.sh make lint 2>&1 | tee artifacts/lint.log | go-test-teamcity
 
+# Generation of docs requires Railroad.jar to avoid excessive API requests.
+curl https://edge-binaries.cockroachdb.com/tools/Railroad.jar.enc | openssl aes-256-cbc -d -out build/Railroad.jar -k "$RAILROAD_JAR_KEY"
 build/builder.sh make generate PKG="./pkg/... ./docs/..."
 build/builder.sh /bin/bash -c '! git status --porcelain | read || (git status; git diff -a 1>&2; exit 1)'
 

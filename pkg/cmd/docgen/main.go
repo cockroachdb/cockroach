@@ -24,9 +24,9 @@ import (
 var rootCmd = func() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "docgen",
-		Short: "docgen generates documentation for cockroachdb's SQL functions",
+		Short: "docgen generates documentation for cockroachdb's SQL functions and grammar",
 	}
-	cmd.AddCommand(functionsCmd)
+	cmd.AddCommand(functionsCmd, diagramCmd)
 	return cmd
 }()
 
