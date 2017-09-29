@@ -18,30 +18,49 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
-func generateFuncsAndOps(outDir string) {
-	if err := ioutil.WriteFile(
-		filepath.Join(outDir, "functions.md"), generateFunctions(parser.Builtins, true), 0644,
-	); err != nil {
-		panic(err)
-	}
-	if err := ioutil.WriteFile(
-		filepath.Join(outDir, "aggregates.md"), generateFunctions(parser.Aggregates, false), 0644,
-	); err != nil {
-		panic(err)
-	}
-	if err := ioutil.WriteFile(
-		filepath.Join(outDir, "operators.md"), generateOperators(), 0644,
-	); err != nil {
-		panic(err)
-	}
+var functionsCmd = &cobra.Command{
+	Use:   "functions <output-dir>",
+	Short: "generate markdown documentation of functions and operators",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		outDir := "docs/generated/sql"
+		if len(args) > 0 {
+			outDir = args[0]
+		}
+
+		if stat, err := os.Stat(outDir); err != nil || !stat.IsDir() {
+			return errors.Errorf("%s does not exist", outDir)
+		}
+
+		if err := ioutil.WriteFile(
+			filepath.Join(outDir, "functions.md"), generateFunctions(parser.Builtins, true), 0644,
+		); err != nil {
+			return err
+		}
+		if err := ioutil.WriteFile(
+			filepath.Join(outDir, "aggregates.md"), generateFunctions(parser.Aggregates, false), 0644,
+		); err != nil {
+			return err
+		}
+		if err := ioutil.WriteFile(
+			filepath.Join(outDir, "operators.md"), generateOperators(), 0644,
+		); err != nil {
+			return err
+		}
+
+		return nil
+	},
 }
 
 type operation struct {
