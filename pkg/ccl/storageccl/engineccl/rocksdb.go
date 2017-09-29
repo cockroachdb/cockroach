@@ -52,11 +52,11 @@ func VerifyBatchRepr(
 		for r.Next() {
 			switch r.BatchType() {
 			case engine.BatchTypeValue:
-				mvccKey, err := engine.DecodeKey(r.UnsafeKey())
+				mvccKey, err := r.MVCCKey()
 				if err != nil {
 					return enginepb.MVCCStats{}, errors.Wrapf(err, "verifying key/value checksums")
 				}
-				v := roachpb.Value{RawBytes: r.UnsafeValue()}
+				v := roachpb.Value{RawBytes: r.Value()}
 				if err := v.Verify(mvccKey.Key); err != nil {
 					return enginepb.MVCCStats{}, err
 				}

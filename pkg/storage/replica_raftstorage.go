@@ -229,6 +229,7 @@ func iterateEntries(
 		true,  /* consistent */
 		nil,   /* txn */
 		false, /* !reverse */
+		false,
 		scanFunc,
 	)
 	return err

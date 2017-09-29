@@ -230,6 +230,10 @@ message ScanRequest {
   reserved 2;
 
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // return the key/value pairs in batch repr format rather than
+  // KeyValue messages. This reduces allocations on both the sending
+  // and receiving sides is a marginally more compact.
+  optional bool return_batch_repr = 3 [(gogoproto.nullable) = false];
 }
 
 // A ScanResponse is the return value from the Scan() method.
@@ -237,6 +241,7 @@ message ScanResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Empty if no rows were scanned.
   repeated KeyValue rows = 2 [(gogoproto.nullable) = false];
+  optional bytes batch_repr = 3;
 }
 
 // A ReverseScanRequest is the argument to the ReverseScan() method. It specifies the
@@ -248,6 +253,10 @@ message ReverseScanRequest {
   reserved 2;
 
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // return the key/value pairs in batch repr format rather than
+  // KeyValue messages. This reduces allocations on both the sending
+  // and receiving sides is a marginally more compact.
+  optional bool return_batch_repr = 3 [(gogoproto.nullable) = false];
 }
 
 // A ReverseScanResponse is the return value from the ReverseScan() method.
@@ -255,6 +264,7 @@ message ReverseScanResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Empty if no rows were scanned.
   repeated KeyValue rows = 2 [(gogoproto.nullable) = false];
+  optional bytes batch_repr = 3;
 }
 
 // A CheckConsistencyRequest is the argument to the CheckConsistency() method.

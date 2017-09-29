@@ -1043,7 +1043,7 @@ func IterateRangeDescriptors(
 	}
 
 	_, err := engine.MVCCIterate(ctx, eng, start, end, hlc.MaxTimestamp, false /* !consistent */, nil, /* txn */
-		false /* !reverse */, kvToDesc)
+		false /* !reverse */, false, kvToDesc)
 	log.Eventf(ctx, "iterated over %d keys to find %d range descriptors (by suffix: %v)",
 		allCount, matchCount, bySuffix)
 	return err

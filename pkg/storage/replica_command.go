@@ -423,12 +423,31 @@ func evalScan(
 	h := cArgs.Header
 	reply := resp.(*roachpb.ScanResponse)
 
-	rows, resumeSpan, intents, err := engine.MVCCScan(ctx, batch, args.Key, args.EndKey,
-		cArgs.MaxKeys, h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
+	if !args.ReturnBatchRepr {
+		rows, resumeSpan, intents, err := engine.MVCCScan(ctx, batch, args.Key, args.EndKey,
+			cArgs.MaxKeys, h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
 
-	reply.NumKeys = int64(len(rows))
-	reply.ResumeSpan = resumeSpan
-	reply.Rows = rows
+		reply.NumKeys = int64(len(rows))
+		reply.ResumeSpan = resumeSpan
+		reply.Rows = rows
+		return intentsToEvalResult(intents, args, true /* alwaysReturn */), err
+	}
+
+	var builder engine.RocksDBBatchBuilder
+	intents, err := engine.MVCCIterate(ctx, batch, args.Key, args.EndKey,
+		h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn,
+		false /* forwawrd */, true, /* allowUnsafe */
+		func(kv roachpb.KeyValue) (bool, error) {
+			if int64(builder.Count()) == cArgs.MaxKeys {
+				reply.ResumeSpan = &roachpb.Span{Key: kv.Key, EndKey: args.EndKey}
+				return true, nil
+			}
+			// builder.Put(engine.MVCCKey{Key: kv.Key, Timestamp: kv.Value.Timestamp}, kv.Value.RawBytes)
+			builder.Put(engine.MVCCKey{Key: kv.Key}, kv.Value.RawBytes)
+			return false, nil
+		})
+	reply.NumKeys = int64(builder.Count())
+	reply.BatchRepr = builder.Finish()
 	return intentsToEvalResult(intents, args, true /* alwaysReturn */), err
 }
 
@@ -450,6 +469,8 @@ func evalReverseScan(
 	reply.ResumeSpan = resumeSpan
 	reply.Rows = rows
 	return intentsToEvalResult(intents, args, true /* alwaysReturn */), err
+
+	// TODO(peter): Add support for args.ReturnBatchRepr.
 }
 
 func verifyTransaction(h roachpb.Header, args roachpb.Request) error {

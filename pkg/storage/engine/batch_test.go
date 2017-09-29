@@ -261,12 +261,12 @@ func TestBatchRepr(t *testing.T) {
 			}
 			switch r.BatchType() {
 			case BatchTypeDeletion:
-				ops = append(ops, fmt.Sprintf("delete(%s)", string(r.UnsafeKey())))
+				ops = append(ops, fmt.Sprintf("delete(%s)", string(r.Key())))
 			case BatchTypeValue:
-				ops = append(ops, fmt.Sprintf("put(%s,%s)", string(r.UnsafeKey()), string(r.UnsafeValue())))
+				ops = append(ops, fmt.Sprintf("put(%s,%s)", string(r.Key()), string(r.Value())))
 			case BatchTypeMerge:
 				// The merge value is a protobuf and not easily displayable.
-				ops = append(ops, fmt.Sprintf("merge(%s)", string(r.UnsafeKey())))
+				ops = append(ops, fmt.Sprintf("merge(%s)", string(r.Key())))
 			}
 		}
 		if err != nil {
@@ -1140,7 +1140,7 @@ func TestDecodeKey(t *testing.T) {
 			if !r.Next() {
 				t.Fatalf("could not get the first entry: %+v", r.Error())
 			}
-			decodedKey, err := DecodeKey(r.UnsafeKey())
+			decodedKey, err := DecodeKey(r.Key())
 			if err != nil {
 				t.Fatalf("unexpected err: %+v", err)
 			}

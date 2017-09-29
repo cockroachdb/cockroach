@@ -123,7 +123,7 @@ func (sc *AbortCache) Iterate(
 	ctx context.Context, e engine.Reader, f func([]byte, roachpb.AbortCacheEntry),
 ) {
 	_, _ = engine.MVCCIterate(ctx, e, sc.min(), sc.max(), hlc.Timestamp{},
-		true /* consistent */, nil /* txn */, false, /* !reverse */
+		true /* consistent */, nil /* txn */, false /* !reverse */, false,
 		func(kv roachpb.KeyValue) (bool, error) {
 			var entry roachpb.AbortCacheEntry
 			if _, err := keys.DecodeAbortCacheKey(kv.Key, nil); err != nil {
