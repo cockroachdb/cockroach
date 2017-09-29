@@ -46,9 +46,15 @@ import (
 
 var (
 	// LeaseDuration is the mean duration a lease will be acquired for. The
-	// actual duration is jittered in the range
-	// [0.75,1.25]*LeaseDuration. Exported for testing purposes only.
+	// actual duration is jittered using LeaseJitterMultiplier.
+	// Exported for testing purposes only.
 	LeaseDuration = 5 * time.Minute
+	// LeaseJitterMultiplier is the factor that we use to randomly jitter the lease
+	// duration when acquiring a new lease and the lease renewal timeout. The
+	// range of the actual lease duration will be
+	// [(1-LeaseJitterMultiplier) * LeaseDuration, (1+LeaseJitterMultiplier) * LeaseDuration]
+	// Exported for testing purposes only.
+	LeaseJitterMultiplier = 0.25
 )
 
 // tableVersionState holds the state for a table version. This includes
@@ -123,9 +129,9 @@ type LeaseStore struct {
 }
 
 // jitteredLeaseDuration returns a randomly jittered duration from the interval
-// [0.75 * leaseDuration, 1.25 * leaseDuration].
+// [(1-LeaseJitterMultiplier) * leaseDuration, (1+LeaseJitterMultiplier) * leaseDuration].
 func jitteredLeaseDuration() time.Duration {
-	return time.Duration(float64(LeaseDuration) * (0.75 + 0.5*rand.Float64()))
+	return time.Duration(float64(LeaseDuration) * (1 - LeaseJitterMultiplier + 2*LeaseJitterMultiplier*rand.Float64()))
 }
 
 // acquire a lease on the most recent version of a table descriptor.
@@ -563,6 +569,12 @@ type tableState struct {
 		// If set, leases are released from the store as soon as their
 		// refcount drops to 0, as opposed to waiting until they expire.
 		dropped bool
+		// latestAcquisitionErr is used to communicating errors received
+		// when acquiring a lease on the asynchronous task. It is only
+		// non-nil if there have been no errors or if there was an error and
+		// a routine blocking on acquisition has not picked up the error
+		// yet. It is also cleared when we begin another acquisition.
+		latestAcquisitionErr error
 	}
 }
 
@@ -574,17 +586,29 @@ func (t *tableState) acquire(
 ) (*tableVersionState, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
 	// Wait for any existing lease acquisition.
 	t.acquireWait()
 
 	// Acquire a lease if no lease exists or if the latest lease is
-	// about to expire.
-	if s := t.mu.active.findNewest(); s == nil || s.hasExpired(timestamp) {
-		if err := t.acquireNodeLease(ctx, m, hlc.Timestamp{}); err != nil {
-			return nil, err
+	// about to expire. Repeatedly check to ensure either a lease is
+	// acquired or we receive an error. This is required for when another
+	// routine acquires a lease and releases it immediately.
+	for {
+		if s := t.mu.active.findNewest(); s == nil || s.hasExpired(timestamp) {
+			err := t.acquireNodeLease(ctx, m, hlc.Timestamp{})
+			if err != nil {
+				return nil, err
+			}
+			t.acquireWait()
+			if err := t.mu.latestAcquisitionErr; err != nil {
+				t.mu.latestAcquisitionErr = nil
+				return nil, err
+			}
+		} else {
+			break
 		}
 	}
-
 	return t.findForTimestamp(ctx, timestamp, m)
 }
 
@@ -710,7 +734,16 @@ func (t *tableState) acquireFreshestFromStoreLocked(ctx context.Context, m *Leas
 		minExpirationTime = newestTable.expiration.Add(int64(time.Millisecond), 0)
 	}
 
-	return t.acquireNodeLease(ctx, m, minExpirationTime)
+	// Begin acquiring a new lease and wait for it to finish
+	err := t.acquireNodeLease(ctx, m, minExpirationTime)
+	if err != nil {
+		return err
+	}
+	t.acquireWait()
+	err = t.mu.latestAcquisitionErr
+	// Reset the async acquisition error
+	t.mu.latestAcquisitionErr = nil
+	return err
 }
 
 // upsertLocked inserts a lease for a particular table version.
@@ -776,6 +809,8 @@ func (t *tableState) acquireWait() {
 // jitter in the expiration time, and guarantee that we get a lease that will be
 // inserted at the end of the lease set (i.e. it will be returned by
 // findNewest() from now on).
+// acquireNodeLease begins an asynchronous process to acquire a lease.
+// Use acquireWait to block until the lease is acquired.
 //
 // t.mu needs to be locked.
 func (t *tableState) acquireNodeLease(
@@ -785,22 +820,56 @@ func (t *tableState) acquireNodeLease(
 		return errors.New("cannot acquire lease when draining")
 	}
 
-	// Notify when lease has been acquired.
+	// Notify when lease is being acquired.
 	t.mu.acquiring = make(chan struct{})
+	t.mu.latestAcquisitionErr = nil
+
+	err := t.stopper.RunAsyncTask(
+		context.Background(), "sql.tableState: async table lease acquisition", func(ctx context.Context) {
+			err := t.acquireNodeLeaseBlocking(ctx, m, minExpirationTime)
+			if err != nil {
+				log.Error(ctx, errors.Wrapf(err, "Async TableDescriptor lease acquisition error"))
+			}
+		})
+
+	if err != nil {
+		close(t.mu.acquiring)
+		t.mu.acquiring = nil
+	}
+
+	return err
+}
+
+// acquireNodeLeaseBlocking does the blocking operation for acquiring a
+// table descriptor lease.
+//
+// t.mu.acquiring must be initialized before calling.
+func (t *tableState) acquireNodeLeaseBlocking(
+	ctx context.Context, m *LeaseManager, minExpirationTime hlc.Timestamp,
+) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	defer func() {
 		close(t.mu.acquiring)
 		t.mu.acquiring = nil
 	}()
-	// We're called with mu locked, but need to unlock it during lease
-	// acquisition.
+
+	if m.isDraining() {
+		err := errors.New("cannot acquire lease when draining")
+		t.mu.latestAcquisitionErr = err
+		return err
+	}
+
 	t.mu.Unlock()
 	table, err := m.LeaseStore.acquire(ctx, t.id, minExpirationTime)
 	t.mu.Lock()
 	if err != nil {
+		t.mu.latestAcquisitionErr = err
 		return err
 	}
 	t.upsertLocked(ctx, table, m)
 	t.tableNameCache.insert(table)
+
 	return nil
 }
 
