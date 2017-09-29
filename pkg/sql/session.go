@@ -1243,6 +1243,7 @@ func (ts *txnState) updateStateAndCleanupOnErr(err error, e *Executor) error {
 		// Note that TransactionAborted is also a retriable error, handled here;
 		// in this case cleanup for the txn has been done for us under the hood.
 		ts.SetState(RestartWait)
+		ts.mu.txn.ResetDeadline()
 	}
 	return err
 }
@@ -1314,8 +1315,6 @@ func (scc *schemaChangerCollection) queueSchemaChanger(schemaChanger SchemaChang
 func (scc *schemaChangerCollection) execSchemaChanges(
 	ctx context.Context, e *Executor, session *Session,
 ) error {
-	// Release the leases once a transaction is complete.
-	session.tables.releaseTables(ctx)
 	if e.cfg.SchemaChangerTestingKnobs.SyncFilter != nil {
 		e.cfg.SchemaChangerTestingKnobs.SyncFilter(TestingSchemaChangerCollection{scc})
 	}
