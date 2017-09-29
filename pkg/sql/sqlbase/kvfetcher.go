@@ -256,22 +256,14 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	var sawResumeSpan bool
 	for _, resp := range f.responses {
 		reply := resp.GetInner()
+		header := reply.Header()
 
-		var numKVs int
-		switch t := reply.(type) {
-		case *roachpb.ScanResponse:
-			numKVs = len(t.Rows)
-		case *roachpb.ReverseScanResponse:
-			numKVs = len(t.Rows)
-		}
-
-		if numKVs > 0 && sawResumeSpan {
+		if header.NumKeys > 0 && sawResumeSpan {
 			return errors.Errorf(
 				"span with results after resume span; new spans: %s",
 				PrettySpans(f.spans, 0))
 		}
 
-		header := reply.Header()
 		if resumeSpan := header.ResumeSpan; resumeSpan != nil {
 			// A span needs to be resumed.
 			f.fetchEnd = false
@@ -298,8 +290,8 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 
 // nextKV returns the next key/value (initiating fetches as necessary). When
 // there are no more keys, returns false and an empty key/value.
-func (f *txnKVFetcher) nextKV(ctx context.Context) (bool, client.KeyValue, error) {
-	var kv client.KeyValue
+func (f *txnKVFetcher) nextKV(ctx context.Context) (bool, roachpb.KeyValue, error) {
+	var kv roachpb.KeyValue
 	for {
 		for len(f.kvs) == 0 && len(f.responses) > 0 {
 			reply := f.responses[0].GetInner()
@@ -314,7 +306,9 @@ func (f *txnKVFetcher) nextKV(ctx context.Context) (bool, client.KeyValue, error
 		}
 
 		if len(f.kvs) > 0 {
-			break
+			kv = f.kvs[0]
+			f.kvs = f.kvs[1:]
+			return true, kv, nil
 		}
 		if f.fetchEnd {
 			return false, kv, nil
@@ -323,9 +317,4 @@ func (f *txnKVFetcher) nextKV(ctx context.Context) (bool, client.KeyValue, error
 			return false, kv, err
 		}
 	}
-
-	kv.Key = f.kvs[0].Key
-	kv.Value = &f.kvs[0].Value
-	f.kvs = f.kvs[1:]
-	return true, kv, nil
 }
