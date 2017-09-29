@@ -129,7 +129,10 @@ class Range extends React.Component<RangeProps, {}> {
         (info => RangeInfo.IsLeader(info)),
         (info => FixLong(info.raft_state.applied).toNumber()),
         (info => FixLong(info.raft_state.hard_state.term).toNumber()),
-        (info => RangeInfo.GetLocalReplica(info).replica_id),
+        (info => {
+          const localReplica = RangeInfo.GetLocalReplica(info);
+          return _.isNil(localReplica) ? 0 : localReplica.replica_id;
+        }),
       ],
       ["desc", "desc", "desc", "asc"],
     );
