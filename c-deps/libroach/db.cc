@@ -2042,8 +2042,6 @@ DBStatus DBImpl::GetStats(DBStatsResult* stats) {
     (int64_t)s->getTickerCount(rocksdb::BLOOM_FILTER_PREFIX_CHECKED);
   stats->bloom_filter_prefix_useful =
     (int64_t)s->getTickerCount(rocksdb::BLOOM_FILTER_PREFIX_USEFUL);
-  stats->memtable_hits = (int64_t)s->getTickerCount(rocksdb::MEMTABLE_HIT);
-  stats->memtable_misses = (int64_t)s->getTickerCount(rocksdb::MEMTABLE_MISS);
   stats->memtable_total_size = memtable_total_size;
   stats->flushes = (int64_t)event_listener->GetFlushes();
   stats->compactions = (int64_t)event_listener->GetCompactions();
