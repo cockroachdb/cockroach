@@ -3,7 +3,7 @@
 
 SHELL = /usr/bin/env bash
 
-TARGETS = sql.go keywords.go reserved_keywords.go helpmap_test.go help_messages.go
+TARGETS = sql.go keywords.go reserved_keywords.go helpmap_test.go help_messages.go doc.go
 .PHONY: $(TARGETS)
 all: $(TARGETS)
 
@@ -75,3 +75,7 @@ help_messages.go: sql.y help.awk
 	awk -f help.awk < $< > $@.tmp || rm $@.tmp
 	mv -f $@.tmp $@
 	gofmt -s -w $@
+
+doc.go:
+	go run ../../cmd/docgen/*.go functions ../../../docs/generated/sql
+	touch doc.go
