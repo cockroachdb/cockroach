@@ -912,7 +912,9 @@ func ExtractIndexKey(
 	return indexKey, err
 }
 
-const datumAllocSize = 16 // Arbitrary, could be tuned.
+// Arbitrary, these could be tuned.
+const initialAllocSize = 1 << 4 // 16
+const maxAllocSize = 1 << 12    // 4096
 
 // DatumAlloc provides batch allocation of datum pointers, amortizing the cost
 // of the allocations.
@@ -933,39 +935,57 @@ type DatumAlloc struct {
 	env               parser.CollationEnvironment
 }
 
+// allocLen returns the new allocation length for a chunk, given the previous
+// allocation length. This implements a bounded exponential chunk size scaling.
+func (a *DatumAlloc) allocLen(prevLen int) int {
+	l := 2 * prevLen
+	if l == 0 {
+		l = initialAllocSize
+	} else if l > maxAllocSize {
+		l = maxAllocSize
+	}
+	return l
+}
+
 // NewDInt allocates a DInt.
 func (a *DatumAlloc) NewDInt(v parser.DInt) *parser.DInt {
 	buf := &a.dintAlloc
-	if len(*buf) == 0 {
-		*buf = make([]parser.DInt, datumAllocSize)
+	l := len(*buf)
+	if l == 0 {
+		l = a.allocLen(cap(*buf))
+		*buf = make([]parser.DInt, l, l)
 	}
-	r := &(*buf)[0]
+	r := &(*buf)[l-1]
 	*r = v
-	*buf = (*buf)[1:]
+	*buf = (*buf)[:l-1]
 	return r
 }
 
 // NewDFloat allocates a DFloat.
 func (a *DatumAlloc) NewDFloat(v parser.DFloat) *parser.DFloat {
 	buf := &a.dfloatAlloc
-	if len(*buf) == 0 {
-		*buf = make([]parser.DFloat, datumAllocSize)
+	l := len(*buf)
+	if l == 0 {
+		l = a.allocLen(cap(*buf))
+		*buf = make([]parser.DFloat, l, l)
 	}
-	r := &(*buf)[0]
+	r := &(*buf)[l-1]
 	*r = v
-	*buf = (*buf)[1:]
+	*buf = (*buf)[:l-1]
 	return r
 }
 
 // NewDString allocates a DString.
 func (a *DatumAlloc) NewDString(v parser.DString) *parser.DString {
 	buf := &a.dstringAlloc
-	if len(*buf) == 0 {
-		*buf = make([]parser.DString, datumAllocSize)
+	l := len(*buf)
+	if l == 0 {
+		l = a.allocLen(cap(*buf))
+		*buf = make([]parser.DString, l, l)
 	}
-	r := &(*buf)[0]
+	r := &(*buf)[l-1]
 	*r = v
-	*buf = (*buf)[1:]
+	*buf = (*buf)[:l-1]
 	return r
 }
 
@@ -977,108 +997,126 @@ func (a *DatumAlloc) NewDName(v parser.DString) parser.Datum {
 // NewDBytes allocates a DBytes.
 func (a *DatumAlloc) NewDBytes(v parser.DBytes) *parser.DBytes {
 	buf := &a.dbytesAlloc
-	if len(*buf) == 0 {
-		*buf = make([]parser.DBytes, datumAllocSize)
+	l := len(*buf)
+	if l == 0 {
+		l = a.allocLen(cap(*buf))
+		*buf = make([]parser.DBytes, l, l)
 	}
-	r := &(*buf)[0]
+	r := &(*buf)[l-1]
 	*r = v
-	*buf = (*buf)[1:]
+	*buf = (*buf)[:l-1]
 	return r
 }
 
 // NewDDecimal allocates a DDecimal.
 func (a *DatumAlloc) NewDDecimal(v parser.DDecimal) *parser.DDecimal {
 	buf := &a.ddecimalAlloc
-	if len(*buf) == 0 {
-		*buf = make([]parser.DDecimal, datumAllocSize)
+	l := len(*buf)
+	if l == 0 {
+		l = a.allocLen(cap(*buf))
+		*buf = make([]parser.DDecimal, l, l)
 	}
-	r := &(*buf)[0]
+	r := &(*buf)[l-1]
 	*r = v
-	*buf = (*buf)[1:]
+	*buf = (*buf)[:l-1]
 	return r
 }
 
 // NewDDate allocates a DDate.
 func (a *DatumAlloc) NewDDate(v parser.DDate) *parser.DDate {
 	buf := &a.ddateAlloc
-	if len(*buf) == 0 {
-		*buf = make([]parser.DDate, datumAllocSize)
+	l := len(*buf)
+	if l == 0 {
+		l = a.allocLen(cap(*buf))
+		*buf = make([]parser.DDate, l, l)
 	}
-	r := &(*buf)[0]
+	r := &(*buf)[l-1]
 	*r = v
-	*buf = (*buf)[1:]
+	*buf = (*buf)[:l-1]
 	return r
 }
 
 // NewDTimestamp allocates a DTimestamp.
 func (a *DatumAlloc) NewDTimestamp(v parser.DTimestamp) *parser.DTimestamp {
 	buf := &a.dtimestampAlloc
-	if len(*buf) == 0 {
-		*buf = make([]parser.DTimestamp, datumAllocSize)
+	l := len(*buf)
+	if l == 0 {
+		l = a.allocLen(cap(*buf))
+		*buf = make([]parser.DTimestamp, l, l)
 	}
-	r := &(*buf)[0]
+	r := &(*buf)[l-1]
 	*r = v
-	*buf = (*buf)[1:]
+	*buf = (*buf)[:l-1]
 	return r
 }
 
 // NewDTimestampTZ allocates a DTimestampTZ.
 func (a *DatumAlloc) NewDTimestampTZ(v parser.DTimestampTZ) *parser.DTimestampTZ {
 	buf := &a.dtimestampTzAlloc
-	if len(*buf) == 0 {
-		*buf = make([]parser.DTimestampTZ, datumAllocSize)
+	l := len(*buf)
+	if l == 0 {
+		l = a.allocLen(cap(*buf))
+		*buf = make([]parser.DTimestampTZ, l, l)
 	}
-	r := &(*buf)[0]
+	r := &(*buf)[l-1]
 	*r = v
-	*buf = (*buf)[1:]
+	*buf = (*buf)[:l-1]
 	return r
 }
 
 // NewDInterval allocates a DInterval.
 func (a *DatumAlloc) NewDInterval(v parser.DInterval) *parser.DInterval {
 	buf := &a.dintervalAlloc
-	if len(*buf) == 0 {
-		*buf = make([]parser.DInterval, datumAllocSize)
+	l := len(*buf)
+	if l == 0 {
+		l = a.allocLen(cap(*buf))
+		*buf = make([]parser.DInterval, l, l)
 	}
-	r := &(*buf)[0]
+	r := &(*buf)[l-1]
 	*r = v
-	*buf = (*buf)[1:]
+	*buf = (*buf)[:l-1]
 	return r
 }
 
 // NewDUuid allocates a DUuid.
 func (a *DatumAlloc) NewDUuid(v parser.DUuid) *parser.DUuid {
 	buf := &a.duuidAlloc
-	if len(*buf) == 0 {
-		*buf = make([]parser.DUuid, datumAllocSize)
+	l := len(*buf)
+	if l == 0 {
+		l = a.allocLen(cap(*buf))
+		*buf = make([]parser.DUuid, l, l)
 	}
-	r := &(*buf)[0]
+	r := &(*buf)[l-1]
 	*r = v
-	*buf = (*buf)[1:]
+	*buf = (*buf)[:l-1]
 	return r
 }
 
 // NewDIPAddr allocates a DIPAddr.
 func (a *DatumAlloc) NewDIPAddr(v parser.DIPAddr) *parser.DIPAddr {
 	buf := &a.dipnetAlloc
-	if len(*buf) == 0 {
-		*buf = make([]parser.DIPAddr, datumAllocSize)
+	l := len(*buf)
+	if l == 0 {
+		l = a.allocLen(cap(*buf))
+		*buf = make([]parser.DIPAddr, l, l)
 	}
-	r := &(*buf)[0]
+	r := &(*buf)[l-1]
 	*r = v
-	*buf = (*buf)[1:]
+	*buf = (*buf)[:l-1]
 	return r
 }
 
 // NewDOid allocates a DOid.
 func (a *DatumAlloc) NewDOid(v parser.DOid) parser.Datum {
 	buf := &a.doidAlloc
-	if len(*buf) == 0 {
-		*buf = make([]parser.DOid, datumAllocSize)
+	l := len(*buf)
+	if l == 0 {
+		l = a.allocLen(cap(*buf))
+		*buf = make([]parser.DOid, l, l)
 	}
-	r := &(*buf)[0]
+	r := &(*buf)[l-1]
 	*r = v
-	*buf = (*buf)[1:]
+	*buf = (*buf)[:l-1]
 	return r
 }
 
