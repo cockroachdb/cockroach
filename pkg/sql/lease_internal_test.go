@@ -19,12 +19,14 @@ package sql
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -411,7 +413,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 	// Try to trigger the race repeatedly: race an AcquireByName against a
 	// Release.
-	// tableChan acts as a barrier, synchornizing the two routines at every
+	// tableChan acts as a barrier, synchronizing the two routines at every
 	// iteration.
 	tableChan := make(chan *sqlbase.TableDescriptor)
 	errChan := make(chan error)
@@ -557,4 +559,241 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	wg.Wait()
+}
+
+// Test for a race where after acquiring a lease with acquireFreshestFromStore
+// and a routine that does acquire() simultaneously and then releases. This
+// race happens because the call to acquireNodeLease is done without holding the
+// tableState lock. The error happens because we expect a lease to be present
+// when it has actually been released due to the race condition. This is
+// prevented by checking if the lease exists after getting the tableState lock.
+func TestLeaseReleaseImmediatelyWithAcquireFreshestFromStore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// blockChan and freshestBlockChan is used to set up the race condition.
+	blockChan := make(chan struct{})
+	freshestBlockChan := make(chan struct{})
+	// preblock is used for the main routine to wait for all acquisition
+	// routines to catch up.
+	var preblock sync.WaitGroup
+	// acquireArrivals and acquireFreshestArrivals tracks how many times
+	// we've arrived at the knob codepath for the corresponding functions.
+	// This is needed because the fix to the race condition hits the knob more
+	// than once in a single routine, so we need to ignore any extra passes.
+	var acquireArrivals int32
+	var acquireFreshestArrivals int32
+
+	removalTracker := NewLeaseRemovalTracker()
+	testingKnobs := base.TestingKnobs{
+		SQLLeaseManager: &LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: LeaseStoreTestingKnobs{
+				RemoveOnceDereferenced: true,
+				LeaseReleasedEvent:     removalTracker.LeaseRemovedNotification,
+				LeaseAcquireFreshestPrelockEvent: func(_ error) {
+					if atomic.LoadInt32(&acquireFreshestArrivals) < 1 {
+						preblock.Done()
+						<-freshestBlockChan
+						atomic.AddInt32(&acquireFreshestArrivals, 1)
+					}
+				},
+				LeaseAcquirePrelockEvent: func(_ error) {
+					if atomic.LoadInt32(&acquireArrivals) < 1 {
+						preblock.Done()
+						<-blockChan
+						atomic.AddInt32(&acquireArrivals, 1)
+					}
+				},
+			},
+		},
+	}
+	s, _, _ := serverutils.StartServer(
+		t, base.TestServerArgs{Knobs: testingKnobs})
+	defer s.Stopper().Stop(context.TODO())
+	leaseManager := s.LeaseManager().(*LeaseManager)
+
+	descID := sqlbase.ID(keys.LeaseTableID)
+	ctx := context.TODO()
+
+	// Result is a struct for moving results to the main result routine.
+	type Result struct {
+		table *sqlbase.TableDescriptor
+		err   error
+	}
+	acquireResultChan := make(chan Result)
+	releaseResultChan := make(chan Result)
+
+	acquireBlockAndRelease := func(acquireChan chan Result, releaseChan chan Result) {
+		table, _, err := leaseManager.Acquire(ctx, leaseManager.clock.Now(), descID)
+		acquireChan <- Result{err: err, table: table}
+		if err != nil {
+			return
+		}
+		err = leaseManager.Release(table)
+		releaseChan <- Result{err: err, table: table}
+	}
+
+	acquireFreshest := func(acquireChan chan Result) {
+		table, _, err := leaseManager.acquireFreshestFromStore(ctx, descID)
+		acquireChan <- Result{err: err, table: table}
+		if err != nil {
+			return
+		}
+	}
+
+	// Start two routines to acquire and release.
+	preblock.Add(2)
+	go acquireBlockAndRelease(acquireResultChan, releaseResultChan)
+	go acquireFreshest(acquireResultChan)
+
+	// Wait until both routines arrive
+	preblock.Wait()
+
+	// Allow the acquire routine to finish acquisition. The first routine here on
+	// refers to this routine.
+	blockChan <- struct{}{}
+	// Wait until the first routine acquires the lease.
+	result := <-acquireResultChan
+	if result.err != nil {
+		t.Fatal(result.err)
+	}
+	tracker := removalTracker.TrackRemoval(result.table)
+	// Wait until the first routine releases the lease.
+	result = <-releaseResultChan
+	if result.err != nil {
+		t.Fatal(result.err)
+	}
+	// Wait until the lease is fully removed.
+	if err := tracker.WaitForRemoval(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Allow the second routine to proceed.
+	freshestBlockChan <- struct{}{}
+	// Get the acquisition results of the second routine.
+	result = <-acquireResultChan
+	if result.err != nil {
+		t.Fatal(result.err)
+	}
+	tracker = removalTracker.TrackRemoval(result.table)
+	// Release the lease.
+	if err := leaseManager.Release(result.table); err != nil {
+		t.Fatal(err)
+	}
+	// Wait until the lease is fully removed.
+	if err := tracker.WaitForRemoval(); err != nil {
+		t.Fatal(err)
+	}
+
+	close(acquireResultChan)
+	close(releaseResultChan)
+	close(blockChan)
+}
+
+// Test for a race where after acquiring a lease with two calls to acquire()
+// concurrently, one routine releases the lease before the other completes.
+// This happens because of the lock handoff to the async acquireNodeLease.
+// The error manifests as a panic in tableState.acquire from findForTimestamp,
+// and is fixed by checking a new lease still exists with the tableState lock.
+func TestLeaseReleaseImmediatelyWithConcurrentAcquire(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// blockChan is used to set up the race condition.
+	blockChan := make(chan struct{})
+	// preblock is used for the main routine to wait for all acquisition
+	// routines to catch up.
+	var preblock sync.WaitGroup
+	// acquireArrivals tracks how many times we've arrived at the knob
+	// codepath. This is needed because the fix to the race condition hits the
+	// knob more than once in a single routine, so we need to ignore any extra
+	// passes.
+	var acquireArrivals int32
+
+	removalTracker := NewLeaseRemovalTracker()
+	testingKnobs := base.TestingKnobs{
+		SQLLeaseManager: &LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: LeaseStoreTestingKnobs{
+				RemoveOnceDereferenced: true,
+				LeaseReleasedEvent:     removalTracker.LeaseRemovedNotification,
+				LeaseAcquirePrelockEvent: func(_ error) {
+					if atomic.LoadInt32(&acquireArrivals) < 2 {
+						preblock.Done()
+						<-blockChan
+						atomic.AddInt32(&acquireArrivals, 1)
+					}
+				},
+			},
+		},
+	}
+	s, _, _ := serverutils.StartServer(
+		t, base.TestServerArgs{Knobs: testingKnobs})
+	defer s.Stopper().Stop(context.TODO())
+	leaseManager := s.LeaseManager().(*LeaseManager)
+
+	descID := sqlbase.ID(keys.LeaseTableID)
+	ctx := context.TODO()
+
+	// Result is a struct for moving results to the main result routine.
+	type Result struct {
+		table *sqlbase.TableDescriptor
+		err   error
+	}
+	acquireResultChan := make(chan Result)
+	releaseResultChan := make(chan Result)
+
+	acquireBlockAndRelease := func(acquireChan chan Result, releaseChan chan Result) {
+		table, _, err := leaseManager.Acquire(ctx, leaseManager.clock.Now(), descID)
+		acquireChan <- Result{err: err, table: table}
+		if err != nil {
+			return
+		}
+		err = leaseManager.Release(table)
+		releaseChan <- Result{err: err, table: table}
+	}
+
+	// Start two routines to acquire and release.
+	preblock.Add(2)
+	go acquireBlockAndRelease(acquireResultChan, releaseResultChan)
+	go acquireBlockAndRelease(acquireResultChan, releaseResultChan)
+
+	// Wait until both routines arrive
+	preblock.Wait()
+
+	// Allow the first routine to finish acquisition. First refers to first to
+	// proceed, order does not matter. This routine hereon is referred to as "first".
+	blockChan <- struct{}{}
+	// Wait until the first routine acquires the lease.
+	result := <-acquireResultChan
+	if result.err != nil {
+		t.Fatal(result.err)
+	}
+	tracker := removalTracker.TrackRemoval(result.table)
+	// Wait until the first routine releases the lease.
+	result = <-releaseResultChan
+	if result.err != nil {
+		t.Fatal(result.err)
+	}
+	// Wait until the lease is fully removed.
+	if err := tracker.WaitForRemoval(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Allow the second routine to proceed.
+	blockChan <- struct{}{}
+	// Get the acquisition results of the second routine.
+	result = <-acquireResultChan
+	if result.err != nil {
+		t.Fatal(result.err)
+	}
+	tracker = removalTracker.TrackRemoval(result.table)
+	// Get the release results of the second routine.
+	result = <-releaseResultChan
+	if result.err != nil {
+		t.Fatal(result.err)
+	}
+	// Wait until the lease is fully removed.
+	if err := tracker.WaitForRemoval(); err != nil {
+		t.Fatal(err)
+	}
+
+	close(acquireResultChan)
+	close(releaseResultChan)
+	close(blockChan)
 }
