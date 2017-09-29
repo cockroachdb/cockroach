@@ -31,17 +31,16 @@ func TestLeaseHistory(t *testing.T) {
 			t.Errorf("%d: expected history len to be %d , actual %d:\n%+v", i, e, a, leases)
 		}
 		if i > 0 {
-			if e, a := int64(0), *leases[0].Epoch; e != a {
+			if e, a := int64(0), leases[0].Epoch; e != a {
 				t.Errorf("%d: expected oldest lease to have epoch of %d , actual %d:\n%+v", i, e, a, leases)
 			}
-			if e, a := int64(i-1), *leases[len(leases)-1].Epoch; e != a {
+			if e, a := int64(i-1), leases[len(leases)-1].Epoch; e != a {
 				t.Errorf("%d: expected newest lease to have epoch of %d , actual %d:\n%+v", i, e, a, leases)
 			}
 		}
 
-		epoch := int64(i)
 		history.add(roachpb.Lease{
-			Epoch: &epoch,
+			Epoch: int64(i),
 		})
 	}
 
@@ -51,16 +50,15 @@ func TestLeaseHistory(t *testing.T) {
 		if e, a := leaseHistoryMaxEntries, len(leases); e != a {
 			t.Errorf("%d: expected history len to be %d , actual %d:\n%+v", i, e, a, leases)
 		}
-		if e, a := int64(i), *leases[0].Epoch; e != a {
+		if e, a := int64(i), leases[0].Epoch; e != a {
 			t.Errorf("%d: expected oldest lease to have epoch of %d , actual %d:\n%+v", i, e, a, leases)
 		}
-		if e, a := int64(i+leaseHistoryMaxEntries-1), *leases[leaseHistoryMaxEntries-1].Epoch; e != a {
+		if e, a := int64(i+leaseHistoryMaxEntries-1), leases[leaseHistoryMaxEntries-1].Epoch; e != a {
 			t.Errorf("%d: expected newest lease to have epoch of %d , actual %d:\n%+v", i, e, a, leases)
 		}
 
-		epoch := int64(i + leaseHistoryMaxEntries)
 		history.add(roachpb.Lease{
-			Epoch: &epoch,
+			Epoch: int64(i + leaseHistoryMaxEntries),
 		})
 	}
 }

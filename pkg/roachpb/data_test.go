@@ -23,7 +23,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 
 	"github.com/cockroachdb/apd"
@@ -571,19 +570,19 @@ func TestLeaseEquivalence(t *testing.T) {
 	ts2 := makeTS(2, 1)
 	ts3 := makeTS(3, 1)
 
-	epoch1 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(1)}
-	epoch2 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(2)}
+	epoch1 := Lease{Replica: r1, Start: ts1, Epoch: 1}
+	epoch2 := Lease{Replica: r1, Start: ts1, Epoch: 2}
 	expire1 := Lease{Replica: r1, Start: ts1, Expiration: ts2.Clone()}
 	expire2 := Lease{Replica: r1, Start: ts1, Expiration: ts3.Clone()}
-	epoch2TS2 := Lease{Replica: r2, Start: ts2, Epoch: proto.Int64(2)}
+	epoch2TS2 := Lease{Replica: r2, Start: ts2, Epoch: 2}
 	expire2TS2 := Lease{Replica: r2, Start: ts2, Expiration: ts3.Clone()}
 
-	proposed1 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(1), ProposedTS: ts1.Clone()}
-	proposed2 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(2), ProposedTS: ts1.Clone()}
-	proposed3 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(1), ProposedTS: ts2.Clone()}
+	proposed1 := Lease{Replica: r1, Start: ts1, Epoch: 1, ProposedTS: ts1.Clone()}
+	proposed2 := Lease{Replica: r1, Start: ts1, Epoch: 2, ProposedTS: ts1.Clone()}
+	proposed3 := Lease{Replica: r1, Start: ts1, Epoch: 1, ProposedTS: ts2.Clone()}
 
-	stasis1 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(1), DeprecatedStartStasis: ts1.Clone()}
-	stasis2 := Lease{Replica: r1, Start: ts1, Epoch: proto.Int64(1), DeprecatedStartStasis: ts2.Clone()}
+	stasis1 := Lease{Replica: r1, Start: ts1, Epoch: 1, DeprecatedStartStasis: ts1.Clone()}
+	stasis2 := Lease{Replica: r1, Start: ts1, Epoch: 1, DeprecatedStartStasis: ts2.Clone()}
 
 	testCases := []struct {
 		l, ol      Lease
@@ -613,10 +612,9 @@ func TestLeaseEquivalence(t *testing.T) {
 	// #18689 changed the nullability of the DeprecatedStartStasis, ProposedTS, and Expiration
 	// field. It introduced a bug whose regression is caught below where a zero Expiration and a nil
 	// Expiration in an epoch-based lease led to mistakenly considering leases non-equivalent.
-	epoch := int64(123)
 	prePRLease := Lease{
 		Start: hlc.Timestamp{WallTime: 10},
-		Epoch: &epoch,
+		Epoch: 123,
 
 		// The bug-trigger.
 		Expiration: new(hlc.Timestamp),
