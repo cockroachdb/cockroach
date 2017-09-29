@@ -87,7 +87,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	if !validExpirationTime(lease.ExpirationTime) {
-		t.Fatalf("invalid expiration time: %s", timeutil.Unix(0, lease.ExpirationTime))
+		t.Fatalf("invalid expiration time: %s. now: %s",
+			timeutil.Unix(0, lease.ExpirationTime), timeutil.Now())
 	}
 
 	// Acquiring another lease will fail.
@@ -152,7 +153,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 func validExpirationTime(expirationTime int64) bool {
 	now := timeutil.Now()
-	return expirationTime > now.Add(sql.LeaseDuration/2).UnixNano() && expirationTime < now.Add(sql.LeaseDuration*3/2).UnixNano()
+	return expirationTime > now.Add(sql.SchemaChangeLeaseDuration/2).UnixNano() && expirationTime < now.Add(sql.SchemaChangeLeaseDuration*3/2).UnixNano()
 }
 
 func TestSchemaChangeProcess(t *testing.T) {
