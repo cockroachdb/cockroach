@@ -15,7 +15,7 @@ build/builder.sh env \
 
 build/builder.sh make lint 2>&1 | tee artifacts/lint.log | go-test-teamcity
 
-build/builder.sh make generate
+build/builder.sh make generate PKG="./pkg/... ./docs/..."
 build/builder.sh /bin/bash -c '! git status --porcelain | read || (git status; git diff -a 1>&2; exit 1)'
 
 # Run the UI tests. This logically belongs in teamcity-test.sh, but we do it
