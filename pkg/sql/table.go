@@ -268,7 +268,6 @@ type TableCollection struct {
 // of a transaction retry.
 func (tc *TableCollection) resetForTxnRetry(ctx context.Context, txn *client.Txn) {
 	if tc.timestamp != (hlc.Timestamp{}) && tc.timestamp != txn.OrigTimestamp() {
-		txn.ResetDeadline()
 		tc.releaseTables(ctx)
 	}
 }
@@ -369,7 +368,7 @@ func (tc *TableCollection) getTableVersion(
 
 	// If the table we just acquired expires before the txn's deadline, reduce
 	// the deadline.
-	txn.UpdateDeadlineMaybe(expiration)
+	txn.UpdateDeadlineMaybe(ctx, expiration)
 	return table, nil
 }
 
@@ -431,7 +430,7 @@ func (tc *TableCollection) getTableVersionByID(
 
 	// If the table we just acquired expires before the txn's deadline, reduce
 	// the deadline.
-	txn.UpdateDeadlineMaybe(expiration)
+	txn.UpdateDeadlineMaybe(ctx, expiration)
 	return table, nil
 }
 

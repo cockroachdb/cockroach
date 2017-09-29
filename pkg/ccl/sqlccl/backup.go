@@ -347,7 +347,7 @@ func makeBackupDescriptor(
 		opt := client.TxnExecOptions{AutoRetry: true, AutoCommit: true}
 		err := txn.Exec(ctx, opt, func(ctx context.Context, txn *client.Txn, opt *client.TxnExecOptions) error {
 			var err error
-			txn.SetFixedTimestamp(endTime)
+			txn.SetFixedTimestamp(ctx, endTime)
 			sqlDescs, err = allSQLDescriptors(ctx, txn)
 			return err
 		})
@@ -755,7 +755,7 @@ func backupResumeHook(typ jobs.Type) func(context.Context, *jobs.Job) error {
 			txn := client.NewTxn(job.DB(), 0 /* gatewayNodeID */)
 			opt := client.TxnExecOptions{AutoRetry: true, AutoCommit: true}
 			if err := txn.Exec(ctx, opt, func(ctx context.Context, txn *client.Txn, opt *client.TxnExecOptions) error {
-				txn.SetFixedTimestamp(details.EndTime)
+				txn.SetFixedTimestamp(ctx, details.EndTime)
 				for _, sqlDescID := range job.Payload().DescriptorIDs {
 					desc := &sqlbase.Descriptor{}
 					descKey := sqlbase.MakeDescMetadataKey(sqlDescID)
