@@ -177,7 +177,9 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 			"SELECT COUNT(newcol) FROM tpch.customer AS OF SYSTEM TIME %s",
 			"SELECT COUNT(c_name) FROM tpch.customer@foo AS OF SYSTEM TIME %s",
 		}
-		if err := at.runSchemaChanges(ctx, t, schemaChanges, validationQueries); err != nil {
+		if err := at.runSchemaChanges(
+			ctx, t, schemaChanges, validationQueries, false,
+		); err != nil {
 			t.Fatal(err)
 		}
 		// These schema changes are run later because the above schema
@@ -187,16 +189,18 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 		// being updated.
 		log.Info(ctx, "running schema changes over datablocks.blocks")
 		schemaChanges = []string{
-			"ALTER TABLE datablocks.blocks ADD COLUMN newcol DECIMAL DEFAULT (DECIMAL '1.4')",
+			"ALTER TABLE datablocks.blocks ADD COLUMN created_at TIMESTAMP DEFAULT now()",
 			"CREATE INDEX foo ON datablocks.blocks (block_id)",
 		}
 		// All these return the same result.
 		validationQueries = []string{
 			"SELECT COUNT(*) FROM datablocks.blocks AS OF SYSTEM TIME %s",
-			"SELECT COUNT(newcol) FROM datablocks.blocks AS OF SYSTEM TIME %s",
+			"SELECT COUNT(created_at) FROM datablocks.blocks AS OF SYSTEM TIME %s",
 			"SELECT COUNT(block_id) FROM datablocks.blocks@foo AS OF SYSTEM TIME %s",
 		}
-		if err := at.runSchemaChanges(ctx, t, schemaChanges, validationQueries); err != nil {
+		if err := at.runSchemaChanges(
+			ctx, t, schemaChanges, validationQueries, true,
+		); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -218,7 +222,11 @@ func (at *allocatorTest) RunAndCleanup(ctx context.Context, t *testing.T) {
 }
 
 func (at *allocatorTest) runSchemaChanges(
-	ctx context.Context, t *testing.T, schemaChanges []string, validationQueries []string,
+	ctx context.Context,
+	t *testing.T,
+	schemaChanges []string,
+	validationQueries []string,
+	extraValidate bool,
 ) error {
 	db, err := gosql.Open("postgres", at.f.PGUrl(ctx, 0))
 	if err != nil {
@@ -232,6 +240,10 @@ func (at *allocatorTest) runSchemaChanges(
 	for i := range schemaChanges {
 		cmd := schemaChanges[i]
 		go func(i int) {
+			// Guarantee a schema change execution order.
+			// We need this because the schema validation code depends on the
+			// the schema changes executing in a specific order.
+			time.Sleep(time.Duration(i) * time.Second)
 			start := timeutil.Now()
 			log.Infof(ctx, "starting schema change: %s", cmd)
 			if _, err := db.Exec(cmd); err != nil {
@@ -251,7 +263,7 @@ func (at *allocatorTest) runSchemaChanges(
 	}
 
 	log.Info(ctx, "validate applied schema changes")
-	if err := at.ValidateSchemaChanges(ctx, t, validationQueries); err != nil {
+	if err := at.ValidateSchemaChanges(ctx, t, validationQueries, extraValidate); err != nil {
 		t.Fatal(err)
 	}
 	return nil
@@ -259,7 +271,7 @@ func (at *allocatorTest) runSchemaChanges(
 
 // The validationQueries all return the same result.
 func (at *allocatorTest) ValidateSchemaChanges(
-	ctx context.Context, t *testing.T, validationQueries []string,
+	ctx context.Context, t *testing.T, validationQueries []string, extraValidate bool,
 ) error {
 	// Sleep for a bit before validating the schema changes to
 	// accommodate for time differences between nodes. Some of the
@@ -278,16 +290,14 @@ func (at *allocatorTest) ValidateSchemaChanges(
 		_ = db.Close()
 	}()
 
-	var now string
-	if err := db.QueryRow("SELECT cluster_logical_timestamp()").Scan(&now); err != nil {
-		t.Fatal(err)
-	}
+	now := timeutil.Now()
+	nowString := fmt.Sprintf("%d.0000000000", now.UnixNano())
 
 	// Validate the different schema changes
 	var eCount int64
 	for i := range validationQueries {
 		var count int64
-		q := fmt.Sprintf(validationQueries[i], now)
+		q := fmt.Sprintf(validationQueries[i], nowString)
 		if err := db.QueryRow(q).Scan(&count); err != nil {
 			return err
 		}
@@ -297,8 +307,83 @@ func (at *allocatorTest) ValidateSchemaChanges(
 		}
 		if eCount == 0 {
 			eCount = count
-		} else if count != eCount {
-			t.Fatalf("%s: %d rows found, expected %d rows", q, count, eCount)
+		} else {
+			// Investigate index creation problems. Always run this so we know
+			// it works.
+			if extraValidate && i == 2 {
+				sp := span{start: now.Add(-30 * time.Minute), end: now}
+				if err := at.findIndexProblem(ctx, db, sp); err != nil {
+					t.Error(err)
+				}
+			}
+			if count != eCount {
+				t.Fatalf("%s: %d rows found, expected %d rows", q, count, eCount)
+			}
+		}
+	}
+	return nil
+}
+
+type span struct {
+	start, end time.Time
+}
+
+// Check index inconsistencies over the span and return true when
+// problems are seen.
+func (at *allocatorTest) checkIndexOverTimeSpan(ctx context.Context, db *gosql.DB, s span) (bool, error) {
+	var eCount int64
+	if err := db.QueryRow("SELECT COUNT(created_at) FROM datablocks.blocks@primary WHERE created_at > $1 AND created_at < $2", s.start, s.end).Scan(&eCount); err != nil {
+		return false, err
+	}
+	var count int64
+	if err := db.QueryRow("SELECT COUNT(block_id) FROM datablocks.blocks@foo WHERE created_at > $1 AND created_at < $2", s.start, s.end).Scan(&count); err != nil {
+		return false, err
+	}
+	log.Infof(ctx, "counts seen %d, %d, over [%s, %s]", count, eCount, s.start, s.end)
+	return count != eCount, nil
+}
+
+// Keep splitting the span of time passed and log where index
+// inconsistencies are seen.
+func (at *allocatorTest) findIndexProblem(ctx context.Context, db *gosql.DB, s span) error {
+	for {
+		// split span into two time ranges.
+		leftSpan, rightSpan := s, s
+		// Divide into quarters because we might need the span in the middle.
+		d := s.end.Sub(s.start) / 4
+		if d < 10*time.Millisecond {
+			log.Infof(ctx, "problem seen over [%s, %s]", s.start, s.end)
+			break
+		}
+		m := s.start.Add(2 * d)
+		leftSpan.end = m
+		rightSpan.start = m
+
+		leftState, err := at.checkIndexOverTimeSpan(ctx, db, leftSpan)
+		if err != nil {
+			return err
+		}
+		rightState, err := at.checkIndexOverTimeSpan(ctx, db, rightSpan)
+		if err != nil {
+			return err
+		}
+		if leftState && rightState {
+			log.Infof(ctx, "problem seen over [%s, %s]", s.start, s.end)
+			// pick the middle of the original span.
+			s = span{start: s.start.Add(d), end: s.start.Add(3 * d)}
+			continue
+		}
+		if leftState {
+			s = leftSpan
+			log.Infof(ctx, "problem seen over [%s, %s]", s.start, s.end)
+		}
+		if rightState {
+			s = rightSpan
+			log.Infof(ctx, "problem seen over [%s, %s]", s.start, s.end)
+		}
+		if !(leftState || rightState) {
+			log.Infof(ctx, "no problem seen over [%s, %s]", s.start, s.end)
+			break
 		}
 	}
 	return nil
