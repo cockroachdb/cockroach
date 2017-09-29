@@ -223,8 +223,10 @@ func TestLeaseManager(testingT *testing.T) {
 	// table and expiration.
 	l1, e1 := t.mustAcquire(1, descID)
 	l2, e2 := t.mustAcquire(1, descID)
-	if l1.ID != l2.ID || e1 != e2 {
+	if l1.ID != l2.ID {
 		t.Fatalf("expected same lease, but found %v != %v", l1, l2)
+	} else if e1 != e2 {
+		t.Fatalf("expected same lease timestamps, but found %v != %v", e1, e2)
 	}
 	t.expectLeases(descID, "/1/1")
 	// Node 2 never acquired a lease on descID, so we should expect an error.
