@@ -500,7 +500,7 @@ func (a AggregatorSpec_Aggregation) Equals(b AggregatorSpec_Aggregation) bool {
 			return false
 		}
 	} else {
-		if a.FilterColIdx == nil || *a.FilterColIdx != *b.FilterColIdx {
+		if b.FilterColIdx == nil || *a.FilterColIdx != *b.FilterColIdx {
 			return false
 		}
 	}

@@ -350,8 +350,10 @@ message AggregatorSpec {
 
     // The column index specifies the argument(s) to the aggregator function.
     //
-    // Currently no functions take more than one argument.
+    // Most aggregations take one argument
     // COUNT_ROWS takes no arguments.
+    // FINAL_STDDEV and FINAL_VARIANCE take three arguments (SQRDIFF, SUM,
+    // COUNT).
     repeated uint32 col_idx = 5;
 
     // If set, this column index specifies a boolean argument; rows for which

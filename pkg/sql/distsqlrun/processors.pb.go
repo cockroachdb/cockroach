@@ -551,8 +551,10 @@ type AggregatorSpec_Aggregation struct {
 	Distinct bool `protobuf:"varint,2,opt,name=distinct" json:"distinct"`
 	// The column index specifies the argument(s) to the aggregator function.
 	//
-	// Currently no functions take more than one argument.
+	// Most aggregations take one argument
 	// COUNT_ROWS takes no arguments.
+	// FINAL_STDDEV and FINAL_VARIANCE take three arguments (SQRDIFF, SUM,
+	// COUNT).
 	ColIdx []uint32 `protobuf:"varint,5,rep,name=col_idx,json=colIdx" json:"col_idx,omitempty"`
 	// If set, this column index specifies a boolean argument; rows for which
 	// this value is not true don't contribute to this aggregation. This enables
