@@ -187,6 +187,8 @@ type Tree interface {
 	// Iterator creates an iterator to iterate over all intervals stored in the
 	// tree, in-order.
 	Iterator() TreeIterator
+	// Clear this tree.
+	Clear()
 }
 
 // TreeIterator iterates over all intervals stored in the interval tree, in-order.

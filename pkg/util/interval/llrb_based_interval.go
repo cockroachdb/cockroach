@@ -652,3 +652,8 @@ func (t *llrbTree) Iterator() TreeIterator {
 	}
 	return &ti
 }
+
+func (t *llrbTree) Clear() {
+	t.Root = nil
+	t.Count = 0
+}

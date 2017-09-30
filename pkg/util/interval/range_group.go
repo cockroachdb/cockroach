@@ -439,7 +439,7 @@ func (rt *rangeTree) Sub(r Range) bool {
 
 // Clear implements RangeGroup. It clears all rangeKeys from the rangeTree.
 func (rt *rangeTree) Clear() {
-	rt.t = NewTree(InclusiveOverlapper)
+	rt.t.Clear()
 }
 
 // Overlaps implements RangeGroup. It returns whether the provided
