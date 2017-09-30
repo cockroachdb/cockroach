@@ -247,6 +247,8 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 
+	ctx := context.Background()
+
 	// Can't be zero because that'd be an empty offset.
 	clock := hlc.NewClock(timeutil.Unix(0, 1).UnixNano, time.Nanosecond)
 
@@ -286,14 +288,14 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 			}}
 	}()
 
-	stopper.RunWorker(context.TODO(), func(context.Context) {
+	stopper.RunWorker(ctx, func(context.Context) {
 		<-stopper.ShouldQuiesce()
 		netutil.FatalIfUnexpected(ln.Close())
 		<-stopper.ShouldStop()
 		s.Stop()
 	})
 
-	stopper.RunWorker(context.TODO(), func(context.Context) {
+	stopper.RunWorker(ctx, func(context.Context) {
 		netutil.FatalIfUnexpected(s.Serve(ln))
 	})
 
@@ -332,17 +334,41 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 		return code == codes.Unavailable || code == codes.Internal
 	}
 
-	testutils.SucceedsSoon(t, func() error {
-		// Close all the connections until we see a failure.
-		if _, err := closeConns(); err != nil {
+	// Close all the connections until we see a failure on the main goroutine.
+	done := make(chan struct{})
+	if err := stopper.RunAsyncTask(ctx, "busyloop-closer", func(ctx context.Context) {
+		for {
+			if _, err := closeConns(); err != nil {
+				log.Warning(ctx, err)
+			}
+			select {
+			case <-done:
+				return
+			default:
+			}
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// We don't use SucceedsSoon because that internally uses doubling backoffs, and
+	// it doesn't need too much bad luck to run into the time limit.
+	for then := timeutil.Now(); ; {
+		err := func() error {
+			if err := clientCtx.ConnHealth(remoteAddr); !isUnhealthy(err) {
+				return errors.Errorf("unexpected error: %v", err)
+			}
+			return nil
+		}()
+		if err == nil {
+			break
+		}
+		if timeutil.Since(then) > 45*time.Second {
 			t.Fatal(err)
 		}
+	}
 
-		if err := clientCtx.ConnHealth(remoteAddr); !isUnhealthy(err) {
-			return errors.Errorf("unexpected error: %v", err)
-		}
-		return nil
-	})
+	close(done)
 
 	// Should become healthy again after GRPC reconnects.
 	testutils.SucceedsSoon(t, func() error {
