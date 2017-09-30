@@ -64,7 +64,7 @@ func runLsRanges(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			panic(err)
 		}
-		startKey = keys.RangeMetaKey(rk)
+		startKey = keys.RangeMetaKey(rk).AsRawKey()
 	}
 	endKey := keys.Meta2Prefix.PrefixEnd()
 
