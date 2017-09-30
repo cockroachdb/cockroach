@@ -19568,14 +19568,134 @@ export namespace cockroach {
                     public toJSON(): { [k: string]: any };
                 }
 
+                type LegacyTimestamp$Properties = {
+                    wall_time?: Long;
+                    logical?: number;
+                };
+
+                /**
+                 * Constructs a new LegacyTimestamp.
+                 * @exports cockroach.storage.engine.enginepb.LegacyTimestamp
+                 * @constructor
+                 * @param {cockroach.storage.engine.enginepb.LegacyTimestamp$Properties=} [properties] Properties to set
+                 */
+                class LegacyTimestamp {
+
+                    /**
+                     * Constructs a new LegacyTimestamp.
+                     * @exports cockroach.storage.engine.enginepb.LegacyTimestamp
+                     * @constructor
+                     * @param {cockroach.storage.engine.enginepb.LegacyTimestamp$Properties=} [properties] Properties to set
+                     */
+                    constructor(properties?: cockroach.storage.engine.enginepb.LegacyTimestamp$Properties);
+
+                    /**
+                     * LegacyTimestamp wall_time.
+                     * @type {Long}
+                     */
+                    public wall_time: Long;
+
+                    /**
+                     * LegacyTimestamp logical.
+                     * @type {number}
+                     */
+                    public logical: number;
+
+                    /**
+                     * Creates a new LegacyTimestamp instance using the specified properties.
+                     * @param {cockroach.storage.engine.enginepb.LegacyTimestamp$Properties=} [properties] Properties to set
+                     * @returns {cockroach.storage.engine.enginepb.LegacyTimestamp} LegacyTimestamp instance
+                     */
+                    public static create(properties?: cockroach.storage.engine.enginepb.LegacyTimestamp$Properties): cockroach.storage.engine.enginepb.LegacyTimestamp;
+
+                    /**
+                     * Encodes the specified LegacyTimestamp message. Does not implicitly {@link cockroach.storage.engine.enginepb.LegacyTimestamp.verify|verify} messages.
+                     * @param {cockroach.storage.engine.enginepb.LegacyTimestamp$Properties} message LegacyTimestamp message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encode(message: cockroach.storage.engine.enginepb.LegacyTimestamp$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Encodes the specified LegacyTimestamp message, length delimited. Does not implicitly {@link cockroach.storage.engine.enginepb.LegacyTimestamp.verify|verify} messages.
+                     * @param {cockroach.storage.engine.enginepb.LegacyTimestamp$Properties} message LegacyTimestamp message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encodeDelimited(message: cockroach.storage.engine.enginepb.LegacyTimestamp$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Decodes a LegacyTimestamp message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.storage.engine.enginepb.LegacyTimestamp} LegacyTimestamp
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.storage.engine.enginepb.LegacyTimestamp;
+
+                    /**
+                     * Decodes a LegacyTimestamp message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.storage.engine.enginepb.LegacyTimestamp} LegacyTimestamp
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.storage.engine.enginepb.LegacyTimestamp;
+
+                    /**
+                     * Verifies a LegacyTimestamp message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    public static verify(message: { [k: string]: any }): string;
+
+                    /**
+                     * Creates a LegacyTimestamp message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.storage.engine.enginepb.LegacyTimestamp} LegacyTimestamp
+                     */
+                    public static fromObject(object: { [k: string]: any }): cockroach.storage.engine.enginepb.LegacyTimestamp;
+
+                    /**
+                     * Creates a LegacyTimestamp message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.storage.engine.enginepb.LegacyTimestamp.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.storage.engine.enginepb.LegacyTimestamp} LegacyTimestamp
+                     */
+                    public static from(object: { [k: string]: any }): cockroach.storage.engine.enginepb.LegacyTimestamp;
+
+                    /**
+                     * Creates a plain object from a LegacyTimestamp message. Also converts values to other types if specified.
+                     * @param {cockroach.storage.engine.enginepb.LegacyTimestamp} message LegacyTimestamp
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public static toObject(message: cockroach.storage.engine.enginepb.LegacyTimestamp, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Creates a plain object from this LegacyTimestamp message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Converts this LegacyTimestamp to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    public toJSON(): { [k: string]: any };
+                }
+
                 type MVCCMetadata$Properties = {
                     txn?: cockroach.storage.engine.enginepb.TxnMeta$Properties;
-                    timestamp?: cockroach.util.hlc.Timestamp$Properties;
+                    timestamp?: cockroach.storage.engine.enginepb.LegacyTimestamp$Properties;
                     deleted?: boolean;
                     key_bytes?: Long;
                     val_bytes?: Long;
                     raw_bytes?: Uint8Array;
-                    merge_timestamp?: cockroach.util.hlc.Timestamp$Properties;
+                    merge_timestamp?: cockroach.storage.engine.enginepb.LegacyTimestamp$Properties;
                 };
 
                 /**
@@ -19602,9 +19722,9 @@ export namespace cockroach {
 
                     /**
                      * MVCCMetadata timestamp.
-                     * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
+                     * @type {(cockroach.storage.engine.enginepb.LegacyTimestamp$Properties|null)}
                      */
-                    public timestamp: (cockroach.util.hlc.Timestamp$Properties|null);
+                    public timestamp: (cockroach.storage.engine.enginepb.LegacyTimestamp$Properties|null);
 
                     /**
                      * MVCCMetadata deleted.
@@ -19632,9 +19752,9 @@ export namespace cockroach {
 
                     /**
                      * MVCCMetadata merge_timestamp.
-                     * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
+                     * @type {(cockroach.storage.engine.enginepb.LegacyTimestamp$Properties|null)}
                      */
-                    public merge_timestamp: (cockroach.util.hlc.Timestamp$Properties|null);
+                    public merge_timestamp: (cockroach.storage.engine.enginepb.LegacyTimestamp$Properties|null);
 
                     /**
                      * Creates a new MVCCMetadata instance using the specified properties.

@@ -3423,7 +3423,11 @@ func TestMVCCStatsBasic(t *testing.T) {
 	if err := MVCCDelete(context.Background(), engine, ms, key, ts2, txn); err != nil {
 		t.Fatal(err)
 	}
-	m2ValSize := encodedSize(&enginepb.MVCCMetadata{Timestamp: ts2, Deleted: true, Txn: &txn.TxnMeta}, t)
+	m2ValSize := encodedSize(&enginepb.MVCCMetadata{
+		Timestamp: enginepb.LegacyTimestamp(ts2),
+		Deleted:   true,
+		Txn:       &txn.TxnMeta,
+	}, t)
 	v2KeySize := mvccVersionTimestampSize
 	v2ValSize := int64(0)
 
@@ -3479,7 +3483,10 @@ func TestMVCCStatsBasic(t *testing.T) {
 		t.Fatal(err)
 	}
 	mKey2Size := int64(mvccKey(key2).EncodedSize())
-	mVal2Size := encodedSize(&enginepb.MVCCMetadata{Timestamp: ts4, Txn: &txn.TxnMeta}, t)
+	mVal2Size := encodedSize(&enginepb.MVCCMetadata{
+		Timestamp: enginepb.LegacyTimestamp(ts4),
+		Txn:       &txn.TxnMeta,
+	}, t)
 	vKey2Size := mvccVersionTimestampSize
 	vVal2Size := int64(len(value2.RawBytes))
 	expMS3 := enginepb.MVCCStats{
