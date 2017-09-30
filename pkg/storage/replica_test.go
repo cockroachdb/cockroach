@@ -2511,6 +2511,10 @@ func TestReplicaCommandQueueCancellationLocal(t *testing.T) {
 		},
 		IntentTxn: txn.TxnMeta,
 		Status:    roachpb.PENDING,
+		// NB: in reality, a timestamp push as this one would specify
+		// PoisonType_Noop, but this test predates that change and wants
+		// something that results in the abort cache key to be declared.
+		Poison: roachpb.PoisonType_Clear,
 	})
 
 	getKeyBa := newBa(true /* withTxn */)
@@ -4877,7 +4881,7 @@ func TestReplicaResolveIntentNoWait(t *testing.T) {
 			Span:   roachpb.Span{Key: key},
 			Txn:    txn.TxnMeta,
 			Status: txn.Status,
-		}}, ResolveOptions{Wait: false, Poison: false}); pErr != nil {
+		}}, ResolveOptions{Wait: false, Poison: roachpb.PoisonType_Clear}); pErr != nil {
 		t.Fatal(pErr)
 	}
 	testutils.SucceedsSoon(t, func() error {

@@ -105,8 +105,16 @@ func (ir *intentResolver) processWriteIntentError(
 		return pErr
 	}
 
+	// If we're pushing the other transaction's timestamp, we don't need to touch the abort cache.
+	// If we abort, we do. Note that we never clear out the cache here, which would be dangerous as
+	// it could let an aborted-but-running transaction access keys that formerly held its intents.
+	poisonType := roachpb.PoisonType_Noop
+	if pushType == roachpb.PUSH_ABORT {
+		poisonType = roachpb.PoisonType_Do
+	}
+
 	if err := ir.resolveIntents(ctx, resolveIntents,
-		ResolveOptions{Wait: false, Poison: pushType == roachpb.PUSH_ABORT}); err != nil {
+		ResolveOptions{Wait: false, Poison: poisonType}); err != nil {
 		return roachpb.NewError(err)
 	}
 
@@ -322,9 +330,10 @@ func (ir *intentResolver) processIntents(
 		//   time of writing has our push abort it, leading to the
 		//   same situation as above.
 		//
-		// Thus, we must poison.
+		// Thus, we must poison (but note that this only has effects
+		// for those intents which are actually aborted).
 		if err := ir.resolveIntents(ctxWithTimeout, resolveIntents,
-			ResolveOptions{Wait: true, Poison: true}); err != nil {
+			ResolveOptions{Wait: true, Poison: roachpb.PoisonType_Do}); err != nil {
 			log.Warningf(ctx, "%s: failed to resolve intents: %s", r, err)
 			return
 		}
@@ -334,7 +343,9 @@ func (ir *intentResolver) processIntents(
 		}
 	} else { // EndTransaction
 		// For EndTransaction, we know the transaction is finalized so
-		// we can skip the push and go straight to the resolve.
+		// we can skip the push and go straight to the resolve, clearing
+		// out the abort cache (for intents that are ABORTED, so for a
+		// successful commit, none).
 		//
 		// This mechanism assumes that when an EndTransaction fails,
 		// the client makes no assumptions about the result. For
@@ -342,7 +353,7 @@ func (ir *intentResolver) processIntents(
 		// may succeed (triggering this code path), but the result may
 		// not make it back to the client.
 		if err := ir.resolveIntents(ctxWithTimeout, item.intents,
-			ResolveOptions{Wait: true, Poison: false}); err != nil {
+			ResolveOptions{Wait: true, Poison: roachpb.PoisonType_Clear}); err != nil {
 			log.Warningf(ctx, "%s: failed to resolve intents: %s", r, err)
 			return
 		}
@@ -365,7 +376,7 @@ func (ir *intentResolver) processIntents(
 		// at least KeyLocalMax.
 		//
 		// #7880 will address this by making GCRequest less special and
-		// thus obviating the need to cook up an artificial range here.
+		// thus obviates the need to cook up an artificial range here.
 		var gcArgs roachpb.GCRequest
 		{
 			key := keys.MustAddr(txn.Key)
@@ -396,7 +407,7 @@ func (ir *intentResolver) processIntents(
 // call to block, and whether the ranges containing the intents are to be poisoned.
 type ResolveOptions struct {
 	Wait   bool
-	Poison bool
+	Poison roachpb.PoisonType
 }
 
 // resolveIntents resolves the given intents. `wait` is currently a
@@ -428,6 +439,8 @@ func (ir *intentResolver) resolveIntents(
 	defer cleanup()
 	log.Eventf(ctx, "resolving intents [wait=%t]", opts.Wait)
 
+	var deprecatedPoison = opts.Poison == roachpb.PoisonType_Do
+
 	var reqs []roachpb.Request
 	for i := range intents {
 		intent := intents[i] // avoids a race in `i, intent := range ...`
@@ -435,17 +448,19 @@ func (ir *intentResolver) resolveIntents(
 		{
 			if len(intent.EndKey) == 0 {
 				resolveArgs = &roachpb.ResolveIntentRequest{
-					Span:      intent.Span,
-					IntentTxn: intent.Txn,
-					Status:    intent.Status,
-					Poison:    opts.Poison,
+					Span:             intent.Span,
+					IntentTxn:        intent.Txn,
+					Status:           intent.Status,
+					DeprecatedPoison: deprecatedPoison,
+					Poison:           opts.Poison,
 				}
 			} else {
 				resolveArgs = &roachpb.ResolveIntentRangeRequest{
-					Span:      intent.Span,
-					IntentTxn: intent.Txn,
-					Status:    intent.Status,
-					Poison:    opts.Poison,
+					Span:             intent.Span,
+					IntentTxn:        intent.Txn,
+					Status:           intent.Status,
+					DeprecatedPoison: deprecatedPoison,
+					Poison:           opts.Poison,
 				}
 			}
 		}
