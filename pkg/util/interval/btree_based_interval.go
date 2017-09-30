@@ -915,3 +915,8 @@ func (t *btree) Iterator() TreeIterator {
 	}
 	return &ti
 }
+
+func (t *btree) Clear() {
+	t.root = nil
+	t.length = 0
+}
