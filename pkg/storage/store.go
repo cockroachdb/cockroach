@@ -1717,16 +1717,12 @@ func (s *Store) BootstrapRange(
 	}
 	// Range addressing for meta2.
 	meta2Key := keys.RangeMetaKey(roachpb.RKeyMax)
-	if err := engine.MVCCPutProto(ctx, batch, ms, meta2Key, now, nil, desc); err != nil {
+	if err := engine.MVCCPutProto(ctx, batch, ms, meta2Key.AsRawKey(), now, nil, desc); err != nil {
 		return err
 	}
 	// Range addressing for meta1.
-	meta2KeyAddr, err := keys.Addr(meta2Key)
-	if err != nil {
-		return err
-	}
-	meta1Key := keys.RangeMetaKey(meta2KeyAddr)
-	if err := engine.MVCCPutProto(ctx, batch, ms, meta1Key, now, nil, desc); err != nil {
+	meta1Key := keys.RangeMetaKey(meta2Key)
+	if err := engine.MVCCPutProto(ctx, batch, ms, meta1Key.AsRawKey(), now, nil, desc); err != nil {
 		return err
 	}
 

@@ -445,14 +445,14 @@ func AddrUpperBound(k roachpb.Key) (roachpb.RKey, error) {
 // - For a meta1 key, KeyMin is returned.
 // - For a meta2 key, a meta1 key is returned.
 // - For an ordinary key, a meta2 key is returned.
-func RangeMetaKey(key roachpb.RKey) roachpb.Key {
+func RangeMetaKey(key roachpb.RKey) roachpb.RKey {
 	if len(key) == 0 { // key.Equal(roachpb.RKeyMin)
-		return roachpb.KeyMin
+		return roachpb.RKeyMin
 	}
 	var prefix roachpb.Key
 	switch key[0] {
 	case meta1PrefixByte:
-		return roachpb.KeyMin
+		return roachpb.RKeyMin
 	case meta2PrefixByte:
 		prefix = Meta1Prefix
 		key = key[len(Meta2Prefix):]
@@ -460,7 +460,7 @@ func RangeMetaKey(key roachpb.RKey) roachpb.Key {
 		prefix = Meta2Prefix
 	}
 
-	buf := make(roachpb.Key, 0, len(prefix)+len(key))
+	buf := make(roachpb.RKey, 0, len(prefix)+len(key))
 	buf = append(buf, prefix...)
 	buf = append(buf, key...)
 	return buf

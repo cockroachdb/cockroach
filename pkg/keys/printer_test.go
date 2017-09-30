@@ -75,7 +75,7 @@ func TestPrettyPrint(t *testing.T) {
 		// system
 		{makeKey(Meta2Prefix, roachpb.Key("foo")), `/Meta2/"foo"`},
 		{makeKey(Meta1Prefix, roachpb.Key("foo")), `/Meta1/"foo"`},
-		{RangeMetaKey(roachpb.RKey("f")), `/Meta2/"f"`},
+		{RangeMetaKey(roachpb.RKey("f")).AsRawKey(), `/Meta2/"f"`},
 
 		{NodeLivenessKey(10033), "/System/NodeLiveness/10033"},
 		{NodeStatusKey(1111), "/System/StatusNode/1111"},
@@ -83,9 +83,9 @@ func TestPrettyPrint(t *testing.T) {
 		{SystemMax, "/System/Max"},
 
 		// key of key
-		{RangeMetaKey(roachpb.RKey(MakeRangeKeyPrefix(MakeTablePrefix(42)))), `/Meta2/Local/Range/Table/42`},
-		{RangeMetaKey(roachpb.RKey(makeKey(MakeTablePrefix(42), roachpb.RKey("foo")))), `/Meta2/Table/42/"foo"`},
-		{RangeMetaKey(roachpb.RKey(makeKey(Meta2Prefix, roachpb.Key("foo")))), `/Meta1/"foo"`},
+		{RangeMetaKey(roachpb.RKey(MakeRangeKeyPrefix(MakeTablePrefix(42)))).AsRawKey(), `/Meta2/Local/Range/Table/42`},
+		{RangeMetaKey(roachpb.RKey(makeKey(MakeTablePrefix(42), roachpb.RKey("foo")))).AsRawKey(), `/Meta2/Table/42/"foo"`},
+		{RangeMetaKey(roachpb.RKey(makeKey(Meta2Prefix, roachpb.Key("foo")))).AsRawKey(), `/Meta1/"foo"`},
 
 		// table
 		{SystemConfigSpan.Key, "/Table/SystemConfigSpan/Start"},

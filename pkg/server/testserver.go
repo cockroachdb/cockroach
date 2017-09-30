@@ -570,7 +570,7 @@ func (ts *TestServer) GetFirstStoreID() roachpb.StoreID {
 func (ts *TestServer) LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, error) {
 	rangeLookupReq := roachpb.RangeLookupRequest{
 		Span: roachpb.Span{
-			Key: keys.RangeMetaKey(keys.MustAddr(key)),
+			Key: keys.RangeMetaKey(keys.MustAddr(key)).AsRawKey(),
 		},
 		MaxRanges: 1,
 	}
