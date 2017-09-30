@@ -37,8 +37,8 @@ type llrbTree struct {
 	Overlapper Overlapper
 }
 
-// newLLBRTree creates a new interval tree with the given overlapper function.
-func newLLBRTree(overlapper Overlapper) *llrbTree {
+// newLLRBTree creates a new interval tree with the given overlapper function.
+func newLLRBTree(overlapper Overlapper) *llrbTree {
 	return &llrbTree{Overlapper: overlapper}
 }
 

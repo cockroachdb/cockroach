@@ -205,5 +205,5 @@ func NewTree(overlapper Overlapper) Tree {
 	if useBTreeImpl {
 		return newBTree(overlapper)
 	}
-	return newLLBRTree(overlapper)
+	return newLLRBTree(overlapper)
 }
