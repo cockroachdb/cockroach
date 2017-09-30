@@ -68,6 +68,24 @@ message TxnMeta {
   optional int32 batch_index = 8 [(gogoproto.nullable) = false];
 }
 
+// LegacyTimestamp is convertible to hlc.Timestamp, but uses the
+// legacy encoding as it is encoded "below raft".
+message LegacyTimestamp {
+  option (gogoproto.equal) = true;
+
+  option (gogoproto.goproto_stringer) = false;
+  option (gogoproto.populate) = true;
+
+  // Holds a wall time, typically a unix epoch time expressed in
+  // nanoseconds.
+  optional int64 wall_time = 1 [(gogoproto.nullable) = false];
+  // The logical component captures causality for events whose wall
+  // times are equal. It is effectively bounded by (maximum clock
+  // skew)/(minimal ns between events) and nearly impossible to
+  // overflow.
+  optional int32 logical = 2 [(gogoproto.nullable) = false];
+}
+
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.
 message MVCCMetadata {
   option (gogoproto.populate) = true;
@@ -77,7 +95,7 @@ message MVCCMetadata {
   // value that may have multiple versions. For values which may have
   // only one version, the data is stored inline (via raw_bytes), and
   // timestamp is set to zero.
-  optional util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  optional LegacyTimestamp timestamp = 2 [(gogoproto.nullable) = false];
   // Is the most recent value a deletion tombstone?
   optional bool deleted = 3 [(gogoproto.nullable) = false];
   // The size in bytes of the most recent encoded key.
@@ -93,7 +111,7 @@ message MVCCMetadata {
   optional bytes raw_bytes = 6;
   // This provides a measure of protection against replays caused by
   // Raft duplicating merge commands.
-  optional util.hlc.Timestamp merge_timestamp = 7;
+  optional LegacyTimestamp merge_timestamp = 7;
 }
 
 // MVCCStats tracks byte and instance counts for various groups of keys,

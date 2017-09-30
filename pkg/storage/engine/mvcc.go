@@ -648,7 +648,7 @@ func mvccGetMetadata(
 	meta.KeyBytes = mvccVersionTimestampSize
 	meta.ValBytes = int64(len(iter.UnsafeValue()))
 	meta.Deleted = meta.ValBytes == 0
-	meta.Timestamp = unsafeKey.Timestamp
+	meta.Timestamp = enginepb.LegacyTimestamp(unsafeKey.Timestamp)
 	return true, int64(unsafeKey.EncodedSize()) - meta.KeyBytes, 0, nil
 }
 
@@ -696,18 +696,19 @@ func mvccGetInternal(
 		return value, nil, safeValue, nil
 	}
 	var ignoredIntents []roachpb.Intent
-	if !consistent && meta.Txn != nil && !timestamp.Less(meta.Timestamp) {
+	metaTimestamp := hlc.Timestamp(meta.Timestamp)
+	if !consistent && meta.Txn != nil && !timestamp.Less(metaTimestamp) {
 		// If we're doing inconsistent reads and there's an intent, we
 		// ignore the intent by insisting that the timestamp we're reading
 		// at is a historical timestamp < the intent timestamp. However, we
 		// return the intent separately; the caller may want to resolve it.
 		ignoredIntents = append(ignoredIntents,
 			roachpb.Intent{Span: roachpb.Span{Key: metaKey.Key}, Status: roachpb.PENDING, Txn: *meta.Txn})
-		timestamp = meta.Timestamp.Prev()
+		timestamp = metaTimestamp.Prev()
 	}
 
 	ownIntent := IsIntentOf(*meta, txn) // false if txn == nil
-	if !timestamp.Less(meta.Timestamp) && meta.Txn != nil && !ownIntent {
+	if !timestamp.Less(metaTimestamp) && meta.Txn != nil && !ownIntent {
 		// Trying to read the last value, but it's another transaction's intent;
 		// the reader will have to act on this.
 		return nil, nil, safeValue, &roachpb.WriteIntentError{
@@ -718,13 +719,13 @@ func mvccGetInternal(
 	var checkValueTimestamp bool
 	seekKey := metaKey
 
-	if !timestamp.Less(meta.Timestamp) || ownIntent {
+	if !timestamp.Less(metaTimestamp) || ownIntent {
 		// We are reading the latest value, which is either an intent written
 		// by this transaction or not an intent at all (so there's no
 		// conflict). Note that when reading the own intent, the timestamp
 		// specified is irrelevant; we always want to see the intent (see
 		// TestMVCCReadWithPushedTimestamp).
-		seekKey.Timestamp = meta.Timestamp
+		seekKey.Timestamp = metaTimestamp
 
 		// Check for case where we're reading our own txn's intent
 		// but it's got a different epoch. This can happen if the
@@ -743,14 +744,14 @@ func mvccGetInternal(
 		// "old" value in a transactional context at time (timestamp, MaxTimestamp]
 		// occurs, leading to a clock uncertainty error if a version exists in
 		// that time interval.
-		if !txn.MaxTimestamp.Less(meta.Timestamp) {
+		if !txn.MaxTimestamp.Less(metaTimestamp) {
 			// Second case: Our read timestamp is behind the latest write, but the
 			// latest write could possibly have happened before our read in
 			// absolute time if the writer had a fast clock.
 			// The reader should try again with a later timestamp than the
 			// one given below.
 			return nil, nil, safeValue, roachpb.NewReadWithinUncertaintyIntervalError(
-				timestamp, meta.Timestamp)
+				timestamp, metaTimestamp)
 		}
 
 		// We want to know if anything has been written ahead of timestamp, but
@@ -819,7 +820,7 @@ type putBuffer struct {
 	meta    enginepb.MVCCMetadata
 	newMeta enginepb.MVCCMetadata
 	newTxn  enginepb.TxnMeta
-	ts      hlc.Timestamp
+	ts      enginepb.LegacyTimestamp
 	tmpbuf  []byte
 }
 
@@ -1062,6 +1063,7 @@ func mvccPutInternal(
 	if ok {
 		// There is existing metadata for this key; ensure our write is permitted.
 		meta = &buf.meta
+		metaTimestamp := hlc.Timestamp(meta.Timestamp)
 
 		if meta.Txn != nil {
 			// There is an uncommitted write intent.
@@ -1089,14 +1091,14 @@ func mvccPutInternal(
 			// We are replacing our own older write intent. If we are
 			// writing at the same timestamp we can simply overwrite it;
 			// otherwise we must explicitly delete the obsolete intent.
-			if timestamp != meta.Timestamp {
+			if timestamp != metaTimestamp {
 				versionKey := metaKey
-				versionKey.Timestamp = meta.Timestamp
+				versionKey.Timestamp = metaTimestamp
 				if err = engine.Clear(versionKey); err != nil {
 					return err
 				}
 			}
-		} else if !meta.Timestamp.Less(timestamp) {
+		} else if !metaTimestamp.Less(timestamp) {
 			// This is the case where we're trying to write under a
 			// committed value. Obviously we can't do that, but we can
 			// increment our timestamp to one logical tick past the existing
@@ -1104,7 +1106,7 @@ func mvccPutInternal(
 			// error indicating what the timestamp ended up being. This
 			// timestamp can then be used to increment the txn timestamp and
 			// be returned with the response.
-			actualTimestamp := meta.Timestamp.Next()
+			actualTimestamp := metaTimestamp.Next()
 			maybeTooOldErr = &roachpb.WriteTooOldError{Timestamp: timestamp, ActualTimestamp: actualTimestamp}
 			// If we're in a transaction, always get the value at the orig
 			// timestamp.
@@ -1142,7 +1144,10 @@ func mvccPutInternal(
 		if txn != nil {
 			txnMeta = &txn.TxnMeta
 		}
-		buf.newMeta = enginepb.MVCCMetadata{Txn: txnMeta, Timestamp: timestamp}
+		buf.newMeta = enginepb.MVCCMetadata{
+			Txn:       txnMeta,
+			Timestamp: enginepb.LegacyTimestamp(timestamp),
+		}
 	}
 	newMeta := &buf.newMeta
 
@@ -1397,7 +1402,7 @@ func MVCCMerge(
 	*meta = enginepb.MVCCMetadata{RawBytes: rawBytes}
 	// If non-zero, set the merge timestamp to provide some replay protection.
 	if timestamp != (hlc.Timestamp{}) {
-		buf.ts = timestamp
+		buf.ts = enginepb.LegacyTimestamp(timestamp)
 		meta.MergeTimestamp = &buf.ts
 	}
 	data, err := buf.marshalMeta(meta)
@@ -1470,7 +1475,7 @@ func getScanMeta(iter Iterator, encEndKey MVCCKey, meta *enginepb.MVCCMetadata) 
 	}
 	if metaKey.IsValue() {
 		meta.Reset()
-		meta.Timestamp = metaKey.Timestamp
+		meta.Timestamp = enginepb.LegacyTimestamp(metaKey.Timestamp)
 		// For values, the size of keys is always account for as
 		// mvccVersionTimestampSize. The size of the metadata key is accounted for
 		// separately.
@@ -1514,7 +1519,7 @@ func getReverseScanMeta(
 
 		meta.Reset()
 		metaKey = iter.UnsafeKey()
-		meta.Timestamp = metaKey.Timestamp
+		meta.Timestamp = enginepb.LegacyTimestamp(metaKey.Timestamp)
 		if metaKey.IsValue() {
 			// For values, the size of keys is always account for as
 			// mvccVersionTimestampSize. The size of the metadata key is accounted
@@ -1913,7 +1918,7 @@ func mvccResolveWriteIntent(
 	// protection. The BeginTransaction replay protection guarantees a
 	// restart in EndTransaction, so the replay won't resolve intents.
 	epochsMatch := meta.Txn.Epoch == intent.Txn.Epoch
-	timestampsValid := !intent.Txn.Timestamp.Less(meta.Timestamp)
+	timestampsValid := !intent.Txn.Timestamp.Less(hlc.Timestamp(meta.Timestamp))
 	commit := intent.Status == roachpb.COMMITTED && epochsMatch && timestampsValid
 
 	// Note the small difference to commit epoch handling here: We allow a push
@@ -1940,7 +1945,7 @@ func mvccResolveWriteIntent(
 	// TODO(tschottdorf): various epoch-related scenarios here deserve more
 	// testing.
 	pushed := intent.Status == roachpb.PENDING &&
-		meta.Timestamp.Less(intent.Txn.Timestamp) &&
+		hlc.Timestamp(meta.Timestamp).Less(intent.Txn.Timestamp) &&
 		meta.Txn.Epoch >= intent.Txn.Epoch
 
 	// If we're committing, or if the commit timestamp of the intent has
@@ -1952,7 +1957,7 @@ func mvccResolveWriteIntent(
 	if commit || pushed {
 		buf.newMeta = *meta
 		// Set the timestamp for upcoming write (or at least the stats update).
-		buf.newMeta.Timestamp = intent.Txn.Timestamp
+		buf.newMeta.Timestamp = enginepb.LegacyTimestamp(intent.Txn.Timestamp)
 
 		var metaKeySize, metaValSize int64
 		var err error
@@ -1976,8 +1981,8 @@ func mvccResolveWriteIntent(
 		}
 
 		// If timestamp of value changed, need to rewrite versioned value.
-		if meta.Timestamp != intent.Txn.Timestamp {
-			origKey := MVCCKey{Key: intent.Key, Timestamp: meta.Timestamp}
+		if hlc.Timestamp(meta.Timestamp) != intent.Txn.Timestamp {
+			origKey := MVCCKey{Key: intent.Key, Timestamp: hlc.Timestamp(meta.Timestamp)}
 			newKey := MVCCKey{Key: intent.Key, Timestamp: intent.Txn.Timestamp}
 			valBytes, err := engine.Get(origKey)
 			if err != nil {
@@ -2015,7 +2020,7 @@ func mvccResolveWriteIntent(
 	// - ResolveIntent with epoch 0 aborts intent from epoch 1.
 
 	// First clear the intent value.
-	latestKey := MVCCKey{Key: intent.Key, Timestamp: meta.Timestamp}
+	latestKey := MVCCKey{Key: intent.Key, Timestamp: hlc.Timestamp(meta.Timestamp)}
 	if err := engine.Clear(latestKey); err != nil {
 		return err
 	}
@@ -2193,7 +2198,7 @@ func MVCCGarbageCollect(
 		inlinedValue := meta.IsInline()
 		implicitMeta := iter.UnsafeKey().IsValue()
 		// First, check whether all values of the key are being deleted.
-		if !gcKey.Timestamp.Less(meta.Timestamp) {
+		if !gcKey.Timestamp.Less(hlc.Timestamp(meta.Timestamp)) {
 			// For version keys, don't allow GC'ing the meta key if it's
 			// not marked deleted. However, for inline values we allow it;
 			// they are internal and GCing them directly saves the extra

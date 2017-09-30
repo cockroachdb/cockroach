@@ -71,14 +71,6 @@ class Timestamp : public ::google::protobuf::MessageLite /* @@protoc_insertion_p
     return *this;
   }
 
-  inline const ::std::string& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-
-  inline ::std::string* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
-  }
-
   static const Timestamp& default_instance();
 
   static inline const Timestamp* internal_default_instance() {
@@ -129,13 +121,13 @@ class Timestamp : public ::google::protobuf::MessageLite /* @@protoc_insertion_p
 
   // accessors -------------------------------------------------------
 
-  bool has_wall_time() const;
+  // int64 wall_time = 1;
   void clear_wall_time();
   static const int kWallTimeFieldNumber = 1;
   ::google::protobuf::int64 wall_time() const;
   void set_wall_time(::google::protobuf::int64 value);
 
-  bool has_logical() const;
+  // int32 logical = 2;
   void clear_logical();
   static const int kLogicalFieldNumber = 2;
   ::google::protobuf::int32 logical() const;
@@ -143,16 +135,11 @@ class Timestamp : public ::google::protobuf::MessageLite /* @@protoc_insertion_p
 
   // @@protoc_insertion_point(class_scope:cockroach.util.hlc.Timestamp)
  private:
-  void set_has_wall_time();
-  void clear_has_wall_time();
-  void set_has_logical();
-  void clear_has_logical();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::internal::HasBits<1> _has_bits_;
-  mutable int _cached_size_;
   ::google::protobuf::int64 wall_time_;
   ::google::protobuf::int32 logical_;
+  mutable int _cached_size_;
   friend struct protobuf_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto::TableStruct;
 };
 // ===================================================================
@@ -163,48 +150,30 @@ class Timestamp : public ::google::protobuf::MessageLite /* @@protoc_insertion_p
 #if !PROTOBUF_INLINE_NOT_IN_HEADERS
 // Timestamp
 
-inline bool Timestamp::has_wall_time() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void Timestamp::set_has_wall_time() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void Timestamp::clear_has_wall_time() {
-  _has_bits_[0] &= ~0x00000001u;
-}
+// int64 wall_time = 1;
 inline void Timestamp::clear_wall_time() {
   wall_time_ = GOOGLE_LONGLONG(0);
-  clear_has_wall_time();
 }
 inline ::google::protobuf::int64 Timestamp::wall_time() const {
   // @@protoc_insertion_point(field_get:cockroach.util.hlc.Timestamp.wall_time)
   return wall_time_;
 }
 inline void Timestamp::set_wall_time(::google::protobuf::int64 value) {
-  set_has_wall_time();
+  
   wall_time_ = value;
   // @@protoc_insertion_point(field_set:cockroach.util.hlc.Timestamp.wall_time)
 }
 
-inline bool Timestamp::has_logical() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void Timestamp::set_has_logical() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void Timestamp::clear_has_logical() {
-  _has_bits_[0] &= ~0x00000002u;
-}
+// int32 logical = 2;
 inline void Timestamp::clear_logical() {
   logical_ = 0;
-  clear_has_logical();
 }
 inline ::google::protobuf::int32 Timestamp::logical() const {
   // @@protoc_insertion_point(field_get:cockroach.util.hlc.Timestamp.logical)
   return logical_;
 }
 inline void Timestamp::set_logical(::google::protobuf::int32 value) {
-  set_has_logical();
+  
   logical_ = value;
   // @@protoc_insertion_point(field_set:cockroach.util.hlc.Timestamp.logical)
 }

@@ -6648,7 +6648,7 @@ func TestProposalOverhead(t *testing.T) {
 	// NB: the expected overhead reflects the space overhead currently present in
 	// Raft commands. This test will fail if that overhead changes. Try to make
 	// this number go down and not up.
-	const expectedOverhead = 117
+	const expectedOverhead = 105
 	if v := atomic.LoadUint32(&overhead); expectedOverhead != v {
 		t.Fatalf("expected overhead of %d, but found %d", expectedOverhead, v)
 	}
