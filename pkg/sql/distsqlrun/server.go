@@ -207,6 +207,15 @@ func FlowVerIsCompatible(flowVer, minAcceptedVersion, serverVersion DistSQLVersi
 	return flowVer >= minAcceptedVersion && flowVer <= serverVersion
 }
 
+// simpleCtxProvider always returns the context that it holds.
+type simpleCtxProvider struct {
+	ctx context.Context
+}
+
+func (s simpleCtxProvider) Ctx() context.Context {
+	return s.ctx
+}
+
 // Note: unless an error is returned, the returned context contains a span that
 // must be finished through Flow.Cleanup.
 func (ds *ServerImpl) setupFlow(
@@ -271,12 +280,10 @@ func (ds *ServerImpl) setupFlow(
 		ReCache:      ds.regexpCache,
 		Mon:          &monitor,
 		ActiveMemAcc: &acc,
-		Ctx: func() context.Context {
-			// TODO(andrei): This is wrong. Each processor should override Ctx with its
-			// own context.
-			return ctx
-		},
-		Txn: txn,
+		// TODO(andrei): This is wrong. Each processor should override Ctx with its
+		// own context.
+		CtxProvider: simpleCtxProvider{ctx: ctx},
+		Txn:         txn,
 	}
 	evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 	evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
