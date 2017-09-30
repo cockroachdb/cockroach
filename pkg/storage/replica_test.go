@@ -6126,7 +6126,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	// Get original meta2 descriptor.
 	rlArgs := &roachpb.RangeLookupRequest{
 		Span: roachpb.Span{
-			Key: keys.RangeMetaKey(roachpb.RKey(key)),
+			Key: keys.RangeMetaKey(roachpb.RKey(key)).AsRawKey(),
 		},
 		MaxRanges: 1,
 		Reverse:   isReverse,
@@ -6161,7 +6161,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	// We send directly to Replica throughout this test, so there's no danger
 	// of the Store aborting this transaction (i.e. we don't have to set a high
 	// priority).
-	pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(key)), data)
+	pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(key)).AsRawKey(), data)
 	txn.Sequence++
 	if _, pErr = maybeWrapWithBeginTransaction(context.Background(), tc.Sender(), roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
 		t.Fatal(pErr)
@@ -6170,7 +6170,7 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	// Now lookup the range; should get the value. Since the lookup is
 	// inconsistent, there's no WriteIntentError.
 	// Note that 'A' < 'a'.
-	rlArgs.Key = keys.RangeMetaKey(roachpb.RKey{'A'})
+	rlArgs.Key = keys.RangeMetaKey(roachpb.RKey{'A'}).AsRawKey()
 
 	reply, pErr = tc.SendWrappedWith(roachpb.Header{
 		Timestamp:       tc.Clock().Now(),
@@ -6248,7 +6248,7 @@ func TestRangeLookupAsyncResolveIntent(t *testing.T) {
 	// Get original meta2 descriptor.
 	rlArgs := &roachpb.RangeLookupRequest{
 		Span: roachpb.Span{
-			Key: keys.RangeMetaKey(roachpb.RKey(key)),
+			Key: keys.RangeMetaKey(roachpb.RKey(key)).AsRawKey(),
 		},
 		MaxRanges: 1,
 	}
@@ -6282,7 +6282,7 @@ func TestRangeLookupAsyncResolveIntent(t *testing.T) {
 	// We send directly to Replica throughout this test, so there's no danger
 	// of the Store aborting this transaction (i.e. we don't have to set a high
 	// priority).
-	pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(key)), data)
+	pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(key)).AsRawKey(), data)
 	txn.Sequence++
 	if _, pErr = maybeWrapWithBeginTransaction(context.Background(), tc.Sender(), roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
 		t.Fatal(pErr)
@@ -6294,7 +6294,7 @@ func TestRangeLookupAsyncResolveIntent(t *testing.T) {
 	// operation will block forever.
 	//
 	// Note that 'A' < 'a'.
-	rlArgs.Key = keys.RangeMetaKey(roachpb.RKey{'A'})
+	rlArgs.Key = keys.RangeMetaKey(roachpb.RKey{'A'}).AsRawKey()
 
 	reply, pErr = tc.SendWrappedWith(roachpb.Header{
 		Timestamp:       tc.Clock().Now(),
@@ -6355,7 +6355,7 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(r.EndKey)), data)
+			pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(r.EndKey)).AsRawKey(), data)
 
 			txn.Sequence++
 			if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
@@ -6366,8 +6366,8 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 		// Resolve the intents.
 		rArgs := &roachpb.ResolveIntentRangeRequest{
 			Span: roachpb.Span{
-				Key:    keys.RangeMetaKey(roachpb.RKey("a")),
-				EndKey: keys.RangeMetaKey(roachpb.RKey("z")),
+				Key:    keys.RangeMetaKey(roachpb.RKey("a")).AsRawKey(),
+				EndKey: keys.RangeMetaKey(roachpb.RKey("z")).AsRawKey(),
 			},
 			IntentTxn: txn.TxnMeta,
 			Status:    roachpb.COMMITTED,
@@ -6387,7 +6387,7 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 	// Test ReverseScan without intents.
 	for _, c := range testCases {
 		clonedRLArgs := *rlArgs
-		clonedRLArgs.Key = keys.RangeMetaKey(roachpb.RKey(c.key))
+		clonedRLArgs.Key = keys.RangeMetaKey(roachpb.RKey(c.key)).AsRawKey()
 		reply, pErr := tc.SendWrappedWith(roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, &clonedRLArgs)
@@ -6409,7 +6409,7 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(r.EndKey)), data)
+		pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(r.EndKey)).AsRawKey(), data)
 
 		txn.Sequence++
 		if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
@@ -6420,7 +6420,7 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 	// Test ReverseScan with intents.
 	for _, c := range testCases {
 		clonedRLArgs := *rlArgs
-		clonedRLArgs.Key = keys.RangeMetaKey(roachpb.RKey(c.key))
+		clonedRLArgs.Key = keys.RangeMetaKey(roachpb.RKey(c.key)).AsRawKey()
 		reply, pErr := tc.SendWrappedWith(roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, &clonedRLArgs)

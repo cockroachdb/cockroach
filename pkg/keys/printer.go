@@ -82,8 +82,8 @@ var (
 					if len(unq) == 0 {
 						return "", Meta1Prefix
 					}
-					return "", RangeMetaKey(MustAddr(RangeMetaKey(MustAddr(
-						roachpb.Key(unq)))))
+					return "", RangeMetaKey(RangeMetaKey(MustAddr(
+						roachpb.Key(unq)))).AsRawKey()
 				},
 			}},
 		},
@@ -98,7 +98,7 @@ var (
 					if len(unq) == 0 {
 						return "", Meta2Prefix
 					}
-					return "", RangeMetaKey(MustAddr(roachpb.Key(unq)))
+					return "", RangeMetaKey(MustAddr(roachpb.Key(unq))).AsRawKey()
 				},
 			}},
 		},

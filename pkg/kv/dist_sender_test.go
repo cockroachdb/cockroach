@@ -399,7 +399,7 @@ func (mdb MockRangeDescriptorDB) RangeLookup(
 	filterDescs := func(retDescs []roachpb.RangeDescriptor) []roachpb.RangeDescriptor {
 		var containedDescs []roachpb.RangeDescriptor
 		for _, retDesc := range retDescs {
-			if desc.ContainsKey(mustMeta(retDesc.EndKey)) {
+			if desc.ContainsKey(keys.RangeMetaKey(retDesc.EndKey)) {
 				containedDescs = append(containedDescs, retDesc)
 			} else {
 				log.Infof(ctx, "filtering descriptor %v from RangeLookup on range %v", retDesc, desc)

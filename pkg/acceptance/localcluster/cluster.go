@@ -416,7 +416,7 @@ func (c *Cluster) TransferLease(nodeIdx int, r *rand.Rand, key roachpb.Key) (boo
 func (c *Cluster) lookupRange(nodeIdx int, key roachpb.Key) (*roachpb.RangeDescriptor, error) {
 	req := &roachpb.RangeLookupRequest{
 		Span: roachpb.Span{
-			Key: keys.RangeMetaKey(keys.MustAddr(key)),
+			Key: keys.RangeMetaKey(keys.MustAddr(key)).AsRawKey(),
 		},
 		MaxRanges: 1,
 	}
