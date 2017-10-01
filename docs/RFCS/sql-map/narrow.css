@@ -1,0 +1,76 @@
+/*
+ Stylesheet for HTML derived from rST.
+
+ Key features:
+
+ - auto beautification of the rST metadata at the start.
+ - proper fitting of SVG inlines.
+*/
+body {
+    font-family: "OFL Sorts Mill Goudy TT", "Palatino Linotype", "Book Antiqua", "Palatino", serif;
+    font-size: 12pt;
+    text-align: justify;
+    color: #222;
+}
+
+div.document {
+    line-height: 1.7em;
+}
+
+dl.docinfo {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+}
+
+dl.docinfo dt {
+    width: 0;
+    display: none;
+}
+
+dl.docinfo dd {
+    margin: 0;
+    padding: 0;
+    display: block;
+    text-align: center;
+    width: 100%;
+    font-style: italic;
+    font-size: 90%;
+    color: #777;
+}
+
+svg {
+    width: 100%;
+}
+
+#svg-container-items {
+    border: 1px solid  black;
+    width: 150ex;
+    margin-left: -40ex;
+}
+
+#svg-items {
+    width: 150ex;
+    height: 40em;
+}
+
+pre, tt {
+    font-size: 10pt;
+    line-height: 1.3em;
+    font-family: "Lucida Console", "Monaco", monospace;
+}
+
+pre.literal-block, pre.doctest-block, pre.math, pre.code {
+    margin-left: 0px;
+    margin-right: 0px;
+}
+
+table.borderless {
+    width: 150%;
+    padding: 0;
+    margin-left: -25%;
+    color: #555;
+    font-size: 85%;
+}
+
+@import "http://fonts.googleapis.com/css?family=OFL+Sorts+Mill+Goudy+TT:regular,italic";
