@@ -5461,7 +5461,6 @@ bool Lease::MergePartialFromCodedStream(
         break;
       }
 
-      // optional .cockroach.util.hlc.Timestamp expiration = 2;
       case 2: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(18u)) {
@@ -5484,7 +5483,6 @@ bool Lease::MergePartialFromCodedStream(
         break;
       }
 
-      // optional .cockroach.util.hlc.Timestamp deprecated_start_stasis = 4;
       case 4: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(34u)) {
@@ -5554,7 +5552,6 @@ void Lease::SerializeWithCachedSizes(
       1, *this->start_, output);
   }
 
-  // optional .cockroach.util.hlc.Timestamp expiration = 2;
   if (cached_has_bits & 0x00000002u) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       2, *this->expiration_, output);
@@ -5565,7 +5562,6 @@ void Lease::SerializeWithCachedSizes(
       3, *this->replica_, output);
   }
 
-  // optional .cockroach.util.hlc.Timestamp deprecated_start_stasis = 4;
   if (cached_has_bits & 0x00000008u) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       4, *this->deprecated_start_stasis_, output);
@@ -5598,7 +5594,6 @@ size_t Lease::ByteSizeLong() const {
           *this->start_);
     }
 
-    // optional .cockroach.util.hlc.Timestamp expiration = 2;
     if (has_expiration()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -5611,7 +5606,6 @@ size_t Lease::ByteSizeLong() const {
           *this->replica_);
     }
 
-    // optional .cockroach.util.hlc.Timestamp deprecated_start_stasis = 4;
     if (has_deprecated_start_stasis()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSizeNoVirtual(
@@ -5752,7 +5746,6 @@ void Lease::set_allocated_start(::cockroach::util::hlc::Timestamp* start) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Lease.start)
 }
 
-// optional .cockroach.util.hlc.Timestamp expiration = 2;
 bool Lease::has_expiration() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
@@ -5841,7 +5834,6 @@ void Lease::set_allocated_replica(::cockroach::roachpb::ReplicaDescriptor* repli
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Lease.replica)
 }
 
-// optional .cockroach.util.hlc.Timestamp deprecated_start_stasis = 4;
 bool Lease::has_deprecated_start_stasis() const {
   return (_has_bits_[0] & 0x00000008u) != 0;
 }

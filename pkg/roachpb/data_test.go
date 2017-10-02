@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -612,6 +613,14 @@ func TestLeaseEquivalence(t *testing.T) {
 
 	if !postPRLease.Equivalent(prePRLease) || !prePRLease.Equivalent(postPRLease) {
 		t.Fatalf("leases not equivalent but should be despite diff(pre,post) = %s", pretty.Diff(prePRLease, postPRLease))
+	}
+}
+
+func TestLeaseFuzzNullability(t *testing.T) {
+	var l Lease
+	protoutil.Walk(&l, protoutil.ZeroInsertingVisitor)
+	if l.Expiration == nil {
+		t.Fatal("unexpectedly nil expiration")
 	}
 }
 
