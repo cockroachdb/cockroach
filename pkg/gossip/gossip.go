@@ -848,7 +848,7 @@ func (g *Gossip) addInfoLocked(key string, val []byte, ttl time.Duration) error 
 
 // AddInfoProto adds or updates an info object. Returns an error if info
 // couldn't be added.
-func (g *Gossip) AddInfoProto(key string, msg proto.Message, ttl time.Duration) error {
+func (g *Gossip) AddInfoProto(key string, msg protoutil.Message, ttl time.Duration) error {
 	bytes, err := protoutil.Marshal(msg)
 	if err != nil {
 		return err

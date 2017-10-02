@@ -20,8 +20,6 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/gogo/protobuf/proto"
-
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -56,7 +54,7 @@ func TrackRaftProtos() func() []reflect.Type {
 		inner: make(map[reflect.Type]struct{}),
 	}
 
-	protoutil.Interceptor = func(pb proto.Message) {
+	protoutil.Interceptor = func(pb protoutil.Message) {
 		t := reflect.TypeOf(pb)
 
 		// Special handling for MVCCMetadata: we expect MVCCMetadata to be
@@ -105,7 +103,7 @@ func TrackRaftProtos() func() []reflect.Type {
 	}
 
 	return func() []reflect.Type {
-		protoutil.Interceptor = func(_ proto.Message) {}
+		protoutil.Interceptor = func(_ protoutil.Message) {}
 
 		belowRaftProtos.Lock()
 		types := make([]reflect.Type, 0, len(belowRaftProtos.inner))

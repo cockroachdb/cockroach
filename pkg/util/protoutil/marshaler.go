@@ -37,7 +37,7 @@ func (*ProtoPb) ContentType() string {
 
 // Marshal implements gwruntime.Marshaler.
 func (*ProtoPb) Marshal(v interface{}) ([]byte, error) {
-	if p, ok := v.(proto.Message); ok {
+	if p, ok := v.(Message); ok {
 		return Marshal(p)
 	}
 	return nil, errors.Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
@@ -83,7 +83,7 @@ func (*ProtoPb) NewEncoder(w io.Writer) gwruntime.Encoder {
 
 // Encode implements gwruntime.Marshaler.
 func (e *protoEncoder) Encode(v interface{}) error {
-	if p, ok := v.(proto.Message); ok {
+	if p, ok := v.(Message); ok {
 		bytes, err := Marshal(p)
 		if err == nil {
 			_, err = e.w.Write(bytes)
