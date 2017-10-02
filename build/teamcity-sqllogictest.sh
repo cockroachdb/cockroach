@@ -9,7 +9,7 @@ mkdir -p artifacts
 # the all-on/all-off strategy BULIDER_HIDE_GOPATH_SRC gives us.
 export BUILDER_HIDE_GOPATH_SRC=0
 
-for config in default distsql; do
+for config in default distsql distsql-disk; do
     build/builder.sh env \
         make test TESTFLAGS="-v -bigtest -config ${config}" TESTTIMEOUT='24h' PKG='./pkg/sql/logictest' TESTS='^TestLogic$$' 2>&1 \
         | tee "artifacts/${config}.log" \
