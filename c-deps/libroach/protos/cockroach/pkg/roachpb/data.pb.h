@@ -123,9 +123,6 @@ extern VersionDefaultTypeInternal _Version_default_instance_;
 namespace storage {
 namespace engine {
 namespace enginepb {
-class LegacyTimestamp;
-class LegacyTimestampDefaultTypeInternal;
-extern LegacyTimestampDefaultTypeInternal _LegacyTimestamp_default_instance_;
 class MVCCMetadata;
 class MVCCMetadataDefaultTypeInternal;
 extern MVCCMetadataDefaultTypeInternal _MVCCMetadata_default_instance_;

@@ -648,7 +648,7 @@ func mvccGetMetadata(
 	meta.KeyBytes = mvccVersionTimestampSize
 	meta.ValBytes = int64(len(iter.UnsafeValue()))
 	meta.Deleted = meta.ValBytes == 0
-	meta.Timestamp = enginepb.LegacyTimestamp(unsafeKey.Timestamp)
+	meta.Timestamp = hlc.LegacyTimestamp(unsafeKey.Timestamp)
 	return true, int64(unsafeKey.EncodedSize()) - meta.KeyBytes, 0, nil
 }
 
@@ -820,7 +820,7 @@ type putBuffer struct {
 	meta    enginepb.MVCCMetadata
 	newMeta enginepb.MVCCMetadata
 	newTxn  enginepb.TxnMeta
-	ts      enginepb.LegacyTimestamp
+	ts      hlc.LegacyTimestamp
 	tmpbuf  []byte
 }
 
@@ -1145,7 +1145,7 @@ func mvccPutInternal(
 		}
 		buf.newMeta = enginepb.MVCCMetadata{
 			Txn:       txnMeta,
-			Timestamp: enginepb.LegacyTimestamp(timestamp),
+			Timestamp: hlc.LegacyTimestamp(timestamp),
 		}
 	}
 	newMeta := &buf.newMeta
@@ -1401,7 +1401,7 @@ func MVCCMerge(
 	*meta = enginepb.MVCCMetadata{RawBytes: rawBytes}
 	// If non-zero, set the merge timestamp to provide some replay protection.
 	if timestamp != (hlc.Timestamp{}) {
-		buf.ts = enginepb.LegacyTimestamp(timestamp)
+		buf.ts = hlc.LegacyTimestamp(timestamp)
 		meta.MergeTimestamp = &buf.ts
 	}
 	data, err := buf.marshalMeta(meta)
@@ -1474,7 +1474,7 @@ func getScanMeta(iter Iterator, encEndKey MVCCKey, meta *enginepb.MVCCMetadata) 
 	}
 	if metaKey.IsValue() {
 		meta.Reset()
-		meta.Timestamp = enginepb.LegacyTimestamp(metaKey.Timestamp)
+		meta.Timestamp = hlc.LegacyTimestamp(metaKey.Timestamp)
 		// For values, the size of keys is always account for as
 		// mvccVersionTimestampSize. The size of the metadata key is accounted for
 		// separately.
@@ -1518,7 +1518,7 @@ func getReverseScanMeta(
 
 		meta.Reset()
 		metaKey = iter.UnsafeKey()
-		meta.Timestamp = enginepb.LegacyTimestamp(metaKey.Timestamp)
+		meta.Timestamp = hlc.LegacyTimestamp(metaKey.Timestamp)
 		if metaKey.IsValue() {
 			// For values, the size of keys is always account for as
 			// mvccVersionTimestampSize. The size of the metadata key is accounted
@@ -1956,7 +1956,7 @@ func mvccResolveWriteIntent(
 	if commit || pushed {
 		buf.newMeta = *meta
 		// Set the timestamp for upcoming write (or at least the stats update).
-		buf.newMeta.Timestamp = enginepb.LegacyTimestamp(intent.Txn.Timestamp)
+		buf.newMeta.Timestamp = hlc.LegacyTimestamp(intent.Txn.Timestamp)
 
 		var metaKeySize, metaValSize int64
 		var err error

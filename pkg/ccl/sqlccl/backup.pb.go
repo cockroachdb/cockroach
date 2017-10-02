@@ -20,7 +20,7 @@ import cockroach_build "github.com/cockroachdb/cockroach/pkg/build"
 import cockroach_roachpb3 "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_sql_sqlbase1 "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import cockroach_util_hlc1 "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 import github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
 import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -45,8 +45,8 @@ const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 // ranges in a backup is the same, but the start may vary (to allow individual
 // tables to be backed up on different schedules).
 type BackupDescriptor struct {
-	StartTime cockroach_util_hlc.Timestamp `protobuf:"bytes,1,opt,name=start_time,json=startTime" json:"start_time"`
-	EndTime   cockroach_util_hlc.Timestamp `protobuf:"bytes,2,opt,name=end_time,json=endTime" json:"end_time"`
+	StartTime cockroach_util_hlc1.Timestamp `protobuf:"bytes,1,opt,name=start_time,json=startTime" json:"start_time"`
+	EndTime   cockroach_util_hlc1.Timestamp `protobuf:"bytes,2,opt,name=end_time,json=endTime" json:"end_time"`
 	// Spans contains the spans requested for backup. The keyranges covered by
 	// `files` may be a subset of this if there were ranges with no changes since
 	// the last backup. For all tables in the backup descriptor, these spans must

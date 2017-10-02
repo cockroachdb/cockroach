@@ -11,7 +11,7 @@ import cockroach_storage_engine_enginepb "github.com/cockroachdb/cockroach/pkg/s
 import cockroach_roachpb4 "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
-import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import cockroach_util_hlc1 "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 import io "io"
 
@@ -58,13 +58,13 @@ type ReplicaState struct {
 	// gcThreshold is the GC threshold of the Range, typically updated when keys
 	// are garbage collected. Reads and writes at timestamps <= this time will
 	// not be served.
-	GCThreshold *cockroach_util_hlc.Timestamp                `protobuf:"bytes,6,opt,name=gc_threshold,json=gcThreshold" json:"gc_threshold,omitempty"`
+	GCThreshold *cockroach_util_hlc1.Timestamp               `protobuf:"bytes,6,opt,name=gc_threshold,json=gcThreshold" json:"gc_threshold,omitempty"`
 	Stats       *cockroach_storage_engine_enginepb.MVCCStats `protobuf:"bytes,7,opt,name=stats" json:"stats,omitempty"`
 	// txn_span_gc_threshold is the (maximum) timestamp below which transaction
 	// records may have been garbage collected (as measured by txn.LastActive()).
 	// Transaction at lower timestamps must not be allowed to write their initial
 	// transaction entry.
-	TxnSpanGCThreshold *cockroach_util_hlc.Timestamp `protobuf:"bytes,9,opt,name=txn_span_gc_threshold,json=txnSpanGcThreshold" json:"txn_span_gc_threshold,omitempty"`
+	TxnSpanGCThreshold *cockroach_util_hlc1.Timestamp `protobuf:"bytes,9,opt,name=txn_span_gc_threshold,json=txnSpanGcThreshold" json:"txn_span_gc_threshold,omitempty"`
 }
 
 func (m *ReplicaState) Reset()                    { *m = ReplicaState{} }
@@ -621,7 +621,7 @@ func (m *ReplicaState) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.GCThreshold == nil {
-				m.GCThreshold = &cockroach_util_hlc.Timestamp{}
+				m.GCThreshold = &cockroach_util_hlc1.Timestamp{}
 			}
 			if err := m.GCThreshold.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -687,7 +687,7 @@ func (m *ReplicaState) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.TxnSpanGCThreshold == nil {
-				m.TxnSpanGCThreshold = &cockroach_util_hlc.Timestamp{}
+				m.TxnSpanGCThreshold = &cockroach_util_hlc1.Timestamp{}
 			}
 			if err := m.TxnSpanGCThreshold.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err

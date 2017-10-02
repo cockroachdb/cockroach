@@ -29,15 +29,13 @@
 #include <google/protobuf/repeated_field.h>  // IWYU pragma: export
 #include <google/protobuf/extension_set.h>  // IWYU pragma: export
 #include <google/protobuf/generated_enum_util.h>
+#include "cockroach/pkg/util/hlc/legacy_timestamp.pb.h"
 #include "cockroach/pkg/util/hlc/timestamp.pb.h"
 // @@protoc_insertion_point(includes)
 namespace cockroach {
 namespace storage {
 namespace engine {
 namespace enginepb {
-class LegacyTimestamp;
-class LegacyTimestampDefaultTypeInternal;
-extern LegacyTimestampDefaultTypeInternal _LegacyTimestamp_default_instance_;
 class MVCCMetadata;
 class MVCCMetadataDefaultTypeInternal;
 extern MVCCMetadataDefaultTypeInternal _MVCCMetadata_default_instance_;
@@ -52,6 +50,9 @@ extern TxnMetaDefaultTypeInternal _TxnMeta_default_instance_;
 }  // namespace storage
 namespace util {
 namespace hlc {
+class LegacyTimestamp;
+class LegacyTimestampDefaultTypeInternal;
+extern LegacyTimestampDefaultTypeInternal _LegacyTimestamp_default_instance_;
 class Timestamp;
 class TimestampDefaultTypeInternal;
 extern TimestampDefaultTypeInternal _Timestamp_default_instance_;
@@ -260,104 +261,6 @@ class TxnMeta : public ::google::protobuf::MessageLite /* @@protoc_insertion_poi
 };
 // -------------------------------------------------------------------
 
-class LegacyTimestamp : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.storage.engine.enginepb.LegacyTimestamp) */ {
- public:
-  LegacyTimestamp();
-  virtual ~LegacyTimestamp();
-
-  LegacyTimestamp(const LegacyTimestamp& from);
-
-  inline LegacyTimestamp& operator=(const LegacyTimestamp& from) {
-    CopyFrom(from);
-    return *this;
-  }
-
-  inline const ::std::string& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-
-  inline ::std::string* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
-  }
-
-  static const LegacyTimestamp& default_instance();
-
-  static inline const LegacyTimestamp* internal_default_instance() {
-    return reinterpret_cast<const LegacyTimestamp*>(
-               &_LegacyTimestamp_default_instance_);
-  }
-  static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    1;
-
-  void Swap(LegacyTimestamp* other);
-
-  // implements Message ----------------------------------------------
-
-  inline LegacyTimestamp* New() const PROTOBUF_FINAL { return New(NULL); }
-
-  LegacyTimestamp* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
-  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
-    PROTOBUF_FINAL;
-  void CopyFrom(const LegacyTimestamp& from);
-  void MergeFrom(const LegacyTimestamp& from);
-  void Clear() PROTOBUF_FINAL;
-  bool IsInitialized() const PROTOBUF_FINAL;
-
-  size_t ByteSizeLong() const PROTOBUF_FINAL;
-  bool MergePartialFromCodedStream(
-      ::google::protobuf::io::CodedInputStream* input) PROTOBUF_FINAL;
-  void SerializeWithCachedSizes(
-      ::google::protobuf::io::CodedOutputStream* output) const PROTOBUF_FINAL;
-  void DiscardUnknownFields();
-  int GetCachedSize() const PROTOBUF_FINAL { return _cached_size_; }
-  private:
-  void SharedCtor();
-  void SharedDtor();
-  void SetCachedSize(int size) const;
-  void InternalSwap(LegacyTimestamp* other);
-  private:
-  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
-    return NULL;
-  }
-  inline void* MaybeArenaPtr() const {
-    return NULL;
-  }
-  public:
-
-  ::std::string GetTypeName() const PROTOBUF_FINAL;
-
-  // nested types ----------------------------------------------------
-
-  // accessors -------------------------------------------------------
-
-  bool has_wall_time() const;
-  void clear_wall_time();
-  static const int kWallTimeFieldNumber = 1;
-  ::google::protobuf::int64 wall_time() const;
-  void set_wall_time(::google::protobuf::int64 value);
-
-  bool has_logical() const;
-  void clear_logical();
-  static const int kLogicalFieldNumber = 2;
-  ::google::protobuf::int32 logical() const;
-  void set_logical(::google::protobuf::int32 value);
-
-  // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.LegacyTimestamp)
- private:
-  void set_has_wall_time();
-  void clear_has_wall_time();
-  void set_has_logical();
-  void clear_has_logical();
-
-  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::internal::HasBits<1> _has_bits_;
-  mutable int _cached_size_;
-  ::google::protobuf::int64 wall_time_;
-  ::google::protobuf::int32 logical_;
-  friend struct protobuf_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto::TableStruct;
-};
-// -------------------------------------------------------------------
-
 class MVCCMetadata : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.storage.engine.enginepb.MVCCMetadata) */ {
  public:
   MVCCMetadata();
@@ -385,7 +288,7 @@ class MVCCMetadata : public ::google::protobuf::MessageLite /* @@protoc_insertio
                &_MVCCMetadata_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    2;
+    1;
 
   void Swap(MVCCMetadata* other);
 
@@ -455,19 +358,19 @@ class MVCCMetadata : public ::google::protobuf::MessageLite /* @@protoc_insertio
   bool has_timestamp() const;
   void clear_timestamp();
   static const int kTimestampFieldNumber = 2;
-  const ::cockroach::storage::engine::enginepb::LegacyTimestamp& timestamp() const;
-  ::cockroach::storage::engine::enginepb::LegacyTimestamp* mutable_timestamp();
-  ::cockroach::storage::engine::enginepb::LegacyTimestamp* release_timestamp();
-  void set_allocated_timestamp(::cockroach::storage::engine::enginepb::LegacyTimestamp* timestamp);
+  const ::cockroach::util::hlc::LegacyTimestamp& timestamp() const;
+  ::cockroach::util::hlc::LegacyTimestamp* mutable_timestamp();
+  ::cockroach::util::hlc::LegacyTimestamp* release_timestamp();
+  void set_allocated_timestamp(::cockroach::util::hlc::LegacyTimestamp* timestamp);
 
-  // optional .cockroach.storage.engine.enginepb.LegacyTimestamp merge_timestamp = 7;
+  // optional .cockroach.util.hlc.LegacyTimestamp merge_timestamp = 7;
   bool has_merge_timestamp() const;
   void clear_merge_timestamp();
   static const int kMergeTimestampFieldNumber = 7;
-  const ::cockroach::storage::engine::enginepb::LegacyTimestamp& merge_timestamp() const;
-  ::cockroach::storage::engine::enginepb::LegacyTimestamp* mutable_merge_timestamp();
-  ::cockroach::storage::engine::enginepb::LegacyTimestamp* release_merge_timestamp();
-  void set_allocated_merge_timestamp(::cockroach::storage::engine::enginepb::LegacyTimestamp* merge_timestamp);
+  const ::cockroach::util::hlc::LegacyTimestamp& merge_timestamp() const;
+  ::cockroach::util::hlc::LegacyTimestamp* mutable_merge_timestamp();
+  ::cockroach::util::hlc::LegacyTimestamp* release_merge_timestamp();
+  void set_allocated_merge_timestamp(::cockroach::util::hlc::LegacyTimestamp* merge_timestamp);
 
   bool has_key_bytes() const;
   void clear_key_bytes();
@@ -509,8 +412,8 @@ class MVCCMetadata : public ::google::protobuf::MessageLite /* @@protoc_insertio
   mutable int _cached_size_;
   ::google::protobuf::internal::ArenaStringPtr raw_bytes_;
   ::cockroach::storage::engine::enginepb::TxnMeta* txn_;
-  ::cockroach::storage::engine::enginepb::LegacyTimestamp* timestamp_;
-  ::cockroach::storage::engine::enginepb::LegacyTimestamp* merge_timestamp_;
+  ::cockroach::util::hlc::LegacyTimestamp* timestamp_;
+  ::cockroach::util::hlc::LegacyTimestamp* merge_timestamp_;
   ::google::protobuf::int64 key_bytes_;
   ::google::protobuf::int64 val_bytes_;
   bool deleted_;
@@ -545,7 +448,7 @@ class MVCCStats : public ::google::protobuf::MessageLite /* @@protoc_insertion_p
                &_MVCCStats_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    3;
+    2;
 
   void Swap(MVCCStats* other);
 
@@ -1017,56 +920,6 @@ inline void TxnMeta::set_batch_index(::google::protobuf::int32 value) {
 
 // -------------------------------------------------------------------
 
-// LegacyTimestamp
-
-inline bool LegacyTimestamp::has_wall_time() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void LegacyTimestamp::set_has_wall_time() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void LegacyTimestamp::clear_has_wall_time() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-inline void LegacyTimestamp::clear_wall_time() {
-  wall_time_ = GOOGLE_LONGLONG(0);
-  clear_has_wall_time();
-}
-inline ::google::protobuf::int64 LegacyTimestamp::wall_time() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.LegacyTimestamp.wall_time)
-  return wall_time_;
-}
-inline void LegacyTimestamp::set_wall_time(::google::protobuf::int64 value) {
-  set_has_wall_time();
-  wall_time_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.LegacyTimestamp.wall_time)
-}
-
-inline bool LegacyTimestamp::has_logical() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void LegacyTimestamp::set_has_logical() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void LegacyTimestamp::clear_has_logical() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void LegacyTimestamp::clear_logical() {
-  logical_ = 0;
-  clear_has_logical();
-}
-inline ::google::protobuf::int32 LegacyTimestamp::logical() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.LegacyTimestamp.logical)
-  return logical_;
-}
-inline void LegacyTimestamp::set_logical(::google::protobuf::int32 value) {
-  set_has_logical();
-  logical_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.LegacyTimestamp.logical)
-}
-
-// -------------------------------------------------------------------
-
 // MVCCMetadata
 
 // optional .cockroach.storage.engine.enginepb.TxnMeta txn = 1;
@@ -1124,30 +977,30 @@ inline void MVCCMetadata::clear_has_timestamp() {
   _has_bits_[0] &= ~0x00000004u;
 }
 inline void MVCCMetadata::clear_timestamp() {
-  if (timestamp_ != NULL) timestamp_->::cockroach::storage::engine::enginepb::LegacyTimestamp::Clear();
+  if (timestamp_ != NULL) timestamp_->::cockroach::util::hlc::LegacyTimestamp::Clear();
   clear_has_timestamp();
 }
-inline const ::cockroach::storage::engine::enginepb::LegacyTimestamp& MVCCMetadata::timestamp() const {
+inline const ::cockroach::util::hlc::LegacyTimestamp& MVCCMetadata::timestamp() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCMetadata.timestamp)
   return timestamp_ != NULL ? *timestamp_
-                         : *::cockroach::storage::engine::enginepb::LegacyTimestamp::internal_default_instance();
+                         : *::cockroach::util::hlc::LegacyTimestamp::internal_default_instance();
 }
-inline ::cockroach::storage::engine::enginepb::LegacyTimestamp* MVCCMetadata::mutable_timestamp() {
+inline ::cockroach::util::hlc::LegacyTimestamp* MVCCMetadata::mutable_timestamp() {
   set_has_timestamp();
   if (timestamp_ == NULL) {
-    timestamp_ = new ::cockroach::storage::engine::enginepb::LegacyTimestamp;
+    timestamp_ = new ::cockroach::util::hlc::LegacyTimestamp;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCMetadata.timestamp)
   return timestamp_;
 }
-inline ::cockroach::storage::engine::enginepb::LegacyTimestamp* MVCCMetadata::release_timestamp() {
+inline ::cockroach::util::hlc::LegacyTimestamp* MVCCMetadata::release_timestamp() {
   // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCMetadata.timestamp)
   clear_has_timestamp();
-  ::cockroach::storage::engine::enginepb::LegacyTimestamp* temp = timestamp_;
+  ::cockroach::util::hlc::LegacyTimestamp* temp = timestamp_;
   timestamp_ = NULL;
   return temp;
 }
-inline void MVCCMetadata::set_allocated_timestamp(::cockroach::storage::engine::enginepb::LegacyTimestamp* timestamp) {
+inline void MVCCMetadata::set_allocated_timestamp(::cockroach::util::hlc::LegacyTimestamp* timestamp) {
   delete timestamp_;
   timestamp_ = timestamp;
   if (timestamp) {
@@ -1290,7 +1143,7 @@ inline void MVCCMetadata::set_allocated_raw_bytes(::std::string* raw_bytes) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCMetadata.raw_bytes)
 }
 
-// optional .cockroach.storage.engine.enginepb.LegacyTimestamp merge_timestamp = 7;
+// optional .cockroach.util.hlc.LegacyTimestamp merge_timestamp = 7;
 inline bool MVCCMetadata::has_merge_timestamp() const {
   return (_has_bits_[0] & 0x00000008u) != 0;
 }
@@ -1301,30 +1154,30 @@ inline void MVCCMetadata::clear_has_merge_timestamp() {
   _has_bits_[0] &= ~0x00000008u;
 }
 inline void MVCCMetadata::clear_merge_timestamp() {
-  if (merge_timestamp_ != NULL) merge_timestamp_->::cockroach::storage::engine::enginepb::LegacyTimestamp::Clear();
+  if (merge_timestamp_ != NULL) merge_timestamp_->::cockroach::util::hlc::LegacyTimestamp::Clear();
   clear_has_merge_timestamp();
 }
-inline const ::cockroach::storage::engine::enginepb::LegacyTimestamp& MVCCMetadata::merge_timestamp() const {
+inline const ::cockroach::util::hlc::LegacyTimestamp& MVCCMetadata::merge_timestamp() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCMetadata.merge_timestamp)
   return merge_timestamp_ != NULL ? *merge_timestamp_
-                         : *::cockroach::storage::engine::enginepb::LegacyTimestamp::internal_default_instance();
+                         : *::cockroach::util::hlc::LegacyTimestamp::internal_default_instance();
 }
-inline ::cockroach::storage::engine::enginepb::LegacyTimestamp* MVCCMetadata::mutable_merge_timestamp() {
+inline ::cockroach::util::hlc::LegacyTimestamp* MVCCMetadata::mutable_merge_timestamp() {
   set_has_merge_timestamp();
   if (merge_timestamp_ == NULL) {
-    merge_timestamp_ = new ::cockroach::storage::engine::enginepb::LegacyTimestamp;
+    merge_timestamp_ = new ::cockroach::util::hlc::LegacyTimestamp;
   }
   // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCMetadata.merge_timestamp)
   return merge_timestamp_;
 }
-inline ::cockroach::storage::engine::enginepb::LegacyTimestamp* MVCCMetadata::release_merge_timestamp() {
+inline ::cockroach::util::hlc::LegacyTimestamp* MVCCMetadata::release_merge_timestamp() {
   // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCMetadata.merge_timestamp)
   clear_has_merge_timestamp();
-  ::cockroach::storage::engine::enginepb::LegacyTimestamp* temp = merge_timestamp_;
+  ::cockroach::util::hlc::LegacyTimestamp* temp = merge_timestamp_;
   merge_timestamp_ = NULL;
   return temp;
 }
-inline void MVCCMetadata::set_allocated_merge_timestamp(::cockroach::storage::engine::enginepb::LegacyTimestamp* merge_timestamp) {
+inline void MVCCMetadata::set_allocated_merge_timestamp(::cockroach::util::hlc::LegacyTimestamp* merge_timestamp) {
   delete merge_timestamp_;
   merge_timestamp_ = merge_timestamp;
   if (merge_timestamp) {
@@ -1662,8 +1515,6 @@ inline void MVCCStats::set_sys_count(::google::protobuf::int64 value) {
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
-// -------------------------------------------------------------------
-
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

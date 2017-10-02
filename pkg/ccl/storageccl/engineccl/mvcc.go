@@ -117,7 +117,7 @@ func (i *MVCCIncrementalIterator) NextKey() {
 		unsafeMetaKey := i.iter.UnsafeKey()
 		if unsafeMetaKey.IsValue() {
 			i.meta.Reset()
-			i.meta.Timestamp = enginepb.LegacyTimestamp(unsafeMetaKey.Timestamp)
+			i.meta.Timestamp = hlc.LegacyTimestamp(unsafeMetaKey.Timestamp)
 		} else {
 			if i.err = i.iter.ValueProto(&i.meta); i.err != nil {
 				i.valid = false

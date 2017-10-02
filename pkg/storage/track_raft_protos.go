@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -53,6 +54,14 @@ func TrackRaftProtos() func() []reflect.Type {
 	}{
 		inner: make(map[reflect.Type]struct{}),
 	}
+
+	// Hard-coded protos for which we don't want to change the encoding. These
+	// are not "below raft" in the normal sense, but instead are used as part of
+	// conditional put operations.
+	belowRaftProtos.Lock()
+	belowRaftProtos.inner[reflect.TypeOf(&roachpb.RangeDescriptor{})] = struct{}{}
+	belowRaftProtos.inner[reflect.TypeOf(&Liveness{})] = struct{}{}
+	belowRaftProtos.Unlock()
 
 	protoutil.Interceptor = func(pb protoutil.Message) {
 		t := reflect.TypeOf(pb)

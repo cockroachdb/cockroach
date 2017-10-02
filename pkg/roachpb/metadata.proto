@@ -68,9 +68,13 @@ message ReplicaIdent {
 // RangeDescriptor is the value stored in a range metadata key.
 // A range is described using an inclusive start key, a non-inclusive end key,
 // and a list of replicas where the range is stored.
+//
+// NOTE: Care must be taken when changing the encoding of this proto
+// because it is used as part of conditional put operations.
 message RangeDescriptor {
   option (gogoproto.goproto_stringer) = false;
   option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
 
   optional int64 range_id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];

@@ -8,7 +8,7 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 import cockroach_storage_engine_enginepb "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import cockroach_util_hlc1 "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 import github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
 
@@ -215,7 +215,7 @@ type Value struct {
 	// raw_bytes contains the encoded value and checksum.
 	RawBytes []byte `protobuf:"bytes,1,opt,name=raw_bytes,json=rawBytes" json:"raw_bytes,omitempty"`
 	// Timestamp of value.
-	Timestamp cockroach_util_hlc.Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
+	Timestamp cockroach_util_hlc1.Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
 }
 
 func (m *Value) Reset()                    { *m = Value{} }
@@ -356,8 +356,8 @@ func (m *InternalCommitTrigger) GetModifiedSpanTrigger() *ModifiedSpanTrigger {
 }
 
 type ObservedTimestamp struct {
-	NodeID    NodeID                       `protobuf:"varint,1,opt,name=node_id,json=nodeId,casttype=NodeID" json:"node_id"`
-	Timestamp cockroach_util_hlc.Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
+	NodeID    NodeID                        `protobuf:"varint,1,opt,name=node_id,json=nodeId,casttype=NodeID" json:"node_id"`
+	Timestamp cockroach_util_hlc1.Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
 }
 
 func (m *ObservedTimestamp) Reset()                    { *m = ObservedTimestamp{} }
@@ -378,9 +378,9 @@ type Transaction struct {
 	// The transaction metadata. These are persisted with every intent.
 	cockroach_storage_engine_enginepb.TxnMeta `protobuf:"bytes,1,opt,name=meta,embedded=meta" json:"meta"`
 	// A free-text identifier for debug purposes.
-	Name          string                       `protobuf:"bytes,2,opt,name=name" json:"name"`
-	Status        TransactionStatus            `protobuf:"varint,4,opt,name=status,enum=cockroach.roachpb.TransactionStatus" json:"status"`
-	LastHeartbeat cockroach_util_hlc.Timestamp `protobuf:"bytes,5,opt,name=last_heartbeat,json=lastHeartbeat" json:"last_heartbeat"`
+	Name          string                        `protobuf:"bytes,2,opt,name=name" json:"name"`
+	Status        TransactionStatus             `protobuf:"varint,4,opt,name=status,enum=cockroach.roachpb.TransactionStatus" json:"status"`
+	LastHeartbeat cockroach_util_hlc1.Timestamp `protobuf:"bytes,5,opt,name=last_heartbeat,json=lastHeartbeat" json:"last_heartbeat"`
 	// The original timestamp at which the transaction started. For serializable
 	// transactions, if the timestamp drifts from the original timestamp, the
 	// transaction will retry.
@@ -422,14 +422,14 @@ type Transaction struct {
 	// Again, keep in mind that, when the transaction commits, all the intents are
 	// bumped to the commit timestamp (otherwise, pushing a transaction wouldn't
 	// achieve anything).
-	OrigTimestamp cockroach_util_hlc.Timestamp `protobuf:"bytes,6,opt,name=orig_timestamp,json=origTimestamp" json:"orig_timestamp"`
+	OrigTimestamp cockroach_util_hlc1.Timestamp `protobuf:"bytes,6,opt,name=orig_timestamp,json=origTimestamp" json:"orig_timestamp"`
 	// Initial Timestamp + clock skew. Reads which encounter values with
 	// timestamps between timestamp and max_timestamp trigger a txn
 	// retry error, unless the node being read is listed in observed_timestamps
 	// (in which case no more read uncertainty can occur).
 	// The case max_timestamp < timestamp is possible for transactions which have
 	// been pushed; in this case, max_timestamp should be ignored.
-	MaxTimestamp cockroach_util_hlc.Timestamp `protobuf:"bytes,7,opt,name=max_timestamp,json=maxTimestamp" json:"max_timestamp"`
+	MaxTimestamp cockroach_util_hlc1.Timestamp `protobuf:"bytes,7,opt,name=max_timestamp,json=maxTimestamp" json:"max_timestamp"`
 	// A list of <NodeID, timestamp> pairs. The list maps NodeIDs to timestamps
 	// as observed from their local clock during this transaction. The purpose of
 	// this map is to avoid uncertainty related restarts which normally occur
@@ -484,21 +484,21 @@ type Lease struct {
 	// The start is a timestamp at which the lease begins. This value
 	// must be greater than the last lease expiration or the lease request
 	// is considered invalid.
-	Start cockroach_util_hlc.Timestamp `protobuf:"bytes,1,opt,name=start" json:"start"`
+	Start cockroach_util_hlc1.Timestamp `protobuf:"bytes,1,opt,name=start" json:"start"`
 	// The expiration is a timestamp at which the lease expires. This means that
 	// a new lease can be granted for a later timestamp.
-	Expiration *cockroach_util_hlc.Timestamp `protobuf:"bytes,2,opt,name=expiration" json:"expiration,omitempty"`
+	Expiration *cockroach_util_hlc1.Timestamp `protobuf:"bytes,2,opt,name=expiration" json:"expiration,omitempty"`
 	// The address of the would-be lease holder.
 	Replica ReplicaDescriptor `protobuf:"bytes,3,opt,name=replica" json:"replica"`
 	// The start of the lease stasis period. This field is deprecated.
-	DeprecatedStartStasis *cockroach_util_hlc.Timestamp `protobuf:"bytes,4,opt,name=deprecated_start_stasis,json=deprecatedStartStasis" json:"deprecated_start_stasis,omitempty"`
+	DeprecatedStartStasis *cockroach_util_hlc1.Timestamp `protobuf:"bytes,4,opt,name=deprecated_start_stasis,json=deprecatedStartStasis" json:"deprecated_start_stasis,omitempty"`
 	// The current timestamp when this lease has been proposed. Used after a
 	// transfer and after a node restart to enforce that a node only uses leases
 	// proposed after the time of the said transfer or restart. This is nullable
 	// to help with the rollout (such that a lease applied by some nodes before
 	// the rollout and some nodes after the rollout is serialized the same).
 	// TODO(andrei): Make this non-nullable after the rollout.
-	ProposedTS *cockroach_util_hlc.Timestamp `protobuf:"bytes,5,opt,name=proposed_ts,json=proposedTs" json:"proposed_ts,omitempty"`
+	ProposedTS *cockroach_util_hlc1.Timestamp `protobuf:"bytes,5,opt,name=proposed_ts,json=proposedTs" json:"proposed_ts,omitempty"`
 	// The epoch of the lease holder's node liveness entry. If this value
 	// is non-zero, the start and expiration values are ignored.
 	Epoch *int64 `protobuf:"varint,6,opt,name=epoch" json:"epoch,omitempty"`
@@ -519,7 +519,7 @@ type AbortCacheEntry struct {
 	Key Key `protobuf:"bytes,1,opt,name=key,casttype=Key" json:"key,omitempty"`
 	// The candidate commit timestamp the transaction record held at the time
 	// it was aborted.
-	Timestamp cockroach_util_hlc.Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
+	Timestamp cockroach_util_hlc1.Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
 	// The priority of the transaction.
 	Priority int32 `protobuf:"varint,3,opt,name=priority" json:"priority"`
 }
@@ -1693,7 +1693,7 @@ func NewPopulatedObservedTimestamp(r randyData, easy bool) *ObservedTimestamp {
 	if r.Intn(2) == 0 {
 		this.NodeID *= -1
 	}
-	v3 := cockroach_util_hlc.NewPopulatedTimestamp(r, easy)
+	v3 := cockroach_util_hlc1.NewPopulatedTimestamp(r, easy)
 	this.Timestamp = *v3
 	if !easy && r.Intn(10) != 0 {
 	}
@@ -1706,11 +1706,11 @@ func NewPopulatedTransaction(r randyData, easy bool) *Transaction {
 	this.TxnMeta = *v4
 	this.Name = string(randStringData(r))
 	this.Status = TransactionStatus([]int32{0, 1, 2}[r.Intn(3)])
-	v5 := cockroach_util_hlc.NewPopulatedTimestamp(r, easy)
+	v5 := cockroach_util_hlc1.NewPopulatedTimestamp(r, easy)
 	this.LastHeartbeat = *v5
-	v6 := cockroach_util_hlc.NewPopulatedTimestamp(r, easy)
+	v6 := cockroach_util_hlc1.NewPopulatedTimestamp(r, easy)
 	this.OrigTimestamp = *v6
-	v7 := cockroach_util_hlc.NewPopulatedTimestamp(r, easy)
+	v7 := cockroach_util_hlc1.NewPopulatedTimestamp(r, easy)
 	this.MaxTimestamp = *v7
 	if r.Intn(10) != 0 {
 		v8 := r.Intn(5)
@@ -1738,18 +1738,18 @@ func NewPopulatedTransaction(r randyData, easy bool) *Transaction {
 
 func NewPopulatedLease(r randyData, easy bool) *Lease {
 	this := &Lease{}
-	v12 := cockroach_util_hlc.NewPopulatedTimestamp(r, easy)
+	v12 := cockroach_util_hlc1.NewPopulatedTimestamp(r, easy)
 	this.Start = *v12
 	if r.Intn(10) != 0 {
-		this.Expiration = cockroach_util_hlc.NewPopulatedTimestamp(r, easy)
+		this.Expiration = cockroach_util_hlc1.NewPopulatedTimestamp(r, easy)
 	}
 	v13 := NewPopulatedReplicaDescriptor(r, easy)
 	this.Replica = *v13
 	if r.Intn(10) != 0 {
-		this.DeprecatedStartStasis = cockroach_util_hlc.NewPopulatedTimestamp(r, easy)
+		this.DeprecatedStartStasis = cockroach_util_hlc1.NewPopulatedTimestamp(r, easy)
 	}
 	if r.Intn(10) != 0 {
-		this.ProposedTS = cockroach_util_hlc.NewPopulatedTimestamp(r, easy)
+		this.ProposedTS = cockroach_util_hlc1.NewPopulatedTimestamp(r, easy)
 	}
 	if r.Intn(10) != 0 {
 		v14 := int64(r.Int63())
@@ -1772,7 +1772,7 @@ func NewPopulatedAbortCacheEntry(r randyData, easy bool) *AbortCacheEntry {
 			this.Key[i] = byte(r.Intn(256))
 		}
 	}
-	v16 := cockroach_util_hlc.NewPopulatedTimestamp(r, easy)
+	v16 := cockroach_util_hlc1.NewPopulatedTimestamp(r, easy)
 	this.Timestamp = *v16
 	this.Priority = int32(r.Int31())
 	if r.Intn(2) == 0 {
@@ -3847,7 +3847,7 @@ func (m *Lease) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Expiration == nil {
-				m.Expiration = &cockroach_util_hlc.Timestamp{}
+				m.Expiration = &cockroach_util_hlc1.Timestamp{}
 			}
 			if err := m.Expiration.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -3910,7 +3910,7 @@ func (m *Lease) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.DeprecatedStartStasis == nil {
-				m.DeprecatedStartStasis = &cockroach_util_hlc.Timestamp{}
+				m.DeprecatedStartStasis = &cockroach_util_hlc1.Timestamp{}
 			}
 			if err := m.DeprecatedStartStasis.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -3943,7 +3943,7 @@ func (m *Lease) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.ProposedTS == nil {
-				m.ProposedTS = &cockroach_util_hlc.Timestamp{}
+				m.ProposedTS = &cockroach_util_hlc1.Timestamp{}
 			}
 			if err := m.ProposedTS.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
