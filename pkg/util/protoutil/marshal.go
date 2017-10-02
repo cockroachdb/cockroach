@@ -14,16 +14,36 @@
 
 package protoutil
 
-import "github.com/gogo/protobuf/proto"
+import (
+	"github.com/gogo/protobuf/proto"
+)
+
+// Message extends the proto.Message interface with the MarshalTo and Size
+// methods we tell gogoproto to generate for us.
+type Message interface {
+	proto.Message
+	MarshalTo(data []byte) (int, error)
+	Size() int
+}
 
 // Interceptor will be called with every proto before it is marshalled.
 // Interceptor is not safe to modify concurrently with calls to Marshal.
-var Interceptor = func(_ proto.Message) {}
+var Interceptor = func(_ Message) {}
 
-// Marshal uses proto.Marshal to encode pb into the wire format. It is used in
-// some tests to intercept calls to proto.Marshal.
-func Marshal(pb proto.Message) ([]byte, error) {
+// Marshal encodes pb into the wire format. It is used throughout the code base
+// to intercept calls to proto.Marshal.
+func Marshal(pb Message) ([]byte, error) {
+	dest := make([]byte, pb.Size())
+	if _, err := MarshalTo(pb, dest); err != nil {
+		return nil, err
+	}
+	return dest, nil
+}
+
+// MarshalTo encodes pb into the wire format. It is used throughout the code
+// base to intercept calls to pb.MarshalTo.
+func MarshalTo(pb Message, dest []byte) (int, error) {
 	Interceptor(pb)
 
-	return proto.Marshal(pb)
+	return pb.MarshalTo(dest)
 }

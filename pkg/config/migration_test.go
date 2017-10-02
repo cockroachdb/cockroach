@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -26,7 +27,7 @@ func TestMigrateZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
-		input, want proto.Message
+		input, want protoutil.Message
 	}{
 		{
 			&ZoneConfig{

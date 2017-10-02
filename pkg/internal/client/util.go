@@ -19,11 +19,10 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 // TODO(pmattis): The methods in this file needs tests.
@@ -83,7 +82,7 @@ func marshalValue(v interface{}) (roachpb.Value, error) {
 		err := r.SetDuration(t)
 		return r, err
 
-	case proto.Message:
+	case protoutil.Message:
 		err := r.SetProto(t)
 		return r, err
 

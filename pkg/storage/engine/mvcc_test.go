@@ -3323,12 +3323,8 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 }
 
 // encodedSize returns the encoded size of the protobuf message.
-func encodedSize(msg proto.Message, t *testing.T) int64 {
-	data, err := protoutil.Marshal(msg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return int64(len(data))
+func encodedSize(msg protoutil.Message, t *testing.T) int64 {
+	return int64(msg.Size())
 }
 
 func verifyStats(debug string, ms, expMS *enginepb.MVCCStats, t *testing.T) {
