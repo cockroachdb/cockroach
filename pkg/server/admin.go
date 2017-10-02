@@ -23,7 +23,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -48,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -113,7 +113,7 @@ func (s *adminServer) RegisterGateway(
 //
 // TODO(cdo): Make this work when we have an authentication scheme for the
 // API.
-func (s *adminServer) getUser(_ proto.Message) string {
+func (s *adminServer) getUser(_ protoutil.Message) string {
 	return security.RootUser
 }
 
@@ -1495,7 +1495,7 @@ func (s *adminServer) queryZone(
 	}
 
 	var zone config.ZoneConfig
-	if err := proto.Unmarshal(zoneBytes, &zone); err != nil {
+	if err := protoutil.Unmarshal(zoneBytes, &zone); err != nil {
 		return config.ZoneConfig{}, false, err
 	}
 	return zone, true, nil

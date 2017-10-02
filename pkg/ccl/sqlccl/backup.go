@@ -14,7 +14,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
@@ -108,7 +107,7 @@ func readBackupDescriptor(
 		return BackupDescriptor{}, err
 	}
 	var backupDesc BackupDescriptor
-	if err := proto.Unmarshal(descBytes, &backupDesc); err != nil {
+	if err := protoutil.Unmarshal(descBytes, &backupDesc); err != nil {
 		return BackupDescriptor{}, err
 	}
 	return backupDesc, err

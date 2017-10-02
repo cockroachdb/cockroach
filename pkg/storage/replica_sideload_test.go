@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 )
@@ -54,10 +53,10 @@ func entryEq(l, r raftpb.Entry) error {
 	_, lData := DecodeRaftCommand(l.Data)
 	_, rData := DecodeRaftCommand(r.Data)
 	var lc, rc storagebase.RaftCommand
-	if err := proto.Unmarshal(lData, &lc); err != nil {
+	if err := protoutil.Unmarshal(lData, &lc); err != nil {
 		return errors.Wrap(err, "unmarshalling LHS")
 	}
-	if err := proto.Unmarshal(rData, &rc); err != nil {
+	if err := protoutil.Unmarshal(rData, &rc); err != nil {
 		return errors.Wrap(err, "unmarshalling RHS")
 	}
 	if !reflect.DeepEqual(lc, rc) {
@@ -762,12 +761,12 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 		var cmd storagebase.RaftCommand
 		var finalEnt raftpb.Entry
 		for _, entryBytes := range mockSender.logEntries {
-			if err := proto.Unmarshal(entryBytes, &ent); err != nil {
+			if err := protoutil.Unmarshal(entryBytes, &ent); err != nil {
 				t.Fatal(err)
 			}
 			if sniffSideloadedRaftCommand(ent.Data) {
 				_, cmdBytes := DecodeRaftCommand(ent.Data)
-				if err := proto.Unmarshal(cmdBytes, &cmd); err != nil {
+				if err := protoutil.Unmarshal(cmdBytes, &cmd); err != nil {
 					t.Fatal(err)
 				}
 				if as := cmd.ReplicatedEvalResult.AddSSTable; as == nil {

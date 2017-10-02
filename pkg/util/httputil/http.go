@@ -21,8 +21,9 @@ import (
 	"strconv"
 
 	"github.com/gogo/protobuf/jsonpb"
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 const (
@@ -50,7 +51,7 @@ const (
 
 // GetJSON uses the supplied client to GET the URL specified by the parameters
 // and unmarshals the result into response.
-func GetJSON(httpClient http.Client, path string, response proto.Message) error {
+func GetJSON(httpClient http.Client, path string, response protoutil.Message) error {
 	req, err := http.NewRequest("GET", path, nil)
 	if err != nil {
 		return err
@@ -61,7 +62,7 @@ func GetJSON(httpClient http.Client, path string, response proto.Message) error 
 
 // PostJSON uses the supplied client to POST request to the URL specified by
 // the parameters and unmarshals the result into response.
-func PostJSON(httpClient http.Client, path string, request, response proto.Message) error {
+func PostJSON(httpClient http.Client, path string, request, response protoutil.Message) error {
 	// Hack to avoid upsetting TestProtoMarshal().
 	marshalFn := (&jsonpb.Marshaler{}).Marshal
 
@@ -83,7 +84,7 @@ func PostJSON(httpClient http.Client, path string, request, response proto.Messa
 // The response is returned to the caller, though its body will have been
 // closed.
 func PostJSONWithRequest(
-	httpClient http.Client, path string, request, response proto.Message,
+	httpClient http.Client, path string, request, response protoutil.Message,
 ) (*http.Response, error) {
 	// Hack to avoid upsetting TestProtoMarshal().
 	marshalFn := (&jsonpb.Marshaler{}).Marshal
@@ -101,7 +102,7 @@ func PostJSONWithRequest(
 }
 
 func doJSONRequest(
-	httpClient http.Client, req *http.Request, response proto.Message,
+	httpClient http.Client, req *http.Request, response protoutil.Message,
 ) (*http.Response, error) {
 	if timeout := httpClient.Timeout; timeout > 0 {
 		req.Header.Set("Grpc-Timeout", strconv.FormatInt(timeout.Nanoseconds(), 10)+"n")

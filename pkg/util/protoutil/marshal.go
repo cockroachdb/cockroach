@@ -25,6 +25,7 @@ import (
 type Message interface {
 	proto.Message
 	MarshalTo(data []byte) (int, error)
+	Unmarshal(data []byte) error
 	Size() int
 }
 
@@ -75,4 +76,15 @@ func Marshal(pb Message) ([]byte, error) {
 func MarshalToWithoutFuzzing(pb Message, dest []byte) (int, error) {
 	Interceptor(pb)
 	return pb.MarshalTo(dest)
+}
+
+// Unmarshal parses the protocol buffer representation in buf and places the
+// decoded result in pb. If the struct underlying pb does not match the data in
+// buf, the results can be unpredictable.
+//
+// Unmarshal resets pb before starting to unmarshal, so any existing data in pb
+// is always removed.
+func Unmarshal(data []byte, pb Message) error {
+	pb.Reset()
+	return pb.Unmarshal(data)
 }

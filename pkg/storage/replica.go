@@ -28,7 +28,6 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/gogo/protobuf/proto"
 	"github.com/google/btree"
 	"github.com/kr/pretty"
 	"github.com/opentracing/opentracing-go"
@@ -3488,7 +3487,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				// leader. Clear commandID so it's ignored for processing.
 				if len(encodedCommand) == 0 {
 					commandID = ""
-				} else if err := proto.Unmarshal(encodedCommand, &command); err != nil {
+				} else if err := protoutil.Unmarshal(encodedCommand, &command); err != nil {
 					const expl = "while unmarshalling entry"
 					return stats, expl, errors.Wrap(err, expl)
 				}
@@ -3516,18 +3515,18 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 		case raftpb.EntryConfChange:
 			var cc raftpb.ConfChange
-			if err := proto.Unmarshal(e.Data, &cc); err != nil {
+			if err := protoutil.Unmarshal(e.Data, &cc); err != nil {
 				const expl = "while unmarshaling ConfChange"
 				return stats, expl, errors.Wrap(err, expl)
 			}
 			var ccCtx ConfChangeContext
-			if err := proto.Unmarshal(cc.Context, &ccCtx); err != nil {
+			if err := protoutil.Unmarshal(cc.Context, &ccCtx); err != nil {
 				const expl = "while unmarshaling ConfChangeContext"
 				return stats, expl, errors.Wrap(err, expl)
 
 			}
 			var command storagebase.RaftCommand
-			if err := proto.Unmarshal(ccCtx.Payload, &command); err != nil {
+			if err := protoutil.Unmarshal(ccCtx.Payload, &command); err != nil {
 				const expl = "while unmarshaling RaftCommand"
 				return stats, expl, errors.Wrap(err, expl)
 			}

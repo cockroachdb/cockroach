@@ -22,7 +22,6 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -30,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
@@ -247,7 +247,7 @@ func TestEngineBatch(t *testing.T) {
 				t.Fatal(err)
 			}
 			var m enginepb.MVCCMetadata
-			if err := proto.Unmarshal(b, &m); err != nil {
+			if err := protoutil.Unmarshal(b, &m); err != nil {
 				t.Fatal(err)
 			}
 			if !m.IsInline() {
@@ -453,10 +453,10 @@ func TestEngineMerge(t *testing.T) {
 			}
 			result, _ := engine.Get(tc.testKey)
 			var resultV, expectedV enginepb.MVCCMetadata
-			if err := proto.Unmarshal(result, &resultV); err != nil {
+			if err := protoutil.Unmarshal(result, &resultV); err != nil {
 				t.Fatal(err)
 			}
-			if err := proto.Unmarshal(tc.expected, &expectedV); err != nil {
+			if err := protoutil.Unmarshal(tc.expected, &expectedV); err != nil {
 				t.Fatal(err)
 			}
 			if !reflect.DeepEqual(resultV, expectedV) {
