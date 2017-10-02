@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -67,6 +68,7 @@ var importOptionExpectValues = map[string]bool{
 	importOptionTransformOnly: false,
 	importOptionSSTSize:       true,
 	importOptionTemp:          true,
+	restoreOptIntoDB:          true,
 }
 
 // LoadCSV converts CSV files into enterprise backup format.
@@ -813,15 +815,17 @@ func importJobDescription(
 	stmt.Options = nil
 	hasTransformOnly := false
 	for k, v := range opts {
-		if k == importOptionTemp {
+		switch k {
+		case importOptionTemp:
 			clean, err := storageccl.SanitizeExportStorageURI(v)
 			if err != nil {
 				return "", err
 			}
 			v = clean
-		}
-		if k == importOptionTransformOnly {
+		case importOptionTransformOnly:
 			hasTransformOnly = true
+		case restoreOptIntoDB:
+			continue
 		}
 		opt := parser.KVOption{Key: parser.Name(k)}
 		if importOptionExpectValues[k] {
@@ -919,7 +923,20 @@ func importPlanHook(
 				}
 			} else {
 				targetDB = override
-				// TODO(dt): verify db exists
+			}
+			// Check if database exists right now. It might not after the import is done,
+			// but it's better to fail fast than wait until restore.
+			if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				id, err := txn.Get(ctx, sqlbase.MakeNameMetadataKey(0, targetDB))
+				if err != nil {
+					return err
+				}
+				if id.Value == nil {
+					return errors.Errorf("database does not exist: %q", targetDB)
+				}
+				return nil
+			}); err != nil {
+				return err
 			}
 		}
 
