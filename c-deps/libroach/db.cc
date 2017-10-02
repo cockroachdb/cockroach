@@ -444,11 +444,16 @@ void SerializeProtoToValue(std::string *val, const google::protobuf::MessageLite
   msg.AppendToString(val);
 }
 
-bool IsValidSplitKey(const rocksdb::Slice& key) {
-  for (auto span : kSortedNoSplitSpans) {
-    // kSortedNoSplitSpans are reverse sorted (largest to smallest) on
-    // the span end key which allows us to early exit if our key to
-    // check is above the end of the last no-split span.
+bool IsValidSplitKey(const rocksdb::Slice& key, bool meta2_splits) {
+  if (key == kMeta2KeyMax) {
+    return false;
+  }
+  auto no_split_spans = meta2_splits ? kSortedNoSplitSpans : kSortedNoSplitSpansWithoutMeta2Splits;
+  for (auto span : no_split_spans) {
+    // kSortedNoSplitSpans and kSortedNoSplitSpansWithoutMeta2Splits are
+    // both reverse sorted (largest to smallest) on the span end key which
+    // allows us to early exit if our key to check is above the end of the
+    // last no-split span.
     if (key.compare(span.second) >= 0) {
       return true;
     }
@@ -456,7 +461,7 @@ bool IsValidSplitKey(const rocksdb::Slice& key) {
       return false;
     }
   }
-  return (key != kMeta2KeyMax);
+  return true;
 }
 
 class DBComparator : public rocksdb::Comparator {
@@ -2404,12 +2409,12 @@ MVCCStatsResult MVCCComputeStats(
   return MVCCComputeStatsInternal(iter->rep.get(), start, end, now_nanos);
 }
 
-bool MVCCIsValidSplitKey(DBSlice key) {
-  return IsValidSplitKey(ToSlice(key));
+bool MVCCIsValidSplitKey(DBSlice key, bool meta2_splits) {
+  return IsValidSplitKey(ToSlice(key), meta2_splits);
 }
 
-DBStatus MVCCFindSplitKey(
-    DBIterator* iter, DBKey start, DBKey end, int64_t target_size, DBString* split_key) {
+DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, 
+                          int64_t target_size, bool meta2_splits, DBString* split_key) {
   auto iter_rep = iter->rep.get();
   const std::string start_key = EncodeKey(start);
   iter_rep->Seek(start_key);
@@ -2432,7 +2437,7 @@ DBStatus MVCCFindSplitKey(
     }
 
     ++n;
-    const bool valid = n > 1 && IsValidSplitKey(decoded_key);
+    const bool valid = n > 1 && IsValidSplitKey(decoded_key, meta2_splits);
     int64_t diff = target_size - size_so_far;
     if (diff < 0) {
       diff = -diff;

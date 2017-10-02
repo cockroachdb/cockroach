@@ -28,6 +28,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -595,6 +596,7 @@ func runMVCCFindSplitKey(emk engineMaker, valueBytes int, b *testing.B) {
 	const rangeBytes = 64 * 1024 * 1024
 	numKeys := rangeBytes / (overhead + valueBytes)
 	eng, _ := setupMVCCData(emk, 1, numKeys, valueBytes, b)
+	st := cluster.MakeTestingClusterSettings()
 	defer eng.Close()
 
 	b.SetBytes(rangeBytes)
@@ -603,7 +605,7 @@ func runMVCCFindSplitKey(emk engineMaker, valueBytes int, b *testing.B) {
 	var err error
 	for i := 0; i < b.N; i++ {
 		_, err = MVCCFindSplitKey(
-			context.Background(), eng, roachpb.RKeyMin, roachpb.RKeyMax, rangeBytes/2)
+			context.Background(), eng, st, roachpb.RKeyMin, roachpb.RKeyMax, rangeBytes/2)
 		if err != nil {
 			b.Fatal(err)
 		}

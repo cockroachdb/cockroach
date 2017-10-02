@@ -151,14 +151,31 @@ func (ecv *ExposedClusterVersion) BootstrapVersion() ClusterVersion {
 
 // IsActive returns true if the features of the supplied version are active at
 // the running version.
+//
+// If this returns true then all nodes in the cluster will eventually see this
+// version. However, this is not atomic because versions are gossiped. Because
+// of this, nodes should not gate proper handling of remotely initiated requests
+// that their binary knows how to handle on this state.
 func (ecv *ExposedClusterVersion) IsActive(v roachpb.Version) bool {
 	return ecv.Version().IsActive(v)
 }
 
+// IsMinSupported returns true if the features of the supplied version will be
+// permanently available (i.e. cannot be downgraded away).
+func (ecv *ExposedClusterVersion) IsMinSupported(v roachpb.Version) bool {
+	return ecv.Version().IsMinSupported(v)
+}
+
 // MakeTestingClusterSettings returns a Settings object that has had its version
-// initialized to BootstrapVersion().
+// initialized to BinaryServerVersion.
 func MakeTestingClusterSettings() *Settings {
-	st := MakeClusterSettings(BinaryServerVersion, BinaryServerVersion)
+	return MakeTestingClusterSettingsWithVersion(BinaryServerVersion, BinaryServerVersion)
+}
+
+// MakeTestingClusterSettingsWithVersion returns a Settings object that has had
+// its version initialized to the provided version configuration.
+func MakeTestingClusterSettingsWithVersion(minVersion, serverVersion roachpb.Version) *Settings {
+	st := MakeClusterSettings(minVersion, serverVersion)
 	cv := st.Version.BootstrapVersion()
 	// Initialize with all features enabled.
 	if err := st.InitializeVersion(cv); err != nil {

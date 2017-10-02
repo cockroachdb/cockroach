@@ -2727,7 +2727,7 @@ func (r *Replica) adminSplitWithDescriptor(
 			var err error
 			targetSize := r.GetMaxBytes() / 2
 			foundSplitKey, err = engine.MVCCFindSplitKey(
-				ctx, r.store.engine, desc.StartKey, desc.EndKey, targetSize)
+				ctx, r.store.engine, r.store.cfg.Settings, desc.StartKey, desc.EndKey, targetSize)
 			if err != nil {
 				return reply, false, roachpb.NewErrorf("unable to determine split key: %s", err)
 			}
@@ -2759,7 +2759,7 @@ func (r *Replica) adminSplitWithDescriptor(
 		if !splitKey.Equal(foundSplitKey) {
 			return reply, false, roachpb.NewErrorf("cannot split range at range-local key %s", splitKey)
 		}
-		if !engine.IsValidSplitKey(foundSplitKey) {
+		if !engine.IsValidSplitKey(r.store.cfg.Settings, foundSplitKey) {
 			return reply, false, roachpb.NewErrorf("cannot split range at key %s", splitKey)
 		}
 	}

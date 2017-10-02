@@ -33,6 +33,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
@@ -3022,37 +3023,61 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 
 func TestValidSplitKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testCases := []struct {
+
+	versionedTestCases := map[roachpb.Version][]struct {
 		key   roachpb.Key
 		valid bool
 	}{
-		{roachpb.Key("\x02"), false},
-		{roachpb.Key("\x02\x00"), false},
-		{roachpb.Key("\x02\xff"), false},
-		{roachpb.Key("\x03"), false},
-		{roachpb.Key("\x03\x00"), false},
-		{roachpb.Key("\x03\xff"), false},
-		{roachpb.Key("\x03\xff\xff"), false},
-		{roachpb.Key("\x04"), true},
-		{roachpb.Key("\x05"), true},
-		{roachpb.Key("a"), true},
-		{roachpb.Key("\xff"), true},
-		{roachpb.Key("\xff\x01"), true},
-		{roachpb.Key(keys.MakeTablePrefix(keys.MaxSystemConfigDescID)), false},
-		{roachpb.Key(keys.MakeTablePrefix(keys.MaxSystemConfigDescID + 1)), true},
+		cluster.VersionBase: {
+			{roachpb.Key("\x02"), false},
+			{roachpb.Key("\x02\x00"), false},
+			{roachpb.Key("\x02\xff"), false},
+			{roachpb.Key("\x03"), false},
+			{roachpb.Key("\x03\x00"), false},
+			{roachpb.Key("\x03\xff"), false},
+			{roachpb.Key("\x03\xff\xff"), false},
+			{roachpb.Key("\x04"), true},
+			{roachpb.Key("\x05"), true},
+			{roachpb.Key("a"), true},
+			{roachpb.Key("\xff"), true},
+			{roachpb.Key("\xff\x01"), true},
+			{roachpb.Key(keys.MakeTablePrefix(keys.MaxSystemConfigDescID)), false},
+			{roachpb.Key(keys.MakeTablePrefix(keys.MaxSystemConfigDescID + 1)), true},
+		},
+		cluster.VersionMeta2Splits: {
+			{roachpb.Key("\x02"), false},
+			{roachpb.Key("\x02\x00"), false},
+			{roachpb.Key("\x02\xff"), false},
+			{roachpb.Key("\x03"), true},     // different
+			{roachpb.Key("\x03\x00"), true}, // different
+			{roachpb.Key("\x03\xff"), true}, // different
+			{roachpb.Key("\x03\xff\xff"), false},
+			{roachpb.Key("\x04"), true},
+			{roachpb.Key("\x05"), true},
+			{roachpb.Key("a"), true},
+			{roachpb.Key("\xff"), true},
+			{roachpb.Key("\xff\x01"), true},
+			{roachpb.Key(keys.MakeTablePrefix(keys.MaxSystemConfigDescID)), false},
+			{roachpb.Key(keys.MakeTablePrefix(keys.MaxSystemConfigDescID + 1)), true},
+		},
 	}
-
-	for i, test := range testCases {
-		if valid := IsValidSplitKey(test.key); valid != test.valid {
-			t.Errorf("%d: expected %q [%x] valid %t; got %t",
-				i, test.key, []byte(test.key), test.valid, valid)
-		}
+	for version, testCases := range versionedTestCases {
+		t.Run(fmt.Sprintf("version=%s", version), func(t *testing.T) {
+			st := cluster.MakeTestingClusterSettingsWithVersion(version, version)
+			for i, test := range testCases {
+				if valid := IsValidSplitKey(st, test.key); valid != test.valid {
+					t.Errorf("%d: expected %q [%x] valid %t; got %t",
+						i, test.key, []byte(test.key), test.valid, valid)
+				}
+			}
+		})
 	}
 }
 
 func TestFindSplitKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rangeID := roachpb.RangeID(1)
+	st := cluster.MakeTestingClusterSettings()
 	engine := createTestEngine()
 	defer engine.Close()
 
@@ -3088,7 +3113,7 @@ func TestFindSplitKey(t *testing.T) {
 
 	for i, td := range testData {
 		humanSplitKey, err := MVCCFindSplitKey(
-			context.Background(), engine, roachpb.RKeyMin, roachpb.RKeyMax, td.targetSize)
+			context.Background(), engine, st, roachpb.RKeyMin, roachpb.RKeyMax, td.targetSize)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3107,6 +3132,7 @@ func TestFindSplitKey(t *testing.T) {
 func TestFindValidSplitKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rangeID := roachpb.RangeID(1)
+	st := cluster.MakeTestingClusterSettings()
 	testCases := []struct {
 		keys     []roachpb.Key
 		expSplit roachpb.Key
@@ -3141,9 +3167,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 				roachpb.Key("\x03\x00"),
 				roachpb.Key("\x03\xff"),
 			},
-			// TODO(peter): revert when we allow meta2 splitting. See #16266.
-			// expSplit: roachpb.Key("\x03"),
-			expSplit: nil,
+			expSplit: roachpb.Key("\x03"),
 			expError: false,
 		},
 		// Even lopsided, always split at meta2.
@@ -3154,9 +3178,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 				roachpb.Key("\x02\xff"),
 				roachpb.Key("\x03"),
 			},
-			// TODO(peter): revert when we allow meta2 splitting. See #16266.
-			// expSplit: roachpb.Key("\x03"),
-			expSplit: nil,
+			expSplit: roachpb.Key("\x03"),
 			expError: false,
 		},
 		// Lopsided, truncate non-zone prefix.
@@ -3223,7 +3245,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 			}
 			targetSize := (ms.KeyBytes + ms.ValBytes) / 2
 			splitKey, err := MVCCFindSplitKey(
-				context.Background(), engine, rangeStartAddr, rangeEndAddr, targetSize)
+				context.Background(), engine, st, rangeStartAddr, rangeEndAddr, targetSize)
 			if test.expError {
 				if !testutils.IsError(err, "has no valid splits") {
 					t.Fatalf("%d: unexpected error: %v", i, err)
@@ -3245,6 +3267,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 func TestFindBalancedSplitKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rangeID := roachpb.RangeID(1)
+	st := cluster.MakeTestingClusterSettings()
 	testCases := []struct {
 		keySizes []int
 		valSizes []int
@@ -3311,7 +3334,7 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 			}
 			targetSize := (ms.KeyBytes + ms.ValBytes) / 2
 			splitKey, err := MVCCFindSplitKey(
-				context.Background(), engine, roachpb.RKey("\x02"), roachpb.RKeyMax, targetSize)
+				context.Background(), engine, st, roachpb.RKey("\x02"), roachpb.RKeyMax, targetSize)
 			if err != nil {
 				t.Fatalf("unexpected error: %s", err)
 			}

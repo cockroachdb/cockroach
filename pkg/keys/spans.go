@@ -19,12 +19,10 @@ import "github.com/cockroachdb/cockroach/pkg/roachpb"
 //go:generate go run gen_cpp_keys.go
 
 var (
+	// Meta1Span holds all first level addressing.
+	Meta1Span = roachpb.Span{Key: roachpb.KeyMin, EndKey: Meta2Prefix}
+
 	// MetaSpan holds all the addressing records.
-	//
-	// TODO(peter): Allow splitting of meta2 records. This requires enhancement
-	// to range lookup. See #16266.
-	//
-	//  Meta1Span = roachpb.Span{Key: roachpb.KeyMin, EndKey: Meta2Prefix}
 	MetaSpan = roachpb.Span{Key: roachpb.KeyMin, EndKey: MetaMax}
 
 	// NodeLivenessSpan holds the liveness records for nodes in the cluster.
@@ -34,11 +32,16 @@ var (
 	SystemConfigSpan = roachpb.Span{Key: SystemConfigSplitKey, EndKey: SystemConfigTableDataMax}
 
 	// NoSplitSpans describes the ranges that should never be split.
-	// MetaSpan: needed to find other ranges.
+	// Meta1Span: needed to find other ranges.
 	// NodeLivenessSpan: liveness information on nodes in the cluster.
 	// SystemConfigSpan: system objects which will be gossiped.
-	NoSplitSpans = []roachpb.Span{MetaSpan, NodeLivenessSpan, SystemConfigSpan}
+	NoSplitSpans = []roachpb.Span{Meta1Span, NodeLivenessSpan, SystemConfigSpan}
+
+	// NoSplitSpansWithoutMeta2Splits describes the ranges that were never
+	// to be split before we supported meta2 splits.
+	NoSplitSpansWithoutMeta2Splits = []roachpb.Span{MetaSpan, NodeLivenessSpan, SystemConfigSpan}
 )
 
-// Silence unused warning. This variable is actually used by gen_cpp_keys.go.
+// Silence unused warnings. These variables are actually used by gen_cpp_keys.go.
 var _ = NoSplitSpans
+var _ = NoSplitSpansWithoutMeta2Splits

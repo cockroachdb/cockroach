@@ -71,3 +71,9 @@ var (
 func (cv ClusterVersion) IsActive(v roachpb.Version) bool {
 	return !cv.UseVersion.Less(v)
 }
+
+// IsMinSupported returns true if the features of the supplied version will be
+// permanently available (i.e. cannot be downgraded away).
+func (cv ClusterVersion) IsMinSupported(v roachpb.Version) bool {
+	return !cv.MinimumVersion.Less(v)
+}

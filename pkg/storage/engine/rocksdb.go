@@ -1144,9 +1144,11 @@ func (r *rocksDBBatchIterator) ComputeStats(
 	return r.iter.ComputeStats(start, end, nowNanos)
 }
 
-func (r *rocksDBBatchIterator) FindSplitKey(start, end MVCCKey, targetSize int64) (MVCCKey, error) {
+func (r *rocksDBBatchIterator) FindSplitKey(
+	start, end MVCCKey, targetSize int64, meta2Splits bool,
+) (MVCCKey, error) {
 	r.batch.flushMutations()
-	return r.iter.FindSplitKey(start, end, targetSize)
+	return r.iter.FindSplitKey(start, end, targetSize, meta2Splits)
 }
 
 func (r *rocksDBBatchIterator) Key() MVCCKey {
@@ -1745,9 +1747,12 @@ func (r *rocksDBIterator) ComputeStats(
 	return stats, err
 }
 
-func (r *rocksDBIterator) FindSplitKey(start, end MVCCKey, targetSize int64) (MVCCKey, error) {
+func (r *rocksDBIterator) FindSplitKey(
+	start, end MVCCKey, targetSize int64, meta2Splits bool,
+) (MVCCKey, error) {
 	var splitKey C.DBString
-	status := C.MVCCFindSplitKey(r.iter, goToCKey(start), goToCKey(end), C.int64_t(targetSize), &splitKey)
+	status := C.MVCCFindSplitKey(r.iter, goToCKey(start), goToCKey(end),
+		C.int64_t(targetSize), C.bool(meta2Splits), &splitKey)
 	if err := statusToError(status); err != nil {
 		return MVCCKey{}, err
 	}
@@ -2163,6 +2168,16 @@ func (r *RocksDB) WriteFile(filename string, data []byte) error {
 // ranges cannot be split (the meta1 span and the system DB span); split keys
 // chosen within any of these ranges are considered invalid. And a split key
 // equal to Meta2KeyMax (\x03\xff\xff) is considered invalid.
-func IsValidSplitKey(key roachpb.Key) bool {
-	return bool(C.MVCCIsValidSplitKey(goToCSlice(key)))
+func IsValidSplitKey(st *cluster.Settings, key roachpb.Key) bool {
+	return bool(C.MVCCIsValidSplitKey(goToCSlice(key), C._Bool(settingsAllowMeta2Splits(st))))
+}
+
+// settingsAllowMeta2Splits determines whether the settings allow splitting of
+// meta2 ranges.
+func settingsAllowMeta2Splits(st *cluster.Settings) bool {
+	// Once a split occurs, it can't be rolled back even on a downgrade, so we
+	// only allow meta2 splits if the minimum supported version is
+	// VersionMeta2Splits, as opposed to allowing them if the active version is
+	// VersionMeta2Splits.
+	return st.Version.IsMinSupported(cluster.VersionMeta2Splits)
 }
