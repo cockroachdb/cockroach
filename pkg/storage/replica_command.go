@@ -1291,7 +1291,7 @@ func evalRangeLookup(
 	userKey := keys.UserKey(key)
 	containsFn := roachpb.RangeDescriptor.ContainsKey
 	if args.Reverse {
-		containsFn = roachpb.RangeDescriptor.ContainsExclusiveEndKey
+		containsFn = roachpb.RangeDescriptor.ContainsKeyInverted
 	}
 
 	for _, kv := range kvs {

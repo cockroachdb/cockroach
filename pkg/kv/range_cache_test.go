@@ -233,7 +233,7 @@ func doLookupWithToken(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if (useReverseScan && !r.ContainsExclusiveEndKey(keyAddr)) || (!useReverseScan && !r.ContainsKey(keyAddr)) {
+	if (useReverseScan && !r.ContainsKeyInverted(keyAddr)) || (!useReverseScan && !r.ContainsKey(keyAddr)) {
 		t.Fatalf("Returned range did not contain key: %s-%s, %s", r.StartKey, r.EndKey, key)
 	}
 	return r, returnToken
@@ -683,7 +683,7 @@ func testRangeCacheHandleDoubleSplit(t *testing.T, useReverseScan bool) {
 				break
 			}
 			if useReverseScan {
-				if !desc.ContainsExclusiveEndKey(key) {
+				if !desc.ContainsKeyInverted(key) {
 					t.Errorf("desc %s does not contain exclusive end key %s", desc, key)
 				}
 			} else {

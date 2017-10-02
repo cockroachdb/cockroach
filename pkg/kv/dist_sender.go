@@ -1019,7 +1019,7 @@ func (ds *DistSender) deduceRetryEarlyExitError(ctx context.Context) *roachpb.Er
 
 func includesFrontOfCurSpan(isReverse bool, rd *roachpb.RangeDescriptor, rs roachpb.RSpan) bool {
 	if isReverse {
-		return rd.ContainsExclusiveEndKey(rs.EndKey)
+		return rd.ContainsKeyInverted(rs.EndKey)
 	}
 	return rd.ContainsKey(rs.Key)
 }
