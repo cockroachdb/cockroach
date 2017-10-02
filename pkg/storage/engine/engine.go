@@ -278,7 +278,9 @@ type Stats struct {
 // PutProto sets the given key to the protobuf-serialized byte string
 // of msg and the provided timestamp. Returns the length in bytes of
 // key and the value.
-func PutProto(engine Writer, key MVCCKey, msg proto.Message) (keyBytes, valBytes int64, err error) {
+func PutProto(
+	engine Writer, key MVCCKey, msg protoutil.Message,
+) (keyBytes, valBytes int64, err error) {
 	bytes, err := protoutil.Marshal(msg)
 	if err != nil {
 		return 0, 0, err
