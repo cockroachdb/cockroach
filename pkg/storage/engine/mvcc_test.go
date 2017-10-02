@@ -3022,31 +3022,54 @@ func TestMVCCResolveTxnRange(t *testing.T) {
 
 func TestValidSplitKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testCases := []struct {
+
+	versionedTestCases := map[bool][]struct {
 		key   roachpb.Key
 		valid bool
 	}{
-		{roachpb.Key("\x02"), false},
-		{roachpb.Key("\x02\x00"), false},
-		{roachpb.Key("\x02\xff"), false},
-		{roachpb.Key("\x03"), false},
-		{roachpb.Key("\x03\x00"), false},
-		{roachpb.Key("\x03\xff"), false},
-		{roachpb.Key("\x03\xff\xff"), false},
-		{roachpb.Key("\x04"), true},
-		{roachpb.Key("\x05"), true},
-		{roachpb.Key("a"), true},
-		{roachpb.Key("\xff"), true},
-		{roachpb.Key("\xff\x01"), true},
-		{roachpb.Key(keys.MakeTablePrefix(keys.MaxSystemConfigDescID)), false},
-		{roachpb.Key(keys.MakeTablePrefix(keys.MaxSystemConfigDescID + 1)), true},
+		false /* !allowMeta2Splits */ : {
+			{roachpb.Key("\x02"), false},
+			{roachpb.Key("\x02\x00"), false},
+			{roachpb.Key("\x02\xff"), false},
+			{roachpb.Key("\x03"), false},
+			{roachpb.Key("\x03\x00"), false},
+			{roachpb.Key("\x03\xff"), false},
+			{roachpb.Key("\x03\xff\xff"), false},
+			{roachpb.Key("\x04"), true},
+			{roachpb.Key("\x05"), true},
+			{roachpb.Key("a"), true},
+			{roachpb.Key("\xff"), true},
+			{roachpb.Key("\xff\x01"), true},
+			{roachpb.Key(keys.MakeTablePrefix(keys.MaxSystemConfigDescID)), false},
+			{roachpb.Key(keys.MakeTablePrefix(keys.MaxSystemConfigDescID + 1)), true},
+		},
+		true /* allowMeta2Splits */ : {
+			{roachpb.Key("\x02"), false},
+			{roachpb.Key("\x02\x00"), false},
+			{roachpb.Key("\x02\xff"), false},
+			{roachpb.Key("\x03"), true},     // different
+			{roachpb.Key("\x03\x00"), true}, // different
+			{roachpb.Key("\x03\xff"), true}, // different
+			{roachpb.Key("\x03\xff\xff"), false},
+			{roachpb.Key("\x04"), true},
+			{roachpb.Key("\x05"), true},
+			{roachpb.Key("a"), true},
+			{roachpb.Key("\xff"), true},
+			{roachpb.Key("\xff\x01"), true},
+			{roachpb.Key(keys.MakeTablePrefix(keys.MaxSystemConfigDescID)), false},
+			{roachpb.Key(keys.MakeTablePrefix(keys.MaxSystemConfigDescID + 1)), true},
+		},
 	}
-
-	for i, test := range testCases {
-		if valid := IsValidSplitKey(test.key); valid != test.valid {
-			t.Errorf("%d: expected %q [%x] valid %t; got %t",
-				i, test.key, []byte(test.key), test.valid, valid)
-		}
+	for allowMeta2Splits, testCases := range versionedTestCases {
+		t.Run(fmt.Sprintf("allowMeta2Splits=%t", allowMeta2Splits), func(t *testing.T) {
+			for i, test := range testCases {
+				valid := IsValidSplitKey(test.key, allowMeta2Splits)
+				if valid != test.valid {
+					t.Errorf("%d: expected %q [%x] valid %t; got %t",
+						i, test.key, []byte(test.key), test.valid, valid)
+				}
+			}
+		})
 	}
 }
 
@@ -3087,8 +3110,8 @@ func TestFindSplitKey(t *testing.T) {
 	}
 
 	for i, td := range testData {
-		humanSplitKey, err := MVCCFindSplitKey(
-			context.Background(), engine, roachpb.RKeyMin, roachpb.RKeyMax, td.targetSize)
+		humanSplitKey, err := MVCCFindSplitKey(context.Background(), engine,
+			roachpb.RKeyMin, roachpb.RKeyMax, td.targetSize, true /* allowMeta2Splits */)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3141,9 +3164,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 				roachpb.Key("\x03\x00"),
 				roachpb.Key("\x03\xff"),
 			},
-			// TODO(peter): revert when we allow meta2 splitting. See #16266.
-			// expSplit: roachpb.Key("\x03"),
-			expSplit: nil,
+			expSplit: roachpb.Key("\x03"),
 			expError: false,
 		},
 		// Even lopsided, always split at meta2.
@@ -3154,9 +3175,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 				roachpb.Key("\x02\xff"),
 				roachpb.Key("\x03"),
 			},
-			// TODO(peter): revert when we allow meta2 splitting. See #16266.
-			// expSplit: roachpb.Key("\x03"),
-			expSplit: nil,
+			expSplit: roachpb.Key("\x03"),
 			expError: false,
 		},
 		// Lopsided, truncate non-zone prefix.
@@ -3222,8 +3241,8 @@ func TestFindValidSplitKeys(t *testing.T) {
 				t.Fatal(err)
 			}
 			targetSize := (ms.KeyBytes + ms.ValBytes) / 2
-			splitKey, err := MVCCFindSplitKey(
-				context.Background(), engine, rangeStartAddr, rangeEndAddr, targetSize)
+			splitKey, err := MVCCFindSplitKey(context.Background(), engine,
+				rangeStartAddr, rangeEndAddr, targetSize, true /* allowMeta2Splits */)
 			if test.expError {
 				if !testutils.IsError(err, "has no valid splits") {
 					t.Fatalf("%d: unexpected error: %v", i, err)
@@ -3310,8 +3329,8 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 				t.Fatal(err)
 			}
 			targetSize := (ms.KeyBytes + ms.ValBytes) / 2
-			splitKey, err := MVCCFindSplitKey(
-				context.Background(), engine, roachpb.RKey("\x02"), roachpb.RKeyMax, targetSize)
+			splitKey, err := MVCCFindSplitKey(context.Background(), engine,
+				roachpb.RKey("\x02"), roachpb.RKeyMax, targetSize, true /* allowMeta2Splits */)
 			if err != nil {
 				t.Fatalf("unexpected error: %s", err)
 			}
