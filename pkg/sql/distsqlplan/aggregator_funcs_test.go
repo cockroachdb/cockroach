@@ -262,15 +262,37 @@ func checkDistAggregationInfo(
 		t.Errorf("different row lengths (dist: %d non-dist: %d)", len(rowsDist[0]), len(rowsNonDist[0]))
 	} else {
 		for i := range rowsDist[0] {
-			tDist := rowsDist[0][i].Type.String()
-			tNonDist := rowsNonDist[0][i].Type.String()
-			if tDist != tNonDist {
-				t.Errorf("different type for column %d (dist: %s non-dist: %s)", i, tDist, tNonDist)
+			rowDist := rowsDist[0][i]
+			rowNonDist := rowsNonDist[0][i]
+			if rowDist.Type.String() != rowNonDist.Type.String() {
+				t.Errorf("different type for column %d (dist: %s non-dist: %s)", i, rowDist.Type.String(), rowNonDist.Type.String())
+			}
+
+			var equiv bool
+			switch rowDist.Datum.(type) {
+			case *parser.DDecimal:
+				// For some decimal operations, non-local and
+				// local computations may differ by the last
+				// digit.  We reduce the precision of both
+				// results.
+				decDist := &rowDist.Datum.(*parser.DDecimal).Decimal
+				if _, err := parser.CompareCtx.Round(decDist, decDist); err != nil {
+					t.Fatal(err)
+				}
+				decNonDist := &rowNonDist.Datum.(*parser.DDecimal).Decimal
+				if _, err := parser.CompareCtx.Round(decNonDist, decNonDist); err != nil {
+					t.Fatal(err)
+				}
+				equiv = decDist.Cmp(decNonDist) == 0
+			default:
+				// For all other types, a simple string
+				// representation comparison will suffice.
+				equiv = rowDist.String() == rowNonDist.String()
+			}
+			if !equiv {
+				t.Errorf("different results for column %d\nw/o local stage:   %s\nwith local stage:  %s", i, rowDist.String(), rowNonDist.String())
 			}
 		}
-	}
-	if rowsDist.String() != rowsNonDist.String() {
-		t.Errorf("different results\nw/o local stage:   %s\nwith local stage:  %s", rowsNonDist, rowsDist)
 	}
 }
 

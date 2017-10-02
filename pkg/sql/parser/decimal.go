@@ -37,6 +37,11 @@ var (
 	// happen in dist SQL. The additional 5 allows the stress test to pass.
 	// See #13689 for more analysis and other algorithms.
 	IntermediateCtx = DecimalCtx.WithPrecision(DecimalCtx.Precision + 5)
+	// CompareCtx is a decimal context with reduced precision for comparing
+	// decimal results in primarily tests. For some decimal aggregate
+	// operations there will often be unavoidable off-by-last-digit errors,
+	// which is semantically okay.
+	CompareCtx = DecimalCtx.WithPrecision(DecimalCtx.Precision - 1)
 	// RoundCtx is a decimal context with high precision and RoundHalfEven
 	// rounding.
 	RoundCtx = func() *apd.Context {
