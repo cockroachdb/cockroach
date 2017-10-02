@@ -809,39 +809,40 @@ func (cq *CommandQueue) metrics() CommandQueueMetrics {
 	}
 }
 
+type CommandQueueSnapshot map[int64]storagebase.CommandQueuesSnapshot_Command
+
 // GetSnapshot returns a snapshot of this command queue's state.
-func (cq *CommandQueue) GetSnapshot() []storagebase.CommandQueueCommand {
+func (cq *CommandQueue) GetSnapshot() CommandQueueSnapshot {
 	// Before taking the snapshot, ensure all commands have been flushed into
 	// the interval trees.
 	cq.flushReadsBuffer()
-	commandMap := make(map[int64]storagebase.CommandQueueCommand)
-	addCommandsFromTree(commandMap, cq.reads)
-	addCommandsFromTree(commandMap, cq.writes)
-	return filterNonexistentPrereqs(commandMap)
+	commandMap := make(CommandQueueSnapshot)
+	commandMap.addCommandsFromTree(cq.reads)
+	commandMap.addCommandsFromTree(cq.writes)
+	commandMap.filterNonexistentPrereqs()
+	return commandMap
 }
 
-func addCommandsFromTree(
-	commandsSoFar map[int64]storagebase.CommandQueueCommand, tree interval.Tree,
-) {
+func (cqs CommandQueueSnapshot) addCommandsFromTree(tree interval.Tree) {
 	tree.Do(func(item interval.Interface) (done bool) {
 		currentCmd := item.(*cmd)
-		addCommand(commandsSoFar, *currentCmd)
+		cqs.addCommand(*currentCmd)
 		return false
 	})
 }
 
-// addCommand adds the given command to the given map, if it has no
-// children. If it has children, it doesn't add the given command, but
-// calls itself on each child. Thus, only leaf commands are added.
-func addCommand(commandsSoFar map[int64]storagebase.CommandQueueCommand, command cmd) {
+// addCommand adds all leaf commands to the snapshot. This is done by
+// either adding the given command if it's a leaf, or recursively calling
+// itself on the given command's children.
+func (cqs CommandQueueSnapshot) addCommand(command cmd) {
 	if len(command.children) > 0 {
 		for i := range command.children {
-			addCommand(commandsSoFar, command.children[i])
+			cqs.addCommand(command.children[i])
 		}
 		return
 	}
 
-	commandProto := storagebase.CommandQueueCommand{
+	commandProto := storagebase.CommandQueuesSnapshot_Command{
 		Id:        command.id,
 		Readonly:  command.readOnly,
 		Timestamp: command.timestamp,
@@ -851,26 +852,22 @@ func addCommand(commandsSoFar map[int64]storagebase.CommandQueueCommand, command
 	for _, prereqCmd := range *command.prereqs {
 		commandProto.Prereqs = append(commandProto.Prereqs, prereqCmd.id)
 	}
-	commandsSoFar[command.id] = commandProto
+	cqs[command.id] = commandProto
 }
 
 // filterNonexistentPrereqs removes prereqs which point at commands that
-// are no longer in the queue. This can happen e.g. if command C has prereqs
+// are no longer in the queue. For example, if command C has prereqs
 // A and B, but B finishes and is removed from the queue while C is still
-// waiting on A.
-func filterNonexistentPrereqs(
-	commandMap map[int64]storagebase.CommandQueueCommand,
-) []storagebase.CommandQueueCommand {
-	result := make([]storagebase.CommandQueueCommand, 0, len(commandMap))
-	for _, command := range commandMap {
+// waiting on A, this function will remove the edge from C to B.
+func (cqs CommandQueueSnapshot) filterNonexistentPrereqs() {
+	for _, command := range cqs {
 		filteredPrereqs := make([]int64, 0, len(command.Prereqs))
 		for _, prereq := range command.Prereqs {
-			if _, ok := commandMap[prereq]; ok {
+			if _, ok := cqs[prereq]; ok {
 				filteredPrereqs = append(filteredPrereqs, prereq)
 			}
 		}
 		command.Prereqs = filteredPrereqs
-		result = append(result, command)
+		cqs[command.Id] = command
 	}
-	return result
 }
