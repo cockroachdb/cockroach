@@ -366,12 +366,13 @@ func (v *Value) SetInt(i int64) {
 // receiver and clears the checksum. If the proto message is an
 // InternalTimeSeriesData, the tag will be set to TIMESERIES rather than BYTES.
 func (v *Value) SetProto(msg protoutil.Message) error {
+	msg = protoutil.MaybeFuzz(msg)
 	// All of the Cockroach protos implement MarshalTo and Size. So we marshal
 	// directly into the Value.RawBytes field instead of allocating a separate
 	// []byte and copying.
 	size := msg.Size()
 	v.RawBytes = make([]byte, headerSize+size)
-	if _, err := protoutil.MarshalTo(msg, v.RawBytes[headerSize:]); err != nil {
+	if _, err := protoutil.MarshalToWithoutFuzzing(msg, v.RawBytes[headerSize:]); err != nil {
 		return err
 	}
 	// Special handling for timeseries data.
@@ -1057,6 +1058,17 @@ func (l Lease) String() string {
 		return fmt.Sprintf("repl=%s start=%s exp=%s%s", l.Replica, l.Start, l.Expiration, proposedSuffix)
 	}
 	return fmt.Sprintf("repl=%s start=%s epo=%d%s", l.Replica, l.Start, *l.Epoch, proposedSuffix)
+}
+
+// BootstrapLease returns the lease to persist for the range of a freshly bootstrapped store. The
+// returned lease is morally "empty" but has a few fields set to non-nil zero values because some
+// used to be non-nullable and we now fuzz their nullability in tests. As a consequence, it's better
+// to always use zero fields here so that the initial stats are constant.
+func BootstrapLease() Lease {
+	return Lease{
+		Expiration:            &hlc.Timestamp{},
+		DeprecatedStartStasis: &hlc.Timestamp{},
+	}
 }
 
 // OwnedBy returns whether the given store is the lease owner.

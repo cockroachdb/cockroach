@@ -55,23 +55,20 @@ message ReplicaState {
   // replica state in memory. In memory (storage.Replica.mu.state), the lease
   // is never nil (and never zero-valued), but it may be nil when sent over
   // the network as part of ReplicatedEvalResult.
-  //
-  // TODO(tamird): consider changing the type of storage.Replica.mu.state to
-  // avoid the nullability there.
   roachpb.Lease lease = 4;
   // The truncation state of the Raft log.
   roachpb.RaftTruncatedState truncated_state = 5;
   // gcThreshold is the GC threshold of the Range, typically updated when keys
   // are garbage collected. Reads and writes at timestamps <= this time will
   // not be served.
-  util.hlc.Timestamp gc_threshold = 6 [(gogoproto.customname) = "GCThreshold"];
+  util.hlc.Timestamp gc_threshold = 6 [(gogoproto.customname) = "GCThreshold", (gogoproto.moretags) = "cockroachdb:\"randnullable\""];
   storage.engine.enginepb.MVCCStats stats = 7;
   reserved 8;
   // txn_span_gc_threshold is the (maximum) timestamp below which transaction
   // records may have been garbage collected (as measured by txn.LastActive()).
   // Transaction at lower timestamps must not be allowed to write their initial
   // transaction entry.
-  util.hlc.Timestamp txn_span_gc_threshold = 9 [(gogoproto.customname) = "TxnSpanGCThreshold"];
+  util.hlc.Timestamp txn_span_gc_threshold = 9 [(gogoproto.customname) = "TxnSpanGCThreshold", (gogoproto.moretags) = "cockroachdb:\"randnullable\""];
 
   reserved 10;
 }
