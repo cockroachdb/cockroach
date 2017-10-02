@@ -34470,6 +34470,215 @@ export const cockroach = $root.cockroach = (() => {
              */
             const hlc = {};
 
+            hlc.LegacyTimestamp = (function() {
+
+                /**
+                 * Properties of a LegacyTimestamp.
+                 * @typedef cockroach.util.hlc.LegacyTimestamp$Properties
+                 * @type {Object}
+                 * @property {Long} [wall_time] LegacyTimestamp wall_time.
+                 * @property {number} [logical] LegacyTimestamp logical.
+                 */
+
+                /**
+                 * Constructs a new LegacyTimestamp.
+                 * @exports cockroach.util.hlc.LegacyTimestamp
+                 * @constructor
+                 * @param {cockroach.util.hlc.LegacyTimestamp$Properties=} [properties] Properties to set
+                 */
+                function LegacyTimestamp(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * LegacyTimestamp wall_time.
+                 * @type {Long}
+                 */
+                LegacyTimestamp.prototype.wall_time = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                /**
+                 * LegacyTimestamp logical.
+                 * @type {number}
+                 */
+                LegacyTimestamp.prototype.logical = 0;
+
+                /**
+                 * Creates a new LegacyTimestamp instance using the specified properties.
+                 * @param {cockroach.util.hlc.LegacyTimestamp$Properties=} [properties] Properties to set
+                 * @returns {cockroach.util.hlc.LegacyTimestamp} LegacyTimestamp instance
+                 */
+                LegacyTimestamp.create = function create(properties) {
+                    return new LegacyTimestamp(properties);
+                };
+
+                /**
+                 * Encodes the specified LegacyTimestamp message. Does not implicitly {@link cockroach.util.hlc.LegacyTimestamp.verify|verify} messages.
+                 * @param {cockroach.util.hlc.LegacyTimestamp$Properties} message LegacyTimestamp message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                LegacyTimestamp.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.wall_time != null && message.hasOwnProperty("wall_time"))
+                        writer.uint32(/* id 1, wireType 0 =*/8).int64(message.wall_time);
+                    if (message.logical != null && message.hasOwnProperty("logical"))
+                        writer.uint32(/* id 2, wireType 0 =*/16).int32(message.logical);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified LegacyTimestamp message, length delimited. Does not implicitly {@link cockroach.util.hlc.LegacyTimestamp.verify|verify} messages.
+                 * @param {cockroach.util.hlc.LegacyTimestamp$Properties} message LegacyTimestamp message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                LegacyTimestamp.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a LegacyTimestamp message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.util.hlc.LegacyTimestamp} LegacyTimestamp
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                LegacyTimestamp.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.util.hlc.LegacyTimestamp();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.wall_time = reader.int64();
+                            break;
+                        case 2:
+                            message.logical = reader.int32();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a LegacyTimestamp message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.util.hlc.LegacyTimestamp} LegacyTimestamp
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                LegacyTimestamp.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a LegacyTimestamp message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                LegacyTimestamp.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.wall_time != null && message.hasOwnProperty("wall_time"))
+                        if (!$util.isInteger(message.wall_time) && !(message.wall_time && $util.isInteger(message.wall_time.low) && $util.isInteger(message.wall_time.high)))
+                            return "wall_time: integer|Long expected";
+                    if (message.logical != null && message.hasOwnProperty("logical"))
+                        if (!$util.isInteger(message.logical))
+                            return "logical: integer expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a LegacyTimestamp message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.util.hlc.LegacyTimestamp} LegacyTimestamp
+                 */
+                LegacyTimestamp.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.util.hlc.LegacyTimestamp)
+                        return object;
+                    let message = new $root.cockroach.util.hlc.LegacyTimestamp();
+                    if (object.wall_time != null)
+                        if ($util.Long)
+                            (message.wall_time = $util.Long.fromValue(object.wall_time)).unsigned = false;
+                        else if (typeof object.wall_time === "string")
+                            message.wall_time = parseInt(object.wall_time, 10);
+                        else if (typeof object.wall_time === "number")
+                            message.wall_time = object.wall_time;
+                        else if (typeof object.wall_time === "object")
+                            message.wall_time = new $util.LongBits(object.wall_time.low >>> 0, object.wall_time.high >>> 0).toNumber();
+                    if (object.logical != null)
+                        message.logical = object.logical | 0;
+                    return message;
+                };
+
+                /**
+                 * Creates a LegacyTimestamp message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.util.hlc.LegacyTimestamp.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.util.hlc.LegacyTimestamp} LegacyTimestamp
+                 */
+                LegacyTimestamp.from = LegacyTimestamp.fromObject;
+
+                /**
+                 * Creates a plain object from a LegacyTimestamp message. Also converts values to other types if specified.
+                 * @param {cockroach.util.hlc.LegacyTimestamp} message LegacyTimestamp
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                LegacyTimestamp.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults) {
+                        if ($util.Long) {
+                            let long = new $util.Long(0, 0, false);
+                            object.wall_time = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                        } else
+                            object.wall_time = options.longs === String ? "0" : 0;
+                        object.logical = 0;
+                    }
+                    if (message.wall_time != null && message.hasOwnProperty("wall_time"))
+                        if (typeof message.wall_time === "number")
+                            object.wall_time = options.longs === String ? String(message.wall_time) : message.wall_time;
+                        else
+                            object.wall_time = options.longs === String ? $util.Long.prototype.toString.call(message.wall_time) : options.longs === Number ? new $util.LongBits(message.wall_time.low >>> 0, message.wall_time.high >>> 0).toNumber() : message.wall_time;
+                    if (message.logical != null && message.hasOwnProperty("logical"))
+                        object.logical = message.logical;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this LegacyTimestamp message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                LegacyTimestamp.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this LegacyTimestamp to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                LegacyTimestamp.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return LegacyTimestamp;
+            })();
+
             hlc.Timestamp = (function() {
 
                 /**
@@ -36009,215 +36218,6 @@ export const cockroach = $root.cockroach = (() => {
                     return TxnMeta;
                 })();
 
-                enginepb.LegacyTimestamp = (function() {
-
-                    /**
-                     * Properties of a LegacyTimestamp.
-                     * @typedef cockroach.storage.engine.enginepb.LegacyTimestamp$Properties
-                     * @type {Object}
-                     * @property {Long} [wall_time] LegacyTimestamp wall_time.
-                     * @property {number} [logical] LegacyTimestamp logical.
-                     */
-
-                    /**
-                     * Constructs a new LegacyTimestamp.
-                     * @exports cockroach.storage.engine.enginepb.LegacyTimestamp
-                     * @constructor
-                     * @param {cockroach.storage.engine.enginepb.LegacyTimestamp$Properties=} [properties] Properties to set
-                     */
-                    function LegacyTimestamp(properties) {
-                        if (properties)
-                            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                                if (properties[keys[i]] != null)
-                                    this[keys[i]] = properties[keys[i]];
-                    }
-
-                    /**
-                     * LegacyTimestamp wall_time.
-                     * @type {Long}
-                     */
-                    LegacyTimestamp.prototype.wall_time = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
-
-                    /**
-                     * LegacyTimestamp logical.
-                     * @type {number}
-                     */
-                    LegacyTimestamp.prototype.logical = 0;
-
-                    /**
-                     * Creates a new LegacyTimestamp instance using the specified properties.
-                     * @param {cockroach.storage.engine.enginepb.LegacyTimestamp$Properties=} [properties] Properties to set
-                     * @returns {cockroach.storage.engine.enginepb.LegacyTimestamp} LegacyTimestamp instance
-                     */
-                    LegacyTimestamp.create = function create(properties) {
-                        return new LegacyTimestamp(properties);
-                    };
-
-                    /**
-                     * Encodes the specified LegacyTimestamp message. Does not implicitly {@link cockroach.storage.engine.enginepb.LegacyTimestamp.verify|verify} messages.
-                     * @param {cockroach.storage.engine.enginepb.LegacyTimestamp$Properties} message LegacyTimestamp message or plain object to encode
-                     * @param {$protobuf.Writer} [writer] Writer to encode to
-                     * @returns {$protobuf.Writer} Writer
-                     */
-                    LegacyTimestamp.encode = function encode(message, writer) {
-                        if (!writer)
-                            writer = $Writer.create();
-                        if (message.wall_time != null && message.hasOwnProperty("wall_time"))
-                            writer.uint32(/* id 1, wireType 0 =*/8).int64(message.wall_time);
-                        if (message.logical != null && message.hasOwnProperty("logical"))
-                            writer.uint32(/* id 2, wireType 0 =*/16).int32(message.logical);
-                        return writer;
-                    };
-
-                    /**
-                     * Encodes the specified LegacyTimestamp message, length delimited. Does not implicitly {@link cockroach.storage.engine.enginepb.LegacyTimestamp.verify|verify} messages.
-                     * @param {cockroach.storage.engine.enginepb.LegacyTimestamp$Properties} message LegacyTimestamp message or plain object to encode
-                     * @param {$protobuf.Writer} [writer] Writer to encode to
-                     * @returns {$protobuf.Writer} Writer
-                     */
-                    LegacyTimestamp.encodeDelimited = function encodeDelimited(message, writer) {
-                        return this.encode(message, writer).ldelim();
-                    };
-
-                    /**
-                     * Decodes a LegacyTimestamp message from the specified reader or buffer.
-                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                     * @param {number} [length] Message length if known beforehand
-                     * @returns {cockroach.storage.engine.enginepb.LegacyTimestamp} LegacyTimestamp
-                     * @throws {Error} If the payload is not a reader or valid buffer
-                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                     */
-                    LegacyTimestamp.decode = function decode(reader, length) {
-                        if (!(reader instanceof $Reader))
-                            reader = $Reader.create(reader);
-                        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.storage.engine.enginepb.LegacyTimestamp();
-                        while (reader.pos < end) {
-                            let tag = reader.uint32();
-                            switch (tag >>> 3) {
-                            case 1:
-                                message.wall_time = reader.int64();
-                                break;
-                            case 2:
-                                message.logical = reader.int32();
-                                break;
-                            default:
-                                reader.skipType(tag & 7);
-                                break;
-                            }
-                        }
-                        return message;
-                    };
-
-                    /**
-                     * Decodes a LegacyTimestamp message from the specified reader or buffer, length delimited.
-                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                     * @returns {cockroach.storage.engine.enginepb.LegacyTimestamp} LegacyTimestamp
-                     * @throws {Error} If the payload is not a reader or valid buffer
-                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                     */
-                    LegacyTimestamp.decodeDelimited = function decodeDelimited(reader) {
-                        if (!(reader instanceof $Reader))
-                            reader = $Reader(reader);
-                        return this.decode(reader, reader.uint32());
-                    };
-
-                    /**
-                     * Verifies a LegacyTimestamp message.
-                     * @param {Object.<string,*>} message Plain object to verify
-                     * @returns {?string} `null` if valid, otherwise the reason why it is not
-                     */
-                    LegacyTimestamp.verify = function verify(message) {
-                        if (typeof message !== "object" || message === null)
-                            return "object expected";
-                        if (message.wall_time != null && message.hasOwnProperty("wall_time"))
-                            if (!$util.isInteger(message.wall_time) && !(message.wall_time && $util.isInteger(message.wall_time.low) && $util.isInteger(message.wall_time.high)))
-                                return "wall_time: integer|Long expected";
-                        if (message.logical != null && message.hasOwnProperty("logical"))
-                            if (!$util.isInteger(message.logical))
-                                return "logical: integer expected";
-                        return null;
-                    };
-
-                    /**
-                     * Creates a LegacyTimestamp message from a plain object. Also converts values to their respective internal types.
-                     * @param {Object.<string,*>} object Plain object
-                     * @returns {cockroach.storage.engine.enginepb.LegacyTimestamp} LegacyTimestamp
-                     */
-                    LegacyTimestamp.fromObject = function fromObject(object) {
-                        if (object instanceof $root.cockroach.storage.engine.enginepb.LegacyTimestamp)
-                            return object;
-                        let message = new $root.cockroach.storage.engine.enginepb.LegacyTimestamp();
-                        if (object.wall_time != null)
-                            if ($util.Long)
-                                (message.wall_time = $util.Long.fromValue(object.wall_time)).unsigned = false;
-                            else if (typeof object.wall_time === "string")
-                                message.wall_time = parseInt(object.wall_time, 10);
-                            else if (typeof object.wall_time === "number")
-                                message.wall_time = object.wall_time;
-                            else if (typeof object.wall_time === "object")
-                                message.wall_time = new $util.LongBits(object.wall_time.low >>> 0, object.wall_time.high >>> 0).toNumber();
-                        if (object.logical != null)
-                            message.logical = object.logical | 0;
-                        return message;
-                    };
-
-                    /**
-                     * Creates a LegacyTimestamp message from a plain object. Also converts values to their respective internal types.
-                     * This is an alias of {@link cockroach.storage.engine.enginepb.LegacyTimestamp.fromObject}.
-                     * @function
-                     * @param {Object.<string,*>} object Plain object
-                     * @returns {cockroach.storage.engine.enginepb.LegacyTimestamp} LegacyTimestamp
-                     */
-                    LegacyTimestamp.from = LegacyTimestamp.fromObject;
-
-                    /**
-                     * Creates a plain object from a LegacyTimestamp message. Also converts values to other types if specified.
-                     * @param {cockroach.storage.engine.enginepb.LegacyTimestamp} message LegacyTimestamp
-                     * @param {$protobuf.ConversionOptions} [options] Conversion options
-                     * @returns {Object.<string,*>} Plain object
-                     */
-                    LegacyTimestamp.toObject = function toObject(message, options) {
-                        if (!options)
-                            options = {};
-                        let object = {};
-                        if (options.defaults) {
-                            if ($util.Long) {
-                                let long = new $util.Long(0, 0, false);
-                                object.wall_time = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
-                            } else
-                                object.wall_time = options.longs === String ? "0" : 0;
-                            object.logical = 0;
-                        }
-                        if (message.wall_time != null && message.hasOwnProperty("wall_time"))
-                            if (typeof message.wall_time === "number")
-                                object.wall_time = options.longs === String ? String(message.wall_time) : message.wall_time;
-                            else
-                                object.wall_time = options.longs === String ? $util.Long.prototype.toString.call(message.wall_time) : options.longs === Number ? new $util.LongBits(message.wall_time.low >>> 0, message.wall_time.high >>> 0).toNumber() : message.wall_time;
-                        if (message.logical != null && message.hasOwnProperty("logical"))
-                            object.logical = message.logical;
-                        return object;
-                    };
-
-                    /**
-                     * Creates a plain object from this LegacyTimestamp message. Also converts values to other types if specified.
-                     * @param {$protobuf.ConversionOptions} [options] Conversion options
-                     * @returns {Object.<string,*>} Plain object
-                     */
-                    LegacyTimestamp.prototype.toObject = function toObject(options) {
-                        return this.constructor.toObject(this, options);
-                    };
-
-                    /**
-                     * Converts this LegacyTimestamp to JSON.
-                     * @returns {Object.<string,*>} JSON object
-                     */
-                    LegacyTimestamp.prototype.toJSON = function toJSON() {
-                        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
-                    };
-
-                    return LegacyTimestamp;
-                })();
-
                 enginepb.MVCCMetadata = (function() {
 
                     /**
@@ -36225,12 +36225,12 @@ export const cockroach = $root.cockroach = (() => {
                      * @typedef cockroach.storage.engine.enginepb.MVCCMetadata$Properties
                      * @type {Object}
                      * @property {cockroach.storage.engine.enginepb.TxnMeta$Properties} [txn] MVCCMetadata txn.
-                     * @property {cockroach.storage.engine.enginepb.LegacyTimestamp$Properties} [timestamp] MVCCMetadata timestamp.
+                     * @property {cockroach.util.hlc.LegacyTimestamp$Properties} [timestamp] MVCCMetadata timestamp.
                      * @property {boolean} [deleted] MVCCMetadata deleted.
                      * @property {Long} [key_bytes] MVCCMetadata key_bytes.
                      * @property {Long} [val_bytes] MVCCMetadata val_bytes.
                      * @property {Uint8Array} [raw_bytes] MVCCMetadata raw_bytes.
-                     * @property {cockroach.storage.engine.enginepb.LegacyTimestamp$Properties} [merge_timestamp] MVCCMetadata merge_timestamp.
+                     * @property {cockroach.util.hlc.LegacyTimestamp$Properties} [merge_timestamp] MVCCMetadata merge_timestamp.
                      */
 
                     /**
@@ -36254,7 +36254,7 @@ export const cockroach = $root.cockroach = (() => {
 
                     /**
                      * MVCCMetadata timestamp.
-                     * @type {(cockroach.storage.engine.enginepb.LegacyTimestamp$Properties|null)}
+                     * @type {(cockroach.util.hlc.LegacyTimestamp$Properties|null)}
                      */
                     MVCCMetadata.prototype.timestamp = null;
 
@@ -36284,7 +36284,7 @@ export const cockroach = $root.cockroach = (() => {
 
                     /**
                      * MVCCMetadata merge_timestamp.
-                     * @type {(cockroach.storage.engine.enginepb.LegacyTimestamp$Properties|null)}
+                     * @type {(cockroach.util.hlc.LegacyTimestamp$Properties|null)}
                      */
                     MVCCMetadata.prototype.merge_timestamp = null;
 
@@ -36309,7 +36309,7 @@ export const cockroach = $root.cockroach = (() => {
                         if (message.txn != null && message.hasOwnProperty("txn"))
                             $root.cockroach.storage.engine.enginepb.TxnMeta.encode(message.txn, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
                         if (message.timestamp != null && message.hasOwnProperty("timestamp"))
-                            $root.cockroach.storage.engine.enginepb.LegacyTimestamp.encode(message.timestamp, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+                            $root.cockroach.util.hlc.LegacyTimestamp.encode(message.timestamp, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
                         if (message.deleted != null && message.hasOwnProperty("deleted"))
                             writer.uint32(/* id 3, wireType 0 =*/24).bool(message.deleted);
                         if (message.key_bytes != null && message.hasOwnProperty("key_bytes"))
@@ -36319,7 +36319,7 @@ export const cockroach = $root.cockroach = (() => {
                         if (message.raw_bytes != null && message.hasOwnProperty("raw_bytes"))
                             writer.uint32(/* id 6, wireType 2 =*/50).bytes(message.raw_bytes);
                         if (message.merge_timestamp != null && message.hasOwnProperty("merge_timestamp"))
-                            $root.cockroach.storage.engine.enginepb.LegacyTimestamp.encode(message.merge_timestamp, writer.uint32(/* id 7, wireType 2 =*/58).fork()).ldelim();
+                            $root.cockroach.util.hlc.LegacyTimestamp.encode(message.merge_timestamp, writer.uint32(/* id 7, wireType 2 =*/58).fork()).ldelim();
                         return writer;
                     };
 
@@ -36352,7 +36352,7 @@ export const cockroach = $root.cockroach = (() => {
                                 message.txn = $root.cockroach.storage.engine.enginepb.TxnMeta.decode(reader, reader.uint32());
                                 break;
                             case 2:
-                                message.timestamp = $root.cockroach.storage.engine.enginepb.LegacyTimestamp.decode(reader, reader.uint32());
+                                message.timestamp = $root.cockroach.util.hlc.LegacyTimestamp.decode(reader, reader.uint32());
                                 break;
                             case 3:
                                 message.deleted = reader.bool();
@@ -36367,7 +36367,7 @@ export const cockroach = $root.cockroach = (() => {
                                 message.raw_bytes = reader.bytes();
                                 break;
                             case 7:
-                                message.merge_timestamp = $root.cockroach.storage.engine.enginepb.LegacyTimestamp.decode(reader, reader.uint32());
+                                message.merge_timestamp = $root.cockroach.util.hlc.LegacyTimestamp.decode(reader, reader.uint32());
                                 break;
                             default:
                                 reader.skipType(tag & 7);
@@ -36404,7 +36404,7 @@ export const cockroach = $root.cockroach = (() => {
                                 return "txn." + error;
                         }
                         if (message.timestamp != null && message.hasOwnProperty("timestamp")) {
-                            let error = $root.cockroach.storage.engine.enginepb.LegacyTimestamp.verify(message.timestamp);
+                            let error = $root.cockroach.util.hlc.LegacyTimestamp.verify(message.timestamp);
                             if (error)
                                 return "timestamp." + error;
                         }
@@ -36421,7 +36421,7 @@ export const cockroach = $root.cockroach = (() => {
                             if (!(message.raw_bytes && typeof message.raw_bytes.length === "number" || $util.isString(message.raw_bytes)))
                                 return "raw_bytes: buffer expected";
                         if (message.merge_timestamp != null && message.hasOwnProperty("merge_timestamp")) {
-                            let error = $root.cockroach.storage.engine.enginepb.LegacyTimestamp.verify(message.merge_timestamp);
+                            let error = $root.cockroach.util.hlc.LegacyTimestamp.verify(message.merge_timestamp);
                             if (error)
                                 return "merge_timestamp." + error;
                         }
@@ -36445,7 +36445,7 @@ export const cockroach = $root.cockroach = (() => {
                         if (object.timestamp != null) {
                             if (typeof object.timestamp !== "object")
                                 throw TypeError(".cockroach.storage.engine.enginepb.MVCCMetadata.timestamp: object expected");
-                            message.timestamp = $root.cockroach.storage.engine.enginepb.LegacyTimestamp.fromObject(object.timestamp);
+                            message.timestamp = $root.cockroach.util.hlc.LegacyTimestamp.fromObject(object.timestamp);
                         }
                         if (object.deleted != null)
                             message.deleted = Boolean(object.deleted);
@@ -36475,7 +36475,7 @@ export const cockroach = $root.cockroach = (() => {
                         if (object.merge_timestamp != null) {
                             if (typeof object.merge_timestamp !== "object")
                                 throw TypeError(".cockroach.storage.engine.enginepb.MVCCMetadata.merge_timestamp: object expected");
-                            message.merge_timestamp = $root.cockroach.storage.engine.enginepb.LegacyTimestamp.fromObject(object.merge_timestamp);
+                            message.merge_timestamp = $root.cockroach.util.hlc.LegacyTimestamp.fromObject(object.merge_timestamp);
                         }
                         return message;
                     };
@@ -36519,7 +36519,7 @@ export const cockroach = $root.cockroach = (() => {
                         if (message.txn != null && message.hasOwnProperty("txn"))
                             object.txn = $root.cockroach.storage.engine.enginepb.TxnMeta.toObject(message.txn, options);
                         if (message.timestamp != null && message.hasOwnProperty("timestamp"))
-                            object.timestamp = $root.cockroach.storage.engine.enginepb.LegacyTimestamp.toObject(message.timestamp, options);
+                            object.timestamp = $root.cockroach.util.hlc.LegacyTimestamp.toObject(message.timestamp, options);
                         if (message.deleted != null && message.hasOwnProperty("deleted"))
                             object.deleted = message.deleted;
                         if (message.key_bytes != null && message.hasOwnProperty("key_bytes"))
@@ -36535,7 +36535,7 @@ export const cockroach = $root.cockroach = (() => {
                         if (message.raw_bytes != null && message.hasOwnProperty("raw_bytes"))
                             object.raw_bytes = options.bytes === String ? $util.base64.encode(message.raw_bytes, 0, message.raw_bytes.length) : options.bytes === Array ? Array.prototype.slice.call(message.raw_bytes) : message.raw_bytes;
                         if (message.merge_timestamp != null && message.hasOwnProperty("merge_timestamp"))
-                            object.merge_timestamp = $root.cockroach.storage.engine.enginepb.LegacyTimestamp.toObject(message.merge_timestamp, options);
+                            object.merge_timestamp = $root.cockroach.util.hlc.LegacyTimestamp.toObject(message.merge_timestamp, options);
                         return object;
                     };
 
@@ -37190,7 +37190,7 @@ export const cockroach = $root.cockroach = (() => {
              * @type {Object}
              * @property {number} [node_id] Liveness node_id.
              * @property {Long} [epoch] Liveness epoch.
-             * @property {cockroach.util.hlc.Timestamp$Properties} [expiration] Liveness expiration.
+             * @property {cockroach.util.hlc.LegacyTimestamp$Properties} [expiration] Liveness expiration.
              * @property {boolean} [draining] Liveness draining.
              * @property {boolean} [decommissioning] Liveness decommissioning.
              */
@@ -37222,7 +37222,7 @@ export const cockroach = $root.cockroach = (() => {
 
             /**
              * Liveness expiration.
-             * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
+             * @type {(cockroach.util.hlc.LegacyTimestamp$Properties|null)}
              */
             Liveness.prototype.expiration = null;
 
@@ -37261,7 +37261,7 @@ export const cockroach = $root.cockroach = (() => {
                 if (message.epoch != null && message.hasOwnProperty("epoch"))
                     writer.uint32(/* id 2, wireType 0 =*/16).int64(message.epoch);
                 if (message.expiration != null && message.hasOwnProperty("expiration"))
-                    $root.cockroach.util.hlc.Timestamp.encode(message.expiration, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
+                    $root.cockroach.util.hlc.LegacyTimestamp.encode(message.expiration, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
                 if (message.draining != null && message.hasOwnProperty("draining"))
                     writer.uint32(/* id 4, wireType 0 =*/32).bool(message.draining);
                 if (message.decommissioning != null && message.hasOwnProperty("decommissioning"))
@@ -37301,7 +37301,7 @@ export const cockroach = $root.cockroach = (() => {
                         message.epoch = reader.int64();
                         break;
                     case 3:
-                        message.expiration = $root.cockroach.util.hlc.Timestamp.decode(reader, reader.uint32());
+                        message.expiration = $root.cockroach.util.hlc.LegacyTimestamp.decode(reader, reader.uint32());
                         break;
                     case 4:
                         message.draining = reader.bool();
@@ -37345,7 +37345,7 @@ export const cockroach = $root.cockroach = (() => {
                     if (!$util.isInteger(message.epoch) && !(message.epoch && $util.isInteger(message.epoch.low) && $util.isInteger(message.epoch.high)))
                         return "epoch: integer|Long expected";
                 if (message.expiration != null && message.hasOwnProperty("expiration")) {
-                    let error = $root.cockroach.util.hlc.Timestamp.verify(message.expiration);
+                    let error = $root.cockroach.util.hlc.LegacyTimestamp.verify(message.expiration);
                     if (error)
                         return "expiration." + error;
                 }
@@ -37381,7 +37381,7 @@ export const cockroach = $root.cockroach = (() => {
                 if (object.expiration != null) {
                     if (typeof object.expiration !== "object")
                         throw TypeError(".cockroach.storage.Liveness.expiration: object expected");
-                    message.expiration = $root.cockroach.util.hlc.Timestamp.fromObject(object.expiration);
+                    message.expiration = $root.cockroach.util.hlc.LegacyTimestamp.fromObject(object.expiration);
                 }
                 if (object.draining != null)
                     message.draining = Boolean(object.draining);
@@ -37428,7 +37428,7 @@ export const cockroach = $root.cockroach = (() => {
                     else
                         object.epoch = options.longs === String ? $util.Long.prototype.toString.call(message.epoch) : options.longs === Number ? new $util.LongBits(message.epoch.low >>> 0, message.epoch.high >>> 0).toNumber() : message.epoch;
                 if (message.expiration != null && message.hasOwnProperty("expiration"))
-                    object.expiration = $root.cockroach.util.hlc.Timestamp.toObject(message.expiration, options);
+                    object.expiration = $root.cockroach.util.hlc.LegacyTimestamp.toObject(message.expiration, options);
                 if (message.draining != null && message.hasOwnProperty("draining"))
                     object.draining = message.draining;
                 if (message.decommissioning != null && message.hasOwnProperty("decommissioning"))

@@ -340,7 +340,7 @@ func (r *Replica) leaseStatus(
 			status.State = LeaseState_EXPIRED
 			return status
 		}
-		expiration = status.Liveness.Expiration
+		expiration = hlc.Timestamp(status.Liveness.Expiration)
 	}
 	maxOffset := r.store.Clock().MaxOffset()
 	if maxOffset == timeutil.ClocklessMaxOffset {

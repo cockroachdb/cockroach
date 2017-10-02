@@ -3415,7 +3415,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 		t.Fatal(err)
 	}
 	m2ValSize := int64((&enginepb.MVCCMetadata{
-		Timestamp: enginepb.LegacyTimestamp(ts2),
+		Timestamp: hlc.LegacyTimestamp(ts2),
 		Deleted:   true,
 		Txn:       &txn.TxnMeta,
 	}).Size())
@@ -3475,7 +3475,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 	}
 	mKey2Size := int64(mvccKey(key2).EncodedSize())
 	mVal2Size := int64((&enginepb.MVCCMetadata{
-		Timestamp: enginepb.LegacyTimestamp(ts4),
+		Timestamp: hlc.LegacyTimestamp(ts4),
 		Txn:       &txn.TxnMeta,
 	}).Size())
 	vKey2Size := mvccVersionTimestampSize

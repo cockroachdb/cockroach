@@ -39,6 +39,15 @@ func (t Timestamp) String() string {
 	return fmt.Sprintf("%d.%09d,%d", t.WallTime/1E9, t.WallTime%1E9, t.Logical)
 }
 
+// Less compares two timestamps.
+func (t LegacyTimestamp) Less(s LegacyTimestamp) bool {
+	return Timestamp(t).Less(Timestamp(s))
+}
+
+func (t LegacyTimestamp) String() string {
+	return Timestamp(t).String()
+}
+
 // Add returns a timestamp with the WallTime and Logical components increased.
 // wallTime is expressed in nanos.
 func (t Timestamp) Add(wallTime int64, logical int32) Timestamp {
