@@ -28,6 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -2271,7 +2272,11 @@ func MVCCGarbageCollect(
 // the split is roughly targetSize bytes. The returned key will never be chosen
 // from the key ranges listed in keys.NoSplitSpans.
 func MVCCFindSplitKey(
-	ctx context.Context, engine Reader, key, endKey roachpb.RKey, targetSize int64,
+	ctx context.Context,
+	engine Reader,
+	st *cluster.Settings,
+	key, endKey roachpb.RKey,
+	targetSize int64,
 ) (roachpb.Key, error) {
 	if key.Less(roachpb.RKey(keys.LocalMax)) {
 		key = roachpb.RKey(keys.LocalMax)
@@ -2283,7 +2288,8 @@ func MVCCFindSplitKey(
 	splitKey, err := it.FindSplitKey(
 		MakeMVCCMetadataKey(key.AsRawKey()),
 		MakeMVCCMetadataKey(endKey.AsRawKey()),
-		targetSize)
+		targetSize,
+		settingsAllowMeta2Splits(st))
 	if err != nil {
 		return nil, err
 	}
