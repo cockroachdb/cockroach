@@ -2426,6 +2426,7 @@ func (r *Replica) sha512(
 	iter := NewReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
 	defer iter.Close()
 
+	var legacyTimestamp hlc.LegacyTimestamp
 	for ; ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {
 			return nil, err
@@ -2458,7 +2459,8 @@ func (r *Replica) sha512(
 		if _, err := hasher.Write(key.Key); err != nil {
 			return nil, err
 		}
-		timestamp, err := protoutil.Marshal(&key.Timestamp)
+		legacyTimestamp = hlc.LegacyTimestamp(key.Timestamp)
+		timestamp, err := protoutil.Marshal(&legacyTimestamp)
 		if err != nil {
 			return nil, err
 		}

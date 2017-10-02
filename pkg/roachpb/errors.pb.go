@@ -7,7 +7,7 @@ package roachpb
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import cockroach_util_hlc1 "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 import github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
 
@@ -194,8 +194,8 @@ func (*RangeKeyMismatchError) Descriptor() ([]byte, []int) { return fileDescript
 // lower bound for a new timestamp at which at least the read producing
 // this error would succeed on retry.
 type ReadWithinUncertaintyIntervalError struct {
-	ReadTimestamp     cockroach_util_hlc.Timestamp `protobuf:"bytes,1,opt,name=read_timestamp,json=readTimestamp" json:"read_timestamp"`
-	ExistingTimestamp cockroach_util_hlc.Timestamp `protobuf:"bytes,2,opt,name=existing_timestamp,json=existingTimestamp" json:"existing_timestamp"`
+	ReadTimestamp     cockroach_util_hlc1.Timestamp `protobuf:"bytes,1,opt,name=read_timestamp,json=readTimestamp" json:"read_timestamp"`
+	ExistingTimestamp cockroach_util_hlc1.Timestamp `protobuf:"bytes,2,opt,name=existing_timestamp,json=existingTimestamp" json:"existing_timestamp"`
 }
 
 func (m *ReadWithinUncertaintyIntervalError) Reset()         { *m = ReadWithinUncertaintyIntervalError{} }
@@ -289,8 +289,8 @@ func (*WriteIntentError) Descriptor() ([]byte, []int) { return fileDescriptorErr
 // history. The write is instead done at actual timestamp, which is
 // the timestamp of the existing version+1.
 type WriteTooOldError struct {
-	Timestamp       cockroach_util_hlc.Timestamp `protobuf:"bytes,1,opt,name=timestamp" json:"timestamp"`
-	ActualTimestamp cockroach_util_hlc.Timestamp `protobuf:"bytes,2,opt,name=actual_timestamp,json=actualTimestamp" json:"actual_timestamp"`
+	Timestamp       cockroach_util_hlc1.Timestamp `protobuf:"bytes,1,opt,name=timestamp" json:"timestamp"`
+	ActualTimestamp cockroach_util_hlc1.Timestamp `protobuf:"bytes,2,opt,name=actual_timestamp,json=actualTimestamp" json:"actual_timestamp"`
 }
 
 func (m *WriteTooOldError) Reset()                    { *m = WriteTooOldError{} }
@@ -557,7 +557,7 @@ type Error struct {
 	Index *ErrPosition `protobuf:"bytes,7,opt,name=index" json:"index,omitempty"`
 	// now is the current time at the node sending the response,
 	// which can be used by the receiver to update its local HLC.
-	Now cockroach_util_hlc.Timestamp `protobuf:"bytes,8,opt,name=now" json:"now"`
+	Now cockroach_util_hlc1.Timestamp `protobuf:"bytes,8,opt,name=now" json:"now"`
 }
 
 func (m *Error) Reset()                    { *m = Error{} }

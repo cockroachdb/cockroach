@@ -24,6 +24,8 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -63,14 +65,18 @@ type fixture struct {
 
 var belowRaftGoldenProtos = map[reflect.Type]fixture{
 	reflect.TypeOf(&enginepb.MVCCMetadata{}): {
-		populatedConstructor: func(r *rand.Rand) proto.Message { return enginepb.NewPopulatedMVCCMetadata(r, false) },
-		emptySum:             7551962144604783939,
-		populatedSum:         8188088666885167358,
+		populatedConstructor: func(r *rand.Rand) proto.Message {
+			return enginepb.NewPopulatedMVCCMetadata(r, false)
+		},
+		emptySum:     7551962144604783939,
+		populatedSum: 8188088666885167358,
 	},
 	reflect.TypeOf(&enginepb.MVCCStats{}): {
-		populatedConstructor: func(r *rand.Rand) proto.Message { return enginepb.NewPopulatedMVCCStats(r, false) },
-		emptySum:             18064891702890239528,
-		populatedSum:         4287370248246326846,
+		populatedConstructor: func(r *rand.Rand) proto.Message {
+			return enginepb.NewPopulatedMVCCStats(r, false)
+		},
+		emptySum:     18064891702890239528,
+		populatedSum: 4287370248246326846,
 	},
 	reflect.TypeOf(&raftpb.HardState{}): {
 		populatedConstructor: func(r *rand.Rand) proto.Message {
@@ -85,6 +91,20 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 		},
 		emptySum:     13621293256077144893,
 		populatedSum: 13375098491754757572,
+	},
+	reflect.TypeOf(&roachpb.RangeDescriptor{}): {
+		populatedConstructor: func(r *rand.Rand) proto.Message {
+			return roachpb.NewPopulatedRangeDescriptor(r, false)
+		},
+		emptySum:     5524024218313206949,
+		populatedSum: 7661699749677660364,
+	},
+	reflect.TypeOf(&storage.Liveness{}): {
+		populatedConstructor: func(r *rand.Rand) proto.Message {
+			return storage.NewPopulatedLiveness(r, false)
+		},
+		emptySum:     892800390935990883,
+		populatedSum: 16231745342114354146,
 	},
 }
 

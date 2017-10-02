@@ -70,7 +70,7 @@ func NewFakeNodeLiveness(clock *hlc.Clock, nodeCount int) *FakeNodeLiveness {
 		nodeID := roachpb.NodeID(i + 1)
 		nl.mu.livenessMap[nodeID] = &storage.Liveness{
 			Epoch:      1,
-			Expiration: hlc.MaxTimestamp,
+			Expiration: hlc.LegacyTimestamp(hlc.MaxTimestamp),
 			NodeID:     nodeID,
 		}
 	}
@@ -117,5 +117,5 @@ func (nl *FakeNodeLiveness) FakeIncrementEpoch(id roachpb.NodeID) {
 func (nl *FakeNodeLiveness) FakeSetExpiration(id roachpb.NodeID, ts hlc.Timestamp) {
 	nl.mu.Lock()
 	defer nl.mu.Unlock()
-	nl.mu.livenessMap[id].Expiration = ts
+	nl.mu.livenessMap[id].Expiration = hlc.LegacyTimestamp(ts)
 }

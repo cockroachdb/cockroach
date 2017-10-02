@@ -93,7 +93,7 @@ func MakeStorePoolNodeLivenessFunc(nodeLiveness *NodeLiveness) NodeLivenessFunc 
 		if err != nil {
 			return nodeStatusUnknown
 		}
-		deadAsOf := liveness.Expiration.GoTime().Add(threshold)
+		deadAsOf := hlc.Timestamp(liveness.Expiration).GoTime().Add(threshold)
 		if !now.Before(deadAsOf) {
 			return nodeStatusDead
 		}

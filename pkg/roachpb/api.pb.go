@@ -167,7 +167,7 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 import cockroach_storage_engine_enginepb "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import cockroach_util_hlc1 "github.com/cockroachdb/cockroach/pkg/util/hlc"
 import cockroach_util_tracing "github.com/cockroachdb/cockroach/pkg/util/tracing"
 
 import github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -685,7 +685,7 @@ type EndTransactionRequest struct {
 	// trouble with the deadline check. A Serializable txn that has had its
 	// timestamp pushed has already lost before the deadline check: it will be
 	// forced to restart.
-	Deadline *cockroach_util_hlc.Timestamp `protobuf:"bytes,3,opt,name=deadline" json:"deadline,omitempty"`
+	Deadline *cockroach_util_hlc1.Timestamp `protobuf:"bytes,3,opt,name=deadline" json:"deadline,omitempty"`
 	// Optional commit triggers. Note that commit triggers are for
 	// internal use only and will cause an error if requested through the
 	// external-facing KV API.
@@ -886,7 +886,7 @@ func (*RangeLookupResponse) Descriptor() ([]byte, []int) { return fileDescriptor
 // gossip protocol.
 type HeartbeatTxnRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	Now  cockroach_util_hlc.Timestamp `protobuf:"bytes,2,opt,name=now" json:"now"`
+	Now  cockroach_util_hlc1.Timestamp `protobuf:"bytes,2,opt,name=now" json:"now"`
 }
 
 func (m *HeartbeatTxnRequest) Reset()                    { *m = HeartbeatTxnRequest{} }
@@ -913,10 +913,10 @@ type GCRequest struct {
 	Span `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	Keys []GCRequest_GCKey `protobuf:"bytes,3,rep,name=keys" json:"keys"`
 	// Threshold is the expiration timestamp.
-	Threshold cockroach_util_hlc.Timestamp `protobuf:"bytes,4,opt,name=threshold" json:"threshold"`
+	Threshold cockroach_util_hlc1.Timestamp `protobuf:"bytes,4,opt,name=threshold" json:"threshold"`
 	// TxnSpanGCThreshold is the timestamp below which inactive transactions were
 	// considered for GC (and thus might have been removed).
-	TxnSpanGCThreshold cockroach_util_hlc.Timestamp `protobuf:"bytes,5,opt,name=txn_span_gc_threshold,json=txnSpanGcThreshold" json:"txn_span_gc_threshold"`
+	TxnSpanGCThreshold cockroach_util_hlc1.Timestamp `protobuf:"bytes,5,opt,name=txn_span_gc_threshold,json=txnSpanGcThreshold" json:"txn_span_gc_threshold"`
 }
 
 func (m *GCRequest) Reset()                    { *m = GCRequest{} }
@@ -925,8 +925,8 @@ func (*GCRequest) ProtoMessage()               {}
 func (*GCRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{38} }
 
 type GCRequest_GCKey struct {
-	Key       Key                          `protobuf:"bytes,1,opt,name=key,casttype=Key" json:"key,omitempty"`
-	Timestamp cockroach_util_hlc.Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
+	Key       Key                           `protobuf:"bytes,1,opt,name=key,casttype=Key" json:"key,omitempty"`
+	Timestamp cockroach_util_hlc1.Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
 }
 
 func (m *GCRequest_GCKey) Reset()                    { *m = GCRequest_GCKey{} }
@@ -972,12 +972,12 @@ type PushTxnRequest struct {
 	// PushTo is the timestamp just after which PusheeTxn is attempted to be
 	// pushed. During conflict resolution, it should be set to the timestamp
 	// of the its conflicting write.
-	PushTo cockroach_util_hlc.Timestamp `protobuf:"bytes,4,opt,name=push_to,json=pushTo" json:"push_to"`
+	PushTo cockroach_util_hlc1.Timestamp `protobuf:"bytes,4,opt,name=push_to,json=pushTo" json:"push_to"`
 	// Now holds the timestamp used to compare the last heartbeat of the pushee
 	// against. This is necessary since the request header's timestamp does not
 	// necessarily advance with the node clock across retries and hence cannot
 	// detect abandoned transactions.
-	Now cockroach_util_hlc.Timestamp `protobuf:"bytes,5,opt,name=now" json:"now"`
+	Now cockroach_util_hlc1.Timestamp `protobuf:"bytes,5,opt,name=now" json:"now"`
 	// Readers set this to PUSH_TIMESTAMP to move pushee_txn's provisional
 	// commit timestamp forward. Writers set this to PUSH_ABORT to request
 	// that pushee_txn be aborted if possible. Inconsistent readers set
@@ -1413,8 +1413,8 @@ func (*WriteBatchResponse) Descriptor() ([]byte, []int) { return fileDescriptorA
 // files under a basepath.
 type ExportRequest struct {
 	Span      `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
-	Storage   ExportStorage                `protobuf:"bytes,2,opt,name=storage" json:"storage"`
-	StartTime cockroach_util_hlc.Timestamp `protobuf:"bytes,3,opt,name=start_time,json=startTime" json:"start_time"`
+	Storage   ExportStorage                 `protobuf:"bytes,2,opt,name=storage" json:"storage"`
+	StartTime cockroach_util_hlc1.Timestamp `protobuf:"bytes,3,opt,name=start_time,json=startTime" json:"start_time"`
 }
 
 func (m *ExportRequest) Reset()                    { *m = ExportRequest{} }
@@ -1683,7 +1683,7 @@ type Header struct {
 	// timestamp specifies time at which read or writes should be
 	// performed. If the timestamp is set to zero value, its value
 	// is initialized to the wall time of the receiving node.
-	Timestamp cockroach_util_hlc.Timestamp `protobuf:"bytes,1,opt,name=timestamp" json:"timestamp"`
+	Timestamp cockroach_util_hlc1.Timestamp `protobuf:"bytes,1,opt,name=timestamp" json:"timestamp"`
 	// replica specifies the destination of the request.
 	Replica ReplicaDescriptor `protobuf:"bytes,2,opt,name=replica" json:"replica"`
 	// range_id specifies the ID of the Raft consensus group which the key
@@ -1770,14 +1770,14 @@ type BatchResponse_Header struct {
 	// timestamp is set only for non-transactional responses and denotes the
 	// highest timestamp at which a command from the batch executed. At the
 	// time of writing, it is used solely for informational purposes and tests.
-	Timestamp cockroach_util_hlc.Timestamp `protobuf:"bytes,2,opt,name=Timestamp" json:"Timestamp"`
+	Timestamp cockroach_util_hlc1.Timestamp `protobuf:"bytes,2,opt,name=Timestamp" json:"Timestamp"`
 	// txn is non-nil if the request specified a non-nil
 	// transaction. The transaction timestamp and/or priority may have
 	// been updated, depending on the outcome of the request.
 	Txn *Transaction `protobuf:"bytes,3,opt,name=txn" json:"txn,omitempty"`
 	// now is the highest current time from any node contacted during the request.
 	// It can be used by the receiver to update its local HLC.
-	Now cockroach_util_hlc.Timestamp `protobuf:"bytes,5,opt,name=now" json:"now"`
+	Now cockroach_util_hlc1.Timestamp `protobuf:"bytes,5,opt,name=now" json:"now"`
 	// collected_spans stores trace spans recorded during the execution of this
 	// request.
 	CollectedSpans []cockroach_util_tracing.RecordedSpan `protobuf:"bytes,6,rep,name=collected_spans,json=collectedSpans" json:"collected_spans"`
@@ -11890,7 +11890,7 @@ func (m *EndTransactionRequest) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Deadline == nil {
-				m.Deadline = &cockroach_util_hlc.Timestamp{}
+				m.Deadline = &cockroach_util_hlc1.Timestamp{}
 			}
 			if err := m.Deadline.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
