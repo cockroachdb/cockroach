@@ -104,6 +104,7 @@ message CommandQueuesSnapshot {
 
   // Timestamp in nanoseconds when this snapshot was taken.
   util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
+  // localScope and globalScope are maps from command ids to commands.
   map<int64, Command> localScope = 2 [(gogoproto.nullable) = false];
   map<int64, Command> globalScope = 3 [(gogoproto.nullable) = false];
 }

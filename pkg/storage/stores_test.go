@@ -145,7 +145,10 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error when creating replica: %v", err)
 		}
-		store.AddReplica(replica)
+		err2 := store.AddReplica(replica)
+		if err2 != nil {
+			t.Fatalf("unexpected error when adding replica: %v", err2)
+		}
 	}
 
 	// Test the case where the replica we're looking for exists.

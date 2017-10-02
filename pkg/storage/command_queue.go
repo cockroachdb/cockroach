@@ -809,6 +809,7 @@ func (cq *CommandQueue) metrics() CommandQueueMetrics {
 	}
 }
 
+// CommandQueueSnapshot is a map from command ids to commands.
 type CommandQueueSnapshot map[int64]storagebase.CommandQueuesSnapshot_Command
 
 // GetSnapshot returns a snapshot of this command queue's state.
