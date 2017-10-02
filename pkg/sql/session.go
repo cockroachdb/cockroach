@@ -675,12 +675,12 @@ func (s *Session) newPlanner(e *Executor, txn *client.Txn) *planner {
 // evalCtx creates a parser.EvalContext from the Session's current configuration.
 func (s *Session) evalCtx() parser.EvalContext {
 	return parser.EvalContext{
-		Location:   &s.Location,
-		Database:   s.Database,
-		User:       s.User,
-		SearchPath: s.SearchPath,
-		Ctx:        s.Ctx,
-		Mon:        &s.TxnState.mon,
+		Location:    &s.Location,
+		Database:    s.Database,
+		User:        s.User,
+		SearchPath:  s.SearchPath,
+		CtxProvider: s,
+		Mon:         &s.TxnState.mon,
 	}
 }
 

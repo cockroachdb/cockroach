@@ -1841,8 +1841,21 @@ type EvalPlanner interface {
 	QualifyWithDatabase(ctx context.Context, t *NormalizableTableName) (*TableName, error)
 }
 
-// contextHolder is a wrapper that returns a Context.
-type contextHolder func() context.Context
+// CtxProvider is anything that can return a Context.
+type CtxProvider interface {
+	// Ctx returns this provider's context.
+	Ctx() context.Context
+}
+
+// backgroundCtxProvider returns the background context.
+type backgroundCtxProvider struct{}
+
+// Ctx implements CtxProvider.
+func (s backgroundCtxProvider) Ctx() context.Context {
+	return context.Background()
+}
+
+var _ CtxProvider = backgroundCtxProvider{}
 
 // EvalContext defines the context in which to evaluate an expression, allowing
 // the retrieval of state such as the node ID or statement start time.
@@ -1873,14 +1886,15 @@ type EvalContext struct {
 	// unqualified table name. Names in the search path are normalized already.
 	// This must not be modified (this is shared from the session).
 	SearchPath SearchPath
-	// Ctx represents the context in which the expression is evaluated. This will
-	// point to the Session's context container.
+
+	// CtxProvider holds the context in which the expression is evaluated. This
+	// will point to the session, which is itself a provider of contexts.
 	// NOTE: seems a bit lazy to hold a pointer to the session's context here,
 	// instead of making sure the right context is explicitly set before the
 	// EvalContext is used. But there's already precedent with the Location field,
 	// and also at the time of writing, EvalContexts are initialized with the
 	// planner and not mutated.
-	Ctx contextHolder
+	CtxProvider CtxProvider
 
 	Planner EvalPlanner
 
@@ -1922,7 +1936,7 @@ func MakeTestingEvalContext() EvalContext {
 	)
 	monitor.Start(context.Background(), nil, mon.MakeStandaloneBudget(math.MaxInt64))
 	ctx.Mon = &monitor
-	ctx.Ctx = context.Background
+	ctx.CtxProvider = backgroundCtxProvider{}
 	acc := monitor.MakeBoundAccount()
 	ctx.ActiveMemAcc = &acc
 	now := timeutil.Now()
@@ -2047,6 +2061,11 @@ func (ctx *EvalContext) GetLocation() *time.Location {
 		return time.UTC
 	}
 	return *ctx.Location
+}
+
+// Ctx returns the session's context.
+func (ctx *EvalContext) Ctx() context.Context {
+	return ctx.CtxProvider.Ctx()
 }
 
 func (ctx *EvalContext) getTmpDec() *apd.Decimal {
