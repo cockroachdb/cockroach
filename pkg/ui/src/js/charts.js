@@ -65,17 +65,11 @@ function renderChart(config) {
   x.domain([d3.min(xExtents, function (d) { return d[0]; }), d3.max(xExtents, function (d) { return d[1]; })]);
   y.domain([d3.min(yExtents, function (d) { return d[0]; }), d3.max(yExtents, function (d) { return d[1]; })]);
 
-  var legend = chart.append("g")
-    .attr("class", "nv-legendWrap")
-    .attr("transform", "translate(0,-30)")
-    .append("g")
-    .attr("class", "nvd3 nv-legend")
-    .attr("transform", "translate(0,5)")
-    .append("g")
-    .attr("transform", "translate(" + (width - config.metrics.length * 70) + ",5)");
+  var legend = chart.selectAll("g.nv-legend")
+    .attr("transform", "translate(" + (width - config.metrics.length * 70) + ",10)");
 
   var legendsBase = legend.selectAll("g.nv-series")
-    .data(config.metrics);
+    .data(config.metrics.length === 1 ? [] : config.metrics);
 
   var legendsNew = legendsBase.enter()
     .append("g")
@@ -96,25 +90,49 @@ function renderChart(config) {
     .merge(legendsBase);
 
   legends
-    .attr("transform", function (d, i) { return "translate(" + (i*71) + ",5)"; });
+    .attr("transform", function (m, i) { return "translate(" + (i*71) + ",5)"; })
+    // TODO(couchand): revisit these handler methods
+    .on("dblclick", function (m) {
+      config.metrics.forEach(function (other) {
+        other.hidden = true;
+      });
+      m.hidden = false;
+
+      container.each(renderChart);
+    })
+    .on("click", function (m) {
+      m.hidden = !m.hidden;
+
+      var allHidden = true;
+      config.metrics.forEach(function (other) {
+        if (!other.hidden) {
+          allHidden = false;
+        }
+      });
+      if (allHidden) {
+        config.metrics.forEach(function (other) {
+          other.hidden = false;
+        });
+      }
+
+      container.each(renderChart);
+    });
 
   legends.select("circle")
-    .attr("fill", function (m) { return color(m.title); });
+    .attr("stroke", function (m) { return color(m.title); })
+    .style("stroke-width", "2px")
+    .attr("fill", function (m) { return color(m.title); })
+    .style("fill-opacity", function (m) { return m.hidden ? 0 : 1; });
 
   legends.select("text")
     .text(function (m) { return m.title; });
 
-  chart.append("g")
+  var xContainer = chart.select("g.nv-x")
     .attr("transform", "translate(0," + height + ")")
-    .attr("class", "nvd3-svg nv-x nv-axis")
-    .append("g")
-    .attr("class", "nvd3 nv-wrap nv-axis")
+    .selectAll(".nv-axis")
     .call(xAxis);
-
-  chart.append("g")
-    .attr("class", "nvd3-svg nv-y nv-axis")
-    .append("g")
-    .attr("class", "nvd3 nv-wrap nv-axis")
+  var yContainer = chart.select("g.nv-y")
+    .selectAll(".nv-axis")
     .call(yAxis);
 
   var linesBase = chart.selectAll("path.line")
@@ -127,8 +145,10 @@ function renderChart(config) {
     .attr("fill", "none")
     .merge(linesBase);
 
-  lines.attr("d", function (m) { return line(m.data); })
-    .attr("stroke", function (m) { return color(m.title); });
+  lines
+    .attr("d", function (m) { return line(m.data); })
+    .attr("stroke", function (m) { return color(m.title); })
+    .style("stroke-opacity", function (m) { return m.hidden ? 0 : 1; });
 }
 
 function renderChartArray(config) {
@@ -147,7 +167,7 @@ function renderChartArray(config) {
     .append("span")
     .attr("class", "visualization__title");
 
-  visualizationEnter
+  var chartEnter = visualizationEnter
     .append("div")
     .attr("class", "visualization__content")
     .append("div")
@@ -157,6 +177,21 @@ function renderChartArray(config) {
     .attr("class", "graph nvd3-svg")
     .append("g")
     .attr("class", "main");
+
+  var legend = chartEnter.append("g")
+    .attr("class", "nv-legendWrap")
+    .attr("transform", "translate(0,-30)")
+    .append("g")
+    .attr("class", "nvd3 nv-legend");
+
+  chartEnter.append("g")
+    .attr("class", "nvd3-svg nv-x nv-axis")
+    .append("g")
+    .attr("class", "nvd3 nv-wrap nv-axis");
+  chartEnter.append("g")
+    .attr("class", "nvd3-svg nv-y nv-axis")
+    .append("g")
+    .attr("class", "nvd3 nv-wrap nv-axis");
 
   var visualization = visualizationEnter.merge(visualizationBase);
 
