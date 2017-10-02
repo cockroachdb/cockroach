@@ -350,7 +350,9 @@ $(ARCHIVE).tmp: .buildinfo/tag .buildinfo/rev .buildinfo/basebranch
 # For details, see the "Possible timestamp problems with diff-files?" thread on
 # the Git mailing list (http://marc.info/?l=git&m=131687596307197).
 .buildinfo/tag: | .buildinfo
-	@{ git describe --tags --dirty 2> /dev/null || git rev-parse --short HEAD; } | tr -d \\n > $@
+	@{ git describe --tags --exact-match 2>/dev/null || \
+	  echo v1.x-unstable.$$(git show -s --date=format:'%Y%m%d' --format=%cd HEAD)-$$(git rev-parse --short HEAD); } | \
+	  tr -d \\n > $@
 
 .buildinfo/basebranch: | .buildinfo
 	@git describe --tags --abbrev=0 | tr -d \\n > $@
