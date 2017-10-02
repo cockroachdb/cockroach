@@ -373,6 +373,9 @@ func (v *Value) SetProto(msg proto.Message) error {
 		MarshalTo(data []byte) (int, error)
 		Size() int
 	}
+	// TODO(tschottdorf): this is awkward since it might deep-clone and protoutil.Marshal
+	// below will do it again. It's a bit hard to move this though.
+	msg = protoutil.MaybeFuzz(msg)
 	if m, ok := msg.(marshalTo); ok {
 		size := m.Size()
 		v.RawBytes = make([]byte, headerSize+size)
@@ -381,6 +384,7 @@ func (v *Value) SetProto(msg proto.Message) error {
 		// significant (~30%) slowdown. It is unclear why. See
 		// BenchmarkValueSetProto.
 		protoutil.Interceptor(msg)
+
 		if _, err := m.MarshalTo(v.RawBytes[headerSize:]); err != nil {
 			return err
 		}
@@ -1075,6 +1079,17 @@ func (l Lease) String() string {
 		return fmt.Sprintf("repl=%s start=%s exp=%s%s", l.Replica, l.Start, l.Expiration, proposedSuffix)
 	}
 	return fmt.Sprintf("repl=%s start=%s epo=%d%s", l.Replica, l.Start, *l.Epoch, proposedSuffix)
+}
+
+// BootstrapLease returns the lease to persist for the range of a freshly bootstrapped store. The
+// returned lease is morally "empty" but has a few fields set to null instead of nil because some
+// used to be non-nullable and we now fuzz their nullability in tests. As a consequence, it's better
+// to always use zero fields here so that the initial stats are constant.
+func BootstrapLease() Lease {
+	return Lease{
+		Expiration:            &hlc.Timestamp{},
+		DeprecatedStartStasis: &hlc.Timestamp{},
+	}
 }
 
 // OwnedBy returns whether the given store is the lease owner.

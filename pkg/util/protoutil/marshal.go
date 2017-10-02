@@ -20,10 +20,34 @@ import "github.com/gogo/protobuf/proto"
 // Interceptor is not safe to modify concurrently with calls to Marshal.
 var Interceptor = func(_ proto.Message) {}
 
+// MaybeFuzz takes the given proto and, if nullability fuzzing is enabled, walks it using a
+// RandomZeroInsertingVisitor. A suitable copy is made and returned if fuzzing took place.
+func MaybeFuzz(pb proto.Message) proto.Message {
+	if fuzzEnabled {
+		_, noClone := uncloneable(pb)
+		if !noClone {
+			pb = Clone(pb)
+		} else {
+			// Perform a more expensive clone. Unfortunately this is the code path
+			// hit by anything that holds a UUID (most things).
+			b, err := proto.Marshal(pb)
+			if err != nil {
+				panic(err)
+			}
+			if err := proto.Unmarshal(b, pb); err != nil {
+				panic(err)
+			}
+		}
+		Walk(pb, RandomZeroInsertingVisitor)
+	}
+	return pb
+}
+
 // Marshal uses proto.Marshal to encode pb into the wire format. It is used in
 // some tests to intercept calls to proto.Marshal.
 func Marshal(pb proto.Message) ([]byte, error) {
 	Interceptor(pb)
 
+	pb = MaybeFuzz(pb)
 	return proto.Marshal(pb)
 }

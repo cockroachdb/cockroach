@@ -220,6 +220,7 @@ bin/logictest.test: main.go $(shell $(FIND_RELEVANT) ! -name 'zcgo_flags.go' -na
 bench: ## Run benchmarks.
 bench: BENCHES := .
 bench: TESTS := -
+bench: TAGS += bench
 bench: TESTTIMEOUT := $(BENCHTIMEOUT)
 
 .PHONY: check test testshort testrace testlogic bench
