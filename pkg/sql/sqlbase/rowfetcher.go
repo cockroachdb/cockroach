@@ -92,7 +92,7 @@ type RowFetcher struct {
 	prettyValueBuf *bytes.Buffer
 
 	// The current key/value, unless kvEnd is true.
-	kv                client.KeyValue
+	kv                roachpb.KeyValue
 	keyRemainingBytes []byte
 	kvEnd             bool
 
@@ -101,7 +101,7 @@ type RowFetcher struct {
 }
 
 type kvFetcher interface {
-	nextKV(ctx context.Context) (bool, client.KeyValue, error)
+	nextKV(ctx context.Context) (bool, roachpb.KeyValue, error)
 	getRangesInfo() []roachpb.RangeInfo
 }
 
@@ -320,7 +320,7 @@ func (rf *RowFetcher) ReadIndexKey(k roachpb.Key) (remaining []byte, ok bool, er
 // accordingly. If debugStrings is true, returns pretty printed key and value
 // information in prettyKey/prettyValue (otherwise they are empty strings).
 func (rf *RowFetcher) processKV(
-	ctx context.Context, kv client.KeyValue, debugStrings bool,
+	ctx context.Context, kv roachpb.KeyValue, debugStrings bool,
 ) (prettyKey string, prettyValue string, err error) {
 	if debugStrings {
 		prettyKey = fmt.Sprintf("/%s/%s%s", rf.desc.Name, rf.index.Name, prettyEncDatums(rf.keyVals))
@@ -382,7 +382,10 @@ func (rf *RowFetcher) processKV(
 			return "", "", err
 		}
 	} else {
-		valueBytes := kv.ValueBytes()
+		valueBytes, err := kv.Value.GetBytes()
+		if err != nil {
+			return "", "", err
+		}
 		if rf.extraVals != nil {
 			// This is a unique index; decode the extra column values from
 			// the value.
@@ -432,7 +435,7 @@ func (rf *RowFetcher) processKV(
 func (rf *RowFetcher) processValueSingle(
 	ctx context.Context,
 	family *ColumnFamilyDescriptor,
-	kv client.KeyValue,
+	kv roachpb.KeyValue,
 	debugStrings bool,
 	prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
@@ -485,7 +488,7 @@ func (rf *RowFetcher) processValueSingle(
 
 func (rf *RowFetcher) processValueBytes(
 	ctx context.Context,
-	kv client.KeyValue,
+	kv roachpb.KeyValue,
 	valueBytes []byte,
 	debugStrings bool,
 	prettyKeyPrefix string,
@@ -552,7 +555,7 @@ func (rf *RowFetcher) processValueBytes(
 // processValueTuple processes the given values (of columns family.ColumnIDs),
 // setting values in the rf.row accordingly. The key is only used for logging.
 func (rf *RowFetcher) processValueTuple(
-	ctx context.Context, kv client.KeyValue, debugStrings bool, prettyKeyPrefix string,
+	ctx context.Context, kv roachpb.KeyValue, debugStrings bool, prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
 	tupleBytes, err := kv.Value.GetTuple()
 	if err != nil {

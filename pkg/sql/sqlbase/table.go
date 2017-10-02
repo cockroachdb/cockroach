@@ -1827,9 +1827,9 @@ func encodeArrayElement(b []byte, d parser.Datum) ([]byte, error) {
 // expected by the column. An error is returned if the value's type does not
 // match the column's type.
 func UnmarshalColumnValue(
-	a *DatumAlloc, typ ColumnType, value *roachpb.Value,
+	a *DatumAlloc, typ ColumnType, value roachpb.Value,
 ) (parser.Datum, error) {
-	if value == nil {
+	if value.RawBytes == nil {
 		return parser.DNull, nil
 	}
 

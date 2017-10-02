@@ -216,14 +216,14 @@ func errHasCode(err error, code string) bool {
 
 // singleKVFetcher is a kvFetcher that returns a single kv.
 type singleKVFetcher struct {
-	kv   client.KeyValue
+	kv   roachpb.KeyValue
 	done bool
 }
 
 // nextKV implements the kvFetcher interface.
-func (f *singleKVFetcher) nextKV(ctx context.Context) (bool, client.KeyValue, error) {
+func (f *singleKVFetcher) nextKV(ctx context.Context) (bool, roachpb.KeyValue, error) {
 	if f.done {
-		return false, client.KeyValue{}, nil
+		return false, roachpb.KeyValue{}, nil
 	}
 	f.done = true
 	return true, f.kv, nil
@@ -277,7 +277,10 @@ func ConvertBatchError(ctx context.Context, tableDesc *TableDescriptor, b *clien
 			false /* returnRangeInfo */, &DatumAlloc{}); err != nil {
 			return err
 		}
-		f := singleKVFetcher{kv: client.KeyValue{Key: key, Value: cErr.ActualValue}}
+		f := singleKVFetcher{kv: roachpb.KeyValue{Key: key}}
+		if cErr.ActualValue != nil {
+			f.kv.Value = *cErr.ActualValue
+		}
 		// Use the RowFetcher to decode the single kv pair above by passing in
 		// this singleKVFetcher implementation, which doesn't actually hit KV.
 		if err := rf.StartScanFrom(ctx, &f); err != nil {
