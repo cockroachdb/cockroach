@@ -796,8 +796,9 @@ func TestBatchMixRawRequest(t *testing.T) {
 
 func TestUpdateDeadlineMaybe(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(hlc.UnixNano, 0)
-	db := NewDB(newTestSender(nil), clock)
+	mc := hlc.NewManualClock(1)
+	clock := hlc.NewClock(mc.UnixNano, 0 /* maxOffset */)
+	db := NewDB(nil /* sender */, clock)
 	txn := NewTxn(db, 0 /* gatewayNodeID */)
 
 	if txn.deadline != nil {
@@ -805,7 +806,7 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 	}
 
 	deadline := hlc.Timestamp{WallTime: 10, Logical: 1}
-	if !txn.UpdateDeadlineMaybe(deadline) {
+	if !txn.UpdateDeadlineMaybe(context.TODO(), deadline) {
 		t.Errorf("expected update, but it didn't happen")
 	}
 	if d := *txn.deadline; d != deadline {
@@ -813,7 +814,7 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 	}
 
 	futureDeadline := hlc.Timestamp{WallTime: 11, Logical: 1}
-	if txn.UpdateDeadlineMaybe(futureDeadline) {
+	if txn.UpdateDeadlineMaybe(context.TODO(), futureDeadline) {
 		t.Errorf("expected no update, but update happened")
 	}
 	if d := *txn.deadline; d != deadline {
@@ -821,7 +822,7 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 	}
 
 	pastDeadline := hlc.Timestamp{WallTime: 9, Logical: 1}
-	if !txn.UpdateDeadlineMaybe(pastDeadline) {
+	if !txn.UpdateDeadlineMaybe(context.TODO(), pastDeadline) {
 		t.Errorf("expected update, but it didn't happen")
 	}
 	if d := *txn.deadline; d != pastDeadline {
