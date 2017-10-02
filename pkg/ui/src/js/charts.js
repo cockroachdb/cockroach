@@ -37,7 +37,7 @@ function renderChart(config) {
     .attr("height", rect.height);
 
   var chart = svg.selectAll("g.main")
-    .attr("transform", "translate(" + margin.left + "," + margin.top + ")")
+    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
   var width = rect.width - margin.left - margin.right;
   var height = rect.height - margin.top - margin.bottom;
@@ -48,6 +48,7 @@ function renderChart(config) {
   var color = d3.scaleOrdinal(d3.schemeCategory10);
 
   var xAxis = d3.axisBottom(x)
+    .ticks(width < 700 ? 5 : 10)
     .tickSizeInner(-height)
     .tickSizeOuter(0);
   var yAxis = d3.axisLeft(y)
@@ -221,6 +222,13 @@ function renderChartArray(config) {
   var linegraph = content.selectAll(".linegraph");
 
   linegraph.each(renderChart);
+
+  // TODO(couchand): apparently, the current flexbox styling is getting in the
+  // way of the resize being handled properly -- needs investigation
+  // TODO(couchand): no dependency for debounce?
+  window.addEventListener("resize", _.debounce(function () {
+    linegraph.each(renderChart);
+  }, 10));
 }
 
 window.charts = {
