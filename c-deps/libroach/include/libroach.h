@@ -221,8 +221,9 @@ typedef struct {
 
 MVCCStatsResult MVCCComputeStats(DBIterator* iter, DBKey start, DBKey end, int64_t now_nanos);
 
-bool MVCCIsValidSplitKey(DBSlice key);
-DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, int64_t target_size, DBString* split_key);
+bool MVCCIsValidSplitKey(DBSlice key, bool allow_meta2_splits);
+DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, 
+                          int64_t target_size, bool allow_meta2_splits, DBString* split_key);
 
 // DBStatsResult contains various runtime stats for RocksDB.
 typedef struct {

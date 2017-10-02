@@ -95,8 +95,10 @@ type Iterator interface {
 	ComputeStats(start, end MVCCKey, nowNanos int64) (enginepb.MVCCStats, error)
 	// FindSplitKey finds a key from the given span such that the left side of
 	// the split is roughly targetSize bytes. The returned key will never be
-	// chosen from the key ranges listed in keys.NoSplitSpans.
-	FindSplitKey(start, end MVCCKey, targetSize int64) (MVCCKey, error)
+	// chosen from the key ranges listed in keys.NoSplitSpans if
+	// allowMeta2Splits is true and keys.NoSplitSpansWithoutMeta2Splits if
+	// allowMeta2Splits is false.
+	FindSplitKey(start, end MVCCKey, targetSize int64, allowMeta2Splits bool) (MVCCKey, error)
 }
 
 // Reader is the read interface to an engine's data.
