@@ -16,6 +16,8 @@ package keys
 
 import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
+//go:generate go run gen_cpp_keys.go
+
 var (
 	// MetaSpan holds all the addressing records.
 	//
@@ -37,3 +39,6 @@ var (
 	// SystemConfigSpan: system objects which will be gossiped.
 	NoSplitSpans = []roachpb.Span{MetaSpan, NodeLivenessSpan, SystemConfigSpan}
 )
+
+// Silence unused warning. This variable is actually used by gen_cpp_keys.go.
+var _ = NoSplitSpans

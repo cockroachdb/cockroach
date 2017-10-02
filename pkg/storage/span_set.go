@@ -247,6 +247,16 @@ func (s *SpanSetIterator) ComputeStats(
 	return s.i.ComputeStats(start, end, nowNanos)
 }
 
+// FindSplitKey implements engine.Iterator.
+func (s *SpanSetIterator) FindSplitKey(
+	start, end engine.MVCCKey, targetSize int64,
+) (engine.MVCCKey, error) {
+	if err := s.spans.checkAllowed(SpanReadOnly, roachpb.Span{Key: start.Key, EndKey: end.Key}); err != nil {
+		return engine.MVCCKey{}, err
+	}
+	return s.i.FindSplitKey(start, end, targetSize)
+}
+
 type spanSetReader struct {
 	r     engine.Reader
 	spans *SpanSet
