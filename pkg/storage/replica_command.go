@@ -2721,13 +2721,19 @@ func (r *Replica) adminSplitWithDescriptor(
 	log.Event(ctx, "split begins")
 	var splitKey roachpb.RKey
 	{
+		// Once a split occurs, it can't be rolled back even on a downgrade, so
+		// we only allow meta2 splits if the minimum supported version is
+		// VersionMeta2Splits, as opposed to allowing them if the active version
+		// is VersionMeta2Splits.
+		allowMeta2Splits := r.store.cfg.Settings.Version.IsMinSupported(cluster.VersionMeta2Splits)
+
 		var foundSplitKey roachpb.Key
 		if len(args.SplitKey) == 0 {
 			// Find a key to split by size.
 			var err error
 			targetSize := r.GetMaxBytes() / 2
 			foundSplitKey, err = engine.MVCCFindSplitKey(
-				ctx, r.store.engine, desc.StartKey, desc.EndKey, targetSize)
+				ctx, r.store.engine, desc.StartKey, desc.EndKey, targetSize, allowMeta2Splits)
 			if err != nil {
 				return reply, false, roachpb.NewErrorf("unable to determine split key: %s", err)
 			}
@@ -2759,7 +2765,7 @@ func (r *Replica) adminSplitWithDescriptor(
 		if !splitKey.Equal(foundSplitKey) {
 			return reply, false, roachpb.NewErrorf("cannot split range at range-local key %s", splitKey)
 		}
-		if !engine.IsValidSplitKey(foundSplitKey) {
+		if !engine.IsValidSplitKey(foundSplitKey, allowMeta2Splits) {
 			return reply, false, roachpb.NewErrorf("cannot split range at key %s", splitKey)
 		}
 	}

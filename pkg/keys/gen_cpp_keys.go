@@ -23,6 +23,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 func rocksdbSlice(key []byte) string {
@@ -64,17 +65,21 @@ func main() {
 	fmt.Fprintf(f, "const rocksdb::Slice kMeta2KeyMax(%s);\n", rocksdbSlice(keys.Meta2KeyMax))
 	fmt.Fprintf(f, "\n")
 
-	// Sort the no split spans by end key which reduces the number of comparisons
-	// on libroach/db.cc:IsValidSplitKey().
-	sortedNoSplitSpans := keys.NoSplitSpans
-	sort.Slice(sortedNoSplitSpans, func(i, j int) bool {
-		return sortedNoSplitSpans[i].EndKey.Compare(sortedNoSplitSpans[j].EndKey) > 0
-	})
+	genSortedSpans := func(spans []roachpb.Span, name string) {
+		// Sort the spans by end key which reduces the number of comparisons on
+		// libroach/db.cc:IsValidSplitKey().
+		sortedSpans := spans
+		sort.Slice(sortedSpans, func(i, j int) bool {
+			return sortedSpans[i].EndKey.Compare(sortedSpans[j].EndKey) > 0
+		})
 
-	fmt.Fprintf(f, "const std::vector<std::pair<rocksdb::Slice, rocksdb::Slice> > kSortedNoSplitSpans = {\n")
-	for _, span := range sortedNoSplitSpans {
-		fmt.Fprintf(f, "  std::make_pair(rocksdb::Slice(%s), rocksdb::Slice(%s)),\n",
-			rocksdbSlice(span.Key), rocksdbSlice(span.EndKey))
+		fmt.Fprintf(f, "const std::vector<std::pair<rocksdb::Slice, rocksdb::Slice> > kSorted%s = {\n", name)
+		for _, span := range sortedSpans {
+			fmt.Fprintf(f, "  std::make_pair(rocksdb::Slice(%s), rocksdb::Slice(%s)),\n",
+				rocksdbSlice(span.Key), rocksdbSlice(span.EndKey))
+		}
+		fmt.Fprintf(f, "};\n")
 	}
-	fmt.Fprintf(f, "};\n")
+	genSortedSpans(keys.NoSplitSpans, "NoSplitSpans")
+	genSortedSpans(keys.NoSplitSpansWithoutMeta2Splits, "NoSplitSpansWithoutMeta2Splits")
 }

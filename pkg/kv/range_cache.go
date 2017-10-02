@@ -472,6 +472,13 @@ func (rdc *RangeDescriptorCache) performLegacyRangeLookup(
 	return compatDB.legacyRangeLookup(ctx, key, desc, useReverseScan)
 }
 
+// Clear clears all RangeDescriptors from the RangeDescriptorCache.
+func (rdc *RangeDescriptorCache) Clear() {
+	rdc.rangeCache.Lock()
+	defer rdc.rangeCache.Unlock()
+	rdc.rangeCache.cache.Clear()
+}
+
 // EvictCachedRangeDescriptor will evict any cached user-space and meta range
 // descriptors for the given key. It is intended that this method be called from
 // a consumer of rangeDescriptorCache through the EvictionToken abstraction if

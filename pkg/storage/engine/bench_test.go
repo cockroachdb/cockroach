@@ -602,8 +602,8 @@ func runMVCCFindSplitKey(emk engineMaker, valueBytes int, b *testing.B) {
 
 	var err error
 	for i := 0; i < b.N; i++ {
-		_, err = MVCCFindSplitKey(
-			context.Background(), eng, roachpb.RKeyMin, roachpb.RKeyMax, rangeBytes/2)
+		_, err = MVCCFindSplitKey(context.Background(), eng, roachpb.RKeyMin,
+			roachpb.RKeyMax, rangeBytes/2, true /* allowMeta2Splits */)
 		if err != nil {
 			b.Fatal(err)
 		}

@@ -30,3 +30,10 @@ func (cv ClusterVersion) IsActive(versionKey VersionKey) bool {
 	v := VersionByKey(versionKey)
 	return cv.IsActiveVersion(v)
 }
+
+// IsMinSupported returns true if the features of the supplied version will be
+// permanently available (i.e. cannot be downgraded away).
+func (cv ClusterVersion) IsMinSupported(versionKey VersionKey) bool {
+	v := VersionByKey(versionKey)
+	return !cv.MinimumVersion.Less(v)
+}
