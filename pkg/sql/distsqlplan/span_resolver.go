@@ -268,7 +268,7 @@ func (it *spanResolverIterator) Seek(
 	if it.dir == oldDir && it.it.Valid() {
 		reverse := (it.dir == kv.Descending)
 		desc := it.it.Desc()
-		if (reverse && desc.ContainsExclusiveEndKey(seekKey)) ||
+		if (reverse && desc.ContainsKeyInverted(seekKey)) ||
 			(!reverse && desc.ContainsKey(seekKey)) {
 			if log.V(1) {
 				log.Infof(ctx, "not seeking (key=%s); existing descriptor %s", seekKey, desc)
