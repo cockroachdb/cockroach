@@ -451,8 +451,8 @@ func TestOfficializeAddr(t *testing.T) {
 				cfgAddr, lnAddr, expAddr string
 			}{
 				{"localhost:0", "127.0.0.1:1234", "localhost:1234"},
-				{"localhost:1234", "127.0.0.1:2345", "localhost:2345"},
-				{":1234", net.JoinHostPort(addrs[0], "2345"), net.JoinHostPort(host, "2345")},
+				{"localhost:1234", "127.0.0.1:2345", "localhost:1234"},
+				{":1234", net.JoinHostPort(addrs[0], "2345"), net.JoinHostPort(host, "1234")},
 				{":0", net.JoinHostPort(addrs[0], "2345"), net.JoinHostPort(host, "2345")},
 			} {
 				t.Run(tc.cfgAddr, func(t *testing.T) {
