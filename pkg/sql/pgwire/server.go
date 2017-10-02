@@ -388,11 +388,11 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 		defer v3conn.finish(ctx)
 
 		if v3conn.sessionArgs, err = parseOptions(ctx, buf.msg); err != nil {
-			return v3conn.sendInternalError(err.Error())
+			return v3conn.sendError(pgerror.NewError(pgerror.CodeProtocolViolationError, err.Error()))
 		}
 
 		if errSSLRequired {
-			return v3conn.sendInternalError(ErrSSLRequired)
+			return v3conn.sendError(pgerror.NewError(pgerror.CodeProtocolViolationError, ErrSSLRequired))
 		}
 		if draining {
 			return v3conn.sendError(newAdminShutdownErr(errors.New(ErrDraining)))
@@ -400,7 +400,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 
 		v3conn.sessionArgs.User = parser.Name(v3conn.sessionArgs.User).Normalize()
 		if err := v3conn.handleAuthentication(ctx, s.cfg.Insecure); err != nil {
-			return v3conn.sendInternalError(err.Error())
+			return v3conn.sendError(pgerror.NewError(pgerror.CodeInvalidPasswordError, err.Error()))
 		}
 
 		// Reserve some memory for this connection using the server's
