@@ -42,7 +42,7 @@ function renderChart(config) {
   var width = rect.width - margin.left - margin.right;
   var height = rect.height - margin.top - margin.bottom;
 
-  var x = d3.scaleLinear().range([0, width]);
+  var x = d3.scaleUtc().range([0, width]);
   var y = d3.scaleLinear().range([height, 0]);
 
   var color = d3.scaleOrdinal(d3.schemeCategory10);
@@ -62,6 +62,7 @@ function renderChart(config) {
   var xExtents = config.metrics.map(function (m) { return d3.extent(m.data, function (d) { return d.timestamp_nanos; }); });
   var yExtents = config.metrics.map(function (m) { return d3.extent(m.data, function (d) { return d.value; }); });
 
+  // TODO(couchand): x domain should be configured elsewhere
   x.domain([d3.min(xExtents, function (d) { return d[0]; }), d3.max(xExtents, function (d) { return d[1]; })]);
   y.domain([d3.min(yExtents, function (d) { return d[0]; }), d3.max(yExtents, function (d) { return d[1]; })]);
 
@@ -128,12 +129,22 @@ function renderChart(config) {
     .text(function (m) { return m.title; });
 
   var xContainer = chart.select("g.nv-x")
-    .attr("transform", "translate(0," + height + ")")
+    .attr("transform", "translate(0," + height + ")");
+
+  xContainer
     .selectAll(".nv-axis")
     .call(xAxis);
-  var yContainer = chart.select("g.nv-y")
+
+  var yContainer = chart.select("g.nv-y");
+
+  yContainer
     .selectAll(".nv-axis")
     .call(yAxis);
+
+  yContainer
+    .selectAll("text.nv-axislabel")
+    .attr("x", -height / 2)
+    .text(config.type);
 
   var linesBase = chart.selectAll("path.line")
     .data(config.metrics);
@@ -172,7 +183,8 @@ function renderChartArray(config) {
     .attr("class", "visualization__content")
     .append("div")
     .attr("class", "linegraph nvd3")
-    // TODO(couchand): the rest of this line should be inside the chart fn
+    // TODO(couchand): the rest of this line as well as all the following
+    // initialization should be inside the chart fn
     .append("svg")
     .attr("class", "graph nvd3-svg")
     .append("g")
@@ -191,7 +203,12 @@ function renderChartArray(config) {
   chartEnter.append("g")
     .attr("class", "nvd3-svg nv-y nv-axis")
     .append("g")
-    .attr("class", "nvd3 nv-wrap nv-axis");
+    .attr("class", "nvd3 nv-wrap nv-axis")
+    .append("text")
+    .attr("class", "nv-axislabel")
+    .attr("transform", "rotate(-90)")
+    .attr("y", "-40") // TODO(couchand): de-magicify this number
+    .style("text-anchor", "middle");
 
   var visualization = visualizationEnter.merge(visualizationBase);
 
