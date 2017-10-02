@@ -21,6 +21,7 @@ package cockroach.sql.distsqlrun;
 option go_package = "distsqlrun";
 
 import "cockroach/pkg/roachpb/api.proto";
+import "cockroach/pkg/roachpb/csv.proto";
 import "cockroach/pkg/roachpb/data.proto";
 import "cockroach/pkg/roachpb/errors.proto";
 import "cockroach/pkg/sql/sqlbase/structured.proto";

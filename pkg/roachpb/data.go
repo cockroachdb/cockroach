@@ -1074,7 +1074,7 @@ func (l Lease) String() string {
 	if l.Type() == LeaseExpiration {
 		return fmt.Sprintf("repl=%s start=%s exp=%s%s", l.Replica, l.Start, l.Expiration, proposedSuffix)
 	}
-	return fmt.Sprintf("repl=%s start=%s epo=%d%s", l.Replica, l.Start, *l.Epoch, proposedSuffix)
+	return fmt.Sprintf("repl=%s start=%s epo=%d%s", l.Replica, l.Start, l.Epoch, proposedSuffix)
 }
 
 // OwnedBy returns whether the given store is the lease owner.
@@ -1098,7 +1098,7 @@ const (
 
 // Type returns the lease type.
 func (l Lease) Type() LeaseType {
-	if l.Epoch == nil {
+	if l.Epoch == 0 {
 		return LeaseExpiration
 	}
 	return LeaseEpoch
@@ -1123,13 +1123,13 @@ func (l Lease) Equivalent(ol Lease) bool {
 		// tested in TestLeaseEquivalence.
 		l.Expiration, ol.Expiration = nil, nil
 
-		if ol.Epoch != nil && *l.Epoch == *ol.Epoch {
-			l.Epoch, ol.Epoch = nil, nil
+		if l.Epoch == ol.Epoch {
+			l.Epoch, ol.Epoch = 0, 0
 		}
 	case LeaseExpiration:
 		// See the comment above, though this field's nullability wasn't
 		// changed. We nil it out for completeness only.
-		l.Epoch, ol.Epoch = nil, nil
+		l.Epoch, ol.Epoch = 0, 0
 
 		// For expiration-based leases, extensions are considered equivalent.
 		if !ol.GetExpiration().Less(l.GetExpiration()) {
