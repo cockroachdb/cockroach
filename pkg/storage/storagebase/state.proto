@@ -91,7 +91,7 @@ message RangeInfo {
 
 // CommandQueueSnapshot is a snapshot of the command queue graph for rendering
 // on an admin UI debug page. While the actual CommandQueue uses interval trees
-// for fast mutation and lookups, all the UI needs is a simple array of commands.
+// for fast mutation and lookups, all the UI needs is a simple map of commands.
 message CommandQueuesSnapshot {
   message Command {
     int64 id = 1;

@@ -91,10 +91,11 @@ func (*RangeInfo) Descriptor() ([]byte, []int) { return fileDescriptorState, []i
 
 // CommandQueueSnapshot is a snapshot of the command queue graph for rendering
 // on an admin UI debug page. While the actual CommandQueue uses interval trees
-// for fast mutation and lookups, all the UI needs is a simple array of commands.
+// for fast mutation and lookups, all the UI needs is a simple map of commands.
 type CommandQueuesSnapshot struct {
 	// Timestamp in nanoseconds when this snapshot was taken.
-	Timestamp   cockroach_util_hlc1.Timestamp           `protobuf:"bytes,1,opt,name=timestamp" json:"timestamp"`
+	Timestamp cockroach_util_hlc1.Timestamp `protobuf:"bytes,1,opt,name=timestamp" json:"timestamp"`
+	// localScope and globalScope are maps from command ids to commands.
 	LocalScope  map[int64]CommandQueuesSnapshot_Command `protobuf:"bytes,2,rep,name=localScope" json:"localScope" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
 	GlobalScope map[int64]CommandQueuesSnapshot_Command `protobuf:"bytes,3,rep,name=globalScope" json:"globalScope" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
 }

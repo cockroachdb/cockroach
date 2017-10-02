@@ -112,7 +112,7 @@ func TestStoresVisitStores(t *testing.T) {
 }
 
 func TestStoresGetReplicaForRangeID(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 
