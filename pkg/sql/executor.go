@@ -540,7 +540,7 @@ func (e *Executor) Prepare(
 
 	if protoTS != nil {
 		planner.avoidCachedDescriptors = true
-		txn.SetFixedTimestamp(*protoTS)
+		txn.SetFixedTimestamp(session.Ctx(), *protoTS)
 	}
 
 	if filter := e.cfg.TestingKnobs.BeforePrepare; filter != nil {
@@ -919,6 +919,9 @@ func (e *Executor) execParsed(
 				}
 			}
 
+			// Release any leases the transaction(s) may have used.
+			session.tables.releaseTables(session.Ctx())
+
 			// Exec the schema changers (if the txn rolled back, the schema changers
 			// will short-circuit because the corresponding descriptor mutation is not
 			// found).
@@ -1010,9 +1013,8 @@ func runWithAutoRetry(
 
 	var err error
 	for {
-
 		if protoTS != nil {
-			txnState.mu.txn.SetFixedTimestamp(*protoTS)
+			txnState.mu.txn.SetFixedTimestamp(session.Ctx(), *protoTS)
 		}
 		// Some results may have been produced by a previous attempt.
 		txnState.txnResults.Reset(session.Ctx())

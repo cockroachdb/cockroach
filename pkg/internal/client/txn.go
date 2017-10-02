@@ -591,8 +591,15 @@ func (txn *Txn) CommitOrCleanup(ctx context.Context) error {
 
 // UpdateDeadlineMaybe sets the transactions deadline to the lower of the
 // current one (if any) and the passed value.
-func (txn *Txn) UpdateDeadlineMaybe(deadline hlc.Timestamp) bool {
+//
+// The deadline cannot be lower than txn.OrigTimestamp.
+func (txn *Txn) UpdateDeadlineMaybe(ctx context.Context, deadline hlc.Timestamp) bool {
 	if txn.deadline == nil || deadline.Less(*txn.deadline) {
+		if deadline.Less(txn.OrigTimestamp()) {
+			log.Fatalf(ctx, "deadline below txn.OrigTimestamp is nonsensical; "+
+				"txn has would have no change to commit. Deadline: %s, txn: %s",
+				deadline, txn.Proto())
+		}
 		txn.deadline = &deadline
 		return true
 	}
@@ -1185,7 +1192,7 @@ func (txn *Txn) recordPreviousTxnIDLocked(prevTxnID uuid.UUID) {
 // This is used to support historical queries (AS OF SYSTEM TIME queries and
 // backups). This method must be called on every transaction retry (but note
 // that retries should be rare for read-only queries with no clock uncertainty).
-func (txn *Txn) SetFixedTimestamp(ts hlc.Timestamp) {
+func (txn *Txn) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) {
 	txn.mu.Lock()
 	txn.mu.Proto.Timestamp = ts
 	txn.mu.Proto.OrigTimestamp = ts
@@ -1196,7 +1203,7 @@ func (txn *Txn) SetFixedTimestamp(ts hlc.Timestamp) {
 	// it won't ever exceed the deadline, and thus setting the deadline here is
 	// not strictly needed. However, it doesn't do anything incorrect and it will
 	// possibly find problems if things change in the future, so it is left in.
-	txn.UpdateDeadlineMaybe(ts)
+	txn.UpdateDeadlineMaybe(ctx, ts)
 }
 
 // GenerateForcedRetryableError returns a HandledRetryableTxnError that will

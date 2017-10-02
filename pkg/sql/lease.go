@@ -419,7 +419,7 @@ func (s LeaseStore) getForExpiration(
 		descKey := sqlbase.MakeDescMetadataKey(id)
 		prevTimestamp := expiration
 		prevTimestamp.WallTime--
-		txn.SetFixedTimestamp(prevTimestamp)
+		txn.SetFixedTimestamp(ctx, prevTimestamp)
 		var desc sqlbase.Descriptor
 		if err := txn.GetProto(ctx, descKey, &desc); err != nil {
 			return err
@@ -1225,7 +1225,7 @@ func (m *LeaseManager) resolveName(
 	key := nameKey.Key()
 	id := sqlbase.InvalidID
 	if err := m.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		txn.SetFixedTimestamp(timestamp)
+		txn.SetFixedTimestamp(ctx, timestamp)
 		gr, err := txn.Get(ctx, key)
 		if err != nil {
 			return err
