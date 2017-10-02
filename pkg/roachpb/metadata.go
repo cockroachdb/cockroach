@@ -108,9 +108,10 @@ func (r RangeDescriptor) ContainsKey(key RKey) bool {
 	return r.RSpan().ContainsKey(key)
 }
 
-// ContainsExclusiveEndKey returns whether this RangeDescriptor contains the specified end key.
-func (r RangeDescriptor) ContainsExclusiveEndKey(key RKey) bool {
-	return r.RSpan().ContainsExclusiveEndKey(key)
+// ContainsKeyInverted returns whether this RangeDescriptor contains the
+// specified key using an inverted range. See RSpan.ContainsKeyInverted.
+func (r RangeDescriptor) ContainsKeyInverted(key RKey) bool {
+	return r.RSpan().ContainsKeyInverted(key)
 }
 
 // ContainsKeyRange returns whether this RangeDescriptor contains the specified

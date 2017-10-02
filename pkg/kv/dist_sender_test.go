@@ -424,7 +424,7 @@ func mockRangeDescriptorDBForDescs(descs ...roachpb.RangeDescriptor) MockRangeDe
 		for _, desc := range descs {
 			contains := desc.ContainsKey
 			if useReverseScan {
-				contains = desc.ContainsExclusiveEndKey
+				contains = desc.ContainsKeyInverted
 			}
 			if contains(key) {
 				matchingDescs = append(matchingDescs, desc)

@@ -377,7 +377,7 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 	if desc := lookupRes.desc; desc != nil {
 		containsFn := (*roachpb.RangeDescriptor).ContainsKey
 		if useReverseScan {
-			containsFn = (*roachpb.RangeDescriptor).ContainsExclusiveEndKey
+			containsFn = (*roachpb.RangeDescriptor).ContainsKeyInverted
 		}
 		if !containsFn(desc, key) {
 			return nil, evictToken, errors.Errorf("key %q not contained in range lookup's "+
@@ -535,7 +535,7 @@ func (rdc *RangeDescriptorCache) getCachedRangeDescriptorLocked(
 
 	containsFn := (*roachpb.RangeDescriptor).ContainsKey
 	if inclusive {
-		containsFn = (*roachpb.RangeDescriptor).ContainsExclusiveEndKey
+		containsFn = (*roachpb.RangeDescriptor).ContainsKeyInverted
 	}
 
 	// Return nil if the key does not belong to the range.
