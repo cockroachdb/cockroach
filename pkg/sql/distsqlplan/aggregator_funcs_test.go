@@ -32,6 +32,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
+var (
+	// compareCtx is a decimal context with reduced precision for comparing decimal
+	// results.  For some decimal aggregate operations there will often be
+	// unavoidable off-by-last-digit errors, which is semantically okay.
+	compareCtx = parser.DecimalCtx.WithPrecision(parser.DecimalCtx.Precision - 1)
+	// floatPrecFmt is the format string with a precision of 10 (after
+	// decimal point) specified for float comparisons. Float aggregation
+	// operations involve unavoidable off-by-last-few-digits errors, which
+	// is expected.
+	floatPrecFmt = "%.10f"
+)
+
 // runTestFlow runs a flow with the given processors and returns the results.
 // Any errors stop the current test.
 func runTestFlow(
@@ -283,15 +295,53 @@ func checkDistAggregationInfo(
 		t.Errorf("different row lengths (dist: %d non-dist: %d)", len(rowsDist[0]), len(rowsNonDist[0]))
 	} else {
 		for i := range rowsDist[0] {
-			tDist := rowsDist[0][i].Type.String()
-			tNonDist := rowsNonDist[0][i].Type.String()
-			if tDist != tNonDist {
-				t.Errorf("different type for column %d (dist: %s non-dist: %s)", i, tDist, tNonDist)
+			rowDist := rowsDist[0][i]
+			rowNonDist := rowsNonDist[0][i]
+			if !rowDist.Datum.ResolvedType().FamilyEqual(rowNonDist.Datum.ResolvedType()) {
+				t.Fatalf("different type for column %d (dist: %s non-dist: %s)", i, rowDist.Datum.ResolvedType(), rowNonDist.Datum.ResolvedType())
+			}
+
+			var equiv bool
+			var strDist, strNonDist string
+			switch typedDist := rowDist.Datum.(type) {
+			case *parser.DDecimal:
+				// For some decimal operations, non-local and
+				// local computations may differ by the last
+				// digit.  We reduce the precision of both
+				// results.
+				decDist := &typedDist.Decimal
+				if _, err := compareCtx.Round(decDist, decDist); err != nil {
+					t.Fatal(err)
+				}
+				decNonDist := &rowNonDist.Datum.(*parser.DDecimal).Decimal
+				if _, err := compareCtx.Round(decNonDist, decNonDist); err != nil {
+					t.Fatal(err)
+				}
+				strDist = decDist.String()
+				strNonDist = decNonDist.String()
+				equiv = decDist.Cmp(decNonDist) == 0
+			case *parser.DFloat:
+				// Float results are highly variable and
+				// loss of precision between non-local and
+				// local is expected. We reduce the precision
+				// specified by floatPrecFmt and compare
+				// their string representations.
+				floatDist := float64(*typedDist)
+				floatNonDist := float64(*rowNonDist.Datum.(*parser.DFloat))
+				strDist = fmt.Sprintf(floatPrecFmt, floatDist)
+				strNonDist = fmt.Sprintf(floatPrecFmt, floatNonDist)
+				equiv = strDist == strNonDist
+			default:
+				// For all other types, a simple string
+				// representation comparison will suffice.
+				strDist = rowDist.String()
+				strNonDist = rowNonDist.String()
+				equiv = strDist == strNonDist
+			}
+			if !equiv {
+				t.Errorf("different results for column %d\nw/o local stage:   %s\nwith local stage:  %s", i, strDist, strNonDist)
 			}
 		}
-	}
-	if rowsDist.String() != rowsNonDist.String() {
-		t.Errorf("different results\nw/o local stage:   %s\nwith local stage:  %s", rowsNonDist, rowsDist)
 	}
 }
 
@@ -316,7 +366,7 @@ func TestDistAggregationTable(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 	sqlutils.CreateTable(
 		t, tc.ServerConn(0), "t",
-		"k INT PRIMARY KEY, int1 INT, int2 INT, bool1 BOOL, bool2 BOOL, dec1 DECIMAL, dec2 DECIMAL, b BYTES",
+		"k INT PRIMARY KEY, int1 INT, int2 INT, bool1 BOOL, bool2 BOOL, dec1 DECIMAL, dec2 DECIMAL, float1 FLOAT, float2 FLOAT, b BYTES",
 		numRows,
 		func(row int) []parser.Datum {
 			return []parser.Datum{
@@ -327,6 +377,8 @@ func TestDistAggregationTable(t *testing.T) {
 				parser.MakeDBool(parser.DBool(rng.Intn(10) != 0)),
 				sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DECIMAL}, false),
 				sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DECIMAL}, true),
+				sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_FLOAT}, false),
+				sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_FLOAT}, true),
 				parser.NewDBytes(parser.DBytes(randutil.RandBytes(rng, 10))),
 			}
 		},
