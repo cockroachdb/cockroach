@@ -336,9 +336,7 @@ func TestClusterRecovery(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	// TODO(tschottdorf): should run via RunLocal, but only if we manage to deal
-	// with the loss of Gossip connectivity due to ever-changing ports.
-	RunDocker(t, func(t *testing.T) {
+	RunLocal(t, func(t *testing.T) {
 		runTestWithCluster(t, testClusterRecoveryInner)
 	})
 }
@@ -390,7 +388,7 @@ func testClusterRecoveryInner(
 	for _, c := range counts {
 		count += c
 	}
-	log.Infof(ctx, "%d %.1f/sec", count, float64(count)/elapsed.Seconds())
+	log.Infof(ctx, "%d %.1f/sec over %s", count, float64(count)/elapsed.Seconds(), elapsed)
 }
 
 // TestNodeRestart starts up a cluster with an "accounts" table.
