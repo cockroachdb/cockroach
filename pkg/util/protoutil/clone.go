@@ -40,6 +40,15 @@ func init() {
 	types.known = make(map[typeKey]reflect.Type)
 }
 
+func uncloneable(pb proto.Message) (reflect.Type, bool) {
+	for _, verbotenKind := range verbotenKinds {
+		if t := typeIsOrContainsVerboten(reflect.TypeOf(pb), verbotenKind); t != nil {
+			return t, true
+		}
+	}
+	return nil, false
+}
+
 // Clone uses proto.Clone to return a deep copy of pb. It panics if pb
 // recursively contains any instances of types which are known to be
 // unsupported by proto.Clone.
@@ -54,12 +63,9 @@ func init() {
 // The concrete case against which this is currently guarding may be resolved
 // upstream, see https://github.com/gogo/protobuf/issues/147.
 func Clone(pb proto.Message) proto.Message {
-	for _, verbotenKind := range verbotenKinds {
-		if t := typeIsOrContainsVerboten(reflect.TypeOf(pb), verbotenKind); t != nil {
-			panic(fmt.Sprintf("attempt to clone %T, which contains uncloneable field of type %s", pb, t))
-		}
+	if t, ok := uncloneable(pb); ok {
+		panic(fmt.Sprintf("attempt to clone %T, which contains uncloneable field of type %s", pb, t))
 	}
-
 	return proto.Clone(pb)
 }
 

@@ -1743,8 +1743,9 @@ func (s *Store) BootstrapRange(
 		return err
 	}
 
+	lease := roachpb.BootstrapLease()
 	updatedMS, err := writeInitialState(ctx, s.cfg.Settings, batch, *ms, *desc,
-		roachpb.Lease{}, hlc.Timestamp{}, hlc.Timestamp{})
+		lease, hlc.Timestamp{}, hlc.Timestamp{})
 	if err != nil {
 		return err
 	}

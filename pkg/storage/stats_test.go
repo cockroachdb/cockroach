@@ -32,7 +32,7 @@ import (
 // writeInitialState().
 func initialStats() enginepb.MVCCStats {
 	return enginepb.MVCCStats{
-		SysBytes: 184,
+		SysBytes: 188,
 		SysCount: 6,
 	}
 }
@@ -47,7 +47,7 @@ func TestRangeStatsEmpty(t *testing.T) {
 
 	ms := tc.repl.GetMVCCStats()
 	if exp := initialStats(); !reflect.DeepEqual(ms, exp) {
-		t.Errorf("unexpected stats:\n%s", pretty.Diff(exp, ms))
+		t.Errorf("unexpected stats diff(exp, actual):\n%s", pretty.Diff(exp, ms))
 	}
 }
 
