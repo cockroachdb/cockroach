@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/util/rocksdb"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/rlmcpherson/s3gof3r"
@@ -188,7 +189,14 @@ func (rh *ResponseHeader) combine(otherRH ResponseHeader) error {
 func (sr *ScanResponse) combine(c combinable) error {
 	otherSR := c.(*ScanResponse)
 	if sr != nil {
+		// TODO(peter): Handle one response containing Rows and the other a
+		// BatchRepr.
 		sr.Rows = append(sr.Rows, otherSR.Rows...)
+		var err error
+		sr.BatchRepr, err = rocksdb.BatchMerge(sr.BatchRepr, otherSR.BatchRepr)
+		if err != nil {
+			return err
+		}
 		if err := sr.ResponseHeader.combine(otherSR.Header()); err != nil {
 			return err
 		}
@@ -202,11 +210,17 @@ var _ combinable = &ScanResponse{}
 func (sr *ReverseScanResponse) combine(c combinable) error {
 	otherSR := c.(*ReverseScanResponse)
 	if sr != nil {
+		// TODO(peter): Handle one response containing Rows and the other a
+		// BatchRepr.
 		sr.Rows = append(sr.Rows, otherSR.Rows...)
+		var err error
+		sr.BatchRepr, err = rocksdb.BatchMerge(sr.BatchRepr, otherSR.BatchRepr)
+		if err != nil {
+			return err
+		}
 		if err := sr.ResponseHeader.combine(otherSR.Header()); err != nil {
 			return err
 		}
-
 	}
 	return nil
 }

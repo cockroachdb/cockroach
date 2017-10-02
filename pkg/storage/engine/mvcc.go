@@ -1456,7 +1456,7 @@ func MVCCDeleteRange(
 	// In order to detect the potential write intent by another
 	// concurrent transaction with a newer timestamp, we need
 	// to use the max timestamp for scan.
-	_, err := MVCCIterate(ctx, engine, key, endKey, hlc.MaxTimestamp, true, txn, false, f)
+	_, err := MVCCIterate(ctx, engine, key, endKey, hlc.MaxTimestamp, true, txn, false, false, f)
 	iter.Close()
 	buf.release()
 	return keys, resumeSpan, num, err
@@ -1555,7 +1555,7 @@ func mvccScanInternal(
 	}
 
 	var resumeSpan *roachpb.Span
-	intents, err := MVCCIterate(ctx, engine, key, endKey, timestamp, consistent, txn, reverse,
+	intents, err := MVCCIterate(ctx, engine, key, endKey, timestamp, consistent, txn, reverse, false,
 		func(kv roachpb.KeyValue) (bool, error) {
 			if int64(len(res)) == max {
 				// Another key was found beyond the max limit.
@@ -1622,7 +1622,7 @@ func MVCCIterate(
 	timestamp hlc.Timestamp,
 	consistent bool,
 	txn *roachpb.Transaction,
-	reverse bool,
+	reverse, allowUnsafe bool,
 	f func(roachpb.KeyValue) (bool, error),
 ) ([]roachpb.Intent, error) {
 	if !consistent && txn != nil {
@@ -1697,6 +1697,11 @@ func MVCCIterate(
 			break
 		}
 
+		// TODO(peter): This is causing TestMonotonicInserts to fail for some
+		// reason.
+		if false && allowUnsafe {
+			alloc = alloc[:0]
+		}
 		alloc, metaKey.Key = alloc.Copy(metaKey.Key, 1)
 
 		// Indicate that we're fine with an unsafe Value.RawBytes being returned.
@@ -1704,7 +1709,7 @@ func MVCCIterate(
 			ctx, iter, metaKey, timestamp, consistent, unsafeValue, txn, buf)
 		intents = append(intents, newIntents...)
 		if value.IsPresent() {
-			if valueSafety == unsafeValue {
+			if !allowUnsafe && valueSafety == unsafeValue {
 				// Copy the unsafe value into our allocation buffer.
 				alloc, value.RawBytes = alloc.Copy(value.RawBytes, 0)
 			}

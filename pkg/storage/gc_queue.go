@@ -475,7 +475,8 @@ func processLocalKeyRange(
 
 	_, err := engine.MVCCIterate(ctx, snap, startKey, endKey,
 		hlc.Timestamp{}, true /* consistent */, nil, /* txn */
-		false /* !reverse */, func(kv roachpb.KeyValue) (bool, error) {
+		false /* !reverse */, false,
+		func(kv roachpb.KeyValue) (bool, error) {
 			return false, handleOne(kv)
 		})
 	return gcKeys, err

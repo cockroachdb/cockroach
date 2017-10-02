@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -96,6 +97,7 @@ type txnKVFetcher struct {
 	batchIdx  int
 	responses []roachpb.ResponseUnion
 	kvs       []roachpb.KeyValue
+	reader    *engine.RocksDBBatchReader
 
 	// As the kvFetcher fetches batches of kvs, it accumulates information on the
 	// replicas where the batches came from. This info can be retrieved through
@@ -220,12 +222,14 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		scans := make([]roachpb.ReverseScanRequest, len(f.spans))
 		for i := range f.spans {
 			scans[i].Span = f.spans[i]
+			scans[i].ReturnBatchRepr = true
 			ba.Requests[i].MustSetInner(&scans[i])
 		}
 	} else {
 		scans := make([]roachpb.ScanRequest, len(f.spans))
 		for i := range f.spans {
 			scans[i].Span = f.spans[i]
+			scans[i].ReturnBatchRepr = true
 			ba.Requests[i].MustSetInner(&scans[i])
 		}
 	}
@@ -256,22 +260,14 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	var sawResumeSpan bool
 	for _, resp := range f.responses {
 		reply := resp.GetInner()
+		header := reply.Header()
 
-		var numKVs int
-		switch t := reply.(type) {
-		case *roachpb.ScanResponse:
-			numKVs = len(t.Rows)
-		case *roachpb.ReverseScanResponse:
-			numKVs = len(t.Rows)
-		}
-
-		if numKVs > 0 && sawResumeSpan {
+		if header.NumKeys > 0 && sawResumeSpan {
 			return errors.Errorf(
 				"span with results after resume span; new spans: %s",
 				PrettySpans(f.spans, 0))
 		}
 
-		header := reply.Header()
 		if resumeSpan := header.ResumeSpan; resumeSpan != nil {
 			// A span needs to be resumed.
 			f.fetchEnd = false
@@ -298,23 +294,63 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 
 // nextKV returns the next key/value (initiating fetches as necessary). When
 // there are no more keys, returns false and an empty key/value.
-func (f *txnKVFetcher) nextKV(ctx context.Context) (bool, client.KeyValue, error) {
-	var kv client.KeyValue
+func (f *txnKVFetcher) nextKV(ctx context.Context) (bool, roachpb.KeyValue, error) {
+	var kv roachpb.KeyValue
 	for {
-		for len(f.kvs) == 0 && len(f.responses) > 0 {
+		for f.reader == nil && len(f.kvs) == 0 && len(f.responses) > 0 {
 			reply := f.responses[0].GetInner()
 			f.responses = f.responses[1:]
 
 			switch t := reply.(type) {
 			case *roachpb.ScanResponse:
-				f.kvs = t.Rows
+				if t.BatchRepr != nil {
+					var err error
+					f.reader, err = engine.NewRocksDBBatchReader(t.BatchRepr)
+					if err != nil {
+						return false, kv, err
+					}
+				} else {
+					f.kvs = t.Rows
+				}
 			case *roachpb.ReverseScanResponse:
-				f.kvs = t.Rows
+				if t.BatchRepr != nil {
+					var err error
+					f.reader, err = engine.NewRocksDBBatchReader(t.BatchRepr)
+					if err != nil {
+						return false, kv, err
+					}
+				} else {
+					f.kvs = t.Rows
+				}
 			}
 		}
 
+		if f.reader != nil {
+			if f.reader.Next() {
+				mvccKey, err := f.reader.MVCCKey()
+				if err != nil {
+					return false, kv, err
+				}
+				kv = roachpb.KeyValue{
+					Key: mvccKey.Key,
+					Value: roachpb.Value{
+						RawBytes:  f.reader.Value(),
+						Timestamp: mvccKey.Timestamp,
+					},
+				}
+				return true, kv, nil
+			}
+
+			if err := f.reader.Error(); err != nil {
+				return false, kv, err
+			}
+			f.reader = nil
+			continue
+		}
 		if len(f.kvs) > 0 {
-			break
+			kv = f.kvs[0]
+			f.kvs = f.kvs[1:]
+			return true, kv, nil
 		}
 		if f.fetchEnd {
 			return false, kv, nil
@@ -323,9 +359,4 @@ func (f *txnKVFetcher) nextKV(ctx context.Context) (bool, client.KeyValue, error
 			return false, kv, err
 		}
 	}
-
-	kv.Key = f.kvs[0].Key
-	kv.Value = &f.kvs[0].Value
-	f.kvs = f.kvs[1:]
-	return true, kv, nil
 }

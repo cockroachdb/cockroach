@@ -109,6 +109,11 @@ func (b *RocksDBBatchBuilder) Len() int {
 	return len(b.repr)
 }
 
+// Count returns the number of operations in the batch.
+func (b *RocksDBBatchBuilder) Count() int {
+	return b.count
+}
+
 // getRepr constructs the batch representation and returns it.
 func (b *RocksDBBatchBuilder) getRepr() []byte {
 	b.maybeInit()
