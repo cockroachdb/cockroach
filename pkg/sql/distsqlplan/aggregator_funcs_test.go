@@ -219,6 +219,26 @@ func checkDistAggregationInfo(
 			},
 		}},
 	}
+
+	// The type(s) outputted by the final stage can be different than the
+	// input type (e.g. DECIMAL instead of INT).
+	finalOutputTypes := make([]sqlbase.ColumnType, numFinal)
+	// Passed into FinalIndexing as the indices for the IndexedVars inputs
+	// to the post processor.
+	varIdxs := make([]int, numFinal)
+	for i, finalInfo := range info.FinalStage {
+		inputTypes := make([]sqlbase.ColumnType, len(finalInfo.LocalIdxs))
+		for i, localIdx := range finalInfo.LocalIdxs {
+			inputTypes[i] = intermediaryTypes[localIdx]
+		}
+		var err error
+		_, finalOutputTypes[i], err = distsqlrun.GetAggregateInfo(finalInfo.Fn, inputTypes...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		varIdxs[i] = i
+	}
+
 	var procs []distsqlrun.ProcessorSpec
 	for i := 0; i < numParallel; i++ {
 		tr := makeTableReader(1+i*numRows/numParallel, 1+(i+1)*numRows/numParallel, 2*i)
@@ -246,9 +266,10 @@ func checkDistAggregationInfo(
 			StreamID: distsqlrun.StreamID(2*i + 1),
 		})
 	}
+
 	if info.FinalRendering != nil {
-		h := MakeTypeIndexedVarHelper(intermediaryTypes)
-		expr, err := info.FinalRendering(&h, 0 /* varIdxOffset */)
+		h := MakeTypeIndexedVarHelper(finalOutputTypes)
+		expr, err := info.FinalRendering(&h, varIdxs)
 		if err != nil {
 			t.Fatal(err)
 		}
