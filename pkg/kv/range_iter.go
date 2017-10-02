@@ -192,7 +192,7 @@ func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir Sca
 		// TODO: this code is subject to removal. See
 		// https://groups.google.com/d/msg/cockroach-db/DebjQEgU9r4/_OhMe7atFQAJ
 		reverse := ri.scanDir == Descending
-		if (reverse && !ri.desc.ContainsExclusiveEndKey(ri.key)) ||
+		if (reverse && !ri.desc.ContainsKeyInverted(ri.key)) ||
 			(!reverse && !ri.desc.ContainsKey(ri.key)) {
 			log.Eventf(ctx, "addressing error: %s does not include key %s", ri.desc, ri.key)
 			if err := ri.token.Evict(ctx); err != nil {

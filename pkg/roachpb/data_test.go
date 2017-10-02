@@ -719,9 +719,9 @@ func TestRSpanContains(t *testing.T) {
 	}
 }
 
-// TestRSpanContainsExclusiveEndKey verifies ContainsExclusiveEndKey to check whether a key
-// or key range is contained within the span.
-func TestRSpanContainsExclusiveEndKey(t *testing.T) {
+// TestRSpanContainsKeyInverted verifies ContainsKeyInverted to check whether a key
+// is contained within the span.
+func TestRSpanContainsKeyInverted(t *testing.T) {
 	rs := RSpan{Key: []byte("b"), EndKey: []byte("c")}
 
 	testData := []struct {
@@ -736,7 +736,7 @@ func TestRSpanContainsExclusiveEndKey(t *testing.T) {
 		{RKey("c").Next(), false},
 	}
 	for i, test := range testData {
-		if rs.ContainsExclusiveEndKey(test.key) != test.contains {
+		if rs.ContainsKeyInverted(test.key) != test.contains {
 			t.Errorf("%d: expected key %q within range", i, test.key)
 		}
 	}
