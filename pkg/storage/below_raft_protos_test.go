@@ -98,7 +98,7 @@ func TestBelowRaftProtos(t *testing.T) {
 
 	slice := make([]byte, 1<<20)
 	for typ, fix := range belowRaftGoldenProtos {
-		if b, err := protoutil.Marshal(reflect.New(typ.Elem()).Interface().(proto.Message)); err != nil {
+		if b, err := protoutil.Marshal(reflect.New(typ.Elem()).Interface().(protoutil.Message)); err != nil {
 			t.Fatal(err)
 		} else if err := verifyHash(b, fix.emptySum); err != nil {
 			t.Errorf("%s (empty): %s\n", typ, err)

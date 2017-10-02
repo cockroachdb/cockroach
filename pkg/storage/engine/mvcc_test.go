@@ -3322,15 +3322,6 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 	}
 }
 
-// encodedSize returns the encoded size of the protobuf message.
-func encodedSize(msg proto.Message, t *testing.T) int64 {
-	data, err := protoutil.Marshal(msg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return int64(len(data))
-}
-
 func verifyStats(debug string, ms, expMS *enginepb.MVCCStats, t *testing.T) {
 	if ms.ContainsEstimates != expMS.ContainsEstimates {
 		t.Errorf("%s: mvcc contains estimates %t; expected %t", debug, ms.ContainsEstimates, expMS.ContainsEstimates)
@@ -3423,11 +3414,11 @@ func TestMVCCStatsBasic(t *testing.T) {
 	if err := MVCCDelete(context.Background(), engine, ms, key, ts2, txn); err != nil {
 		t.Fatal(err)
 	}
-	m2ValSize := encodedSize(&enginepb.MVCCMetadata{
+	m2ValSize := int64((&enginepb.MVCCMetadata{
 		Timestamp: enginepb.LegacyTimestamp(ts2),
 		Deleted:   true,
 		Txn:       &txn.TxnMeta,
-	}, t)
+	}).Size())
 	v2KeySize := mvccVersionTimestampSize
 	v2ValSize := int64(0)
 
@@ -3483,10 +3474,10 @@ func TestMVCCStatsBasic(t *testing.T) {
 		t.Fatal(err)
 	}
 	mKey2Size := int64(mvccKey(key2).EncodedSize())
-	mVal2Size := encodedSize(&enginepb.MVCCMetadata{
+	mVal2Size := int64((&enginepb.MVCCMetadata{
 		Timestamp: enginepb.LegacyTimestamp(ts4),
 		Txn:       &txn.TxnMeta,
-	}, t)
+	}).Size())
 	vKey2Size := mvccVersionTimestampSize
 	vVal2Size := int64(len(value2.RawBytes))
 	expMS3 := enginepb.MVCCStats{
@@ -3587,7 +3578,7 @@ func TestMVCCStatsBasic(t *testing.T) {
 		t.Fatal(err)
 	}
 	txnKeySize := int64(mvccKey(txnKey).EncodedSize())
-	txnValSize := encodedSize(&enginepb.MVCCMetadata{RawBytes: txnVal.RawBytes}, t)
+	txnValSize := int64((&enginepb.MVCCMetadata{RawBytes: txnVal.RawBytes}).Size())
 	expMS6 := expMS5
 	expMS6.SysBytes += txnKeySize + txnValSize
 	expMS6.SysCount++

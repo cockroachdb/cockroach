@@ -452,7 +452,7 @@ func MVCCGetProto(
 	timestamp hlc.Timestamp,
 	consistent bool,
 	txn *roachpb.Transaction,
-	msg proto.Message,
+	msg protoutil.Message,
 ) (bool, error) {
 	// TODO(tschottdorf): Consider returning skipped intents to the caller.
 	value, _, mvccGetErr := MVCCGet(ctx, engine, key, timestamp, consistent, txn)
@@ -478,7 +478,7 @@ func MVCCPutProto(
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
 	txn *roachpb.Transaction,
-	msg proto.Message,
+	msg protoutil.Message,
 ) error {
 	value := roachpb.Value{}
 	if err := value.SetProto(msg); err != nil {
@@ -847,8 +847,7 @@ func (b *putBuffer) marshalMeta(meta *enginepb.MVCCMetadata) (_ []byte, err erro
 	} else {
 		data = data[:size]
 	}
-	protoutil.Interceptor(meta)
-	n, err := meta.MarshalTo(data)
+	n, err := protoutil.MarshalTo(meta, data)
 	if err != nil {
 		return nil, err
 	}

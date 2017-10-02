@@ -46,7 +46,7 @@ func gibberishString(n int) string {
 	return string(b)
 }
 
-func mustMarshal(m proto.Message) []byte {
+func mustMarshal(m protoutil.Message) []byte {
 	b, err := protoutil.Marshal(m)
 	if err != nil {
 		panic(err)
