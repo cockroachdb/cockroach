@@ -84,6 +84,19 @@ function testSendInvalidUTF8(client) {
   });
 }
 
+function testSendNotEnoughParams(client) {
+  return new Promise(resolve => {
+    client.query({
+      text: 'SELECT 3',
+      values: ['foo']
+    }, function (err, results) {
+      let validationError = isError(err, /expected 0 arguments, got 1/, '08P01');
+      if (validationError) throw validationError;
+      resolve();
+    });
+  });
+}
+
 function runTests(client, ...tests) {
   if (tests.length === 0) {
     return Promise.resolve();
@@ -97,6 +110,7 @@ client.connect(function (err) {
 
   runTests(client,
     testSendInvalidUTF8,
+    testSendNotEnoughParams,
     testSelect
   ).then(result => {
     client.end(function (err) {
