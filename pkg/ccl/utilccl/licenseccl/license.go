@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -48,7 +47,7 @@ func Decode(s string) (*License, error) {
 		return nil, errors.Wrap(err, "invalid license string")
 	}
 	var lic License
-	if err := proto.Unmarshal(data, &lic); err != nil {
+	if err := protoutil.Unmarshal(data, &lic); err != nil {
 		return nil, errors.Wrap(err, "invalid license string")
 	}
 	return &lic, nil

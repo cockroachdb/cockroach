@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -107,7 +107,7 @@ func (kv *KeyValue) ValueInt() int64 {
 }
 
 // ValueProto parses the byte slice value into msg.
-func (kv *KeyValue) ValueProto(msg proto.Message) error {
+func (kv *KeyValue) ValueProto(msg protoutil.Message) error {
 	if kv.Value == nil {
 		msg.Reset()
 		return nil
@@ -220,7 +220,7 @@ func (db *DB) Get(ctx context.Context, key interface{}) (KeyValue, error) {
 // message. If the key doesn't exist, the proto will simply be reset.
 //
 // key can be either a byte slice or a string.
-func (db *DB) GetProto(ctx context.Context, key interface{}, msg proto.Message) error {
+func (db *DB) GetProto(ctx context.Context, key interface{}, msg protoutil.Message) error {
 	r, err := db.Get(ctx, key)
 	if err != nil {
 		return err
@@ -231,7 +231,7 @@ func (db *DB) GetProto(ctx context.Context, key interface{}, msg proto.Message) 
 // Put sets the value for a key.
 //
 // key can be either a byte slice or a string. value can be any key type, a
-// proto.Message or any Go primitive type (bool, int, etc).
+// protoutil.Message or any Go primitive type (bool, int, etc).
 func (db *DB) Put(ctx context.Context, key, value interface{}) error {
 	b := &Batch{}
 	b.Put(key, value)
@@ -244,7 +244,7 @@ func (db *DB) Put(ctx context.Context, key, value interface{}) error {
 // with caution.
 //
 // key can be either a byte slice or a string. value can be any key type, a
-// proto.Message or any Go primitive type (bool, int, etc).
+// protoutil.Message or any Go primitive type (bool, int, etc).
 func (db *DB) PutInline(ctx context.Context, key, value interface{}) error {
 	b := &Batch{}
 	b.PutInline(key, value)
@@ -259,7 +259,7 @@ func (db *DB) PutInline(ctx context.Context, key, value interface{}) error {
 // Returns an error if the existing value is not equal to expValue.
 //
 // key can be either a byte slice or a string. value can be any key type, a
-// proto.Message or any Go primitive type (bool, int, etc).
+// protoutil.Message or any Go primitive type (bool, int, etc).
 func (db *DB) CPut(ctx context.Context, key, value, expValue interface{}) error {
 	b := &Batch{}
 	b.CPut(key, value, expValue)
@@ -272,7 +272,7 @@ func (db *DB) CPut(ctx context.Context, key, value, expValue interface{}) error 
 // mismatched values and will cause a ConditionFailedError.
 //
 // key can be either a byte slice or a string. value can be any key type, a
-// proto.Message or any Go primitive type (bool, int, etc). It is illegal to
+// protoutil.Message or any Go primitive type (bool, int, etc). It is illegal to
 // set value to nil.
 func (db *DB) InitPut(ctx context.Context, key, value interface{}, failOnTombstones bool) error {
 	b := &Batch{}

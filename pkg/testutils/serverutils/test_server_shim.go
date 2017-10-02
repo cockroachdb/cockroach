@@ -27,8 +27,6 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/gogo/protobuf/proto"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -40,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
@@ -203,7 +202,7 @@ func StartServerRaw(args base.TestServerArgs) (TestServerInterface, error) {
 
 // GetJSONProto uses the supplied client to GET the URL specified by the parameters
 // and unmarshals the result into response.
-func GetJSONProto(ts TestServerInterface, path string, response proto.Message) error {
+func GetJSONProto(ts TestServerInterface, path string, response protoutil.Message) error {
 	httpClient, err := ts.GetAuthenticatedHTTPClient()
 	if err != nil {
 		return err
@@ -213,7 +212,7 @@ func GetJSONProto(ts TestServerInterface, path string, response proto.Message) e
 
 // PostJSONProto uses the supplied client to POST request to the URL specified by
 // the parameters and unmarshals the result into response.
-func PostJSONProto(ts TestServerInterface, path string, request, response proto.Message) error {
+func PostJSONProto(ts TestServerInterface, path string, request, response protoutil.Message) error {
 	httpClient, err := ts.GetAuthenticatedHTTPClient()
 	if err != nil {
 		return err

@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/gogo/protobuf/proto"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 // Construct a fake tls.ConnectionState object with one peer certificate
@@ -91,7 +91,7 @@ func TestAuthenticationHook(t *testing.T) {
 	testCases := []struct {
 		insecure           bool
 		tls                *tls.ConnectionState
-		request            proto.Message
+		request            protoutil.Message
 		buildHookSuccess   bool
 		publicHookSuccess  bool
 		privateHookSuccess bool

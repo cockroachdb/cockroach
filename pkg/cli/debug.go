@@ -38,12 +38,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/jsonpb"
-	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -230,9 +230,9 @@ func tryMeta(kv engine.MVCCKeyValue) (string, error) {
 	return descStr(desc), nil
 }
 
-func maybeUnmarshalInline(v []byte, dest proto.Message) error {
+func maybeUnmarshalInline(v []byte, dest protoutil.Message) error {
 	var meta enginepb.MVCCMetadata
-	if err := proto.Unmarshal(v, &meta); err != nil {
+	if err := protoutil.Unmarshal(v, &meta); err != nil {
 		return err
 	}
 	value := roachpb.Value{
@@ -260,14 +260,14 @@ func tryRangeIDKey(kv engine.MVCCKeyValue) (string, error) {
 
 	// All range ID keys are stored inline on the metadata.
 	var meta enginepb.MVCCMetadata
-	if err := proto.Unmarshal(kv.Value, &meta); err != nil {
+	if err := protoutil.Unmarshal(kv.Value, &meta); err != nil {
 		return "", err
 	}
 	value := roachpb.Value{RawBytes: meta.RawBytes}
 
 	// Values encoded as protobufs set msg and continue outside the
 	// switch. Other types are handled inside the switch and return.
-	var msg proto.Message
+	var msg protoutil.Message
 	switch {
 	case bytes.Equal(suffix, keys.LocalLeaseAppliedIndexSuffix):
 		fallthrough
@@ -358,7 +358,7 @@ func printRangeDescriptor(kv engine.MVCCKeyValue) (bool, error) {
 	return false, nil
 }
 
-func getProtoValue(data []byte, msg proto.Message) error {
+func getProtoValue(data []byte, msg protoutil.Message) error {
 	value := roachpb.Value{
 		RawBytes: data,
 	}
@@ -436,7 +436,7 @@ func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 		if len(ent.Data) > 0 {
 			_, cmdData := storage.DecodeRaftCommand(ent.Data)
 			var cmd storagebase.RaftCommand
-			if err := proto.Unmarshal(cmdData, &cmd); err != nil {
+			if err := protoutil.Unmarshal(cmdData, &cmd); err != nil {
 				return "", err
 			}
 			ent.Data = nil
@@ -445,15 +445,15 @@ func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 		return fmt.Sprintf("%s: EMPTY\n", &ent), nil
 	} else if ent.Type == raftpb.EntryConfChange {
 		var cc raftpb.ConfChange
-		if err := proto.Unmarshal(ent.Data, &cc); err != nil {
+		if err := protoutil.Unmarshal(ent.Data, &cc); err != nil {
 			return "", err
 		}
 		var ctx storage.ConfChangeContext
-		if err := proto.Unmarshal(cc.Context, &ctx); err != nil {
+		if err := protoutil.Unmarshal(cc.Context, &ctx); err != nil {
 			return "", err
 		}
 		var cmd storagebase.ReplicatedEvalResult
-		if err := proto.Unmarshal(ctx.Payload, &cmd); err != nil {
+		if err := protoutil.Unmarshal(ctx.Payload, &cmd); err != nil {
 			return "", err
 		}
 		ent.Data = nil
@@ -845,7 +845,7 @@ func parseGossipValues(gossipInfo *gossip.InfoStatus) (string, error) {
 		} else if key == gossip.KeySystemConfig {
 			if debugCtx.printSystemConfig {
 				var config config.SystemConfig
-				if err := proto.Unmarshal(bytes, &config); err != nil {
+				if err := protoutil.Unmarshal(bytes, &config); err != nil {
 					return "", errors.Wrapf(err, "failed to parse value for key %q", key)
 				}
 				output = append(output, fmt.Sprintf("%q: %+v", key, config))
@@ -854,31 +854,31 @@ func parseGossipValues(gossipInfo *gossip.InfoStatus) (string, error) {
 			}
 		} else if key == gossip.KeyFirstRangeDescriptor {
 			var desc roachpb.RangeDescriptor
-			if err := proto.Unmarshal(bytes, &desc); err != nil {
+			if err := protoutil.Unmarshal(bytes, &desc); err != nil {
 				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
 			}
 			output = append(output, fmt.Sprintf("%q: %v", key, desc))
 		} else if gossip.IsNodeIDKey(key) {
 			var desc roachpb.NodeDescriptor
-			if err := proto.Unmarshal(bytes, &desc); err != nil {
+			if err := protoutil.Unmarshal(bytes, &desc); err != nil {
 				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
 			}
 			output = append(output, fmt.Sprintf("%q: %+v", key, desc))
 		} else if strings.HasPrefix(key, gossip.KeyStorePrefix) {
 			var desc roachpb.StoreDescriptor
-			if err := proto.Unmarshal(bytes, &desc); err != nil {
+			if err := protoutil.Unmarshal(bytes, &desc); err != nil {
 				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
 			}
 			output = append(output, fmt.Sprintf("%q: %+v", key, desc))
 		} else if strings.HasPrefix(key, gossip.KeyNodeLivenessPrefix) {
 			var liveness storage.Liveness
-			if err := proto.Unmarshal(bytes, &liveness); err != nil {
+			if err := protoutil.Unmarshal(bytes, &liveness); err != nil {
 				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
 			}
 			output = append(output, fmt.Sprintf("%q: %+v", key, liveness))
 		} else if strings.HasPrefix(key, gossip.KeyDeadReplicasPrefix) {
 			var deadReplicas roachpb.StoreDeadReplicas
-			if err := proto.Unmarshal(bytes, &deadReplicas); err != nil {
+			if err := protoutil.Unmarshal(bytes, &deadReplicas); err != nil {
 				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
 			}
 			output = append(output, fmt.Sprintf("%q: %+v", key, deadReplicas))

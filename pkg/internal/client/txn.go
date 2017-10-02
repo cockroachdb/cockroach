@@ -17,7 +17,6 @@ package client
 import (
 	"fmt"
 
-	"github.com/gogo/protobuf/proto"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -27,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -365,7 +365,7 @@ func (txn *Txn) Get(ctx context.Context, key interface{}) (KeyValue, error) {
 // message. If the key doesn't exist, the proto will simply be reset.
 //
 // key can be either a byte slice or a string.
-func (txn *Txn) GetProto(ctx context.Context, key interface{}, msg proto.Message) error {
+func (txn *Txn) GetProto(ctx context.Context, key interface{}, msg protoutil.Message) error {
 	r, err := txn.Get(ctx, key)
 	if err != nil {
 		return err
@@ -376,7 +376,7 @@ func (txn *Txn) GetProto(ctx context.Context, key interface{}, msg proto.Message
 // Put sets the value for a key
 //
 // key can be either a byte slice or a string. value can be any key type, a
-// proto.Message or any Go primitive type (bool, int, etc).
+// protoutil.Message or any Go primitive type (bool, int, etc).
 func (txn *Txn) Put(ctx context.Context, key, value interface{}) error {
 	b := txn.NewBatch()
 	b.Put(key, value)
@@ -391,7 +391,7 @@ func (txn *Txn) Put(ctx context.Context, key, value interface{}) error {
 // Returns an error if the existing value is not equal to expValue.
 //
 // key can be either a byte slice or a string. value can be any key type, a
-// proto.Message or any Go primitive type (bool, int, etc).
+// protoutil.Message or any Go primitive type (bool, int, etc).
 func (txn *Txn) CPut(ctx context.Context, key, value, expValue interface{}) error {
 	b := txn.NewBatch()
 	b.CPut(key, value, expValue)
@@ -404,7 +404,7 @@ func (txn *Txn) CPut(ctx context.Context, key, value, expValue interface{}) erro
 // and will cause a ConditionFailedError.
 //
 // key can be either a byte slice or a string. value can be any key type, a
-// proto.Message or any Go primitive type (bool, int, etc). It is illegal to
+// protoutil.Message or any Go primitive type (bool, int, etc). It is illegal to
 // set value to nil.
 func (txn *Txn) InitPut(ctx context.Context, key, value interface{}, failOnTombstones bool) error {
 	b := txn.NewBatch()

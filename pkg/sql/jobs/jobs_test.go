@@ -22,7 +22,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -33,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/kr/pretty"
 )
@@ -61,7 +61,7 @@ func (expected *expectation) verify(id *int64, expectedStatus jobs.Status) error
 	}
 
 	var payload jobs.Payload
-	if err := proto.Unmarshal(payloadBytes, &payload); err != nil {
+	if err := protoutil.Unmarshal(payloadBytes, &payload); err != nil {
 		return err
 	}
 

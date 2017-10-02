@@ -22,23 +22,23 @@ import (
 	"reflect"
 
 	"github.com/gogo/protobuf/jsonpb"
-	"github.com/gogo/protobuf/proto"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
-
-	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 )
 
 var _ gwruntime.Marshaler = (*JSONPb)(nil)
 
-var typeProtoMessage = reflect.TypeOf((*proto.Message)(nil)).Elem()
+var typeProtoMessage = reflect.TypeOf((*Message)(nil)).Elem()
 
 // JSONPb is a gwruntime.Marshaler that uses github.com/gogo/protobuf/jsonpb.
 type JSONPb jsonpb.Marshaler
 
 // ContentType implements gwruntime.Marshaler.
 func (*JSONPb) ContentType() string {
-	return httputil.JSONContentType
+	// NB: This is the same as httputil.JSONContentType which we can't use due to
+	// an import cycle.
+	const JSONContentType = "application/json"
+	return JSONContentType
 }
 
 // Marshal implements gwruntime.Marshaler.
@@ -49,7 +49,7 @@ func (j *JSONPb) Marshal(v interface{}) ([]byte, error) {
 // a lower-case version of marshal to allow for a call from
 // marshalNonProtoField without upsetting TestProtoMarshal().
 func (j *JSONPb) marshal(v interface{}) ([]byte, error) {
-	if pb, ok := v.(proto.Message); ok {
+	if pb, ok := v.(Message); ok {
 		var buf bytes.Buffer
 		marshalFn := (*jsonpb.Marshaler)(j).Marshal
 		if err := marshalFn(&buf, pb); err != nil {
@@ -98,7 +98,7 @@ func (j *JSONPb) marshalNonProtoField(v interface{}) ([]byte, error) {
 
 // Unmarshal implements gwruntime.Marshaler.
 func (j *JSONPb) Unmarshal(data []byte, v interface{}) error {
-	if pb, ok := v.(proto.Message); ok {
+	if pb, ok := v.(Message); ok {
 		return jsonpb.Unmarshal(bytes.NewReader(data), pb)
 	}
 	return errors.Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
@@ -107,7 +107,7 @@ func (j *JSONPb) Unmarshal(data []byte, v interface{}) error {
 // NewDecoder implements gwruntime.Marshaler.
 func (j *JSONPb) NewDecoder(r io.Reader) gwruntime.Decoder {
 	return gwruntime.DecoderFunc(func(v interface{}) error {
-		if pb, ok := v.(proto.Message); ok {
+		if pb, ok := v.(Message); ok {
 			return jsonpb.Unmarshal(r, pb)
 		}
 		return errors.Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
@@ -117,7 +117,7 @@ func (j *JSONPb) NewDecoder(r io.Reader) gwruntime.Decoder {
 // NewEncoder implements gwruntime.Marshaler.
 func (j *JSONPb) NewEncoder(w io.Writer) gwruntime.Encoder {
 	return gwruntime.EncoderFunc(func(v interface{}) error {
-		if pb, ok := v.(proto.Message); ok {
+		if pb, ok := v.(Message); ok {
 			marshalFn := (*jsonpb.Marshaler)(j).Marshal
 			return marshalFn(w, pb)
 		}
