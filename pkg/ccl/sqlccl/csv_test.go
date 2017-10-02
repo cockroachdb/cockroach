@@ -474,6 +474,14 @@ func TestImportStmt(t *testing.T) {
 			"",
 		},
 		{
+			"schema-in-file-intodb",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, into_db = 'csv1'`,
+			[]interface{}{fmt.Sprintf("nodelocal://%s", tablePath)},
+			files,
+			`WITH temp = %s, transform_only`,
+			"",
+		},
+		{
 			"schema-in-query",
 			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH temp = $1`,
 			nil,
@@ -561,6 +569,14 @@ func TestImportStmt(t *testing.T) {
 			dups,
 			``,
 			"primary or unique index has duplicate keys",
+		},
+		{
+			"no-database",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, into_db = 'nonexistent'`,
+			[]interface{}{fmt.Sprintf("nodelocal://%s", tablePath)},
+			files,
+			``,
+			`database does not exist: "nonexistent"`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
