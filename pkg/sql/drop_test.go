@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
 
@@ -59,7 +58,7 @@ func zoneExists(sqlDB *gosql.DB, exists bool, id sqlbase.ID) error {
 			return errors.Errorf("e = %d, v = %d", id, storedID)
 		}
 		var cfg config.ZoneConfig
-		if err := proto.Unmarshal(val, &cfg); err != nil {
+		if err := protoutil.Unmarshal(val, &cfg); err != nil {
 			return err
 		}
 		if e := config.DefaultZoneConfig(); !reflect.DeepEqual(e, cfg) {

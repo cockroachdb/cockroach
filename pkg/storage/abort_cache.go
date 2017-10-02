@@ -17,7 +17,6 @@ package storage
 import (
 	"golang.org/x/net/context"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -160,7 +160,7 @@ func copySeqCache(
 			key := keys.AbortCacheKey(dstID, txnID)
 			encKey := engine.MakeMVCCMetadataKey(key)
 			// Decode the MVCCMetadata value.
-			if err := proto.Unmarshal(kv.Value, &meta); err != nil {
+			if err := protoutil.Unmarshal(kv.Value, &meta); err != nil {
 				return false, errors.Errorf("could not decode mvcc metadata %s [% x]: %s", kv.Key, kv.Value, err)
 			}
 			value := engine.MakeValue(meta)

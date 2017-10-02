@@ -17,7 +17,7 @@ package security
 import (
 	"crypto/tls"
 
-	"github.com/gogo/protobuf/proto"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -54,16 +54,16 @@ type RequestWithUser interface {
 
 // ProtoAuthHook builds an authentication hook based on the security
 // mode and client certificate.
-// The proto.Message passed to the hook must implement RequestWithUser.
+// The protoutil.Message passed to the hook must implement RequestWithUser.
 func ProtoAuthHook(
 	insecureMode bool, tlsState *tls.ConnectionState,
-) (func(proto.Message, bool) error, error) {
+) (func(protoutil.Message, bool) error, error) {
 	userHook, err := UserAuthCertHook(insecureMode, tlsState)
 	if err != nil {
 		return nil, err
 	}
 
-	return func(request proto.Message, clientConnection bool) error {
+	return func(request protoutil.Message, clientConnection bool) error {
 		// RequestWithUser must be implemented.
 		requestWithUser, ok := request.(RequestWithUser)
 		if !ok {

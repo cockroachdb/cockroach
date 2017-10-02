@@ -424,6 +424,7 @@ func TestStyle(t *testing.T) {
 			"--",
 			"*.go",
 			":!*.pb.go",
+			":!util/protoutil/marshal.go",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -435,9 +436,46 @@ func TestStyle(t *testing.T) {
 
 		if err := stream.ForEach(stream.Sequence(
 			filter,
-			stream.GrepNot(`(json|jsonpb|yaml|proto)\.Unmarshal\(`),
+			stream.GrepNot(`(json|jsonpb|yaml|protoutil)\.Unmarshal\(`),
 		), func(s string) {
-			t.Errorf(`%s <- forbidden; use "proto.Unmarshal" instead`, s)
+			t.Errorf(`%s <- forbidden; use "protoutil.Unmarshal" instead`, s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
+	t.Run("TestProtoMessage", func(t *testing.T) {
+		t.Parallel()
+		cmd, stderr, filter, err := dirCmd(
+			pkg.Dir,
+			"git",
+			"grep",
+			"-nEw",
+			`proto\.Message`,
+			"--",
+			"*.go",
+			":!*.pb.go",
+			":!*.pb.gw.go",
+			":!util/protoutil/marshal.go",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(stream.Sequence(
+			filter,
+		), func(s string) {
+			t.Errorf(`%s <- forbidden; use "protoutil.Message" instead`, s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -729,8 +767,9 @@ func TestStyle(t *testing.T) {
 			// Test that the settings package does not import CRDB dependencies.
 			if importingPkg == settingsPkgPrefix && strings.HasPrefix(importedPkg, cockroachDB) {
 				switch {
-				case strings.HasSuffix(s, "testutils"):
 				case strings.HasSuffix(s, "humanizeutil"):
+				case strings.HasSuffix(s, "protoutil"):
+				case strings.HasSuffix(s, "testutils"):
 				case strings.HasSuffix(s, settingsPkgPrefix):
 				default:
 					t.Errorf("%s <- please don't add CRDB dependencies to settings pkg", s)

@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
 
@@ -646,7 +645,7 @@ func UnmarshalPayload(datum parser.Datum) (*Payload, error) {
 		return nil, errors.Errorf(
 			"Job: failed to unmarshal payload as DBytes (was %T)", bytes)
 	}
-	if err := proto.Unmarshal([]byte(*bytes), payload); err != nil {
+	if err := protoutil.Unmarshal([]byte(*bytes), payload); err != nil {
 		return nil, err
 	}
 	return payload, nil

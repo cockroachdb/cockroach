@@ -29,7 +29,6 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -485,7 +484,7 @@ func (v Value) GetInt() (int64, error) {
 // GetProto unmarshals the bytes field of the receiver into msg. If
 // unmarshalling fails or the tag is not BYTES, an error will be
 // returned.
-func (v Value) GetProto(msg proto.Message) error {
+func (v Value) GetProto(msg protoutil.Message) error {
 	expectedTag := ValueType_BYTES
 
 	// Special handling for ts data.
@@ -496,7 +495,7 @@ func (v Value) GetProto(msg proto.Message) error {
 	if tag := v.GetTag(); tag != expectedTag {
 		return fmt.Errorf("value type is not %s: %s", expectedTag, tag)
 	}
-	return proto.Unmarshal(v.dataBytes(), msg)
+	return protoutil.Unmarshal(v.dataBytes(), msg)
 }
 
 // GetTime decodes a time value from the bytes field of the receiver. If the

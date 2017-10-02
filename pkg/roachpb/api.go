@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/gogo/protobuf/proto"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
 	"github.com/rlmcpherson/s3gof3r"
 )
@@ -119,7 +119,7 @@ func UpdatesTimestampCache(args Request) bool {
 
 // Request is an interface for RPC requests.
 type Request interface {
-	proto.Message
+	protoutil.Message
 	// Header returns the request header.
 	Header() Span
 	// SetHeader sets the request header.
@@ -152,7 +152,7 @@ func (tlr *TransferLeaseRequest) prevLease() Lease {
 
 // Response is an interface for RPC responses.
 type Response interface {
-	proto.Message
+	protoutil.Message
 	// Header returns the response header.
 	Header() ResponseHeader
 	// SetHeader sets the response header.

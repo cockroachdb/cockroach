@@ -53,14 +53,14 @@ func init() {
 //
 // The concrete case against which this is currently guarding may be resolved
 // upstream, see https://github.com/gogo/protobuf/issues/147.
-func Clone(pb proto.Message) proto.Message {
+func Clone(pb Message) Message {
 	for _, verbotenKind := range verbotenKinds {
 		if t := typeIsOrContainsVerboten(reflect.TypeOf(pb), verbotenKind); t != nil {
 			panic(fmt.Sprintf("attempt to clone %T, which contains uncloneable field of type %s", pb, t))
 		}
 	}
 
-	return proto.Clone(pb)
+	return proto.Clone(pb).(Message)
 }
 
 func typeIsOrContainsVerboten(t reflect.Type, verboten reflect.Kind) reflect.Type {

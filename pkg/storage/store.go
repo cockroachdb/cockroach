@@ -27,7 +27,6 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/gogo/protobuf/proto"
 	"github.com/google/btree"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -3446,7 +3445,7 @@ func sendSnapshot(
 	{
 		var ent raftpb.Entry
 		for i := range logEntries {
-			if err := proto.Unmarshal(logEntries[i], &ent); err != nil {
+			if err := protoutil.Unmarshal(logEntries[i], &ent); err != nil {
 				return err
 			}
 			if !sniffSideloadedRaftCommand(ent.Data) {

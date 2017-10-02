@@ -30,7 +30,6 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -43,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -583,7 +583,7 @@ func (r *RocksDB) Get(key MVCCKey) ([]byte, error) {
 
 // GetProto fetches the value at the specified key and unmarshals it.
 func (r *RocksDB) GetProto(
-	key MVCCKey, msg proto.Message,
+	key MVCCKey, msg protoutil.Message,
 ) (ok bool, keyBytes, valBytes int64, err error) {
 	return dbGetProto(r.rdb, key, msg)
 }
@@ -761,7 +761,7 @@ func (r *rocksDBReadOnly) Get(key MVCCKey) ([]byte, error) {
 }
 
 func (r *rocksDBReadOnly) GetProto(
-	key MVCCKey, msg proto.Message,
+	key MVCCKey, msg protoutil.Message,
 ) (ok bool, keyBytes, valBytes int64, err error) {
 	if r.isClosed {
 		panic("using a closed rocksDBReadOnly")
@@ -886,7 +886,7 @@ func (r *RocksDB) GetSSTables() SSTableInfos {
 func (r *RocksDB) getUserProperties() (enginepb.SSTUserPropertiesCollection, error) {
 	buf := cStringToGoBytes(C.DBGetUserProperties(r.rdb))
 	var ssts enginepb.SSTUserPropertiesCollection
-	if err := proto.Unmarshal(buf, &ssts); err != nil {
+	if err := protoutil.Unmarshal(buf, &ssts); err != nil {
 		return enginepb.SSTUserPropertiesCollection{}, err
 	}
 	if ssts.Error != "" {
@@ -946,7 +946,7 @@ func (r *rocksDBSnapshot) Get(key MVCCKey) ([]byte, error) {
 }
 
 func (r *rocksDBSnapshot) GetProto(
-	key MVCCKey, msg proto.Message,
+	key MVCCKey, msg protoutil.Message,
 ) (ok bool, keyBytes, valBytes int64, err error) {
 	return dbGetProto(r.handle, key, msg)
 }
@@ -1032,7 +1032,7 @@ func (r *distinctBatch) Get(key MVCCKey) ([]byte, error) {
 }
 
 func (r *distinctBatch) GetProto(
-	key MVCCKey, msg proto.Message,
+	key MVCCKey, msg protoutil.Message,
 ) (ok bool, keyBytes, valBytes int64, err error) {
 	if r.writeOnly {
 		return dbGetProto(r.parent.rdb, key, msg)
@@ -1157,7 +1157,7 @@ func (r *rocksDBBatchIterator) Value() []byte {
 	return r.iter.Value()
 }
 
-func (r *rocksDBBatchIterator) ValueProto(msg proto.Message) error {
+func (r *rocksDBBatchIterator) ValueProto(msg protoutil.Message) error {
 	return r.iter.ValueProto(msg)
 }
 
@@ -1275,7 +1275,7 @@ func (r *rocksDBBatch) Get(key MVCCKey) ([]byte, error) {
 }
 
 func (r *rocksDBBatch) GetProto(
-	key MVCCKey, msg proto.Message,
+	key MVCCKey, msg protoutil.Message,
 ) (ok bool, keyBytes, valBytes int64, err error) {
 	if r.writeOnly {
 		panic("write-only batch")
@@ -1693,11 +1693,11 @@ func (r *rocksDBIterator) Value() []byte {
 	return cSliceToGoBytes(r.value)
 }
 
-func (r *rocksDBIterator) ValueProto(msg proto.Message) error {
+func (r *rocksDBIterator) ValueProto(msg protoutil.Message) error {
 	if r.value.len <= 0 {
 		return nil
 	}
-	return proto.Unmarshal(r.UnsafeValue(), msg)
+	return protoutil.Unmarshal(r.UnsafeValue(), msg)
 }
 
 func (r *rocksDBIterator) UnsafeKey() MVCCKey {
@@ -1935,7 +1935,7 @@ func dbGet(rdb *C.DBEngine, key MVCCKey) ([]byte, error) {
 }
 
 func dbGetProto(
-	rdb *C.DBEngine, key MVCCKey, msg proto.Message,
+	rdb *C.DBEngine, key MVCCKey, msg protoutil.Message,
 ) (ok bool, keyBytes, valBytes int64, err error) {
 	if len(key.Key) == 0 {
 		err = emptyKeyError()
@@ -1955,7 +1955,7 @@ func dbGetProto(
 		// cannot live past the lifetime of this method, but we're only
 		// using it to unmarshal the roachpb.
 		data := cSliceToUnsafeGoBytes(C.DBSlice(result))
-		err = proto.Unmarshal(data, msg)
+		err = protoutil.Unmarshal(data, msg)
 	}
 	C.free(unsafe.Pointer(result.data))
 	keyBytes = int64(key.EncodedSize())

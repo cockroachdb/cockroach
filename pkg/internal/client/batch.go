@@ -368,7 +368,7 @@ func (b *Batch) put(key, value interface{}, inline bool) {
 // and Result.Err will indicate success or failure.
 //
 // key can be either a byte slice or a string. value can be any key type, a
-// proto.Message or any Go primitive type (bool, int, etc).
+// protoutil.Message or any Go primitive type (bool, int, etc).
 func (b *Batch) Put(key, value interface{}) {
 	b.put(key, value, false)
 }
@@ -382,7 +382,7 @@ func (b *Batch) Put(key, value interface{}) {
 // and Result.Err will indicate success or failure.
 //
 // key can be either a byte slice or a string. value can be any key type, a
-// proto.Message or any Go primitive type (bool, int, etc).
+// protoutil.Message or any Go primitive type (bool, int, etc).
 func (b *Batch) PutInline(key, value interface{}) {
 	b.put(key, value, true)
 }
@@ -396,7 +396,7 @@ func (b *Batch) PutInline(key, value interface{}) {
 // and Result.Err will indicate success or failure.
 //
 // key can be either a byte slice or a string. value can be any key type, a
-// proto.Message or any Go primitive type (bool, int, etc).
+// protoutil.Message or any Go primitive type (bool, int, etc).
 func (b *Batch) CPut(key, value, expValue interface{}) {
 	k, err := marshalKey(key)
 	if err != nil {
@@ -423,8 +423,8 @@ func (b *Batch) CPut(key, value, expValue interface{}) {
 // a ConditionFailedError just like a mismatched value.
 //
 // key can be either a byte slice or a string. value can be any key type, a
-// proto.Message or any Go primitive type (bool, int, etc). It is illegal to
-// set value to nil.
+// protoutil.Message or any Go primitive type (bool, int, etc). It is illegal
+// to set value to nil.
 func (b *Batch) InitPut(key, value interface{}, failOnTombstones bool) {
 	k, err := marshalKey(key)
 	if err != nil {
