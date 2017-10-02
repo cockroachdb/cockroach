@@ -111,6 +111,68 @@ func TestStoresVisitStores(t *testing.T) {
 	}
 }
 
+func TestStoresGetReplicaForRangeID(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+
+	ls := newStores(log.AmbientContext{}, clock)
+	numStores := 10
+	for i := 0; i < numStores; i++ {
+		storeID := roachpb.StoreID(i)
+		rangeID := roachpb.RangeID(i)
+
+		memEngine := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+		stopper.AddCloser(memEngine)
+
+		cfg := TestStoreConfig(clock)
+		cfg.Transport = NewDummyRaftTransport(cfg.Settings)
+
+		store := NewStore(cfg, memEngine, &roachpb.NodeDescriptor{NodeID: 1})
+		store.Ident.StoreID = storeID
+		ls.AddStore(store)
+
+		desc := &roachpb.RangeDescriptor{
+			RangeID:  rangeID,
+			StartKey: roachpb.RKey("a"),
+			EndKey:   roachpb.RKey("b"),
+			Replicas: []roachpb.ReplicaDescriptor{{StoreID: storeID}},
+		}
+
+		replica, err := NewReplica(desc, store, 0)
+		if err != nil {
+			t.Fatalf("unexpected error when creating replica: %v", err)
+		}
+		store.AddReplica(replica)
+	}
+
+	// Test the case where the replica we're looking for exists.
+	rangeID1 := roachpb.RangeID(5)
+	replica1, err1 := ls.GetReplicaForRangeID(rangeID1)
+	if replica1 == nil {
+		t.Fatal("expected replica to be found; was nil")
+	}
+	if err1 != nil {
+		t.Fatalf("expected err to be nil; was %v", err1)
+	}
+	if replica1.RangeID != rangeID1 {
+		t.Fatalf("expected replica's range id to be %v; got %v", rangeID1, replica1.RangeID)
+	}
+
+	// Test the case where the replica we're looking for doesn't exist.
+	rangeID2 := roachpb.RangeID(1000)
+	replica2, err2 := ls.GetReplicaForRangeID(rangeID2)
+	if replica2 != nil {
+		t.Fatalf("expected replica to be nil; was %v", replica2)
+	}
+	expectedError := roachpb.NewRangeNotFoundError(rangeID2)
+	if err2.Error() != expectedError.Error() {
+		t.Fatalf("expected err to be %v; was %v", expectedError, err2)
+	}
+}
+
 func TestStoresGetStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ls := newStores(log.AmbientContext{Tracer: tracing.NewTracer()}, hlc.NewClock(hlc.UnixNano, time.Nanosecond))

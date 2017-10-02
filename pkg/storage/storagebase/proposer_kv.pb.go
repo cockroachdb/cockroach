@@ -18,7 +18,6 @@
 		RaftCommand
 		ReplicaState
 		RangeInfo
-		CommandQueueCommand
 		CommandQueuesSnapshot
 */
 package storagebase

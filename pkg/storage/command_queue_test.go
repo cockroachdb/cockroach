@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -739,9 +738,6 @@ func TestCommandQueueGetSnapshotWithReadBuffer(t *testing.T) {
 	add(cq, roachpb.Key("a"), nil, true, nil)
 
 	snapshot := cq.GetSnapshot()
-	if n := len(snapshot); n != 2 {
-		t.Fatalf("expected 2 commands in snapshot; got %d", n)
-	}
 
 	assertExpectedPrereqs(t, snapshot, map[int64][]int64{
 		1: {},
@@ -765,9 +761,6 @@ func TestCommandQueueGetSnapshotWithChildren(t *testing.T) {
 	})
 
 	snapshot := cq.GetSnapshot()
-	if n := len(snapshot); n != 4 {
-		t.Fatalf("expected 4 commands in shapshot; got %d", n)
-	}
 
 	assertExpectedPrereqs(t, snapshot, map[int64][]int64{
 		1: {},
@@ -788,9 +781,6 @@ func TestCommandQueueGetSnapshotWithDisappearingPrereq(t *testing.T) {
 	add(cq, roachpb.Key("b"), nil, false, []*cmd{cmd1, cmdNotInQueue})
 
 	snapshot := cq.GetSnapshot()
-	if n := len(snapshot); n != 2 {
-		t.Fatalf("expected 2 commands in shapshot; got %d", n)
-	}
 
 	assertExpectedPrereqs(t, snapshot, map[int64][]int64{
 		1: {},
@@ -799,14 +789,13 @@ func TestCommandQueueGetSnapshotWithDisappearingPrereq(t *testing.T) {
 }
 
 func assertExpectedPrereqs(
-	t *testing.T, commands []storagebase.CommandQueueCommand, expectedPrereqs map[int64][]int64,
+	t *testing.T, snapshot CommandQueueSnapshot, expectedPrereqs map[int64][]int64,
 ) {
-	commandsMap := map[int64]storagebase.CommandQueueCommand{}
-	for _, command := range commands {
-		commandsMap[command.Id] = command
+	if len(snapshot) != len(expectedPrereqs) {
+		t.Fatalf("expected %d commands; got %d", len(expectedPrereqs), len(snapshot))
 	}
 	for commandID, expectedPrereqs := range expectedPrereqs {
-		command, ok := commandsMap[commandID]
+		command, ok := snapshot[commandID]
 		if !ok {
 			t.Fatalf("expected command with id %v; none returned", commandID)
 		}

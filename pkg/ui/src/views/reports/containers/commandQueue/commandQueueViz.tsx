@@ -1,3 +1,4 @@
+import _ from "lodash";
 import React from "react";
 import Long from "long";
 import classNames from "classnames";
@@ -7,7 +8,9 @@ import * as protos from "src/js/protos";
 import Print from "src/views/reports/containers/range/print";
 
 interface QueueVizProps {
-  queue: Array<protos.cockroach.storage.storagebase.CommandQueueCommand$Properties>;
+  queue: {
+    [ID: string]: protos.cockroach.storage.storagebase.CommandQueuesSnapshot.Command$Properties,
+  };
 }
 
 interface QueueVizState {
@@ -36,7 +39,7 @@ export default class CommandQueueViz extends React.Component<QueueVizProps, Queu
     });
     g.setDefaultEdgeLabel(() => ({}));
 
-    this.props.queue.forEach((command) => {
+    _.forEach(this.props.queue, (command) => {
       g.setNode(command.id.toString(), {
         width: COMMAND_DIAMETER,
         height: COMMAND_DIAMETER,

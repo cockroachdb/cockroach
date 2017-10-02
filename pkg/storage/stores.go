@@ -146,6 +146,7 @@ func (ls *Stores) GetReplicaForRangeID(rangeID roachpb.RangeID) (*Replica, error
 		case nil:
 			replica = replicaFromStore
 		case *roachpb.RangeNotFoundError:
+			return nil
 		default:
 			return err
 		}
@@ -153,7 +154,13 @@ func (ls *Stores) GetReplicaForRangeID(rangeID roachpb.RangeID) (*Replica, error
 		return nil
 	})
 
-	return replica, err
+	if err != nil {
+		return nil, err
+	}
+	if replica == nil {
+		return nil, roachpb.NewRangeNotFoundError(rangeID)
+	}
+	return replica, nil
 }
 
 // Send implements the client.Sender interface. The store is looked up from the

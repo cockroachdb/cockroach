@@ -92,21 +92,21 @@ message RangeInfo {
   int64 approximate_proposal_quota = 7;
 }
 
-message CommandQueueCommand {
-  int64 id = 1;
-  string key = 2;
-  string end_key = 3;
-  bool readonly = 4;
-  util.hlc.Timestamp timestamp = 5 [(gogoproto.nullable) = false];
-  repeated int64 prereqs = 6;
-}
-
 // CommandQueueSnapshot is a snapshot of the command queue graph for rendering
 // on an admin UI debug page. While the actual CommandQueue uses interval trees
 // for fast mutation and lookups, all the UI needs is a simple array of commands.
 message CommandQueuesSnapshot {
+  message Command {
+    int64 id = 1;
+    string key = 2;
+    string end_key = 3;
+    bool readonly = 4;
+    util.hlc.Timestamp timestamp = 5 [(gogoproto.nullable) = false];
+    repeated int64 prereqs = 6;
+  }
+
   // Timestamp in nanoseconds when this snapshot was taken.
   util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
-  repeated CommandQueueCommand localScope = 2 [(gogoproto.nullable) = false];
-  repeated CommandQueueCommand globalScope = 3 [(gogoproto.nullable) = false];
+  map<int64, Command> localScope = 2 [(gogoproto.nullable) = false];
+  map<int64, Command> globalScope = 3 [(gogoproto.nullable) = false];
 }
