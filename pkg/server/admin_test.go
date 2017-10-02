@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -1089,7 +1090,7 @@ func TestHealthAPI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.Clock().Update(self.Expiration.Add(1, 0))
+	s.Clock().Update(hlc.Timestamp(self.Expiration).Add(1, 0))
 
 	// Health API is not accessible if the node is not accessible, because it
 	// cannot verify the authentication session.

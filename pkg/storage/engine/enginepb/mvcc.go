@@ -14,12 +14,6 @@
 
 package enginepb
 
-import "github.com/cockroachdb/cockroach/pkg/util/hlc"
-
-func (t LegacyTimestamp) String() string {
-	return hlc.Timestamp(t).String()
-}
-
 // Short returns a prefix of the transaction's ID.
 func (t TxnMeta) Short() string {
 	return t.ID.Short()

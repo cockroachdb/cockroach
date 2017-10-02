@@ -1,0 +1,37 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+syntax = "proto2";
+package cockroach.util.hlc;
+option go_package = "hlc";
+
+import "gogoproto/gogo.proto";
+
+// LegacyTimestamp is convertible to hlc.Timestamp, but uses the
+// legacy encoding as it is encoded "below raft".
+message LegacyTimestamp {
+  option (gogoproto.equal) = true;
+
+  option (gogoproto.goproto_stringer) = false;
+  option (gogoproto.populate) = true;
+
+  // Holds a wall time, typically a unix epoch time expressed in
+  // nanoseconds.
+  optional int64 wall_time = 1 [(gogoproto.nullable) = false];
+  // The logical component captures causality for events whose wall
+  // times are equal. It is effectively bounded by (maximum clock
+  // skew)/(minimal ns between events) and nearly impossible to
+  // overflow.
+  optional int32 logical = 2 [(gogoproto.nullable) = false];
+}

@@ -29,7 +29,7 @@ import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_storage_engine_enginepb "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 import cockroach_storage_engine_enginepb1 "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import cockroach_util_hlc1 "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 
@@ -111,8 +111,8 @@ type ReplicatedEvalResult struct {
 	// Duplicates BatchRequest.Timestamp for proposer-evaluated KV. Used
 	// to verify the validity of the command (for lease coverage and GC
 	// threshold).
-	Timestamp            cockroach_util_hlc.Timestamp `protobuf:"bytes,8,opt,name=timestamp" json:"timestamp"`
-	IsConsistencyRelated bool                         `protobuf:"varint,9,opt,name=is_consistency_related,json=isConsistencyRelated,proto3" json:"is_consistency_related,omitempty"`
+	Timestamp            cockroach_util_hlc1.Timestamp `protobuf:"bytes,8,opt,name=timestamp" json:"timestamp"`
+	IsConsistencyRelated bool                          `protobuf:"varint,9,opt,name=is_consistency_related,json=isConsistencyRelated,proto3" json:"is_consistency_related,omitempty"`
 	// The stats delta corresponding to the data in this WriteBatch. On
 	// a split, contains only the contributions to the left-hand side.
 	DeprecatedDelta *cockroach_storage_engine_enginepb.MVCCStats        `protobuf:"bytes,10,opt,name=deprecated_delta,json=deprecatedDelta" json:"deprecated_delta,omitempty"`
