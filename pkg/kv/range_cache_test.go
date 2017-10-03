@@ -934,9 +934,9 @@ func TestRangeCacheEvictMetaDescriptors(t *testing.T) {
 	}
 }
 
-// TestGetCachedRangeDescriptorInclusive verifies the correctness of the result
-// that is returned by getCachedRangeDescriptor with inclusive=true.
-func TestGetCachedRangeDescriptorInclusive(t *testing.T) {
+// TestGetCachedRangeDescriptorInverted verifies the correctness of the result
+// that is returned by getCachedRangeDescriptor with inverted=true.
+func TestGetCachedRangeDescriptorInverted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testData := []*roachpb.RangeDescriptor{
@@ -990,7 +990,7 @@ func TestGetCachedRangeDescriptorInclusive(t *testing.T) {
 	for _, test := range testCases {
 		cache.rangeCache.RLock()
 		targetRange, entry, err := cache.getCachedRangeDescriptorLocked(
-			test.queryKey, true /* inclusive */)
+			test.queryKey, true /* inverted */)
 		cache.rangeCache.RUnlock()
 		if err != nil {
 			t.Error(err)
