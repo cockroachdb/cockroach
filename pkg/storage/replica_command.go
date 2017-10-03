@@ -425,10 +425,16 @@ func evalScan(
 
 	rows, resumeSpan, intents, err := engine.MVCCScan(ctx, batch, args.Key, args.EndKey,
 		cArgs.MaxKeys, h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
+	if err != nil {
+		return EvalResult{}, err
+	}
 
 	reply.NumKeys = int64(len(rows))
 	reply.ResumeSpan = resumeSpan
 	reply.Rows = rows
+	if args.ReturnIntents {
+		reply.IntentRows, err = collectIntentRows(ctx, batch, cArgs, intents)
+	}
 	return intentsToEvalResult(intents, args, true /* alwaysReturn */), err
 }
 
@@ -445,11 +451,51 @@ func evalReverseScan(
 
 	rows, resumeSpan, intents, err := engine.MVCCReverseScan(ctx, batch, args.Key, args.EndKey,
 		cArgs.MaxKeys, h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
+	if err != nil {
+		return EvalResult{}, err
+	}
 
 	reply.NumKeys = int64(len(rows))
 	reply.ResumeSpan = resumeSpan
 	reply.Rows = rows
+	if args.ReturnIntents {
+		reply.IntentRows, err = collectIntentRows(ctx, batch, cArgs, intents)
+	}
 	return intentsToEvalResult(intents, args, true /* alwaysReturn */), err
+}
+
+// collectIntentRows collects the key-value pairs for each intent provided. It
+// also verifies that the ReturnIntents option is allowed.
+//
+// TODO(nvanbenschoten): mvccGetInternal should return the intent values directly
+// when ReturnIntents is true. Since this will initially only be used for
+// RangeLookups and since this is how they currently collect intent values, this
+// is ok for now.
+func collectIntentRows(
+	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, intents []roachpb.Intent,
+) ([]roachpb.KeyValue, error) {
+	if cArgs.Header.ReadConsistency != roachpb.INCONSISTENT {
+		return nil, errors.New("can only return intents when performing an inconsistent scan")
+	}
+
+	res := make([]roachpb.KeyValue, 0, len(intents))
+	for _, intent := range intents {
+		val, _, err := engine.MVCCGetAsTxn(
+			ctx, batch, intent.Key, intent.Txn.Timestamp, intent.Txn,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if val == nil {
+			// Intent is a deletion.
+			continue
+		}
+		res = append(res, roachpb.KeyValue{
+			Key:   intent.Key,
+			Value: *val,
+		})
+	}
+	return res, nil
 }
 
 func verifyTransaction(h roachpb.Header, args roachpb.Request) error {
