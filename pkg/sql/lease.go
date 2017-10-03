@@ -42,14 +42,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// TODO(pmattis): Periodically renew leases for tables that were used recently and
-// for which the lease will expire soon.
-
 var (
 	// LeaseDuration is the mean duration a lease will be acquired for. The
 	// actual duration is jittered in the range
 	// [0.75,1.25]*LeaseDuration. Exported for testing purposes only.
 	LeaseDuration = 5 * time.Minute
+	// LeaseJitterFraction is the factor that we use to randomly jitter the lease
+	// duration when acquiring a new lease and the lease renewal timeout. The
+	// range of the actual lease duration will be
+	// [(1-LeaseJitterFraction) * LeaseDuration, (1+LeaseJitterFraction) * LeaseDuration]
+	// Exported for testing purposes only.
+	LeaseJitterFraction = 0.25
+	// LeaseRenewalTimeout is the time until expiry when we want to acquire a new
+	// lease.
+	LeaseRenewalTimeout = 1 * time.Minute
 )
 
 // tableVersionState holds the state for a table version. This includes
@@ -91,6 +97,16 @@ func (s *tableVersionState) String() string {
 // at the given timestamp
 func (s *tableVersionState) hasExpired(timestamp hlc.Timestamp) bool {
 	return !timestamp.Less(s.expiration)
+}
+
+// shouldPreemptivelyRenewLease checks whether the table descriptor lease has
+// enough life: that it expires further then LeaseRenewalTimeout duration from
+// now.
+func (s *tableVersionState) shouldPreemptivelyRenewLease() bool {
+	// Get the current time and move it forward by the lease renewal timeout.
+	t := hlc.Timestamp{WallTime: hlc.UnixNano() + int64(LeaseRenewalTimeout)}
+	log.Warningf(context.TODO(), "shouldPreemptivelyRenewLease now=%s expiration=%s", t, s.expiration)
+	return !t.Less(s.expiration)
 }
 
 func (s *tableVersionState) incRefcount() {
@@ -572,20 +588,25 @@ func (t *tableState) acquire(
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	// Acquire a lease if no lease exists or if the latest lease is about to
-	// expire. Repeatedly check to ensure either a lease is acquired or we receive
-	// an error. Checking we havea valid lease after acquisition is is required
-	// if the acquiring routine immediately releases the lease.
+	// Acquire a lease if no lease exists or if the latest lease will expire
+	// within the timestamp. Repeatedly check to ensure either a lease is acquired
+	// or we receive an error. We need to check for a valid lease after acquisition
+	// in the event another routine immediately releases the lease.
 	for s := t.mu.active.findNewest(); s == nil || s.hasExpired(timestamp); s = t.mu.active.findNewest() {
 		t.mu.Unlock()
 		_, _, err := t.mu.group.Do("acquire", func() (interface{}, error) {
+			log.Warningf(ctx, "TableDescriptor sync acquire")
 			return nil, t.acquireNodeLease(ctx, m, hlc.Timestamp{})
 		})
 		t.mu.Lock()
+		if m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquiringBlockedEvent != nil {
+			m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquiringBlockedEvent(t.id)
+		}
 		if err != nil {
 			return nil, err
 		}
 	}
+
 	return t.findForTimestamp(ctx, timestamp, m)
 }
 
@@ -714,9 +735,13 @@ func (t *tableState) acquireFreshestFromStoreLocked(ctx context.Context, m *Leas
 
 		t.mu.Unlock()
 		_, shared, err := t.mu.group.Do("acquire", func() (interface{}, error) {
+			log.Warningf(ctx, "TableDescriptor sync acquireFreshestFromStoreLocked")
 			return nil, t.acquireNodeLease(ctx, m, minExpirationTime)
 		})
 		t.mu.Lock()
+		if m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquiringBlockedEvent != nil {
+			m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquiringBlockedEvent(t.id)
+		}
 		if !shared {
 			return err
 		}
@@ -914,11 +939,12 @@ func (t *tableState) purgeOldVersions(
 
 // LeaseStoreTestingKnobs contains testing knobs.
 type LeaseStoreTestingKnobs struct {
-	// Called after a lease is removed from the store, with any operation error.
 	// See LeaseRemovalTracker.
 	LeaseReleasedEvent func(table sqlbase.TableDescriptor, err error)
 	// Called after a lease is acquired, with any operation error.
 	LeaseAcquiredEvent func(table sqlbase.TableDescriptor, err error)
+	// Called when blocking during a lease acquisition.
+	LeaseAcquiringBlockedEvent func(tableID sqlbase.ID)
 	// RemoveOnceDereferenced forces leases to be removed
 	// as soon as they are dereferenced.
 	RemoveOnceDereferenced bool
@@ -1115,7 +1141,8 @@ func nameMatchesTable(table *sqlbase.TableDescriptor, dbID sqlbase.ID, tableName
 // the timestamp. It returns the table descriptor and a expiration time.
 // A transaction using this descriptor must ensure that its
 // commit-timestamp < expiration-time. Care must be taken to not modify
-// the returned descriptor.
+// the returned descriptor. AcquireByName will renew a lease that is about to
+// expire to prevent blocking when no lease is available.
 func (m *LeaseManager) AcquireByName(
 	ctx context.Context, timestamp hlc.Timestamp, dbID sqlbase.ID, tableName string,
 ) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
@@ -1123,8 +1150,26 @@ func (m *LeaseManager) AcquireByName(
 	tableVersion := m.tableNames.get(dbID, tableName, timestamp)
 	if tableVersion != nil {
 		if !timestamp.Less(tableVersion.ModificationTime) {
+			// Check if we should preemptively acquiring a new lease if this one will
+			// expire soon.
+			if tableVersion.shouldPreemptivelyRenewLease() {
+				t := m.findTableState(tableVersion.ID, true)
+				// innerCtx, span := tracing.ForkCtxSpan(ctx, "[async] lease acquisition")
+				t.mu.group.DoChan("acquire", func() (interface{}, error) {
+					// defer tracing.FinishSpan(span)
+					log.Warningf(context.Background(), "TableDescriptor async renewal")
+					err := t.acquireNodeLease(context.Background(), m, hlc.Timestamp{})
+					if err != nil {
+						log.Error(context.Background(), errors.Wrapf(err, "TableDescriptor async lease acquisition failed"))
+					}
+					return nil, err
+				})
+			}
+
+			log.Warningf(ctx, "AcquireByName cache")
 			return &tableVersion.TableDescriptor, tableVersion.expiration, nil
 		}
+		log.Warningf(ctx, "AcquireByName cache failed")
 		if err := m.Release(&tableVersion.TableDescriptor); err != nil {
 			return nil, hlc.Timestamp{}, err
 		}
@@ -1135,6 +1180,7 @@ func (m *LeaseManager) AcquireByName(
 		}
 		return table, expiration, nil
 	}
+	log.Warningf(ctx, "AcquireByName other cache failed")
 
 	// We failed to find something in the cache, or what we found is not
 	// guaranteed to be valid by the time we use it because we don't have a
