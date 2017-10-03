@@ -71,6 +71,9 @@ type allocatorTest struct {
 	// Run some schema changes during the rebalancing.
 	RunSchemaChanges bool
 
+	// start load time.
+	startLoad time.Time
+
 	f *terrafarm.Farmer
 }
 
@@ -155,6 +158,7 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 	at.f.Assert(ctx, t)
 
 	log.Infof(ctx, "starting load on cluster")
+	at.startLoad = timeutil.Now()
 	if err := at.f.StartLoad(ctx, "block_writer"); err != nil {
 		t.Fatal(err)
 	}
@@ -177,7 +181,9 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 			"SELECT COUNT(newcol) FROM tpch.customer AS OF SYSTEM TIME %s",
 			"SELECT COUNT(c_name) FROM tpch.customer@foo AS OF SYSTEM TIME %s",
 		}
-		if err := at.runSchemaChanges(ctx, t, schemaChanges, validationQueries); err != nil {
+		if err := at.runSchemaChanges(
+			ctx, t, schemaChanges, validationQueries, nil,
+		); err != nil {
 			t.Fatal(err)
 		}
 		// These schema changes are run later because the above schema
@@ -187,16 +193,23 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 		// being updated.
 		log.Info(ctx, "running schema changes over datablocks.blocks")
 		schemaChanges = []string{
-			"ALTER TABLE datablocks.blocks ADD COLUMN newcol DECIMAL DEFAULT (DECIMAL '1.4')",
+			"ALTER TABLE datablocks.blocks ADD COLUMN created_at TIMESTAMP DEFAULT now()",
 			"CREATE INDEX foo ON datablocks.blocks (block_id)",
 		}
 		// All these return the same result.
 		validationQueries = []string{
 			"SELECT COUNT(*) FROM datablocks.blocks AS OF SYSTEM TIME %s",
-			"SELECT COUNT(newcol) FROM datablocks.blocks AS OF SYSTEM TIME %s",
+			"SELECT COUNT(created_at) FROM datablocks.blocks AS OF SYSTEM TIME %s",
 			"SELECT COUNT(block_id) FROM datablocks.blocks@foo AS OF SYSTEM TIME %s",
 		}
-		if err := at.runSchemaChanges(ctx, t, schemaChanges, validationQueries); err != nil {
+		// Queries to hone in on index validation problems.
+		indexValidationQueries := []string{
+			"SELECT COUNT(created_at) FROM datablocks.blocks@primary AS OF SYSTEM TIME %s WHERE created_at > $1 AND created_at < $2",
+			"SELECT COUNT(block_id) FROM datablocks.blocks@foo AS OF SYSTEM TIME %s WHERE created_at > $1 AND created_at < $2",
+		}
+		if err := at.runSchemaChanges(
+			ctx, t, schemaChanges, validationQueries, indexValidationQueries,
+		); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -218,7 +231,11 @@ func (at *allocatorTest) RunAndCleanup(ctx context.Context, t *testing.T) {
 }
 
 func (at *allocatorTest) runSchemaChanges(
-	ctx context.Context, t *testing.T, schemaChanges []string, validationQueries []string,
+	ctx context.Context,
+	t *testing.T,
+	schemaChanges []string,
+	validationQueries []string,
+	indexValidationQueries []string,
 ) error {
 	db, err := gosql.Open("postgres", at.f.PGUrl(ctx, 0))
 	if err != nil {
@@ -228,30 +245,20 @@ func (at *allocatorTest) runSchemaChanges(
 		_ = db.Close()
 	}()
 
-	errChan := make(chan error)
-	for i := range schemaChanges {
-		cmd := schemaChanges[i]
-		go func(i int) {
-			start := timeutil.Now()
-			log.Infof(ctx, "starting schema change: %s", cmd)
-			if _, err := db.Exec(cmd); err != nil {
-				errChan <- errors.Errorf("hit schema change error: %s, for %s, in %s", err, cmd, timeutil.Since(start))
-				return
-			}
-			log.Infof(ctx, "completed schema change: %s, in %s", cmd, timeutil.Since(start))
-			errChan <- nil
-			// TODO(vivek): Monitor progress of schema changes and log progress.
-		}(i)
-	}
-
-	for range schemaChanges {
-		if err := <-errChan; err != nil {
-			t.Fatal(err)
+	for _, cmd := range schemaChanges {
+		start := timeutil.Now()
+		log.Infof(ctx, "starting schema change: %s", cmd)
+		if _, err := db.Exec(cmd); err != nil {
+			t.Fatalf("hit schema change error: %s, for %s, in %s", err, cmd, timeutil.Since(start))
 		}
+		log.Infof(ctx, "completed schema change: %s, in %s", cmd, timeutil.Since(start))
+		// TODO(vivek): Monitor progress of schema changes and log progress.
 	}
 
 	log.Info(ctx, "validate applied schema changes")
-	if err := at.ValidateSchemaChanges(ctx, t, validationQueries); err != nil {
+	if err := at.ValidateSchemaChanges(
+		ctx, t, validationQueries, indexValidationQueries,
+	); err != nil {
 		t.Fatal(err)
 	}
 	return nil
@@ -259,7 +266,7 @@ func (at *allocatorTest) runSchemaChanges(
 
 // The validationQueries all return the same result.
 func (at *allocatorTest) ValidateSchemaChanges(
-	ctx context.Context, t *testing.T, validationQueries []string,
+	ctx context.Context, t *testing.T, validationQueries []string, indexValidationQueries []string,
 ) error {
 	// Sleep for a bit before validating the schema changes to
 	// accommodate for time differences between nodes. Some of the
@@ -278,16 +285,21 @@ func (at *allocatorTest) ValidateSchemaChanges(
 		_ = db.Close()
 	}()
 
-	var now string
-	if err := db.QueryRow("SELECT cluster_logical_timestamp()").Scan(&now); err != nil {
+	var nowString string
+	if err := db.QueryRow("SELECT cluster_logical_timestamp()").Scan(&nowString); err != nil {
 		t.Fatal(err)
 	}
+	var nowInNanos int64
+	if _, err := fmt.Sscanf(nowString, "%d", &nowInNanos); err != nil {
+		t.Fatal(err)
+	}
+	now := timeutil.Unix(0, nowInNanos)
 
 	// Validate the different schema changes
 	var eCount int64
 	for i := range validationQueries {
 		var count int64
-		q := fmt.Sprintf(validationQueries[i], now)
+		q := fmt.Sprintf(validationQueries[i], nowString)
 		if err := db.QueryRow(q).Scan(&count); err != nil {
 			return err
 		}
@@ -297,8 +309,83 @@ func (at *allocatorTest) ValidateSchemaChanges(
 		}
 		if eCount == 0 {
 			eCount = count
+			// Investigate index creation problems. Always run this so we know
+			// it works.
+			if indexValidationQueries != nil {
+				sp := timeSpan{start: at.startLoad, end: now}
+				if err := at.findIndexProblem(ctx, db, sp, nowString, indexValidationQueries); err != nil {
+					t.Error(err)
+				}
+			}
 		} else if count != eCount {
 			t.Fatalf("%s: %d rows found, expected %d rows", q, count, eCount)
+		}
+	}
+	return nil
+}
+
+type timeSpan struct {
+	start, end time.Time
+}
+
+// Check index inconsistencies over the timeSpan and return true when
+// problems are seen.
+func (at *allocatorTest) checkIndexOverTimeSpan(
+	ctx context.Context, db *gosql.DB, s timeSpan, nowString string, indexValidationQueries []string,
+) (bool, error) {
+	var eCount int64
+	q := fmt.Sprintf(indexValidationQueries[0], nowString)
+	if err := db.QueryRow(q, s.start, s.end).Scan(&eCount); err != nil {
+		return false, err
+	}
+	var count int64
+	q = fmt.Sprintf(indexValidationQueries[1], nowString)
+	if err := db.QueryRow(q, s.start, s.end).Scan(&count); err != nil {
+		return false, err
+	}
+	log.Infof(ctx, "counts seen %d, %d, over [%s, %s]", count, eCount, s.start, s.end)
+	return count != eCount, nil
+}
+
+// Keep splitting the span of time passed and log where index
+// inconsistencies are seen.
+func (at *allocatorTest) findIndexProblem(
+	ctx context.Context, db *gosql.DB, s timeSpan, nowString string, indexValidationQueries []string,
+) error {
+	spans := []timeSpan{s}
+	// process all the outstanding time spans.
+	for len(spans) > 0 {
+		s := spans[0]
+		spans = spans[1:]
+		// split span into two time ranges.
+		leftSpan, rightSpan := s, s
+		d := s.end.Sub(s.start) / 2
+		if d < 50*time.Millisecond {
+			log.Infof(ctx, "problem seen over [%s, %s]", s.start, s.end)
+			continue
+		}
+		m := s.start.Add(d)
+		leftSpan.end = m
+		rightSpan.start = m
+
+		leftState, err := at.checkIndexOverTimeSpan(
+			ctx, db, leftSpan, nowString, indexValidationQueries)
+		if err != nil {
+			return err
+		}
+		rightState, err := at.checkIndexOverTimeSpan(
+			ctx, db, rightSpan, nowString, indexValidationQueries)
+		if err != nil {
+			return err
+		}
+		if leftState {
+			spans = append(spans, leftSpan)
+		}
+		if rightState {
+			spans = append(spans, rightSpan)
+		}
+		if !(leftState || rightState) {
+			log.Infof(ctx, "no problem seen over [%s, %s]", s.start, s.end)
 		}
 	}
 	return nil
