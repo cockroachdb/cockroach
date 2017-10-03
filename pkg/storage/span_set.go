@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/gogo/protobuf/proto"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -218,7 +218,7 @@ func (s *SpanSetIterator) Value() []byte {
 }
 
 // ValueProto implements engine.Iterator.
-func (s *SpanSetIterator) ValueProto(msg proto.Message) error {
+func (s *SpanSetIterator) ValueProto(msg protoutil.Message) error {
 	return s.i.ValueProto(msg)
 }
 
@@ -279,7 +279,9 @@ func (s spanSetReader) Get(key engine.MVCCKey) ([]byte, error) {
 	return s.r.Get(key)
 }
 
-func (s spanSetReader) GetProto(key engine.MVCCKey, msg proto.Message) (bool, int64, int64, error) {
+func (s spanSetReader) GetProto(
+	key engine.MVCCKey, msg protoutil.Message,
+) (bool, int64, int64, error) {
 	if err := s.spans.checkAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
 		return false, 0, 0, err
 	}

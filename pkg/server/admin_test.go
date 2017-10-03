@@ -56,13 +56,13 @@ import (
 )
 
 func getAdminJSONProto(
-	ts serverutils.TestServerInterface, path string, response proto.Message,
+	ts serverutils.TestServerInterface, path string, response protoutil.Message,
 ) error {
 	return serverutils.GetJSONProto(ts, adminPrefix+path, response)
 }
 
 func postAdminJSONProto(
-	ts serverutils.TestServerInterface, path string, request, response proto.Message,
+	ts serverutils.TestServerInterface, path string, request, response protoutil.Message,
 ) error {
 	return serverutils.PostJSONProto(ts, adminPrefix+path, request, response)
 }

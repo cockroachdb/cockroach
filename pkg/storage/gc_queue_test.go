@@ -22,7 +22,6 @@ import (
 	"testing/quick"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -36,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -824,7 +824,7 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	err := tc.store.Engine().Iterate(engine.MakeMVCCMetadataKey(roachpb.KeyMin),
 		engine.MakeMVCCMetadataKey(roachpb.KeyMax), func(kv engine.MVCCKeyValue) (bool, error) {
 			if !kv.Key.IsValue() {
-				if err := proto.Unmarshal(kv.Value, meta); err != nil {
+				if err := protoutil.Unmarshal(kv.Value, meta); err != nil {
 					return false, err
 				}
 				if meta.Txn != nil {

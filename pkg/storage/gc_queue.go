@@ -21,7 +21,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -36,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -770,7 +770,7 @@ func RunGC(
 		// If there's more than a single value for the key, possibly send for GC.
 		if len(keys) > 1 {
 			meta := &enginepb.MVCCMetadata{}
-			if err := proto.Unmarshal(vals[0], meta); err != nil {
+			if err := protoutil.Unmarshal(vals[0], meta); err != nil {
 				log.Errorf(ctx, "unable to unmarshal MVCC metadata for key %q: %s", keys[0], err)
 			} else {
 				// In the event that there's an active intent, send for

@@ -404,10 +404,10 @@ func TestBatchGet(t *testing.T) {
 
 func compareMergedValues(t *testing.T, result, expected []byte) bool {
 	var resultV, expectedV enginepb.MVCCMetadata
-	if err := proto.Unmarshal(result, &resultV); err != nil {
+	if err := protoutil.Unmarshal(result, &resultV); err != nil {
 		t.Fatal(err)
 	}
-	if err := proto.Unmarshal(expected, &expectedV); err != nil {
+	if err := protoutil.Unmarshal(expected, &expectedV); err != nil {
 		t.Fatal(err)
 	}
 	return reflect.DeepEqual(resultV, expectedV)

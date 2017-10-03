@@ -23,7 +23,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -2368,7 +2367,7 @@ func ComputeStatsGo(
 			first = true
 
 			if !implicitMeta {
-				if err := proto.Unmarshal(unsafeValue, meta); err != nil {
+				if err := protoutil.Unmarshal(unsafeValue, meta); err != nil {
 					return ms, errors.Wrap(err, "unable to decode MVCCMetadata")
 				}
 			}

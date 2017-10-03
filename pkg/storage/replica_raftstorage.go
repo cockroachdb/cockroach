@@ -20,7 +20,6 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -770,7 +770,7 @@ func (r *Replica) applySnapshot(
 
 	logEntries := make([]raftpb.Entry, len(inSnap.LogEntries))
 	for i, bytes := range inSnap.LogEntries {
-		if err := proto.Unmarshal(bytes, &logEntries[i]); err != nil {
+		if err := protoutil.Unmarshal(bytes, &logEntries[i]); err != nil {
 			return err
 		}
 	}
