@@ -77,7 +77,7 @@
 
 [[projects]]
   name = "github.com/aws/aws-sdk-go"
-  packages = ["aws","aws/awserr","aws/awsutil","aws/client","aws/client/metadata","aws/corehandlers","aws/credentials","aws/credentials/ec2rolecreds","aws/credentials/endpointcreds","aws/credentials/stscreds","aws/defaults","aws/ec2metadata","aws/endpoints","aws/request","aws/session","aws/signer/v4","private/protocol","private/protocol/query","private/protocol/query/queryutil","private/protocol/rest","private/protocol/restxml","private/protocol/xml/xmlutil","service/s3","service/sts"]
+  packages = ["aws","aws/awserr","aws/awsutil","aws/client","aws/client/metadata","aws/corehandlers","aws/credentials","aws/credentials/ec2rolecreds","aws/credentials/endpointcreds","aws/credentials/stscreds","aws/defaults","aws/ec2metadata","aws/endpoints","aws/request","aws/session","aws/signer/v4","private/protocol","private/protocol/query","private/protocol/query/queryutil","private/protocol/rest","private/protocol/restxml","private/protocol/xml/xmlutil","service/s3","service/s3/s3iface","service/s3/s3manager","service/sts"]
   revision = "0032dd29f2a063a66a9f4b44bf6664da3a5b71cc"
 
 [[projects]]
@@ -544,11 +544,6 @@
   revision = "1f30fe9094a513ce4c700b9a54458bbb0c96996c"
 
 [[projects]]
-  name = "github.com/rlmcpherson/s3gof3r"
-  packages = ["."]
-  revision = "864ae0bf7cf2e20c0002b7ea17f4d84fec1abc14"
-
-[[projects]]
   name = "github.com/rubyist/circuitbreaker"
   packages = ["."]
   revision = "2074adba5ddc7d5f7559448a9c3066573521c5bf"
@@ -674,6 +669,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "6f894a326b8459636d3168b14fda3ab490b310ec4394b997402e0b437756a92d"
+  inputs-digest = "2aba9a3ee1a9cc6cbb40522644f6b1b9758191c8868084bcb7555aa8e5854a58"
   solver-name = "gps-cdcl"
   solver-version = 1
