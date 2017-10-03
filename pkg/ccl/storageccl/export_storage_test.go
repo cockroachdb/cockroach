@@ -23,7 +23,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rlmcpherson/s3gof3r"
+	"github.com/aws/aws-sdk-go/aws/credentials"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -52,7 +52,7 @@ func storeFromURI(ctx context.Context, t *testing.T, uri string) ExportStorage {
 	return s
 }
 
-func testExportStore(t *testing.T, storeURI string, skipSingleFile, skipSize bool) {
+func testExportStore(t *testing.T, storeURI string, skipSingleFile bool) {
 	ctx := context.TODO()
 
 	conf, err := ExportStorageConfFromURI(storeURI)
@@ -81,12 +81,10 @@ func testExportStore(t *testing.T, storeURI string, skipSingleFile, skipSize boo
 				t.Fatal(err)
 			}
 
-			if !skipSize {
-				if sz, err := s.Size(ctx, name); err != nil {
-					t.Error(err)
-				} else if sz != int64(len(payload)) {
-					t.Errorf("size mismatch, got %d, expected %d", sz, len(payload))
-				}
+			if sz, err := s.Size(ctx, name); err != nil {
+				t.Error(err)
+			} else if sz != int64(len(payload)) {
+				t.Errorf("size mismatch, got %d, expected %d", sz, len(payload))
 			}
 
 			r, err := s.ReadFile(ctx, name)
@@ -200,7 +198,7 @@ func TestPutLocal(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testExportStore(t, dest, false, false)
+	testExportStore(t, dest, false)
 }
 
 func TestPutHttp(t *testing.T) {
@@ -256,7 +254,7 @@ func TestPutHttp(t *testing.T) {
 	t.Run("singleHost", func(t *testing.T) {
 		srv, files, cleanup := makeServer()
 		defer cleanup()
-		testExportStore(t, srv.String(), false, false)
+		testExportStore(t, srv.String(), false)
 		if expected, actual := 13, files(); expected != actual {
 			t.Fatalf("expected %d files to be written to single http store, got %d", expected, actual)
 		}
@@ -273,7 +271,7 @@ func TestPutHttp(t *testing.T) {
 		combined := *srv1
 		combined.Host = strings.Join([]string{srv1.Host, srv2.Host, srv3.Host}, ",")
 
-		testExportStore(t, combined.String(), true, false)
+		testExportStore(t, combined.String(), true)
 		if expected, actual := 3, files1(); expected != actual {
 			t.Fatalf("expected %d files written to http host 1, got %d", expected, actual)
 		}
@@ -326,12 +324,9 @@ func TestPutHttp(t *testing.T) {
 func TestPutS3(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s3Keys, err := s3gof3r.EnvKeys()
+	creds, err := credentials.NewEnvCredentials().Get()
 	if err != nil {
-		s3Keys, err = s3gof3r.InstanceKeys()
-		if err != nil {
-			t.Skip("No AWS keys instance or env keys")
-		}
+		t.Skip("No AWS credentials")
 	}
 	bucket := os.Getenv("AWS_S3_BUCKET")
 	if bucket == "" {
@@ -345,10 +340,10 @@ func TestPutS3(t *testing.T) {
 		fmt.Sprintf(
 			"s3://%s/%s?%s=%s&%s=%s",
 			bucket, "backup-test",
-			S3AccessKeyParam, url.QueryEscape(s3Keys.AccessKey),
-			S3SecretParam, url.QueryEscape(s3Keys.SecretKey),
+			S3AccessKeyParam, url.QueryEscape(creds.AccessKeyID),
+			S3SecretParam, url.QueryEscape(creds.SecretAccessKey),
 		),
-		false, true,
+		false,
 	)
 }
 
@@ -363,7 +358,7 @@ func TestPutGoogleCloud(t *testing.T) {
 	// TODO(dt): this prevents leaking an http conn goroutine.
 	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
 
-	testExportStore(t, fmt.Sprintf("gs://%s/%s", bucket, "backup-test"), false, false)
+	testExportStore(t, fmt.Sprintf("gs://%s/%s", bucket, "backup-test"), false)
 }
 
 func TestPutAzure(t *testing.T) {
@@ -388,6 +383,6 @@ func TestPutAzure(t *testing.T) {
 			AzureAccountNameParam, url.QueryEscape(accountName),
 			AzureAccountKeyParam, url.QueryEscape(accountKey),
 		),
-		false, false,
+		false,
 	)
 }
