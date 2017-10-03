@@ -334,7 +334,7 @@ WHERE message LIKE 'fetched: %'
 		plan.Close(ctx)
 		return nil, err
 	}
-	tracePlan, err := p.makeTraceNode(stmtPlan)
+	tracePlan, err := p.makeTraceNode(stmtPlan, n.OnlyKVTrace /* kvTracingEnabled */)
 	if err != nil {
 		plan.Close(ctx)
 		stmtPlan.Close(ctx)
