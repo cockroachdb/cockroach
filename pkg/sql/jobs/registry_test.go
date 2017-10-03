@@ -41,7 +41,7 @@ func TestRegistryCancelation(t *testing.T) {
 	var ex sqlutil.InternalExecutor
 	var gossip *gossip.Gossip
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	registry := MakeRegistry(clock, db, ex, gossip, FakeNodeID, FakeClusterID)
+	registry := MakeRegistry(clock, db, ex, gossip, FakeNodeID, FakeClusterID, nil /* cluster.Settings */)
 
 	const nodeCount = 1
 	nodeLiveness := NewFakeNodeLiveness(clock, nodeCount)
@@ -128,7 +128,7 @@ func TestRegistryRegister(t *testing.T) {
 	var ex sqlutil.InternalExecutor
 	var gossip *gossip.Gossip
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	registry := MakeRegistry(clock, db, ex, gossip, FakeNodeID, FakeClusterID)
+	registry := MakeRegistry(clock, db, ex, gossip, FakeNodeID, FakeClusterID, nil /* cluster.Settings */)
 
 	if err := registry.register(42, &Job{}); err != nil {
 		t.Fatal(err)

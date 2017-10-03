@@ -169,7 +169,7 @@ func runLoadShow(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	}
-	desc, err := sqlccl.ReadBackupDescriptorFromURI(ctx, basepath)
+	desc, err := sqlccl.ReadBackupDescriptorFromURI(ctx, basepath, nil /* cluster.Settings */)
 	if err != nil {
 		return err
 	}

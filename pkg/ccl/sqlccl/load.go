@@ -63,7 +63,7 @@ func Load(
 	if err != nil {
 		return BackupDescriptor{}, err
 	}
-	dir, err := storageccl.MakeExportStorage(ctx, conf)
+	dir, err := storageccl.MakeExportStorage(ctx, conf, nil /* cluster.Settings */)
 	if err != nil {
 		return BackupDescriptor{}, errors.Wrap(err, "export storage from URI")
 	}
