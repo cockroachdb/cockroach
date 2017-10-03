@@ -1,0 +1,75 @@
+<div><svg width="736" height="248">
+         
+         <polygon points="9 17 1 13 1 21"></polygon>
+         <polygon points="17 17 9 13 9 21"></polygon>
+         <rect x="31" y="3" width="70" height="32" rx="10"></rect>
+         <rect x="29" y="1" width="70" height="32" class="terminal" rx="10"></rect>
+         <text class="terminal" x="39" y="21">CREATE</text>
+         <rect x="121" y="3" width="62" height="32" rx="10"></rect>
+         <rect x="119" y="1" width="62" height="32" class="terminal" rx="10"></rect>
+         <text class="terminal" x="129" y="21">TABLE</text>
+         
+            <rect x="203" y="3" width="94" height="32"></rect>
+            <rect x="201" y="1" width="94" height="32" class="nonterminal"></rect>
+            <text class="nonterminal" x="211" y="21">table_name</text>
+         
+         <rect x="317" y="3" width="26" height="32" rx="10"></rect>
+         <rect x="315" y="1" width="26" height="32" class="terminal" rx="10"></rect>
+         <text class="terminal" x="325" y="21">(</text>
+         
+            <rect x="363" y="3" width="106" height="32"></rect>
+            <rect x="361" y="1" width="106" height="32" class="nonterminal"></rect>
+            <text class="nonterminal" x="371" y="21">column_name</text>
+         
+         
+            <rect x="489" y="3" width="100" height="32"></rect>
+            <rect x="487" y="1" width="100" height="32" class="nonterminal"></rect>
+            <text class="nonterminal" x="497" y="21">column_type</text>
+         
+         <rect x="609" y="3" width="106" height="32" rx="10"></rect>
+         <rect x="607" y="1" width="106" height="32" class="terminal" rx="10"></rect>
+         <text class="terminal" x="617" y="21">REFERENCES</text>
+         
+            <rect x="76" y="69" width="102" height="32"></rect>
+            <rect x="74" y="67" width="102" height="32" class="nonterminal"></rect>
+            <text class="nonterminal" x="84" y="87">parent_table</text>
+         
+         <rect x="218" y="101" width="26" height="32" rx="10"></rect>
+         <rect x="216" y="99" width="26" height="32" class="terminal" rx="10"></rect>
+         <text class="terminal" x="226" y="119">(</text>
+         <a xlink:href="sql-grammar.html#ref_column_name" xlink:title="ref_column_name">
+            <rect x="264" y="101" width="132" height="32"></rect>
+            <rect x="262" y="99" width="132" height="32" class="nonterminal"></rect>
+            <text class="nonterminal" x="272" y="119">ref_column_name</text>
+         </a>
+         <rect x="416" y="101" width="26" height="32" rx="10"></rect>
+         <rect x="414" y="99" width="26" height="32" class="terminal" rx="10"></rect>
+         <text class="terminal" x="424" y="119">)</text>
+         <a xlink:href="sql-grammar.html#column_constraints" xlink:title="column_constraints">
+            <rect x="502" y="101" width="142" height="32"></rect>
+            <rect x="500" y="99" width="142" height="32" class="nonterminal"></rect>
+            <text class="nonterminal" x="510" y="119">column_constraints</text>
+         </a>
+         <rect x="251" y="183" width="24" height="32" rx="10"></rect>
+         <rect x="249" y="181" width="24" height="32" class="terminal" rx="10"></rect>
+         <text class="terminal" x="259" y="201">,</text>
+         <a xlink:href="sql-grammar.html#column_def" xlink:title="column_def">
+            <rect x="295" y="183" width="92" height="32"></rect>
+            <rect x="293" y="181" width="92" height="32" class="nonterminal"></rect>
+            <text class="nonterminal" x="303" y="201">column_def</text>
+         </a>
+         
+            <rect x="467" y="215" width="130" height="32"></rect>
+            <rect x="465" y="213" width="130" height="32" class="nonterminal"></rect>
+            <text class="nonterminal" x="475" y="233">table_constraints</text>
+         
+         <rect x="637" y="183" width="26" height="32" rx="10"></rect>
+         <rect x="635" y="181" width="26" height="32" class="terminal" rx="10"></rect>
+         <text class="terminal" x="645" y="201">)</text>
+         <rect x="683" y="183" width="26" height="32" rx="10"></rect>
+         <rect x="681" y="181" width="26" height="32" class="terminal" rx="10"></rect>
+         <text class="terminal" x="691" y="201">)</text>
+         <path class="line" d="m17 17 h2 m0 0 h10 m70 0 h10 m0 0 h10 m62 0 h10 m0 0 h10 m94 0 h10 m0 0 h10 m26 0 h10 m0 0 h10 m106 0 h10 m0 0 h10 m100 0 h10 m0 0 h10 m106 0 h10 m2 0 l2 0 m2 0 l2 0 m2 0 l2 0 m-683 66 l2 0 m2 0 l2 0 m2 0 l2 0 m2 0 h10 m102 0 h10 m20 0 h10 m0 0 h234 m-264 0 h20 m244 0 h20 m-284 0 q10 0 10 10 m264 0 q0 -10 10 -10 m-274 10 v12 m264 0 v-12 m-264 12 q0 10 10 10 m244 0 q10 0 10 -10 m-254 10 h10 m26 0 h10 m0 0 h10 m132 0 h10 m0 0 h10 m26 0 h10 m40 -32 h10 m0 0 h152 m-182 0 h20 m162 0 h20 m-202 0 q10 0 10 10 m182 0 q0 -10 10 -10 m-192 10 v12 m182 0 v-12 m-182 12 q0 10 10 10 m162 0 q10 0 10 -10 m-172 10 h10 m142 0 h10 m22 -32 l2 0 m2 0 l2 0 m2 0 l2 0 m-497 114 l2 0 m2 0 l2 0 m2 0 l2 0 m42 0 h10 m24 0 h10 m0 0 h10 m92 0 h10 m-176 0 l20 0 m-1 0 q-9 0 -9 -10 l0 -12 q0 -10 10 -10 m156 32 l20 0 m-20 0 q10 0 10 -10 l0 -12 q0 -10 -10 -10 m-156 0 h10 m0 0 h146 m-196 32 h20 m196 0 h20 m-236 0 q10 0 10 10 m216 0 q0 -10 10 -10 m-226 10 v14 m216 0 v-14 m-216 14 q0 10 10 10 m196 0 q10 0 10 -10 m-206 10 h10 m0 0 h186 m40 -34 h10 m0 0 h140 m-170 0 h20 m150 0 h20 m-190 0 q10 0 10 10 m170 0 q0 -10 10 -10 m-180 10 v12 m170 0 v-12 m-170 12 q0 10 10 10 m150 0 q10 0 10 -10 m-160 10 h10 m130 0 h10 m20 -32 h10 m26 0 h10 m0 0 h10 m26 0 h10 m3 0 h-3"></path>
+         <polygon points="727 197 735 193 735 201"></polygon>
+         <polygon points="727 197 719 193 719 201"></polygon>
+      </svg></div>
