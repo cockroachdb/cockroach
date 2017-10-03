@@ -22,10 +22,11 @@
   revision = "a2fdd780c9a50455cecd249b00bdc3eb73a78e31"
 
 [[projects]]
-  branch = "2.x"
+  branch = "parse-constraints-with-dash-in-pre"
   name = "github.com/Masterminds/semver"
   packages = ["."]
-  revision = "139cc0982c53f1367af5636b12b7643cd03757fc"
+  revision = "a93e51b5a57ef416dac8bb02d11407b6f55d8929"
+  source = "https://github.com/carolynvs/semver.git"
 
 [[projects]]
   name = "github.com/Masterminds/vcs"
@@ -89,6 +90,12 @@
   name = "github.com/biogo/store"
   packages = ["llrb"]
   revision = "913427a1d5e89604e50ea1db0f28f34966d61602"
+
+[[projects]]
+  name = "github.com/boltdb/bolt"
+  packages = ["."]
+  revision = "2f1ce7a837dcb8da3ec595b1dac9d0632f0f99e8"
+  version = "v1.3.1"
 
 [[projects]]
   name = "github.com/cenk/backoff"
@@ -276,8 +283,9 @@
 
 [[projects]]
   name = "github.com/golang/dep"
-  packages = [".","cmd/dep","internal/feedback","internal/fs","internal/gps","internal/gps/paths","internal/gps/pkgtree"]
-  revision = "f4027efdd10ab0e7561e53f92953d71f3d8c52a9"
+  packages = [".","cmd/dep","internal/feedback","internal/fs","internal/gps","internal/gps/paths","internal/gps/pkgtree","internal/importers","internal/importers/base","internal/importers/glide","internal/importers/godep","internal/importers/govend","internal/importers/vndr"]
+  revision = "83789e236d7ff64c82ee8392005455fc1ec1983b"
+  version = "v0.3.1"
 
 [[projects]]
   name = "github.com/golang/glog"
@@ -459,6 +467,12 @@
   name = "github.com/montanaflynn/stats"
   packages = ["."]
   revision = "41c34e4914ec3c05d485e564d9028d8861d5d9ad"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/nightlyone/lockfile"
+  packages = ["."]
+  revision = "6a197d5ea61168f2ac821de2b7f011b250904900"
 
 [[projects]]
   name = "github.com/olekukonko/tablewriter"
