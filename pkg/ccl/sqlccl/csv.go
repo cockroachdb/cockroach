@@ -95,7 +95,7 @@ func LoadCSV(
 	if len(dataFiles) == 0 {
 		dataFiles = []string{fmt.Sprintf("%s.dat", table)}
 	}
-	createTable, err := readCreateTableFromStore(ctx, table)
+	createTable, err := readCreateTableFromStore(ctx, table, cluster.NoSettings)
 	if err != nil {
 		return 0, 0, 0, err
 	}
@@ -181,7 +181,11 @@ func doLocalCSVTransform(
 	if err != nil {
 		return 0, 0, 0, err
 	}
-	es, err := storageccl.MakeExportStorage(ctx, conf)
+	var st *cluster.Settings
+	if execCfg != nil {
+		st = execCfg.Settings
+	}
+	es, err := storageccl.MakeExportStorage(ctx, conf, st)
 	if err != nil {
 		return 0, 0, 0, err
 	}
@@ -216,7 +220,7 @@ func doLocalCSVTransform(
 	group.Go(func() error {
 		defer close(recordCh)
 		var err error
-		csvCount, err = readCSV(gCtx, comma, comment, len(tableDesc.VisibleColumns()), dataFiles, recordCh, readProgressFn)
+		csvCount, err = readCSV(gCtx, comma, comment, len(tableDesc.VisibleColumns()), dataFiles, recordCh, readProgressFn, st)
 		return err
 	})
 	group.Go(func() error {
@@ -268,8 +272,10 @@ const (
 	defaultCSVTableID  sqlbase.ID = defaultCSVParentID + 1
 )
 
-func readCreateTableFromStore(ctx context.Context, filename string) (*parser.CreateTable, error) {
-	store, err := exportStorageFromURI(ctx, filename)
+func readCreateTableFromStore(
+	ctx context.Context, filename string, settings *cluster.Settings,
+) (*parser.CreateTable, error) {
+	store, err := exportStorageFromURI(ctx, filename, settings)
 	if err != nil {
 		return nil, err
 	}
@@ -372,6 +378,7 @@ func readCSV(
 	dataFiles []string,
 	recordCh chan<- csvRecord,
 	progressFn func(float32),
+	settings *cluster.Settings,
 ) (int64, error) {
 	const batchSize = 500
 	expectedColsExtra := expectedCols + 1
@@ -388,7 +395,7 @@ func readCSV(
 		if err != nil {
 			return 0, err
 		}
-		es, err := storageccl.MakeExportStorage(ctx, conf)
+		es, err := storageccl.MakeExportStorage(ctx, conf, settings)
 		if err != nil {
 			return 0, err
 		}
@@ -417,7 +424,7 @@ func readCSV(
 			if err != nil {
 				return err
 			}
-			es, err := storageccl.MakeExportStorage(ctx, conf)
+			es, err := storageccl.MakeExportStorage(ctx, conf, settings)
 			if err != nil {
 				return err
 			}
@@ -986,7 +993,7 @@ func importPlanHook(
 			if err != nil {
 				return err
 			}
-			create, err = readCreateTableFromStore(ctx, filename)
+			create, err = readCreateTableFromStore(ctx, filename, p.ExecCfg().Settings)
 			if err != nil {
 				return err
 			}
@@ -1158,7 +1165,7 @@ func doDistributedCSVTransform(
 	if err != nil {
 		return 0, err
 	}
-	es, err := storageccl.MakeExportStorage(ctx, dest)
+	es, err := storageccl.MakeExportStorage(ctx, dest, p.ExecCfg().Settings)
 	if err != nil {
 		return 0, err
 	}
@@ -1185,6 +1192,7 @@ func newReadCSVProcessor(
 		tableDesc:  spec.TableDesc,
 		uri:        spec.Uri,
 		output:     output,
+		settings:   flowCtx.Settings,
 	}
 	if err := cp.out.Init(&distsqlrun.PostProcessSpec{}, csvOutputTypes, &flowCtx.EvalCtx, output); err != nil {
 		return nil, err
@@ -1199,6 +1207,7 @@ type readCSVProcessor struct {
 	uri        string
 	out        distsqlrun.ProcOutputHelper
 	output     distsqlrun.RowReceiver
+	settings   *cluster.Settings
 }
 
 var _ distsqlrun.Processor = &readCSVProcessor{}
@@ -1227,7 +1236,7 @@ func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 		defer tracing.FinishSpan(span)
 		defer close(recordCh)
 		_, err := readCSV(sCtx, cp.csvOptions.Comma, cp.csvOptions.Comment,
-			len(cp.tableDesc.VisibleColumns()), []string{cp.uri}, recordCh, nil)
+			len(cp.tableDesc.VisibleColumns()), []string{cp.uri}, recordCh, nil, cp.settings)
 		return err
 	})
 	// Convert CSV records to KVs
@@ -1338,6 +1347,7 @@ func newSSTWriterProcessor(
 		input:         input,
 		output:        output,
 		tempStorage:   flowCtx.TempStorage,
+		settings:      flowCtx.Settings,
 	}
 	if err := sp.out.Init(&distsqlrun.PostProcessSpec{}, sstOutputTypes, &flowCtx.EvalCtx, output); err != nil {
 		return nil, err
@@ -1353,6 +1363,7 @@ type sstWriter struct {
 	out           distsqlrun.ProcOutputHelper
 	output        distsqlrun.RowReceiver
 	tempStorage   engine.Engine
+	settings      *cluster.Settings
 }
 
 var _ distsqlrun.Processor = &sstWriter{}
@@ -1450,7 +1461,7 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 		if err != nil {
 			return err
 		}
-		es, err := storageccl.MakeExportStorage(ctx, conf)
+		es, err := storageccl.MakeExportStorage(ctx, conf, sp.settings)
 		if err != nil {
 			return err
 		}
