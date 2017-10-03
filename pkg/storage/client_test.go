@@ -631,9 +631,9 @@ type mtcRangeDescriptorDB struct {
 }
 
 func (mrdb mtcRangeDescriptorDB) RangeLookup(
-	ctx context.Context, key roachpb.RKey, desc *roachpb.RangeDescriptor, useReverseScan bool,
+	ctx context.Context, key roachpb.RKey, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
-	return (*mrdb.ds).RangeLookup(ctx, key, desc, useReverseScan)
+	return (*mrdb.ds).RangeLookup(ctx, key, useReverseScan)
 }
 
 func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {

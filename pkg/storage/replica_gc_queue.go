@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -193,26 +192,18 @@ func (rgcq *replicaGCQueue) process(
 
 	// Calls to RangeLookup typically use inconsistent reads, but we
 	// want to do a consistent read here. This is important when we are
-	// considering one of the metadata ranges: we must not do an
-	// inconsistent lookup in our own copy of the range.
-	b := &client.Batch{}
-	b.AddRawRequest(&roachpb.RangeLookupRequest{
-		Span: roachpb.Span{
-			Key: keys.RangeMetaKey(desc.StartKey).AsRawKey(),
-		},
-		MaxRanges: 1,
-	})
-	if err := rgcq.db.Run(ctx, b); err != nil {
+	// considering one of the metadata ranges: we must not do an inconsistent
+	// lookup in our own copy of the range.
+	rs, _, err := client.RangeLookupForVersion(ctx, rgcq.store.ClusterSettings(), rgcq.db.GetSender(),
+		desc.StartKey.AsRawKey(), roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
+	if err != nil {
 		return err
 	}
-	br := b.RawResponse()
-	reply := br.Responses[0].GetInner().(*roachpb.RangeLookupResponse)
-
-	if len(reply.Ranges) != 1 {
-		return errors.Errorf("expected 1 range descriptor, got %d", len(reply.Ranges))
+	if len(rs) != 1 {
+		return errors.Errorf("expected 1 range descriptor, got %d", len(rs))
 	}
+	replyDesc := rs[0]
 
-	replyDesc := reply.Ranges[0]
 	if currentDesc, currentMember := replyDesc.GetReplicaDescriptor(repl.store.StoreID()); !currentMember {
 		// We are no longer a member of this range; clean up our local data.
 		rgcq.metrics.RemoveReplicaCount.Inc(1)

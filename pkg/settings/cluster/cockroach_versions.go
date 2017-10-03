@@ -33,6 +33,7 @@ const (
 	VersionStatsBasedRebalancing
 	VersionRaftLastIndex
 	VersionMVCCNetworkStats
+	VersionMeta2Splits
 
 	// Add new versions here (step one of two)
 
@@ -77,6 +78,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionMVCCNetworkStats is https://github.com/cockroachdb/cockroach/pull/18828.
 		Key:     VersionMVCCNetworkStats,
 		Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 2},
+	},
+	{
+		// VersionMeta2Splits is https://github.com/cockroachdb/cockroach/pull/18970.
+		Key:     VersionMeta2Splits,
+		Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 3},
 	},
 
 	// Add new versions here (step two of two).

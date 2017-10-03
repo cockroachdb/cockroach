@@ -40,11 +40,10 @@ import (
 )
 
 const (
-	// The default maximum number of ranges to return from a range
-	// lookup.
-	defaultRangeLookupMaxRanges = 8
 	// The default limit for asynchronous senders.
 	defaultSenderConcurrency = 500
+	// The maximum number of range descriptors to prefetch during range lookups.
+	rangeLookupPrefetchCount = 8
 )
 
 var (
@@ -133,8 +132,7 @@ type DistSender struct {
 	gossip  *gossip.Gossip
 	metrics DistSenderMetrics
 	// rangeCache caches replica metadata for key ranges.
-	rangeCache           *RangeDescriptorCache
-	rangeLookupMaxRanges int32
+	rangeCache *RangeDescriptorCache
 	// leaseHolderCache caches range lease holders by range ID.
 	leaseHolderCache *LeaseHolderCache
 	transportFactory TransportFactory
@@ -207,9 +205,8 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 	getRangeDescCacheSize := func() int64 {
 		return rangeDescriptorCacheSize.Get(&ds.st.SV)
 	}
-	ds.rangeCache = NewRangeDescriptorCache(rdb, getRangeDescCacheSize)
+	ds.rangeCache = NewRangeDescriptorCache(ds.st, rdb, getRangeDescCacheSize)
 	ds.leaseHolderCache = NewLeaseHolderCache(getRangeDescCacheSize)
-	ds.rangeLookupMaxRanges = defaultRangeLookupMaxRanges
 	if tf := cfg.TestingKnobs.TransportFactory; tf != nil {
 		ds.transportFactory = tf
 	} else {
@@ -270,41 +267,50 @@ func (ds *DistSender) LeaseHolderCache() *LeaseHolderCache {
 	return ds.leaseHolderCache
 }
 
-// RangeLookup implements the RangeDescriptorDB interface.
-// RangeLookup dispatches a RangeLookup request for the given metadata
-// key to the replicas of the given range. Note that we allow
-// inconsistent reads when doing range lookups for efficiency. Getting
-// stale data is not a correctness problem but instead may
-// infrequently result in additional latency as additional range
-// lookups may be required. Note also that rangeLookup bypasses the
-// DistSender's Send() method, so there is no error inspection and
-// retry logic here; this is not an issue since the lookup performs a
-// single inconsistent read only.
+// RangeLookup implements the RangeDescriptorDB interface. It uses LookupRange
+// to perform a lookup scan for the provided key, using DistSender itself as the
+// client.Sender. This means that the scan will recurse into DistSender, which
+// will in turn use the RangeDescriptorCache again to lookup the RangeDescriptor
+// necessary to perform the scan.
+//
+// Note that we allow inconsistent reads when doing range lookups for
+// efficiency. Getting stale data is not a correctness problem but instead may
+// infrequently result in additional latency as additional range lookups may be
+// required.
 func (ds *DistSender) RangeLookup(
+	ctx context.Context, key roachpb.RKey, useReverseScan bool,
+) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
+	// By using DistSender as the sender, we guarantee that even if the desired
+	// RangeDescriptor is not on the first range we send the lookup too, we'll
+	// still find it when we scan to the next range. This addresses the issue
+	// described in #18032 and #16266, allowing us to support meta2 splits.
+	return client.RangeLookup(ctx, ds, key.AsRawKey(),
+		roachpb.INCONSISTENT, rangeLookupPrefetchCount, useReverseScan)
+}
+
+// legacyRangeLookup implements the legacyRangeDescriptorDB interface. The
+// method dispatches a RangeLookupRequest with the range metadata key for the
+// given key to the replicas of the given range. Note that we allow inconsistent
+// reads when doing range lookups for efficiency. Getting stale data is not a
+// correctness problem but instead may infrequently result in additional latency
+// as additional range lookups may be required. Note also that rangeLookup
+// bypasses the DistSender's Send() method, so there is no error inspection and
+// retry logic here; this is not an issue since the lookup performs a single
+// inconsistent read only.
+func (ds *DistSender) legacyRangeLookup(
 	ctx context.Context, key roachpb.RKey, desc *roachpb.RangeDescriptor, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
-	ba := roachpb.BatchRequest{}
-	ba.ReadConsistency = roachpb.INCONSISTENT
-	ba.Add(&roachpb.RangeLookupRequest{
-		Span: roachpb.Span{
-			// We can interpret the RKey as a Key here since it's a metadata
-			// lookup; those are never local.
-			Key: key.AsRawKey(),
-		},
-		MaxRanges: ds.rangeLookupMaxRanges,
-		Reverse:   useReverseScan,
+	sender := client.SenderFunc(func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		replicas := NewReplicaSlice(ds.gossip, desc)
+		shuffle.Shuffle(replicas)
+		br, err := ds.sendRPC(ctx, desc.RangeID, replicas, ba)
+		if err != nil {
+			return nil, roachpb.NewError(err)
+		}
+		return br, nil
 	})
-	replicas := NewReplicaSlice(ds.gossip, desc)
-	shuffle.Shuffle(replicas)
-	br, err := ds.sendRPC(ctx, desc.RangeID, replicas, ba)
-	if err != nil {
-		return nil, nil, err
-	}
-	if br.Error != nil {
-		return nil, nil, br.Error.GoError()
-	}
-	resp := br.Responses[0].GetInner().(*roachpb.RangeLookupResponse)
-	return resp.Ranges, resp.PrefetchedRanges, nil
+	return client.LegacyRangeLookup(ctx, sender, key.AsRawKey(),
+		roachpb.INCONSISTENT, rangeLookupPrefetchCount, useReverseScan)
 }
 
 // FirstRange implements the RangeDescriptorDB interface.
@@ -736,6 +742,9 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			// case where we don't need to re-run is if the read
 			// consistency is not required.
 			if ba.Txn == nil && ba.IsPossibleTransaction() && ba.ReadConsistency != roachpb.INCONSISTENT {
+				// TODO(nvanbenschoten): if this becomes an issue for RangeLookup
+				// scans, we could look into changing IsPossibleTransaction for
+				// ScanRequest/ReverseScanRequest to detect RangeLookups.
 				responseCh <- response{pErr: roachpb.NewError(&roachpb.OpRequiresTxnError{})}
 				return
 			}
