@@ -87,6 +87,43 @@ RUN mkdir build src && cd build \
 
 RUN apt-get autoremove -y gcc g++
 
+# Build & install libtinfo for the linux targets.
+# (on BSD or BSD-derived like macOS it's already built-in; on windows we don't need it.)
+
+# Configure flags.
+COPY ncurses.conf ./
+# The patch is needed to work around a bug in Debian mawk, see
+# http://lists.gnu.org/archive/html/bug-ncurses/2015-08/msg00008.html
+COPY ncurses.patch ./
+
+# Run the two builds.
+# We need to manually disable secure_getenv and cdefs on the musl build
+# because they are not available in the musl sysroot.
+RUN mkdir ncurses \
+ && curl -fsSL http://ftp.gnu.org/gnu/ncurses/ncurses-6.0.tar.gz | tar --strip-components=1 -C ncurses -xz \
+ && cd ncurses \
+ && patch -p0 <../ncurses.patch \
+ && export cf_cv_type_of_bool='unsigned char' \
+ && export cf_cv_working_poll=yes \
+ && mkdir build-x86_64-unknown-linux-musl \
+ && (cd build-x86_64-unknown-linux-musl \
+    && CC=/x-tools/x86_64-unknown-linux-musl/bin/x86_64-unknown-linux-musl-cc \
+       CXX=/x-tools/x86_64-unknown-linux-musl/bin/x86_64-unknown-linux-musl-c++ \
+       ../configure --prefix=/x-tools/x86_64-unknown-linux-musl/x86_64-unknown-linux-musl/sysroot/usr \
+         --host=x86_64-unknown-linux-musl \
+         $(cat /ncurses.conf) --without-shared --without-dlsym \
+    && (cd ncurses && make all && make install.tinfo)) \
+ && mkdir build-x86_64-unknown-linux-gnu \
+ && (cd build-x86_64-unknown-linux-gnu \
+    && CC=/x-tools/x86_64-unknown-linux-gnu/bin/x86_64-unknown-linux-gnu-cc \
+       CXX=/x-tools/x86_64-unknown-linux-gnu/bin/x86_64-unknown-linux-gnu-c++ \
+       ../configure --prefix=/x-tools/x86_64-unknown-linux-gnu/x86_64-unknown-linux-gnu/sysroot/usr \
+         --host=x86_64-unknown-linux-gnu \
+         $(cat /ncurses.conf) \
+    && (cd ncurses && make all && make install.tinfo)) \
+ && cd .. \
+ && rm -rf ncurses ncurses.conf ncurses.patch
+
 # Build an msan-enabled build of libc++, following instructions from
 # https://github.com/google/sanitizers/wiki/MemorySanitizerLibcxxHowTo
 RUN mkdir llvm                    && curl -sfSL http://releases.llvm.org/3.9.1/llvm-3.9.1.src.tar.xz      | tar --strip-components=1 -C llvm -xJ \
