@@ -1329,27 +1329,17 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 func getRangeMetadata(
 	key roachpb.RKey, mtc *multiTestContext, t *testing.T,
 ) roachpb.RangeDescriptor {
-	// Calls to RangeLookup typically use inconsistent reads, but we
+	// Calls to LookupRange typically use inconsistent reads, but we
 	// want to do a consistent read here. This is important when we are
 	// considering one of the metadata ranges: we must not do an
 	// inconsistent lookup in our own copy of the range.
-	b := &client.Batch{}
-	b.AddRawRequest(&roachpb.RangeLookupRequest{
-		Span: roachpb.Span{
-			Key: keys.RangeMetaKey(key).AsRawKey(),
-		},
-		MaxRanges: 1,
-	})
-	var reply *roachpb.RangeLookupResponse
-	if err := mtc.dbs[0].Run(context.TODO(), b); err != nil {
+	sender := mtc.dbs[0].GetSender()
+	rs, _, err := client.LookupRange(context.TODO(), sender, key.AsRawKey(),
+		roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
+	if err != nil {
 		t.Fatalf("error getting range metadata: %s", err)
-	} else {
-		reply = b.RawResponse().Responses[0].GetInner().(*roachpb.RangeLookupResponse)
 	}
-	if a, e := len(reply.Ranges), 1; a != e {
-		t.Fatalf("expected %d range descriptor, got %d", e, a)
-	}
-	return reply.Ranges[0]
+	return rs[0]
 }
 
 // TestUnreplicateFirstRange verifies that multiTestContext still functions in

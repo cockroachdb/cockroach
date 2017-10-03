@@ -414,18 +414,13 @@ func (c *Cluster) TransferLease(nodeIdx int, r *rand.Rand, key roachpb.Key) (boo
 }
 
 func (c *Cluster) lookupRange(nodeIdx int, key roachpb.Key) (*roachpb.RangeDescriptor, error) {
-	req := &roachpb.RangeLookupRequest{
-		Span: roachpb.Span{
-			Key: keys.RangeMetaKey(keys.MustAddr(key)).AsRawKey(),
-		},
-		MaxRanges: 1,
-	}
 	sender := c.Client(nodeIdx).GetSender()
-	resp, pErr := client.SendWrapped(context.Background(), sender, req)
-	if pErr != nil {
-		return nil, errors.Errorf("%s: lookup range: %s", key, pErr)
+	rs, _, err := client.LookupRange(context.Background(), sender, key,
+		roachpb.CONSISTENT, 0 /* prefetchNum */, false /* !reverse */)
+	if err != nil {
+		return nil, errors.Errorf("%s: lookup range: %s", key, err)
 	}
-	return &resp.(*roachpb.RangeLookupResponse).Ranges[0], nil
+	return &rs[0], nil
 }
 
 // RandNode returns the index of a random alive node.

@@ -382,32 +382,17 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 }
 
-type MockRangeDescriptorDB func(roachpb.RKey, bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error)
+// MockRangeDescriptorDB is an implementation of RangeDescriptorDB. Unlike
+// DistSender's implementation, MockRangeDescriptorDB does not call back into
+// the RangeDescriptorCache by default to perform RangeLookups. Because of this,
+// tests should not rely on that behavior and should implement it themselves if
+// they need it.
+type MockRangeDescriptorDB func(roachpb.RKey, bool) (rs, preRs []roachpb.RangeDescriptor, err error)
 
 func (mdb MockRangeDescriptorDB) RangeLookup(
-	ctx context.Context, key roachpb.RKey, desc *roachpb.RangeDescriptor, useReverseScan bool,
+	ctx context.Context, key roachpb.RKey, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
-	descs, prefetched, err := mdb(keys.UserKey(key), useReverseScan)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// filterDescs filters the provided slice to only descriptors which would be
-	// stored within the bounds of the range this RangeLookup was sent to. This
-	// simulates how real RangeLookupRequests behave without needing to inform
-	// mdb about desc.
-	filterDescs := func(retDescs []roachpb.RangeDescriptor) []roachpb.RangeDescriptor {
-		var containedDescs []roachpb.RangeDescriptor
-		for _, retDesc := range retDescs {
-			if desc.ContainsKey(keys.RangeMetaKey(retDesc.EndKey)) {
-				containedDescs = append(containedDescs, retDesc)
-			} else {
-				log.Infof(ctx, "filtering descriptor %v from RangeLookup on range %v", retDesc, desc)
-			}
-		}
-		return containedDescs
-	}
-	return filterDescs(descs), filterDescs(prefetched), nil
+	return mdb(key, useReverseScan)
 }
 
 func (mdb MockRangeDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, error) {
@@ -416,6 +401,34 @@ func (mdb MockRangeDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, error) 
 		return nil, err
 	}
 	return &rs[0], nil
+}
+
+// withMetaRecursion returns a new MockRangeDescriptorDB that will behave the
+// same as the receiver, but will also recurse into the provided
+// RangeDescriptorCache on each lookup to simulate the use of a descriptor's
+// parent descriptor during the RangeLookup scan. This is important for tests
+// that expect the RangeLookup for a user space descriptor to trigger a lookup
+// for a meta descriptor.
+func (mdb MockRangeDescriptorDB) withMetaRecursion(
+	rdc *RangeDescriptorCache,
+) MockRangeDescriptorDB {
+	return func(key roachpb.RKey, useReverseScan bool) (rs, preRs []roachpb.RangeDescriptor, err error) {
+		metaKey := keys.RangeMetaKey(key)
+		if !metaKey.Equal(roachpb.RKeyMin) {
+			_, _, err := rdc.LookupRangeDescriptor(context.Background(), metaKey, nil, useReverseScan)
+			if err != nil {
+				return nil, nil, err
+			}
+		}
+		return mdb(key, useReverseScan)
+	}
+}
+
+// withMetaRecursion calls MockRangeDescriptorDB.withMetaRecursion on the
+// DistSender's RangeDescriptorDB.
+func (ds *DistSender) withMetaRecursion() *DistSender {
+	ds.rangeCache.db = ds.rangeCache.db.(MockRangeDescriptorDB).withMetaRecursion(ds.rangeCache)
+	return ds
 }
 
 func mockRangeDescriptorDBForDescs(descs ...roachpb.RangeDescriptor) MockRangeDescriptorDB {
@@ -631,7 +644,6 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 	errs := []error{
 		errors.New("boom"),
 		nil,
-		nil,
 	}
 
 	cfg := DistSenderConfig{
@@ -649,9 +661,6 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 			// Return next error and truncate the prefix of the errors array.
 			err := errs[0]
 			errs = errs[1:]
-			if key.Less(testMetaRangeDescriptor.EndKey) {
-				return []roachpb.RangeDescriptor{testMetaRangeDescriptor}, nil, err
-			}
 			return []roachpb.RangeDescriptor{testUserRangeDescriptor}, nil, err
 		}),
 	}
@@ -742,7 +751,7 @@ func TestEvictOnFirstRangeGossip(t *testing.T) {
 		RangeDescriptorDB: rDB,
 	}
 
-	ds := NewDistSender(cfg, g)
+	ds := NewDistSender(cfg, g).withMetaRecursion()
 
 	anyKey := roachpb.Key("anything")
 	rAnyKey := keys.MustAddr(anyKey)
@@ -937,15 +946,15 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	g, clock := makeGossip(t, stopper)
-	if err := g.AddInfoProto(gossip.KeyFirstRangeDescriptor, &testUserRangeDescriptor, time.Hour); err != nil {
+	if err := g.AddInfoProto(gossip.KeyFirstRangeDescriptor, &testMetaRangeDescriptor, time.Hour); err != nil {
 		t.Fatal(err)
 	}
 
 	// Updated below, after it has first been returned.
-	badStartKey := roachpb.RKey("m")
+	badEndKey := roachpb.RKey("m")
 	newRangeDescriptor := testUserRangeDescriptor
-	goodStartKey := newRangeDescriptor.StartKey
-	newRangeDescriptor.StartKey = badStartKey
+	goodEndKey := newRangeDescriptor.EndKey
+	newRangeDescriptor.EndKey = badEndKey
 	descStale := true
 
 	var testFn rpcSendFn = func(
@@ -959,11 +968,15 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, ok := ba.GetArg(roachpb.RangeLookup); ok {
+		if client.IsRangeLookup(ba) {
 			if bytes.HasPrefix(rs.Key, keys.Meta1Prefix) {
 				br := &roachpb.BatchResponse{}
-				r := &roachpb.RangeLookupResponse{}
-				r.Ranges = append(r.Ranges, testMetaRangeDescriptor)
+				r := &roachpb.ScanResponse{}
+				var kv roachpb.KeyValue
+				if err := kv.Value.SetProto(&testMetaRangeDescriptor); err != nil {
+					t.Fatal(err)
+				}
+				r.Rows = append(r.Rows, kv)
 				br.Add(r)
 				return br, nil
 			}
@@ -973,14 +986,18 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 			}
 
 			br := &roachpb.BatchResponse{}
-			r := &roachpb.RangeLookupResponse{}
-			r.Ranges = append(r.Ranges, newRangeDescriptor)
+			r := &roachpb.ScanResponse{}
+			var kv roachpb.KeyValue
+			if err := kv.Value.SetProto(&newRangeDescriptor); err != nil {
+				t.Fatal(err)
+			}
+			r.Rows = append(r.Rows, kv)
 			br.Add(r)
 			// If we just returned the stale descriptor, set up returning the
 			// good one next time.
 			if bytes.HasPrefix(rs.Key, keys.Meta2Prefix) {
-				if newRangeDescriptor.StartKey.Equal(badStartKey) {
-					newRangeDescriptor.StartKey = goodStartKey
+				if newRangeDescriptor.EndKey.Equal(badEndKey) {
+					newRangeDescriptor.EndKey = goodEndKey
 				} else {
 					descStale = false
 				}
@@ -989,7 +1006,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 		}
 		// When the Scan first turns up, update the descriptor for future
 		// range descriptor lookups.
-		if !newRangeDescriptor.StartKey.Equal(goodStartKey) {
+		if !newRangeDescriptor.EndKey.Equal(goodEndKey) {
 			return nil, &roachpb.RangeKeyMismatchError{
 				RequestStartKey: rs.Key.AsRawKey(),
 				RequestEndKey:   rs.EndKey.AsRawKey(),
@@ -1023,7 +1040,7 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	g, clock := makeGossip(t, stopper)
-	if err := g.AddInfoProto(gossip.KeyFirstRangeDescriptor, &testUserRangeDescriptor, time.Hour); err != nil {
+	if err := g.AddInfoProto(gossip.KeyFirstRangeDescriptor, &testMetaRangeDescriptor, time.Hour); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1045,11 +1062,15 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, ok := ba.GetArg(roachpb.RangeLookup); ok {
+		if client.IsRangeLookup(ba) {
 			if bytes.HasPrefix(rs.Key, keys.Meta1Prefix) {
 				br := &roachpb.BatchResponse{}
-				r := &roachpb.RangeLookupResponse{}
-				r.Ranges = append(r.Ranges, testMetaRangeDescriptor)
+				r := &roachpb.ScanResponse{}
+				var kv roachpb.KeyValue
+				if err := kv.Value.SetProto(&testMetaRangeDescriptor); err != nil {
+					t.Fatal(err)
+				}
+				r.Rows = append(r.Rows, kv)
 				br.Add(r)
 				return br, nil
 			}
@@ -1060,8 +1081,12 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 			firstLookup = false
 
 			br := &roachpb.BatchResponse{}
-			r := &roachpb.RangeLookupResponse{}
-			r.Ranges = append(r.Ranges, badRangeDescriptor)
+			r := &roachpb.ScanResponse{}
+			var kv roachpb.KeyValue
+			if err := kv.Value.SetProto(&badRangeDescriptor); err != nil {
+				t.Fatal(err)
+			}
+			r.Rows = append(r.Rows, kv)
 			br.Add(r)
 			return br, nil
 		}
@@ -1273,17 +1298,14 @@ func TestMultiRangeGapReverse(t *testing.T) {
 	rdb := MockRangeDescriptorDB(func(key roachpb.RKey, reverse bool) (
 		[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error,
 	) {
-		n := 0
-		if !bytes.HasPrefix(key, keys.Meta2Prefix) {
-			n = sort.Search(len(descs), func(i int) bool {
-				if !reverse {
-					return key.Less(descs[i].EndKey)
-				}
-				// In reverse mode, the range boundary behavior is "inverted".
-				// If we scan [a,z) in reverse mode, we'd look up key z.
-				return !descs[i].EndKey.Less(key) // key <= EndKey
-			})
-		}
+		n := sort.Search(len(descs), func(i int) bool {
+			if !reverse {
+				return key.Less(descs[i].EndKey)
+			}
+			// In reverse mode, the range boundary behavior is "inverted".
+			// If we scan [a,z) in reverse mode, we'd look up key z.
+			return !descs[i].EndKey.Less(key) // key <= EndKey
+		})
 		if n < 0 {
 			n = 0
 		}
