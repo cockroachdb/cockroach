@@ -1065,115 +1065,17 @@ to efficiently gain visibility into a universe of information at the Cluster,
 Node or Store level. A [periodic background process](RFCS/20160901_time_series_culling.md)
 culls older timeseries data, downsampling and eventually discarding it.
 
-# Key-prefix Accounting and Zones
+# Zones
 
-Arbitrarily fine-grained accounting is specified via
-key prefixes. Key prefixes can overlap, as is necessary for capturing
-hierarchical relationships. For illustrative purposes, let’s say keys
-specifying rows in a set of databases have the following format:
-
-`<db>:<table>:<primary-key>[:<secondary-key>]`
-
-In this case, we might collect accounting with
-key prefixes:
-
-`db1`, `db1:user`, `db1:order`,
-
-Accounting is kept for the entire map by default.
-
-## Accounting
-to keep accounting for a range defined by a key prefix, an entry is created in
-the accounting system table. The format of accounting table keys is:
-
-`\0acct<key-prefix>`
-
-In practice, we assume each node is capable of caching the
-entire accounting table as it is likely to be relatively small.
-
-Accounting is kept for key prefix ranges with eventual consistency for
-efficiency. There are two types of values which comprise accounting:
-counts and occurrences, for lack of better terms. Counts describe
-system state, such as the total number of bytes, rows,
-etc. Occurrences include transient performance and load metrics. Both
-types of accounting are captured as time series with minute
-granularity. The length of time accounting metrics are kept is
-configurable. Below are examples of each type of accounting value.
-
-**System State Counters/Performance**
-
-- Count of items (e.g. rows)
-- Total bytes
-- Total key bytes
-- Total value length
-- Queued message count
-- Queued message total bytes
-- Count of values \< 16B
-- Count of values \< 64B
-- Count of values \< 256B
-- Count of values \< 1K
-- Count of values \< 4K
-- Count of values \< 16K
-- Count of values \< 64K
-- Count of values \< 256K
-- Count of values \< 1M
-- Count of values \> 1M
-- Total bytes of accounting
-
-
-**Load Occurrences**
-
-- Get op count
-- Get total MB
-- Put op count
-- Put total MB
-- Delete op count
-- Delete total MB
-- Delete range op count
-- Delete range total MB
-- Scan op count
-- Scan op MB
-- Split count
-- Merge count
-
-Because accounting information is kept as time series and over many
-possible metrics of interest, the data can become numerous. Accounting
-data are stored in the map near the key prefix described, in order to
-distribute load (for both aggregation and storage).
-
-Accounting keys for system state have the form:
-`<key-prefix>|acctd<metric-name>*`. Notice the leading ‘pipe’
-character. It’s meant to sort the root level account AFTER any other
-system tables. They must increment the same underlying values as they
-are permanent counts, and not transient activity. Logic at the
-node takes care of snapshotting the value into an appropriately
-suffixed (e.g. with timestamp hour) multi-value time series entry.
-
-Keys for perf/load metrics:
-`<key-prefix>acctd<metric-name><hourly-timestamp>`.
-
-`<hourly-timestamp>`-suffixed accounting entries are multi-valued,
-containing a varint64 entry for each minute with activity during the
-specified hour.
-
-To efficiently keep accounting over large key ranges, the task of
-aggregation must be distributed. If activity occurs within the same
-range as the key prefix for accounting, the updates are made as part
-of the consensus write. If the ranges differ, then a message is sent
-to the parent range to increment the accounting. If upon receiving the
-message, the parent range also does not include the key prefix, it in
-turn forwards it to its parent or left child in the balanced binary
-tree which is maintained to describe the range hierarchy. This limits
-the number of messages before an update is visible at the root to `2*log N`,
-where `N` is the number of ranges in the key prefix.
-
-## Zones
-zones are stored in the map with keys prefixed by
-`\0zone` followed by the key prefix to which the zone
-configuration applies. Zone values specify a protobuf containing
+Zones provide a method for configuring the replication of portions of the
+keyspace. Zone values specify a protobuf containing
 the datacenters from which replicas for ranges which fall under
 the zone must be chosen.
 
-Please see [pkg/config/config.proto](https://github.com/cockroachdb/cockroach/blob/master/pkg/config/config.proto) for up-to-date data structures used, the best entry point being `message ZoneConfig`.
+Please see
+[pkg/config/config.proto](https://github.com/cockroachdb/cockroach/blob/master/pkg/config/config.proto)
+for up-to-date data structures used, the best entry point being
+`message ZoneConfig`.
 
 If zones are modified in situ, each node verifies the
 existing zones for its ranges against the zone configuration. If
