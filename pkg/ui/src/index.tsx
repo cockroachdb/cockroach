@@ -47,6 +47,7 @@ import Network from "src/views/reports/containers/network";
 import Nodes from "src/views/reports/containers/nodes";
 import Certificates from "src/views/reports/containers/certificates";
 import Range from "src/views/reports/containers/range";
+import CommandQueue from "src/views/reports/containers/commandQueue";
 import Debug from "src/views/reports/containers/debug";
 
 import { alertDataSync } from "src/redux/alerts";
@@ -101,6 +102,7 @@ ReactDOM.render(
           <Route path="nodes" component={ Nodes } />
           <Route path={`certificates/:${nodeIDAttr}`} component={ Certificates } />
           <Route path={`range/:${rangeIDAttr}`} component={ Range } />
+          <Route path={`range/:${rangeIDAttr}/cmdqueue`} component={ CommandQueue } />
         </Route>
       </Route>
     </Router>
