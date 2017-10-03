@@ -198,7 +198,7 @@ func (rgcq *replicaGCQueue) process(
 	b := &client.Batch{}
 	b.AddRawRequest(&roachpb.RangeLookupRequest{
 		Span: roachpb.Span{
-			Key: keys.RangeMetaKey(desc.StartKey),
+			Key: keys.RangeMetaKey(desc.StartKey).AsRawKey(),
 		},
 		MaxRanges: 1,
 	})

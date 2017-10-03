@@ -167,7 +167,7 @@ func scanMetaKVs(
 	if err != nil {
 		return nil, err
 	}
-	if len(kvs) == 0 || !kvs[len(kvs)-1].Key.Equal(metaEnd) {
+	if len(kvs) == 0 || !kvs[len(kvs)-1].Key.Equal(metaEnd.AsRawKey()) {
 		// Normally we need to scan one more KV because the ranges are addressed by
 		// the end key.
 		extraKV, err := txn.Scan(ctx, metaEnd, keys.Meta2Prefix.PrefixEnd(), 1 /* one result */)

@@ -1775,7 +1775,7 @@ func TestStoreSplitBeginTxnPushMetaIntentRace(t *testing.T) {
 				log.Infof(context.TODO(), "allowing BeginTransaction to proceed after 20ms")
 			}
 		} else if filterArgs.Req.Method() == roachpb.Put &&
-			filterArgs.Req.Header().Key.Equal(keys.RangeMetaKey(splitKey)) {
+			filterArgs.Req.Header().Key.Equal(keys.RangeMetaKey(splitKey).AsRawKey()) {
 			select {
 			case wroteMeta2 <- struct{}{}:
 			default:
@@ -1837,7 +1837,7 @@ func TestStoreSplitBeginTxnPushMetaIntentRace(t *testing.T) {
 	// within a SucceedSoon in order to give the intents time to resolve.
 	testutils.SucceedsSoon(t, func() error {
 		val, intents, err := engine.MVCCGet(context.Background(), store.Engine(),
-			keys.RangeMetaKey(splitKey), hlc.MaxTimestamp, true, nil)
+			keys.RangeMetaKey(splitKey).AsRawKey(), hlc.MaxTimestamp, true, nil)
 		if err != nil {
 			return err
 		}

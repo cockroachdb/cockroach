@@ -1232,10 +1232,7 @@ func evalRangeLookup(
 			if err := v.GetProto(&rd); err != nil {
 				return nil, err
 			}
-			startKeyAddr, err := keys.Addr(keys.RangeMetaKey(rd.StartKey))
-			if err != nil {
-				return nil, err
-			}
+			startKeyAddr := keys.RangeMetaKey(rd.StartKey)
 			if !startKeyAddr.Less(key) {
 				// This is the case in which we've picked up an extra descriptor
 				// we don't want.
