@@ -18,10 +18,10 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/pkg/errors"
-	"github.com/rlmcpherson/s3gof3r"
-
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/pkg/errors"
 )
 
 // UserPriority is a custom type for transaction's user priority.
@@ -949,11 +949,10 @@ func (*ImportRequest) flags() int                   { return isAdmin | isAlone }
 func (*AdminScatterRequest) flags() int             { return isAdmin | isAlone | isRange }
 func (*AddSSTableRequest) flags() int               { return isWrite | isAlone | isRange }
 
-// Keys returns credentials in an s3gof3r.Keys
-func (b *ExportStorage_S3) Keys() s3gof3r.Keys {
-	return s3gof3r.Keys{
-		AccessKey: b.AccessKey,
-		SecretKey: b.Secret,
+// Keys returns credentials in an aws.Config.
+func (b *ExportStorage_S3) Keys() *aws.Config {
+	return &aws.Config{
+		Credentials: credentials.NewStaticCredentials(b.AccessKey, b.Secret, ""),
 	}
 }
 
