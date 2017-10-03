@@ -166,7 +166,14 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if at.RunSchemaChanges {
+	// Rebalancing is tested in all the rebalancing tests. Speed up the
+	// execution of the schema change test by not waiting for rebalancing.
+	if !at.RunSchemaChanges {
+		log.Info(ctx, "waiting for rebalance to finish")
+		if err := at.WaitForRebalance(ctx, t); err != nil {
+			t.Fatal(err)
+		}
+	} else {
 		log.Info(ctx, "running schema changes while cluster is rebalancing")
 		// These schema changes are over a table that is not actively
 		// being updated.
@@ -212,11 +219,6 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 		); err != nil {
 			t.Fatal(err)
 		}
-	}
-
-	log.Info(ctx, "waiting for rebalance to finish")
-	if err := at.WaitForRebalance(ctx, t); err != nil {
-		t.Fatal(err)
 	}
 
 	at.f.Assert(ctx, t)
