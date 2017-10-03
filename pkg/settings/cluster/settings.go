@@ -150,10 +150,16 @@ func (ecv *ExposedClusterVersion) BootstrapVersion() ClusterVersion {
 	}
 }
 
-// IsActive returns true if the features of the supplied version are active at
-// the running version.
-func (ecv *ExposedClusterVersion) IsActive(v roachpb.Version) bool {
-	return ecv.Version().IsActive(v)
+// IsActive returns true if the features of the supplied version key are active at the running
+// version.
+func (ecv *ExposedClusterVersion) IsActive(versionKey VersionKey) bool {
+	return ecv.Version().IsActive(versionKey)
+}
+
+// IsActiveVersion returns true if the features of the supplied version are active at the running
+// version.
+func (ecv *ExposedClusterVersion) IsActiveVersion(v roachpb.Version) bool {
+	return ecv.Version().IsActiveVersion(v)
 }
 
 // MakeTestingClusterSettings returns a Settings object that has had its version
