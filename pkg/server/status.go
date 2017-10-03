@@ -906,21 +906,21 @@ func (s *statusServer) Ranges(
 	}
 
 	convertRaftStatus := func(raftStatus *raft.Status) serverpb.RaftState {
-		var state serverpb.RaftState
 		if raftStatus == nil {
-			state.State = raftStateDormant
-			return state
+			return serverpb.RaftState{
+				State: raftStateDormant,
+			}
 		}
 
-		state.ReplicaID = raftStatus.ID
-		state.HardState = raftStatus.HardState
-		state.Applied = raftStatus.Applied
+		state := serverpb.RaftState{
+			ReplicaID: raftStatus.ID,
+			HardState: raftStatus.HardState,
+			Applied:   raftStatus.Applied,
+			Lead:      raftStatus.Lead,
+			State:     raftStatus.RaftState.String(),
+			Progress:  make(map[uint64]serverpb.RaftState_Progress),
+		}
 
-		// Grab Lead and State, which together form the SoftState.
-		state.Lead = raftStatus.Lead
-		state.State = raftStatus.RaftState.String()
-
-		state.Progress = make(map[uint64]serverpb.RaftState_Progress)
 		for id, progress := range raftStatus.Progress {
 			state.Progress[id] = serverpb.RaftState_Progress{
 				Match:           progress.Match,
@@ -964,6 +964,7 @@ func (s *statusServer) Ranges(
 			CmdQLocal:   serverpb.CommandQueueMetrics(metrics.CmdQMetricsLocal),
 			CmdQGlobal:  serverpb.CommandQueueMetrics(metrics.CmdQMetricsGlobal),
 			LeaseStatus: metrics.LeaseStatus,
+			Quiescent:   metrics.Quiescent,
 		}
 	}
 

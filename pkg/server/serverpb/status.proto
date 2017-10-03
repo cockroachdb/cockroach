@@ -176,6 +176,7 @@ message RangeInfo {
   CommandQueueMetrics cmd_q_local = 11 [(gogoproto.nullable) = false];
   CommandQueueMetrics cmd_q_global = 12 [(gogoproto.nullable) = false];
   storage.LeaseStatus lease_status = 13 [(gogoproto.nullable) = false];
+  bool quiescent = 14;
 }
 
 message RangesRequest {
