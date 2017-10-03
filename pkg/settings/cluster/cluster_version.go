@@ -26,7 +26,7 @@ var (
 	// BinaryServerVersion is the version of this binary.
 	//
 	// NB: This is the version that a new cluster will use when created.
-	BinaryServerVersion = VersionMVCCNetworkStats
+	BinaryServerVersion = VersionMeta2Splits
 )
 
 // List all historical versions here in reverse chronological order, with
@@ -42,6 +42,9 @@ var (
 // bumping to a new minor version until the prior 1.X.0 release has been
 // performed.
 var (
+	// VersionMeta2Splits is is https://github.com/cockroachdb/cockroach/pull/18970.
+	VersionMeta2Splits = roachpb.Version{Major: 1, Minor: 1, Unstable: 3}
+
 	// VersionMVCCNetworkStats is https://github.com/cockroachdb/cockroach/pull/18828.
 	VersionMVCCNetworkStats = roachpb.Version{Major: 1, Minor: 1, Unstable: 2}
 

@@ -66,6 +66,7 @@ kv.bulk_io_write.max_rate                          8.0 EiB        z     the rate
 kv.gc.batch_size                                   100000         i     maximum number of keys in a batch for MVCC garbage collection
 kv.raft.command.max_size                           64 MiB         z     maximum size of a raft command
 kv.raft_log.synchronize                            true           b     set to true to synchronize on Raft log writes to persistent storage
+kv.range_descriptor_cache.lookup_prefetch_count    8              i     maximum number of range descriptors to prefetch during range lookups
 kv.range_descriptor_cache.size                     1000000        i     maximum number of entries in the range descriptor and leaseholder caches
 kv.snapshot_rebalance.max_rate                     2.0 MiB        z     the rate limit (bytes/sec) to use for rebalance snapshots
 kv.snapshot_recovery.max_rate                      8.0 MiB        z     the rate limit (bytes/sec) to use for recovery snapshots
@@ -93,7 +94,7 @@ timeseries.resolution_10s.storage_duration         720h0m0s       d     the amou
 trace.debug.enable                                 false          b     if set, traces for recent requests can be seen in the /debug page
 trace.lightstep.token                              ·              s     if set, traces go to Lightstep using this token
 trace.zipkin.collector                             ·              s     if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'); ignored if trace.lightstep.token is set.
-version                                            1.1-2          m     set the active cluster version in the format '<major>.<minor>'.
+version                                            1.1-3          m     set the active cluster version in the format '<major>.<minor>'.
 
 query T colnames
 SELECT * FROM [SHOW SESSION_USER]
