@@ -16,7 +16,7 @@ if [[ "$TC_BUILD_BRANCH" != *-* ]] && [ "$TEAMCITY_BUILDCONF_NAME" == 'Publish R
   image=docker.io/cockroachdb/cockroach
 
   cp cockroach-linux-2.6.32-gnu-amd64 build/deploy/cockroach
-  docker build --tag=$image:{latest,"$TC_BUILD_BRANCH"} build/deploy
+  docker build --no-cache --tag=$image:{latest,"$TC_BUILD_BRANCH"} build/deploy
 
   TYPE=release-$(go env GOOS)
   case $TYPE in
