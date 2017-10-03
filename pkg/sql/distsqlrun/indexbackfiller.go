@@ -151,7 +151,7 @@ func (ib *indexBackfiller) runChunk(
 		}
 
 		for i := int64(0); i < chunkSize; i++ {
-			encRow, err := ib.fetcher.NextRow(ctx, false /* traceKV */)
+			encRow, err := ib.fetcher.NextRow(ctx)
 			if err != nil {
 				return nil, err
 			}
