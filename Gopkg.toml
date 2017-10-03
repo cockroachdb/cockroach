@@ -52,3 +52,7 @@ ignored = [
 [[constraint]]
   name = "github.com/coreos/etcd"
   branch = "master"
+
+[[constraint]]
+  name = "github.com/rlmcpherson/s3gof3r"
+  revision = "864ae0bf7cf2e20c0002b7ea17f4d84fec1abc14"
