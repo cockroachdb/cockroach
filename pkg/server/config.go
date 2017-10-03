@@ -75,8 +75,11 @@ const (
 
 	minimumNetworkFileDescriptors     = 256
 	recommendedNetworkFileDescriptors = 5000
+)
 
-	productionSettingsWebpage = "please see https://www.cockroachlabs.com/docs/stable/recommended-production-settings.html for more details"
+var productionSettingsWebpage = fmt.Sprintf(
+	"please see %s for more details",
+	base.DocsURL("recommended-production-settings.html"),
 )
 
 // MaxOffsetType stores the configured MaxOffset.

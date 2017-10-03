@@ -1,6 +1,7 @@
 import React from "react";
 import _ from "lodash";
 
+import docsURL from "src/util/docs";
 import { LineGraph } from "src/views/cluster/components/linegraph";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
 
@@ -87,7 +88,7 @@ export default function (props: GraphDashboardProps) {
                 Control this value per node with the
                   <code>
                   <a
-                    href="https://www.cockroachlabs.com/docs/stable/start-a-node.html#flags"
+                    href={docsURL("start-a-node.html#flags")}
                     target="_blank"
                   >
                     --store
