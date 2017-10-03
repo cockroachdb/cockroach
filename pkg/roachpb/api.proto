@@ -230,6 +230,11 @@ message ScanRequest {
   reserved 2;
 
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // Set to true if the KeyValue pairs for all intents encountered during the
+  // scan should also be returned. An error will be thrown if this is set to
+  // true for a consistent scan.
+  optional bool return_intents = 3 [(gogoproto.nullable) = false];
 }
 
 // A ScanResponse is the return value from the Scan() method.
@@ -237,6 +242,9 @@ message ScanResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Empty if no rows were scanned.
   repeated KeyValue rows = 2 [(gogoproto.nullable) = false];
+  // Empty if return_intents was not set to true of if no intent rows were
+  // scanned. These rows do not count against the MaxSpanRequestKeys count.
+  repeated KeyValue intent_rows = 3 [(gogoproto.nullable) = false];
 }
 
 // A ReverseScanRequest is the argument to the ReverseScan() method. It specifies the
@@ -248,6 +256,11 @@ message ReverseScanRequest {
   reserved 2;
 
   optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // Set to true if the KeyValue pairs for all intents encountered during the
+  // scan should also be returned. An error will be thrown if this is set to
+  // true for a consistent scan.
+  optional bool return_intents = 3 [(gogoproto.nullable) = false];
 }
 
 // A ReverseScanResponse is the return value from the ReverseScan() method.
@@ -255,6 +268,9 @@ message ReverseScanResponse {
   optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Empty if no rows were scanned.
   repeated KeyValue rows = 2 [(gogoproto.nullable) = false];
+  // Empty if return_intents was not set to true of if no intent rows were
+  // scanned. These rows do not count against the MaxSpanRequestKeys count.
+  repeated KeyValue intent_rows = 3 [(gogoproto.nullable) = false];
 }
 
 // A CheckConsistencyRequest is the argument to the CheckConsistency() method.
