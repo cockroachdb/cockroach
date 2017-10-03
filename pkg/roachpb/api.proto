@@ -846,6 +846,7 @@ message ExportStorage {
 
     optional string bucket = 1 [(gogoproto.nullable) = false];
     optional string prefix = 2 [(gogoproto.nullable) = false];
+    optional string auth = 3 [(gogoproto.nullable) = false];
   }
   message Azure {
     option (gogoproto.equal) = true;
