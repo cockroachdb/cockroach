@@ -30,6 +30,7 @@ import (
 // execution.
 // It is used as the top-level node for SHOW TRACE FOR statements.
 type traceNode struct {
+	// plan is the wrapped execution plan that will be traced.
 	plan    planNode
 	columns sqlbase.ResultColumns
 	p       *planner
@@ -38,6 +39,9 @@ type traceNode struct {
 
 	traceRows []traceRow
 	curRow    int
+	// If set, the trace will also include "KV trace" messages - verbose messages
+	// around the interaction of SQL with KV. Some of the messages are per-row.
+	KVTracingEnabled bool
 }
 
 var sessionTraceTableName = parser.TableName{
@@ -45,15 +49,23 @@ var sessionTraceTableName = parser.TableName{
 	TableName:    parser.Name("session_trace"),
 }
 
-func (p *planner) makeTraceNode(plan planNode) (planNode, error) {
+// makeTraceNode creates a new traceNode.
+//
+// Args:
+// plan: The wrapped execution plan to be traced.
+// KVTrancingEnabled: If set, the trace will also include "KV trace" messages -
+//   verbose messages around the interaction of SQL with KV. Some of the
+//   messages are per-row.
+func (p *planner) makeTraceNode(plan planNode, KVTracingEnabled bool) (planNode, error) {
 	desc, err := p.getVirtualTabler().getVirtualTableDesc(&sessionTraceTableName)
 	if err != nil {
 		return nil, err
 	}
 	return &traceNode{
-		plan:    plan,
-		p:       p,
-		columns: sqlbase.ResultColumnsFromColDescs(desc.Columns),
+		plan:             plan,
+		p:                p,
+		columns:          sqlbase.ResultColumnsFromColDescs(desc.Columns),
+		KVTracingEnabled: KVTracingEnabled,
 	}, nil
 }
 
@@ -65,7 +77,9 @@ func (n *traceNode) Start(params runParams) error {
 	if n.p.session.Tracing.Enabled() {
 		return errTracingAlreadyEnabled
 	}
-	if err := n.p.session.Tracing.StartTracing(tracing.SnowballRecording, true); err != nil {
+	if err := n.p.session.Tracing.StartTracing(
+		tracing.SnowballRecording, n.KVTracingEnabled,
+	); err != nil {
 		return err
 	}
 
