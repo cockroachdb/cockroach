@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
@@ -137,10 +136,11 @@ func (o *ordinalityNode) optimizeOrdering() {
 		o.ordering = origOrdering.copy()
 	} else {
 		// No ordering defined in the source, so create a new one.
+		o.ordering.eqGroups = origOrdering.eqGroups.Copy()
 		o.ordering.constantCols = origOrdering.constantCols.Copy()
-		o.ordering.ordering = []orderingColumnGroup{{
-			cols: util.MakeFastIntSet(uint32(len(o.columns) - 1)),
-			dir:  encoding.Ascending,
+		o.ordering.ordering = sqlbase.ColumnOrdering{{
+			ColIdx:    len(o.columns) - 1,
+			Direction: encoding.Ascending,
 		}}
 		o.ordering.isKey = true
 	}

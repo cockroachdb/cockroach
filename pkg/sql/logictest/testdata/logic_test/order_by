@@ -196,11 +196,11 @@ EXPLAIN SELECT b FROM t ORDER BY a DESC, b DESC
 query ITTTTT
 EXPLAIN(METADATA) SELECT * FROM t ORDER BY (b, t.*)
 ----
-0  sort  ·      ·            (a, b, c)  +b,+a,+b,+c
-0  ·     order  +b,+a,+b,+c  ·          ·
-1  scan  ·      ·            (a, b, c)  ·
-1  ·     table  t@primary    ·          ·
-1  ·     spans  ALL          ·          ·
+0  sort  ·      ·          (a, b, c)  +b,+a,+c
+0  ·     order  +b,+a,+c   ·          ·
+1  scan  ·      ·          (a, b, c)  ·
+1  ·     table  t@primary  ·          ·
+1  ·     spans  ALL        ·          ·
 
 query ITTTTT
 EXPLAIN(METADATA) SELECT * FROM t ORDER BY (b, a), c
@@ -510,11 +510,11 @@ EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, c
 ----
 0  nosort  ·         ·           (a, b)                 +b
 0  ·       order     +b,+c       ·                      ·
-1  render  ·         ·           (a, b, c)              +b,+c,key
+1  render  ·         ·           (a, b, c)              +b,+c; key
 1  ·       render 0  test.abc.a  ·                      ·
 1  ·       render 1  test.abc.b  ·                      ·
 1  ·       render 2  test.abc.c  ·                      ·
-2  scan    ·         ·           (a, b, c, d[omitted])  +b,+c,key
+2  scan    ·         ·           (a, b, c, d[omitted])  +b,+c; key
 2  ·       table     abc@bc      ·                      ·
 2  ·       spans     ALL         ·                      ·
 
@@ -611,12 +611,12 @@ EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 query ITTTTT
 EXPLAIN (METADATA) SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) ORDER BY b,c
 ----
-0  nosort  ·      ·            (b, c)                 +b,+c,key
-0  ·       order  +b,+c        ·                      ·
-1  render  ·      ·            (b, c, a[omitted])     =a,+b,+c,key
-2  scan    ·      ·            (a[omitted], b, c, d[omitted])  =a,+b,+c,key
-2  ·       table  abc@primary  ·                      ·
-2  ·       spans  /1-/2        ·                      ·
+0  nosort  ·      ·            (b, c)                          +b,+c; key
+0  ·       order  +b,+c        ·                               ·
+1  render  ·      ·            (b, c, a[omitted])     a=CONST; +b,+c; key
+2  scan    ·      ·            (a[omitted], b, c, d[omitted])  a=CONST; +b,+c; key
+2  ·       table  abc@primary  ·                               ·
+2  ·       spans  /1-/2        ·                               ·
 
 statement ok
 CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz))
@@ -627,7 +627,7 @@ INSERT INTO bar VALUES (0, NULL), (1, NULL)
 query ITTTTT
 EXPLAIN (METADATA) SELECT * FROM bar ORDER BY baz, id
 ----
-0  scan  ·      ·          (id, baz)  +baz,key
+0  scan  ·      ·          (id, baz)  +baz; key
 0  ·     table  bar@i_bar  ·          ·
 0  ·     spans  ALL        ·          ·
 
@@ -746,7 +746,7 @@ EXPLAIN (METADATA) INSERT INTO t(a, b) SELECT * FROM (SELECT 1 AS x, 2 AS y) ORD
 ----
 0  insert    ·     ·        (b)     ·
 0  ·         into  t(a, b)  ·       ·
-1  render    ·     ·        (x, y)  =x,=y
+1  render    ·     ·        (x, y)  x=CONST; y=CONST
 2  emptyrow  ·     ·        ()      ·
 
 query ITTTTT
@@ -764,7 +764,7 @@ EXPLAIN (METADATA) UPDATE t SET c = TRUE RETURNING b
 0  update  ·      ·          (b)                ·
 0  ·       table  t          ·                  ·
 0  ·       set    c          ·                  ·
-1  render  ·      ·          (a, b, c, "true")  ="true"
+1  render  ·      ·          (a, b, c, "true")  "true"=CONST
 2  scan    ·      ·          (a, b, c)          ·
 2  ·       table  t@primary  ·                  ·
 2  ·       spans  ALL        ·                  ·
@@ -786,8 +786,8 @@ CREATE TABLE uvwxyz (
 query ITTTTT
 EXPLAIN (METADATA) SELECT * FROM (SELECT y, w, x FROM uvwxyz WHERE y = 1 ORDER BY w) ORDER BY w, x
 ----
-0  render  ·      ·            (y, w, x)                                                             =y,+w,+x
-1  scan    ·      ·            (u[omitted], v[omitted], w, x, y, z[omitted], rowid[hidden,omitted])  =y,+w,+x
+0  render  ·      ·            (y, w, x)                                                             y=CONST; +w,+x
+1  scan    ·      ·            (u[omitted], v[omitted], w, x, y, z[omitted], rowid[hidden,omitted])  y=CONST; +w,+x
 1  ·       table  uvwxyz@ywxz  ·                                                                     ·
 1  ·       spans  /1-/2        ·                                                                     ·
 
@@ -806,9 +806,9 @@ CREATE TABLE blocks (
 query ITTTTT
 EXPLAIN (METADATA) SELECT block_id,writer_id,block_num,block_id FROM blocks ORDER BY block_id, writer_id, block_num LIMIT 1
 ----
-0  limit   ·      ·               (block_id, writer_id, block_num, block_id)            +block_id,+writer_id,+block_num,key
-1  render  ·      ·               (block_id, writer_id, block_num, block_id)            +block_id,+writer_id,+block_num,key
-2  scan    ·      ·               (block_id, writer_id, block_num, raw_bytes[omitted])  +block_id,+writer_id,+block_num,key
+0  limit   ·      ·               (block_id, writer_id, block_num, block_id)            block_id=block_id; +block_id,+writer_id,+block_num; key
+1  render  ·      ·               (block_id, writer_id, block_num, block_id)            block_id=block_id; +block_id,+writer_id,+block_num; key
+2  scan    ·      ·               (block_id, writer_id, block_num, raw_bytes[omitted])  +block_id,+writer_id,+block_num; key
 2  ·       table  blocks@primary  ·                                                     ·
 2  ·       spans  ALL             ·                                                     ·
 2  ·       limit  1               ·                                                     ·

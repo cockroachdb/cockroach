@@ -118,11 +118,11 @@ CREATE TABLE tc (a INT, b INT, INDEX c(a))
 query ITTTTT
 EXPLAIN (METADATA) SELECT * FROM tc WHERE a = 10 ORDER BY b
 ----
-0  sort        ·      ·           (a, b)                                   =a,+b
+0  sort        ·      ·           (a, b)                                   a=CONST; +b
 0  ·           order  +b          ·                                        ·
-1  render      ·      ·           (a, b)                                   =a
-2  index-join  ·      ·           (a, b, rowid[hidden,omitted])            =a
-3  scan        ·      ·           (a[omitted], b[omitted], rowid[hidden])  =a
+1  render      ·      ·           (a, b)                                   a=CONST
+2  index-join  ·      ·           (a, b, rowid[hidden,omitted])            a=CONST
+3  scan        ·      ·           (a[omitted], b[omitted], rowid[hidden])  a=CONST
 3  ·           table  tc@c        ·                                        ·
 3  ·           spans  /10-/11     ·                                        ·
 3  scan        ·      ·           (a, b, rowid[hidden,omitted])            ·
