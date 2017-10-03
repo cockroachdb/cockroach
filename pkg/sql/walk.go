@@ -206,7 +206,7 @@ func (v *planVisitor) visit(plan planNode) {
 				}
 				var order orderingInfo
 				for _, o := range n.mergeJoinOrdering {
-					order.addColumn(o.ColIdx, o.Direction)
+					order.addOrderColumn(o.ColIdx, o.Direction)
 				}
 				v.observer.attr(name, "mergeJoinOrder", order.AsString(eqCols))
 			}
@@ -249,7 +249,7 @@ func (v *planVisitor) visit(plan planNode) {
 			// present in the output.
 			var order orderingInfo
 			for _, o := range n.ordering {
-				order.addColumn(o.ColIdx, o.Direction)
+				order.addOrderColumn(o.ColIdx, o.Direction)
 			}
 			v.observer.attr(name, "order", order.AsString(columns))
 			switch ss := n.sortStrategy.(type) {
