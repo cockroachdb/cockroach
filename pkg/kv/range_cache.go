@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -51,26 +52,46 @@ func (a rangeCacheKey) Compare(b llrb.Comparable) int {
 // underlying datastore. This interface is used by rangeDescriptorCache to
 // initially retrieve information which will be cached.
 type RangeDescriptorDB interface {
-	// RangeLookup takes a meta key to look up descriptors for and a descriptor
-	// of the range believed to hold the meta key. Two slices of range
+	// RangeLookup takes a key to look up descriptors for. Two slices of range
 	// descriptors are returned. The first of these slices holds descriptors
-	// which contain the given key (possibly from intents), and the second holds
-	// prefetched adjacent descriptors.
+	// whose [startKey,endKey) spans contain the given key (possibly from
+	// intents), and the second holds prefetched adjacent descriptors.
 	RangeLookup(
+		ctx context.Context, key roachpb.RKey, useReverseScan bool,
+	) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error)
+
+	// FirstRange returns the descriptor for the first Range. This is the
+	// Range containing all meta1 entries.
+	FirstRange() (*roachpb.RangeDescriptor, error)
+}
+
+// legacyRangeDescriptorDB is a type which can query range descriptors from an
+// underlying datastore. It is a superset of RangeDescriptorDB which can also
+// perform compatibility RangeLookups using RangeLookupRequest batches.
+type legacyRangeDescriptorDB interface {
+	RangeDescriptorDB
+
+	// legacyRangeLookup takes a key to look up descriptors for and a descriptor
+	// of the range believed to hold the key's range metadata key. Two slices of
+	// range descriptors are returned. The first of these slices holds
+	// descriptors which contain key (possibly from intents), and the second
+	// holds prefetched adjacent descriptors.
+	//
+	// Implementations of legacyRangeLookup do not need to properly handle meta2
+	// splits. As such, a cluster with meta2 splits should not use this method.
+	legacyRangeLookup(
 		ctx context.Context,
 		key roachpb.RKey,
 		desc *roachpb.RangeDescriptor,
 		useReverseScan bool,
 	) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error)
-	// FirstRange returns the descriptor for the first Range. This is the
-	// Range containing all meta1 entries.
-	FirstRange() (*roachpb.RangeDescriptor, error)
 }
 
 // RangeDescriptorCache is used to retrieve range descriptors for
 // arbitrary keys. Descriptors are initially queried from storage
 // using a RangeDescriptorDB, but are cached for subsequent lookups.
 type RangeDescriptorCache struct {
+	st *cluster.Settings
 	// RangeDescriptorDB is used to retrieve range descriptors from the
 	// database, which will be cached by this structure.
 	db RangeDescriptorDB
@@ -139,8 +160,10 @@ func makeLookupRequestKey(key roachpb.RKey, evictToken *EvictionToken, useRevers
 // NewRangeDescriptorCache returns a new RangeDescriptorCache which
 // uses the given RangeDescriptorDB as the underlying source of range
 // descriptors.
-func NewRangeDescriptorCache(db RangeDescriptorDB, size func() int64) *RangeDescriptorCache {
-	rdc := &RangeDescriptorCache{db: db}
+func NewRangeDescriptorCache(
+	st *cluster.Settings, db RangeDescriptorDB, size func() int64,
+) *RangeDescriptorCache {
+	rdc := &RangeDescriptorCache{st: st, db: db}
 	rdc.rangeCache.cache = cache.NewOrderedCache(cache.Config{
 		Policy: cache.CacheLRU,
 		ShouldEvict: func(n int, _, _ interface{}) bool {
@@ -388,6 +411,29 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 func (rdc *RangeDescriptorCache) performRangeLookup(
 	ctx context.Context, key roachpb.RKey, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
+	// Tag inner operations.
+	ctx = log.WithLogTag(ctx, "range-lookup", nil)
+	if !rdc.st.Version.IsActive(cluster.VersionMeta2Splits) {
+		return rdc.performLegacyRangeLookup(ctx, key, useReverseScan)
+	}
+
+	// In this case, the requested key is stored in the cluster's first
+	// range. Return the first range, which is always gossiped and not
+	// queried from the datastore.
+	if keys.RangeMetaKey(key).Equal(roachpb.RKeyMin) {
+		desc, err := rdc.db.FirstRange()
+		if err != nil {
+			return nil, nil, err
+		}
+		return []roachpb.RangeDescriptor{*desc}, nil, nil
+	}
+
+	return rdc.db.RangeLookup(ctx, key, useReverseScan)
+}
+
+func (rdc *RangeDescriptorCache) performLegacyRangeLookup(
+	ctx context.Context, key roachpb.RKey, useReverseScan bool,
+) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 	// metadataKey is sent to RangeLookup to find the RangeDescriptor
 	// which contains key.
 	metadataKey := keys.RangeMetaKey(key)
@@ -420,9 +466,10 @@ func (rdc *RangeDescriptorCache) performRangeLookup(
 			return nil, nil, err
 		}
 	}
-	// Tag inner operations.
-	ctx = log.WithLogTag(ctx, "range-lookup", nil)
-	return rdc.db.RangeLookup(ctx, metadataKey, desc, useReverseScan)
+
+	// Will panic if not provided a legacyRangeDescriptorDB.
+	compatDB := rdc.db.(legacyRangeDescriptorDB)
+	return compatDB.legacyRangeLookup(ctx, key, desc, useReverseScan)
 }
 
 // EvictCachedRangeDescriptor will evict any cached user-space and meta range

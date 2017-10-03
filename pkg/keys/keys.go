@@ -370,7 +370,7 @@ func IsLocal(k roachpb.Key) bool {
 // incorporating the Range ID are not (e.g. abort cache entries, and range
 // stats).
 //
-// See AddrEndKey which is to be used when `k` is the EndKey of an interval.
+// See AddrUpperBound which is to be used when `k` is the EndKey of an interval.
 func Addr(k roachpb.Key) (roachpb.RKey, error) {
 	if !IsLocal(k) {
 		return roachpb.RKey(k), nil
