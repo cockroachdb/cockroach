@@ -357,7 +357,7 @@ There are several scenarios in which transactions interact:
   In that case, we would need to take this value into account, but
   we just don't know. Hence the transaction restarts, using instead
   a future timestamp (but remembering a maximum timestamp used to
-  limit the uncertainty window to the maximum clock skew). In fact,
+  limit the uncertainty window to the maximum clock offset). In fact,
   this is optimized further; see the details under "choosing a time
   stamp" below.
 
@@ -469,7 +469,7 @@ Please see [pkg/roachpb/data.proto](https://github.com/cockroachdb/cockroach/blo
 
 **Choosing a Timestamp**
 
-A key challenge of reading data in a distributed system with clock skew
+A key challenge of reading data in a distributed system with clock offset
 is choosing a timestamp guaranteed to be greater than the latest
 timestamp of any committed transaction (in absolute time). No system can
 claim consistency and fail to read already-committed data.
@@ -482,7 +482,7 @@ existing timestamped data on the node.
 For multiple nodes, the timestamp of the node coordinating the
 transaction `t` is used. In addition, a maximum timestamp `t+ε` is
 supplied to provide an upper bound on timestamps for already-committed
-data (`ε` is the maximum clock skew). As the transaction progresses, any
+data (`ε` is the maximum clock offset). As the transaction progresses, any
 data read which have timestamps greater than `t` but less than `t+ε`
 cause the transaction to abort and retry with the conflicting timestamp
 t<sub>c</sub>, where t<sub>c</sub> \> t. The maximum timestamp `t+ε` remains
