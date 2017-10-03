@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -169,7 +170,7 @@ func runLoadShow(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	}
-	desc, err := sqlccl.ReadBackupDescriptorFromURI(ctx, basepath)
+	desc, err := sqlccl.ReadBackupDescriptorFromURI(ctx, basepath, cluster.NoSettings)
 	if err != nil {
 		return err
 	}

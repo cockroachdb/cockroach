@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -41,7 +42,7 @@ func TestRegistryCancelation(t *testing.T) {
 	var ex sqlutil.InternalExecutor
 	var gossip *gossip.Gossip
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	registry := MakeRegistry(clock, db, ex, gossip, FakeNodeID, FakeClusterID)
+	registry := MakeRegistry(clock, db, ex, gossip, FakeNodeID, FakeClusterID, cluster.NoSettings)
 
 	const nodeCount = 1
 	nodeLiveness := NewFakeNodeLiveness(clock, nodeCount)
@@ -128,7 +129,7 @@ func TestRegistryRegister(t *testing.T) {
 	var ex sqlutil.InternalExecutor
 	var gossip *gossip.Gossip
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	registry := MakeRegistry(clock, db, ex, gossip, FakeNodeID, FakeClusterID)
+	registry := MakeRegistry(clock, db, ex, gossip, FakeNodeID, FakeClusterID, cluster.NoSettings)
 
 	if err := registry.register(42, &Job{}); err != nil {
 		t.Fatal(err)

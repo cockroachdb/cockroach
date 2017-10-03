@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -53,11 +54,13 @@ var restoreOptionExpectValues = map[string]bool{
 	restoreOptSkipMissingFKs: false,
 }
 
-func loadBackupDescs(ctx context.Context, uris []string) ([]BackupDescriptor, error) {
+func loadBackupDescs(
+	ctx context.Context, uris []string, settings *cluster.Settings,
+) ([]BackupDescriptor, error) {
 	backupDescs := make([]BackupDescriptor, len(uris))
 
 	for i, uri := range uris {
-		desc, err := ReadBackupDescriptorFromURI(ctx, uri)
+		desc, err := ReadBackupDescriptorFromURI(ctx, uri, settings)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to read backup descriptor")
 		}
@@ -1009,7 +1012,7 @@ func doRestorePlan(
 	if err := restoreStmt.Targets.NormalizeTablesWithDatabase(p.EvalContext().Database); err != nil {
 		return err
 	}
-	backupDescs, err := loadBackupDescs(ctx, from)
+	backupDescs, err := loadBackupDescs(ctx, from, p.ExecCfg().Settings)
 	if err != nil {
 		return err
 	}
@@ -1067,7 +1070,9 @@ func doRestorePlan(
 	return nil
 }
 
-func restoreResumeHook(typ jobs.Type) func(ctx context.Context, job *jobs.Job) error {
+func restoreResumeHook(
+	typ jobs.Type, settings *cluster.Settings,
+) func(ctx context.Context, job *jobs.Job) error {
 	if typ != jobs.TypeRestore {
 		return nil
 	}
@@ -1075,7 +1080,7 @@ func restoreResumeHook(typ jobs.Type) func(ctx context.Context, job *jobs.Job) e
 	return func(ctx context.Context, job *jobs.Job) error {
 		details := job.Record.Details.(jobs.RestoreDetails)
 
-		backupDescs, err := loadBackupDescs(ctx, details.URIs)
+		backupDescs, err := loadBackupDescs(ctx, details.URIs, settings)
 		if err != nil {
 			return err
 		}
