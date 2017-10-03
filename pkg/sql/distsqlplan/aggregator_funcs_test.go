@@ -20,6 +20,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
@@ -33,15 +34,25 @@ import (
 )
 
 var (
-	// compareCtx is a decimal context with reduced precision for comparing decimal
-	// results.  For some decimal aggregate operations there will often be
+	// compareCtx is a decimal context with reduced precision for comparing
+	// decimal results.
+	// For some decimal aggregate operations there will often be
 	// unavoidable off-by-last-digit errors, which is semantically okay.
-	compareCtx = parser.DecimalCtx.WithPrecision(parser.DecimalCtx.Precision - 1)
-	// floatPrecFmt is the format string with a precision of 10 (after
+	compareCtx = &apd.Context{
+		Precision: parser.DecimalCtx.Precision - 1,
+		// We truncate down instead of rounding since the last digit
+		// may cause the new last digit to also be off by one.
+		// For example, if we use the default RoundHalfUp and the last
+		// digits of the decimals we want to compare are 4 and 5,
+		// then the former will be rounded down and the latter will
+		// be rounded up.
+		Rounding: apd.RoundDown,
+	}
+	// floatPrecFmt is the format string with a precision of 3 (after
 	// decimal point) specified for float comparisons. Float aggregation
 	// operations involve unavoidable off-by-last-few-digits errors, which
 	// is expected.
-	floatPrecFmt = "%.10f"
+	floatPrecFmt = "%.3f"
 )
 
 // runTestFlow runs a flow with the given processors and returns the results.
