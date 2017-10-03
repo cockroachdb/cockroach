@@ -45,21 +45,13 @@ var importBatchSize = settings.RegisterByteSizeSetting(
 	32<<20,
 )
 
-// AddSSTableEnabled wraps "kv.import.experimental_addsstable.enabled".
-var AddSSTableEnabled = settings.RegisterBoolSetting(
-	"kv.import.experimental_addsstable.enabled",
-	"set to true to use the AddSSTable command in Import or false to use WriteBatch",
-	true,
-)
-
 // commandMetadataEstimate is an estimate of how much metadata Raft will add to
-// a WriteBatch or AddSSTable command. It is intentionally a vast overestimate
-// to avoid embedding intricate knowledge of the Raft encoding scheme here.
+// an AddSSTable command. It is intentionally a vast overestimate to avoid
+// embedding intricate knowledge of the Raft encoding scheme here.
 const commandMetadataEstimate = 1 << 20 // 1 MB
 
 func init() {
 	importBatchSize.Hide()
-	AddSSTableEnabled.Hide()
 	storage.SetImportCmd(evalImport)
 
 	// Ensure that the user cannot set the maximum raft command size so low that
@@ -71,10 +63,10 @@ func init() {
 	}
 }
 
-// maxImportBatchSize determines the maximum size of the payload in a WriteBatch
-// or AddSSTable request. It uses the ImportBatchSize setting directly unless
-// the specified value would exceed the maximum Raft command size, in which case
-// it returns the maximum batch size that will fit within a Raft command.
+// maxImportBatchSize determines the maximum size of the payload in an
+// AddSSTable request. It uses the ImportBatchSize setting directly unless the
+// specified value would exceed the maximum Raft command size, in which case it
+// returns the maximum batch size that will fit within a Raft command.
 func maxImportBatchSize(st *cluster.Settings) int64 {
 	desiredSize := importBatchSize.Get(&st.SV)
 	maxCommandSize := storage.MaxCommandSize.Get(&st.SV)
@@ -84,74 +76,11 @@ func maxImportBatchSize(st *cluster.Settings) int64 {
 	return desiredSize
 }
 
-type importBatcher interface {
-	Add(engine.MVCCKey, []byte) error
-	Size() int64
-	Finish(context.Context, *client.DB) error
-	Close()
-}
-
-type writeBatcher struct {
-	batch         engine.RocksDBBatchBuilder
-	batchStartKey []byte
-	batchEndKey   []byte
-}
-
-var _ importBatcher = &writeBatcher{}
-
-func (b *writeBatcher) Add(key engine.MVCCKey, value []byte) error {
-	// Update the range currently represented in this batch, as
-	// necessary.
-	if len(b.batchStartKey) == 0 || bytes.Compare(key.Key, b.batchStartKey) < 0 {
-		b.batchStartKey = append(b.batchStartKey[:0], key.Key...)
-	}
-	if len(b.batchEndKey) == 0 || bytes.Compare(key.Key, b.batchEndKey) > 0 {
-		b.batchEndKey = append(b.batchEndKey[:0], key.Key...)
-	}
-
-	b.batch.Put(key, value)
-	return nil
-}
-
-func (b *writeBatcher) Size() int64 {
-	return int64(b.batch.Len())
-}
-
-func (b *writeBatcher) Finish(ctx context.Context, db *client.DB) error {
-	start := roachpb.Key(b.batchStartKey)
-	// The end key of the WriteBatch request is exclusive, but batchEndKey is
-	// currently the largest key in the batch. Increment it.
-	end := roachpb.Key(b.batchEndKey).Next()
-
-	repr := b.batch.Finish()
-	if log.V(1) {
-		log.Infof(ctx, "writebatch [%s,%s)", start, end)
-	}
-
-	const maxWriteBatchRetries = 10
-	for i := 0; ; i++ {
-		err := db.WriteBatch(ctx, start, end, repr)
-		if err == nil {
-			return nil
-		}
-		if _, ok := err.(*roachpb.AmbiguousResultError); i == maxWriteBatchRetries || !ok {
-			return errors.Wrapf(err, "writebatch [%s,%s)", start, end)
-		}
-		log.Warningf(ctx, "writebatch [%s,%s) attempt %d failed: %+v",
-			start, end, i, err)
-		continue
-	}
-}
-
-func (b *writeBatcher) Close() {}
-
 type sstBatcher struct {
 	sstWriter     engine.RocksDBSstFileWriter
 	batchStartKey []byte
 	batchEndKey   []byte
 }
-
-var _ importBatcher = &sstBatcher{}
 
 func (b *sstBatcher) Add(key engine.MVCCKey, value []byte) error {
 	// Update the range currently represented in this batch, as
@@ -268,20 +197,16 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 		iters = append(iters, iter)
 	}
 
-	var batcher importBatcher
+	var batcher *sstBatcher
 	makeBatcher := func() error {
 		if batcher != nil {
 			return errors.New("cannot overwrite a batcher")
 		}
-		if AddSSTableEnabled.Get(&cArgs.EvalCtx.ClusterSettings().SV) {
-			sstWriter, err := engine.MakeRocksDBSstFileWriter()
-			if err != nil {
-				return errors.Wrapf(err, "making sstBatcher")
-			}
-			batcher = &sstBatcher{sstWriter: sstWriter}
-			return nil
+		sstWriter, err := engine.MakeRocksDBSstFileWriter()
+		if err != nil {
+			return errors.Wrapf(err, "making sstBatcher")
 		}
-		batcher = &writeBatcher{}
+		batcher = &sstBatcher{sstWriter: sstWriter}
 		return nil
 	}
 	if err := makeBatcher(); err != nil {
