@@ -59,6 +59,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libncurses-dev \
     make \
     nodejs \
+    openjdk-8-jre \
     openssh-client \
     patch \
     python \
