@@ -548,7 +548,7 @@ SELECT * FROM Orders o inner join Customers c ON o.CustomerID = c.ID WHERE Order
       table](https://www.cockroachlabs.com/docs/stable/column-families.html). For
       details on the mapping between SQL rows and KV pairs, see the
       [corresponding section from the Design
-      Doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md#data-mapping-between-the-sql-model-and-kv) and the [encoding tech note](encoding.md).
+      Doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md#data-mapping-between-the-sql-model-and-kv) and the [encoding tech note](20170222_encoding.md).
 
       The `rowFetcher` also [performs
       decoding](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/sql/sqlbase/table.go#L953)
