@@ -266,14 +266,8 @@ func TestReplicateRange(t *testing.T) {
 	// Verify that in time, no intents remain on meta addressing
 	// keys, and that range descriptor on the meta records is correct.
 	testutils.SucceedsSoon(t, func() error {
-		meta2, err := keys.Addr(keys.RangeMetaKey(roachpb.RKeyMax))
-		if err != nil {
-			t.Fatal(err)
-		}
-		meta1, err := keys.Addr(keys.RangeMetaKey(meta2))
-		if err != nil {
-			t.Fatal(err)
-		}
+		meta2 := keys.RangeMetaKey(roachpb.RKeyMax)
+		meta1 := keys.RangeMetaKey(meta2)
 		for _, key := range []roachpb.RKey{meta2, meta1} {
 			metaDesc := roachpb.RangeDescriptor{}
 			if ok, err := engine.MVCCGetProto(context.Background(), mtc.stores[0].Engine(), key.AsRawKey(), mtc.stores[0].Clock().Now(), true, nil, &metaDesc); err != nil {
@@ -1342,7 +1336,7 @@ func getRangeMetadata(
 	b := &client.Batch{}
 	b.AddRawRequest(&roachpb.RangeLookupRequest{
 		Span: roachpb.Span{
-			Key: keys.RangeMetaKey(key),
+			Key: keys.RangeMetaKey(key).AsRawKey(),
 		},
 		MaxRanges: 1,
 	})
