@@ -23,7 +23,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 
@@ -48,12 +47,12 @@ var specialZonesByID = map[sqlbase.ID]string{
 	keys.TimeseriesRangesID: timeseriesZoneName,
 }
 
-func unmarshalProto(val driver.Value, msg proto.Message) error {
+func unmarshalProto(val driver.Value, msg protoutil.Message) error {
 	raw, ok := val.([]byte)
 	if !ok {
 		return fmt.Errorf("unexpected value: %T", val)
 	}
-	return proto.Unmarshal(raw, msg)
+	return protoutil.Unmarshal(raw, msg)
 }
 
 func queryZones(conn *sqlConn) (map[sqlbase.ID]config.ZoneConfig, error) {

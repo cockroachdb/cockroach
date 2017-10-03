@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/gogo/protobuf/proto"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 var _ DescriptorProto = &DatabaseDescriptor{}
@@ -41,7 +41,7 @@ type DescriptorKey interface {
 // and TableDescriptor.
 // TODO(marc): this is getting rather large.
 type DescriptorProto interface {
-	proto.Message
+	protoutil.Message
 	GetPrivileges() *PrivilegeDescriptor
 	GetID() ID
 	SetID(ID)

@@ -163,10 +163,10 @@ func TestGoMerge(t *testing.T) {
 			continue
 		}
 		var resultV, expectedV enginepb.MVCCMetadata
-		if err := proto.Unmarshal(result, &resultV); err != nil {
+		if err := protoutil.Unmarshal(result, &resultV); err != nil {
 			t.Fatal(err)
 		}
-		if err := proto.Unmarshal(c.expected, &expectedV); err != nil {
+		if err := protoutil.Unmarshal(c.expected, &expectedV); err != nil {
 			t.Fatal(err)
 		}
 		if !reflect.DeepEqual(resultV, expectedV) {
@@ -294,7 +294,7 @@ func TestGoMerge(t *testing.T) {
 // a MVCCMetadata with an inline value.
 func unmarshalTimeSeries(t testing.TB, b []byte) roachpb.InternalTimeSeriesData {
 	var meta enginepb.MVCCMetadata
-	if err := proto.Unmarshal(b, &meta); err != nil {
+	if err := protoutil.Unmarshal(b, &meta); err != nil {
 		t.Fatalf("error unmarshalling time series in text: %s", err.Error())
 	}
 	valueTS, err := MakeValue(meta).GetTimeseries()

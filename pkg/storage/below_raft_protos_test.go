@@ -22,7 +22,6 @@ import (
 	"testing"
 
 	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/gogo/protobuf/proto"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -42,12 +41,6 @@ func verifyHash(b []byte, expectedSum uint64) error {
 	return nil
 }
 
-func marshalTo(pb proto.Message, b []byte) (int, error) {
-	return pb.(interface {
-		MarshalTo([]byte) (int, error)
-	}).MarshalTo(b)
-}
-
 // An arbitrary number chosen to seed the PRNGs used to populate the tested
 // protos.
 const goldenSeed = 1337
@@ -59,27 +52,27 @@ const goldenSeed = 1337
 const itersPerProto = 20
 
 type fixture struct {
-	populatedConstructor   func(*rand.Rand) proto.Message
+	populatedConstructor   func(*rand.Rand) protoutil.Message
 	emptySum, populatedSum uint64
 }
 
 var belowRaftGoldenProtos = map[reflect.Type]fixture{
 	reflect.TypeOf(&enginepb.MVCCMetadata{}): {
-		populatedConstructor: func(r *rand.Rand) proto.Message {
+		populatedConstructor: func(r *rand.Rand) protoutil.Message {
 			return enginepb.NewPopulatedMVCCMetadata(r, false)
 		},
 		emptySum:     7551962144604783939,
 		populatedSum: 8188088666885167358,
 	},
 	reflect.TypeOf(&enginepb.MVCCStats{}): {
-		populatedConstructor: func(r *rand.Rand) proto.Message {
+		populatedConstructor: func(r *rand.Rand) protoutil.Message {
 			return enginepb.NewPopulatedMVCCStats(r, false)
 		},
 		emptySum:     18064891702890239528,
 		populatedSum: 4287370248246326846,
 	},
 	reflect.TypeOf(&raftpb.HardState{}): {
-		populatedConstructor: func(r *rand.Rand) proto.Message {
+		populatedConstructor: func(r *rand.Rand) protoutil.Message {
 			n := r.Uint64()
 			// NB: this would rot if HardState ever picked up more (relevant)
 			// fields, but that's unlikely.
@@ -93,14 +86,14 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 		populatedSum: 13375098491754757572,
 	},
 	reflect.TypeOf(&roachpb.RangeDescriptor{}): {
-		populatedConstructor: func(r *rand.Rand) proto.Message {
+		populatedConstructor: func(r *rand.Rand) protoutil.Message {
 			return roachpb.NewPopulatedRangeDescriptor(r, false)
 		},
 		emptySum:     5524024218313206949,
 		populatedSum: 7661699749677660364,
 	},
 	reflect.TypeOf(&storage.Liveness{}): {
-		populatedConstructor: func(r *rand.Rand) proto.Message {
+		populatedConstructor: func(r *rand.Rand) protoutil.Message {
 			return storage.NewPopulatedLiveness(r, false)
 		},
 		emptySum:     892800390935990883,
@@ -129,7 +122,7 @@ func TestBelowRaftProtos(t *testing.T) {
 		bytes := slice
 		numBytes := 0
 		for i := 0; i < itersPerProto; i++ {
-			if n, err := marshalTo(fix.populatedConstructor(randGen), bytes); err != nil {
+			if n, err := fix.populatedConstructor(randGen).MarshalTo(bytes); err != nil {
 				t.Fatal(err)
 			} else {
 				bytes = bytes[n:]

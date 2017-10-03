@@ -33,7 +33,7 @@ import (
 
 func TestCloneProto(t *testing.T) {
 	testCases := []struct {
-		pb          proto.Message
+		pb          protoutil.Message
 		shouldPanic bool
 	}{
 		// Uncloneable types (all contain UUID fields).
@@ -54,7 +54,7 @@ func TestCloneProto(t *testing.T) {
 		{&roachpb.RangeDescriptor{}, false},
 	}
 	for _, tc := range testCases {
-		var clone proto.Message
+		var clone protoutil.Message
 		var panicObj interface{}
 		func() {
 			defer func() {

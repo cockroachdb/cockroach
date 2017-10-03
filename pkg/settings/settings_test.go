@@ -23,7 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/gogo/protobuf/proto"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -51,7 +51,20 @@ func (d *dummy) Marshal() ([]byte, error) {
 	return []byte(d.msg1 + "." + d.growsbyone), nil
 }
 
-// implement the proto.Message interface
+func (d *dummy) MarshalTo(data []byte) (int, error) {
+	encoded, err := d.Marshal()
+	if err != nil {
+		return 0, err
+	}
+	return copy(data, encoded), nil
+}
+
+func (d *dummy) Size() int {
+	encoded, _ := d.Marshal()
+	return len(encoded)
+}
+
+// implement the protoutil.Message interface
 func (d *dummy) ProtoMessage() {}
 func (d *dummy) Reset()        { *d = dummy{} }
 func (d *dummy) String() string {
@@ -71,7 +84,7 @@ var dummyTransformer = func(sv *settings.Values, old []byte, update *string) ([]
 			return nil, nil, err
 		}
 	}
-	if err := proto.Unmarshal(old, &oldD); err != nil {
+	if err := protoutil.Unmarshal(old, &oldD); err != nil {
 		return nil, nil, err
 	}
 

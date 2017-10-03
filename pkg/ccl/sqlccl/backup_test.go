@@ -27,7 +27,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -558,7 +557,7 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 			return errors.Errorf("%+v", err)
 		}
 		var checkpointDesc sqlccl.BackupDescriptor
-		if err := proto.Unmarshal(checkpointDescBytes, &checkpointDesc); err != nil {
+		if err := protoutil.Unmarshal(checkpointDescBytes, &checkpointDesc); err != nil {
 			return errors.Errorf("%+v", err)
 		}
 		if len(checkpointDesc.Files) == 0 {
@@ -579,7 +578,7 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 			return err
 		}
 		var payload jobs.Payload
-		if err := proto.Unmarshal(payloadBytes, &payload); err != nil {
+		if err := protoutil.Unmarshal(payloadBytes, &payload); err != nil {
 			return err
 		}
 		switch d := payload.Details.(type) {
@@ -707,7 +706,7 @@ func TestBackupRestoreResume(t *testing.T) {
 			t.Fatal(err)
 		}
 		var backupDescriptor sqlccl.BackupDescriptor
-		if err := proto.Unmarshal(backupDescriptorBytes, &backupDescriptor); err != nil {
+		if err := protoutil.Unmarshal(backupDescriptorBytes, &backupDescriptor); err != nil {
 			t.Fatal(err)
 		}
 		for _, file := range backupDescriptor.Files {
@@ -1589,7 +1588,7 @@ func TestBackupRestoreChecksum(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
-		if err := proto.Unmarshal(backupDescBytes, &backupDesc); err != nil {
+		if err := protoutil.Unmarshal(backupDescBytes, &backupDesc); err != nil {
 			t.Fatalf("%+v", err)
 		}
 	}

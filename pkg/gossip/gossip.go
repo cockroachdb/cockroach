@@ -874,12 +874,12 @@ func (g *Gossip) GetInfo(key string) ([]byte, error) {
 
 // GetInfoProto returns an info value by key or KeyNotPresentError if specified
 // key does not exist or has expired.
-func (g *Gossip) GetInfoProto(key string, msg proto.Message) error {
+func (g *Gossip) GetInfoProto(key string, msg protoutil.Message) error {
 	bytes, err := g.GetInfo(key)
 	if err != nil {
 		return err
 	}
-	return proto.Unmarshal(bytes, msg)
+	return protoutil.Unmarshal(bytes, msg)
 }
 
 // InfoOriginatedHere returns true iff the latest info for the provided key

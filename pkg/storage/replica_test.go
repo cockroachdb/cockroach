@@ -1220,7 +1220,7 @@ func TestReplicaGossipFirstRange(t *testing.T) {
 		}
 		if key == gossip.KeyFirstRangeDescriptor {
 			var rangeDesc roachpb.RangeDescriptor
-			if err := proto.Unmarshal(bytes, &rangeDesc); err != nil {
+			if err := protoutil.Unmarshal(bytes, &rangeDesc); err != nil {
 				t.Fatal(err)
 			}
 		}

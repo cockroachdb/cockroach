@@ -40,7 +40,7 @@ func init() {
 	types.known = make(map[typeKey]reflect.Type)
 }
 
-func uncloneable(pb proto.Message) (reflect.Type, bool) {
+func uncloneable(pb Message) (reflect.Type, bool) {
 	for _, verbotenKind := range verbotenKinds {
 		if t := typeIsOrContainsVerboten(reflect.TypeOf(pb), verbotenKind); t != nil {
 			return t, true
@@ -62,11 +62,11 @@ func uncloneable(pb proto.Message) (reflect.Type, bool) {
 //
 // The concrete case against which this is currently guarding may be resolved
 // upstream, see https://github.com/gogo/protobuf/issues/147.
-func Clone(pb proto.Message) proto.Message {
+func Clone(pb Message) Message {
 	if t, ok := uncloneable(pb); ok {
 		panic(fmt.Sprintf("attempt to clone %T, which contains uncloneable field of type %s", pb, t))
 	}
-	return proto.Clone(pb)
+	return proto.Clone(pb).(Message)
 }
 
 func typeIsOrContainsVerboten(t reflect.Type, verboten reflect.Kind) reflect.Type {

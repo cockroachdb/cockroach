@@ -24,7 +24,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -45,12 +44,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func getStatusJSONProto(
-	ts serverutils.TestServerInterface, path string, response proto.Message,
+	ts serverutils.TestServerInterface, path string, response protoutil.Message,
 ) error {
 	return serverutils.GetJSONProto(ts, statusPrefix+path, response)
 }

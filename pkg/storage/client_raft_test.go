@@ -26,7 +26,6 @@ import (
 
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -42,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -2338,15 +2338,15 @@ func (ncc *noConfChangeTestHandler) HandleRaftRequest(
 	for i, e := range req.Message.Entries {
 		if e.Type == raftpb.EntryConfChange {
 			var cc raftpb.ConfChange
-			if err := proto.Unmarshal(e.Data, &cc); err != nil {
+			if err := protoutil.Unmarshal(e.Data, &cc); err != nil {
 				panic(err)
 			}
 			var ccCtx storage.ConfChangeContext
-			if err := proto.Unmarshal(cc.Context, &ccCtx); err != nil {
+			if err := protoutil.Unmarshal(cc.Context, &ccCtx); err != nil {
 				panic(err)
 			}
 			var command storagebase.RaftCommand
-			if err := proto.Unmarshal(ccCtx.Payload, &command); err != nil {
+			if err := protoutil.Unmarshal(ccCtx.Payload, &command); err != nil {
 				panic(err)
 			}
 			if req.RangeID == ncc.rangeID {
