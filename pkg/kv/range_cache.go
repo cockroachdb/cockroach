@@ -434,20 +434,23 @@ func (rdc *RangeDescriptorCache) performRangeLookup(
 // a pointer-based compare-and-evict strategy. This means that if the cache does
 // not contain the provided descriptor, no descriptor will be evicted. If
 // seenDesc is nil, eviction is unconditional.
+//
+// `inverted` determines the behavior at the range boundary, similar to how it
+// does in GetCachedRangeDescriptor.
 func (rdc *RangeDescriptorCache) EvictCachedRangeDescriptor(
-	ctx context.Context, descKey roachpb.RKey, seenDesc *roachpb.RangeDescriptor, inclusive bool,
+	ctx context.Context, descKey roachpb.RKey, seenDesc *roachpb.RangeDescriptor, inverted bool,
 ) error {
 	rdc.rangeCache.Lock()
 	defer rdc.rangeCache.Unlock()
-	return rdc.evictCachedRangeDescriptorLocked(ctx, descKey, seenDesc, inclusive)
+	return rdc.evictCachedRangeDescriptorLocked(ctx, descKey, seenDesc, inverted)
 }
 
 // evictCachedRangeDescriptorLocked is like evictCachedRangeDescriptor, but it
 // assumes that the caller holds a write lock on rdc.rangeCache.
 func (rdc *RangeDescriptorCache) evictCachedRangeDescriptorLocked(
-	ctx context.Context, descKey roachpb.RKey, seenDesc *roachpb.RangeDescriptor, inclusive bool,
+	ctx context.Context, descKey roachpb.RKey, seenDesc *roachpb.RangeDescriptor, inverted bool,
 ) error {
-	cachedDesc, entry, err := rdc.getCachedRangeDescriptorLocked(descKey, inclusive)
+	cachedDesc, entry, err := rdc.getCachedRangeDescriptorLocked(descKey, inverted)
 	if err != nil || cachedDesc == nil {
 		return err
 	}
@@ -487,7 +490,7 @@ func (rdc *RangeDescriptorCache) evictCachedRangeDescriptorLocked(
 		// descriptor. Instead, we want to evict meta('p'), since 'p' is the end
 		// key of the user-space descriptor.
 		//
-		// This is also why we pass inclusive=false down below.
+		// This is also why we pass inverted=false down below.
 		descKey = keys.RangeMetaKey(cachedDesc.EndKey)
 		// TODO(tschottdorf): write a test that verifies that the first descriptor
 		// can also be evicted. This is necessary since the initial range
@@ -497,7 +500,7 @@ func (rdc *RangeDescriptorCache) evictCachedRangeDescriptorLocked(
 			break
 		}
 
-		cachedDesc, entry, err = rdc.getCachedRangeDescriptorLocked(descKey, false /* !inclusive */)
+		cachedDesc, entry, err = rdc.getCachedRangeDescriptorLocked(descKey, false /* !inverted */)
 		if err != nil || cachedDesc == nil {
 			return err
 		}
@@ -508,15 +511,15 @@ func (rdc *RangeDescriptorCache) evictCachedRangeDescriptorLocked(
 // GetCachedRangeDescriptor retrieves the descriptor of the range which contains
 // the given key. It returns nil if the descriptor is not found in the cache.
 //
-// `inclusive` determines the behavior at the range boundary: If set to true
+// `inverted` determines the behavior at the range boundary: If set to true
 // and `key` is the EndKey and StartKey of two adjacent ranges, the first range
 // is returned instead of the second (which technically contains the given key).
 func (rdc *RangeDescriptorCache) GetCachedRangeDescriptor(
-	key roachpb.RKey, inclusive bool,
+	key roachpb.RKey, inverted bool,
 ) (*roachpb.RangeDescriptor, error) {
 	rdc.rangeCache.RLock()
 	defer rdc.rangeCache.RUnlock()
-	desc, _, err := rdc.getCachedRangeDescriptorLocked(key, inclusive)
+	desc, _, err := rdc.getCachedRangeDescriptorLocked(key, inverted)
 	return desc, err
 }
 
@@ -526,12 +529,12 @@ func (rdc *RangeDescriptorCache) GetCachedRangeDescriptor(
 // In addition to GetCachedRangeDescriptor, it also returns an internal cache
 // Entry that can be used for descriptor eviction.
 func (rdc *RangeDescriptorCache) getCachedRangeDescriptorLocked(
-	key roachpb.RKey, inclusive bool,
+	key roachpb.RKey, inverted bool,
 ) (*roachpb.RangeDescriptor, *cache.Entry, error) {
 	// The cache is indexed using the end-key of the range, but the
-	// end-key is non-inclusive by default.
+	// end-key is non-inverted by default.
 	var metaKey roachpb.RKey
-	if !inclusive {
+	if !inverted {
 		metaKey = keys.RangeMetaKey(key.Next())
 	} else {
 		metaKey = keys.RangeMetaKey(key)
@@ -544,7 +547,7 @@ func (rdc *RangeDescriptorCache) getCachedRangeDescriptorLocked(
 	desc := entry.Value.(*roachpb.RangeDescriptor)
 
 	containsFn := (*roachpb.RangeDescriptor).ContainsKey
-	if inclusive {
+	if inverted {
 		containsFn = (*roachpb.RangeDescriptor).ContainsKeyInverted
 	}
 

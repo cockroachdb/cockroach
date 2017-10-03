@@ -858,7 +858,7 @@ func TestEvictCacheOnError(t *testing.T) {
 		if _, ok := ds.leaseHolderCache.Lookup(context.TODO(), 1); ok != !tc.shouldClearLeaseHolder {
 			t.Errorf("%d: lease holder cache eviction: shouldClearLeaseHolder=%t, but value is %t", i, tc.shouldClearLeaseHolder, ok)
 		}
-		if cachedDesc, err := ds.rangeCache.GetCachedRangeDescriptor(roachpb.RKey(key), false /* !inclusive */); err != nil {
+		if cachedDesc, err := ds.rangeCache.GetCachedRangeDescriptor(roachpb.RKey(key), false /* !inverted */); err != nil {
 			t.Error(err)
 		} else if cachedDesc == nil != tc.shouldClearReplica {
 			t.Errorf("%d: unexpected second replica lookup behaviour: wanted=%t", i, tc.shouldClearReplica)
@@ -1279,8 +1279,8 @@ func TestMultiRangeGapReverse(t *testing.T) {
 				if !reverse {
 					return key.Less(descs[i].EndKey)
 				}
-				// In reverse mode, the key is "inclusive". If we scan
-				// [a,z) in reverse mode, we'd look up key z.
+				// In reverse mode, the range boundary behavior is "inverted".
+				// If we scan [a,z) in reverse mode, we'd look up key z.
 				return !descs[i].EndKey.Less(key) // key <= EndKey
 			})
 		}
