@@ -22,7 +22,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/base"
 )
 
 // HelpMessage describes a contextual help message.
@@ -35,10 +35,6 @@ type HelpMessage struct {
 	// HelpMessageBody contains the details of the message.
 	HelpMessageBody
 }
-
-var docsURLBase = "https://www.cockroachlabs.com/docs/" + build.VersionPrefix()
-
-func docsURL(pageName string) string { return docsURLBase + "/" + pageName }
 
 // String implements the fmt.String interface.
 func (h *HelpMessage) String() string {
@@ -100,7 +96,7 @@ func helpWithFunction(sqllex sqlLexer, f ResolvableFunctionReference) int {
 		Function: f.String(),
 		HelpMessageBody: HelpMessageBody{
 			Category: "built-in functions",
-			SeeAlso:  docsURL("functions-and-operators.html"),
+			SeeAlso:  base.DocsURL("functions-and-operators.html"),
 		},
 	}
 
@@ -171,7 +167,7 @@ var HelpMessages = func(h map[string]HelpMessageBody) map[string]HelpMessageBody
 	reformatSeeAlso := func(seeAlso string) string {
 		return strings.Replace(
 			strings.Replace(seeAlso, ", ", "\n  ", -1),
-			"WEBDOCS", docsURLBase, -1)
+			"WEBDOCS", base.DocsURLBase, -1)
 	}
 	srcMsg := h["<SOURCE>"]
 	srcMsg.SeeAlso = reformatSeeAlso(strings.TrimSpace(srcMsg.SeeAlso))

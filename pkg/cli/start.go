@@ -42,6 +42,7 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -780,7 +781,7 @@ func setupAndInitializeLoggingAndProfiling(ctx context.Context) (*stop.Stopper, 
 				"- Any user, even root, can log in without providing a password.\n"+
 				"- Any user, connecting as root, can read or write any data in your cluster.\n"+
 				"- There is no network encryption nor authentication, and thus no confidentiality.\n\n"+
-				"Check out how to secure your cluster: https://www.cockroachlabs.com/docs/stable/secure-a-cluster.html")
+				"Check out how to secure your cluster: "+base.DocsURL("secure-a-cluster.html"))
 	}
 
 	maybeWarnCacheSize()
