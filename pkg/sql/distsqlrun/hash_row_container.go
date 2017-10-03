@@ -119,9 +119,7 @@ const sizeOfBool = int64(unsafe.Sizeof(false))
 // memRowContainer corresponding to matching rows.
 // NOTE: Once a row is marked, adding more rows to the hashMemRowContainer
 // results in undefined behavior. It is not necessary to do otherwise for the
-// current usage of hashMemRowContainer and allows us to assume that a memory
-// error can only occur at the start of the marking phase, thus not having to
-// deal with half-emitted buckets and marks when falling back to disk.
+// current usage of hashMemRowContainer.
 type hashMemRowContainer struct {
 	*memRowContainer
 	columnEncoder
@@ -133,6 +131,11 @@ type hashMemRowContainer struct {
 	// marked specifies for each row in memRowContainer whether that row has
 	// been marked. Used for iterating over unmarked rows.
 	marked []bool
+
+	// markMemoryReserved specifies whether the hashMemRowContainer's memory
+	// account already accounts for the memory needed to mark the rows in the
+	// hashMemRowContainer.
+	markMemoryReserved bool
 
 	// buckets contains the indices into memRowContainer for a given group
 	// key (which is the encoding of storedEqCols).
@@ -219,6 +222,20 @@ func (h *hashMemRowContainer) addRowToBucket(
 	return nil
 }
 
+// reserveMarkMemoryMaybe is a utility function to grow the
+// hashMemRowContainer's memory account by the memory needed to mark all rows.
+// It is a noop if h.markMemoryReserved is true.
+func (h *hashMemRowContainer) reserveMarkMemoryMaybe(ctx context.Context) error {
+	if h.markMemoryReserved {
+		return nil
+	}
+	if err := h.bucketsAcc.Grow(ctx, sizeOfBoolSlice+(sizeOfBool*int64(h.Len()))); err != nil {
+		return err
+	}
+	h.markMemoryReserved = true
+	return nil
+}
+
 // hashMemRowBucketIterator iterates over the rows in a bucket.
 type hashMemRowBucketIterator struct {
 	*hashMemRowContainer
@@ -267,8 +284,8 @@ func (i *hashMemRowBucketIterator) Mark(ctx context.Context, mark bool) error {
 		log.Fatal(ctx, "hash mem row container not set up for marking")
 	}
 	if i.marked == nil {
-		if err := i.bucketsAcc.Grow(ctx, sizeOfBoolSlice+(sizeOfBool*int64(i.Len()))); err != nil {
-			return err
+		if !i.markMemoryReserved {
+			panic("mark memory should have been reserved already")
 		}
 		i.marked = make([]bool, i.Len())
 	}
