@@ -673,6 +673,7 @@ func (td *tableDeleter) row(
 	return nil, td.rd.DeleteRow(ctx, td.b, values, traceKV)
 }
 
+// finalize is part of the tableWriter interface.
 func (td *tableDeleter) finalize(ctx context.Context, _ bool) (*sqlbase.RowContainer, error) {
 	if td.autoCommit {
 		// An auto-txn can commit the transaction with the batch. This is an
@@ -766,9 +767,7 @@ func (td *tableDeleter) deleteAllRows(
 	ctx context.Context, resume roachpb.Span, limit int64, traceKV bool,
 ) (roachpb.Span, error) {
 	if td.rd.Helper.TableDesc.IsInterleaved() {
-		if traceKV {
-			log.VEvent(ctx, 2, "delete forced to scan: table is interleaved")
-		}
+		log.VEvent(ctx, 2, "delete forced to scan: table is interleaved")
 		return td.deleteAllRowsScan(ctx, resume, limit, traceKV)
 	}
 	return td.deleteAllRowsFast(ctx, resume, limit, traceKV)
@@ -787,9 +786,7 @@ func (td *tableDeleter) deleteAllRowsFast(
 			EndKey: tablePrefix.PrefixEnd(),
 		}
 	}
-	if traceKV {
-		log.VEventf(ctx, 2, "DelRange %s - %s", resume.Key, resume.EndKey)
-	}
+	log.VEventf(ctx, 2, "DelRange %s - %s", resume.Key, resume.EndKey)
 	td.b.DelRange(resume.Key, resume.EndKey, false /* returnKeys */)
 	td.b.Header.MaxSpanRequestKeys = limit
 	if _, err := td.finalize(ctx, traceKV); err != nil {
