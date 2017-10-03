@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -65,19 +66,19 @@ var BackupImplicitSQLDescriptors = []sqlbase.Descriptor{
 }
 
 // exportStorageFromURI returns an ExportStorage for the given URI.
-func exportStorageFromURI(ctx context.Context, uri string) (storageccl.ExportStorage, error) {
+func exportStorageFromURI(ctx context.Context, uri string, settings *cluster.Settings) (storageccl.ExportStorage, error) {
 	conf, err := storageccl.ExportStorageConfFromURI(uri)
 	if err != nil {
 		return nil, err
 	}
-	return storageccl.MakeExportStorage(ctx, conf)
+	return storageccl.MakeExportStorage(ctx, conf, settings)
 }
 
 // ReadBackupDescriptorFromURI creates an export store from the given URI, then
 // reads and unmarshals a BackupDescriptor at the standard location in the
 // export storage.
-func ReadBackupDescriptorFromURI(ctx context.Context, uri string) (BackupDescriptor, error) {
-	exportStore, err := exportStorageFromURI(ctx, uri)
+func ReadBackupDescriptorFromURI(ctx context.Context, uri string, settings *cluster.Settings) (BackupDescriptor, error) {
+	exportStore, err := exportStorageFromURI(ctx, uri, settings)
 	if err != nil {
 		return BackupDescriptor{}, err
 	}
@@ -115,14 +116,14 @@ func readBackupDescriptor(
 
 // ValidatePreviousBackups checks that the timestamps of previous backups are
 // consistent. The most recently backed-up time is returned.
-func ValidatePreviousBackups(ctx context.Context, uris []string) (hlc.Timestamp, error) {
+func ValidatePreviousBackups(ctx context.Context, uris []string, settings *cluster.Settings) (hlc.Timestamp, error) {
 	if len(uris) == 0 || len(uris) == 1 && uris[0] == "" {
 		// Full backup.
 		return hlc.Timestamp{}, nil
 	}
 	backups := make([]BackupDescriptor, len(uris))
 	for i, uri := range uris {
-		desc, err := ReadBackupDescriptorFromURI(ctx, uri)
+		desc, err := ReadBackupDescriptorFromURI(ctx, uri, settings)
 		if err != nil {
 			return hlc.Timestamp{}, err
 		}
@@ -651,7 +652,7 @@ func backupPlanHook(
 		var startTime hlc.Timestamp
 		if backupStmt.IncrementalFrom != nil {
 			var err error
-			startTime, err = ValidatePreviousBackups(ctx, incrementalFrom)
+			startTime, err = ValidatePreviousBackups(ctx, incrementalFrom, p.ExecCfg().Settings)
 			if err != nil {
 				return err
 			}
@@ -664,7 +665,7 @@ func backupPlanHook(
 			}
 		}
 
-		exportStore, err := exportStorageFromURI(ctx, to)
+		exportStore, err := exportStorageFromURI(ctx, to, p.ExecCfg().Settings)
 		if err != nil {
 			return err
 		}
@@ -736,7 +737,7 @@ func backupPlanHook(
 	return fn, header, nil
 }
 
-func backupResumeHook(typ jobs.Type) func(context.Context, *jobs.Job) error {
+func backupResumeHook(typ jobs.Type, settings *cluster.Settings) func(context.Context, *jobs.Job) error {
 	if typ != jobs.TypeBackup {
 		return nil
 	}
@@ -786,7 +787,7 @@ func backupResumeHook(typ jobs.Type) func(context.Context, *jobs.Job) error {
 		if err != nil {
 			return err
 		}
-		exportStore, err := storageccl.MakeExportStorage(ctx, conf)
+		exportStore, err := storageccl.MakeExportStorage(ctx, conf, settings)
 		if err != nil {
 			return nil
 		}
@@ -844,7 +845,7 @@ func showBackupPlanHook(
 		if err != nil {
 			return err
 		}
-		desc, err := ReadBackupDescriptorFromURI(ctx, str)
+		desc, err := ReadBackupDescriptorFromURI(ctx, str, p.ExecCfg().Settings)
 		if err != nil {
 			return err
 		}

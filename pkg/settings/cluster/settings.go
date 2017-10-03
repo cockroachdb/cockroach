@@ -75,6 +75,10 @@ type Settings struct {
 	Initialized bool
 }
 
+// NoSettings is used when a func requires a Settings but none is available
+// (for example, a CLI subcommand that does not connect to a cluster).
+var NoSettings *Settings = nil
+
 const keyVersionSetting = "version"
 
 var version = settings.RegisterStateMachineSetting(keyVersionSetting,
