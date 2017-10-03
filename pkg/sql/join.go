@@ -601,8 +601,8 @@ func (n *joinNode) joinOrdering() orderingInfo {
 	for i, leftIdx := range n.pred.leftEqualityIndices {
 		leftGroup := leftOrd.eqGroups.Find(leftIdx)
 		rightGroup := rightOrd.eqGroups.Find(n.pred.rightEqualityIndices[i])
-		if leftOrd.constantCols.Contains(uint32(leftGroup)) ||
-			rightOrd.constantCols.Contains(uint32(rightGroup)) {
+		if leftOrd.constantCols.Contains(leftGroup) ||
+			rightOrd.constantCols.Contains(rightGroup) {
 			info.addConstantColumn(leftCol(leftIdx))
 		}
 	}

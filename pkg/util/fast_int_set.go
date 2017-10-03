@@ -17,162 +17,199 @@ package util
 import (
 	"bytes"
 	"fmt"
-	"math"
-	"sort"
+	"math/bits"
+
+	"golang.org/x/tools/container/intsets"
 )
 
 // FastIntSet keeps track of a set of integers. It does not perform any
 // allocations when the values are small. It is not thread-safe.
 type FastIntSet struct {
-	smallVals uint64
-	largeVals map[uint32]struct{}
+	// We use a uint64 as long as all elements are between 0 and 63. If we add an
+	// element outside of this range, we switch to Sparse. We don't just use the
+	// latter directly because it's larger and can't be passed around by value.
+	small uint64
+	large *intsets.Sparse
 }
 
 // We store bits for values smaller than this cutoff.
-const smallValCutoff = 64
+const smallCutoff = 64
+
+func (s *FastIntSet) smallToLarge() *intsets.Sparse {
+	if s.large != nil {
+		panic("set already large")
+	}
+	large := new(intsets.Sparse)
+	for i, ok := s.Next(0); ok; i, ok = s.Next(i + 1) {
+		large.Insert(i)
+	}
+	return large
+}
+
+// Returns the bit encoded set from 0 to 63, and a flag that indicates whether
+// there are elements outside this range.
+func (s *FastIntSet) largeToSmall() (small uint64, otherValues bool) {
+	if s.large == nil {
+		panic("set not large")
+	}
+	for x := s.large.LowerBound(0); x < smallCutoff; x = s.large.LowerBound(x + 1) {
+		small |= (1 << uint64(x))
+	}
+	return small, s.large.Min() < 0 || s.large.Max() >= smallCutoff
+}
 
 // Add adds a value to the set. No-op if the value is already in the set.
-func (s *FastIntSet) Add(i uint32) {
-	if i < smallValCutoff {
-		s.smallVals |= (1 << uint64(i))
-	} else {
-		if s.largeVals == nil {
-			s.largeVals = make(map[uint32]struct{})
-		}
-		s.largeVals[i] = struct{}{}
+func (s *FastIntSet) Add(i int) {
+	if i >= 0 && i < smallCutoff && s.large == nil {
+		// Fast path.
+		s.small |= (1 << uint64(i))
+		return
 	}
+	if s.large == nil {
+		s.large = s.smallToLarge()
+		s.small = 0
+	}
+	s.large.Insert(i)
 }
 
 // Remove removes a value from the set. No-op if the value is not in the set.
-func (s *FastIntSet) Remove(i uint32) {
-	if i < smallValCutoff {
-		s.smallVals &= ^(1 << uint64(i))
+func (s *FastIntSet) Remove(i int) {
+	if s.large == nil {
+		if i >= 0 && i < smallCutoff {
+			s.small &= ^(1 << uint64(i))
+		}
 	} else {
-		delete(s.largeVals, i)
+		s.large.Remove(i)
 	}
 }
 
 // Contains returns true if the set contains the value.
-func (s *FastIntSet) Contains(i uint32) bool {
-	if i < smallValCutoff {
-		return (s.smallVals & (1 << uint64(i))) != 0
+func (s *FastIntSet) Contains(i int) bool {
+	if s.large != nil {
+		return s.large.Has(i)
 	}
-	_, ok := s.largeVals[i]
-	return ok
+	return i >= 0 && i < smallCutoff && (s.small&(1<<uint64(i))) != 0
 }
 
 // Empty returns true if the set is empty.
 func (s *FastIntSet) Empty() bool {
-	return s.smallVals == 0 && len(s.largeVals) == 0
+	return s.small == 0 && (s.large == nil || s.large.IsEmpty())
 }
 
 // Next returns the first value in the set which is >= startVal. If there is no
 // value, the second return value is false.
-// Note: this is efficient for small sets, but each call takes linear time for large sets.
-func (s *FastIntSet) Next(startVal uint32) (uint32, bool) {
-	if startVal < smallValCutoff {
-		for v := s.smallVals >> startVal; v > 0; {
-			// Skip 8 bits at a time when possible.
-			if v&0xFF == 0 {
-				startVal += 8
-				v >>= 8
-				continue
-			}
-			if v&1 != 0 {
-				return startVal, true
-			}
-			startVal++
-			v >>= 1
-		}
-		startVal = smallValCutoff
+func (s *FastIntSet) Next(startVal int) (int, bool) {
+	if s.large != nil {
+		res := s.large.LowerBound(startVal)
+		return res, res != intsets.MaxInt
 	}
-	if len(s.largeVals) > 0 {
-		found := false
-		min := uint32(0)
-		for k := range s.largeVals {
-			if k >= startVal && (!found || k < min) {
-				found = true
-				min = k
-			}
+	if startVal < smallCutoff {
+		if startVal < 0 {
+			startVal = 0
 		}
-		if found {
-			return min, true
+
+		if ntz := bits.TrailingZeros64(s.small >> uint64(startVal)); ntz < 64 {
+			return startVal + ntz, true
 		}
 	}
-	return math.MaxUint32, false
+	return intsets.MaxInt, false
 }
 
-// ForEach calls a function for each value in the set (in arbitrary order).
-func (s *FastIntSet) ForEach(f func(i uint32)) {
-	for i, v := uint32(0), s.smallVals; v > 0; {
-		// Skip 8 bits at a time when possible.
-		if v&0xFF == 0 {
-			i += 8
-			v >>= 8
-			continue
+// ForEach calls a function for each value in the set (in increasing order).
+func (s *FastIntSet) ForEach(f func(i int)) {
+	if s.large != nil {
+		for x := s.large.Min(); x != intsets.MaxInt; x = s.large.LowerBound(x + 1) {
+			f(x)
 		}
-		if v&1 != 0 {
-			f(i)
+		return
+	}
+	for i, v := 0, s.small; v > 0; {
+		ntz := bits.TrailingZeros64(v)
+		if ntz == 64 {
+			return
 		}
+		i += ntz
+		f(i)
 		i++
-		v >>= 1
-	}
-	for v := range s.largeVals {
-		f(v)
+		v >>= uint64(ntz + 1)
 	}
 }
 
-// Ordered returns a slice with all the integers in the set, in sorted order.
+// Ordered returns a slice with all the integers in the set, in increasing order.
 func (s *FastIntSet) Ordered() []int {
-	// TODO(radu): when we switch to go1.9, use the new math/bits.OnesCount64 to
-	// calculate the correct length.
-	result := make([]int, 0, len(s.largeVals))
-	s.ForEach(func(i uint32) {
-		result = append(result, int(i))
-	})
-	if len(s.largeVals) > 0 {
-		sort.Ints(result)
+	if s.large != nil {
+		return s.large.AppendTo([]int(nil))
 	}
+	result := make([]int, 0, bits.OnesCount64(s.small))
+	s.ForEach(func(i int) {
+		result = append(result, i)
+	})
 	return result
 }
 
 // Copy makes an copy of a FastIntSet which can be modified independently.
 func (s *FastIntSet) Copy() FastIntSet {
-	c := FastIntSet{smallVals: s.smallVals}
-	if len(s.largeVals) > 0 {
-		c.largeVals = make(map[uint32]struct{})
-		for v := range s.largeVals {
-			c.largeVals[v] = struct{}{}
-		}
+	var c FastIntSet
+	if s.large != nil {
+		c.large = new(intsets.Sparse)
+		c.large.Copy(s.large)
+	} else {
+		c.small = s.small
 	}
 	return c
 }
 
 // Equals returns true if the two sets are identical.
 func (s *FastIntSet) Equals(rhs FastIntSet) bool {
-	if s.smallVals != rhs.smallVals {
-		return false
+	if s.large == nil && rhs.large == nil {
+		return s.small == rhs.small
 	}
-	if len(s.largeVals) != len(rhs.largeVals) {
-		return false
+	if s.large != nil && rhs.large != nil {
+		return s.large.Equals(rhs.large)
 	}
-	if len(s.largeVals) > 0 {
-		s1 := s.Ordered()
-		s2 := rhs.Ordered()
-		for i := range s1 {
-			if s1[i] != s2[i] {
-				return false
-			}
+	// One set is "large" and one is "small". They might still be equal (the large
+	// set could have had a large element added and then removed).
+	var extraVals bool
+	s1 := s.small
+	s2 := rhs.small
+	if s.large != nil {
+		s1, extraVals = s.largeToSmall()
+	} else {
+		s2, extraVals = rhs.largeToSmall()
+	}
+	return !extraVals && s1 == s2
+}
+
+// SubsetOf returns true if rhs contains all the elements in s.
+func (s *FastIntSet) SubsetOf(rhs FastIntSet) bool {
+	if s.large == nil && rhs.large == nil {
+		return (s.small & rhs.small) == s.small
+	}
+	if s.large != nil && rhs.large != nil {
+		return s.large.SubsetOf(rhs.large)
+	}
+	// One set is "large" and one is "small".
+	s1 := s.small
+	s2 := rhs.small
+	if s.large != nil {
+		var extraVals bool
+		s1, extraVals = s.largeToSmall()
+		if extraVals {
+			// s has elements that rhs (which is small) can't have.
+			return false
 		}
+	} else {
+		// We don't care if rhs has extra values.
+		s2, _ = rhs.largeToSmall()
 	}
-	return true
+	return (s1 & s2) == s1
 }
 
 func (s *FastIntSet) String() string {
 	var buf bytes.Buffer
 	buf.WriteByte('(')
 	first := true
-	s.ForEach(func(i uint32) {
+	s.ForEach(func(i int) {
 		if first {
 			first = false
 		} else {
