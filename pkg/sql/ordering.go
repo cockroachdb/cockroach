@@ -117,7 +117,7 @@ type orderingInfo struct {
 func (ord orderingInfo) check() {
 	// Only equivalency group representatives show up in constantCols.
 	for c, ok := ord.constantCols.Next(0); ok; c, ok = ord.constantCols.Next(c + 1) {
-		if repr := ord.eqGroups.Find(int(c)); repr != int(c) {
+		if repr := ord.eqGroups.Find(c); repr != c {
 			panic(fmt.Sprintf("non-representative const column %d (representative: %d)", c, repr))
 		}
 	}
@@ -128,13 +128,13 @@ func (ord orderingInfo) check() {
 			panic(fmt.Sprintf("non-representative order column %d (representative: %d)", o.ColIdx, repr))
 		}
 		// The ordering should not contain any constant or redundant columns.
-		if ord.constantCols.Contains(uint32(o.ColIdx)) {
+		if ord.constantCols.Contains(o.ColIdx) {
 			panic(fmt.Sprintf("const column %d appears in ordering", o.ColIdx))
 		}
-		if seen.Contains(uint32(o.ColIdx)) {
+		if seen.Contains(o.ColIdx) {
 			panic(fmt.Sprintf("duplicate column %d appears in ordering", o.ColIdx))
 		}
-		seen.Add(uint32(o.ColIdx))
+		seen.Add(o.ColIdx)
 	}
 	if ord.isKey && len(ord.ordering) == 0 {
 		panic("isKey with no ordering")
@@ -156,8 +156,8 @@ func (ord *orderingInfo) reduce(order sqlbase.ColumnOrdering) sqlbase.ColumnOrde
 	var groupsSeen util.FastIntSet
 	for i, o := range order {
 		group := ord.eqGroups.Find(o.ColIdx)
-		redundant := groupsSeen.Contains(uint32(group)) || ord.constantCols.Contains(uint32(group))
-		groupsSeen.Add(uint32(group))
+		redundant := groupsSeen.Contains(group) || ord.constantCols.Contains(group)
+		groupsSeen.Add(group)
 		if result == nil {
 			if !redundant && o.ColIdx == group {
 				// No modification necessary, continue.
@@ -206,7 +206,7 @@ func (ord *orderingInfo) Format(buf *bytes.Buffer, columns sqlbase.ResultColumns
 		representative := ord.eqGroups.Find(i)
 		if representative != i {
 			// We found a multi-column group.
-			groups.Add(uint32(representative))
+			groups.Add(representative)
 		}
 	}
 
@@ -220,9 +220,9 @@ func (ord *orderingInfo) Format(buf *bytes.Buffer, columns sqlbase.ResultColumns
 	for r, ok := groups.Next(0); ok; r, ok = groups.Next(r + 1) {
 		semiColon()
 		// The representative is always the first element in the group.
-		printCol(buf, columns, int(r))
-		for i := int(r) + 1; i < ord.eqGroups.Len(); i++ {
-			if ord.eqGroups.Find(i) == int(r) {
+		printCol(buf, columns, r)
+		for i := r + 1; i < ord.eqGroups.Len(); i++ {
+			if ord.eqGroups.Find(i) == r {
 				buf.WriteByte('=')
 				printCol(buf, columns, i)
 			}
@@ -273,7 +273,7 @@ func (ord *orderingInfo) isEmpty() bool {
 }
 
 func (ord *orderingInfo) addConstantColumn(colIdx int) {
-	ord.constantCols.Add(uint32(ord.eqGroups.Find(colIdx)))
+	ord.constantCols.Add(ord.eqGroups.Find(colIdx))
 	ord.ordering = ord.reduce(ord.ordering)
 	if len(ord.ordering) == 0 {
 		// TODO(radu): we can only keep track of "keys" for columns in ordering.
@@ -378,9 +378,9 @@ func (ord *orderingInfo) project(colMap []int) orderingInfo {
 	// Remap constant columns, ignoring column groups that have no projected
 	// columns.
 	for col, ok := ord.constantCols.Next(0); ok; col, ok = ord.constantCols.Next(col + 1) {
-		group := ord.eqGroups.Find(int(col))
+		group := ord.eqGroups.Find(col)
 		if r, ok := newRepr[group]; ok {
-			newOrd.constantCols.Add(uint32(newOrd.eqGroups.Find(r)))
+			newOrd.constantCols.Add(newOrd.eqGroups.Find(r))
 		}
 	}
 
@@ -435,14 +435,14 @@ func (ord orderingInfo) computeMatchInternal(
 	for i, col := range desired {
 		group := ord.eqGroups.Find(col.ColIdx)
 		// Check if the column is one of the constant columns.
-		if ord.constantCols.Contains(uint32(group)) {
+		if ord.constantCols.Contains(group) {
 			continue
 		}
-		if groupsSeen.Contains(uint32(group)) {
+		if groupsSeen.Contains(group) {
 			// Redundant column; can be ignored.
 			continue
 		}
-		groupsSeen.Add(uint32(group))
+		groupsSeen.Add(group)
 		if pos < len(ord.ordering) && ord.ordering[pos].ColIdx == group &&
 			ord.ordering[pos].Direction == col.Direction {
 			// The next column matches.
@@ -547,7 +547,7 @@ func computeMergeJoinOrdering(a, b orderingInfo, colA, colB []int) sqlbase.Colum
 	// First, find any merged columns that are constant in both sources. This
 	// means that in each source, this column only sees one value.
 	for i := range colA {
-		if a.constantCols.Contains(uint32(colA[i])) && b.constantCols.Contains(uint32(colB[i])) {
+		if a.constantCols.Contains(colA[i]) && b.constantCols.Contains(colB[i]) {
 			// The direction here is arbitrary - the orderings guarantee that either works.
 			// TODO(radu): perhaps the correct thing would be to return an
 			// orderingInfo with this as a constant column.
@@ -615,8 +615,8 @@ MainLoop:
 					break MainLoop
 				}
 				result = append(result, sqlbase.ColumnOrderInfo{ColIdx: foundCol, Direction: dir})
-				seenGroupsA.Add(uint32(groupA))
-				seenGroupsB.Add(uint32(groupB))
+				seenGroupsA.Add(groupA)
+				seenGroupsB.Add(groupB)
 				ordA, ordB = ordA[1:], ordB[1:]
 				continue MainLoop
 			}
@@ -634,9 +634,9 @@ MainLoop:
 			groupA := a.eqGroups.Find(ordA[0].ColIdx)
 			for i := range colA {
 				if a.eqGroups.Find(colA[i]) == groupA &&
-					((doneB && b.isKey) || seenGroupsB.Contains(uint32(b.eqGroups.Find(colB[i])))) {
+					((doneB && b.isKey) || seenGroupsB.Contains(b.eqGroups.Find(colB[i]))) {
 					result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: ordA[0].Direction})
-					seenGroupsA.Add(uint32(groupA))
+					seenGroupsA.Add(groupA)
 					ordA = ordA[1:]
 					continue MainLoop
 				}
@@ -649,9 +649,9 @@ MainLoop:
 			groupB := b.eqGroups.Find(ordB[0].ColIdx)
 			for i := range colB {
 				if b.eqGroups.Find(colB[i]) == groupB &&
-					((doneA && a.isKey) || seenGroupsA.Contains(uint32(a.eqGroups.Find(colA[i])))) {
+					((doneA && a.isKey) || seenGroupsA.Contains(a.eqGroups.Find(colA[i]))) {
 					result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: ordB[0].Direction})
-					seenGroupsB.Add(uint32(groupB))
+					seenGroupsB.Add(groupB)
 					ordB = ordB[1:]
 					continue MainLoop
 				}
