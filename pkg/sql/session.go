@@ -1419,7 +1419,12 @@ type SessionTracing struct {
 // span that have already been created will not be traced).
 //
 // StopTracing() needs to be called to finish this trace.
-func (st *SessionTracing) StartTracing(recType tracing.RecordingType, traceKV bool) error {
+//
+// Args:
+// kvTracingEnabled: If set, the traces will also include "KV trace" messages -
+//   verbose messages around the interaction of SQL with KV. Some of the messages
+//   are per-row.
+func (st *SessionTracing) StartTracing(recType tracing.RecordingType, kvTracingEnabled bool) error {
 	if st.enabled {
 		return errors.Errorf("already tracing")
 	}
@@ -1433,7 +1438,7 @@ func (st *SessionTracing) StartTracing(recType tracing.RecordingType, traceKV bo
 
 	tracing.StartRecording(sp, recType)
 	st.enabled = true
-	st.kvTracingEnabled = traceKV
+	st.kvTracingEnabled = kvTracingEnabled
 	st.recordingType = recType
 	return nil
 }
