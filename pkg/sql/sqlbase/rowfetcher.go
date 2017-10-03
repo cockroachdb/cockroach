@@ -229,7 +229,7 @@ func (rf *RowFetcher) StartScan(
 		firstBatchLimit++
 	}
 
-	f, err := makeKVFetcher(txn, spans, rf.reverse, limitBatches, firstBatchLimit, rf.returnRangeInfo, traceKV)
+	f, err := makeKVFetcher(txn, spans, rf.reverse, limitBatches, firstBatchLimit, rf.returnRangeInfo)
 	if err != nil {
 		return err
 	}
