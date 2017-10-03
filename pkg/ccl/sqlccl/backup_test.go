@@ -1306,7 +1306,7 @@ func TestBackupRestoreIncremental(t *testing.T) {
 			backupDirs = append(backupDirs, fmt.Sprintf(`'%s'`, backupDir))
 		}
 
-		// Test a regression in RESTORE where the WriteBatch end key was not
+		// Test a regression in RESTORE where the batch end key was not
 		// being set correctly in Import: make an incremental backup such that
 		// the greatest key in the diff is less than the previous backups.
 		sqlDB.Exec(`INSERT INTO data.bank VALUES (0, -1, 'final')`)

@@ -131,41 +131,16 @@ func clientKVsToEngineKVs(kvs []client.KeyValue) []engine.MVCCKeyValue {
 
 func TestImport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Run("WriteBatch", func(t *testing.T) {
-		disableSSTable := func(st *cluster.Settings) {
-			st.Manual.Store(true)
-			AddSSTableEnabled.Override(&st.SV, false)
-		}
-		t.Run("batch=default", func(t *testing.T) {
-			runTestImport(t, disableSSTable)
-		})
-		t.Run("batch=1", func(t *testing.T) {
-			// The test normally doesn't trigger the batching behavior, so lower
-			// the threshold to force it.
-			init := func(st *cluster.Settings) {
-				st.Manual.Store(true)
-				importBatchSize.Override(&st.SV, 1)
-			}
-			runTestImport(t, init)
-		})
+	t.Run("batch=default", func(t *testing.T) {
+		runTestImport(t, func(_ *cluster.Settings) {})
 	})
-	t.Run("AddSSTable", func(t *testing.T) {
-		enableSSTable := func(st *cluster.Settings) {
-			st.Manual.Store(true)
-			AddSSTableEnabled.Override(&st.SV, true)
+	t.Run("batch=1", func(t *testing.T) {
+		// The test normally doesn't trigger the batching behavior, so lower
+		// the threshold to force it.
+		init := func(st *cluster.Settings) {
+			importBatchSize.Override(&st.SV, 1)
 		}
-		t.Run("batch=default", func(t *testing.T) {
-			runTestImport(t, enableSSTable)
-		})
-		t.Run("batch=1", func(t *testing.T) {
-			// The test normally doesn't trigger the batching behavior, so lower
-			// the threshold to force it.
-			init := func(st *cluster.Settings) {
-				enableSSTable(st)
-				importBatchSize.Override(&st.SV, 1)
-			}
-			runTestImport(t, init)
-		})
+		runTestImport(t, init)
 	})
 }
 
