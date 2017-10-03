@@ -569,16 +569,17 @@ func TestHashJoiner(t *testing.T) {
 		// Run tests with a probability of the run failing with a memory error.
 		// These verify that the hashJoiner falls back to disk correctly in all
 		// cases.
-		for i := 0; i < 5; i++ {
-			memFailPoint := buffer
-			t.Run(fmt.Sprintf("MemFailPoint=%s", memFailPoint), func(t *testing.T) {
-				if err := testFunc(t, func(h *hashJoiner) {
-					h.testingKnobMemFailPoint = memFailPoint
-					h.testingKnobFailProbability = 0.5
-				}); err != nil {
-					t.Fatal(err)
-				}
-			})
+		for _, memFailPoint := range []hashJoinPhase{buffer, build} {
+			for i := 0; i < 5; i++ {
+				t.Run(fmt.Sprintf("MemFailPoint=%s", memFailPoint), func(t *testing.T) {
+					if err := testFunc(t, func(h *hashJoiner) {
+						h.testingKnobMemFailPoint = memFailPoint
+						h.testingKnobFailProbability = 0.5
+					}); err != nil {
+						t.Fatal(err)
+					}
+				})
+			}
 		}
 
 		// Run test with a variety of memory limits.
