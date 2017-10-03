@@ -192,6 +192,7 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 		defer log.Infof(ctx, "exiting")
 	}
 
+	// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
 	if err := tr.fetcher.StartScan(
 		ctx, txn, tr.spans, true /* limit batches */, tr.limitHint, false, /* traceKV */
 	); err != nil {
@@ -202,8 +203,7 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	for {
-		// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
-		fetcherRow, err := tr.fetcher.NextRow(ctx, false /* traceKV */)
+		fetcherRow, err := tr.fetcher.NextRow(ctx)
 		if err != nil || fetcherRow == nil {
 			if err != nil {
 				tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})

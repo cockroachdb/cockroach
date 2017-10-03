@@ -81,6 +81,10 @@ type RowFetcher struct {
 	// If set, GetRangeInfo() can be used to retrieve the accumulated info.
 	returnRangeInfo bool
 
+	// traceKV indicates whether or not session tracing is enabled. It is set
+	// when beginning a new scan.
+	traceKV bool
+
 	// -- Fields updated during a scan --
 
 	kvFetcher      kvFetcher
@@ -211,6 +215,8 @@ func (rf *RowFetcher) StartScan(
 		panic("no spans")
 	}
 
+	rf.traceKV = traceKV
+
 	// If we have a limit hint, we limit the first batch size. Subsequent
 	// batches get larger to avoid making things too slow (e.g. in case we have
 	// a very restrictive filter and actually have to retrieve a lot of rows).
@@ -257,7 +263,7 @@ func (rf *RowFetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 
 		// See Init() for a detailed description of when we can get away with not
 		// reading the index key.
-		if rf.mustDecodeIndexKey {
+		if rf.mustDecodeIndexKey || rf.traceKV {
 			rf.keyRemainingBytes, ok, err = rf.ReadIndexKey(rf.kv.Key)
 			if err != nil {
 				return false, err
@@ -320,9 +326,9 @@ func (rf *RowFetcher) ReadIndexKey(k roachpb.Key) (remaining []byte, ok bool, er
 // accordingly. If debugStrings is true, returns pretty printed key and value
 // information in prettyKey/prettyValue (otherwise they are empty strings).
 func (rf *RowFetcher) processKV(
-	ctx context.Context, kv roachpb.KeyValue, debugStrings bool,
+	ctx context.Context, kv roachpb.KeyValue,
 ) (prettyKey string, prettyValue string, err error) {
-	if debugStrings {
+	if rf.traceKV {
 		prettyKey = fmt.Sprintf("/%s/%s%s", rf.desc.Name, rf.index.Name, prettyEncDatums(rf.keyVals))
 	}
 
@@ -344,10 +350,9 @@ func (rf *RowFetcher) processKV(
 
 	if rf.neededCols.Empty() {
 		// We don't need to decode any values.
-		if debugStrings {
+		if rf.traceKV {
 			prettyValue = parser.DNull.String()
 		}
-
 		return prettyKey, prettyValue, nil
 	}
 
@@ -374,9 +379,9 @@ func (rf *RowFetcher) processKV(
 
 		switch kv.Value.GetTag() {
 		case roachpb.ValueType_TUPLE:
-			prettyKey, prettyValue, err = rf.processValueTuple(ctx, kv, debugStrings, prettyKey)
+			prettyKey, prettyValue, err = rf.processValueTuple(ctx, kv, prettyKey)
 		default:
-			prettyKey, prettyValue, err = rf.processValueSingle(ctx, family, kv, debugStrings, prettyKey)
+			prettyKey, prettyValue, err = rf.processValueSingle(ctx, family, kv, prettyKey)
 		}
 		if err != nil {
 			return "", "", err
@@ -399,7 +404,7 @@ func (rf *RowFetcher) processKV(
 					rf.row[rf.colIdxMap[id]] = rf.extraVals[i]
 				}
 			}
-			if debugStrings {
+			if rf.traceKV {
 				prettyValue = prettyEncDatums(rf.extraVals)
 			}
 		}
@@ -414,7 +419,7 @@ func (rf *RowFetcher) processKV(
 
 		if len(valueBytes) > 0 {
 			prettyKey, prettyValue, err = rf.processValueBytes(
-				ctx, kv, valueBytes, debugStrings, prettyKey,
+				ctx, kv, valueBytes, prettyKey,
 			)
 			if err != nil {
 				return "", "", err
@@ -422,7 +427,7 @@ func (rf *RowFetcher) processKV(
 		}
 	}
 
-	if debugStrings && prettyValue == "" {
+	if rf.traceKV && prettyValue == "" {
 		prettyValue = parser.DNull.String()
 	}
 
@@ -433,11 +438,7 @@ func (rf *RowFetcher) processKV(
 // family.DefaultColumnID), setting values in the rf.row accordingly. The key is
 // only used for logging.
 func (rf *RowFetcher) processValueSingle(
-	ctx context.Context,
-	family *ColumnFamilyDescriptor,
-	kv roachpb.KeyValue,
-	debugStrings bool,
-	prettyKeyPrefix string,
+	ctx context.Context, family *ColumnFamilyDescriptor, kv roachpb.KeyValue, prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
 	prettyKey = prettyKeyPrefix
 
@@ -452,9 +453,9 @@ func (rf *RowFetcher) processValueSingle(
 		return "", "", errors.Errorf("single entry value with no default column id")
 	}
 
-	if debugStrings || rf.neededCols.Contains(int(colID)) {
+	if rf.traceKV || rf.neededCols.Contains(int(colID)) {
 		if idx, ok := rf.colIdxMap[colID]; ok {
-			if debugStrings {
+			if rf.traceKV {
 				prettyKey = fmt.Sprintf("%s/%s", prettyKey, rf.desc.Columns[idx].Name)
 			}
 			typ := rf.cols[idx].Type
@@ -467,7 +468,7 @@ func (rf *RowFetcher) processValueSingle(
 			if err != nil {
 				return "", "", err
 			}
-			if debugStrings {
+			if rf.traceKV {
 				prettyValue = value.String()
 			}
 			rf.row[idx] = DatumToEncDatum(typ, value)
@@ -487,14 +488,10 @@ func (rf *RowFetcher) processValueSingle(
 }
 
 func (rf *RowFetcher) processValueBytes(
-	ctx context.Context,
-	kv roachpb.KeyValue,
-	valueBytes []byte,
-	debugStrings bool,
-	prettyKeyPrefix string,
+	ctx context.Context, kv roachpb.KeyValue, valueBytes []byte, prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
 	prettyKey = prettyKeyPrefix
-	if debugStrings {
+	if rf.traceKV {
 		if rf.prettyValueBuf == nil {
 			rf.prettyValueBuf = &bytes.Buffer{}
 		}
@@ -524,7 +521,7 @@ func (rf *RowFetcher) processValueBytes(
 		}
 		idx := rf.colIdxMap[colID]
 
-		if debugStrings {
+		if rf.traceKV {
 			prettyKey = fmt.Sprintf("%s/%s", prettyKey, rf.desc.Columns[idx].Name)
 		}
 
@@ -534,7 +531,7 @@ func (rf *RowFetcher) processValueBytes(
 		if err != nil {
 			return "", "", err
 		}
-		if debugStrings {
+		if rf.traceKV {
 			err := encValue.EnsureDecoded(rf.alloc)
 			if err != nil {
 				return "", "", err
@@ -546,7 +543,7 @@ func (rf *RowFetcher) processValueBytes(
 			log.Infof(ctx, "Scan %d -> %v", idx, encValue)
 		}
 	}
-	if debugStrings {
+	if rf.traceKV {
 		prettyValue = rf.prettyValueBuf.String()
 	}
 	return prettyKey, prettyValue, nil
@@ -555,13 +552,13 @@ func (rf *RowFetcher) processValueBytes(
 // processValueTuple processes the given values (of columns family.ColumnIDs),
 // setting values in the rf.row accordingly. The key is only used for logging.
 func (rf *RowFetcher) processValueTuple(
-	ctx context.Context, kv roachpb.KeyValue, debugStrings bool, prettyKeyPrefix string,
+	ctx context.Context, kv roachpb.KeyValue, prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
 	tupleBytes, err := kv.Value.GetTuple()
 	if err != nil {
 		return "", "", err
 	}
-	return rf.processValueBytes(ctx, kv, tupleBytes, debugStrings, prettyKeyPrefix)
+	return rf.processValueBytes(ctx, kv, tupleBytes, prettyKeyPrefix)
 }
 
 // NextRow processes keys until we complete one row, which is returned as an
@@ -569,7 +566,7 @@ func (rf *RowFetcher) processValueTuple(
 // index used; values that are not needed (as per valNeededForCol) are nil. The
 // EncDatumRow should not be modified and is only valid until the next call.
 // When there are no more rows, the EncDatumRow is nil.
-func (rf *RowFetcher) NextRow(ctx context.Context, traceKV bool) (EncDatumRow, error) {
+func (rf *RowFetcher) NextRow(ctx context.Context) (EncDatumRow, error) {
 	if rf.kvEnd {
 		return nil, nil
 	}
@@ -581,11 +578,11 @@ func (rf *RowFetcher) NextRow(ctx context.Context, traceKV bool) (EncDatumRow, e
 	// column name. When the index key changes we output a row containing the
 	// current values.
 	for {
-		prettyKey, prettyVal, err := rf.processKV(ctx, rf.kv, traceKV)
+		prettyKey, prettyVal, err := rf.processKV(ctx, rf.kv)
 		if err != nil {
 			return nil, err
 		}
-		if traceKV {
+		if rf.traceKV {
 			log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyVal)
 		}
 		rowDone, err := rf.NextKey(ctx)
@@ -603,7 +600,7 @@ func (rf *RowFetcher) NextRow(ctx context.Context, traceKV bool) (EncDatumRow, e
 // The Datums should not be modified and is only valid until the next call.
 // When there are no more rows, the Datums is nil.
 func (rf *RowFetcher) NextRowDecoded(ctx context.Context, traceKV bool) (parser.Datums, error) {
-	encRow, err := rf.NextRow(ctx, traceKV)
+	encRow, err := rf.NextRow(ctx)
 	if err != nil {
 		return nil, err
 	}

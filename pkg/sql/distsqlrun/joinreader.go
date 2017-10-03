@@ -157,6 +157,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 			})
 		}
 
+		// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
 		err := jr.fetcher.StartScan(ctx, txn, spans, false /* no batch limits */, 0, false /* traceKV */)
 		if err != nil {
 			log.Errorf(ctx, "scan error: %s", err)
@@ -167,8 +168,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 		// the next batch. We could start the next batch early while we are
 		// outputting rows.
 		for {
-			// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
-			fetcherRow, err := jr.fetcher.NextRow(ctx, false /* traceKV */)
+			fetcherRow, err := jr.fetcher.NextRow(ctx)
 			if err != nil {
 				return err
 			}

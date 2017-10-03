@@ -574,6 +574,18 @@ CREATE TABLE ab (a INT, b INT, PRIMARY KEY(a, b))
 statement ok
 INSERT INTO ab VALUES (1, 4), (1, 5), (2, 1), (2, 2), (2, 6), (3, 9)
 
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT COUNT(*) FROM ab]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+----
+fetched: /ab/primary/1/4 -> NULL
+fetched: /ab/primary/1/5 -> NULL
+fetched: /ab/primary/2/1 -> NULL
+fetched: /ab/primary/2/2 -> NULL
+fetched: /ab/primary/2/6 -> NULL
+fetched: /ab/primary/3/9 -> NULL
+output row: [6]
+
 # Note: the output from GROUP BY is in random order; the example is constructed so
 # those rows are identical.
 query T
