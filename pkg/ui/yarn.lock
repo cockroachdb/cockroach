@@ -104,6 +104,10 @@
   version "3.5.38"
   resolved "https://registry.yarnpkg.com/@types/d3/-/d3-3.5.38.tgz#76f8f2e9159ae562965b2fa0e6fbee1aa643a1bc"
 
+"@types/dagre-layout@^0.8.0":
+  version "0.8.0"
+  resolved "https://registry.yarnpkg.com/@types/dagre-layout/-/dagre-layout-0.8.0.tgz#79fb118253b84ee908f7666b41f1e4d342c4db91"
+
 "@types/enzyme@^2.7.6":
   version "2.7.7"
   resolved "https://registry.yarnpkg.com/@types/enzyme/-/enzyme-2.7.7.tgz#52688e130fe55185f14844919ec559961488f53d"
