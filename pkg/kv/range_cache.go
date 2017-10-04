@@ -68,6 +68,8 @@ type RangeDescriptorDB interface {
 // rangeDescriptorDBCompat is a type which can query range descriptors from an
 // underlying datastore. It is a superset of RangeDescriptorDB which can also
 // perform compatibility RangeLookups using RangeLookupRequest batches.
+//
+// TODO: remove in version 1.3.
 type rangeDescriptorDBCompat interface {
 	RangeDescriptorDB
 
@@ -431,6 +433,7 @@ func (rdc *RangeDescriptorCache) performRangeLookup(
 	return rdc.db.RangeLookup(ctx, key, useReverseScan)
 }
 
+// TODO: remove in version 1.3.
 func (rdc *RangeDescriptorCache) performRangeLookupCompat(
 	ctx context.Context, key roachpb.RKey, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {

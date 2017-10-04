@@ -389,6 +389,8 @@ func lookupRangeRevScan(
 // way to avoid this completely would be to store RangeDescriptors at
 // RangeMetaKey(desc.StartKey) and only allow meta2 split boundaries at
 // RangeMetaKey(existingSplitBoundary)
+//
+// TODO: remove in version 1.3.
 func LookupRangeCompat(
 	ctx context.Context,
 	sender Sender,
@@ -426,6 +428,8 @@ func LookupRangeCompat(
 // LookupRangeForVersion performs the same operation as LookupRange, but does so
 // using either LookupRange or LookupRangeCompat, depending on the provided
 // cluster version.
+//
+// TODO: remove in version 1.3.
 func LookupRangeForVersion(
 	ctx context.Context,
 	st *cluster.Settings,
