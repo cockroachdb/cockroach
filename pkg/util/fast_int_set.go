@@ -137,6 +137,9 @@ func (s *FastIntSet) ForEach(f func(i int)) {
 
 // Ordered returns a slice with all the integers in the set, in increasing order.
 func (s *FastIntSet) Ordered() []int {
+	if s.Empty() {
+		return nil
+	}
 	if s.large != nil {
 		return s.large.AppendTo([]int(nil))
 	}
