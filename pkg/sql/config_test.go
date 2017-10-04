@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -99,6 +99,42 @@ func TestGetZoneConfig(t *testing.T) {
 	defaultZoneConfig.RangeMaxBytes = 1 << 20
 	defaultZoneConfig.GC.TTLSeconds = 60
 
+	type testCase struct {
+		objectID uint32
+		zoneCfg  config.ZoneConfig
+	}
+	verifyZoneConfigs := func(testCases []testCase) {
+		cfg := forceNewConfig(t, s)
+
+		for tcNum, tc := range testCases {
+			// Verify SystemConfig.GetZoneConfigForKey.
+			{
+				zoneCfg, err := cfg.GetZoneConfigForKey(keys.MakeTablePrefix(tc.objectID))
+				if err != nil {
+					t.Fatalf("#%d: err=%s", tcNum, err)
+				}
+
+				if !proto.Equal(&zoneCfg, &tc.zoneCfg) {
+					t.Errorf("#%d: bad zone config.\nexpected: %+v\ngot: %+v", tcNum, &tc.zoneCfg, zoneCfg)
+				}
+			}
+
+			// Verify sql.GetZoneConfigInTxn.
+			if err := s.DB().Txn(context.Background(), func(ctx context.Context, txn *client.Txn) error {
+				if zoneCfg, found, err := sql.GetZoneConfigInTxn(ctx, txn, tc.objectID); err != nil {
+					return err
+				} else if !found {
+					t.Errorf("#%d: zone config missing", tcNum)
+				} else if !proto.Equal(&zoneCfg, &tc.zoneCfg) {
+					t.Errorf("#%d: bad zone config.\nexpected: %+v\ngot: %+v", tcNum, &tc.zoneCfg, zoneCfg)
+				}
+				return nil
+			}); err != nil {
+				t.Fatalf("#%d: err=%s", tcNum, err)
+			}
+		}
+	}
+
 	{
 		buf, err := protoutil.Marshal(&defaultZoneConfig)
 		if err != nil {
@@ -155,37 +191,18 @@ func TestGetZoneConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	{
-		cfg := forceNewConfig(t, s)
-
-		// We have no custom zone configs.
-		testCases := []struct {
-			key     roachpb.RKey
-			zoneCfg config.ZoneConfig
-		}{
-			{roachpb.RKeyMin, defaultZoneConfig},
-			{keys.MakeTablePrefix(0), defaultZoneConfig},
-			{keys.MakeTablePrefix(1), defaultZoneConfig},
-			{keys.MakeTablePrefix(keys.MaxReservedDescID), defaultZoneConfig},
-			{keys.MakeTablePrefix(db1), defaultZoneConfig},
-			{keys.MakeTablePrefix(db2), defaultZoneConfig},
-			{keys.MakeTablePrefix(tb11), defaultZoneConfig},
-			{keys.MakeTablePrefix(tb12), defaultZoneConfig},
-			{keys.MakeTablePrefix(tb21), defaultZoneConfig},
-			{keys.MakeTablePrefix(tb22), defaultZoneConfig},
-		}
-
-		for tcNum, tc := range testCases {
-			zoneCfg, err := cfg.GetZoneConfigForKey(tc.key)
-			if err != nil {
-				t.Fatalf("#%d: err=%s", tcNum, err)
-			}
-
-			if !proto.Equal(&zoneCfg, &tc.zoneCfg) {
-				t.Errorf("#%d: bad zone config.\nexpected: %+v\ngot: %+v", tcNum, tc.zoneCfg, zoneCfg)
-			}
-		}
-	}
+	// We have no custom zone configs.
+	verifyZoneConfigs([]testCase{
+		{0, defaultZoneConfig},
+		{1, defaultZoneConfig},
+		{keys.MaxReservedDescID, defaultZoneConfig},
+		{db1, defaultZoneConfig},
+		{db2, defaultZoneConfig},
+		{tb11, defaultZoneConfig},
+		{tb12, defaultZoneConfig},
+		{tb21, defaultZoneConfig},
+		{tb22, defaultZoneConfig},
+	})
 
 	// Now set some zone configs. We don't have a nice way of using table
 	// names for this, so we do raw puts.
@@ -222,36 +239,17 @@ func TestGetZoneConfig(t *testing.T) {
 		}
 	}
 
-	{
-		cfg := forceNewConfig(t, s)
-
-		testCases := []struct {
-			key     roachpb.RKey
-			zoneCfg config.ZoneConfig
-		}{
-			{roachpb.RKeyMin, defaultZoneConfig},
-			{keys.MakeTablePrefix(0), defaultZoneConfig},
-			{keys.MakeTablePrefix(1), defaultZoneConfig},
-			{keys.MakeTablePrefix(keys.MaxReservedDescID), defaultZoneConfig},
-			{keys.MakeTablePrefix(db1), db1Cfg},
-			{keys.MakeTablePrefix(db2), defaultZoneConfig},
-			{keys.MakeTablePrefix(tb11), tb11Cfg},
-			{keys.MakeTablePrefix(tb12), db1Cfg},
-			{keys.MakeTablePrefix(tb21), tb21Cfg},
-			{keys.MakeTablePrefix(tb22), defaultZoneConfig},
-		}
-
-		for tcNum, tc := range testCases {
-			zoneCfg, err := cfg.GetZoneConfigForKey(tc.key)
-			if err != nil {
-				t.Fatalf("#%d: err=%s", tcNum, err)
-			}
-
-			if !proto.Equal(&zoneCfg, &tc.zoneCfg) {
-				t.Errorf("#%d: bad zone config.\nexpected: %+v\ngot: %+v", tcNum, tc.zoneCfg, zoneCfg)
-			}
-		}
-	}
+	verifyZoneConfigs([]testCase{
+		{0, defaultZoneConfig},
+		{1, defaultZoneConfig},
+		{keys.MaxReservedDescID, defaultZoneConfig},
+		{db1, db1Cfg},
+		{db2, defaultZoneConfig},
+		{tb11, tb11Cfg},
+		{tb12, db1Cfg},
+		{tb21, tb21Cfg},
+		{tb22, defaultZoneConfig},
+	})
 }
 
 func BenchmarkGetZoneConfig(b *testing.B) {
