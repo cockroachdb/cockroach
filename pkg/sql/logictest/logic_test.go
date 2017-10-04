@@ -266,8 +266,8 @@ var logicTestConfigs = []testClusterConfig{
 	{name: "default", numNodes: 1, overrideDistSQLMode: "Off"},
 	{name: "default-v1.1@v1.0", numNodes: 1, overrideDistSQLMode: "Off",
 		bootstrapVersion: &cluster.ClusterVersion{
-			UseVersion:     cluster.VersionBase,
-			MinimumVersion: cluster.VersionBase,
+			UseVersion:     cluster.VersionByKey(cluster.VersionBase),
+			MinimumVersion: cluster.VersionByKey(cluster.VersionBase),
 		},
 		serverVersion: &roachpb.Version{Major: 1, Minor: 1},
 	},
