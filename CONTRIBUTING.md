@@ -37,8 +37,12 @@ expect in your collaboration with the Cockroach Labs team.
      - Autoconf 2.68+
      - Optional: NodeJS 6.x and Yarn 0.22.0+. Required when compiling protocol
        buffers.
+     - On GNU/Linux specifically, the terminfo/ncurses development
+       headers (note: not needed on BSD, Windows and macOS). This is
+       usually provided by the standard `ncurses-dev`, `ncurses-devel`,
+       `libncurses-dev` or similar package from your GNU/Linux distribution.
 
-    Note that at least 4GB of RAM is required to build from source and run tests.
+   Note that at least 4GB of RAM is required to build from source and run tests.
 
 2. Get the CockroachDB code:
 

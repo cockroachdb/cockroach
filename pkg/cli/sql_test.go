@@ -15,11 +15,11 @@
 package cli
 
 import (
+	"io/ioutil"
 	"net/url"
-	"strings"
+	"os"
 	"testing"
 
-	"github.com/chzyer/readline"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -98,18 +98,48 @@ select '''
 		},
 	}
 
-	conf := readline.Config{
-		DisableAutoSaveHistory: true,
-		FuncOnWidthChanged:     func(func()) {},
-	}
-
 	// Some other tests (TestDumpRow) mess with this, so make sure it's set.
 	cliCtx.tableDisplayFormat = tableDisplayPretty
 
+	// We need a temporary file with a name guaranteed to be available.
+	// So open a dummy file.
+	f, err := ioutil.TempFile("", "input")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Get the name and close it.
+	fname := f.Name()
+	f.Close()
+
+	// At every point below, when t.Fatal is called we should ensure the
+	// file is closed and removed.
+	f = nil
+	defer func() {
+		if f != nil {
+			f.Close()
+		}
+		_ = os.Remove(fname)
+		stdin = os.Stdin
+	}()
+
 	for _, test := range tests {
-		conf.Stdin = strings.NewReader(test.in)
+		// Populate the test input.
+		if f, err = os.OpenFile(fname, os.O_WRONLY, 0666); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.WriteString(test.in); err != nil {
+			t.Fatal(err)
+		}
+		f.Close()
+		// Make it available for reading.
+		if f, err = os.Open(fname); err != nil {
+			t.Fatal(err)
+		}
+		// Override the standard input for runInteractive().
+		stdin = f
+
 		out, err := captureOutput(func() {
-			err := runInteractive(conn, &conf)
+			err := runInteractive(conn)
 			if err != nil {
 				t.Fatal(err)
 			}
