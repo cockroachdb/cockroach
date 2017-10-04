@@ -1,4 +1,4 @@
-# LogicTest: 5node
+# LogicTest: 5node-distsql
 
 # First, we set up two data tables:
 #   - NumToSquare maps integers from 1 to 100 to their squares
@@ -41,11 +41,6 @@ NULL       /2000    {1}       1
 /4000      /6000    {3}       3
 /6000      /8000    {4}       4
 /8000      NULL     {5}       5
-
-# Ready to roll!
-statement ok
-SET DISTSQL = ON
-
 
 #
 # -- Basic tests --
