@@ -121,13 +121,6 @@
   version = "2017.04.17"
 
 [[projects]]
-  branch = "master"
-  name = "github.com/chzyer/readline"
-  packages = ["."]
-  revision = "8ca065f6f7703ba76dfd61a8af7c3426b54e650e"
-  source = "https://github.com/cockroachdb/readline"
-
-[[projects]]
   name = "github.com/client9/misspell"
   packages = [".","cmd/misspell"]
   revision = "b5fc83876cd1bf9fbb4e39afa9e503c83edce3b5"
@@ -400,6 +393,12 @@
   name = "github.com/kisielk/gotool"
   packages = ["."]
   revision = "0de1eaf82fa3f583ce21fde859f1e7e0c5e9b220"
+
+[[projects]]
+  name = "github.com/knz/go-libedit"
+  packages = [".","common","other","unix"]
+  revision = "e3a9619eeb7e58b5eb4ad3606236fcffadf1b11e"
+  version = "v1.2"
 
 [[projects]]
   name = "github.com/knz/strtime"
@@ -695,6 +694,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "2ebf48b7717b1b5dfa8b42088bb4c1673d32004c4a69acbfadbb8a493fa9c990"
+  inputs-digest = "44d910075a6ddad082ceae7c050336ca8fbe6b4fabdd108edee8a9f192b08fde"
   solver-name = "gps-cdcl"
   solver-version = 1
