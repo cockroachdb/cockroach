@@ -5,6 +5,7 @@
   "repository": "github.com/cockroachdb/cockroach",
   "license": "MIT",
   "dependencies": {
+    "@types/dagre-layout": "^0.8.0",
     "analytics-node": "^3.0.0",
     "classnames": "^2.2.5",
     "codemirror": "^5.25.2",
