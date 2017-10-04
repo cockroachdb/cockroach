@@ -1701,7 +1701,7 @@ func (s *Store) BootstrapRange(
 	// Bootstrap version information. We don't do this if this is v1.0, which is
 	// never going to be true in versions that have this code in production, but
 	// can be true in tests.
-	if bootstrapVersion != cluster.VersionBase {
+	if bootstrapVersion != cluster.VersionByKey(cluster.VersionBase) {
 		if err := engine.MVCCPutProto(ctx, batch, ms /* ms */, keys.BootstrapVersionKey, hlc.Timestamp{}, nil, &bootstrapVersion); err != nil {
 			return err
 		}
