@@ -98,6 +98,8 @@ type Iterator interface {
 	// chosen from the key ranges listed in keys.NoSplitSpans if
 	// allowMeta2Splits is true and keys.NoSplitSpansWithoutMeta2Splits if
 	// allowMeta2Splits is false.
+	//
+	// TODO: remove allowMeta2Splits in version 1.3.
 	FindSplitKey(start, end MVCCKey, targetSize int64, allowMeta2Splits bool) (MVCCKey, error)
 }
 
