@@ -599,7 +599,11 @@ var diagramCmd = func() *cobra.Command {
 					relink:  map[string]string{"table_name": "relation_expr", "column_name": "qualified_name", "column_name_list": "qualified_name_list"},
 					nosplit: true,
 				},
-				{name: "upsert_stmt", stmt: "insert_stmt", inline: []string{"insert_target", "insert_rest", "returning_clause"}, match: []*regexp.Regexp{regexp.MustCompile("'UPSERT'")}},
+				{
+					name:   "upsert_stmt",
+					inline: []string{"insert_target", "insert_rest", "returning_clause"},
+					match:  []*regexp.Regexp{regexp.MustCompile("'UPSERT'")},
+				},
 				{
 					name:    "validate_constraint",
 					stmt:    "alter_onetable_stmt",
