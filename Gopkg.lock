@@ -40,6 +40,12 @@
   revision = "d311c76e775b5092c023569caacdbb4e569c3243"
 
 [[projects]]
+  name = "github.com/PuerkitoBio/goquery"
+  packages = ["."]
+  revision = "e1271ee34c6a305e38566ecd27ae374944907ee9"
+  version = "v1.1.0"
+
+[[projects]]
   name = "github.com/Shopify/sarama"
   packages = ["."]
   revision = "c01858abb625b73a3af51d0798e4ad42c8147093"
@@ -64,6 +70,12 @@
   name = "github.com/abourget/teamcity"
   packages = ["."]
   revision = "e241104394f91bf4e65048f9ea5d0c0f3c25b35e"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/andybalholm/cascadia"
+  packages = ["."]
+  revision = "349dd0209470eabd9514242c688c403c0926d266"
 
 [[projects]]
   name = "github.com/apache/thrift"
@@ -610,7 +622,7 @@
 [[projects]]
   branch = "master"
   name = "golang.org/x/net"
-  packages = ["context","context/ctxhttp","http2","http2/hpack","idna","internal/timeseries","lex/httplex","proxy","trace"]
+  packages = ["context","context/ctxhttp","html","html/atom","http2","http2/hpack","idna","internal/timeseries","lex/httplex","proxy","trace"]
   revision = "b3756b4b77d7b13260a0a2ec658753cf48922eac"
 
 [[projects]]
@@ -683,6 +695,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "2aba9a3ee1a9cc6cbb40522644f6b1b9758191c8868084bcb7555aa8e5854a58"
+  inputs-digest = "2ebf48b7717b1b5dfa8b42088bb4c1673d32004c4a69acbfadbb8a493fa9c990"
   solver-name = "gps-cdcl"
   solver-version = 1
