@@ -432,7 +432,7 @@ func populateVersionSetting(ctx context.Context, r runner) error {
 	if v == (roachpb.Version{}) {
 		// The cluster was bootstrapped at v1.0 (or even earlier), so make that
 		// the version.
-		v = cluster.VersionBase
+		v = cluster.VersionByKey(cluster.VersionBase)
 	}
 
 	b, err := protoutil.Marshal(&cluster.ClusterVersion{

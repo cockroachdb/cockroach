@@ -118,8 +118,8 @@ func TestClusterVersionUpgrade1_0To1_2(t *testing.T) {
 
 	// Start by running 1.0.
 	bootstrapVersion := cluster.ClusterVersion{
-		UseVersion:     cluster.VersionBase,
-		MinimumVersion: cluster.VersionBase,
+		UseVersion:     cluster.VersionByKey(cluster.VersionBase),
+		MinimumVersion: cluster.VersionByKey(cluster.VersionBase),
 	}
 
 	tc := setupMixedCluster(t, bootstrapVersion, versions)
@@ -143,7 +143,7 @@ func TestClusterVersionUpgrade1_0To1_2(t *testing.T) {
 		for i := 0; i < tc.NumServers(); i++ {
 			v := tc.getVersionFromSetting(i)
 			wantActive := isNoopUpdate
-			if isActive := v.IsActive(newVersion); isActive != wantActive {
+			if isActive := v.Version().IsActiveVersion(newVersion); isActive != wantActive {
 				t.Fatalf("%d: v%s active=%t (wanted %t)", i, newVersion, isActive, wantActive)
 			}
 
@@ -255,8 +255,8 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 
 	// Start by running 1.0.
 	bootstrapVersion := cluster.ClusterVersion{
-		UseVersion:     cluster.VersionBase,
-		MinimumVersion: cluster.VersionBase,
+		UseVersion:     cluster.VersionByKey(cluster.VersionBase),
+		MinimumVersion: cluster.VersionByKey(cluster.VersionBase),
 	}
 
 	tc := setupMixedCluster(t, bootstrapVersion, versions)
