@@ -2008,3 +2008,62 @@ func TestPointInTimeRecovery(t *testing.T) {
 		sqlDB.CheckQueryResults(`SELECT * FROM data.bank ORDER BY id`, beforeBadThingData)
 	})
 }
+
+func TestBackupRestoreDropDB(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	defer cleanupFn()
+
+	sqlDB.Exec(`DROP DATABASE data CASCADE`)
+	sqlDB.Exec(`
+		CREATE DATABASE data;
+		CREATE TABLE data.t (i int);
+		INSERT INTO data.t VALUES (1);
+	`)
+
+	if err := verifyBackupRestoreStatementResult(
+		sqlDB, "BACKUP DATABASE data TO $1", dir,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	sqlDB.Exec("CREATE DATABASE data2")
+
+	if err := verifyBackupRestoreStatementResult(
+		sqlDB, "RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='data2')", dir,
+	); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestBackupRestoreDropTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	defer cleanupFn()
+
+	data := sampledataccl.Bank(0, 0, 0)
+
+	sqlDB.Exec(fmt.Sprintf(`DROP TABLE %s`, data.Name()))
+	sqlDB.Exec(fmt.Sprintf(`
+		CREATE TABLE %s (i int);
+		INSERT INTO %[1]s VALUES (1);
+	`, data.Name()))
+
+	if err := verifyBackupRestoreStatementResult(
+		sqlDB, "BACKUP DATABASE data TO $1", dir,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	sqlDB.Exec("CREATE DATABASE data2")
+
+	if err := verifyBackupRestoreStatementResult(
+		sqlDB, "RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='data2')", dir,
+	); err != nil {
+		t.Fatal(err)
+	}
+}
