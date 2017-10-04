@@ -143,6 +143,7 @@ func backupRestoreTestSetup(
 func verifyBackupRestoreStatementResult(
 	sqlDB *sqlutils.SQLRunner, query string, args ...interface{},
 ) error {
+	sqlDB.Helper()
 	rows := sqlDB.Query(query, args...)
 
 	columns, err := rows.Columns()
