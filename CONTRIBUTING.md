@@ -38,7 +38,7 @@ expect in your collaboration with the Cockroach Labs team.
      - Optional: NodeJS 6.x and Yarn 0.22.0+. Required when compiling protocol
        buffers.
 
-    Note that at least 4GB of RAM is required to build from source and run tests.
+   Note that at least 4GB of RAM is required to build from source and run tests.
 
 2. Get the CockroachDB code:
 

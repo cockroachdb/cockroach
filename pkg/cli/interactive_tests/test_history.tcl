@@ -8,7 +8,7 @@ spawn $argv sql
 eexpect root@
 
 # Ensure the connection is up and working.
-send "select 1;\r"
+send "SELECT 1;\r"
 eexpect "1 row"
 eexpect root@
 
@@ -27,7 +27,7 @@ start_test "Test that we can recall a previous line with Ctrl+R"
 send "foo;\r"
 eexpect "syntax error"
 eexpect root@
-send "\022sel"
+send "\022SEL"
 eexpect "SELECT 1;"
 end_test
 
@@ -43,14 +43,14 @@ eexpect "SELECT 1;"
 end_test
 
 start_test "Test that client cannot terminate with Ctrl+D while cursor is on recalled line"
-send "\004"
+send_eof
 send "\r"
 eexpect "1 row"
 eexpect root@
 end_test
 
 start_test "Test that Ctrl+D does terminate client on empty line"
-send "\004"
+send_eof
 eexpect eof
 end_test
 
@@ -63,7 +63,7 @@ end_test
 
 start_test "Test that the client cannot terminate with Ctrl+C while cursor is on recalled line"
 interrupt
-send "\rselect 1;\r"
+send "\rSELECT 1;\r"
 eexpect "1 row"
 eexpect root@
 end_test
@@ -80,7 +80,7 @@ eexpect root@
 end_test
 
 start_test "Test that two statements on the same line can be recalled together."
-send "select 2; select 3;\r"
+send "SELECT 2; SELECT 3;\r"
 eexpect "1 row"
 eexpect "1 row"
 eexpect root@
