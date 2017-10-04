@@ -99,7 +99,11 @@ func cleanupTempStorageDirs(ctx context.Context, path string, wg *sync.WaitGroup
 		toDeleteFull := filepath.Join(path, fileToDelete.Name())
 		if toDeleteFull != deletionDir {
 			if err := os.Rename(toDeleteFull, filepath.Join(deletionDir, fileToDelete.Name())); err != nil {
-				return err
+				// Fall back to just removing the file if rename fails (e.g. due to #18994).
+				if rmErr := os.Remove(toDeleteFull); rmErr != nil {
+					return errors.Errorf("failed to remove file %q (%s) after failing to rename it (%s)",
+						toDeleteFull, rmErr, err)
+				}
 			}
 		}
 	}
