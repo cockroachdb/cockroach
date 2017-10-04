@@ -26,8 +26,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/docgen/extract"
 	"github.com/spf13/cobra"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/docgen/extract"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 )
 
 var cmdFuncs *cobra.Command
@@ -158,7 +160,12 @@ var diagramCmd = func() *cobra.Command {
 			if railroadJar != "" {
 				_, err := os.Stat(railroadJar)
 				if err != nil {
-					log.Fatalf("%s not found\n", railroadJar)
+					if envutil.EnvOrDefaultBool("COCKROACH_REQUIRE_RAILROAD", false) {
+						log.Fatalf("%s not found\n", railroadJar)
+					} else {
+						log.Printf("%s not found, falling back to slower web service (employees can find it on google drive).", railroadJar)
+						railroadJar = ""
+					}
 				}
 			}
 
