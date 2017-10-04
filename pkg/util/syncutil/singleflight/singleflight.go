@@ -70,10 +70,25 @@ func (g *Group) Do(
 	return c.val, c.dups > 0, c.err
 }
 
-// DoChan is like Do but returns a channel that will receive the
-// results when they are ready. The method also returns a boolean
-// specifying whether the caller's fn function will be called or
-// not.
+// DoChan is like Do but returns a channel that will receive the results when
+// they are ready. The method also returns a boolean specifying whether the
+// caller's fn function will be called or not. This return value lets callers
+// identify a unique "leader" for a flight.
+//
+// NOTE: DoChan makes it possible to initiate or join a flight while holding a
+// lock without holding it for the duration of the flight. A common usage
+// pattern is:
+// 1. Check some datastructure to see if it contains the value you're looking
+// for.
+// 2. If it doesn't, initiate or join a flight to produce it.
+//
+// Step one is expected to be done while holding a lock. Modifying the
+// datastructure in the callback is expected to need to take the same lock. Once
+// a caller proceeds to step two, it likely wants to keep the lock until
+// DoChan() returned a channel, in order to ensure that a flight is only started
+// before any modifications to the datastructure occurred (relative to the state
+// observed in step one). Were the lock to be released before calling DoChan(),
+// a previous flight might modify the datastructure before our flight began.
 func (g *Group) DoChan(key string, fn func() (interface{}, error)) (<-chan Result, bool) {
 	ch := make(chan Result, 1)
 	g.mu.Lock()
