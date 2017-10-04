@@ -19,8 +19,6 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
-
-	"github.com/cockroachdb/cockroach/pkg/util/caller"
 )
 
 // SQLRunner wraps a testing.TB and *gosql.DB connection and provides
@@ -37,10 +35,10 @@ func MakeSQLRunner(tb testing.TB, db *gosql.DB) *SQLRunner {
 
 // Exec is a wrapper around gosql.Exec that kills the test on error.
 func (sr *SQLRunner) Exec(query string, args ...interface{}) gosql.Result {
+	sr.Helper()
 	r, err := sr.DB.Exec(query, args...)
 	if err != nil {
-		file, line, _ := caller.Lookup(1)
-		sr.Fatalf("%s:%d: error executing '%s': %s", file, line, query, err)
+		sr.Fatalf("error executing '%s': %s", query, err)
 	}
 	return r
 }
@@ -48,6 +46,7 @@ func (sr *SQLRunner) Exec(query string, args ...interface{}) gosql.Result {
 // ExecRowsAffected executes the statement and verifies that RowsAffected()
 // matches the expected value. It kills the test on errors.
 func (sr *SQLRunner) ExecRowsAffected(expRowsAffected int, query string, args ...interface{}) {
+	sr.Helper()
 	r := sr.Exec(query, args...)
 	numRows, err := r.RowsAffected()
 	if err != nil {
@@ -60,6 +59,7 @@ func (sr *SQLRunner) ExecRowsAffected(expRowsAffected int, query string, args ..
 
 // Query is a wrapper around gosql.Query that kills the test on error.
 func (sr *SQLRunner) Query(query string, args ...interface{}) *gosql.Rows {
+	sr.Helper()
 	r, err := sr.DB.Query(query, args...)
 	if err != nil {
 		sr.Fatalf("error executing '%s': %s", query, err)
@@ -75,20 +75,22 @@ type Row struct {
 
 // Scan is a wrapper around (*gosql.Row).Scan that kills the test on error.
 func (r *Row) Scan(dest ...interface{}) {
+	r.Helper()
 	if err := r.row.Scan(dest...); err != nil {
-		file, line, _ := caller.Lookup(1)
-		r.Fatalf("%s:%d: error scanning '%v': %+v", file, line, r.row, err)
+		r.Fatalf("error scanning '%v': %+v", r.row, err)
 	}
 }
 
 // QueryRow is a wrapper around gosql.QueryRow that kills the test on error.
 func (sr *SQLRunner) QueryRow(query string, args ...interface{}) *Row {
+	sr.Helper()
 	return &Row{sr.TB, sr.DB.QueryRow(query, args...)}
 }
 
 // QueryStr runs a Query and converts the result using RowsToStrMatrix. Kills
 // the test on errors.
 func (sr *SQLRunner) QueryStr(query string, args ...interface{}) [][]string {
+	sr.Helper()
 	rows := sr.Query(query, args...)
 	r, err := RowsToStrMatrix(rows)
 	if err != nil {
@@ -135,9 +137,9 @@ func RowsToStrMatrix(rows *gosql.Rows) ([][]string, error) {
 // CheckQueryResults checks that the rows returned by a query match the expected
 // response.
 func (sr *SQLRunner) CheckQueryResults(query string, expected [][]string) {
+	sr.Helper()
 	res := sr.QueryStr(query)
 	if !reflect.DeepEqual(res, expected) {
-		file, line, _ := caller.Lookup(1)
-		sr.Errorf("%s:%d query '%s': expected:\n%v\ngot:%v\n", file, line, query, expected, res)
+		sr.Errorf("query '%s': expected:\n%v\ngot:%v\n", query, expected, res)
 	}
 }
