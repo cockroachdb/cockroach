@@ -1,4 +1,4 @@
-# LogicTest: 5node
+# LogicTest: 5node-distsql
 
 statement ok
 CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, PRIMARY KEY (a, b, c, d))
@@ -35,10 +35,6 @@ NULL       /1       {1}       1
 /7         /8       {3}       3
 /8         /9       {4}       4
 /9         NULL     {5}       5
-
-# Ready to roll!
-statement ok
-SET DISTSQL = ON
 
 # We hardcode the plan for the testcase that follows to make it easier to debug
 # errors caused by changing planning logic.
