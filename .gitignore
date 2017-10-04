@@ -24,3 +24,4 @@ customenv.mk
 
 # Generated files containing include paths.
 zcgo_flags*.go
+build/Railroad.jar
