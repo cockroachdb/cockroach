@@ -30,6 +30,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/chzyer/readline"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -177,7 +178,7 @@ const (
 
 // printCliHelp prints a short inline help about the CLI.
 func printCliHelp() {
-	fmt.Print(`You are using 'cockroach sql', CockroachDB's lightweight SQL client.
+	fmt.Printf(`You are using 'cockroach sql', CockroachDB's lightweight SQL client.
 Type:
   \q to exit        (Ctrl+C/Ctrl+D also supported)
   \! CMD            run an external command and print its results on standard output.
@@ -190,10 +191,11 @@ Type:
   \hf [NAME]        help on SQL built-in functions.
 
 More documentation about our SQL dialect and the CLI shell is available online:
-https://www.cockroachlabs.com/docs/stable/sql-statements.html
-https://www.cockroachlabs.com/docs/stable/use-the-built-in-sql-client.html
-
-`)
+%s
+%s`,
+		base.DocsURL("sql-statements.html"),
+		base.DocsURL("use-the-built-in-sql-client.html"),
+	)
 }
 
 // addHistory persists a line of input to the readline history
