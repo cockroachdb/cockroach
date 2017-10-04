@@ -56,7 +56,7 @@ func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfi
 	}
 
 	for i := range cfg.Nodes {
-		// Leave the field blank for all but the first node so that the use the
+		// Leave the field blank for all but the first node so that they use the
 		// version we're testing in this run.
 		if i == 0 {
 			cfg.Nodes[i].Version = "v1.0.5"
@@ -147,7 +147,7 @@ func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfi
 		}
 	}()
 
-	bumps := []string{"1.0", "1.0-1", "1.0-3"}
+	bumps := []string{"1.0", "1.1", "1.1-2"}
 
 	for i, bump := range bumps {
 		func() {
