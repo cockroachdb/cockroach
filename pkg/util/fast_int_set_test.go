@@ -64,7 +64,7 @@ func TestFastIntSet(t *testing.T) {
 					}
 				}
 				// Cross-check Ordered and Next().
-				vals := make([]int, 0)
+				var vals []int
 				for i, ok := s.Next(0); ok; i, ok = s.Next(i + 1) {
 					vals = append(vals, i)
 				}
