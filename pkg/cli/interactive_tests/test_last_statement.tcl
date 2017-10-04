@@ -30,7 +30,7 @@ eexpect "CREATE TABLE"
 eexpect root@
 send "insert into t.foo(x) values (42)\r"
 eexpect " ->"
-send "\004"
+send_eof
 eexpect ":/# "
 
 send "$argv sql\r"
