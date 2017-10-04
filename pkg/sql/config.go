@@ -15,8 +15,12 @@
 package sql
 
 import (
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -26,10 +30,14 @@ func init() {
 	config.ZoneConfigHook = GetZoneConfig
 }
 
-// GetZoneConfig returns the zone config for the object with 'id'.
-func GetZoneConfig(cfg config.SystemConfig, id uint32) (config.ZoneConfig, bool, error) {
+func getZoneConfig(
+	id uint32,
+	get func(roachpb.Key) (*roachpb.Value, error),
+) (config.ZoneConfig, bool, error) {
 	// Look in the zones table.
-	if zoneVal := cfg.GetValue(sqlbase.MakeZoneKey(sqlbase.ID(id))); zoneVal != nil {
+	if zoneVal, err := get(sqlbase.MakeZoneKey(sqlbase.ID(id))); err != nil {
+		return config.ZoneConfig{}, false, err
+	} else if zoneVal != nil {
 		// We're done.
 		zone, err := config.MigrateZoneConfig(zoneVal)
 		return zone, true, err
@@ -37,7 +45,9 @@ func GetZoneConfig(cfg config.SystemConfig, id uint32) (config.ZoneConfig, bool,
 
 	// No zone config for this ID. We need to figure out if it's a database
 	// or table. Lookup its descriptor.
-	if descVal := cfg.GetValue(sqlbase.MakeDescMetadataKey(sqlbase.ID(id))); descVal != nil {
+	if descVal, err := get(sqlbase.MakeDescMetadataKey(sqlbase.ID(id))); err != nil {
+		return config.ZoneConfig{}, false, err
+	} else if descVal != nil {
 		// Determine whether this is a database or table.
 		var desc sqlbase.Descriptor
 		if err := descVal.GetProto(&desc); err != nil {
@@ -45,18 +55,42 @@ func GetZoneConfig(cfg config.SystemConfig, id uint32) (config.ZoneConfig, bool,
 		}
 		if tableDesc := desc.GetTable(); tableDesc != nil {
 			// This is a table descriptor. Lookup its parent database zone config.
-			return GetZoneConfig(cfg, uint32(tableDesc.ParentID))
+			return getZoneConfig(uint32(tableDesc.ParentID), get)
 		}
 	}
 
 	// Retrieve the default zone config, but only as long as that wasn't the ID
 	// we were trying to retrieve (avoid infinite recursion).
 	if id != keys.RootNamespaceID {
-		return GetZoneConfig(cfg, keys.RootNamespaceID)
+		return getZoneConfig(keys.RootNamespaceID, get)
 	}
 
 	// No descriptor or not a table.
 	return config.ZoneConfig{}, false, nil
+}
+
+// GetZoneConfig returns the zone config for the object with 'id' using the
+// cached system config.
+func GetZoneConfig(cfg config.SystemConfig, id uint32) (config.ZoneConfig, bool, error) {
+	return getZoneConfig(id, func(key roachpb.Key) (*roachpb.Value, error) {
+		return cfg.GetValue(key), nil
+	})
+}
+
+// GetZoneConfigInTxn is like GetZoneConfig, but uses the provided transaction
+// to perform lookups instead of the cached system config.
+func GetZoneConfigInTxn(
+	ctx context.Context,
+	txn *client.Txn,
+	id uint32,
+) (config.ZoneConfig, bool, error) {
+	return getZoneConfig(id, func(key roachpb.Key) (*roachpb.Value, error) {
+		kv, err := txn.Get(ctx, key)
+		if err != nil {
+			return nil, err
+		}
+		return kv.Value, nil
+	})
 }
 
 // GetTableDesc returns the table descriptor for the table with 'id'.
