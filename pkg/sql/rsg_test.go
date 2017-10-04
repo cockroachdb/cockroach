@@ -147,9 +147,6 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 				switch strings.ToLower(name) {
 				case "crdb_internal.force_panic", "crdb_internal.force_log_fatal":
 					continue
-				case "repeat":
-					// TODO(mjibson): wait for fix of #10545
-					continue
 				}
 				for _, builtin := range variations {
 					select {
@@ -192,7 +189,12 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 		default:
 			panic(fmt.Sprintf("unknown fn.Types: %T", ft))
 		}
-		s := fmt.Sprintf("SELECT %s(%s)", nb.name, strings.Join(args, ", "))
+		var limit string
+		switch strings.ToLower(nb.name) {
+		case "generate_series":
+			limit = " LIMIT 100"
+		}
+		s := fmt.Sprintf("SELECT %s(%s) %s", nb.name, strings.Join(args, ", "), limit)
 		funcdone := make(chan error, 1)
 		go func() {
 			funcdone <- db.exec(s)
