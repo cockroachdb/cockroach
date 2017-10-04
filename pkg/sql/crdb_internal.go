@@ -587,6 +587,9 @@ CREATE TABLE crdb_internal.cluster_settings (
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
+		if err := p.RequireSuperUser("read crdb_internal.cluster_settings"); err != nil {
+			return err
+		}
 		for _, k := range settings.Keys() {
 			setting, _ := settings.Lookup(k)
 			if err := addRow(
