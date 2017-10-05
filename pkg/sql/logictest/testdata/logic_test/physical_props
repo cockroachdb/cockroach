@@ -65,6 +65,52 @@ Level  Type  Field   Description                        Columns       Ordering
 0      ·     spans   ALL                                ·             ·
 0      ·     filter  ((a = b) AND (b = c)) AND (c = 1)  ·             ·
 
+query ITTTTT colnames
+EXPLAIN (VERBOSE) SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS x(a,b,c) WHERE a = 1
+----
+Level  Type    Field          Description        Columns    Ordering
+0      filter  ·              ·                  (a, b, c)  a=CONST
+0      ·       filter         x.a = 1            ·          ·
+1      values  ·              ·                  (a, b, c)  ·
+1      ·       size           3 columns, 2 rows  ·          ·
+1      ·       row 0, expr 0  1                  ·          ·
+1      ·       row 0, expr 1  2                  ·          ·
+1      ·       row 0, expr 2  3                  ·          ·
+1      ·       row 1, expr 0  4                  ·          ·
+1      ·       row 1, expr 1  5                  ·          ·
+1      ·       row 1, expr 2  6                  ·          ·
+
+query ITTTTT colnames
+EXPLAIN (VERBOSE) SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS x(a,b,c) WHERE a = b
+----
+Level  Type    Field          Description        Columns    Ordering
+0      filter  ·              ·                  (a, b, c)  a=b
+0      ·       filter         x.a = x.b          ·          ·
+1      values  ·              ·                  (a, b, c)  ·
+1      ·       size           3 columns, 2 rows  ·          ·
+1      ·       row 0, expr 0  1                  ·          ·
+1      ·       row 0, expr 1  2                  ·          ·
+1      ·       row 0, expr 2  3                  ·          ·
+1      ·       row 1, expr 0  4                  ·          ·
+1      ·       row 1, expr 1  5                  ·          ·
+1      ·       row 1, expr 2  6                  ·          ·
+
+query ITTTTT colnames
+EXPLAIN (VERBOSE) SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS x(a,b,c) WHERE a = b AND b = 1
+----
+Level  Type    Field          Description                Columns    Ordering
+0      filter  ·              ·                          (a, b, c)  a=b; a=CONST
+0      ·       filter         (x.a = x.b) AND (x.b = 1)  ·          ·
+1      values  ·              ·                          (a, b, c)  ·
+1      ·       size           3 columns, 2 rows          ·          ·
+1      ·       row 0, expr 0  1                          ·          ·
+1      ·       row 0, expr 1  2                          ·          ·
+1      ·       row 0, expr 2  3                          ·          ·
+1      ·       row 1, expr 0  4                          ·          ·
+1      ·       row 1, expr 1  5                          ·          ·
+1      ·       row 1, expr 2  6                          ·          ·
+
+
 statement ok
 CREATE TABLE efg (e INT PRIMARY KEY, f INT, g INT)
 

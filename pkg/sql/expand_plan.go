@@ -34,7 +34,7 @@ func (p *planner) expandPlan(ctx context.Context, plan planNode) (planNode, erro
 	if err != nil {
 		return plan, err
 	}
-	plan = simplifyOrderings(plan, nil)
+	plan = p.simplifyOrderings(plan, nil)
 	return plan, nil
 }
 
@@ -422,33 +422,33 @@ func translateOrdering(desiredDown sqlbase.ColumnOrdering, r *renderNode) sqlbas
 // This determination cannot be done directly as part of the doExpandPlan
 // recursion (using desiredOrdering) because some nodes (distinctNode) make use
 // of whatever ordering the underlying node happens to provide.
-func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) planNode {
+func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) planNode {
 	if plan == nil {
 		return nil
 	}
 
 	switch n := plan.(type) {
 	case *createTableNode:
-		n.sourcePlan = simplifyOrderings(n.sourcePlan, nil)
+		n.sourcePlan = p.simplifyOrderings(n.sourcePlan, nil)
 
 	case *updateNode:
-		n.run.rows = simplifyOrderings(n.run.rows, nil)
+		n.run.rows = p.simplifyOrderings(n.run.rows, nil)
 
 	case *insertNode:
-		n.run.rows = simplifyOrderings(n.run.rows, nil)
+		n.run.rows = p.simplifyOrderings(n.run.rows, nil)
 
 	case *deleteNode:
-		n.run.rows = simplifyOrderings(n.run.rows, nil)
+		n.run.rows = p.simplifyOrderings(n.run.rows, nil)
 
 	case *explainDistSQLNode:
-		n.plan = simplifyOrderings(n.plan, nil)
+		n.plan = p.simplifyOrderings(n.plan, nil)
 
 	case *traceNode:
-		n.plan = simplifyOrderings(n.plan, nil)
+		n.plan = p.simplifyOrderings(n.plan, nil)
 
 	case *explainPlanNode:
 		if n.expanded {
-			n.plan = simplifyOrderings(n.plan, nil)
+			n.plan = p.simplifyOrderings(n.plan, nil)
 		}
 
 	case *indexJoinNode:
@@ -456,11 +456,12 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 		n.table.ordering = orderingInfo{}
 
 	case *unionNode:
-		n.right = simplifyOrderings(n.right, nil)
-		n.left = simplifyOrderings(n.left, nil)
+		n.right = p.simplifyOrderings(n.right, nil)
+		n.left = p.simplifyOrderings(n.left, nil)
 
 	case *filterNode:
-		n.source.plan = simplifyOrderings(n.source.plan, usefulOrdering)
+		n.source.plan = p.simplifyOrderings(n.source.plan, usefulOrdering)
+		n.computeOrdering(&p.evalCtx)
 
 	case *joinNode:
 		// In DistSQL, we may take advantage of matching orderings on equality
@@ -479,31 +480,31 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 
 		n.ordering.trim(usefulOrdering)
 
-		n.left.plan = simplifyOrderings(n.left.plan, usefulLeft)
-		n.right.plan = simplifyOrderings(n.right.plan, usefulRight)
+		n.left.plan = p.simplifyOrderings(n.left.plan, usefulLeft)
+		n.right.plan = p.simplifyOrderings(n.right.plan, usefulRight)
 
 	case *ordinalityNode:
 		n.ordering.trim(usefulOrdering)
-		n.source = simplifyOrderings(n.source, n.restrictOrdering(usefulOrdering))
+		n.source = p.simplifyOrderings(n.source, n.restrictOrdering(usefulOrdering))
 
 	case *limitNode:
-		n.plan = simplifyOrderings(n.plan, usefulOrdering)
+		n.plan = p.simplifyOrderings(n.plan, usefulOrdering)
 
 	case *groupNode:
 		if n.needOnlyOneRow {
-			n.plan = simplifyOrderings(n.plan, n.desiredOrdering)
+			n.plan = p.simplifyOrderings(n.plan, n.desiredOrdering)
 		} else {
-			n.plan = simplifyOrderings(n.plan, nil)
+			n.plan = p.simplifyOrderings(n.plan, nil)
 		}
 
 	case *windowNode:
-		n.plan = simplifyOrderings(n.plan, nil)
+		n.plan = p.simplifyOrderings(n.plan, nil)
 
 	case *sortNode:
 		if n.needSort {
 			// We could pass no ordering below, but a partial ordering can speed up
 			// the sort (and save memory), at least for DistSQL.
-			n.plan = simplifyOrderings(n.plan, n.ordering)
+			n.plan = p.simplifyOrderings(n.plan, n.ordering)
 		} else {
 			constantCols := planOrdering(n.plan).constantCols
 			// Normally we would pass n.ordering; but n.ordering could be a prefix of
@@ -521,9 +522,9 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 				}
 			}
 			if sortOrder.IsPrefixOf(givenOrder) {
-				n.plan = simplifyOrderings(n.plan, givenOrder)
+				n.plan = p.simplifyOrderings(n.plan, givenOrder)
 			} else {
-				n.plan = simplifyOrderings(n.plan, sortOrder)
+				n.plan = p.simplifyOrderings(n.plan, sortOrder)
 			}
 		}
 
@@ -547,13 +548,13 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 		// distinctNode uses whatever order the underlying node presents (regardless
 		// of any ordering requirement on distinctNode itself).
 		sourceOrdering := planOrdering(n.plan)
-		n.plan = simplifyOrderings(n.plan, sourceOrdering.ordering)
+		n.plan = p.simplifyOrderings(n.plan, sourceOrdering.ordering)
 
 	case *scanNode:
 		n.ordering.trim(usefulOrdering)
 
 	case *renderNode:
-		n.source.plan = simplifyOrderings(n.source.plan, translateOrdering(usefulOrdering, n))
+		n.source.plan = p.simplifyOrderings(n.source.plan, translateOrdering(usefulOrdering, n))
 		// Recompute r.ordering using the source's simplified ordering.
 		// TODO(radu): in some cases there may be multiple possible n.orderings for
 		// a given source plan ordering; we should pass usefulOrdering to help make
@@ -561,13 +562,13 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 		n.computeOrdering(planOrdering(n.source.plan))
 
 	case *delayedNode:
-		n.plan = simplifyOrderings(n.plan, usefulOrdering)
+		n.plan = p.simplifyOrderings(n.plan, usefulOrdering)
 
 	case *splitNode:
-		n.rows = simplifyOrderings(n.rows, nil)
+		n.rows = p.simplifyOrderings(n.rows, nil)
 
 	case *testingRelocateNode:
-		n.rows = simplifyOrderings(n.rows, nil)
+		n.rows = p.simplifyOrderings(n.rows, nil)
 
 	case *valuesNode:
 	case *alterTableNode:

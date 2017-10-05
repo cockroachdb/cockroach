@@ -30,6 +30,12 @@ type filterNode struct {
 	source     planDataSource
 	filter     parser.TypedExpr
 	ivarHelper parser.IndexedVarHelper
+	ordering   orderingInfo
+}
+
+func (f *filterNode) computeOrdering(evalCtx *parser.EvalContext) {
+	f.ordering = planOrdering(f.source.plan)
+	f.ordering.applyExpr(evalCtx, f.filter)
 }
 
 // IndexedVarEval implements the parser.IndexedVarContainer interface.
