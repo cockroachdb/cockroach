@@ -349,6 +349,16 @@ func (ord *orderingInfo) addEquivalency(colA, colB int) {
 }
 
 func (ord *orderingInfo) addKeySet(cols util.FastIntSet) {
+	// Remap column indices to equivalency group representatives.
+	var k util.FastIntSet
+	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
+		group := ord.eqGroups.Find(c)
+		if !ord.constantCols.Contains(group) {
+			k.Add(ord.eqGroups.Find(c))
+		}
+	}
+	cols = k
+
 	// Check if the key set is redundant, or if it makes some existing
 	// key sets redundant.
 	// Note: we don't use range because we are modifying keySets.
@@ -365,15 +375,7 @@ func (ord *orderingInfo) addKeySet(cols util.FastIntSet) {
 			i--
 		}
 	}
-	// Remap column indices to equivalency group representatives.
-	var k util.FastIntSet
-	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
-		group := ord.eqGroups.Find(c)
-		if !ord.constantCols.Contains(group) {
-			k.Add(ord.eqGroups.Find(c))
-		}
-	}
-	ord.keySets = append(ord.keySets, k)
+	ord.keySets = append(ord.keySets, cols)
 }
 
 func (ord *orderingInfo) addOrderColumn(colIdx int, dir encoding.Direction) {

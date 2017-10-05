@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 type joinType int
@@ -597,18 +598,44 @@ func (n *joinNode) joinOrdering() orderingInfo {
 		return info
 	}
 
-	// Propagate any constant equality columns.
-	for i, leftIdx := range n.pred.leftEqualityIndices {
-		leftGroup := leftOrd.eqGroups.Find(leftIdx)
-		rightGroup := rightOrd.eqGroups.Find(n.pred.rightEqualityIndices[i])
-		if leftOrd.constantCols.Contains(leftGroup) ||
-			rightOrd.constantCols.Contains(rightGroup) {
-			info.addConstantColumn(leftCol(leftIdx))
-		}
+	// Any constant columns stay constant after an inner join.
+	for l, ok := leftOrd.constantCols.Next(0); ok; l, ok = leftOrd.constantCols.Next(l + 1) {
+		info.addConstantColumn(leftCol(l))
+	}
+	for r, ok := rightOrd.constantCols.Next(0); ok; r, ok = rightOrd.constantCols.Next(r + 1) {
+		info.addConstantColumn(rightCol(r))
 	}
 
-	// TODO(radu): if the equality columns form a key on one side, we can
-	// propagate all constant columns from the other side.
+	// If the equality columns form a key on both sides, then each row (from
+	// either side) is incorporated into at most one result row; so any key sets
+	// remain valid and can be propagated.
+
+	var leftEqSet, rightEqSet util.FastIntSet
+	for _, leftIdx := range n.pred.leftEqualityIndices {
+		leftEqSet.Add(leftIdx)
+	}
+	for _, rightIdx := range n.pred.rightEqualityIndices {
+		rightEqSet.Add(rightIdx)
+	}
+
+	if leftOrd.groupContainsKey(leftEqSet) && rightOrd.groupContainsKey(rightEqSet) {
+		for _, k := range leftOrd.keySets {
+			// Translate column indices.
+			var s util.FastIntSet
+			for c, ok := k.Next(0); ok; c, ok = k.Next(c + 1) {
+				s.Add(leftCol(c))
+			}
+			info.addKeySet(s)
+		}
+		for _, k := range rightOrd.keySets {
+			// Translate column indices.
+			var s util.FastIntSet
+			for c, ok := k.Next(0); ok; c, ok = k.Next(c + 1) {
+				s.Add(rightCol(c))
+			}
+			info.addKeySet(s)
+		}
+	}
 
 	info.ordering = make(sqlbase.ColumnOrdering, len(n.mergeJoinOrdering))
 	for i, col := range n.mergeJoinOrdering {

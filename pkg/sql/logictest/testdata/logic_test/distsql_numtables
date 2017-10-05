@@ -143,10 +143,10 @@ SELECT x, str FROM NumToSquare JOIN NumToStr ON y = xsquared
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0
 ----
-0  render  ·               ·                    (x, str)                                 ·
+0  render  ·               ·                    (x, str)                                 key(x)
 0  ·       render 0        test.numtosquare.x   ·                                        ·
 0  ·       render 1        test.numtostr.str    ·                                        ·
-1  join    ·               ·                    (x, xsquared[omitted], y[omitted], str)  x=y
+1  join    ·               ·                    (x, xsquared[omitted], y[omitted], str)  x=y; key(x)
 1  ·       type            inner                ·                                        ·
 1  ·       equality        (x) = (y)            ·                                        ·
 1  ·       mergeJoinOrder  +"(x=y)"             ·                                        ·
