@@ -464,17 +464,17 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 	tracer := serverCfg.Settings.Tracer
 	sp := tracer.StartSpan("server start")
-	startCtx := opentracing.ContextWithSpan(context.Background(), sp)
+	ctx := opentracing.ContextWithSpan(context.Background(), sp)
 
 	// Set up the logging and profiling output.
 	// It is important that no logging occurs before this point or the log files
 	// will be created in $TMPDIR instead of their expected location.
-	stopper, err := setupAndInitializeLoggingAndProfiling(startCtx)
+	stopper, err := setupAndInitializeLoggingAndProfiling(ctx)
 	if err != nil {
 		return err
 	}
 
-	serverCfg.Report(startCtx)
+	serverCfg.Report(ctx)
 
 	// Run the rest of the startup process in the background to avoid preventing
 	// proper handling of signals if we get stuck on something during
@@ -494,7 +494,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 		defer log.Flush()
 		defer func() {
 			if s != nil {
-				log.RecoverAndReportPanic(startCtx, &s.ClusterSettings().SV)
+				log.RecoverAndReportPanic(ctx, &s.ClusterSettings().SV)
 			}
 		}()
 		defer sp.Finish()
@@ -503,9 +503,9 @@ func runStart(cmd *cobra.Command, args []string) error {
 				return errors.Wrap(err, "failed to initialize node")
 			}
 
-			log.Info(startCtx, "starting cockroach node")
+			log.Info(ctx, "starting cockroach node")
 			if envVarsUsed := envutil.GetEnvVarsUsed(); len(envVarsUsed) > 0 {
-				log.Infof(startCtx, "using local environment variables: %s", strings.Join(envVarsUsed, ", "))
+				log.Infof(ctx, "using local environment variables: %s", strings.Join(envVarsUsed, ", "))
 			}
 
 			var err error
@@ -522,7 +522,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 				return nil
 			}
 
-			if err := s.Start(startCtx); err != nil {
+			if err := s.Start(ctx); err != nil {
 				if le, ok := err.(server.ListenError); ok {
 					const errorPrefix = "consider changing the port via --"
 					if le.Addr == serverCfg.Addr {
@@ -582,7 +582,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 				return err
 			}
 			msg := buf.String()
-			log.Infof(startCtx, "node startup completed:\n%s", msg)
+			log.Infof(ctx, "node startup completed:\n%s", msg)
 			if !log.LoggingToStderr(log.Severity_INFO) {
 				fmt.Print(msg)
 			}
