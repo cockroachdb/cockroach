@@ -2228,7 +2228,7 @@ func TestStoreRemovePlaceholderOnError(t *testing.T) {
 		IncomingSnapshot{
 			SnapUUID: uuid.MakeV4(),
 			State:    &storagebase.ReplicaState{Desc: repl1.Desc()},
-		}); !testutils.IsPError(err, expected) {
+		}, true /* handleRaftReady */); !testutils.IsPError(err, expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
 	}
 
@@ -2311,7 +2311,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 		IncomingSnapshot{
 			SnapUUID: uuid.MakeV4(),
 			State:    &storagebase.ReplicaState{Desc: repl1.Desc()},
-		}); err != nil {
+		}, true /* handleRaftReady */); err != nil {
 		t.Fatal(err)
 	}
 
