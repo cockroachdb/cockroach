@@ -105,8 +105,18 @@ func (ir *intentResolver) processWriteIntentError(
 		return pErr
 	}
 
+	// We always poison due to limitations of the API: not poisoning equals
+	// clearing the abort cache, and if our pushee transaction first got pushed
+	// for timestamp (by us), then (by someone else) aborted and poisoned, and
+	// then we run the below code, we're clearing the abort cache illegaly.
+	// Furthermore, even if our pushType is not PUSH_ABORT, we may have ended
+	// up with the responsibility to abort the intents (for example if we find
+	// the transaction aborted).
+	//
+	// To do better here, we need per-intent information on whether we need to
+	// poison.
 	if err := ir.resolveIntents(ctx, resolveIntents,
-		ResolveOptions{Wait: false, Poison: pushType == roachpb.PUSH_ABORT}); err != nil {
+		ResolveOptions{Wait: false, Poison: true}); err != nil {
 		return roachpb.NewError(err)
 	}
 
