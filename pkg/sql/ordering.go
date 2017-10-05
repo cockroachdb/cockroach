@@ -53,6 +53,8 @@ import (
 // A set of columns S forms a "key" if no two rows are equal when projected
 // on S. Such a property arises when we are scanning a unique index.
 //
+// An empty key set is valid: it indicates the results have a single row.
+//
 // We store a list of sets which form keys. In most cases there is at most one
 // key.
 //
