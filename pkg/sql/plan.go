@@ -344,6 +344,8 @@ func (p *planner) newPlan(
 		return p.CreateIndex(ctx, n)
 	case *parser.CreateTable:
 		return p.CreateTable(ctx, n)
+	case *parser.CreateSequence:
+		return p.CreateSequence(ctx, n)
 	case *parser.CreateUser:
 		return p.CreateUser(ctx, n)
 	case *parser.CreateView:

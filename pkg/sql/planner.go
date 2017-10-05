@@ -15,10 +15,12 @@
 package sql
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -248,6 +250,27 @@ func (p *planner) QueryRow(
 	default:
 		return nil, &parser.MultipleResultsError{SQL: sql}
 	}
+}
+
+func (p *planner) IncrementSequence(
+	ctx context.Context, seqName string,
+) (int64, error) {
+	tableName, err := parser.ParseTableName(seqName)
+	if err != nil {
+		return 0, err
+	}
+	tableName.DatabaseName = parser.Name(p.session.Database)
+	descriptor, err := p.getTableDesc(ctx, tableName)
+	if err != nil {
+		return 0, err
+	}
+	if descriptor.SequenceSettings == nil {
+		// TODO(vilterp): construct error somewhere else
+		return 0, fmt.Errorf("%s is not a sequence", seqName)
+	}
+	seqValueKey := keys.MakeSequenceKey(uint32(descriptor.ID))
+	res, err := client.IncrementValRetryable(ctx, p.txn.DB(), seqValueKey, 1)
+	return res, err
 }
 
 // queryRows executes a SQL query string where multiple result rows are returned.
