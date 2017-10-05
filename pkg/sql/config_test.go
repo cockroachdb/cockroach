@@ -39,7 +39,7 @@ var configDescKey = sqlbase.MakeDescMetadataKey(keys.MaxReservedDescID)
 // forceNewConfig forces a system config update by writing a bogus descriptor with an
 // incremented value inside. It then repeatedly fetches the gossip config until the
 // just-written descriptor is found.
-func forceNewConfig(t *testing.T, s *server.TestServer) config.SystemConfig {
+func forceNewConfig(t testing.TB, s *server.TestServer) config.SystemConfig {
 	configID++
 	configDesc := &sqlbase.Descriptor{
 		Union: &sqlbase.Descriptor_Database{
@@ -63,7 +63,7 @@ func forceNewConfig(t *testing.T, s *server.TestServer) config.SystemConfig {
 	return waitForConfigChange(t, s)
 }
 
-func waitForConfigChange(t *testing.T, s *server.TestServer) config.SystemConfig {
+func waitForConfigChange(t testing.TB, s *server.TestServer) config.SystemConfig {
 	var foundDesc sqlbase.Descriptor
 	var cfg config.SystemConfig
 	testutils.SucceedsSoon(t, func() error {
@@ -251,5 +251,20 @@ func TestGetZoneConfig(t *testing.T) {
 				t.Errorf("#%d: bad zone config.\nexpected: %+v\ngot: %+v", tcNum, tc.zoneCfg, zoneCfg)
 			}
 		}
+	}
+}
+
+func BenchmarkGetZoneConfig(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+
+	params, _ := createTestServerParams()
+	srv, _, _ := serverutils.StartServer(b, params)
+	defer srv.Stopper().Stop(context.TODO())
+	s := srv.(*server.TestServer)
+	cfg := forceNewConfig(b, s)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		cfg.GetZoneConfigForKey(keys.MakeTablePrefix(keys.MaxReservedDescID + 1))
 	}
 }
