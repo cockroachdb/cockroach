@@ -604,6 +604,18 @@ message QueryTxnResponse {
   repeated bytes waiting_txns = 3 [(gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
 }
 
+
+enum PoisonType {
+  // Sender is at an older version and uses the deprecated_poison field.
+  Deprecated = 0;
+  // Make no changes to the abort cache of the associated transaction.
+  Noop = 1;
+  // Poison the abort cache of the associated transaction.
+  Do = 2;
+  // Clear any entry in the abort cache of the associated transaction.
+  Clear = 3;
+}
+
 // A ResolveIntentRequest is arguments to the ResolveIntent()
 // method. It is sent by transaction coordinators after success
 // calling PushTxn to clean up write intents: either to remove, commit
@@ -618,7 +630,10 @@ message ResolveIntentRequest {
   optional TransactionStatus status = 3 [(gogoproto.nullable) = false];
   // Optionally poison the sequence cache for the transaction the intent's
   // range.
-  optional bool poison = 4 [(gogoproto.nullable) = false];
+  //
+  // TODO(tschottdorf): this can be removed in CockroachDB v1.3.
+  optional bool deprecated_poison = 4 [(gogoproto.nullable) = false];
+  optional PoisonType poison = 5 [(gogoproto.nullable) = false];;
 }
 
 // A ResolveIntentResponse is the return value from the
@@ -641,7 +656,10 @@ message ResolveIntentRangeRequest {
   optional TransactionStatus status = 3 [(gogoproto.nullable) = false];
   // Optionally poison the sequence cache for the transaction on all ranges
   // on which the intents reside.
-  optional bool poison = 4 [(gogoproto.nullable) = false];
+  //
+  // TODO(tschottdorf): this can be removed in CockroachDB v1.3.
+  optional bool deprecated_poison = 4 [(gogoproto.nullable) = false];
+  optional PoisonType poison = 5 [(gogoproto.nullable) = false];
 }
 
 // A NoopResponse is the return value from a no-op operation.
