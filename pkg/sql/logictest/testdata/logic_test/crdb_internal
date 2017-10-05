@@ -200,6 +200,12 @@ node_id  component  field   value
 1        UI         Port    <port>
 1        UI         URI     /
 
+query ITTI colnames
+select * from crdb_internal.ranges
+----
+range_id  start_key  end_key  replicas
+1         /Min       /Max     1
+
 # Check that privileged builtins are only allowed for 'root'
 user testuser
 
@@ -217,3 +223,6 @@ select crdb_internal.set_vmodule('')
 
 query error pq: only root can access the node runtime information
 select * from crdb_internal.node_runtime_info
+
+query error pq: only root is allowed to read crdb_internal.ranges
+select * from crdb_internal.ranges
