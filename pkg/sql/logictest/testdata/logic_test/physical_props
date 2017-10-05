@@ -118,7 +118,7 @@ query ITTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd JOIN efg ON a=e AND a=1 AND f=g
 ----
 Level  Type  Field           Description   Columns                Ordering
-0      join  ·               ·             (a, b, c, d, e, f, g)  a=e; f=g; a=CONST
+0      join  ·               ·             (a, b, c, d, e, f, g)  a=e; f=g; a=CONST; key()
 0      ·     type            inner         ·                      ·
 0      ·     equality        (a) = (e)     ·                      ·
 0      ·     mergeJoinOrder  +"(a=e)"      ·                      ·
@@ -129,3 +129,67 @@ Level  Type  Field           Description   Columns                Ordering
 1      ·     table           efg@primary   ·                      ·
 1      ·     spans           ALL           ·                      ·
 1      ·     filter          f = g         ·                      ·
+
+query ITTTTT colnames
+EXPLAIN (VERBOSE) SELECT * FROM abcd JOIN efg ON a=e AND b=1 AND f=g
+----
+Level  Type  Field           Description   Columns                Ordering
+0      join  ·               ·             (a, b, c, d, e, f, g)  a=e; f=g; b=CONST; key(a)
+0      ·     type            inner         ·                      ·
+0      ·     equality        (a) = (e)     ·                      ·
+0      ·     mergeJoinOrder  +"(a=e)"      ·                      ·
+1      scan  ·               ·             (a, b, c, d)           b=CONST; key(a); +a
+1      ·     table           abcd@primary  ·                      ·
+1      ·     spans           ALL           ·                      ·
+1      ·     filter          b = 1         ·                      ·
+1      scan  ·               ·             (e, f, g)              f=g; key(e); +e
+1      ·     table           efg@primary   ·                      ·
+1      ·     spans           ALL           ·                      ·
+1      ·     filter          f = g         ·                      ·
+
+query ITTTTT colnames
+EXPLAIN (VERBOSE) SELECT * FROM abcd JOIN efg ON a=e
+----
+Level  Type  Field           Description   Columns                Ordering
+0      join  ·               ·             (a, b, c, d, e, f, g)  a=e; key(a)
+0      ·     type            inner         ·                      ·
+0      ·     equality        (a) = (e)     ·                      ·
+0      ·     mergeJoinOrder  +"(a=e)"      ·                      ·
+1      scan  ·               ·             (a, b, c, d)           key(a); +a
+1      ·     table           abcd@primary  ·                      ·
+1      ·     spans           ALL           ·                      ·
+1      scan  ·               ·             (e, f, g)              key(e); +e
+1      ·     table           efg@primary   ·                      ·
+1      ·     spans           ALL           ·                      ·
+
+# Verify keys don't get propagated when not appropriate.
+query ITTTTT colnames
+EXPLAIN (VERBOSE) SELECT * FROM abcd JOIN efg ON a=f
+----
+Level  Type  Field     Description   Columns                Ordering
+0      join  ·         ·             (a, b, c, d, e, f, g)  ·
+0      ·     type      inner         ·                      ·
+0      ·     equality  (a) = (f)     ·                      ·
+1      scan  ·         ·             (a, b, c, d)           key(a)
+1      ·     table     abcd@primary  ·                      ·
+1      ·     spans     ALL           ·                      ·
+1      scan  ·         ·             (e, f, g)              key(e)
+1      ·     table     efg@primary   ·                      ·
+1      ·     spans     ALL           ·                      ·
+
+# Verify we retain all keys when appropriate.
+query ITTTTT colnames
+EXPLAIN (VERBOSE) SELECT * FROM abcd JOIN (SELECT * FROM efg WITH ORDINALITY) ON a=e
+----
+Level  Type        Field           Description   Columns                              Ordering
+0      join        ·               ·             (a, b, c, d, e, f, g, "ordinality")  a=e; key(a); key("ordinality")
+0      ·           type            inner         ·                                    ·
+0      ·           equality        (a) = (e)     ·                                    ·
+0      ·           mergeJoinOrder  +"(a=e)"      ·                                    ·
+1      scan        ·               ·             (a, b, c, d)                         key(a); +a
+1      ·           table           abcd@primary  ·                                    ·
+1      ·           spans           ALL           ·                                    ·
+1      ordinality  ·               ·             (e, f, g, "ordinality")              key(e); key("ordinality"); +e
+2      scan        ·               ·             (e, f, g)                            key(e); +e
+2      ·           table           efg@primary   ·                                    ·
+2      ·           spans           ALL           ·                                    ·
