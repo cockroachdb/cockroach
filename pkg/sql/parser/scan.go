@@ -518,10 +518,42 @@ func (s *Scanner) scanComment(lval *sqlSymType) (present, ok bool) {
 
 func (s *Scanner) scanIdent(lval *sqlSymType) {
 	start := s.pos - 1
-	for ; isIdentMiddle(s.peek()); s.pos++ {
+	isASCII := true
+	isLower := false
+
+	for {
+		ch := s.peek()
+		if !isIdentMiddle(ch) {
+			break
+		}
+
+		if ch >= utf8.RuneSelf {
+			isASCII = false
+		} else if ch >= 'A' && ch <= 'Z' {
+			isLower = false
+		}
+
+		s.pos++
 	}
-	lval.str = Name(s.in[start:s.pos]).Normalize()
-	if id, ok := keywords[strings.ToUpper(lval.str)]; ok {
+
+	if isLower {
+		// Already lowercased.
+		lval.str = s.in[start:s.pos]
+	} else if isASCII {
+		// We know that the identifier we've seen so far is ASCII, so we don't need
+		// to unicode normalize. Instead, just lowercase as normal.
+		b := make([]byte, s.pos-start)
+		for i, c := range s.in[start:s.pos] {
+			if c >= 'A' && c <= 'Z' {
+				c += 'a' - 'A'
+			}
+			b[i] = byte(c)
+		}
+		lval.str = string(b)
+	} else {
+		lval.str = Name(s.in[start:s.pos]).Normalize()
+	}
+	if id, ok := keywords[lval.str]; ok {
 		lval.id = id
 	} else {
 		lval.id = IDENT
@@ -776,33 +808,43 @@ func isHexDigit(ch int) bool {
 }
 
 var lookaheadKeywords = map[string]struct{}{
-	"BETWEEN":    {},
-	"ILIKE":      {},
-	"IN":         {},
-	"LIKE":       {},
-	"OF":         {},
-	"ORDINALITY": {},
-	"SIMILAR":    {},
-	"TIME":       {},
+	"between":    {},
+	"ilike":      {},
+	"in":         {},
+	"like":       {},
+	"of":         {},
+	"ordinality": {},
+	"similar":    {},
+	"time":       {},
 }
 
+// isNonKeywordBareIdentifier returns true if the input string is a permissible
+// bare SQL identifier and is not a SQL keyword.
 func isNonKeywordBareIdentifier(s string) bool {
-	if len(s) == 0 || !isIdentStart(int(s[0])) {
+	if len(s) == 0 || !isIdentStart(int(s[0])) || (s[0] >= 'A' && s[0] <= 'Z') {
 		return false
 	}
+	isASCII := s[0] < utf8.RuneSelf
 	for i := 1; i < len(s); i++ {
 		if !isIdentMiddle(int(s[i])) {
 			return false
 		}
+		if s[i] >= 'A' && s[i] <= 'Z' {
+			// Non-lowercase identifiers aren't permissible.
+			return false
+		}
+		if s[i] >= utf8.RuneSelf {
+			isASCII = false
+		}
 	}
-	upper := strings.ToUpper(s)
-	if _, ok := reservedKeywords[upper]; ok {
+
+	if _, ok := reservedKeywords[s]; ok {
 		return false
 	}
-	if _, ok := lookaheadKeywords[upper]; ok {
+	if _, ok := lookaheadKeywords[s]; ok {
 		return false
 	}
-	return Name(s).Normalize() == s
+	return isASCII || Name(s).Normalize() == s
 }
 
 func isIdentStart(ch int) bool {
