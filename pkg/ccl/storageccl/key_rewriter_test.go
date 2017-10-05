@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -112,7 +113,7 @@ func TestKeyRewriter(t *testing.T) {
 		desc.ID = oldID + 10
 		desc2 := sqlbase.DescriptorTable
 		desc2.ID += 10
-		kr, err := MakeKeyRewriter([]roachpb.ImportRequest_TableRekey{
+		newKr, err := MakeKeyRewriter([]roachpb.ImportRequest_TableRekey{
 			{
 				OldID:   uint32(oldID),
 				NewDesc: mustMarshalDesc(t, &desc),
@@ -127,7 +128,7 @@ func TestKeyRewriter(t *testing.T) {
 		}
 
 		key := sqlbase.MakeIndexKeyPrefix(&sqlbase.NamespaceTable, desc.PrimaryIndex.ID)
-		newKey, ok, err := kr.RewriteKey(key)
+		newKey, ok, err := newKr.RewriteKey(key)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -140,6 +141,24 @@ func TestKeyRewriter(t *testing.T) {
 		}
 		if sqlbase.ID(id) != oldID+10 {
 			t.Fatalf("got %d expected %d", id, desc.ID+1)
+		}
+	})
+
+	t.Run("span", func(t *testing.T) {
+		span := roachpb.Span{
+			Key:    makeKeyRewriterPrefixIgnoringInterleaved(oldID, 1),
+			EndKey: makeKeyRewriterPrefixIgnoringInterleaved(oldID, 2),
+		}
+		newSpan, err := kr.RewriteSpan(span)
+		if err != nil {
+			t.Fatal(err)
+		}
+		expect := roachpb.Span{
+			Key:    keys.MakeTablePrefix(uint32(newID)),
+			EndKey: makeKeyRewriterPrefixIgnoringInterleaved(newID, 2),
+		}
+		if !newSpan.EqualValue(expect) {
+			t.Fatalf("got %s, expected %s", newSpan, expect)
 		}
 	})
 }
