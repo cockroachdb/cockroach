@@ -73,13 +73,22 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 	},
 	reflect.TypeOf(&raftpb.HardState{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
+			type expectedHardState struct {
+				Term             uint64
+				Vote             uint64
+				Commit           uint64
+				XXX_unrecognized []byte
+			}
+			// Conversion fails if new fields are added to `HardState`, in which case this method
+			// and the expected sums should be updated.
+			var _ = expectedHardState(raftpb.HardState{})
+
 			n := r.Uint64()
-			// NB: this would rot if HardState ever picked up more (relevant)
-			// fields, but that's unlikely.
 			return &raftpb.HardState{
-				Term:   n % 3,
-				Vote:   n % 7,
-				Commit: n % 11,
+				Term:             n % 3,
+				Vote:             n % 7,
+				Commit:           n % 11,
+				XXX_unrecognized: nil,
 			}
 		},
 		emptySum:     13621293256077144893,
