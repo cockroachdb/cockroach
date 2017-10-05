@@ -203,6 +203,10 @@ empty
 statement error pq: repeat\(\): .* memory budget exceeded
 SELECT repeat('s', 9223372036854775807)
 
+# Regression for #19035.
+statement error pq: repeat\(\): requested length too large
+SELECT repeat('1234567890'::string, 6978072892806141784::int)
+
 query I
 SELECT ascii('x')
 ----
