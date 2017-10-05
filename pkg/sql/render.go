@@ -454,7 +454,7 @@ func isUnarySource(src planDataSource) bool {
 }
 
 func (r *renderNode) initWhere(ctx context.Context, whereExpr parser.Expr) (*filterNode, error) {
-	f := &filterNode{source: r.source}
+	f := &filterNode{planner: r.planner, source: r.source}
 	f.ivarHelper = parser.MakeIndexedVarHelper(f, len(r.sourceInfo[0].sourceColumns))
 
 	if whereExpr != nil {

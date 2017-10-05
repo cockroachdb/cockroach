@@ -461,6 +461,7 @@ func simplifyOrderings(plan planNode, usefulOrdering sqlbase.ColumnOrdering) pla
 
 	case *filterNode:
 		n.source.plan = simplifyOrderings(n.source.plan, usefulOrdering)
+		n.computeOrdering()
 
 	case *joinNode:
 		// In DistSQL, we may take advantage of matching orderings on equality

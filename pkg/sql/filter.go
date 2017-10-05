@@ -27,9 +27,16 @@ import (
 // during plan optimizations in order to avoid instantiating a fully
 // blown selectTopNode/renderNode pair.
 type filterNode struct {
+	planner    *planner
 	source     planDataSource
 	filter     parser.TypedExpr
 	ivarHelper parser.IndexedVarHelper
+	ordering   orderingInfo
+}
+
+func (f *filterNode) computeOrdering() {
+	f.ordering = planOrdering(f.source.plan)
+	f.ordering.applyExpr(&f.planner.evalCtx, f.filter)
 }
 
 // IndexedVarEval implements the parser.IndexedVarContainer interface.

@@ -950,7 +950,7 @@ EXPLAIN (VERBOSE) SELECT a, b, n, sq FROM (SELECT a, b, a + b AS sum, n, sq FROM
 0  ·       render 1  b                            ·                                     ·
 0  ·       render 2  n                            ·                                     ·
 0  ·       render 3  sq                           ·                                     ·
-1  filter  ·         ·                            (a, b, sum, n, sq)                    ·
+1  filter  ·         ·                            (a, b, sum, n, sq)                    sum=sq
 1  ·       filter    sum = sq                     ·                                     ·
 2  render  ·         ·                            (a, b, sum, n, sq)                    ·
 2  ·       render 0  test.pairs.a                 ·                                     ·

@@ -220,7 +220,8 @@ func (p *planner) groupBy(
 	// also treated as aggregate expressions (with identAggregate).
 	if typedHaving != nil {
 		havingNode = &filterNode{
-			source: planDataSource{plan: plan, info: &dataSourceInfo{}},
+			planner: p,
+			source:  planDataSource{plan: plan, info: &dataSourceInfo{}},
 		}
 		plan = havingNode
 		havingNode.ivarHelper = parser.MakeIndexedVarHelper(havingNode, 0)

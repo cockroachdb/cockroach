@@ -386,7 +386,8 @@ func (p *planner) propagateOrWrapFilters(
 		info = newSourceInfoForSingleTable(anonymousTable, planColumns(newPlan))
 	}
 	f := &filterNode{
-		source: planDataSource{plan: newPlan, info: info},
+		planner: p,
+		source:  planDataSource{plan: newPlan, info: info},
 	}
 	f.ivarHelper = parser.MakeIndexedVarHelper(f, len(info.sourceColumns))
 	f.filter = f.ivarHelper.Rebind(remainingFilter,
