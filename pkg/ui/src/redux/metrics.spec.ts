@@ -1,11 +1,12 @@
 import { assert } from "chai";
 import _ from "lodash";
 import Long from "long";
-import { Action } from "redux";
-import fetchMock from "src/util/fetch-mock";
 
+import { delay } from "redux-saga";
+import { AllEffect, call, ForkEffect, put, take } from "redux-saga/effects";
+import { queryTimeSeries } from "src/util/api";
 import * as protos from "src/js/protos";
-import * as api from "src/util/api";
+
 import * as metrics from "./metrics";
 import reducer from "./metrics";
 
@@ -148,11 +149,13 @@ describe("metrics reducer", function() {
     });
   });
 
-  describe("queryMetrics asynchronous action", function() {
+  describe("saga functions", function() {
     type timespan = [Long, Long];
+    const shortTimespan: timespan = [Long.fromNumber(400), Long.fromNumber(500)];
+    const longTimespan: timespan = [Long.fromNumber(0), Long.fromNumber(500)];
 
     // Helper function to generate metrics request.
-    const createRequest = function(ts: timespan, ...names: string[]): TSRequest {
+    function createRequest(ts: timespan, ...names: string[]): TSRequest {
       return new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
         start_nanos: ts[0],
         end_nanos: ts[1],
@@ -162,159 +165,144 @@ describe("metrics reducer", function() {
           };
         }),
       });
-    };
+    }
 
-    // Mock of metrics state.
-    let mockMetricsState: metrics.MetricQueryState;
-    const mockDispatch = <A extends Action>(action: A): A => {
-      mockMetricsState = reducer(mockMetricsState, action);
-      return undefined;
-    };
-    const queryMetrics = function(id: string, request: TSRequest): Promise<void> {
-      return metrics.queryMetrics(id, request)(mockDispatch);
-    };
-
-    beforeEach(function () {
-      mockMetricsState = undefined;
-    });
-
-    afterEach(fetchMock.restore);
-
-    it ("correctly batches multiple calls", function () {
-      this.timeout(1000);
-
-      // Mock out fetch server; we are only expecting requests to /ts/query,
-      // which we simply reflect with an empty set of datapoints.
-      fetchMock.mock({
-        matcher: "ts/query",
-        method: "POST",
-        response: (_url: string, requestObj: RequestInit) => {
-          // Assert that metric store's "inFlight" is 1 or 2.
-          assert.isAtLeast(mockMetricsState.inFlight, 1);
-          assert.isAtMost(mockMetricsState.inFlight, 2);
-
-          const request = protos.cockroach.ts.tspb.TimeSeriesQueryRequest.decode(new Uint8Array(requestObj.body as ArrayBuffer));
-          const encodedResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse.encode({
-            results: _.map(request.queries, (q) => {
-              return {
-                query: q,
-                datapoints: [],
-              };
-            }),
-          }).finish();
-
+    function createResponse(...queries: protos.cockroach.ts.tspb.TimeSeriesQueryResponse.Result$Properties[]) {
+      return new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
+        results: queries.map(q => {
           return {
-            body: api.toArrayBuffer(encodedResponse),
+            query: q,
+            datapoints: [],
           };
-        },
+        }),
+      });
+    }
+
+    describe("queryMetricsSaga", function() {
+      it("initially waits for incoming request objects", function () {
+        const saga = metrics.queryMetricsSaga();
+        assert.deepEqual(saga.next().value, take(metrics.REQUEST));
       });
 
-      // Dispatch several requests. Requests are divided among two timespans,
-      // which should result in two batches.
-      const shortTimespan: timespan = [Long.fromNumber(400), Long.fromNumber(500)];
-      const longTimespan: timespan = [Long.fromNumber(0), Long.fromNumber(500)];
-      queryMetrics("id.1", createRequest(shortTimespan, "short.1", "short.2"));
-      queryMetrics("id.2", createRequest(longTimespan, "long.1"));
-      queryMetrics("id.3", createRequest(shortTimespan, "short.3"));
-      queryMetrics("id.4", createRequest(shortTimespan, "short.4"));
-      const p1 = queryMetrics("id.5", createRequest(longTimespan, "long.2", "long.3"));
+      it("correctly accumulates batches", function () {
+        const requestAction = metrics.requestMetrics("id", createRequest(shortTimespan, "short.1"));
+        const saga = metrics.queryMetricsSaga();
+        saga.next();
 
-      // Queries should already be present, but unfulfilled.
-      assert.lengthOf(_.keys(mockMetricsState.queries), 5);
-      _.each(mockMetricsState.queries, (q) => {
-        assert.isDefined(q.nextRequest);
-        assert.isUndefined(q.data);
-        assert.isUndefined(q.request);
-      });
+        // Pass in a request, the generator should put the request to the
+        // redux store, fork "sendBatches" process, then await another request.
+        assert.deepEqual(saga.next(requestAction).value, put(requestAction));
+        const sendBatchesFork = saga.next().value as ForkEffect;
+        assert.isDefined(sendBatchesFork.FORK);
+        assert.deepEqual(saga.next().value, take(metrics.REQUEST));
 
-      // Dispatch an additional query for the short timespan, but in a
-      // setTimeout - this should result in a separate batch.
-      const p2 = new Promise<void>((resolve, _reject) => {
-        setTimeout(() => {
-          resolve(queryMetrics("id.6", createRequest(shortTimespan, "short.6")));
-        });
-      });
+        // Pass in two additional requests, the generator should not yield another
+        // fork.
+        for (let i = 0; i < 2; i++) {
+          assert.deepEqual(saga.next(requestAction).value, put(requestAction));
+          assert.deepEqual(saga.next().value, take(metrics.REQUEST));
+        }
 
-      return Promise.all([p1, p2]).then(() => {
-        // Assert that the server got the correct number of requests (2).
-        assert.lengthOf(fetchMock.calls("ts/query"), 3);
-        // Assert that the mock metrics state has 5 queries.
-        assert.lengthOf(_.keys(mockMetricsState.queries), 6);
-        _.each(mockMetricsState.queries, (q) => {
-          assert.isDefined(q.request);
-          assert.isUndefined(q.error);
-          assert.isDefined(q.data, "data not defined for query " + q.id);
-        });
-        // Assert that inFlight is 0.
-        assert.equal(mockMetricsState.inFlight, 0);
+        // Run the fork function. It should initially call delay (to defer to the
+        // event queue), then call sendRequestsAsBatches with the currently
+        // accumulated batches, then complete.
+        const accumulateBatch = sendBatchesFork.FORK.fn() as IterableIterator<any>;
+        assert.deepEqual(accumulateBatch.next().value, call(delay, 0));
+        assert.deepEqual(
+          accumulateBatch.next().value,
+          call(
+            metrics.sendRequestsInBatches,
+            [requestAction.payload, requestAction.payload, requestAction.payload],
+          ),
+        );
+        assert.isTrue(accumulateBatch.next().done);
+
+        // Pass in a request, the generator should again yield a "fork" followed
+        // by another take for request objects.
+        assert.deepEqual(saga.next(requestAction).value, put(requestAction));
+        assert.isDefined((saga.next().value as ForkEffect).FORK);
+        assert.deepEqual(saga.next().value, take(metrics.REQUEST));
       });
     });
 
-    it ("correctly responds to errors.", function () {
-      this.timeout(1000);
+    describe("sendRequestsInBatches", function() {
+      it("sendBatches correctly batches multiple requests", function () {
+        const requests = [
+          metrics.requestMetrics("id", createRequest(shortTimespan, "short.1")).payload,
+          metrics.requestMetrics("id", createRequest(longTimespan, "long.1")).payload,
+          metrics.requestMetrics("id", createRequest(shortTimespan, "short.2", "short.3")).payload,
+          metrics.requestMetrics("id", createRequest(shortTimespan, "short.4")).payload,
+          metrics.requestMetrics("id", createRequest(longTimespan, "long.2", "long.3")).payload,
+        ];
+        const sendBatches = metrics.sendRequestsInBatches(requests);
 
-      // Mock out fetch server; send a positive reply to the first request, and
-      // an error to the second request.
-      let successSent = false;
-      fetchMock.mock({
-        matcher: "ts/query",
-        method: "POST",
-        response: (_url: string, requestObj: RequestInit) => {
-          // Assert that metric store's "inFlight" is 1.
-          assert.equal(mockMetricsState.inFlight, 1);
+        // sendBatches next puts a "fetchMetrics" action into the store.
+        assert.deepEqual(sendBatches.next().value, put(metrics.fetchMetrics()));
 
-          if (successSent) {
-            return { throws: new Error() };
-          }
-          successSent = true;
+        // Next, sendBatches dispatches a "all" effect with a "call" for each
+        // batch; there should be two batches in total.
+        const allEffect = sendBatches.next().value as AllEffect;
+        assert.isArray(allEffect.ALL);
+        assert.deepEqual(allEffect.ALL, [
+          call(metrics.sendRequestsAsBatch, [requests[0], requests[2], requests[3]]),
+          call(metrics.sendRequestsAsBatch, [requests[1], requests[4]]),
+        ]);
 
-          const request = protos.cockroach.ts.tspb.TimeSeriesQueryRequest.decode(new Uint8Array(requestObj.body as ArrayBuffer));
-          const encodedResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse.encode({
-            results: _.map(request.queries, (q) => {
-              return {
-                query: q,
-                datapoints: [],
-              };
-            }),
-          }).finish();
+        // After completion, puts "fetchMetricsComplete" to store.
+        assert.deepEqual(sendBatches.next().value, put(metrics.fetchMetricsComplete()));
+        assert.isTrue(sendBatches.next().done);
+      });
+    });
 
-          return {
-            body: api.toArrayBuffer(encodedResponse),
-          };
-        },
+    describe("sendRequestsAsBatch", function() {
+      const requests = [
+        metrics.requestMetrics("id1", createRequest(shortTimespan, "short.1")).payload,
+        metrics.requestMetrics("id2", createRequest(shortTimespan, "short.2", "short.3")).payload,
+        metrics.requestMetrics("id3", createRequest(shortTimespan, "short.4")).payload,
+      ];
+
+      it("correctly sends batch as single request, correctly handles valid response", function() {
+        const sendBatch = metrics.sendRequestsAsBatch(requests);
+        const expectedRequest = createRequest(shortTimespan, "short.1", "short.2", "short.3", "short.4");
+        assert.deepEqual(sendBatch.next().value, call(queryTimeSeries, expectedRequest));
+
+        // Return a valid response.
+        const response = createResponse(...expectedRequest.queries);
+
+        // Expect three puts to the underlying store.
+        const actualEffects = [
+          sendBatch.next(response).value,
+          sendBatch.next().value,
+          sendBatch.next().value,
+        ];
+        const expectedEffects = requests.map(req => put(metrics.receiveMetrics(
+          req.id,
+          req.data,
+          createResponse(...req.data.queries),
+        )));
+        assert.deepEqual(actualEffects, expectedEffects);
+        assert.isTrue(sendBatch.next().done);
       });
 
-      // Dispatch several requests. Requests are divided among two timespans,
-      // which should result in two batches.
-      const shortTimespan: timespan = [Long.fromNumber(400), Long.fromNumber(500)];
-      const longTimespan: timespan = [Long.fromNumber(0), Long.fromNumber(500)];
-      queryMetrics("id.1", createRequest(shortTimespan, "short.1", "short.2"));
-      const p = queryMetrics("id.2", createRequest(longTimespan, "long.1"));
+      it("correctly handles error response", function() {
+        const sendBatch = metrics.sendRequestsAsBatch(requests);
+        const expectedRequest = createRequest(shortTimespan, "short.1", "short.2", "short.3", "short.4");
+        assert.deepEqual(sendBatch.next().value, call(queryTimeSeries, expectedRequest));
 
-      // Queries should already be present, but unfulfilled.
-      assert.lengthOf(_.keys(mockMetricsState.queries), 2);
-      _.each(mockMetricsState.queries, (q) => {
-        assert.isDefined(q.nextRequest);
-        assert.isUndefined(q.data);
-      });
-
-      return p.then(() => {
-        // Assert that the server got the correct number of requests (2).
-        assert.lengthOf(fetchMock.calls("ts/query"), 2);
-        // Assert that the mock metrics state has 2 queries.
-        assert.lengthOf(_.keys(mockMetricsState.queries), 2);
-        // Assert query with id.1 has results.
-        const q1 = mockMetricsState.queries["id.1"];
-        assert.isDefined(q1);
-        assert.isDefined(q1.data);
-        assert.isUndefined(q1.error);
-        // Assert query with id.2 has an error.
-        const q2 = mockMetricsState.queries["id.2"];
-        assert.isDefined(q2);
-        assert.isDefined(q2.error);
-        assert.isUndefined(q2.data);
-        // Assert that inFlight is 0.
-        assert.equal(mockMetricsState.inFlight, 0);
+        // Throw an exception, a network error.  Expect three puts, which are
+        // are error responses.
+        const err = new Error("network error");
+        const actualEffects = [
+          sendBatch.throw(err).value,
+          sendBatch.next().value,
+          sendBatch.next().value,
+        ];
+        const expectedEffects = requests.map(req => put(metrics.errorMetrics(
+          req.id,
+          err,
+        )));
+        assert.deepEqual(actualEffects, expectedEffects);
+        assert.isTrue(sendBatch.next().done);
       });
     });
   });

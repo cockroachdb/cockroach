@@ -2,6 +2,7 @@ import _ from "lodash";
 import { createStore, combineReducers, applyMiddleware, compose, GenericStoreEnhancer } from "redux";
 import { hashHistory } from "react-router";
 import { syncHistoryWithStore, routerReducer, RouterState } from "react-router-redux";
+import createSagaMiddleware from "redux-saga";
 import thunk from "redux-thunk";
 
 import localSettingsReducer from "./localsettings";
@@ -26,31 +27,38 @@ export interface AdminUIState {
 
 // createAdminUIStore is a function that returns a new store for the admin UI.
 // It's in a function so it can be recreated as necessary for testing.
-export const createAdminUIStore = () => createStore(
-  combineReducers<AdminUIState>({
-    routing: routerReducer,
-    localSettings: localSettingsReducer,
-    uiData: uiDataReducer,
-    metrics: metricsReducer,
-    timewindow: timeWindowReducer,
-    cachedData: apiReducersReducer,
-  }),
-  compose(
-    applyMiddleware(thunk),
-    // Support for redux dev tools
-    // https://chrome.google.com/webstore/detail/redux-devtools/lmhkpmbekcpmknklioeibfkpmmfibljd
-    (window as any).devToolsExtension ? (window as any).devToolsExtension({
-      // TODO(maxlang): implement {,de}serializeAction.
-      // TODO(maxlang): implement deserializeState.
-      serializeState: (_key: string, value: any): Object => {
-        if (value && value.toRaw) {
-          return value.toRaw();
-        }
-        return value;
-      },
-    }) : _.identity,
-  ) as GenericStoreEnhancer,
-);
+export function createAdminUIStore() {
+  const sagaMiddleware = createSagaMiddleware();
+
+  const store = createStore(
+    combineReducers<AdminUIState>({
+      routing: routerReducer,
+      localSettings: localSettingsReducer,
+      uiData: uiDataReducer,
+      metrics: metricsReducer,
+      timewindow: timeWindowReducer,
+      cachedData: apiReducersReducer,
+    }),
+    compose(
+      applyMiddleware(thunk, sagaMiddleware),
+      // Support for redux dev tools
+      // https://chrome.google.com/webstore/detail/redux-devtools/lmhkpmbekcpmknklioeibfkpmmfibljd
+      (window as any).devToolsExtension ? (window as any).devToolsExtension({
+        // TODO(maxlang): implement {,de}serializeAction.
+        // TODO(maxlang): implement deserializeState.
+        serializeState: (_key: string, value: any): Object => {
+          if (value && value.toRaw) {
+            return value.toRaw();
+          }
+          return value;
+        },
+      }) : _.identity,
+    ) as GenericStoreEnhancer,
+  );
+
+  sagaMiddleware.run(metrics.queryMetricsSaga);
+  return store;
+}
 
 export const store = createAdminUIStore();
 

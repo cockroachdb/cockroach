@@ -7,7 +7,7 @@ import moment from "moment";
 
 import * as protos from  "src/js/protos";
 import { AdminUIState } from "src/redux/state";
-import { queryMetrics, MetricsQuery } from "src/redux/metrics";
+import { requestMetrics, MetricsQuery } from "src/redux/metrics";
 import {
   Metric, MetricProps, MetricsDataComponentProps, QueryTimeInfo,
 } from "src/views/shared/components/metricQuery";
@@ -63,7 +63,7 @@ function queryFromProps(
 interface MetricsDataProviderConnectProps {
   metrics: MetricsQuery;
   timeInfo: QueryTimeInfo;
-  queryMetrics: typeof queryMetrics;
+  requestMetrics: typeof requestMetrics;
 }
 
 /**
@@ -141,10 +141,10 @@ class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> 
     if (!request) {
       return;
     }
-    const { metrics, queryMetrics, id } = props;
+    const { metrics, requestMetrics, id } = props;
     const nextRequest = metrics && metrics.nextRequest;
     if (!nextRequest || !_.isEqual(nextRequest, request)) {
-      queryMetrics(id, request);
+      requestMetrics(id, request);
     }
   }
 
@@ -217,7 +217,7 @@ const metricsDataProviderConnected = connect(
     };
   },
   {
-    queryMetrics,
+    requestMetrics,
   },
 )(MetricsDataProvider);
 

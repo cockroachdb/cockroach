@@ -6,7 +6,9 @@
  */
 
 import _ from "lodash";
-import { Action, Dispatch } from "redux";
+import { Action } from "redux";
+import { delay } from "redux-saga";
+import { take, fork, call, all, put } from "redux-saga/effects";
 
 import * as protos from  "src/js/protos";
 import { PayloadAction } from "src/interfaces/action";
@@ -235,103 +237,96 @@ export function fetchMetricsComplete(): Action {
 }
 
 /**
- * queuedRequests is a list of requests that should be asynchronously sent to
- * the server. As a purely asynchronous concept, this lives outside of the redux
- * store.
- */
-let queuedRequests: WithID<TSRequest>[] = [];
-
-/**
- * queuePromise is a promise that will be resolved when the current batch of
- * queued requests has been been processed. This is returned by the queryMetrics
- * thunk method, for use in synchronizing in tests.
- */
-let queuePromise: Promise<void> = null;
-
-/**
- * queryMetrics action allows components to asynchronously request new metrics
- * from the server. Components provide their id and a request object for new
- * data.
+ * queryMetricsSaga is a redux saga which listens for REQUEST actions and sends
+ * those requests to the server asynchronously.
  *
- * Requests to queryMetrics may be batched when dispatching to the server;
+ * Metric queries can be batched when sending to the to the server -
  * specifically, queries which have the same time span can be handled by the
- * server in a single call.
+ * server in a single call. This saga will attempt to batch any requests which
+ * are dispatched as part of the same event (e.g. if a rendering page displays
+ * several graphs which need data).
  */
-export function queryMetrics<S>(id: string, query: TSRequest) {
-  return (dispatch: Dispatch<S>): Promise<void> => {
-    // Indicate that this request has been received and queued.
-    dispatch(requestMetrics(id, query));
-    queuedRequests.push({
-      id: id,
-      data: query,
-    });
+export function* queryMetricsSaga() {
+  let requests: WithID<TSRequest>[] = [];
 
-    // Only the first queued request is responsible for initiating the fetch
-    // process. The fetch process is "debounced" with a setTimeout, and thus
-    // multiple queryMetrics actions can be batched into a single fetch from the
-    // server.
-    if (queuedRequests.length > 1) {
-      // Return queuePromise, created by an earlier queueMetrics request.
-      return queuePromise;
+  while (true) {
+    const requestAction: PayloadAction<WithID<TSRequest>> = yield take((REQUEST));
+
+    // Dispatch action to underlying store.
+    yield put(requestAction);
+    requests.push(requestAction.payload);
+
+    // If no other requests are queued, fork a process which will send the
+    // request (and any other subsequent requests that are queued).
+    if (requests.length === 1) {
+      yield fork(sendRequestsAfterDelay);
     }
+  }
 
-    queuePromise = new Promise<void>((resolve, _reject) => {
-      setTimeout(() => {
-        // Increment in-flight counter.
-        dispatch(fetchMetrics());
+  function* sendRequestsAfterDelay() {
+    // Delay of zero will defer execution to the message queue, allowing the
+    // currently executing event (e.g. rendering a new page or a timespan change)
+    // to dispatch additional requests which can be batched.
+    yield call(delay, 0);
 
-        // Construct queryable batches from the set of queued queries. Queries can
-        // be dispatched in a batch if they are querying over the same timespan.
-        const batches = _.groupBy(queuedRequests, (qr) => timespanKey(qr.data));
-        queuedRequests = [];
+    const requestsToSend = requests;
+    requests = [];
+    yield call(sendRequestsInBatches, requestsToSend);
+  }
+}
 
-        // Fetch data from the server for each batch.
-        const promises = _.map(batches, (batch) => {
-          // Flatten the individual queries from all requests in the batch into a
-          // single request.
-          // Lodash operations are split into two methods because the lodash
-          // typescript definition loses type information when chaining into
-          // flatten.
-          const unifiedRequest = _.clone(batch[0].data);
-          const toFlatten = _.map(batch, (req) => req.data.queries);
-          unifiedRequest.queries = _.flatten(toFlatten);
+/**
+ * sendRequestsInBatches attempts to send the supplied requests in the
+ * smallest number of batches possible.
+ */
+export function* sendRequestsInBatches(requests: WithID<TSRequest>[]) {
+  // Construct queryable batches from the set of queued queries. Queries can
+  // be dispatched in a batch if they are querying over the same timespan.
+  const batches = _.groupBy(requests, (qr) => timespanKey(qr.data));
+  requests = [];
 
-          return queryTimeSeries(unifiedRequest).then((response) => {
-            // The number of results should match the queries exactly, and should
-            // be in the exact order passed.
-            if (response.results.length !== unifiedRequest.queries.length) {
-              throw `mismatched count of results (${response.results.length}) and queries (${unifiedRequest.queries.length})`;
-            }
+  yield put(fetchMetrics());
+  yield all(_.map(batches, batch => call(sendRequestsAsBatch, batch)));
+  yield put(fetchMetricsComplete());
+}
 
-            const results = response.results;
+/**
+ * sendRequestsAsBatch sends the supplied requests in a single batch.
+ */
+export function* sendRequestsAsBatch(requests: WithID<TSRequest>[]) {
+  // Flatten the queries from the batch into a single request.
+  const unifiedRequest = _.clone(requests[0].data);
+  unifiedRequest.queries = _.flatMap(requests, req => req.data.queries);
 
-            // Match each result in the response to its corresponding original
-            // query. Each request may have sent multiple queries in the batch.
-            _.each(batch, (request) => {
-              const numQueries = request.data.queries.length;
-              dispatch(receiveMetrics(request.id, request.data, new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
-                results: results.splice(0, numQueries),
-              })));
-            });
-          }).catch((e: Error) => {
-            // Dispatch the error to each individual MetricsQuery which was
-            // requesting data.
-            _.each(batch, (request) => {
-              dispatch(errorMetrics(request.id, e));
-            });
-          });
-        });
+  let response: protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
+  try {
+    response = yield call(queryTimeSeries, unifiedRequest);
+    // The number of results should match the queries exactly, and should
+    // be in the exact order passed.
+    if (response.results.length !== unifiedRequest.queries.length) {
+      throw `mismatched count of results (${response.results.length}) and queries (${unifiedRequest.queries.length})`;
+    }
+  } catch (e) {
+    // Dispatch the error to each individual MetricsQuery which was
+    // requesting data.
+    for (const request of requests) {
+      yield put(errorMetrics(request.id, e));
+    }
+    return;
+  }
 
-        // Wait for all promises to complete, then decrement in-flight counter
-        // and resolve queuePromise.
-        resolve(Promise.all(promises).then(() => {
-          dispatch(fetchMetricsComplete());
-        }));
-      });
-    });
-
-    return queuePromise;
-  };
+  // Match each result in the unified response to its corresponding original
+  // query. Each request may have sent multiple queries in the batch.
+  const results = response.results;
+  for (const request of requests) {
+    yield put(receiveMetrics(
+      request.id,
+      request.data,
+      new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
+        results: results.splice(0, request.data.queries.length),
+      }),
+    ));
+  }
 }
 
 interface SimpleTimespan {
