@@ -183,10 +183,11 @@ Type:
 
 More documentation about our SQL dialect and the CLI shell is available online:
 %s
-%s\n`,
+%s`,
 		base.DocsURL("sql-statements.html"),
 		base.DocsURL("use-the-built-in-sql-client.html"),
 	)
+	fmt.Println()
 }
 
 // addHistory persists a line of input to the readline history
