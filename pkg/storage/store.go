@@ -2825,7 +2825,7 @@ func (s *Store) HandleSnapshot(
 				inSnap.snapType = snapTypePreemptive
 			}
 
-			if err := s.processRaftRequest(ctx, &header.RaftMessageRequest, inSnap); err != nil {
+			if err := s.processRaftRequest(ctx, &header.RaftMessageRequest, inSnap, true /* handleRaftReady */); err != nil {
 				return sendSnapError(errors.Wrap(err.GoError(), "failed to apply snapshot"))
 			}
 			return stream.Send(&SnapshotResponse{Status: SnapshotResponse_APPLIED})
@@ -2911,7 +2911,7 @@ func (s *Store) HandleRaftUncoalescedRequest(
 	s.metrics.raftRcvdMessages[req.Message.Type].Inc(1)
 
 	if respStream == nil {
-		return s.processRaftRequest(ctx, req, IncomingSnapshot{})
+		return s.processRaftRequest(ctx, req, IncomingSnapshot{}, true /* handleRaftReady */)
 	}
 
 	value, ok := s.replicaQueues.Load(int64(req.RangeID))
@@ -2938,7 +2938,7 @@ func (s *Store) HandleRaftUncoalescedRequest(
 }
 
 func (s *Store) processRaftRequest(
-	ctx context.Context, req *RaftMessageRequest, inSnap IncomingSnapshot,
+	ctx context.Context, req *RaftMessageRequest, inSnap IncomingSnapshot, handleRaftReady bool,
 ) (pErr *roachpb.Error) {
 	// Lazily create the replica.
 	r, _, err := s.getOrCreateReplica(
@@ -3189,11 +3189,13 @@ func (s *Store) processRaftRequest(
 		return roachpb.NewError(err)
 	}
 
-	if _, expl, err := r.handleRaftReadyRaftMuLocked(inSnap); err != nil {
-		// Mimic the behavior in processRaft.
-		log.Fatalf(ctx, "%s: %s", log.Safe(expl), err) // TODO(bdarnell)
+	if handleRaftReady {
+		if _, expl, err := r.handleRaftReadyRaftMuLocked(inSnap); err != nil {
+			// Mimic the behavior in processRaft.
+			log.Fatalf(ctx, "%s: %s", log.Safe(expl), err) // TODO(bdarnell)
+		}
+		removePlaceholder = false
 	}
-	removePlaceholder = false
 	return nil
 }
 
@@ -3549,8 +3551,11 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 	q.infos = nil
 	q.Unlock()
 
-	for _, info := range infos {
-		if pErr := s.processRaftRequest(info.respStream.Context(), info.req, IncomingSnapshot{}); pErr != nil {
+	for i := 0; i < len(infos); i++ {
+		// Only handle raft ready for the last request to provide better batching
+		// of syncing new log entries to disk.
+		handleRaftReady := (i == len(infos)-1)
+		if pErr := s.processRaftRequest(infos[i].respStream.Context(), infos[i].req, IncomingSnapshot{}, handleRaftReady); pErr != nil {
 			// If we're unable to process the request, clear the request queue. This
 			// only happens if we couldn't create the replica because the request was
 			// targeted to a removed range. This is also racy and could cause us to
@@ -3561,7 +3566,7 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 				s.replicaQueues.Delete(int64(rangeID))
 			}
 			q.Unlock()
-			if err := info.respStream.Send(newRaftMessageResponse(info.req, pErr)); err != nil {
+			if err := infos[i].respStream.Send(newRaftMessageResponse(infos[i].req, pErr)); err != nil {
 				// Seems excessive to log this on every occurrence as the other side
 				// might have closed.
 				log.VEventf(ctx, 1, "error sending error: %s", err)
