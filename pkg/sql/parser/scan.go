@@ -520,8 +520,23 @@ func (s *Scanner) scanIdent(lval *sqlSymType) {
 	start := s.pos - 1
 	for ; isIdentMiddle(s.peek()); s.pos++ {
 	}
-	lval.str = Name(s.in[start:s.pos]).Normalize()
-	if id, ok := keywords[strings.ToUpper(lval.str)]; ok {
+	// We know that the identifier we've seen so far is ASCII, so we don't need
+	// to unicode normalize. Instead, just upper and lowercase
+	bLower := make([]byte, s.pos - start)
+	bUpper := make([]byte, s.pos - start)
+	for i, cUp := range s.in[start:s.pos] {
+		cLow := cUp
+		if cUp >= 'a' && cUp <= 'z' {
+			cUp -= 'a' - 'A'
+		}
+		if cLow >= 'A' && cLow <= 'Z' {
+			cLow += 'a' - 'A'
+		}
+		bUpper[i] = byte(cUp)
+		bLower[i] = byte(cLow)
+	}
+	lval.str = string(bLower)
+	if id, ok := keywords[string(bUpper)]; ok {
 		lval.id = id
 	} else {
 		lval.id = IDENT
@@ -786,6 +801,8 @@ var lookaheadKeywords = map[string]struct{}{
 	"TIME":       {},
 }
 
+// isNonKeywordBareIdentifier returns true if the input string is a permissible
+// bare SQL identifier and is not a SQL keyword.
 func isNonKeywordBareIdentifier(s string) bool {
 	if len(s) == 0 || !isIdentStart(int(s[0])) {
 		return false
@@ -795,14 +812,28 @@ func isNonKeywordBareIdentifier(s string) bool {
 			return false
 		}
 	}
-	upper := strings.ToUpper(s)
-	if _, ok := reservedKeywords[upper]; ok {
+
+	// If we made it this far, we know there's no unicode characters in our
+	// string, so we can use a naive unicode-unaware uppercase algorithm that's
+	// faster than Strings.ToUpper.
+	// See https://github.com/golang/go/issues/17859 for ToUpper performance.
+	isLower := true
+	b := make([]byte, len(s))
+	for i, c := range s {
+		if c >= 'a' && c <= 'z' {
+			c -= 'a' - 'A'
+		} else if c >= 'A' && c <='Z' {
+			isLower = false
+		}
+		b[i] = byte(c)
+	}
+	if _, ok := reservedKeywords[string(b)]; ok {
 		return false
 	}
-	if _, ok := lookaheadKeywords[upper]; ok {
+	if _, ok := lookaheadKeywords[string(b)]; ok {
 		return false
 	}
-	return Name(s).Normalize() == s
+	return isLower
 }
 
 func isIdentStart(ch int) bool {
