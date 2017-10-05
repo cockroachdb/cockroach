@@ -134,6 +134,10 @@ func NewTxnWithProto(db *DB, gatewayNodeID roachpb.NodeID, proto roachpb.Transac
 	return txn
 }
 
+func (txn *Txn) DB() *DB {
+	return txn.db
+}
+
 // ID returns the current ID of the transaction.
 func (txn *Txn) ID() uuid.UUID {
 	txn.mu.Lock()

@@ -330,6 +330,7 @@ func (p *planner) propagateFilters(
 	case *createIndexNode:
 	case *createUserNode:
 	case *createViewNode:
+	case *createSequenceNode:
 	case *dropDatabaseNode:
 	case *dropIndexNode:
 	case *dropTableNode:

@@ -607,6 +607,14 @@ message TableDescriptor {
   // Mutation jobs queued for execution in a FIFO order. Remains synchronized
   // with the mutations list.
   repeated MutationJob mutationJobs = 27 [(gogoproto.nullable) = false];
+
+  message SequenceSettings {
+    optional uint32 increment = 1 [(gogoproto.nullable) = false];
+  }
+
+  // The presence of sequence_settings indicates that this descriptor is for a sequence
+  // (a pseudo-table with one row).
+  optional SequenceSettings sequence_settings = 28;
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored

@@ -179,6 +179,12 @@ func (*CreateView) StatementType() StatementType { return DDL }
 func (*CreateView) StatementTag() string { return "CREATE VIEW" }
 
 // StatementType implements the Statement interface.
+func (*CreateSequence) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CreateSequence) StatementTag() string { return "CREATE SEQUENCE" }
+
+// StatementType implements the Statement interface.
 func (*Deallocate) StatementType() StatementType { return Ack }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -656,6 +662,7 @@ func (n *CopyFrom) String() string                 { return AsString(n) }
 func (n *CreateDatabase) String() string           { return AsString(n) }
 func (n *CreateIndex) String() string              { return AsString(n) }
 func (n *CreateTable) String() string              { return AsString(n) }
+func (n *CreateSequence) String() string           { return AsString(n) }
 func (n *CreateUser) String() string               { return AsString(n) }
 func (n *CreateView) String() string               { return AsString(n) }
 func (n *Deallocate) String() string               { return AsString(n) }
