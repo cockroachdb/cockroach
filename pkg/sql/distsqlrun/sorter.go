@@ -44,9 +44,6 @@ type sorter struct {
 	// ProcOutputHelper. 0 if the sorter should sort and push all the rows from
 	// the input.
 	count int64
-	// testingKnobMemLimit is used in testing to set a limit on the memory that
-	// should be used by the sortAllStrategy. Minimum value to enable is 1.
-	testingKnobMemLimit int64
 	// tempStorage is used to store rows when the working set is larger than can
 	// be stored in memory.
 	tempStorage engine.Engine
@@ -97,14 +94,15 @@ func (s *sorter) Run(ctx context.Context, wg *sync.WaitGroup) {
 	// Enable fall back to disk if the cluster setting is set or a memory limit
 	// has been set through testing.
 	st := s.flowCtx.Settings
-	useTempStorage := settingUseTempStorageSorts.Get(&st.SV) || s.testingKnobMemLimit > 0
+	useTempStorage := settingUseTempStorageSorts.Get(&st.SV) ||
+		s.flowCtx.testingKnobs.MemoryLimitBytes > 0
 	rowContainerMon := s.flowCtx.EvalCtx.Mon
 	if s.matchLen == 0 && s.count == 0 && useTempStorage {
 		// We will use the sortAllStrategy in this case and potentially fall
 		// back to disk.
 		// Limit the memory use by creating a child monitor with a hard limit.
 		// The strategy will overflow to disk if this limit is not enough.
-		limit := s.testingKnobMemLimit
+		limit := s.flowCtx.testingKnobs.MemoryLimitBytes
 		if limit <= 0 {
 			limit = settingWorkMemBytes.Get(&st.SV)
 		}

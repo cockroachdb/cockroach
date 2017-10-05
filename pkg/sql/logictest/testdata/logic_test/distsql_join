@@ -1,4 +1,4 @@
-# LogicTest: 5node
+# LogicTest: 5node-distsql
 
 statement ok
 CREATE TABLE data (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b, c, d))
@@ -35,10 +35,6 @@ NULL       /1       1         {1}       1
 /7         /8       8         {3}       3
 /8         /9       9         {4}       4
 /9         NULL     10        {5}       5
-
-# Ready to roll!
-statement ok
-SET DISTSQL = ON
 
 statement ok
 SET CLUSTER SETTING sql.distsql.merge_joins.enabled = true;
