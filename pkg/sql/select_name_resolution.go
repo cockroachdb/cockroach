@@ -35,7 +35,6 @@ const invalidColIdx = parser.InvalidColIdx
 type nameResolutionVisitor struct {
 	err        error
 	sources    multiSourceInfo
-	colOffsets []int
 	iVarHelper parser.IndexedVarHelper
 	searchPath parser.SearchPath
 
@@ -121,7 +120,7 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 			v.err = err
 			return false, expr
 		}
-		ivar := v.iVarHelper.IndexedVar(v.colOffsets[srcIdx] + colIdx)
+		ivar := v.iVarHelper.IndexedVar(v.sources[srcIdx].colOffset + colIdx)
 		v.foundDependentVars = true
 		return true, ivar
 
@@ -219,14 +218,13 @@ func (p *planner) resolveNames(
 	*v = nameResolutionVisitor{
 		err:                nil,
 		sources:            sources,
-		colOffsets:         make([]int, len(sources)),
 		iVarHelper:         ivarHelper,
 		searchPath:         p.session.SearchPath,
 		foundDependentVars: false,
 	}
 	colOffset := 0
-	for i, s := range sources {
-		v.colOffsets[i] = colOffset
+	for _, s := range sources {
+		s.colOffset = colOffset
 		colOffset += len(s.sourceColumns)
 	}
 

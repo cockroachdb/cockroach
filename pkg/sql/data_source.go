@@ -124,6 +124,11 @@ type dataSourceInfo struct {
 	// column but might be different if the statement renames
 	// them using AS.
 	sourceAliases sourceAliases
+
+	// colOffset is used by the nameResolutionVisitor to keep track of how many
+	// columns are in previous dataSourceInfos. It shouldn't be touched by
+	// anything but that visitor!
+	colOffset int
 }
 
 // planDataSource contains the data source information for data
