@@ -26,7 +26,9 @@
     "react-select": "^1.0.0-rc.4",
     "react-sticky": "^5.0.5",
     "redux": "^3.6.0",
+    "redux-saga": "^0.15.6",
     "redux-thunk": "^2.2.0",
+    "regenerator-runtime": "^0.11.0",
     "reselect": "^3.0.0",
     "webcola": "3.3.5",
     "whatwg-fetch": "^2.0.3"
