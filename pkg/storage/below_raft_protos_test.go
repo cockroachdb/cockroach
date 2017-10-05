@@ -56,6 +56,17 @@ type fixture struct {
 	emptySum, populatedSum uint64
 }
 
+type expectedHardState struct {
+	Term             uint64
+	Vote             uint64
+	Commit           uint64
+	XXX_unrecognized []byte
+}
+
+// convertation fails if new fields are added to `HardState`, in that case
+// `populatedConstructor` and `expectedHardState` should be updated
+var _ = expectedHardState(raftpb.HardState{})
+
 var belowRaftGoldenProtos = map[reflect.Type]fixture{
 	reflect.TypeOf(&enginepb.MVCCMetadata{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
@@ -74,8 +85,6 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 	reflect.TypeOf(&raftpb.HardState{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
 			n := r.Uint64()
-			// NB: this would rot if HardState ever picked up more (relevant)
-			// fields, but that's unlikely.
 			return &raftpb.HardState{
 				Term:   n % 3,
 				Vote:   n % 7,

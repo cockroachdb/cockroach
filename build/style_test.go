@@ -1001,6 +1001,8 @@ func TestStyle(t *testing.T) {
 				// Deprecated database/sql/driver interfaces not compatible with 1.7.
 				"github.com/cockroachdb/cockroach/pkg/sql/*.go:SA1019",
 				"github.com/cockroachdb/cockroach/pkg/cli/sql_util.go:SA1019",
+				// style_test.go:1024: storage/below_raft_protos_test.go:63:2: field XXX_unrecognized is unused (U1000)
+				"github.com/cockroachdb/cockroach/pkg/storage/below_raft_protos_test.go:U1000",
 
 				// IR templates.
 				"github.com/cockroachdb/cockroach/pkg/sql/ir/base/*.go:U1000",
