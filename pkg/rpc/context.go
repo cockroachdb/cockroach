@@ -257,6 +257,12 @@ func (c *Connection) setInitialHeartbeatDone() {
 	})
 }
 
+type crpcConnMeta struct {
+	sync.Once
+	conn    *CRPCClientConn
+	dialErr error
+}
+
 // Context contains the fields required by the rpc framework.
 type Context struct {
 	*base.Config
@@ -282,6 +288,8 @@ type Context struct {
 
 	ClusterID base.ClusterIDContainer
 	version   *cluster.ExposedClusterVersion
+
+	crpcConns syncmap.Map
 
 	// For unittesting.
 	BreakerFactory  func() *circuit.Breaker
@@ -332,6 +340,23 @@ func NewContext(
 				}
 			})
 			ctx.removeConn(k.(string), conn)
+			return true
+		})
+
+		ctx.crpcConns.Range(func(k, v interface{}) bool {
+			meta := v.(*crpcConnMeta)
+			meta.Do(func() {
+				// Make sure initialization is not in progress when we're removing the
+				// conn. We need to set the error in case we win the race against the
+				// real initialization code.
+				if meta.dialErr == nil {
+					meta.dialErr = &roachpb.NodeUnavailableError{}
+				}
+			})
+			ctx.crpcConns.Delete(k)
+			if conn := meta.conn; conn != nil {
+				conn.Close()
+			}
 			return true
 		})
 	})
@@ -518,6 +543,26 @@ func (ctx *Context) GRPCDial(target string) *Connection {
 	})
 
 	return conn
+}
+
+// CRPCDial ...
+func (ctx *Context) CRPCDial(target string) (*CRPCClientConn, error) {
+	value, ok := ctx.crpcConns.Load(target)
+	if !ok {
+		meta := &crpcConnMeta{}
+		value, _ = ctx.crpcConns.LoadOrStore(target, meta)
+	}
+
+	meta := value.(*crpcConnMeta)
+	meta.Do(func() {
+		conn, err := net.Dial("tcp", target)
+		if err != nil {
+			meta.dialErr = err
+			return
+		}
+		meta.conn = newCRPCClientConn(conn)
+	})
+	return meta.conn, meta.dialErr
 }
 
 // NewBreaker creates a new circuit breaker properly configured for RPC
