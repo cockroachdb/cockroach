@@ -367,7 +367,7 @@ func processLocalKeyRange(
 	txnMap map[uuid.UUID]*roachpb.Transaction,
 	cutoff hlc.Timestamp,
 	infoMu *lockableGCInfo,
-	resolveIntents resolveFunc,
+	resolveIntentsFn resolveFunc,
 ) ([]roachpb.GCRequest_GCKey, error) {
 	infoMu.Lock()
 	defer infoMu.Unlock()
@@ -408,7 +408,7 @@ func processLocalKeyRange(
 			if err := func() error {
 				infoMu.Unlock() // intentional
 				defer infoMu.Lock()
-				return resolveIntents(roachpb.AsIntents(txn.Intents, &txn),
+				return resolveIntentsFn(roachpb.AsIntents(txn.Intents, &txn),
 					ResolveOptions{Wait: true, Poison: false})
 			}(); err != nil {
 				// Ignore above error, but if context is expired, no point in keeping going.
@@ -424,7 +424,7 @@ func processLocalKeyRange(
 			if err := func() error {
 				infoMu.Unlock() // intentional
 				defer infoMu.Lock()
-				return resolveIntents(roachpb.AsIntents(txn.Intents, &txn), ResolveOptions{Wait: true, Poison: false})
+				return resolveIntentsFn(roachpb.AsIntents(txn.Intents, &txn), ResolveOptions{Wait: true, Poison: false})
 			}(); err != nil {
 				// Returning the error here would abort the whole GC run, and
 				// we don't want that. Instead, we simply don't GC this entry.
