@@ -248,6 +248,7 @@ var keywords = map[string]struct {
 	"search":                    {SEARCH, "U"},
 	"second":                    {SECOND, "U"},
 	"select":                    {SELECT, "R"},
+	"sequence":                  {SEQUENCE, "U"},
 	"sequences":                 {SEQUENCES, "U"},
 	"serial":                    {SERIAL, "C"},
 	"serializable":              {SERIALIZABLE, "U"},

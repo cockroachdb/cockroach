@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1316,6 +1317,22 @@ func (n *createViewNode) makeViewTableDesc(
 	return desc, desc.AllocateIDs()
 }
 
+func (n *createSequenceNode) makeSequenceTableDesc(
+	ctx context.Context,
+	sequenceName string,
+	parentID sqlbase.ID,
+	id sqlbase.ID,
+	privileges *sqlbase.PrivilegeDescriptor,
+) (sqlbase.TableDescriptor, error) {
+	desc := initTableDescriptor(id, parentID, sequenceName, n.p.txn.OrigTimestamp(), privileges)
+
+	desc.SequenceSettings = &sqlbase.TableDescriptor_SequenceSettings{
+		Increment: 1,
+	}
+
+	return desc, desc.AllocateIDs()
+}
+
 // makeTableDescIfAs is the MakeTableDesc method for when we have a table
 // that is created with the CREATE AS format.
 func makeTableDescIfAs(
@@ -1696,3 +1713,104 @@ func makeCheckConstraint(
 	}
 	return &sqlbase.TableDescriptor_CheckConstraint{Expr: parser.Serialize(d.Expr), Name: name}, nil
 }
+
+type createSequenceNode struct {
+	p      *planner
+	n      *parser.CreateSequence
+	dbDesc *sqlbase.DatabaseDescriptor
+}
+
+func (p *planner) CreateSequence(ctx context.Context, n *parser.CreateSequence) (planNode, error) {
+	name, err := n.Name.NormalizeWithDatabaseName(p.session.Database)
+	if err != nil {
+		return nil, err
+	}
+
+	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), name.Database())
+	if err != nil {
+		return nil, err
+	}
+
+	if err := p.CheckPrivilege(dbDesc, privilege.CREATE); err != nil {
+		return nil, err
+	}
+
+	return &createSequenceNode{
+		p:      p,
+		n:      n,
+		dbDesc: dbDesc,
+	}, nil
+}
+
+func (n *createSequenceNode) Start(params runParams) error {
+	seqName := n.n.Name.TableName().Table()
+	tKey := tableKey{parentID: n.dbDesc.ID, name: seqName}
+	key := tKey.Key()
+	if exists, err := descExists(params.ctx, n.p.txn, key); err == nil && exists {
+		return sqlbase.NewRelationAlreadyExistsError(tKey.Name())
+	} else if err != nil {
+		return err
+	}
+
+	id, err := GenerateUniqueDescID(params.ctx, n.p.session.execCfg.DB)
+	if err != nil {
+		return nil
+	}
+
+	// Inherit permissions from the database descriptor.
+	privs := n.dbDesc.GetPrivileges()
+
+	desc, err := n.makeSequenceTableDesc(params.ctx, seqName, n.dbDesc.ID, id, privs)
+	if err != nil {
+		return err
+	}
+
+	if err = desc.ValidateTable(); err != nil {
+		return err
+	}
+
+	if err = n.p.createDescriptorWithID(params.ctx, key, id, &desc); err != nil {
+		return err
+	}
+
+	// initialize the sequence value
+	seqValueKey := keys.MakeSequenceKey(uint32(id))
+
+	// TODO(vilterp): base this on user-specified start value
+	seqStartValue := &roachpb.Value{}
+	seqStartValue.SetInt(int64(0))
+
+	b := &client.Batch{}
+	b.Put(seqValueKey, seqStartValue)
+	n.p.txn.Run(params.ctx, b)
+
+	if desc.Adding() {
+		n.p.notifySchemaChange(&desc, sqlbase.InvalidMutationID)
+	}
+	if err := desc.Validate(params.ctx, n.p.txn); err != nil {
+		return err
+	}
+
+	// Log Create Sequence event. This is an auditable log event and is
+	// recorded in the same transaction as the table descriptor update.
+	if err := MakeEventLogger(n.p.LeaseMgr()).InsertEventRecord(
+		params.ctx,
+		n.p.txn,
+		EventLogCreateSequence,
+		int32(desc.ID),
+		int32(n.p.evalCtx.NodeID),
+		struct {
+			SequenceName string
+			Statement    string
+			User         string
+		}{n.n.Name.String(), n.n.String(), n.p.session.User},
+	); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (*createSequenceNode) Next(runParams) (bool, error) { return false, nil }
+func (*createSequenceNode) Close(context.Context)        {}
+func (*createSequenceNode) Values() parser.Datums        { return parser.Datums{} }

@@ -615,6 +615,11 @@ func MakeFamilyKey(key []byte, famID uint32) []byte {
 	return encoding.EncodeUvarintAscending(key, uint64(len(key)-size))
 }
 
+// MakeSequenceKey returns the key used to store the value of a sequence.
+func MakeSequenceKey(tableID uint32) []byte {
+	return makeKey(MakeTablePrefix(tableID), roachpb.RKey("SequenceValue"))
+}
+
 // GetRowPrefixLength returns the length of the row prefix of the key. A table
 // key's row prefix is defined as the maximal prefix of the key that is also a
 // prefix of every key for the same row. (Any key with this maximal prefix is
