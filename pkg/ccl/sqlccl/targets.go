@@ -90,6 +90,9 @@ func descriptorsMatchingTargets(
 
 	for _, desc := range descriptors {
 		if tableDesc := desc.GetTable(); tableDesc != nil {
+			if tableDesc.Dropped() {
+				continue
+			}
 			dbDesc, ok := databasesByID[tableDesc.ParentID]
 			if !ok {
 				return nil, errors.Errorf("unknown ParentID: %d", tableDesc.ParentID)

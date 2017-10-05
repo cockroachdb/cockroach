@@ -2050,3 +2050,46 @@ func TestPointInTimeRecovery(t *testing.T) {
 		sqlDB.CheckQueryResults(`SELECT * FROM data.bank ORDER BY id`, beforeBadThingData)
 	})
 }
+
+func TestBackupRestoreDropDB(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	defer cleanupFn()
+
+	sqlDB.Exec(`DROP DATABASE data CASCADE`)
+	sqlDB.Exec(`
+		CREATE DATABASE data;
+		CREATE TABLE data.bank (i int);
+		INSERT INTO data.bank VALUES (1);
+	`)
+
+	sqlDB.Exec("BACKUP DATABASE data TO $1", dir)
+	sqlDB.Exec("CREATE DATABASE data2")
+	sqlDB.Exec("RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='data2')", dir)
+
+	expected := sqlDB.QueryStr(`SELECT * FROM data.bank`)
+	sqlDB.CheckQueryResults(`SELECT * FROM data2.bank`, expected)
+}
+
+func TestBackupRestoreDropTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	defer cleanupFn()
+
+	sqlDB.Exec(`DROP TABLE data.bank`)
+	sqlDB.Exec(`
+		CREATE TABLE data.bank (i int);
+		INSERT INTO data.bank VALUES (1);
+	`)
+
+	sqlDB.Exec("BACKUP DATABASE data TO $1", dir)
+	sqlDB.Exec("CREATE DATABASE data2")
+	sqlDB.Exec("RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='data2')", dir)
+
+	expected := sqlDB.QueryStr(`SELECT * FROM data.bank`)
+	sqlDB.CheckQueryResults(`SELECT * FROM data2.bank`, expected)
+}
