@@ -73,12 +73,6 @@ type cliState struct {
 	errExit bool
 	// Determines whether to perform client-side syntax checking.
 	checkSyntax bool
-	// Determines whether to store normalized syntax in the shell history
-	// when check_syntax is set.
-	// TODO(knz): this can possibly be set back to false by default when
-	// the upstream readline library handles multi-line history entries
-	// properly.
-	normalizeHistory bool
 	// smartPrompt indicates whether to update the prompt using queries
 	// to the server. See the state cliRefreshPrompt and
 	// doRefreshPrompt() below.
@@ -105,21 +99,16 @@ type cliState struct {
 	lastKnownTxnStatus string
 
 	// partialLines is the array of lines accumulated so far in a
-	// multi-line entry. When syntax checking is enabled, partialLines
-	// also gets rewritten so that all statements parsed successfully so
-	// far have their own, single entry in partialLines (i.e. statements
-	// spanning multiple lines are grouped together in one partialLines
-	// entry).
+	// multi-line entry.
 	partialLines []string
 
-	// partialStmtsLen represents the number of semicolon-separated
-	// statements in `partialLines` parsed successfully so far. It grows
-	// larger than zero whenever 1) syntax checking is enabled and 2)
-	// multi-statement (as opposed to multi-line) entry starts,
-	// i.e. when the shell decides to continue inputting statements even
-	// after a full statement followed by a semicolon was read
-	// successfully. This is currently used for multi-line transaction
-	// editing.
+	// partialStmtsLen represents the number of entries in partialLines
+	// parsed successfully so far. It grows larger than zero whenever 1)
+	// syntax checking is enabled and 2) multi-statement (as opposed to
+	// multi-line) entry starts, i.e. when the shell decides to continue
+	// inputting statements even after a full statement followed by a
+	// semicolon was read successfully. This is currently used for
+	// multi-line transaction editing.
 	partialStmtsLen int
 
 	// concatLines is the concatenation of partialLines, computed during
@@ -203,7 +192,7 @@ More documentation about our SQL dialect and the CLI shell is available online:
 // addHistory persists a line of input to the readline history
 // file.
 func (c *cliState) addHistory(line string) {
-	if !isInteractive {
+	if !isInteractive || len(line) == 0 {
 		return
 	}
 
@@ -271,12 +260,6 @@ var options = map[string]struct {
 		func(c *cliState, _ []string) error { c.checkSyntax = true; return nil },
 		func(c *cliState) error { c.checkSyntax = false; return nil },
 	},
-	`normalize_history`: {
-		0,
-		false,
-		func(c *cliState, _ []string) error { c.normalizeHistory = true; return nil },
-		func(c *cliState) error { c.normalizeHistory = false; return nil },
-	},
 	`show_times`: {
 		0,
 		true,
@@ -301,7 +284,6 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 				{"errexit", strconv.FormatBool(c.errExit)},
 				{"echo", strconv.FormatBool(sqlCtx.echo)},
 				{"check_syntax", strconv.FormatBool(c.checkSyntax)},
-				{"normalize_history", strconv.FormatBool(c.normalizeHistory)},
 				{"show_times", strconv.FormatBool(cliCtx.showTimes)},
 				{"smart_prompt", strconv.FormatBool(c.smartPrompt)},
 			}))
@@ -617,7 +599,6 @@ func (c *cliState) doStart(nextState cliStateEnum) cliStateEnum {
 
 	if isInteractive {
 		c.checkSyntax = true
-		c.normalizeHistory = true
 		c.errExit = false
 		c.smartPrompt = true
 		c.promptPrefix, c.fullPrompt, c.continuePrompt = preparePrompts(c.conn.url)
@@ -931,36 +912,16 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 		return execState
 	}
 
+	// Add the last lines received to the history.
+	// Like above, this is one input chunk. However there may be
+	// sensitive newlines in string literals or SQL comments, so we
+	// can't blindly concatenate all the partial input into a single
+	// line. Leave them separate.
 	var lastInputChunk bytes.Buffer
-	if c.normalizeHistory {
-		// Add statements, not lines, to the history.
-		// The last input chunk is one unit of input by the user, so
-		// we want the user to be able to recall it all at once
-		// (= one history entry)
-		for i := c.partialStmtsLen; i < len(parsedStmts); i++ {
-			if i > c.partialStmtsLen {
-				lastInputChunk.WriteByte(' ')
-			}
-			fmt.Fprint(&lastInputChunk, parser.AsStringWithFlags(parsedStmts[i], parser.FmtParsable)+";")
-		}
-	} else {
-		// Add the last lines received to the history.
-		// Like above, this is one input chunk. However there may be
-		// sensitive newlines in string literals or SQL comments, so we
-		// can't blindly concatenate all the partial input into a single
-		// line. Leave them separate.
-		for i := c.partialStmtsLen; i < len(c.partialLines); i++ {
-			fmt.Fprintln(&lastInputChunk, c.partialLines[i])
-		}
+	for i := c.partialStmtsLen; i < len(c.partialLines); i++ {
+		fmt.Fprintln(&lastInputChunk, c.partialLines[i])
 	}
 	c.addHistory(lastInputChunk.String())
-
-	// Replace the last entered lines by the last entered statements.
-	c.partialLines = c.partialLines[:c.partialStmtsLen]
-	for i := c.partialStmtsLen; i < len(parsedStmts); i++ {
-		c.partialLines = append(c.partialLines,
-			parser.AsStringWithFlags(parsedStmts[i], parser.FmtSimpleWithPasswords)+";")
-	}
 
 	nextState := execState
 
@@ -977,7 +938,7 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 		nextState = contState
 	}
 
-	c.partialStmtsLen = len(parsedStmts)
+	c.partialStmtsLen = len(c.partialLines)
 
 	return nextState
 }
