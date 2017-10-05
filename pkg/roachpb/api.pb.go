@@ -4230,6 +4230,8 @@ func (m *ScanResponse) MarshalTo(dAtA []byte) (int, error) {
 			}
 			i += n
 		}
+		// Would be nice to bufalloc.ReleaseKVSlice(m.Rows). Not easily possible
+		// in generated code.
 	}
 	return i, nil
 }
@@ -4294,6 +4296,8 @@ func (m *ReverseScanResponse) MarshalTo(dAtA []byte) (int, error) {
 			}
 			i += n
 		}
+		// Would be nice to bufalloc.ReleaseKVSlice(m.Rows). Not easily possible
+		// in generated code.
 	}
 	return i, nil
 }
@@ -11227,6 +11231,8 @@ func (m *ScanResponse) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
+			// Would be nice to do m.Rows = bufalloc.AppendToKVSlice(m.Rows, KeyValue{}).
+			// Not easily possible in generated code.
 			m.Rows = append(m.Rows, KeyValue{})
 			if err := m.Rows[len(m.Rows)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -11418,6 +11424,8 @@ func (m *ReverseScanResponse) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
+			// Would be nice to do m.Rows = bufalloc.AppendToKVSlice(m.Rows, KeyValue{}).
+			// Not easily possible in generated code.
 			m.Rows = append(m.Rows, KeyValue{})
 			if err := m.Rows[len(m.Rows)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err

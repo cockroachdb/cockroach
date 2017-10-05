@@ -1565,7 +1565,7 @@ func mvccScanInternal(
 				}
 				return true, nil
 			}
-			res = append(res, kv)
+			res = bufalloc.AppendToKVSlice(res, kv)
 			return false, nil
 		})
 
