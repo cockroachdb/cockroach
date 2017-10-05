@@ -582,6 +582,30 @@ func (ord *orderingInfo) trim(desired sqlbase.ColumnOrdering) {
 	}
 }
 
+// applyExpr tries to extract useful information from an expression we know is
+// true on all rows (e.g. a filter expression) and updates the orderingInfo
+// accordingly. Specifically: it might add constant columns and equivalency
+// groups.
+func (ord *orderingInfo) applyExpr(evalCtx *parser.EvalContext, expr parser.TypedExpr) {
+	if expr == nil {
+		return
+	}
+	andExprs := splitAndExpr(evalCtx, expr, nil)
+	for _, e := range andExprs {
+		// Look for expressions of the form: @x = val or @x = @y.
+		if c, ok := e.(*parser.ComparisonExpr); ok && c.Operator == parser.EQ {
+			if ok, leftCol := getColVarIdx(c.Left); ok {
+				if _, ok := c.Right.(parser.Datum); ok {
+					ord.addConstantColumn(leftCol)
+				} else if ok, rightCol := getColVarIdx(c.Right); ok {
+					ord.addEquivalency(leftCol, rightCol)
+				}
+			}
+		}
+		// TODO(radu): look for tuple equalities like (a, b) = (c, d)
+	}
+}
+
 // computeMergeJoinOrdering determines if merge-join can be used to perform a join.
 //
 // It takes the orderings of the two data sources that are to be joined on a set
