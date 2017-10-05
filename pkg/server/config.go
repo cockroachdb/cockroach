@@ -334,7 +334,7 @@ func SetOpenFileLimitForOneStore() (uint64, error) {
 }
 
 // MakeConfig returns a Context with default values.
-func MakeConfig(st *cluster.Settings) Config {
+func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 	storeSpec, err := base.NewStoreSpec(defaultStorePath)
 	if err != nil {
 		panic(err)
@@ -354,7 +354,8 @@ func MakeConfig(st *cluster.Settings) Config {
 		Stores: base.StoreSpecList{
 			Specs: []base.StoreSpec{storeSpec},
 		},
-		TempStorageConfig: base.TempStorageConfigFromEnv(storeSpec, "", base.DefaultTempStorageMaxSizeBytes),
+		TempStorageConfig: base.TempStorageConfigFromEnv(
+			ctx, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes),
 	}
 	cfg.AmbientCtx.Tracer = st.Tracer
 

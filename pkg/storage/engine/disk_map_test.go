@@ -33,7 +33,7 @@ import (
 func TestRocksDBMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	tempEngine, err := NewTempEngine(base.DefaultTestTempStorageConfig)
+	tempEngine, err := NewTempEngine(base.DefaultTestTempStorageConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func TestRocksDBMap(t *testing.T) {
 func TestRocksDBMapSandbox(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	tempEngine, err := NewTempEngine(base.DefaultTestTempStorageConfig)
+	tempEngine, err := NewTempEngine(base.DefaultTestTempStorageConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,7 +225,7 @@ func TestRocksDBMapSandbox(t *testing.T) {
 func TestRocksDBStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	tempEngine, err := NewTempEngine(base.DefaultTestTempStorageConfig)
+	tempEngine, err := NewTempEngine(base.DefaultTestTempStorageConfig())
 	if err != nil {
 		t.Fatal(err)
 	}

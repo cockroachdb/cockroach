@@ -132,7 +132,7 @@ func createTestNode(
 		if err != nil {
 			t.Fatal(err)
 		}
-		serverCfg := MakeConfig(st)
+		serverCfg := MakeConfig(context.TODO(), st)
 		serverCfg.GossipBootstrapResolvers = []resolver.Resolver{r}
 		filtered := serverCfg.FilterGossipBootstrapResolvers(
 			context.Background(), ln.Addr(), ln.Addr(),

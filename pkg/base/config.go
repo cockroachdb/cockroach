@@ -21,11 +21,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/pkg/errors"
 )
 
 // Base config defaults.
@@ -412,11 +415,11 @@ type TempStorageConfig struct {
 	// subdirectory for temp storage will be created.
 	// If InMemory is set to true, ParentDir is ignored.
 	ParentDir string
-	// MaxSizeBytes is the space budget allocated for temp storage. This
-	// will either be a limit in-memory (if InMemory is true) or on-disk.
-	// If the budget is exceeded, no further allocations on temp storage
-	// will be permitted unless space is freed from previous allocations.
-	MaxSizeBytes int64
+	// Mon will be used by the temp storage to register all its capacity requests.
+	// It can be used to limit the disk or memory that temp storage is allowed to
+	// use. If InMemory is set, than this has to be a memory monitor; otherwise it
+	// has to be a disk monitor.
+	Mon *mon.BytesMonitor
 	// RecordDir is the path to the directory of the record file which
 	// records the path of the temporary directory created on node startup.
 	// Previous temporary directories that could not be cleaned up may
@@ -443,20 +446,39 @@ type TempStorageConfig struct {
 // TempStorageConfig.RecordDir is always set to the first store's path such
 // that the record file is always located with the first store.
 func TempStorageConfigFromEnv(
-	firstStore StoreSpec, parentDir string, maxSizeBytes int64,
+	ctx context.Context, firstStore StoreSpec, parentDir string, maxSizeBytes int64,
 ) TempStorageConfig {
 	// First store is in-memory so we must also make the temp storage
 	// in-memory. See TODO in function comment.
 	if firstStore.InMemory {
+		monitor := mon.MakeMonitor(
+			"in-mem temp storage",
+			mon.MemoryResource,
+			nil,             /* curCount */
+			nil,             /* maxHist */
+			1024*1024,       /* increment */
+			maxSizeBytes/10, /* noteworthy */
+		)
+		monitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(maxSizeBytes))
+
 		return TempStorageConfig{
-			InMemory:     true,
-			MaxSizeBytes: maxSizeBytes,
+			InMemory: true,
+			Mon:      &monitor,
 		}
 	}
 
+	monitor := mon.MakeMonitor(
+		"temp disk storage",
+		mon.DiskResource,
+		nil,             /* curCount */
+		nil,             /* maxHist */
+		64*1024*1024,    /* increment */
+		maxSizeBytes/10, /* noteworthy */
+	)
+	monitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(maxSizeBytes))
 	tsc := TempStorageConfig{
-		ParentDir:    parentDir,
-		MaxSizeBytes: maxSizeBytes,
+		ParentDir: parentDir,
+		Mon:       &monitor,
 		// The record directory is always defaulted to the first store's path
 		// such that subsequent node startups can retrieve the records of
 		// abandoned temporary subdirectories.
