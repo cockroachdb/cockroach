@@ -104,9 +104,6 @@ eexpect "Failed running \"sql\""
 # Check that history is scrubbed.
 send "$argv sql --certs-dir=$certs_dir\r"
 eexpect "root@"
-# Ctrl+R eisen
-send "\022eisen"
-eexpect "CREATE USER eisen WITH PASSWORD \\*\\*\\*\\*\\*;"
 interrupt
 end_test
 
