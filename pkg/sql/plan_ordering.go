@@ -30,12 +30,13 @@ func planOrdering(plan planNode) orderingInfo {
 		return planOrdering(n.results)
 	case *distinctNode:
 		return planOrdering(n.plan)
-	case *filterNode:
-		return planOrdering(n.source.plan)
 	case *limitNode:
 		return planOrdering(n.plan)
 	case *indexJoinNode:
 		return planOrdering(n.index)
+
+	case *filterNode:
+		return n.ordering
 
 	case *groupNode:
 		// TODO(dt,knz,radu): aggregate buckets can be ordered if the source is
