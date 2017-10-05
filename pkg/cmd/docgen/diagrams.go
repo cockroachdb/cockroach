@@ -23,11 +23,14 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/docgen/extract"
 	"github.com/spf13/cobra"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/docgen/extract"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 )
 
 var cmdFuncs *cobra.Command
@@ -158,7 +161,12 @@ var diagramCmd = func() *cobra.Command {
 			if railroadJar != "" {
 				_, err := os.Stat(railroadJar)
 				if err != nil {
-					log.Fatalf("%s not found\n", railroadJar)
+					if envutil.EnvOrDefaultBool("COCKROACH_REQUIRE_RAILROAD", false) {
+						log.Fatalf("%s not found\n", railroadJar)
+					} else {
+						log.Printf("%s not found, falling back to slower web service (employees can find Railroad.jar on Google Drive).", railroadJar)
+						railroadJar = ""
+					}
 				}
 			}
 
@@ -629,12 +637,23 @@ var diagramCmd = func() *cobra.Command {
 					if printBNF {
 						fmt.Printf("%s: (PRE REPLACE)\n\n%s\n", s.name, g)
 					}
-					for from, to := range s.replace {
-						g = bytes.Replace(g, []byte(from), []byte(to), -1)
+					replacements := make([]string, 0, len(s.replace))
+					for from := range s.replace {
+						replacements = append(replacements, from)
 					}
-					for from, to := range s.regreplace {
+					sort.Strings(replacements)
+					for _, from := range replacements {
+						g = bytes.Replace(g, []byte(from), []byte(s.replace[from]), -1)
+					}
+
+					replacements = replacements[:0]
+					for from := range s.regreplace {
+						replacements = append(replacements, from)
+					}
+					sort.Strings(replacements)
+					for _, from := range replacements {
 						re := regexp.MustCompile(from)
-						g = re.ReplaceAll(g, []byte(to))
+						g = re.ReplaceAll(g, []byte(s.regreplace[from]))
 					}
 					if printBNF {
 						fmt.Printf("%s: (POST REPLACE)\n\n%s\n", s.name, g)

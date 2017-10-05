@@ -26,4 +26,3 @@ questions come up.
 package sql
 
 //go:generate go run ../../../pkg/cmd/docgen/main.go ../../../pkg/cmd/docgen/funcs.go ../../../pkg/cmd/docgen/diagrams.go functions .
-//go:generate go run ../../../pkg/cmd/docgen/main.go ../../../pkg/cmd/docgen/funcs.go ../../../pkg/cmd/docgen/diagrams.go grammar --base ./diagrams --railroad ../../../build/Railroad.jar --addr ../../../pkg/sql/parser/sql.y
