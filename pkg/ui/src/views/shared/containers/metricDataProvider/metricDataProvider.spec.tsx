@@ -12,7 +12,7 @@ import {
 import {
   MetricsDataProviderUnconnected as MetricsDataProvider,
 } from "src/views/shared/containers/metricDataProvider";
-import { queryMetrics, MetricsQuery } from "src/redux/metrics";
+import { requestMetrics, MetricsQuery } from "src/redux/metrics";
 
 // TextGraph is a proof-of-concept component used to demonstrate that
 // MetricsDataProvider is working correctly. Used in tests.
@@ -34,9 +34,9 @@ function makeDataProvider(
   id: string,
   metrics: MetricsQuery,
   timeInfo: QueryTimeInfo,
-  qm: typeof queryMetrics,
+  rm: typeof requestMetrics,
 ) {
-  return shallow(<MetricsDataProvider id={id} metrics={metrics} timeInfo={timeInfo} queryMetrics={qm}>
+  return shallow(<MetricsDataProvider id={id} metrics={metrics} timeInfo={timeInfo} requestMetrics={rm}>
     <TextGraph>
       <Axis>
         <Metric name="test.metric.1" />
@@ -197,7 +197,7 @@ describe("<MetricsDataProvider>", function() {
           <MetricsDataProvider id="id"
                                metrics={null}
                                timeInfo={timespan1}
-                               queryMetrics={spy}>
+                               requestMetrics={spy}>
             <TextGraph>
               <Axis>
                 <Metric name="test.metrics.1" />
