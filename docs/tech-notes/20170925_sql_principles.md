@@ -3,8 +3,8 @@
 This tech nodes outlines some general guiding principles for future
 work, during the period 2017-2019.
 
-Reminder from "[The SQL layer in CockroachDB](sql.md)" - the SQL layer
-in CockroachDB contains 5 main component groups, including:
+Reminder from [The SQL layer in CockroachDB](20170320_sql.md) - the
+SQL layer in CockroachDB contains 5 main component groups, including:
 
 - the SQL **front-end**, responsible for parsing,
   desugaring, free simplifications and semantic analysis; this
