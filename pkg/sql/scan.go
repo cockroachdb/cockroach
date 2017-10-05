@@ -406,6 +406,7 @@ func (n *scanNode) computeOrdering(
 	}
 	// We included any implicit columns, so the columns form a key.
 	ordering.addKeySet(keySet)
+	ordering.applyExpr(&n.p.evalCtx, n.filter)
 	return ordering
 }
 
