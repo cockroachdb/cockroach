@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"golang.org/x/net/context"
-	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -42,7 +41,7 @@ type SendOptions struct {
 
 type batchClient struct {
 	remoteAddr string
-	conn       *grpc.ClientConn
+	crpcConn   *rpc.CRPCClientConn
 	client     roachpb.InternalClient
 	args       roachpb.BatchRequest
 	healthy    bool
@@ -113,17 +112,28 @@ func grpcTransportFactoryImpl(
 ) (Transport, error) {
 	clients := make([]batchClient, 0, len(replicas))
 	for _, replica := range replicas {
-		conn, err := rpcContext.GRPCDial(replica.NodeDesc.Address.String())
-		if err != nil {
-			return nil, err
+		var internalClient roachpb.InternalClient
+		var crpcConn *rpc.CRPCClientConn
+		if false {
+			conn, err := rpcContext.GRPCDial(replica.NodeDesc.Address.String())
+			if err != nil {
+				return nil, err
+			}
+			internalClient = roachpb.NewInternalClient(conn)
+		} else {
+			var err error
+			crpcConn, err = rpcContext.CRPCDial(replica.NodeDesc.Address.String())
+			if err != nil {
+				return nil, err
+			}
 		}
 		argsCopy := args
 		argsCopy.Replica = replica.ReplicaDescriptor
 		remoteAddr := replica.NodeDesc.Address.String()
 		clients = append(clients, batchClient{
 			remoteAddr: remoteAddr,
-			conn:       conn,
-			client:     roachpb.NewInternalClient(conn),
+			crpcConn:   crpcConn,
+			client:     internalClient,
 			args:       argsCopy,
 			healthy:    rpcContext.ConnHealth(remoteAddr) == nil,
 		})
@@ -230,7 +240,14 @@ func (gt *grpcTransport) send(
 		}
 
 		log.VEventf(ctx, 2, "sending request to %s", client.remoteAddr)
-		reply, err := client.client.Batch(ctx, &client.args)
+		var reply *roachpb.BatchResponse
+		var err error
+		if client.crpcConn != nil {
+			reply = &roachpb.BatchResponse{}
+			err = client.crpcConn.Send(&client.args, reply)
+		} else {
+			reply, err = client.client.Batch(ctx, &client.args)
+		}
 		if reply != nil {
 			for i := range reply.Responses {
 				if err := reply.Responses[i].GetInner().Verify(client.args.Requests[i].GetInner()); err != nil {
