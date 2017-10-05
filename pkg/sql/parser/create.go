@@ -839,6 +839,19 @@ func (node *CreateTable) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
+type CreateSequence struct {
+	IfNotExists bool
+	Name        NormalizableTableName
+}
+
+func (node *CreateSequence) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("CREATE SEQUENCE ")
+	if node.IfNotExists {
+		buf.WriteString("IF NOT EXISTS ")
+	}
+	FormatNode(buf, f, &node.Name)
+}
+
 // CreateUser represents a CREATE USER statement.
 type CreateUser struct {
 	Name     Name

@@ -456,7 +456,7 @@ func (u *sqlSymUnion) scrubOption() ScrubOption {
 %token <str>   RELEASE RESET RESTORE RESTRICT RESUME RETURNING REVOKE RIGHT
 %token <str>   ROLLBACK ROLLUP ROW ROWS RSHIFT
 
-%token <str>   SAVEPOINT SCATTER SCRUB SEARCH SECOND SELECT SEQUENCES
+%token <str>   SAVEPOINT SCATTER SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
 %token <str>   SERIAL SERIALIZABLE SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
 %token <str>   SHOW SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 %token <str>   START STATUS STDIN STRICT STRING STORE STORING SUBSTRING
@@ -551,6 +551,7 @@ func (u *sqlSymUnion) scrubOption() ScrubOption {
 %type <Statement> create_index_stmt
 %type <Statement> create_table_stmt
 %type <Statement> create_table_as_stmt
+%type <Statement> create_sequence_stmt
 %type <Statement> create_user_stmt
 %type <Statement> create_view_stmt
 %type <Statement> delete_stmt
@@ -1502,6 +1503,7 @@ create_stmt:
 | create_index_stmt    // EXTEND WITH HELP: CREATE INDEX
 | create_table_stmt    // EXTEND WITH HELP: CREATE TABLE
 | create_table_as_stmt // EXTEND WITH HELP: CREATE TABLE
+| create_sequence_stmt
 // Error case for both CREATE TABLE and CREATE TABLE ... AS in one
 | CREATE TABLE error   // SHOW HELP: CREATE TABLE
 | create_user_stmt     // EXTEND WITH HELP: CREATE USER
@@ -3104,6 +3106,16 @@ numeric_only:
 | signed_iconst
   {
     $$.val = $1.numVal()
+  }
+
+create_sequence_stmt:
+  CREATE SEQUENCE any_name
+  {
+    $$.val = &CreateSequence{Name: $3.normalizableTableName(), IfNotExists: false}
+  }
+| CREATE SEQUENCE IF NOT EXISTS any_name
+  {
+    $$.val = &CreateSequence{Name: $6.normalizableTableName(), IfNotExists: true}
   }
 
 // %Help: TRUNCATE - empty one or more tables
@@ -6708,6 +6720,7 @@ unreserved_keyword:
 | SEARCH
 | SECOND
 | SERIALIZABLE
+| SEQUENCE
 | SEQUENCES
 | SESSION
 | SESSIONS
