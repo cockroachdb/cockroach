@@ -477,11 +477,19 @@ var Builtins = map[string][]Builtin{
 				s := string(MustBeDString(args[0]))
 				count := int(MustBeDInt(args[1]))
 
-				if count < 0 {
+				ln := len(s) * count
+				// Use <= here instead of < to prevent a possible divide-by-zero in the next
+				// if block.
+				if count <= 0 {
 					count = 0
+				} else if ln/count != len(s) {
+					// Detect overflow and trigger an error.
+					return nil, pgerror.NewError(
+						pgerror.CodeProgramLimitExceededError, "requested length too large",
+					)
 				}
 
-				if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(s)*count)); err != nil {
+				if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(ln)); err != nil {
 					return nil, err
 				}
 				return NewDString(strings.Repeat(s, count)), nil
