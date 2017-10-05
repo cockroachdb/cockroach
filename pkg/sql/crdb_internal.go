@@ -28,6 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -43,27 +44,28 @@ const crdbInternalName = "crdb_internal"
 var crdbInternal = virtualSchema{
 	name: crdbInternalName,
 	tables: []virtualSchemaTable{
+		crdbInternalBackwardDependenciesTable,
 		crdbInternalBuildInfoTable,
-		crdbInternalRuntimeInfoTable,
-		crdbInternalTablesTable,
-		crdbInternalLeasesTable,
-		crdbInternalSchemaChangesTable,
-		crdbInternalStmtStatsTable,
-		crdbInternalJobsTable,
-		crdbInternalSessionTraceTable,
-		crdbInternalClusterSettingsTable,
-		crdbInternalSessionVariablesTable,
-		crdbInternalLocalQueriesTable,
-		crdbInternalClusterQueriesTable,
-		crdbInternalLocalSessionsTable,
-		crdbInternalClusterSessionsTable,
 		crdbInternalBuiltinFunctionsTable,
+		crdbInternalClusterQueriesTable,
+		crdbInternalClusterSessionsTable,
+		crdbInternalClusterSettingsTable,
 		crdbInternalCreateStmtsTable,
+		crdbInternalForwardDependenciesTable,
+		crdbInternalIndexColumnsTable,
+		crdbInternalJobsTable,
+		crdbInternalLeasesTable,
+		crdbInternalLocalQueriesTable,
+		crdbInternalLocalSessionsTable,
+		crdbInternalRangesTable,
+		crdbInternalRuntimeInfoTable,
+		crdbInternalSchemaChangesTable,
+		crdbInternalSessionTraceTable,
+		crdbInternalSessionVariablesTable,
+		crdbInternalStmtStatsTable,
 		crdbInternalTableColumnsTable,
 		crdbInternalTableIndexesTable,
-		crdbInternalIndexColumnsTable,
-		crdbInternalBackwardDependenciesTable,
-		crdbInternalForwardDependenciesTable,
+		crdbInternalTablesTable,
 	},
 }
 
@@ -1299,5 +1301,44 @@ CREATE TABLE crdb_internal.forward_dependencies (
 
 				return nil
 			})
+	},
+}
+
+// crdbInternalRangesTable exposes system ranges.
+var crdbInternalRangesTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.ranges (
+  range_id  INT,
+  start_key STRING,
+  end_key   STRING,
+  replicas  INT
+)
+`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error {
+		if err := p.RequireSuperUser("read crdb_internal.ranges"); err != nil {
+			return err
+		}
+		ranges, err := scanMetaKVs(ctx, p.txn, roachpb.Span{
+			Key:    keys.MinKey,
+			EndKey: keys.MaxKey,
+		})
+		if err != nil {
+			return err
+		}
+		var desc roachpb.RangeDescriptor
+		for _, r := range ranges {
+			if err := r.ValueProto(&desc); err != nil {
+				return err
+			}
+			if err := addRow(
+				parser.NewDInt(parser.DInt(desc.RangeID)),
+				parser.NewDString(keys.PrettyPrint(desc.StartKey.AsRawKey())),
+				parser.NewDString(keys.PrettyPrint(desc.EndKey.AsRawKey())),
+				parser.NewDInt(parser.DInt(len(desc.Replicas))),
+			); err != nil {
+				return err
+			}
+		}
+		return nil
 	},
 }

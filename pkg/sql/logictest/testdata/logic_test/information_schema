@@ -220,6 +220,7 @@ crdb_internal       node_queries
 crdb_internal       node_runtime_info
 crdb_internal       node_sessions
 crdb_internal       node_statement_statistics
+crdb_internal       ranges
 crdb_internal       schema_changes
 crdb_internal       session_trace
 crdb_internal       session_variables
@@ -372,6 +373,7 @@ def            crdb_internal       node_queries               SYSTEM VIEW  1
 def            crdb_internal       node_runtime_info          SYSTEM VIEW  1
 def            crdb_internal       node_sessions              SYSTEM VIEW  1
 def            crdb_internal       node_statement_statistics  SYSTEM VIEW  1
+def            crdb_internal       ranges                     SYSTEM VIEW  1
 def            crdb_internal       schema_changes             SYSTEM VIEW  1
 def            crdb_internal       session_trace              SYSTEM VIEW  1
 def            crdb_internal       session_variables          SYSTEM VIEW  1
