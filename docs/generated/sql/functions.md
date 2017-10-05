@@ -133,6 +133,10 @@ hour, minute, second, millisecond, microsecond, epoch</span>
 
 Compatible elements: year, quarter, month, week, dayofweek, dayofyear,
 hour, minute, second, millisecond, microsecond, epoch</span>
+<code>extract(element: <a href="string.html">string</a>, input: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="int.html">int</a></code> | <span class="funcdesc">Extracts `element` from `input`.
+
+Compatible elements: year, quarter, month, week, dayofweek, dayofyear,
+hour, minute, second, millisecond, microsecond, epoch</span>
 <code>extract_duration(element: <a href="string.html">string</a>, input: <a href="interval.html">interval</a>) &rarr; <a href="int.html">int</a></code> | <span class="funcdesc">Extracts `element` from `input`.
 Compatible elements: hour, minute, second, millisecond, microsecond.</span>
 <code>now() &rarr; <a href="timestamp.html">timestamp</a></code> | <span class="funcdesc">Returns the current transaction's timestamp.</span>

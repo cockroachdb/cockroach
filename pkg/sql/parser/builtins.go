@@ -1301,6 +1301,19 @@ CockroachDB supports the following flags:
 				"Compatible elements: year, quarter, month, week, dayofweek, dayofyear,\n" +
 				"hour, minute, second, millisecond, microsecond, epoch",
 		},
+		Builtin{
+			Types:      ArgTypes{{"element", TypeString}, {"input", TypeTimestampTZ}},
+			ReturnType: fixedReturnType(TypeInt),
+			category:   categoryDateAndTime,
+			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+				fromTSTZ := args[1].(*DTimestampTZ)
+				timeSpan := strings.ToLower(string(MustBeDString(args[0])))
+				return extractStringFromTimestamp(ctx, fromTSTZ.Time, timeSpan)
+			},
+			Info: "Extracts `element` from `input`.\n\n" +
+				"Compatible elements: year, quarter, month, week, dayofweek, dayofyear,\n" +
+				"hour, minute, second, millisecond, microsecond, epoch",
+		},
 	},
 
 	"extract_duration": {
