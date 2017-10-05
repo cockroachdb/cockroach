@@ -11,6 +11,7 @@ package storageccl
 import (
 	"bytes"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -191,7 +192,9 @@ func (kr *KeyRewriter) RewriteKey(key []byte) ([]byte, bool, error) {
 }
 
 // RewriteSpan returns a new span with both Key and EndKey rewritten using
-// RewriteKey. An error is returned if either was not matched for rewrite.
+// RewriteKey. Span start keys for the primary index will be rewritten to
+// contain just the table ID. That is, /Table/51/1 -> /Table/51. An error
+// is returned if either was not matched for rewrite.
 func (kr *KeyRewriter) RewriteSpan(span roachpb.Span) (roachpb.Span, error) {
 	newKey, ok, err := kr.RewriteKey(append([]byte(nil), span.Key...))
 	if err != nil {
@@ -200,6 +203,15 @@ func (kr *KeyRewriter) RewriteSpan(span roachpb.Span) (roachpb.Span, error) {
 	if !ok {
 		return roachpb.Span{}, errors.Errorf("could not rewrite key: %s", span.Key)
 	}
+	if b, id, idx, err := sqlbase.DecodeTableIDIndexID(newKey); err != nil {
+		return roachpb.Span{}, errors.Wrapf(err, "could not rewrite key: %s", span.Key)
+	} else if idx == 1 && len(b) == 0 {
+		newKey = keys.MakeTablePrefix(uint32(id))
+	}
+	// Modify all spans that begin at the primary index to instead begin at the
+	// start of the table. That is, change a span start key from /Table/51/1 to
+	// /Table/51. Otherwise a permanentely empty span at /Table/51-/Table/51/1
+	// will be created.
 	newEndKey, ok, err := kr.RewriteKey(append([]byte(nil), span.EndKey...))
 	if err != nil {
 		return roachpb.Span{}, errors.Wrapf(err, "could not rewrite key: %s", span.EndKey)
