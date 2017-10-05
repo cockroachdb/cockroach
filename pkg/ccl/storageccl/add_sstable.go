@@ -86,32 +86,26 @@ func evalAddSSTable(
 func verifySSTable(
 	existingIter engine.SimpleIterator, data []byte, start, end engine.MVCCKey, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
-	dataIter, err := engineccl.NewMemSSTIterator(data)
+	// To verify every KV is a valid roachpb.KeyValue in the range [start, end)
+	// we a) pass a verify flag on the iterator so that as ComputeStatsGo calls
+	// Next, we're also verifying each KV pair. We explicitly check the first key
+	// is >= start and then that we do not find a key after end.
+	dataIter, err := engineccl.NewMemSSTIterator(data, true)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	defer dataIter.Close()
 
+	// Check that the fist key is in the expected range.
 	dataIter.Seek(engine.MVCCKey{Key: keys.MinKey})
 	ok, err := dataIter.Valid()
-	for ; ok; ok, err = dataIter.Valid() {
-		unsafeKey := dataIter.UnsafeKey()
-		if unsafeKey.Less(start) || !unsafeKey.Less(end) {
-			// TODO(dan): Add a new field in roachpb.Error, so the client can
-			// catch this and retry. It can happen if the range splits between
-			// when the client constructs the file and sends the request.
+	if err != nil {
+		return enginepb.MVCCStats{}, err
+	} else if ok {
+		if unsafeKey := dataIter.UnsafeKey(); unsafeKey.Less(start) {
 			return enginepb.MVCCStats{}, errors.Errorf("key %s not in request range [%s,%s)",
 				unsafeKey.Key, start.Key, end.Key)
 		}
-
-		v := roachpb.Value{RawBytes: dataIter.UnsafeValue()}
-		if err := v.Verify(unsafeKey.Key); err != nil {
-			return enginepb.MVCCStats{}, err
-		}
-		dataIter.Next()
-	}
-	if err != nil {
-		return enginepb.MVCCStats{}, err
 	}
 
 	// In the case that two iterators have an entry with the same key and
@@ -122,8 +116,20 @@ func verifySSTable(
 	mergedIter := engineccl.MakeMultiIterator([]engine.SimpleIterator{existingIter, dataIter})
 	defer mergedIter.Close()
 
-	// TODO(dan): This unnecessarily iterates the sstable a second time, see if
-	// combining this computation with the above checksum verification speeds
-	// anything up.
-	return engine.ComputeStatsGo(mergedIter, start, end, nowNanos)
+	stats, err := engine.ComputeStatsGo(mergedIter, start, end, nowNanos)
+	if err != nil {
+		return stats, err
+	}
+
+	dataIter.Seek(end)
+	ok, err = dataIter.Valid()
+	if err != nil {
+		return enginepb.MVCCStats{}, err
+	} else if ok {
+		if unsafeKey := dataIter.UnsafeKey(); !unsafeKey.Less(end) {
+			return enginepb.MVCCStats{}, errors.Errorf("key %s not in request range [%s,%s)",
+				unsafeKey.Key, start.Key, end.Key)
+		}
+	}
+	return stats, nil
 }
