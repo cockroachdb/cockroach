@@ -435,23 +435,29 @@ func runStart(cmd *cobra.Command, args []string) error {
 	} else {
 		tempStorePercentageResolver = memoryPercentResolver
 	}
+	var tempStorageMaxSizeBytes int64
 	if err := diskTempStorageSizeValue.Resolve(
-		&serverCfg.TempStorageConfig.MaxSizeBytes, tempStorePercentageResolver,
+		&tempStorageMaxSizeBytes, tempStorePercentageResolver,
 	); err != nil {
 		return err
 	}
 	if firstStore.InMemory && !diskTempStorageSizeValue.IsSet() {
 		// The default temp store size is different when the first
 		// store (and thus also the temp storage) is in memory.
-		serverCfg.TempStorageConfig.MaxSizeBytes = base.DefaultInMemTempStorageMaxSizeBytes
+		tempStorageMaxSizeBytes = base.DefaultInMemTempStorageMaxSizeBytes
 	}
+
+	tracer := serverCfg.Settings.Tracer
+	sp := tracer.StartSpan("server start")
+	ctx := opentracing.ContextWithSpan(context.Background(), sp)
 
 	// Re-initialize temp storage based on the current attributes
 	// (initialized from CLI flags and above) and the first store's spec.
 	serverCfg.TempStorageConfig = base.TempStorageConfigFromEnv(
+		ctx,
 		firstStore,
 		serverCfg.TempStorageConfig.ParentDir,
-		serverCfg.TempStorageConfig.MaxSizeBytes,
+		tempStorageMaxSizeBytes,
 	)
 
 	// Use the server-specific values for some flags and settings.
@@ -461,10 +467,6 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
-
-	tracer := serverCfg.Settings.Tracer
-	sp := tracer.StartSpan("server start")
-	ctx := opentracing.ContextWithSpan(context.Background(), sp)
 
 	// Set up the logging and profiling output.
 	// It is important that no logging occurs before this point or the log files

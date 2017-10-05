@@ -21,11 +21,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/pkg/errors"
 )
 
 // Base config defaults.
@@ -413,11 +416,11 @@ type TempStorageConfig struct {
 	// Path is the filepath of the temporary subdirectory created for
 	// the temp storage.
 	Path string
-	// MaxSizeBytes is the space budget allocated for temp storage. This
-	// will either be a limit in-memory (if InMemory is true) or on-disk.
-	// If the budget is exceeded, no further allocations on temp storage
-	// will be permitted unless space is freed from previous allocations.
-	MaxSizeBytes int64
+	// Mon will be used by the temp storage to register all its capacity requests.
+	// It can be used to limit the disk or memory that temp storage is allowed to
+	// use. If InMemory is set, than this has to be a memory monitor; otherwise it
+	// has to be a disk monitor.
+	Mon *mon.BytesMonitor
 }
 
 // TempStorageConfigFromEnv creates a TempStorageConfig.
@@ -426,20 +429,40 @@ type TempStorageConfig struct {
 // If parentDir is unspecified but the specified store has an on-disk path,
 // parentDir will be defaulted to the store's path.
 func TempStorageConfigFromEnv(
-	firstStore StoreSpec, parentDir string, maxSizeBytes int64,
+	ctx context.Context, firstStore StoreSpec, parentDir string, maxSizeBytes int64,
 ) TempStorageConfig {
-	tsc := TempStorageConfig{
-		ParentDir:    parentDir,
-		MaxSizeBytes: maxSizeBytes,
+
+	inMem := parentDir == "" && firstStore.InMemory
+	var monitor mon.BytesMonitor
+	if inMem {
+		monitor = mon.MakeMonitor(
+			"in-mem temp storage",
+			mon.MemoryResource,
+			nil,             /* curCount */
+			nil,             /* maxHist */
+			1024*1024,       /* increment */
+			maxSizeBytes/10, /* noteworthy */
+		)
+		monitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(maxSizeBytes))
+	} else {
+		monitor = mon.MakeMonitor(
+			"temp disk storage",
+			mon.DiskResource,
+			nil,             /* curCount */
+			nil,             /* maxHist */
+			64*1024*1024,    /* increment */
+			maxSizeBytes/10, /* noteworthy */
+		)
+		monitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(maxSizeBytes))
 	}
 
-	if tsc.ParentDir == "" {
-		if firstStore.InMemory {
-			tsc.InMemory = true
-		} else {
-			tsc.ParentDir = firstStore.Path
-		}
+	if parentDir == "" && !inMem {
+		parentDir = firstStore.Path
 	}
 
-	return tsc
+	return TempStorageConfig{
+		InMemory:  inMem,
+		ParentDir: parentDir,
+		Mon:       &monitor,
+	}
 }

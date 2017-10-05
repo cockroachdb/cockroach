@@ -507,7 +507,7 @@ func TestHashJoiner(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig)
+	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
