@@ -80,6 +80,15 @@ proc interrupt {} {
     sleep 0.4
 }
 
+# Convenience function that sends Ctrl+D to the monitored process.
+# Leaves some upfront delay to let the readline process the time
+# to initialize the key binding.
+proc send_eof {} {
+    report "EOF TO FOREGROUND PROCESS"
+    sleep 0.4
+    send "\004"
+}
+
 # Convenience functions to start/shutdown the server.
 # Preserves the invariant that the server's PID is saved
 # in `server_pid`.
