@@ -16,11 +16,13 @@ package log
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	raven "github.com/getsentry/raven-go"
@@ -197,6 +199,86 @@ func (e *safeError) Error() string {
 	return e.message
 }
 
+func censor(r interface{}) string {
+	handlePathError := func(v *os.PathError) string {
+		v.Path = "<redacted>"
+		return v.Error()
+	}
+	handleLinkError := func(v *os.LinkError) string {
+		v.Old, v.New = "<redacted>", "<redacted>"
+		return v.Error()
+	}
+	handleErrno := func(v syscall.Errno) string {
+		return v.Error()
+	}
+	handleSyscallError := func(v *os.SyscallError) string {
+		return fmt.Sprintf("%s: %s", v.Syscall, censor(v.Err))
+	}
+	handleSafeType := func(v *SafeType) string {
+		return fmt.Sprintf("%+v", v.V)
+	}
+
+	handle := func(r interface{}) string {
+		switch t := r.(type) {
+		case *SafeType:
+			return handleSafeType(t)
+		case SafeType:
+			return handleSafeType(&t)
+		case error:
+			// continue below
+		default:
+			return ""
+		}
+
+		// Now that we're looking at an error, see if it's one we can
+		// deconstruct for maximum (safe) clarity. Separating this from the
+		// block above ensures that the types below actually implement `error`.
+		switch t := r.(error).(type) {
+		case runtime.Error:
+			return t.Error()
+		case syscall.Errno:
+			return handleErrno(t)
+		case *os.SyscallError:
+			return handleSyscallError(t)
+		case *os.PathError:
+			return handlePathError(t)
+		case *os.LinkError:
+			return handleLinkError(t)
+		default:
+		}
+
+		// Still an error, but not one we know how to deconstruct.
+
+		switch r.(error) {
+		case context.DeadlineExceeded:
+		case context.Canceled:
+		case os.ErrInvalid:
+		case os.ErrPermission:
+		case os.ErrExist:
+		case os.ErrNotExist:
+		case os.ErrClosed:
+		default:
+			// Not a whitelisted sentinel error.
+			return ""
+		}
+		// Whitelisted sentinel error.
+		return r.(error).Error()
+	}
+
+	type causer interface {
+		Cause() error
+	}
+
+	reportable := handle(r)
+	if c, ok := r.(causer); ok {
+		if reportable == "" {
+			reportable += "<redacted>"
+		}
+		reportable += ": caused by " + censor(c.Cause())
+	}
+	return reportable
+}
+
 func reportablesToSafeError(depth int, format string, reportables []interface{}) error {
 	if len(reportables) == 0 {
 		reportables = []interface{}{"nothing reported"}
@@ -207,31 +289,24 @@ func reportablesToSafeError(depth int, format string, reportables []interface{})
 	if depth > 0 {
 		file, line, _ = caller.Lookup(depth)
 	}
-	// TODO(tschottdorf): many more errors could be admissible here, for example all known sentinel
-	// errors such as `context.Canceled`, and we can also "unspool" errors created via
-	// `errors.Wrap{,f}` and extract any format strings and safe errors/values that occur within.
-	censor := func(r interface{}) string {
-		switch t := r.(type) {
-		case runtime.Error:
-			return t.Error()
-		case *SafeType:
-			return fmt.Sprintf("%+v", t.V)
-		case SafeType:
-			return fmt.Sprintf("%+v", t.V)
-		default:
-			return fmt.Sprintf("<%T>", r)
-		}
-	}
 
 	if e, ok := reportables[0].(error); ok && format == "" && len(reportables) == 1 && censor(e) == e.Error() {
-		// Special case so that `panic(err)` for a safe `err` returns `err` (and doesn't wrap it in
-		// a `safeError`).
+		// Special case so that `panic(err)` for a safe `err` returns `err` (and
+		// doesn't wrap it in a `safeError`).
 		return e
 	}
 
 	redacted := make([]string, 0, len(reportables))
 	for i := range reportables {
-		redacted = append(redacted, censor(reportables[i]))
+		msg := censor(reportables[i])
+		typ := fmt.Sprintf("<%T>", reportables[i])
+		if msg == "" {
+			redacted = append(redacted, typ)
+		} else if typ == "<log.SafeType>" || typ == "<*log.SafeType>" {
+			redacted = append(redacted, msg)
+		} else {
+			redacted = append(redacted, typ+": "+msg)
+		}
 	}
 	reportables = nil
 
