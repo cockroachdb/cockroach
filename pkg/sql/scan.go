@@ -387,6 +387,7 @@ func (n *scanNode) computeOrdering(
 
 	columnIDs, dirs := index.FullColumnIDs()
 
+	var keySet util.FastIntSet
 	for i, colID := range columnIDs {
 		idx, ok := n.colIdxMap[colID]
 		if !ok {
@@ -401,11 +402,10 @@ func (n *scanNode) computeOrdering(
 			}
 			ordering.addOrderColumn(idx, dir)
 		}
+		keySet.Add(idx)
 	}
-	// We included any implicit columns, so the results are unique.
-	if len(ordering.ordering) > 0 {
-		ordering.isKey = true
-	}
+	// We included any implicit columns, so the columns form a key.
+	ordering.addKeySet(keySet)
 	return ordering
 }
 

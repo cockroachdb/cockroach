@@ -34,6 +34,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -1004,4 +1005,31 @@ func BenchmarkWideTable(b *testing.B) {
 			}
 		})
 	})
+}
+
+// BenchmarkPlanning runs some queries on an empty table. The purpose is to
+// benchmark (and get memory allocation statistics) the planning process.
+func BenchmarkPlanning(b *testing.B) {
+	s, db, _ := serverutils.StartServer(b, base.TestServerArgs{UseDatabase: "bench"})
+	defer s.Stopper().Stop(context.TODO())
+
+	sr := sqlutils.MakeSQLRunner(b, db)
+	sr.Exec(`CREATE DATABASE bench`)
+	sr.Exec(`CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX(b), UNIQUE INDEX(c))`)
+
+	queries := []string{
+		`SELECT * FROM abc`,
+		`SELECT * FROM abc WHERE a > 5 ORDER BY a`,
+		`SELECT * FROM abc WHERE b = 5`,
+		`SELECT * FROM abc WHERE b = 5 ORDER BY a`,
+		`SELECT * FROM abc WHERE c = 5`,
+		`SELECT * FROM abc JOIN abc AS abc2 ON abc.a = abc2.a`,
+	}
+	for _, q := range queries {
+		b.Run(q, func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				sr.Exec(q)
+			}
+		})
+	}
 }

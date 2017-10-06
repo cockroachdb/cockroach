@@ -53,13 +53,13 @@ EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data) NATURAL JOIN (SELECT a,b
 2  render  ·               ·                  (a, b)                                                                              +a,+b
 2  ·       render 0        test.data.a        ·                                                                                   ·
 2  ·       render 1        test.data.b        ·                                                                                   ·
-3  scan    ·               ·                  (a, b, c[omitted], d[omitted])                                                      +a,+b
+3  scan    ·               ·                  (a, b, c[omitted], d[omitted])                                                      key(a,b,c,d); +a,+b
 3  ·       table           data@primary       ·                                                                                   ·
 3  ·       spans           ALL                ·                                                                                   ·
 2  render  ·               ·                  (a, b)                                                                              +a,+b
 2  ·       render 0        data2.a            ·                                                                                   ·
 2  ·       render 1        data2.b            ·                                                                                   ·
-3  scan    ·               ·                  (a, b, c[omitted], d[omitted])                                                      +a,+b
+3  scan    ·               ·                  (a, b, c[omitted], d[omitted])                                                      key(a,b,c,d); +a,+b
 3  ·       table           data@primary       ·                                                                                   ·
 3  ·       spans           ALL                ·                                                                                   ·
 
@@ -75,7 +75,7 @@ EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,
 1  render  ·               ·                  (a, b)                          +a,+b
 1  ·       render 0        data1.a            ·                               ·
 1  ·       render 1        data1.b            ·                               ·
-2  scan    ·               ·                  (a, b, c[omitted], d[omitted])  +a,+b
+2  scan    ·               ·                  (a, b, c[omitted], d[omitted])  key(a,b,c,d); +a,+b
 2  ·       table           data@primary       ·                               ·
 2  ·       spans           ALL                ·                               ·
 1  sort    ·               ·                  (c, d)                          +c,+d
@@ -83,7 +83,7 @@ EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,
 2  render  ·               ·                  (c, d)                          ·
 2  ·       render 0        data2.c            ·                               ·
 2  ·       render 1        data2.d            ·                               ·
-3  scan    ·               ·                  (a[omitted], b[omitted], c, d)  ·
+3  scan    ·               ·                  (a[omitted], b[omitted], c, d)  key(a,b,c,d)
 3  ·       table           data@primary       ·                               ·
 3  ·       spans           ALL                ·                               ·
 
@@ -104,7 +104,7 @@ EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,
 1  render  ·               ·                  (a, b)                          +a,+b
 1  ·       render 0        data1.a            ·                               ·
 1  ·       render 1        data1.b            ·                               ·
-2  scan    ·               ·                  (a, b, c[omitted], d[omitted])  +a,+b
+2  scan    ·               ·                  (a, b, c[omitted], d[omitted])  key(a,b,c,d); +a,+b
 2  ·       table           data@primary       ·                               ·
 2  ·       spans           ALL                ·                               ·
 1  sort    ·               ·                  (c, d)                          +c,+d
@@ -112,7 +112,7 @@ EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,
 2  render  ·               ·                  (c, d)                          ·
 2  ·       render 0        data2.c            ·                               ·
 2  ·       render 1        data2.d            ·                               ·
-3  scan    ·               ·                  (a[omitted], b[omitted], c, d)  ·
+3  scan    ·               ·                  (a[omitted], b[omitted], c, d)  key(a,b,c,d)
 3  ·       table           data@primary       ·                               ·
 3  ·       spans           ALL                ·                               ·
 
@@ -134,7 +134,7 @@ EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,
 2  render  ·               ·                  (a, b)                          +a,+b
 2  ·       render 0        data1.a            ·                               ·
 2  ·       render 1        data1.b            ·                               ·
-3  scan    ·               ·                  (a, b, c[omitted], d[omitted])  +a,+b
+3  scan    ·               ·                  (a, b, c[omitted], d[omitted])  key(a,b,c,d); +a,+b
 3  ·       table           data@primary       ·                               ·
 3  ·       spans           ALL                ·                               ·
 2  sort    ·               ·                  (c, d)                          +c,+d
@@ -142,7 +142,7 @@ EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,
 3  render  ·               ·                  (c, d)                          ·
 3  ·       render 0        data2.c            ·                               ·
 3  ·       render 1        data2.d            ·                               ·
-4  scan    ·               ·                  (a[omitted], b[omitted], c, d)  ·
+4  scan    ·               ·                  (a[omitted], b[omitted], c, d)  key(a,b,c,d)
 4  ·       table           data@primary       ·                               ·
 4  ·       spans           ALL                ·                               ·
 
@@ -168,7 +168,7 @@ EXPLAIN (VERBOSE) (SELECT a,b from data AS data3 NATURAL JOIN ((SELECT a,b FROM 
 1  ·       type            inner                                ·                                                                                                                                                                                       ·
 1  ·       equality        (a, b, c, d) = (a, b, c, d)          ·                                                                                                                                                                                       ·
 1  ·       mergeJoinOrder  +"(a=a)",+"(b=b)",+"(c=c)",+"(d=d)"  ·                                                                                                                                                                                       ·
-2  scan    ·               ·                                    (a, b, c, d)                                                                                                                                                                            +a,+b,+c,+d; key
+2  scan    ·               ·                                    (a, b, c, d)                                                                                                                                                                            key(a,b,c,d); +a,+b,+c,+d
 2  ·       table           data@primary                         ·                                                                                                                                                                                       ·
 2  ·       spans           ALL                                  ·                                                                                                                                                                                       ·
 2  join    ·               ·                                    (a, b, c, d)                                                                                                                                                                            a=c; b=d; +a,+b
@@ -178,7 +178,7 @@ EXPLAIN (VERBOSE) (SELECT a,b from data AS data3 NATURAL JOIN ((SELECT a,b FROM 
 3  render  ·               ·                                    (a, b)                                                                                                                                                                                  +a,+b
 3  ·       render 0        data1.a                              ·                                                                                                                                                                                       ·
 3  ·       render 1        data1.b                              ·                                                                                                                                                                                       ·
-4  scan    ·               ·                                    (a, b, c[omitted], d[omitted])                                                                                                                                                          +a,+b
+4  scan    ·               ·                                    (a, b, c[omitted], d[omitted])                                                                                                                                                          key(a,b,c,d); +a,+b
 4  ·       table           data@primary                         ·                                                                                                                                                                                       ·
 4  ·       spans           ALL                                  ·                                                                                                                                                                                       ·
 3  sort    ·               ·                                    (c, d)                                                                                                                                                                                  +c,+d
@@ -186,7 +186,7 @@ EXPLAIN (VERBOSE) (SELECT a,b from data AS data3 NATURAL JOIN ((SELECT a,b FROM 
 4  render  ·               ·                                    (c, d)                                                                                                                                                                                  ·
 4  ·       render 0        data2.c                              ·                                                                                                                                                                                       ·
 4  ·       render 1        data2.d                              ·                                                                                                                                                                                       ·
-5  scan    ·               ·                                    (a[omitted], b[omitted], c, d)                                                                                                                                                          ·
+5  scan    ·               ·                                    (a[omitted], b[omitted], c, d)                                                                                                                                                          key(a,b,c,d)
 5  ·       table           data@primary                         ·                                                                                                                                                                                       ·
 5  ·       spans           ALL                                  ·                                                                                                                                                                                       ·
 
