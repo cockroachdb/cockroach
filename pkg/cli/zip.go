@@ -18,7 +18,6 @@ package cli
 import (
 	"archive/zip"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -105,7 +104,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 	)
 
 	if len(args) != 1 {
-		return errors.New("exactly one argument is required")
+		return usageAndError(cmd)
 	}
 
 	conn, _, stopper, err := getClientGRPCConn()
