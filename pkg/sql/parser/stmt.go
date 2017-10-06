@@ -172,6 +172,8 @@ func (*CreateUser) StatementType() StatementType { return Ack }
 // StatementTag returns a short string identifying the type of statement.
 func (*CreateUser) StatementTag() string { return "CREATE USER" }
 
+func (*CreateUser) hiddenFromShowQueries() {}
+
 // StatementType implements the Statement interface.
 func (*CreateView) StatementType() StatementType { return DDL }
 
