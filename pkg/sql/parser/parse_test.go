@@ -1153,6 +1153,8 @@ func TestParse2(t *testing.T) {
 
 		{`RESET NAMES`, `SET client_encoding = DEFAULT`},
 
+		{`CREATE USER IF NOT EXISTS foo`, `CREATE USER IF NOT EXISTS foo`},
+
 		{
 			`CREATE TABLE a (b INT, FOREIGN KEY (b) REFERENCES other ON UPDATE NO ACTION ON DELETE NO ACTION)`,
 			`CREATE TABLE a (b INT, FOREIGN KEY (b) REFERENCES other)`,
