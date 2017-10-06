@@ -19,6 +19,9 @@ user1
 statement error user user1 already exists
 CREATE USER user1
 
+statement ok
+CREATE USER IF NOT EXISTS user1
+
 statement error user user1 already exists
 CREATE USER UsEr1
 

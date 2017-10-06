@@ -223,8 +223,9 @@ func (*createIndexNode) Close(context.Context)        {}
 func (*createIndexNode) Values() parser.Datums        { return parser.Datums{} }
 
 type createUserNode struct {
-	n        *parser.CreateUser
-	password string
+	n           *parser.CreateUser
+	password    string
+	ifNotExists bool
 }
 
 // CreateUser creates a user.
@@ -253,7 +254,7 @@ func (p *planner) CreateUser(ctx context.Context, n *parser.CreateUser) (planNod
 		}
 	}
 
-	return &createUserNode{n: n, password: resolvedPassword}, nil
+	return &createUserNode{n: n, password: resolvedPassword, ifNotExists: n.IfNotExists}, nil
 }
 
 const usernameHelp = "usernames are case insensitive, must start with a letter " +
@@ -304,6 +305,9 @@ func (n *createUserNode) Start(params runParams) error {
 	)
 	if err != nil {
 		if sqlbase.IsUniquenessConstraintViolationError(err) {
+			if n.ifNotExists {
+				return nil
+			}
 			err = errors.Errorf("user %s already exists", normalizedUsername)
 		}
 		return err
