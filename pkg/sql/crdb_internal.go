@@ -25,8 +25,10 @@ import (
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
+	yaml "gopkg.in/yaml.v2"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -36,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -66,6 +69,7 @@ var crdbInternal = virtualSchema{
 		crdbInternalTableColumnsTable,
 		crdbInternalTableIndexesTable,
 		crdbInternalTablesTable,
+		crdbInternalZonesTable,
 	},
 }
 
@@ -1335,6 +1339,63 @@ CREATE TABLE crdb_internal.ranges (
 				parser.NewDString(keys.PrettyPrint(desc.StartKey.AsRawKey())),
 				parser.NewDString(keys.PrettyPrint(desc.EndKey.AsRawKey())),
 				parser.NewDInt(parser.DInt(len(desc.Replicas))),
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
+// crdbInternalZonesTable exposes the zone config overrides in the system.zones
+// table.
+var crdbInternalZonesTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.zones (
+	id            INT NOT NULL,
+  cli_specifier STRING NOT NULL,
+	config_yaml   BYTES NOT NULL,
+	config_proto  BYTES NOT NULL
+)
+`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error {
+		namespace, err := p.getAllNames(ctx)
+		if err != nil {
+			return err
+		}
+		resolveID := func(id uint32) (parentID uint32, name string, err error) {
+			if entry, ok := namespace[sqlbase.ID(id)]; ok {
+				return uint32(entry.parentID), entry.name, nil
+			}
+			return 0, "", err
+		}
+
+		rows, err := p.queryRows(ctx, `SELECT id, config FROM system.zones`)
+		if err != nil {
+			return err
+		}
+		for _, r := range rows {
+			id := uint32(parser.MustBeDInt(r[0]))
+			var cliSpecifier parser.Datum = parser.DNull
+			if zs, err := config.ZoneSpecifierFromID(id, resolveID); err == nil {
+				cliSpecifier = parser.NewDString(zs.CLISpecifier())
+			}
+
+			configBytes := []byte(*r[1].(*parser.DBytes))
+			var configProto config.ZoneConfig
+			if err := protoutil.Unmarshal(configBytes, &configProto); err != nil {
+				return err
+			}
+			configYAML, err := yaml.Marshal(configProto)
+			if err != nil {
+				return err
+			}
+
+			if err := addRow(
+				r[0], // id
+				cliSpecifier,
+				parser.NewDBytes(parser.DBytes(configYAML)),
+				parser.NewDBytes(parser.DBytes(configBytes)),
 			); err != nil {
 				return err
 			}
