@@ -679,8 +679,8 @@ func (node *CreateTable) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // CreateUser represents a CREATE USER statement.
 type CreateUser struct {
-	Name        Name
-	Password    *string // pointer so that empty and nil can be differentiated
+	Name        Expr
+	Password    Expr // nil if no password specified
 	IfNotExists bool
 }
 
@@ -699,7 +699,7 @@ func (node *CreateUser) Format(buf *bytes.Buffer, f FmtFlags) {
 	if node.HasPassword() {
 		buf.WriteString(" WITH PASSWORD ")
 		if f.showPasswords {
-			encodeSQLString(buf, *node.Password)
+			FormatNode(buf, f, node.Password)
 		} else {
 			buf.WriteString("*****")
 		}

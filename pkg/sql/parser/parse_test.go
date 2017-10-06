@@ -1074,7 +1074,12 @@ func TestParse2(t *testing.T) {
 
 		{`RESET NAMES`, `SET client_encoding = DEFAULT`},
 
-		{`CREATE USER IF NOT EXISTS foo`, `CREATE USER IF NOT EXISTS foo`},
+		{`CREATE USER foo`,
+			`CREATE USER 'foo'`},
+		{`CREATE USER IF NOT EXISTS foo`,
+			`CREATE USER IF NOT EXISTS 'foo'`},
+		{`CREATE USER foo PASSWORD bar`,
+			`CREATE USER 'foo' WITH PASSWORD 'bar'`},
 	}
 	for _, d := range testData {
 		stmts, err := Parse(d.sql)
@@ -1082,7 +1087,7 @@ func TestParse2(t *testing.T) {
 			t.Errorf("%s: expected success, but found %s", d.sql, err)
 			continue
 		}
-		s := stmts.String()
+		s := AsStringWithFlags(stmts, FmtSimpleWithPasswords)
 		if d.expected != s {
 			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
 		}

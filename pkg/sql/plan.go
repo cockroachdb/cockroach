@@ -470,6 +470,8 @@ func (p *planner) prepare(ctx context.Context, stmt parser.Statement) (planNode,
 		return p.CancelQuery(ctx, n)
 	case *parser.CancelJob:
 		return p.CancelJob(ctx, n)
+	case *parser.CreateUser:
+		return p.CreateUser(ctx, n)
 	case *parser.Delete:
 		return p.Delete(ctx, n, nil)
 	case *parser.Explain:
