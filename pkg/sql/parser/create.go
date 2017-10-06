@@ -706,6 +706,28 @@ func (node *CreateUser) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
+// AlterUserSetPassword represents an ALTER USER WITH PASSWORD statement.
+type AlterUserSetPassword struct {
+	Name     Expr
+	Password Expr
+	IfExists bool
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterUserSetPassword) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("ALTER USER ")
+	if node.IfExists {
+		buf.WriteString("IF EXISTS ")
+	}
+	FormatNode(buf, f, node.Name)
+	buf.WriteString(" WITH PASSWORD ")
+	if f.showPasswords {
+		FormatNode(buf, f, node.Password)
+	} else {
+		buf.WriteString("*****")
+	}
+}
+
 // CreateView represents a CREATE VIEW statement.
 type CreateView struct {
 	Name        NormalizableTableName

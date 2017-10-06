@@ -1092,6 +1092,8 @@ func TestParse2(t *testing.T) {
 			`CREATE USER 'foo' WITH PASSWORD 'bar'`},
 		{`DROP USER foo, bar`,
 			`DROP USER 'foo', 'bar'`},
+		{`ALTER USER foo WITH PASSWORD bar`,
+			`ALTER USER 'foo' WITH PASSWORD 'bar'`},
 	}
 	for _, d := range testData {
 		stmts, err := Parse(d.sql)

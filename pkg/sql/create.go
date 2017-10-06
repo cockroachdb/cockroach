@@ -343,6 +343,97 @@ func (*createUserNode) Next(runParams) (bool, error) { return false, nil }
 func (*createUserNode) Close(context.Context)        {}
 func (*createUserNode) Values() parser.Datums        { return parser.Datums{} }
 
+// alterUserSetPasswordNode represents an ALTER USER ... WITH PASSWORD statement.
+type alterUserSetPasswordNode struct {
+	ifExists     bool
+	name         func() (string, error)
+	password     func() (string, error)
+	rowsAffected int
+}
+
+func (p *planner) AlterUserSetPassword(
+	ctx context.Context, n *parser.AlterUserSetPassword,
+) (planNode, error) {
+	tDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), &parser.TableName{DatabaseName: "system", TableName: "users"})
+	if err != nil {
+		return nil, err
+	}
+
+	if err := p.CheckPrivilege(tDesc, privilege.UPDATE); err != nil {
+		return nil, err
+	}
+
+	name, err := p.TypeAsString(n.Name, "ALTER USER")
+	if err != nil {
+		return nil, err
+	}
+	password, err := p.TypeAsString(n.Password, "ALTER USER")
+	if err != nil {
+		return nil, err
+	}
+
+	return &alterUserSetPasswordNode{
+		ifExists: n.IfExists,
+		name:     name,
+		password: password,
+	}, nil
+}
+
+func (n *alterUserSetPasswordNode) FastPathResults() (int, bool) {
+	return n.rowsAffected, true
+}
+
+func (n *alterUserSetPasswordNode) Start(params runParams) error {
+	name, err := n.name()
+	if err != nil {
+		return err
+	}
+	if name == "" {
+		return errNoUserNameSpecified
+	}
+	normalizedUsername, err := NormalizeAndValidateUsername(name)
+	if err != nil {
+		return err
+	}
+
+	var hashedPassword []byte
+	if n.password != nil {
+		resolvedPassword, err := n.password()
+		if err != nil {
+			return err
+		}
+		if resolvedPassword == "" {
+			return security.ErrEmptyPassword
+		}
+
+		hashedPassword, err = security.HashPassword(resolvedPassword)
+		if err != nil {
+			return err
+		}
+	}
+
+	internalExecutor := InternalExecutor{LeaseManager: params.p.LeaseMgr()}
+	n.rowsAffected, err = internalExecutor.ExecuteStatementInTransaction(
+		params.ctx,
+		"create-user",
+		params.p.txn,
+		`UPDATE system.users SET "hashedPassword" = $2 WHERE username = $1`,
+		normalizedUsername,
+		hashedPassword,
+	)
+	if err != nil {
+		return err
+	}
+	if n.rowsAffected == 0 && !n.ifExists {
+		return errors.Errorf("user %s does not exist", normalizedUsername)
+	}
+	return err
+}
+
+func (*alterUserSetPasswordNode) Next(runParams) (bool, error) { return false, nil }
+func (*alterUserSetPasswordNode) Close(context.Context)        {}
+func (*alterUserSetPasswordNode) Values() parser.Datums        { return parser.Datums{} }
+
 // createViewNode represents a CREATE VIEW statement.
 type createViewNode struct {
 	p             *planner
