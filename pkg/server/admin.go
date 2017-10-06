@@ -719,6 +719,12 @@ func (s *adminServer) Events(
 		if err := scanner.ScanIndex(row, 4, &event.Info); err != nil {
 			return nil, err
 		}
+		if event.EventType == string(sql.EventLogSetClusterSetting) {
+			if s.getUser(req) != security.RootUser {
+				// TODO(dt): unpack and selectively redact the setting value.
+				event.Info = ""
+			}
+		}
 		if err := scanner.ScanIndex(row, 5, &event.UniqueID); err != nil {
 			return nil, err
 		}

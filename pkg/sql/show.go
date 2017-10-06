@@ -49,6 +49,11 @@ func checkTableExists(ctx context.Context, p *planner, tn *parser.TableName) err
 func (p *planner) ShowClusterSetting(
 	ctx context.Context, n *parser.ShowClusterSetting,
 ) (planNode, error) {
+
+	if err := p.RequireSuperUser("SHOW CLUSTER SETTINGS"); err != nil {
+		return nil, err
+	}
+
 	name := strings.ToLower(n.Name)
 
 	if name == "all" {
