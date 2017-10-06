@@ -750,7 +750,7 @@ func Example_sql() {
 	// sql -e copy t.f from stdin
 	// woops! COPY has confused this client! Suggestion: use 'psql' for COPY
 	// user ls --echo-sql
-	// > SELECT username FROM system.users
+	// > SHOW USERS
 	// username
 	// # 0 rows
 }
@@ -1266,43 +1266,43 @@ func Example_user() {
 	// username
 	// # 0 rows
 	// user set FOO
-	// INSERT 1
+	// CREATE USER
 	// user set Foo
-	// INSERT 1
+	// CREATE USER
 	// user set fOo
-	// INSERT 1
+	// CREATE USER
 	// user set foO
-	// INSERT 1
+	// CREATE USER
 	// user set foo
-	// INSERT 1
+	// CREATE USER
 	// user set _foo
-	// INSERT 1
+	// CREATE USER
 	// user set f_oo
-	// INSERT 1
+	// CREATE USER
 	// user set foo_
-	// INSERT 1
+	// CREATE USER
 	// user set ,foo
-	// username ",foo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
+	// pq: username ",foo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
 	// user set f,oo
-	// username "f,oo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
+	// pq: username "f,oo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
 	// user set foo,
-	// username "foo," invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
+	// pq: username "foo," invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
 	// user set 0foo
-	// username "0foo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
+	// pq: username "0foo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
 	// user set foo0
-	// INSERT 1
+	// CREATE USER
 	// user set f0oo
-	// INSERT 1
+	// CREATE USER
 	// user set foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof
-	// username "foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
+	// pq: username "foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
 	// user set foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoo
-	// INSERT 1
+	// CREATE USER
 	// user set Ομηρος
-	// INSERT 1
+	// CREATE USER
 	// user set and
-	// INSERT 1
+	// CREATE USER
 	// user set table
-	// INSERT 1
+	// CREATE USER
 	// user ls --format=pretty
 	// +-----------------------------------------------------------------+
 	// |                            username                             |
@@ -1320,7 +1320,7 @@ func Example_user() {
 	// +-----------------------------------------------------------------+
 	// (10 rows)
 	// user rm foo
-	// DELETE 1
+	// DROP USER 1
 	// user ls --format=pretty
 	// +-----------------------------------------------------------------+
 	// |                            username                             |

@@ -20,7 +20,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 )
 
 var password bool
@@ -68,7 +67,7 @@ func runLsUsers(cmd *cobra.Command, args []string) error {
 	}
 	defer conn.Close()
 	return runQueryAndFormatResults(conn, os.Stdout,
-		makeQuery(`SELECT username FROM system.users`))
+		makeQuery(`SHOW USERS`))
 }
 
 // A rmUserCmd command removes the user for the specified username.
@@ -91,7 +90,7 @@ func runRmUser(cmd *cobra.Command, args []string) error {
 	}
 	defer conn.Close()
 	return runQueryAndFormatResults(conn, os.Stdout,
-		makeQuery(`DELETE FROM system.users WHERE username=$1`, args[0]))
+		makeQuery(`DROP USER $1`, args[0]))
 }
 
 // A setUserCmd command creates a new or updates an existing user.
@@ -117,14 +116,11 @@ func runSetUser(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
 		return usageAndError(cmd)
 	}
-	var err error
-	var username string
-	if username, err = sql.NormalizeAndValidateUsername(args[0]); err != nil {
-		return err
-	}
-	var hashed []byte
+	pwdString := ""
 	if password {
-		if hashed, err = security.PromptForPasswordAndHash(); err != nil {
+		var err error
+		pwdString, err = security.PromptForPasswordTwice()
+		if err != nil {
 			return err
 		}
 	}
@@ -134,10 +130,18 @@ func runSetUser(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	defer conn.Close()
-	// TODO(asubiotto): Implement appropriate server-side authorization rules
-	// for users to be able to change their own passwords.
-	return runQueryAndFormatResults(conn, os.Stdout,
-		makeQuery(`UPSERT INTO system.users VALUES ($1, $2)`, username, hashed))
+
+	if err := runQueryAndFormatResults(conn, os.Stdout,
+		makeQuery(`CREATE USER IF NOT EXISTS $1`, args[0])); err != nil {
+		return err
+	}
+	if password {
+		// TODO(asubiotto): Implement appropriate server-side authorization rules
+		// for users to be able to change their own passwords.
+		return runQueryAndFormatResults(conn, os.Stdout,
+			makeQuery(`ALTER USER $1 WITH PASSWORD $2`, args[0], pwdString))
+	}
+	return nil
 }
 
 var userCmds = []*cobra.Command{
