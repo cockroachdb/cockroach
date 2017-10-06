@@ -15,6 +15,7 @@
 package sql
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/pkg/errors"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -1054,19 +1056,69 @@ type dropUserNode struct {
 }
 
 func (n *dropUserNode) Start(params runParams) error {
-	numDeleted := 0
-
 	names, err := n.names()
 	if err != nil {
 		return err
 	}
 
+	userNames := make(map[string]struct{})
 	for _, name := range names {
 		normalizedUsername, err := NormalizeAndValidateUsername(name)
 		if err != nil {
 			return err
 		}
+		userNames[normalizedUsername] = struct{}{}
+	}
 
+	var usedBy bytes.Buffer
+	if err := forEachDatabaseDesc(params.ctx, params.p,
+		func(db *sqlbase.DatabaseDescriptor) error {
+			for _, u := range db.GetPrivileges().Users {
+				if _, ok := userNames[u.User]; ok {
+					if usedBy.Len() > 0 {
+						usedBy.WriteString(", ")
+					}
+					parser.Name(db.Name).Format(&usedBy, parser.FmtSimple)
+				}
+			}
+			return nil
+		}); err != nil {
+		return err
+	}
+	if err := forEachTableDescAll(params.ctx, params.p, "",
+		func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+			for _, u := range table.GetPrivileges().Users {
+				if _, ok := userNames[u.User]; ok {
+					tn := parser.TableName{
+						DatabaseName: parser.Name(db.Name),
+						TableName:    parser.Name(table.Name),
+					}
+					if usedBy.Len() > 0 {
+						usedBy.WriteString(", ")
+					}
+					tn.Format(&usedBy, parser.FmtSimple)
+				}
+			}
+			return nil
+		}); err != nil {
+		return err
+	}
+	if usedBy.Len() > 0 {
+		var nameList bytes.Buffer
+		for i, name := range names {
+			if i > 0 {
+				nameList.WriteString(", ")
+			}
+			parser.Name(name).Format(&nameList, parser.FmtSimple)
+		}
+		return pgerror.NewErrorf(pgerror.CodeGroupingError,
+			"cannot drop user%s %s: grants still exist on %s",
+			util.Pluralize(int64(nameList.Len())), nameList.String(), usedBy.String(),
+		)
+	}
+
+	numDeleted := 0
+	for normalizedUsername := range userNames {
 		// Note: protected users like security.RootUser are not included in system.users,
 		// so there is no need to filter them out.
 
