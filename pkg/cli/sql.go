@@ -866,10 +866,10 @@ func (c *cliState) doPrepareStatementLine(
 		return contState
 	}
 
+	// Complete input. Remember it in the history.
+	c.addHistory(c.concatLines)
+
 	if !c.checkSyntax {
-		// If syntax checking is not enabled, put the raw statement into
-		// history, then go and run it.
-		c.addHistory(c.concatLines)
 		return execState
 	}
 
@@ -894,12 +894,6 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 			}
 		}
 
-		// Even on failure, add the last (erroneous) lines as-is to the
-		// history, so that the user can recall them later to fix them.
-		for i := c.partialStmtsLen; i < len(c.partialLines); i++ {
-			c.addHistory(c.partialLines[i])
-		}
-
 		// Remove the erroneous lines from the buffered input,
 		// then try again.
 		c.partialLines = c.partialLines[:c.partialStmtsLen]
@@ -912,17 +906,6 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 	if !isInteractive {
 		return execState
 	}
-
-	// Add the last lines received to the history.
-	// Like above, this is one input chunk. However there may be
-	// sensitive newlines in string literals or SQL comments, so we
-	// can't blindly concatenate all the partial input into a single
-	// line. Leave them separate.
-	var lastInputChunk bytes.Buffer
-	for i := c.partialStmtsLen; i < len(c.partialLines); i++ {
-		fmt.Fprintln(&lastInputChunk, c.partialLines[i])
-	}
-	c.addHistory(lastInputChunk.String())
 
 	nextState := execState
 
