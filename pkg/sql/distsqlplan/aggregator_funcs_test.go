@@ -16,11 +16,11 @@ package distsqlplan
 
 import (
 	"fmt"
+	"math/big"
 	"testing"
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
@@ -34,20 +34,13 @@ import (
 )
 
 var (
-	// compareCtx is a decimal context with reduced precision for comparing
-	// decimal results.
-	// For some decimal aggregate operations there will often be
-	// unavoidable off-by-last-digit errors, which is semantically okay.
-	compareCtx = &apd.Context{
-		Precision: parser.DecimalCtx.Precision - 1,
-		// We truncate down instead of rounding since the last digit
-		// may cause the new last digit to also be off by one.
-		// For example, if we use the default RoundHalfUp and the last
-		// digits of the decimals we want to compare are 4 and 5,
-		// then the former will be rounded down and the latter will
-		// be rounded up.
-		Rounding: apd.RoundDown,
-	}
+	// diffCtx is a decimal context used to perform subtractions between
+	// local and non-local decimal results to check if they are within
+	// 1ulp. Decimals within 1ulp is acceptable for high-precision
+	// decimal calculations.
+	diffCtx = parser.DecimalCtx.WithPrecision(0)
+	// Use to check for 1ulp.
+	bigOne = big.NewInt(1)
 	// floatPrecFmt is the format string with a precision of 3 (after
 	// decimal point) specified for float comparisons. Float aggregation
 	// operations involve unavoidable off-by-last-few-digits errors, which
@@ -318,19 +311,20 @@ func checkDistAggregationInfo(
 			case *parser.DDecimal:
 				// For some decimal operations, non-local and
 				// local computations may differ by the last
-				// digit.  We reduce the precision of both
-				// results.
+				// digit (by 1 ulp).
 				decDist := &typedDist.Decimal
-				if _, err := compareCtx.Round(decDist, decDist); err != nil {
-					t.Fatal(err)
-				}
 				decNonDist := &rowNonDist.Datum.(*parser.DDecimal).Decimal
-				if _, err := compareCtx.Round(decNonDist, decNonDist); err != nil {
-					t.Fatal(err)
-				}
 				strDist = decDist.String()
 				strNonDist = decNonDist.String()
+				// We first check if they're equivalent, and if
+				// not, we check if they're within 1ulp.
 				equiv = decDist.Cmp(decNonDist) == 0
+				if !equiv {
+					if _, err := diffCtx.Sub(decNonDist, decNonDist, decDist); err != nil {
+						t.Fatal(err)
+					}
+					equiv = decNonDist.Coeff.Cmp(bigOne) == 0
+				}
 			case *parser.DFloat:
 				// Float results are highly variable and
 				// loss of precision between non-local and
