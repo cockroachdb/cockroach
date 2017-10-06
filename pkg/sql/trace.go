@@ -38,6 +38,10 @@ type traceNode struct {
 
 	traceRows []traceRow
 	curRow    int
+
+	// recordingStarted is set if this node started tracing on the session. If it
+	// did, then Close() needs to stop the recording.
+	recordingStarted bool
 }
 
 var sessionTraceTableName = parser.TableName{
@@ -68,6 +72,7 @@ func (n *traceNode) Start(params runParams) error {
 	if err := n.p.session.Tracing.StartTracing(tracing.SnowballRecording, true); err != nil {
 		return err
 	}
+	n.recordingStarted = true
 
 	startCtx, sp := tracing.ChildSpan(params.ctx, "starting plan")
 	defer sp.Finish()
@@ -80,8 +85,7 @@ func (n *traceNode) Close(ctx context.Context) {
 		n.plan.Close(ctx)
 	}
 	n.traceRows = nil
-	if n.p.session.Tracing.Enabled() {
-		// Start has already ran and enabled tracing. Stop it.
+	if n.recordingStarted {
 		if err := stopTracing(n.p.session); err != nil {
 			log.Errorf(ctx, "error stopping tracing at end of SHOW TRACE FOR: %v", err)
 		}
