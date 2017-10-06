@@ -124,6 +124,12 @@ type dataSourceInfo struct {
 	// column but might be different if the statement renames
 	// them using AS.
 	sourceAliases sourceAliases
+
+	// colOffset is the offset of the first column in this dataSourceInfo in the
+	// multiSourceInfo array it is part of.
+	// The value is populated and used during name resolution, and shouldn't get
+	// touched by anything but the nameResolutionVisitor without care.
+	colOffset int
 }
 
 // planDataSource contains the data source information for data
