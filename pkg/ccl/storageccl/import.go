@@ -188,7 +188,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 			}
 		}
 
-		iter, err := engineccl.NewMemSSTIterator(fileContents)
+		iter, err := engineccl.NewMemSSTIterator(fileContents, false)
 		if err != nil {
 			return nil, err
 		}
