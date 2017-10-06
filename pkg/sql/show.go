@@ -412,6 +412,7 @@ func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNod
 	var grantQuery bytes.Buffer
 	var params []string
 	var initCheck func(context.Context) error
+	var orderBy string
 
 	if n.Targets.Databases != nil {
 		// Get grants of database from information_schema.schema_privileges
@@ -434,6 +435,7 @@ func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNod
 		fmt.Fprint(&grantQuery,
 			`SELECT TABLE_SCHEMA AS "Database", GRANTEE AS "User", PRIVILEGE_TYPE AS "Privileges" `+
 				`FROM "".information_schema.schema_privileges`)
+		orderBy = " ORDER BY 1,2,3"
 		if len(params) == 0 {
 			// There are no rows, but we can't simply return emptyNode{} because
 			// the result columns must still be defined.
@@ -475,8 +477,9 @@ func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNod
 		}
 
 		fmt.Fprint(&grantQuery,
-			`SELECT TABLE_NAME AS "Table", GRANTEE AS "User", PRIVILEGE_TYPE AS "Privileges" `+
+			`SELECT TABLE_SCHEMA AS "Database", TABLE_NAME AS "Table", GRANTEE AS "User", PRIVILEGE_TYPE AS "Privileges" `+
 				`FROM "".information_schema.table_privileges`)
+		orderBy = " ORDER BY 1,2,3,4"
 		if len(params) == 0 {
 			// There are no rows, but we can't simply return emptyNode{} because
 			// the result columns must still be defined.
@@ -493,7 +496,7 @@ func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNod
 		}
 		fmt.Fprintf(&grantQuery, ` AND GRANTEE IN (%s)`, strings.Join(params, ","))
 	}
-	fmt.Fprint(&grantQuery, " ORDER BY 1,2,3")
+	fmt.Fprint(&grantQuery, orderBy)
 	return p.delegateQuery(ctx, "SHOW GRANTS", grantQuery.String(), initCheck, nil)
 }
 

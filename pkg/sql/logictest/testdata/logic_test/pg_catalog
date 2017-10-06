@@ -102,10 +102,10 @@ SHOW CONSTRAINTS FROM pg_catalog.pg_namespace
 ----
 Table         Name     Type  Column(s)  Details
 
-query TTT colnames
+query TTTT colnames
 SHOW GRANTS ON pg_catalog.pg_namespace
 ----
-Table  User  Privileges
+Database  Table  User  Privileges
 
 
 # Verify selecting from pg_catalog.
