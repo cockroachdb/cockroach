@@ -478,6 +478,8 @@ func (p *planner) prepare(ctx context.Context, stmt parser.Statement) (planNode,
 		return p.CreateUser(ctx, n)
 	case *parser.Delete:
 		return p.Delete(ctx, n, nil)
+	case *parser.DropUser:
+		return p.DropUser(ctx, n)
 	case *parser.Explain:
 		return p.Explain(ctx, n)
 	case *parser.Insert:

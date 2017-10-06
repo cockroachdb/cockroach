@@ -1047,15 +1047,22 @@ func (p *planner) getViewDescForCascade(
 }
 
 type dropUserNode struct {
-	n *parser.DropUser
+	ifExists bool
+	names    func() ([]string, error)
 	// The number of users deleted.
 	numDeleted int
 }
 
 func (n *dropUserNode) Start(params runParams) error {
 	numDeleted := 0
-	for _, name := range n.n.Names {
-		normalizedUsername, err := NormalizeAndValidateUsername(string(name))
+
+	names, err := n.names()
+	if err != nil {
+		return err
+	}
+
+	for _, name := range names {
+		normalizedUsername, err := NormalizeAndValidateUsername(name)
 		if err != nil {
 			return err
 		}
@@ -1078,7 +1085,7 @@ func (n *dropUserNode) Start(params runParams) error {
 			return err
 		}
 
-		if rowsAffected == 0 && !n.n.IfExists {
+		if rowsAffected == 0 && !n.ifExists {
 			return errors.Errorf("user %s does not exist", normalizedUsername)
 		}
 
@@ -1107,5 +1114,13 @@ func (p *planner) DropUser(ctx context.Context, n *parser.DropUser) (planNode, e
 		return nil, err
 	}
 
-	return &dropUserNode{n: n}, nil
+	names, err := p.TypeAsStringArray(n.Names, "DROP USER")
+	if err != nil {
+		return nil, err
+	}
+
+	return &dropUserNode{
+		ifExists: n.IfExists,
+		names:    names,
+	}, nil
 }

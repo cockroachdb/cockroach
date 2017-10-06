@@ -124,7 +124,7 @@ func (node *DropView) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // DropUser represents a DROP USER statement
 type DropUser struct {
-	Names    NameList
+	Names    Exprs
 	IfExists bool
 }
 

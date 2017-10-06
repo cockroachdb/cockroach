@@ -526,6 +526,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <Statement> discard_stmt
 
 %type <Statement> drop_stmt
+%type <Statement> drop_ddl_stmt
 %type <Statement> drop_database_stmt
 %type <Statement> drop_index_stmt
 %type <Statement> drop_table_stmt
@@ -1507,12 +1508,15 @@ discard_stmt:
 // %Category: Group
 // %Text: DROP DATABASE, DROP INDEX, DROP TABLE, DROP VIEW, DROP USER
 drop_stmt:
+  drop_ddl_stmt      // help texts in sub-rule
+| drop_user_stmt     // EXTEND WITH HELP: DROP USER
+| DROP error         // SHOW HELP: DROP
+
+drop_ddl_stmt:
   drop_database_stmt // EXTEND WITH HELP: DROP DATABASE
 | drop_index_stmt    // EXTEND WITH HELP: DROP INDEX
 | drop_table_stmt    // EXTEND WITH HELP: DROP TABLE
 | drop_view_stmt     // EXTEND WITH HELP: DROP VIEW
-| drop_user_stmt     // EXTEND WITH HELP: DROP USER
-| DROP error         // SHOW HELP: DROP
 
 // %Help: DROP VIEW - remove a view
 // %Category: DDL
@@ -1595,13 +1599,13 @@ drop_database_stmt:
 // %Text: DROP USER [IF EXISTS] <user> [, ...]
 // %SeeAlso: CREATE USER, SHOW USERS
 drop_user_stmt:
-  DROP USER name_list
+  DROP USER string_or_placeholder_list
   {
-    $$.val = &DropUser{Names: $3.nameList(), IfExists: false}
+    $$.val = &DropUser{Names: $3.exprs(), IfExists: false}
   }
-| DROP USER IF EXISTS name_list
+| DROP USER IF EXISTS string_or_placeholder_list
   {
-    $$.val = &DropUser{Names: $5.nameList(), IfExists: true}
+    $$.val = &DropUser{Names: $5.exprs(), IfExists: true}
   }
 | DROP USER error // SHOW HELP: DROP USER
 
@@ -1670,6 +1674,7 @@ preparable_stmt:
 | cancel_stmt       // help texts in sub-rule
 | create_user_stmt  // EXTEND WITH HELP: CREATE USER
 | delete_stmt       // EXTEND WITH HELP: DELETE
+| drop_user_stmt    // EXTEND WITH HELP: DROP USER
 | import_stmt       // EXTEND WITH HELP: IMPORT
 | insert_stmt       // EXTEND WITH HELP: INSERT
 | pause_stmt        // EXTEND WITH HELP: PAUSE JOB
@@ -1690,7 +1695,7 @@ explainable_stmt:
   preparable_stmt
 | alter_stmt       // help texts in sub-rule
 | create_ddl_stmt  // help texts in sub-rule
-| drop_stmt        // help texts in sub-rule
+| drop_ddl_stmt    // help texts in sub-rule
 | execute_stmt     // EXTEND WITH HELP: EXECUTE
 | explain_stmt { /* SKIP DOC */ }
 
