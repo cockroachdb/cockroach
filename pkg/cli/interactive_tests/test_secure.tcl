@@ -56,7 +56,7 @@ eexpect "Enter password:"
 send "woof\r"
 eexpect "Confirm password:"
 send "woof\r"
-eexpect "INSERT 1\r\n"
+eexpect "CREATE USER"
 eexpect $prompt
 end_test
 

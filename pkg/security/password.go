@@ -87,16 +87,3 @@ func PromptForPasswordTwice() (string, error) {
 
 	return string(one), nil
 }
-
-// PromptForPasswordAndHash prompts for a password twice and returns the bcrypt
-// hash.
-func PromptForPasswordAndHash() ([]byte, error) {
-	password, err := PromptForPasswordTwice()
-	if err != nil {
-		return nil, err
-	}
-	if password == "" {
-		return nil, nil
-	}
-	return HashPassword(password)
-}
