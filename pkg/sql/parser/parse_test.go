@@ -265,9 +265,6 @@ func TestParse(t *testing.T) {
 		{`DROP VIEW a.b CASCADE`},
 		{`DROP VIEW a, b CASCADE`},
 
-		{`DROP USER a`},
-		{`DROP USER a, b`},
-
 		{`CANCEL JOB a`},
 		{`CANCEL QUERY a`},
 		{`RESUME JOB a`},
@@ -1159,6 +1156,8 @@ func TestParse2(t *testing.T) {
 			`CREATE USER IF NOT EXISTS 'foo'`},
 		{`CREATE USER foo PASSWORD bar`,
 			`CREATE USER 'foo' WITH PASSWORD 'bar'`},
+		{`DROP USER foo, bar`,
+			`DROP USER 'foo', 'bar'`},
 
 		{
 			`CREATE TABLE a (b INT, FOREIGN KEY (b) REFERENCES other ON UPDATE NO ACTION ON DELETE NO ACTION)`,

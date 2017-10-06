@@ -387,7 +387,10 @@ var diagramCmd = func() *cobra.Command {
 					inline:  []string{"opt_drop_behavior", "table_name_with_index_list", "table_name_with_index"},
 					replace: map[string]string{"qualified_name": "table_name", "'@' name": "'@' index_name"}, unlink: []string{"table_name", "index_name"},
 				},
-				{name: "drop_stmt", inline: []string{"table_name_list", "any_name", "qualified_name_list", "qualified_name"}},
+				{
+					name:   "drop_stmt",
+					inline: []string{"table_name_list", "any_name", "qualified_name_list", "qualified_name", "drop_ddl_stmt"},
+				},
 				{
 					name:    "drop_table",
 					stmt:    "drop_table_stmt",
