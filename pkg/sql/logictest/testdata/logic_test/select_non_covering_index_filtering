@@ -136,8 +136,8 @@ EXPLAIN (VERBOSE) SELECT a FROM t WHERE b = 2 OR ((b BETWEEN 2 AND 1) AND ((s !=
 ----
 0  render      ·         ·          (a)                                      ·
 0  ·           render 0  test.t.a   ·                                        ·
-1  index-join  ·         ·          (a, b[omitted], c[omitted], s[omitted])  key(a,b,c)
-2  scan        ·         ·          (a, b[omitted], c[omitted], s[omitted])  key(a,b,c)
+1  index-join  ·         ·          (a, b[omitted], c[omitted], s[omitted])  b=CONST; key(a,c)
+2  scan        ·         ·          (a, b[omitted], c[omitted], s[omitted])  b=CONST; key(a,c)
 2  ·           table     t@bc       ·                                        ·
 2  ·           spans     /2-/3      ·                                        ·
 2  scan        ·         ·          (a, b[omitted], c[omitted], s[omitted])  ·

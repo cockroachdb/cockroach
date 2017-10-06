@@ -53,6 +53,8 @@ import (
 // A set of columns S forms a "key" if no two rows are equal when projected
 // on S. Such a property arises when we are scanning a unique index.
 //
+// An empty key set is valid: it indicates the results have a single row.
+//
 // We store a list of sets which form keys. In most cases there is at most one
 // key.
 //
@@ -347,6 +349,16 @@ func (ord *orderingInfo) addEquivalency(colA, colB int) {
 }
 
 func (ord *orderingInfo) addKeySet(cols util.FastIntSet) {
+	// Remap column indices to equivalency group representatives.
+	var k util.FastIntSet
+	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
+		group := ord.eqGroups.Find(c)
+		if !ord.constantCols.Contains(group) {
+			k.Add(ord.eqGroups.Find(c))
+		}
+	}
+	cols = k
+
 	// Check if the key set is redundant, or if it makes some existing
 	// key sets redundant.
 	// Note: we don't use range because we are modifying keySets.
@@ -363,15 +375,7 @@ func (ord *orderingInfo) addKeySet(cols util.FastIntSet) {
 			i--
 		}
 	}
-	// Remap column indices to equivalency group representatives.
-	var k util.FastIntSet
-	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
-		group := ord.eqGroups.Find(c)
-		if !ord.constantCols.Contains(group) {
-			k.Add(ord.eqGroups.Find(c))
-		}
-	}
-	ord.keySets = append(ord.keySets, k)
+	ord.keySets = append(ord.keySets, cols)
 }
 
 func (ord *orderingInfo) addOrderColumn(colIdx int, dir encoding.Direction) {
@@ -577,6 +581,30 @@ func (ord *orderingInfo) trim(desired sqlbase.ColumnOrdering) {
 	_, pos := ord.computeMatchInternal(desired)
 	if pos < len(ord.ordering) {
 		ord.ordering = ord.ordering[:pos]
+	}
+}
+
+// applyExpr tries to extract useful information from an expression we know is
+// true on all rows (e.g. a filter expression) and updates the orderingInfo
+// accordingly. Specifically: it might add constant columns and equivalency
+// groups.
+func (ord *orderingInfo) applyExpr(evalCtx *parser.EvalContext, expr parser.TypedExpr) {
+	if expr == nil {
+		return
+	}
+	andExprs := splitAndExpr(evalCtx, expr, nil)
+	for _, e := range andExprs {
+		// Look for expressions of the form: @x = val or @x = @y.
+		if c, ok := e.(*parser.ComparisonExpr); ok && c.Operator == parser.EQ {
+			if ok, leftCol := getColVarIdx(c.Left); ok {
+				if _, ok := c.Right.(parser.Datum); ok {
+					ord.addConstantColumn(leftCol)
+				} else if ok, rightCol := getColVarIdx(c.Right); ok {
+					ord.addEquivalency(leftCol, rightCol)
+				}
+			}
+		}
+		// TODO(radu): look for tuple equalities like (a, b) = (c, d)
 	}
 }
 
