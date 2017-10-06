@@ -24,8 +24,21 @@
 
 PKG          := ./pkg/...## Which package to run tests against, e.g. "./pkg/storage".
 TAGS         :=
-TESTS        :=.## Tests to run for use with `make test`.
-BENCHES      :=## Benchmarks to run for use with `make bench`.
+
+ifeq ($(MAKECMDGOALS),bench)
+ifneq ($(TESTS),)
+$(error TESTS specified with "make bench"; did you mean BENCHES?)
+endif
+TESTS := -
+BENCHES :=. ## Benchmarks to run for use with `make bench`.
+else
+ifneq ($(BENCHES),)
+$(error BENCHES should only be specified for "make bench")
+endif
+TESTS := . ## Tests to run for use with `make test`.
+BENCHES :=
+endif
+
 FILES        :=## Space delimited list of logic test files to run, for make testlogic.
 TESTTIMEOUT  := 4m## Test timeout to use for regular tests.
 RACETIMEOUT  := 15m## Test timeout to use for race tests.
@@ -218,8 +231,6 @@ bin/logictest.test: main.go $(shell $(FIND_RELEVANT) ! -name 'zcgo_flags.go' -na
 	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -c -o bin/logictest.test $(PKG)
 
 bench: ## Run benchmarks.
-bench: BENCHES := .
-bench: TESTS := -
 bench: TESTTIMEOUT := $(BENCHTIMEOUT)
 
 .PHONY: check test testshort testrace testlogic bench
