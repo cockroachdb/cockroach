@@ -122,12 +122,12 @@ func doExpandPlan(
 		}
 
 		n.mergeJoinOrdering = computeMergeJoinOrdering(
-			planOrdering(n.left.plan),
-			planOrdering(n.right.plan),
+			planPhysicalProps(n.left.plan),
+			planPhysicalProps(n.right.plan),
 			n.pred.leftEqualityIndices,
 			n.pred.rightEqualityIndices,
 		)
-		n.ordering = n.joinOrdering()
+		n.props = n.joinOrdering()
 
 	case *ordinalityNode:
 		// There may be too many columns in the required ordering. Filter them.
@@ -158,7 +158,7 @@ func doExpandPlan(
 		n.plan, err = doExpandPlan(ctx, p, params, n.plan)
 
 		if len(n.desiredOrdering) > 0 {
-			match := planOrdering(n.plan).computeMatch(n.desiredOrdering)
+			match := planPhysicalProps(n.plan).computeMatch(n.desiredOrdering)
 			if match == len(n.desiredOrdering) {
 				// We have a single MIN/MAX function and the underlying plan's
 				// ordering matches the function. We only need to retrieve one row.
@@ -186,7 +186,7 @@ func doExpandPlan(
 
 		// Check to see if the requested ordering is compatible with the existing
 		// ordering.
-		match := planOrdering(n.plan).computeMatch(n.ordering)
+		match := planPhysicalProps(n.plan).computeMatch(n.ordering)
 		n.needSort = (match < len(n.ordering))
 
 	case *distinctNode:
@@ -197,7 +197,7 @@ func doExpandPlan(
 			return plan, err
 		}
 
-		ordering := planOrdering(n.plan)
+		ordering := planPhysicalProps(n.plan)
 		if !ordering.isEmpty() {
 			// If any of the columns form a key, we already know that all rows are
 			// unique. Elide the distinctNode.
@@ -296,8 +296,8 @@ func expandScanNode(
 ) (planNode, error) {
 	var analyzeOrdering analyzeOrderingFn
 	if len(params.desiredOrdering) > 0 {
-		analyzeOrdering = func(indexOrdering orderingInfo) (matchingCols, totalCols int) {
-			match := indexOrdering.computeMatch(params.desiredOrdering)
+		analyzeOrdering = func(indexProps physicalProps) (matchingCols, totalCols int) {
+			match := indexProps.computeMatch(params.desiredOrdering)
 			return match, len(params.desiredOrdering)
 		}
 	}
@@ -369,7 +369,7 @@ func expandRenderNode(
 		}
 	}
 
-	r.computeOrdering(planOrdering(r.source.plan))
+	r.computePhysicalProps(planPhysicalProps(r.source.plan))
 	return r, nil
 }
 
@@ -452,8 +452,8 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 		}
 
 	case *indexJoinNode:
-		n.index.ordering.trim(usefulOrdering)
-		n.table.ordering = orderingInfo{}
+		n.index.props.trim(usefulOrdering)
+		n.table.props = physicalProps{}
 
 	case *unionNode:
 		n.right = p.simplifyOrderings(n.right, nil)
@@ -461,7 +461,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 
 	case *filterNode:
 		n.source.plan = p.simplifyOrderings(n.source.plan, usefulOrdering)
-		n.computeOrdering(&p.evalCtx)
+		n.computePhysicalProps(&p.evalCtx)
 
 	case *joinNode:
 		// In DistSQL, we may take advantage of matching orderings on equality
@@ -478,13 +478,13 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 			}
 		}
 
-		n.ordering.trim(usefulOrdering)
+		n.props.trim(usefulOrdering)
 
 		n.left.plan = p.simplifyOrderings(n.left.plan, usefulLeft)
 		n.right.plan = p.simplifyOrderings(n.right.plan, usefulRight)
 
 	case *ordinalityNode:
-		n.ordering.trim(usefulOrdering)
+		n.props.trim(usefulOrdering)
 		n.source = p.simplifyOrderings(n.source, n.restrictOrdering(usefulOrdering))
 
 	case *limitNode:
@@ -506,7 +506,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 			// the sort (and save memory), at least for DistSQL.
 			n.plan = p.simplifyOrderings(n.plan, n.ordering)
 		} else {
-			constantCols := planOrdering(n.plan).constantCols
+			constantCols := planPhysicalProps(n.plan).constantCols
 			// Normally we would pass n.ordering; but n.ordering could be a prefix of
 			// the useful ordering. Check for this, ignoring any constant columns.
 			sortOrder := make(sqlbase.ColumnOrdering, 0, len(n.ordering))
@@ -547,11 +547,11 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 	case *distinctNode:
 		// distinctNode uses whatever order the underlying node presents (regardless
 		// of any ordering requirement on distinctNode itself).
-		sourceOrdering := planOrdering(n.plan)
+		sourceOrdering := planPhysicalProps(n.plan)
 		n.plan = p.simplifyOrderings(n.plan, sourceOrdering.ordering)
 
 	case *scanNode:
-		n.ordering.trim(usefulOrdering)
+		n.props.trim(usefulOrdering)
 
 	case *renderNode:
 		n.source.plan = p.simplifyOrderings(n.source.plan, translateOrdering(usefulOrdering, n))
@@ -559,7 +559,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 		// TODO(radu): in some cases there may be multiple possible n.orderings for
 		// a given source plan ordering; we should pass usefulOrdering to help make
 		// that choice (#13709).
-		n.computeOrdering(planOrdering(n.source.plan))
+		n.computePhysicalProps(planPhysicalProps(n.source.plan))
 
 	case *delayedNode:
 		n.plan = p.simplifyOrderings(n.plan, usefulOrdering)

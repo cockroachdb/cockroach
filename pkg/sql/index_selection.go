@@ -62,7 +62,7 @@ const nonCoveringIndexPenalty = 10
 //    matchingCols is 1.
 //  - the bac index, along with the fact that b is constrained to a single
 //    value, matches the desired ordering; matchingCols is 2.
-type analyzeOrderingFn func(indexOrdering orderingInfo) (matchingCols, totalCols int)
+type analyzeOrderingFn func(indexProps physicalProps) (matchingCols, totalCols int)
 
 // selectIndex analyzes the scanNode to determine if there is an index
 // available that can fulfill the query with a more restrictive scan.
@@ -412,10 +412,10 @@ func (v *indexInfo) analyzeOrdering(
 	ctx context.Context, scan *scanNode, analyzeOrdering analyzeOrderingFn, preferOrderMatching bool,
 ) {
 	// Analyze the ordering provided by the index (either forward or reverse).
-	fwdIndexOrdering := scan.computeOrdering(v.index, v.exactPrefix, false)
-	revIndexOrdering := scan.computeOrdering(v.index, v.exactPrefix, true)
-	fwdMatch, fwdOrderCols := analyzeOrdering(fwdIndexOrdering)
-	revMatch, revOrderCols := analyzeOrdering(revIndexOrdering)
+	fwdIndexProps := scan.computePhysicalProps(v.index, v.exactPrefix, false)
+	revIndexProps := scan.computePhysicalProps(v.index, v.exactPrefix, true)
+	fwdMatch, fwdOrderCols := analyzeOrdering(fwdIndexProps)
+	revMatch, revOrderCols := analyzeOrdering(revIndexProps)
 
 	if fwdOrderCols != revOrderCols {
 		panic(fmt.Sprintf("fwdOrderCols(%d) != revOrderCols(%d)", fwdOrderCols, revOrderCols))

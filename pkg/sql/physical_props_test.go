@@ -48,20 +48,20 @@ type equivGroups [][]int
 type constCols []int
 type keySets [][]int
 
-// makeOrdInfo creates an orderingInfo. The parameters supported are:
+// makePhysProps creates a physicalProps. The parameters supported are:
 //  - ColumnOrdering: ordering
 //  - equivGroups: equivalency groups
 //  - constCols: constant columns
 //  - keySets: key sets
 //
 // The parameters can be passed in any order. Examples:
-//   makeOrdInfo(
+//   makePhysProps(
 //     equivGroups{{0,1},{2,3}},
 //     constCols{4},
 //     makeColumnOrdering(1, asc, 2, desc),
 //   )
-func makeOrdInfo(args ...interface{}) orderingInfo {
-	var ord orderingInfo
+func makePhysProps(args ...interface{}) physicalProps {
+	var props physicalProps
 
 	// First, process equivalency groups.
 	for _, a := range args {
@@ -70,7 +70,7 @@ func makeOrdInfo(args ...interface{}) orderingInfo {
 			// Equivalency groups.
 			for _, group := range a {
 				for i := 1; i < len(group); i++ {
-					ord.eqGroups.Union(group[0], group[i])
+					props.eqGroups.Union(group[0], group[i])
 				}
 			}
 		}
@@ -80,20 +80,20 @@ func makeOrdInfo(args ...interface{}) orderingInfo {
 	for _, a := range args {
 		switch a := a.(type) {
 		case sqlbase.ColumnOrdering:
-			ord.ordering = a
-			for i := range ord.ordering {
-				ord.ordering[i].ColIdx = ord.eqGroups.Find(ord.ordering[i].ColIdx)
+			props.ordering = a
+			for i := range props.ordering {
+				props.ordering[i].ColIdx = props.eqGroups.Find(props.ordering[i].ColIdx)
 			}
 		case constCols:
 			// Constant columns.
 			for _, i := range a {
-				ord.constantCols.Add(ord.eqGroups.Find(i))
+				props.constantCols.Add(props.eqGroups.Find(i))
 			}
 		case keySets:
-			ord.keySets = make([]util.FastIntSet, len(a))
+			props.keySets = make([]util.FastIntSet, len(a))
 			for i := range a {
 				for _, j := range a[i] {
-					ord.keySets[i].Add(ord.eqGroups.Find(j))
+					props.keySets[i].Add(props.eqGroups.Find(j))
 				}
 			}
 		case equivGroups:
@@ -102,11 +102,11 @@ func makeOrdInfo(args ...interface{}) orderingInfo {
 			panic(fmt.Sprintf("unknown parameter type %T", a))
 		}
 	}
-	ord.check()
-	return ord
+	props.check()
+	return props
 }
 
-func ordEqual(a, b orderingInfo) bool {
+func propsEqual(a, b physicalProps) bool {
 	a.check()
 	b.check()
 	if !a.eqGroups.Equals(b.eqGroups) ||
@@ -153,21 +153,21 @@ func TestComputeOrderingMatch(t *testing.T) {
 	}
 
 	type computeOrderCase struct {
-		existing orderingInfo
+		existing physicalProps
 		cases    []desiredCase
 	}
 
 	testSets := []computeOrderCase{
 		{
 			// No existing ordering.
-			existing: makeOrdInfo(),
+			existing: makePhysProps(),
 			cases: []desiredCase{
 				defTestCase(0, 0, makeColumnOrdering(1, desc, 5, asc)),
 			},
 		},
 		{
 			// Ordering with no constant columns.
-			existing: makeOrdInfo(makeColumnOrdering(1, desc, 2, asc)),
+			existing: makePhysProps(makeColumnOrdering(1, desc, 2, asc)),
 			cases: []desiredCase{
 				defTestCase(1, 0, makeColumnOrdering(1, desc, 5, asc)),
 				defTestCase(0, 1, makeColumnOrdering(1, asc, 5, asc, 2, asc)),
@@ -175,7 +175,7 @@ func TestComputeOrderingMatch(t *testing.T) {
 		},
 		{
 			// Ordering with column groups and no constant columns.
-			existing: makeOrdInfo(
+			existing: makePhysProps(
 				equivGroups{{1, 2}, {3, 4}},
 				makeColumnOrdering(1, desc, 3, asc),
 			),
@@ -193,7 +193,7 @@ func TestComputeOrderingMatch(t *testing.T) {
 		},
 		{
 			// Ordering with no constant columns but with key.
-			existing: makeOrdInfo(
+			existing: makePhysProps(
 				makeColumnOrdering(1, desc, 2, asc),
 				keySets{{1, 2}},
 			),
@@ -208,7 +208,7 @@ func TestComputeOrderingMatch(t *testing.T) {
 		},
 		{
 			// Ordering with column groups, no constant columns but with key.
-			existing: makeOrdInfo(
+			existing: makePhysProps(
 				equivGroups{{1, 2, 3}},
 				makeColumnOrdering(1, desc, 4, asc),
 				keySets{{1, 4}},
@@ -236,7 +236,7 @@ func TestComputeOrderingMatch(t *testing.T) {
 		},
 		{
 			// Ordering with only constant columns.
-			existing: makeOrdInfo(
+			existing: makePhysProps(
 				constCols{1, 2},
 			),
 			cases: []desiredCase{
@@ -246,7 +246,7 @@ func TestComputeOrderingMatch(t *testing.T) {
 		},
 		{
 			// Ordering with constant columns.
-			existing: makeOrdInfo(
+			existing: makePhysProps(
 				constCols{0, 5, 6},
 				makeColumnOrdering(1, desc, 2, asc),
 			),
@@ -262,7 +262,7 @@ func TestComputeOrderingMatch(t *testing.T) {
 
 		{
 			// Ordering with group columns and constant columns.
-			existing: makeOrdInfo(
+			existing: makePhysProps(
 				equivGroups{{1, 2, 3}, {4, 5}},
 				constCols{0, 8, 9},
 				makeColumnOrdering(1, desc, 4, asc),
@@ -280,7 +280,7 @@ func TestComputeOrderingMatch(t *testing.T) {
 		},
 		{
 			// Ordering with constant columns and key.
-			existing: makeOrdInfo(
+			existing: makePhysProps(
 				constCols{0, 5, 6},
 				makeColumnOrdering(1, desc, 2, asc),
 				keySets{{1, 2}},
@@ -299,7 +299,7 @@ func TestComputeOrderingMatch(t *testing.T) {
 		},
 		{
 			// Ordering with column groups, constant columns and key.
-			existing: makeOrdInfo(
+			existing: makePhysProps(
 				equivGroups{{1, 8}, {2, 9}},
 				constCols{0, 5, 6},
 				makeColumnOrdering(1, desc, 2, asc),
@@ -364,7 +364,7 @@ func TestTrimOrderingGuarantee(t *testing.T) {
 							if numOrderCols == 0 && isKey {
 								continue
 							}
-							o := orderingInfo{}
+							o := physicalProps{}
 
 							for i := 0; i < numEquiv; i++ {
 								o.addEquivalency(rng.Intn(10), rng.Intn(10))
@@ -429,31 +429,31 @@ func TestTrimOrdering(t *testing.T) {
 
 	testCases := []struct {
 		name     string
-		ord      orderingInfo
+		props    physicalProps
 		desired  sqlbase.ColumnOrdering
-		expected orderingInfo
+		expected physicalProps
 	}{
 		{
 			name: "basic-prefix-1",
-			ord: makeOrdInfo(
+			props: makePhysProps(
 				makeColumnOrdering(1, asc, 2, desc),
 				keySets{{1, 2}},
 			),
 			desired: makeColumnOrdering(1, asc),
-			expected: makeOrdInfo(
+			expected: makePhysProps(
 				makeColumnOrdering(1, asc),
 				keySets{{1, 2}},
 			),
 		},
 		{
 			name: "basic-prefix-1-with-groups",
-			ord: makeOrdInfo(
+			props: makePhysProps(
 				equivGroups{{1, 5}},
 				makeColumnOrdering(1, asc, 2, desc),
 				keySets{{1, 2}},
 			),
 			desired: makeColumnOrdering(1, asc, 5, asc),
-			expected: makeOrdInfo(
+			expected: makePhysProps(
 				equivGroups{{1, 5}},
 				makeColumnOrdering(1, asc),
 				keySets{{1, 2}},
@@ -461,24 +461,24 @@ func TestTrimOrdering(t *testing.T) {
 		},
 		{
 			name: "direction-mismatch",
-			ord: makeOrdInfo(
+			props: makePhysProps(
 				makeColumnOrdering(1, asc, 2, desc),
 				keySets{{1, 2}},
 			),
 			desired: makeColumnOrdering(1, desc),
-			expected: makeOrdInfo(
+			expected: makePhysProps(
 				keySets{{1, 2}},
 			),
 		},
 		{
 			name: "const-columns-1",
-			ord: makeOrdInfo(
+			props: makePhysProps(
 				constCols{0, 5, 6},
 				makeColumnOrdering(1, desc, 2, desc),
 				keySets{{1, 2}},
 			),
 			desired: makeColumnOrdering(5, asc, 1, desc),
-			expected: makeOrdInfo(
+			expected: makePhysProps(
 				constCols{0, 5, 6},
 				makeColumnOrdering(1, desc),
 				keySets{{1, 2}},
@@ -487,13 +487,13 @@ func TestTrimOrdering(t *testing.T) {
 
 		{
 			name: "const-columns-2",
-			ord: makeOrdInfo(
+			props: makePhysProps(
 				constCols{0, 5, 6},
 				makeColumnOrdering(1, desc, 2, desc, 3, asc),
 				keySets{{1, 2, 3}},
 			),
 			desired: makeColumnOrdering(5, asc, 1, desc, 0, desc, 2, desc),
-			expected: makeOrdInfo(
+			expected: makePhysProps(
 				constCols{0, 5, 6},
 				makeColumnOrdering(1, desc, 2, desc),
 				keySets{{1, 2, 3}},
@@ -502,14 +502,14 @@ func TestTrimOrdering(t *testing.T) {
 
 		{
 			name: "const-columns-with-groups",
-			ord: makeOrdInfo(
+			props: makePhysProps(
 				equivGroups{{1, 7}, {2, 9}},
 				constCols{0, 5, 6},
 				makeColumnOrdering(1, desc, 2, desc),
 				keySets{{1, 2}},
 			),
 			desired: makeColumnOrdering(5, asc, 1, desc, 6, desc, 7, asc),
-			expected: makeOrdInfo(
+			expected: makePhysProps(
 				equivGroups{{1, 7}, {2, 9}},
 				constCols{0, 5, 6},
 				makeColumnOrdering(1, desc),
@@ -518,13 +518,13 @@ func TestTrimOrdering(t *testing.T) {
 		},
 		{
 			name: "no-match",
-			ord: makeOrdInfo(
+			props: makePhysProps(
 				constCols{0, 5, 6},
 				makeColumnOrdering(1, desc, 2, desc, 3, asc),
 				keySets{{1, 2, 3}},
 			),
 			desired: makeColumnOrdering(5, asc, 4, asc),
-			expected: makeOrdInfo(
+			expected: makePhysProps(
 				constCols{0, 5, 6},
 				keySets{{1, 2, 3}},
 			),
@@ -535,9 +535,9 @@ func TestTrimOrdering(t *testing.T) {
 		tc := testCases[i]
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			tc.ord.trim(tc.desired)
-			if !ordEqual(tc.ord, tc.expected) {
-				t.Errorf("expected %s, got %s", tc.expected.AsString(nil), tc.ord.AsString(nil))
+			tc.props.trim(tc.desired)
+			if !propsEqual(tc.props, tc.expected) {
+				t.Errorf("expected %s, got %s", tc.expected.AsString(nil), tc.props.AsString(nil))
 			}
 		})
 	}
@@ -548,16 +548,16 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 
 	testCases := []struct {
 		name       string
-		a, b       orderingInfo
+		a, b       physicalProps
 		colA, colB []int
 		expected   sqlbase.ColumnOrdering
 	}{
 		{
 			name: "basic",
-			a: makeOrdInfo(
+			a: makePhysProps(
 				makeColumnOrdering(1, asc, 2, desc, 3, asc),
 			),
-			b: makeOrdInfo(
+			b: makePhysProps(
 				makeColumnOrdering(3, asc, 4, desc),
 			),
 			colA:     []int{1, 2},
@@ -567,11 +567,11 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 
 		{
 			name: "groups",
-			a: makeOrdInfo(
+			a: makePhysProps(
 				equivGroups{{2, 5}},
 				makeColumnOrdering(1, asc, 2, desc, 3, asc),
 			),
-			b: makeOrdInfo(
+			b: makePhysProps(
 				equivGroups{{2, 3}},
 				makeColumnOrdering(2, asc, 4, desc),
 			),
@@ -582,10 +582,10 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 
 		{
 			name: "const-a",
-			a: makeOrdInfo(
+			a: makePhysProps(
 				constCols{1, 2},
 			),
-			b: makeOrdInfo(
+			b: makePhysProps(
 				makeColumnOrdering(3, asc, 4, desc),
 			),
 			colA:     []int{1, 2},
@@ -595,10 +595,10 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 
 		{
 			name: "const-b",
-			a: makeOrdInfo(
+			a: makePhysProps(
 				makeColumnOrdering(1, asc, 2, desc, 3, asc),
 			),
-			b: makeOrdInfo(
+			b: makePhysProps(
 				constCols{3, 4},
 			),
 			colA:     []int{1, 2},
@@ -608,11 +608,11 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 
 		{
 			name: "const-with-groups",
-			a: makeOrdInfo(
+			a: makePhysProps(
 				equivGroups{{1, 4, 5}},
 				makeColumnOrdering(1, asc, 2, desc, 3, asc),
 			),
-			b: makeOrdInfo(
+			b: makePhysProps(
 				constCols{3, 4},
 			),
 			colA:     []int{5, 2},
@@ -621,11 +621,11 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 		},
 		{
 			name: "const-both",
-			a: makeOrdInfo(
+			a: makePhysProps(
 				constCols{1},
 				makeColumnOrdering(2, desc),
 			),
-			b: makeOrdInfo(
+			b: makePhysProps(
 				constCols{4},
 				makeColumnOrdering(3, asc),
 			),
@@ -635,11 +635,11 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 		},
 		{
 			name: "key-a",
-			a: makeOrdInfo(
+			a: makePhysProps(
 				makeColumnOrdering(1, asc),
 				keySets{{1}},
 			),
-			b: makeOrdInfo(
+			b: makePhysProps(
 				makeColumnOrdering(3, asc, 4, desc),
 			),
 			colA:     []int{1, 2},
@@ -649,10 +649,10 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 
 		{
 			name: "key-b",
-			a: makeOrdInfo(
+			a: makePhysProps(
 				makeColumnOrdering(1, asc, 2, desc),
 			),
-			b: makeOrdInfo(
+			b: makePhysProps(
 				makeColumnOrdering(3, asc),
 				keySets{{3}},
 			),
@@ -663,10 +663,10 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 
 		{
 			name: "partial-ordering-1",
-			a: makeOrdInfo(
+			a: makePhysProps(
 				makeColumnOrdering(1, asc, 3, asc, 2, desc),
 			),
-			b: makeOrdInfo(
+			b: makePhysProps(
 				makeColumnOrdering(3, asc, 4, desc),
 			),
 			colA:     []int{1, 2},
@@ -675,10 +675,10 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 		},
 		{
 			name: "partial-ordering-2",
-			a: makeOrdInfo(
+			a: makePhysProps(
 				makeColumnOrdering(1, asc, 2, desc, 3, asc),
 			),
-			b: makeOrdInfo(
+			b: makePhysProps(
 				makeColumnOrdering(3, asc, 5, desc, 4, desc),
 			),
 			colA:     []int{1, 2},
@@ -687,11 +687,11 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 		},
 		{
 			name: "partial-ordering-with-groups",
-			a: makeOrdInfo(
+			a: makePhysProps(
 				equivGroups{{1, 8}, {3, 9}},
 				makeColumnOrdering(1, asc, 3, asc, 2, desc),
 			),
-			b: makeOrdInfo(
+			b: makePhysProps(
 				equivGroups{{3, 5}},
 				makeColumnOrdering(3, asc, 4, desc),
 			),
@@ -701,11 +701,11 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 		},
 		{
 			name: "grouped-cols",
-			a: makeOrdInfo(
+			a: makePhysProps(
 				equivGroups{{0, 2}, {1, 3}},
 				makeColumnOrdering(2, asc, 3, asc),
 			),
-			b: makeOrdInfo(
+			b: makePhysProps(
 				makeColumnOrdering(0, asc, 1, asc, 2, asc, 3, asc),
 			),
 			colA:     []int{0, 1, 2, 3},
@@ -714,11 +714,11 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 		},
 		{
 			name: "grouped-cols-opposite-order",
-			a: makeOrdInfo(
+			a: makePhysProps(
 				equivGroups{{0, 2}, {1, 3}},
 				makeColumnOrdering(2, asc, 1, asc),
 			),
-			b: makeOrdInfo(
+			b: makePhysProps(
 				makeColumnOrdering(0, asc, 1, asc, 2, desc, 3, desc),
 			),
 			colA:     []int{0, 1, 2, 3},
@@ -741,7 +741,7 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 func TestProjectOrdering(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ord := makeOrdInfo(
+	ord := makePhysProps(
 		equivGroups{{0, 1, 2}, {3, 4}, {5, 6, 7}},
 		constCols{3, 8, 9},
 		keySets{{0, 5}, {5, 10}, {0, 10, 11}},
@@ -749,31 +749,31 @@ func TestProjectOrdering(t *testing.T) {
 	)
 	testCases := []struct {
 		columns  []int
-		expected orderingInfo
+		expected physicalProps
 	}{
 		{
 			columns: []int{0},
-			expected: makeOrdInfo(
+			expected: makePhysProps(
 				makeColumnOrdering(0, asc),
 			),
 		},
 		{
 			columns: []int{0, -1, 0, 2},
-			expected: makeOrdInfo(
+			expected: makePhysProps(
 				equivGroups{{0, 2, 3}},
 				makeColumnOrdering(0, asc),
 			),
 		},
 		{
 			columns: []int{2, 0},
-			expected: makeOrdInfo(
+			expected: makePhysProps(
 				equivGroups{{0, 1}},
 				makeColumnOrdering(1, asc),
 			),
 		},
 		{
 			columns: []int{4, 7, 1},
-			expected: makeOrdInfo(
+			expected: makePhysProps(
 				constCols{0},
 				keySets{{1, 2}},
 				makeColumnOrdering(2, asc),
@@ -781,7 +781,7 @@ func TestProjectOrdering(t *testing.T) {
 		},
 		{
 			columns: []int{0, 3, 5, 10, 8},
-			expected: makeOrdInfo(
+			expected: makePhysProps(
 				constCols{1, 4},
 				keySets{{0, 2}, {2, 3}},
 				makeColumnOrdering(0, asc, 3, asc, 2, desc),
@@ -789,7 +789,7 @@ func TestProjectOrdering(t *testing.T) {
 		},
 		{
 			columns: []int{0, 1, 2, 3, 4, 5, 6, 10, 8},
-			expected: makeOrdInfo(
+			expected: makePhysProps(
 				equivGroups{{0, 1, 2}, {3, 4}, {5, 6}},
 				constCols{3, 8},
 				keySets{{0, 5}, {5, 7}},
@@ -802,7 +802,7 @@ func TestProjectOrdering(t *testing.T) {
 		t.Run(fmt.Sprintf("%d", tIdx), func(t *testing.T) {
 			t.Parallel()
 			res := ord.project(tc.columns)
-			if !ordEqual(res, tc.expected) {
+			if !propsEqual(res, tc.expected) {
 				t.Errorf("expected %s, got %s", tc.expected.AsString(nil), res.AsString(nil))
 			}
 		})
