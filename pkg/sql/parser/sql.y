@@ -2884,12 +2884,16 @@ truncate_stmt:
 
 // %Help: CREATE USER - define a new user
 // %Category: Priv
-// %Text: CREATE USER <name> [ [WITH] PASSWORD <passwd> ]
+// %Text: CREATE USER [IF NOT EXISTS] <name> [ [WITH] PASSWORD <passwd> ]
 // %SeeAlso: DROP USER, SHOW USERS, WEBDOCS/create-user.html
 create_user_stmt:
   CREATE USER name opt_password
   {
     $$.val = &CreateUser{Name: Name($3), Password: $4.strPtr()}
+  }
+| CREATE USER IF NOT EXISTS name opt_password
+  {
+    $$.val = &CreateUser{Name: Name($6), Password: $7.strPtr(), IfNotExists: true}
   }
 | CREATE USER error // SHOW HELP: CREATE USER
 
