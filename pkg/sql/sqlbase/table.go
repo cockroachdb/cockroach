@@ -2045,13 +2045,14 @@ func (desc TableDescriptor) collectConstraintInfo(
 			}
 			detail := ConstraintDetail{Kind: ConstraintTypeFK}
 			detail.Unvalidated = index.ForeignKey.Validity == ConstraintValidity_Unvalidated
+			numCols := len(index.ColumnIDs)
+			if index.ForeignKey.SharedPrefixLen > 0 {
+				numCols = int(index.ForeignKey.SharedPrefixLen)
+			}
+			detail.Columns = index.ColumnNames[:numCols]
+			detail.Index = index
+
 			if tableLookup != nil {
-				numCols := len(index.ColumnIDs)
-				if index.ForeignKey.SharedPrefixLen > 0 {
-					numCols = int(index.ForeignKey.SharedPrefixLen)
-				}
-				detail.Columns = index.ColumnNames[:numCols]
-				detail.Index = index
 				other, err := tableLookup(index.ForeignKey.Table)
 				if err != nil {
 					return nil, errors.Errorf("error resolving table %d referenced in foreign key",
