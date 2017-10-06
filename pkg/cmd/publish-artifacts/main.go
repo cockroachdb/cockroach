@@ -50,6 +50,7 @@ var libsRe = func() *regexp.Regexp {
 		regexp.QuoteMeta("librt.so."),
 		regexp.QuoteMeta("libpthread.so."),
 		regexp.QuoteMeta("libdl.so."),
+		regexp.QuoteMeta("libtinfo.so."),
 		regexp.QuoteMeta("libm.so."),
 		regexp.QuoteMeta("libc.so."),
 		strings.Replace(regexp.QuoteMeta("ld-linux-ARCH.so."), "ARCH", ".*", -1),
