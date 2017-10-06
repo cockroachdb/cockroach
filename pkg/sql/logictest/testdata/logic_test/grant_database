@@ -9,9 +9,6 @@ SHOW GRANTS ON DATABASE a
 Database User Privileges
 a        root ALL
 
-statement error cannot use SHOW GRANTS without a target
-SHOW GRANTS
-
 statement error user root does not have ALL privileges
 REVOKE SELECT ON DATABASE a FROM root
 
