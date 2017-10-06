@@ -553,6 +553,8 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&scatterNode{}):           "scatter",
 	reflect.TypeOf(&setNode{}):               "set",
 	reflect.TypeOf(&setClusterSettingNode{}): "set cluster setting",
+	reflect.TypeOf(&setZoneConfigNode{}):     "configure zone",
+	reflect.TypeOf(&showZoneConfigNode{}):    "show zone configuration",
 	reflect.TypeOf(&showRangesNode{}):        "showRanges",
 	reflect.TypeOf(&showFingerprintsNode{}):  "showFingerprints",
 	reflect.TypeOf(&sortNode{}):              "sort",

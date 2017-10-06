@@ -121,10 +121,8 @@ func TestGetZoneConfig(t *testing.T) {
 
 			// Verify sql.GetZoneConfigInTxn.
 			if err := s.DB().Txn(context.Background(), func(ctx context.Context, txn *client.Txn) error {
-				if zoneCfg, found, err := sql.GetZoneConfigInTxn(ctx, txn, tc.objectID); err != nil {
+				if zoneCfg, _, err := sql.GetZoneConfigInTxn(ctx, txn, tc.objectID); err != nil {
 					return err
-				} else if !found {
-					t.Errorf("#%d: zone config missing", tcNum)
 				} else if !proto.Equal(&zoneCfg, &tc.zoneCfg) {
 					t.Errorf("#%d: bad zone config.\nexpected: %+v\ngot: %+v", tcNum, &tc.zoneCfg, zoneCfg)
 				}
