@@ -336,16 +336,15 @@ func (n *alterTableNode) Start(params runParams) error {
 					}
 				}
 			case sqlbase.ConstraintTypeFK:
-				for i, idx := range n.tableDesc.Indexes {
-					if idx.ForeignKey.Name == name {
-						if err := params.p.removeFKBackReference(params.ctx, n.tableDesc, idx); err != nil {
-							return err
-						}
-						n.tableDesc.Indexes[i].ForeignKey = sqlbase.ForeignKeyReference{}
-						descriptorChanged = true
-						break
-					}
+				idx, err := n.tableDesc.FindIndexByID(details.Index.ID)
+				if err != nil {
+					return err
 				}
+				if err := params.p.removeFKBackReference(params.ctx, n.tableDesc, *idx); err != nil {
+					return err
+				}
+				idx.ForeignKey = sqlbase.ForeignKeyReference{}
+				descriptorChanged = true
 			default:
 				return errors.Errorf("dropping %s constraint %q unsupported", details.Kind, t.Constraint)
 			}
