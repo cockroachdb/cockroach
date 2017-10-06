@@ -305,6 +305,21 @@ func TestSettingsSetAndShow(t *testing.T) {
 	) {
 		t.Fatal(err)
 	}
+	if _, err := testuser.Exec(`SHOW CLUSTER SETTING foo`); !testutils.IsError(err,
+		`only root is allowed to SHOW CLUSTER SETTINGS`,
+	) {
+		t.Fatal(err)
+	}
+	if _, err := testuser.Exec(`SHOW ALL CLUSTER SETTINGS`); !testutils.IsError(err,
+		`only root is allowed to SHOW CLUSTER SETTINGS`,
+	) {
+		t.Fatal(err)
+	}
+	if _, err := testuser.Exec(`SELECT * FROM crdb_internal.cluster_settings`); !testutils.IsError(err,
+		`only root is allowed to read crdb_internal.cluster_settings`,
+	) {
+		t.Fatal(err)
+	}
 }
 
 func TestSettingsShowAll(t *testing.T) {
