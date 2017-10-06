@@ -72,7 +72,7 @@ type scanNode struct {
 	spans            []roachpb.Span
 	isSecondaryIndex bool
 	reverse          bool
-	ordering         orderingInfo
+	props            physicalProps
 
 	rowIndex int64 // the index of the current row
 
@@ -373,17 +373,18 @@ func (n *scanNode) initOrdering(exactPrefix int) {
 	if n.index == nil {
 		return
 	}
-	n.ordering = n.computeOrdering(n.index, exactPrefix, n.reverse)
+	n.props = n.computePhysicalProps(n.index, exactPrefix, n.reverse)
 }
 
-// computeOrdering calculates ordering information for table columns assuming that:
-//    - we scan a given index (potentially in reverse order), and
-//    - the first `exactPrefix` columns of the index each have a constant value
-//      (see orderingInfo).
-func (n *scanNode) computeOrdering(
+// computePhysicalProps calculates ordering information for table columns
+// assuming that:
+//   - we scan a given index (potentially in reverse order), and
+//   - the first `exactPrefix` columns of the index each have a constant value
+//     (see physicalProps).
+func (n *scanNode) computePhysicalProps(
 	index *sqlbase.IndexDescriptor, exactPrefix int, reverse bool,
-) orderingInfo {
-	var ordering orderingInfo
+) physicalProps {
+	var ordering physicalProps
 
 	columnIDs, dirs := index.FullColumnIDs()
 

@@ -157,9 +157,9 @@ func (p *planner) orderBy(
 								return nil, errors.Errorf("ORDER BY \"%s\" is ambiguous", target)
 							}
 							// Note that in this case we want to use the index of the first
-							// matching column. This is because renderNode.computeOrdering
-							// also prefers the first column, and we want the orderings to
-							// match as much as possible.
+							// matching column. This is because
+							// renderNode.computePhysicalProps also prefers the first column,
+							// and we want the orderings to match as much as possible.
 							continue
 						}
 						index = j
