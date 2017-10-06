@@ -633,7 +633,7 @@ func TestEval(t *testing.T) {
 		{`('2010-09-28'::date)::timestamp`, `'2010-09-28 00:00:00+00:00'`},
 		{`'2010-09-28 12:00:00.1-04'::timestamp`, `'2010-09-28 16:00:00.1+00:00'`},
 		{`'2010-09-28 12:00:00.1-04'::timestamp::text`, `'2010-09-28 16:00:00.1+00:00'`},
-		{`'2010-09-28 12:00:00.1-04'::timestamptz::text`, `'2010-09-28 16:00:00.1+00:00'`},
+		{`'2010-09-28 12:00:00.1-04'::timestamptz::text`, `'2010-09-28 12:00:00.1-04:00'`},
 		{`'12h2m1s23ms'::interval`, `'12h2m1s23ms'`},
 		{`'12h2m1s23ms'::interval::text`, `'12h2m1s23ms'`},
 		{`interval '1'`, `'1s'`},
@@ -726,7 +726,7 @@ func TestEval(t *testing.T) {
 		{`extract_duration(millisecond from '20s30ms40µs'::interval)`, `20030`},
 		{`extract_duration(microsecond from '12345ns'::interval)`, `12`},
 		// Need two interval ops to verify the return type matches the return struct type.
-		{`'2010-09-28 12:00:00.1-04:00'::timestamptz - '0s'::interval - '0s'::interval`, `'2010-09-28 16:00:00.1+00:00'`},
+		{`'2010-09-28 12:00:00.1-04:00'::timestamptz - '0s'::interval - '0s'::interval`, `'2010-09-28 12:00:00.1-04:00'`},
 		{`'12h2m1s23ms'::interval + '1h'::interval`, `'13h2m1s23ms'`},
 		{`'12 hours 2 minutes 1 second'::interval + '1h'::interval`, `'13h2m1s'`},
 		{`'PT12H2M1S'::interval + '1h'::interval`, `'13h2m1s'`},
