@@ -136,6 +136,10 @@ func TestFormatExpr(t *testing.T) {
 			`('3s')[interval]`},
 		{`date '2003-01-01'`, FmtShowTypes,
 			`('2003-01-01')[date]`},
+		{`timestamp '2003-01-01 00:00:00'`, FmtShowTypes,
+			`('2003-01-01 00:00:00+00:00')[timestamp]`},
+		{`timestamptz '2003-01-01 00:00:00+03'`, FmtShowTypes,
+			`('2003-01-01 00:00:00+03:00')[timestamptz]`},
 		{`greatest(unique_rowid(), 12)`, FmtShowTypes,
 			`(greatest((unique_rowid())[int], (12)[int]))[int]`},
 
