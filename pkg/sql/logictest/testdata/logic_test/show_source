@@ -117,12 +117,12 @@ pg_catalog
 system
 test
 
-query TTT colnames
+query TTTT colnames
 SELECT * FROM [SHOW GRANTS ON system.descriptor]
 ----
-Table       User  Privileges
-descriptor  root  GRANT
-descriptor  root  SELECT
+Database  Table       User  Privileges
+system    descriptor  root  GRANT
+system    descriptor  root  SELECT
 
 query TTBITTBB colnames
 SELECT * FROM [SHOW INDEX FROM system.descriptor]
