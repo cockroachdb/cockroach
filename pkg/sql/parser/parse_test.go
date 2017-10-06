@@ -1073,6 +1073,8 @@ func TestParse2(t *testing.T) {
 		{`RESET CLUSTER SETTING a`, `SET CLUSTER SETTING a = DEFAULT`},
 
 		{`RESET NAMES`, `SET client_encoding = DEFAULT`},
+
+		{`CREATE USER IF NOT EXISTS foo`, `CREATE USER IF NOT EXISTS foo`},
 	}
 	for _, d := range testData {
 		stmts, err := Parse(d.sql)
