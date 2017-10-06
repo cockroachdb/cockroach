@@ -43,11 +43,31 @@ func TestDisableTableLeases() func() {
 	}
 }
 
-// tableKey implements sqlbase.DescriptorKey.
-type tableKey struct {
+type namespaceKey struct {
 	parentID sqlbase.ID
 	name     string
 }
+
+// getAllNames returns a map from ID to namespaceKey for every entry in
+// system.namespace.
+func (p *planner) getAllNames(ctx context.Context) (map[sqlbase.ID]namespaceKey, error) {
+	namespace := map[sqlbase.ID]namespaceKey{}
+	rows, err := p.queryRows(ctx, `SELECT id, "parentID", name FROM system.namespace`)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		id, parentID, name := parser.MustBeDInt(r[0]), parser.MustBeDInt(r[1]), parser.MustBeDString(r[2])
+		namespace[sqlbase.ID(id)] = namespaceKey{
+			parentID: sqlbase.ID(parentID),
+			name:     string(name),
+		}
+	}
+	return namespace, nil
+}
+
+// tableKey implements sqlbase.DescriptorKey.
+type tableKey namespaceKey
 
 func (tk tableKey) Key() roachpb.Key {
 	return sqlbase.MakeNameMetadataKey(tk.parentID, tk.name)

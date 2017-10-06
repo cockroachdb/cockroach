@@ -269,6 +269,8 @@ func doExpandPlan(
 	case *valueGenerator:
 	case *setNode:
 	case *setClusterSettingNode:
+	case *setZoneConfigNode:
+	case *showZoneConfigNode:
 	case *showRangesNode:
 	case *showFingerprintsNode:
 	case *scatterNode:
@@ -590,6 +592,8 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 	case *valueGenerator:
 	case *setNode:
 	case *setClusterSettingNode:
+	case *setZoneConfigNode:
+	case *showZoneConfigNode:
 	case *showRangesNode:
 	case *showFingerprintsNode:
 	case *scatterNode:

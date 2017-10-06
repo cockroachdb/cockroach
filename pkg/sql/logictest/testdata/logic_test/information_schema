@@ -227,6 +227,7 @@ crdb_internal       session_variables
 crdb_internal       table_columns
 crdb_internal       table_indexes
 crdb_internal       tables
+crdb_internal       zones
 information_schema  columns
 information_schema  key_column_usage
 information_schema  schema_privileges
@@ -340,6 +341,7 @@ query T
 SELECT table_name FROM information_schema.tables WHERE table_name > 't'  ORDER BY 1 DESC
 ----
 zones
+zones
 xyz
 web_sessions
 views
@@ -380,6 +382,7 @@ def            crdb_internal       session_variables          SYSTEM VIEW  1
 def            crdb_internal       table_columns              SYSTEM VIEW  1
 def            crdb_internal       table_indexes              SYSTEM VIEW  1
 def            crdb_internal       tables                     SYSTEM VIEW  1
+def            crdb_internal       zones                      SYSTEM VIEW  1
 def            information_schema  columns                    SYSTEM VIEW  1
 def            information_schema  key_column_usage           SYSTEM VIEW  1
 def            information_schema  schema_privileges          SYSTEM VIEW  1
