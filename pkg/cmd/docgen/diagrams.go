@@ -334,12 +334,22 @@ var diagramCmd = func() *cobra.Command {
 					replace: map[string]string{"any_name": "view_name", "name_list": "column_list"},
 					relink:  map[string]string{"view_name": "any_name", "column_list": "name_list"},
 				},
-				{name: "create_user_stmt", inline: []string{"opt_with", "opt_password"}, replace: map[string]string{"'SCONST'": "password"}, unlink: []string{"password"}},
+				{name: "create_user_stmt",
+					inline: []string{"opt_with", "opt_password"},
+					replace: map[string]string{
+						"'PASSWORD' string_or_placeholder": "'PASSWORD' password",
+						"'USER' string_or_placeholder":     "'USER' name",
+						"'EXISTS' string_or_placeholder":   "'EXISTS' name",
+					},
+					unlink: []string{"password"},
+				},
 				{
-					name:    "default_value_column_level",
-					stmt:    "stmt_block",
-					replace: map[string]string{"stmt_list": "'CREATE' 'TABLE' table_name '(' column_name column_type 'DEFAULT' default_value ( column_constraints | ) ( ',' ( column_def ( ',' column_def )* ) | ) ( table_constraints | ) ')' ')'"},
-					unlink:  []string{"table_name", "column_name", "column_type", "default_value", "table_constraints"},
+					name: "default_value_column_level",
+					stmt: "stmt_block",
+					replace: map[string]string{
+						"stmt_list": "'CREATE' 'TABLE' table_name '(' column_name column_type 'DEFAULT' default_value ( column_constraints | ) ( ',' ( column_def ( ',' column_def )* ) | ) ( table_constraints | ) ')' ')'",
+					},
+					unlink: []string{"table_name", "column_name", "column_type", "default_value", "table_constraints"},
 				},
 				{name: "delete_stmt", inline: []string{"relation_expr_opt_alias", "where_clause", "returning_clause", "target_list", "target_elem"}},
 				{
