@@ -536,6 +536,7 @@ func (u *sqlSymUnion) referenceActions() ReferenceActions {
 %type <Statement> copy_from_stmt
 
 %type <Statement> create_stmt
+%type <Statement> create_ddl_stmt
 %type <Statement> create_database_stmt
 %type <Statement> create_index_stmt
 %type <Statement> create_table_stmt
@@ -633,7 +634,7 @@ func (u *sqlSymUnion) referenceActions() ReferenceActions {
 %type <ValidationBehavior> opt_validate_behavior
 
 %type <str> opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
-%type <*string> opt_password
+%type <Expr> opt_password
 
 %type <IsolationLevel> transaction_iso_level
 %type <UserPriority>  transaction_user_priority
@@ -1487,15 +1488,19 @@ cancel_query_stmt:
 // CREATE DATABASE, CREATE TABLE, CREATE INDEX, CREATE TABLE AS,
 // CREATE USER, CREATE VIEW
 create_stmt:
+  create_user_stmt     // EXTEND WITH HELP: CREATE USER
+| create_ddl_stmt      // help texts in sub-rule
+| CREATE error         // SHOW HELP: CREATE
+
+create_ddl_stmt:
   create_database_stmt // EXTEND WITH HELP: CREATE DATABASE
 | create_index_stmt    // EXTEND WITH HELP: CREATE INDEX
 | create_table_stmt    // EXTEND WITH HELP: CREATE TABLE
 | create_table_as_stmt // EXTEND WITH HELP: CREATE TABLE
 // Error case for both CREATE TABLE and CREATE TABLE ... AS in one
 | CREATE TABLE error   // SHOW HELP: CREATE TABLE
-| create_user_stmt     // EXTEND WITH HELP: CREATE USER
 | create_view_stmt     // EXTEND WITH HELP: CREATE VIEW
-| CREATE error         // SHOW HELP: CREATE
+
 
 // %Help: DELETE - delete rows from a table
 // %Category: DML
@@ -1692,31 +1697,32 @@ explain_stmt:
 | EXPLAIN '(' error // SHOW HELP: EXPLAIN
 
 preparable_stmt:
-  backup_stmt  // EXTEND WITH HELP: BACKUP
-| cancel_stmt  // help texts in sub-rule
-| delete_stmt  // EXTEND WITH HELP: DELETE
-| import_stmt  // EXTEND WITH HELP: IMPORT
-| insert_stmt  // EXTEND WITH HELP: INSERT
-| pause_stmt   // EXTEND WITH HELP: PAUSE JOB
-| reset_stmt   // help texts in sub-rule
-| restore_stmt // EXTEND WITH HELP: RESTORE
-| resume_stmt  // EXTEND WITH HELP: RESUME JOB
-| select_stmt  // help texts in sub-rule
+  backup_stmt       // EXTEND WITH HELP: BACKUP
+| cancel_stmt       // help texts in sub-rule
+| create_user_stmt  // EXTEND WITH HELP: CREATE USER
+| delete_stmt       // EXTEND WITH HELP: DELETE
+| import_stmt       // EXTEND WITH HELP: IMPORT
+| insert_stmt       // EXTEND WITH HELP: INSERT
+| pause_stmt        // EXTEND WITH HELP: PAUSE JOB
+| reset_stmt        // help texts in sub-rule
+| restore_stmt      // EXTEND WITH HELP: RESTORE
+| resume_stmt       // EXTEND WITH HELP: RESUME JOB
+| select_stmt       // help texts in sub-rule
   {
     $$.val = $1.slct()
   }
 | set_session_stmt  // EXTEND WITH HELP: SET SESSION
 | set_csetting_stmt // EXTEND WITH HELP: SET CLUSTER SETTING
-| show_stmt    // help texts in sub-rule
-| update_stmt  // EXTEND WITH HELP: UPDATE
-| upsert_stmt  // EXTEND WITH HELP: UPSERT
+| show_stmt         // help texts in sub-rule
+| update_stmt       // EXTEND WITH HELP: UPDATE
+| upsert_stmt       // EXTEND WITH HELP: UPSERT
 
 explainable_stmt:
   preparable_stmt
-| alter_stmt   // help texts in sub-rule
-| create_stmt  // help texts in sub-rule
-| drop_stmt    // help texts in sub-rule
-| execute_stmt // EXTEND WITH HELP: EXECUTE
+| alter_stmt       // help texts in sub-rule
+| create_ddl_stmt  // help texts in sub-rule
+| drop_stmt        // help texts in sub-rule
+| execute_stmt     // EXTEND WITH HELP: EXECUTE
 | explain_stmt { /* SKIP DOC */ }
 
 explain_option_list:
@@ -3078,24 +3084,24 @@ truncate_stmt:
 // %Text: CREATE USER [IF NOT EXISTS] <name> [ [WITH] PASSWORD <passwd> ]
 // %SeeAlso: DROP USER, SHOW USERS, WEBDOCS/create-user.html
 create_user_stmt:
-  CREATE USER name opt_password
+  CREATE USER string_or_placeholder opt_password
   {
-    $$.val = &CreateUser{Name: Name($3), Password: $4.strPtr()}
+    $$.val = &CreateUser{Name: $3.expr(), Password: $4.expr()}
   }
-| CREATE USER IF NOT EXISTS name opt_password
+| CREATE USER IF NOT EXISTS string_or_placeholder opt_password
   {
-    $$.val = &CreateUser{Name: Name($6), Password: $7.strPtr(), IfNotExists: true}
+    $$.val = &CreateUser{Name: $6.expr(), Password: $7.expr(), IfNotExists: true}
   }
 | CREATE USER error // SHOW HELP: CREATE USER
 
 opt_password:
-  opt_with PASSWORD SCONST
+  opt_with PASSWORD string_or_placeholder
   {
-    pwd := $3
-    $$.val = &pwd
+    $$.val = $3.expr()
   }
-| /* EMPTY */ {
-    $$.val = (*string)(nil)
+| /* EMPTY */
+  {
+    $$.val = nil
   }
 
 // %Help: CREATE VIEW - create a new view

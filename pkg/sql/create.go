@@ -223,8 +223,8 @@ func (*createIndexNode) Close(context.Context)        {}
 func (*createIndexNode) Values() parser.Datums        { return parser.Datums{} }
 
 type createUserNode struct {
-	n           *parser.CreateUser
-	password    string
+	name        func() (string, error)
+	password    func() (string, error)
 	ifNotExists bool
 }
 
@@ -233,10 +233,6 @@ type createUserNode struct {
 //   notes: postgres allows the creation of users with an empty password. We do
 //          as well, but disallow password authentication for these users.
 func (p *planner) CreateUser(ctx context.Context, n *parser.CreateUser) (planNode, error) {
-	if n.Name == "" {
-		return nil, errors.New("no username specified")
-	}
-
 	tDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), &parser.TableName{DatabaseName: "system", TableName: "users"})
 	if err != nil {
 		return nil, err
@@ -246,15 +242,23 @@ func (p *planner) CreateUser(ctx context.Context, n *parser.CreateUser) (planNod
 		return nil, err
 	}
 
-	var resolvedPassword string
+	name, err := p.TypeAsString(n.Name, "CREATE USER")
+	if err != nil {
+		return nil, err
+	}
+	var password func() (string, error)
 	if n.HasPassword() {
-		resolvedPassword = *n.Password
-		if resolvedPassword == "" {
-			return nil, security.ErrEmptyPassword
+		password, err = p.TypeAsString(n.Password, "CREATE USER")
+		if err != nil {
+			return nil, err
 		}
 	}
 
-	return &createUserNode{n: n, password: resolvedPassword, ifNotExists: n.IfNotExists}, nil
+	return &createUserNode{
+		name:        name,
+		password:    password,
+		ifNotExists: n.IfNotExists,
+	}, nil
 }
 
 const usernameHelp = "usernames are case insensitive, must start with a letter " +
@@ -279,19 +283,35 @@ func NormalizeAndValidateUsername(username string) (string, error) {
 	return username, nil
 }
 
+var errNoUserNameSpecified = errors.New("no username specified")
+
 func (n *createUserNode) Start(params runParams) error {
+	name, err := n.name()
+	if err != nil {
+		return err
+	}
+	if name == "" {
+		return errNoUserNameSpecified
+	}
+	normalizedUsername, err := NormalizeAndValidateUsername(name)
+	if err != nil {
+		return err
+	}
+
 	var hashedPassword []byte
-	if n.password != "" {
-		var err error
-		hashedPassword, err = security.HashPassword(n.password)
+	if n.password != nil {
+		resolvedPassword, err := n.password()
 		if err != nil {
 			return err
 		}
-	}
+		if resolvedPassword == "" {
+			return security.ErrEmptyPassword
+		}
 
-	normalizedUsername, err := NormalizeAndValidateUsername(string(n.n.Name))
-	if err != nil {
-		return err
+		hashedPassword, err = security.HashPassword(resolvedPassword)
+		if err != nil {
+			return err
+		}
 	}
 
 	internalExecutor := InternalExecutor{LeaseManager: params.p.LeaseMgr()}
