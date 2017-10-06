@@ -523,9 +523,9 @@ CREATE TABLE tab0(
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT k FROM tab0 WHERE (a IN (6) AND a > 6) OR b >= 4
 ----
-0  render  ·         ·                                     (k)        ·
+0  render  ·         ·                                     (k)        key(k)
 0  ·       render 0  test.tab0.k                           ·          ·
-1  scan    ·         ·                                     (k, a, b)  ·
+1  scan    ·         ·                                     (k, a, b)  key(k)
 1  ·       table     tab0@primary                          ·          ·
 1  ·       spans     ALL                                   ·          ·
 1  ·       filter    ((a IN (6)) AND (a > 6)) OR (b >= 4)  ·          ·

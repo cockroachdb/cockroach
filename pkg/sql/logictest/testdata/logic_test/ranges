@@ -114,9 +114,9 @@ EXPLAIN (METADATA) ALTER TABLE t SPLIT AT SELECT k1,k2 FROM t ORDER BY k1 LIMIT 
 ----
 Level  Type    Field  Description  Columns                           Ordering
 0      split   ·      ·            (key, pretty)                     ·
-1      limit   ·      ·            (k1, k2)                          +k1
-2      render  ·      ·            (k1, k2)                          +k1
-3      scan    ·      ·            (k1, k2, v[omitted], w[omitted])  +k1
+1      limit   ·      ·            (k1, k2)                          key(k1,k2); +k1
+2      render  ·      ·            (k1, k2)                          key(k1,k2); +k1
+3      scan    ·      ·            (k1, k2, v[omitted], w[omitted])  key(k1,k2); +k1
 3      ·       table  t@primary    ·                                 ·
 3      ·       spans  ALL          ·                                 ·
 3      ·       limit  3            ·                                 ·

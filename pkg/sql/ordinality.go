@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
@@ -142,6 +143,9 @@ func (o *ordinalityNode) optimizeOrdering() {
 			ColIdx:    len(o.columns) - 1,
 			Direction: encoding.Ascending,
 		}}
-		o.ordering.isKey = true
 	}
+	// The ordinality column forms a key.
+	var k util.FastIntSet
+	k.Add(len(o.columns) - 1)
+	o.ordering.keySets = append(o.ordering.keySets, k)
 }

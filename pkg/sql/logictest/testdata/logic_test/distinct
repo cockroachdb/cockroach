@@ -195,3 +195,62 @@ query I
 SELECT COUNT(*) FROM (SELECT DISTINCT y FROM xyz)
 ----
 3
+
+
+query ITTTTT
+EXPLAIN (METADATA) SELECT DISTINCT x FROM xyz
+----
+0  render  ·      ·            (x)                          key(x)
+1  scan    ·      ·            (x, y[omitted], z[omitted])  key(x)
+1  ·       table  xyz@primary  ·                            ·
+1  ·       spans  ALL          ·                            ·
+
+query ITTTTT
+EXPLAIN (METADATA) SELECT DISTINCT x, y, z FROM xyz
+----
+0  scan  ·      ·            (x, y, z)  key(x)
+0  ·     table  xyz@primary  ·          ·
+0  ·     spans  ALL          ·          ·
+
+statement ok
+CREATE TABLE abcd (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  PRIMARY KEY (a, b, c),
+  UNIQUE INDEX (d, b)
+)
+
+query ITTTTT
+EXPLAIN (METADATA) SELECT DISTINCT 1, d, b FROM abcd ORDER BY d, b
+----
+0  render  ·      ·                  ("1", d, b)                     "1"=CONST; key(d,b); +d,+b
+1  scan    ·      ·                  (a[omitted], b, c[omitted], d)  key(b,d); +d,+b
+1  ·       table  abcd@abcd_d_b_key  ·                               ·
+1  ·       spans  ALL                ·                               ·
+
+query ITTTTT
+EXPLAIN (METADATA) SELECT DISTINCT a, b FROM abcd
+----
+0  distinct  ·      ·             (a, b)                          +a,+b
+0  ·         key    a, b          ·                               ·
+1  render    ·      ·             (a, b)                          +a,+b
+2  scan      ·      ·             (a, b, c[omitted], d[omitted])  key(a,b,c); +a,+b
+2  ·         table  abcd@primary  ·                               ·
+2  ·         spans  ALL           ·                               ·
+
+query ITTTTT
+EXPLAIN (METADATA) SELECT DISTINCT a, b, c FROM abcd
+----
+0  render  ·      ·             (a, b, c)              key(a,b,c)
+1  scan    ·      ·             (a, b, c, d[omitted])  key(a,b,c)
+1  ·       table  abcd@primary  ·                      ·
+1  ·       spans  ALL           ·                      ·
+
+query ITTTTT
+EXPLAIN (METADATA) SELECT DISTINCT a, b, c, d FROM abcd
+----
+0  scan  ·      ·             (a, b, c, d)  key(a,b,c)
+0  ·     table  abcd@primary  ·             ·
+0  ·     spans  ALL           ·             ·

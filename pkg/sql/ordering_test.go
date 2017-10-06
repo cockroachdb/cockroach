@@ -44,18 +44,15 @@ func makeColumnOrdering(args ...interface{}) sqlbase.ColumnOrdering {
 	return res
 }
 
-type isKeyType struct{}
-
-var isKey = isKeyType{}
-
 type equivGroups [][]int
 type constCols []int
+type keySets [][]int
 
 // makeOrdInfo creates an orderingInfo. The parameters supported are:
 //  - ColumnOrdering: ordering
 //  - equivGroups: equivalency groups
 //  - constCols: constant columns
-//  - isKeyType: "key" indicator
+//  - keySets: key sets
 //
 // The parameters can be passed in any order. Examples:
 //   makeOrdInfo(
@@ -92,8 +89,13 @@ func makeOrdInfo(args ...interface{}) orderingInfo {
 			for _, i := range a {
 				ord.constantCols.Add(ord.eqGroups.Find(i))
 			}
-		case isKeyType:
-			ord.isKey = true
+		case keySets:
+			ord.keySets = make([]util.FastIntSet, len(a))
+			for i := range a {
+				for _, j := range a[i] {
+					ord.keySets[i].Add(ord.eqGroups.Find(j))
+				}
+			}
 		case equivGroups:
 			// Already handled
 		default:
@@ -109,9 +111,15 @@ func ordEqual(a, b orderingInfo) bool {
 	b.check()
 	if !a.eqGroups.Equals(b.eqGroups) ||
 		!a.constantCols.Equals(b.constantCols) ||
-		a.isKey != b.isKey ||
+		len(a.keySets) != len(b.keySets) ||
 		len(a.ordering) != len(b.ordering) {
 		return false
+	}
+	// Verify the key sets match.
+	for i := range a.keySets {
+		if !a.keySets[i].Equals(b.keySets[i]) {
+			return false
+		}
 	}
 
 	// Verify the ordering is the same.
@@ -184,10 +192,10 @@ func TestComputeOrderingMatch(t *testing.T) {
 			},
 		},
 		{
-			// Ordering with no constant columns but with isKey.
+			// Ordering with no constant columns but with key.
 			existing: makeOrdInfo(
 				makeColumnOrdering(1, desc, 2, asc),
-				isKey,
+				keySets{{1, 2}},
 			),
 			cases: []desiredCase{
 				defTestCase(1, 0, makeColumnOrdering(1, desc, 5, asc)),
@@ -199,11 +207,11 @@ func TestComputeOrderingMatch(t *testing.T) {
 			},
 		},
 		{
-			// Ordering with column groups, no constant columns but with isKey.
+			// Ordering with column groups, no constant columns but with key.
 			existing: makeOrdInfo(
 				equivGroups{{1, 2, 3}},
 				makeColumnOrdering(1, desc, 4, asc),
-				isKey,
+				keySets{{1, 4}},
 			),
 			cases: []desiredCase{
 				defTestCase(1, 0, makeColumnOrdering(1, desc, 5, asc)),
@@ -271,11 +279,11 @@ func TestComputeOrderingMatch(t *testing.T) {
 			},
 		},
 		{
-			// Ordering with constant columns and isKey.
+			// Ordering with constant columns and key.
 			existing: makeOrdInfo(
 				constCols{0, 5, 6},
 				makeColumnOrdering(1, desc, 2, asc),
-				isKey,
+				keySets{{1, 2}},
 			),
 			cases: []desiredCase{
 				defTestCase(2, 0, makeColumnOrdering(1, desc, 5, asc)),
@@ -290,12 +298,12 @@ func TestComputeOrderingMatch(t *testing.T) {
 			},
 		},
 		{
-			// Ordering with column groups, constant columns and isKey.
+			// Ordering with column groups, constant columns and key.
 			existing: makeOrdInfo(
 				equivGroups{{1, 8}, {2, 9}},
 				constCols{0, 5, 6},
 				makeColumnOrdering(1, desc, 2, asc),
-				isKey,
+				keySets{{1, 2}},
 			),
 			cases: []desiredCase{
 				defTestCase(2, 0, makeColumnOrdering(8, desc, 5, asc)),
@@ -371,18 +379,22 @@ func TestTrimOrderingGuarantee(t *testing.T) {
 								used.Add(j)
 							}
 
+							var keySet util.FastIntSet
 							for i := 0; i < numOrderCols; i++ {
 								for tries := 0; ; tries++ {
 									// Increase the range if we can't find a new valid id.
 									x := rng.Intn(10 + tries/10)
 									if o.eqGroups.Find(x) == x && !used.Contains(x) {
 										used.Add(x)
+										keySet.Add(x)
 										o.addOrderColumn(x, genDir(rng))
 										break
 									}
 								}
 							}
-							o.isKey = isKey
+							if isKey {
+								o.addKeySet(keySet)
+							}
 							o.check()
 							for _, desiredLen := range []int{0, 1, 2, 4, 5} {
 								for desiredTries := 0; desiredTries < 10; desiredTries++ {
@@ -425,11 +437,12 @@ func TestTrimOrdering(t *testing.T) {
 			name: "basic-prefix-1",
 			ord: makeOrdInfo(
 				makeColumnOrdering(1, asc, 2, desc),
-				isKey,
+				keySets{{1, 2}},
 			),
 			desired: makeColumnOrdering(1, asc),
 			expected: makeOrdInfo(
 				makeColumnOrdering(1, asc),
+				keySets{{1, 2}},
 			),
 		},
 		{
@@ -437,34 +450,38 @@ func TestTrimOrdering(t *testing.T) {
 			ord: makeOrdInfo(
 				equivGroups{{1, 5}},
 				makeColumnOrdering(1, asc, 2, desc),
-				isKey,
+				keySets{{1, 2}},
 			),
 			desired: makeColumnOrdering(1, asc, 5, asc),
 			expected: makeOrdInfo(
 				equivGroups{{1, 5}},
 				makeColumnOrdering(1, asc),
+				keySets{{1, 2}},
 			),
 		},
 		{
 			name: "direction-mismatch",
 			ord: makeOrdInfo(
 				makeColumnOrdering(1, asc, 2, desc),
-				isKey,
+				keySets{{1, 2}},
 			),
-			desired:  makeColumnOrdering(1, desc),
-			expected: makeOrdInfo(),
+			desired: makeColumnOrdering(1, desc),
+			expected: makeOrdInfo(
+				keySets{{1, 2}},
+			),
 		},
 		{
 			name: "const-columns-1",
 			ord: makeOrdInfo(
 				constCols{0, 5, 6},
 				makeColumnOrdering(1, desc, 2, desc),
-				isKey,
+				keySets{{1, 2}},
 			),
 			desired: makeColumnOrdering(5, asc, 1, desc),
 			expected: makeOrdInfo(
 				constCols{0, 5, 6},
 				makeColumnOrdering(1, desc),
+				keySets{{1, 2}},
 			),
 		},
 
@@ -473,12 +490,13 @@ func TestTrimOrdering(t *testing.T) {
 			ord: makeOrdInfo(
 				constCols{0, 5, 6},
 				makeColumnOrdering(1, desc, 2, desc, 3, asc),
-				isKey,
+				keySets{{1, 2, 3}},
 			),
 			desired: makeColumnOrdering(5, asc, 1, desc, 0, desc, 2, desc),
 			expected: makeOrdInfo(
 				constCols{0, 5, 6},
 				makeColumnOrdering(1, desc, 2, desc),
+				keySets{{1, 2, 3}},
 			),
 		},
 
@@ -488,13 +506,14 @@ func TestTrimOrdering(t *testing.T) {
 				equivGroups{{1, 7}, {2, 9}},
 				constCols{0, 5, 6},
 				makeColumnOrdering(1, desc, 2, desc),
-				isKey,
+				keySets{{1, 2}},
 			),
 			desired: makeColumnOrdering(5, asc, 1, desc, 6, desc, 7, asc),
 			expected: makeOrdInfo(
 				equivGroups{{1, 7}, {2, 9}},
 				constCols{0, 5, 6},
 				makeColumnOrdering(1, desc),
+				keySets{{1, 2}},
 			),
 		},
 		{
@@ -502,11 +521,12 @@ func TestTrimOrdering(t *testing.T) {
 			ord: makeOrdInfo(
 				constCols{0, 5, 6},
 				makeColumnOrdering(1, desc, 2, desc, 3, asc),
-				isKey,
+				keySets{{1, 2, 3}},
 			),
 			desired: makeColumnOrdering(5, asc, 4, asc),
 			expected: makeOrdInfo(
 				constCols{0, 5, 6},
+				keySets{{1, 2, 3}},
 			),
 		},
 	}
@@ -617,7 +637,7 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 			name: "key-a",
 			a: makeOrdInfo(
 				makeColumnOrdering(1, asc),
-				isKey,
+				keySets{{1}},
 			),
 			b: makeOrdInfo(
 				makeColumnOrdering(3, asc, 4, desc),
@@ -634,7 +654,7 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 			),
 			b: makeOrdInfo(
 				makeColumnOrdering(3, asc),
-				isKey,
+				keySets{{3}},
 			),
 			colA:     []int{1, 2},
 			colB:     []int{3, 4},
@@ -724,6 +744,7 @@ func TestProjectOrdering(t *testing.T) {
 	ord := makeOrdInfo(
 		equivGroups{{0, 1, 2}, {3, 4}, {5, 6, 7}},
 		constCols{3, 8, 9},
+		keySets{{0, 5}, {5, 10}, {0, 10, 11}},
 		makeColumnOrdering(0, asc, 10, asc, 5, desc),
 	)
 	testCases := []struct {
@@ -754,6 +775,7 @@ func TestProjectOrdering(t *testing.T) {
 			columns: []int{4, 7, 1},
 			expected: makeOrdInfo(
 				constCols{0},
+				keySets{{1, 2}},
 				makeColumnOrdering(2, asc),
 			),
 		},
@@ -761,6 +783,7 @@ func TestProjectOrdering(t *testing.T) {
 			columns: []int{0, 3, 5, 10, 8},
 			expected: makeOrdInfo(
 				constCols{1, 4},
+				keySets{{0, 2}, {2, 3}},
 				makeColumnOrdering(0, asc, 3, asc, 2, desc),
 			),
 		},
@@ -769,6 +792,7 @@ func TestProjectOrdering(t *testing.T) {
 			expected: makeOrdInfo(
 				equivGroups{{0, 1, 2}, {3, 4}, {5, 6}},
 				constCols{3, 8},
+				keySets{{0, 5}, {5, 7}},
 				makeColumnOrdering(0, asc, 7, asc, 5, desc),
 			),
 		},
