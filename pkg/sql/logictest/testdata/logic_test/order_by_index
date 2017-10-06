@@ -105,8 +105,8 @@ EXPLAIN(METADATA) SELECT k FROM kv a NATURAL JOIN kv ORDER BY INDEX kv@foo
 ----
 0  sort    ·               ·                (k)                                                                                  ·
 0  ·       order           -v               ·                                                                                    ·
-1  render  ·               ·                (k, v)                                                                               ·
-2  join    ·               ·                (k, v[omitted], k[hidden,omitted], v[hidden,omitted], k[hidden,omitted], v[hidden])  k=k=k; v=v=v
+1  render  ·               ·                (k, v)                                                                               key(k)
+2  join    ·               ·                (k, v[omitted], k[hidden,omitted], v[hidden,omitted], k[hidden,omitted], v[hidden])  k=k=k; v=v=v; key(k)
 2  ·       type            inner            ·                                                                                    ·
 2  ·       equality        (k, v) = (k, v)  ·                                                                                    ·
 2  ·       mergeJoinOrder  +"(k=k)"         ·                                                                                    ·
@@ -123,8 +123,8 @@ EXPLAIN(METADATA) SELECT k FROM kv@foo a NATURAL JOIN kv@foo ORDER BY INDEX kv@f
 ----
 0  nosort  ·               ·                  (k)                                                                                  ·
 0  ·       order           -v                 ·                                                                                    ·
-1  render  ·               ·                  (k, v)                                                                               -v
-2  join    ·               ·                  (k, v[omitted], k[hidden,omitted], v[hidden,omitted], k[hidden,omitted], v[hidden])  k=k=k; v=v=v; -v
+1  render  ·               ·                  (k, v)                                                                               key(k,v); -v
+2  join    ·               ·                  (k, v[omitted], k[hidden,omitted], v[hidden,omitted], k[hidden,omitted], v[hidden])  k=k=k; v=v=v; key(k,v); -v
 2  ·       type            inner              ·                                                                                    ·
 2  ·       equality        (k, v) = (k, v)    ·                                                                                    ·
 2  ·       mergeJoinOrder  -"(v=v)",+"(k=k)"  ·                                                                                    ·

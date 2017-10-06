@@ -754,7 +754,7 @@ EXPLAIN (METADATA) DELETE FROM t WHERE a = 3 RETURNING b
 ----
 0  delete  ·      ·          (b)        ·
 0  ·       from   t          ·          ·
-1  scan    ·      ·          (a, b, c)  key(a)
+1  scan    ·      ·          (a, b, c)  a=CONST; key()
 1  ·       table  t@primary  ·          ·
 1  ·       spans  /3-/4      ·          ·
 

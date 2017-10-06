@@ -189,8 +189,11 @@ func (p *planner) selectIndex(
 		}
 	}
 
-	if analyzeOrdering != nil {
-		for _, c := range candidates {
+	for _, c := range candidates {
+		// Compute the prefix of the index for which we have exact constraints. This
+		// prefix is inconsequential for ordering because the values are identical.
+		c.exactPrefix = c.constraints.exactPrefix(&s.p.evalCtx)
+		if analyzeOrdering != nil {
 			c.analyzeOrdering(ctx, s, analyzeOrdering, preferOrderMatching)
 		}
 	}
@@ -408,10 +411,6 @@ func (v *indexInfo) analyzeExprs(exprs []parser.TypedExprs) {
 func (v *indexInfo) analyzeOrdering(
 	ctx context.Context, scan *scanNode, analyzeOrdering analyzeOrderingFn, preferOrderMatching bool,
 ) {
-	// Compute the prefix of the index for which we have exact constraints. This
-	// prefix is inconsequential for ordering because the values are identical.
-	v.exactPrefix = v.constraints.exactPrefix(&scan.p.evalCtx)
-
 	// Analyze the ordering provided by the index (either forward or reverse).
 	fwdIndexOrdering := scan.computeOrdering(v.index, v.exactPrefix, false)
 	revIndexOrdering := scan.computeOrdering(v.index, v.exactPrefix, true)
