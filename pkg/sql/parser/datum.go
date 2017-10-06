@@ -1698,7 +1698,7 @@ func (d *DTimestampTZ) Format(buf *bytes.Buffer, f FmtFlags) {
 	if !f.bareStrings {
 		buf.WriteByte('\'')
 	}
-	buf.WriteString(d.UTC().Format(TimestampOutputFormat))
+	buf.WriteString(d.In(d.Location()).Format(TimestampOutputFormat))
 	if !f.bareStrings {
 		buf.WriteByte('\'')
 	}
