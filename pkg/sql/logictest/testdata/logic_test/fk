@@ -132,6 +132,36 @@ statement ok
 INSERT INTO "user content"."customer reviews" (id, product, body) VALUES (2, '780', 'would not buy again')
 
 statement ok
+CREATE TABLE "user content".review_stats (
+  id INT PRIMARY KEY,
+  upvotes INT,
+  CONSTRAINT reviewfk FOREIGN KEY (id) REFERENCES "user content"."customer reviews"
+)
+
+query TTTTT
+SHOW CONSTRAINTS FROM "user content".review_stats
+----
+review_stats  primary   PRIMARY KEY  id  NULL
+review_stats  reviewfk  FOREIGN KEY  id  customer reviews.[id]
+
+statement error pgcode 23503 foreign key violation: value \[5\] not found in customer reviews@primary \[id\]
+INSERT INTO "user content".review_stats (id, upvotes) VALUES (5, 1)
+
+statement ok
+INSERT INTO "user content".review_stats (id, upvotes) VALUES (2, 1)
+
+statement error pgcode 23503 foreign key violation: values \[2\] in columns \[id\] referenced in table "review_stats"
+DELETE FROM "user content"."customer reviews" WHERE id = 2
+
+statement ok
+ALTER TABLE "user content".review_stats DROP CONSTRAINT reviewfk
+
+query TTTTT
+SHOW CONSTRAINTS FROM "user content".review_stats
+----
+review_stats  primary   PRIMARY KEY  id  NULL
+
+statement ok
 DELETE FROM "user content"."customer reviews"
 
 statement error pgcode 23503 foreign key violation: value \['790'\] not found in products@primary \[sku\]
@@ -748,7 +778,6 @@ DROP TABLE refers1
 
 statement ok
 COMMIT
-
 
 statement ok
 CREATE TABLE a (id BIGSERIAL NOT NULL, self_id INT, b_id INT UNIQUE NOT NULL, PRIMARY KEY (id));
