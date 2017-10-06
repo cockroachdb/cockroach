@@ -2448,7 +2448,7 @@ func TestReplicaCommandQueueCancellationLocal(t *testing.T) {
 	}
 
 	// Used only to block the other requests. Not a necessary part of the
-	// scenerio. See the comment on RunWithoutInitialSpan.
+	// scenario. See the comment on RunWithoutInitialSpan.
 	heartbeatBa := newBa(true /* withTxn */)
 	heartbeatBa.Add(&roachpb.HeartbeatTxnRequest{
 		Span: roachpb.Span{
@@ -2510,7 +2510,14 @@ func TestReplicaCommandQueueCancellationLocal(t *testing.T) {
 			Key: intentKey,
 		},
 		IntentTxn: txn.TxnMeta,
-		Status:    roachpb.PENDING,
+		// NB: This test originally used PENDING but the test requires the abort
+		// cache key to be declared here, and this is no more the case due to an
+		// optimization. Use an ABORTED resolve instead...
+		Status: roachpb.ABORTED,
+		// ... but with Poison=false which accesses the abort cache by *clearing*
+		// it. Poison=true would fail the test since the transaction would not be
+		// able to issue further commands.
+		Poison: false,
 	})
 
 	getKeyBa := newBa(true /* withTxn */)
