@@ -694,22 +694,22 @@ func getOutputColumnsFromScanNode(n *scanNode) []uint32 {
 // convertOrdering maps the columns in ord.ordering to the output columns of a
 // processor.
 func (dsp *distSQLPlanner) convertOrdering(
-	ord orderingInfo, planToStreamColMap []int,
+	props physicalProps, planToStreamColMap []int,
 ) distsqlrun.Ordering {
-	if len(ord.ordering) == 0 {
+	if len(props.ordering) == 0 {
 		return distsqlrun.Ordering{}
 	}
 	result := distsqlrun.Ordering{
-		Columns: make([]distsqlrun.Ordering_Column, len(ord.ordering)),
+		Columns: make([]distsqlrun.Ordering_Column, len(props.ordering)),
 	}
-	for i, o := range ord.ordering {
+	for i, o := range props.ordering {
 		streamColIdx := planToStreamColMap[o.ColIdx]
 		if streamColIdx == -1 {
 			// Find any column in the equivalency group that is part of the processor
 			// output.
-			group := ord.eqGroups.Find(o.ColIdx)
+			group := props.eqGroups.Find(o.ColIdx)
 			for col, pos := range planToStreamColMap {
-				if pos != -1 && ord.eqGroups.Find(col) == group {
+				if pos != -1 && props.eqGroups.Find(col) == group {
 					streamColIdx = pos
 					break
 				}
@@ -773,14 +773,14 @@ func (dsp *distSQLPlanner) createTableReaders(
 		planToStreamColMap[i] = i
 	}
 
-	if len(p.ResultRouters) > 1 && len(n.ordering.ordering) > 0 {
+	if len(p.ResultRouters) > 1 && len(n.props.ordering) > 0 {
 		// Make a note of the fact that we have to maintain a certain ordering
 		// between the parallel streams.
 		//
 		// This information is taken into account by the AddProjection call below:
 		// specifically, it will make sure these columns are kept even if they are
 		// not in the projection (e.g. "SELECT v FROM kv ORDER BY k").
-		p.SetMergeOrdering(dsp.convertOrdering(n.ordering, planToStreamColMap))
+		p.SetMergeOrdering(dsp.convertOrdering(n.props, planToStreamColMap))
 	}
 	p.SetLastStagePost(post, getTypesForPlanResult(n, planToStreamColMap))
 
@@ -1199,7 +1199,7 @@ func (dsp *distSQLPlanner) selectRenders(p *physicalPlan, n *renderNode) {
 // reflect the sort node.
 func (dsp *distSQLPlanner) addSorters(p *physicalPlan, n *sortNode) {
 
-	matchLen := planOrdering(n.plan).computeMatch(n.ordering)
+	matchLen := planPhysicalProps(n.plan).computeMatch(n.ordering)
 
 	if matchLen < len(n.ordering) {
 		// Sorting is needed; we add a stage of sorting processors.
@@ -1355,7 +1355,7 @@ func (dsp *distSQLPlanner) addAggregators(
 		// We can't do local aggregation, but we can do local distinct processing
 		// to reduce streaming duplicates, and aggregate on the final node.
 
-		ordering := dsp.convertOrdering(planOrdering(n.plan), p.planToStreamColMap).Columns
+		ordering := dsp.convertOrdering(planPhysicalProps(n.plan), p.planToStreamColMap).Columns
 		orderedColsMap := make(map[uint32]struct{})
 		for _, ord := range ordering {
 			orderedColsMap[ord.ColIdx] = struct{}{}
@@ -1791,7 +1791,7 @@ ColLoop:
 			distsqlrun.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
 			post,
 			getTypesForPlanResult(n, plan.planToStreamColMap),
-			dsp.convertOrdering(planOrdering(n), plan.planToStreamColMap),
+			dsp.convertOrdering(planPhysicalProps(n), plan.planToStreamColMap),
 		)
 	} else {
 		// Use a single join reader (if there is a single stream, on that node; if
@@ -2164,7 +2164,7 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 	// Joiners may guarantee an ordering to outputs, so we ensure that
 	// ordering is propagated through the input synchronizer of the next stage.
 	// We can propagate the ordering from either side, we use the left side here.
-	p.SetMergeOrdering(dsp.convertOrdering(n.ordering, p.planToStreamColMap))
+	p.SetMergeOrdering(dsp.convertOrdering(n.props, p.planToStreamColMap))
 	return p, nil
 }
 

@@ -39,11 +39,11 @@ import (
 // common SQL optimizations*. Its use should be limited in clients to
 // situations where the corresponding performance cost is affordable.
 type ordinalityNode struct {
-	source   planNode
-	ordering orderingInfo
-	columns  sqlbase.ResultColumns
-	row      parser.Datums
-	curCnt   int64
+	source  planNode
+	props   physicalProps
+	columns sqlbase.ResultColumns
+	row     parser.Datums
+	curCnt  int64
 }
 
 func (p *planner) wrapOrdinality(ds planDataSource) planDataSource {
@@ -51,10 +51,10 @@ func (p *planner) wrapOrdinality(ds planDataSource) planDataSource {
 	srcColumns := planColumns(src)
 
 	res := &ordinalityNode{
-		source:   src,
-		ordering: planOrdering(src),
-		row:      make(parser.Datums, len(srcColumns)+1),
-		curCnt:   1,
+		source: src,
+		props:  planPhysicalProps(src),
+		row:    make(parser.Datums, len(srcColumns)+1),
+		curCnt: 1,
 	}
 
 	// Allocate an extra column for the ordinality values.
@@ -124,22 +124,22 @@ func (o *ordinalityNode) optimizeOrdering() {
 	// We are going to "optimize" the ordering. We had an ordering
 	// initially from the source, but expand() may have caused it to
 	// change. So here retrieve the ordering of the source again.
-	origOrdering := planOrdering(o.source)
+	origOrdering := planPhysicalProps(o.source)
 
 	if len(origOrdering.ordering) > 0 {
 		// TODO(knz/radu): we basically have two simultaneous orderings.
-		// What we really want is something that orderingInfo cannot
+		// What we really want is something that physicalProps cannot
 		// currently express: that the rows are ordered by a set of
 		// columns AND at the same time they are also ordered by a
 		// different set of columns. However since ordinalityNode is
 		// currently the only case where this happens we consider it's not
 		// worth the hassle and just use the source ordering.
-		o.ordering = origOrdering.copy()
+		o.props = origOrdering.copy()
 	} else {
 		// No ordering defined in the source, so create a new one.
-		o.ordering.eqGroups = origOrdering.eqGroups.Copy()
-		o.ordering.constantCols = origOrdering.constantCols.Copy()
-		o.ordering.ordering = sqlbase.ColumnOrdering{{
+		o.props.eqGroups = origOrdering.eqGroups.Copy()
+		o.props.constantCols = origOrdering.constantCols.Copy()
+		o.props.ordering = sqlbase.ColumnOrdering{{
 			ColIdx:    len(o.columns) - 1,
 			Direction: encoding.Ascending,
 		}}
@@ -147,5 +147,5 @@ func (o *ordinalityNode) optimizeOrdering() {
 	// The ordinality column forms a key.
 	var k util.FastIntSet
 	k.Add(len(o.columns) - 1)
-	o.ordering.keySets = append(o.ordering.keySets, k)
+	o.props.keySets = append(o.props.keySets, k)
 }

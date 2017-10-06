@@ -24,10 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
-// orderingInfo describes the physical properties of a set of results:
+// physicalProps describes the physical properties of a set of results:
 // equivalent columns, ordering information, etc.
 //
-// TODO(radu): rename this structure to "physicalProperties" or similar.
 // The intention is that this will evolve towards what is described in
 // "Fundamental techniques for order optimization" by Simmen et al.
 //
@@ -94,7 +93,7 @@ import (
 //  - keys: if we have a key on columns (a, b) and the results have the ordering
 //    a+,b+ we can satisfy any desired ordering that has a+,b+ as a prefix (such
 //    as a+,b+,c-,d+).
-type orderingInfo struct {
+type physicalProps struct {
 	// column equivalency groups. This structure assigns a "representative" for
 	// each group, which is the smallest column in that group (returned by Find);
 	// only representatives can appear in the other fields below.
@@ -116,35 +115,35 @@ type orderingInfo struct {
 }
 
 // check verifies the invariants of the structure.
-func (ord orderingInfo) check() {
+func (pp physicalProps) check() {
 	// Only equivalency group representatives show up in constantCols.
-	for c, ok := ord.constantCols.Next(0); ok; c, ok = ord.constantCols.Next(c + 1) {
-		if repr := ord.eqGroups.Find(c); repr != c {
+	for c, ok := pp.constantCols.Next(0); ok; c, ok = pp.constantCols.Next(c + 1) {
+		if repr := pp.eqGroups.Find(c); repr != c {
 			panic(fmt.Sprintf("non-representative const column %d (representative: %d)", c, repr))
 		}
 	}
 	// Only equivalency group representatives show up in keySets.
-	for _, k := range ord.keySets {
+	for _, k := range pp.keySets {
 		for c, ok := k.Next(0); ok; c, ok = k.Next(c + 1) {
-			if repr := ord.eqGroups.Find(c); repr != c {
+			if repr := pp.eqGroups.Find(c); repr != c {
 				panic(fmt.Sprintf("non-representative key set column %d (representative: %d)", c, repr))
 			}
-			if ord.constantCols.Contains(c) {
+			if pp.constantCols.Contains(c) {
 				panic(fmt.Sprintf("const column %d in key set %s", c, k))
 			}
 		}
 	}
 	var seen util.FastIntSet
-	for _, o := range ord.ordering {
-		if ord.groupContainsKey(seen) {
+	for _, o := range pp.ordering {
+		if pp.groupContainsKey(seen) {
 			panic(fmt.Sprintf("ordering contains columns after forming a key"))
 		}
 		// Only equivalency group representatives show up in ordering.
-		if repr := ord.eqGroups.Find(o.ColIdx); repr != o.ColIdx {
+		if repr := pp.eqGroups.Find(o.ColIdx); repr != o.ColIdx {
 			panic(fmt.Sprintf("non-representative order column %d (representative: %d)", o.ColIdx, repr))
 		}
 		// The ordering should not contain any constant or redundant columns.
-		if ord.constantCols.Contains(o.ColIdx) {
+		if pp.constantCols.Contains(o.ColIdx) {
 			panic(fmt.Sprintf("const column %d appears in ordering", o.ColIdx))
 		}
 		if seen.Contains(o.ColIdx) {
@@ -156,8 +155,8 @@ func (ord orderingInfo) check() {
 
 // Returns true if there is a keySet that is a subset of cols.
 // Assumes cols contains only column group representatives.
-func (ord *orderingInfo) groupContainsKey(cols util.FastIntSet) bool {
-	for _, k := range ord.keySets {
+func (pp *physicalProps) groupContainsKey(cols util.FastIntSet) bool {
+	for _, k := range pp.keySets {
 		if k.SubsetOf(cols) {
 			return true
 		}
@@ -171,15 +170,15 @@ func (ord *orderingInfo) groupContainsKey(cols util.FastIntSet) bool {
 //
 // An example of a redundant column is if we have an order A+,B+,C+ but A and C
 // are in an equivalence group; the reduced ordering is A+,B+.
-func (ord *orderingInfo) reduce(order sqlbase.ColumnOrdering) sqlbase.ColumnOrdering {
+func (pp *physicalProps) reduce(order sqlbase.ColumnOrdering) sqlbase.ColumnOrdering {
 	// We only allocate the result if we need to make modifications.
 	var result sqlbase.ColumnOrdering
 
 	// Set of column groups seen so far.
 	var groupsSeen util.FastIntSet
 	for i, o := range order {
-		group := ord.eqGroups.Find(o.ColIdx)
-		if ord.groupContainsKey(groupsSeen) {
+		group := pp.eqGroups.Find(o.ColIdx)
+		if pp.groupContainsKey(groupsSeen) {
 			// The group of columns we added so far contains a key; further columns
 			// are all redundant.
 			if result == nil {
@@ -187,7 +186,7 @@ func (ord *orderingInfo) reduce(order sqlbase.ColumnOrdering) sqlbase.ColumnOrde
 			}
 			return result
 		}
-		redundant := groupsSeen.Contains(group) || ord.constantCols.Contains(group)
+		redundant := groupsSeen.Contains(group) || pp.constantCols.Contains(group)
 		groupsSeen.Add(group)
 		if result == nil {
 			if !redundant && o.ColIdx == group {
@@ -210,7 +209,7 @@ func (ord *orderingInfo) reduce(order sqlbase.ColumnOrdering) sqlbase.ColumnOrde
 	return result
 }
 
-// Format pretty-prints the orderingInfo to a stream.
+// Format pretty-prints the physicalProps to a stream.
 // If columns is not nil, column names are printed instead of column indexes.
 //
 // The output is a series of information "groups" separated by semicolons; each
@@ -221,8 +220,8 @@ func (ord *orderingInfo) reduce(order sqlbase.ColumnOrdering) sqlbase.ColumnOrde
 //
 // Example:
 //   a=b=c; d=e=f; g=CONST; h=CONST; b+,d-
-func (ord *orderingInfo) Format(buf *bytes.Buffer, columns sqlbase.ResultColumns) {
-	ord.check()
+func (pp *physicalProps) Format(buf *bytes.Buffer, columns sqlbase.ResultColumns) {
+	pp.check()
 	printCol := func(buf *bytes.Buffer, columns sqlbase.ResultColumns, colIdx int) {
 		if columns == nil || colIdx >= len(columns) {
 			fmt.Fprintf(buf, "@%d", colIdx+1)
@@ -233,8 +232,8 @@ func (ord *orderingInfo) Format(buf *bytes.Buffer, columns sqlbase.ResultColumns
 
 	// Print any equivalency groups.
 	var groups util.FastIntSet
-	for i := 0; i < ord.eqGroups.Len(); i++ {
-		representative := ord.eqGroups.Find(i)
+	for i := 0; i < pp.eqGroups.Len(); i++ {
+		representative := pp.eqGroups.Find(i)
 		if representative != i {
 			// We found a multi-column group.
 			groups.Add(representative)
@@ -252,23 +251,23 @@ func (ord *orderingInfo) Format(buf *bytes.Buffer, columns sqlbase.ResultColumns
 		semiColon()
 		// The representative is always the first element in the group.
 		printCol(buf, columns, r)
-		for i := r + 1; i < ord.eqGroups.Len(); i++ {
-			if ord.eqGroups.Find(i) == r {
+		for i := r + 1; i < pp.eqGroups.Len(); i++ {
+			if pp.eqGroups.Find(i) == r {
 				buf.WriteByte('=')
 				printCol(buf, columns, i)
 			}
 		}
 	}
 	// Print the constant columns.
-	if !ord.constantCols.Empty() {
-		for _, c := range ord.constantCols.Ordered() {
+	if !pp.constantCols.Empty() {
+		for _, c := range pp.constantCols.Ordered() {
 			semiColon()
 			printCol(buf, columns, c)
 			buf.WriteString("=CONST")
 		}
 	}
 
-	for _, k := range ord.keySets {
+	for _, k := range pp.keySets {
 		semiColon()
 		buf.WriteString("key(")
 		first := true
@@ -283,7 +282,7 @@ func (ord *orderingInfo) Format(buf *bytes.Buffer, columns sqlbase.ResultColumns
 	}
 
 	// Print the ordering columns and for each their sort order.
-	for i, o := range ord.ordering {
+	for i, o := range pp.ordering {
 		if i == 0 {
 			semiColon()
 		} else {
@@ -300,61 +299,61 @@ func (ord *orderingInfo) Format(buf *bytes.Buffer, columns sqlbase.ResultColumns
 	}
 }
 
-// AsString pretty-prints the orderingInfo to a string. The result columns are
+// AsString pretty-prints the physicalProps to a string. The result columns are
 // used for printing column names and are optional.
-func (ord orderingInfo) AsString(columns sqlbase.ResultColumns) string {
+func (pp physicalProps) AsString(columns sqlbase.ResultColumns) string {
 	var buf bytes.Buffer
-	ord.Format(&buf, columns)
+	pp.Format(&buf, columns)
 	return buf.String()
 }
 
-func (ord *orderingInfo) isEmpty() bool {
-	return ord.constantCols.Empty() && len(ord.ordering) == 0
+func (pp *physicalProps) isEmpty() bool {
+	return pp.constantCols.Empty() && len(pp.ordering) == 0
 }
 
-func (ord *orderingInfo) addConstantColumn(colIdx int) {
-	group := ord.eqGroups.Find(colIdx)
-	ord.constantCols.Add(group)
-	for i := range ord.keySets {
-		ord.keySets[i].Remove(group)
+func (pp *physicalProps) addConstantColumn(colIdx int) {
+	group := pp.eqGroups.Find(colIdx)
+	pp.constantCols.Add(group)
+	for i := range pp.keySets {
+		pp.keySets[i].Remove(group)
 	}
-	ord.ordering = ord.reduce(ord.ordering)
+	pp.ordering = pp.reduce(pp.ordering)
 }
 
-func (ord *orderingInfo) addEquivalency(colA, colB int) {
-	gA := ord.eqGroups.Find(colA)
-	gB := ord.eqGroups.Find(colB)
+func (pp *physicalProps) addEquivalency(colA, colB int) {
+	gA := pp.eqGroups.Find(colA)
+	gB := pp.eqGroups.Find(colB)
 	if gA == gB {
 		return
 	}
-	ord.eqGroups.Union(gA, gB)
+	pp.eqGroups.Union(gA, gB)
 	// Make sure gA is the new representative.
-	if ord.eqGroups.Find(gA) == gB {
+	if pp.eqGroups.Find(gA) == gB {
 		gA, gB = gB, gA
 	}
 
-	if ord.constantCols.Contains(gB) {
-		ord.constantCols.Remove(gB)
-		ord.constantCols.Add(gA)
+	if pp.constantCols.Contains(gB) {
+		pp.constantCols.Remove(gB)
+		pp.constantCols.Add(gA)
 	}
 
-	for i := range ord.keySets {
-		if ord.keySets[i].Contains(gB) {
-			ord.keySets[i].Remove(gB)
-			ord.keySets[i].Add(gA)
+	for i := range pp.keySets {
+		if pp.keySets[i].Contains(gB) {
+			pp.keySets[i].Remove(gB)
+			pp.keySets[i].Add(gA)
 		}
 	}
 
-	ord.ordering = ord.reduce(ord.ordering)
+	pp.ordering = pp.reduce(pp.ordering)
 }
 
-func (ord *orderingInfo) addKeySet(cols util.FastIntSet) {
+func (pp *physicalProps) addKeySet(cols util.FastIntSet) {
 	// Remap column indices to equivalency group representatives.
 	var k util.FastIntSet
 	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
-		group := ord.eqGroups.Find(c)
-		if !ord.constantCols.Contains(group) {
-			k.Add(ord.eqGroups.Find(c))
+		group := pp.eqGroups.Find(c)
+		if !pp.constantCols.Contains(group) {
+			k.Add(pp.eqGroups.Find(c))
 		}
 	}
 	cols = k
@@ -362,62 +361,63 @@ func (ord *orderingInfo) addKeySet(cols util.FastIntSet) {
 	// Check if the key set is redundant, or if it makes some existing
 	// key sets redundant.
 	// Note: we don't use range because we are modifying keySets.
-	for i := 0; i < len(ord.keySets); i++ {
-		k := ord.keySets[i]
+	for i := 0; i < len(pp.keySets); i++ {
+		k := pp.keySets[i]
 		if k.SubsetOf(cols) {
 			// We already have a key with a subset of these columns.
 			return
 		}
 		if cols.SubsetOf(k) {
 			// The new key set makes this one redundant.
-			copy(ord.keySets[i:], ord.keySets[i+1:])
-			ord.keySets = ord.keySets[:len(ord.keySets)-1]
+			copy(pp.keySets[i:], pp.keySets[i+1:])
+			pp.keySets = pp.keySets[:len(pp.keySets)-1]
 			i--
 		}
 	}
-	ord.keySets = append(ord.keySets, cols)
+	pp.keySets = append(pp.keySets, cols)
 }
 
-func (ord *orderingInfo) addOrderColumn(colIdx int, dir encoding.Direction) {
-	ord.ordering = append(ord.ordering, sqlbase.ColumnOrderInfo{
-		ColIdx:    ord.eqGroups.Find(colIdx),
+func (pp *physicalProps) addOrderColumn(colIdx int, dir encoding.Direction) {
+	pp.ordering = append(pp.ordering, sqlbase.ColumnOrderInfo{
+		ColIdx:    pp.eqGroups.Find(colIdx),
 		Direction: dir,
 	})
-	ord.ordering = ord.reduce(ord.ordering)
+	pp.ordering = pp.reduce(pp.ordering)
 }
 
-// copy returns a copy of ord which can be modified independently.
-func (ord *orderingInfo) copy() orderingInfo {
-	result := orderingInfo{
-		eqGroups:     ord.eqGroups.Copy(),
-		constantCols: ord.constantCols.Copy(),
-		keySets:      make([]util.FastIntSet, len(ord.keySets)),
+// copy returns a copy of pp which can be modified independently.
+func (pp *physicalProps) copy() physicalProps {
+	result := physicalProps{
+		eqGroups:     pp.eqGroups.Copy(),
+		constantCols: pp.constantCols.Copy(),
+		keySets:      make([]util.FastIntSet, len(pp.keySets)),
 	}
-	for i := range ord.keySets {
-		result.keySets[i] = ord.keySets[i].Copy()
+	for i := range pp.keySets {
+		result.keySets[i] = pp.keySets[i].Copy()
 	}
 
-	if len(ord.ordering) > 0 {
-		result.ordering = append(sqlbase.ColumnOrdering(nil), ord.ordering...)
+	if len(pp.ordering) > 0 {
+		result.ordering = append(sqlbase.ColumnOrdering(nil), pp.ordering...)
 	}
 	return result
 }
 
-// reverse returns the reversed ordering.
-func (ord *orderingInfo) reverse() orderingInfo {
-	result := ord.copy()
-	for i := range ord.ordering {
+// reverse returns the physical properties for the reversed result set, which
+// are the same except that the ordering directions are reversed.
+func (pp *physicalProps) reverse() physicalProps {
+	result := pp.copy()
+	for i := range pp.ordering {
 		result.ordering[i].Direction = result.ordering[i].Direction.Reverse()
 	}
 	return result
 }
 
-// project returns an orderingInfo for a set of columns that include a
+// project returns an physicalProps for a set of columns that include a
 // projection of the original columns; the primary use case is computing an
-// orderingInfo for a renderNode.
+// physicalProps for a renderNode.
 //
-// The new orderingInfo refers to columns [0, len(colMap)); column i in the new
-// orderingInfo corresponds to column colMap[i] in the original orderingInfo.
+// The new physicalProps refers to columns [0, len(colMap)); column i in the new
+// physicalProps corresponds to column colMap[i] in the original physicalProps.
 //
 // For example, consider a table t with columns
 //   0: A
@@ -425,16 +425,16 @@ func (ord *orderingInfo) reverse() orderingInfo {
 //   2: C
 //   3: D
 // For the projection required by "SELECT B, D, C FROM t", colMap is {1, 3, 2}.
-// If this table has (for example) orderingInfo indicating equivalency groups
-// A=B=C and ordering D+,A-, the resulting orderingInfo has equivalency groups
+// If this table has (for example) physicalProps indicating equivalency groups
+// A=B=C and ordering D+,A-, the resulting physicalProps has equivalency groups
 // 0=2 and ordering 1+,0-.
 //
 // To support intermingling projected columns with other (e.g. rendered) columns,
 // entries in colMap can be -1. For example, for "SELECT A, A+B, C FROM t",
 // colMap is {0, -1, 2}. Column 1 will not be part of the ordering or any
 // equivalency groups.
-func (ord *orderingInfo) project(colMap []int) orderingInfo {
-	var newOrd orderingInfo
+func (pp *physicalProps) project(colMap []int) physicalProps {
+	var newOrd physicalProps
 
 	// For every equivalency group that has at least a column that is projected,
 	// pick one such column as a representative for that group.
@@ -453,7 +453,7 @@ func (ord *orderingInfo) project(colMap []int) orderingInfo {
 
 	for i, c := range colMap {
 		if c != -1 {
-			group := ord.eqGroups.Find(c)
+			group := pp.eqGroups.Find(c)
 			if r, ok := newRepr[group]; ok {
 				// This group shows up multiple times in the projection.
 				newOrd.eqGroups.Union(i, r)
@@ -466,8 +466,8 @@ func (ord *orderingInfo) project(colMap []int) orderingInfo {
 
 	// Remap constant columns, ignoring column groups that have no projected
 	// columns.
-	for col, ok := ord.constantCols.Next(0); ok; col, ok = ord.constantCols.Next(col + 1) {
-		group := ord.eqGroups.Find(col)
+	for col, ok := pp.constantCols.Next(0); ok; col, ok = pp.constantCols.Next(col + 1) {
+		group := pp.eqGroups.Find(col)
 		if r, ok := newRepr[group]; ok {
 			newOrd.constantCols.Add(newOrd.eqGroups.Find(r))
 		}
@@ -475,10 +475,10 @@ func (ord *orderingInfo) project(colMap []int) orderingInfo {
 
 	// Retain key sets that contain only projected columns.
 KeySetLoop:
-	for _, k := range ord.keySets {
+	for _, k := range pp.keySets {
 		var newK util.FastIntSet
 		for col, ok := k.Next(0); ok; col, ok = k.Next(col + 1) {
-			group := ord.eqGroups.Find(col)
+			group := pp.eqGroups.Find(col)
 			r, ok := newRepr[group]
 			if !ok {
 				continue KeySetLoop
@@ -488,11 +488,11 @@ KeySetLoop:
 		newOrd.keySets = append(newOrd.keySets, newK)
 	}
 
-	newOrd.ordering = make(sqlbase.ColumnOrdering, 0, len(ord.ordering))
+	newOrd.ordering = make(sqlbase.ColumnOrdering, 0, len(pp.ordering))
 
 	// Preserve the ordering, up to the first column that's not present in the
 	// projected columns.
-	for _, o := range ord.ordering {
+	for _, o := range pp.ordering {
 		r, ok := newRepr[o.ColIdx]
 		if !ok {
 			// None of the columns in the equivalency group are present. We need to
@@ -515,34 +515,34 @@ KeySetLoop:
 }
 
 // computeMatch computes how long of a prefix of a desired ColumnOrdering is
-// matched by the orderingInfo.
+// matched by the physicalProps.
 //
 // Returns a value between 0 and len(desired).
-func (ord orderingInfo) computeMatch(desired sqlbase.ColumnOrdering) int {
-	matchLen, _ := ord.computeMatchInternal(desired)
+func (pp physicalProps) computeMatch(desired sqlbase.ColumnOrdering) int {
+	matchLen, _ := pp.computeMatchInternal(desired)
 	return matchLen
 }
 
 // computeMatchInternal returns both the length of the match and the number of
-// columns of ord.ordering necessary for the match.
-func (ord orderingInfo) computeMatchInternal(
+// columns of pp.ordering necessary for the match.
+func (pp physicalProps) computeMatchInternal(
 	desired sqlbase.ColumnOrdering,
 ) (matchLen, ordPos int) {
-	ord.check()
-	// position in ord.ordering
+	pp.check()
+	// position in pp.ordering
 	pos := 0
 	// Set of column groups seen so far.
 	var groupsSeen util.FastIntSet
 
 	for i, col := range desired {
-		if ord.groupContainsKey(groupsSeen) {
+		if pp.groupContainsKey(groupsSeen) {
 			// The columns accumulated so far form a key; any other columns with which
 			// we may want to "refine" the ordering don't make a difference.
 			return len(desired), pos
 		}
-		group := ord.eqGroups.Find(col.ColIdx)
+		group := pp.eqGroups.Find(col.ColIdx)
 		// Check if the column is one of the constant columns.
-		if ord.constantCols.Contains(group) {
+		if pp.constantCols.Contains(group) {
 			continue
 		}
 		if groupsSeen.Contains(group) {
@@ -550,8 +550,8 @@ func (ord orderingInfo) computeMatchInternal(
 			continue
 		}
 		groupsSeen.Add(group)
-		if pos < len(ord.ordering) && ord.ordering[pos].ColIdx == group &&
-			ord.ordering[pos].Direction == col.Direction {
+		if pos < len(pp.ordering) && pp.ordering[pos].ColIdx == group &&
+			pp.ordering[pos].Direction == col.Direction {
 			// The next column matches.
 			pos++
 			continue
@@ -563,32 +563,27 @@ func (ord orderingInfo) computeMatchInternal(
 	return len(desired), pos
 }
 
-// trim simplifies ord.ordering, retaining only the column groups that are
+// trim simplifies pp.ordering, retaining only the column groups that are
 // needed to to match a desired ordering (or a prefix of it); equivalency
 // groups, constant columns, and key sets are left untouched.
 //
 // A trimmed ordering is guaranteed to still match the desired ordering to the
 // same extent, i.e. before and after are equal in:
-//   before := ord.computeMatch(desired)
-//   ord.trim(desired)
-//   after := ord.computeMatch(desired)
-//
-// TODO(radu): after trimming an orderingInfo that isKey, if some of the columns
-// in the ordering are not retained, then we lose track of the original key (we
-// can't describe it in the current orderingInfo). This will be fixed once we
-// can represent allow arbitrary keys.
-func (ord *orderingInfo) trim(desired sqlbase.ColumnOrdering) {
-	_, pos := ord.computeMatchInternal(desired)
-	if pos < len(ord.ordering) {
-		ord.ordering = ord.ordering[:pos]
+//   before := pp.computeMatch(desired)
+//   pp.trim(desired)
+//   after := pp.computeMatch(desired)
+func (pp *physicalProps) trim(desired sqlbase.ColumnOrdering) {
+	_, pos := pp.computeMatchInternal(desired)
+	if pos < len(pp.ordering) {
+		pp.ordering = pp.ordering[:pos]
 	}
 }
 
 // applyExpr tries to extract useful information from an expression we know is
-// true on all rows (e.g. a filter expression) and updates the orderingInfo
+// true on all rows (e.g. a filter expression) and updates the physicalProps
 // accordingly. Specifically: it might add constant columns and equivalency
 // groups.
-func (ord *orderingInfo) applyExpr(evalCtx *parser.EvalContext, expr parser.TypedExpr) {
+func (pp *physicalProps) applyExpr(evalCtx *parser.EvalContext, expr parser.TypedExpr) {
 	if expr == nil {
 		return
 	}
@@ -598,9 +593,9 @@ func (ord *orderingInfo) applyExpr(evalCtx *parser.EvalContext, expr parser.Type
 		if c, ok := e.(*parser.ComparisonExpr); ok && c.Operator == parser.EQ {
 			if ok, leftCol := getColVarIdx(c.Left); ok {
 				if _, ok := c.Right.(parser.Datum); ok {
-					ord.addConstantColumn(leftCol)
+					pp.addConstantColumn(leftCol)
 				} else if ok, rightCol := getColVarIdx(c.Right); ok {
-					ord.addEquivalency(leftCol, rightCol)
+					pp.addEquivalency(leftCol, rightCol)
 				}
 			}
 		}
@@ -624,7 +619,7 @@ func (ord *orderingInfo) applyExpr(evalCtx *parser.EvalContext, expr parser.Type
 // (or alternatively, an extra sorting step to complete the ordering followed by
 // a merge-join). See example below.
 //
-// Note that this function is not intended to calculate the output orderingInfo
+// Note that this function is not intended to calculate the output physicalProps
 // of joins (this is a separate problem with other complications).
 //
 // Examples:
@@ -632,8 +627,8 @@ func (ord *orderingInfo) applyExpr(evalCtx *parser.EvalContext, expr parser.Type
 //       table A with columns (u, v, x, y)  primary key x+,y+,u+
 //       table B with columns (x, y, w)     primary key x+,y+
 //     equality columns are x, y
-//     a orderingInfo is 2+,3+,0+
-//     b orderingInfo is 0+,1+
+//     a ordering is 2+,3+,0+
+//     b ordering is 0+,1+
 //     colA is {2, 3}   // column indices of x,y in table A
 //     colB is {0, 1}   // column indices of x,y in table B
 //
@@ -646,8 +641,8 @@ func (ord *orderingInfo) applyExpr(evalCtx *parser.EvalContext, expr parser.Type
 //       table A with columns (u, v, x, y)  primary key x+
 //       table B with columns (x, y, w)     primary key x+,y+
 //     equality columns are x, y
-//     a orderingInfo is 2+
-//     b orderingInfo is 0+,1+
+//     a ordering is 2+
+//     b ordering is 0+,1+
 //     colA is {2, 3}   // column indices of x,y in table A
 //     colB is {0, 1}   // column indices of x,y in table B
 //
@@ -657,7 +652,7 @@ func (ord *orderingInfo) applyExpr(evalCtx *parser.EvalContext, expr parser.Type
 //     performed on this group. Alternatively, an extra sorting step could be
 //     used to refine the ordering (this sorting step would also use the partial
 //     ordering to only sort within groups) followed by a regular merge-join.
-func computeMergeJoinOrdering(a, b orderingInfo, colA, colB []int) sqlbase.ColumnOrdering {
+func computeMergeJoinOrdering(a, b physicalProps, colA, colB []int) sqlbase.ColumnOrdering {
 	if len(colA) != len(colB) {
 		panic(fmt.Sprintf("invalid column lists %v; %v", colA, colB))
 	}
@@ -673,7 +668,7 @@ func computeMergeJoinOrdering(a, b orderingInfo, colA, colB []int) sqlbase.Colum
 		if a.constantCols.Contains(colA[i]) && b.constantCols.Contains(colB[i]) {
 			// The direction here is arbitrary - the orderings guarantee that either works.
 			// TODO(radu): perhaps the correct thing would be to return an
-			// orderingInfo with this as a constant column.
+			// physicalProps with this as a constant column.
 			result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: encoding.Ascending})
 		}
 	}

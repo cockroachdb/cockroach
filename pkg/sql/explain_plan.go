@@ -121,7 +121,7 @@ func (p *planner) populateExplain(
 			if plan != nil {
 				cols := planColumns(plan)
 				row = append(row, parser.NewDString(formatColumns(cols, e.showTypes)))
-				row = append(row, parser.NewDString(planOrdering(plan).AsString(cols)))
+				row = append(row, parser.NewDString(planPhysicalProps(plan).AsString(cols)))
 			} else {
 				row = append(row, emptyString, emptyString)
 			}
@@ -154,7 +154,7 @@ func planToString(ctx context.Context, plan planNode) string {
 				cols := planColumns(plan)
 				fmt.Fprintf(&buf, "%d %s%s %s %s %s\n", level, name, field, description,
 					formatColumns(cols, true),
-					planOrdering(plan).AsString(cols),
+					planPhysicalProps(plan).AsString(cols),
 				)
 			}
 		},

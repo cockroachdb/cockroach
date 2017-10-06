@@ -204,7 +204,7 @@ func (v *planVisitor) visit(plan planNode) {
 				for i := range eqCols {
 					eqCols[i].Name = fmt.Sprintf("(%s=%s)", n.pred.leftColNames[i], n.pred.rightColNames[i])
 				}
-				var order orderingInfo
+				var order physicalProps
 				for _, o := range n.mergeJoinOrdering {
 					order.addOrderColumn(o.ColIdx, o.Direction)
 				}
@@ -247,7 +247,7 @@ func (v *planVisitor) visit(plan planNode) {
 			// We use n.ordering and not plan.Ordering() because
 			// plan.Ordering() does not include the added sort columns not
 			// present in the output.
-			var order orderingInfo
+			var order physicalProps
 			for _, o := range n.ordering {
 				order.addOrderColumn(o.ColIdx, o.Direction)
 			}
