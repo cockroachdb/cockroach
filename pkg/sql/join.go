@@ -141,7 +141,7 @@ type joinNode struct {
 
 	// ordering is set during expandPlan based on mergeJoinOrdering, but later
 	// trimmed.
-	ordering orderingInfo
+	props physicalProps
 
 	// columns contains the metadata for the results of this node.
 	columns sqlbase.ResultColumns
@@ -549,11 +549,11 @@ func (n *joinNode) Close(ctx context.Context) {
 	n.left.plan.Close(ctx)
 }
 
-func (n *joinNode) joinOrdering() orderingInfo {
+func (n *joinNode) joinOrdering() physicalProps {
 	if len(n.mergeJoinOrdering) == 0 {
-		return orderingInfo{}
+		return physicalProps{}
 	}
-	info := orderingInfo{}
+	info := physicalProps{}
 
 	// n.Columns has the following schema on equality JOINs:
 	//
@@ -568,8 +568,8 @@ func (n *joinNode) joinOrdering() orderingInfo {
 		return n.pred.numMergedEqualityColumns + n.pred.numLeftCols + rightColIdx
 	}
 
-	leftOrd := planOrdering(n.left.plan)
-	rightOrd := planOrdering(n.right.plan)
+	leftOrd := planPhysicalProps(n.left.plan)
+	rightOrd := planPhysicalProps(n.right.plan)
 
 	// Propagate the equivalency groups for the left columns.
 	for i := 0; i < n.pred.numLeftCols; i++ {

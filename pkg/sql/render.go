@@ -76,7 +76,7 @@ type renderNode struct {
 	// ordering indicates the order of returned rows.
 	// initially suggested by the GROUP BY and ORDER BY clauses;
 	// modified by index selection.
-	ordering orderingInfo
+	props physicalProps
 
 	// The current source row, with one value per source column.
 	// populated by Next(), used by renderRow().
@@ -589,8 +589,8 @@ func (r *renderNode) renderRow() error {
 //    SELECT a, b, a FROM t@abc ...
 //      we have an equivalency group between columns 0 and 2 and the ordering is
 //      first by column 0 (a), then by column 1.
-func (r *renderNode) computeOrdering(fromOrder orderingInfo) {
-	// See orderingInfo.project for a description of the projection map.
+func (r *renderNode) computePhysicalProps(fromOrder physicalProps) {
+	// See physicalProps.project for a description of the projection map.
 	projMap := make([]int, len(r.render))
 	for i, expr := range r.render {
 		if ivar, ok := expr.(*parser.IndexedVar); ok {
@@ -600,7 +600,7 @@ func (r *renderNode) computeOrdering(fromOrder orderingInfo) {
 			projMap[i] = -1
 		}
 	}
-	r.ordering = fromOrder.project(projMap)
+	r.props = fromOrder.project(projMap)
 
 	// Detect constants.
 	for col, expr := range r.render {
@@ -611,7 +611,7 @@ func (r *renderNode) computeOrdering(fromOrder orderingInfo) {
 			continue
 		}
 		if !hasRowDependentValues && !r.columns[col].Omitted {
-			r.ordering.addConstantColumn(col)
+			r.props.addConstantColumn(col)
 		}
 	}
 }
