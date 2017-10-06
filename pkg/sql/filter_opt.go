@@ -311,6 +311,7 @@ func (p *planner) propagateFilters(
 		}
 
 	case *alterTableNode:
+	case *alterUserSetPasswordNode:
 	case *cancelQueryNode:
 	case *scrubNode:
 	case *controlJobNode:

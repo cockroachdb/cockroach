@@ -47,6 +47,16 @@ statement ok
 PREPARE pcu AS CREATE USER $1 WITH PASSWORD $2;
   EXECUTE pcu('foo','bar')
 
+statement ok
+ALTER USER foo WITH PASSWORD somepass
+
+statement ok
+PREPARE chpw AS ALTER USER $1 WITH PASSWORD $2;
+  EXECUTE chpw('foo', 'bar')
+
+statement error user blix does not exist
+EXECUTE chpw('blix', 'blah')
+
 query T colnames
 SHOW USERS
 ----

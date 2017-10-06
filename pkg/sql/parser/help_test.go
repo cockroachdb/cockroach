@@ -77,6 +77,9 @@ func TestContextualHelp(t *testing.T) {
 		{`ALTER VIEW blah RENAME ??`, `ALTER VIEW`},
 		{`ALTER VIEW blah RENAME TO blih ??`, `ALTER VIEW`},
 
+		{`ALTER USER IF ??`, `ALTER USER`},
+		{`ALTER USER foo WITH PASSWORD ??`, `ALTER USER`},
+
 		{`CANCEL ??`, `CANCEL`},
 		{`CANCEL JOB ??`, `CANCEL JOB`},
 		{`CANCEL QUERY ??`, `CANCEL QUERY`},
