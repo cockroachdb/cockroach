@@ -202,6 +202,8 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *valueGenerator:
 	case *setNode:
 	case *setClusterSettingNode:
+	case *setZoneConfigNode:
+	case *showZoneConfigNode:
 	case *showRangesNode:
 	case *showFingerprintsNode:
 	case *scatterNode:
