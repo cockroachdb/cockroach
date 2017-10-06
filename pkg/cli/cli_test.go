@@ -1227,6 +1227,7 @@ func Example_user() {
 	c.Run("user ls --format=pretty")
 	c.Run("user ls --format=tsv")
 	c.Run("user set FOO")
+	c.RunWithArgs([]string{"sql", "-e", "create user if not exists 'FOO'"})
 	c.Run("user set Foo")
 	c.Run("user set fOo")
 	c.Run("user set foO")
@@ -1266,21 +1267,23 @@ func Example_user() {
 	// username
 	// # 0 rows
 	// user set FOO
-	// CREATE USER
+	// CREATE USER 1
+	// sql -e create user if not exists 'FOO'
+	// CREATE USER 0
 	// user set Foo
-	// CREATE USER
+	// CREATE USER 0
 	// user set fOo
-	// CREATE USER
+	// CREATE USER 0
 	// user set foO
-	// CREATE USER
+	// CREATE USER 0
 	// user set foo
-	// CREATE USER
+	// CREATE USER 0
 	// user set _foo
-	// CREATE USER
+	// CREATE USER 1
 	// user set f_oo
-	// CREATE USER
+	// CREATE USER 1
 	// user set foo_
-	// CREATE USER
+	// CREATE USER 1
 	// user set ,foo
 	// pq: username ",foo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
 	// user set f,oo
@@ -1290,19 +1293,19 @@ func Example_user() {
 	// user set 0foo
 	// pq: username "0foo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
 	// user set foo0
-	// CREATE USER
+	// CREATE USER 1
 	// user set f0oo
-	// CREATE USER
+	// CREATE USER 1
 	// user set foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof
 	// pq: username "foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
 	// user set foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoo
-	// CREATE USER
+	// CREATE USER 1
 	// user set Ομηρος
-	// CREATE USER
+	// CREATE USER 1
 	// user set and
-	// CREATE USER
+	// CREATE USER 1
 	// user set table
-	// CREATE USER
+	// CREATE USER 1
 	// user ls --format=pretty
 	// +-----------------------------------------------------------------+
 	// |                            username                             |
