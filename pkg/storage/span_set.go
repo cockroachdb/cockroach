@@ -16,6 +16,9 @@
 package storage
 
 import (
+	"bytes"
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -49,6 +52,19 @@ const (
 // separate local and global command queues).
 type SpanSet struct {
 	spans [numSpanAccess][numSpanScope][]roachpb.Span
+}
+
+// String prints a string representation of the span set.
+func (ss *SpanSet) String() string {
+	var buf bytes.Buffer
+	for i := SpanAccess(0); i < numSpanAccess; i++ {
+		for j := spanScope(0); j < numSpanScope; j++ {
+			for _, span := range ss.getSpans(i, j) {
+				fmt.Fprintf(&buf, "%d %d: %s\n", i, j, span)
+			}
+		}
+	}
+	return buf.String()
 }
 
 func (ss *SpanSet) len() int {

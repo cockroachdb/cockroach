@@ -1863,12 +1863,32 @@ func setAbortCache(
 	return rec.AbortCache().Put(ctx, batch, ms, txn.ID, &entry)
 }
 
-func declareKeysResolveIntent(
+func writeAbortCacheOnResolve(status roachpb.TransactionStatus) bool {
+	return status == roachpb.ABORTED
+}
+
+func declareKeysResolveIntentCombined(
 	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
 ) {
 	DefaultDeclareKeys(desc, header, req, spans)
-	ri := req.(*roachpb.ResolveIntentRequest)
-	spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortCacheKey(header.RangeID, ri.IntentTxn.ID)})
+	var args *roachpb.ResolveIntentRequest
+	switch t := req.(type) {
+	case *roachpb.ResolveIntentRequest:
+		args = t
+	case *roachpb.ResolveIntentRangeRequest:
+		// Ranged and point requests only differ in whether the header's EndKey
+		// is used, so we can convert them.
+		args = (*roachpb.ResolveIntentRequest)(t)
+	}
+	if writeAbortCacheOnResolve(args.Status) {
+		spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortCacheKey(header.RangeID, args.IntentTxn.ID)})
+	}
+}
+
+func declareKeysResolveIntent(
+	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
+) {
+	declareKeysResolveIntentCombined(desc, header, req, spans)
 }
 
 // evalResolveIntent resolves a write intent from the specified key
@@ -1892,7 +1912,7 @@ func evalResolveIntent(
 	if err := engine.MVCCResolveWriteIntent(ctx, batch, ms, intent); err != nil {
 		return EvalResult{}, err
 	}
-	if intent.Status == roachpb.ABORTED {
+	if writeAbortCacheOnResolve(args.Status) {
 		return EvalResult{}, setAbortCache(ctx, cArgs.EvalCtx, batch, ms, args.IntentTxn, args.Poison)
 	}
 	return EvalResult{}, nil
@@ -1901,9 +1921,7 @@ func evalResolveIntent(
 func declareKeysResolveIntentRange(
 	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *SpanSet,
 ) {
-	DefaultDeclareKeys(desc, header, req, spans)
-	ri := req.(*roachpb.ResolveIntentRangeRequest)
-	spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortCacheKey(header.RangeID, ri.IntentTxn.ID)})
+	declareKeysResolveIntentCombined(desc, header, req, spans)
 }
 
 // evalResolveIntentRange resolves write intents in the specified
@@ -1928,7 +1946,7 @@ func evalResolveIntentRange(
 	if _, err := engine.MVCCResolveWriteIntentRange(ctx, batch, ms, intent, math.MaxInt64); err != nil {
 		return EvalResult{}, err
 	}
-	if intent.Status == roachpb.ABORTED {
+	if writeAbortCacheOnResolve(args.Status) {
 		return EvalResult{}, setAbortCache(ctx, cArgs.EvalCtx, batch, ms, args.IntentTxn, args.Poison)
 	}
 	return EvalResult{}, nil
