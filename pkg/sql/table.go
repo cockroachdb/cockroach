@@ -21,7 +21,6 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
@@ -76,17 +75,6 @@ func (tk tableKey) Key() roachpb.Key {
 
 func (tk tableKey) Name() string {
 	return tk.name
-}
-
-// GetKeysForTableDescriptor retrieves the KV keys corresponding
-// to the zone, name and descriptor of a table.
-func GetKeysForTableDescriptor(
-	tableDesc *sqlbase.TableDescriptor,
-) (zoneKey roachpb.Key, nameKey roachpb.Key, descKey roachpb.Key) {
-	zoneKey = config.MakeZoneKey(uint32(tableDesc.ID))
-	nameKey = sqlbase.MakeNameMetadataKey(tableDesc.ParentID, tableDesc.GetName())
-	descKey = sqlbase.MakeDescMetadataKey(tableDesc.ID)
-	return
 }
 
 // A unique id for a particular table descriptor version.

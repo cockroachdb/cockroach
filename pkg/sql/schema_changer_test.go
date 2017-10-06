@@ -2046,7 +2046,7 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	}{
 		// DROP TABLE followed by CREATE TABLE case.
 		{`drop-create`, `DROP TABLE t.kv`, `CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR)`,
-			`relation "kv" already exists`},
+			``},
 		// schema change followed by another statement works.
 		{`createindex-insert`, `CREATE INDEX foo ON t.kv (v)`, `INSERT INTO t.kv VALUES ('c', 'd')`,
 			``},

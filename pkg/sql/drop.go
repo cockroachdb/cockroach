@@ -868,6 +868,42 @@ func (p *planner) initiateDropTable(ctx context.Context, tableDesc *sqlbase.Tabl
 	if err := p.writeTableDesc(ctx, tableDesc); err != nil {
 		return err
 	}
+
+	// Remove the table name to id map. This map could be cached on a
+	// remote node but we don't care about that because the cache is used
+	// to map a name to a descriptor, and we guarantee that transactions
+	// use descriptors correctly. It can happen that the same name gets
+	// mapped to another id and thus another descriptor in the future,
+	// and a node using the old mapping sees the name map to the old dropped
+	// descriptor and can potentially add data into a dropped table.
+	// This is okay because the dropped table GC is started only once all
+	// nodes are not using leases on the old descriptor. A node using the
+	// old descriptor is notified that the old descriptor is no longer
+	// valid (dropped), and will release the lease on the old descriptor.
+	// While acquiring a new lease on the descriptor it will reevaluate
+	// the name to id map and will use the new descriptor.
+	//
+	// Furthermore, If a table is being dropped on node A and a user is
+	// running another transaction inserting data through node B in a
+	// coordinated manner such that the insert is executed after the drop
+	// is complete, the insert will fail because a DROP only returns back
+	// to the user once it has confirmed that the table descriptor has been
+	// purged from every cache across the cluster. In particular, the DROP
+	// is executed through two kv transactions that map to one SQL transaction;
+	// the first kv transaction places the table in the DROPPED state, and
+	// the second increments the descriptor version and waits until the previous
+	// version has been purged from the cluster. And if for some reason node B
+	// picks a timestamp from the past (before the DROP) for the insert, it
+	// will behave as if the data were inserted into the dropped table.
+	nameKey := sqlbase.MakeNameMetadataKey(tableDesc.ParentID, tableDesc.GetName())
+	// Use CPut because we want to remove a specific name -> id map.
+	if p.session.Tracing.KVTracingEnabled() {
+		log.VEventf(ctx, 2, "CPut %s -> nil", nameKey)
+	}
+	if err := p.txn.CPut(ctx, nameKey, nil, tableDesc.ID); err != nil {
+		return err
+	}
+
 	p.notifySchemaChange(tableDesc, sqlbase.InvalidMutationID)
 	return nil
 }

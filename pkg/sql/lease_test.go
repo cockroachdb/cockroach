@@ -541,6 +541,8 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	clearSchemaChangers = true
 	mu.Unlock()
 
+	tableDesc := sqlbase.GetTableDescriptor(t.kvDB, "test", "t")
+
 	// DROP the table
 	_, err = t.db.Exec(`DROP TABLE test.t`)
 	if err != nil {
@@ -548,7 +550,6 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	}
 
 	// Make sure we can't get a lease on the descriptor.
-	tableDesc := sqlbase.GetTableDescriptor(t.kvDB, "test", "t")
 	// try to acquire at a bogus version to make sure we don't get back a lease we
 	// already had.
 	_, _, err = t.acquireMinVersion(1, tableDesc.ID, tableDesc.Version+1)

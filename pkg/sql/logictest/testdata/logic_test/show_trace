@@ -275,6 +275,9 @@ SELECT span, operation, regexp_replace(message, 'wall_time:\d+', 'wall_time:...'
 (0,1)  starting plan  Put /Table/3/1/53/2/1 -> table:<name:"kv2" id:53 parent_id:51 version:1 up_version:true modification_time:<wall_time:... > columns:<name:"k" id:1 type:<semantic_type:INT width:0 precision:0 visible_type:NONE > nullable:true hidden:false > columns:<name:"v" id:2 type:<semantic_type:INT width:0 precision:0 visible_type:NONE > nullable:true hidden:false > columns:<name:"rowid" id:3 type:<semantic_type:INT width:0 precision:0 visible_type:NONE > nullable:false default_expr:"unique_rowid()" hidden:true > next_column_id:4 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_names:"rowid" column_ids:1 column_ids:2 column_ids:3 default_column_id:0 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true column_names:"rowid" column_directions:ASC column_ids:3 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION > interleave:<> partitioning:<num_columns:0 > > next_index_id:2 privileges:<users:<user:"root" privileges:2 > > next_mutation_id:1 format_version:3 state:DROP view_query:"" >
 (0,1)  starting plan  querying next range at /Table/SystemConfigSpan/Start
 (0,1)  starting plan  r1: sending batch 1 Put, 1 BeginTxn to (n1,s1):1
+(0,1)  starting plan  CPut /Table/2/1/51/"kv2"/3/1 -> nil
+(0,1)  starting plan  querying next range at /Table/2/1/51/"kv2"/3/1
+(0,1)  starting plan  r1: sending batch 1 CPut to (n1,s1):1
 (0,1)  starting plan  querying next range at /Table/2/1/0/"system"/3/1
 (0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
 (0,1)  starting plan  querying next range at /Table/3/1/1/2/1
@@ -354,6 +357,9 @@ SELECT span, operation, regexp_replace(regexp_replace(message, 'mutationJobs:<[^
 (0,1)  starting plan  Put /Table/3/1/52/2/1 -> table:<name:"kv" id:52 parent_id:51 version:7 up_version:true modification_time:<wall_time:... > columns:<name:"k" id:1 type:<semantic_type:INT width:0 precision:0 visible_type:NONE > nullable:false hidden:false > columns:<name:"v" id:2 type:<semantic_type:INT width:0 precision:0 visible_type:NONE > nullable:true hidden:false > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true column_names:"k" column_directions:ASC column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION > interleave:<> partitioning:<num_columns:0 > > next_index_id:3 privileges:<users:<user:"root" privileges:2 > > next_mutation_id:3 format_version:3 state:DROP view_query:"" >
 (0,1)  starting plan  querying next range at /Table/SystemConfigSpan/Start
 (0,1)  starting plan  r1: sending batch 1 Put, 1 BeginTxn to (n1,s1):1
+(0,1)  starting plan  CPut /Table/2/1/51/"kv"/3/1 -> nil
+(0,1)  starting plan  querying next range at /Table/2/1/51/"kv"/3/1
+(0,1)  starting plan  r1: sending batch 1 CPut to (n1,s1):1
 (0,1)  starting plan  querying next range at /Table/2/1/0/"system"/3/1
 (0,1)  starting plan  r1: sending batch 1 Get to (n1,s1):1
 (0,1)  starting plan  querying next range at /Table/3/1/1/2/1

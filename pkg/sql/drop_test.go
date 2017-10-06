@@ -708,7 +708,7 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 	// We might still be able to read/write in the table inside this transaction
 	// until the schema changer runs, but we shouldn't be able to ALTER it.
 	if _, err := tx.Exec(`ALTER TABLE t.kv ADD COLUMN w CHAR`); !testutils.IsError(err,
-		`table "kv" is being dropped`) {
+		`relation "t.kv" does not exist`) {
 		t.Fatalf("different error than expected: %v", err)
 	}
 
@@ -749,7 +749,7 @@ func TestCommandsWhileTableBeingDropped(t *testing.T) {
 
 	params, _ := createTestServerParams()
 	// Block schema changers so that the table we're about to DROP is not
-	// actually dropped; it will be left in the "deleted" state.
+	// actually dropped; it will be left in the "dropped" state.
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
@@ -774,8 +774,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 
-	// Check that SHOW TABLES marks a dropped table with the " (dropped)"
-	// suffix.
+	// Check that SHOW TABLES is unable to see the table.
 	rows, err := db.Query(`SHOW TABLES FROM test`)
 	if err != nil {
 		t.Fatal(err)
@@ -785,13 +784,18 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 		t.Fatal("table should be invisible through SHOW TABLES")
 	}
 
-	// Check that CREATE TABLE with the same name returns a proper error.
-	if _, err := db.Exec(`CREATE TABLE test.t(a INT PRIMARY KEY)`); !testutils.IsError(err, `relation "t" already exists`) {
+	// Check that DROP TABLE with the same name returns a proper error.
+	if _, err := db.Exec(`DROP TABLE test.t`); !testutils.IsError(err, `relation "test.t" does not exist`) {
 		t.Fatal(err)
 	}
 
-	// Check that DROP TABLE with the same name returns a proper error.
-	if _, err := db.Exec(`DROP TABLE test.t`); !testutils.IsError(err, `table "t" is being dropped`) {
+	// Check that CREATE TABLE works.
+	if _, err := db.Exec(`CREATE TABLE test.t(a INT PRIMARY KEY)`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that DROP TABLE drops the newly created table.
+	if _, err := db.Exec(`DROP TABLE test.t`); err != nil {
 		t.Fatal(err)
 	}
 }

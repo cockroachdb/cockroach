@@ -44,6 +44,75 @@ DROP TABLE IF EXISTS a
 statement ok
 CREATE TABLE a (id INT PRIMARY KEY)
 
+statement ok
+INSERT INTO a VALUES (5),(6),(8)
+
 query I
 SELECT * FROM a
 ----
+5
+6
+8
+
+# DROP followed by CREATE in the same transaction.
+statement ok
+BEGIN
+
+statement ok
+DROP TABLE a
+
+statement ok
+CREATE TABLE a (id INT PRIMARY KEY)
+
+statement ok
+COMMIT
+
+query I
+SELECT * FROM a
+----
+
+statement ok
+INSERT INTO b VALUES (5),(6),(8)
+
+# DROP followed by RENAME in the same transaction.
+statement ok
+BEGIN
+
+statement ok
+DROP TABLE a
+
+statement ok
+ALTER TABLE b RENAME TO a
+
+statement ok
+COMMIT
+
+query I
+SELECT * FROM a
+----
+5
+6
+8
+
+statement ok
+CREATE VIEW v AS select id from a
+
+# DROP VIEW followed by CREATE in the same transaction.
+statement ok
+BEGIN
+
+statement ok
+DROP VIEW v
+
+statement ok
+CREATE VIEW v AS select id from a
+
+statement ok
+COMMIT
+
+query I
+SELECT * FROM v
+----
+5
+6
+8

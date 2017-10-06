@@ -18,6 +18,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -129,19 +130,6 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 	newTableDesc.SetID(0)
 	newTableDesc.Version = 1
 
-	// Remove old name -> id map.
-	zoneKey, nameKey, _ := GetKeysForTableDescriptor(tableDesc)
-
-	b := &client.Batch{}
-	// Use CPut because we want to remove a specific name -> id map.
-	if traceKV {
-		log.VEventf(ctx, 2, "CPut %s -> nil", nameKey)
-	}
-	b.CPut(nameKey, nil, tableDesc.ID)
-	if err := p.txn.Run(ctx, b); err != nil {
-		return err
-	}
-
 	// Drop table.
 	if err := p.initiateDropTable(ctx, tableDesc); err != nil {
 		return err
@@ -204,8 +192,8 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 	p.notifySchemaChange(&newTableDesc, sqlbase.InvalidMutationID)
 
 	// Copy the zone config.
-	b = &client.Batch{}
-	b.Get(zoneKey)
+	b := &client.Batch{}
+	b.Get(config.MakeZoneKey(uint32(tableDesc.ID)))
 	if err := p.txn.Run(ctx, b); err != nil {
 		return err
 	}
