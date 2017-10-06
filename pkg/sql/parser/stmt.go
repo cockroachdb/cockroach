@@ -175,7 +175,7 @@ func (n *CreateTable) StatementTag() string {
 }
 
 // StatementType implements the Statement interface.
-func (*CreateUser) StatementType() StatementType { return Ack }
+func (*CreateUser) StatementType() StatementType { return RowsAffected }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CreateUser) StatementTag() string { return "CREATE USER" }
