@@ -31,107 +31,107 @@ GRANT ALL ON a.t TO readwrite
 statement ok
 CREATE TABLE t (id INT PRIMARY KEY)
 
-query TTT colnames
+query TTTT colnames
 SHOW GRANTS ON t
 ----
-Table    User      Privileges
-t        readwrite ALL
-t        root      ALL
+Database  Table  User       Privileges
+a         t      readwrite  ALL
+a         t      root       ALL
 
-query TTT colnames
+query TTTT colnames
 SHOW GRANTS ON a.t
 ----
-Table    User      Privileges
-t        readwrite ALL
-t        root      ALL
+Database  Table  User       Privileges
+a         t      readwrite  ALL
+a         t      root       ALL
 
 statement ok
 GRANT ALL ON t TO readwrite, "test-user"
 
-query TTT
+query TTTT
 SHOW GRANTS ON t
 ----
-t     readwrite ALL
-t     root      ALL
-t     test-user ALL
+a  t  readwrite  ALL
+a  t  root       ALL
+a  t  test-user  ALL
 
-query TTT
+query TTTT
 SHOW GRANTS ON t FOR readwrite, "test-user"
 ----
-t     readwrite ALL
-t     test-user ALL
+a  t  readwrite  ALL
+a  t  test-user  ALL
 
 statement ok
 REVOKE INSERT,DELETE ON t FROM "test-user",readwrite
 
-query TTT
+query TTTT
 SHOW GRANTS ON t
 ----
- t  readwrite  CREATE
- t  readwrite  DROP
- t  readwrite  GRANT
- t  readwrite  SELECT
- t  readwrite  UPDATE
- t  root       ALL
- t  test-user  CREATE
- t  test-user  DROP
- t  test-user  GRANT
- t  test-user  SELECT
- t  test-user  UPDATE
+a  t  readwrite  CREATE
+a  t  readwrite  DROP
+a  t  readwrite  GRANT
+a  t  readwrite  SELECT
+a  t  readwrite  UPDATE
+a  t  root       ALL
+a  t  test-user  CREATE
+a  t  test-user  DROP
+a  t  test-user  GRANT
+a  t  test-user  SELECT
+a  t  test-user  UPDATE
 
-query TTT
+query TTTT
 SHOW GRANTS ON t FOR readwrite, "test-user"
 ----
-t  readwrite  CREATE
-t  readwrite  DROP
-t  readwrite  GRANT
-t  readwrite  SELECT
-t  readwrite  UPDATE
-t  test-user  CREATE
-t  test-user  DROP
-t  test-user  GRANT
-t  test-user  SELECT
-t  test-user  UPDATE
+a  t  readwrite  CREATE
+a  t  readwrite  DROP
+a  t  readwrite  GRANT
+a  t  readwrite  SELECT
+a  t  readwrite  UPDATE
+a  t  test-user  CREATE
+a  t  test-user  DROP
+a  t  test-user  GRANT
+a  t  test-user  SELECT
+a  t  test-user  UPDATE
 
 statement ok
 REVOKE SELECT ON t FROM "test-user"
 
-query TTT
+query TTTT
 SHOW GRANTS ON t
 ----
-t  readwrite  CREATE
-t  readwrite  DROP
-t  readwrite  GRANT
-t  readwrite  SELECT
-t  readwrite  UPDATE
-t  root       ALL
-t  test-user  CREATE
-t  test-user  DROP
-t  test-user  GRANT
-t  test-user  UPDATE
+a  t  readwrite  CREATE
+a  t  readwrite  DROP
+a  t  readwrite  GRANT
+a  t  readwrite  SELECT
+a  t  readwrite  UPDATE
+a  t  root       ALL
+a  t  test-user  CREATE
+a  t  test-user  DROP
+a  t  test-user  GRANT
+a  t  test-user  UPDATE
 
-query TTT
+query TTTT
 SHOW GRANTS ON t FOR readwrite, "test-user"
 ----
-t  readwrite  CREATE
-t  readwrite  DROP
-t  readwrite  GRANT
-t  readwrite  SELECT
-t  readwrite  UPDATE
-t  test-user  CREATE
-t  test-user  DROP
-t  test-user  GRANT
-t  test-user  UPDATE
+a  t  readwrite  CREATE
+a  t  readwrite  DROP
+a  t  readwrite  GRANT
+a  t  readwrite  SELECT
+a  t  readwrite  UPDATE
+a  t  test-user  CREATE
+a  t  test-user  DROP
+a  t  test-user  GRANT
+a  t  test-user  UPDATE
 
 statement ok
 REVOKE ALL ON t FROM readwrite,"test-user"
 
-query TTT
+query TTTT
 SHOW GRANTS ON t
 ----
-t     root      ALL
+a  t  root  ALL
 
-query TTT
+query TTTT
 SHOW GRANTS ON t FOR readwrite, "test-user"
 ----
 
@@ -140,107 +140,107 @@ SHOW GRANTS ON t FOR readwrite, "test-user"
 statement ok
 CREATE VIEW v as SELECT id FROM t
 
-query TTT colnames
+query TTTT colnames
 SHOW GRANTS ON v
 ----
-Table    User      Privileges
-v        readwrite ALL
-v        root      ALL
+Database  Table  User       Privileges
+a         v      readwrite  ALL
+a         v      root       ALL
 
-query TTT colnames
+query TTTT colnames
 SHOW GRANTS ON a.v
 ----
-Table    User      Privileges
-v        readwrite ALL
-v        root      ALL
+Database  Table  User       Privileges
+a         v      readwrite  ALL
+a         v      root       ALL
 
 statement ok
 GRANT ALL ON v TO readwrite, "test-user"
 
-query TTT
+query TTTT
 SHOW GRANTS ON v
 ----
-v     readwrite ALL
-v     root      ALL
-v     test-user ALL
+a  v  readwrite  ALL
+a  v  root       ALL
+a  v  test-user  ALL
 
-query TTT
+query TTTT
 SHOW GRANTS ON v FOR readwrite, "test-user"
 ----
-v     readwrite ALL
-v     test-user ALL
+a  v  readwrite  ALL
+a  v  test-user  ALL
 
 statement ok
 REVOKE INSERT,DELETE ON v FROM "test-user",readwrite
 
-query TTT
+query TTTT
 SHOW GRANTS ON v
 ----
-v  readwrite  CREATE
-v  readwrite  DROP
-v  readwrite  GRANT
-v  readwrite  SELECT
-v  readwrite  UPDATE
-v  root       ALL
-v  test-user  CREATE
-v  test-user  DROP
-v  test-user  GRANT
-v  test-user  SELECT
-v  test-user  UPDATE
+a  v  readwrite  CREATE
+a  v  readwrite  DROP
+a  v  readwrite  GRANT
+a  v  readwrite  SELECT
+a  v  readwrite  UPDATE
+a  v  root       ALL
+a  v  test-user  CREATE
+a  v  test-user  DROP
+a  v  test-user  GRANT
+a  v  test-user  SELECT
+a  v  test-user  UPDATE
 
-query TTT
+query TTTT
 SHOW GRANTS ON v FOR readwrite, "test-user"
 ----
-v  readwrite  CREATE
-v  readwrite  DROP
-v  readwrite  GRANT
-v  readwrite  SELECT
-v  readwrite  UPDATE
-v  test-user  CREATE
-v  test-user  DROP
-v  test-user  GRANT
-v  test-user  SELECT
-v  test-user  UPDATE
+a  v  readwrite  CREATE
+a  v  readwrite  DROP
+a  v  readwrite  GRANT
+a  v  readwrite  SELECT
+a  v  readwrite  UPDATE
+a  v  test-user  CREATE
+a  v  test-user  DROP
+a  v  test-user  GRANT
+a  v  test-user  SELECT
+a  v  test-user  UPDATE
 
 statement ok
 REVOKE SELECT ON v FROM "test-user"
 
-query TTT
+query TTTT
 SHOW GRANTS ON v
 ----
-v  readwrite  CREATE
-v  readwrite  DROP
-v  readwrite  GRANT
-v  readwrite  SELECT
-v  readwrite  UPDATE
-v  root       ALL
-v  test-user  CREATE
-v  test-user  DROP
-v  test-user  GRANT
-v  test-user  UPDATE
+a  v  readwrite  CREATE
+a  v  readwrite  DROP
+a  v  readwrite  GRANT
+a  v  readwrite  SELECT
+a  v  readwrite  UPDATE
+a  v  root       ALL
+a  v  test-user  CREATE
+a  v  test-user  DROP
+a  v  test-user  GRANT
+a  v  test-user  UPDATE
 
-query TTT
+query TTTT
 SHOW GRANTS ON v FOR readwrite, "test-user"
 ----
-v  readwrite  CREATE
-v  readwrite  DROP
-v  readwrite  GRANT
-v  readwrite  SELECT
-v  readwrite  UPDATE
-v  test-user  CREATE
-v  test-user  DROP
-v  test-user  GRANT
-v  test-user  UPDATE
+a  v  readwrite  CREATE
+a  v  readwrite  DROP
+a  v  readwrite  GRANT
+a  v  readwrite  SELECT
+a  v  readwrite  UPDATE
+a  v  test-user  CREATE
+a  v  test-user  DROP
+a  v  test-user  GRANT
+a  v  test-user  UPDATE
 
 statement ok
 REVOKE ALL ON v FROM readwrite,"test-user"
 
-query TTT
+query TTTT
 SHOW GRANTS ON v
 ----
-v     root      ALL
+a  v  root  ALL
 
-query TTT
+query TTTT
 SHOW GRANTS ON v FOR readwrite, "test-user"
 ----
 
@@ -292,14 +292,14 @@ SET DATABASE = "b"
 statement ok
 GRANT ALL ON * TO Vanilli
 
-query TTT colnames
+query TTTT colnames
 SHOW GRANTS ON *
 ----
-Table  User     Privileges
-t      root     ALL
-t      vanilli  ALL
-t2     root     ALL
-t2     vanilli  ALL
+Database  Table  User     Privileges
+b         t      root     ALL
+b         t      vanilli  ALL
+b         t2     root     ALL
+b         t2     vanilli  ALL
 
 
 # Multiple targets.
@@ -307,46 +307,58 @@ t2     vanilli  ALL
 statement ok
 GRANT ALL ON c.*, b.t TO Millie
 
-query TTT colnames
+query TTTT colnames
 SHOW GRANTS ON b.*
 ----
-Table  User     Privileges
-t      millie   ALL
-t      root     ALL
-t      vanilli  ALL
-t2     root     ALL
-t2     vanilli  ALL
+Database  Table  User     Privileges
+b         t      millie   ALL
+b         t      root     ALL
+b         t      vanilli  ALL
+b         t2     root     ALL
+b         t2     vanilli  ALL
 
-query TTT colnames
+query TTTT colnames
+SHOW GRANTS ON a.*, b.*
+----
+Database  Table  User     Privileges
+a         t      root     ALL
+a         v      root     ALL
+b         t      millie   ALL
+b         t      root     ALL
+b         t      vanilli  ALL
+b         t2     root     ALL
+b         t2     vanilli  ALL
+
+query TTTT colnames
 SHOW GRANTS ON c.t
 ----
-Table  User    Privileges
-t      millie  ALL
-t      root    ALL
+Database  Table  User    Privileges
+c         t      millie  ALL
+c         t      root    ALL
 
 statement ok
 REVOKE ALL ON *, c.* FROM Vanilli
 
-query TTT colnames
+query TTTT colnames
 SHOW GRANTS ON b.*
 ----
-Table  User    Privileges
-t      millie  ALL
-t      root    ALL
-t2     root    ALL
+Database  Table  User    Privileges
+b         t      millie  ALL
+b         t      root    ALL
+b         t2     root    ALL
 
 statement ok
 CREATE DATABASE empty
 
-query TTT colnames
+query TTTT colnames
 SHOW GRANTS ON empty.*
 ----
-Table  User    Privileges
+Database  Table  User  Privileges
 
-query TTT colnames
+query TTTT colnames
 SHOW GRANTS ON empty.*, b.*
 ----
-Table  User    Privileges
-t      millie  ALL
-t      root    ALL
-t2     root    ALL
+Database  Table  User    Privileges
+b         t      millie  ALL
+b         t      root    ALL
+b         t2     root    ALL
