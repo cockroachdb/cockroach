@@ -376,8 +376,8 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %token <str>   CANCEL CASCADE CASE CAST CHAR
 %token <str>   CHARACTER CHARACTERISTICS CHECK
 %token <str>   CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMIT
-%token <str>   COMMITTED CONCAT CONFLICT CONSTRAINT CONSTRAINTS
-%token <str>   COPY COVERING CREATE
+%token <str>   COMMITTED CONCAT CONFIGURATION CONFIGURATIONS CONFIGURE CONFLICT
+%token <str>   CONSTRAINT CONSTRAINTS COPY COVERING CREATE
 %token <str>   CROSS CSV CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
 %token <str>   CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str>   CURRENT_USER CYCLE
@@ -387,7 +387,8 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %token <str>   DISCARD DISTINCT DO DOUBLE DROP
 
 %token <str>   ELSE ENCODING END ESCAPE EXCEPT
-%token <str>   EXISTS EXECUTE EXPERIMENTAL_FINGERPRINTS EXPLAIN EXTRACT EXTRACT_DURATION
+%token <str>   EXISTS EXECUTE EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL
+%token <str>   EXPLAIN EXTRACT EXTRACT_DURATION
 
 %token <str>   FALSE FAMILY FETCH FILTER FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR
 %token <str>   FORCE_INDEX FOREIGN FROM FULL
@@ -477,6 +478,10 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <Statement> alter_index_stmt
 %type <Statement> alter_view_stmt
 %type <Statement> alter_database_stmt
+%type <Statement> alter_range_stmt
+
+// ALTER RANGE
+%type <Statement> alter_zone_range_stmt
 
 // ALTER TABLE
 %type <Statement> alter_onetable_stmt
@@ -484,9 +489,11 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <Statement> alter_rename_table_stmt
 %type <Statement> alter_scatter_stmt
 %type <Statement> alter_testing_relocate_stmt
+%type <Statement> alter_zone_table_stmt
 
 // ALTER DATABASE
 %type <Statement> alter_rename_database_stmt
+%type <Statement> alter_zone_database_stmt
 
 // ALTER INDEX
 %type <Statement> alter_scatter_index_stmt
@@ -571,6 +578,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <Statement> show_trace_stmt
 %type <Statement> show_transaction_stmt
 %type <Statement> show_users_stmt
+%type <Statement> show_zone_stmt
 
 %type <str> session_var
 
@@ -923,6 +931,7 @@ alter_stmt:
 | alter_index_stmt    // EXTEND WITH HELP: ALTER INDEX
 | alter_view_stmt     // EXTEND WITH HELP: ALTER VIEW
 | alter_database_stmt // EXTEND WITH HELP: ALTER DATABASE
+| alter_range_stmt
 | ALTER error         // SHOW HELP: ALTER
 
 // %Help: ALTER TABLE - change the definition of a table
@@ -955,6 +964,7 @@ alter_table_stmt:
 | alter_split_stmt
 | alter_testing_relocate_stmt
 | alter_scatter_stmt
+| alter_zone_table_stmt
 | alter_rename_table_stmt
 // ALTER TABLE has its error help token here because the ALTER TABLE
 // prefix is spread over multiple non-terminals.
@@ -978,9 +988,13 @@ alter_view_stmt:
 // %SeeAlso: WEBDOCS/alter-database.html
 alter_database_stmt:
   alter_rename_database_stmt
+|  alter_zone_database_stmt
 // ALTER DATABASE has its error help token here because the ALTER DATABASE
 // prefix is spread over multiple non-terminals.
 | ALTER DATABASE error // SHOW HELP: ALTER DATABASE
+
+alter_range_stmt:
+  alter_zone_range_stmt
 
 // %Help: ALTER INDEX - change the definition of an index
 // %Category: DDL
@@ -1036,6 +1050,44 @@ alter_testing_relocate_index_stmt:
   {
     /* SKIP DOC */
     $$.val = &TestingRelocate{Index: $3.tableWithIdx(), Rows: $5.slct()}
+  }
+
+alter_zone_range_stmt:
+  ALTER RANGE DEFAULT EXPERIMENTAL CONFIGURE ZONE a_expr_const
+  {
+    /* SKIP DOC */
+    $$.val = &SetZoneConfig{
+      ZoneSpecifier: ZoneSpecifier{NamedZone: Name($3)},
+      YAMLConfig: $7.expr(),
+    }
+  }
+| ALTER RANGE name EXPERIMENTAL CONFIGURE ZONE a_expr_const
+  {
+    /* SKIP DOC */
+    $$.val = &SetZoneConfig{
+      ZoneSpecifier: ZoneSpecifier{NamedZone: Name($3)},
+      YAMLConfig: $7.expr(),
+    }
+  }
+
+alter_zone_database_stmt:
+  ALTER DATABASE name EXPERIMENTAL CONFIGURE ZONE a_expr_const
+  {
+    /* SKIP DOC */
+    $$.val = &SetZoneConfig{
+      ZoneSpecifier: ZoneSpecifier{Database: Name($3)},
+      YAMLConfig: $7.expr(),
+    }
+  }
+
+alter_zone_table_stmt:
+  ALTER TABLE qualified_name EXPERIMENTAL CONFIGURE ZONE a_expr_const
+  {
+    /* SKIP DOC */
+    $$.val = &SetZoneConfig{
+      ZoneSpecifier: ZoneSpecifier{Table: $3.normalizableTableName()},
+      YAMLConfig: $7.expr(),
+    }
   }
 
 alter_scatter_stmt:
@@ -2115,6 +2167,7 @@ show_stmt:
 | show_trace_stmt        // EXTEND WITH HELP: SHOW TRACE
 | show_transaction_stmt  // EXTEND WITH HELP: SHOW TRANSACTION
 | show_users_stmt        // EXTEND WITH HELP: SHOW USERS
+| show_zone_stmt
 | SHOW error             // SHOW HELP: SHOW
 
 // %Help: SHOW SESSION - display session variables
@@ -2387,6 +2440,38 @@ show_users_stmt:
     $$.val = &ShowUsers{}
   }
 | SHOW USERS error // SHOW HELP: SHOW USERS
+
+show_zone_stmt:
+  EXPERIMENTAL SHOW ZONE CONFIGURATION FOR RANGE name
+  {
+    /* SKIP DOC */
+    $$.val = &ShowZoneConfig{ZoneSpecifier{NamedZone: Name($7)}}
+  }
+| EXPERIMENTAL SHOW ZONE CONFIGURATION FOR RANGE DEFAULT
+  {
+    /* SKIP DOC */
+    $$.val = &ShowZoneConfig{ZoneSpecifier{NamedZone: Name($7)}}
+  }
+| EXPERIMENTAL SHOW ZONE CONFIGURATION FOR DATABASE name
+  {
+    /* SKIP DOC */
+    $$.val = &ShowZoneConfig{ZoneSpecifier{Database: Name($7)}}
+  }
+| EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE qualified_name
+  {
+    /* SKIP DOC */
+    $$.val = &ShowZoneConfig{ZoneSpecifier{Table: $7.normalizableTableName()}}
+  }
+| EXPERIMENTAL SHOW ZONE CONFIGURATIONS
+  {
+    /* SKIP DOC */
+    $$.val = &ShowZoneConfig{}
+  }
+| EXPERIMENTAL SHOW ALL ZONE CONFIGURATIONS
+  {
+    /* SKIP DOC */
+    $$.val = &ShowZoneConfig{}
+  }
 
 show_testing_stmt:
   SHOW TESTING_RANGES FROM TABLE qualified_name
@@ -6227,6 +6312,9 @@ unreserved_keyword:
 | COMMIT
 | COMMITTED
 | CONFLICT
+| CONFIGURATION
+| CONFIGURATIONS
+| CONFIGURE
 | CONSTRAINTS
 | COPY
 | COVERING
@@ -6245,6 +6333,7 @@ unreserved_keyword:
 | DROP
 | ENCODING
 | EXECUTE
+| EXPERIMENTAL
 | EXPERIMENTAL_FINGERPRINTS
 | EXPLAIN
 | FILTER

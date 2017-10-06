@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
 func init() {
@@ -30,27 +31,31 @@ func init() {
 	config.ZoneConfigHook = GetZoneConfig
 }
 
+var errNoZoneConfigApplies = errors.New("no zone config applies")
+
+// getZoneConfig recursively looks up entries in system.zones until an entry
+// that applies to the object with the specified id is found.
 func getZoneConfig(
 	id uint32, get func(roachpb.Key) (*roachpb.Value, error),
-) (config.ZoneConfig, bool, error) {
+) (config.ZoneConfig, uint32, error) {
 	// Look in the zones table.
 	if zoneVal, err := get(sqlbase.MakeZoneKey(sqlbase.ID(id))); err != nil {
-		return config.ZoneConfig{}, false, err
+		return config.ZoneConfig{}, 0, err
 	} else if zoneVal != nil {
 		// We're done.
 		zone, err := config.MigrateZoneConfig(zoneVal)
-		return zone, true, err
+		return zone, id, err
 	}
 
 	// No zone config for this ID. We need to figure out if it's a database
 	// or table. Lookup its descriptor.
 	if descVal, err := get(sqlbase.MakeDescMetadataKey(sqlbase.ID(id))); err != nil {
-		return config.ZoneConfig{}, false, err
+		return config.ZoneConfig{}, 0, err
 	} else if descVal != nil {
 		// Determine whether this is a database or table.
 		var desc sqlbase.Descriptor
 		if err := descVal.GetProto(&desc); err != nil {
-			return config.ZoneConfig{}, false, err
+			return config.ZoneConfig{}, 0, err
 		}
 		if tableDesc := desc.GetTable(); tableDesc != nil {
 			// This is a table descriptor. Lookup its parent database zone config.
@@ -65,22 +70,27 @@ func getZoneConfig(
 	}
 
 	// No descriptor or not a table.
-	return config.ZoneConfig{}, false, nil
+	return config.ZoneConfig{}, 0, errNoZoneConfigApplies
 }
 
 // GetZoneConfig returns the zone config for the object with 'id' using the
 // cached system config.
 func GetZoneConfig(cfg config.SystemConfig, id uint32) (config.ZoneConfig, bool, error) {
-	return getZoneConfig(id, func(key roachpb.Key) (*roachpb.Value, error) {
+	zone, _, err := getZoneConfig(id, func(key roachpb.Key) (*roachpb.Value, error) {
 		return cfg.GetValue(key), nil
 	})
+	found := err != nil
+	if err == errNoZoneConfigApplies {
+		err = nil
+	}
+	return zone, found, err
 }
 
 // GetZoneConfigInTxn is like GetZoneConfig, but uses the provided transaction
 // to perform lookups instead of the cached system config.
 func GetZoneConfigInTxn(
 	ctx context.Context, txn *client.Txn, id uint32,
-) (config.ZoneConfig, bool, error) {
+) (config.ZoneConfig, uint32, error) {
 	return getZoneConfig(id, func(key roachpb.Key) (*roachpb.Value, error) {
 		kv, err := txn.Get(ctx, key)
 		if err != nil {

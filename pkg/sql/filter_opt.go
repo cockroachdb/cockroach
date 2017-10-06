@@ -339,6 +339,8 @@ func (p *planner) propagateFilters(
 	case *valuesNode:
 	case *setNode:
 	case *setClusterSettingNode:
+	case *setZoneConfigNode:
+	case *showZoneConfigNode:
 	case *showRangesNode:
 	case *showFingerprintsNode:
 	case *scatterNode:
