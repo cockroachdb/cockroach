@@ -343,6 +343,24 @@ func backupAndRestore(
 		if rowCount != int64(numAccounts) {
 			t.Fatalf("expected %d rows but found %d", numAccounts, rowCount)
 		}
+
+		// Verify there's no /Table/51 - /Table/51/1 empty span.
+		{
+			var count int
+			sqlDBRestore.QueryRow(`
+			SELECT count(*) FROM crdb_internal.ranges
+			WHERE start_key = (
+				('/Table/' ||
+				(SELECT table_id FROM crdb_internal.tables
+					WHERE database_name = $1 AND name = $2
+				)::STRING) ||
+				'/1'
+			)
+		`, "data", "bank").Scan(&count)
+			if count != 0 {
+				t.Fatal("unexpected span start at primary index")
+			}
+		}
 	}
 }
 func TestBackupRestoreSystemJobs(t *testing.T) {
