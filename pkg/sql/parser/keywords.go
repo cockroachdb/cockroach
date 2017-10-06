@@ -117,6 +117,7 @@ var keywords = map[string]struct {
 	"having":                    {HAVING, "R"},
 	"high":                      {HIGH, "U"},
 	"hour":                      {HOUR, "U"},
+	"identified":                {IDENTIFIED, "U"},
 	"if":                        {IF, "C"},
 	"ifnull":                    {IFNULL, "C"},
 	"ilike":                     {ILIKE, "T"},

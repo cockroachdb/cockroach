@@ -396,7 +396,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 
 %token <str>   HAVING HELP HIGH HOUR HAS_SOME HAS_ALL
 
-%token <str>   IMPORT INCREMENTAL IF IFNULL ILIKE IN INET INTERLEAVE
+%token <str>   IDENTIFIED IMPORT INCREMENTAL IF IFNULL ILIKE IN INET INTERLEAVE
 %token <str>   INDEX INDEXES INITIALLY
 %token <str>   INNER INSERT INT INT2VECTOR INT2 INT4 INT8 INT64 INTEGER
 %token <str>   INTERSECT INTERVAL INTO IS ISOLATION
@@ -473,10 +473,12 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <Statement> stmt
 
 %type <Statement> alter_stmt
+%type <Statement> alter_ddl_stmt
 %type <Statement> alter_table_stmt
 %type <Statement> alter_index_stmt
 %type <Statement> alter_view_stmt
 %type <Statement> alter_database_stmt
+%type <Statement> alter_user_stmt
 
 // ALTER TABLE
 %type <Statement> alter_onetable_stmt
@@ -487,6 +489,9 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 
 // ALTER DATABASE
 %type <Statement> alter_rename_database_stmt
+
+// ALTER USER
+%type <Statement> alter_user_password_stmt
 
 // ALTER INDEX
 %type <Statement> alter_scatter_index_stmt
@@ -919,13 +924,17 @@ stmt:
 
 // %Help: ALTER
 // %Category: Group
-// %Text: ALTER TABLE, ALTER INDEX, ALTER VIEW, ALTER DATABASE
+// %Text: ALTER TABLE, ALTER INDEX, ALTER VIEW, ALTER DATABASE, ALTER USER
 alter_stmt:
+  alter_ddl_stmt      // help texts in sub-rule
+| alter_user_stmt     // EXTEND WITH HELP: ALTER USER
+| ALTER error         // SHOW HELP: ALTER
+
+alter_ddl_stmt:
   alter_table_stmt    // EXTEND WITH HELP: ALTER TABLE
 | alter_index_stmt    // EXTEND WITH HELP: ALTER INDEX
 | alter_view_stmt     // EXTEND WITH HELP: ALTER VIEW
 | alter_database_stmt // EXTEND WITH HELP: ALTER DATABASE
-| ALTER error         // SHOW HELP: ALTER
 
 // %Help: ALTER TABLE - change the definition of a table
 // %Category: DDL
@@ -972,6 +981,15 @@ alter_view_stmt:
 // ALTER VIEW has its error help token here because the ALTER VIEW
 // prefix is spread over multiple non-terminals.
 | ALTER VIEW error // SHOW HELP: ALTER VIEW
+
+// %Help: ALTER USER - change user properties
+// %Category: Priv
+// %Text:
+// ALTER USER [IF EXISTS] <name> IDENTIFY BY <password>
+// %SeeAlso: CREATE USER
+alter_user_stmt:
+  alter_user_password_stmt
+| ALTER USER error // SHOW HELP: ALTER USER
 
 // %Help: ALTER DATABASE - change the definition of a database
 // %Category: DDL
@@ -1626,7 +1644,8 @@ explain_stmt:
 | EXPLAIN '(' error // SHOW HELP: EXPLAIN
 
 preparable_stmt:
-  backup_stmt       // EXTEND WITH HELP: BACKUP
+  alter_user_stmt   // EXTEND WITH HELP: ALTER USER
+| backup_stmt       // EXTEND WITH HELP: BACKUP
 | cancel_stmt       // help texts in sub-rule
 | create_user_stmt  // EXTEND WITH HELP: CREATE USER
 | delete_stmt       // EXTEND WITH HELP: DELETE
@@ -1649,7 +1668,7 @@ preparable_stmt:
 
 explainable_stmt:
   preparable_stmt
-| alter_stmt       // help texts in sub-rule
+| alter_ddl_stmt   // help texts in sub-rule
 | create_ddl_stmt  // help texts in sub-rule
 | drop_ddl_stmt    // help texts in sub-rule
 | execute_stmt     // EXTEND WITH HELP: EXECUTE
@@ -2954,6 +2973,18 @@ alter_rename_database_stmt:
   ALTER DATABASE name RENAME TO name
   {
     $$.val = &RenameDatabase{Name: Name($3), NewName: Name($6)}
+  }
+
+// As in MySQL.
+// https://dev.mysql.com/doc/refman/5.7/en/alter-user.html
+alter_user_password_stmt:
+  ALTER USER string_or_placeholder IDENTIFIED BY string_or_placeholder
+  {
+    $$.val = &AlterUserSetPassword{Name: $3.expr(), Password: $6.expr()}
+  }
+| ALTER USER IF EXISTS string_or_placeholder IDENTIFIED BY string_or_placeholder
+  {
+    $$.val = &AlterUserSetPassword{Name: $5.expr(), Password: $8.expr(), IfExists: true}
   }
 
 alter_rename_table_stmt:
@@ -6300,6 +6331,7 @@ unreserved_keyword:
 | GRANTS
 | HIGH
 | HOUR
+| IDENTIFIED
 | IMPORT
 | INCREMENTAL
 | INDEXES
