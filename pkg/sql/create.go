@@ -223,9 +223,10 @@ func (*createIndexNode) Close(context.Context)        {}
 func (*createIndexNode) Values() parser.Datums        { return parser.Datums{} }
 
 type createUserNode struct {
-	name        func() (string, error)
-	password    func() (string, error)
-	ifNotExists bool
+	name         func() (string, error)
+	password     func() (string, error)
+	ifNotExists  bool
+	rowsAffected int
 }
 
 // CreateUser creates a user.
@@ -315,7 +316,7 @@ func (n *createUserNode) Start(params runParams) error {
 	}
 
 	internalExecutor := InternalExecutor{LeaseManager: params.p.LeaseMgr()}
-	rowsAffected, err := internalExecutor.ExecuteStatementInTransaction(
+	n.rowsAffected, err = internalExecutor.ExecuteStatementInTransaction(
 		params.ctx,
 		"create-user",
 		params.p.txn,
@@ -326,23 +327,32 @@ func (n *createUserNode) Start(params runParams) error {
 	if err != nil {
 		if sqlbase.IsUniquenessConstraintViolationError(err) {
 			if n.ifNotExists {
+				// INSERT only detects error at the end of each batch.  This
+				// means perhaps the count by ExecuteStatementInTransactions
+				// will have reported updated rows even though an error was
+				// encountered.  If the error was due to a duplicate entry, we
+				// are not actually inserting anything but are canceling the
+				// error, so clear the row count so that the client can learn
+				// what's going on.
+				n.rowsAffected = 0
 				return nil
 			}
 			err = errors.Errorf("user %s already exists", normalizedUsername)
 		}
 		return err
-	} else if rowsAffected != 1 {
+	} else if n.rowsAffected != 1 {
 		return errors.Errorf(
-			"%d rows affected by user creation; expected exactly one row affected", rowsAffected,
+			"%d rows affected by user creation; expected exactly one row affected", n.rowsAffected,
 		)
 	}
 
 	return nil
 }
 
-func (*createUserNode) Next(runParams) (bool, error) { return false, nil }
-func (*createUserNode) Close(context.Context)        {}
-func (*createUserNode) Values() parser.Datums        { return parser.Datums{} }
+func (n *createUserNode) FastPathResults() (int, bool) { return n.rowsAffected, true }
+func (*createUserNode) Next(runParams) (bool, error)   { return false, nil }
+func (*createUserNode) Close(context.Context)          {}
+func (*createUserNode) Values() parser.Datums          { return parser.Datums{} }
 
 // alterUserSetPasswordNode represents an ALTER USER ... WITH PASSWORD statement.
 type alterUserSetPasswordNode struct {
