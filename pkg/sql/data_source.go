@@ -791,6 +791,21 @@ func (src *dataSourceInfo) checkDatabaseName(tn parser.TableName) (parser.TableN
 	return tn, nil
 }
 
+func findColHelper(
+	src *dataSourceInfo, c *parser.ColumnItem, colName string, iSrc, srcIdx, colIdx, idx int,
+) (int, int, error) {
+	col := src.sourceColumns[idx]
+	if col.Name == colName {
+		if colIdx != invalidColIdx {
+			return invalidSrcIdx, invalidColIdx, pgerror.NewErrorf(pgerror.CodeAmbiguousColumnError,
+				"column reference %q is ambiguous", parser.ErrString(c))
+		}
+		srcIdx = iSrc
+		colIdx = idx
+	}
+	return srcIdx, colIdx, nil
+}
+
 // findColumn looks up the column specified by a ColumnItem. The
 // function returns the index of the source in the multiSourceInfo
 // array and the column index for the column array of that
@@ -817,19 +832,6 @@ func (sources multiSourceInfo) findColumn(
 		c.TableName.DatabaseName = tableName.DatabaseName
 	}
 
-	findColHelper := func(src *dataSourceInfo, iSrc, srcIdx, colIdx int, idx int) (int, int, error) {
-		col := src.sourceColumns[idx]
-		if col.Name == colName {
-			if colIdx != invalidColIdx {
-				return invalidSrcIdx, invalidColIdx, pgerror.NewErrorf(pgerror.CodeAmbiguousColumnError,
-					"column reference %q is ambiguous", parser.ErrString(c))
-			}
-			srcIdx = iSrc
-			colIdx = idx
-		}
-		return srcIdx, colIdx, nil
-	}
-
 	colIdx = invalidColIdx
 	for iSrc, src := range sources {
 		colRange, ok := src.sourceAliases.columnRange(tableName)
@@ -839,7 +841,7 @@ func (sources multiSourceInfo) findColumn(
 			continue
 		}
 		for _, idx := range colRange {
-			srcIdx, colIdx, err = findColHelper(src, iSrc, srcIdx, colIdx, idx)
+			srcIdx, colIdx, err = findColHelper(src, c, colName, iSrc, srcIdx, colIdx, idx)
 			if err != nil {
 				return srcIdx, colIdx, err
 			}
@@ -851,7 +853,7 @@ func (sources multiSourceInfo) findColumn(
 		// columns, not just columns of the anonymous table.
 		for iSrc, src := range sources {
 			for idx := 0; idx < len(src.sourceColumns); idx++ {
-				srcIdx, colIdx, err = findColHelper(src, iSrc, srcIdx, colIdx, idx)
+				srcIdx, colIdx, err = findColHelper(src, c, colName, iSrc, srcIdx, colIdx, idx)
 				if err != nil {
 					return srcIdx, colIdx, err
 				}

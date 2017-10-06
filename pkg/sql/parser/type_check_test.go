@@ -130,6 +130,22 @@ func TestTypeCheck(t *testing.T) {
 	}
 }
 
+func BenchmarkTypeCheck(b *testing.B) {
+	// random example from TPCC
+	sql := `CASE 1 >= $1 + 10 WHEN true THEN 1-$1 ELSE (1-$1)+91 END`
+	expr, err := ParseExpr(sql)
+	if err != nil {
+		b.Fatalf("%s: %v", expr, err)
+	}
+	ctx := MakeSemaContext(false)
+	for i := 0; i < b.N; i++ {
+		_, err := TypeCheck(expr, &ctx, TypeInt)
+		if err != nil {
+			b.Fatalf("unexpected error: %s", err)
+		}
+	}
+}
+
 func TestTypeCheckNormalize(t *testing.T) {
 	testData := []struct {
 		expr     string
