@@ -11,7 +11,7 @@ interactive, contextual help is returned at runtime.
 We equip the generated parser with the ability to report contextual
 help in two circumstances:
 
-- when the user explicitly requests help with the HELPTOKEN (current syntax: standalone "`?`")
+- when the user explicitly requests help with the HELPTOKEN (current syntax: standalone "`??`")
 - when the user makes a grammatical mistake (e.g. `INSERT sometable INTO(x, y) ...`)
 
 We use the `docgen` tool to produce the generated documentation files that are
