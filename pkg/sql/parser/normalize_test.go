@@ -145,6 +145,11 @@ func TestNormalizeExpr(t *testing.T) {
 		{`IF((true OR a < 0), (0 + a)::decimal, 2 / (1 - 1))`, `a::DECIMAL`},
 		{`COALESCE(NULL, (NULL < 3), a = 2 - 1, d)`, `COALESCE(a = 1, d)`},
 		{`COALESCE(NULL, a)`, `a`},
+		{`NOT NULL`, `NULL`},
+		{`NOT d`, `NOT d`},
+		{`NOT NOT d`, `d`},
+		{`NOT NOT NOT d`, `NOT d`},
+		{`NOT NOT NOT NOT d`, `d`},
 		// #15454: ensure that operators are pretty-printed correctly after normalization.
 		{`(random() + 1.0)::INT`, `(random() + 1.0)::INT`},
 		{`('a' || left('b', random()::INT)) COLLATE en`, `('a' || left('b', random()::INT)) COLLATE en`},
