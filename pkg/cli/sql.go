@@ -568,9 +568,9 @@ func (c *cliState) GetCompletions(_ string) []string {
 	sql, _ := c.ins.GetLineInfo()
 	var p parser.Parser
 
-	if !strings.HasSuffix(sql, "?") {
+	if !strings.HasSuffix(sql, "??") {
 		fmt.Fprintf(c.ins.Stdout(),
-			"\ntab completion not supported; append '?' and press tab for contextual help\n\n%s", sql)
+			"\ntab completion not supported; append '??' and press tab for contextual help\n\n%s", sql)
 		return nil
 	}
 

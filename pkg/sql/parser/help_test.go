@@ -53,273 +53,273 @@ func TestContextualHelp(t *testing.T) {
 		input string
 		key   string
 	}{
-		{`ALTER ?`, `ALTER`},
-
-		{`ALTER TABLE IF ?`, `ALTER TABLE`},
-		{`ALTER TABLE blah ?`, `ALTER TABLE`},
-		{`ALTER TABLE blah ADD ?`, `ALTER TABLE`},
-		{`ALTER TABLE blah ALTER x DROP ?`, `ALTER TABLE`},
-		{`ALTER TABLE blah RENAME TO ?`, `ALTER TABLE`},
-		{`ALTER TABLE blah RENAME TO blih ?`, `ALTER TABLE`},
-		{`ALTER TABLE blah SPLIT AT (SELECT 1) ?`, `ALTER TABLE`},
-
-		{`ALTER INDEX foo@bar RENAME ?`, `ALTER INDEX`},
-		{`ALTER INDEX foo@bar RENAME TO blih ?`, `ALTER INDEX`},
-		{`ALTER INDEX foo@bar SPLIT ?`, `ALTER INDEX`},
-		{`ALTER INDEX foo@bar SPLIT AT (SELECT 1) ?`, `ALTER INDEX`},
-
-		{`ALTER DATABASE foo ?`, `ALTER DATABASE`},
-		{`ALTER DATABASE foo RENAME ?`, `ALTER DATABASE`},
-		{`ALTER DATABASE foo RENAME TO bar ?`, `ALTER DATABASE`},
-
-		{`ALTER VIEW IF ?`, `ALTER VIEW`},
-		{`ALTER VIEW blah ?`, `ALTER VIEW`},
-		{`ALTER VIEW blah RENAME ?`, `ALTER VIEW`},
-		{`ALTER VIEW blah RENAME TO blih ?`, `ALTER VIEW`},
-
-		{`CANCEL ?`, `CANCEL`},
-		{`CANCEL JOB ?`, `CANCEL JOB`},
-		{`CANCEL QUERY ?`, `CANCEL QUERY`},
-
-		{`CREATE UNIQUE ?`, `CREATE`},
-		{`CREATE UNIQUE INDEX ?`, `CREATE INDEX`},
-		{`CREATE INDEX IF NOT ?`, `CREATE INDEX`},
-		{`CREATE INDEX blah ?`, `CREATE INDEX`},
-		{`CREATE INDEX blah ON bloh (?`, `CREATE INDEX`},
-		{`CREATE INDEX blah ON bloh (x,y) STORING ?`, `CREATE INDEX`},
-		{`CREATE INDEX blah ON bloh (x) ?`, `CREATE INDEX`},
-
-		{`CREATE DATABASE IF ?`, `CREATE DATABASE`},
-		{`CREATE DATABASE IF NOT ?`, `CREATE DATABASE`},
-		{`CREATE DATABASE blih ?`, `CREATE DATABASE`},
-
-		{`CREATE USER blih ?`, `CREATE USER`},
-		{`CREATE USER blih WITH ?`, `CREATE USER`},
-
-		{`CREATE VIEW blah (?`, `CREATE VIEW`},
-		{`CREATE VIEW blah AS (SELECT c FROM x) ?`, `CREATE VIEW`},
-		{`CREATE VIEW blah AS SELECT c FROM x ?`, `SELECT`},
-		{`CREATE VIEW blah AS (?`, `<SELECTCLAUSE>`},
-
-		{`CREATE TABLE blah (?`, `CREATE TABLE`},
-		{`CREATE TABLE IF NOT ?`, `CREATE TABLE`},
-		{`CREATE TABLE blah (x, y) AS ?`, `CREATE TABLE`},
-		{`CREATE TABLE blah (x INT) ?`, `CREATE TABLE`},
-		{`CREATE TABLE blah AS ?`, `CREATE TABLE`},
-		{`CREATE TABLE blah AS (SELECT 1) ?`, `CREATE TABLE`},
-		{`CREATE TABLE blah AS SELECT 1 ?`, `SELECT`},
-
-		{`DELETE FROM ?`, `DELETE`},
-		{`DELETE FROM blah ?`, `DELETE`},
-		{`DELETE FROM blah WHERE ?`, `DELETE`},
-		{`DELETE FROM blah WHERE x > 3 ?`, `DELETE`},
-
-		{`DISCARD ALL ?`, `DISCARD`},
-		{`DISCARD ?`, `DISCARD`},
-
-		{`DROP ?`, `DROP`},
-
-		{`DROP DATABASE IF ?`, `DROP DATABASE`},
-		{`DROP DATABASE IF EXISTS blah ?`, `DROP DATABASE`},
-
-		{`DROP INDEX blah, ?`, `DROP INDEX`},
-		{`DROP INDEX blah@blih ?`, `DROP INDEX`},
-
-		{`DROP TABLE blah ?`, `DROP TABLE`},
-		{`DROP TABLE IF ?`, `DROP TABLE`},
-		{`DROP TABLE IF EXISTS blih, bloh ?`, `DROP TABLE`},
-
-		{`DROP VIEW blah ?`, `DROP VIEW`},
-		{`DROP VIEW IF ?`, `DROP VIEW`},
-		{`DROP VIEW IF EXISTS blih, bloh ?`, `DROP VIEW`},
-
-		{`DROP USER IF ?`, `DROP USER`},
-		{`DROP USER IF EXISTS bloh ?`, `DROP USER`},
-
-		{`EXPLAIN (?`, `EXPLAIN`},
-		{`EXPLAIN SELECT 1 ?`, `SELECT`},
-		{`EXPLAIN INSERT INTO xx (SELECT 1) ?`, `INSERT`},
-		{`EXPLAIN UPSERT INTO xx (SELECT 1) ?`, `UPSERT`},
-		{`EXPLAIN DELETE FROM xx ?`, `DELETE`},
-		{`EXPLAIN UPDATE xx SET x = y ?`, `UPDATE`},
-		{`SELECT * FROM [EXPLAIN ?`, `EXPLAIN`},
-
-		{`PREPARE foo ?`, `PREPARE`},
-		{`PREPARE foo (?`, `PREPARE`},
-		{`PREPARE foo AS SELECT 1 ?`, `SELECT`},
-		{`PREPARE foo AS (SELECT 1) ?`, `PREPARE`},
-		{`PREPARE foo AS INSERT INTO xx (SELECT 1) ?`, `INSERT`},
-		{`PREPARE foo AS UPSERT INTO xx (SELECT 1) ?`, `UPSERT`},
-		{`PREPARE foo AS DELETE FROM xx ?`, `DELETE`},
-		{`PREPARE foo AS UPDATE xx SET x = y ?`, `UPDATE`},
-
-		{`EXECUTE foo ?`, `EXECUTE`},
-		{`EXECUTE foo (?`, `EXECUTE`},
+		{`ALTER ??`, `ALTER`},
+
+		{`ALTER TABLE IF ??`, `ALTER TABLE`},
+		{`ALTER TABLE blah ??`, `ALTER TABLE`},
+		{`ALTER TABLE blah ADD ??`, `ALTER TABLE`},
+		{`ALTER TABLE blah ALTER x DROP ??`, `ALTER TABLE`},
+		{`ALTER TABLE blah RENAME TO ??`, `ALTER TABLE`},
+		{`ALTER TABLE blah RENAME TO blih ??`, `ALTER TABLE`},
+		{`ALTER TABLE blah SPLIT AT (SELECT 1) ??`, `ALTER TABLE`},
+
+		{`ALTER INDEX foo@bar RENAME ??`, `ALTER INDEX`},
+		{`ALTER INDEX foo@bar RENAME TO blih ??`, `ALTER INDEX`},
+		{`ALTER INDEX foo@bar SPLIT ??`, `ALTER INDEX`},
+		{`ALTER INDEX foo@bar SPLIT AT (SELECT 1) ??`, `ALTER INDEX`},
+
+		{`ALTER DATABASE foo ??`, `ALTER DATABASE`},
+		{`ALTER DATABASE foo RENAME ??`, `ALTER DATABASE`},
+		{`ALTER DATABASE foo RENAME TO bar ??`, `ALTER DATABASE`},
+
+		{`ALTER VIEW IF ??`, `ALTER VIEW`},
+		{`ALTER VIEW blah ??`, `ALTER VIEW`},
+		{`ALTER VIEW blah RENAME ??`, `ALTER VIEW`},
+		{`ALTER VIEW blah RENAME TO blih ??`, `ALTER VIEW`},
+
+		{`CANCEL ??`, `CANCEL`},
+		{`CANCEL JOB ??`, `CANCEL JOB`},
+		{`CANCEL QUERY ??`, `CANCEL QUERY`},
+
+		{`CREATE UNIQUE ??`, `CREATE`},
+		{`CREATE UNIQUE INDEX ??`, `CREATE INDEX`},
+		{`CREATE INDEX IF NOT ??`, `CREATE INDEX`},
+		{`CREATE INDEX blah ??`, `CREATE INDEX`},
+		{`CREATE INDEX blah ON bloh (??`, `CREATE INDEX`},
+		{`CREATE INDEX blah ON bloh (x,y) STORING ??`, `CREATE INDEX`},
+		{`CREATE INDEX blah ON bloh (x) ??`, `CREATE INDEX`},
+
+		{`CREATE DATABASE IF ??`, `CREATE DATABASE`},
+		{`CREATE DATABASE IF NOT ??`, `CREATE DATABASE`},
+		{`CREATE DATABASE blih ??`, `CREATE DATABASE`},
+
+		{`CREATE USER blih ??`, `CREATE USER`},
+		{`CREATE USER blih WITH ??`, `CREATE USER`},
+
+		{`CREATE VIEW blah (??`, `CREATE VIEW`},
+		{`CREATE VIEW blah AS (SELECT c FROM x) ??`, `CREATE VIEW`},
+		{`CREATE VIEW blah AS SELECT c FROM x ??`, `SELECT`},
+		{`CREATE VIEW blah AS (??`, `<SELECTCLAUSE>`},
+
+		{`CREATE TABLE blah (??`, `CREATE TABLE`},
+		{`CREATE TABLE IF NOT ??`, `CREATE TABLE`},
+		{`CREATE TABLE blah (x, y) AS ??`, `CREATE TABLE`},
+		{`CREATE TABLE blah (x INT) ??`, `CREATE TABLE`},
+		{`CREATE TABLE blah AS ??`, `CREATE TABLE`},
+		{`CREATE TABLE blah AS (SELECT 1) ??`, `CREATE TABLE`},
+		{`CREATE TABLE blah AS SELECT 1 ??`, `SELECT`},
+
+		{`DELETE FROM ??`, `DELETE`},
+		{`DELETE FROM blah ??`, `DELETE`},
+		{`DELETE FROM blah WHERE ??`, `DELETE`},
+		{`DELETE FROM blah WHERE x > 3 ??`, `DELETE`},
+
+		{`DISCARD ALL ??`, `DISCARD`},
+		{`DISCARD ??`, `DISCARD`},
+
+		{`DROP ??`, `DROP`},
+
+		{`DROP DATABASE IF ??`, `DROP DATABASE`},
+		{`DROP DATABASE IF EXISTS blah ??`, `DROP DATABASE`},
+
+		{`DROP INDEX blah, ??`, `DROP INDEX`},
+		{`DROP INDEX blah@blih ??`, `DROP INDEX`},
+
+		{`DROP TABLE blah ??`, `DROP TABLE`},
+		{`DROP TABLE IF ??`, `DROP TABLE`},
+		{`DROP TABLE IF EXISTS blih, bloh ??`, `DROP TABLE`},
+
+		{`DROP VIEW blah ??`, `DROP VIEW`},
+		{`DROP VIEW IF ??`, `DROP VIEW`},
+		{`DROP VIEW IF EXISTS blih, bloh ??`, `DROP VIEW`},
+
+		{`DROP USER IF ??`, `DROP USER`},
+		{`DROP USER IF EXISTS bloh ??`, `DROP USER`},
+
+		{`EXPLAIN (??`, `EXPLAIN`},
+		{`EXPLAIN SELECT 1 ??`, `SELECT`},
+		{`EXPLAIN INSERT INTO xx (SELECT 1) ??`, `INSERT`},
+		{`EXPLAIN UPSERT INTO xx (SELECT 1) ??`, `UPSERT`},
+		{`EXPLAIN DELETE FROM xx ??`, `DELETE`},
+		{`EXPLAIN UPDATE xx SET x = y ??`, `UPDATE`},
+		{`SELECT * FROM [EXPLAIN ??`, `EXPLAIN`},
+
+		{`PREPARE foo ??`, `PREPARE`},
+		{`PREPARE foo (??`, `PREPARE`},
+		{`PREPARE foo AS SELECT 1 ??`, `SELECT`},
+		{`PREPARE foo AS (SELECT 1) ??`, `PREPARE`},
+		{`PREPARE foo AS INSERT INTO xx (SELECT 1) ??`, `INSERT`},
+		{`PREPARE foo AS UPSERT INTO xx (SELECT 1) ??`, `UPSERT`},
+		{`PREPARE foo AS DELETE FROM xx ??`, `DELETE`},
+		{`PREPARE foo AS UPDATE xx SET x = y ??`, `UPDATE`},
+
+		{`EXECUTE foo ??`, `EXECUTE`},
+		{`EXECUTE foo (??`, `EXECUTE`},
 
-		{`DEALLOCATE foo ?`, `DEALLOCATE`},
-		{`DEALLOCATE ALL ?`, `DEALLOCATE`},
-		{`DEALLOCATE PREPARE ?`, `DEALLOCATE`},
+		{`DEALLOCATE foo ??`, `DEALLOCATE`},
+		{`DEALLOCATE ALL ??`, `DEALLOCATE`},
+		{`DEALLOCATE PREPARE ??`, `DEALLOCATE`},
 
-		{`INSERT INTO ?`, `INSERT`},
-		{`INSERT INTO blah (?`, `<SELECTCLAUSE>`},
-		{`INSERT INTO blah VALUES (1) RETURNING ?`, `INSERT`},
-		{`INSERT INTO blah (VALUES (1)) ?`, `INSERT`},
-		{`INSERT INTO blah VALUES (1) ?`, `VALUES`},
-		{`INSERT INTO blah TABLE foo ?`, `TABLE`},
-
-		{`UPSERT INTO ?`, `UPSERT`},
-		{`UPSERT INTO blah (?`, `<SELECTCLAUSE>`},
-		{`UPSERT INTO blah VALUES (1) RETURNING ?`, `UPSERT`},
-		{`UPSERT INTO blah (VALUES (1)) ?`, `UPSERT`},
-		{`UPSERT INTO blah VALUES (1) ?`, `VALUES`},
-		{`UPSERT INTO blah TABLE foo ?`, `TABLE`},
+		{`INSERT INTO ??`, `INSERT`},
+		{`INSERT INTO blah (??`, `<SELECTCLAUSE>`},
+		{`INSERT INTO blah VALUES (1) RETURNING ??`, `INSERT`},
+		{`INSERT INTO blah (VALUES (1)) ??`, `INSERT`},
+		{`INSERT INTO blah VALUES (1) ??`, `VALUES`},
+		{`INSERT INTO blah TABLE foo ??`, `TABLE`},
+
+		{`UPSERT INTO ??`, `UPSERT`},
+		{`UPSERT INTO blah (??`, `<SELECTCLAUSE>`},
+		{`UPSERT INTO blah VALUES (1) RETURNING ??`, `UPSERT`},
+		{`UPSERT INTO blah (VALUES (1)) ??`, `UPSERT`},
+		{`UPSERT INTO blah VALUES (1) ??`, `VALUES`},
+		{`UPSERT INTO blah TABLE foo ??`, `TABLE`},
 
-		{`UPDATE blah ?`, `UPDATE`},
-		{`UPDATE blah SET ?`, `UPDATE`},
-		{`UPDATE blah SET x = 3 WHERE true ?`, `UPDATE`},
-		{`UPDATE blah SET x = 3 ?`, `UPDATE`},
-		{`UPDATE blah SET x = 3 WHERE ?`, `UPDATE`},
+		{`UPDATE blah ??`, `UPDATE`},
+		{`UPDATE blah SET ??`, `UPDATE`},
+		{`UPDATE blah SET x = 3 WHERE true ??`, `UPDATE`},
+		{`UPDATE blah SET x = 3 ??`, `UPDATE`},
+		{`UPDATE blah SET x = 3 WHERE ??`, `UPDATE`},
 
-		{`GRANT ALL ?`, `GRANT`},
-		{`GRANT ALL ON foo TO ?`, `GRANT`},
-		{`GRANT ALL ON foo TO bar ?`, `GRANT`},
+		{`GRANT ALL ??`, `GRANT`},
+		{`GRANT ALL ON foo TO ??`, `GRANT`},
+		{`GRANT ALL ON foo TO bar ??`, `GRANT`},
 
-		{`PAUSE ?`, `PAUSE JOB`},
+		{`PAUSE ??`, `PAUSE JOB`},
 
-		{`RESUME ?`, `RESUME JOB`},
-
-		{`REVOKE ALL ?`, `REVOKE`},
-		{`REVOKE ALL ON foo FROM ?`, `REVOKE`},
-		{`REVOKE ALL ON foo FROM bar ?`, `REVOKE`},
+		{`RESUME ??`, `RESUME JOB`},
+
+		{`REVOKE ALL ??`, `REVOKE`},
+		{`REVOKE ALL ON foo FROM ??`, `REVOKE`},
+		{`REVOKE ALL ON foo FROM bar ??`, `REVOKE`},
 
-		{`SELECT * FROM ?`, `<SOURCE>`},
-		{`SELECT * FROM (?`, `<SOURCE>`}, // not <selectclause>! joins are allowed.
-		{`SELECT * FROM [SHOW ?`, `SHOW`},
+		{`SELECT * FROM ??`, `<SOURCE>`},
+		{`SELECT * FROM (??`, `<SOURCE>`}, // not <selectclause>! joins are allowed.
+		{`SELECT * FROM [SHOW ??`, `SHOW`},
 
-		{`SHOW blah ?`, `SHOW SESSION`},
-		{`SHOW database ?`, `SHOW SESSION`},
-		{`SHOW TIME ?`, `SHOW SESSION`},
-		{`SHOW all ?`, `SHOW SESSION`},
-		{`SHOW SESSION_USER ?`, `SHOW SESSION`},
-		{`SHOW SESSION blah ?`, `SHOW SESSION`},
-		{`SHOW SESSION database ?`, `SHOW SESSION`},
-		{`SHOW SESSION TIME ZONE ?`, `SHOW SESSION`},
-		{`SHOW SESSION all ?`, `SHOW SESSION`},
-		{`SHOW SESSION SESSION_USER ?`, `SHOW SESSION`},
+		{`SHOW blah ??`, `SHOW SESSION`},
+		{`SHOW database ??`, `SHOW SESSION`},
+		{`SHOW TIME ??`, `SHOW SESSION`},
+		{`SHOW all ??`, `SHOW SESSION`},
+		{`SHOW SESSION_USER ??`, `SHOW SESSION`},
+		{`SHOW SESSION blah ??`, `SHOW SESSION`},
+		{`SHOW SESSION database ??`, `SHOW SESSION`},
+		{`SHOW SESSION TIME ZONE ??`, `SHOW SESSION`},
+		{`SHOW SESSION all ??`, `SHOW SESSION`},
+		{`SHOW SESSION SESSION_USER ??`, `SHOW SESSION`},
 
-		{`SHOW SESSIONS ?`, `SHOW SESSIONS`},
-		{`SHOW LOCAL SESSIONS ?`, `SHOW SESSIONS`},
+		{`SHOW SESSIONS ??`, `SHOW SESSIONS`},
+		{`SHOW LOCAL SESSIONS ??`, `SHOW SESSIONS`},
 
-		{`SHOW QUERIES ?`, `SHOW QUERIES`},
-		{`SHOW LOCAL QUERIES ?`, `SHOW QUERIES`},
+		{`SHOW QUERIES ??`, `SHOW QUERIES`},
+		{`SHOW LOCAL QUERIES ??`, `SHOW QUERIES`},
 
-		{`SHOW TRACE ?`, `SHOW TRACE`},
-		{`SHOW TRACE FOR SESSION ?`, `SHOW TRACE`},
-		{`SHOW TRACE FOR ?`, `SHOW TRACE`},
+		{`SHOW TRACE ??`, `SHOW TRACE`},
+		{`SHOW TRACE FOR SESSION ??`, `SHOW TRACE`},
+		{`SHOW TRACE FOR ??`, `SHOW TRACE`},
 
-		{`SHOW JOBS ?`, `SHOW JOBS`},
+		{`SHOW JOBS ??`, `SHOW JOBS`},
 
-		{`SHOW BACKUP 'foo' ?`, `SHOW BACKUP`},
+		{`SHOW BACKUP 'foo' ??`, `SHOW BACKUP`},
 
-		{`SHOW CLUSTER SETTING all ?`, `SHOW CLUSTER SETTING`},
-		{`SHOW ALL CLUSTER ?`, `SHOW CLUSTER SETTING`},
+		{`SHOW CLUSTER SETTING all ??`, `SHOW CLUSTER SETTING`},
+		{`SHOW ALL CLUSTER ??`, `SHOW CLUSTER SETTING`},
 
-		{`SHOW COLUMNS FROM ?`, `SHOW COLUMNS`},
-		{`SHOW COLUMNS FROM foo ?`, `SHOW COLUMNS`},
+		{`SHOW COLUMNS FROM ??`, `SHOW COLUMNS`},
+		{`SHOW COLUMNS FROM foo ??`, `SHOW COLUMNS`},
 
-		{`SHOW CONSTRAINTS FROM ?`, `SHOW CONSTRAINTS`},
-		{`SHOW CONSTRAINTS FROM foo ?`, `SHOW CONSTRAINTS`},
+		{`SHOW CONSTRAINTS FROM ??`, `SHOW CONSTRAINTS`},
+		{`SHOW CONSTRAINTS FROM foo ??`, `SHOW CONSTRAINTS`},
 
-		{`SHOW CREATE TABLE blah ?`, `SHOW CREATE TABLE`},
+		{`SHOW CREATE TABLE blah ??`, `SHOW CREATE TABLE`},
 
-		{`SHOW CREATE VIEW blah ?`, `SHOW CREATE VIEW`},
+		{`SHOW CREATE VIEW blah ??`, `SHOW CREATE VIEW`},
 
-		{`SHOW DATABASES ?`, `SHOW DATABASES`},
+		{`SHOW DATABASES ??`, `SHOW DATABASES`},
 
-		{`SHOW GRANTS ON ?`, `SHOW GRANTS`},
-		{`SHOW GRANTS ON foo FOR ?`, `SHOW GRANTS`},
-		{`SHOW GRANTS ON foo FOR bar ?`, `SHOW GRANTS`},
+		{`SHOW GRANTS ON ??`, `SHOW GRANTS`},
+		{`SHOW GRANTS ON foo FOR ??`, `SHOW GRANTS`},
+		{`SHOW GRANTS ON foo FOR bar ??`, `SHOW GRANTS`},
 
-		{`SHOW KEYS ?`, `SHOW INDEXES`},
-		{`SHOW INDEX ?`, `SHOW INDEXES`},
-		{`SHOW INDEXES FROM ?`, `SHOW INDEXES`},
-		{`SHOW INDEXES FROM blah ?`, `SHOW INDEXES`},
+		{`SHOW KEYS ??`, `SHOW INDEXES`},
+		{`SHOW INDEX ??`, `SHOW INDEXES`},
+		{`SHOW INDEXES FROM ??`, `SHOW INDEXES`},
+		{`SHOW INDEXES FROM blah ??`, `SHOW INDEXES`},
 
-		{`SHOW TABLES FROM ?`, `SHOW TABLES`},
-		{`SHOW TABLES FROM blah ?`, `SHOW TABLES`},
+		{`SHOW TABLES FROM ??`, `SHOW TABLES`},
+		{`SHOW TABLES FROM blah ??`, `SHOW TABLES`},
 
-		{`SHOW TRANSACTION PRIORITY ?`, `SHOW TRANSACTION`},
-		{`SHOW TRANSACTION STATUS ?`, `SHOW TRANSACTION`},
-		{`SHOW TRANSACTION ISOLATION ?`, `SHOW TRANSACTION`},
-		{`SHOW TRANSACTION ISOLATION LEVEL ?`, `SHOW TRANSACTION`},
+		{`SHOW TRANSACTION PRIORITY ??`, `SHOW TRANSACTION`},
+		{`SHOW TRANSACTION STATUS ??`, `SHOW TRANSACTION`},
+		{`SHOW TRANSACTION ISOLATION ??`, `SHOW TRANSACTION`},
+		{`SHOW TRANSACTION ISOLATION LEVEL ??`, `SHOW TRANSACTION`},
 
-		{`SHOW USERS ?`, `SHOW USERS`},
+		{`SHOW USERS ??`, `SHOW USERS`},
 
-		{`TRUNCATE foo ?`, `TRUNCATE`},
-		{`TRUNCATE foo, ?`, `TRUNCATE`},
+		{`TRUNCATE foo ??`, `TRUNCATE`},
+		{`TRUNCATE foo, ??`, `TRUNCATE`},
 
-		{`SELECT 1 ?`, `SELECT`},
-		{`SELECT * FROM ?`, `<SOURCE>`},
-		{`SELECT 1 FROM foo ?`, `SELECT`},
-		{`SELECT 1 FROM foo WHERE ?`, `SELECT`},
-		{`SELECT 1 FROM (SELECT ?`, `SELECT`},
-		{`SELECT 1 FROM (VALUES ?`, `VALUES`},
-		{`SELECT 1 FROM (TABLE ?`, `TABLE`},
-		{`SELECT 1 FROM (SELECT 2 ?`, `SELECT`},
-		{`SELECT 1 FROM (?`, `<SOURCE>`},
+		{`SELECT 1 ??`, `SELECT`},
+		{`SELECT * FROM ??`, `<SOURCE>`},
+		{`SELECT 1 FROM foo ??`, `SELECT`},
+		{`SELECT 1 FROM foo WHERE ??`, `SELECT`},
+		{`SELECT 1 FROM (SELECT ??`, `SELECT`},
+		{`SELECT 1 FROM (VALUES ??`, `VALUES`},
+		{`SELECT 1 FROM (TABLE ??`, `TABLE`},
+		{`SELECT 1 FROM (SELECT 2 ??`, `SELECT`},
+		{`SELECT 1 FROM (??`, `<SOURCE>`},
 
-		{`TABLE blah ?`, `TABLE`},
+		{`TABLE blah ??`, `TABLE`},
 
-		{`VALUES (?`, `VALUES`},
+		{`VALUES (??`, `VALUES`},
 
-		{`VALUES (1) ?`, `VALUES`},
+		{`VALUES (1) ??`, `VALUES`},
 
-		{`SET SESSION TRANSACTION ?`, `SET TRANSACTION`},
-		{`SET SESSION TRANSACTION ISOLATION LEVEL SNAPSHOT ?`, `SET TRANSACTION`},
-		{`SET SESSION TIME ?`, `SET SESSION`},
-		{`SET SESSION TIME ZONE 'UTC' ?`, `SET SESSION`},
-		{`SET SESSION blah TO ?`, `SET SESSION`},
-		{`SET SESSION blah TO 42 ?`, `SET SESSION`},
+		{`SET SESSION TRANSACTION ??`, `SET TRANSACTION`},
+		{`SET SESSION TRANSACTION ISOLATION LEVEL SNAPSHOT ??`, `SET TRANSACTION`},
+		{`SET SESSION TIME ??`, `SET SESSION`},
+		{`SET SESSION TIME ZONE 'UTC' ??`, `SET SESSION`},
+		{`SET SESSION blah TO ??`, `SET SESSION`},
+		{`SET SESSION blah TO 42 ??`, `SET SESSION`},
 
-		{`SET TRANSACTION ?`, `SET TRANSACTION`},
-		{`SET TRANSACTION ISOLATION LEVEL SNAPSHOT ?`, `SET TRANSACTION`},
-		{`SET TIME ?`, `SET SESSION`},
-		{`SET TIME ZONE 'UTC' ?`, `SET SESSION`},
-		{`SET blah TO ?`, `SET SESSION`},
-		{`SET blah TO 42 ?`, `SET SESSION`},
+		{`SET TRANSACTION ??`, `SET TRANSACTION`},
+		{`SET TRANSACTION ISOLATION LEVEL SNAPSHOT ??`, `SET TRANSACTION`},
+		{`SET TIME ??`, `SET SESSION`},
+		{`SET TIME ZONE 'UTC' ??`, `SET SESSION`},
+		{`SET blah TO ??`, `SET SESSION`},
+		{`SET blah TO 42 ??`, `SET SESSION`},
 
-		{`SET CLUSTER ?`, `SET CLUSTER SETTING`},
-		{`SET CLUSTER SETTING blah = 42 ?`, `SET CLUSTER SETTING`},
+		{`SET CLUSTER ??`, `SET CLUSTER SETTING`},
+		{`SET CLUSTER SETTING blah = 42 ??`, `SET CLUSTER SETTING`},
 
-		{`RESET blah ?`, `RESET`},
-		{`RESET SESSION ?`, `RESET`},
-		{`RESET CLUSTER SETTING ?`, `RESET CLUSTER SETTING`},
+		{`RESET blah ??`, `RESET`},
+		{`RESET SESSION ??`, `RESET`},
+		{`RESET CLUSTER SETTING ??`, `RESET CLUSTER SETTING`},
 
-		{`BEGIN TRANSACTION ?`, `BEGIN`},
-		{`BEGIN TRANSACTION ISOLATION ?`, `BEGIN`},
-		{`BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT, ?`, `BEGIN`},
-		{`START ?`, `BEGIN`},
+		{`BEGIN TRANSACTION ??`, `BEGIN`},
+		{`BEGIN TRANSACTION ISOLATION ??`, `BEGIN`},
+		{`BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT, ??`, `BEGIN`},
+		{`START ??`, `BEGIN`},
 
-		{`COMMIT TRANSACTION ?`, `COMMIT`},
-		{`END ?`, `COMMIT`},
+		{`COMMIT TRANSACTION ??`, `COMMIT`},
+		{`END ??`, `COMMIT`},
 
-		{`ROLLBACK TRANSACTION ?`, `ROLLBACK`},
-		{`ROLLBACK TO ?`, `ROLLBACK`},
+		{`ROLLBACK TRANSACTION ??`, `ROLLBACK`},
+		{`ROLLBACK TO ??`, `ROLLBACK`},
 
-		{`SAVEPOINT blah ?`, `SAVEPOINT`},
+		{`SAVEPOINT blah ??`, `SAVEPOINT`},
 
-		{`RELEASE blah ?`, `RELEASE`},
-		{`RELEASE SAVEPOINT blah ?`, `RELEASE`},
+		{`RELEASE blah ??`, `RELEASE`},
+		{`RELEASE SAVEPOINT blah ??`, `RELEASE`},
 
-		{`BACKUP foo TO 'bar' ?`, `BACKUP`},
-		{`BACKUP DATABASE ?`, `BACKUP`},
-		{`BACKUP foo TO 'bar' AS OF ?`, `BACKUP`},
+		{`BACKUP foo TO 'bar' ??`, `BACKUP`},
+		{`BACKUP DATABASE ??`, `BACKUP`},
+		{`BACKUP foo TO 'bar' AS OF ??`, `BACKUP`},
 
-		{`RESTORE foo FROM 'bar' ?`, `RESTORE`},
-		{`RESTORE DATABASE ?`, `RESTORE`},
+		{`RESTORE foo FROM 'bar' ??`, `RESTORE`},
+		{`RESTORE DATABASE ??`, `RESTORE`},
 
-		{`IMPORT TABLE foo CREATE USING 'foo.sql' CSV DATA ('foo') ?`, `IMPORT`},
-		{`IMPORT TABLE ?`, `IMPORT`},
+		{`IMPORT TABLE foo CREATE USING 'foo.sql' CSV DATA ('foo') ??`, `IMPORT`},
+		{`IMPORT TABLE ??`, `IMPORT`},
 	}
 
 	// The following checks that the test definition above exercises all
@@ -370,7 +370,7 @@ func TestHelpFunctions(t *testing.T) {
 			continue
 		}
 		t.Run(f, func(t *testing.T) {
-			_, err := Parse("select " + f + "(?")
+			_, err := Parse("select " + f + "(??")
 			if err == nil {
 				t.Errorf("parser didn't trigger error")
 				return
@@ -405,7 +405,7 @@ func TestHelpKeys(t *testing.T) {
 	// checks that the parser renders the correct help message.
 	for key, body := range HelpMessages {
 		t.Run(key, func(t *testing.T) {
-			_, err := Parse(key + " ?")
+			_, err := Parse(key + " ??")
 			if err == nil {
 				t.Errorf("parser didn't trigger error")
 				return
