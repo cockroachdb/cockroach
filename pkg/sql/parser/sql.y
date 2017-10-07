@@ -377,7 +377,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %token <str>   CHARACTER CHARACTERISTICS CHECK
 %token <str>   CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMIT
 %token <str>   COMMITTED CONCAT CONFLICT CONSTRAINT CONSTRAINTS
-%token <str>   COPY COVERING CREATE
+%token <str>   CONTAINS COPY COVERING CREATE
 %token <str>   CROSS CSV CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
 %token <str>   CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str>   CURRENT_USER CYCLE
@@ -389,12 +389,12 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %token <str>   ELSE ENCODING END ESCAPE EXCEPT
 %token <str>   EXISTS EXECUTE EXPERIMENTAL_FINGERPRINTS EXPLAIN EXTRACT EXTRACT_DURATION
 
-%token <str>   FALSE FAMILY FETCH FILTER FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR
-%token <str>   FORCE_INDEX FOREIGN FROM FULL
+%token <str>   FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH FILTER
+%token <str>   FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE_INDEX FOREIGN FROM FULL
 
 %token <str>   GRANT GRANTS GREATEST GROUP GROUPING
 
-%token <str>   HAVING HELP HIGH HOUR
+%token <str>   HAVING HELP HIGH HOUR HAS_SOME HAS_ALL
 
 %token <str>   IMPORT INCREMENTAL IF IFNULL ILIKE IN INET INTERLEAVE
 %token <str>   INDEX INDEXES INITIALLY
@@ -425,7 +425,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 
 %token <str>   RANGE READ REAL RECURSIVE REF REFERENCES
 %token <str>   REGCLASS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE
-%token <str>   RENAME REPEATABLE
+%token <str>   REMOVE_PATH RENAME REPEATABLE
 %token <str>   RELEASE RESET RESTORE RESTRICT RESUME RETURNING REVOKE RIGHT
 %token <str>   ROLLBACK ROLLUP ROW ROWS RSHIFT
 
@@ -797,7 +797,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %left      AND
 %right     NOT
 %nonassoc  IS                  // IS sets precedence for IS NULL, etc
-%nonassoc  '<' '>' '=' LESS_EQUALS GREATER_EQUALS NOT_EQUALS
+%nonassoc  '<' '>' '=' LESS_EQUALS GREATER_EQUALS NOT_EQUALS CONTAINS CONTAINED_BY '?' HAS_SOME_KEY HAS_ALL_KEYS
 %nonassoc  '~' BETWEEN IN LIKE ILIKE SIMILAR NOT_REGMATCH REGIMATCH NOT_REGIMATCH NOT_LA
 %nonassoc  ESCAPE              // ESCAPE must be just above LIKE/ILIKE/SIMILAR
 %nonassoc  OVERLAPS
@@ -827,7 +827,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 // funny behavior of UNBOUNDED on the SQL standard, though.
 %nonassoc  UNBOUNDED         // ideally should have same precedence as IDENT
 %nonassoc  IDENT NULL PARTITION RANGE ROWS PRECEDING FOLLOWING CUBE ROLLUP
-%left      CONCAT       // multi-character ops
+%left      CONCAT FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH REMOVE_PATH  // multi-character ops
 %left      '|'
 %left      '#'
 %left      '&'
@@ -4857,6 +4857,26 @@ a_expr:
   {
     $$.val = &ComparisonExpr{Operator: GT, Left: $1.expr(), Right: $3.expr()}
   }
+| a_expr '?' a_expr
+  {
+    $$.val = &ComparisonExpr{Operator: HasKey, Left: $1.expr(), Right: $3.expr()}
+  }
+| a_expr HAS_SOME_KEY a_expr
+  {
+    $$.val = &ComparisonExpr{Operator: HasSomeKey, Left: $1.expr(), Right: $3.expr()}
+  }
+| a_expr HAS_ALL_KEYS a_expr
+  {
+    $$.val = &ComparisonExpr{Operator: HasAllKeys, Left: $1.expr(), Right: $3.expr()}
+  }
+| a_expr CONTAINS a_expr
+  {
+    $$.val = &ComparisonExpr{Operator: Contains, Left: $1.expr(), Right: $3.expr()}
+  }
+| a_expr CONTAINED_BY a_expr
+  {
+    $$.val = &ComparisonExpr{Operator: ContainedBy, Left: $1.expr(), Right: $3.expr()}
+  }
 | a_expr '=' a_expr
   {
     $$.val = &ComparisonExpr{Operator: EQ, Left: $1.expr(), Right: $3.expr()}
@@ -4872,6 +4892,26 @@ a_expr:
 | a_expr RSHIFT a_expr
   {
     $$.val = &BinaryExpr{Operator: RShift, Left: $1.expr(), Right: $3.expr()}
+  }
+| a_expr FETCHVAL a_expr
+  {
+    $$.val = &BinaryExpr{Operator: FetchVal, Left: $1.expr(), Right: $3.expr()}
+  }
+| a_expr FETCHTEXT a_expr
+  {
+    $$.val = &BinaryExpr{Operator: FetchText, Left: $1.expr(), Right: $3.expr()}
+  }
+| a_expr FETCHVAL_PATH a_expr
+  {
+    $$.val = &BinaryExpr{Operator: FetchValPath, Left: $1.expr(), Right: $3.expr()}
+  }
+| a_expr FETCHTEXT_PATH a_expr
+  {
+    $$.val = &BinaryExpr{Operator: FetchTextPath, Left: $1.expr(), Right: $3.expr()}
+  }
+| a_expr REMOVE_PATH a_expr
+  {
+    $$.val = &FuncExpr{Func: wrapFunction("JSON_REMOVE_PATH"), Exprs: Exprs{$1.expr(), $3.expr()}}
   }
 | a_expr LESS_EQUALS a_expr
   {
