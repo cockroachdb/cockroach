@@ -397,6 +397,16 @@ func TestParse(t *testing.T) {
 		{`SELECT (TABLE a)`},
 		{`SELECT 0x1`},
 		{`SELECT 'Deutsch' COLLATE "DE"`},
+		{`SELECT a @> b`},
+		{`SELECT a <@ b`},
+		{`SELECT a ? b`},
+		{`SELECT a ?| b`},
+		{`SELECT a ?& b`},
+		{`SELECT a->'x'`},
+		{`SELECT a#>'{x}'`},
+		{`SELECT a#>>'{x}'`},
+		{`SELECT (a->'x')->'y'`},
+		{`SELECT (a->'x')->>'y'`},
 
 		{`SELECT 1 FROM t`},
 		{`SELECT 1, 2 FROM t`},
@@ -915,6 +925,8 @@ func TestParse2(t *testing.T) {
 			`SELECT a FROM t EXCEPT SELECT 1 FROM t`},
 		{`SELECT a FROM t INTERSECT DISTINCT SELECT 1 FROM t`,
 			`SELECT a FROM t INTERSECT SELECT 1 FROM t`},
+
+		{`SELECT a #- '{x}'`, `SELECT json_remove_path(a, '{x}')`},
 
 		// Pretty printing the FAMILY INET function is not normal due to the grammar
 		// definition of FAMILY.
