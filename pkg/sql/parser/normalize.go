@@ -443,6 +443,20 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 			expr = &exprCopy
 			expr.Right = &tupleCopy
 		}
+	case Is:
+		if expr.TypedRight() != DNull {
+			return NewTypedAndExpr(
+				NewTypedComparisonExpr(EQ, expr.TypedLeft(), expr.TypedRight()),
+				NewTypedComparisonExpr(IsNot, expr.TypedLeft(), DNull),
+			)
+		}
+	case IsNot:
+		if isVar(expr.Left) && expr.TypedRight() != DNull {
+			return NewTypedOrExpr(
+				NewTypedComparisonExpr(NE, expr.TypedLeft(), expr.TypedRight()),
+				NewTypedComparisonExpr(Is, expr.TypedLeft(), DNull),
+			)
+		}
 	case NE,
 		Like, NotLike,
 		ILike, NotILike,
