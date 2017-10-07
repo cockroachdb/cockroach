@@ -328,6 +328,9 @@ func TestSimplifyNotExpr(t *testing.T) {
 		{`NOT i NOT SIMILAR TO 'foo'`, `i = 'foo'`, false, false},
 		{`NOT (a != 1 AND b != 1)`, `(a = 1) OR (b = 1)`, true, false},
 		{`NOT (a != 1 OR a < 1)`, `a = 1`, true, false},
+		{`NOT NOT a = 1`, `a = 1`, true, true},
+		{`NOT NOT NOT a = 1`, `a != 1`, true, true},
+		{`NOT NOT NOT NOT a = 1`, `a = 1`, true, true},
 	}
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
