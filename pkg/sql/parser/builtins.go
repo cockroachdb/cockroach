@@ -1513,6 +1513,11 @@ CockroachDB supports the following flags:
 		},
 	},
 
+	"json_remove_path": {
+	// TODO(justin): added here so #- can be desugared into it, still needs to be
+	// implemented.
+	},
+
 	"ln": {
 		floatBuiltin1(func(x float64) (Datum, error) {
 			return NewDFloat(DFloat(math.Log(x))), nil
