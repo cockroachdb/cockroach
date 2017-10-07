@@ -171,6 +171,8 @@ func simplifyNotExpr(evalCtx *parser.EvalContext, n *parser.NotExpr) (parser.Typ
 		return parser.DNull, true
 	}
 	switch t := n.Expr.(type) {
+	case *parser.NotExpr:
+		return simplifyExpr(evalCtx, t.TypedInnerExpr())
 	case *parser.ComparisonExpr:
 		op := t.Operator
 		switch op {

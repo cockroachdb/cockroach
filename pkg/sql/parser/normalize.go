@@ -509,15 +509,17 @@ func (expr *OrExpr) normalize(v *normalizeVisitor) TypedExpr {
 	return expr
 }
 
-func (expr *ParenExpr) normalize(v *normalizeVisitor) TypedExpr {
-	newExpr := expr.TypedInnerExpr()
-	if normalizable, ok := newExpr.(normalizableExpr); ok {
-		newExpr = normalizable.normalize(v)
-		if v.err != nil {
-			return expr
-		}
+func (expr *NotExpr) normalize(v *normalizeVisitor) TypedExpr {
+	inner := expr.TypedInnerExpr()
+	switch t := inner.(type) {
+	case *NotExpr:
+		return t.TypedInnerExpr()
 	}
-	return newExpr
+	return expr
+}
+
+func (expr *ParenExpr) normalize(v *normalizeVisitor) TypedExpr {
+	return expr.TypedInnerExpr()
 }
 
 func (expr *AnnotateTypeExpr) normalize(v *normalizeVisitor) TypedExpr {
