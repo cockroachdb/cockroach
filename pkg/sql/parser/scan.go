@@ -321,7 +321,12 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		return
 
 	case '?':
-		lval.id = HELPTOKEN
+		switch s.peek() {
+		case '?': // ??
+			s.pos++
+			lval.id = HELPTOKEN
+			return
+		}
 		return
 
 	case '<':
