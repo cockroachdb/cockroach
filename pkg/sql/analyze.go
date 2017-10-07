@@ -155,8 +155,10 @@ func simplifyExpr(
 		return simplifyOrExpr(evalCtx, t)
 	case *parser.ComparisonExpr:
 		return simplifyComparisonExpr(evalCtx, t)
-	case *parser.IndexedVar, *parser.DBool:
-		return e, true
+	case *parser.IndexedVar:
+		return simplifyBoolVar(evalCtx, t)
+	case *parser.DBool:
+		return t, true
 	}
 	// We don't know how to simplify expressions that fall through to here, so
 	// consider this part of the expression true.
@@ -224,6 +226,10 @@ func simplifyNotExpr(evalCtx *parser.EvalContext, n *parser.NotExpr) (parser.Typ
 		return simplifyExpr(evalCtx, parser.NewTypedAndExpr(
 			parser.NewTypedNotExpr(t.TypedLeft()),
 			parser.NewTypedNotExpr(t.TypedRight()),
+		))
+	case *parser.IndexedVar:
+		return simplifyExpr(evalCtx, parser.NewTypedNotExpr(
+			boolVarToComparison(t),
 		))
 	}
 	return parser.MakeDBool(true), false
@@ -1472,6 +1478,18 @@ func simplifyComparisonExpr(
 		}
 	}
 	return parser.MakeDBool(true), false
+}
+
+func simplifyBoolVar(evalCtx *parser.EvalContext, n *parser.IndexedVar) (parser.TypedExpr, bool) {
+	return simplifyExpr(evalCtx, boolVarToComparison(n))
+}
+
+func boolVarToComparison(n *parser.IndexedVar) parser.TypedExpr {
+	return parser.NewTypedComparisonExpr(
+		parser.EQ,
+		n,
+		parser.MakeDBool(true),
+	)
 }
 
 func makePrefixRange(
