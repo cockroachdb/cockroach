@@ -1433,7 +1433,28 @@ func simplifyComparisonExpr(
 				), true
 			}
 			return n, true
-		case parser.NE, parser.GE, parser.LE:
+		case parser.NE:
+			// Translate "a != MAX" to "a < MAX" and "a != MIN" to "a > MIN".
+			// These inequalities can be more easily used for index selection.
+			// For datum types with large domains, this isn't particularly
+			// useful. However, for types like BOOL, this is important because
+			// it means we can use an index constraint for queries like
+			// `SELECT * FROM t WHERE b != true`.
+			if right.(parser.Datum).IsMax() {
+				return parser.NewTypedComparisonExpr(
+					parser.LT,
+					left,
+					right,
+				), true
+			} else if right.(parser.Datum).IsMin() {
+				return parser.NewTypedComparisonExpr(
+					parser.GT,
+					left,
+					right,
+				), true
+			}
+			return n, true
+		case parser.GE, parser.LE:
 			return n, true
 		case parser.GT:
 			// This simplification is necessary so that subsequent transformation of

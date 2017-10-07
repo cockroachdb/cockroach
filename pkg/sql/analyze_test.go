@@ -210,10 +210,14 @@ func TestSimplifyExpr(t *testing.T) {
 		{`a <= NULL`, `NULL`, true},
 		{`a IN (NULL)`, `NULL`, true},
 
+		{`f != false`, `f > false`, true},
+		{`f != true`, `f < true`, true},
 		{`f < false`, `false`, true},
 		{`f < true`, `f < true`, true},
 		{`f > false`, `f > false`, true},
 		{`f > true`, `false`, true},
+		{`a != -9223372036854775808`, `a > -9223372036854775808`, true},
+		{`a != 9223372036854775807`, `a < 9223372036854775807`, true},
 		{`a < -9223372036854775808`, `false`, true},
 		{`a < 9223372036854775807`, `a < 9223372036854775807`, true},
 		{`a > -9223372036854775808`, `a > -9223372036854775808`, true},
@@ -257,9 +261,9 @@ func TestSimplifyExpr(t *testing.T) {
 		{`c IS NULL`, `c IS NULL`, true},
 		{`c IS NOT NULL`, `c IS NOT NULL`, true},
 		{`c IS TRUE`, `c = true`, true},
-		{`c IS NOT TRUE`, `c != true`, true},
+		{`c IS NOT TRUE`, `(c < true) OR (c IS NULL)`, true},
 		{`c IS FALSE`, `c = false`, true},
-		{`c IS NOT FALSE`, `c != false`, true},
+		{`c IS NOT FALSE`, `(c > false) OR (c IS NULL)`, true},
 		{`c IS UNKNOWN`, `c IS NULL`, true},
 		{`c IS NOT UNKNOWN`, `c IS NOT NULL`, true},
 		{`a IS DISTINCT FROM NULL`, `a IS NOT NULL`, true},
@@ -313,7 +317,7 @@ func TestSimplifyNotExpr(t *testing.T) {
 		isEquiv    bool
 		checkEquiv bool
 	}{
-		{`NOT c`, `c != true`, true, false},
+		{`NOT c`, `c < true`, true, false},
 		{`NOT a = 1`, `a != 1`, true, true},
 		{`NOT a != 1`, `a = 1`, true, true},
 		{`NOT a > 1`, `a <= 1`, true, true},
