@@ -187,11 +187,11 @@ func TestSimplifyExpr(t *testing.T) {
 		{`true`, `true`, true},
 		{`false`, `false`, true},
 
-		{`f`, `f`, true},
-		{`f AND g`, `f AND g`, true},
-		{`f OR g`, `f OR g`, true},
-		{`(f AND g) AND (c AND d)`, `f AND (g AND (c AND d))`, true},
-		{`(f OR g) OR (c OR d)`, `f OR (g OR (c OR d))`, true},
+		{`f`, `f = true`, true},
+		{`f AND g`, `(f = true) AND (g = true)`, true},
+		{`f OR g`, `(f = true) OR (g = true)`, true},
+		{`(f AND g) AND (c AND d)`, `(f = true) AND ((g = true) AND ((c = true) AND (d = true)))`, true},
+		{`(f OR g) OR (c OR d)`, `(f = true) OR ((g = true) OR ((c = true) OR (d = true)))`, true},
 		{`i < lower('FOO')`, `i < 'foo'`, true},
 		{`a < 1 AND a < 2 AND a < 3 AND a < 4 AND a < 5`, `a < 1`, true},
 		{`a < 1 OR a < 2 OR a < 3 OR a < 4 OR a < 5`, `a < 5`, true},
@@ -313,6 +313,7 @@ func TestSimplifyNotExpr(t *testing.T) {
 		isEquiv    bool
 		checkEquiv bool
 	}{
+		{`NOT c`, `c != true`, true, false},
 		{`NOT a = 1`, `a != 1`, true, true},
 		{`NOT a != 1`, `a = 1`, true, true},
 		{`NOT a > 1`, `a <= 1`, true, true},

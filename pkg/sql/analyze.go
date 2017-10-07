@@ -131,6 +131,7 @@ func joinExprs(
 //   (a < 1 AND a > 2)  -> false
 //   (a > 1 OR a < 2)   -> true
 //   (a > 1 OR func(b)) -> true
+//   (b)                -> (b = true)
 //
 // Note that simplification is not normalization. Normalization as performed by
 // parser.NormalizeExpr returns an expression that is equivalent to the
@@ -155,8 +156,10 @@ func simplifyExpr(
 		return simplifyOrExpr(evalCtx, t)
 	case *parser.ComparisonExpr:
 		return simplifyComparisonExpr(evalCtx, t)
-	case *parser.IndexedVar, *parser.DBool:
-		return e, true
+	case *parser.IndexedVar:
+		return simplifyBoolVar(evalCtx, t)
+	case *parser.DBool:
+		return t, true
 	}
 	// We don't know how to simplify expressions that fall through to here, so
 	// consider this part of the expression true.
@@ -224,6 +227,10 @@ func simplifyNotExpr(evalCtx *parser.EvalContext, n *parser.NotExpr) (parser.Typ
 		return simplifyExpr(evalCtx, parser.NewTypedAndExpr(
 			parser.NewTypedNotExpr(t.TypedLeft()),
 			parser.NewTypedNotExpr(t.TypedRight()),
+		))
+	case *parser.IndexedVar:
+		return simplifyExpr(evalCtx, parser.NewTypedNotExpr(
+			boolVarToComparison(t),
 		))
 	}
 	return parser.MakeDBool(true), false
@@ -1472,6 +1479,21 @@ func simplifyComparisonExpr(
 		}
 	}
 	return parser.MakeDBool(true), false
+}
+
+// simplifyBoolVar transforms a boolean IndexedVar into a ComparisonExpr
+// (e.g. WHERE b -> WHERE b = true) This is so index selection only needs
+// to work on ComparisonExprs.
+func simplifyBoolVar(evalCtx *parser.EvalContext, n *parser.IndexedVar) (parser.TypedExpr, bool) {
+	return simplifyExpr(evalCtx, boolVarToComparison(n))
+}
+
+func boolVarToComparison(n *parser.IndexedVar) parser.TypedExpr {
+	return parser.NewTypedComparisonExpr(
+		parser.EQ,
+		n,
+		parser.MakeDBool(true),
+	)
 }
 
 func makePrefixRange(
