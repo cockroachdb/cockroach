@@ -194,6 +194,17 @@ func TestMakeConstraints(t *testing.T) {
 		columns  string
 		expected string
 	}{
+		{`c`, `c`, `[c = true]`},
+		{`c = true`, `c`, `[c = true]`},
+		{`c = false`, `c`, `[c = false]`},
+		{`c != true`, `c`, `[c IS NOT NULL, c <= false]`},
+		{`c != false`, `c`, `[c >= true]`},
+		{`NOT c`, `c`, `[c IS NOT NULL, c <= false]`},
+		{`c IS TRUE`, `c`, `[c = true]`},
+		{`c IS NOT TRUE`, `c`, `[c IS NOT NULL, c <= false] OR [c IS NULL]`},
+		{`c IS FALSE`, `c`, `[c = false]`},
+		{`c IS NOT FALSE`, `c`, `[c >= true] OR [c IS NULL]`},
+
 		{`a = 1`, `b`, ``},
 		{`a = 1`, `a`, `[a = 1]`},
 		{`a != 1`, `a`, `[a IS NOT NULL]`},
@@ -346,6 +357,17 @@ func TestMakeSpans(t *testing.T) {
 		expectedAsc  string
 		expectedDesc string
 	}{
+		{`c`, `c`, `/1-/2`, `/1-/0`},
+		{`c = true`, `c`, `/1-/2`, `/1-/0`},
+		{`c = false`, `c`, `/0-/1`, `/0-/-1/NULL`},
+		{`c != true`, `c`, `/#-/1`, `/0-/#`},
+		{`c != false`, `c`, `/1-`, `-/0`},
+		{`NOT c`, `c`, `/#-/1`, `/0-/#`},
+		{`c IS TRUE`, `c`, `/1-/2`, `/1-/0`},
+		{`c IS NOT TRUE`, `c`, `-/1`, `/0-/# /NULL-`},
+		{`c IS FALSE`, `c`, `/0-/1`, `/0-/-1/NULL`},
+		{`c IS NOT FALSE`, `c`, `-/# /1-`, `-/0 /NULL-`},
+
 		{`a = 1`, `a`, `/1-/2`, `/1-/0`},
 		{`a != 1`, `a`, `/#-`, `-/#`},
 		{`a > 1`, `a`, `/2-`, `-/1`},
@@ -601,6 +623,17 @@ func TestExactPrefix(t *testing.T) {
 		columns  string
 		expected int
 	}{
+		{`c`, `c`, 1},
+		{`c = true`, `c`, 1},
+		{`c = false`, `c`, 1},
+		{`c != true`, `c`, 0},
+		{`c != false`, `c`, 0},
+		{`NOT c`, `c`, 0},
+		{`c IS TRUE`, `c`, 1},
+		{`c IS NOT TRUE`, `c`, 0},
+		{`c IS FALSE`, `c`, 1},
+		{`c IS NOT FALSE`, `c`, 0},
+
 		{`a = 1`, `a`, 1},
 		{`a != 1`, `a`, 0},
 		{`a IN (1)`, `a`, 1},
