@@ -1,0 +1,11 @@
+create_table_stmt ::=
+	'CREATE' 'TABLE' any_name '(' column_def ( ( ',' ( column_def | index_def | family_def | table_constraint ) ) )* ')' opt_interleave
+	| 'CREATE' 'TABLE' any_name '(' index_def ( ( ',' ( column_def | index_def | family_def | table_constraint ) ) )* ')' opt_interleave
+	| 'CREATE' 'TABLE' any_name '(' family_def ( ( ',' ( column_def | index_def | family_def | table_constraint ) ) )* ')' opt_interleave
+	| 'CREATE' 'TABLE' any_name '(' table_constraint ( ( ',' ( column_def | index_def | family_def | table_constraint ) ) )* ')' opt_interleave
+	| 'CREATE' 'TABLE' any_name '('  ')' opt_interleave
+	| 'CREATE' 'TABLE' 'IF' 'NOT' 'EXISTS' any_name '(' column_def ( ( ',' ( column_def | index_def | family_def | table_constraint ) ) )* ')' opt_interleave
+	| 'CREATE' 'TABLE' 'IF' 'NOT' 'EXISTS' any_name '(' index_def ( ( ',' ( column_def | index_def | family_def | table_constraint ) ) )* ')' opt_interleave
+	| 'CREATE' 'TABLE' 'IF' 'NOT' 'EXISTS' any_name '(' family_def ( ( ',' ( column_def | index_def | family_def | table_constraint ) ) )* ')' opt_interleave
+	| 'CREATE' 'TABLE' 'IF' 'NOT' 'EXISTS' any_name '(' table_constraint ( ( ',' ( column_def | index_def | family_def | table_constraint ) ) )* ')' opt_interleave
+	| 'CREATE' 'TABLE' 'IF' 'NOT' 'EXISTS' any_name '('  ')' opt_interleave

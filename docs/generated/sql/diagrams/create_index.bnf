@@ -1,0 +1,3 @@
+create_index_stmt ::=
+	'CREATE' ( 'UNIQUE' |  ) 'INDEX' ( index_name |  ) 'ON' table_name '(' ( ( ( column_name ( 'ASC' | 'DESC' |  ) ) ) ( ( ',' ( column_name ( 'ASC' | 'DESC' |  ) ) ) )* ) ')' ( ( 'COVERING' | 'STORING' ) '(' ( ( name ) ( ( ',' column_name ) )* ) ')' |  ) opt_interleave
+	| 'CREATE' ( 'UNIQUE' |  ) 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' ( ( ( column_name ( 'ASC' | 'DESC' |  ) ) ) ( ( ',' ( column_name ( 'ASC' | 'DESC' |  ) ) ) )* ) ')' ( ( 'COVERING' | 'STORING' ) '(' ( ( name ) ( ( ',' column_name ) )* ) ')' |  ) opt_interleave

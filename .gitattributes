@@ -1,5 +1,6 @@
 *.pb.* -diff
 *.ir.* -diff
+docs/generated/sql/diagrams/*.html -diff
 pkg/ui/embedded.go -diff
 pkg/sql/parser/sql.go -diff
 pkg/sql/parser/help_messages.go -diff

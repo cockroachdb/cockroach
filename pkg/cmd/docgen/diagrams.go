@@ -659,6 +659,22 @@ var diagramCmd = func() *cobra.Command {
 						fmt.Printf("%s: (POST REPLACE)\n\n%s\n", s.name, g)
 						return
 					}
+
+					name := strings.Replace(s.name, "_stmt", "", 1)
+
+					bnfFile := filepath.Join(baseDir, fmt.Sprintf("%s.bnf", name))
+					if bnf, err := ioutil.ReadFile(bnfFile); err != nil && !os.IsNotExist(err) {
+						log.Fatal(s.name, err)
+					} else if err == nil {
+						if bytes.Equal(bnf, g) {
+							fmt.Fprintf(os.Stderr, "no change in bnf for %s...\n", s.stmt)
+							return
+						}
+					}
+					if err := ioutil.WriteFile(bnfFile, g, 0644); err != nil {
+						log.Fatal(s.name, err)
+					}
+
 					rr, err := runRR(s.name, bytes.NewReader(g), railroadJar)
 					if err != nil {
 						log.Fatalf("%s: %s\n%s", s.name, err, g)
@@ -668,7 +684,6 @@ var diagramCmd = func() *cobra.Command {
 						log.Fatal(s.name, err)
 					}
 					body = strings.Replace(body, `<a xlink:href="#`, `<a xlink:href="sql-grammar.html#`, -1)
-					name := strings.Replace(s.name, "_stmt", "", 1)
 					for _, u := range s.unlink {
 						s := fmt.Sprintf(`<a xlink:href="sql-grammar.html#%s" xlink:title="%s">((?s).*?)</a>`, u, u)
 						link := regexp.MustCompile(s)
