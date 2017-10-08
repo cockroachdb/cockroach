@@ -21,9 +21,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -33,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -402,6 +401,46 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	if expectedBytes, expectedQPS := int64(19), 25-QPS; desc.Capacity.LogicalBytes != expectedBytes || desc.Capacity.WritesPerSecond != expectedQPS {
 		t.Fatalf("expected Logical bytes %d, but got %d, expected WritesPerSecond %f, but got %f",
 			expectedBytes, desc.Capacity.LogicalBytes, expectedQPS, desc.Capacity.WritesPerSecond)
+	}
+}
+
+// TestStorePoolUpdateLocalStoreBeforeGossip verifies that an attempt to update
+// the local copy of store before that store has been gossiped will be a no-op.
+func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	manual := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	stopper, _, _, sp, _ := createTestStorePool(
+		TestTimeUntilStoreDead, false /* deterministic */, nodeStatusDead)
+	defer stopper.Stop(context.TODO())
+
+	// Create store.
+	node := roachpb.NodeDescriptor{NodeID: roachpb.NodeID(1)}
+	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+	stopper.AddCloser(eng)
+	cfg := TestStoreConfig(clock)
+	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
+	store := NewStore(cfg, eng, &node)
+
+	// Create replica.
+	rg := roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKey([]byte("a")),
+		EndKey:   roachpb.RKey([]byte("b")),
+	}
+	replica, err := NewReplica(&rg, store, roachpb.ReplicaID(0))
+	if err != nil {
+		t.Fatalf("make replica error : %s", err)
+	}
+
+	// Update StorePool, which should be a no-op.
+	storeID := roachpb.StoreID(1)
+	if _, ok := sp.getStoreDescriptor(storeID); ok {
+		t.Fatalf("StoreDescriptor not gossiped, should not be found")
+	}
+	sp.updateLocalStoreAfterRebalance(storeID, replica, roachpb.ADD_REPLICA)
+	if _, ok := sp.getStoreDescriptor(storeID); ok {
+		t.Fatalf("StoreDescriptor still not gossiped, should not be found")
 	}
 }
 
