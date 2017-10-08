@@ -15,15 +15,13 @@
 package base
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/build"
 )
 
 // DocsURLBase is the root URL for the version of the docs associated with this
 // binary.
-var DocsURLBase = fmt.Sprintf("https://www.cockroachlabs.com/docs/%s/", build.VersionPrefix())
+var DocsURLBase = "https://www.cockroachlabs.com/docs/" + build.VersionPrefix()
 
 // DocsURL generates the URL to pageName in the version of the docs associated
 // with this binary.
-func DocsURL(pageName string) string { return DocsURLBase + pageName }
+func DocsURL(pageName string) string { return DocsURLBase + "/" + pageName }
