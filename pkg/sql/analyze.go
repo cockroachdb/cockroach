@@ -207,8 +207,20 @@ func simplifyNotExpr(evalCtx *parser.EvalContext, n *parser.NotExpr) (parser.Typ
 			op = parser.SimilarTo
 		case parser.RegMatch:
 			op = parser.NotRegMatch
+		case parser.NotRegMatch:
+			op = parser.RegMatch
 		case parser.RegIMatch:
 			op = parser.NotRegIMatch
+		case parser.NotRegIMatch:
+			op = parser.RegIMatch
+		case parser.IsDistinctFrom:
+			op = parser.IsNotDistinctFrom
+		case parser.IsNotDistinctFrom:
+			op = parser.IsDistinctFrom
+		case parser.Is:
+			op = parser.IsNot
+		case parser.IsNot:
+			op = parser.Is
 		default:
 			return parser.MakeDBool(true), false
 		}
