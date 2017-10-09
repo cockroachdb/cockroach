@@ -17,7 +17,6 @@ package parser
 import (
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
@@ -204,7 +203,7 @@ func (k *keywordsValueGenerator) Values() Datums {
 	info := keywords[kw]
 	cat := info.cat
 	desc := keywordCategoryDescriptions[cat]
-	return Datums{NewDString(strings.ToLower(kw)), NewDString(cat), NewDString(desc)}
+	return Datums{NewDString(kw), NewDString(cat), NewDString(desc)}
 }
 
 var keywordCategoryDescriptions = map[string]string{
