@@ -74,6 +74,8 @@ type FlowCtx struct {
 
 	// TempStorage is used by some DistSQL processors to store Rows when the
 	// working set is larger than can be stored in memory.
+	// This is not supposed to be used as a general engine.Engine and thus
+	// one should sparingly use the set of features offered by it.
 	TempStorage engine.Engine
 	// diskMonitor is used to monitor temporary storage disk usage.
 	diskMonitor *mon.BytesMonitor

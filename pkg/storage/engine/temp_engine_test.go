@@ -15,45 +15,32 @@
 package engine
 
 import (
-	"fmt"
-	"io/ioutil"
-	"path/filepath"
-	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"golang.org/x/net/context"
 )
 
-func TestCleanupTempStorageDirs(t *testing.T) {
+func TestNewTempEngine(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	dir, dirCleanup := testutils.TempDir(t)
-	defer dirCleanup()
+	// Create the temporary directory for the RocksDB engine.
+	tempDir, tempDirCleanup := testutils.TempDir(t)
+	defer tempDirCleanup()
 
-	tempBytes := []byte{byte(1), byte(2), byte(3)}
-	if err := ioutil.WriteFile(filepath.Join(dir, "FOO"), tempBytes, 0777); err != nil {
-		t.Fatal(err)
-	}
-	if err := ioutil.WriteFile(filepath.Join(dir, "BAR"), tempBytes, 0777); err != nil {
-		t.Fatal(err)
-	}
-	if err := ioutil.WriteFile(filepath.Join(dir, "BAZ"), tempBytes, 0777); err != nil {
-		t.Fatal(err)
-	}
-
-	wg := sync.WaitGroup{}
-	if err := cleanupTempStorageDirs(context.TODO(), dir, &wg); err != nil {
-		t.Fatal(fmt.Sprintf("error encountered in cleanupTempStorageDirs: %v", err))
-	}
-	wg.Wait()
-
-	files, err := ioutil.ReadDir(dir)
+	engine, err := NewTempEngine(base.TempStorageConfig{Path: tempDir})
 	if err != nil {
-		t.Fatal(fmt.Sprintf("error reading temporary directory: %v", err))
+		t.Fatalf("error encountered when invoking NewTempEngine: %v", err)
 	}
-	if len(files) != 0 {
-		t.Fatalf("directory not cleaned up after calling cleanupTempStorageDirs, still have %d files", len(files))
+	defer engine.Close()
+
+	tempEngine, ok := engine.(*RocksDB)
+	if !ok {
+		t.Fatalf("temp engine could not be asserted as a rocksdb instance")
+	}
+	// Temp engine initialized with the temporary directory.
+	if tempDir != tempEngine.cfg.Dir {
+		t.Fatalf("temp engine initialized with unexpected parent directory.\nexpected %s\nactual %s", tempDir, tempEngine.cfg.Dir)
 	}
 }
