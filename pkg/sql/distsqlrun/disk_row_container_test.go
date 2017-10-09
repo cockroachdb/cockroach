@@ -61,7 +61,7 @@ func TestDiskRowContainer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	tempEngine, err := engine.NewTempEngine(ctx, base.DefaultTestStoreSpec)
+	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +244,7 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	tempEngine, err := engine.NewTempEngine(ctx, base.DefaultTestStoreSpec)
+	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
