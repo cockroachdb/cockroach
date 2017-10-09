@@ -326,6 +326,14 @@ func (s *Scanner) scan(lval *sqlSymType) {
 			s.pos++
 			lval.id = HELPTOKEN
 			return
+		case '|': // ?|
+			s.pos++
+			lval.id = HAS_SOME_KEY
+			return
+		case '&': // ?|
+			s.pos++
+			lval.id = HAS_ALL_KEYS
+			return
 		}
 		return
 
@@ -342,6 +350,10 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		case '=': // <=
 			s.pos++
 			lval.id = LESS_EQUALS
+			return
+		case '@': // <@
+			s.pos++
+			lval.id = CONTAINED_BY
 			return
 		}
 		return
@@ -397,6 +409,49 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		case '*': // ~*
 			s.pos++
 			lval.id = REGIMATCH
+			return
+		}
+		return
+
+	case '@':
+		switch s.peek() {
+		case '>': // @>
+			s.pos++
+			lval.id = CONTAINS
+			return
+		}
+		return
+
+	case '-':
+		switch s.peek() {
+		case '>': // ->
+			if s.peekN(1) == '>' {
+				// ->>
+				s.pos += 2
+				lval.id = FETCHTEXT
+				return
+			}
+			s.pos++
+			lval.id = FETCHVAL
+			return
+		}
+		return
+
+	case '#':
+		switch s.peek() {
+		case '>': // #>
+			if s.peekN(1) == '>' {
+				// #>>
+				s.pos += 2
+				lval.id = FETCHTEXT_PATH
+				return
+			}
+			s.pos++
+			lval.id = FETCHVAL_PATH
+			return
+		case '-': // #-
+			s.pos++
+			lval.id = REMOVE_PATH
 			return
 		}
 		return
