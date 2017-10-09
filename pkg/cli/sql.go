@@ -1004,7 +1004,14 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 
 				// The readline initialization is not placed in
 				// the doStart() method because of the defer.
-				c.ins, c.exitErr = readline.InitFiles("cockroach", stdin, os.Stdout, stderr)
+				c.ins, c.exitErr = readline.InitFiles("cockroach",
+					true, /* wideChars */
+					stdin, os.Stdout, stderr)
+				if c.exitErr == readline.ErrWidecharNotSupported {
+					log.Warning(context.TODO(), "wide character support disabled")
+					c.ins, c.exitErr = readline.InitFiles("cockroach",
+						false, stdin, os.Stdout, stderr)
+				}
 				if c.exitErr != nil {
 					return c.exitErr
 				}
