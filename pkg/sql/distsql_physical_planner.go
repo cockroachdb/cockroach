@@ -450,7 +450,7 @@ func makePlanToStreamColMap(numCols int) []int {
 	return m
 }
 
-// indetityMap returns the slice {0, 1, 2, ..., numCols-1}.
+// identityMap returns the slice {0, 1, 2, ..., numCols-1}.
 // buf can be optionally provided as a buffer.
 func identityMap(buf []int, numCols int) []int {
 	buf = buf[:0]
@@ -458,6 +458,15 @@ func identityMap(buf []int, numCols int) []int {
 		buf = append(buf, i)
 	}
 	return buf
+}
+
+// identityMapInPlace returns the modified slice such that it contains
+// {0, 1, ..., len(slice)-1}.
+func identityMapInPlace(slice []int) []int {
+	for i := range slice {
+		slice[i] = i
+	}
+	return slice
 }
 
 // spanPartition is the intersection between a set of spans for a certain
@@ -679,13 +688,15 @@ func getOutputColumnsFromScanNode(n *scanNode) []uint32 {
 			num++
 		}
 	}
-	outputColumns := make([]uint32, 0, num)
+	outputColumns := make([]uint32, num)
+	idx := 0
 	for i := range n.resultColumns {
 		// TODO(radu): if we have a scan with a filter, valNeededForCol will include
 		// the columns needed for the filter, even if they aren't needed for the
 		// next stage.
 		if n.valNeededForCol[i] {
-			outputColumns = append(outputColumns, uint32(i))
+			outputColumns[idx] = uint32(i)
+			idx++
 		}
 	}
 	return outputColumns
@@ -747,12 +758,13 @@ func (dsp *distSQLPlanner) createTableReaders(
 	var p physicalPlan
 	stageID := p.NewStageID()
 
-	for _, sp := range spanPartitions {
+	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spanPartitions))
+	for i, sp := range spanPartitions {
 		tr := &distsqlrun.TableReaderSpec{}
 		*tr = spec
 		tr.Spans = make([]distsqlrun.TableReaderSpan, len(sp.spans))
-		for i := range sp.spans {
-			tr.Spans[i].Span = sp.spans[i]
+		for j := range sp.spans {
+			tr.Spans[j].Span = sp.spans[j]
 		}
 
 		proc := distsqlplan.Processor{
@@ -765,13 +777,10 @@ func (dsp *distSQLPlanner) createTableReaders(
 		}
 
 		pIdx := p.AddProcessor(proc)
-		p.ResultRouters = append(p.ResultRouters, pIdx)
+		p.ResultRouters[i] = pIdx
 	}
 
-	planToStreamColMap := make([]int, len(n.resultColumns))
-	for i := range planToStreamColMap {
-		planToStreamColMap[i] = i
-	}
+	planToStreamColMap := identityMapInPlace(make([]int, len(n.resultColumns)))
 
 	if len(p.ResultRouters) > 1 && len(n.props.ordering) > 0 {
 		// Make a note of the fact that we have to maintain a certain ordering
@@ -850,13 +859,14 @@ func (dsp *distSQLPlanner) CreateBackfiller(
 		return physicalPlan{}, err
 	}
 
-	p := physicalPlan{}
-	for _, sp := range spanPartitions {
+	var p physicalPlan
+	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spanPartitions))
+	for i, sp := range spanPartitions {
 		ib := &distsqlrun.BackfillerSpec{}
 		*ib = spec
 		ib.Spans = make([]distsqlrun.TableReaderSpan, len(sp.spans))
-		for i := range sp.spans {
-			ib.Spans[i].Span = sp.spans[i]
+		for j := range sp.spans {
+			ib.Spans[j].Span = sp.spans[j]
 		}
 
 		proc := distsqlplan.Processor{
@@ -868,7 +878,7 @@ func (dsp *distSQLPlanner) CreateBackfiller(
 		}
 
 		pIdx := p.AddProcessor(proc)
-		p.ResultRouters = append(p.ResultRouters, pIdx)
+		p.ResultRouters[i] = pIdx
 	}
 	dsp.FinalizePlan(planCtx, &p)
 	return p, nil
@@ -950,6 +960,7 @@ func (l *DistLoader) LoadCSV(
 	colTypeBytes := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}
 	stageID := p.NewStageID()
 
+	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(from))
 	// Stage 1: for each input file, assign it to a node
 	for i, input := range from {
 		// TODO(mjibson): attempt to intelligently schedule http files to matching cockroach nodes
@@ -973,7 +984,7 @@ func (l *DistLoader) LoadCSV(
 			},
 		}
 		pIdx := p.AddProcessor(proc)
-		p.ResultRouters = append(p.ResultRouters, pIdx)
+		p.ResultRouters[i] = pIdx
 	}
 
 	// We only need the key during sorting.
@@ -1079,7 +1090,7 @@ func (l *DistLoader) LoadCSV(
 	// This is a hardcoded two stage plan. The first stage is the mappers,
 	// the second stage is the reducers. We have to keep track of all the mappers
 	// we create because the reducers need to hook up a stream for each mapper.
-	var firstStageRouters []distsqlplan.ProcessorIdx
+	firstStageRouters := make([]distsqlplan.ProcessorIdx, len(from))
 	firstStageTypes := []sqlbase.ColumnType{colTypeBytes, colTypeBytes}
 
 	stageID = p.NewStageID()
@@ -1108,7 +1119,7 @@ func (l *DistLoader) LoadCSV(
 			},
 		}
 		pIdx := p.AddProcessor(proc)
-		firstStageRouters = append(firstStageRouters, pIdx)
+		firstStageRouters[i] = pIdx
 	}
 
 	// The SST Writer returns 5 columns: name of the file, size of the file,
@@ -1123,6 +1134,7 @@ func (l *DistLoader) LoadCSV(
 	}
 
 	stageID = p.NewStageID()
+	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spans))
 	for i := range spans {
 		node := nodes[i%len(nodes)]
 		swSpec := distsqlrun.SSTWriterSpec{
@@ -1151,7 +1163,7 @@ func (l *DistLoader) LoadCSV(
 				DestInput:        0,
 			})
 		}
-		p.ResultRouters = append(p.ResultRouters, pIdx)
+		p.ResultRouters[i] = pIdx
 	}
 
 	l.distSQLPlanner.FinalizePlan(&planCtx, &p)
@@ -1366,13 +1378,17 @@ func (dsp *distSQLPlanner) addAggregators(
 				distinctColsMap[c] = struct{}{}
 			}
 		}
-		orderedColumns := make([]uint32, 0, len(orderedColsMap))
+		orderedColumns := make([]uint32, len(orderedColsMap))
+		idx := 0
 		for o := range orderedColsMap {
-			orderedColumns = append(orderedColumns, o)
+			orderedColumns[idx] = o
+			idx++
 		}
-		distinctColumns := make([]uint32, 0, len(distinctColsMap))
+		distinctColumns := make([]uint32, len(distinctColsMap))
+		idx = 0
 		for o := range distinctColsMap {
-			distinctColumns = append(distinctColumns, o)
+			distinctColumns[idx] = o
+			idx++
 		}
 
 		sort.Slice(orderedColumns, func(i, j int) bool { return orderedColumns[i] < orderedColumns[j] })
@@ -2051,16 +2067,19 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 		// the join columns as described above) to values that make sense in the
 		// joiner (0 to N-1 for the left input columns, N to N+M-1 for the right
 		// input columns).
-		joinColMap := make([]int, 0, len(n.columns))
+		joinColMap := make([]int, len(n.columns))
 		// There should be no merged columns when ON clause is present
 		if n.pred.numMergedEqualityColumns != 0 {
 			panic("merged columns with ON condition")
 		}
+		idx := 0
 		for i := 0; i < n.pred.numLeftCols; i++ {
-			joinColMap = append(joinColMap, mergedColNum+leftPlan.planToStreamColMap[i])
+			joinColMap[idx] = mergedColNum + leftPlan.planToStreamColMap[i]
+			idx++
 		}
 		for i := 0; i < n.pred.numRightCols; i++ {
-			joinColMap = append(joinColMap, mergedColNum+rightPlan.planToStreamColMap[i]+len(leftTypes))
+			joinColMap[idx] = mergedColNum + rightPlan.planToStreamColMap[i] + len(leftTypes)
+			idx++
 		}
 		onExpr = distsqlplan.MakeExpression(n.pred.onCond, joinColMap)
 	}
@@ -2275,6 +2294,7 @@ func (dsp *distSQLPlanner) createPlanForValues(
 	}
 	defer n.Close(planCtx.ctx)
 
+	s.RawBytes = make([][]byte, n.Len())
 	for i := 0; i < n.Len(); i++ {
 		if next, err := n.Next(runParams{ctx: planCtx.ctx}); !next {
 			return physicalPlan{}, err
@@ -2290,7 +2310,7 @@ func (dsp *distSQLPlanner) createPlanForValues(
 				return physicalPlan{}, err
 			}
 		}
-		s.RawBytes = append(s.RawBytes, buf)
+		s.RawBytes[i] = buf
 	}
 
 	plan := distsqlplan.PhysicalPlan{
@@ -2308,7 +2328,7 @@ func (dsp *distSQLPlanner) createPlanForValues(
 
 	return physicalPlan{
 		PhysicalPlan:       plan,
-		planToStreamColMap: identityMap(makePlanToStreamColMap(columns), columns),
+		planToStreamColMap: identityMapInPlace(make([]int, columns)),
 	}, nil
 }
 
@@ -2321,11 +2341,12 @@ func (dsp *distSQLPlanner) createPlanForDistinct(
 	}
 	currentResultRouters := plan.ResultRouters
 	var orderedColumns []uint32
-	for i := 0; i < len(n.columnsInOrder); i++ {
-		if n.columnsInOrder[i] {
+	for i, o := range n.columnsInOrder {
+		if o {
 			orderedColumns = append(orderedColumns, uint32(plan.planToStreamColMap[i]))
 		}
 	}
+
 	var distinctColumns []uint32
 	for i := range planColumns(n) {
 		if plan.planToStreamColMap[i] != -1 {
