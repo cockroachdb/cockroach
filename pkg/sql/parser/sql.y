@@ -645,7 +645,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <TablePatterns> table_pattern_list
 %type <UnresolvedName> any_name
 %type <TableNameReferences> table_name_list
-%type <Exprs> expr_list
+%type <Exprs> expr_list opt_expr_list
 %type <UnresolvedName> attrs
 %type <SelectExprs> target_list
 %type <UpdateExprs> set_clause_list
@@ -4028,7 +4028,7 @@ table_ref:
   {
     $$.val = &AliasedTableExpr{Expr: $1.newNormalizableTableName(), Hints: $2.indexHints(), Ordinality: $3.bool(), As: $4.aliasClause() }
   }
-| qualified_name '(' expr_list ')' opt_ordinality opt_alias_clause
+| qualified_name '(' opt_expr_list ')' opt_ordinality opt_alias_clause
   {
     $$.val = &AliasedTableExpr{Expr: &FuncExpr{Func: $1.resolvableFunctionReference(), Exprs: $3.exprs()}, Ordinality: $5.bool(), As: $6.aliasClause() }
   }
@@ -5543,13 +5543,9 @@ frame_bound:
 // without conflicting with the parenthesized a_expr production. Without the
 // ROW keyword, there must be more than one a_expr inside the parens.
 row:
-  ROW '(' expr_list ')'
+  ROW '(' opt_expr_list ')'
   {
     $$.val = &Tuple{Exprs: $3.exprs(), row: true}
-  }
-| ROW '(' ')'
-  {
-    $$.val = &Tuple{Exprs: nil, row: true}
   }
 | '(' expr_list ',' a_expr ')'
   {
@@ -5557,13 +5553,9 @@ row:
   }
 
 explicit_row:
-  ROW '(' expr_list ')'
+  ROW '(' opt_expr_list ')'
   {
     $$.val = &Tuple{Exprs: $3.exprs(), row: true}
-  }
-| ROW '(' ')'
-  {
-    $$.val = &Tuple{Exprs: nil, row: true}
   }
 
 implicit_row:
@@ -5618,6 +5610,13 @@ subquery_op:
   // however the SubLink structure which handles any/some/all stuff
   // is not ready for such a thing.
 
+opt_expr_list:
+  expr_list
+| /* EMPTY */
+  {
+    $$.val = Exprs{}
+  }
+
 expr_list:
   a_expr
   {
@@ -5639,17 +5638,13 @@ type_list:
   }
 
 array_expr:
-  '[' expr_list ']'
+  '[' opt_expr_list ']'
   {
     $$.val = &Array{Exprs: $2.exprs()}
   }
 | '[' array_expr_list ']'
   {
     $$.val = &Array{Exprs: $2.exprs()}
-  }
-| '[' ']'
-  {
-    $$.val = &Array{Exprs: nil}
   }
 
 array_expr_list:
@@ -5747,13 +5742,9 @@ substr_list:
   {
     $$.val = Exprs{$1.expr(), NewDInt(1), $2.expr()}
   }
-| expr_list
+| opt_expr_list
   {
     $$.val = $1.exprs()
-  }
-| /* EMPTY */
-  {
-    $$.val = Exprs(nil)
   }
 
 substr_from:
