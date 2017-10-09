@@ -57,9 +57,9 @@ type generatorFactory func(ctx *EvalContext, args Datums) (ValueGenerator, error
 // rows of values in a streaming fashion (like Go iterators or
 // generators in Python).
 type ValueGenerator interface {
-	// ColumnTypes returns the type signature of this value generator.
+	// ResolvedType returns the type signature of this value generator.
 	// Used by DTable.ResolvedType().
-	ColumnTypes() TTuple
+	ResolvedType() TTable
 
 	// Start initializes the generator. Must be called once before
 	// Next() and Values().
@@ -102,13 +102,13 @@ var Generators = map[string][]Builtin{
 	"generate_series": {
 		makeGeneratorBuiltin(
 			ArgTypes{{"start", TypeInt}, {"end", TypeInt}},
-			TTuple{TypeInt},
+			seriesValueGeneratorType,
 			makeSeriesGenerator,
 			"Produces a virtual table containing the integer values from `start` to `end`, inclusive.",
 		),
 		makeGeneratorBuiltin(
 			ArgTypes{{"start", TypeInt}, {"end", TypeInt}, {"step", TypeInt}},
-			TTuple{TypeInt},
+			seriesValueGeneratorType,
 			makeSeriesGenerator,
 			"Produces a virtual table containing the integer values from `start` to `end`, inclusive, by increment of `step`.",
 		),
@@ -120,7 +120,10 @@ var Generators = map[string][]Builtin{
 				if len(args) == 0 {
 					return unknownReturnType
 				}
-				return TTable{Cols: TTuple{args[0].ResolvedType().(TArray).Typ}}
+				return TTable{
+					Cols:   TTuple{args[0].ResolvedType().(TArray).Typ},
+					Labels: arrayValueGeneratorLabels,
+				}
 			},
 			makeArrayGenerator,
 			"Returns the input array as a set of rows",
@@ -128,8 +131,8 @@ var Generators = map[string][]Builtin{
 	},
 }
 
-func makeGeneratorBuiltin(in ArgTypes, ret TTuple, g generatorFactory, info string) Builtin {
-	return makeGeneratorBuiltinWithReturnType(in, fixedReturnType(TTable{Cols: ret}), g, info)
+func makeGeneratorBuiltin(in ArgTypes, ret TTable, g generatorFactory, info string) Builtin {
+	return makeGeneratorBuiltinWithReturnType(in, fixedReturnType(ret), g, info)
 }
 
 func makeGeneratorBuiltinWithReturnType(
@@ -159,6 +162,11 @@ type seriesValueGenerator struct {
 	nextOK                   bool
 }
 
+var seriesValueGeneratorType = TTable{
+	Cols:   TTuple{TypeInt},
+	Labels: []string{"generate_series"},
+}
+
 var errStepCannotBeZero = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "step cannot be 0")
 
 func makeSeriesGenerator(_ *EvalContext, args Datums) (ValueGenerator, error) {
@@ -180,8 +188,8 @@ func makeSeriesGenerator(_ *EvalContext, args Datums) (ValueGenerator, error) {
 	}, nil
 }
 
-// ColumnTypes implements the ValueGenerator interface.
-func (s *seriesValueGenerator) ColumnTypes() TTuple { return TTuple{TypeInt} }
+// ResolvedType implements the ValueGenerator interface.
+func (*seriesValueGenerator) ResolvedType() TTable { return seriesValueGeneratorType }
 
 // Start implements the ValueGenerator interface.
 func (s *seriesValueGenerator) Start() error { return nil }
@@ -222,8 +230,15 @@ type arrayValueGenerator struct {
 	nextIndex int
 }
 
-// ColumnTypes implements the ValueGenerator interface.
-func (s *arrayValueGenerator) ColumnTypes() TTuple { return TTuple{s.array.ParamTyp} }
+var arrayValueGeneratorLabels = []string{"unnest"}
+
+// ResolvedType implements the ValueGenerator interface.
+func (s *arrayValueGenerator) ResolvedType() TTable {
+	return TTable{
+		Cols:   TTuple{s.array.ParamTyp},
+		Labels: arrayValueGeneratorLabels,
+	}
+}
 
 // Start implements the ValueGenerator interface.
 func (s *arrayValueGenerator) Start() error {

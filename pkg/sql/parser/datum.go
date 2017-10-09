@@ -2455,7 +2455,7 @@ func (t *DTable) Format(buf *bytes.Buffer, _ FmtFlags) {
 
 // ResolvedType implements the TypedExpr interface.
 func (t *DTable) ResolvedType() Type {
-	return TTable{t.ValueGenerator.ColumnTypes()}
+	return t.ValueGenerator.ResolvedType()
 }
 
 // Compare implements the Datum interface.
