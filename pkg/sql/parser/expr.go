@@ -135,8 +135,16 @@ type AndExpr struct {
 
 func (*AndExpr) operatorExpr() {}
 
-func binExprFmtWithParen(buf *bytes.Buffer, f FmtFlags, e1 Expr, op string, e2 Expr) {
-	binExprFmtWithParenAndSubOp(buf, f, e1, "", op, e2)
+func binExprFmtWithParen(buf *bytes.Buffer, f FmtFlags, e1 Expr, op string, e2 Expr, pad bool) {
+	exprFmtWithParen(buf, f, e1)
+	if pad {
+		buf.WriteByte(' ')
+	}
+	buf.WriteString(op)
+	if pad {
+		buf.WriteByte(' ')
+	}
+	exprFmtWithParen(buf, f, e2)
 }
 
 func binExprFmtWithParenAndSubOp(
@@ -155,7 +163,7 @@ func binExprFmtWithParenAndSubOp(
 
 // Format implements the NodeFormatter interface.
 func (node *AndExpr) Format(buf *bytes.Buffer, f FmtFlags) {
-	binExprFmtWithParen(buf, f, node.Left, "AND", node.Right)
+	binExprFmtWithParen(buf, f, node.Left, "AND", node.Right, true)
 }
 
 // NewTypedAndExpr returns a new AndExpr that is verified to be well-typed.
@@ -186,7 +194,7 @@ func (*OrExpr) operatorExpr() {}
 
 // Format implements the NodeFormatter interface.
 func (node *OrExpr) Format(buf *bytes.Buffer, f FmtFlags) {
-	binExprFmtWithParen(buf, f, node.Left, "OR", node.Right)
+	binExprFmtWithParen(buf, f, node.Left, "OR", node.Right, true)
 }
 
 // NewTypedOrExpr returns a new OrExpr that is verified to be well-typed.
@@ -293,6 +301,11 @@ const (
 	IsNotDistinctFrom
 	Is
 	IsNot
+	Contains
+	ContainedBy
+	HasKey
+	HasSomeKey
+	HasAllKeys
 
 	// The following operators will always be used with an associated SubOperator.
 	// If Go had algebraic data types they would be defined in a self-contained
@@ -335,6 +348,11 @@ var comparisonOpName = [...]string{
 	IsNotDistinctFrom: "IS NOT DISTINCT FROM",
 	Is:                "IS",
 	IsNot:             "IS NOT",
+	Contains:          "@>",
+	ContainedBy:       "<@",
+	HasKey:            "?",
+	HasSomeKey:        "?|",
+	HasAllKeys:        "?&",
 	Any:               "ANY",
 	Some:              "SOME",
 	All:               "ALL",
@@ -377,7 +395,7 @@ func (node *ComparisonExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	if node.Operator.hasSubOperator() {
 		binExprFmtWithParenAndSubOp(buf, f, node.Left, node.SubOperator.String(), opStr, node.Right)
 	} else {
-		binExprFmtWithParen(buf, f, node.Left, opStr, node.Right)
+		binExprFmtWithParen(buf, f, node.Left, opStr, node.Right, true)
 	}
 }
 
@@ -463,7 +481,7 @@ func (node *RangeCond) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 	exprFmtWithParen(buf, f, node.Left)
 	buf.WriteString(notStr)
-	binExprFmtWithParen(buf, f, node.From, "AND", node.To)
+	binExprFmtWithParen(buf, f, node.From, "AND", node.To, true)
 }
 
 // TypedLeft returns the RangeCond's left expression as a TypedExpr.
@@ -748,22 +766,36 @@ const (
 	Concat
 	LShift
 	RShift
+	FetchVal
+	FetchText
+	FetchValPath
+	FetchTextPath
+	RemovePath
 )
 
 var binaryOpName = [...]string{
-	Bitand:   "&",
-	Bitor:    "|",
-	Bitxor:   "#",
-	Plus:     "+",
-	Minus:    "-",
-	Mult:     "*",
-	Div:      "/",
-	FloorDiv: "//",
-	Mod:      "%",
-	Pow:      "^",
-	Concat:   "||",
-	LShift:   "<<",
-	RShift:   ">>",
+	Bitand:        "&",
+	Bitor:         "|",
+	Bitxor:        "#",
+	Plus:          "+",
+	Minus:         "-",
+	Mult:          "*",
+	Div:           "/",
+	FloorDiv:      "//",
+	Mod:           "%",
+	Pow:           "^",
+	Concat:        "||",
+	LShift:        "<<",
+	RShift:        ">>",
+	FetchVal:      "->",
+	FetchText:     "->>",
+	FetchValPath:  "#>",
+	FetchTextPath: "#>>",
+	RemovePath:    "#-",
+}
+
+func (i BinaryOperator) isPadded() bool {
+	return !(i == FetchVal || i == FetchText || i == FetchValPath || i == FetchTextPath)
 }
 
 func (i BinaryOperator) String() string {
@@ -825,7 +857,7 @@ func newBinExprIfValidOverload(op BinaryOperator, left TypedExpr, right TypedExp
 
 // Format implements the NodeFormatter interface.
 func (node *BinaryExpr) Format(buf *bytes.Buffer, f FmtFlags) {
-	binExprFmtWithParen(buf, f, node.Left, node.Operator.String(), node.Right)
+	binExprFmtWithParen(buf, f, node.Left, node.Operator.String(), node.Right, node.Operator.isPadded())
 }
 
 // UnaryOperator represents a unary operator.
