@@ -4,14 +4,31 @@ BEGIN {
     print ""
     print "package parser"
     print ""
-    print "var keywords = map[string]int{"
+    print "var keywords = map[string]struct{"
+    print "    tok int"
+    print "    cat string"
+    print "}{"
 
     # This variable will be associated with a pipe for intermediate output.
     sort = "env LC_ALL=C sort"
 }
 
+# Category codes are for pg_get_keywords, see
+# src/backend/utils/adt/misc.c in pg's sources.
 /^.*_keyword:/ {
   keyword = 1
+  if ($1 == "col_name_keyword:") {
+      category = "C"
+  } else if ($1 == "unreserved_keyword:") {
+      category = "U"
+  } else if ($1 == "type_func_name_keyword:") {
+      category = "T"
+  } else if ($1 == "reserved_keyword:") {
+      category ="R"
+  } else {
+      print "unknown keyword type:", $1 >>"/dev/stderr"
+      exit 1
+  }
   next
 }
 
@@ -21,7 +38,7 @@ BEGIN {
 
 {
   if (keyword && $NF != "") {
-    printf("\"%s\": %s,\n", $NF, $NF) | sort
+      printf("\"%s\": {%s, \"%s\"},\n", tolower($NF), $NF, category) | sort
   }
 }
 

@@ -16,6 +16,7 @@ package parser
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
@@ -57,9 +58,9 @@ type generatorFactory func(ctx *EvalContext, args Datums) (ValueGenerator, error
 // rows of values in a streaming fashion (like Go iterators or
 // generators in Python).
 type ValueGenerator interface {
-	// ColumnTypes returns the type signature of this value generator.
+	// ResolvedType returns the type signature of this value generator.
 	// Used by DTable.ResolvedType().
-	ColumnTypes() TTuple
+	ResolvedType() TTable
 
 	// Start initializes the generator. Must be called once before
 	// Next() and Values().
@@ -102,15 +103,23 @@ var Generators = map[string][]Builtin{
 	"generate_series": {
 		makeGeneratorBuiltin(
 			ArgTypes{{"start", TypeInt}, {"end", TypeInt}},
-			TTuple{TypeInt},
+			seriesValueGeneratorType,
 			makeSeriesGenerator,
 			"Produces a virtual table containing the integer values from `start` to `end`, inclusive.",
 		),
 		makeGeneratorBuiltin(
 			ArgTypes{{"start", TypeInt}, {"end", TypeInt}, {"step", TypeInt}},
-			TTuple{TypeInt},
+			seriesValueGeneratorType,
 			makeSeriesGenerator,
 			"Produces a virtual table containing the integer values from `start` to `end`, inclusive, by increment of `step`.",
+		),
+	},
+	"pg_get_keywords": {
+		makeGeneratorBuiltin(
+			ArgTypes{},
+			keywordsValueGeneratorType,
+			makeKeywordsGenerator,
+			"Produces a virtual table containing the keywords known to the SQL parser.",
 		),
 	},
 	"unnest": {
@@ -120,7 +129,10 @@ var Generators = map[string][]Builtin{
 				if len(args) == 0 {
 					return unknownReturnType
 				}
-				return TTable{Cols: TTuple{args[0].ResolvedType().(TArray).Typ}}
+				return TTable{
+					Cols:   TTuple{args[0].ResolvedType().(TArray).Typ},
+					Labels: arrayValueGeneratorLabels,
+				}
 			},
 			makeArrayGenerator,
 			"Returns the input array as a set of rows",
@@ -128,8 +140,8 @@ var Generators = map[string][]Builtin{
 	},
 }
 
-func makeGeneratorBuiltin(in ArgTypes, ret TTuple, g generatorFactory, info string) Builtin {
-	return makeGeneratorBuiltinWithReturnType(in, fixedReturnType(TTable{Cols: ret}), g, info)
+func makeGeneratorBuiltin(in ArgTypes, ret TTable, g generatorFactory, info string) Builtin {
+	return makeGeneratorBuiltinWithReturnType(in, fixedReturnType(ret), g, info)
 }
 
 func makeGeneratorBuiltinWithReturnType(
@@ -152,11 +164,76 @@ func makeGeneratorBuiltinWithReturnType(
 	}
 }
 
+// keywordsValueGenerator supports the execution of pg_get_keywords().
+type keywordsValueGenerator struct {
+	curKeyword int
+}
+
+var keywordsValueGeneratorType = TTable{
+	Cols:   TTuple{TypeString, TypeString, TypeString},
+	Labels: []string{"word", "catcode", "catdesc"},
+}
+
+func makeKeywordsGenerator(_ *EvalContext, _ Datums) (ValueGenerator, error) {
+	return &keywordsValueGenerator{}, nil
+}
+
+// ResolvedType implements the ValueGenerator interface.
+func (*keywordsValueGenerator) ResolvedType() TTable { return keywordsValueGeneratorType }
+
+// Close implements the ValueGenerator interface.
+func (*keywordsValueGenerator) Close() {}
+
+// Start implements the ValueGenerator interface.
+func (k *keywordsValueGenerator) Start() error {
+	k.curKeyword = -1
+	return nil
+}
+func (k *keywordsValueGenerator) Next() (bool, error) {
+	k.curKeyword++
+	if k.curKeyword >= len(keywordNames) {
+		return false, nil
+	}
+	return true, nil
+}
+
+// Values implements the ValueGenerator interface.
+func (k *keywordsValueGenerator) Values() Datums {
+	kw := keywordNames[k.curKeyword]
+	info := keywords[kw]
+	cat := info.cat
+	desc := keywordCategoryDescriptions[cat]
+	return Datums{NewDString(kw), NewDString(cat), NewDString(desc)}
+}
+
+var keywordCategoryDescriptions = map[string]string{
+	"R": "reserved",
+	"C": "unreserved (cannot be function or type name)",
+	"T": "reserved (can be function or type name)",
+	"U": "unreserved",
+}
+
+// keywordNames contains all the keys in the `keywords` map, sorted so
+// that pg_get_keywords returns deterministic results.
+var keywordNames = func() []string {
+	ret := make([]string, 0, len(keywords))
+	for k := range keywords {
+		ret = append(ret, k)
+	}
+	sort.Strings(ret)
+	return ret
+}()
+
 // seriesValueGenerator supports the execution of generate_series()
 // with integer bounds.
 type seriesValueGenerator struct {
 	value, start, stop, step int64
 	nextOK                   bool
+}
+
+var seriesValueGeneratorType = TTable{
+	Cols:   TTuple{TypeInt},
+	Labels: []string{"generate_series"},
 }
 
 var errStepCannotBeZero = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "step cannot be 0")
@@ -180,8 +257,8 @@ func makeSeriesGenerator(_ *EvalContext, args Datums) (ValueGenerator, error) {
 	}, nil
 }
 
-// ColumnTypes implements the ValueGenerator interface.
-func (s *seriesValueGenerator) ColumnTypes() TTuple { return TTuple{TypeInt} }
+// ResolvedType implements the ValueGenerator interface.
+func (*seriesValueGenerator) ResolvedType() TTable { return seriesValueGeneratorType }
 
 // Start implements the ValueGenerator interface.
 func (s *seriesValueGenerator) Start() error { return nil }
@@ -222,8 +299,15 @@ type arrayValueGenerator struct {
 	nextIndex int
 }
 
-// ColumnTypes implements the ValueGenerator interface.
-func (s *arrayValueGenerator) ColumnTypes() TTuple { return TTuple{s.array.ParamTyp} }
+var arrayValueGeneratorLabels = []string{"unnest"}
+
+// ResolvedType implements the ValueGenerator interface.
+func (s *arrayValueGenerator) ResolvedType() TTable {
+	return TTable{
+		Cols:   TTuple{s.array.ParamTyp},
+		Labels: arrayValueGeneratorLabels,
+	}
+}
 
 // Start implements the ValueGenerator interface.
 func (s *arrayValueGenerator) Start() error {

@@ -479,7 +479,23 @@ func renameSource(
 	src planDataSource, as parser.AliasClause, includeHidden bool,
 ) (planDataSource, error) {
 	var tableAlias parser.TableName
+	colAlias := as.Cols
+
 	if as.Alias != "" {
+		// Special case for Postgres compatibility: if a data source does
+		// not currently have a name, and it is a set-generating function
+		// with just one column, and the AS clause doesn't specify column
+		// names, then use the specified table name both as the
+		// column name and table name.
+		isAnonymousTable := (len(src.info.sourceAliases) == 0 ||
+			(len(src.info.sourceAliases) == 1 && src.info.sourceAliases[0].name == anonymousTable))
+		noColNameSpecified := len(colAlias) == 0
+		if vg, ok := src.plan.(*valueGenerator); ok && isAnonymousTable && noColNameSpecified {
+			if tType, ok := vg.expr.ResolvedType().(parser.TTable); ok && len(tType.Cols) == 1 {
+				colAlias = parser.NameList{as.Alias}
+			}
+		}
+
 		// If an alias was specified, use that.
 		tableAlias.TableName = as.Alias
 		src.info.sourceAliases = sourceAliases{{
@@ -487,7 +503,6 @@ func renameSource(
 			columnRange: fillColumnRange(0, len(src.info.sourceColumns)-1),
 		}}
 	}
-	colAlias := as.Cols
 
 	if len(colAlias) > 0 {
 		// Make a copy of the slice since we are about to modify the contents.

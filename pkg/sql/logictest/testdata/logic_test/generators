@@ -242,3 +242,20 @@ SELECT GENERATE_SERIES(9223372036854775807::int, -9223372036854775807::int, -922
 9223372036854775807
 0
 -9223372036854775807
+
+# pg_get_keywords for compatibility (#10291)
+query TTT colnames
+SELECT * FROM pg_get_keywords() WHERE word IN ('alter', 'and', 'between', 'cross') ORDER BY word
+----
+word     catcode catdesc
+alter    U       unreserved
+and      R       reserved
+between  C       unreserved (cannot be function or type name)
+cross    T       reserved (can be function or type name)
+
+# Postgres enables renaming both the source and the column name for
+# single-column generators, but not for multi-column generators.
+query IITTT colnames
+SELECT a.*, b.*, c.* FROM generate_series(1,1) a, unnest(ARRAY[1]) b, pg_get_keywords() c LIMIT 0
+----
+a  b  word  catcode  catdesc
