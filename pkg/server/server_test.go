@@ -703,7 +703,8 @@ func TestTempStorage(t *testing.T) {
 			defer tempDirCleanup()
 
 			// This will be cleaned up by tempDirCleanup.
-			tempStorage := base.TempStorageConfigFromEnv(tc.storeSpec, tempDir, base.DefaultTempStorageMaxSizeBytes)
+			tempStorage := base.TempStorageConfigFromEnv(
+				context.TODO(), tc.storeSpec, tempDir, base.DefaultTempStorageMaxSizeBytes)
 
 			s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 				StoreSpecs:        []base.StoreSpec{tc.storeSpec},

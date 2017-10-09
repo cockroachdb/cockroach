@@ -29,12 +29,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -118,8 +118,11 @@ type ServerConfig struct {
 
 	// TempStorage is used by some DistSQL processors to store rows when the
 	// working set is larger than can be stored in memory.
-	TempStorage             engine.Engine
-	TempStorageMaxSizeBytes int64
+	TempStorage engine.Engine
+	// DiskMonitor is used to monitor temporary storage disk usage. Actual disk
+	// space used will be a small multiple (~1.1) of this because of RocksDB
+	// space amplification.
+	DiskMonitor *mon.BytesMonitor
 
 	Metrics *DistSQLMetrics
 
@@ -141,13 +144,6 @@ type ServerImpl struct {
 	flowScheduler *flowScheduler
 	memMonitor    mon.BytesMonitor
 	regexpCache   *parser.RegexpCache
-	// tempStorage is used by some DistSQL processors to store working sets
-	// larger than memory.
-	tempStorage engine.Engine
-	// diskMonitor is used to monitor temporary storage disk usage. Actual disk
-	// space used will be a small multiple (~1.1) of this because of RocksDB
-	// space amplification.
-	diskMonitor mon.BytesMonitor
 }
 
 var _ DistSQLServer = &ServerImpl{}
@@ -167,19 +163,8 @@ func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
 			-1, /* increment: use default block size */
 			noteworthyMemoryUsageBytes,
 		),
-		tempStorage: cfg.TempStorage,
 	}
 	ds.memMonitor.Start(ctx, cfg.ParentMemoryMonitor, mon.BoundAccount{})
-
-	ds.diskMonitor = mon.MakeMonitor(
-		"distsql-tempstorage",
-		mon.DiskResource,
-		nil,                            /* curCount */
-		nil,                            /* maxHist */
-		64*1024*1024,                   /* increment */
-		cfg.TempStorageMaxSizeBytes/10, /* noteworthy */
-	)
-	ds.diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(cfg.TempStorageMaxSizeBytes))
 	return ds
 }
 
@@ -302,8 +287,8 @@ func (ds *ServerImpl) setupFlow(
 		clientDB:       ds.DB,
 		testingKnobs:   ds.TestingKnobs,
 		nodeID:         nodeID,
-		TempStorage:    ds.tempStorage,
-		diskMonitor:    &ds.diskMonitor,
+		TempStorage:    ds.TempStorage,
+		diskMonitor:    ds.DiskMonitor,
 		JobRegistry:    ds.ServerConfig.JobRegistry,
 	}
 

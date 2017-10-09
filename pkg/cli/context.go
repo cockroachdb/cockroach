@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 )
 
 // statementsValue is an implementation of pflag.Value that appends any
@@ -65,7 +66,7 @@ var serverCfg = func() server.Config {
 	// A similar singleton reference exists in the log package. See comment there.
 	log.ReportingSettingsSingleton.Store(&st.SV)
 
-	return server.MakeConfig(st)
+	return server.MakeConfig(context.Background(), st)
 }()
 
 var baseCfg = serverCfg.Config

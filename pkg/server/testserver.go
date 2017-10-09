@@ -62,14 +62,14 @@ const (
 // Certs with the test certs directory.
 // We need to override the certs loader.
 func makeTestConfig(st *cluster.Settings) Config {
-	cfg := MakeConfig(st)
+	cfg := MakeConfig(context.TODO(), st)
 
 	// Test servers start in secure mode by default.
 	cfg.Insecure = false
 
 	// Configure the default in-memory temp storage for all tests unless
 	// otherwise configured.
-	cfg.TempStorageConfig = base.DefaultTestTempStorageConfig
+	cfg.TempStorageConfig = base.DefaultTestTempStorageConfig()
 
 	// Load test certs. In addition, the tests requiring certs
 	// need to call security.SetAssetLoader(securitytest.EmbeddedAssets)
