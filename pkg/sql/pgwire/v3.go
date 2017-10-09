@@ -632,7 +632,7 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 	// The unnamed prepared statement can be freely overwritten.
 	if name != "" {
 		if c.session.PreparedStatements.Exists(name) {
-			return c.sendInternalError(fmt.Sprintf("prepared statement %q already exists", name))
+			return c.sendError(pgerror.NewErrorf(pgerror.CodeDuplicatePreparedStatementError, "prepared statement %q already exists", name))
 		}
 	}
 	query, err := buf.getString()
@@ -649,7 +649,7 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 	for i := range inTypeHints {
 		typ, err := buf.getUint32()
 		if err != nil {
-			return err
+			return c.sendError(pgerror.NewError(pgerror.CodeProtocolViolationError, err.Error()))
 		}
 		inTypeHints[i] = oid.Oid(typ)
 	}
@@ -663,7 +663,7 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		}
 		v, ok := parser.OidToType[t]
 		if !ok {
-			return c.sendInternalError(fmt.Sprintf("unknown oid type: %v", t))
+			return c.sendError(pgerror.NewErrorf(pgerror.CodeProtocolViolationError, "unknown oid type: %v", t))
 		}
 		sqlTypeHints[strconv.Itoa(i+1)] = v
 	}
@@ -681,7 +681,7 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 	for k, t := range stmt.TypeHints {
 		i, err := strconv.Atoi(k)
 		if err != nil || i < 1 {
-			return c.sendInternalError(fmt.Sprintf("invalid placeholder name: $%s", k))
+			return c.sendError(pgerror.NewErrorf(pgerror.CodeUndefinedParameterError, "invalid placeholder name: $%s", k))
 		}
 		// Placeholder names are 1-indexed; the arrays in the protocol are
 		// 0-indexed.
@@ -732,7 +732,7 @@ func (c *v3Conn) handleDescribe(ctx context.Context, buf *readBuffer) error {
 	case prepareStatement:
 		stmt, ok := c.session.PreparedStatements.Get(name)
 		if !ok {
-			return c.sendInternalError(fmt.Sprintf("unknown prepared statement %q", name))
+			return c.sendError(pgerror.NewErrorf(pgerror.CodeInvalidSQLStatementNameError, "unknown prepared statement %q", name))
 		}
 
 		stmtMeta := stmt.ProtocolMeta.(preparedStatementMeta)
@@ -752,7 +752,7 @@ func (c *v3Conn) handleDescribe(ctx context.Context, buf *readBuffer) error {
 	case preparePortal:
 		portal, ok := c.session.PreparedPortals.Get(name)
 		if !ok {
-			return c.sendInternalError(fmt.Sprintf("unknown portal %q", name))
+			return c.sendError(pgerror.NewErrorf(pgerror.CodeInvalidCursorNameError, "unknown portal %q", name))
 		}
 
 		portalMeta := portal.ProtocolMeta.(preparedPortalMeta)
@@ -795,7 +795,7 @@ func (c *v3Conn) handleBind(ctx context.Context, buf *readBuffer) error {
 	// The unnamed portal can be freely overwritten.
 	if portalName != "" {
 		if c.session.PreparedPortals.Exists(portalName) {
-			return c.sendInternalError(fmt.Sprintf("portal %q already exists", portalName))
+			return c.sendError(pgerror.NewErrorf(pgerror.CodeDuplicateCursorError, "portal %q already exists", portalName))
 		}
 	}
 	statementName, err := buf.getString()
@@ -804,7 +804,7 @@ func (c *v3Conn) handleBind(ctx context.Context, buf *readBuffer) error {
 	}
 	stmt, ok := c.session.PreparedStatements.Get(statementName)
 	if !ok {
-		return c.sendInternalError(fmt.Sprintf("unknown prepared statement %q", statementName))
+		return c.sendError(pgerror.NewErrorf(pgerror.CodeInvalidSQLStatementNameError, "unknown prepared statement %q", statementName))
 	}
 
 	stmtMeta := stmt.ProtocolMeta.(preparedStatementMeta)
@@ -842,7 +842,7 @@ func (c *v3Conn) handleBind(ctx context.Context, buf *readBuffer) error {
 			qArgFormatCodes[i] = formatCode(c)
 		}
 	default:
-		return c.sendInternalError(fmt.Sprintf("wrong number of format codes specified: %d for %d arguments", numQArgFormatCodes, numQArgs))
+		return c.sendError(pgerror.NewErrorf(pgerror.CodeProtocolViolationError, "wrong number of format codes specified: %d for %d arguments", numQArgFormatCodes, numQArgs))
 	}
 
 	numValues, err := buf.getUint16()
@@ -850,7 +850,7 @@ func (c *v3Conn) handleBind(ctx context.Context, buf *readBuffer) error {
 		return err
 	}
 	if numValues != numQArgs {
-		return c.sendInternalError(fmt.Sprintf("expected %d arguments, got %d", numQArgs, numValues))
+		return c.sendError(pgerror.NewErrorf(pgerror.CodeProtocolViolationError, "expected %d arguments, got %d", numQArgs, numValues))
 	}
 	qargs := parser.QueryArguments{}
 	for i, t := range stmtMeta.inTypes {
@@ -911,7 +911,7 @@ func (c *v3Conn) handleBind(ctx context.Context, buf *readBuffer) error {
 			columnFormatCodes[i] = formatCode(c)
 		}
 	default:
-		return c.sendInternalError(fmt.Sprintf("expected 0, 1, or %d for number of format codes, got %d", numColumns, numColumnFormatCodes))
+		return c.sendError(pgerror.NewErrorf(pgerror.CodeProtocolViolationError, "expected 0, 1, or %d for number of format codes, got %d", numColumns, numColumnFormatCodes))
 	}
 	// Create the new PreparedPortal in the connection's Session.
 	portal, err := c.session.PreparedPortals.New(ctx, portalName, stmt, qargs)
@@ -937,7 +937,7 @@ func (c *v3Conn) handleExecute(buf *readBuffer) error {
 	}
 	portal, ok := c.session.PreparedPortals.Get(portalName)
 	if !ok {
-		return c.sendInternalError(fmt.Sprintf("unknown portal %q", portalName))
+		return c.sendError(pgerror.NewErrorf(pgerror.CodeInvalidCursorNameError, "unknown portal %q", portalName))
 	}
 	limit, err := buf.getUint32()
 	if err != nil {
@@ -969,12 +969,6 @@ func (c *v3Conn) sendCommandComplete(tag []byte, w io.Writer) error {
 	c.writeBuf.write(tag)
 	c.writeBuf.nullTerminate()
 	return c.writeBuf.finishMsg(w)
-}
-
-// TODO(andrei): Figure out the correct codes to send for all the errors
-// in this file and remove this function.
-func (c *v3Conn) sendInternalError(errToSend string) error {
-	return c.sendError(pgerror.NewError(pgerror.CodeInternalError, errToSend))
 }
 
 func (c *v3Conn) sendError(err error) error {
