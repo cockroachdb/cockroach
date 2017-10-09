@@ -36,9 +36,15 @@ func TestPushTransactionsWithNonPendingIntent(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
-	intents := []roachpb.Intent{{Span: roachpb.Span{Key: roachpb.Key("a")}, Status: roachpb.ABORTED}}
+	intents := []roachpb.Intent{
+		{Span: roachpb.Span{Key: roachpb.Key("a")}, Status: roachpb.PENDING},
+		{Span: roachpb.Span{Key: roachpb.Key("b")}, Status: roachpb.ABORTED},
+	}
 	if _, pErr := tc.store.intentResolver.maybePushTransactions(
-		context.Background(), intents, roachpb.Header{}, roachpb.PUSH_TOUCH, true); !testutils.IsPError(pErr, "unexpected aborted/resolved intent") {
+		context.Background(), intents, roachpb.Header{}, roachpb.PUSH_TOUCH, true); !testutils.IsPError(pErr, "unexpected ABORTED intent") {
 		t.Errorf("expected error on aborted/resolved intent, but got %s", pErr)
+	}
+	if cnt := len(tc.store.intentResolver.mu.inFlight); cnt != 0 {
+		t.Errorf("expected no inflight refcount map entries, found %d", cnt)
 	}
 }
