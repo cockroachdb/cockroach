@@ -444,11 +444,23 @@ void SerializeProtoToValue(std::string *val, const google::protobuf::MessageLite
   msg.AppendToString(val);
 }
 
-bool IsValidSplitKey(const rocksdb::Slice& key) {
-  for (auto span : kSortedNoSplitSpans) {
-    // kSortedNoSplitSpans are reverse sorted (largest to smallest) on
-    // the span end key which allows us to early exit if our key to
-    // check is above the end of the last no-split span.
+bool IsValidSplitKey(const rocksdb::Slice& key, bool allow_meta2_splits) {
+  if (key == kMeta2KeyMax) {
+    // We do not allow splits at Meta2KeyMax. The reason for this is that the
+    // last range is the keyspace will always end at KeyMax, which will be
+    // stored at Meta2KeyMax because RangeMetaKey(KeyMax) = Meta2KeyMax. If we
+    // allowed splits at this key then the last descriptor would be stored on a
+    // non-meta range since the meta ranges would span from [KeyMin,Meta2KeyMax)
+    // and the first non-meta range would span [Meta2KeyMax,...).
+    return false;
+  }
+  const auto &no_split_spans = allow_meta2_splits ? kSortedNoSplitSpans :
+                                                    kSortedNoSplitSpansWithoutMeta2Splits;
+  for (auto span : no_split_spans) {
+    // kSortedNoSplitSpans and kSortedNoSplitSpansWithoutMeta2Splits are
+    // both reverse sorted (largest to smallest) on the span end key which
+    // allows us to early exit if our key to check is above the end of the
+    // last no-split span.
     if (key.compare(span.second) >= 0) {
       return true;
     }
@@ -456,7 +468,7 @@ bool IsValidSplitKey(const rocksdb::Slice& key) {
       return false;
     }
   }
-  return (key != kMeta2KeyMax);
+  return true;
 }
 
 class DBComparator : public rocksdb::Comparator {
@@ -2404,12 +2416,12 @@ MVCCStatsResult MVCCComputeStats(
   return MVCCComputeStatsInternal(iter->rep.get(), start, end, now_nanos);
 }
 
-bool MVCCIsValidSplitKey(DBSlice key) {
-  return IsValidSplitKey(ToSlice(key));
+bool MVCCIsValidSplitKey(DBSlice key, bool allow_meta2_splits) {
+  return IsValidSplitKey(ToSlice(key), allow_meta2_splits);
 }
 
-DBStatus MVCCFindSplitKey(
-    DBIterator* iter, DBKey start, DBKey end, int64_t target_size, DBString* split_key) {
+DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, 
+                          int64_t target_size, bool allow_meta2_splits, DBString* split_key) {
   auto iter_rep = iter->rep.get();
   const std::string start_key = EncodeKey(start);
   iter_rep->Seek(start_key);
@@ -2432,7 +2444,7 @@ DBStatus MVCCFindSplitKey(
     }
 
     ++n;
-    const bool valid = n > 1 && IsValidSplitKey(decoded_key);
+    const bool valid = n > 1 && IsValidSplitKey(decoded_key, allow_meta2_splits);
     int64_t diff = target_size - size_so_far;
     if (diff < 0) {
       diff = -diff;

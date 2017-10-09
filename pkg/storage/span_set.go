@@ -249,12 +249,12 @@ func (s *SpanSetIterator) ComputeStats(
 
 // FindSplitKey implements engine.Iterator.
 func (s *SpanSetIterator) FindSplitKey(
-	start, end engine.MVCCKey, targetSize int64,
+	start, end engine.MVCCKey, targetSize int64, allowMeta2Splits bool,
 ) (engine.MVCCKey, error) {
 	if err := s.spans.checkAllowed(SpanReadOnly, roachpb.Span{Key: start.Key, EndKey: end.Key}); err != nil {
 		return engine.MVCCKey{}, err
 	}
-	return s.i.FindSplitKey(start, end, targetSize)
+	return s.i.FindSplitKey(start, end, targetSize, allowMeta2Splits)
 }
 
 type spanSetReader struct {

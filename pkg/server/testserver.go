@@ -572,18 +572,13 @@ func (ts *TestServer) GetFirstStoreID() roachpb.StoreID {
 
 // LookupRange returns the descriptor of the range containing key.
 func (ts *TestServer) LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, error) {
-	rangeLookupReq := roachpb.RangeLookupRequest{
-		Span: roachpb.Span{
-			Key: keys.RangeMetaKey(keys.MustAddr(key)).AsRawKey(),
-		},
-		MaxRanges: 1,
-	}
-	resp, pErr := client.SendWrapped(context.Background(), ts.DistSender(), &rangeLookupReq)
-	if pErr != nil {
+	rs, _, err := client.RangeLookupForVersion(context.Background(), ts.ClusterSettings(),
+		ts.DistSender(), key, roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
+	if err != nil {
 		return roachpb.RangeDescriptor{}, errors.Errorf(
-			"%q: lookup range unexpected error: %s", key, pErr)
+			"%q: lookup range unexpected error: %s", key, err)
 	}
-	return resp.(*roachpb.RangeLookupResponse).Ranges[0], nil
+	return rs[0], nil
 }
 
 // SplitRange splits the range containing splitKey.

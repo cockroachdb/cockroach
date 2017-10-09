@@ -6100,7 +6100,7 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 }
 
 // TestReplicaDanglingMetaIntent creates a dangling intent on a meta2
-// record and verifies that RangeLookup requests behave
+// record and verifies that RangeLookup scans behave
 // appropriately. Normally, the old value and a write intent error
 // should be returned. If IgnoreIntents is specified, then a random
 // choice of old or new is returned with no error.
@@ -6109,42 +6109,39 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 // we don't erroneously return that descriptor (recently fixed bug).
 func TestReplicaDanglingMetaIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// Test RangeLookup with Scan.
-	testRangeDanglingMetaIntent(t, false)
-	// Test RangeLookup with ReverseScan.
-	testRangeDanglingMetaIntent(t, true)
+	for _, legacy := range []bool{false, true} {
+		t.Run(fmt.Sprintf("legacy=%t", legacy), func(t *testing.T) {
+			for _, reverse := range []bool{false, true} {
+				t.Run(fmt.Sprintf("reverse=%t", reverse), func(t *testing.T) {
+					testRangeDanglingMetaIntent(t, legacy, reverse)
+				})
+			}
+		})
+	}
 }
 
-func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
+func testRangeDanglingMetaIntent(t *testing.T, legacy, isReverse bool) {
+	rangeLookup := client.RangeLookup
+	if legacy {
+		rangeLookup = client.LegacyRangeLookup
+	}
+
 	tc := testContext{}
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(ctx)
 	tc.Start(t, stopper)
 
 	key := roachpb.Key("a")
 
 	// Get original meta2 descriptor.
-	rlArgs := &roachpb.RangeLookupRequest{
-		Span: roachpb.Span{
-			Key: keys.RangeMetaKey(roachpb.RKey(key)).AsRawKey(),
-		},
-		MaxRanges: 1,
-		Reverse:   isReverse,
+	rs, _, err := rangeLookup(ctx, tc.Sender(), key, roachpb.INCONSISTENT, 0, isReverse)
+	if err != nil {
+		t.Fatal(err)
 	}
+	origDesc := rs[0]
 
-	var rlReply *roachpb.RangeLookupResponse
-
-	reply, pErr := tc.SendWrappedWith(roachpb.Header{
-		ReadConsistency: roachpb.INCONSISTENT,
-	}, rlArgs)
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
-	rlReply = reply.(*roachpb.RangeLookupResponse)
-
-	origDesc := rlReply.Ranges[0]
 	newDesc := origDesc
-	var err error
 	newDesc.EndKey, err = keys.Addr(key)
 	if err != nil {
 		t.Fatal(err)
@@ -6163,56 +6160,34 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 	// priority).
 	pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(key)).AsRawKey(), data)
 	txn.Sequence++
-	if _, pErr = maybeWrapWithBeginTransaction(context.Background(), tc.Sender(), roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
+	if _, pErr := maybeWrapWithBeginTransaction(ctx, tc.Sender(), roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
 	// Now lookup the range; should get the value. Since the lookup is
-	// inconsistent, there's no WriteIntentError.
+	// inconsistent, there's no WriteIntentError. It should return both
+	// the committed descriptor and the intent descriptor.
+	//
 	// Note that 'A' < 'a'.
-	rlArgs.Key = keys.RangeMetaKey(roachpb.RKey{'A'}).AsRawKey()
-
-	reply, pErr = tc.SendWrappedWith(roachpb.Header{
-		Timestamp:       tc.Clock().Now(),
-		ReadConsistency: roachpb.INCONSISTENT,
-	}, rlArgs)
-	if pErr != nil {
-		t.Errorf("unexpected lookup error: %s", pErr)
+	newKey := roachpb.Key{'A'}
+	rs, _, err = rangeLookup(ctx, tc.Sender(), newKey, roachpb.INCONSISTENT, 0, isReverse)
+	if err != nil {
+		t.Fatal(err)
 	}
-	rlReply = reply.(*roachpb.RangeLookupResponse)
-	if !reflect.DeepEqual(rlReply.Ranges[0], origDesc) {
-		t.Errorf("expected original descriptor %s; got %s", &origDesc, &rlReply.Ranges[0])
+	if len(rs) != 2 {
+		t.Fatalf("expected 2 matching range descriptors, found %v", rs)
+	}
+	if desc := rs[0]; !reflect.DeepEqual(desc, origDesc) {
+		t.Errorf("expected original descriptor %s; got %s", &origDesc, &desc)
+	}
+	if intentDesc := rs[1]; !reflect.DeepEqual(intentDesc, newDesc) {
+		t.Errorf("expected original descriptor %s; got %s", &newDesc, &intentDesc)
 	}
 
 	// Switch to consistent lookups, which should run into the intent.
-	_, pErr = tc.SendWrappedWith(roachpb.Header{
-		ReadConsistency: roachpb.CONSISTENT,
-	}, rlArgs)
-	if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
-		t.Fatalf("expected WriteIntentError, not %s", pErr)
-	}
-
-	// Try a single inconsistent lookup. Expect to see both descriptors.
-	var origSeen, newSeen bool
-	clonedRLArgs := *rlArgs
-	reply, pErr = tc.SendWrappedWith(roachpb.Header{
-		ReadConsistency: roachpb.INCONSISTENT,
-	}, &clonedRLArgs)
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
-	rlReply = reply.(*roachpb.RangeLookupResponse)
-	for _, seen := range rlReply.Ranges {
-		if reflect.DeepEqual(seen, origDesc) {
-			origSeen = true
-		} else if reflect.DeepEqual(seen, newDesc) {
-			newSeen = true
-		} else {
-			t.Errorf("expected orig/new descriptor %s/%s; got %s", &origDesc, &newDesc, &seen)
-		}
-	}
-	if !origSeen || !newSeen {
-		t.Errorf("expected to see both original and new descriptor; saw original = %t, saw new = %t", origSeen, newSeen)
+	_, _, err = rangeLookup(ctx, tc.Sender(), newKey, roachpb.CONSISTENT, 0, isReverse)
+	if _, ok := err.(*roachpb.WriteIntentError); !ok {
+		t.Fatalf("expected WriteIntentError, not %s", err)
 	}
 }
 
@@ -6222,90 +6197,82 @@ func testRangeDanglingMetaIntent(t *testing.T, isReverse bool) {
 func TestRangeLookupAsyncResolveIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	blockPushTxn := make(chan struct{})
-	defer close(blockPushTxn)
-
-	// Disable async tasks in the intent resolver. All tasks will be synchronous.
-	cfg := TestStoreConfig(nil)
-	cfg.IntentResolverTaskLimit = -1
-	cfg.TestingKnobs.TestingProposalFilter =
-		func(args storagebase.ProposalFilterArgs) *roachpb.Error {
-			for _, union := range args.Req.Requests {
-				if union.GetInner().Method() == roachpb.PushTxn {
-					<-blockPushTxn
-					break
-				}
+	for _, legacy := range []bool{false, true} {
+		t.Run(fmt.Sprintf("legacy=%t", legacy), func(t *testing.T) {
+			rangeLookup := client.RangeLookup
+			if legacy {
+				rangeLookup = client.LegacyRangeLookup
 			}
-			return nil
-		}
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	tc.StartWithStoreConfig(t, stopper, cfg)
 
-	key := roachpb.Key("a")
+			blockPushTxn := make(chan struct{})
+			defer close(blockPushTxn)
 
-	// Get original meta2 descriptor.
-	rlArgs := &roachpb.RangeLookupRequest{
-		Span: roachpb.Span{
-			Key: keys.RangeMetaKey(roachpb.RKey(key)).AsRawKey(),
-		},
-		MaxRanges: 1,
-	}
+			// Disable async tasks in the intent resolver. All tasks will be synchronous.
+			cfg := TestStoreConfig(nil)
+			cfg.IntentResolverTaskLimit = -1
+			cfg.TestingKnobs.TestingProposalFilter =
+				func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+					for _, union := range args.Req.Requests {
+						if union.GetInner().Method() == roachpb.PushTxn {
+							<-blockPushTxn
+							break
+						}
+					}
+					return nil
+				}
+			tc := testContext{}
+			ctx := context.Background()
+			stopper := stop.NewStopper()
+			defer stopper.Stop(ctx)
+			tc.StartWithStoreConfig(t, stopper, cfg)
 
-	var rlReply *roachpb.RangeLookupResponse
+			key := roachpb.Key("a")
 
-	reply, pErr := tc.SendWrappedWith(roachpb.Header{
-		ReadConsistency: roachpb.INCONSISTENT,
-	}, rlArgs)
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
-	rlReply = reply.(*roachpb.RangeLookupResponse)
+			// Get original meta2 descriptor.
+			rs, _, err := rangeLookup(ctx, tc.Sender(), key, roachpb.INCONSISTENT, 0, false)
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	origDesc := rlReply.Ranges[0]
-	newDesc := origDesc
-	var err error
-	newDesc.EndKey, err = keys.Addr(key)
-	if err != nil {
-		t.Fatal(err)
-	}
+			origDesc := rs[0]
+			newDesc := origDesc
+			newDesc.EndKey, err = keys.Addr(key)
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	// Write the new descriptor as an intent.
-	data, err := protoutil.Marshal(&newDesc)
-	if err != nil {
-		t.Fatal(err)
-	}
-	txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
-	// Officially begin the transaction. If not for this, the intent resolution
-	// machinery would simply remove the intent we write below, see #3020.
-	// We send directly to Replica throughout this test, so there's no danger
-	// of the Store aborting this transaction (i.e. we don't have to set a high
-	// priority).
-	pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(key)).AsRawKey(), data)
-	txn.Sequence++
-	if _, pErr = maybeWrapWithBeginTransaction(context.Background(), tc.Sender(), roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
+			// Write the new descriptor as an intent.
+			data, err := protoutil.Marshal(&newDesc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
+			// Officially begin the transaction. If not for this, the intent resolution
+			// machinery would simply remove the intent we write below, see #3020.
+			// We send directly to Replica throughout this test, so there's no danger
+			// of the Store aborting this transaction (i.e. we don't have to set a high
+			// priority).
+			pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(key)).AsRawKey(), data)
+			txn.Sequence++
+			if _, pErr := maybeWrapWithBeginTransaction(ctx, tc.Sender(), roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
+				t.Fatal(pErr)
+			}
 
-	// Now lookup the range. Since the lookup is inconsistent, there's no
-	// WriteIntentError, but we'll try to resolve any intents that are found. If
-	// the RangeLookup op attempts to resolve the intents synchronously, the
-	// operation will block forever.
-	//
-	// Note that 'A' < 'a'.
-	rlArgs.Key = keys.RangeMetaKey(roachpb.RKey{'A'}).AsRawKey()
-
-	reply, pErr = tc.SendWrappedWith(roachpb.Header{
-		Timestamp:       tc.Clock().Now(),
-		ReadConsistency: roachpb.INCONSISTENT,
-	}, rlArgs)
-	if pErr != nil {
-		t.Errorf("unexpected lookup error: %s", pErr)
-	}
-	rlReply = reply.(*roachpb.RangeLookupResponse)
-	if !reflect.DeepEqual(rlReply.Ranges[0], origDesc) {
-		t.Errorf("expected original descriptor %s; got %s", &origDesc, &rlReply.Ranges[0])
+			// Now lookup the range. Since the lookup is inconsistent, there's no
+			// WriteIntentError, but we'll try to resolve any intents that are found. If
+			// the RangeLookup op attempts to resolve the intents synchronously, the
+			// operation will block forever.
+			//
+			// Note that 'A' < 'a'.
+			newKey := roachpb.Key{'A'}
+			rs, _, err = rangeLookup(ctx, tc.Sender(), newKey, roachpb.INCONSISTENT, 0, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if desc := rs[0]; !reflect.DeepEqual(desc, origDesc) {
+				t.Errorf("expected original descriptor %s; got %s", &origDesc, &desc)
+			}
+		})
 	}
 }
 
@@ -6313,133 +6280,128 @@ func TestRangeLookupAsyncResolveIntent(t *testing.T) {
 // from RangeLookup by using ReverseScan.
 func TestReplicaLookupUseReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
 
-	splitRangeBefore := roachpb.RangeDescriptor{RangeID: 3, StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("h")}
-	splitRangeLHS := roachpb.RangeDescriptor{RangeID: 3, StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("f")}
-	splitRangeRHS := roachpb.RangeDescriptor{RangeID: 5, StartKey: roachpb.RKey("f"), EndKey: roachpb.RKey("h")}
-
-	// Test ranges: ["a","c"), ["c","f"), ["f","h") and ["h","y").
-	testRanges := []roachpb.RangeDescriptor{
-		{RangeID: 2, StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("c")},
-		splitRangeBefore,
-		{RangeID: 4, StartKey: roachpb.RKey("h"), EndKey: roachpb.RKey("y")},
-	}
-
-	testCases := []struct {
-		key      string
-		expected roachpb.RangeDescriptor
-	}{
-		// For testRanges[0|1|3] there is no intent. A key in the middle
-		// and the end key should both give us the range itself.
-		{key: "b", expected: testRanges[0]},
-		{key: "c", expected: testRanges[0]},
-		{key: "d", expected: testRanges[1]},
-		{key: "f", expected: testRanges[1]},
-		{key: "j", expected: testRanges[2]},
-		// testRanges[2] has an intent, so the inconsistent scan will read
-		// an old value (nil). Since we're in reverse mode, testRanges[1]
-		// is the result.
-		{key: "g", expected: testRanges[1]},
-		{key: "h", expected: testRanges[1]},
-	}
-
-	{
-		txn := newTransaction("test", roachpb.Key{}, 1, enginepb.SERIALIZABLE, tc.Clock())
-		for _, r := range testRanges {
-			// Write the new descriptor as an intent.
-			data, err := protoutil.Marshal(&r)
-			if err != nil {
-				t.Fatal(err)
+	for _, legacy := range []bool{false, true} {
+		t.Run(fmt.Sprintf("legacy=%t", legacy), func(t *testing.T) {
+			rangeLookup := client.RangeLookup
+			if legacy {
+				rangeLookup = client.LegacyRangeLookup
 			}
-			pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(r.EndKey)).AsRawKey(), data)
 
-			txn.Sequence++
-			if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
-				t.Fatal(pErr)
+			tc := testContext{}
+			ctx := context.Background()
+			stopper := stop.NewStopper()
+			defer stopper.Stop(ctx)
+			tc.Start(t, stopper)
+
+			splitRangeBefore := roachpb.RangeDescriptor{RangeID: 3, StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("h")}
+			splitRangeLHS := roachpb.RangeDescriptor{RangeID: 3, StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("f")}
+			splitRangeRHS := roachpb.RangeDescriptor{RangeID: 5, StartKey: roachpb.RKey("f"), EndKey: roachpb.RKey("h")}
+
+			// Test ranges: ["a","c"), ["c","f"), ["f","h") and ["h","y").
+			testRanges := []roachpb.RangeDescriptor{
+				{RangeID: 2, StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("c")},
+				splitRangeBefore,
+				{RangeID: 4, StartKey: roachpb.RKey("h"), EndKey: roachpb.RKey("y")},
 			}
-		}
 
-		// Resolve the intents.
-		rArgs := &roachpb.ResolveIntentRangeRequest{
-			Span: roachpb.Span{
-				Key:    keys.RangeMetaKey(roachpb.RKey("a")).AsRawKey(),
-				EndKey: keys.RangeMetaKey(roachpb.RKey("z")).AsRawKey(),
-			},
-			IntentTxn: txn.TxnMeta,
-			Status:    roachpb.COMMITTED,
-		}
-		if _, pErr := tc.SendWrapped(rArgs); pErr != nil {
-			t.Fatal(pErr)
-		}
-	}
+			testCases := []struct {
+				key      string
+				expected roachpb.RangeDescriptor
+			}{
+				// For testRanges[0|1|3] there is no intent. A key in the middle
+				// and the end key should both give us the range itself.
+				{key: "b", expected: testRanges[0]},
+				{key: "c", expected: testRanges[0]},
+				{key: "d", expected: testRanges[1]},
+				{key: "f", expected: testRanges[1]},
+				{key: "j", expected: testRanges[2]},
+				// testRanges[2] has an intent, so the inconsistent scan will read
+				// an old value (nil). Since we're in reverse mode, testRanges[1]
+				// is the result.
+				{key: "g", expected: testRanges[1]},
+				{key: "h", expected: testRanges[1]},
+			}
 
-	// Get original meta2 descriptor.
-	rlArgs := &roachpb.RangeLookupRequest{
-		MaxRanges: 1,
-		Reverse:   true,
-	}
-	var rlReply *roachpb.RangeLookupResponse
+			{
+				txn := newTransaction("test", roachpb.Key{}, 1, enginepb.SERIALIZABLE, tc.Clock())
+				for _, r := range testRanges {
+					// Write the new descriptor as an intent.
+					data, err := protoutil.Marshal(&r)
+					if err != nil {
+						t.Fatal(err)
+					}
+					pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(r.EndKey)).AsRawKey(), data)
 
-	// Test ReverseScan without intents.
-	for _, c := range testCases {
-		clonedRLArgs := *rlArgs
-		clonedRLArgs.Key = keys.RangeMetaKey(roachpb.RKey(c.key)).AsRawKey()
-		reply, pErr := tc.SendWrappedWith(roachpb.Header{
-			ReadConsistency: roachpb.INCONSISTENT,
-		}, &clonedRLArgs)
-		if pErr != nil {
-			t.Fatal(pErr)
-		}
-		rlReply = reply.(*roachpb.RangeLookupResponse)
-		seen := rlReply.Ranges[0]
-		if !(seen.StartKey.Equal(c.expected.StartKey) && seen.EndKey.Equal(c.expected.EndKey)) {
-			t.Errorf("expected descriptor %s; got %s", &c.expected, &seen)
-		}
-	}
+					txn.Sequence++
+					if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
+						t.Fatal(pErr)
+					}
+				}
 
-	// Write the new descriptors as intents.
-	txn := newTransaction("test", roachpb.Key{}, 1, enginepb.SERIALIZABLE, tc.Clock())
-	for _, r := range []roachpb.RangeDescriptor{splitRangeLHS, splitRangeRHS} {
-		// Write the new descriptor as an intent.
-		data, err := protoutil.Marshal(&r)
-		if err != nil {
-			t.Fatal(err)
-		}
-		pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(r.EndKey)).AsRawKey(), data)
+				// Resolve the intents.
+				rArgs := &roachpb.ResolveIntentRangeRequest{
+					Span: roachpb.Span{
+						Key:    keys.RangeMetaKey(roachpb.RKey("a")).AsRawKey(),
+						EndKey: keys.RangeMetaKey(roachpb.RKey("z")).AsRawKey(),
+					},
+					IntentTxn: txn.TxnMeta,
+					Status:    roachpb.COMMITTED,
+				}
+				if _, pErr := tc.SendWrapped(rArgs); pErr != nil {
+					t.Fatal(pErr)
+				}
+			}
 
-		txn.Sequence++
-		if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
-			t.Fatal(pErr)
-		}
-	}
+			// Test reverse RangeLookup scan without intents.
+			for _, c := range testCases {
+				rs, _, err := rangeLookup(ctx, tc.Sender(), roachpb.Key(c.key), roachpb.INCONSISTENT, 0, true)
+				if err != nil {
+					t.Fatal(err)
+				}
+				seen := rs[0]
+				if !(seen.StartKey.Equal(c.expected.StartKey) && seen.EndKey.Equal(c.expected.EndKey)) {
+					t.Errorf("expected descriptor %s; got %s", &c.expected, &seen)
+				}
+			}
 
-	// Test ReverseScan with intents.
-	for _, c := range testCases {
-		clonedRLArgs := *rlArgs
-		clonedRLArgs.Key = keys.RangeMetaKey(roachpb.RKey(c.key)).AsRawKey()
-		reply, pErr := tc.SendWrappedWith(roachpb.Header{
-			ReadConsistency: roachpb.INCONSISTENT,
-		}, &clonedRLArgs)
-		if pErr != nil {
-			t.Fatal(pErr)
-		}
-		rlReply = reply.(*roachpb.RangeLookupResponse)
-		seen := rlReply.Ranges[0]
-		if !(seen.StartKey.Equal(c.expected.StartKey) && seen.EndKey.Equal(c.expected.EndKey)) {
-			t.Errorf("expected descriptor %s; got %s", &c.expected, &seen)
-		}
+			// Write the new descriptors as intents.
+			txn := newTransaction("test", roachpb.Key{}, 1, enginepb.SERIALIZABLE, tc.Clock())
+			for _, r := range []roachpb.RangeDescriptor{splitRangeLHS, splitRangeRHS} {
+				// Write the new descriptor as an intent.
+				data, err := protoutil.Marshal(&r)
+				if err != nil {
+					t.Fatal(err)
+				}
+				pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(r.EndKey)).AsRawKey(), data)
+
+				txn.Sequence++
+				if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
+					t.Fatal(pErr)
+				}
+			}
+
+			// Test reverse RangeLookup scan with intents.
+			for _, c := range testCases {
+				rs, _, err := rangeLookup(ctx, tc.Sender(), roachpb.Key(c.key), roachpb.INCONSISTENT, 0, true)
+				if err != nil {
+					t.Fatal(err)
+				}
+				seen := rs[0]
+				if !(seen.StartKey.Equal(c.expected.StartKey) && seen.EndKey.Equal(c.expected.EndKey)) {
+					t.Errorf("expected descriptor %s; got %s", &c.expected, &seen)
+				}
+			}
+		})
 	}
 }
 
 func TestRangeLookup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(ctx)
 	tc.Start(t, stopper)
 
 	expected := []roachpb.RangeDescriptor{*tc.repl.Desc()}
@@ -6448,38 +6410,39 @@ func TestRangeLookup(t *testing.T) {
 		reverse  bool
 		expected []roachpb.RangeDescriptor
 	}{
-
 		// Test with the first range (StartKey==KeyMin). Normally we look
 		// up this range in gossip instead of executing the RPC, but
 		// RangeLookup is still used when up-to-date information is
 		// required.
-		{key: roachpb.RKeyMin, reverse: false, expected: expected},
+		{key: roachpb.RKey(keys.Meta1Prefix), reverse: false, expected: expected},
 		// Test with the last key in a meta prefix. This is an edge case in the
 		// implementation.
-		{key: keys.MustAddr(keys.Meta1KeyMax), reverse: false, expected: expected},
-		{key: keys.MustAddr(keys.Meta2KeyMax), reverse: false, expected: nil},
-		{key: keys.MustAddr(keys.Meta1KeyMax), reverse: true, expected: expected},
-		{key: keys.MustAddr(keys.Meta2KeyMax), reverse: true, expected: expected},
+		{key: roachpb.RKey(keys.Meta2KeyMax), reverse: false, expected: expected},
+		{key: roachpb.RKey(roachpb.KeyMax), reverse: false, expected: nil},
+		{key: roachpb.RKey(keys.Meta2KeyMax), reverse: true, expected: expected},
+		{key: roachpb.RKey(roachpb.KeyMax), reverse: true, expected: expected},
 	}
 
-	for i, c := range testCases {
-		resp, pErr := tc.SendWrapped(&roachpb.RangeLookupRequest{
-			Span: roachpb.Span{
-				Key: c.key.AsRawKey(),
-			},
-			MaxRanges: 1,
-			Reverse:   c.reverse,
+	for _, legacy := range []bool{false, true} {
+		t.Run(fmt.Sprintf("legacy=%t", legacy), func(t *testing.T) {
+			rangeLookup := client.RangeLookup
+			if legacy {
+				rangeLookup = client.LegacyRangeLookup
+			}
+
+			for i, c := range testCases {
+				rs, _, err := rangeLookup(ctx, tc.Sender(), c.key.AsRawKey(), roachpb.CONSISTENT, 0, c.reverse)
+				if err != nil {
+					if c.expected != nil {
+						t.Fatal(err)
+					}
+				} else {
+					if !reflect.DeepEqual(rs, c.expected) {
+						t.Errorf("%d: expected %+v, got %+v", i, c.expected, rs)
+					}
+				}
+			}
 		})
-		if pErr != nil {
-			if c.expected != nil {
-				t.Fatal(pErr)
-			}
-		} else {
-			reply := resp.(*roachpb.RangeLookupResponse)
-			if !reflect.DeepEqual(reply.Ranges, c.expected) {
-				t.Errorf("%d: expected %+v, got %+v", i, c.expected, reply.Ranges)
-			}
-		}
 	}
 }
 

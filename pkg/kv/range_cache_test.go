@@ -27,8 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -50,6 +49,8 @@ func (a testDescriptorNode) Compare(b llrb.Comparable) int {
 	return bytes.Compare(aKey, bKey)
 }
 
+// getDescriptors scans the testDescriptorDB starting at the provided key in the
+// specified direction and collects the first RangeDescriptors that it finds.
 func (db *testDescriptorDB) getDescriptors(
 	key roachpb.RKey, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
@@ -97,19 +98,60 @@ func (db *testDescriptorDB) getDescriptors(
 }
 
 func (db *testDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, error) {
-	return nil, nil
+	rs, _, err := db.getDescriptors(roachpb.RKeyMin, false /* !useReverseScan */)
+	if err != nil {
+		return nil, err
+	}
+	return &rs[0], nil
 }
 
 func (db *testDescriptorDB) RangeLookup(
-	ctx context.Context, key roachpb.RKey, _ *roachpb.RangeDescriptor, useReverseScan bool,
+	ctx context.Context, key roachpb.RKey, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 	select {
 	case <-db.pauseChan:
 	case <-ctx.Done():
 		return nil, nil, ctx.Err()
 	}
+
 	atomic.AddInt64(&db.lookupCount, 1)
-	return db.getDescriptors(keys.UserKey(key), useReverseScan)
+	rs, preRs, err := db.getDescriptors(key, useReverseScan)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if err := db.simulateLookupScan(ctx, key, &rs[0], useReverseScan); err != nil {
+		return nil, nil, err
+	}
+	return rs, preRs, nil
+}
+
+// For each RangeLookup, we also perform a cache lookup for the descriptor
+// which holds that key. This mimics the behavior of DistSender, which uses
+// the cache when performing a ScanRequest over the meta range to find the
+// desired descriptor.
+//
+// This isn't exactly correct, because DistSender will actually keep
+// scanning until it prefetches the desired number of descriptors, but it's
+// close enough for testing.
+func (db *testDescriptorDB) simulateLookupScan(
+	ctx context.Context, key roachpb.RKey, foundDesc *roachpb.RangeDescriptor, useReverseScan bool,
+) error {
+	metaKey := keys.RangeMetaKey(key)
+	for {
+		desc, _, err := db.cache.LookupRangeDescriptor(ctx, metaKey, nil, useReverseScan)
+		if err != nil {
+			return err
+		}
+		// If the descriptor for metaKey does not contain the EndKey of the
+		// descriptor we're going to return, simulate a scan continuation.
+		// This can happen in the case of meta2 splits.
+		if desc.ContainsKey(keys.RangeMetaKey(foundDesc.EndKey)) {
+			break
+		}
+		metaKey = desc.EndKey
+	}
+	return nil
 }
 
 func (db *testDescriptorDB) splitRange(t *testing.T, key roachpb.RKey) {
@@ -147,50 +189,56 @@ func newTestDescriptorDB() *testDescriptorDB {
 	db := &testDescriptorDB{
 		pauseChan: make(chan struct{}),
 	}
-	db.data.Insert(testDescriptorNode{
-		&roachpb.RangeDescriptor{
-			StartKey: testutils.MakeKey(keys.Meta2Prefix, roachpb.RKeyMin),
-			EndKey:   testutils.MakeKey(keys.Meta2Prefix, roachpb.RKeyMax),
-		},
-	})
-	db.data.Insert(testDescriptorNode{
-		&roachpb.RangeDescriptor{
-			StartKey: testutils.MakeKey(keys.Meta2Prefix, roachpb.RKeyMax),
-			EndKey:   roachpb.RKeyMax,
-		},
-	})
+	td1 := &roachpb.RangeDescriptor{
+		StartKey: roachpb.RKeyMin,
+		EndKey:   roachpb.RKey(keys.Meta2Prefix),
+	}
+	td2 := &roachpb.RangeDescriptor{
+		StartKey: td1.EndKey,
+		EndKey:   roachpb.RKey(keys.MetaMax),
+	}
+	td3 := &roachpb.RangeDescriptor{
+		StartKey: td2.EndKey,
+		EndKey:   roachpb.RKeyMax,
+	}
+	db.data.Insert(testDescriptorNode{td1})
+	db.data.Insert(testDescriptorNode{td2})
+	db.data.Insert(testDescriptorNode{td3})
 	db.resumeRangeLookups()
 	return db
 }
 
 func initTestDescriptorDB(t *testing.T) *testDescriptorDB {
+	st := cluster.MakeTestingClusterSettings()
 	db := newTestDescriptorDB()
 	for i, char := range "abcdefghijklmnopqrstuvwx" {
+		// Create splits on each character:
+		//   [min,a), [a,b), [b,c), [c,d), [d,e), etc.
 		db.splitRange(t, roachpb.RKey(string(char)))
 		if i > 0 && i%6 == 0 {
+			// Create meta2 splits on every 6th character:
+			//   [meta(min),meta(g)), [meta(g),meta(m)), [meta(m),meta(s)), etc.
 			db.splitRange(t, keys.RangeMetaKey(roachpb.RKey(string(char))))
 		}
 	}
-	db.cache = NewRangeDescriptorCache(db, staticSize(2<<10))
+	db.cache = NewRangeDescriptorCache(st, db, staticSize(2<<10))
 	return db
 }
 
 // assertLookupCountEq fails unless exactly the number of lookups have been observed.
 func (db *testDescriptorDB) assertLookupCountEq(t *testing.T, exp int64, key string) {
+	t.Helper()
 	if exp != db.lookupCount {
-		file, line, _ := caller.Lookup(1)
-		t.Errorf("%s:%d: expected lookup count %d after %s, was %d",
-			file, line, exp, key, db.lookupCount)
+		t.Errorf("expected lookup count %d after %s, was %d", exp, key, db.lookupCount)
 	}
 	db.lookupCount = 0
 }
 
 // assertLookupCountEq fails unless number of lookups observed is >= from and <= to.
 func (db *testDescriptorDB) assertLookupCount(t *testing.T, from, to int64, key string) {
+	t.Helper()
 	if from > db.lookupCount || to < db.lookupCount {
-		file, line, _ := caller.Lookup(1)
-		t.Errorf("%s:%d: expected lookup count in [%d, %d] after %s, was %d",
-			file, line, from, to, key, db.lookupCount)
+		t.Errorf("expected lookup count in [%d, %d] after %s, was %d", from, to, key, db.lookupCount)
 	}
 	db.lookupCount = 0
 }
@@ -292,6 +340,9 @@ func TestRangeCache(t *testing.T) {
 	db := initTestDescriptorDB(t)
 	ctx := context.TODO()
 
+	// Totally uncached range.
+	//  Retrieves [meta(min),meta(g)) and [a,b).
+	//  Prefetches [meta(g),meta(m)), [meta(m),meta(s)), [b,c), and [c,d).
 	doLookup(ctx, t, db.cache, "aa")
 	db.assertLookupCountEq(t, 2, "aa")
 
@@ -304,31 +355,47 @@ func TestRangeCache(t *testing.T) {
 	db.assertLookupCountEq(t, 0, "cz")
 
 	// Metadata 2 ranges aren't cached, metadata 1 range is.
+	//  Retrieves [d,e).
+	//  Prefetches [e,f) and [f,g).
 	doLookup(ctx, t, db.cache, "d")
 	db.assertLookupCountEq(t, 1, "d")
 	doLookup(ctx, t, db.cache, "fa")
 	db.assertLookupCountEq(t, 0, "fa")
 
 	// Metadata 2 ranges aren't cached, metadata 1 range is.
+	//  Retrieves [i,j).
+	//  Prefetches [j,k) and [k,l).
 	doLookup(ctx, t, db.cache, "ij")
 	db.assertLookupCountEq(t, 1, "ij")
 	doLookup(ctx, t, db.cache, "jk")
 	db.assertLookupCountEq(t, 0, "jk")
-	doLookup(ctx, t, db.cache, "pn")
-	db.assertLookupCountEq(t, 1, "pn")
 
-	// Totally uncached ranges
+	// Totally uncached range.
+	//  Retrieves [meta(s),meta(max)) and [r,s).
+	//  Prefetches [s,t) and [t,u).
+	//
+	// Notice that the lookup key "ra" will not initially go to
+	// [meta(s),meta(max)), but instead will go to [meta(m),meta(s)). This is
+	// an example where the RangeLookup scan will continue onto a new range.
+	doLookup(ctx, t, db.cache, "ra")
+	db.assertLookupCountEq(t, 2, "ra")
+
+	// Metadata 2 ranges aren't cached, metadata 1 range is.
+	//  Retrieves [v,w).
+	//  Prefetches [w,x) and [x,max).
 	doLookup(ctx, t, db.cache, "vu")
-	db.assertLookupCountEq(t, 2, "vu")
-	doLookup(ctx, t, db.cache, "xx")
-	db.assertLookupCountEq(t, 0, "xx")
+	db.assertLookupCountEq(t, 1, "vu")
 
 	// Evict clears one level 1 and one level 2 cache
+	//  Evicts [meta(min),meta(g)) and [d,e).
 	if err := db.cache.EvictCachedRangeDescriptor(ctx, roachpb.RKey("da"), nil, false); err != nil {
 		t.Fatal(err)
 	}
 	doLookup(ctx, t, db.cache, "fa")
 	db.assertLookupCountEq(t, 0, "fa")
+	// Totally uncached range.
+	//  Retrieves [meta(min),meta(g)) and [d,e).
+	//  Prefetches [e,f) and [f,g).
 	doLookup(ctx, t, db.cache, "da")
 	db.assertLookupCountEq(t, 2, "da")
 
@@ -346,9 +413,13 @@ func TestRangeCache(t *testing.T) {
 	db.assertLookupCountEq(t, 0, "cz")
 	// Now evict with the actual descriptor. The cache should clear the
 	// descriptor and the cached meta key.
+	//  Evicts [meta(min),meta(g)) and [c,d).
 	if err := evictToken.Evict(ctx); err != nil {
 		t.Fatal(err)
 	}
+	// Totally uncached range.
+	//  Retrieves [meta(min),meta(g)) and [c,d).
+	//  Prefetches [c,e) and [e,f).
 	doLookup(ctx, t, db.cache, "cz")
 	db.assertLookupCountEq(t, 2, "cz")
 }
@@ -377,11 +448,16 @@ func TestRangeCacheCoalescedRequests(t *testing.T) {
 		db.assertLookupCountEq(t, expected, key)
 	}
 
+	// Totally uncached range.
+	//  Retrieves [meta(min),meta(g)) and [a,b).
+	//  Prefetches [meta(g),meta(m)), [meta(m),meta(s)), [b,c), and [c,d).
 	pauseLookupResumeAndAssert("aa", 2)
 
 	// Metadata 2 ranges aren't cached, metadata 1 range is.
+	//  Retrieves [d,e).
+	//  Prefetches [e,f) and [f,g).
 	pauseLookupResumeAndAssert("d", 1)
-	pauseLookupResumeAndAssert("fa", 0)
+	pauseLookupResumeAndAssert("ea", 0)
 }
 
 // TestRangeCacheContextCancellation tests the behavior that for an ongoing
@@ -750,7 +826,8 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 		EndKey:   roachpb.RKeyMax,
 	}
 
-	cache := NewRangeDescriptorCache(nil, staticSize(2<<10))
+	st := cluster.MakeTestingClusterSettings()
+	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10))
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKeyMax)), defDesc)
 
 	// Now, add a new, overlapping set of descriptors.
@@ -846,7 +923,8 @@ func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 		EndKey:   roachpb.RKeyMax,
 	}
 
-	cache := NewRangeDescriptorCache(nil, staticSize(2<<10))
+	st := cluster.MakeTestingClusterSettings()
+	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10))
 	if err := cache.InsertRangeDescriptors(ctx, firstDesc, restDesc); err != nil {
 		t.Fatal(err)
 	}
@@ -906,7 +984,8 @@ func TestRangeCacheEvictMetaDescriptors(t *testing.T) {
 				t.Fatalf("restDesc must contain evictKey, found %v", tc.evictKey)
 			}
 
-			cache := NewRangeDescriptorCache(nil, staticSize(2<<10))
+			st := cluster.MakeTestingClusterSettings()
+			cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10))
 			err := cache.InsertRangeDescriptors(ctx, meta1Desc, meta2LeftDesc, meta2RightDesc, restDesc)
 			if err != nil {
 				t.Fatal(err)
@@ -945,7 +1024,8 @@ func TestGetCachedRangeDescriptorInverted(t *testing.T) {
 		{StartKey: roachpb.RKey("g"), EndKey: roachpb.RKey("z")},
 	}
 
-	cache := NewRangeDescriptorCache(nil, staticSize(2<<10))
+	st := cluster.MakeTestingClusterSettings()
+	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10))
 	for _, rd := range testData {
 		cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(rd.EndKey)), rd)
 	}
