@@ -235,21 +235,19 @@ func makeFKInsertHelper(
 	return h, nil
 }
 
-func (h fkInsertHelper) checkAll(ctx context.Context, row parser.Datums, traceKV bool) error {
+func (h fkInsertHelper) checkAll(ctx context.Context, row parser.Datums) error {
 	if len(h.fks) == 0 {
 		return nil
 	}
 	for idx := range h.fks {
-		if err := h.checkIdx(ctx, idx, row, traceKV); err != nil {
+		if err := h.checkIdx(ctx, idx, row); err != nil {
 			return err
 		}
 	}
 	return h.checker.runCheck(ctx, nil, row)
 }
 
-func (h fkInsertHelper) checkIdx(
-	ctx context.Context, idx IndexID, row parser.Datums, traceKV bool,
-) error {
+func (h fkInsertHelper) checkIdx(ctx context.Context, idx IndexID, row parser.Datums) error {
 	fks := h.fks
 	for i, fk := range fks[idx] {
 		nulls := true
@@ -322,21 +320,19 @@ func makeFKDeleteHelper(
 	return h, nil
 }
 
-func (h fkDeleteHelper) checkAll(ctx context.Context, row parser.Datums, traceKV bool) error {
+func (h fkDeleteHelper) checkAll(ctx context.Context, row parser.Datums) error {
 	if len(h.fks) == 0 {
 		return nil
 	}
 	for idx := range h.fks {
-		if err := h.checkIdx(ctx, idx, row, traceKV); err != nil {
+		if err := h.checkIdx(ctx, idx, row); err != nil {
 			return err
 		}
 	}
-	return h.checker.runCheck(ctx, row, nil)
+	return h.checker.runCheck(ctx, row, nil /* newRow */)
 }
 
-func (h fkDeleteHelper) checkIdx(
-	ctx context.Context, idx IndexID, row parser.Datums, traceKV bool,
-) error {
+func (h fkDeleteHelper) checkIdx(ctx context.Context, idx IndexID, row parser.Datums) error {
 	for i := range h.fks[idx] {
 		if err := h.checker.addCheck(row, &h.fks[idx][i]); err != nil {
 			return err
@@ -381,12 +377,12 @@ func makeFKUpdateHelper(
 }
 
 func (fks fkUpdateHelper) checkIdx(
-	ctx context.Context, idx IndexID, oldValues, newValues parser.Datums, traceKV bool,
+	ctx context.Context, idx IndexID, oldValues, newValues parser.Datums,
 ) error {
-	if err := fks.inbound.checkIdx(ctx, idx, oldValues, traceKV); err != nil {
+	if err := fks.inbound.checkIdx(ctx, idx, oldValues); err != nil {
 		return err
 	}
-	return fks.outbound.checkIdx(ctx, idx, newValues, traceKV)
+	return fks.outbound.checkIdx(ctx, idx, newValues)
 }
 
 // CollectSpans implements the FkSpanCollector interface.
