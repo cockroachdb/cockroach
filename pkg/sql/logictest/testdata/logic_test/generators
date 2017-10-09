@@ -242,3 +242,13 @@ SELECT GENERATE_SERIES(9223372036854775807::int, -9223372036854775807::int, -922
 9223372036854775807
 0
 -9223372036854775807
+
+# pg_get_keywords for compatibility (#10291)
+query TTT colnames
+SELECT * FROM pg_get_keywords() WHERE word IN ('alter', 'and', 'between', 'cross') ORDER BY word
+----
+word     catcode catdesc
+alter    U       unreserved
+and      R       reserved
+between  C       unreserved (cannot be function or type name)
+cross    T       reserved (can be function or type name)
