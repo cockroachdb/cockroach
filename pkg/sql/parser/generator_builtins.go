@@ -16,6 +16,8 @@ package parser
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
@@ -113,6 +115,14 @@ var Generators = map[string][]Builtin{
 			"Produces a virtual table containing the integer values from `start` to `end`, inclusive, by increment of `step`.",
 		),
 	},
+	"pg_get_keywords": {
+		makeGeneratorBuiltin(
+			ArgTypes{},
+			keywordsValueGeneratorType,
+			makeKeywordsGenerator,
+			"Produces a virtual table containing the keywords known to the SQL parser.",
+		),
+	},
 	"unnest": {
 		makeGeneratorBuiltinWithReturnType(
 			ArgTypes{{"input", TypeAnyArray}},
@@ -154,6 +164,66 @@ func makeGeneratorBuiltinWithReturnType(
 		Info:     info,
 	}
 }
+
+// keywordsValueGenerator supports the execution of pg_get_keywords().
+type keywordsValueGenerator struct {
+	curKeyword int
+}
+
+var keywordsValueGeneratorType = TTable{
+	Cols:   TTuple{TypeString, TypeString, TypeString},
+	Labels: []string{"word", "catcode", "catdesc"},
+}
+
+func makeKeywordsGenerator(_ *EvalContext, _ Datums) (ValueGenerator, error) {
+	return &keywordsValueGenerator{}, nil
+}
+
+// ResolvedType implements the ValueGenerator interface.
+func (*keywordsValueGenerator) ResolvedType() TTable { return keywordsValueGeneratorType }
+
+// Close implements the ValueGenerator interface.
+func (*keywordsValueGenerator) Close() {}
+
+// Start implements the ValueGenerator interface.
+func (k *keywordsValueGenerator) Start() error {
+	k.curKeyword = -1
+	return nil
+}
+func (k *keywordsValueGenerator) Next() (bool, error) {
+	k.curKeyword++
+	if k.curKeyword >= len(keywordNames) {
+		return false, nil
+	}
+	return true, nil
+}
+
+// Values implements the ValueGenerator interface.
+func (k *keywordsValueGenerator) Values() Datums {
+	kw := keywordNames[k.curKeyword]
+	info := keywords[kw]
+	cat := info.cat
+	desc := keywordCategoryDescriptions[cat]
+	return Datums{NewDString(strings.ToLower(kw)), NewDString(cat), NewDString(desc)}
+}
+
+var keywordCategoryDescriptions = map[string]string{
+	"R": "reserved",
+	"C": "unreserved (cannot be function or type name)",
+	"T": "reserved (can be function or type name)",
+	"U": "unreserved",
+}
+
+// keywordNames contains all the keys in the `keywords` map, sorted so
+// that pg_get_keywords returns deterministic results.
+var keywordNames = func() []string {
+	ret := make([]string, 0, len(keywords))
+	for k := range keywords {
+		ret = append(ret, k)
+	}
+	sort.Strings(ret)
+	return ret
+}()
 
 // seriesValueGenerator supports the execution of generate_series()
 // with integer bounds.
