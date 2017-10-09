@@ -156,8 +156,8 @@ func TestScanKeyword(t *testing.T) {
 		s := MakeScanner(kwName)
 		var lval sqlSymType
 		id := s.Lex(&lval)
-		if kwID != id {
-			t.Errorf("%s: expected %d, but found %d", kwName, kwID, id)
+		if kwID.tok != id {
+			t.Errorf("%s: expected %d, but found %d", kwName, kwID.tok, id)
 		}
 	}
 }
