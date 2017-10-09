@@ -435,23 +435,29 @@ func runStart(cmd *cobra.Command, args []string) error {
 	} else {
 		tempStorePercentageResolver = memoryPercentResolver
 	}
+	var tempStorageMaxSizeBytes int64
 	if err := diskTempStorageSizeValue.Resolve(
-		&serverCfg.TempStorageConfig.MaxSizeBytes, tempStorePercentageResolver,
+		&tempStorageMaxSizeBytes, tempStorePercentageResolver,
 	); err != nil {
 		return err
 	}
 	if firstStore.InMemory && !diskTempStorageSizeValue.IsSet() {
 		// The default temp store size is different when the first
 		// store (and thus also the temp storage) is in memory.
-		serverCfg.TempStorageConfig.MaxSizeBytes = base.DefaultInMemTempStorageMaxSizeBytes
+		tempStorageMaxSizeBytes = base.DefaultInMemTempStorageMaxSizeBytes
 	}
+
+	tracer := serverCfg.Settings.Tracer
+	sp := tracer.StartSpan("server start")
+	ctx := opentracing.ContextWithSpan(context.Background(), sp)
 
 	// Re-initialize temp storage based on the current attributes
 	// (initialized from CLI flags and above) and the first store's spec.
 	serverCfg.TempStorageConfig = base.TempStorageConfigFromEnv(
+		ctx,
 		firstStore,
 		serverCfg.TempStorageConfig.ParentDir,
-		serverCfg.TempStorageConfig.MaxSizeBytes,
+		tempStorageMaxSizeBytes,
 	)
 
 	// Use the server-specific values for some flags and settings.
@@ -462,19 +468,15 @@ func runStart(cmd *cobra.Command, args []string) error {
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
-	tracer := serverCfg.Settings.Tracer
-	sp := tracer.StartSpan("server start")
-	startCtx := opentracing.ContextWithSpan(context.Background(), sp)
-
 	// Set up the logging and profiling output.
 	// It is important that no logging occurs before this point or the log files
 	// will be created in $TMPDIR instead of their expected location.
-	stopper, err := setupAndInitializeLoggingAndProfiling(startCtx)
+	stopper, err := setupAndInitializeLoggingAndProfiling(ctx)
 	if err != nil {
 		return err
 	}
 
-	serverCfg.Report(startCtx)
+	serverCfg.Report(ctx)
 
 	// Run the rest of the startup process in the background to avoid preventing
 	// proper handling of signals if we get stuck on something during
@@ -494,7 +496,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 		defer log.Flush()
 		defer func() {
 			if s != nil {
-				log.RecoverAndReportPanic(startCtx, &s.ClusterSettings().SV)
+				log.RecoverAndReportPanic(ctx, &s.ClusterSettings().SV)
 			}
 		}()
 		defer sp.Finish()
@@ -503,9 +505,9 @@ func runStart(cmd *cobra.Command, args []string) error {
 				return errors.Wrap(err, "failed to initialize node")
 			}
 
-			log.Info(startCtx, "starting cockroach node")
+			log.Info(ctx, "starting cockroach node")
 			if envVarsUsed := envutil.GetEnvVarsUsed(); len(envVarsUsed) > 0 {
-				log.Infof(startCtx, "using local environment variables: %s", strings.Join(envVarsUsed, ", "))
+				log.Infof(ctx, "using local environment variables: %s", strings.Join(envVarsUsed, ", "))
 			}
 
 			var err error
@@ -522,7 +524,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 				return nil
 			}
 
-			if err := s.Start(startCtx); err != nil {
+			if err := s.Start(ctx); err != nil {
 				if le, ok := err.(server.ListenError); ok {
 					const errorPrefix = "consider changing the port via --"
 					if le.Addr == serverCfg.Addr {
@@ -582,7 +584,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 				return err
 			}
 			msg := buf.String()
-			log.Infof(startCtx, "node startup completed:\n%s", msg)
+			log.Infof(ctx, "node startup completed:\n%s", msg)
 			if !log.LoggingToStderr(log.Severity_INFO) {
 				fmt.Print(msg)
 			}

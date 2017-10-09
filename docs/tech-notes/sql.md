@@ -804,8 +804,8 @@ of monitor:
 - `"txn"`, one per `Session` instance (`Session.Txn.mon`), hanging off
   `"root"`, for txn-wide allocations like temporary rows sets.
 
-**Code:** `sql/mon`; more details in a comment at the start of
-`sql/mon/mem_usage.go`.
+**Code:** `util/mon`; more details in a comment at the start of
+`util/mon/mem_usage.go`.
 
 **Whom to ask for details:** andrei, knz
 

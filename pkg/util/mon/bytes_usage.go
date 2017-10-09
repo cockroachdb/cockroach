@@ -18,14 +18,15 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/pkg/errors"
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 // BytesAccount and BytesMonitor together form the mechanism by which
@@ -245,7 +246,7 @@ var DefaultPoolAllocationSize = envutil.EnvOrDefaultInt64("COCKROACH_ALLOCATION_
 //   allocations for (e.g. memory or disk).
 //
 // - curCount and maxHist are the metric objects to update with usage
-//   statistics.
+//   statistics. Can be nil.
 //
 // - increment is the block size used for upstream allocations from
 //   the pool. Note: if set to 0 or lower, the default pool allocation

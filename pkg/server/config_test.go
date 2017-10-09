@@ -34,7 +34,7 @@ import (
 
 func TestParseInitNodeAttributes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cfg := MakeConfig(cluster.MakeTestingClusterSettings())
+	cfg := MakeConfig(context.TODO(), cluster.MakeTestingClusterSettings())
 	cfg.Attrs = "attr1=val1::attr2=val2"
 	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, SizeInBytes: base.MinimumStoreSize * 100}}}
 	engines, err := cfg.CreateEngines(context.TODO())
@@ -55,7 +55,7 @@ func TestParseInitNodeAttributes(t *testing.T) {
 // correctly.
 func TestParseJoinUsingAddrs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cfg := MakeConfig(cluster.MakeTestingClusterSettings())
+	cfg := MakeConfig(context.TODO(), cluster.MakeTestingClusterSettings())
 	cfg.JoinList = []string{"localhost:12345,,localhost:23456", "localhost:34567"}
 	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, SizeInBytes: base.MinimumStoreSize * 100}}}
 	engines, err := cfg.CreateEngines(context.TODO())
@@ -115,8 +115,8 @@ func TestReadEnvironmentVariables(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	// Makes sure no values are set when no environment variables are set.
-	cfg := MakeConfig(st)
-	cfgExpected := MakeConfig(st)
+	cfg := MakeConfig(context.TODO(), st)
+	cfgExpected := MakeConfig(context.TODO(), st)
 
 	resetEnvVar()
 	cfg.readEnvironmentVariables()
@@ -188,7 +188,7 @@ func TestFilterGossipBootstrapResolvers(t *testing.T) {
 			resolvers = append(resolvers, resolver)
 		}
 	}
-	cfg := MakeConfig(cluster.MakeTestingClusterSettings())
+	cfg := MakeConfig(context.TODO(), cluster.MakeTestingClusterSettings())
 	cfg.GossipBootstrapResolvers = resolvers
 
 	listenAddr := util.MakeUnresolvedAddr("tcp", resolverSpecs[0])

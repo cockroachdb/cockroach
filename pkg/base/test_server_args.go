@@ -18,8 +18,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"golang.org/x/net/context"
 )
 
 // TestServerArgs contains the parameters one can set when creating a test
@@ -122,14 +124,27 @@ var (
 	DefaultTestStoreSpec = StoreSpec{
 		InMemory: true,
 	}
-	// DefaultTestTempStorageConfig is the associated temp storage for
-	// DefaultTestStoreSpec that is in-memory.
-	// It has a maximum size of 100MiB.
-	DefaultTestTempStorageConfig = TempStorageConfig{
-		InMemory:     true,
-		MaxSizeBytes: DefaultInMemTempStorageMaxSizeBytes,
-	}
 )
+
+// DefaultTestTempStorageConfig is the associated temp storage for
+// DefaultTestStoreSpec that is in-memory.
+// It has a maximum size of 100MiB.
+func DefaultTestTempStorageConfig() TempStorageConfig {
+	var maxSizeBytes int64 = DefaultInMemTempStorageMaxSizeBytes
+	monitor := mon.MakeMonitor(
+		"in-mem temp storage",
+		mon.MemoryResource,
+		nil,             /* curCount */
+		nil,             /* maxHist */
+		1024*1024,       /* increment */
+		maxSizeBytes/10, /* noteworthy */
+	)
+	monitor.Start(context.Background(), nil /* pool */, mon.MakeStandaloneBudget(maxSizeBytes))
+	return TempStorageConfig{
+		InMemory: true,
+		Mon:      &monitor,
+	}
+}
 
 // TestClusterReplicationMode represents the replication settings for a TestCluster.
 type TestClusterReplicationMode int

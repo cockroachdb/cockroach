@@ -22,13 +22,13 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/sql/mon"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -61,7 +61,7 @@ func TestDiskRowContainer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig)
+	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +244,7 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig)
+	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
