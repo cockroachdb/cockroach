@@ -289,7 +289,8 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	size := func() int64 { return 2 << 10 }
-	rangeCache := kv.NewRangeDescriptorCache(nil /* db */, size)
+	st := cluster.MakeTestingClusterSettings()
+	rangeCache := kv.NewRangeDescriptorCache(st, nil /* db */, size)
 	leaseCache := kv.NewLeaseHolderCache(size)
 	r, err := makeDistSQLReceiver(
 		context.TODO(), nil /* sink */, rangeCache, leaseCache, nil /* txn */, nil /* updateClock */)
