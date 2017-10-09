@@ -38,7 +38,7 @@ BEGIN {
 
 {
   if (keyword && $NF != "") {
-      printf("\"%s\": {%s, \"%s\"},\n", $NF, $NF, category) | sort
+      printf("\"%s\": {%s, \"%s\"},\n", tolower($NF), $NF, category) | sort
   }
 }
 
