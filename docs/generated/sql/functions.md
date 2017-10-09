@@ -377,5 +377,6 @@ Function &rarr; Returns | Description
 <code>generate_series(start: <a href="int.html">int</a>, end: <a href="int.html">int</a>) &rarr; setof tuple{int}</code> | <span class="funcdesc">Produces a virtual table containing the integer values from `start` to `end`, inclusive.</span>
 <code>generate_series(start: <a href="int.html">int</a>, end: <a href="int.html">int</a>, step: <a href="int.html">int</a>) &rarr; setof tuple{int}</code> | <span class="funcdesc">Produces a virtual table containing the integer values from `start` to `end`, inclusive, by increment of `step`.</span>
 <code>oid(int: <a href="int.html">int</a>) &rarr; oid</code> | <span class="funcdesc">Converts an integer to an OID.</span>
+<code>pg_get_keywords() &rarr; setof tuple{<a href="string.html">string</a>, <a href="string.html">string</a>, string}</code> | <span class="funcdesc">Produces a virtual table containing the keywords known to the SQL parser.</span>
 <code>unnest(input: anyelement[]) &rarr; anyelement</code> | <span class="funcdesc">Returns the input array as a set of rows</span>
 

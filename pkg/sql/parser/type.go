@@ -569,7 +569,10 @@ func (a TArray) IsAmbiguous() bool {
 
 // TTable is the type of a DTable.
 // See the comments at the start of generator_builtins.go for details.
-type TTable struct{ Cols TTuple }
+type TTable struct {
+	Cols   TTuple
+	Labels []string
+}
 
 func (a TTable) String() string { return "setof " + a.Cols.String() }
 

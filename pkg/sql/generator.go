@@ -15,8 +15,6 @@
 package sql
 
 import (
-	"fmt"
-
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -44,8 +42,6 @@ type valueGenerator struct {
 // makeGenerator creates a valueGenerator instance that wraps a call to a
 // generator function.
 func (p *planner) makeGenerator(ctx context.Context, t *parser.FuncExpr) (planNode, error) {
-	origName := t.Func.String()
-
 	if err := p.parser.AssertNoAggregationOrWindowing(t, "FROM", p.session.SearchPath); err != nil {
 		return nil, err
 	}
@@ -62,17 +58,10 @@ func (p *planner) makeGenerator(ctx context.Context, t *parser.FuncExpr) (planNo
 		return nil, errors.Errorf("FROM expression is not a generator: %s", t)
 	}
 
-	var columns sqlbase.ResultColumns
-	if len(tType.Cols) == 1 {
-		columns = sqlbase.ResultColumns{sqlbase.ResultColumn{Name: origName, Typ: tType.Cols[0]}}
-	} else {
-		columns = make(sqlbase.ResultColumns, len(tType.Cols))
-		for i, t := range tType.Cols {
-			columns[i] = sqlbase.ResultColumn{
-				Name: fmt.Sprintf("column%d", i+1),
-				Typ:  t,
-			}
-		}
+	columns := make(sqlbase.ResultColumns, len(tType.Cols))
+	for i := range columns {
+		columns[i].Name = tType.Labels[i]
+		columns[i].Typ = tType.Cols[i]
 	}
 
 	return &valueGenerator{
