@@ -197,8 +197,9 @@ session with SET sql_safe_updates = FALSE.`,
 		Name: "format",
 		Description: `
 Selects how to display table rows in results. Possible values: tsv,
-csv, pretty, records, sql, html. If left unspecified, defaults to tsv
-for non-interactive sessions and pretty for interactive sessions.`,
+csv, pretty, records, sql, raw, html. If left unspecified, defaults to
+tsv for non-interactive sessions and pretty for interactive
+sessions.`,
 	}
 
 	Join = FlagInfo{
