@@ -134,7 +134,9 @@ func (n *traceNode) Next(params runParams) (bool, error) {
 					}
 
 					values := n.plan.Values()
-					log.VEventf(consumeCtx, 2, "output row: %s", values)
+					if n.kvTracingEnabled {
+						log.VEventf(consumeCtx, 2, "output row: %s", values)
+					}
 				}
 			}
 			log.VEventf(consumeCtx, 2, "plan completed execution")
