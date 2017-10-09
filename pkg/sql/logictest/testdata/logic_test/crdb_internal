@@ -200,11 +200,11 @@ node_id  component  field   value
 1        UI         Port    <port>
 1        UI         URI     /
 
-query ITTI colnames
+query ITTTTTTTTI colnames
 select * from crdb_internal.ranges
 ----
-range_id  start_key  end_key  replicas
-1         /Min       /Max     1
+range_id  start_key  start_pretty  end_key    end_pretty  database  table  index  replicas  lease_holder
+1         ·          /Min          [255 255]  /Max        ·         ·      ·      {1}       1
 
 # Check that privileged builtins are only allowed for 'root'
 user testuser

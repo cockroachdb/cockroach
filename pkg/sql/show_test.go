@@ -15,6 +15,7 @@
 package sql_test
 
 import (
+	"bytes"
 	gosql "database/sql"
 	"fmt"
 	"reflect"
@@ -544,5 +545,75 @@ func TestShowJobs(t *testing.T) {
 	if !reflect.DeepEqual(in, out) {
 		diff := strings.Join(pretty.Diff(in, out), "\n")
 		t.Fatalf("in job did not match out job:\n%s", diff)
+	}
+}
+
+// TestCRDBInternalRanges tests that crdb_internal.ranges correctly displays
+// table and database names for existing and dropped descriptors.
+func TestCRDBInternalRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params, _ := createTestServerParams()
+	s, rawSQLDB, _ := serverutils.StartServer(t, params)
+	sqlDB := sqlutils.MakeSQLRunner(t, rawSQLDB)
+	defer s.Stopper().Stop(context.TODO())
+
+	// These tests would be a better fit for the logic tests, but they do not seem
+	// to generate splits on their own, so we need to use a normal test instead.
+	sqlDB.Exec(`
+		CREATE DATABASE d;
+		CREATE TABLE d.a ();
+		CREATE DATABASE e;
+		CREATE TABLE e.b ();
+		CREATE TABLE d.c (i INT);
+		DROP DATABASE e CASCADE;
+		CREATE INDEX ON d.c (i);
+		ALTER TABLE d.c SPLIT AT VALUES (123);
+		ALTER INDEX d.c@c_i_idx SPLIT AT VALUES (0);
+	`)
+
+	toTabs := func(v [][]string) string {
+		var b bytes.Buffer
+		for _, line := range v {
+			for i, col := range line {
+				if i > 0 {
+					b.WriteString("\t")
+				}
+				fmt.Fprintf(&b, "%q", col)
+			}
+			b.WriteString("\n")
+		}
+		return b.String()
+	}
+	vals := sqlDB.QueryStr(`SELECT * FROM crdb_internal.ranges`)
+	tabs := toTabs(vals)
+	// See lines 17-23 below for various populations of database, table, and
+	// index names.
+	const expect = `"1"	""	"/Min"	"\x04"	"/System/\"\""	""	""	""	"{1}"	"1"
+"2"	"\x04"	"/System/\"\""	"\x04\x00liveness-"	"/System/NodeLiveness"	""	""	""	"{1}"	"1"
+"3"	"\x04\x00liveness-"	"/System/NodeLiveness"	"\x04\x00liveness."	"/System/NodeLivenessMax"	""	""	""	"{1}"	"1"
+"4"	"\x04\x00liveness."	"/System/NodeLivenessMax"	"\x04tsd"	"/System/tsd"	""	""	""	"{1}"	"1"
+"5"	"\x04tsd"	"/System/tsd"	"\x04tse"	"/System/\"tse\""	""	""	""	"{1}"	"1"
+"6"	"\x04tse"	"/System/\"tse\""	"\x88"	"/Table/SystemConfigSpan/Start"	""	""	""	"{1}"	"1"
+"7"	"\x88"	"/Table/SystemConfigSpan/Start"	"\x93"	"/Table/11"	""	""	""	"{1}"	"1"
+"8"	"\x93"	"/Table/11"	"\x94"	"/Table/12"	"system"	"lease"	""	"{1}"	"1"
+"9"	"\x94"	"/Table/12"	"\x95"	"/Table/13"	"system"	"eventlog"	""	"{1}"	"1"
+"10"	"\x95"	"/Table/13"	"\x96"	"/Table/14"	"system"	"rangelog"	""	"{1}"	"1"
+"11"	"\x96"	"/Table/14"	"\x97"	"/Table/15"	"system"	"ui"	""	"{1}"	"1"
+"12"	"\x97"	"/Table/15"	"\x98"	"/Table/16"	"system"	"jobs"	""	"{1}"	"1"
+"13"	"\x98"	"/Table/16"	"\x99"	"/Table/17"	""	""	""	"{1}"	"1"
+"14"	"\x99"	"/Table/17"	"\x9a"	"/Table/18"	""	""	""	"{1}"	"1"
+"15"	"\x9a"	"/Table/18"	"\x9b"	"/Table/19"	""	""	""	"{1}"	"1"
+"16"	"\x9b"	"/Table/19"	"\xba"	"/Table/50"	"system"	"web_sessions"	""	"{1}"	"1"
+"17"	"\xba"	"/Table/50"	"\xbb"	"/Table/51"	"d"	""	""	"{1}"	"1"
+"18"	"\xbb"	"/Table/51"	"\xbc"	"/Table/52"	"d"	"a"	""	"{1}"	"1"
+"19"	"\xbc"	"/Table/52"	"\xbd"	"/Table/53"	""	""	""	"{1}"	"1"
+"20"	"\xbd"	"/Table/53"	"\xbe"	"/Table/54"	""	"b"	""	"{1}"	"1"
+"21"	"\xbe"	"/Table/54"	"\xbe\x89\xf6{"	"/Table/54/1/123"	"d"	"c"	""	"{1}"	"1"
+"22"	"\xbe\x89\xf6{"	"/Table/54/1/123"	"\xbe\x8a\x88"	"/Table/54/2/0"	"d"	"c"	""	"{1}"	"1"
+"23"	"\xbe\x8a\x88"	"/Table/54/2/0"	"\xff\xff"	"/Max"	"d"	"c"	"c_i_idx"	"{1}"	"1"
+`
+	if tabs != expect {
+		t.Fatalf("got %s, expected %s", tabs, expect)
 	}
 }
