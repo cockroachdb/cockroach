@@ -103,10 +103,6 @@ type txnKVFetcher struct {
 	// rangeInfos are deduped, so they're not ordered in any particular way and
 	// they don't map to kvFetcher.spans in any particular way.
 	rangeInfos []roachpb.RangeInfo
-
-	// traceKV determines whether or not to emit a log message every time a Scan
-	// is sent.
-	traceKV bool
 }
 
 func (f *txnKVFetcher) getRangesInfo() []roachpb.RangeInfo {
@@ -172,7 +168,6 @@ func makeKVFetcher(
 	useBatchLimit bool,
 	firstBatchLimit int64,
 	returnRangeInfo bool,
-	traceKV bool,
 ) (txnKVFetcher, error) {
 	if firstBatchLimit < 0 || (!useBatchLimit && firstBatchLimit != 0) {
 		return txnKVFetcher{}, errors.Errorf("invalid batch limit %d (useBatchLimit: %t)",
@@ -206,7 +201,6 @@ func makeKVFetcher(
 		useBatchLimit:   useBatchLimit,
 		firstBatchLimit: firstBatchLimit,
 		returnRangeInfo: returnRangeInfo,
-		traceKV:         traceKV,
 	}, nil
 }
 
@@ -230,16 +224,15 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		}
 	}
 
-	if f.traceKV {
-		scanStr := "Scan "
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		buf := bytes.NewBufferString("Scan ")
 		for i, span := range f.spans {
 			if i != 0 {
-				scanStr += ", "
+				buf.WriteString(", ")
 			}
-			scanStr += span.String()
+			buf.WriteString(span.String())
 		}
-
-		log.VEventf(ctx, 2, scanStr)
+		log.VEvent(ctx, 2, buf.String())
 	}
 
 	// Reset spans in preparation for adding resume-spans below.

@@ -19,6 +19,8 @@ import (
 	"io"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/petermattis/goid"
 
 	"golang.org/x/net/context"
@@ -169,8 +171,45 @@ func FatalfDepth(ctx context.Context, depth int, format string, args ...interfac
 
 // V returns true if the logging verbosity is set to the specified level or
 // higher.
+//
+// See also ExpensiveLogEnabled().
+//
+// TODO(andrei): Audit uses of V() and see which ones should actually use the
+// newer ExpensiveLogEnabled().
 func V(level level) bool {
 	return VDepth(level, 1)
+}
+
+// ExpensiveLogEnabled is used to test whether effort should be used to produce
+// log messages whose construction has a measurable cost. It returns true if
+// either the current context is recording the trace, or if the caller's
+// verbosity is above level.
+//
+// NOTE: This doesn't take into consideration whether tracing is generally
+// enabled or whether a trace.EventLog or a trace.Trace (i.e. sp.netTr) is
+// attached to ctx. In particular, if some OpenTracing collection is enabled
+// (e.g. LightStep), that, by itself, does NOT cause the expensive messages to
+// be enabled. SHOW TRACE FOR <stmt> and friends, on the other hand, does cause
+// these messages to be enabled, as it shows that a user has expressed
+// particular interest in a trace.
+//
+// Usage:
+//
+// if ExpensiveLogEnabled(ctx, 2) {
+//   msg := constructExpensiveMessage()
+//   log.VEventf(ctx, 2, msg)
+// }
+//
+func ExpensiveLogEnabled(ctx context.Context, level level) bool {
+	if sp := opentracing.SpanFromContext(ctx); sp != nil {
+		if tracing.IsRecording(sp) {
+			return true
+		}
+	}
+	if VDepth(level, 1 /* depth */) {
+		return true
+	}
+	return false
 }
 
 // MakeEntry creates an Entry.

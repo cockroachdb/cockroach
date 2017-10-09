@@ -117,6 +117,14 @@ func (s *span) isRecording() bool {
 	return atomic.LoadInt32(&s.recording) != 0
 }
 
+// IsRecording returns true if the span is recording its events.
+func IsRecording(s opentracing.Span) bool {
+	if _, noop := s.(*noopSpan); noop {
+		return false
+	}
+	return s.(*span).isRecording()
+}
+
 func (s *span) enableRecording(group *spanGroup, recType RecordingType) {
 	if group == nil {
 		panic("no spanGroup")
