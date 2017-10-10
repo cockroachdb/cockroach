@@ -684,6 +684,9 @@ Compatible elements: hour, minute, second, millisecond, microsecond.</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
+<tr><td><code>crdb_internal.unary_table() &rarr; setof tuple{}</code></td><td><span class="funcdesc"><p>Produces a virtual table containing a single row with no values.</p>
+<p>This function is used only by CockroachDB’s developers for testing purposes.</p>
+</span></td></tr>
 <tr><td><code>format_type(type_oid: oid, typemod: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the SQL name of a data type that is identified by its type OID and possibly a type modifier. Currently, the type modifier is ignored.</p>
 </span></td></tr>
 <tr><td><code>generate_series(start: <a href="int.html">int</a>, end: <a href="int.html">int</a>) &rarr; setof tuple{int}</code></td><td><span class="funcdesc"><p>Produces a virtual table containing the integer values from <code>start</code> to <code>end</code>, inclusive.</p>
