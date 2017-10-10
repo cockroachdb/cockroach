@@ -141,6 +141,16 @@ func (ba *BatchRequest) IsSingleQueryTxnRequest() bool {
 	return false
 }
 
+// IsSingleEndTransactionRequest returns true iff the batch contains a single
+// request, and that request is an EndTransactionRequest.
+func (ba *BatchRequest) IsSingleEndTransactionRequest() bool {
+	if ba.IsSingleRequest() {
+		_, ok := ba.Requests[0].GetInner().(*EndTransactionRequest)
+		return ok
+	}
+	return false
+}
+
 // GetPrevLeaseForLeaseRequest returns the previous lease, at the time
 // of proposal, for a request lease or transfer lease request. If the
 // batch does not contain a single lease request, this method will panic.
