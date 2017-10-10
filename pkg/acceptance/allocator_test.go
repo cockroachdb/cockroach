@@ -193,6 +193,20 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 		); err != nil {
 			t.Fatal(err)
 		}
+
+		// No schema changes on photos.photos but there are updates on
+		// the table. All these return the same result.
+		validationQueries = []string{
+			"SELECT COUNT(*) FROM photos.photos AS OF SYSTEM TIME %s",
+			"SELECT COUNT(longitude) FROM photos.photos AS OF SYSTEM TIME %s",
+			"SELECT COUNT(timestamp) FROM photos.photos@byUserID AS OF SYSTEM TIME %s",
+		}
+		if err := at.runValidationQueries(
+			ctx, t, validationQueries, nil,
+		); err != nil {
+			t.Fatal(err)
+		}
+
 		// These schema changes are run later because the above schema
 		// changes run for a decent amount of time giving datablocks.blocks
 		// an opportunity to get populate through the load generator. These
@@ -258,7 +272,7 @@ func (at *allocatorTest) runSchemaChanges(
 	}
 
 	log.Info(ctx, "validate applied schema changes")
-	if err := at.ValidateSchemaChanges(
+	if err := at.runValidationQueries(
 		ctx, t, validationQueries, indexValidationQueries,
 	); err != nil {
 		t.Fatal(err)
@@ -267,7 +281,7 @@ func (at *allocatorTest) runSchemaChanges(
 }
 
 // The validationQueries all return the same result.
-func (at *allocatorTest) ValidateSchemaChanges(
+func (at *allocatorTest) runValidationQueries(
 	ctx context.Context, t *testing.T, validationQueries []string, indexValidationQueries []string,
 ) error {
 	// Sleep for a bit before validating the schema changes to
@@ -340,11 +354,13 @@ func (at *allocatorTest) checkIndexOverTimeSpan(
 	if err := db.QueryRow(q, s.start, s.end).Scan(&eCount); err != nil {
 		return false, err
 	}
+	log.Infof(ctx, "query: %s, found %d rows", q, eCount)
 	var count int64
 	q = fmt.Sprintf(indexValidationQueries[1], nowString)
 	if err := db.QueryRow(q, s.start, s.end).Scan(&count); err != nil {
 		return false, err
 	}
+	log.Infof(ctx, "query: %s, found %d rows", q, count)
 	log.Infof(ctx, "counts seen %d, %d, over [%s, %s]", count, eCount, s.start, s.end)
 	return count != eCount, nil
 }
