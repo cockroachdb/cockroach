@@ -79,6 +79,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.columns
 
 		// Nodes with a fixed schema.
+	case *scrubNode:
+		return n.getColumns(mut, scrubColumns)
 	case *explainDistSQLNode:
 		return n.getColumns(mut, explainDistSQLColumns)
 	case *testingRelocateNode:
