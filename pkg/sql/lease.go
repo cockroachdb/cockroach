@@ -44,13 +44,6 @@ import (
 // TODO(pmattis): Periodically renew leases for tables that were used recently and
 // for which the lease will expire soon.
 
-var (
-	// LeaseDuration is the mean duration a lease will be acquired for. The
-	// actual duration is jittered in the range
-	// [0.75,1.25]*LeaseDuration. Exported for testing purposes only.
-	LeaseDuration = 5 * time.Minute
-)
-
 // tableVersionState holds the state for a table version. This includes
 // the lease information for a table version.
 // TODO(vivek): A node only needs to manage lease information on what it
@@ -118,14 +111,27 @@ type LeaseStore struct {
 	clock  *hlc.Clock
 	nodeID *base.NodeIDContainer
 
+	// leaseDuration is the mean duration a lease will be acquired for. The
+	// actual duration is jittered using leaseJitterFraction. Jittering is done to
+	// prevent multiple leases from being renewed simultaneously if they were all
+	// acquired simultaneously.
+	leaseDuration time.Duration
+	// leaseJitterFraction is the factor that we use to randomly jitter the lease
+	// duration when acquiring a new lease and the lease renewal timeout. The
+	// range of the actual lease duration will be
+	// [(1-leaseJitterFraction) * leaseDuration, (1+leaseJitterFraction) * leaseDuration]
+	// Exported for testing purposes only.
+	leaseJitterFraction float64
+
 	testingKnobs LeaseStoreTestingKnobs
 	memMetrics   *MemoryMetrics
 }
 
 // jitteredLeaseDuration returns a randomly jittered duration from the interval
-// [0.75 * leaseDuration, 1.25 * leaseDuration].
-func jitteredLeaseDuration() time.Duration {
-	return time.Duration(float64(LeaseDuration) * (0.75 + 0.5*rand.Float64()))
+// [(1-leaseJitterFraction) * leaseDuration, (1+leaseJitterFraction) * leaseDuration].
+func (s LeaseStore) jitteredLeaseDuration() time.Duration {
+	return time.Duration(float64(s.leaseDuration) * (1 - s.leaseJitterFraction +
+		2*s.leaseJitterFraction*rand.Float64()))
 }
 
 // acquire a lease on the most recent version of a table descriptor.
@@ -137,7 +143,7 @@ func (s LeaseStore) acquire(
 	var table *tableVersionState
 	err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		expiration := txn.OrigTimestamp()
-		expiration.WallTime += int64(jitteredLeaseDuration())
+		expiration.WallTime += int64(s.jitteredLeaseDuration())
 		if expiration.Less(minExpirationTime) {
 			expiration = minExpirationTime
 		}
@@ -1096,14 +1102,17 @@ func NewLeaseManager(
 	testingKnobs LeaseManagerTestingKnobs,
 	stopper *stop.Stopper,
 	memMetrics *MemoryMetrics,
+	cfg base.LeaseManagerConfig,
 ) *LeaseManager {
 	lm := &LeaseManager{
 		LeaseStore: LeaseStore{
-			db:           db,
-			clock:        clock,
-			nodeID:       nodeID,
-			testingKnobs: testingKnobs.LeaseStoreTestingKnobs,
-			memMetrics:   memMetrics,
+			db:                  db,
+			clock:               clock,
+			nodeID:              nodeID,
+			leaseDuration:       cfg.TableDescriptorLeaseDuration,
+			leaseJitterFraction: *cfg.TableDescriptorLeaseJitterFraction,
+			testingKnobs:        testingKnobs.LeaseStoreTestingKnobs,
+			memMetrics:          memMetrics,
 		},
 		testingKnobs: testingKnobs,
 		tableNames: tableNameCache{

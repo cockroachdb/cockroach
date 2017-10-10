@@ -50,9 +50,11 @@ type leaseTest struct {
 	kvDB                     *client.DB
 	nodes                    map[uint32]*sql.LeaseManager
 	leaseManagerTestingKnobs sql.LeaseManagerTestingKnobs
+	cfg                      base.LeaseManagerConfig
 }
 
 func newLeaseTest(t *testing.T, params base.TestServerArgs) *leaseTest {
+	params.LeaseManagerConfig.SetDefaults()
 	s, db, kvDB := serverutils.StartServer(t, params)
 	leaseTest := &leaseTest{
 		T:      t,
@@ -60,6 +62,7 @@ func newLeaseTest(t *testing.T, params base.TestServerArgs) *leaseTest {
 		db:     db,
 		kvDB:   kvDB,
 		nodes:  map[uint32]*sql.LeaseManager{},
+		cfg:    params.LeaseManagerConfig,
 	}
 	if params.Knobs.SQLLeaseManager != nil {
 		leaseTest.leaseManagerTestingKnobs =
@@ -191,6 +194,7 @@ func (t *leaseTest) node(nodeID uint32) *sql.LeaseManager {
 			t.leaseManagerTestingKnobs,
 			t.server.Stopper(),
 			&sql.MemoryMetrics{},
+			t.cfg,
 		)
 		t.nodes[nodeID] = mgr
 	}
@@ -303,6 +307,9 @@ func TestLeaseManager(testingT *testing.T) {
 func TestLeaseManagerReacquire(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 	params, _ := createTestServerParams()
+	// Set the lease duration such that the next lease acquisition will
+	// require the lease to be reacquired.
+	params.LeaseManagerConfig.TableDescriptorLeaseDuration = 5 * time.Nanosecond
 	removalTracker := sql.NewLeaseRemovalTracker()
 	params.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
@@ -315,17 +322,6 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 	defer t.cleanup()
 
 	const descID = keys.LeaseTableID
-
-	// Set the lease duration such that the next lease acquisition will
-	// require the lease to be reacquired.
-	savedLeaseDuration := sql.LeaseDuration
-	defer func() {
-		sql.LeaseDuration = savedLeaseDuration
-	}()
-
-	sql.LeaseDuration = 5 * time.Nanosecond
-
-	time.Sleep(5 * sql.LeaseDuration)
 
 	l1, e1 := t.mustAcquire(1, descID)
 	t.expectLeases(descID, "/1/1")

@@ -121,6 +121,7 @@ type Config struct {
 	Settings *cluster.Settings
 
 	base.RaftConfig
+	base.LeaseManagerConfig
 
 	// Unix socket: for postgres only.
 	SocketFile string
@@ -369,6 +370,7 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 
 	cfg.Config.InitDefaults()
 	cfg.RaftConfig.SetDefaults()
+	cfg.LeaseManagerConfig.SetDefaults()
 	return cfg
 }
 

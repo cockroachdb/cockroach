@@ -105,6 +105,8 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg.TestingKnobs = params.Knobs
 	cfg.RaftConfig = params.RaftConfig
 	cfg.RaftConfig.SetDefaults()
+	cfg.LeaseManagerConfig = params.LeaseManagerConfig
+	cfg.LeaseManagerConfig.SetDefaults()
 	if params.JoinAddr != "" {
 		cfg.JoinList = []string{params.JoinAddr}
 	}
