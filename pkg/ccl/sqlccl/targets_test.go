@@ -36,52 +36,53 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		sessionDatabase string
 		pattern         string
 		expected        []string
+		expectedDBs     []string
 		err             string
 	}{
-		{"", "DATABASE system", []string{"system", "foo", "bar"}, ``},
-		{"", "DATABASE system, noexist", nil, `database "noexist" does not exist`},
-		{"", "DATABASE data", []string{"data", "baz"}, ``},
-		{"", "DATABASE system, data", []string{"system", "foo", "bar", "data", "baz"}, ``},
-		{"", "DATABASE system, data, noexist", nil, `database "noexist" does not exist`},
-		{"system", "DATABASE system", []string{"system", "foo", "bar"}, ``},
-		{"system", "DATABASE system, noexist", nil, `database "noexist" does not exist`},
-		{"system", "DATABASE data", []string{"data", "baz"}, ``},
-		{"system", "DATABASE system, data", []string{"system", "foo", "bar", "data", "baz"}, ``},
-		{"system", "DATABASE system, data, noexist", nil, `database "noexist" does not exist`},
+		{"", "DATABASE system", []string{"system", "foo", "bar"}, []string{"system"}, ``},
+		{"", "DATABASE system, noexist", nil, nil, `database "noexist" does not exist`},
+		{"", "DATABASE data", []string{"data", "baz"}, []string{"data"}, ``},
+		{"", "DATABASE system, data", []string{"system", "foo", "bar", "data", "baz"}, []string{"data", "system"}, ``},
+		{"", "DATABASE system, data, noexist", nil, nil, `database "noexist" does not exist`},
+		{"system", "DATABASE system", []string{"system", "foo", "bar"}, []string{"system"}, ``},
+		{"system", "DATABASE system, noexist", nil, nil, `database "noexist" does not exist`},
+		{"system", "DATABASE data", []string{"data", "baz"}, []string{"data"}, ``},
+		{"system", "DATABASE system, data", []string{"system", "foo", "bar", "data", "baz"}, []string{"data", "system"}, ``},
+		{"system", "DATABASE system, data, noexist", nil, nil, `database "noexist" does not exist`},
 
-		{"", "TABLE foo", nil, `table "foo" does not exist`},
-		{"system", "TABLE foo", []string{"system", "foo"}, ``},
-		{"data", "TABLE foo", nil, `table "foo" does not exist`},
+		{"", "TABLE foo", nil, nil, `table "foo" does not exist`},
+		{"system", "TABLE foo", []string{"system", "foo"}, nil, ``},
+		{"data", "TABLE foo", nil, nil, `table "foo" does not exist`},
 
-		{"", "TABLE *", nil, `no database specified for wildcard`},
-		{"", "TABLE *, system.foo", nil, `no database specified for wildcard`},
-		{"noexist", "TABLE *", nil, `database "noexist" does not exist`},
-		{"system", "TABLE *", []string{"system", "foo", "bar"}, ``},
-		{"data", "TABLE *", []string{"data", "baz"}, ``},
-		{"empty", "TABLE *", []string{"empty"}, ``},
+		{"", "TABLE *", nil, nil, `no database specified for wildcard`},
+		{"", "TABLE *, system.foo", nil, nil, `no database specified for wildcard`},
+		{"noexist", "TABLE *", nil, nil, `database "noexist" does not exist`},
+		{"system", "TABLE *", []string{"system", "foo", "bar"}, nil, ``},
+		{"data", "TABLE *", []string{"data", "baz"}, nil, ``},
+		{"empty", "TABLE *", []string{"empty"}, nil, ``},
 
-		{"", "TABLE foo, baz", nil, `table "(foo|baz)" does not exist`},
-		{"system", "TABLE foo, baz", nil, `table "baz" does not exist`},
-		{"data", "TABLE foo, baz", nil, `table "foo" does not exist`},
+		{"", "TABLE foo, baz", nil, nil, `table "(foo|baz)" does not exist`},
+		{"system", "TABLE foo, baz", nil, nil, `table "baz" does not exist`},
+		{"data", "TABLE foo, baz", nil, nil, `table "foo" does not exist`},
 
-		{"", "TABLE system.foo", []string{"system", "foo"}, ``},
-		{"", "TABLE system.foo, foo", []string{"system", "foo"}, `table "foo" does not exist`},
+		{"", "TABLE system.foo", []string{"system", "foo"}, nil, ``},
+		{"", "TABLE system.foo, foo", []string{"system", "foo"}, nil, `table "foo" does not exist`},
 
-		{"", "TABLE system.foo, bar", []string{"system", "foo"}, `table "bar" does not exist`},
-		{"system", "TABLE system.foo, bar", []string{"system", "foo", "bar"}, ``},
+		{"", "TABLE system.foo, bar", []string{"system", "foo"}, nil, `table "bar" does not exist`},
+		{"system", "TABLE system.foo, bar", []string{"system", "foo", "bar"}, nil, ``},
 
-		{"", "TABLE noexist.*", nil, `database "noexist" does not exist`},
-		{"", "TABLE empty.*", []string{"empty"}, ``},
-		{"", "TABLE system.*", []string{"system", "foo", "bar"}, ``},
-		{"", "TABLE system.*, foo, baz", nil, `table "(foo|baz)" does not exist`},
-		{"system", "TABLE system.*, foo, baz", nil, `table "baz" does not exist`},
-		{"data", "TABLE system.*, baz", []string{"system", "foo", "bar", "data", "baz"}, ``},
-		{"data", "TABLE system.*, foo, baz", nil, `table "(foo|baz)" does not exist`},
+		{"", "TABLE noexist.*", nil, nil, `database "noexist" does not exist`},
+		{"", "TABLE empty.*", []string{"empty"}, nil, ``},
+		{"", "TABLE system.*", []string{"system", "foo", "bar"}, nil, ``},
+		{"", "TABLE system.*, foo, baz", nil, nil, `table "(foo|baz)" does not exist`},
+		{"system", "TABLE system.*, foo, baz", nil, nil, `table "baz" does not exist`},
+		{"data", "TABLE system.*, baz", []string{"system", "foo", "bar", "data", "baz"}, nil, ``},
+		{"data", "TABLE system.*, foo, baz", nil, nil, `table "(foo|baz)" does not exist`},
 
-		{"", "TABLE SyStEm.FoO", []string{"system", "foo"}, ``},
+		{"", "TABLE SyStEm.FoO", []string{"system", "foo"}, nil, ``},
 
-		{"", `TABLE system."foo"`, []string{"system", "foo"}, ``},
-		{"system", `TABLE "foo"`, []string{"system", "foo"}, ``},
+		{"", `TABLE system."foo"`, []string{"system", "foo"}, nil, ``},
+		{"system", `TABLE "foo"`, []string{"system", "foo"}, nil, ``},
 		// TODO(dan): Enable these tests once #8862 is fixed.
 		// {"", `TABLE system."FOO"`, []string{"system"}},
 		// {"system", `TABLE "FOO"`, []string{"system"}},
@@ -95,7 +96,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 			}
 			targets := stmt.(*parser.Grant).Targets
 
-			matched, err := descriptorsMatchingTargets(test.sessionDatabase, descriptors, targets)
+			matched, dbs, err := descriptorsMatchingTargets(test.sessionDatabase, descriptors, targets)
 			if test.err != "" {
 				if !testutils.IsError(err, test.err) {
 					t.Fatalf("expected error matching '%v', but got '%v'", test.err, err)
@@ -107,10 +108,19 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 				for _, m := range matched {
 					matchedNames = append(matchedNames, m.GetName())
 				}
+				var matchedDBNames []string
+				for _, m := range dbs {
+					matchedDBNames = append(matchedDBNames, m.GetName())
+				}
 				sort.Strings(test.expected)
+				sort.Strings(test.expectedDBs)
 				sort.Strings(matchedNames)
+				sort.Strings(matchedDBNames)
 				if !reflect.DeepEqual(test.expected, matchedNames) {
 					t.Fatalf("expected %q got %q", test.expected, matchedNames)
+				}
+				if !reflect.DeepEqual(test.expectedDBs, matchedDBNames) {
+					t.Fatalf("expected %q got %q", test.expectedDBs, matchedDBNames)
 				}
 			}
 		})
