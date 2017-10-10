@@ -13744,7 +13744,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
 		//line sql.y:5285
 		{
-			sqlVAL.union.val = &FuncExpr{Func: sqlDollar[1].union.resolvableFunctionReference(), Exprs: Exprs{StarExpr()}}
+			sqlVAL.union.val = &FuncExpr{Func: sqlDollar[1].union.resolvableFunctionReference(), Exprs: Exprs{UnqualifiedStarInstance}}
 		}
 	case 1001:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
@@ -14585,7 +14585,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:5878
 		{
-			sqlVAL.union.val = UnqualifiedStar{}
+			sqlVAL.union.val = UnqualifiedStarInstance
 		}
 	case 1152:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
@@ -14765,7 +14765,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:6049
 		{
-			sqlVAL.union.val = UnresolvedName{UnqualifiedStar{}}
+			sqlVAL.union.val = UnresolvedName{UnqualifiedStarInstance}
 		}
 	case 1183:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
