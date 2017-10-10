@@ -4158,7 +4158,6 @@ func TestEndTransactionWithErrors(t *testing.T) {
 // rolled back by an EndTransactionRequest.
 func TestEndTransactionRollbackAbortedTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer setTxnAutoGC(false)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
@@ -4180,7 +4179,7 @@ func TestEndTransactionRollbackAbortedTransaction(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	// Check if the intent has not yet been resolved.
+	// Check that the intent has not yet been resolved.
 	var ba roachpb.BatchRequest
 	gArgs := getArgs(key)
 	ba.Add(&gArgs)
@@ -4193,7 +4192,7 @@ func TestEndTransactionRollbackAbortedTransaction(t *testing.T) {
 	}
 
 	// Abort the transaction again. No error is returned.
-	args, h := endTxnArgs(txn, false)
+	args, h := endTxnArgs(txn, false /* commit */)
 	args.IntentSpans = []roachpb.Span{{Key: key}}
 	resp, pErr := tc.SendWrappedWith(h, &args)
 	if pErr != nil {
