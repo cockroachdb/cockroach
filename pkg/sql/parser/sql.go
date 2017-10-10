@@ -13693,13 +13693,13 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:5198
 		{
-			sqlVAL.union.val = &FuncExpr{Func: wrapFunction("ISNAN"), Exprs: Exprs{sqlDollar[1].union.expr()}}
+			sqlVAL.union.val = &ComparisonExpr{Operator: EQ, Left: sqlDollar[1].union.expr(), Right: NewStrVal("NaN")}
 		}
 	case 957:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
 		//line sql.y:5202
 		{
-			sqlVAL.union.val = &NotExpr{Expr: &FuncExpr{Func: wrapFunction("ISNAN"), Exprs: Exprs{sqlDollar[1].union.expr()}}}
+			sqlVAL.union.val = &ComparisonExpr{Operator: NE, Left: sqlDollar[1].union.expr(), Right: NewStrVal("NaN")}
 		}
 	case 958:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
