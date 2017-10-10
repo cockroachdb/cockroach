@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -520,7 +521,7 @@ type Store struct {
 		// Protects all fields in the tsCacheMu struct.
 		syncutil.Mutex
 		// Most recent timestamps for keys / key ranges.
-		cache *timestampCache
+		cache *tscache.TimestampCache
 	}
 
 	scheduler *raftScheduler
@@ -871,7 +872,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.mu.Unlock()
 
 	s.tsCacheMu.Lock()
-	s.tsCacheMu.cache = newTimestampCache(s.cfg.Clock)
+	s.tsCacheMu.cache = tscache.NewTimestampCache(s.cfg.Clock)
 	s.tsCacheMu.Unlock()
 
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)

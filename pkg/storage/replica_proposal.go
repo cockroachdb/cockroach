@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -492,9 +493,9 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 		r.store.tsCacheMu.Lock()
 		for _, keyRange := range makeReplicatedKeyRanges(desc) {
 			for _, readOnly := range []bool{true, false} {
-				r.store.tsCacheMu.cache.add(
+				r.store.tsCacheMu.cache.Add(
 					keyRange.start.Key, keyRange.end.Key,
-					newLease.Start, lowWaterTxnIDMarker, readOnly)
+					newLease.Start, tscache.LowWaterTxnIDMarker, readOnly)
 			}
 		}
 		r.store.tsCacheMu.Unlock()
