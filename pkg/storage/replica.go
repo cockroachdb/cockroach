@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1908,11 +1909,11 @@ func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry pr
 			// evaluating the request.
 			log.Fatal(context.Background(), err)
 		}
-		creq := makeCacheRequest(&ec.ba, br, span)
+		creq := makeTSCacheRequest(&ec.ba, br, span)
 
 		if ec.repl.store.Clock().MaxOffset() == timeutil.ClocklessMaxOffset {
 			// Clockless mode: all reads count as writes.
-			creq.writes, creq.reads = append(creq.writes, creq.reads...), nil
+			creq.Writes, creq.Reads = append(creq.Writes, creq.Reads...), nil
 		}
 		ec.repl.store.tsCacheMu.Lock()
 		ec.repl.store.tsCacheMu.cache.AddRequest(creq)
@@ -1925,15 +1926,15 @@ func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry pr
 	ec.repl.removeCmdsFromCommandQueue(ec.cmds)
 }
 
-func makeCacheRequest(
+func makeTSCacheRequest(
 	ba *roachpb.BatchRequest, br *roachpb.BatchResponse, span roachpb.RSpan,
-) cacheRequest {
-	cr := cacheRequest{
-		span:      span,
-		timestamp: ba.Timestamp,
+) tscache.CacheRequest {
+	cr := tscache.CacheRequest{
+		Span:      span,
+		Timestamp: ba.Timestamp,
 	}
 	if ba.Txn != nil {
-		cr.txnID = ba.Txn.ID
+		cr.TxnID = ba.Txn.ID
 	}
 
 	for i, union := range ba.Requests {
@@ -1944,14 +1945,14 @@ func makeCacheRequest(
 			case *roachpb.DeleteRangeRequest:
 				// DeleteRange adds to the write timestamp cache to prevent
 				// subsequent writes from rewriting history.
-				cr.writes = append(cr.writes, header)
+				cr.Writes = append(cr.Writes, header)
 			case *roachpb.EndTransactionRequest:
 				// EndTransaction adds to the write timestamp cache to ensure replays
 				// create a transaction record with WriteTooOld set.
 				//
 				// Note that TimestampCache.ExpandRequests lazily creates the
 				// transaction key from the request key.
-				cr.txn = roachpb.Span{Key: header.Key}
+				cr.Txn = roachpb.Span{Key: header.Key}
 			case *roachpb.ScanRequest:
 				resp := br.Responses[i].GetInner().(*roachpb.ScanResponse)
 				if ba.Header.MaxSpanRequestKeys != 0 &&
@@ -1975,7 +1976,7 @@ func makeCacheRequest(
 					copy(key, src)
 					header.EndKey = key.Next()
 				}
-				cr.reads = append(cr.reads, header)
+				cr.Reads = append(cr.Reads, header)
 			case *roachpb.ReverseScanRequest:
 				resp := br.Responses[i].GetInner().(*roachpb.ReverseScanResponse)
 				if ba.Header.MaxSpanRequestKeys != 0 &&
@@ -1991,9 +1992,9 @@ func makeCacheRequest(
 					copy(key, src)
 					header.Key = key
 				}
-				cr.reads = append(cr.reads, header)
+				cr.Reads = append(cr.Reads, header)
 			default:
-				cr.reads = append(cr.reads, header)
+				cr.Reads = append(cr.Reads, header)
 			}
 		}
 	}
