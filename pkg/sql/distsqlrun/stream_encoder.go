@@ -31,13 +31,10 @@ import (
 //          err := se.AddRow(...)
 //          ...
 //       }
-//       msg := se.FormMessage(false, nil)
+//       msg := se.FormMessage(nil)
 //       // Send out message.
 //       ...
 //   }
-//   msg := se.FormMessage(true, nil)
-//   // Send out final message
-//   ...
 type StreamEncoder struct {
 	// infos is initialized when the first row is received.
 	infos []DatumInfo

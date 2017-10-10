@@ -29,12 +29,12 @@ import (
 // The encoder/decoder don't maintain the ordering between rows and metadata
 // records.
 func testGetDecodedRows(
-	t *testing.T, sd *StreamDecoder, decodedRows sqlbase.EncDatumRows, metas []ProducerMetadata,
+	tb testing.TB, sd *StreamDecoder, decodedRows sqlbase.EncDatumRows, metas []ProducerMetadata,
 ) (sqlbase.EncDatumRows, []ProducerMetadata) {
 	for {
 		row, meta, err := sd.GetRow(nil /* rowBuf */)
 		if err != nil {
-			t.Fatal(err)
+			tb.Fatal(err)
 		}
 		if row == nil && meta.Empty() {
 			break
@@ -48,7 +48,7 @@ func testGetDecodedRows(
 	return decodedRows, metas
 }
 
-func testRowStream(t *testing.T, rng *rand.Rand, records []rowOrMeta) {
+func testRowStream(tb testing.TB, rng *rand.Rand, records []rowOrMeta) {
 	var se StreamEncoder
 	var sd StreamDecoder
 
@@ -61,7 +61,7 @@ func testRowStream(t *testing.T, rng *rand.Rand, records []rowOrMeta) {
 		if rowIdx < len(records) {
 			if records[rowIdx].row != nil {
 				if err := se.AddRow(records[rowIdx].row); err != nil {
-					t.Fatal(err)
+					tb.Fatal(err)
 				}
 				numRows++
 			} else {
@@ -77,16 +77,16 @@ func testRowStream(t *testing.T, rng *rand.Rand, records []rowOrMeta) {
 			msg.Data.RawBytes = append([]byte(nil), msg.Data.RawBytes...)
 			err := sd.AddMessage(msg)
 			if err != nil {
-				t.Fatal(err)
+				tb.Fatal(err)
 			}
-			decodedRows, metas = testGetDecodedRows(t, &sd, decodedRows, metas)
+			decodedRows, metas = testGetDecodedRows(tb, &sd, decodedRows, metas)
 		}
 	}
 	if len(metas) != numMeta {
-		t.Errorf("expected %d metadata records, got: %d", numMeta, len(metas))
+		tb.Errorf("expected %d metadata records, got: %d", numMeta, len(metas))
 	}
 	if len(decodedRows) != numRows {
-		t.Errorf("expected %d rows, got: %d", numRows, len(decodedRows))
+		tb.Errorf("expected %d rows, got: %d", numRows, len(decodedRows))
 	}
 }
 
