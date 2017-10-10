@@ -34,15 +34,10 @@ var _ RowSource = &RepeatableRowSource{}
 func NewRepeatableRowSource(
 	types []sqlbase.ColumnType, rows sqlbase.EncDatumRows,
 ) *RepeatableRowSource {
-	r := &RepeatableRowSource{rows: rows, types: types}
-	if len(r.rows) > 0 && r.types == nil {
-		inferredTypes := make([]sqlbase.ColumnType, len(r.rows[0]))
-		for i, d := range r.rows[0] {
-			inferredTypes[i] = d.Type
-		}
-		r.types = inferredTypes
+	if types == nil {
+		panic("types required")
 	}
-	return r
+	return &RepeatableRowSource{rows: rows, types: types}
 }
 
 // Types is part of the RowSource interface.

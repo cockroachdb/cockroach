@@ -517,24 +517,19 @@ type RowBufferArgs struct {
 	OnNext func(*RowBuffer) (sqlbase.EncDatumRow, ProducerMetadata)
 }
 
-// NewRowBuffer creates a RowBuffer with the given schema and initial rows. The
-// types are optional if there is at least one row.
+// NewRowBuffer creates a RowBuffer with the given schema and initial rows.
 func NewRowBuffer(
 	types []sqlbase.ColumnType, rows sqlbase.EncDatumRows, hooks RowBufferArgs,
 ) *RowBuffer {
+	if types == nil {
+		panic("types required")
+	}
 	wrappedRows := make([]BufferedRecord, len(rows))
 	for i, row := range rows {
 		wrappedRows[i].Row = row
 	}
 	rb := &RowBuffer{types: types, args: hooks}
 	rb.mu.records = wrappedRows
-
-	if len(rb.mu.records) > 0 && rb.types == nil {
-		rb.types = make([]sqlbase.ColumnType, len(rb.mu.records[0].Row))
-		for i, d := range rb.mu.records[0].Row {
-			rb.types[i] = d.Type
-		}
-	}
 	return rb
 }
 
@@ -578,7 +573,7 @@ func (rb *RowBuffer) ProducerDone() {
 // Types is part of the RowSource interface.
 func (rb *RowBuffer) Types() []sqlbase.ColumnType {
 	if rb.types == nil {
-		panic("not initialized with types")
+		panic("not initialized")
 	}
 	return rb.types
 }

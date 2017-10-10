@@ -42,8 +42,7 @@ type testInputs struct {
 func initTestData() testInputs {
 	v := [15]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
-			parser.NewDInt(parser.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(intType, parser.NewDInt(parser.DInt(i)))
 	}
 
 	inputUnordered := sqlbase.EncDatumRows{
@@ -81,8 +80,9 @@ func initTestData() testInputs {
 }
 
 func runProcessors(tc testCase) (sqlbase.EncDatumRows, error) {
-	inL := NewRowBuffer(nil, tc.inputLeft, RowBufferArgs{})
-	inR := NewRowBuffer(nil, tc.inputRight, RowBufferArgs{})
+	types := []sqlbase.ColumnType{intType, intType}
+	inL := NewRowBuffer(types, tc.inputLeft, RowBufferArgs{})
+	inR := NewRowBuffer(types, tc.inputRight, RowBufferArgs{})
 	out := &RowBuffer{}
 
 	flowCtx := FlowCtx{Settings: cluster.MakeTestingClusterSettings()}

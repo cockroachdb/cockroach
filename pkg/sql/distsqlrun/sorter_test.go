@@ -218,7 +218,7 @@ func TestSorter(t *testing.T) {
 			t.Run(fmt.Sprintf("%sMemLimit=%d", c.name, memLimit), func(t *testing.T) {
 				types := make([]sqlbase.ColumnType, len(c.input[0]))
 				for i := range types {
-					types[i] = c.input[0][i].Type
+					types[i] = intType
 				}
 				in := NewRowBuffer(types, c.input, RowBufferArgs{})
 				out := &RowBuffer{}

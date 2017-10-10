@@ -135,7 +135,7 @@ func TestDistinct(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			ds := c.spec
 
-			in := NewRowBuffer(nil /* types */, c.input, RowBufferArgs{})
+			in := NewRowBuffer(twoIntCols, c.input, RowBufferArgs{})
 			out := &RowBuffer{}
 
 			evalCtx := parser.MakeTestingEvalContext()
