@@ -88,9 +88,11 @@ type RowFetcher struct {
 	// -- Fields updated during a scan --
 
 	kvFetcher      kvFetcher
-	keyVals        []EncDatum  // the index key values for the current row
+	keyVals        []EncDatum // the index key values for the current row
+	keyValTypes    []ColumnType
 	extraVals      EncDatumRow // the extra column values for unique indexes
-	indexKey       []byte      // the index key of the current row
+	extraTypes     []ColumnType
+	indexKey       []byte // the index key of the current row
 	row            EncDatumRow
 	decodedRow     parser.Datums
 	prettyValueBuf *bytes.Buffer
@@ -180,9 +182,10 @@ func (rf *RowFetcher) Init(
 		}
 	}
 
-	var err error
 	// Prepare our index key vals slice.
-	rf.keyVals, err = MakeEncodedKeyVals(rf.desc, indexColumnIDs)
+	rf.keyVals = make([]EncDatum, len(indexColumnIDs))
+	var err error
+	rf.keyValTypes, err = GetColumnTypes(desc, indexColumnIDs)
 	if err != nil {
 		return err
 	}
@@ -192,7 +195,8 @@ func (rf *RowFetcher) Init(
 		// key. Prepare extraVals for use in decoding this value.
 		// Primary indexes only contain ascendingly-encoded values. If this
 		// ever changes, we'll probably have to figure out the directions here too.
-		rf.extraVals, err = MakeEncodedKeyVals(desc, index.ExtraColumnIDs)
+		rf.extraVals = make([]EncDatum, len(index.ExtraColumnIDs))
+		rf.extraTypes, err = GetColumnTypes(desc, index.ExtraColumnIDs)
 		if err != nil {
 			return err
 		}
@@ -305,10 +309,10 @@ func (rf *RowFetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 	}
 }
 
-func prettyEncDatums(vals []EncDatum) string {
+func (rf *RowFetcher) prettyEncDatums(types []ColumnType, vals []EncDatum) string {
 	var buf bytes.Buffer
-	for _, v := range vals {
-		if err := v.EnsureDecoded(&DatumAlloc{}); err != nil {
+	for i, v := range vals {
+		if err := v.EnsureDecoded(&types[i], &DatumAlloc{}); err != nil {
 			fmt.Fprintf(&buf, "error decoding: %v", err)
 		}
 		fmt.Fprintf(&buf, "/%v", v.Datum)
@@ -318,7 +322,7 @@ func prettyEncDatums(vals []EncDatum) string {
 
 // ReadIndexKey decodes an index key for the fetcher's table.
 func (rf *RowFetcher) ReadIndexKey(k roachpb.Key) (remaining []byte, ok bool, err error) {
-	return DecodeIndexKey(rf.alloc, rf.desc, rf.index, rf.keyVals,
+	return DecodeIndexKey(rf.alloc, rf.desc, rf.index, rf.keyValTypes, rf.keyVals,
 		rf.indexColumnDirs, k)
 }
 
@@ -329,7 +333,9 @@ func (rf *RowFetcher) processKV(
 	ctx context.Context, kv roachpb.KeyValue,
 ) (prettyKey string, prettyValue string, err error) {
 	if rf.traceKV {
-		prettyKey = fmt.Sprintf("/%s/%s%s", rf.desc.Name, rf.index.Name, prettyEncDatums(rf.keyVals))
+		prettyKey = fmt.Sprintf(
+			"/%s/%s%s", rf.desc.Name, rf.index.Name, rf.prettyEncDatums(rf.keyValTypes, rf.keyVals),
+		)
 	}
 
 	if rf.indexKey == nil {
@@ -395,7 +401,7 @@ func (rf *RowFetcher) processKV(
 			// This is a unique index; decode the extra column values from
 			// the value.
 			var err error
-			valueBytes, err = DecodeKeyVals(rf.extraVals, nil, valueBytes)
+			valueBytes, err = DecodeKeyVals(rf.extraTypes, rf.extraVals, nil, valueBytes)
 			if err != nil {
 				return "", "", err
 			}
@@ -405,13 +411,13 @@ func (rf *RowFetcher) processKV(
 				}
 			}
 			if rf.traceKV {
-				prettyValue = prettyEncDatums(rf.extraVals)
+				prettyValue = rf.prettyEncDatums(rf.extraTypes, rf.extraVals)
 			}
 		}
 
 		if debugRowFetch {
 			if rf.extraVals != nil {
-				log.Infof(ctx, "Scan %s -> %s", kv.Key, prettyEncDatums(rf.extraVals))
+				log.Infof(ctx, "Scan %s -> %s", kv.Key, rf.prettyEncDatums(rf.extraTypes, rf.extraVals))
 			} else {
 				log.Infof(ctx, "Scan %s", kv.Key)
 			}
@@ -527,12 +533,12 @@ func (rf *RowFetcher) processValueBytes(
 
 		var encValue EncDatum
 		encValue, valueBytes, err =
-			EncDatumFromBuffer(rf.cols[idx].Type, DatumEncoding_VALUE, valueBytes)
+			EncDatumFromBuffer(&rf.cols[idx].Type, DatumEncoding_VALUE, valueBytes)
 		if err != nil {
 			return "", "", err
 		}
 		if rf.traceKV {
-			err := encValue.EnsureDecoded(rf.alloc)
+			err := encValue.EnsureDecoded(&rf.cols[idx].Type, rf.alloc)
 			if err != nil {
 				return "", "", err
 			}
@@ -607,10 +613,18 @@ func (rf *RowFetcher) NextRowDecoded(ctx context.Context, traceKV bool) (parser.
 	if encRow == nil {
 		return nil, nil
 	}
-	err = EncDatumRowToDatums(rf.decodedRow, encRow, rf.alloc)
-	if err != nil {
-		return nil, err
+
+	for i, encDatum := range encRow {
+		if encDatum.IsUnset() {
+			rf.decodedRow[i] = parser.DNull
+			continue
+		}
+		if err := encDatum.EnsureDecoded(&rf.cols[i].Type, rf.alloc); err != nil {
+			return nil, err
+		}
+		rf.decodedRow[i] = encDatum.Datum
 	}
+
 	return rf.decodedRow, nil
 }
 
@@ -623,8 +637,8 @@ func (rf *RowFetcher) finalizeRow() {
 					rf.desc.Name, rf.cols[i].Name))
 			}
 			rf.row[i] = EncDatum{
-				Type:  rf.cols[i].Type,
-				Datum: parser.DNull,
+				typeDeprecated: rf.cols[i].Type,
+				Datum:          parser.DNull,
 			}
 		}
 	}

@@ -50,11 +50,13 @@ func TestPostProcess(t *testing.T) {
 
 	testCases := []struct {
 		post          PostProcessSpec
+		outputTypes   []sqlbase.ColumnType
 		expNeededCols []int
 		expected      string
 	}{
 		{
 			post:          PostProcessSpec{},
+			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
@@ -64,6 +66,7 @@ func TestPostProcess(t *testing.T) {
 			post: PostProcessSpec{
 				Filter: Expression{Expr: "@1 = 1"},
 			},
+			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[1 2 3] [1 2 4] [1 3 4]]",
 		},
@@ -74,6 +77,7 @@ func TestPostProcess(t *testing.T) {
 				Projection:    true,
 				OutputColumns: []uint32{0, 2},
 			},
+			outputTypes:   twoIntCols,
 			expNeededCols: []int{0, 2},
 			expected:      "[[0 2] [0 3] [0 4] [0 3] [0 4] [0 4] [1 3] [1 4] [1 4] [2 4]]",
 		},
@@ -85,6 +89,7 @@ func TestPostProcess(t *testing.T) {
 				Projection:    true,
 				OutputColumns: []uint32{0, 2},
 			},
+			outputTypes:   twoIntCols,
 			expNeededCols: []int{0, 2},
 			expected:      "[[1 3] [1 4] [1 4]]",
 		},
@@ -96,6 +101,7 @@ func TestPostProcess(t *testing.T) {
 				Projection:    true,
 				OutputColumns: []uint32{0, 2},
 			},
+			outputTypes:   twoIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 3] [0 4] [1 3] [1 4]]",
 		},
@@ -105,6 +111,7 @@ func TestPostProcess(t *testing.T) {
 			post: PostProcessSpec{
 				RenderExprs: []Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
 			},
+			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1},
 			expected:      "[[0 1 1] [0 1 1] [0 1 1] [0 2 2] [0 2 2] [0 3 3] [1 2 3] [1 2 3] [1 3 4] [2 3 5]]",
 		},
@@ -115,6 +122,7 @@ func TestPostProcess(t *testing.T) {
 				Filter:      Expression{Expr: "@2 = 2"},
 				RenderExprs: []Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
 			},
+			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1},
 			expected:      "[[0 2 2] [0 2 2] [1 2 3] [1 2 3]]",
 		},
@@ -125,6 +133,7 @@ func TestPostProcess(t *testing.T) {
 				Filter:      Expression{Expr: "@3 = 4"},
 				RenderExprs: []Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
 			},
+			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 1] [0 2 2] [0 3 3] [1 2 3] [1 3 4] [2 3 5]]",
 		},
@@ -141,6 +150,7 @@ func TestPostProcess(t *testing.T) {
 					{Expr: "@1 = @2 - 1 AND @1 = @3 - 2"},
 				},
 			},
+			outputTypes:   []sqlbase.ColumnType{intType, intType, boolType, boolType, boolType, boolType},
 			expNeededCols: []int{0, 1, 2},
 			expected: "[" + strings.Join([]string{
 				/* 0 1 2 */ "[-1 2 false true true true]",
@@ -159,6 +169,7 @@ func TestPostProcess(t *testing.T) {
 		// Offset.
 		{
 			post:          PostProcessSpec{Offset: 3},
+			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
@@ -166,21 +177,25 @@ func TestPostProcess(t *testing.T) {
 		// Limit.
 		{
 			post:          PostProcessSpec{Limit: 3},
+			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4]]",
 		},
 		{
 			post:          PostProcessSpec{Limit: 9},
+			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4]]",
 		},
 		{
 			post:          PostProcessSpec{Limit: 10},
+			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
 		{
 			post:          PostProcessSpec{Limit: 11},
+			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
@@ -188,21 +203,25 @@ func TestPostProcess(t *testing.T) {
 		// Offset + limit.
 		{
 			post:          PostProcessSpec{Offset: 3, Limit: 2},
+			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4]]",
 		},
 		{
 			post:          PostProcessSpec{Offset: 3, Limit: 6},
+			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4]]",
 		},
 		{
 			post:          PostProcessSpec{Offset: 3, Limit: 7},
+			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
 		{
 			post:          PostProcessSpec{Offset: 3, Limit: 8},
+			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
@@ -213,6 +232,7 @@ func TestPostProcess(t *testing.T) {
 				Filter: Expression{Expr: "@1 = 1"},
 				Offset: 1,
 			},
+			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[1 2 4] [1 3 4]]",
 		},
@@ -223,6 +243,7 @@ func TestPostProcess(t *testing.T) {
 				Filter: Expression{Expr: "@1 = 1"},
 				Limit:  2,
 			},
+			outputTypes:   threeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[1 2 3] [1 2 4]]",
 		},
@@ -277,7 +298,7 @@ func TestPostProcess(t *testing.T) {
 				res = append(res, row)
 			}
 
-			if str := res.String(); str != tc.expected {
+			if str := res.String(tc.outputTypes); str != tc.expected {
 				t.Errorf("expected output:\n    %s\ngot:\n    %s\n", tc.expected, str)
 			}
 		})

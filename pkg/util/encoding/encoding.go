@@ -563,7 +563,8 @@ func getBytesLength(b []byte, e escapes) (int, error) {
 	for {
 		i := bytes.IndexByte(b[skipped:], e.escape)
 		if i == -1 {
-			return 0, errors.Errorf("did not find terminator %#x in buffer %#x", e.escape, b)
+			panic(fmt.Sprintf("did not find terminator %#x in buffer %#x", e.escape, b))
+			//return 0, errors.Errorf("did not find terminator %#x in buffer %#x", e.escape, b)
 		}
 		if i+1 >= len(b) {
 			return 0, errors.Errorf("malformed escape in buffer %#x", b)

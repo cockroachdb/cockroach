@@ -33,6 +33,7 @@ type algebraicSetOp struct {
 	leftSource, rightSource RowSource
 	opType                  AlgebraicSetOpSpec_SetOpType
 	ordering                Ordering
+	types                   []sqlbase.ColumnType
 	datumAlloc              *sqlbase.DatumAlloc
 }
 
@@ -74,7 +75,8 @@ func newAlgebraicSetOp(
 		}
 	}
 
-	err := e.out.Init(post, leftSource.Types(), &flowCtx.EvalCtx, output)
+	e.types = lt
+	err := e.out.Init(post, e.types, &flowCtx.EvalCtx, output)
 	if err != nil {
 		return nil, err
 	}
@@ -129,6 +131,11 @@ func (e *algebraicSetOp) exceptAll(ctx context.Context) error {
 		return err
 	}
 
+	allCols := make(columns, len(e.types))
+	for i := range allCols {
+		allCols[i] = uint32(i)
+	}
+
 	// We iterate in lockstep through the groups of rows given equalilty under
 	// the common source ordering. Whenever we find a left group without a match
 	// on the right, it's easy - we output the full group. Whenever we find a
@@ -147,7 +154,9 @@ func (e *algebraicSetOp) exceptAll(ctx context.Context) error {
 			break
 		}
 
-		cmp, err := CompareEncDatumRowForMerge(leftRows[0], rightRows[0],
+		cmp, err := CompareEncDatumRowForMerge(
+			e.types,
+			leftRows[0], rightRows[0],
 			convertToColumnOrdering(e.ordering), convertToColumnOrdering(e.ordering),
 			e.datumAlloc,
 		)
@@ -157,12 +166,10 @@ func (e *algebraicSetOp) exceptAll(ctx context.Context) error {
 		if cmp == 0 {
 			var scratch []byte
 			rightMap := make(map[string]struct{}, len(rightRows))
-			allRightCols := make(columns, len(e.rightSource.Types()))
-			for i := range e.rightSource.Types() {
-				allRightCols[i] = uint32(i)
-			}
 			for _, encDatumRow := range rightRows {
-				encoded, _, err := encodeColumnsOfRow(e.datumAlloc, scratch, encDatumRow, allRightCols, true /* encodeNull */)
+				encoded, _, err := encodeColumnsOfRow(
+					e.datumAlloc, scratch, encDatumRow, allCols, e.types, true, /* encodeNull */
+				)
 				if err != nil {
 					return err
 				}
@@ -170,7 +177,9 @@ func (e *algebraicSetOp) exceptAll(ctx context.Context) error {
 				rightMap[string(encoded)] = struct{}{}
 			}
 			for _, encDatumRow := range leftRows {
-				encoded, _, err := encodeColumnsOfRow(e.datumAlloc, scratch, encDatumRow, allRightCols, true /* encodeNull */)
+				encoded, _, err := encodeColumnsOfRow(
+					e.datumAlloc, scratch, encDatumRow, allCols, e.types, true, /* encodeNull */
+				)
 				if err != nil {
 					return err
 				}

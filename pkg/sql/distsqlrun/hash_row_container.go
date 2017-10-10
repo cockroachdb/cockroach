@@ -84,19 +84,28 @@ type hashRowContainer interface {
 // columnEncoder is a utility struct used by implementations of hashRowContainer
 // to encode equality columns, the result of which is used as a key to a bucket.
 type columnEncoder struct {
-	scratch    []byte
+	scratch []byte
+	// types for the "key" columns (equality columns)
+	keyTypes   []sqlbase.ColumnType
 	datumAlloc sqlbase.DatumAlloc
+}
+
+func (e *columnEncoder) init(types []sqlbase.ColumnType, keyCols columns) {
+	e.keyTypes = make([]sqlbase.ColumnType, len(keyCols))
+	for i, c := range keyCols {
+		e.keyTypes[i] = types[c]
+	}
 }
 
 // encodeEqualityCols returns the encoding of the specified columns of the given
 // row. The returned byte slice is only valid until the next call to
 // encodeEqualityColumns().
 // TODO(asubiotto): This logic could be shared with the diskRowContainer.
-func (e columnEncoder) encodeEqualityCols(
+func (e *columnEncoder) encodeEqualityCols(
 	ctx context.Context, row sqlbase.EncDatumRow, eqCols columns,
 ) ([]byte, error) {
 	encoded, hasNull, err := encodeColumnsOfRow(
-		&e.datumAlloc, e.scratch, row, eqCols, false, /* encodeNull */
+		&e.datumAlloc, e.scratch, row, eqCols, e.keyTypes, false, /* encodeNull */
 	)
 	if err != nil {
 		return nil, err
@@ -169,7 +178,7 @@ func (h *hashMemRowContainer) Init(
 	if h.storedEqCols != nil {
 		return errors.New("hashMemRowContainer has already been initialized")
 	}
-
+	h.columnEncoder.init(h.memRowContainer.types, storedEqCols)
 	h.shouldMark = shouldMark
 	h.storedEqCols = storedEqCols
 
@@ -367,13 +376,17 @@ var (
 // as the underlying store that rows are stored on. shouldMark specifies whether
 // the hashDiskRowContainer should set itself up to mark rows.
 func makeHashDiskRowContainer(diskMonitor *mon.BytesMonitor, e engine.Engine) hashDiskRowContainer {
-	return hashDiskRowContainer{diskMonitor: diskMonitor, engine: e}
+	return hashDiskRowContainer{
+		diskMonitor: diskMonitor,
+		engine:      e,
+	}
 }
 
 // Init implements the hashRowContainer interface.
 func (h *hashDiskRowContainer) Init(
 	ctx context.Context, shouldMark bool, types []sqlbase.ColumnType, storedEqCols columns,
 ) error {
+	h.columnEncoder.init(types, storedEqCols)
 	// Provide the diskRowContainer with an ordering on the equality columns of
 	// the rows that we will store. This will result in rows with the
 	// same equality columns ocurring contiguously in the keyspace.

@@ -36,8 +36,9 @@ import (
 //       ...
 //   }
 type StreamEncoder struct {
-	// infos is initialized when the first row is received.
-	infos []DatumInfo
+	// infos is fully initialized when the first row is received.
+	infos            []DatumInfo
+	infosInitialized bool
 
 	rowBuf       []byte
 	numEmptyRows int
@@ -59,6 +60,13 @@ type StreamEncoder struct {
 func (se *StreamEncoder) setHeaderFields(flowID FlowID, streamID StreamID) {
 	se.msgHdr.FlowID = flowID
 	se.msgHdr.StreamID = streamID
+}
+
+func (se *StreamEncoder) init(types []sqlbase.ColumnType) {
+	se.infos = make([]DatumInfo, len(types))
+	for i := range types {
+		se.infos[i].Type = types[i]
+	}
 }
 
 // AddMetadata encodes a metadata message. Unlike AddRow(), it cannot fail. This
@@ -93,25 +101,28 @@ func (se *StreamEncoder) AddMetadata(meta ProducerMetadata) {
 
 // AddRow encodes a message.
 func (se *StreamEncoder) AddRow(row sqlbase.EncDatumRow) error {
-	if se.infos == nil && row != nil {
+	if se.infos == nil {
+		panic("init not called")
+	}
+	if len(se.infos) != len(row) {
+		return errors.Errorf("inconsistent row length: expected %d, got %d", len(se.infos), len(row))
+	}
+	if !se.infosInitialized {
 		// First row. Initialize encodings.
-		se.infos = make([]DatumInfo, len(row))
 		for i := range row {
 			enc, ok := row[i].Encoding()
 			if !ok {
 				enc = preferredEncoding
 			}
-			if enc != sqlbase.DatumEncoding_VALUE && (sqlbase.HasCompositeKeyEncoding(row[i].Type.SemanticType) ||
-				sqlbase.MustBeValueEncoded(row[i].Type.SemanticType)) {
+			sType := se.infos[i].Type.SemanticType
+			if enc != sqlbase.DatumEncoding_VALUE &&
+				(sqlbase.HasCompositeKeyEncoding(sType) || sqlbase.MustBeValueEncoded(sType)) {
 				// Force VALUE encoding for composite types (key encodings may lose data).
 				enc = sqlbase.DatumEncoding_VALUE
 			}
 			se.infos[i].Encoding = enc
-			se.infos[i].Type = row[i].Type
 		}
-	}
-	if len(se.infos) != len(row) {
-		return errors.Errorf("inconsistent row length: had %d, now %d", len(se.infos), len(row))
+		se.infosInitialized = true
 	}
 	if len(row) == 0 {
 		se.numEmptyRows++
@@ -119,7 +130,7 @@ func (se *StreamEncoder) AddRow(row sqlbase.EncDatumRow) error {
 	}
 	for i := range row {
 		var err error
-		se.rowBuf, err = row[i].Encode(&se.alloc, se.infos[i].Encoding, se.rowBuf)
+		se.rowBuf, err = row[i].Encode(&se.infos[i].Type, &se.alloc, se.infos[i].Encoding, se.rowBuf)
 		if err != nil {
 			return err
 		}
@@ -143,7 +154,7 @@ func (se *StreamEncoder) FormMessage(ctx context.Context) *ProducerMessage {
 		se.headerSent = true
 	}
 	if !se.typingSent {
-		if se.infos != nil {
+		if se.infosInitialized {
 			msg.Typing = se.infos
 			se.typingSent = true
 		}

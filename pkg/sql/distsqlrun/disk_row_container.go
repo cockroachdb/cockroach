@@ -122,15 +122,16 @@ func (d *diskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) 
 	}
 
 	for i, orderInfo := range d.ordering {
+		col := orderInfo.ColIdx
 		var err error
-		d.scratchKey, err = row[orderInfo.ColIdx].Encode(&d.datumAlloc, d.encodings[i], d.scratchKey)
+		d.scratchKey, err = row[col].Encode(&d.types[col], &d.datumAlloc, d.encodings[i], d.scratchKey)
 		if err != nil {
 			return err
 		}
 	}
 	for _, i := range d.valueIdxs {
 		var err error
-		d.scratchVal, err = row[i].Encode(&d.datumAlloc, sqlbase.DatumEncoding_VALUE, d.scratchVal)
+		d.scratchVal, err = row[i].Encode(&d.types[i], &d.datumAlloc, sqlbase.DatumEncoding_VALUE, d.scratchVal)
 		if err != nil {
 			return err
 		}
@@ -179,14 +180,15 @@ func (d *diskRowContainer) keyValToRow(k []byte, v []byte) (sqlbase.EncDatumRow,
 			continue
 		}
 		var err error
-		d.scratchEncRow[orderInfo.ColIdx], k, err = sqlbase.EncDatumFromBuffer(d.types[orderInfo.ColIdx], d.encodings[i], k)
+		col := orderInfo.ColIdx
+		d.scratchEncRow[col], k, err = sqlbase.EncDatumFromBuffer(&d.types[col], d.encodings[i], k)
 		if err != nil {
 			return nil, errors.Wrap(err, "unable to decode row")
 		}
 	}
 	for _, i := range d.valueIdxs {
 		var err error
-		d.scratchEncRow[i], v, err = sqlbase.EncDatumFromBuffer(d.types[i], sqlbase.DatumEncoding_VALUE, v)
+		d.scratchEncRow[i], v, err = sqlbase.EncDatumFromBuffer(&d.types[i], sqlbase.DatumEncoding_VALUE, v)
 		if err != nil {
 			return nil, errors.Wrap(err, "unable to decode row")
 		}

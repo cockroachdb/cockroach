@@ -92,10 +92,11 @@ func makeTableDescForTest(test indexKeyTest) (TableDescriptor, map[ColumnID]int)
 func decodeIndex(
 	a *DatumAlloc, tableDesc *TableDescriptor, index *IndexDescriptor, key []byte,
 ) ([]parser.Datum, error) {
-	values, err := MakeEncodedKeyVals(tableDesc, index.ColumnIDs)
+	types, err := GetColumnTypes(tableDesc, index.ColumnIDs)
 	if err != nil {
 		return nil, err
 	}
+	values := make([]EncDatum, len(index.ColumnIDs))
 	colDirs := make([]encoding.Direction, len(index.ColumnDirections))
 	for i, dir := range index.ColumnDirections {
 		colDirs[i], err = dir.ToEncodingDirection()
@@ -103,7 +104,7 @@ func decodeIndex(
 			return nil, err
 		}
 	}
-	_, ok, err := DecodeIndexKey(a, tableDesc, index, values, colDirs, key)
+	_, ok, err := DecodeIndexKey(a, tableDesc, index, types, values, colDirs, key)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +115,7 @@ func decodeIndex(
 	decodedValues := make([]parser.Datum, len(values))
 	var da DatumAlloc
 	for i, value := range values {
-		err := value.EnsureDecoded(&da)
+		err := value.EnsureDecoded(&types[i], &da)
 		if err != nil {
 			return nil, err
 		}
@@ -223,7 +224,7 @@ func TestIndexKey(t *testing.T) {
 				}
 			}
 
-			indexID, _, err := DecodeIndexKeyPrefix(&a, &tableDesc, entry.Key)
+			indexID, _, err := DecodeIndexKeyPrefix(&tableDesc, entry.Key)
 			if err != nil {
 				t.Fatal(err)
 			}

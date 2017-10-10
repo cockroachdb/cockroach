@@ -248,8 +248,8 @@ func TestSorter(t *testing.T) {
 					retRows = append(retRows, row)
 				}
 
-				expStr := c.expected.String()
-				retStr := retRows.String()
+				expStr := c.expected.String(types)
+				retStr := retRows.String(types)
 				if expStr != retStr {
 					t.Errorf("invalid results; expected:\n   %s\ngot:\n   %s",
 						expStr, retStr)

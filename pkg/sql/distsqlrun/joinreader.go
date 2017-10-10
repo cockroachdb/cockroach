@@ -42,7 +42,8 @@ type joinReader struct {
 	fetcher sqlbase.RowFetcher
 	alloc   sqlbase.DatumAlloc
 
-	input RowSource
+	input      RowSource
+	inputTypes []sqlbase.ColumnType
 }
 
 var _ Processor = &joinReader{}
@@ -60,9 +61,10 @@ func newJoinReader(
 	}
 
 	jr := &joinReader{
-		flowCtx: flowCtx,
-		desc:    spec.Table,
-		input:   input,
+		flowCtx:    flowCtx,
+		desc:       spec.Table,
+		input:      input,
+		inputTypes: input.Types(),
 	}
 
 	types := make([]sqlbase.ColumnType, len(spec.Table.Columns))
@@ -83,6 +85,8 @@ func newJoinReader(
 		return nil, err
 	}
 
+	// TODO(radu): verify the input types match the index key types
+
 	return jr, nil
 }
 
@@ -94,9 +98,12 @@ func (jr *joinReader) generateKey(
 		return nil, errors.Errorf("joinReader input has %d columns, expected at least %d",
 			len(row), len(jr.desc.PrimaryIndex.ColumnIDs))
 	}
+	// There may be extra values on the row, e.g. to allow an ordered synchronizer
+	// to interleave multiple input streams.
 	row = row[:len(index.ColumnIDs)]
+	types := jr.inputTypes[:len(index.ColumnIDs)]
 
-	return sqlbase.MakeKeyFromEncDatums(row, &jr.desc, index, primaryKeyPrefix, alloc)
+	return sqlbase.MakeKeyFromEncDatums(types, row, &jr.desc, index, primaryKeyPrefix, alloc)
 }
 
 // mainLoop runs the mainLoop and returns any error.
