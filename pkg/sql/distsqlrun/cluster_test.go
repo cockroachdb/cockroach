@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	opentracing "github.com/opentracing/opentracing-go"
 )
@@ -556,5 +557,202 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 	}
 	if atomic.LoadInt64(&foundReq) != 1 {
 		t.Fatal("TestingEvalFilter failed to find any requests")
+	}
+}
+
+// BenchmarkInfrastructure sets up a flow that doesn't use KV at all and runs it
+// repeatedly. The intention is to profile the distsqlrun infrastructure itself.
+func BenchmarkInfrastructure(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+
+	args := base.TestClusterArgs{ReplicationMode: base.ReplicationManual}
+	tc := serverutils.StartTestCluster(b, 3, args)
+	defer tc.Stopper().Stop(context.Background())
+
+	for _, numNodes := range []int{1, 3} {
+		b.Run(fmt.Sprintf("n%d", numNodes), func(b *testing.B) {
+			for _, numRows := range []int{1, 100, 10000} {
+				b.Run(fmt.Sprintf("r%d", numRows), func(b *testing.B) {
+					// Generate some data sets, consisting of rows with three values; the first
+					// value is increasing.
+					rng, _ := randutil.NewPseudoRand()
+					lastVal := 1
+					valSpecs := make([]ValuesCoreSpec, numNodes)
+					for i := range valSpecs {
+						se := StreamEncoder{}
+						for j := 0; j < numRows; j++ {
+							row := make(sqlbase.EncDatumRow, 3)
+							typInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+							lastVal += rng.Intn(10)
+							row[0] = sqlbase.DatumToEncDatum(typInt, parser.NewDInt(parser.DInt(lastVal)))
+							row[1] = sqlbase.DatumToEncDatum(typInt, parser.NewDInt(parser.DInt(rng.Intn(100000))))
+							row[2] = sqlbase.DatumToEncDatum(typInt, parser.NewDInt(parser.DInt(rng.Intn(100000))))
+							if err := se.AddRow(row); err != nil {
+								b.Fatal(err)
+							}
+						}
+						msg := se.FormMessage(context.TODO())
+						valSpecs[i] = ValuesCoreSpec{
+							Columns:  msg.Typing,
+							RawBytes: [][]byte{msg.Data.RawBytes},
+						}
+					}
+
+					// Set up the following network:
+					//
+					//         Node 0              Node 1          ...
+					//
+					//      +----------+        +----------+
+					//      |  Values  |        |  Values  |       ...
+					//      +----------+        +----------+
+					//          |                  |
+					//          |       stream 1   |
+					// stream 0 |   /-------------/                ...
+					//          |  |
+					//          v  v
+					//     +---------------+
+					//     | ordered* sync |
+					//  +--+---------------+--+
+					//  |        No-op        |
+					//  +---------------------+
+					//
+					// *unordered if we have a single node.
+
+					reqs := make([]SetupFlowRequest, numNodes)
+					streamType := func(i int) StreamEndpointSpec_Type {
+						if i == 0 {
+							return StreamEndpointSpec_LOCAL
+						}
+						return StreamEndpointSpec_REMOTE
+					}
+					txnProto := roachpb.MakeTransaction(
+						"cluster-test",
+						nil, // baseKey
+						roachpb.NormalUserPriority,
+						enginepb.SERIALIZABLE,
+						tc.Server(0).Clock().Now(),
+						0, // maxOffset
+					)
+					for i := range reqs {
+						reqs[i] = SetupFlowRequest{
+							Version: Version,
+							Txn:     txnProto,
+							Flow: FlowSpec{
+								Processors: []ProcessorSpec{{
+									Core: ProcessorCoreUnion{Values: &valSpecs[i]},
+									Output: []OutputRouterSpec{{
+										Type: OutputRouterSpec_PASS_THROUGH,
+										Streams: []StreamEndpointSpec{
+											{Type: streamType(i), StreamID: StreamID(i), TargetAddr: tc.Server(0).ServingAddr()},
+										},
+									}},
+								}},
+							},
+						}
+					}
+
+					reqs[0].Flow.Processors[0].Output[0].Streams[0] = StreamEndpointSpec{
+						Type:     StreamEndpointSpec_LOCAL,
+						StreamID: 0,
+					}
+					inStreams := make([]StreamEndpointSpec, numNodes)
+					for i := range inStreams {
+						inStreams[i].Type = streamType(i)
+						inStreams[i].StreamID = StreamID(i)
+					}
+
+					lastProc := ProcessorSpec{
+						Input: []InputSyncSpec{{
+							Type:     InputSyncSpec_ORDERED,
+							Ordering: Ordering{Columns: []Ordering_Column{{0, Ordering_Column_ASC}}},
+							Streams:  inStreams,
+						}},
+						Core: ProcessorCoreUnion{Noop: &NoopCoreSpec{}},
+						Output: []OutputRouterSpec{{
+							Type:    OutputRouterSpec_PASS_THROUGH,
+							Streams: []StreamEndpointSpec{{Type: StreamEndpointSpec_SYNC_RESPONSE}},
+						}},
+					}
+					if numNodes == 1 {
+						lastProc.Input[0].Type = InputSyncSpec_UNORDERED
+						lastProc.Input[0].Ordering = Ordering{}
+					}
+					reqs[0].Flow.Processors = append(reqs[0].Flow.Processors, lastProc)
+
+					var clients []DistSQLClient
+					for i := 0; i < numNodes; i++ {
+						s := tc.Server(i)
+						conn, err := s.RPCContext().GRPCDial(s.ServingAddr())
+						if err != nil {
+							b.Fatal(err)
+						}
+						clients = append(clients, NewDistSQLClient(conn))
+					}
+
+					b.ResetTimer()
+					for repeat := 0; repeat < b.N; repeat++ {
+						fid := FlowID{uuid.MakeV4()}
+						for i := range reqs {
+							reqs[i].Flow.FlowID = fid
+						}
+
+						for i := 1; i < numNodes; i++ {
+							if resp, err := clients[i].SetupFlow(context.TODO(), &reqs[i]); err != nil {
+								b.Fatal(err)
+							} else if resp.Error != nil {
+								b.Fatal(resp.Error)
+							}
+						}
+						stream, err := clients[0].RunSyncFlow(context.TODO())
+						if err != nil {
+							b.Fatal(err)
+						}
+						err = stream.Send(&ConsumerSignal{SetupFlowRequest: &reqs[0]})
+						if err != nil {
+							b.Fatal(err)
+						}
+
+						var decoder StreamDecoder
+						var rows sqlbase.EncDatumRows
+						var metas []ProducerMetadata
+						for {
+							msg, err := stream.Recv()
+							if err != nil {
+								if err == io.EOF {
+									break
+								}
+								b.Fatal(err)
+							}
+							err = decoder.AddMessage(msg)
+							if err != nil {
+								b.Fatal(err)
+							}
+							rows, metas = testGetDecodedRows(b, &decoder, rows, metas)
+						}
+						metas = ignoreMisplannedRanges(metas)
+						if len(metas) != 0 {
+							b.Fatalf("unexpected metadata (%d): %+v", len(metas), metas)
+						}
+						if len(rows) != numNodes*numRows {
+							b.Errorf("got %d rows, expected %d", len(rows), numNodes*numRows)
+						}
+						var a sqlbase.DatumAlloc
+						for i := range rows {
+							if err := rows[i][0].EnsureDecoded(&a); err != nil {
+								b.Fatal(err)
+							}
+							if i > 0 {
+								last := *rows[i-1][0].Datum.(*parser.DInt)
+								curr := *rows[i][0].Datum.(*parser.DInt)
+								if last > curr {
+									b.Errorf("rows not ordered correctly (%d after %d, row %d)", curr, last, i)
+									break
+								}
+							}
+						}
+					}
+				})
+			}
+		})
 	}
 }
