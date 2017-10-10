@@ -138,6 +138,15 @@ var Generators = map[string][]Builtin{
 			"Returns the input array as a set of rows",
 		),
 	},
+	"crdb_internal.unary_table": {
+		makeGeneratorBuiltin(
+			ArgTypes{},
+			unaryValueGeneratorType,
+			makeUnaryGenerator,
+			"Produces a virtual table containing a single row with no values.\n\n"+
+				"This function is used only by CockroachDB's developers for testing purposes.",
+		),
+	},
 }
 
 func makeGeneratorBuiltin(in ArgTypes, ret TTable, g generatorFactory, info string) Builtin {
@@ -331,3 +340,38 @@ func (s *arrayValueGenerator) Next() (bool, error) {
 func (s *arrayValueGenerator) Values() Datums {
 	return Datums{s.array.Array[s.nextIndex]}
 }
+
+// unaryValueGenerator supports the execution of crdb_internal.unary_table().
+type unaryValueGenerator struct {
+	done bool
+}
+
+var unaryValueGeneratorType = TTable{
+	Cols:   TTuple{},
+	Labels: []string{"unary_table"},
+}
+
+func makeUnaryGenerator(_ *EvalContext, args Datums) (ValueGenerator, error) {
+	return &unaryValueGenerator{}, nil
+}
+
+// ResolvedType implements the ValueGenerator interface.
+func (*unaryValueGenerator) ResolvedType() TTable { return unaryValueGeneratorType }
+
+// Start implements the ValueGenerator interface.
+func (s *unaryValueGenerator) Start() error { return nil }
+
+// Close implements the ValueGenerator interface.
+func (s *unaryValueGenerator) Close() {}
+
+// Next implements the ValueGenerator interface.
+func (s *unaryValueGenerator) Next() (bool, error) {
+	if !s.done {
+		s.done = true
+		return true, nil
+	}
+	return false, nil
+}
+
+// Values implements the ValueGenerator interface.
+func (s *unaryValueGenerator) Values() Datums { return Datums{} }

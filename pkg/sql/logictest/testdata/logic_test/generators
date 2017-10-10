@@ -272,3 +272,9 @@ SELECT 'a', pg_get_keywords() b, 'c' LIMIT 1
 ----
 'a'  b                            'c'
 a    ('action','U','unreserved')  c
+
+query TTT colnames
+SELECT 'a', crdb_internal.unary_table() b, 'c' LIMIT 1
+----
+'a'  b   'c'
+a    ()  c
