@@ -989,3 +989,42 @@ func BenchmarkWideTable(b *testing.B) {
 		})
 	})
 }
+
+// BenchmarkIndexJoin measure an index-join with 1000 rows.
+func BenchmarkIndexJoin(b *testing.B) {
+	// The table will have an extra column not contained in the index to force a
+	// join with the PK.
+	create := `
+		 CREATE TABLE tidx (
+				 k INT NOT NULL,
+				 v INT NULL,
+				 extra STRING NULL,
+				 CONSTRAINT "primary" PRIMARY KEY (k ASC),
+				 INDEX idx (v ASC),
+				 FAMILY "primary" (k, v, extra)
+		 )
+		`
+	// We'll insert 1000 rows with random values below 1000 in the index. We'll
+	// then query the index with a query that retrieves all the data (but the
+	// optimizer doesn't know that).
+	insert := "insert into tidx(k,v) select generate_series(1,1000), (random()*1000)::int"
+	s, db, _ := serverutils.StartServer(b, base.TestServerArgs{UseDatabase: "bench"})
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := db.Exec(`CREATE DATABASE bench`); err != nil {
+		b.Fatal(err)
+	}
+	if _, err := db.Exec(create); err != nil {
+		b.Fatal(err)
+	}
+	if _, err := db.Exec(insert); err != nil {
+		b.Fatal(err)
+	}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		if _, err := db.Exec("select * from tidx where v < 1000"); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
