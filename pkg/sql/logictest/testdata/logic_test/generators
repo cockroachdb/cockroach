@@ -259,3 +259,16 @@ query IITTT colnames
 SELECT a.*, b.*, c.* FROM generate_series(1,1) a, unnest(ARRAY[1]) b, pg_get_keywords() c LIMIT 0
 ----
 a  b  word  catcode  catdesc
+
+# Beware of multi-valued SRFs in render position (#19149)
+query TTT colnames
+SELECT 'a', pg_get_keywords(), 'c' LIMIT 1
+----
+'a'  pg_get_keywords              'c'
+a    ('action','U','unreserved')  c
+
+query TTT colnames
+SELECT 'a', pg_get_keywords() b, 'c' LIMIT 1
+----
+'a'  b                            'c'
+a    ('action','U','unreserved')  c

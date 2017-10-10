@@ -330,6 +330,42 @@ func (p *planner) getVirtualDataSource(
 	return planDataSource{}, false, nil
 }
 
+// getDataSourceAsOneColumn builds a planDataSource from a data source
+// clause and ensures that it returns one column. If the plan would
+// return zero or more than one column, the columns are grouped into
+// a tuple. This is needed for SRF substitution (e.g. `SELECT
+// pg_get_keywords()`).
+func (p *planner) getDataSourceAsOneColumn(
+	ctx context.Context, src *parser.FuncExpr,
+) (planDataSource, error) {
+	ds, err := p.getDataSource(ctx, src, nil, publicColumns)
+	if err != nil {
+		return ds, err
+	}
+	if len(ds.info.sourceColumns) == 1 {
+		return ds, nil
+	}
+
+	// Zero or more than one column: make a tuple.
+
+	// We use the name of the function to determine the name of the
+	// rendered column.
+	fd, err := src.Func.Resolve(p.session.SearchPath)
+	if err != nil {
+		return planDataSource{}, err
+	}
+	newPlan, err := p.makeTupleRender(ctx, ds, fd.Name)
+	if err != nil {
+		return planDataSource{}, err
+	}
+
+	tn := parser.TableName{TableName: parser.Name(fd.Name)}
+	return planDataSource{
+		info: newSourceInfoForSingleTable(tn, planColumns(newPlan)),
+		plan: newPlan,
+	}, nil
+}
+
 // getDataSource builds a planDataSource from a single data source clause
 // (TableExpr) in a SelectClause.
 func (p *planner) getDataSource(
