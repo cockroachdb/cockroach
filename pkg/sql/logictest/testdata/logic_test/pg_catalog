@@ -691,6 +691,7 @@ oid   typname       typnamespace  typowner  typlen  typbyval  typtype
 2249  record        1782195457    NULL      0       true      b
 2283  anyelement    1782195457    NULL      -1      false     b
 2950  uuid          1782195457    NULL      16      true      b
+3802  json          1782195457    NULL      -1      false     b
 4089  regnamespace  1782195457    NULL      8       true      b
 
 query OTTBBTOOO colnames
@@ -728,6 +729,7 @@ oid   typname       typcategory  typispreferred  typisdefined  typdelim  typreli
 2249  record        P            false           true          ,         0         0        0
 2283  anyelement    P            false           true          ,         0         0        0
 2950  uuid          U            false           true          ,         0         0        0
+3802  json          U            false           true          ,         0         0        0
 4089  regnamespace  N            false           true          ,         0         0        0
 
 query OTOOOOOOO colnames
@@ -765,6 +767,7 @@ oid   typname       typinput        typoutput        typreceive        typsend  
 2249  record        record_in       record_out       record_recv       record_send       0         0          0
 2283  anyelement    anyelement_in   anyelement_out   anyelement_recv   anyelement_send   0         0          0
 2950  uuid          uuid_in         uuid_out         uuid_recv         uuid_send         0         0          0
+3802  json          json_in         json_out         json_recv         json_send         0         0          0
 4089  regnamespace  regnamespacein  regnamespaceout  regnamespacerecv  regnamespacesend  0         0          0
 
 query OTTTBOI colnames
@@ -802,6 +805,7 @@ oid   typname       typalign  typstorage  typnotnull  typbasetype  typtypmod
 2249  record        NULL      NULL        false       0            -1
 2283  anyelement    NULL      NULL        false       0            -1
 2950  uuid          NULL      NULL        false       0            -1
+3802  json          NULL      NULL        false       0            -1
 4089  regnamespace  NULL      NULL        false       0            -1
 
 query OTIOTTT colnames
@@ -839,6 +843,7 @@ oid   typname       typndims  typcollation  typdefaultbin  typdefault  typacl
 2249  record        0         0             NULL           NULL        NULL
 2283  anyelement    0         0             NULL           NULL        NULL
 2950  uuid          0         0             NULL           NULL        NULL
+3802  json          0         0             NULL           NULL        NULL
 4089  regnamespace  0         0             NULL           NULL        NULL
 
 ## pg_catalog.pg_proc
