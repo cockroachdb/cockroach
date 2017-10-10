@@ -636,11 +636,81 @@ func (node *InterleaveDef) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
+// PartitionBy represents an PARTITION BY definition within a CREATE/ALTER
+// TABLE/INDEX statement.
+type PartitionBy struct {
+	Fields NameList
+	List   []ListPartition
+	Range  []RangePartition
+}
+
+// Format implements the NodeFormatter interface.
+func (node *PartitionBy) Format(buf *bytes.Buffer, f FmtFlags) {
+	if len(node.List) > 0 {
+		buf.WriteString(` PARTITION BY LIST (`)
+	} else if len(node.Range) > 0 {
+		buf.WriteString(` PARTITION BY RANGE (`)
+	}
+	FormatNode(buf, f, node.Fields)
+	buf.WriteString(`) (`)
+	for i, p := range node.List {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		FormatNode(buf, f, p)
+	}
+	for i, p := range node.Range {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		FormatNode(buf, f, p)
+	}
+	buf.WriteString(`)`)
+}
+
+// ListPartition represents a PARTITION definition within a PARTITION BY LIST.
+type ListPartition struct {
+	Name         Name
+	Tuples       []*Tuple
+	Subpartition *PartitionBy
+}
+
+// Format implements the NodeFormatter interface.
+func (node ListPartition) Format(buf *bytes.Buffer, f FmtFlags) {
+	fmt.Fprintf(buf, `PARTITION %s VALUES `, node.Name)
+	for i, n := range node.Tuples {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		FormatNode(buf, f, n)
+	}
+	if node.Subpartition != nil {
+		FormatNode(buf, f, node.Subpartition)
+	}
+}
+
+// RangePartition represents a PARTITION definition within a PARTITION BY LIST.
+type RangePartition struct {
+	Name         Name
+	Tuple        *Tuple
+	Subpartition *PartitionBy
+}
+
+// Format implements the NodeFormatter interface.
+func (node RangePartition) Format(buf *bytes.Buffer, f FmtFlags) {
+	fmt.Fprintf(buf, `PARTITION %s VALUES LESS THAN `, node.Name)
+	FormatNode(buf, f, node.Tuple)
+	if node.Subpartition != nil {
+		FormatNode(buf, f, node.Subpartition)
+	}
+}
+
 // CreateTable represents a CREATE TABLE statement.
 type CreateTable struct {
 	IfNotExists   bool
 	Table         NormalizableTableName
 	Interleave    *InterleaveDef
+	PartitionBy   *PartitionBy
 	Defs          TableDefs
 	AsSource      *Select
 	AsColumnNames NameList // Only to be used in conjunction with AsSource
@@ -673,6 +743,9 @@ func (node *CreateTable) Format(buf *bytes.Buffer, f FmtFlags) {
 		buf.WriteByte(')')
 		if node.Interleave != nil {
 			FormatNode(buf, f, node.Interleave)
+		}
+		if node.PartitionBy != nil {
+			FormatNode(buf, f, node.PartitionBy)
 		}
 	}
 }

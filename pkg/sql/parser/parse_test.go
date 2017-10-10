@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"go/constant"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -142,6 +143,23 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b INT) INTERLEAVE IN PARENT foo (c) CASCADE`},
 		{`CREATE TABLE a.b (b INT)`},
 		{`CREATE TABLE IF NOT EXISTS a (b INT)`},
+
+		{`CREATE TABLE a (b INT) PARTITION BY LIST (b) (PARTITION p1 VALUES (1, DEFAULT), PARTITION p2 VALUES (2))`},
+		{`CREATE TABLE a (b INT) PARTITION BY RANGE (b) (PARTITION p1 VALUES LESS THAN (1), PARTITION p1 VALUES LESS THAN (2))`},
+		// This montrosity was added on the assumption that it's more readable
+		// than all on one line. Feel free to rip it out if you come across it
+		// and disagree.
+		{regexp.MustCompile(`\n\s*`).ReplaceAllLiteralString(
+			`CREATE TABLE a (b INT, c INT, d INT) PARTITION BY LIST (b) (
+				PARTITION p1 VALUES (1) PARTITION BY LIST (c) (
+					PARTITION p1_1 VALUES (3), PARTITION p1_2 VALUES (4, 5)
+				), PARTITION p2 VALUES (6) PARTITION BY RANGE (c) (
+					PARTITION p2_1 VALUES LESS THAN (7) PARTITION BY LIST (d) (
+						PARTITION p2_1_1 VALUES (8)
+					)
+				)
+			)`, ``),
+		},
 
 		{`CREATE TABLE a AS SELECT * FROM b`},
 		{`CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b`},
@@ -770,7 +788,7 @@ func TestParse(t *testing.T) {
 		}
 		s := stmts.String()
 		if d.sql != s {
-			t.Errorf("expected %s, but found %s", d.sql, s)
+			t.Errorf("expected \n%s\n, but found \n%s", d.sql, s)
 		}
 	}
 }
