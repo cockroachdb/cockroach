@@ -650,6 +650,14 @@ SELECT b FROM a
 statement ok
 DROP TABLE a
 
+# JSON arrays.
+
+## TODO(justin) can't store them in columns yet (#19062)
+query T
+SELECT ARRAY['{"a": 1}'::JSON]
+----
+{{"a":1}}
+
 # Collated string array columns.
 
 statement ok

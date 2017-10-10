@@ -46,6 +46,7 @@ func (*DateColType) columnType()           {}
 func (*TimestampColType) columnType()      {}
 func (*TimestampTZColType) columnType()    {}
 func (*IntervalColType) columnType()       {}
+func (*JSONColType) columnType()           {}
 func (*UUIDColType) columnType()           {}
 func (*IPAddrColType) columnType()         {}
 func (*StringColType) columnType()         {}
@@ -65,6 +66,7 @@ func (*DateColType) castTargetType()           {}
 func (*TimestampColType) castTargetType()      {}
 func (*TimestampTZColType) castTargetType()    {}
 func (*IntervalColType) castTargetType()       {}
+func (*JSONColType) castTargetType()           {}
 func (*UUIDColType) castTargetType()           {}
 func (*IPAddrColType) castTargetType()         {}
 func (*StringColType) castTargetType()         {}
@@ -422,6 +424,20 @@ var int2vectorColType = &VectorColType{
 	ParamType: intColTypeInt,
 }
 
+// JSONColType represents the JSON column type.
+type JSONColType struct {
+	Name string
+}
+
+// Format implements the NodeFormatter interface.
+func (node *JSONColType) Format(buf *bytes.Buffer, _ FmtFlags) {
+	buf.WriteString(node.Name)
+}
+
+// Pre-allocated immutable JSON column type.
+var jsonColType = &JSONColType{Name: "JSON"}
+var jsonbColType = &JSONColType{Name: "JSONB"}
+
 // Pre-allocated immutable postgres oid column types.
 var (
 	oidColTypeOid          = &OidColType{Name: "OID"}
@@ -494,6 +510,7 @@ func (node *DateColType) String() string           { return AsString(node) }
 func (node *TimestampColType) String() string      { return AsString(node) }
 func (node *TimestampTZColType) String() string    { return AsString(node) }
 func (node *IntervalColType) String() string       { return AsString(node) }
+func (node *JSONColType) String() string           { return AsString(node) }
 func (node *UUIDColType) String() string           { return AsString(node) }
 func (node *IPAddrColType) String() string         { return AsString(node) }
 func (node *StringColType) String() string         { return AsString(node) }
@@ -523,6 +540,8 @@ func DatumTypeToColumnType(t Type) (ColumnType, error) {
 		return timestampTzColTypeTimestampWithTZ, nil
 	case TypeInterval:
 		return intervalColTypeInterval, nil
+	case TypeJSON:
+		return jsonColType, nil
 	case TypeUUID:
 		return uuidColTypeUUID, nil
 	case TypeINet:
@@ -587,6 +606,8 @@ func CastTargetToDatumType(t CastTargetType) Type {
 		return TypeTimestampTZ
 	case *IntervalColType:
 		return TypeInterval
+	case *JSONColType:
+		return TypeJSON
 	case *UUIDColType:
 		return TypeUUID
 	case *IPAddrColType:
