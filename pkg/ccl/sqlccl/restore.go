@@ -689,7 +689,7 @@ func restoreTableDescs(
 		}
 
 		for _, table := range tables {
-			if err := table.Validate(ctx, txn); err != nil {
+			if err := table.Validate(ctx, txn, false /* newOrModifiedTable */); err != nil {
 				return err
 			}
 		}

@@ -549,7 +549,7 @@ func (desc *TableDescriptor) AllocateIDs() error {
 	if desc.ID == 0 {
 		desc.ID = keys.MaxReservedDescID + 1
 	}
-	err := desc.ValidateTable()
+	err := desc.ValidateTable(true /* newOrModifiedTable */)
 	desc.ID = savedID
 	return err
 }
@@ -815,8 +815,10 @@ func (desc *TableDescriptor) allocateColumnFamilyIDs(columnNames map[string]Colu
 
 // Validate validates that the table descriptor is well formed. Checks include
 // both single table and cross table invariants.
-func (desc *TableDescriptor) Validate(ctx context.Context, txn *client.Txn) error {
-	err := desc.ValidateTable()
+func (desc *TableDescriptor) Validate(
+	ctx context.Context, txn *client.Txn, newOrModifiedTable bool,
+) error {
+	err := desc.ValidateTable(newOrModifiedTable)
 	if err != nil {
 		return err
 	}
@@ -968,7 +970,12 @@ func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *c
 // names and index names are unique and verifying that column IDs and index IDs
 // are consistent. Use Validate to validate that cross-table references are
 // correct.
-func (desc *TableDescriptor) ValidateTable() error {
+// If newOrModifiedTable is true, indexes are also checked for duplicates. This
+// parameter is used to allow table usage (querying, reading the table
+// descriptor) for backwards compatibility if a table violates this check. We
+// previously allowed duplicate indexes to be made, so if those schemas are
+// modified a duplicate index error will be thrown until the index is removed.
+func (desc *TableDescriptor) ValidateTable(newOrModifiedTable bool) error {
 	if err := validateName(desc.Name, "table"); err != nil {
 		return err
 	}
@@ -1071,7 +1078,7 @@ func (desc *TableDescriptor) ValidateTable() error {
 		if err != nil {
 			return err
 		}
-		if err := desc.validateTableIndexes(columnNames, colIDToFamilyID); err != nil {
+		if err := desc.validateTableIndexes(columnNames, colIDToFamilyID, newOrModifiedTable); err != nil {
 			return err
 		}
 	}
@@ -1146,16 +1153,15 @@ func (desc *TableDescriptor) validateColumnFamilies(
 }
 
 func (desc *TableDescriptor) validateTableIndexes(
-	columnNames map[string]ColumnID, colIDToFamilyID map[ColumnID]FamilyID,
+	columnNames map[string]ColumnID, colIDToFamilyID map[ColumnID]FamilyID, newOrModifiedTable bool,
 ) error {
-	// TODO(pmattis): Check that the indexes are unique. That is, no 2 indexes
-	// should contain identical sets of columns.
 	if len(desc.PrimaryIndex.ColumnIDs) == 0 {
 		return ErrMissingPrimaryKey
 	}
 
 	indexNames := map[string]struct{}{}
 	indexIDs := map[IndexID]string{}
+	indexesInvolvedColumns := map[string]string{}
 	for _, index := range desc.AllNonDropIndexes() {
 		if err := validateName(index.Name, "index"); err != nil {
 			return err
@@ -1198,6 +1204,12 @@ func (desc *TableDescriptor) validateTableIndexes(
 			return fmt.Errorf("index %q must contain at least 1 column", index.Name)
 		}
 
+		indexInvolvedColumns := ""
+
+		if index.Unique {
+			indexInvolvedColumns = "u"
+		}
+
 		for i, name := range index.ColumnNames {
 			colID, ok := columnNames[name]
 			if !ok {
@@ -1207,7 +1219,23 @@ func (desc *TableDescriptor) validateTableIndexes(
 				return fmt.Errorf("index %q column %q should have ID %d, but found ID %d",
 					index.Name, name, colID, index.ColumnIDs[i])
 			}
+
+			if len(indexInvolvedColumns) > 0 {
+				indexInvolvedColumns += ","
+			}
+
+			if index.ColumnDirections[i] == IndexDescriptor_ASC {
+				indexInvolvedColumns += "+"
+			} else {
+				indexInvolvedColumns += "-"
+			}
+			indexInvolvedColumns += string(index.ColumnIDs[i])
 		}
+
+		if otherIndexName, ok := indexesInvolvedColumns[indexInvolvedColumns]; ok && newOrModifiedTable {
+			return fmt.Errorf("index %q is a duplicate index of index %q", index.Name, otherIndexName)
+		}
+		indexesInvolvedColumns[indexInvolvedColumns] = index.Name
 	}
 
 	for _, colID := range desc.PrimaryIndex.ColumnIDs {

@@ -48,7 +48,7 @@ CREATE TABLE c (
   foo INT,
   bar INT,
   INDEX c_foo_idx (foo),
-  INDEX (foo),
+  INDEX (foo DESC),
   INDEX c_foo_bar_idx (foo ASC, bar DESC),
   UNIQUE (bar)
 )
@@ -60,7 +60,7 @@ Table  Name           Unique  Seq  Column  Direction  Storing  Implicit
 c      primary        true    1    id      ASC        false    false
 c      c_foo_idx      false   1    foo     ASC        false    false
 c      c_foo_idx      false   2    id      ASC        false    true
-c      c_foo_idx1     false   1    foo     ASC        false    false
+c      c_foo_idx1     false   1    foo     DESC       false    false
 c      c_foo_idx1     false   2    id      ASC        false    true
 c      c_foo_bar_idx  false   1    foo     ASC        false    false
 c      c_foo_bar_idx  false   2    bar     DESC       false    false

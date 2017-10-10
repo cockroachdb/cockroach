@@ -528,6 +528,191 @@ func TestValidateTableDesc(t *testing.T) {
 				NextFamilyID: 1,
 				NextIndexID:  2,
 			}},
+		{`index "secondidx" is a duplicate index of index "primaryidx"`,
+			TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: FamilyFormatVersion,
+				Columns: []ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"bar"}},
+				},
+				PrimaryIndex: IndexDescriptor{ID: 1, Name: "primaryidx", ColumnIDs: []ColumnID{1},
+					ColumnNames:      []string{"bar"},
+					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+				},
+				Indexes: []IndexDescriptor{
+					{ID: 2, Name: "secondidx", ColumnIDs: []ColumnID{1},
+						ColumnNames:      []string{"bar"},
+						ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+					},
+				},
+				NextColumnID: 2,
+				NextFamilyID: 1,
+				NextIndexID:  3,
+			}},
+		// Test no index error is thrown for indexes that are similar but with
+		// different directions.
+		// A privilege error is thrown, as we've gotten past the index checks.
+		{`user root does not have privileges`,
+			TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: FamilyFormatVersion,
+				Columns: []ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"bar"}},
+				},
+				PrimaryIndex: IndexDescriptor{ID: 1, Name: "primaryidx", ColumnIDs: []ColumnID{1},
+					ColumnNames:      []string{"bar"},
+					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+				},
+				Indexes: []IndexDescriptor{
+					{ID: 2, Name: "secondidx", ColumnIDs: []ColumnID{1},
+						ColumnNames:      []string{"bar"},
+						ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_DESC},
+					},
+				},
+				NextColumnID: 2,
+				NextFamilyID: 1,
+				NextIndexID:  3,
+				Privileges:   &PrivilegeDescriptor{},
+			}},
+		// Test no index error is thrown for indexes that are similar but have
+		// different uniqueness.
+		// A privilege error is thrown, as we've gotten past the index checks.
+		{`user root does not have privileges`,
+			TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: FamilyFormatVersion,
+				Columns: []ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []ColumnID{1}, ColumnNames: []string{"bar"}},
+				},
+				PrimaryIndex: IndexDescriptor{ID: 1, Name: "primaryidx", ColumnIDs: []ColumnID{1},
+					ColumnNames:      []string{"bar"},
+					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+				},
+				Indexes: []IndexDescriptor{
+					{ID: 2, Name: "secondidx", ColumnIDs: []ColumnID{1},
+						ColumnNames:      []string{"bar"},
+						ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_DESC},
+					},
+				},
+				NextColumnID: 2,
+				NextFamilyID: 1,
+				NextIndexID:  3,
+				Privileges:   &PrivilegeDescriptor{},
+			}},
+		// Test no index error is thrown for similar compound indexes where only
+		// some directions are the same.
+		// A privilege error is thrown, as we've gotten past the index checks.
+		{`user root does not have privileges`,
+			TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: FamilyFormatVersion,
+				Columns: []ColumnDescriptor{
+					{ID: 1, Name: "one"},
+					{ID: 2, Name: "two"},
+					{ID: 3, Name: "three"},
+				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []ColumnID{1, 2, 3}, ColumnNames: []string{"one", "two", "three"}},
+				},
+				PrimaryIndex: IndexDescriptor{ID: 1, Name: "primaryidx", ColumnIDs: []ColumnID{1},
+					ColumnNames:      []string{"one"},
+					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+				},
+				Indexes: []IndexDescriptor{
+					{ID: 2, Name: "foo", ColumnIDs: []ColumnID{1, 2, 3},
+						ColumnNames:      []string{"one", "two", "three"},
+						ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_DESC, IndexDescriptor_ASC},
+					},
+					{ID: 3, Name: "bar", ColumnIDs: []ColumnID{1, 2, 3},
+						ColumnNames:      []string{"one", "two", "three"},
+						ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC, IndexDescriptor_ASC},
+					},
+				},
+				NextColumnID: 4,
+				NextFamilyID: 1,
+				NextIndexID:  4,
+				Privileges:   &PrivilegeDescriptor{},
+			}},
+		{`index "bar" is a duplicate index of index "foo"`,
+			TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: FamilyFormatVersion,
+				Columns: []ColumnDescriptor{
+					{ID: 1, Name: "one"},
+					{ID: 2, Name: "two"},
+					{ID: 3, Name: "three"},
+				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []ColumnID{1, 2, 3}, ColumnNames: []string{"one", "two", "three"}},
+				},
+				PrimaryIndex: IndexDescriptor{ID: 1, Name: "primaryidx", ColumnIDs: []ColumnID{1},
+					ColumnNames:      []string{"one"},
+					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+				},
+				Indexes: []IndexDescriptor{
+					{ID: 2, Name: "foo", ColumnIDs: []ColumnID{1, 2, 3},
+						ColumnNames:      []string{"one", "two", "three"},
+						ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC, IndexDescriptor_ASC},
+					},
+					{ID: 3, Name: "bar", ColumnIDs: []ColumnID{1, 2, 3},
+						ColumnNames:      []string{"one", "two", "three"},
+						ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC, IndexDescriptor_ASC},
+					},
+				},
+				NextColumnID: 4,
+				NextFamilyID: 1,
+				NextIndexID:  4,
+			}},
+		{`index "bar" is a duplicate index of index "foo"`,
+			TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: FamilyFormatVersion,
+				Columns: []ColumnDescriptor{
+					{ID: 1, Name: "bar"},
+					{ID: 2, Name: "second"},
+				},
+				Families: []ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []ColumnID{1, 2}, ColumnNames: []string{"bar", "second"}},
+				},
+				PrimaryIndex: IndexDescriptor{ID: 1, Name: "primaryidx", ColumnIDs: []ColumnID{1},
+					ColumnNames:      []string{"bar"},
+					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+				},
+				Indexes: []IndexDescriptor{
+					{ID: 2, Name: "foo", ColumnIDs: []ColumnID{2},
+						ColumnNames:      []string{"second"},
+						ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+					},
+					{ID: 3, Name: "bar", ColumnIDs: []ColumnID{2},
+						ColumnNames:      []string{"second"},
+						ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+					},
+				},
+				NextColumnID: 3,
+				NextFamilyID: 1,
+				NextIndexID:  4,
+			}},
 		{`index "bar" column "bar" should have ID 1, but found ID 2`,
 			TableDescriptor{
 				ID:            2,
@@ -589,8 +774,10 @@ func TestValidateTableDesc(t *testing.T) {
 			}},
 	}
 	for i, d := range testData {
-		if err := d.desc.ValidateTable(); err == nil {
+		if err := d.desc.ValidateTable(true /* newOrModifiedTable */); err == nil && d.err != "" {
 			t.Errorf("%d: expected \"%s\", but found success: %+v", i, d.err, d.desc)
+		} else if d.err == "" {
+			t.Errorf("%d: expected no error, but found \"%+v\"", i, err)
 		} else if d.err != err.Error() {
 			t.Errorf("%d: expected \"%s\", but found \"%+v\"", i, d.err, err)
 		}

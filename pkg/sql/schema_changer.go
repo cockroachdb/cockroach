@@ -1009,7 +1009,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 					case *sqlbase.Descriptor_Table:
 						table := union.Table
 						table.MaybeUpgradeFormatVersion()
-						if err := table.ValidateTable(); err != nil {
+						if err := table.ValidateTable(false /* newOrModifiedTable */); err != nil {
 							log.Errorf(ctx, "%s: received invalid table descriptor: %v", kv.Key, table)
 							continue
 						}
