@@ -24,7 +24,7 @@ import (
 	"sort"
 	"strings"
 
-	markdown "github.com/golang-commonmark/markdown"
+	"github.com/golang-commonmark/markdown"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
