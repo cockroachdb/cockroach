@@ -354,6 +354,34 @@ func (r *renderNode) initTargets(
 	return nil
 }
 
+// makeTupleRender creates a new renderNode which makes a single tuple
+// columns from all the columns in its source. Used by
+// getDataSourceAsOneColumn().
+func (p *planner) makeTupleRender(
+	ctx context.Context, src planDataSource, name string,
+) (*renderNode, error) {
+	// Make a simple renderNode that renders all the columns in its
+	// source.
+	r := &renderNode{
+		planner:    p,
+		source:     src,
+		sourceInfo: multiSourceInfo{src.info},
+	}
+	r.ivarHelper = parser.MakeIndexedVarHelper(r, len(r.sourceInfo[0].sourceColumns))
+	if err := r.initTargets(ctx,
+		parser.SelectExprs{parser.SelectExpr{Expr: parser.UnqualifiedStar{}}}, nil); err != nil {
+		return nil, err
+	}
+
+	// Then merge all the columns into a tuple.
+	tVal := parser.NewTypedTuple(r.render...)
+	cols := sqlbase.ResultColumns{
+		{Name: name, Typ: tVal.ResolvedType()},
+	}
+	r.resetRenderColumns(parser.TypedExprs{tVal}, cols)
+	return r, nil
+}
+
 // srfExtractionVisitor replaces the innermost set-returning function in an
 // expression with an IndexedVar that points at a new index at the end of the
 // ivarHelper. The extracted SRF is retained in the srf field.
@@ -427,7 +455,7 @@ func (r *renderNode) rewriteSRFs(
 
 	// We rewrote exactly one SRF; cross-join it with our sources and return the
 	// new render expression.
-	src, err := r.planner.getDataSource(ctx, v.srf, nil, publicColumns)
+	src, err := r.planner.getDataSourceAsOneColumn(ctx, v.srf)
 	if err != nil {
 		return target, err
 	}

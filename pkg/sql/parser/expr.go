@@ -663,6 +663,20 @@ type Tuple struct {
 	types TTuple
 }
 
+// NewTypedTuple creates a Tuple containing the given TypedExprs.
+func NewTypedTuple(exprs ...TypedExpr) *Tuple {
+	t := make(TTuple, len(exprs))
+	e := make(Exprs, len(exprs))
+	for i := range t {
+		t[i] = exprs[i].ResolvedType()
+		e[i] = exprs[i]
+	}
+	return &Tuple{
+		Exprs: e,
+		types: t,
+	}
+}
+
 // Format implements the NodeFormatter interface.
 func (node *Tuple) Format(buf *bytes.Buffer, f FmtFlags) {
 	if node.row {
