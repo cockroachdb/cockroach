@@ -29,10 +29,9 @@ import (
 func TestPostProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(intType, parser.NewDInt(parser.DInt(i)))
 	}
 
 	// We run the same input rows through various PostProcessSpecs.
@@ -231,7 +230,7 @@ func TestPostProcess(t *testing.T) {
 
 	for tcIdx, tc := range testCases {
 		t.Run(strconv.Itoa(tcIdx), func(t *testing.T) {
-			inBuf := NewRowBuffer(nil /* types */, input, RowBufferArgs{})
+			inBuf := NewRowBuffer(threeIntCols, input, RowBufferArgs{})
 			outBuf := &RowBuffer{}
 
 			var out ProcOutputHelper
