@@ -110,7 +110,7 @@ func TestOrderedSync(t *testing.T) {
 	for testIdx, c := range testCases {
 		var sources []RowSource
 		for _, srcRows := range c.sources {
-			rowBuf := NewRowBuffer(nil /* types */, srcRows, RowBufferArgs{})
+			rowBuf := NewRowBuffer(threeIntCols, srcRows, RowBufferArgs{})
 			sources = append(sources, rowBuf)
 		}
 		evalCtx := parser.NewTestingEvalContext()

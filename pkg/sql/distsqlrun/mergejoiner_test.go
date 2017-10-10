@@ -37,10 +37,13 @@ func TestMergeJoiner(t *testing.T) {
 	null := sqlbase.EncDatum{Datum: parser.DNull}
 
 	testCases := []struct {
-		spec     MergeJoinerSpec
-		outCols  []uint32
-		inputs   []sqlbase.EncDatumRows
-		expected sqlbase.EncDatumRows
+		spec       MergeJoinerSpec
+		outCols    []uint32
+		leftTypes  []sqlbase.ColumnType
+		leftInput  sqlbase.EncDatumRows
+		rightTypes []sqlbase.ColumnType
+		rightInput sqlbase.EncDatumRows
+		expected   sqlbase.EncDatumRows
 	}{
 		{
 			spec: MergeJoinerSpec{
@@ -55,21 +58,21 @@ func TestMergeJoiner(t *testing.T) {
 				Type: JoinType_INNER,
 				// Implicit @1 = @3 constraint.
 			},
-			outCols: []uint32{0, 3, 4},
-			inputs: []sqlbase.EncDatumRows{
-				{
-					{v[0], v[0]},
-					{v[1], v[4]},
-					{v[2], v[4]},
-					{v[3], v[1]},
-					{v[4], v[5]},
-					{v[5], v[5]},
-				},
-				{
-					{v[1], v[0], v[4]},
-					{v[3], v[4], v[1]},
-					{v[4], v[4], v[5]},
-				},
+			outCols:   []uint32{0, 3, 4},
+			leftTypes: twoIntCols,
+			leftInput: sqlbase.EncDatumRows{
+				{v[0], v[0]},
+				{v[1], v[4]},
+				{v[2], v[4]},
+				{v[3], v[1]},
+				{v[4], v[5]},
+				{v[5], v[5]},
+			},
+			rightTypes: threeIntCols,
+			rightInput: sqlbase.EncDatumRows{
+				{v[1], v[0], v[4]},
+				{v[3], v[4], v[1]},
+				{v[4], v[4], v[5]},
 			},
 			expected: sqlbase.EncDatumRows{
 				{v[1], v[0], v[4]},
@@ -90,19 +93,19 @@ func TestMergeJoiner(t *testing.T) {
 				Type: JoinType_INNER,
 				// Implicit @1 = @3 constraint.
 			},
-			outCols: []uint32{0, 1, 3},
-			inputs: []sqlbase.EncDatumRows{
-				{
-					{v[0], v[0]},
-					{v[0], v[1]},
-				},
-				{
-					{v[0], v[4]},
-					{v[0], v[1]},
-					{v[0], v[0]},
-					{v[0], v[5]},
-					{v[0], v[4]},
-				},
+			outCols:   []uint32{0, 1, 3},
+			leftTypes: twoIntCols,
+			leftInput: sqlbase.EncDatumRows{
+				{v[0], v[0]},
+				{v[0], v[1]},
+			},
+			rightTypes: twoIntCols,
+			rightInput: sqlbase.EncDatumRows{
+				{v[0], v[4]},
+				{v[0], v[1]},
+				{v[0], v[0]},
+				{v[0], v[5]},
+				{v[0], v[4]},
 			},
 			expected: sqlbase.EncDatumRows{
 				{v[0], v[0], v[4]},
@@ -131,26 +134,26 @@ func TestMergeJoiner(t *testing.T) {
 				OnExpr: Expression{Expr: "@4 >= 4"},
 				// Implicit AND @1 = @3 constraint.
 			},
-			outCols: []uint32{0, 1, 3},
-			inputs: []sqlbase.EncDatumRows{
-				{
-					{v[0], v[0]},
-					{v[0], v[1]},
-					{v[1], v[0]},
-					{v[1], v[1]},
-				},
-				{
-					{v[0], v[4]},
-					{v[0], v[1]},
-					{v[0], v[0]},
-					{v[0], v[5]},
-					{v[0], v[4]},
-					{v[1], v[4]},
-					{v[1], v[1]},
-					{v[1], v[0]},
-					{v[1], v[5]},
-					{v[1], v[4]},
-				},
+			outCols:   []uint32{0, 1, 3},
+			leftTypes: twoIntCols,
+			leftInput: sqlbase.EncDatumRows{
+				{v[0], v[0]},
+				{v[0], v[1]},
+				{v[1], v[0]},
+				{v[1], v[1]},
+			},
+			rightTypes: twoIntCols,
+			rightInput: sqlbase.EncDatumRows{
+				{v[0], v[4]},
+				{v[0], v[1]},
+				{v[0], v[0]},
+				{v[0], v[5]},
+				{v[0], v[4]},
+				{v[1], v[4]},
+				{v[1], v[1]},
+				{v[1], v[0]},
+				{v[1], v[5]},
+				{v[1], v[4]},
 			},
 			expected: sqlbase.EncDatumRows{
 				{v[0], v[0], v[4]},
@@ -181,35 +184,35 @@ func TestMergeJoiner(t *testing.T) {
 				OnExpr: Expression{Expr: "@2 >= @4"},
 				// Implicit AND @1 = @3 constraint.
 			},
-			outCols: []uint32{0, 1, 3},
-			inputs: []sqlbase.EncDatumRows{
-				{
-					{v[0], v[0]},
-					{v[0], v[0]},
+			outCols:   []uint32{0, 1, 3},
+			leftTypes: twoIntCols,
+			leftInput: sqlbase.EncDatumRows{
+				{v[0], v[0]},
+				{v[0], v[0]},
 
-					{v[1], v[5]},
+				{v[1], v[5]},
 
-					{v[2], v[0]},
-					{v[2], v[8]},
+				{v[2], v[0]},
+				{v[2], v[8]},
 
-					{v[3], v[5]},
+				{v[3], v[5]},
 
-					{v[6], v[0]},
-				},
-				{
-					{v[0], v[5]},
-					{v[0], v[5]},
+				{v[6], v[0]},
+			},
+			rightTypes: twoIntCols,
+			rightInput: sqlbase.EncDatumRows{
+				{v[0], v[5]},
+				{v[0], v[5]},
 
-					{v[1], v[0]},
-					{v[1], v[8]},
+				{v[1], v[0]},
+				{v[1], v[8]},
 
-					{v[2], v[5]},
+				{v[2], v[5]},
 
-					{v[3], v[0]},
-					{v[3], v[0]},
+				{v[3], v[0]},
+				{v[3], v[0]},
 
-					{v[5], v[0]},
-				},
+				{v[5], v[0]},
 			},
 			expected: sqlbase.EncDatumRows{
 				{v[0], v[0], null},
@@ -244,21 +247,21 @@ func TestMergeJoiner(t *testing.T) {
 				Type: JoinType_LEFT_OUTER,
 				// Implicit @1 = @3 constraint.
 			},
-			outCols: []uint32{0, 3, 4},
-			inputs: []sqlbase.EncDatumRows{
-				{
-					{v[0], v[0]},
-					{v[1], v[4]},
-					{v[2], v[4]},
-					{v[3], v[1]},
-					{v[4], v[5]},
-					{v[5], v[5]},
-				},
-				{
-					{v[1], v[0], v[4]},
-					{v[3], v[4], v[1]},
-					{v[4], v[4], v[5]},
-				},
+			outCols:   []uint32{0, 3, 4},
+			leftTypes: twoIntCols,
+			leftInput: sqlbase.EncDatumRows{
+				{v[0], v[0]},
+				{v[1], v[4]},
+				{v[2], v[4]},
+				{v[3], v[1]},
+				{v[4], v[5]},
+				{v[5], v[5]},
+			},
+			rightTypes: threeIntCols,
+			rightInput: sqlbase.EncDatumRows{
+				{v[1], v[0], v[4]},
+				{v[3], v[4], v[1]},
+				{v[4], v[4], v[5]},
 			},
 			expected: sqlbase.EncDatumRows{
 				{v[0], null, null},
@@ -282,21 +285,21 @@ func TestMergeJoiner(t *testing.T) {
 				Type: JoinType_RIGHT_OUTER,
 				// Implicit @1 = @3 constraint.
 			},
-			outCols: []uint32{3, 1, 2},
-			inputs: []sqlbase.EncDatumRows{
-				{
-					{v[1], v[0], v[4]},
-					{v[3], v[4], v[1]},
-					{v[4], v[4], v[5]},
-				},
-				{
-					{v[0], v[0]},
-					{v[1], v[4]},
-					{v[2], v[4]},
-					{v[3], v[1]},
-					{v[4], v[5]},
-					{v[5], v[5]},
-				},
+			outCols:   []uint32{3, 1, 2},
+			leftTypes: threeIntCols,
+			leftInput: sqlbase.EncDatumRows{
+				{v[1], v[0], v[4]},
+				{v[3], v[4], v[1]},
+				{v[4], v[4], v[5]},
+			},
+			rightTypes: twoIntCols,
+			rightInput: sqlbase.EncDatumRows{
+				{v[0], v[0]},
+				{v[1], v[4]},
+				{v[2], v[4]},
+				{v[3], v[1]},
+				{v[4], v[5]},
+				{v[5], v[5]},
 			},
 			expected: sqlbase.EncDatumRows{
 				{v[0], null, null},
@@ -320,21 +323,21 @@ func TestMergeJoiner(t *testing.T) {
 				Type: JoinType_FULL_OUTER,
 				// Implicit @1 = @3 constraint.
 			},
-			outCols: []uint32{0, 3, 4},
-			inputs: []sqlbase.EncDatumRows{
-				{
-					{v[0], v[0]},
-					{v[1], v[4]},
-					{v[2], v[4]},
-					{v[3], v[1]},
-					{v[4], v[5]},
-				},
-				{
-					{v[1], v[0], v[4]},
-					{v[3], v[4], v[1]},
-					{v[4], v[4], v[5]},
-					{v[5], v[5], v[1]},
-				},
+			outCols:   []uint32{0, 3, 4},
+			leftTypes: twoIntCols,
+			leftInput: sqlbase.EncDatumRows{
+				{v[0], v[0]},
+				{v[1], v[4]},
+				{v[2], v[4]},
+				{v[3], v[1]},
+				{v[4], v[5]},
+			},
+			rightTypes: threeIntCols,
+			rightInput: sqlbase.EncDatumRows{
+				{v[1], v[0], v[4]},
+				{v[3], v[4], v[1]},
+				{v[4], v[4], v[5]},
+				{v[5], v[5], v[1]},
 			},
 			expected: sqlbase.EncDatumRows{
 				{v[0], null, null},
@@ -350,8 +353,8 @@ func TestMergeJoiner(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			ms := c.spec
-			leftInput := NewRowBuffer(nil /* types */, c.inputs[0], RowBufferArgs{})
-			rightInput := NewRowBuffer(nil /* types */, c.inputs[1], RowBufferArgs{})
+			leftInput := NewRowBuffer(c.leftTypes, c.leftInput, RowBufferArgs{})
+			rightInput := NewRowBuffer(c.rightTypes, c.rightInput, RowBufferArgs{})
 			out := &RowBuffer{}
 			evalCtx := parser.MakeTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
