@@ -84,6 +84,18 @@ function testSendInvalidUTF8(client) {
   });
 }
 
+function testSelectJSONB(client) {
+  return new Promise(resolve => {
+    client.query({
+      text: 'SELECT \'{"a": 1}\'::JSONB val',
+    }, function (err, results) {
+      assert.equal(typeof results.rows[0].val, 'object');
+      assert.deepEqual(results.rows[0].val, {a: 1});
+      resolve();
+    });
+  });
+}
+
 function testSendNotEnoughParams(client) {
   return new Promise(resolve => {
     client.query({
@@ -111,7 +123,8 @@ client.connect(function (err) {
   runTests(client,
     testSendInvalidUTF8,
     testSendNotEnoughParams,
-    testSelect
+    testSelect,
+    testSelectJSONB
   ).then(result => {
     client.end(function (err) {
       if (err) throw err;

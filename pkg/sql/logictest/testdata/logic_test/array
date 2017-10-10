@@ -650,6 +650,14 @@ SELECT b FROM a
 statement ok
 DROP TABLE a
 
+# JSONB arrays.
+
+## Can't store them in columns yet.
+query T
+SELECT ARRAY['{"a": 1}'::JSONB]
+----
+{{"a":1}}
+
 # Collated string array columns.
 
 statement ok

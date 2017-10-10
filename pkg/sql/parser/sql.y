@@ -401,7 +401,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %token <str>   INNER INSERT INT INT2VECTOR INT2 INT4 INT8 INT64 INTEGER
 %token <str>   INTERSECT INTERVAL INTO IS ISOLATION
 
-%token <str>   JOB JOBS JOIN
+%token <str>   JOB JOBS JOIN JSONB
 
 %token <str>   KEY KEYS KV
 
@@ -4349,6 +4349,10 @@ simple_typename:
   {
     $$.val = bytesColTypeBytea
   }
+| JSONB
+  {
+    $$.val = jsonbColType
+  }
 | TEXT
   {
     $$.val = stringColTypeText
@@ -6444,6 +6448,7 @@ col_name_keyword:
 | INT64
 | INTEGER
 | INTERVAL
+| JSONB
 | LEAST
 | NAME
 | NULLIF

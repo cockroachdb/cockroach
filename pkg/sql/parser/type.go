@@ -89,6 +89,8 @@ var (
 	TypeTimestampTZ Type = tTimestampTZ{}
 	// TypeInterval is the type of a DInterval. Can be compared with ==.
 	TypeInterval Type = tInterval{}
+	// TypeJsonb is the type of a DJsonb. Can be compared with ==.
+	TypeJsonb Type = tJsonb{}
 	// TypeUUID is the type of a DUuid. Can be compared with ==.
 	TypeUUID Type = tUUID{}
 	// TypeINet is the type of a DIPAddr. Can be compared with ==.
@@ -386,6 +388,18 @@ func (tInterval) Size() (uintptr, bool)       { return unsafe.Sizeof(DInterval{}
 func (tInterval) Oid() oid.Oid                { return oid.T_interval }
 func (tInterval) SQLName() string             { return "interval" }
 func (tInterval) IsAmbiguous() bool           { return false }
+
+type tJsonb struct{}
+
+func (tJsonb) String() string { return "jsonb" }
+func (tJsonb) Equivalent(other Type) bool {
+	return UnwrapType(other) == TypeJsonb || other == TypeAny
+}
+func (tJsonb) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeJsonb }
+func (tJsonb) Size() (uintptr, bool)       { return unsafe.Sizeof(DJsonb{}), variableSize }
+func (tJsonb) Oid() oid.Oid                { return oid.T_jsonb }
+func (tJsonb) SQLName() string             { return "jsonb" }
+func (tJsonb) IsAmbiguous() bool           { return false }
 
 type tUUID struct{}
 

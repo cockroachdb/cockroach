@@ -173,6 +173,9 @@ func (b *writeBuffer) writeTextDatum(
 	case *parser.DInterval:
 		b.writeLengthPrefixedString(v.ValueAsString())
 
+	case *parser.DJsonb:
+		b.writeLengthPrefixedString(v.String())
+
 	case *parser.DTuple:
 		b.variablePutbuf.WriteString("(")
 		for i, d := range v.D {

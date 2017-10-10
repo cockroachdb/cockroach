@@ -591,6 +591,14 @@ func ParseDDecimal(s string) (*DDecimal, error) {
 	return dd, err
 }
 
+// ParseDDecimalVal parses and returns the DDecimal value represented by the
+// provided string, or an error if parsing is unsuccessful.
+func ParseDDecimalVal(s string) (DDecimal, error) {
+	dd := DDecimal{}
+	err := dd.SetString(s)
+	return dd, err
+}
+
 // SetString sets d to s. Any non-standard NaN values are converted to a
 // normal NaN.
 func (d *DDecimal) SetString(s string) error {
@@ -690,10 +698,14 @@ func (d *DDecimal) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
+func (d *DDecimal) rawSize() uintptr {
+	intVal := d.Decimal.Coeff
+	return uintptr(cap(intVal.Bits())) * unsafe.Sizeof(big.Word(0))
+}
+
 // Size implements the Datum interface.
 func (d *DDecimal) Size() uintptr {
-	intVal := d.Decimal.Coeff
-	return unsafe.Sizeof(*d) + uintptr(cap(intVal.Bits()))*unsafe.Sizeof(big.Word(0))
+	return unsafe.Sizeof(*d) + d.rawSize()
 }
 
 var (
@@ -1913,6 +1925,202 @@ func (d *DInterval) Format(buf *bytes.Buffer, f FmtFlags) {
 // Size implements the Datum interface.
 func (d *DInterval) Size() uintptr {
 	return unsafe.Sizeof(*d)
+}
+
+type jsonbType int
+
+const (
+	nullJsonbType jsonbType = iota
+	stringJsonbType
+	numberJsonbType
+	falseJsonbType
+	trueJsonbType
+	arrayJsonbType
+	objectJsonbType
+)
+
+type jsonbKeyValuePair struct {
+	k DString
+	v DJsonb
+}
+
+// DJsonb is the JSONB Datum.
+// TODO(justin): stored as a struct rather than an interface with the belief
+// that this might help with method dispatch overhead and GC pressure, but this
+// assumption still needs to be tested with a benchmark.
+// It's very possibly a net lose, because in the common case we'll have objects
+// or arrays at the top level and thus have pointers anyway, and this bloats the
+// size of a DJsonb considerably.
+// Not to mention it will largely be dealt with as a Datum anyway, so it's
+// already a pointer in that case.
+type DJsonb struct {
+	typ      jsonbType
+	numVal   DDecimal
+	strVal   DString
+	arrayVal []DJsonb
+	// objectVal is a list of kv pairs sorted by key.
+	// TODO(justin): it might make more sense to store this as a map (or ALSO as a
+	// map) for lookups, but for the moment this simplifies comparisons and it will
+	// simplify encoding.
+	objectVal []jsonbKeyValuePair
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (*DJsonb) ResolvedType() Type {
+	return TypeJsonb
+}
+
+// Compare implements the Datum interface.
+func (d *DJsonb) Compare(ctx *EvalContext, other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
+	v, ok := other.(*DJsonb)
+	if !ok {
+		panic(makeUnsupportedComparisonMessage(d, other))
+	}
+	if v.typ > d.typ {
+		return -1
+	}
+	if v.typ < d.typ {
+		return 1
+	}
+	switch d.typ {
+	case numberJsonbType:
+		return d.numVal.Compare(ctx, &v.numVal)
+	case stringJsonbType:
+		return d.strVal.Compare(ctx, &v.strVal)
+	case arrayJsonbType:
+		if len(v.arrayVal) > len(d.arrayVal) {
+			return -1
+		}
+		if len(v.arrayVal) < len(d.arrayVal) {
+			return 1
+		}
+		for i := 0; i < len(d.arrayVal); i++ {
+			cmp := d.arrayVal[i].Compare(ctx, &v.arrayVal[i])
+			if cmp != 0 {
+				return cmp
+			}
+		}
+		return 0
+	case objectJsonbType:
+		if len(v.objectVal) > len(d.objectVal) {
+			return -1
+		}
+		if len(v.objectVal) < len(d.objectVal) {
+			return 1
+		}
+		for i := 0; i < len(d.objectVal); i++ {
+			cmpKey := d.objectVal[i].k.Compare(ctx, &v.objectVal[i].k)
+			if cmpKey != 0 {
+				return cmpKey
+			}
+			cmpVal := d.objectVal[i].v.Compare(ctx, &v.objectVal[i].v)
+			if cmpVal != 0 {
+				return cmpVal
+			}
+		}
+		return 0
+	}
+	return 0
+}
+
+// Prev implements the Datum interface.
+func (d *DJsonb) Prev() (Datum, bool) {
+	return nil, false
+}
+
+// Next implements the Datum interface.
+func (d *DJsonb) Next() (Datum, bool) {
+	return nil, false
+}
+
+// IsMax implements the Datum interface.
+func (d *DJsonb) IsMax() bool {
+	return false
+}
+
+// IsMin implements the Datum interface.
+func (d *DJsonb) IsMin() bool {
+	return d.typ == nullJsonbType
+}
+
+// max implements the Datum interface.
+func (d *DJsonb) max() (Datum, bool) {
+	return nil, false
+}
+
+// min implements the Datum interface.
+func (d *DJsonb) min() (Datum, bool) {
+	return &DJsonb{typ: nullJsonbType}, true
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (*DJsonb) AmbiguousFormat() bool { return true }
+
+// Format implements the NodeFormatter interface.
+func (d *DJsonb) Format(buf *bytes.Buffer, f FmtFlags) {
+	switch d.typ {
+	case numberJsonbType:
+		d.numVal.Format(buf, f)
+	case stringJsonbType:
+		encodeJSONString(buf, string(d.strVal))
+	case trueJsonbType:
+		buf.WriteString("true")
+	case falseJsonbType:
+		buf.WriteString("false")
+	case nullJsonbType:
+		buf.WriteString("null")
+	case arrayJsonbType:
+		buf.WriteByte('[')
+		for i := range d.arrayVal {
+			if i != 0 {
+				buf.WriteByte(',')
+			}
+			d.arrayVal[i].Format(buf, f)
+		}
+		buf.WriteByte(']')
+	case objectJsonbType:
+		buf.WriteByte('{')
+		for i := range d.objectVal {
+			if i != 0 {
+				buf.WriteByte(',')
+			}
+			encodeJSONString(buf, string(d.objectVal[i].k))
+			buf.WriteByte(':')
+			d.objectVal[i].v.Format(buf, f)
+		}
+		buf.WriteByte('}')
+	}
+}
+
+// Size implements the Datum interface.
+// TODO(justin): is this a frequently-called method? Should we be caching the computed size?
+func (d *DJsonb) Size() uintptr {
+	var valSize uintptr
+	switch d.typ {
+	// We can't defer to DDecimal or DString for number or string because those
+	// count the size of the containing pointer, which we already account for.
+	case numberJsonbType:
+		valSize = d.numVal.rawSize()
+	case stringJsonbType:
+		valSize = uintptr(len(d.strVal))
+	case arrayJsonbType:
+		for i := range d.arrayVal {
+			valSize += d.arrayVal[i].Size()
+		}
+	case objectJsonbType:
+		for i := range d.objectVal {
+			valSize += d.objectVal[i].k.Size()
+			valSize += d.objectVal[i].v.Size()
+		}
+	case trueJsonbType: // 0
+	case falseJsonbType: // 0
+	case nullJsonbType: // 0
+	}
+	return unsafe.Sizeof(*d) + valSize
 }
 
 // DTuple is the tuple Datum.
