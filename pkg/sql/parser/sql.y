@@ -4983,11 +4983,11 @@ a_expr:
   }
 | a_expr IS NAN %prec IS
   {
-    $$.val = &FuncExpr{Func: wrapFunction("ISNAN"), Exprs: Exprs{$1.expr()}}
+    $$.val = &ComparisonExpr{Operator: EQ, Left: $1.expr(), Right: NewStrVal("NaN")}
   }
 | a_expr IS NOT NAN %prec IS
   {
-    $$.val = &NotExpr{Expr: &FuncExpr{Func: wrapFunction("ISNAN"), Exprs: Exprs{$1.expr()}}}
+    $$.val = &ComparisonExpr{Operator: NE, Left: $1.expr(), Right: NewStrVal("NaN")}
   }
 | a_expr IS NULL %prec IS
   {

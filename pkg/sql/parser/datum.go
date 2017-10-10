@@ -515,35 +515,50 @@ func (d *DFloat) Compare(ctx *EvalContext, other Datum) int {
 
 // Prev implements the Datum interface.
 func (d *DFloat) Prev() (Datum, bool) {
-	return NewDFloat(DFloat(math.Nextafter(float64(*d), math.Inf(-1)))), true
+	f := float64(*d)
+	if math.IsNaN(f) {
+		return nil, false
+	}
+	if f == math.Inf(-1) {
+		return dNaNFloat, true
+	}
+	return NewDFloat(DFloat(math.Nextafter(f, math.Inf(-1)))), true
 }
 
 // Next implements the Datum interface.
 func (d *DFloat) Next() (Datum, bool) {
-	return NewDFloat(DFloat(math.Nextafter(float64(*d), math.Inf(1)))), true
+	f := float64(*d)
+	if math.IsNaN(f) {
+		return dNegInfFloat, true
+	}
+	if f == math.Inf(+1) {
+		return nil, false
+	}
+	return NewDFloat(DFloat(math.Nextafter(f, math.Inf(+1)))), true
 }
 
-var dMaxFloat = NewDFloat(DFloat(math.Inf(1)))
-var dMinFloat = NewDFloat(DFloat(math.Inf(-1)))
+var dPosInfFloat = NewDFloat(DFloat(math.Inf(+1)))
+var dNegInfFloat = NewDFloat(DFloat(math.Inf(-1)))
+var dNaNFloat = NewDFloat(DFloat(math.NaN()))
 
 // IsMax implements the Datum interface.
 func (d *DFloat) IsMax() bool {
-	return *d == *dMaxFloat
+	return *d == *dPosInfFloat
 }
 
 // IsMin implements the Datum interface.
 func (d *DFloat) IsMin() bool {
-	return *d == *dMinFloat
+	return math.IsNaN(float64(*d))
 }
 
 // max implements the Datum interface.
 func (d *DFloat) max() (Datum, bool) {
-	return dMaxFloat, true
+	return dPosInfFloat, true
 }
 
 // min implements the Datum interface.
 func (d *DFloat) min() (Datum, bool) {
-	return dMinFloat, true
+	return dNaNFloat, true
 }
 
 // AmbiguousFormat implements the Datum interface.
@@ -655,24 +670,27 @@ func (d *DDecimal) Next() (Datum, bool) {
 	return nil, false
 }
 
+var dPosInfDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.Infinite, Negative: false}}
+var dNaNDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.NaN}}
+
 // IsMax implements the Datum interface.
-func (*DDecimal) IsMax() bool {
-	return false
+func (d *DDecimal) IsMax() bool {
+	return d.Form == apd.Infinite && !d.Negative
 }
 
 // IsMin implements the Datum interface.
-func (*DDecimal) IsMin() bool {
-	return false
+func (d *DDecimal) IsMin() bool {
+	return d.Form == apd.NaN
 }
 
 // max implements the Datum interface.
 func (d *DDecimal) max() (Datum, bool) {
-	return nil, false
+	return dPosInfDecimal, true
 }
 
 // min implements the Datum interface.
 func (d *DDecimal) min() (Datum, bool) {
-	return nil, false
+	return dNaNDecimal, true
 }
 
 // AmbiguousFormat implements the Datum interface.
