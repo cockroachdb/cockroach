@@ -95,7 +95,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 			}
 			targets := stmt.(*parser.Grant).Targets
 
-			matched, err := descriptorsMatchingTargets(test.sessionDatabase, descriptors, targets)
+			matched, _, err := descriptorsMatchingTargets(test.sessionDatabase, descriptors, targets)
 			if test.err != "" {
 				if !testutils.IsError(err, test.err) {
 					t.Fatalf("expected error matching '%v', but got '%v'", test.err, err)
