@@ -1,0 +1,115 @@
+# LogicTest: default distsql parallel-stmts
+
+## Basic creation
+
+query TT
+SELECT '1'::JSONB, '2'::JSON
+----
+1 2
+
+query T
+SELECT '1.00'::JSONB
+----
+1.00
+
+statement error unexpected EOF
+SELECT '{'::JSONB
+
+query T
+SELECT '"hello"'::JSONB
+----
+"hello"
+
+query T
+SELECT '"abc\n123"'::JSONB
+----
+"abc\n123"
+
+query TTT
+SELECT 'true'::JSONB, 'false'::JSONB, 'null'::JSONB
+----
+true false null
+
+query T
+SELECT '[]'::JSONB
+----
+[]
+
+query T
+SELECT '[1, 2, 3]'::JSONB
+----
+[1,2,3]
+
+query T
+SELECT '[1, "hello", [[[true, false]]]]'::JSONB
+----
+[1,"hello",[[[true,false]]]]
+
+query T
+SELECT '[1, "hello", {"a": ["foo", {"b": 3}]}]'::JSONB
+----
+[1,"hello",{"a":["foo",{"b":3}]}]
+
+query T
+SELECT '{}'::JSONB
+----
+{}
+
+query T
+SELECT '{"a": "b", "c": "d"}'::JSONB
+----
+{"a":"b","c":"d"}
+
+query T
+SELECT '{"a": 1, "c": {"foo": "bar"}}'::JSONB
+----
+{"a":1,"c":{"foo":"bar"}}
+
+# Only the final occurrence of a key in an object is kept.
+query T
+SELECT '{"a": 1, "a": 2}'::JSONB
+----
+{"a":2}
+
+query T
+SELECT NULL::JSONB
+----
+NULL
+
+# TODO(justin)
+statement error unsupported result type: jsonb
+CREATE TABLE foo (bar JSONB)
+
+## Comparisons
+
+# We opt to not expose <, >, <=, >= at this time, to avoid having to commit to
+# an ordering.
+query B
+SELECT '1'::JSONB = '1'::JSONB
+----
+true
+
+query B
+SELECT '1'::JSONB = '2'::JSONB
+----
+false
+
+query B
+SELECT '1.00'::JSONB = '1'::JSONB
+----
+true
+
+query BB
+SELECT '"hello"'::JSONB = '"hello"'::JSONB, '"hello"'::JSONB = '"goodbye"'::JSONB
+----
+true false
+
+query B
+SELECT '"hello"'::JSONB IN ('"hello"'::JSONB, '1'::JSONB, '[]'::JSONB)
+----
+true
+
+query B
+SELECT 'false'::JSONB IN ('"hello"'::JSONB, '1'::JSONB, '[]'::JSONB)
+----
+false

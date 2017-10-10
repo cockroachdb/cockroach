@@ -1119,6 +1119,7 @@ var (
 	uuidCastTypes      = []Type{TypeNull, TypeString, TypeCollatedString, TypeBytes, TypeUUID}
 	inetCastTypes      = []Type{TypeNull, TypeString, TypeCollatedString, TypeINet}
 	arrayCastTypes     = []Type{TypeNull, TypeString}
+	jsonbCastTypes     = []Type{TypeNull, TypeString}
 )
 
 // validCastTypes returns a set of types that can be cast into the provided type.
@@ -1142,6 +1143,8 @@ func validCastTypes(t Type) []Type {
 		return timestampCastTypes
 	case TypeInterval:
 		return intervalCastTypes
+	case TypeJSON:
+		return jsonbCastTypes
 	case TypeUUID:
 		return uuidCastTypes
 	case TypeINet:
@@ -1259,6 +1262,7 @@ func (node *DDecimal) String() string         { return AsString(node) }
 func (node *DFloat) String() string           { return AsString(node) }
 func (node *DInt) String() string             { return AsString(node) }
 func (node *DInterval) String() string        { return AsString(node) }
+func (node *DJSON) String() string            { return AsString(node) }
 func (node *DUuid) String() string            { return AsString(node) }
 func (node *DIPAddr) String() string          { return AsString(node) }
 func (node *DString) String() string          { return AsString(node) }
