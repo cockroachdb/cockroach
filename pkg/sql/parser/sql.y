@@ -319,6 +319,18 @@ func (u *sqlSymUnion) validationBehavior() ValidationBehavior {
 func (u *sqlSymUnion) interleave() *InterleaveDef {
     return u.val.(*InterleaveDef)
 }
+func (u *sqlSymUnion) partitionBy() *PartitionBy {
+    return u.val.(*PartitionBy)
+}
+func (u *sqlSymUnion) listPartitions() []ListPartition {
+    return u.val.([]ListPartition)
+}
+func (u *sqlSymUnion) rangePartitions() []RangePartition {
+    return u.val.([]RangePartition)
+}
+func (u *sqlSymUnion) tuples() []*Tuple {
+    return u.val.([]*Tuple)
+}
 func (u *sqlSymUnion) windowDef() *WindowDef {
     return u.val.(*WindowDef)
 }
@@ -407,7 +419,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %token <str>   KEY KEYS KV
 
 %token <str>   LATERAL LC_CTYPE LC_COLLATE
-%token <str>   LEADING LEAST LEFT LEVEL LIKE LIMIT LOCAL
+%token <str>   LEADING LEAST LEFT LESS LEVEL LIKE LIMIT LIST LOCAL
 %token <str>   LOCALTIME LOCALTIMESTAMP LOW LSHIFT
 
 %token <str>   MATCH MINUTE MONTH
@@ -436,7 +448,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %token <str>   START STATUS STDIN STRICT STRING STORE STORING SUBSTRING
 %token <str>   SYMMETRIC SYSTEM
 
-%token <str>   TABLE TABLES TEMP TEMPLATE TEMPORARY TESTING_RANGES TESTING_RELOCATE TEXT THEN
+%token <str>   TABLE TABLES TEMP TEMPLATE TEMPORARY TESTING_RANGES TESTING_RELOCATE TEXT THAN THEN
 %token <str>   TIME TIMESTAMP TIMESTAMPTZ TO TRAILING TRACE TRANSACTION TREAT TRIM TRUE
 %token <str>   TRUNCATE TYPE
 
@@ -639,6 +651,10 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 
 %type <TableDefs> opt_table_elem_list table_elem_list
 %type <*InterleaveDef> opt_interleave
+%type <*PartitionBy> opt_partition_by partition_by
+%type <[]ListPartition> list_partitions
+%type <[]RangePartition> range_partitions
+%type <[]*Tuple> list_partition_values
 %type <empty> opt_all_clause
 %type <bool> distinct_clause
 %type <NameList> opt_column_list
@@ -2541,9 +2557,17 @@ pause_stmt:
 // WEBDOCS/create-table.html
 // WEBDOCS/create-table-as.html
 create_table_stmt:
-  CREATE TABLE any_name '(' opt_table_elem_list ')' opt_interleave
+  CREATE TABLE any_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
   {
-    $$.val = &CreateTable{Table: $3.normalizableTableName(), IfNotExists: false, Interleave: $7.interleave(), Defs: $5.tblDefs(), AsSource: nil, AsColumnNames: nil}
+    $$.val = &CreateTable{
+      Table: $3.normalizableTableName(),
+      IfNotExists: false,
+      Interleave: $7.interleave(),
+      Defs: $5.tblDefs(),
+      AsSource: nil,
+      AsColumnNames: nil,
+      PartitionBy: $8.partitionBy(),
+    }
   }
 | CREATE TABLE IF NOT EXISTS any_name '(' opt_table_elem_list ')' opt_interleave
   {
@@ -2618,6 +2642,89 @@ opt_interleave_drop_behavior:
 | /* EMPTY */
   {
     $$.val = DropDefault
+  }
+
+opt_partition_by:
+  partition_by
+| /* EMPTY */
+  {
+    $$.val = (*PartitionBy)(nil)
+  }
+
+partition_by:
+  PARTITION BY LIST '(' name_list ')' '(' list_partitions ')'
+  {
+    $$.val = &PartitionBy{
+      Fields: $5.nameList(),
+      List: $8.listPartitions(),
+    }
+  }
+| PARTITION BY RANGE '(' name_list ')' '(' range_partitions ')'
+  {
+    $$.val = &PartitionBy{
+      Fields: $5.nameList(),
+      Range: $8.rangePartitions(),
+    }
+  }
+
+list_partitions:
+  PARTITION unrestricted_name VALUES list_partition_values ',' list_partitions
+  {
+    $$.val = append([]ListPartition{{
+      Name: Name($2),
+      Tuples: $4.tuples(),
+    }}, $6.listPartitions()...)
+  }
+| PARTITION unrestricted_name VALUES list_partition_values partition_by ',' list_partitions
+  {
+    $$.val = append([]ListPartition{{
+      Name: Name($2),
+      Tuples: $4.tuples(),
+      Subpartition: $5.partitionBy(),
+    }}, $7.listPartitions()...)
+  }
+| PARTITION unrestricted_name VALUES list_partition_values opt_partition_by
+  {
+    $$.val = []ListPartition{{
+      Name: Name($2),
+      Tuples: $4.tuples(),
+      Subpartition: $5.partitionBy(),
+    }}
+  }
+
+list_partition_values:
+  ctext_row
+  {
+    $$.val = []*Tuple{{Exprs: $1.exprs()}}
+  }
+| list_partition_values ',' ctext_row
+  {
+    $$.val = append($1.tuples(), &Tuple{Exprs: $3.exprs()})
+  }
+
+range_partitions:
+  PARTITION unrestricted_name VALUES LESS THAN ctext_row ',' range_partitions
+  {
+    $$.val = append([]RangePartition{{
+      Name: Name($2),
+      Tuple: &Tuple{Exprs: $6.exprs()},
+    }}, $8.rangePartitions()...)
+  }
+| PARTITION unrestricted_name VALUES LESS THAN ctext_row partition_by ',' range_partitions
+  {
+    $$.val = append([]RangePartition{{
+      Name: Name($2),
+      Tuple: &Tuple{Exprs: $6.exprs()},
+      Subpartition: $7.partitionBy(),
+    }}, $9.rangePartitions()...)
+  }
+| PARTITION unrestricted_name VALUES LESS THAN ctext_row opt_partition_by
+  {
+    $$.val = []RangePartition{{
+      Name: Name($2),
+      Tuple: &Tuple{Exprs: $6.exprs()},
+      Subpartition: $7.partitionBy(),
+    }}
   }
 
 column_def:
@@ -6375,7 +6482,9 @@ unreserved_keyword:
 | KV
 | LC_COLLATE
 | LC_CTYPE
+| LESS
 | LEVEL
+| LIST
 | LOCAL
 | LOW
 | MATCH
@@ -6455,6 +6564,7 @@ unreserved_keyword:
 | TESTING_RANGES
 | TESTING_RELOCATE
 | TEXT
+| THAN
 | TRACE
 | TRANSACTION
 | TRUNCATE
