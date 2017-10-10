@@ -26,11 +26,20 @@ send "$argv sql\r"
 eexpect root@
 send "select 1;\r"
 eexpect "+-*+\r\n*\r\n+-*+\r\n*1 row"
-send "\\q\r"
-eexpect ":/# "
+eexpect root@
+end_test
+
+start_test "Check that the shell supports unicode input and that results display unicode characters."
+send "select '☃';\r"
+eexpect "U00002603"
+eexpect "☃"
+eexpect "+-*+\r\n*1 row"
+eexpect root@
 end_test
 
 start_test "Check that tables are not pretty-printed when input is a terminal and --format=tsv is specified."
+send "\\q\r"
+eexpect ":/# "
 send "$argv sql --format=tsv\r"
 eexpect root@
 send "select 42; select 1;\r"

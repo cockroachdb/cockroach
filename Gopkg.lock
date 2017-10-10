@@ -397,8 +397,8 @@
 [[projects]]
   name = "github.com/knz/go-libedit"
   packages = [".","common","other","unix"]
-  revision = "438167ad0c588fe6f2e87cb6ba8a4e9753e6d26e"
-  version = "v1.3"
+  revision = "7577af3c24e9e2f3298da1358c4fa5e2329fd304"
+  version = "v1.4"
 
 [[projects]]
   name = "github.com/knz/strtime"
