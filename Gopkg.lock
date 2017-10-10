@@ -287,6 +287,12 @@
   revision = "100ba4e885062801d56799d78530b73b178a78f3"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/golang-commonmark/markdown"
+  packages = [".","byteutil","html","linkify"]
+  revision = "11a7a839e723aa293cccdc353b394dbfce7c131e"
+
+[[projects]]
   name = "github.com/golang/dep"
   packages = [".","cmd/dep","internal/feedback","internal/fs","internal/gps","internal/gps/paths","internal/gps/pkgtree","internal/importers","internal/importers/base","internal/importers/glide","internal/importers/godep","internal/importers/govend","internal/importers/vndr"]
   revision = "83789e236d7ff64c82ee8392005455fc1ec1983b"
@@ -497,6 +503,12 @@
   version = "v1.0.0-rc0"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/opennota/urlesc"
+  packages = ["."]
+  revision = "de5bf2ad457846296e2031421a34e2568e304e35"
+
+[[projects]]
   name = "github.com/opentracing/opentracing-go"
   packages = [".","ext","log"]
   revision = "eaaf4e1eeb7a5373b38e70901270c83577dc6fb9"
@@ -694,6 +706,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "44d910075a6ddad082ceae7c050336ca8fbe6b4fabdd108edee8a9f192b08fde"
+  inputs-digest = "e29086ff86e8e28654fe1b81c4bb73495fee6bcdb64857c7d0970326221e09a8"
   solver-name = "gps-cdcl"
   solver-version = 1
