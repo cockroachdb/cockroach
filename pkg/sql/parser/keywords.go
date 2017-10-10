@@ -239,6 +239,7 @@ var keywords = map[string]struct {
 	"rows":                      {ROWS, "U"},
 	"savepoint":                 {SAVEPOINT, "U"},
 	"scatter":                   {SCATTER, "U"},
+	"scrub":                     {SCRUB, "U"},
 	"search":                    {SEARCH, "U"},
 	"second":                    {SECOND, "U"},
 	"select":                    {SELECT, "R"},

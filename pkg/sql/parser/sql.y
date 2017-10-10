@@ -430,7 +430,7 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %token <str>   RELEASE RESET RESTORE RESTRICT RESUME RETURNING REVOKE RIGHT
 %token <str>   ROLLBACK ROLLUP ROW ROWS RSHIFT
 
-%token <str>   SAVEPOINT SCATTER SEARCH SECOND SELECT SEQUENCES
+%token <str>   SAVEPOINT SCATTER SCRUB SEARCH SECOND SELECT SEQUENCES
 %token <str>   SERIAL SERIALIZABLE SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
 %token <str>   SHOW SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 %token <str>   START STATUS STDIN STRICT STRING STORE STORING SUBSTRING
@@ -510,6 +510,9 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <Statement> cancel_stmt
 %type <Statement> cancel_job_stmt
 %type <Statement> cancel_query_stmt
+
+%type <Statement> scrub_stmt
+%type <Statement> scrub_table_stmt
 
 %type <Statement> commit_stmt
 %type <Statement> copy_from_stmt
@@ -889,6 +892,7 @@ stmt:
 | alter_stmt      // help texts in sub-rule
 | backup_stmt     // EXTEND WITH HELP: BACKUP
 | cancel_stmt     // help texts in sub-rule
+| scrub_stmt
 | copy_from_stmt
 | create_stmt     // help texts in sub-rule
 | deallocate_stmt // EXTEND WITH HELP: DEALLOCATE
@@ -1937,6 +1941,16 @@ set_stmt:
 | set_exprs_internal   { /* SKIP DOC */ }
 | use_stmt             { /* SKIP DOC */ }
 | SET LOCAL error { return unimplemented(sqllex, "set local") }
+
+scrub_stmt:
+  scrub_table_stmt
+
+scrub_table_stmt:
+  EXPERIMENTAL SCRUB TABLE string_or_placeholder
+  {
+    $$.val = &Scrub{Typ: ScrubTable, Table: $4.expr()}
+  }
+
 
 // %Help: SET CLUSTER SETTING - change a cluster setting
 // %Category: Cfg
@@ -6430,6 +6444,7 @@ unreserved_keyword:
 | STATUS
 | SAVEPOINT
 | SCATTER
+| SCRUB
 | SEARCH
 | SECOND
 | SERIALIZABLE
