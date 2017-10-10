@@ -551,6 +551,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&renderNode{}):            "render",
 	reflect.TypeOf(&scanNode{}):              "scan",
 	reflect.TypeOf(&scatterNode{}):           "scatter",
+	reflect.TypeOf(&scrubNode{}):             "scrub",
 	reflect.TypeOf(&setNode{}):               "set",
 	reflect.TypeOf(&setClusterSettingNode{}): "set cluster setting",
 	reflect.TypeOf(&setZoneConfigNode{}):     "configure zone",

@@ -1075,6 +1075,8 @@ func TestParse2(t *testing.T) {
 
 		{`USE foo`, `SET database = foo`},
 
+		{`EXPERIMENTAL SCRUB TABLE x`, `EXPERIMENTAL SCRUB TABLE 'x'`},
+
 		{`SET NAMES foo`, `SET client_encoding = foo`},
 		{`SET NAMES 'foo'`, `SET client_encoding = 'foo'`},
 		{`SET NAMES DEFAULT`, `SET client_encoding = DEFAULT`},
