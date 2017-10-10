@@ -12,15 +12,8 @@ public abstract class CockroachDBTest {
     public void setupConnection() throws Exception {
         Class.forName("org.postgresql.Driver");
 
-        String DB_URL = "jdbc:postgresql://";
-        DB_URL += System.getenv("PGHOST") + ":" + System.getenv("PGPORT");
-        DB_URL += "/test?ssl=true";
-        DB_URL += "&sslcert=" + System.getenv("PGSSLCERT");
-        DB_URL += "&sslkey=key.pk8";
-        DB_URL += "&sslrootcert=/certs/ca.crt";
-        DB_URL += "&sslfactory=org.postgresql.ssl.jdbc4.LibPQFactory";
         Connection conn;
-        conn = DriverManager.getConnection(DB_URL);
+        conn = DriverManager.getConnection(getDBUrl(), "root", "");
         PreparedStatement stmt = conn.prepareStatement("CREATE DATABASE test");
         int res = stmt.executeUpdate();
         if (res != 0) {
@@ -31,6 +24,38 @@ public abstract class CockroachDBTest {
         stmt.executeUpdate();
 
         this.conn = conn;
+    }
+
+    public String getDBUrl() {
+        String DBUrl = "jdbc:postgresql://";
+        DBUrl += pgHost() + ":" + pgPort();
+        DBUrl += "/test";
+        if (System.getenv("PGSSLCERT") != null) {
+            DBUrl += "?ssl=true";
+            DBUrl += "&sslcert=" + System.getenv("PGSSLCERT");
+            DBUrl += "&sslkey=key.pk8";
+            DBUrl += "&sslrootcert=/certs/ca.crt";
+            DBUrl += "&sslfactory=org.postgresql.ssl.jdbc4.LibPQFactory";
+        } else {
+            DBUrl += "?sslmode=disable";
+        }
+        return DBUrl;
+    }
+
+    public String pgHost() {
+        String host = System.getenv("PGHOST");
+        if (host == null) {
+            host = "localhost";
+        }
+        return host;
+    }
+
+    public String pgPort() {
+        String port = System.getenv("PGPORT");
+        if (port == null) {
+            port = "26257";
+        }
+        return port;
     }
 
     @After

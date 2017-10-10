@@ -650,6 +650,8 @@ SELECT b FROM a
 statement ok
 DROP TABLE a
 
+# JSON arrays.
+
 # Collated string array columns.
 
 statement ok
