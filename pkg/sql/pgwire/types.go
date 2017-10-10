@@ -173,6 +173,9 @@ func (b *writeBuffer) writeTextDatum(
 	case *parser.DInterval:
 		b.writeLengthPrefixedString(v.ValueAsString())
 
+	case *parser.DJSON:
+		b.writeLengthPrefixedString(v.String())
+
 	case *parser.DTuple:
 		b.variablePutbuf.WriteString("(")
 		for i, d := range v.D {
@@ -812,7 +815,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 
 	// Types with identical text/binary handling.
 	switch id {
-	case oid.T_text, oid.T_varchar:
+	case oid.T_text, oid.T_varchar, oid.T_jsonb:
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}

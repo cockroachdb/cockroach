@@ -23,6 +23,7 @@ package parser
 import (
 	"bytes"
 	"fmt"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -162,6 +163,25 @@ func encodeSQLStringInsideArray(buf *bytes.Buffer, in string) {
 		if r >= 0x20 && r < 0x7F && encodeMap[ch] == dontEscape && ch != '"' {
 			// Character is printable doesn't need escaping - just print it out.
 			buf.WriteByte(ch)
+		} else {
+			encodeEscapedChar(buf, in, r, ch, i, '"')
+		}
+	}
+
+	buf.WriteByte('"')
+}
+
+// encodeJSONString writes a string literal to buf as a JSON string.
+// Very similar to encodeSQLStringInsideArray. Primary difference is that it is
+// legal to directly print out unicode characters.
+func encodeJSONString(buf *bytes.Buffer, in string, f FmtFlags) {
+	buf.WriteByte('"')
+	// Loop through each unicode code point.
+	for i, r := range in {
+		ch := byte(r)
+		if unicode.IsPrint(r) && encodeMap[ch] == dontEscape && ch != '"' {
+			// Character is printable doesn't need escaping - just print it out.
+			buf.WriteRune(r)
 		} else {
 			encodeEscapedChar(buf, in, r, ch, i, '"')
 		}

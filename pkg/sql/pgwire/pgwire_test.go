@@ -870,6 +870,10 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs(`{"aaa"}`).Results(`{"aaa"}`),
 			baseTest.SetArgs(`{aaa,bbb,ccc}`).Results(`{"aaa","bbb","ccc"}`),
 		},
+		"SELECT $1:::JSON": {
+			baseTest.SetArgs(`true`).Results(`true`),
+			baseTest.SetArgs(`"hello"`).Results(`"hello"`),
+		},
 
 		// TODO(jordan): blocked on #13651
 		//"SELECT $1::INT[]": {

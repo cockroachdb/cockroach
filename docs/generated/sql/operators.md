@@ -186,6 +186,8 @@
 <tr><td><a href="int.html">int[]</a> <code>=</code> <a href="int.html">int[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="interval.html">interval</a> <code>=</code> <a href="interval.html">interval</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="interval.html">interval[]</a> <code>=</code> <a href="interval.html">interval[]</a></td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>jsonb <code>=</code> jsonb</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>jsonb <code>=</code> jsonb</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>oid <code>=</code> oid</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>oid <code>=</code> oid</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>=</code> <a href="string.html">string</a></td><td><a href="bool.html">bool</a></td></tr>
@@ -224,6 +226,7 @@
 <tr><td><a href="inet.html">inet</a> <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="int.html">int</a> <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="interval.html">interval</a> <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>jsonb <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>oid <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="timestamp.html">timestamp</a> <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
@@ -283,6 +286,9 @@
 <tr><td><a href="interval.html">interval</a> <code>||</code> <a href="interval.html">interval[]</a></td><td><a href="interval.html">interval[]</a></td></tr>
 <tr><td><a href="interval.html">interval[]</a> <code>||</code> <a href="interval.html">interval</a></td><td><a href="interval.html">interval[]</a></td></tr>
 <tr><td><a href="interval.html">interval[]</a> <code>||</code> <a href="interval.html">interval[]</a></td><td><a href="interval.html">interval[]</a></td></tr>
+<tr><td>jsonb <code>||</code> jsonb</td><td>jsonb</td></tr>
+<tr><td>jsonb <code>||</code> jsonb</td><td>jsonb</td></tr>
+<tr><td>jsonb <code>||</code> jsonb</td><td>jsonb</td></tr>
 <tr><td>oid <code>||</code> oid</td><td>oid</td></tr>
 <tr><td>oid <code>||</code> oid</td><td>oid</td></tr>
 <tr><td>oid <code>||</code> oid</td><td>oid</td></tr>
