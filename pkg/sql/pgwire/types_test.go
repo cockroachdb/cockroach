@@ -15,6 +15,7 @@
 package pgwire
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -105,6 +106,57 @@ func TestIntArrayRoundTrip(t *testing.T) {
 	defer evalCtx.Stop(context.Background())
 	if got.Compare(evalCtx, d) != 0 {
 		t.Fatalf("expected %s, got %s", d, got)
+	}
+}
+
+func TestJSONSQLArray(t *testing.T) {
+	testCases := []struct {
+		input    []string
+		expected string
+	}{
+		{[]string{`true`, `false`}, `{"true","false"}`},
+		{[]string{`123`}, `{"123"}`},
+		{[]string{`"hello"`}, `{"\"hello\""}`},
+		{[]string{`"abc\"123"`}, `{"\"abc\\\"123\""}`},
+		{[]string{`{}`}, `{"{}"}`},
+		{[]string{`{"foo":"bar"}`}, `{"{\"foo\":\"bar\"}"}`},
+		{[]string{`{"foo":[1,"hello"]}`}, `{"{\"foo\":[1,\"hello\"]}"}`},
+		{[]string{`[1, 2, 3]`}, `{"[1,2,3]"}`},
+		{[]string{`["hello"]`}, `{"[\"hello\"]"}`},
+		{[]string{`"\""`}, `{"\"\\\"\""}`},
+	}
+
+	for _, tc := range testCases {
+		ary := parser.NewDArray(parser.TypeJSON)
+		for _, s := range tc.input {
+			j, err := parser.ParseDJSON(s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := ary.Append(j); err != nil {
+				t.Fatal(err)
+			}
+		}
+		var buf writeBuffer
+		buf.writeTextDatum(context.Background(), ary, time.UTC)
+		// There's some extra garbage at the front we don't care about.
+		encoded := strings.TrimLeftFunc(buf.wrapped.String(), func(r rune) bool { return r != '{' })
+
+		t.Run(tc.expected, func(t *testing.T) {
+			if encoded != tc.expected {
+				t.Fatalf("expected %v, got %v", tc.expected, encoded)
+			}
+		})
+
+		t.Run("round trip "+tc.expected, func(t *testing.T) {
+			parsedArray, err := parser.ParseDArrayFromString(parser.NewTestingEvalContext(), encoded, &parser.JSONColType{Name: "JSON"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if parsedArray.Compare(parser.NewTestingEvalContext(), ary) != 0 {
+				t.Fatalf("expected %v to equal %v", parsedArray, ary)
+			}
+		})
 	}
 }
 

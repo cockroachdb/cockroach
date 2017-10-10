@@ -705,6 +705,8 @@ oid   typname       typnamespace  typowner  typlen  typbyval  typtype
 2283  anyelement    1782195457    NULL      -1      false     b
 2950  uuid          1782195457    NULL      16      true      b
 2951  _uuid         1782195457    NULL      -1      false     b
+3802  jsonb         1782195457    NULL      -1      false     b
+3807  _jsonb        1782195457    NULL      -1      false     b
 4089  regnamespace  1782195457    NULL      8       true      b
 
 query OTTBBTOOO colnames
@@ -756,6 +758,8 @@ oid   typname       typcategory  typispreferred  typisdefined  typdelim  typreli
 2283  anyelement    P            false           true          ,         0         0        0
 2950  uuid          U            false           true          ,         0         0        2951
 2951  _uuid         A            false           true          ,         0         2950     0
+3802  jsonb         U            false           true          ,         0         0        3807
+3807  _jsonb        A            false           true          ,         0         3802     0
 4089  regnamespace  N            false           true          ,         0         0        0
 
 query OTOOOOOOO colnames
@@ -807,6 +811,8 @@ oid   typname       typinput        typoutput        typreceive        typsend  
 2283  anyelement    anyelement_in   anyelement_out   anyelement_recv   anyelement_send   0         0          0
 2950  uuid          uuid_in         uuid_out         uuid_recv         uuid_send         0         0          0
 2951  _uuid         array_in        array_out        array_recv        array_send        0         0          0
+3802  jsonb         jsonb_in        jsonb_out        jsonb_recv        jsonb_send        0         0          0
+3807  _jsonb        array_in        array_out        array_recv        array_send        0         0          0
 4089  regnamespace  regnamespacein  regnamespaceout  regnamespacerecv  regnamespacesend  0         0          0
 
 query OTTTBOI colnames
@@ -858,6 +864,8 @@ oid   typname       typalign  typstorage  typnotnull  typbasetype  typtypmod
 2283  anyelement    NULL      NULL        false       0            -1
 2950  uuid          NULL      NULL        false       0            -1
 2951  _uuid         NULL      NULL        false       0            -1
+3802  jsonb         NULL      NULL        false       0            -1
+3807  _jsonb        NULL      NULL        false       0            -1
 4089  regnamespace  NULL      NULL        false       0            -1
 
 query OTIOTTT colnames
@@ -909,6 +917,8 @@ oid   typname       typndims  typcollation  typdefaultbin  typdefault  typacl
 2283  anyelement    0         0             NULL           NULL        NULL
 2950  uuid          0         0             NULL           NULL        NULL
 2951  _uuid         0         0             NULL           NULL        NULL
+3802  jsonb         0         0             NULL           NULL        NULL
+3807  _jsonb        0         0             NULL           NULL        NULL
 4089  regnamespace  0         0             NULL           NULL        NULL
 
 ## pg_catalog.pg_proc

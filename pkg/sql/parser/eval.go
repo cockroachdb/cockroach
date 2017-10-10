@@ -1258,6 +1258,11 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
+			LeftType:  TypeJSON,
+			RightType: TypeJSON,
+			fn:        cmpOpScalarEQFn,
+		},
+		CmpOp{
 			LeftType:  TypeUUID,
 			RightType: TypeUUID,
 			fn:        cmpOpScalarEQFn,
@@ -1563,6 +1568,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeEvalTupleIn(TypeTimestamp),
 		makeEvalTupleIn(TypeTimestampTZ),
 		makeEvalTupleIn(TypeInterval),
+		makeEvalTupleIn(TypeJSON),
 		makeEvalTupleIn(TypeUUID),
 		makeEvalTupleIn(TypeINet),
 		makeEvalTupleIn(TypeTuple),
@@ -2567,6 +2573,11 @@ func performCast(ctx *EvalContext, d Datum, t CastTargetType) (Datum, error) {
 		case *DInterval:
 			return d, nil
 		}
+	case *JSONColType:
+		switch v := d.(type) {
+		case *DString:
+			return ParseDJSON(string(*v))
+		}
 	case *ArrayColType:
 		if s, ok := d.(*DString); ok {
 			return ParseDArrayFromString(ctx, string(*s), typ.ParamType)
@@ -3090,6 +3101,11 @@ func (t *DInt) Eval(_ *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (t *DInterval) Eval(_ *EvalContext) (Datum, error) {
+	return t, nil
+}
+
+// Eval implements the TypedExpr interface.
+func (t *DJSON) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 

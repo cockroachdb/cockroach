@@ -430,6 +430,8 @@ func TestParse(t *testing.T) {
 		{`SELECT a#>>'{x}'`},
 		{`SELECT (a->'x')->'y'`},
 		{`SELECT (a->'x')->>'y'`},
+		{`SELECT ''::JSON`},
+		{`SELECT ''::JSONB`},
 
 		{`SELECT 1 FROM t`},
 		{`SELECT 1, 2 FROM t`},
