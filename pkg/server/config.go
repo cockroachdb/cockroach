@@ -121,6 +121,7 @@ type Config struct {
 	Settings *cluster.Settings
 
 	base.RaftConfig
+	base.LeaseManagerConfig
 
 	// Unix socket: for postgres only.
 	SocketFile string
