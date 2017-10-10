@@ -8,10 +8,51 @@ CREATE TABLE p (f float primary key)
 statement ok
 INSERT INTO p VALUES ('NaN'::float), ('Inf'::float), ('-Inf'::float), ('0'::float), (1), (-1)
 
+# -0 and 0 should both equate to zero with or without an index.
+
 statement error duplicate key value
 INSERT INTO p VALUES ('-0'::float)
 
-# -0 and 0 should both equate to zero with or without an index
+# Verify that lookups for NaN use indices when possible:
+# - `WHERE f IS NaN` should perform a point lookup.
+# - `WHERE f = 'NaN'` should also perform a point lookup.
+# - `WHERE isnan(f)` is a function so it can't perform a point lookup.
+
+query ITTT
+EXPLAIN SELECT * FROM p WHERE f IS NaN
+----
+0  scan  ·      ·
+0  ·     table  p@primary
+0  ·     spans  /NaN-/-Inf
+
+query ITTT
+EXPLAIN SELECT * FROM p WHERE f = 'NaN'
+----
+0  scan  ·      ·
+0  ·     table  p@primary
+0  ·     spans  /NaN-/-Inf
+
+query ITTT
+EXPLAIN SELECT * FROM p WHERE isnan(f)
+----
+0  scan  ·      ·
+0  ·     table  p@primary
+0  ·     spans  ALL
+
+query R
+SELECT * FROM p WHERE f = 'NaN'
+----
+NaN
+
+query RBBB
+SELECT f, f IS NaN, f = 'NaN', isnan(f) FROM p ORDER BY 1
+----
+NaN   true   true   true
+-Inf  false  false  false
+-1    false  false  false
+0     false  false  false
+1     false  false  false
++Inf  false  false  false
 
 statement ok
 CREATE TABLE i (f float)
