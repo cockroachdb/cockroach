@@ -122,6 +122,9 @@ type Config struct {
 
 	base.RaftConfig
 
+	// LeaseManagerConfig holds configuration values specific to the LeaseManager.
+	LeaseManagerConfig *base.LeaseManagerConfig
+
 	// Unix socket: for postgres only.
 	SocketFile string
 
@@ -369,6 +372,7 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 
 	cfg.Config.InitDefaults()
 	cfg.RaftConfig.SetDefaults()
+	cfg.LeaseManagerConfig = base.NewLeaseManagerConfig()
 	return cfg
 }
 

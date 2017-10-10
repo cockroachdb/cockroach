@@ -411,7 +411,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 	// Try to trigger the race repeatedly: race an AcquireByName against a
 	// Release.
-	// tableChan acts as a barrier, synchornizing the two routines at every
+	// tableChan acts as a barrier, synchronizing the two routines at every
 	// iteration.
 	tableChan := make(chan *sqlbase.TableDescriptor)
 	errChan := make(chan error)
