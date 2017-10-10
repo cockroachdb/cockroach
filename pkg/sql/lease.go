@@ -44,7 +44,7 @@ import (
 // TODO(pmattis): Periodically renew leases for tables that were used recently and
 // for which the lease will expire soon.
 
-var (
+const (
 	// LeaseDuration is the mean duration a lease will be acquired for. The
 	// actual duration is jittered in the range
 	// [0.75,1.25]*LeaseDuration. Exported for testing purposes only.
@@ -118,14 +118,18 @@ type LeaseStore struct {
 	clock  *hlc.Clock
 	nodeID *base.NodeIDContainer
 
+	// leaseDuration is a constant initialized by NewLeaseManager. It is modified
+	// only during by tests through testSetLeaseDuration.
+	leaseDuration time.Duration
+
 	testingKnobs LeaseStoreTestingKnobs
 	memMetrics   *MemoryMetrics
 }
 
 // jitteredLeaseDuration returns a randomly jittered duration from the interval
 // [0.75 * leaseDuration, 1.25 * leaseDuration].
-func jitteredLeaseDuration() time.Duration {
-	return time.Duration(float64(LeaseDuration) * (0.75 + 0.5*rand.Float64()))
+func jitteredLeaseDuration(leaseDuration time.Duration) time.Duration {
+	return time.Duration(float64(leaseDuration) * (0.75 + 0.5*rand.Float64()))
 }
 
 // acquire a lease on the most recent version of a table descriptor.
@@ -137,7 +141,7 @@ func (s LeaseStore) acquire(
 	var table *tableVersionState
 	err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		expiration := txn.OrigTimestamp()
-		expiration.WallTime += int64(jitteredLeaseDuration())
+		expiration.WallTime += int64(jitteredLeaseDuration(s.leaseDuration))
 		if expiration.Less(minExpirationTime) {
 			expiration = minExpirationTime
 		}
@@ -1099,11 +1103,12 @@ func NewLeaseManager(
 ) *LeaseManager {
 	lm := &LeaseManager{
 		LeaseStore: LeaseStore{
-			db:           db,
-			clock:        clock,
-			nodeID:       nodeID,
-			testingKnobs: testingKnobs.LeaseStoreTestingKnobs,
-			memMetrics:   memMetrics,
+			db:            db,
+			clock:         clock,
+			nodeID:        nodeID,
+			leaseDuration: LeaseDuration,
+			testingKnobs:  testingKnobs.LeaseStoreTestingKnobs,
+			memMetrics:    memMetrics,
 		},
 		testingKnobs: testingKnobs,
 		tableNames: tableNameCache{
@@ -1122,6 +1127,13 @@ func NewLeaseManager(
 
 func nameMatchesTable(table *sqlbase.TableDescriptor, dbID sqlbase.ID, tableName string) bool {
 	return table.ParentID == dbID && table.Name == tableName
+}
+
+// TestSetLeaseDuration is used to modify the leaseDuration constant for
+// the lifespan of the LeaseManager. This function exists and is exported only
+// for testing purposes.
+func (m *LeaseManager) TestSetLeaseDuration(leaseDuration time.Duration) {
+	m.LeaseStore.leaseDuration = leaseDuration
 }
 
 // AcquireByName returns a table version for the specified table valid for
