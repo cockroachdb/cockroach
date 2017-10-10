@@ -19,16 +19,19 @@ package sql
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestTableSet(t *testing.T) {
@@ -411,7 +414,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 
 	// Try to trigger the race repeatedly: race an AcquireByName against a
 	// Release.
-	// tableChan acts as a barrier, synchornizing the two routines at every
+	// tableChan acts as a barrier, synchronizing the two routines at every
 	// iteration.
 	tableChan := make(chan *sqlbase.TableDescriptor)
 	errChan := make(chan error)
@@ -557,4 +560,215 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	wg.Wait()
+}
+
+// Test one possible outcome of a race between a lease acquisition (the first
+// case through tableState.acquire(), the second through
+// tableState.acquireFreshestFromStore()) and a release of the lease that was
+// just acquired. Precisely:
+// 1. Thread 1 calls either acquireFreshestFromStore() or acquire().
+// 2. Thread 1 releases the lock on tableState and starts acquisition of a lease
+//    from the store, blocking until it's finished.
+// 3. Thread 2 calls acquire(). The lease has not been acquired yet, so it
+//    also enters the acquisition code path (calling DoChan).
+// 4. Thread 2 proceeds to release the lock on tableState waiting for the
+//    in-flight acquisition.
+// 4. The lease is acquired from the store and the waiting routines are
+//    unblocked.
+// 5. Thread 2 unblocks first, and releases the new lease, for whatever reason.
+// 5. Thread 1 wakes up. At this point, a naive implementation would use the
+//    newly acquired lease, which would be incorrect. The test checks that
+//    acquireFreshestFromStore() or acquire() notices, after re-acquiring the
+//    tableState lock, that the new lease has been released and acquires a new
+//    one.
+func TestLeaseAcquireAndReleaseConcurrenctly(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Result is a struct for moving results to the main result routine.
+	type Result struct {
+		table *sqlbase.TableDescriptor
+		exp   hlc.Timestamp
+		err   error
+	}
+
+	descID := sqlbase.ID(keys.LeaseTableID)
+
+	// acquireBlock calls Acquire and then releases the lease.
+	acquireBlock := func(
+		ctx context.Context,
+		m *LeaseManager,
+		acquireChan chan Result,
+	) {
+		table, e, err := m.Acquire(ctx, m.clock.Now(), descID)
+		acquireChan <- Result{err: err, exp: e, table: table}
+	}
+
+	// acquireFreshestBlock calls acquireFreshestFromStore and then releases the
+	// lease.
+	acquireFreshestBlock := func(
+		ctx context.Context,
+		m *LeaseManager,
+		acquireChan chan Result,
+	) {
+		table, e, err := m.acquireFreshestFromStore(ctx, descID)
+		acquireChan <- Result{err: err, exp: e, table: table}
+	}
+
+	testCases := []struct {
+		// The name of the test
+		name string
+		// The routine being called during the test as the "thread 1" mentioned in
+		// the comment preceding this test.
+		routineFunc func(ctx context.Context, m *LeaseManager, acquireChan chan Result)
+		// Whether the second routine is a call to LeaseManager.acquireFreshest or
+		// not. This determines which channel we unblock.
+		isSecondCallAcquireFreshest bool
+	}{
+		// This test case checks if the race condition occurs where thread 1 calls
+		// tableState.acquire().
+		{
+			name:                        "CallAcquireConcurrently",
+			routineFunc:                 acquireBlock,
+			isSecondCallAcquireFreshest: false,
+		},
+		// This test case checks if the race condition occurs where thread 1 calls
+		// tableState.acquireFreshestFromStore().
+		{
+			name:                        "CallAcquireFreshestAndAcquireConcurrently",
+			routineFunc:                 acquireFreshestBlock,
+			isSecondCallAcquireFreshest: true,
+		},
+	}
+
+	for _, test := range testCases {
+		ctx := context.Background()
+		t.Run(test.name, func(t *testing.T) {
+			// blockChan and freshestBlockChan is used to set up the race condition.
+			blockChan := make(chan struct{})
+			freshestBlockChan := make(chan struct{})
+			// acquisitionBlock is used to prevent acquireNodeLease from
+			// completing, to force a lease to delay its acquisition.
+			acquisitionBlock := make(chan struct{})
+
+			// preblock is used for the main routine to wait for all acquisition
+			// routines to catch up.
+			var preblock sync.WaitGroup
+			// acquireArrivals and acquireFreshestArrivals tracks how many times
+			// we've arrived at the knob codepath for the corresponding functions.
+			// This is needed because the fix to the race condition hits the knob more
+			// than once in a single routine, so we need to ignore any extra passes.
+			var acquireArrivals int32
+			var acquireFreshestArrivals int32
+			// leasesAcquiredCount counts how many leases were acquired in total.
+			var leasesAcquiredCount int32
+
+			removalTracker := NewLeaseRemovalTracker()
+			testingKnobs := base.TestingKnobs{
+				SQLLeaseManager: &LeaseManagerTestingKnobs{
+					LeaseStoreTestingKnobs: LeaseStoreTestingKnobs{
+						RemoveOnceDereferenced: true,
+						LeaseReleasedEvent:     removalTracker.LeaseRemovedNotification,
+						LeaseAcquireFreshestResultBlockEvent: func() {
+							log.Warningf(ctx, "AcquireFreshestPrelockEvent")
+							if atomic.LoadInt32(&acquireFreshestArrivals) < 1 {
+								log.Warningf(ctx, "AcquireFreshestPrelockEvent first arrival: blocking")
+								atomic.AddInt32(&acquireFreshestArrivals, 1)
+								preblock.Done()
+								<-freshestBlockChan
+								log.Warningf(ctx, "AcquireFreshestPrelockEvent first arrival: unblocking")
+							}
+						},
+						LeaseAcquireResultBlockEvent: func() {
+							if count := atomic.LoadInt32(&acquireArrivals); (count < 1 && test.isSecondCallAcquireFreshest) ||
+								(count < 2 && !test.isSecondCallAcquireFreshest) {
+								atomic.AddInt32(&acquireArrivals, 1)
+								preblock.Done()
+								<-blockChan
+							}
+						},
+						LeaseAcquiredEvent: func(_ sqlbase.TableDescriptor, _ error) {
+							atomic.AddInt32(&leasesAcquiredCount, 1)
+							<-acquisitionBlock
+						},
+					},
+				},
+			}
+
+			s, _, _ := serverutils.StartServer(
+				t, base.TestServerArgs{Knobs: testingKnobs})
+			defer s.Stopper().Stop(context.TODO())
+			leaseManager := s.LeaseManager().(*LeaseManager)
+
+			// Set the lease jitter so leases will have monotonically increasing
+			// expiration. This prevents a false test failure if two leases happen to
+			// have the same expiration due to randomness as expiration is used to
+			// check if two leases are equal.
+			leaseManager.TestSetLeaseJitterFraction(0)
+
+			acquireResultChan := make(chan Result)
+
+			// Start two routines to acquire and release.
+			preblock.Add(2)
+			go acquireBlock(ctx, leaseManager, acquireResultChan)
+			go test.routineFunc(ctx, leaseManager, acquireResultChan)
+
+			// Wait until both routines arrive
+			preblock.Wait()
+
+			// Allow the acquisition to finish. By delaying it until now, we guarantee
+			// both routines will receive the same lease.
+			acquisitionBlock <- struct{}{}
+
+			// Allow the first routine to finish acquisition. In the case where both
+			// routines are calling Acquire(), first refers to whichever routine
+			// continues, order does not matter.
+			blockChan <- struct{}{}
+			// Wait for the first routines results
+			result1 := <-acquireResultChan
+			if result1.err != nil {
+				t.Fatal(result1.err)
+			}
+
+			// Release and remove the lease
+			tracker := removalTracker.TrackRemoval(result1.table)
+			if err := leaseManager.Release(result1.table); err != nil {
+				t.Fatal(err)
+			}
+			// Wait until the lease is fully removed.
+			if err := tracker.WaitForRemoval(); err != nil {
+				t.Fatal(err)
+			}
+
+			// Allow the second routine to proceed.
+			if test.isSecondCallAcquireFreshest {
+				freshestBlockChan <- struct{}{}
+			} else {
+				blockChan <- struct{}{}
+			}
+
+			// Allow all future acquisitions to complete.
+			close(acquisitionBlock)
+
+			// Get the acquisition results of the second routine.
+			result2 := <-acquireResultChan
+			if result2.err != nil {
+				t.Fatal(result2.err)
+			}
+			// Release and remove the lease
+			tracker = removalTracker.TrackRemoval(result2.table)
+			if err := leaseManager.Release(result2.table); err != nil {
+				t.Fatal(err)
+			}
+			// Wait until the lease is fully removed.
+			if err := tracker.WaitForRemoval(); err != nil {
+				t.Fatal(err)
+			}
+
+			if result1.table == result2.table && result1.exp == result2.exp {
+				t.Fatalf("Expected the leases to be different. TableDescriptor pointers are equal and both the same expiration")
+			} else if count := atomic.LoadInt32(&leasesAcquiredCount); count != 2 {
+				t.Fatalf("Expected to acquire 2 leases, instead got %d", count)
+			}
+		})
+	}
 }
