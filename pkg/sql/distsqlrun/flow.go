@@ -277,11 +277,14 @@ func (f *Flow) makeProcessor(ps *ProcessorSpec, inputs []RowSource) (Processor, 
 	if err != nil {
 		return nil, err
 	}
-	// Initialize any routers (the setupRouter case above).
+	// Initialize any routers (the setupRouter case above) and outboxes.
 	types := proc.OutputTypes()
 	for _, o := range outputs {
-		if r, ok := o.(router); ok {
-			r.init(&f.FlowCtx, types)
+		switch o := o.(type) {
+		case router:
+			o.init(&f.FlowCtx, types)
+		case *outbox:
+			o.init(types)
 		}
 	}
 	return proc, nil

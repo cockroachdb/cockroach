@@ -644,9 +644,14 @@ func (h *hashJoiner) probePhase(
 // If the row contains any NULLs and encodeNull is false, hasNull is true and
 // no encoding is returned. If encodeNull is true, hasNull is never set.
 func encodeColumnsOfRow(
-	da *sqlbase.DatumAlloc, appendTo []byte, row sqlbase.EncDatumRow, cols columns, encodeNull bool,
+	da *sqlbase.DatumAlloc,
+	appendTo []byte,
+	row sqlbase.EncDatumRow,
+	cols columns,
+	colTypes []sqlbase.ColumnType,
+	encodeNull bool,
 ) (encoding []byte, hasNull bool, err error) {
-	for _, colIdx := range cols {
+	for i, colIdx := range cols {
 		if row[colIdx].IsNull() && !encodeNull {
 			return nil, true, nil
 		}
@@ -655,7 +660,7 @@ func encodeColumnsOfRow(
 		// TODO(radu): we should figure out what encoding is readily available and
 		// use that (though it needs to be consistent across all rows). We could add
 		// functionality to compare VALUE encodings ignoring the column ID.
-		appendTo, err = row[colIdx].Encode(da, sqlbase.DatumEncoding_ASCENDING_KEY, appendTo)
+		appendTo, err = row[colIdx].Encode(&colTypes[i], da, sqlbase.DatumEncoding_ASCENDING_KEY, appendTo)
 		if err != nil {
 			return appendTo, false, err
 		}

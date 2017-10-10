@@ -367,7 +367,7 @@ func TestAggregator(t *testing.T) {
 
 			var expected []string
 			for _, row := range c.expected {
-				expected = append(expected, row.String())
+				expected = append(expected, row.String(c.outputTypes))
 			}
 			sort.Strings(expected)
 			expStr := strings.Join(expected, "")
@@ -381,7 +381,7 @@ func TestAggregator(t *testing.T) {
 				if row == nil {
 					break
 				}
-				rets = append(rets, row.String())
+				rets = append(rets, row.String(c.outputTypes))
 			}
 			sort.Strings(rets)
 			retStr := strings.Join(rets, "")

@@ -49,6 +49,7 @@ func TestSorter(t *testing.T) {
 		name     string
 		spec     SorterSpec
 		post     PostProcessSpec
+		types    []sqlbase.ColumnType
 		input    sqlbase.EncDatumRows
 		expected sqlbase.EncDatumRows
 	}{
@@ -63,6 +64,7 @@ func TestSorter(t *testing.T) {
 						{ColIdx: 2, Direction: asc},
 					}),
 			},
+			types: threeIntCols,
 			input: sqlbase.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
@@ -92,7 +94,8 @@ func TestSorter(t *testing.T) {
 						{ColIdx: 2, Direction: asc},
 					}),
 			},
-			post: PostProcessSpec{Limit: 4},
+			post:  PostProcessSpec{Limit: 4},
+			types: threeIntCols,
 			input: sqlbase.EncDatumRows{
 				{v[3], v[3], v[0]},
 				{v[3], v[4], v[1]},
@@ -120,6 +123,7 @@ func TestSorter(t *testing.T) {
 						{ColIdx: 2, Direction: asc},
 					}),
 			},
+			types: threeIntCols,
 			input: sqlbase.EncDatumRows{
 				{v[0], v[1], v[2]},
 				{v[0], v[1], v[0]},
@@ -156,6 +160,7 @@ func TestSorter(t *testing.T) {
 						{ColIdx: 3, Direction: asc},
 					}),
 			},
+			types: []sqlbase.ColumnType{intType, intType, intType, intType},
 			input: sqlbase.EncDatumRows{
 				{v[1], v[1], v[2], v[5]},
 				{v[0], v[1], v[2], v[4]},
@@ -216,11 +221,7 @@ func TestSorter(t *testing.T) {
 		// use disk.
 		for _, memLimit := range []int64{0, 1, 1150, 2048} {
 			t.Run(fmt.Sprintf("%sMemLimit=%d", c.name, memLimit), func(t *testing.T) {
-				types := make([]sqlbase.ColumnType, len(c.input[0]))
-				for i := range types {
-					types[i] = intType
-				}
-				in := NewRowBuffer(types, c.input, RowBufferArgs{})
+				in := NewRowBuffer(c.types, c.input, RowBufferArgs{})
 				out := &RowBuffer{}
 
 				s, err := newSorter(&flowCtx, &c.spec, in, &c.post, out)
@@ -248,8 +249,8 @@ func TestSorter(t *testing.T) {
 					retRows = append(retRows, row)
 				}
 
-				expStr := c.expected.String()
-				retStr := retRows.String()
+				expStr := c.expected.String(c.types)
+				retStr := retRows.String(c.types)
 				if expStr != retStr {
 					t.Errorf("invalid results; expected:\n   %s\ngot:\n   %s",
 						expStr, retStr)

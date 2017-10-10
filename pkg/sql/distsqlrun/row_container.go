@@ -142,7 +142,7 @@ func (mc *memRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) 
 		log.Fatalf(ctx, "invalid row length %d, expected %d", len(row), len(mc.types))
 	}
 	for i := range row {
-		err := row[i].EnsureDecoded(&mc.datumAlloc)
+		err := row[i].EnsureDecoded(&mc.types[i], &mc.datumAlloc)
 		if err != nil {
 			return err
 		}
@@ -168,14 +168,14 @@ func (mc *memRowContainer) Pop() interface{} { panic("unimplemented") }
 // Assumes InitMaxHeap was called.
 func (mc *memRowContainer) MaybeReplaceMax(ctx context.Context, row sqlbase.EncDatumRow) error {
 	max := mc.At(0)
-	cmp, err := row.CompareToDatums(&mc.datumAlloc, mc.ordering, mc.evalCtx, max)
+	cmp, err := row.CompareToDatums(mc.types, &mc.datumAlloc, mc.ordering, mc.evalCtx, max)
 	if err != nil {
 		return err
 	}
 	if cmp < 0 {
 		// row is smaller than the max; replace.
 		for i := range row {
-			if err := row[i].EnsureDecoded(&mc.datumAlloc); err != nil {
+			if err := row[i].EnsureDecoded(&mc.types[i], &mc.datumAlloc); err != nil {
 				return err
 			}
 			mc.scratchRow[i] = row[i].Datum
