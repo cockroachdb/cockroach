@@ -3551,11 +3551,14 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 	q.infos = nil
 	q.Unlock()
 
-	for i := 0; i < len(infos); i++ {
-		// Only handle raft ready for the last request to provide better batching
-		// of syncing new log entries to disk.
-		handleRaftReady := (i == len(infos)-1)
-		if pErr := s.processRaftRequest(infos[i].respStream.Context(), infos[i].req, IncomingSnapshot{}, handleRaftReady); pErr != nil {
+	for i, info := range infos {
+		// Only handle raft ready for the last request to provide better batching of
+		// syncing new log entries to disk. However, there is an exception here. If
+		// the request following this one is a quiesce request, we also want to
+		// handle raft ready so that we're up-to-date when we quiesce.
+		last := i == len(infos)-1
+		handleRaftReady := last || infos[i+1].req.Quiesce
+		if pErr := s.processRaftRequest(info.respStream.Context(), info.req, IncomingSnapshot{}, handleRaftReady); pErr != nil {
 			// If we're unable to process the request, clear the request queue. This
 			// only happens if we couldn't create the replica because the request was
 			// targeted to a removed range. This is also racy and could cause us to
@@ -3566,7 +3569,7 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 				s.replicaQueues.Delete(int64(rangeID))
 			}
 			q.Unlock()
-			if err := infos[i].respStream.Send(newRaftMessageResponse(infos[i].req, pErr)); err != nil {
+			if err := info.respStream.Send(newRaftMessageResponse(info.req, pErr)); err != nil {
 				// Seems excessive to log this on every occurrence as the other side
 				// might have closed.
 				log.VEventf(ctx, 1, "error sending error: %s", err)
