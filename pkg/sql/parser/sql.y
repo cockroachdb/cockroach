@@ -387,7 +387,8 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %token <str>   DISCARD DISTINCT DO DOUBLE DROP
 
 %token <str>   ELSE ENCODING END ESCAPE EXCEPT
-%token <str>   EXISTS EXECUTE EXPERIMENTAL_FINGERPRINTS EXPLAIN EXTRACT EXTRACT_DURATION
+%token <str>   EXISTS EXECUTE EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL
+%token <str>   EXPLAIN EXTRACT EXTRACT_DURATION
 
 %token <str>   FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH FILTER
 %token <str>   FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE_INDEX FOREIGN FROM FULL
@@ -503,6 +504,9 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <Statement> cancel_stmt
 %type <Statement> cancel_job_stmt
 %type <Statement> cancel_query_stmt
+
+%type <Statement> check_stmt
+%type <Statement> check_table_stmt
 
 %type <Statement> commit_stmt
 %type <Statement> copy_from_stmt
@@ -881,6 +885,7 @@ stmt:
 | alter_stmt      // help texts in sub-rule
 | backup_stmt     // EXTEND WITH HELP: BACKUP
 | cancel_stmt     // help texts in sub-rule
+| check_stmt      // help texts in sub-rule
 | copy_from_stmt
 | create_stmt     // help texts in sub-rule
 | deallocate_stmt // EXTEND WITH HELP: DEALLOCATE
@@ -1893,6 +1898,18 @@ set_stmt:
 | set_exprs_internal   { /* SKIP DOC */ }
 | use_stmt             { /* SKIP DOC */ }
 | SET LOCAL error { return unimplemented(sqllex, "set local") }
+
+check_stmt:
+  check_table_stmt
+| EXPERIMENTAL CHECK error // SHOW HELP: CHECK
+
+check_table_stmt:
+  EXPERIMENTAL CHECK TABLE qualified_name
+  {
+    /* SKIP DOC */
+    $$.val = &CheckConsistency{Table: $4.newNormalizableTableName()}
+  }
+
 
 // %Help: SET CLUSTER SETTING - change a cluster setting
 // %Category: Cfg
@@ -6276,6 +6293,7 @@ unreserved_keyword:
 | DROP
 | ENCODING
 | EXECUTE
+| EXPERIMENTAL
 | EXPERIMENTAL_FINGERPRINTS
 | EXPLAIN
 | FILTER

@@ -1,0 +1,8 @@
+# LogicTest: default parallel-stmts distsql
+
+statement ok
+CREATE TABLE t (id int PRIMARY KEY)
+
+query TTTTTTTT
+EXPERIMENTAL CHECK TABLE t
+-----

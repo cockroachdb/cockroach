@@ -323,6 +323,7 @@ func (p *planner) propagateFilters(
 
 	case *alterTableNode:
 	case *cancelQueryNode:
+	case *checkConsistencyNode:
 	case *controlJobNode:
 	case *copyNode:
 	case *createDatabaseNode:

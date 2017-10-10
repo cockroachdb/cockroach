@@ -91,6 +91,7 @@ var keywords = map[string]struct {
 	"except":                    {EXCEPT, "R"},
 	"execute":                   {EXECUTE, "U"},
 	"exists":                    {EXISTS, "C"},
+	"experimental":              {EXPERIMENTAL, "U"},
 	"experimental_fingerprints": {EXPERIMENTAL_FINGERPRINTS, "U"},
 	"explain":                   {EXPLAIN, "U"},
 	"extract":                   {EXTRACT, "C"},

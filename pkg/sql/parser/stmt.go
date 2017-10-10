@@ -130,6 +130,14 @@ func (*CancelQuery) StatementType() StatementType { return Ack }
 func (*CancelQuery) StatementTag() string { return "CANCEL QUERY" }
 
 // StatementType implements the Statement interface.
+func (*CheckConsistency) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (n *CheckConsistency) StatementTag() string {
+	return "CHECK TABLE"
+}
+
+// StatementType implements the Statement interface.
 func (*CommitTransaction) StatementType() StatementType { return Ack }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -633,6 +641,7 @@ func (n *Backup) String() string                   { return AsString(n) }
 func (n *BeginTransaction) String() string         { return AsString(n) }
 func (n *CancelJob) String() string                { return AsString(n) }
 func (n *CancelQuery) String() string              { return AsString(n) }
+func (n *CheckConsistency) String() string         { return AsString(n) }
 func (n *CommitTransaction) String() string        { return AsString(n) }
 func (n *CopyFrom) String() string                 { return AsString(n) }
 func (n *CreateDatabase) String() string           { return AsString(n) }

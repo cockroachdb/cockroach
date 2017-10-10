@@ -520,6 +520,7 @@ func nodeName(plan planNode) string {
 var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&alterTableNode{}):        "alter table",
 	reflect.TypeOf(&cancelQueryNode{}):       "cancel query",
+	reflect.TypeOf(&checkConsistencyNode{}):  "check table",
 	reflect.TypeOf(&controlJobNode{}):        "control job",
 	reflect.TypeOf(&copyNode{}):              "copy",
 	reflect.TypeOf(&createDatabaseNode{}):    "create database",

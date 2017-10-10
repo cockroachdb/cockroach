@@ -165,6 +165,7 @@ func applyLimit(plan planNode, numRows int64, soft bool) {
 	case *valuesNode:
 	case *alterTableNode:
 	case *cancelQueryNode:
+	case *checkConsistencyNode:
 	case *controlJobNode:
 	case *copyNode:
 	case *createDatabaseNode:
