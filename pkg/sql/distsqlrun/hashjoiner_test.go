@@ -548,6 +548,7 @@ func TestHashJoiner(t *testing.T) {
 			if err != nil {
 				return err
 			}
+			outTypes := h.OutputTypes()
 			setup(h)
 			h.Run(ctx, nil)
 
@@ -555,7 +556,7 @@ func TestHashJoiner(t *testing.T) {
 				return errors.New("output RowReceiver not closed")
 			}
 
-			return checkExpectedRows(c.expected, out)
+			return checkExpectedRows(outTypes, c.expected, out)
 		}
 
 		// Run test with a variety of initial buffer sizes.
@@ -598,10 +599,12 @@ func TestHashJoiner(t *testing.T) {
 	}
 }
 
-func checkExpectedRows(expectedRows sqlbase.EncDatumRows, results *RowBuffer) error {
+func checkExpectedRows(
+	types []sqlbase.ColumnType, expectedRows sqlbase.EncDatumRows, results *RowBuffer,
+) error {
 	var expected []string
 	for _, row := range expectedRows {
-		expected = append(expected, row.String())
+		expected = append(expected, row.String(types))
 	}
 	sort.Strings(expected)
 	expStr := strings.Join(expected, "")
@@ -615,7 +618,7 @@ func checkExpectedRows(expectedRows sqlbase.EncDatumRows, results *RowBuffer) er
 		if row == nil {
 			break
 		}
-		rets = append(rets, row.String())
+		rets = append(rets, row.String(types))
 	}
 	sort.Strings(rets)
 	retStr := strings.Join(rets, "")
@@ -724,7 +727,7 @@ func TestHashJoinerDrain(t *testing.T) {
 		t.Fatalf("left input not drained; still %d rows in it", len(leftInput.mu.records))
 	}
 
-	if err := checkExpectedRows(expected, out); err != nil {
+	if err := checkExpectedRows(oneIntCol, expected, out); err != nil {
 		t.Fatal(err)
 	}
 }

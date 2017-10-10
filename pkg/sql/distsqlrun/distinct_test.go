@@ -166,8 +166,8 @@ func TestDistinct(t *testing.T) {
 				res = append(res, row)
 			}
 
-			if result := res.String(); result != c.expected.String() {
-				t.Errorf("invalid results: %s, expected %s'", result, c.expected.String())
+			if result := res.String(twoIntCols); result != c.expected.String(twoIntCols) {
+				t.Errorf("invalid results: %s, expected %s'", result, c.expected.String(twoIntCols))
 			}
 		})
 	}

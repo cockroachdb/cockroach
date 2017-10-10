@@ -29,6 +29,7 @@ type distinct struct {
 
 	flowCtx      *FlowCtx
 	input        RowSource
+	types        []sqlbase.ColumnType
 	lastGroupKey sqlbase.EncDatumRow
 	seen         map[string]struct{}
 	orderedCols  map[uint32]struct{}
@@ -56,7 +57,8 @@ func newDistinct(
 		d.distinctCols[col] = struct{}{}
 	}
 
-	if err := d.out.Init(post, input.Types(), &flowCtx.EvalCtx, output); err != nil {
+	d.types = input.Types()
+	if err := d.out.Init(post, d.types, &flowCtx.EvalCtx, output); err != nil {
 		return nil, err
 	}
 
@@ -151,7 +153,9 @@ func (d *distinct) matchLastGroupKey(row sqlbase.EncDatumRow) (bool, error) {
 		return false, nil
 	}
 	for colIdx := range d.orderedCols {
-		res, err := d.lastGroupKey[colIdx].Compare(&d.datumAlloc, &d.flowCtx.EvalCtx, &row[colIdx])
+		res, err := d.lastGroupKey[colIdx].Compare(
+			&d.types[colIdx], &d.datumAlloc, &d.flowCtx.EvalCtx, &row[colIdx],
+		)
 		if res != 0 || err != nil {
 			return false, err
 		}
@@ -178,7 +182,7 @@ func (d *distinct) encode(appendTo []byte, row sqlbase.EncDatumRow) ([]byte, err
 		// datums). We instead opt to always choose sqlbase.DatumEncoding_ASCENDING_KEY
 		// but we may want to check the first row for what encodings are already
 		// available.
-		appendTo, err = datum.Encode(&d.datumAlloc, sqlbase.DatumEncoding_ASCENDING_KEY, appendTo)
+		appendTo, err = datum.Encode(&d.types[i], &d.datumAlloc, sqlbase.DatumEncoding_ASCENDING_KEY, appendTo)
 		if err != nil {
 			return nil, err
 		}

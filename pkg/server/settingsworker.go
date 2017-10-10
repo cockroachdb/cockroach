@@ -45,15 +45,16 @@ func (s *Server) refreshSettings() {
 		var k, v, t string
 		// First we need to decode the setting name field from the index key.
 		{
-			nameRow := []sqlbase.EncDatum{{Type: tbl.Columns[0].Type}}
-			_, matches, err := sqlbase.DecodeIndexKey(a, tbl, &tbl.PrimaryIndex, nameRow, nil, kv.Key)
+			types := []sqlbase.ColumnType{tbl.Columns[0].Type}
+			nameRow := make([]sqlbase.EncDatum, 1)
+			_, matches, err := sqlbase.DecodeIndexKey(tbl, &tbl.PrimaryIndex, types, nameRow, nil, kv.Key)
 			if err != nil {
 				return errors.Wrap(err, "failed to decode key")
 			}
 			if !matches {
 				return errors.Errorf("unexpected non-settings KV with settings prefix: %v", kv.Key)
 			}
-			if err := nameRow[0].EnsureDecoded(a); err != nil {
+			if err := nameRow[0].EnsureDecoded(&types[0], a); err != nil {
 				return err
 			}
 			k = string(parser.MustBeDString(nameRow[0].Datum))

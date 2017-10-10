@@ -64,11 +64,11 @@ func GetTableDescriptor(kvDB *client.DB, database string, table string) *TableDe
 }
 
 // RandDatum generates a random Datum of the given type.
-// If null is true, the datum can be DNull.
+// If nullOk is true, the datum can be DNull.
 // Note that if typ.SemanticType is ColumnType_NULL, the datum will always be DNull,
 // regardless of the null flag.
-func RandDatum(rng *rand.Rand, typ ColumnType, null bool) parser.Datum {
-	if null && rng.Intn(10) == 0 {
+func RandDatum(rng *rand.Rand, typ ColumnType, nullOk bool) parser.Datum {
+	if nullOk && rng.Intn(10) == 0 {
 		return parser.DNull
 	}
 	switch typ.SemanticType {
@@ -199,31 +199,32 @@ func RandDatumEncoding(rng *rand.Rand) DatumEncoding {
 }
 
 // RandEncDatum generates a random EncDatum (of a random type).
-func RandEncDatum(rng *rand.Rand) EncDatum {
+func RandEncDatum(rng *rand.Rand) (EncDatum, ColumnType) {
 	typ := RandColumnType(rng)
-	datum := RandDatum(rng, typ, true)
-	return DatumToEncDatum(typ, datum)
+	datum := RandDatum(rng, typ, true /* nullOk */)
+	return DatumToEncDatum(typ, datum), typ
 }
 
 // RandEncDatumSlice generates a slice of random EncDatum values of the same random
 // type.
-func RandEncDatumSlice(rng *rand.Rand, numVals int) []EncDatum {
+func RandEncDatumSlice(rng *rand.Rand, numVals int) ([]EncDatum, ColumnType) {
 	typ := RandColumnType(rng)
 	vals := make([]EncDatum, numVals)
 	for i := range vals {
 		vals[i] = DatumToEncDatum(typ, RandDatum(rng, typ, true))
 	}
-	return vals
+	return vals, typ
 }
 
 // RandEncDatumSlices generates EncDatum slices, each slice with values of the same
 // random type.
-func RandEncDatumSlices(rng *rand.Rand, numSets, numValsPerSet int) [][]EncDatum {
+func RandEncDatumSlices(rng *rand.Rand, numSets, numValsPerSet int) ([][]EncDatum, []ColumnType) {
 	vals := make([][]EncDatum, numSets)
+	types := make([]ColumnType, numSets)
 	for i := range vals {
-		vals[i] = RandEncDatumSlice(rng, numValsPerSet)
+		vals[i], types[i] = RandEncDatumSlice(rng, numValsPerSet)
 	}
-	return vals
+	return vals, types
 }
 
 // RandEncDatumRowOfTypes generates a slice of random EncDatum values for the
@@ -238,8 +239,9 @@ func RandEncDatumRowOfTypes(rng *rand.Rand, types []ColumnType) EncDatumRow {
 
 // RandEncDatumRows generates EncDatumRows where all rows follow the same random
 // []ColumnType structure.
-func RandEncDatumRows(rng *rand.Rand, numRows, numCols int) EncDatumRows {
-	return RandEncDatumRowsOfTypes(rng, numRows, RandColumnTypes(rng, numCols))
+func RandEncDatumRows(rng *rand.Rand, numRows, numCols int) (EncDatumRows, []ColumnType) {
+	types := RandColumnTypes(rng, numCols)
+	return RandEncDatumRowsOfTypes(rng, numRows, types), types
 }
 
 // RandEncDatumRowsOfTypes generates EncDatumRows, each row with values of the

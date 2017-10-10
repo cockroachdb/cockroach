@@ -386,8 +386,8 @@ func TestMergeJoiner(t *testing.T) {
 				}
 				retRows = append(retRows, row)
 			}
-			expStr := c.expected.String()
-			retStr := retRows.String()
+			expStr := c.expected.String(threeIntCols)
+			retStr := retRows.String(threeIntCols)
 			if expStr != retStr {
 				t.Errorf("invalid results; expected:\n   %s\ngot:\n   %s",
 					expStr, retStr)

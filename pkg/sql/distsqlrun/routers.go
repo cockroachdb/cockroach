@@ -146,6 +146,8 @@ func (ro *routerOutput) popRowsLocked(rowBuf []sqlbase.EncDatumRow) []sqlbase.En
 const semaphorePeriod = 8
 
 type routerBase struct {
+	types []sqlbase.ColumnType
+
 	outputs []routerOutput
 
 	// How many of streams are not in the DrainRequested or ConsumerClosed state.
@@ -187,10 +189,15 @@ func (rb *routerBase) setupStreams(streams []RowReceiver) {
 
 // init must be called after setupStreams but before start.
 func (rb *routerBase) init(flowCtx *FlowCtx, types []sqlbase.ColumnType) {
+	rb.types = types
 	for i := range rb.outputs {
 		// This method must be called before we start() so we don't need
 		// to take the mutex.
 		rb.outputs[i].mu.rowContainer.init(nil /* ordering */, types, &flowCtx.EvalCtx)
+		// Initialize any outboxes.
+		if o, ok := rb.outputs[i].stream.(*outbox); ok {
+			o.init(types)
+		}
 	}
 }
 
@@ -472,7 +479,7 @@ func (hr *hashRouter) computeDestination(row sqlbase.EncDatumRow) (int, error) {
 		// nodes may be doing the same hashing and the encodings need to match. The
 		// encoding needs to be determined at planning time. #13829
 		var err error
-		hr.buffer, err = row[col].Encode(&hr.alloc, preferredEncoding, hr.buffer)
+		hr.buffer, err = row[col].Encode(&hr.types[col], &hr.alloc, preferredEncoding, hr.buffer)
 		if err != nil {
 			return -1, err
 		}
@@ -551,8 +558,8 @@ func (rr *rangeRouter) computeDestination(row sqlbase.EncDatumRow) (int, error) 
 	var err error
 	rr.b = rr.b[:0]
 	for _, enc := range rr.encodings {
-		col := row[enc.Column]
-		rr.b, err = col.Encode(&rr.alloc, enc.Encoding, rr.b)
+		col := enc.Column
+		rr.b, err = row[col].Encode(&rr.types[col], &rr.alloc, enc.Encoding, rr.b)
 		if err != nil {
 			return 0, err
 		}

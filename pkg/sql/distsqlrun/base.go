@@ -171,7 +171,8 @@ func DrainAndForwardMetadata(ctx context.Context, src RowSource, dst RowReceiver
 		}
 		if row != nil {
 			log.Fatalf(
-				ctx, "both row data and metadata in the same record. row: %s meta: %+v", row, meta,
+				ctx, "both row data and metadata in the same record. row: %s meta: %+v",
+				row.String(src.Types()), meta,
 			)
 		}
 
@@ -242,6 +243,11 @@ type NoMetadataRowSource struct {
 // MakeNoMetadataRowSource builds a NoMetadataRowSource.
 func MakeNoMetadataRowSource(src RowSource, sink RowReceiver) NoMetadataRowSource {
 	return NoMetadataRowSource{src: src, metadataSink: sink}
+}
+
+// Types returns the source types.
+func (rs *NoMetadataRowSource) Types() []sqlbase.ColumnType {
+	return rs.src.Types()
 }
 
 // NextRow is analogous to RowSource.Next. If the producer sends an error, we

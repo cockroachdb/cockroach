@@ -1386,6 +1386,7 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 		// able to do this in memory, but requires that rows added to it be done
 		// in order. Thus, we first need to fetch all rows and sort them. We use
 		// NewRocksDBMap to write the rows, then fetch them in order using an iterator.
+		types := sp.input.Types()
 		input := distsqlrun.MakeNoMetadataRowSource(sp.input, sp.output)
 		alloc := &sqlbase.DatumAlloc{}
 		store := engine.NewRocksDBMultiMap(sp.tempStorage)
@@ -1404,7 +1405,7 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 				return errors.Errorf("expected 2 datums, got %d", len(row))
 			}
 			for i, ed := range row {
-				if err := ed.EnsureDecoded(alloc); err != nil {
+				if err := ed.EnsureDecoded(&types[i], alloc); err != nil {
 					return err
 				}
 				datum := ed.Datum.(*parser.DBytes)

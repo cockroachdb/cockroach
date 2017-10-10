@@ -39,6 +39,7 @@ import (
 var intType = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
 var boolType = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}
 var decType = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DECIMAL}
+var strType = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING}
 var oneIntCol = []sqlbase.ColumnType{intType}
 var twoIntCols = []sqlbase.ColumnType{intType, intType}
 var threeIntCols = []sqlbase.ColumnType{intType, intType, intType}

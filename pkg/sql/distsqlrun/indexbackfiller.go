@@ -34,6 +34,7 @@ type indexBackfiller struct {
 	// colIdxMap maps ColumnIDs to indices into desc.Columns and desc.Mutations.
 	colIdxMap map[sqlbase.ColumnID]int
 
+	types   []sqlbase.ColumnType
 	rowVals parser.Datums
 	da      sqlbase.DatumAlloc
 }
@@ -80,6 +81,10 @@ func (ib *indexBackfiller) init() error {
 				cols = append(cols, *column)
 			}
 		}
+	}
+	ib.types = make([]sqlbase.ColumnType, len(cols))
+	for i := range cols {
+		ib.types[i] = cols[i].Type
 	}
 
 	ib.colIdxMap = make(map[sqlbase.ColumnID]int, len(cols))
@@ -161,7 +166,7 @@ func (ib *indexBackfiller) runChunk(
 			if len(ib.rowVals) == 0 {
 				ib.rowVals = make(parser.Datums, len(encRow))
 			}
-			if err := sqlbase.EncDatumRowToDatums(ib.rowVals, encRow, &ib.da); err != nil {
+			if err := sqlbase.EncDatumRowToDatums(ib.types, ib.rowVals, encRow, &ib.da); err != nil {
 				return nil, err
 			}
 			if err := sqlbase.EncodeSecondaryIndexes(

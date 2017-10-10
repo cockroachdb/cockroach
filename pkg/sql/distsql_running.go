@@ -135,6 +135,7 @@ func (dsp *distSQLPlanner) Run(
 	dsp.distSQLSrv.ServerConfig.Metrics.QueryStart()
 	defer dsp.distSQLSrv.ServerConfig.Metrics.QueryStop()
 
+	recv.outputTypes = plan.ResultTypes
 	recv.resultToStreamColMap = plan.planToStreamColMap
 	thisNodeID := dsp.nodeDesc.NodeID
 
@@ -224,8 +225,12 @@ func (dsp *distSQLPlanner) Run(
 type distSQLReceiver struct {
 	ctx context.Context
 
-	// resultWriter is the interface which we sent results to.
+	// resultWriter is the interface which we send results to.
 	resultWriter rowResultWriter
+
+	// outputTypes are the types of the result columns produced by the plan.
+	outputTypes []sqlbase.ColumnType
+
 	// resultToStreamColMap maps result columns to columns in the distsqlrun results
 	// stream.
 	resultToStreamColMap []int
@@ -365,7 +370,7 @@ func (r *distSQLReceiver) Push(
 		r.row = make(parser.Datums, len(r.resultToStreamColMap))
 	}
 	for i, resIdx := range r.resultToStreamColMap {
-		err := row[resIdx].EnsureDecoded(&r.alloc)
+		err := row[resIdx].EnsureDecoded(&r.outputTypes[resIdx], &r.alloc)
 		if err != nil {
 			r.err = err
 			r.status = distsqlrun.ConsumerClosed

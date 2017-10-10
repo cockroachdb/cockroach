@@ -17,6 +17,7 @@ package sqlbase
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -40,7 +41,8 @@ func EncodingDirToDatumEncoding(dir encoding.Direction) DatumEncoding {
 // parser.Datum. It allows "passing through" a Datum without decoding and
 // reencoding.
 type EncDatum struct {
-	Type ColumnType
+	// Temporary, used just for sanity checking this change.
+	typeDeprecated ColumnType
 
 	// Encoding type. Valid only if encoded is not nil.
 	encoding DatumEncoding
@@ -52,7 +54,17 @@ type EncDatum struct {
 	Datum parser.Datum
 }
 
-func (ed *EncDatum) stringWithAlloc(a *DatumAlloc) string {
+func (ed *EncDatum) checkType(typ *ColumnType) {
+	if reflect.DeepEqual(ed.typeDeprecated, ColumnType{}) {
+		// Allow uninitialized types.
+		return
+	}
+	if ed.typeDeprecated.SemanticType != typ.SemanticType {
+		panic(fmt.Sprintf("expected type %+v, got %+v", ed.typeDeprecated, *typ))
+	}
+}
+
+func (ed *EncDatum) stringWithAlloc(typ *ColumnType, a *DatumAlloc) string {
 	if ed.Datum == nil {
 		if ed.encoded == nil {
 			return "<unset>"
@@ -60,7 +72,7 @@ func (ed *EncDatum) stringWithAlloc(a *DatumAlloc) string {
 		if a == nil {
 			a = &DatumAlloc{}
 		}
-		err := ed.EnsureDecoded(a)
+		err := ed.EnsureDecoded(typ, a)
 		if err != nil {
 			return fmt.Sprintf("<error: %v>", err)
 		}
@@ -68,23 +80,23 @@ func (ed *EncDatum) stringWithAlloc(a *DatumAlloc) string {
 	return ed.Datum.String()
 }
 
-func (ed *EncDatum) String() string {
-	return ed.stringWithAlloc(nil)
+func (ed *EncDatum) String(typ *ColumnType) string {
+	return ed.stringWithAlloc(typ, nil)
 }
 
 // EncDatumFromEncoded initializes an EncDatum with the given encoded
 // value. The encoded value is stored as a shallow copy, so the caller must
 // make sure the slice is not modified for the lifetime of the EncDatum.
 // SetEncoded wipes the underlying Datum.
-func EncDatumFromEncoded(typ ColumnType, enc DatumEncoding, encoded []byte) EncDatum {
+func EncDatumFromEncoded(typ *ColumnType, enc DatumEncoding, encoded []byte) EncDatum {
 	if len(encoded) == 0 {
-		panic("empty encoded value")
+		panic(fmt.Sprintf("empty encoded value"))
 	}
 	return EncDatum{
-		Type:     typ,
-		encoding: enc,
-		encoded:  encoded,
-		Datum:    nil,
+		typeDeprecated: *typ,
+		encoding:       enc,
+		encoded:        encoded,
+		Datum:          nil,
 	}
 }
 
@@ -92,7 +104,7 @@ func EncDatumFromEncoded(typ ColumnType, enc DatumEncoding, encoded []byte) EncD
 // possibly followed by other data. Similar to EncDatumFromEncoded,
 // except that this function figures out where the encoding stops and returns a
 // slice for the rest of the buffer.
-func EncDatumFromBuffer(typ ColumnType, enc DatumEncoding, buf []byte) (EncDatum, []byte, error) {
+func EncDatumFromBuffer(typ *ColumnType, enc DatumEncoding, buf []byte) (EncDatum, []byte, error) {
 	switch enc {
 	case DatumEncoding_ASCENDING_KEY, DatumEncoding_DESCENDING_KEY:
 		encLen, err := encoding.PeekLength(buf)
@@ -123,8 +135,8 @@ func DatumToEncDatum(ctyp ColumnType, d parser.Datum) EncDatum {
 			d.ResolvedType(), ptyp))
 	}
 	return EncDatum{
-		Type:  ctyp,
-		Datum: d,
+		typeDeprecated: ctyp,
+		Datum:          d,
 	}
 }
 
@@ -167,14 +179,15 @@ func (ed *EncDatum) IsNull() bool {
 }
 
 // EnsureDecoded ensures that the Datum field is set (decoding if it is not).
-func (ed *EncDatum) EnsureDecoded(a *DatumAlloc) error {
+func (ed *EncDatum) EnsureDecoded(typ *ColumnType, a *DatumAlloc) error {
+	ed.checkType(typ)
 	if ed.Datum != nil {
 		return nil
 	}
 	if ed.encoded == nil {
 		panic("decoding unset EncDatum")
 	}
-	datType := ed.Type.ToDatumType()
+	datType := typ.ToDatumType()
 	var err error
 	var rem []byte
 	switch ed.encoding {
@@ -210,12 +223,15 @@ func (ed *EncDatum) Encoding() (DatumEncoding, bool) {
 // encoding.
 // Note: DatumEncoding_VALUE encodings are not unique because they can contain
 // a column ID so they should not be used to test for equality.
-func (ed *EncDatum) Encode(a *DatumAlloc, enc DatumEncoding, appendTo []byte) ([]byte, error) {
+func (ed *EncDatum) Encode(
+	typ *ColumnType, a *DatumAlloc, enc DatumEncoding, appendTo []byte,
+) ([]byte, error) {
+	ed.checkType(typ)
 	if ed.encoded != nil && enc == ed.encoding {
 		// We already have an encoding that matches that we can use.
 		return append(appendTo, ed.encoded...), nil
 	}
-	if err := ed.EnsureDecoded(a); err != nil {
+	if err := ed.EnsureDecoded(typ, a); err != nil {
 		return nil, err
 	}
 	switch enc {
@@ -235,8 +251,9 @@ func (ed *EncDatum) Encode(a *DatumAlloc, enc DatumEncoding, appendTo []byte) ([
 //    0  if the receiver is equal to rhs,
 //    +1 if the receiver is greater than rhs.
 func (ed *EncDatum) Compare(
-	a *DatumAlloc, evalCtx *parser.EvalContext, rhs *EncDatum,
+	typ *ColumnType, a *DatumAlloc, evalCtx *parser.EvalContext, rhs *EncDatum,
 ) (int, error) {
+	ed.checkType(typ)
 	// TODO(radu): if we have both the Datum and a key encoding available, which
 	// one would be faster to use?
 	if ed.encoding == rhs.encoding && ed.encoded != nil && rhs.encoded != nil {
@@ -247,10 +264,10 @@ func (ed *EncDatum) Compare(
 			return bytes.Compare(rhs.encoded, ed.encoded), nil
 		}
 	}
-	if err := ed.EnsureDecoded(a); err != nil {
+	if err := ed.EnsureDecoded(typ, a); err != nil {
 		return 0, err
 	}
-	if err := rhs.EnsureDecoded(a); err != nil {
+	if err := rhs.EnsureDecoded(typ, a); err != nil {
 		return 0, err
 	}
 	return ed.Datum.Compare(evalCtx, rhs.Datum), nil
@@ -259,25 +276,33 @@ func (ed *EncDatum) Compare(
 // EncDatumRow is a row of EncDatums.
 type EncDatumRow []EncDatum
 
-func (r EncDatumRow) stringToBuf(a *DatumAlloc, b *bytes.Buffer) {
+func (r EncDatumRow) stringToBuf(types []ColumnType, a *DatumAlloc, b *bytes.Buffer) {
+	if len(types) != len(r) {
+		panic(fmt.Sprintf("mismatched types (%v) and row (%v)", types, r))
+	}
 	b.WriteString("[")
 	for i := range r {
 		if i > 0 {
 			b.WriteString(" ")
 		}
-		b.WriteString(r[i].stringWithAlloc(a))
+		b.WriteString(r[i].stringWithAlloc(&types[i], a))
 	}
 	b.WriteString("]")
 }
 
-func (r EncDatumRow) String() string {
+func (r EncDatumRow) String(types []ColumnType) string {
 	var b bytes.Buffer
-	r.stringToBuf(&DatumAlloc{}, &b)
+	r.stringToBuf(types, &DatumAlloc{}, &b)
 	return b.String()
 }
 
 // EncDatumRowToDatums converts a given EncDatumRow to a Datums.
-func EncDatumRowToDatums(datums parser.Datums, row EncDatumRow, da *DatumAlloc) error {
+func EncDatumRowToDatums(
+	types []ColumnType, datums parser.Datums, row EncDatumRow, da *DatumAlloc,
+) error {
+	if len(types) != len(row) {
+		panic(fmt.Sprintf("mismatched types (%v) and row (%v)", types, row))
+	}
 	if len(row) != len(datums) {
 		return errors.Errorf(
 			"Length mismatch (%d and %d) between datums and row", len(datums), len(row))
@@ -287,7 +312,7 @@ func EncDatumRowToDatums(datums parser.Datums, row EncDatumRow, da *DatumAlloc) 
 			datums[i] = parser.DNull
 			continue
 		}
-		err := encDatum.EnsureDecoded(da)
+		err := encDatum.EnsureDecoded(&types[i], da)
 		if err != nil {
 			return err
 		}
@@ -308,10 +333,17 @@ func EncDatumRowToDatums(datums parser.Datums, row EncDatumRow, da *DatumAlloc) 
 // {{0, asc}, {1, asc}} (i.e. ordered by first column and then by second
 // column).
 func (r EncDatumRow) Compare(
-	a *DatumAlloc, ordering ColumnOrdering, evalCtx *parser.EvalContext, rhs EncDatumRow,
+	types []ColumnType,
+	a *DatumAlloc,
+	ordering ColumnOrdering,
+	evalCtx *parser.EvalContext,
+	rhs EncDatumRow,
 ) (int, error) {
+	if len(r) != len(types) || len(rhs) != len(types) {
+		panic(fmt.Sprintf("length mismatch: %d types, %d lhs, %d rhs\n%+v\n%+v\n%+v", len(types), len(r), len(rhs), types, r, rhs))
+	}
 	for _, c := range ordering {
-		cmp, err := r[c.ColIdx].Compare(a, evalCtx, &rhs[c.ColIdx])
+		cmp, err := r[c.ColIdx].Compare(&types[c.ColIdx], a, evalCtx, &rhs[c.ColIdx])
 		if err != nil {
 			return 0, err
 		}
@@ -327,10 +359,14 @@ func (r EncDatumRow) Compare(
 
 // CompareToDatums is a version of Compare which compares against decoded Datums.
 func (r EncDatumRow) CompareToDatums(
-	a *DatumAlloc, ordering ColumnOrdering, evalCtx *parser.EvalContext, rhs parser.Datums,
+	types []ColumnType,
+	a *DatumAlloc,
+	ordering ColumnOrdering,
+	evalCtx *parser.EvalContext,
+	rhs parser.Datums,
 ) (int, error) {
 	for _, c := range ordering {
-		if err := r[c.ColIdx].EnsureDecoded(a); err != nil {
+		if err := r[c.ColIdx].EnsureDecoded(&types[c.ColIdx], a); err != nil {
 			return 0, err
 		}
 		cmp := r[c.ColIdx].Datum.Compare(evalCtx, rhs[c.ColIdx])
@@ -344,10 +380,10 @@ func (r EncDatumRow) CompareToDatums(
 	return 0, nil
 }
 
-// EncDatumRows is a slice of EncDatumRows.
+// EncDatumRows is a slice of EncDatumRows having the same schema.
 type EncDatumRows []EncDatumRow
 
-func (r EncDatumRows) String() string {
+func (r EncDatumRows) String(types []ColumnType) string {
 	var a DatumAlloc
 	var b bytes.Buffer
 	b.WriteString("[")
@@ -355,7 +391,7 @@ func (r EncDatumRows) String() string {
 		if i > 0 {
 			b.WriteString(" ")
 		}
-		r.stringToBuf(&a, &b)
+		r.stringToBuf(types, &a, &b)
 	}
 	b.WriteString("]")
 	return b.String()

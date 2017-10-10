@@ -83,6 +83,16 @@ func (m *outbox) setFlowCtx(flowCtx *FlowCtx) {
 	m.flowCtx = flowCtx
 }
 
+func (m *outbox) init(types []sqlbase.ColumnType) {
+	if types == nil {
+		// We check for nil to detect uninitialized cases; but we support 0-length
+		// rows.
+		types = make([]sqlbase.ColumnType, 0)
+	}
+	m.RowChannel.Init(types)
+	m.encoder.init(types)
+}
+
 // addRow encodes a row into rowBuf. If enough rows were accumulated, flush() is
 // called.
 //
@@ -367,10 +377,12 @@ func (m *outbox) run(ctx context.Context, wg *sync.WaitGroup) {
 
 // Starts the outbox.
 func (m *outbox) start(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel context.CancelFunc) {
+	if m.types == nil {
+		panic("outbox not initialized")
+	}
 	if wg != nil {
 		wg.Add(1)
 	}
-	m.RowChannel.Init(nil)
 	m.flowCtxCancel = flowCtxCancel
 	go m.run(ctx, wg)
 }

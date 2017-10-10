@@ -45,7 +45,7 @@ func generateValuesSpec(
 		for end := i + rowsPerChunk; i < len(rows) && i < end; i++ {
 			for j, info := range spec.Columns {
 				var err error
-				buf, err = rows[i][j].Encode(&a, info.Encoding, buf)
+				buf, err = rows[i][j].Encode(&colTypes[j], &a, info.Encoding, buf)
 				if err != nil {
 					return ValuesCoreSpec{}, err
 				}
@@ -63,8 +63,7 @@ func TestValues(t *testing.T) {
 		for _, numCols := range []int{1, 3} {
 			for _, rowsPerChunk := range []int{1, 2, 5} {
 				t.Run(fmt.Sprintf("%d-%d-%d", numRows, numCols, rowsPerChunk), func(t *testing.T) {
-					colTypes := sqlbase.RandColumnTypes(rng, numCols)
-					inRows := sqlbase.RandEncDatumRowsOfTypes(rng, numRows, colTypes)
+					inRows, colTypes := sqlbase.RandEncDatumRows(rng, numRows, numCols)
 
 					spec, err := generateValuesSpec(colTypes, inRows, rowsPerChunk)
 					if err != nil {
@@ -106,13 +105,16 @@ func TestValues(t *testing.T) {
 						if len(res[i]) != numCols {
 							t.Fatalf("row %d incorrect length %d, expected %d", i, len(res[i]), numCols)
 						}
-						for j, res := range res[i] {
-							cmp, err := res.Compare(&a, evalCtx, &inRows[i][j])
+						for j, val := range res[i] {
+							cmp, err := val.Compare(&colTypes[j], &a, evalCtx, &inRows[i][j])
 							if err != nil {
 								t.Fatal(err)
 							}
 							if cmp != 0 {
-								t.Errorf("row %d, column %d: received %s, expected %s", i, j, &res, &inRows[i][j])
+								t.Errorf(
+									"row %d, column %d: received %s, expected %s",
+									i, j, val.String(&colTypes[j]), inRows[i][j].String(&colTypes[j]),
+								)
 							}
 						}
 					}

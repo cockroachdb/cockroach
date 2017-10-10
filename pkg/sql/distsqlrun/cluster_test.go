@@ -185,6 +185,7 @@ func TestClusterFlow(t *testing.T) {
 							{Type: StreamEndpointSpec_REMOTE, StreamID: 1},
 							{Type: StreamEndpointSpec_LOCAL, StreamID: 2},
 						},
+						ColumnTypes: twoIntCols,
 					}},
 					Core: ProcessorCoreUnion{JoinReader: &JoinReaderSpec{Table: *desc}},
 					Post: PostProcessSpec{
@@ -267,7 +268,7 @@ func TestClusterFlow(t *testing.T) {
 	}
 	expected := strings.Join(results, " ")
 	expected = "[" + expected + "]"
-	if rowStr := rows.String(); rowStr != expected {
+	if rowStr := rows.String([]sqlbase.ColumnType{strType}); rowStr != expected {
 		t.Errorf("Result: %s\n Expected: %s\n", rowStr, expected)
 	}
 }
@@ -580,13 +581,13 @@ func BenchmarkInfrastructure(b *testing.B) {
 					valSpecs := make([]ValuesCoreSpec, numNodes)
 					for i := range valSpecs {
 						se := StreamEncoder{}
+						se.init(threeIntCols)
 						for j := 0; j < numRows; j++ {
 							row := make(sqlbase.EncDatumRow, 3)
-							typInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
 							lastVal += rng.Intn(10)
-							row[0] = sqlbase.DatumToEncDatum(typInt, parser.NewDInt(parser.DInt(lastVal)))
-							row[1] = sqlbase.DatumToEncDatum(typInt, parser.NewDInt(parser.DInt(rng.Intn(100000))))
-							row[2] = sqlbase.DatumToEncDatum(typInt, parser.NewDInt(parser.DInt(rng.Intn(100000))))
+							row[0] = sqlbase.DatumToEncDatum(intType, parser.NewDInt(parser.DInt(lastVal)))
+							row[1] = sqlbase.DatumToEncDatum(intType, parser.NewDInt(parser.DInt(rng.Intn(100000))))
+							row[2] = sqlbase.DatumToEncDatum(intType, parser.NewDInt(parser.DInt(rng.Intn(100000))))
 							if err := se.AddRow(row); err != nil {
 								b.Fatal(err)
 							}
@@ -663,9 +664,10 @@ func BenchmarkInfrastructure(b *testing.B) {
 
 					lastProc := ProcessorSpec{
 						Input: []InputSyncSpec{{
-							Type:     InputSyncSpec_ORDERED,
-							Ordering: Ordering{Columns: []Ordering_Column{{0, Ordering_Column_ASC}}},
-							Streams:  inStreams,
+							Type:        InputSyncSpec_ORDERED,
+							Ordering:    Ordering{Columns: []Ordering_Column{{0, Ordering_Column_ASC}}},
+							Streams:     inStreams,
+							ColumnTypes: threeIntCols,
 						}},
 						Core: ProcessorCoreUnion{Noop: &NoopCoreSpec{}},
 						Output: []OutputRouterSpec{{
@@ -738,7 +740,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 						}
 						var a sqlbase.DatumAlloc
 						for i := range rows {
-							if err := rows[i][0].EnsureDecoded(&a); err != nil {
+							if err := rows[i][0].EnsureDecoded(&intType, &a); err != nil {
 								b.Fatal(err)
 							}
 							if i > 0 {

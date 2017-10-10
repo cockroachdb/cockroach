@@ -149,7 +149,7 @@ func TestTableReader(t *testing.T) {
 			res = append(res, row)
 		}
 
-		if result := res.String(); result != c.expected {
+		if result := res.String(tr.OutputTypes()); result != c.expected {
 			t.Errorf("invalid results: %s, expected %s'", result, c.expected)
 		}
 	}
@@ -227,7 +227,7 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 		res = append(res, row)
 	}
 	if len(res) != 3 {
-		t.Fatalf("expected 3 rows, got: %s", res)
+		t.Fatalf("expected 3 rows, got: %d", len(res))
 	}
 	if len(metas) != 1 {
 		t.Fatalf("expected one meta with misplanned ranges, got: %+v", metas)
