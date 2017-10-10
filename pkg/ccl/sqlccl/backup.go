@@ -356,7 +356,7 @@ func makeBackupDescriptor(
 	}
 
 	sessionDatabase := p.EvalContext().Database
-	if sqlDescs, err = descriptorsMatchingTargets(sessionDatabase, sqlDescs, targets); err != nil {
+	if sqlDescs, _, err = descriptorsMatchingTargets(sessionDatabase, sqlDescs, targets); err != nil {
 		return BackupDescriptor{}, err
 	}
 

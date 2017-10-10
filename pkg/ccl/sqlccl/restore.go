@@ -71,17 +71,12 @@ func loadBackupDescs(ctx context.Context, uris []string) ([]BackupDescriptor, er
 
 func selectTargets(
 	p sql.PlanHookState, backupDescs []BackupDescriptor, targets parser.TargetList,
-) ([]sqlbase.Descriptor, error) {
-	if len(targets.Databases) > 0 {
-		return nil, errors.Errorf("RESTORE DATABASE is not yet supported " +
-			"(but you can use 'RESTORE somedb.*' to restore all backed up tables for a given DB).")
-	}
-
+) ([]sqlbase.Descriptor, []*sqlbase.DatabaseDescriptor, error) {
 	sessionDatabase := p.EvalContext().Database
 	lastBackupDesc := backupDescs[len(backupDescs)-1]
-	sqlDescs, err := descriptorsMatchingTargets(sessionDatabase, lastBackupDesc.Descriptors, targets)
+	sqlDescs, dbs, err := descriptorsMatchingTargets(sessionDatabase, lastBackupDesc.Descriptors, targets)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	seenTable := false
@@ -91,10 +86,10 @@ func selectTargets(
 		}
 	}
 	if !seenTable {
-		return nil, errors.Errorf("no tables found: %s", parser.AsString(targets))
+		return nil, nil, errors.Errorf("no tables found: %s", parser.AsString(targets))
 	}
 
-	return sqlDescs, nil
+	return sqlDescs, dbs, nil
 }
 
 // allocateTableRewrites determines the new ID and parentID (a "TableRewrite")
@@ -103,9 +98,23 @@ func selectTargets(
 // into their original database (or the database specified in opst) to avoid
 // leaking table IDs if we can be sure the restore would fail.
 func allocateTableRewrites(
-	ctx context.Context, p sql.PlanHookState, sqlDescs []sqlbase.Descriptor, opts map[string]string,
+	ctx context.Context,
+	p sql.PlanHookState,
+	sqlDescs []sqlbase.Descriptor,
+	restoreDBs []*sqlbase.DatabaseDescriptor,
+	opts map[string]string,
 ) (tableRewriteMap, error) {
 	tableRewrites := make(tableRewriteMap)
+	_, renaming := opts[restoreOptIntoDB]
+
+	restoreDBNames := make(map[string]*sqlbase.DatabaseDescriptor, len(restoreDBs))
+	for _, db := range restoreDBs {
+		restoreDBNames[db.Name] = db
+	}
+
+	if len(restoreDBNames) > 0 && renaming {
+		return nil, errors.Errorf("cannot use %q option when restoring who databases", restoreOptIntoDB)
+	}
 
 	databasesByID := make(map[sqlbase.ID]*sqlbase.DatabaseDescriptor)
 	tablesByID := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
@@ -123,7 +132,7 @@ func allocateTableRewrites(
 	// Fail fast if the tables to restore are incompatible with the specified
 	// options.
 	for _, table := range tablesByID {
-		if _, renaming := opts[restoreOptIntoDB]; renaming && table.IsView() {
+		if renaming && table.IsView() {
 			return nil, errors.Errorf("cannot restore view when using %q option", restoreOptIntoDB)
 		}
 
@@ -147,74 +156,100 @@ func allocateTableRewrites(
 		}
 	}
 
+	needsNewParentIDs := make(map[string][]sqlbase.ID)
+
 	// Fail fast if the necessary databases don't exist or are otherwise
 	// incompatible with this restore.
 	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		// Check that any DBs being restored do _not_ exist.
+		for name := range restoreDBNames {
+			existingDatabaseID, err := txn.Get(ctx, sqlbase.MakeNameMetadataKey(0, name))
+			if err != nil {
+				return err
+			}
+			if existingDatabaseID.Value != nil {
+				return errors.Errorf("database %q already exists", name)
+			}
+		}
+
 		for _, table := range tablesByID {
-			// Determine the new parent ID.
-			var parentID sqlbase.ID
-			{
-				var targetDB string
-				if override, ok := opts[restoreOptIntoDB]; ok {
-					targetDB = override
-				} else {
-					database, ok := databasesByID[table.ParentID]
-					if !ok {
-						return errors.Errorf("no database with ID %d in backup for table %q",
-							table.ParentID, table.Name)
+			var targetDB string
+			if override, ok := opts[restoreOptIntoDB]; ok {
+				targetDB = override
+			} else {
+				database, ok := databasesByID[table.ParentID]
+				if !ok {
+					return errors.Errorf("no database with ID %d in backup for table %q",
+						table.ParentID, table.Name)
+				}
+				targetDB = database.Name
+			}
+
+			if _, ok := restoreDBNames[targetDB]; ok {
+				needsNewParentIDs[targetDB] = append(needsNewParentIDs[targetDB], table.ID)
+			} else {
+				var parentID sqlbase.ID
+				{
+					existingDatabaseID, err := txn.Get(ctx, sqlbase.MakeNameMetadataKey(0, targetDB))
+					if err != nil {
+						return err
 					}
-					targetDB = database.Name
+					if existingDatabaseID.Value == nil {
+						return errors.Errorf("a database named %q needs to exist to restore table %q",
+							targetDB, table.Name)
+					}
+
+					newParentID, err := existingDatabaseID.Value.GetInt()
+					if err != nil {
+						return err
+					}
+					parentID = sqlbase.ID(newParentID)
 				}
 
-				// Make sure the target DB exists.
-				existingDatabaseID, err := txn.Get(ctx, sqlbase.MakeNameMetadataKey(0, targetDB))
-				if err != nil {
-					return err
+				// Check that the table name is _not_ in use.
+				// This would fail the CPut later anyway, but this yields a prettier error.
+				{
+					nameKey := sqlbase.MakeNameMetadataKey(parentID, table.Name)
+					res, err := txn.Get(ctx, nameKey)
+					if err != nil {
+						return err
+					}
+					if res.Exists() {
+						return sqlbase.NewRelationAlreadyExistsError(table.Name)
+					}
 				}
-				if existingDatabaseID.Value == nil {
-					return errors.Errorf("a database named %q needs to exist to restore table %q",
-						targetDB, table.Name)
+
+				// Check privileges. These will be checked again in the transaction
+				// that actually writes the new table descriptors.
+				{
+					parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, parentID)
+					if err != nil {
+						return errors.Wrapf(err, "failed to lookup parent DB %d", parentID)
+					}
+
+					if err := p.CheckPrivilege(parentDB, privilege.CREATE); err != nil {
+						return err
+					}
 				}
-				newParentID, err := existingDatabaseID.Value.GetInt()
-				if err != nil {
-					return err
-				}
-				parentID = sqlbase.ID(newParentID)
+				// Create the table rewrite with the new parent ID. We've done all the
+				// up-front validation that we can.
+				tableRewrites[table.ID] = &jobs.RestoreDetails_TableRewrite{ParentID: parentID}
 			}
-
-			// Check that the table name is _not_ in use.
-			// This would fail the CPut later anyway, but this yields a prettier error.
-			{
-				nameKey := sqlbase.MakeNameMetadataKey(parentID, table.Name)
-				res, err := txn.Get(ctx, nameKey)
-				if err != nil {
-					return err
-				}
-				if res.Exists() {
-					return sqlbase.NewRelationAlreadyExistsError(table.Name)
-				}
-			}
-
-			// Check privileges. These will be checked again in the transaction
-			// that actually writes the new table descriptors.
-			{
-				parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, parentID)
-				if err != nil {
-					return errors.Wrapf(err, "failed to lookup parent DB %d", parentID)
-				}
-
-				if err := p.CheckPrivilege(parentDB, privilege.CREATE); err != nil {
-					return err
-				}
-			}
-
-			// Create the table rewrite with the new parent ID. We've done all the
-			// up-front validation that we can.
-			tableRewrites[table.ID] = &jobs.RestoreDetails_TableRewrite{ParentID: parentID}
 		}
 		return nil
 	}); err != nil {
 		return nil, err
+	}
+
+	for _, db := range restoreDBs {
+		newID, err := sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
+		if err != nil {
+			return nil, err
+		}
+		tableRewrites[db.ID] = &jobs.RestoreDetails_TableRewrite{TableID: newID}
+		for _, tableID := range needsNewParentIDs[db.Name] {
+			tableRewrites[tableID] = &jobs.RestoreDetails_TableRewrite{ParentID: newID}
+		}
 	}
 
 	// Allocate new IDs for each table.
@@ -663,24 +698,36 @@ func splitAndScatter(
 // and the user must have CREATE permission on that database at the time this
 // function is called.
 func restoreTableDescs(
-	ctx context.Context, db *client.DB, tables []*sqlbase.TableDescriptor, user string,
+	ctx context.Context,
+	db *client.DB,
+	databases []*sqlbase.DatabaseDescriptor,
+	tables []*sqlbase.TableDescriptor,
+	user string,
 ) error {
 	ctx, span := tracing.ChildSpan(ctx, "restoreTableDescs")
 	defer tracing.FinishSpan(span)
 	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
+		wroteDBs := map[sqlbase.ID]struct{}{}
+		for _, desc := range databases {
+			wroteDBs[desc.ID] = struct{}{}
+			log.Infof(ctx, "Writing DB %q to ID %v", desc.Name, desc.ID)
+			b.CPut(sqlbase.MakeDescMetadataKey(desc.ID), sqlbase.WrapDescriptor(desc), nil)
+			b.CPut(sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, desc.Name), desc.ID, nil)
+		}
 		for _, table := range tables {
-			parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, table.ParentID)
-			if err != nil {
-				return errors.Wrapf(err, "failed to lookup parent DB %d", table.ParentID)
+			if _, ok := wroteDBs[table.ParentID]; !ok {
+				parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, table.ParentID)
+				if err != nil {
+					return errors.Wrapf(err, "failed to lookup parent DB %d", table.ParentID)
+				}
+				if err := sql.CheckPrivilege(user, parentDB, privilege.CREATE); err != nil {
+					return err
+				}
+				// Default is to copy privs from restoring parent db, like CREATE TABLE.
+				// TODO(dt): Make this more configurable.
+				table.Privileges = parentDB.GetPrivileges()
 			}
-			if err := sql.CheckPrivilege(user, parentDB, privilege.CREATE); err != nil {
-				return err
-			}
-			// Default is to copy privs from restoring parent db, like CREATE TABLE.
-			// TODO(dt): Make this more configurable.
-			table.Privileges = parentDB.GetPrivileges()
-
 			b.CPut(table.GetDescMetadataKey(), sqlbase.WrapDescriptor(table), nil)
 			b.CPut(table.GetNameMetadataKey(), table.ID, nil)
 		}
@@ -734,12 +781,20 @@ func restore(
 
 	failed := roachpb.BulkOpSummary{}
 
+	var databases []*sqlbase.DatabaseDescriptor
 	var tables []*sqlbase.TableDescriptor
 	var oldTableIDs []sqlbase.ID
 	for _, desc := range sqlDescs {
 		if tableDesc := desc.GetTable(); tableDesc != nil {
 			tables = append(tables, tableDesc)
 			oldTableIDs = append(oldTableIDs, tableDesc.ID)
+		}
+		if dbDesc := desc.GetDatabase(); dbDesc != nil {
+			rewrite, ok := tableRewrites[dbDesc.ID]
+			if ok {
+				dbDesc.ID = rewrite.TableID
+				databases = append(databases, dbDesc)
+			}
 		}
 	}
 
@@ -927,7 +982,7 @@ func restore(
 	// Write the new TableDescriptors and flip the namespace entries over to
 	// them. After this call, any queries on a table will be served by the newly
 	// restored data.
-	if err := restoreTableDescs(restoreCtx, db, tables, job.Record.Username); err != nil {
+	if err := restoreTableDescs(restoreCtx, db, databases, tables, job.Record.Username); err != nil {
 		return failed, errors.Wrapf(err, "restoring %d TableDescriptors", len(tables))
 	}
 
@@ -1013,11 +1068,11 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
-	sqlDescs, err := selectTargets(p, backupDescs, restoreStmt.Targets)
+	sqlDescs, restoreDBs, err := selectTargets(p, backupDescs, restoreStmt.Targets)
 	if err != nil {
 		return err
 	}
-	tableRewrites, err := allocateTableRewrites(ctx, p, sqlDescs, opts)
+	tableRewrites, err := allocateTableRewrites(ctx, p, sqlDescs, restoreDBs, opts)
 	if err != nil {
 		return err
 	}
