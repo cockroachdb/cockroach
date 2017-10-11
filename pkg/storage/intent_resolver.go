@@ -161,7 +161,15 @@ func (ir *intentResolver) maybePushTransactions(
 	// resolve.
 	ir.mu.Lock()
 	// TODO(tschottdorf): can optimize this and use same underlying slice.
-	var pushIntents, nonPendingIntents []roachpb.Intent
+	var pushIntents []roachpb.Intent
+	cleanupPushIntentsLocked := func() {
+		for _, intent := range pushIntents {
+			ir.mu.inFlight[intent.Txn.ID]--
+			if ir.mu.inFlight[intent.Txn.ID] == 0 {
+				delete(ir.mu.inFlight, intent.Txn.ID)
+			}
+		}
+	}
 	pushTxns := map[uuid.UUID]enginepb.TxnMeta{}
 	for _, intent := range intents {
 		if intent.Status != roachpb.PENDING {
@@ -169,7 +177,9 @@ func (ir *intentResolver) maybePushTransactions(
 			// because the transaction is already finalized.
 			// This shouldn't happen as all intents created are in
 			// the PENDING status.
-			nonPendingIntents = append(nonPendingIntents, intent)
+			cleanupPushIntentsLocked()
+			ir.mu.Unlock()
+			return nil, roachpb.NewErrorf("unexpected %s intent: %+v", intent.Status, intent)
 		} else if _, ok := ir.mu.inFlight[intent.Txn.ID]; ok && skipIfInFlight {
 			// Another goroutine is working on this transaction so we can
 			// skip it.
@@ -184,9 +194,7 @@ func (ir *intentResolver) maybePushTransactions(
 		}
 	}
 	ir.mu.Unlock()
-	if len(nonPendingIntents) > 0 {
-		return nil, roachpb.NewErrorf("unexpected aborted/resolved intents: %+v", nonPendingIntents)
-	} else if len(pushIntents) == 0 {
+	if len(pushIntents) == 0 {
 		return []roachpb.Intent(nil), nil
 	}
 
@@ -218,12 +226,7 @@ func (ir *intentResolver) maybePushTransactions(
 		pErr = b.MustPErr()
 	}
 	ir.mu.Lock()
-	for _, intent := range pushIntents {
-		ir.mu.inFlight[intent.Txn.ID]--
-		if ir.mu.inFlight[intent.Txn.ID] == 0 {
-			delete(ir.mu.inFlight, intent.Txn.ID)
-		}
-	}
+	cleanupPushIntentsLocked()
 	ir.mu.Unlock()
 	if pErr != nil {
 		return nil, pErr
