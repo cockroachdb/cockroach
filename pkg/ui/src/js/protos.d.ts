@@ -14443,7 +14443,6 @@ export namespace cockroach {
         }
 
         type ZoneConfig$Properties = {
-            replica_attrs?: cockroach.roachpb.Attributes$Properties[];
             range_min_bytes?: Long;
             range_max_bytes?: Long;
             gc?: cockroach.config.GCPolicy$Properties;
@@ -14466,12 +14465,6 @@ export namespace cockroach {
              * @param {cockroach.config.ZoneConfig$Properties=} [properties] Properties to set
              */
             constructor(properties?: cockroach.config.ZoneConfig$Properties);
-
-            /**
-             * ZoneConfig replica_attrs.
-             * @type {Array.<cockroach.roachpb.Attributes$Properties>}
-             */
-            public replica_attrs: cockroach.roachpb.Attributes$Properties[];
 
             /**
              * ZoneConfig range_min_bytes.
