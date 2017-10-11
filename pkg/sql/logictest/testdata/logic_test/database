@@ -99,7 +99,7 @@ SELECT * FROM b.a
 7
 
 statement error database "b" is not empty
-DROP DATABASE b
+DROP DATABASE b RESTRICT
 
 statement ok
 DROP DATABASE b CASCADE

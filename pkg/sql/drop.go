@@ -71,10 +71,20 @@ func (p *planner) DropDatabase(ctx context.Context, n *parser.DropDatabase) (pla
 		return nil, err
 	}
 
-	if len(tbNames) > 0 && n.DropBehavior != parser.DropCascade {
-		return nil, pgerror.NewErrorf(pgerror.CodeDependentObjectsStillExistError,
-			"database %q is not empty and CASCADE was not specified",
-			parser.ErrString(parser.Name(dbDesc.Name)))
+	if len(tbNames) > 0 {
+		switch n.DropBehavior {
+		case parser.DropRestrict:
+			return nil, pgerror.NewErrorf(pgerror.CodeDependentObjectsStillExistError,
+				"database %q is not empty and RESTRICT was specified",
+				parser.ErrString(parser.Name(dbDesc.Name)))
+		case parser.DropDefault:
+			// The default is CASCADE, however be cautious if CASCADE was
+			// not specified explicitly.
+			if p.session.SafeUpdates {
+				return nil, pgerror.NewDangerousStatementErrorf(
+					"DROP DATABASE on non-empty database without explicit CASCADE")
+			}
+		}
 	}
 
 	td := make([]*sqlbase.TableDescriptor, len(tbNames))
