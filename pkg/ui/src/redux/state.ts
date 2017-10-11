@@ -18,7 +18,7 @@ import * as apiReducers from "./apiReducers";
 export interface AdminUIState {
     routing: RouterState;
     localSettings: localSettings.LocalSettingsState;
-    uiData: uiData.UIDataSet;
+    uiData: uiData.UIDataState;
     metrics: metrics.MetricQueryState;
     timewindow: timewindow.TimeWindowState;
     cachedData: apiReducers.APIReducersState;

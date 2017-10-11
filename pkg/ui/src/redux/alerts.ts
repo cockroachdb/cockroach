@@ -11,7 +11,7 @@ import { ThunkAction } from "redux-thunk";
 
 import { LocalSetting } from "./localsettings";
 import {
-  saveUIData, VERSION_DISMISSED_KEY, loadUIData, isInFlight, UIDataSet,
+  saveUIData, VERSION_DISMISSED_KEY, loadUIData, isInFlight, UIDataState,
 } from "./uiData";
 import { refreshCluster, refreshNodes, refreshVersion, refreshHealth } from "./apiReducers";
 import { nodeStatusesSelector } from "./nodes";
@@ -237,7 +237,7 @@ export function alertDataSync(store: Store<AdminUIState>) {
 
   // Memoizers to prevent unnecessary dispatches of alertDataSync if store
   // hasn't changed in an interesting way.
-  let lastUIData: UIDataSet;
+  let lastUIData: UIDataState;
 
   return () => {
     const state: AdminUIState = store.getState();
