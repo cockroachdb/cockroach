@@ -56,6 +56,104 @@ short and related arguments (e.g. `start, end int64`) should either go on the sa
 or the type should be repeated on each line -- no argument should appear by itself
 on a line with no type (confusing and brittle when edited).
 
+### Inline comments for arguments to function calls
+
+A code reader encountering a function call should be able to intuit what all
+the arguments to the call represent. Whenever it wouldn't be otherwise clear
+what the value used as an argument represents (for example, from the variable's
+name if a variable is used or from the type name if a struct literal is used),
+consider annotating it with an inline comment specifying the respective
+parameter's name. Particularly, consider doing this for literals of "basic"
+types (boolean, numeric, string types, whether the type is predeclared or not)
+and for `nil` identifiers, as they are frequently not suggestive enough of what
+they represent.
+
+For example:
+
+```
+intentsToEvalResult(externalIntents, args, false /* alwaysReturn */)
+
+monitor := mon.MakeMonitor(
+  "in-mem temp storage",
+  mon.MemoryResource,
+  nil,             /* curCount */
+  nil,             /* maxHist */
+  1024*1024,       /* increment */
+  maxSizeBytes/10, /* noteworthy */
+)
+```
+
+Note: For `bool` constants, like for all literals, the comment should indicate
+the name of the parameter and does not depend on the argument value.
+*Do not* put a bang in the comment when commenting the `false` constant. Also,
+do not adapt the comment to negate the name of the parameter. For example:
+
+```
+func endTxn(commit bool){}
+
+OK:     endTxn(false /* commit */)
+NOT OK: endTxn(false /* !commit */)
+NOT OK: endTxn(false /* abort */)
+// If you want to add an explanation to an argument, a suggested style is to
+// include both the param name and the explanation with a dash between them:
+OK:     endTxn(false /* commit - we abort as we concluded above that we can't commit */)
+```
+
+#### Try to avoid `bool` parameters
+
+`bool` arguments to functions are often dubious things, as they hint to code that
+essentially reads like:
+
+```
+func doSomething(shouldDoX bool) {
+  if shouldDoX {
+    doX()
+  } else {
+    doY()
+  }
+}
+```
+
+This is not always the case. However, in cases where that is a fair assessment
+of the situation, consider whether the `doSomething` function should exist at
+all.  
+In cases where the `bool` in question, along with other arguments, acts as a
+"knob" to the function consider replacing it with some type of "configuration"
+struct (for examples, see [Dave Cheney's treatment of the
+topic](https://dave.cheney.net/2014/10/17/functional-options-for-friendly-apis)).
+In situations where there's a single `bool` param or the situation is less
+clear-cut, consider replacing the `bool` in question with an enum. For example:
+
+```
+type EndTxnAction bool
+
+const (
+  Commit EndTxnAction = false
+  Abort = true
+)
+
+func endTxn(action EndTxnAction) {}
+```
+is better than
+```
+func endTxn(commit bool) {}
+```
+
+#### Try to give names to sentinel values
+
+The advice above about configurations structs notwithstanding, whenever a
+parameters allows special values such as `nil`, `false`, `0` or `-1` to be
+passed to indicate special behavior (frequently inhibiting some functionality),
+consider creating a named constant representing the sentinel, and using that at
+call sites. This avoids the need for a comment at call sites and helps with
+automated renames.  
+For example, the `Job.Progressed()` method takes a callback that will be called
+with a job's details; a special `Noop` can be passed to specify that no callback
+is needed. `Noob` is just defined as a `nil` function pointer, but
+`job.Progressed(..., jobs.Noop)` reads better than `job.Progressed(..., nil)`.
+[Example Job.Progressed() call](https://github.com/cockroachdb/cockroach/blob/407057955ddbf182e2ac12a7fbf40f6afd4e6922/pkg/sql/backfill.go#L519)
+
+
 ### fmt Verbs
 
 Prefer the most specific verb for your use. In other words, prefer to avoid %v
