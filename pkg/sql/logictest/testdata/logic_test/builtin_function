@@ -949,6 +949,28 @@ DOGGIE
 CAT
 
 query T
+SELECT regexp_replace('abc', 'b', e'\n', 'w')
+----
+a
+c
+
+query T
+SELECT regexp_replace('abc\', 'b', 'a', 'w')
+----
+aac\
+
+query T
+SELECT regexp_replace('abc', 'c', 'a\', 'w')
+----
+aba\
+
+# #19046
+query T
+SELECT regexp_replace('ReRe','R(e)','1\\1','g');
+----
+1\11\1
+
+query T
 SELECT (timestamp '2016-02-10 19:46:33.306157519')::string
 ----
 2016-02-10 19:46:33.306158+00:00
