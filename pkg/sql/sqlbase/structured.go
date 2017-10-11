@@ -1145,11 +1145,14 @@ func (desc *TableDescriptor) validateColumnFamilies(
 	return colIDToFamilyID, nil
 }
 
+// validateTableIndexes validates that indexes are well formed. Checks include
+// validating the columns involved in the index, verifying the index names and
+// IDs are unique, and the family of the primary key is 0. This does not check
+// if indexes are unique (i.e. same set of columns, direction, and uniqueness)
+// as there are practical uses for them.
 func (desc *TableDescriptor) validateTableIndexes(
 	columnNames map[string]ColumnID, colIDToFamilyID map[ColumnID]FamilyID,
 ) error {
-	// TODO(pmattis): Check that the indexes are unique. That is, no 2 indexes
-	// should contain identical sets of columns.
 	if len(desc.PrimaryIndex.ColumnIDs) == 0 {
 		return ErrMissingPrimaryKey
 	}
