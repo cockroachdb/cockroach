@@ -45,7 +45,7 @@ export class OptInAttributes {
 // VERSION_DISMISSED_KEY is the uiData key on the server that tracks when the outdated banner was last dismissed.
 export const VERSION_DISMISSED_KEY = "version_dismissed";
 
-export enum UIDataState {
+export enum UIDataStatus {
   UNINITIALIZED, // Data has not been loaded yet.
   LOADING,
   LOADING_LOAD_ERROR, // Loading with an existing load error
@@ -56,24 +56,24 @@ export enum UIDataState {
 }
 
 export class UIData {
-  state: UIDataState = UIDataState.UNINITIALIZED;
+  status: UIDataStatus = UIDataStatus.UNINITIALIZED;
   error: Error;
   data: any;
 }
 
 /**
- * UIDataSet maintains the current values of fields that are persisted to the
+ * UIDataState maintains the current values of fields that are persisted to the
  * server as UIData. Fields are maintained in this collection as untyped
  * objects.
  */
-export class UIDataSet {
+export class UIDataState {
   [key: string]: UIData;
 }
 
 /**
- * Reducer which modifies a UIDataSet.
+ * Reducer which modifies a UIDataState.
  */
-export default function (state = new UIDataSet(), action: Action): UIDataSet {
+export function uiDataReducer(state = new UIDataState(), action: Action): UIDataState {
   if (_.isNil(action)) {
     return state;
   }
@@ -83,7 +83,7 @@ export default function (state = new UIDataSet(), action: Action): UIDataSet {
       const { key, value } = (action as PayloadAction<KeyValue>).payload;
       state = _.clone(state);
       state[key] = _.clone(state[key]) || new UIData();
-      state[key].state = UIDataState.VALID;
+      state[key].status = UIDataStatus.VALID;
       state[key].data = value;
       state[key].error = null;
       return state;
@@ -93,7 +93,7 @@ export default function (state = new UIDataSet(), action: Action): UIDataSet {
       state = _.clone(state);
       _.each(keys, (k) => {
         state[k] = _.clone(state[k]) || new UIData();
-        state[k].state = UIDataState.SAVING;
+        state[k].status = UIDataStatus.SAVING;
       });
       return state;
     }
@@ -104,7 +104,7 @@ export default function (state = new UIDataSet(), action: Action): UIDataSet {
       const { key: saveErrorKey, error: saveError } = (action as PayloadAction<KeyedError>).payload;
       state = _.clone(state);
       state[saveErrorKey] = _.clone(state[saveErrorKey]) || new UIData();
-      state[saveErrorKey].state = UIDataState.SAVE_ERROR;
+      state[saveErrorKey].status = UIDataStatus.SAVE_ERROR;
       state[saveErrorKey].error = saveError;
       return state;
     }
@@ -113,7 +113,7 @@ export default function (state = new UIDataSet(), action: Action): UIDataSet {
       state = _.clone(state);
       _.each(keys, (k) => {
         state[k] = _.clone(state[k]) || new UIData();
-        state[k].state = UIDataState.LOADING;
+        state[k].status = UIDataStatus.LOADING;
       });
       return state;
     }
@@ -124,7 +124,7 @@ export default function (state = new UIDataSet(), action: Action): UIDataSet {
       const { key: loadErrorKey, error: loadError } = (action as PayloadAction<KeyedError>).payload;
       state = _.clone(state);
       state[loadErrorKey] = _.clone(state[loadErrorKey]) || new UIData();
-      state[loadErrorKey].state = UIDataState.LOAD_ERROR;
+      state[loadErrorKey].status = UIDataStatus.LOAD_ERROR;
       state[loadErrorKey].error = loadError;
       return state;
     }
@@ -205,7 +205,7 @@ export interface KeyedError {
 
 // Returns true if the key exists and the data is valid.
 export function isValid(state: AdminUIState, key: string) {
-  return state.uiData[key] && (state.uiData[key].state === UIDataState.VALID) || false;
+  return state.uiData[key] && (state.uiData[key].status === UIDataStatus.VALID) || false;
 }
 
 // Returns contents of the data field if the key is valid, undefined otherwise.
@@ -215,35 +215,35 @@ export function getData(state: AdminUIState, key: string) {
 
 // Returns true if the given key exists and is in the SAVING state.
 export function isSaving(state: AdminUIState, key: string) {
-  return state.uiData[key] && (state.uiData[key].state === UIDataState.SAVING) || false;
+  return state.uiData[key] && (state.uiData[key].status === UIDataStatus.SAVING) || false;
 }
 
 // Returns true if the given key exists and is in the SAVING state.
 export function isLoading(state: AdminUIState, key: string) {
-  return state.uiData[key] && (state.uiData[key].state === UIDataState.LOADING) || false;
+  return state.uiData[key] && (state.uiData[key].status === UIDataStatus.LOADING) || false;
 }
 
 // Returns true if the key exists and is in either the SAVING or LOADING state.
 export function isInFlight(state: AdminUIState, key: string) {
-  return state.uiData[key] && ((state.uiData[key].state === UIDataState.SAVING) || (state.uiData[key].state === UIDataState.LOADING)) || false;
+  return state.uiData[key] && ((state.uiData[key].status === UIDataStatus.SAVING) || (state.uiData[key].status === UIDataStatus.LOADING)) || false;
 }
 
 // Returns the error field if the key exists and is in the SAVE_ERROR state.
 // Returns null otherwise.
 export function getSaveError(state: AdminUIState, key: string): Error {
-  return (state.uiData[key] && (state.uiData[key].state === UIDataState.SAVE_ERROR || state.uiData[key].state === UIDataState.SAVING)) ? state.uiData[key].error : null;
+  return (state.uiData[key] && (state.uiData[key].status === UIDataStatus.SAVE_ERROR || state.uiData[key].status === UIDataStatus.SAVING)) ? state.uiData[key].error : null;
 }
 
 // Returns the error field if the key exists and is in the LOAD_ERROR state.
 // Returns null otherwise.
 export function getLoadError(state: AdminUIState, key: string): Error {
-  return (state.uiData[key] && (state.uiData[key].state === UIDataState.LOAD_ERROR || state.uiData[key].state === UIDataState.LOADING)) ? state.uiData[key].error : null;
+  return (state.uiData[key] && (state.uiData[key].status === UIDataStatus.LOAD_ERROR || state.uiData[key].status === UIDataStatus.LOADING)) ? state.uiData[key].error : null;
 }
 
 /**
  * saveUIData saves the value one (or more) UIData objects to the server. After
  * the values have been successfully persisted to the server, they are updated
- * in the local UIDataSet store.
+ * in the local UIDataState store.
  */
 export function saveUIData(...values: KeyValue[]) {
   return (dispatch: Dispatch<AdminUIState>, getState: () => AdminUIState): Promise<void> => {

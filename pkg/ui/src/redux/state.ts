@@ -1,39 +1,34 @@
 import _ from "lodash";
-import { createStore, combineReducers, applyMiddleware, compose, GenericStoreEnhancer } from "redux";
 import { hashHistory } from "react-router";
 import { syncHistoryWithStore, routerReducer, RouterState } from "react-router-redux";
+import { createStore, combineReducers, applyMiddleware, compose, GenericStoreEnhancer } from "redux";
 import thunk from "redux-thunk";
 
-import localSettingsReducer from "./localsettings";
-import * as localSettings from "./localsettings";
-import uiDataReducer from "./uiData";
-import * as uiData from "./uiData";
-import metricsReducer from "./metrics";
-import * as metrics from "./metrics";
-import timeWindowReducer from "./timewindow";
-import * as timewindow from "./timewindow";
-import apiReducersReducer from "./apiReducers";
-import * as apiReducers from "./apiReducers";
+import { apiReducersReducer, APIReducersState } from "./apiReducers";
+import { localSettingsReducer, LocalSettingsState } from "./localsettings";
+import { metricsReducer, MetricsState } from "./metrics";
+import { timeWindowReducer, TimeWindowState } from "./timewindow";
+import { uiDataReducer, UIDataState } from "./uiData";
 
 export interface AdminUIState {
+    cachedData: APIReducersState;
+    localSettings: LocalSettingsState;
+    metrics: MetricsState;
     routing: RouterState;
-    localSettings: localSettings.LocalSettingsDict;
-    uiData: uiData.UIDataSet;
-    metrics: metrics.MetricQueryState;
-    timewindow: timewindow.TimeWindowState;
-    cachedData: apiReducers.APIReducersState;
+    timewindow: TimeWindowState;
+    uiData: UIDataState;
 }
 
 // createAdminUIStore is a function that returns a new store for the admin UI.
 // It's in a function so it can be recreated as necessary for testing.
 export const createAdminUIStore = () => createStore(
   combineReducers<AdminUIState>({
-    routing: routerReducer,
-    localSettings: localSettingsReducer,
-    uiData: uiDataReducer,
-    metrics: metricsReducer,
-    timewindow: timeWindowReducer,
     cachedData: apiReducersReducer,
+    localSettings: localSettingsReducer,
+    metrics: metricsReducer,
+    routing: routerReducer,
+    timewindow: timeWindowReducer,
+    uiData: uiDataReducer,
   }),
   compose(
     applyMiddleware(thunk),

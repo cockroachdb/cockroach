@@ -123,7 +123,7 @@ export interface APIReducersState {
   commandQueue: CachedDataReducerState<api.CommandQueueResponseMessage>;
 }
 
-export default combineReducers<APIReducersState>({
+export const apiReducersReducer = combineReducers<APIReducersState>({
   [clusterReducerObj.actionNamespace]: clusterReducerObj.reducer,
   [eventsReducerObj.actionNamespace]: eventsReducerObj.reducer,
   [healthReducerObj.actionNamespace]: healthReducerObj.reducer,
