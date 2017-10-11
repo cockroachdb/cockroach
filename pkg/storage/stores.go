@@ -173,11 +173,14 @@ func (ls *Stores) Send(
 	// If we aren't given a Replica, then a little bending over
 	// backwards here. This case applies exclusively to unittests.
 	if ba.RangeID == 0 || ba.Replica.StoreID == 0 {
-		rs, err := keys.Range(ba)
-		if err != nil {
-			return nil, roachpb.NewError(err)
+		if !ba.HasRSpan() {
+			rs, err := keys.Range(ba, true)
+			if err != nil {
+				return nil, roachpb.NewError(err)
+			}
+			ba.RSpan = rs
 		}
-		rangeID, repDesc, err := ls.LookupReplica(rs.Key, rs.EndKey)
+		rangeID, repDesc, err := ls.LookupReplica(ba.RSpan.Key, ba.RSpan.EndKey)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}

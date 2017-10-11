@@ -1765,9 +1765,6 @@ func (r *Replica) Send(
 		r.leaseholderStats.record(ba.Header.GatewayNodeID)
 	}
 
-	if err := r.checkBatchRequest(ba); err != nil {
-		return nil, roachpb.NewError(err)
-	}
 	// Add the range log tag.
 	ctx = r.AnnotateCtx(ctx)
 	ctx, cleanup := tracing.EnsureContext(ctx, r.AmbientContext.Tracer, "replica send")
@@ -1776,12 +1773,15 @@ func (r *Replica) Send(
 	// If the internal Raft group is not initialized, create it and wake the leader.
 	r.maybeInitializeRaftGroup(ctx)
 
-	useRaft := ba.IsWrite()
 	isReadOnly := ba.IsReadOnly()
-
+	useRaft := !isReadOnly && ba.IsWrite()
 	if isReadOnly && r.store.Clock().MaxOffset() == timeutil.ClocklessMaxOffset {
 		// Clockless reads mode: reads go through Raft.
 		useRaft = true
+	}
+
+	if err := r.checkBatchRequest(ba, isReadOnly); err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	// Differentiate between admin, read-only and write.
@@ -1864,8 +1864,8 @@ func (r *Replica) requestCanProceed(rspan roachpb.RSpan, ts hlc.Timestamp) error
 // read-only, or none.
 // TODO(tschottdorf): should check that request is contained in range
 // and that EndTransaction only occurs at the very end.
-func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest) error {
-	if ba.IsReadOnly() {
+func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest, isReadOnly bool) error {
+	if isReadOnly {
 		if ba.ReadConsistency == roachpb.INCONSISTENT && ba.Txn != nil {
 			// Disallow any inconsistent reads within txns.
 			return errors.Errorf("cannot allow inconsistent reads within a transaction")
@@ -1902,7 +1902,7 @@ func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry pr
 	// marked as affecting the cache are processed. Inconsistent reads
 	// are excluded.
 	if pErr == nil && retry == proposalNoRetry && ec.ba.ReadConsistency != roachpb.INCONSISTENT {
-		span, err := keys.Range(ec.ba)
+		span, err := keys.Range(ec.ba, false)
 		if err != nil {
 			// This can't happen because we've already called keys.Range before
 			// evaluating the request.
@@ -2223,7 +2223,7 @@ func (r *Replica) removeCmdsFromCommandQueue(cmds batchCmdSet) {
 // will inform the batch response timestamp or batch response txn
 // timestamp.
 func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.Error) {
-	span, err := keys.Range(*ba)
+	span, err := keys.Range(*ba, false)
 	if err != nil {
 		return false, roachpb.NewError(err)
 	}
@@ -2316,7 +2316,7 @@ func (r *Replica) executeAdminBatch(
 		return nil, roachpb.NewErrorf("only single-element admin batches allowed")
 	}
 
-	rSpan, err := keys.Range(ba)
+	rSpan, err := keys.Range(ba, false)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -2439,7 +2439,7 @@ func (r *Replica) executeReadOnlyBatch(
 		return nil, roachpb.NewError(err)
 	}
 
-	rSpan, err := keys.Range(ba)
+	rSpan, err := keys.Range(ba, false)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -2793,7 +2793,7 @@ func (r *Replica) evaluateProposal(
 
 	result.Replicated.IsLeaseRequest = ba.IsLeaseRequest()
 	result.Replicated.Timestamp = ba.Timestamp
-	rSpan, err := keys.Range(ba)
+	rSpan, err := keys.Range(ba, false)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -2875,7 +2875,7 @@ func (r *Replica) propose(
 		return nil, nil, noop, roachpb.NewError(err)
 	}
 
-	rSpan, err := keys.Range(ba)
+	rSpan, err := keys.Range(ba, false)
 	if err != nil {
 		return nil, nil, noop, roachpb.NewError(err)
 	}

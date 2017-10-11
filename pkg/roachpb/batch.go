@@ -141,6 +141,12 @@ func (ba *BatchRequest) IsSingleQueryTxnRequest() bool {
 	return false
 }
 
+// HasRSpan returns whether the RSpan member has been initialized.
+// This is true if either the Key or EndKey has non-zero length.
+func (ba *BatchRequest) HasRSpan() bool {
+	return len(ba.RSpan.Key) > 0 || len(ba.RSpan.EndKey) > 0
+}
+
 // GetPrevLeaseForLeaseRequest returns the previous lease, at the time
 // of proposal, for a request lease or transfer lease request. If the
 // batch does not contain a single lease request, this method will panic.

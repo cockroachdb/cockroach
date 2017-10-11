@@ -85,7 +85,7 @@ func (db *testSender) Send(
 		return nil, roachpb.NewErrorf("%s method not supported", et.Method())
 	}
 	// Lookup range and direct request.
-	rs, err := keys.Range(ba)
+	rs, err := keys.Range(ba, false)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -862,65 +862,6 @@ func TestStoreExecuteNoop(t *testing.T) {
 	}
 }
 
-// TestStoreVerifyKeys checks that key length is enforced and
-// that end keys must sort >= start.
-func TestStoreVerifyKeys(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	store, _ := createTestStore(t, stopper)
-	// Try a start key == KeyMax.
-	gArgs := getArgs(roachpb.KeyMax)
-	if _, pErr := client.SendWrapped(context.Background(), store.testSender(), &gArgs); !testutils.IsPError(pErr, "must be less than KeyMax") {
-		t.Fatalf("expected error for start key == KeyMax: %v", pErr)
-	}
-	// Try a get with an end key specified (get requires only a start key and should fail).
-	gArgs.EndKey = roachpb.KeyMax
-	if _, pErr := client.SendWrapped(context.Background(), store.testSender(), &gArgs); !testutils.IsPError(pErr, "must be less than KeyMax") {
-		t.Fatalf("unexpected error for end key specified on a non-range-based operation: %v", pErr)
-	}
-	// Try a scan with end key < start key.
-	sArgs := scanArgs([]byte("b"), []byte("a"))
-	if _, pErr := client.SendWrapped(context.Background(), store.testSender(), &sArgs); !testutils.IsPError(pErr, "must be greater than") {
-		t.Fatalf("unexpected error for end key < start: %v", pErr)
-	}
-	// Try a scan with start key == end key.
-	sArgs.Key = []byte("a")
-	sArgs.EndKey = sArgs.Key
-	if _, pErr := client.SendWrapped(context.Background(), store.testSender(), &sArgs); !testutils.IsPError(pErr, "must be greater than") {
-		t.Fatalf("unexpected error for start == end key: %v", pErr)
-	}
-	// Try a scan with range-local start key, but "regular" end key.
-	sArgs.Key = keys.MakeRangeKey([]byte("test"), []byte("sffx"), nil)
-	sArgs.EndKey = []byte("z")
-	if _, pErr := client.SendWrapped(context.Background(), store.testSender(), &sArgs); !testutils.IsPError(pErr, "range-local") {
-		t.Fatalf("unexpected error for local start, non-local end key: %v", pErr)
-	}
-
-	// Try a put to meta2 key which would otherwise exceed maximum key
-	// length, but is accepted because of the meta prefix.
-	meta2KeyMax := testutils.MakeKey(keys.Meta2Prefix, roachpb.RKeyMax)
-	pArgs := putArgs(meta2KeyMax, []byte("value"))
-	if _, pErr := client.SendWrapped(context.Background(), store.testSender(), &pArgs); pErr != nil {
-		t.Fatalf("unexpected error on put to meta2 value: %s", pErr)
-	}
-	// Try to put a range descriptor record for a start key which is
-	// maximum length.
-	key := append([]byte{}, roachpb.RKeyMax...)
-	key[len(key)-1] = 0x01
-	pArgs = putArgs(keys.RangeDescriptorKey(key), []byte("value"))
-	if _, pErr := client.SendWrapped(context.Background(), store.testSender(), &pArgs); pErr != nil {
-		t.Fatalf("unexpected error on put to range descriptor for KeyMax value: %s", pErr)
-	}
-	// Try a put to txn record for a meta2 key (note that this doesn't
-	// actually happen in practice, as txn records are not put directly,
-	// but are instead manipulated only through txn methods).
-	pArgs = putArgs(keys.TransactionKey(meta2KeyMax, uuid.MakeV4()), []byte("value"))
-	if _, pErr := client.SendWrapped(context.Background(), store.testSender(), &pArgs); pErr != nil {
-		t.Fatalf("unexpected error on put to txn meta2 value: %s", pErr)
-	}
-}
-
 // TestStoreSendUpdateTime verifies that the node clock is updated.
 func TestStoreSendUpdateTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -972,7 +913,7 @@ func TestStoreSendWithClockOffset(t *testing.T) {
 	// Set args timestamp to exceed max offset.
 	reqTS := store.cfg.Clock.Now().Add(store.cfg.Clock.MaxOffset().Nanoseconds()+1, 0)
 	_, pErr := client.SendWrappedWith(context.Background(), store.testSender(), roachpb.Header{Timestamp: reqTS}, &args)
-	if !testutils.IsPError(pErr, "rejecting command with timestamp in the future") {
+	if !testutils.IsPError(pErr, "remote wall time is too far ahead") {
 		t.Errorf("unexpected error: %v", pErr)
 	}
 }
@@ -1942,15 +1883,15 @@ func TestStoreBadRequests(t *testing.T) {
 		err    string
 	}{
 		// EndKey for non-Range is invalid.
-		{&args1, nil, "should not be specified"},
+		{&args1, nil, "end key specified for non-range operation"},
 		// Start key must be less than KeyMax.
 		{&args2, nil, "must be less than"},
 		// End key must be greater than start.
 		{&args3, nil, "must be greater than"},
 		{&args4, nil, "must be greater than"},
 		// Can't range from local to global.
-		{&args5, nil, "must be greater than LocalMax"},
-		{&args6, nil, "is range-local, but"},
+		{&args5, nil, "start and end keys mix range-local and global"},
+		{&args6, nil, "start and end keys mix range-local and global"},
 		// Txn must be specified in Header.
 		{&tArgs0, nil, "no transaction specified"},
 		{&tArgs1, nil, "no transaction specified"},

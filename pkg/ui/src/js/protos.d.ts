@@ -14831,6 +14831,126 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
+        type RSpan$Properties = {
+            key?: Uint8Array;
+            end_key?: Uint8Array;
+        };
+
+        /**
+         * Constructs a new RSpan.
+         * @exports cockroach.roachpb.RSpan
+         * @constructor
+         * @param {cockroach.roachpb.RSpan$Properties=} [properties] Properties to set
+         */
+        class RSpan {
+
+            /**
+             * Constructs a new RSpan.
+             * @exports cockroach.roachpb.RSpan
+             * @constructor
+             * @param {cockroach.roachpb.RSpan$Properties=} [properties] Properties to set
+             */
+            constructor(properties?: cockroach.roachpb.RSpan$Properties);
+
+            /**
+             * RSpan key.
+             * @type {Uint8Array}
+             */
+            public key: Uint8Array;
+
+            /**
+             * RSpan end_key.
+             * @type {Uint8Array}
+             */
+            public end_key: Uint8Array;
+
+            /**
+             * Creates a new RSpan instance using the specified properties.
+             * @param {cockroach.roachpb.RSpan$Properties=} [properties] Properties to set
+             * @returns {cockroach.roachpb.RSpan} RSpan instance
+             */
+            public static create(properties?: cockroach.roachpb.RSpan$Properties): cockroach.roachpb.RSpan;
+
+            /**
+             * Encodes the specified RSpan message. Does not implicitly {@link cockroach.roachpb.RSpan.verify|verify} messages.
+             * @param {cockroach.roachpb.RSpan$Properties} message RSpan message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            public static encode(message: cockroach.roachpb.RSpan$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified RSpan message, length delimited. Does not implicitly {@link cockroach.roachpb.RSpan.verify|verify} messages.
+             * @param {cockroach.roachpb.RSpan$Properties} message RSpan message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            public static encodeDelimited(message: cockroach.roachpb.RSpan$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a RSpan message from the specified reader or buffer.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {cockroach.roachpb.RSpan} RSpan
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.roachpb.RSpan;
+
+            /**
+             * Decodes a RSpan message from the specified reader or buffer, length delimited.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {cockroach.roachpb.RSpan} RSpan
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.roachpb.RSpan;
+
+            /**
+             * Verifies a RSpan message.
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {?string} `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): string;
+
+            /**
+             * Creates a RSpan message from a plain object. Also converts values to their respective internal types.
+             * @param {Object.<string,*>} object Plain object
+             * @returns {cockroach.roachpb.RSpan} RSpan
+             */
+            public static fromObject(object: { [k: string]: any }): cockroach.roachpb.RSpan;
+
+            /**
+             * Creates a RSpan message from a plain object. Also converts values to their respective internal types.
+             * This is an alias of {@link cockroach.roachpb.RSpan.fromObject}.
+             * @function
+             * @param {Object.<string,*>} object Plain object
+             * @returns {cockroach.roachpb.RSpan} RSpan
+             */
+            public static from(object: { [k: string]: any }): cockroach.roachpb.RSpan;
+
+            /**
+             * Creates a plain object from a RSpan message. Also converts values to other types if specified.
+             * @param {cockroach.roachpb.RSpan} message RSpan
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            public static toObject(message: cockroach.roachpb.RSpan, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+            /**
+             * Creates a plain object from this RSpan message. Also converts values to other types if specified.
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this RSpan to JSON.
+             * @returns {Object.<string,*>} JSON object
+             */
+            public toJSON(): { [k: string]: any };
+        }
+
         /**
          * ValueType enum.
          * @name ValueType

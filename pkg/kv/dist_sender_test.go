@@ -955,7 +955,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 		ba roachpb.BatchRequest,
 		_ *rpc.Context,
 	) (*roachpb.BatchResponse, error) {
-		rs, err := keys.Range(ba)
+		rs, err := keys.Range(ba, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1041,7 +1041,7 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 		ba roachpb.BatchRequest,
 		_ *rpc.Context,
 	) (*roachpb.BatchResponse, error) {
-		rs, err := keys.Range(ba)
+		rs, err := keys.Range(ba, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1373,7 +1373,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		ba roachpb.BatchRequest,
 		_ *rpc.Context,
 	) (*roachpb.BatchResponse, error) {
-		rs, err := keys.Range(ba)
+		rs, err := keys.Range(ba, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1579,7 +1579,7 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 		ba roachpb.BatchRequest,
 		_ *rpc.Context,
 	) (*roachpb.BatchResponse, error) {
-		rs, err := keys.Range(ba)
+		rs, err := keys.Range(ba, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1890,7 +1890,7 @@ func TestSequenceUpdateOnMultiRangeQueryLoop(t *testing.T) {
 		ba roachpb.BatchRequest,
 		_ *rpc.Context,
 	) (*roachpb.BatchResponse, error) {
-		rs, err := keys.Range(ba)
+		rs, err := keys.Range(ba, false)
 		if err != nil {
 			t.Fatal(err)
 		}

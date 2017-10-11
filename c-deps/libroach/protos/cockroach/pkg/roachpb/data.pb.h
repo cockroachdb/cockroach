@@ -77,6 +77,9 @@ extern ObservedTimestampDefaultTypeInternal _ObservedTimestamp_default_instance_
 class Percentiles;
 class PercentilesDefaultTypeInternal;
 extern PercentilesDefaultTypeInternal _Percentiles_default_instance_;
+class RSpan;
+class RSpanDefaultTypeInternal;
+extern RSpanDefaultTypeInternal _RSpan_default_instance_;
 class RangeDescriptor;
 class RangeDescriptorDefaultTypeInternal;
 extern RangeDescriptorDefaultTypeInternal _RangeDescriptor_default_instance_;
@@ -315,6 +318,120 @@ class Span : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(
 };
 // -------------------------------------------------------------------
 
+class RSpan : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.RSpan) */ {
+ public:
+  RSpan();
+  virtual ~RSpan();
+
+  RSpan(const RSpan& from);
+
+  inline RSpan& operator=(const RSpan& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  inline const ::std::string& unknown_fields() const {
+    return _internal_metadata_.unknown_fields();
+  }
+
+  inline ::std::string* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields();
+  }
+
+  static const RSpan& default_instance();
+
+  static inline const RSpan* internal_default_instance() {
+    return reinterpret_cast<const RSpan*>(
+               &_RSpan_default_instance_);
+  }
+  static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
+    1;
+
+  void Swap(RSpan* other);
+
+  // implements Message ----------------------------------------------
+
+  inline RSpan* New() const PROTOBUF_FINAL { return New(NULL); }
+
+  RSpan* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    PROTOBUF_FINAL;
+  void CopyFrom(const RSpan& from);
+  void MergeFrom(const RSpan& from);
+  void Clear() PROTOBUF_FINAL;
+  bool IsInitialized() const PROTOBUF_FINAL;
+
+  size_t ByteSizeLong() const PROTOBUF_FINAL;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) PROTOBUF_FINAL;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const PROTOBUF_FINAL;
+  void DiscardUnknownFields();
+  int GetCachedSize() const PROTOBUF_FINAL { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(RSpan* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const PROTOBUF_FINAL;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  bool has_key() const;
+  void clear_key();
+  static const int kKeyFieldNumber = 3;
+  const ::std::string& key() const;
+  void set_key(const ::std::string& value);
+  #if LANG_CXX11
+  void set_key(::std::string&& value);
+  #endif
+  void set_key(const char* value);
+  void set_key(const void* value, size_t size);
+  ::std::string* mutable_key();
+  ::std::string* release_key();
+  void set_allocated_key(::std::string* key);
+
+  bool has_end_key() const;
+  void clear_end_key();
+  static const int kEndKeyFieldNumber = 4;
+  const ::std::string& end_key() const;
+  void set_end_key(const ::std::string& value);
+  #if LANG_CXX11
+  void set_end_key(::std::string&& value);
+  #endif
+  void set_end_key(const char* value);
+  void set_end_key(const void* value, size_t size);
+  ::std::string* mutable_end_key();
+  ::std::string* release_end_key();
+  void set_allocated_end_key(::std::string* end_key);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.RSpan)
+ private:
+  void set_has_key();
+  void clear_has_key();
+  void set_has_end_key();
+  void clear_has_end_key();
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::HasBits<1> _has_bits_;
+  mutable int _cached_size_;
+  ::google::protobuf::internal::ArenaStringPtr key_;
+  ::google::protobuf::internal::ArenaStringPtr end_key_;
+  friend struct protobuf_cockroach_2fpkg_2froachpb_2fdata_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
 class Value : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.Value) */ {
  public:
   Value();
@@ -342,7 +459,7 @@ class Value : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
                &_Value_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    1;
+    2;
 
   void Swap(Value* other);
 
@@ -451,7 +568,7 @@ class KeyValue : public ::google::protobuf::MessageLite /* @@protoc_insertion_po
                &_KeyValue_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    2;
+    3;
 
   void Swap(KeyValue* other);
 
@@ -559,7 +676,7 @@ class StoreIdent : public ::google::protobuf::MessageLite /* @@protoc_insertion_
                &_StoreIdent_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    3;
+    4;
 
   void Swap(StoreIdent* other);
 
@@ -674,7 +791,7 @@ class SplitTrigger : public ::google::protobuf::MessageLite /* @@protoc_insertio
                &_SplitTrigger_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    4;
+    5;
 
   void Swap(SplitTrigger* other);
 
@@ -776,7 +893,7 @@ class MergeTrigger : public ::google::protobuf::MessageLite /* @@protoc_insertio
                &_MergeTrigger_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    5;
+    6;
 
   void Swap(MergeTrigger* other);
 
@@ -878,7 +995,7 @@ class ChangeReplicasTrigger : public ::google::protobuf::MessageLite /* @@protoc
                &_ChangeReplicasTrigger_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    6;
+    7;
 
   void Swap(ChangeReplicasTrigger* other);
 
@@ -999,7 +1116,7 @@ class ModifiedSpanTrigger : public ::google::protobuf::MessageLite /* @@protoc_i
                &_ModifiedSpanTrigger_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    7;
+    8;
 
   void Swap(ModifiedSpanTrigger* other);
 
@@ -1100,7 +1217,7 @@ class InternalCommitTrigger : public ::google::protobuf::MessageLite /* @@protoc
                &_InternalCommitTrigger_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    8;
+    9;
 
   void Swap(InternalCommitTrigger* other);
 
@@ -1228,7 +1345,7 @@ class ObservedTimestamp : public ::google::protobuf::MessageLite /* @@protoc_ins
                &_ObservedTimestamp_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    9;
+    10;
 
   void Swap(ObservedTimestamp* other);
 
@@ -1328,7 +1445,7 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
                &_Transaction_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    10;
+    11;
 
   void Swap(Transaction* other);
 
@@ -1529,7 +1646,7 @@ class Intent : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
                &_Intent_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    11;
+    12;
 
   void Swap(Intent* other);
 
@@ -1640,7 +1757,7 @@ class Lease : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
                &_Lease_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    12;
+    13;
 
   void Swap(Lease* other);
 
@@ -1784,7 +1901,7 @@ class AbortCacheEntry : public ::google::protobuf::MessageLite /* @@protoc_inser
                &_AbortCacheEntry_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    13;
+    14;
 
   void Swap(AbortCacheEntry* other);
 
@@ -1901,7 +2018,7 @@ class CSVOptions : public ::google::protobuf::MessageLite /* @@protoc_insertion_
                &_CSVOptions_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    14;
+    15;
 
   void Swap(CSVOptions* other);
 
@@ -2117,6 +2234,134 @@ inline void Span::set_allocated_end_key(::std::string* end_key) {
   }
   end_key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), end_key);
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Span.end_key)
+}
+
+// -------------------------------------------------------------------
+
+// RSpan
+
+inline bool RSpan::has_key() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+inline void RSpan::set_has_key() {
+  _has_bits_[0] |= 0x00000001u;
+}
+inline void RSpan::clear_has_key() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+inline void RSpan::clear_key() {
+  key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_key();
+}
+inline const ::std::string& RSpan::key() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RSpan.key)
+  return key_.GetNoArena();
+}
+inline void RSpan::set_key(const ::std::string& value) {
+  set_has_key();
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.RSpan.key)
+}
+#if LANG_CXX11
+inline void RSpan::set_key(::std::string&& value) {
+  set_has_key();
+  key_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.RSpan.key)
+}
+#endif
+inline void RSpan::set_key(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  set_has_key();
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.RSpan.key)
+}
+inline void RSpan::set_key(const void* value, size_t size) {
+  set_has_key();
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.RSpan.key)
+}
+inline ::std::string* RSpan::mutable_key() {
+  set_has_key();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RSpan.key)
+  return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* RSpan::release_key() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.RSpan.key)
+  clear_has_key();
+  return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void RSpan::set_allocated_key(::std::string* key) {
+  if (key != NULL) {
+    set_has_key();
+  } else {
+    clear_has_key();
+  }
+  key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), key);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RSpan.key)
+}
+
+inline bool RSpan::has_end_key() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+inline void RSpan::set_has_end_key() {
+  _has_bits_[0] |= 0x00000002u;
+}
+inline void RSpan::clear_has_end_key() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+inline void RSpan::clear_end_key() {
+  end_key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_end_key();
+}
+inline const ::std::string& RSpan::end_key() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RSpan.end_key)
+  return end_key_.GetNoArena();
+}
+inline void RSpan::set_end_key(const ::std::string& value) {
+  set_has_end_key();
+  end_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.RSpan.end_key)
+}
+#if LANG_CXX11
+inline void RSpan::set_end_key(::std::string&& value) {
+  set_has_end_key();
+  end_key_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.RSpan.end_key)
+}
+#endif
+inline void RSpan::set_end_key(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  set_has_end_key();
+  end_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.RSpan.end_key)
+}
+inline void RSpan::set_end_key(const void* value, size_t size) {
+  set_has_end_key();
+  end_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.RSpan.end_key)
+}
+inline ::std::string* RSpan::mutable_end_key() {
+  set_has_end_key();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RSpan.end_key)
+  return end_key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* RSpan::release_end_key() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.RSpan.end_key)
+  clear_has_end_key();
+  return end_key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void RSpan::set_allocated_end_key(::std::string* end_key) {
+  if (end_key != NULL) {
+    set_has_end_key();
+  } else {
+    clear_has_end_key();
+  }
+  end_key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), end_key);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RSpan.end_key)
 }
 
 // -------------------------------------------------------------------
@@ -4089,6 +4334,8 @@ inline void CSVOptions::set_allocated_nullif(::std::string* nullif) {
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

@@ -401,14 +401,18 @@ func TestBatchRange(t *testing.T) {
 		},
 		{
 			// Range-local point request.
-			req: [][2]string{{string(RangeDescriptorKey(roachpb.RKeyMax)), ""}},
-			exp: [2]string{"\xff\xff", "\xff\xff\x00"},
+			req: [][2]string{{string(RangeDescriptorKey(roachpb.RKey("a"))), ""}},
+			exp: [2]string{"a", "a\x00"},
+		},
+		{
+			req: [][2]string{{string(RangeDescriptorKey(roachpb.RKeyMin)), string(RangeDescriptorKey(roachpb.RKeyMax))}},
+			exp: [2]string{"", "\xff\xff\x00"},
 		},
 		{
 			// Range-local to global such that the key ordering flips.
 			// Important that we get a valid range back.
-			req: [][2]string{{string(RangeDescriptorKey(roachpb.RKeyMax)), "x"}},
-			exp: [2]string{"\xff\xff", "\xff\xff\x00"},
+			req: [][2]string{{string(RangeDescriptorKey(roachpb.RKey("x"))), "a"}},
+			exp: [2]string{"x", "x\x00"},
 		},
 		{
 			// Range-local to global without order messed up.
@@ -422,7 +426,7 @@ func TestBatchRange(t *testing.T) {
 		for _, pair := range c.req {
 			ba.Add(&roachpb.ScanRequest{Span: roachpb.Span{Key: roachpb.Key(pair[0]), EndKey: roachpb.Key(pair[1])}})
 		}
-		if rs, err := Range(ba); err != nil {
+		if rs, err := Range(ba, false); err != nil {
 			t.Errorf("%d: %v", i, err)
 		} else if actPair := [2]string{string(rs.Key), string(rs.EndKey)}; !reflect.DeepEqual(actPair, c.exp) {
 			t.Errorf("%d: expected [%q,%q), got [%q,%q)", i, c.exp[0], c.exp[1], actPair[0], actPair[1])
@@ -433,32 +437,65 @@ func TestBatchRange(t *testing.T) {
 // TestBatchError verifies that Range returns an error if a request has an invalid range.
 func TestBatchError(t *testing.T) {
 	testCases := []struct {
-		req    [2]string
-		errMsg string
+		req     [2]string
+		enforce bool
+		errMsg  string
 	}{
 		{
-			req:    [2]string{"\xff\xff\xff\xff", "a"},
-			errMsg: "must be less than KeyMax",
+			req:     [2]string{"b", "a"},
+			enforce: true,
+			errMsg:  "must be greater than start",
 		},
 		{
-			req:    [2]string{"a", "\xff\xff\xff\xff"},
-			errMsg: "must be less than or equal to KeyMax",
+			req:     [2]string{"\xff\xff\xff\xff", "a"},
+			enforce: true,
+			errMsg:  "must be less than KeyMax",
+		},
+		{
+			req:     [2]string{"a", "\xff\xff\xff\xff"},
+			enforce: true,
+			errMsg:  "must be less than or equal to KeyMax",
+		},
+		{
+			req:     [2]string{"", "a"},
+			enforce: true,
+			errMsg:  "start and end keys mix range-local and global",
+		},
+		{
+			req:     [2]string{"", "a"},
+			enforce: false,
+			errMsg:  "",
+		},
+		{
+			req:     [2]string{string(roachpb.RKeyMin), string(roachpb.RKeyMax)},
+			enforce: true,
+			errMsg:  "start and end keys mix range-local and global",
+		},
+		{
+			req:     [2]string{string(roachpb.RKeyMin), string(roachpb.RKeyMax)},
+			enforce: false,
+			errMsg:  "",
+		},
+		{
+			req:     [2]string{string(RangeDescriptorKey(roachpb.RKey("a"))), "x"},
+			enforce: true,
+			errMsg:  "start and end keys mix range-local and global",
 		},
 	}
 
 	for i, c := range testCases {
 		var ba roachpb.BatchRequest
 		ba.Add(&roachpb.ScanRequest{Span: roachpb.Span{Key: roachpb.Key(c.req[0]), EndKey: roachpb.Key(c.req[1])}})
-		if _, err := Range(ba); !testutils.IsError(err, c.errMsg) {
-			t.Errorf("%d: unexpected error %v", i, err)
+		if _, err := Range(ba, c.enforce); !testutils.IsError(err, c.errMsg) {
+			t.Errorf("%d: expected error %q; got %v", i, c.errMsg, err)
 		}
 	}
 
 	// Test a case where a non-range request has an end key.
 	var ba roachpb.BatchRequest
 	ba.Add(&roachpb.GetRequest{Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}})
-	if _, err := Range(ba); !testutils.IsError(err, "end key specified for non-range operation") {
-		t.Errorf("unexpected error %v", err)
+	if _, err := Range(ba, true); !testutils.IsError(err, "end key specified for non-range operation") {
+		t.Errorf("expected error %v", err)
 	}
 }
 

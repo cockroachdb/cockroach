@@ -938,6 +938,18 @@ func (t *Transaction) ResetObservedTimestamps() {
 // operations in the transaction. When multiple calls are made for a single
 // nodeID, the lowest timestamp prevails.
 func (t *Transaction) UpdateObservedTimestamp(nodeID NodeID, maxTS hlc.Timestamp) {
+	// These if blocks are a fast path optimization for cases where
+	// there are no observed timestamps or exactly one which is for
+	// the same nodeID as we're updating.
+	if l := len(t.ObservedTimestamps); l == 0 {
+		t.ObservedTimestamps = []ObservedTimestamp{{NodeID: nodeID, Timestamp: maxTS}}
+		return
+	} else if l == 1 && t.ObservedTimestamps[0].NodeID == nodeID {
+		if maxTS.Less(t.ObservedTimestamps[0].Timestamp) {
+			t.ObservedTimestamps = []ObservedTimestamp{{NodeID: nodeID, Timestamp: maxTS}}
+		}
+		return
+	}
 	s := observedTimestampSlice(t.ObservedTimestamps)
 	t.ObservedTimestamps = s.update(nodeID, maxTS)
 }
@@ -1211,13 +1223,8 @@ func (a Spans) Len() int           { return len(a) }
 func (a Spans) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a Spans) Less(i, j int) bool { return a[i].Key.Compare(a[j].Key) < 0 }
 
-// RSpan is a key range with an inclusive start RKey and an exclusive end RKey.
-type RSpan struct {
-	Key, EndKey RKey
-}
-
 // Equal compares for equality.
-func (rs RSpan) Equal(o RSpan) bool {
+func (rs RSpan) EqualValue(o RSpan) bool {
 	return rs.Key.Equal(o.Key) && rs.EndKey.Equal(o.EndKey)
 }
 

@@ -18,6 +18,8 @@ namespace cockroach {
 namespace roachpb {
 class SpanDefaultTypeInternal : public ::google::protobuf::internal::ExplicitlyConstructed<Span> {
 } _Span_default_instance_;
+class RSpanDefaultTypeInternal : public ::google::protobuf::internal::ExplicitlyConstructed<RSpan> {
+} _RSpan_default_instance_;
 class ValueDefaultTypeInternal : public ::google::protobuf::internal::ExplicitlyConstructed<Value> {
 } _Value_default_instance_;
 class KeyValueDefaultTypeInternal : public ::google::protobuf::internal::ExplicitlyConstructed<KeyValue> {
@@ -75,11 +77,13 @@ PROTOBUF_CONSTEXPR_VAR ::google::protobuf::internal::ParseTable const
   { NULL, NULL, 0, -1, -1, false },
   { NULL, NULL, 0, -1, -1, false },
   { NULL, NULL, 0, -1, -1, false },
+  { NULL, NULL, 0, -1, -1, false },
 };
 
 
 void TableStruct::Shutdown() {
   _Span_default_instance_.Shutdown();
+  _RSpan_default_instance_.Shutdown();
   _Value_default_instance_.Shutdown();
   _KeyValue_default_instance_.Shutdown();
   _StoreIdent_default_instance_.Shutdown();
@@ -104,6 +108,7 @@ void TableStruct::InitDefaultsImpl() {
   ::cockroach::storage::engine::enginepb::protobuf_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto::InitDefaults();
   ::cockroach::util::hlc::protobuf_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto::InitDefaults();
   _Span_default_instance_.DefaultConstruct();
+  _RSpan_default_instance_.DefaultConstruct();
   _Value_default_instance_.DefaultConstruct();
   _KeyValue_default_instance_.DefaultConstruct();
   _StoreIdent_default_instance_.DefaultConstruct();
@@ -607,6 +612,378 @@ void Span::set_allocated_end_key(::std::string* end_key) {
   }
   end_key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), end_key);
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Span.end_key)
+}
+
+#endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
+
+// ===================================================================
+
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int RSpan::kKeyFieldNumber;
+const int RSpan::kEndKeyFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+RSpan::RSpan()
+  : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
+  if (GOOGLE_PREDICT_TRUE(this != internal_default_instance())) {
+    protobuf_cockroach_2fpkg_2froachpb_2fdata_2eproto::InitDefaults();
+  }
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.RSpan)
+}
+RSpan::RSpan(const RSpan& from)
+  : ::google::protobuf::MessageLite(),
+      _internal_metadata_(NULL),
+      _has_bits_(from._has_bits_),
+      _cached_size_(0) {
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (from.has_key()) {
+    key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.key_);
+  }
+  end_key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (from.has_end_key()) {
+    end_key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.end_key_);
+  }
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.RSpan)
+}
+
+void RSpan::SharedCtor() {
+  _cached_size_ = 0;
+  key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  end_key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+
+RSpan::~RSpan() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.RSpan)
+  SharedDtor();
+}
+
+void RSpan::SharedDtor() {
+  key_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  end_key_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+
+void RSpan::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
+const RSpan& RSpan::default_instance() {
+  protobuf_cockroach_2fpkg_2froachpb_2fdata_2eproto::InitDefaults();
+  return *internal_default_instance();
+}
+
+RSpan* RSpan::New(::google::protobuf::Arena* arena) const {
+  RSpan* n = new RSpan;
+  if (arena != NULL) {
+    arena->Own(n);
+  }
+  return n;
+}
+
+void RSpan::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.roachpb.RSpan)
+  if (_has_bits_[0 / 32] & 3u) {
+    if (has_key()) {
+      GOOGLE_DCHECK(!key_.IsDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited()));
+      (*key_.UnsafeRawStringPointer())->clear();
+    }
+    if (has_end_key()) {
+      GOOGLE_DCHECK(!end_key_.IsDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited()));
+      (*end_key_.UnsafeRawStringPointer())->clear();
+    }
+  }
+  _has_bits_.Clear();
+  _internal_metadata_.Clear();
+}
+
+bool RSpan::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  ::google::protobuf::io::LazyStringOutputStream unknown_fields_string(
+      ::google::protobuf::NewPermanentCallback(&_internal_metadata_,
+          &::google::protobuf::internal::InternalMetadataWithArenaLite::
+              mutable_unknown_fields));
+  ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
+      &unknown_fields_string, false);
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.RSpan)
+  for (;;) {
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      case 3: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(26u)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
+                input, this->mutable_key()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 4: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(34u)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
+                input, this->mutable_end_key()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0 ||
+            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
+            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormatLite::SkipField(
+            input, tag, &unknown_fields_stream));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.RSpan)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.RSpan)
+  return false;
+#undef DO_
+}
+
+void RSpan::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.RSpan)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = _has_bits_[0];
+  if (cached_has_bits & 0x00000001u) {
+    ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
+      3, this->key(), output);
+  }
+
+  if (cached_has_bits & 0x00000002u) {
+    ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
+      4, this->end_key(), output);
+  }
+
+  output->WriteRaw(unknown_fields().data(),
+                   static_cast<int>(unknown_fields().size()));
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.RSpan)
+}
+
+size_t RSpan::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.RSpan)
+  size_t total_size = 0;
+
+  total_size += unknown_fields().size();
+
+  if (_has_bits_[0 / 32] & 3u) {
+    if (has_key()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::BytesSize(
+          this->key());
+    }
+
+    if (has_end_key()) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::BytesSize(
+          this->end_key());
+    }
+
+  }
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = cached_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  return total_size;
+}
+
+void RSpan::CheckTypeAndMergeFrom(
+    const ::google::protobuf::MessageLite& from) {
+  MergeFrom(*::google::protobuf::down_cast<const RSpan*>(&from));
+}
+
+void RSpan::MergeFrom(const RSpan& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.RSpan)
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  cached_has_bits = from._has_bits_[0];
+  if (cached_has_bits & 3u) {
+    if (cached_has_bits & 0x00000001u) {
+      set_has_key();
+      key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.key_);
+    }
+    if (cached_has_bits & 0x00000002u) {
+      set_has_end_key();
+      end_key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.end_key_);
+    }
+  }
+}
+
+void RSpan::CopyFrom(const RSpan& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.roachpb.RSpan)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool RSpan::IsInitialized() const {
+  return true;
+}
+
+void RSpan::Swap(RSpan* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void RSpan::InternalSwap(RSpan* other) {
+  key_.Swap(&other->key_);
+  end_key_.Swap(&other->end_key_);
+  std::swap(_has_bits_[0], other->_has_bits_[0]);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+  std::swap(_cached_size_, other->_cached_size_);
+}
+
+::std::string RSpan::GetTypeName() const {
+  return "cockroach.roachpb.RSpan";
+}
+
+#if PROTOBUF_INLINE_NOT_IN_HEADERS
+// RSpan
+
+bool RSpan::has_key() const {
+  return (_has_bits_[0] & 0x00000001u) != 0;
+}
+void RSpan::set_has_key() {
+  _has_bits_[0] |= 0x00000001u;
+}
+void RSpan::clear_has_key() {
+  _has_bits_[0] &= ~0x00000001u;
+}
+void RSpan::clear_key() {
+  key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_key();
+}
+const ::std::string& RSpan::key() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RSpan.key)
+  return key_.GetNoArena();
+}
+void RSpan::set_key(const ::std::string& value) {
+  set_has_key();
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.RSpan.key)
+}
+#if LANG_CXX11
+void RSpan::set_key(::std::string&& value) {
+  set_has_key();
+  key_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.RSpan.key)
+}
+#endif
+void RSpan::set_key(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  set_has_key();
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.RSpan.key)
+}
+void RSpan::set_key(const void* value, size_t size) {
+  set_has_key();
+  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.RSpan.key)
+}
+::std::string* RSpan::mutable_key() {
+  set_has_key();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RSpan.key)
+  return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+::std::string* RSpan::release_key() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.RSpan.key)
+  clear_has_key();
+  return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+void RSpan::set_allocated_key(::std::string* key) {
+  if (key != NULL) {
+    set_has_key();
+  } else {
+    clear_has_key();
+  }
+  key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), key);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RSpan.key)
+}
+
+bool RSpan::has_end_key() const {
+  return (_has_bits_[0] & 0x00000002u) != 0;
+}
+void RSpan::set_has_end_key() {
+  _has_bits_[0] |= 0x00000002u;
+}
+void RSpan::clear_has_end_key() {
+  _has_bits_[0] &= ~0x00000002u;
+}
+void RSpan::clear_end_key() {
+  end_key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  clear_has_end_key();
+}
+const ::std::string& RSpan::end_key() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.RSpan.end_key)
+  return end_key_.GetNoArena();
+}
+void RSpan::set_end_key(const ::std::string& value) {
+  set_has_end_key();
+  end_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.RSpan.end_key)
+}
+#if LANG_CXX11
+void RSpan::set_end_key(::std::string&& value) {
+  set_has_end_key();
+  end_key_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.RSpan.end_key)
+}
+#endif
+void RSpan::set_end_key(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  set_has_end_key();
+  end_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.RSpan.end_key)
+}
+void RSpan::set_end_key(const void* value, size_t size) {
+  set_has_end_key();
+  end_key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.RSpan.end_key)
+}
+::std::string* RSpan::mutable_end_key() {
+  set_has_end_key();
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.RSpan.end_key)
+  return end_key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+::std::string* RSpan::release_end_key() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.RSpan.end_key)
+  clear_has_end_key();
+  return end_key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+void RSpan::set_allocated_end_key(::std::string* end_key) {
+  if (end_key != NULL) {
+    set_has_end_key();
+  } else {
+    clear_has_end_key();
+  }
+  end_key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), end_key);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.RSpan.end_key)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

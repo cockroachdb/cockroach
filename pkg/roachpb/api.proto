@@ -1139,6 +1139,12 @@ message Header {
   // gateway_node_id is the ID of the gateway node where the request originated.
   optional int32 gateway_node_id = 11 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "GatewayNodeID", (gogoproto.casttype) = "NodeID"];
+  // rspan is the key span which encompasses all requests in the
+  // batch, inclusive of span.Key, and exclusive of span.EndKey. Note
+  // that this span is a raw span, where the local addressing has been
+  // accounted for.
+  optional RSpan rspan = 12 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "RSpan"];
 }
 
 

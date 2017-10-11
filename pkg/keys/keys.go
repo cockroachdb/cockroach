@@ -673,7 +673,12 @@ func EnsureSafeSplitKey(key roachpb.Key) (roachpb.Key, error) {
 }
 
 // Range returns a key range encompassing all the keys in the Batch.
-func Range(ba roachpb.BatchRequest) (roachpb.RSpan, error) {
+func Range(
+	ba roachpb.BatchRequest, enforceLocalGlobalMix bool,
+) (roachpb.RSpan, error) {
+	if ba.HasRSpan() {
+		return ba.RSpan, nil
+	}
 	from := roachpb.RKeyMax
 	to := roachpb.RKeyMin
 	for _, arg := range ba.Requests {
@@ -695,22 +700,35 @@ func Range(ba roachpb.BatchRequest) (roachpb.RSpan, error) {
 			from = key
 		}
 		if !key.Less(to) {
-			// Key.Next() is larger than `to`.
-			if bytes.Compare(key, roachpb.RKeyMax) > 0 {
+			if bytes.Compare(key, roachpb.RKeyMax) >= 0 {
 				return roachpb.RSpan{}, errors.Errorf("%s must be less than KeyMax", key)
 			}
+			// Key.Next() is larger than `to`.
 			to = key.Next()
 		}
 
 		if len(h.EndKey) == 0 {
 			continue
 		}
-		endKey, err := AddrUpperBound(h.EndKey)
+		endKey, err := Addr(h.EndKey)
 		if err != nil {
 			return roachpb.RSpan{}, err
 		}
 		if bytes.Compare(roachpb.RKeyMax, endKey) < 0 {
-			return roachpb.RSpan{}, errors.Errorf("%s must be less than or equal to KeyMax", endKey)
+			return roachpb.RSpan{}, errors.Errorf("%s must be less than or equal to KeyMax", h.EndKey)
+		}
+		if IsLocal(h.EndKey) {
+			// The upper bound for a range-local key that addresses to key k
+			// is the key directly after k.
+			endKey = endKey.Next()
+		}
+		if enforceLocalGlobalMix {
+			if !key.Less(endKey) {
+				return roachpb.RSpan{}, errors.Errorf("end key %s must be greater than start %s", endKey, key)
+			}
+			if (len(h.Key) == 0 || IsLocal(h.Key)) != IsLocal(h.EndKey) {
+				return roachpb.RSpan{}, errors.Errorf("start and end keys mix range-local and global (%s, %s)", h.Key, h.EndKey)
+			}
 		}
 		if to.Less(endKey) {
 			// EndKey is larger than `to`.

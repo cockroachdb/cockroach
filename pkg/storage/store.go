@@ -181,54 +181,6 @@ func newRaftConfig(
 	}
 }
 
-// verifyKeys verifies keys. If checkEndKey is true, then the end key
-// is verified to be non-nil and greater than start key. If
-// checkEndKey is false, end key is verified to be nil. Additionally,
-// verifies that start key is less than KeyMax and end key is less
-// than or equal to KeyMax. It also verifies that a key range that
-// contains range-local keys is completely range-local.
-func verifyKeys(start, end roachpb.Key, checkEndKey bool) error {
-	if bytes.Compare(start, roachpb.KeyMax) >= 0 {
-		return errors.Errorf("start key %q must be less than KeyMax", start)
-	}
-	if !checkEndKey {
-		if len(end) != 0 {
-			return errors.Errorf("end key %q should not be specified for this operation", end)
-		}
-		return nil
-	}
-	if end == nil {
-		return errors.Errorf("end key must be specified")
-	}
-	if bytes.Compare(roachpb.KeyMax, end) < 0 {
-		return errors.Errorf("end key %q must be less than or equal to KeyMax", end)
-	}
-	{
-		sAddr, err := keys.Addr(start)
-		if err != nil {
-			return err
-		}
-		eAddr, err := keys.Addr(end)
-		if err != nil {
-			return err
-		}
-		if !sAddr.Less(eAddr) {
-			return errors.Errorf("end key %q must be greater than start %q", end, start)
-		}
-		if !bytes.Equal(sAddr, start) {
-			if bytes.Equal(eAddr, end) {
-				return errors.Errorf("start key is range-local, but end key is not")
-			}
-		} else if bytes.Compare(start, keys.LocalMax) < 0 {
-			// It's a range op, not local but somehow plows through local data -
-			// not cool.
-			return errors.Errorf("start key in [%q,%q) must be greater than LocalMax", start, end)
-		}
-	}
-
-	return nil
-}
-
 // rangeKeyItem is a common interface for roachpb.Key and Range.
 type rangeKeyItem interface {
 	endKey() roachpb.RKey
@@ -2424,15 +2376,13 @@ func (s *Store) Send(
 	// Attach any log tags from the store to the context (which normally
 	// comes from gRPC).
 	ctx = s.AnnotateCtx(ctx)
-	for _, union := range ba.Requests {
-		arg := union.GetInner()
-		if _, ok := arg.(*roachpb.NoopRequest); ok {
-			continue
-		}
-		header := arg.Header()
-		if err := verifyKeys(header.Key, header.EndKey, roachpb.IsRange(arg)); err != nil {
+
+	if !ba.HasRSpan() {
+		rs, err := keys.Range(ba, true)
+		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
+		ba.RSpan = rs
 	}
 
 	if err := ba.SetActiveTimestamp(s.Clock().Now); err != nil {
@@ -2443,65 +2393,22 @@ func (s *Store) Send(
 		s.cfg.TestingKnobs.ClockBeforeSend(s.cfg.Clock, ba)
 	}
 
-	if maxOffset := s.Clock().MaxOffset(); maxOffset > 0 && maxOffset != timeutil.ClocklessMaxOffset {
-		// Once a command is submitted to raft, all replicas' logical
-		// clocks will be ratcheted forward to match. If the command
-		// appears to come from a node with a bad clock, reject it now
-		// before we reach that point.
-		offset := time.Duration(ba.Timestamp.WallTime - s.Clock().PhysicalNow())
-		if offset > maxOffset && !s.cfg.TestingKnobs.DisableMaxOffsetCheck {
-			return nil, roachpb.NewErrorf("rejecting command with timestamp in the future: %d (%s ahead)",
-				ba.Timestamp.WallTime, offset)
-		}
-	}
 	// Update our clock with the incoming request timestamp. This advances the
 	// local node's clock to a high water mark from all nodes with which it has
 	// interacted. We hold on to the resulting timestamp - we know that any
 	// write with a higher timestamp we run into later must have started after
 	// this point in (absolute) time.
-	now := s.cfg.Clock.Update(ba.Timestamp)
-
-	defer func() {
-		if r := recover(); r != nil {
-			// On panic, don't run the defer. It's probably just going to panic
-			// again due to undefined state.
-			panic(r)
+	var now hlc.Timestamp
+	if s.cfg.TestingKnobs.DisableMaxOffsetCheck {
+		now = s.cfg.Clock.Update(ba.Timestamp)
+	} else {
+		// If the command appears to come from a node with a bad clock,
+		// reject it now before we reach that point.
+		var err error
+		if now, err = s.cfg.Clock.UpdateAndCheckMaxOffset(ba.Timestamp); err != nil {
+			return nil, roachpb.NewError(err)
 		}
-		if ba.Txn != nil {
-			// We're in a Txn, so we can reduce uncertainty restarts by attaching
-			// the above timestamp to the returned response or error. The caller
-			// can use it to shorten its uncertainty interval when it comes back to
-			// this node.
-			if pErr != nil {
-				pErr.OriginNode = ba.Replica.NodeID
-				if txn := pErr.GetTxn(); txn != nil {
-					// Clone the txn, as we'll modify it.
-					pErr.SetTxn(txn)
-				} else {
-					pErr.SetTxn(ba.Txn)
-				}
-				pErr.GetTxn().UpdateObservedTimestamp(ba.Replica.NodeID, now)
-			} else {
-				if br.Txn == nil {
-					br.Txn = ba.Txn
-				}
-				br.Txn.UpdateObservedTimestamp(ba.Replica.NodeID, now)
-				// Update our clock with the outgoing response txn timestamp.
-				s.cfg.Clock.Update(br.Txn.Timestamp)
-			}
-		} else {
-			if pErr == nil {
-				// Update our clock with the outgoing response timestamp.
-				s.cfg.Clock.Update(br.Timestamp)
-			}
-		}
-
-		if pErr != nil {
-			pErr.Now = now
-		} else {
-			br.Now = now
-		}
-	}()
+	}
 
 	if ba.Txn != nil {
 		// We make our transaction aware that no other operation that causally
@@ -2519,10 +2426,57 @@ func (s *Store) Send(
 
 	if log.V(1) {
 		log.Eventf(ctx, "executing %s", ba)
-	} else if log.HasSpanOrEvent(ctx) {
-		log.Eventf(ctx, "executing %d requests", len(ba.Requests))
 	}
 
+	br, pErr = s.sendHelper(ctx, ba, now)
+
+	if ba.Txn != nil {
+		// We're in a Txn, so we can reduce uncertainty restarts by attaching
+		// the above timestamp to the returned response or error. The caller
+		// can use it to shorten its uncertainty interval when it comes back to
+		// this node.
+		if pErr != nil {
+			pErr.OriginNode = ba.Replica.NodeID
+			if txn := pErr.GetTxn(); txn != nil {
+				// Clone the txn, as we'll modify it.
+				pErr.SetTxn(txn)
+			} else {
+				pErr.SetTxn(ba.Txn)
+			}
+			pErr.GetTxn().UpdateObservedTimestamp(ba.Replica.NodeID, now)
+		} else {
+			if br.Txn == nil {
+				br.Txn = ba.Txn
+			}
+			br.Txn.UpdateObservedTimestamp(ba.Replica.NodeID, now)
+			// Update our clock with the outgoing response txn timestamp (if
+			// timestamp has been forwarded).
+			if ba.Timestamp.Less(br.Txn.Timestamp) {
+				s.cfg.Clock.Update(br.Txn.Timestamp)
+			}
+		}
+	} else {
+		if pErr == nil {
+			// Update our clock with the outgoing response timestamp (if
+			// timestamp has been forwarded).
+			if ba.Timestamp.Less(br.Timestamp) {
+				s.cfg.Clock.Update(br.Timestamp)
+			}
+		}
+	}
+
+	if pErr != nil {
+		pErr.Now = now
+	} else {
+		br.Now = now
+	}
+
+	return
+}
+
+func (s *Store) sendHelper(
+	ctx context.Context, ba roachpb.BatchRequest, now hlc.Timestamp,
+) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	// Add the command to the range for execution; exit retry loop on success.
 	for {
 		// Exit loop if context has been canceled or timed out.

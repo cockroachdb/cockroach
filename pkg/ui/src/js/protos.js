@@ -27168,6 +27168,207 @@ export const cockroach = $root.cockroach = (() => {
             return Span;
         })();
 
+        roachpb.RSpan = (function() {
+
+            /**
+             * Properties of a RSpan.
+             * @typedef cockroach.roachpb.RSpan$Properties
+             * @type {Object}
+             * @property {Uint8Array} [key] RSpan key.
+             * @property {Uint8Array} [end_key] RSpan end_key.
+             */
+
+            /**
+             * Constructs a new RSpan.
+             * @exports cockroach.roachpb.RSpan
+             * @constructor
+             * @param {cockroach.roachpb.RSpan$Properties=} [properties] Properties to set
+             */
+            function RSpan(properties) {
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * RSpan key.
+             * @type {Uint8Array}
+             */
+            RSpan.prototype.key = $util.newBuffer([]);
+
+            /**
+             * RSpan end_key.
+             * @type {Uint8Array}
+             */
+            RSpan.prototype.end_key = $util.newBuffer([]);
+
+            /**
+             * Creates a new RSpan instance using the specified properties.
+             * @param {cockroach.roachpb.RSpan$Properties=} [properties] Properties to set
+             * @returns {cockroach.roachpb.RSpan} RSpan instance
+             */
+            RSpan.create = function create(properties) {
+                return new RSpan(properties);
+            };
+
+            /**
+             * Encodes the specified RSpan message. Does not implicitly {@link cockroach.roachpb.RSpan.verify|verify} messages.
+             * @param {cockroach.roachpb.RSpan$Properties} message RSpan message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            RSpan.encode = function encode(message, writer) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (message.key != null && message.hasOwnProperty("key"))
+                    writer.uint32(/* id 3, wireType 2 =*/26).bytes(message.key);
+                if (message.end_key != null && message.hasOwnProperty("end_key"))
+                    writer.uint32(/* id 4, wireType 2 =*/34).bytes(message.end_key);
+                return writer;
+            };
+
+            /**
+             * Encodes the specified RSpan message, length delimited. Does not implicitly {@link cockroach.roachpb.RSpan.verify|verify} messages.
+             * @param {cockroach.roachpb.RSpan$Properties} message RSpan message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            RSpan.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a RSpan message from the specified reader or buffer.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {cockroach.roachpb.RSpan} RSpan
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            RSpan.decode = function decode(reader, length) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.roachpb.RSpan();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    switch (tag >>> 3) {
+                    case 3:
+                        message.key = reader.bytes();
+                        break;
+                    case 4:
+                        message.end_key = reader.bytes();
+                        break;
+                    default:
+                        reader.skipType(tag & 7);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a RSpan message from the specified reader or buffer, length delimited.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {cockroach.roachpb.RSpan} RSpan
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            RSpan.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a RSpan message.
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {?string} `null` if valid, otherwise the reason why it is not
+             */
+            RSpan.verify = function verify(message) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (message.key != null && message.hasOwnProperty("key"))
+                    if (!(message.key && typeof message.key.length === "number" || $util.isString(message.key)))
+                        return "key: buffer expected";
+                if (message.end_key != null && message.hasOwnProperty("end_key"))
+                    if (!(message.end_key && typeof message.end_key.length === "number" || $util.isString(message.end_key)))
+                        return "end_key: buffer expected";
+                return null;
+            };
+
+            /**
+             * Creates a RSpan message from a plain object. Also converts values to their respective internal types.
+             * @param {Object.<string,*>} object Plain object
+             * @returns {cockroach.roachpb.RSpan} RSpan
+             */
+            RSpan.fromObject = function fromObject(object) {
+                if (object instanceof $root.cockroach.roachpb.RSpan)
+                    return object;
+                let message = new $root.cockroach.roachpb.RSpan();
+                if (object.key != null)
+                    if (typeof object.key === "string")
+                        $util.base64.decode(object.key, message.key = $util.newBuffer($util.base64.length(object.key)), 0);
+                    else if (object.key.length)
+                        message.key = object.key;
+                if (object.end_key != null)
+                    if (typeof object.end_key === "string")
+                        $util.base64.decode(object.end_key, message.end_key = $util.newBuffer($util.base64.length(object.end_key)), 0);
+                    else if (object.end_key.length)
+                        message.end_key = object.end_key;
+                return message;
+            };
+
+            /**
+             * Creates a RSpan message from a plain object. Also converts values to their respective internal types.
+             * This is an alias of {@link cockroach.roachpb.RSpan.fromObject}.
+             * @function
+             * @param {Object.<string,*>} object Plain object
+             * @returns {cockroach.roachpb.RSpan} RSpan
+             */
+            RSpan.from = RSpan.fromObject;
+
+            /**
+             * Creates a plain object from a RSpan message. Also converts values to other types if specified.
+             * @param {cockroach.roachpb.RSpan} message RSpan
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            RSpan.toObject = function toObject(message, options) {
+                if (!options)
+                    options = {};
+                let object = {};
+                if (options.defaults) {
+                    object.key = options.bytes === String ? "" : [];
+                    object.end_key = options.bytes === String ? "" : [];
+                }
+                if (message.key != null && message.hasOwnProperty("key"))
+                    object.key = options.bytes === String ? $util.base64.encode(message.key, 0, message.key.length) : options.bytes === Array ? Array.prototype.slice.call(message.key) : message.key;
+                if (message.end_key != null && message.hasOwnProperty("end_key"))
+                    object.end_key = options.bytes === String ? $util.base64.encode(message.end_key, 0, message.end_key.length) : options.bytes === Array ? Array.prototype.slice.call(message.end_key) : message.end_key;
+                return object;
+            };
+
+            /**
+             * Creates a plain object from this RSpan message. Also converts values to other types if specified.
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            RSpan.prototype.toObject = function toObject(options) {
+                return this.constructor.toObject(this, options);
+            };
+
+            /**
+             * Converts this RSpan to JSON.
+             * @returns {Object.<string,*>} JSON object
+             */
+            RSpan.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            return RSpan;
+        })();
+
         /**
          * ValueType enum.
          * @name ValueType

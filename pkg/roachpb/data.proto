@@ -38,6 +38,23 @@ message Span {
   optional bytes end_key = 4 [(gogoproto.casttype) = "Key"];
 }
 
+// RSpan specifies a span whose key and end key have been translated
+// into "raw" keys (Key -> RKey). Raw keys are keys whose local
+// addressing has been accounted for.
+message RSpan {
+  option (gogoproto.equal) = true;
+
+  option (gogoproto.goproto_stringer) = false;
+  option (gogoproto.populate) = true;
+
+  // The key for request. If the request operates on a range, this
+  // represents the starting key for the range.
+  optional bytes key = 3 [(gogoproto.casttype) = "RKey"];
+  // The end key is empty if the request spans only a single key. Otherwise,
+  // it must order strictly after Key. The span is exclusive of end key.
+  optional bytes end_key = 4 [(gogoproto.casttype) = "RKey"];
+}
+
 // ValueType defines a set of type constants placed in the "tag" field of Value
 // messages. These are defined as a protocol buffer enumeration so that they
 // can be used portably between our Go and C code. The tags are used by the

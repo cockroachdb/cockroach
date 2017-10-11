@@ -590,7 +590,7 @@ func (ds *DistSender) Send(
 		// Local addressing has already been resolved.
 		// TODO(tschottdorf): consider rudimentary validation of the batch here
 		// (for example, non-range requests with EndKey, or empty key ranges).
-		rs, err := keys.Range(ba)
+		rs, err := keys.Range(ba, true)
 		if err != nil {
 			return nil, roachpb.NewError(err)
 		}
@@ -964,7 +964,7 @@ func (ds *DistSender) sendPartialBatch(
 			// from the last descriptor to avoid endless loops.
 			var replacements []roachpb.RangeDescriptor
 			different := func(rd *roachpb.RangeDescriptor) bool {
-				return !desc.RSpan().Equal(rd.RSpan())
+				return !desc.RSpan().EqualValue(rd.RSpan())
 			}
 			if tErr.MismatchedRange != nil && different(tErr.MismatchedRange) {
 				replacements = append(replacements, *tErr.MismatchedRange)
