@@ -82,7 +82,7 @@ func (mt mutationTest) makeMutationsActive() {
 		}
 	}
 	mt.tableDesc.Mutations = nil
-	if err := mt.tableDesc.ValidateTable(); err != nil {
+	if err := mt.tableDesc.ValidateTable(true /* newOrModifiedTable */); err != nil {
 		mt.Fatal(err)
 	}
 	if err := mt.kvDB.Put(
@@ -137,7 +137,7 @@ func (mt mutationTest) writeMutation(m sqlbase.DescriptorMutation) {
 		}
 	}
 	mt.tableDesc.Mutations = append(mt.tableDesc.Mutations, m)
-	if err := mt.tableDesc.ValidateTable(); err != nil {
+	if err := mt.tableDesc.ValidateTable(true /* newOrModifiedTable */); err != nil {
 		mt.Fatal(err)
 	}
 	if err := mt.kvDB.Put(
@@ -342,21 +342,21 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k),
 	// Check that a mutation can only be inserted with an explicit mutation state, and direction.
 	tableDesc = mTest.tableDesc
 	tableDesc.Mutations = []sqlbase.DescriptorMutation{{}}
-	if err := tableDesc.ValidateTable(); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, and no column/index descriptor") {
+	if err := tableDesc.ValidateTable(true /* newOrModifiedTable */); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, and no column/index descriptor") {
 		t.Fatal(err)
 	}
 	tableDesc.Mutations = []sqlbase.DescriptorMutation{{Descriptor_: &sqlbase.DescriptorMutation_Column{Column: &tableDesc.Columns[len(tableDesc.Columns)-1]}}}
 	tableDesc.Columns = tableDesc.Columns[:len(tableDesc.Columns)-1]
-	if err := tableDesc.ValidateTable(); !testutils.IsError(err, `mutation in state UNKNOWN, direction NONE, col "i", id 3`) {
+	if err := tableDesc.ValidateTable(true /* newOrModifiedTable */); !testutils.IsError(err, `mutation in state UNKNOWN, direction NONE, col "i", id 3`) {
 		t.Fatal(err)
 	}
 	tableDesc.Mutations[0].State = sqlbase.DescriptorMutation_DELETE_ONLY
-	if err := tableDesc.ValidateTable(); !testutils.IsError(err, `mutation in state DELETE_ONLY, direction NONE, col "i", id 3`) {
+	if err := tableDesc.ValidateTable(true /* newOrModifiedTable */); !testutils.IsError(err, `mutation in state DELETE_ONLY, direction NONE, col "i", id 3`) {
 		t.Fatal(err)
 	}
 	tableDesc.Mutations[0].State = sqlbase.DescriptorMutation_UNKNOWN
 	tableDesc.Mutations[0].Direction = sqlbase.DescriptorMutation_DROP
-	if err := tableDesc.ValidateTable(); !testutils.IsError(err, `mutation in state UNKNOWN, direction DROP, col "i", id 3`) {
+	if err := tableDesc.ValidateTable(true /* newOrModifiedTable */); !testutils.IsError(err, `mutation in state UNKNOWN, direction DROP, col "i", id 3`) {
 		t.Fatal(err)
 	}
 }
@@ -519,7 +519,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 	tableDesc = mTest.tableDesc
 	tableDesc.Mutations = []sqlbase.DescriptorMutation{{Descriptor_: &sqlbase.DescriptorMutation_Index{Index: &tableDesc.Indexes[len(tableDesc.Indexes)-1]}}}
 	tableDesc.Indexes = tableDesc.Indexes[:len(tableDesc.Indexes)-1]
-	if err := tableDesc.ValidateTable(); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, index foo, id 2") {
+	if err := tableDesc.ValidateTable(true /* newOrModifiedTable */); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, index foo, id 2") {
 		t.Fatal(err)
 	}
 }

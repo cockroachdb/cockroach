@@ -438,7 +438,7 @@ func (n *createViewNode) Start(params runParams) error {
 		return err
 	}
 
-	if err = desc.ValidateTable(); err != nil {
+	if err = desc.ValidateTable(true /* newOrModifiedTable */); err != nil {
 		return err
 	}
 
@@ -471,7 +471,7 @@ func (n *createViewNode) Start(params runParams) error {
 	if desc.Adding() {
 		n.p.notifySchemaChange(&desc, sqlbase.InvalidMutationID)
 	}
-	if err := desc.Validate(params.ctx, n.p.txn); err != nil {
+	if err := desc.Validate(params.ctx, n.p.txn, true /* newOrModifiedTable */); err != nil {
 		return err
 	}
 
@@ -633,7 +633,7 @@ func (n *createTableNode) Start(params runParams) error {
 	// We need to validate again after adding the FKs.
 	// Only validate the table because backreferences aren't created yet.
 	// Everything is validated below.
-	err = desc.ValidateTable()
+	err = desc.ValidateTable(true /* newOrModifiedTable */)
 	if err != nil {
 		return err
 	}
@@ -659,7 +659,7 @@ func (n *createTableNode) Start(params runParams) error {
 		}
 	}
 
-	if err := desc.Validate(params.ctx, params.p.txn); err != nil {
+	if err := desc.Validate(params.ctx, params.p.txn, true /* newOrModifiedTable */); err != nil {
 		return err
 	}
 
@@ -987,7 +987,7 @@ func (p *planner) saveNonmutationAndNotify(ctx context.Context, td *sqlbase.Tabl
 	if err := td.SetUpVersion(); err != nil {
 		return err
 	}
-	if err := td.ValidateTable(); err != nil {
+	if err := td.ValidateTable(true /* newOrModifiedTable */); err != nil {
 		return err
 	}
 	if err := p.writeTableDesc(ctx, td); err != nil {

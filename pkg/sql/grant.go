@@ -48,7 +48,7 @@ func (p *planner) changePrivileges(
 				return nil, err
 			}
 		case *sqlbase.TableDescriptor:
-			if err := d.Validate(ctx, p.txn); err != nil {
+			if err := d.Validate(ctx, p.txn, false /* newOrModifiedTable */); err != nil {
 				return nil, err
 			}
 			if err := d.SetUpVersion(); err != nil {

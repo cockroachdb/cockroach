@@ -260,7 +260,7 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 	}
 	desc.PrimaryIndex = sqlbase.IndexDescriptor{}
 
-	err = desc.ValidateTable()
+	err = desc.ValidateTable(true /* newOrModifiedTable */)
 	if !testutils.IsError(err, sqlbase.ErrMissingPrimaryKey.Error()) {
 		t.Fatalf("unexpected error: %v", err)
 	}
