@@ -30,7 +30,9 @@ existing `unique_rowid()` function.
 A *sequence* is a named database object which exists in a schema alongside
 tables, views and other sequences, and is used to hold an integer value which
 can be read and incremented atomically, usually for the purpose of giving out
-unique ids as rows are inserted into a table.
+unique ids as rows are inserted into a table. In additon to their values,
+sequences have settings such as start value, amount to increment by, and max
+value. (See "Sequence settings details" below)
 
 Example:
 
@@ -139,9 +141,9 @@ To support this feature, I propose the following changes:
 ### Internal representation and operations
 
 I propose that sequences be represented internally as a type of
-`TableDescriptor`. Just as a `TableDescriptor` has fields which are popuplated
+`TableDescriptor`. Just as a `TableDescriptor` has fields which are populated
 only for views, it will have a field (`sequence_settings` or similar) which is
-only populated when a table descriptor represents a sequence. The
+only populated on table descriptors which describe sequences. The
 `sequence_settings` field on the table descriptor will include sequence settings
 such as `increment`, `minvalue`, `maxvalue`, `start`, and `cycle`. `INSERT`s,
 `UPDATE`s, and schema changes to the sequence will be disallowed based on the
@@ -164,22 +166,6 @@ Since the sequence value is stored in its own range, it will always be in a
 different range than the other row in the transaction which is being written to
 using the value it gives out. However, since the sequence update takes place
 outside of the SQL transaction, this should not trigger the 2PC commit protocol.
-
-### Corner cases
-
-- *Reducing max value as sequence value goes above it*:
-  - Scenario:
-    - A sequence's max value setting is 10; current value is 5
-    - User runs `ALTER SEQUENCE my_sequence MAXVALUE 5`. `my_sequence` is now
-      at its maximum; any calls to `nextval` should error out or wrap around.
-    - User runs `nextval('my_sequence')` on a different node
-  - Problem: The node running `nextval` may not yet have received word of the
-    schema change, since schema changes are scheduled and gossipped. Thus,
-    a value higher than the sequence's maximum could be given out if `nextval`
-    and the schema change are running concurrently.
-  - Evaluation: This is not a big problem, since most users will leave the
-    max value at its default (2^64), and either error out when they hit it,
-    or wrap around (according to their `CYCLE` setting).
 
 ### Sequence settings details
 
@@ -209,6 +195,22 @@ docs][postgres-seq-functions]):
   on this sequence from the column. We would also create this association
   if we see a call to `nextval` with a sequence name in the `DEFAULT` expression
   of a column.
+
+### Corner cases
+
+- *Reducing max value setting as sequence value concurrently goes above it*:
+  - Scenario:
+    - A sequence's max value setting is 10; current value is 5
+    - User runs `ALTER SEQUENCE my_sequence MAXVALUE 5`. `my_sequence` is now
+      at its maximum; any calls to `nextval` should error out or wrap around.
+    - User runs `nextval('my_sequence')` on a different node
+  - Problem: The node running `nextval` may not yet have received word of the
+    schema change, since schema changes are scheduled and gossipped. Thus,
+    a value higher than the sequence's maximum could be given out if `nextval`
+    and the schema change are running concurrently.
+  - Evaluation: This is not a big problem, since most users will leave the
+    max value at its default (2^64), and either error out when they hit it,
+    or wrap around (according to their `CYCLE` setting).
 
 ## Drawbacks
 
