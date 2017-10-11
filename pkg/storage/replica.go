@@ -5046,8 +5046,15 @@ func evaluateBatch(
 		// transaction field cleared by this point so we do not execute
 		// this check in that case.
 		if ba.IsTransactionWrite() || ba.Txn.Writing {
-			if pErr := checkIfTxnAborted(ctx, rec, batch, *ba.Txn); pErr != nil {
-				return nil, EvalResult{}, pErr
+			// If the request is asking to abort the transaction, then don't check the
+			// AbortCache; we don't want the request to be rejected if the transaction
+			// has already been aborted.
+			singleAbort := ba.IsSingleEndTransactionRequest() &&
+				!ba.Requests[0].GetInner().(*roachpb.EndTransactionRequest).Commit
+			if !singleAbort {
+				if pErr := checkIfTxnAborted(ctx, rec, batch, *ba.Txn); pErr != nil {
+					return nil, EvalResult{}, pErr
+				}
 			}
 		}
 	}
