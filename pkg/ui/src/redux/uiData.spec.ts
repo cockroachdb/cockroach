@@ -6,7 +6,6 @@ import fetchMock from "src/util/fetch-mock";
 
 import * as protos from "src/js/protos";
 import * as api from "src/util/api";
-import reducer from "./uiData";
 import * as uidata from "./uiData";
 
 describe("UIData reducer", function() {
@@ -36,11 +35,11 @@ describe("UIData reducer", function() {
     let state: any;
 
     beforeEach(function () {
-      state = { uiData: reducer(undefined, { type: "unknown" }) };
+      state = { uiData: uidata.uiDataReducer(undefined, { type: "unknown" }) };
     });
 
     const dispatch = (action: Action) => {
-      state = { uiData: reducer(state.uiData, action) };
+      state = { uiData: uidata.uiDataReducer(state.uiData, action) };
     };
 
     it("isValid", function () {
@@ -198,11 +197,11 @@ describe("UIData reducer", function() {
     let state: uidata.UIDataState;
 
     beforeEach(function () {
-      state = reducer(undefined, { type: "unknown" });
+      state = uidata.uiDataReducer(undefined, { type: "unknown" });
     });
 
     const dispatch = (action: Action) => {
-      state = reducer(state, action);
+      state = uidata.uiDataReducer(state, action);
     };
 
     it("should have the correct default value.", function() {
@@ -302,7 +301,7 @@ describe("UIData reducer", function() {
     let state: uidata.UIDataState;
 
     const dispatch = (action: Action) => {
-      state = reducer(state, action);
+      state = uidata.uiDataReducer(state, action);
     };
 
     const uiKey1 = "a_key";
@@ -323,7 +322,7 @@ describe("UIData reducer", function() {
     };
 
     beforeEach(function () {
-      state = reducer(undefined, { type: "unknown" });
+      state = uidata.uiDataReducer(undefined, { type: "unknown" });
     });
 
     afterEach(fetchMock.restore);

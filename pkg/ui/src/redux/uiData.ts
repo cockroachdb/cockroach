@@ -73,7 +73,7 @@ export class UIDataState {
 /**
  * Reducer which modifies a UIDataState.
  */
-export default function (state = new UIDataState(), action: Action): UIDataState {
+export function uiDataReducer(state = new UIDataState(), action: Action): UIDataState {
   if (_.isNil(action)) {
     return state;
   }

@@ -105,7 +105,7 @@ export class TimeWindowState {
   }
 }
 
-export default function(state = new TimeWindowState(), action: Action): TimeWindowState {
+export function timeWindowReducer(state = new TimeWindowState(), action: Action): TimeWindowState {
   switch (action.type) {
     case SET_WINDOW:
       const { payload: tw } = action as PayloadAction<TimeWindow>;

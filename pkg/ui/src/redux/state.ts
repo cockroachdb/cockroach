@@ -4,15 +4,15 @@ import { hashHistory } from "react-router";
 import { syncHistoryWithStore, routerReducer, RouterState } from "react-router-redux";
 import thunk from "redux-thunk";
 
-import localSettingsReducer from "./localsettings";
+import { localSettingsReducer } from "./localsettings";
 import * as localSettings from "./localsettings";
-import uiDataReducer from "./uiData";
+import { uiDataReducer } from "./uiData";
 import * as uiData from "./uiData";
-import metricsReducer from "./metrics";
+import { metricsReducer } from "./metrics";
 import * as metrics from "./metrics";
-import timeWindowReducer from "./timewindow";
+import { timeWindowReducer } from "./timewindow";
 import * as timewindow from "./timewindow";
-import apiReducersReducer from "./apiReducers";
+import { apiReducersReducer } from "./apiReducers";
 import * as apiReducers from "./apiReducers";
 
 export interface AdminUIState {
