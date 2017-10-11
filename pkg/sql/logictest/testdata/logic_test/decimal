@@ -215,6 +215,74 @@ EXPLAIN SELECT * FROM s WHERE isnan(d)
 1  ·       table  s@s_d_idx
 1  ·       spans  ALL
 
+query R
+SELECT * FROM s WHERE d = 'NaN'
+----
+NaN
+NaN
+
+query RBBB rowsort
+SELECT d, d IS NaN, d = 'NaN', isnan(d) FROM s@{FORCE_INDEX=primary} ORDER BY 1
+----
+NULL       NULL   NULL   NULL
+NaN        true   true   true
+NaN        true   true   true
+-Infinity  false  false  false
+-1         false  false  false
+0          false  false  false
+-0         false  false  false
+-0.0       false  false  false
+-0.00      false  false  false
+-0.000     false  false  false
+-0.0000    false  false  false
+1          false  false  false
+Infinity   false  false  false
+
+query RBBB rowsort
+SELECT d, d IS NaN, d = 'NaN', isnan(d) FROM s@{FORCE_INDEX=s_d_idx} ORDER BY 1
+----
+NULL       NULL   NULL   NULL
+NaN        true   true   true
+NaN        true   true   true
+-Infinity  false  false  false
+-1         false  false  false
+0          false  false  false
+-0         false  false  false
+-0.0       false  false  false
+-0.00      false  false  false
+-0.000     false  false  false
+-0.0000    false  false  false
+1          false  false  false
+Infinity   false  false  false
+
+query RB rowsort
+select d, d > 'NaN' from s@{FORCE_INDEX=primary} where d > 'NaN' ORDER BY d
+----
+-Infinity  true
+-1         true
+0          true
+-0         true
+-0.0       true
+-0.00      true
+-0.000     true
+-0.0000    true
+1          true
+Infinity   true
+
+query RB rowsort
+select d, d > 'NaN' from s@{FORCE_INDEX=s_d_idx} where d > 'NaN' ORDER BY d
+----
+-Infinity  true
+-1         true
+0          true
+-0         true
+-0.0       true
+-0.00      true
+-0.000     true
+-0.0000    true
+1          true
+Infinity   true
+
 # Verify that decimals don't lose trailing 0s even when used for an index.
 statement ok
 CREATE INDEX idx ON s (d)

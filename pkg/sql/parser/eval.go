@@ -1655,14 +1655,6 @@ func cmpOpScalarFn(ctx *EvalContext, left, right Datum, op ComparisonOperator) D
 		// If either Datum is NULL, the result of the comparison is NULL.
 		return DNull
 	}
-	if isNaN(left) || isNaN(right) {
-		// If either Datum is NaN, the result of the comparison is False,
-		// unless both are NaN and we're comparing for equality.
-		if isNaN(left) && isNaN(right) && op == EQ {
-			return DBoolTrue
-		}
-		return DBoolFalse
-	}
 	cmp := left.Compare(ctx, right)
 	return boolFromCmp(cmp, op)
 }
@@ -1686,14 +1678,6 @@ func cmpOpTupleFn(ctx *EvalContext, left, right DTuple, op ComparisonOperator) D
 		if leftElem == DNull || rightElem == DNull {
 			// If either Datum is NULL, the result of the comparison is NULL.
 			return DNull
-		}
-		if isNaN(leftElem) || isNaN(rightElem) {
-			// If either Datum is NaN, the result of the comparison is False,
-			// unless both are NaN and we're comparing for equality.
-			if isNaN(leftElem) && isNaN(rightElem) && op == EQ {
-				return DBoolTrue
-			}
-			return DBoolFalse
 		}
 		cmp = leftElem.Compare(ctx, rightElem)
 		if cmp != 0 {
