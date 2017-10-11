@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -50,6 +51,7 @@ type Registry struct {
 	clock     *hlc.Clock
 	nodeID    *base.NodeIDContainer
 	clusterID func() uuid.UUID
+	settings  *cluster.Settings
 
 	mu struct {
 		syncutil.Mutex
@@ -66,8 +68,17 @@ func MakeRegistry(
 	gossip *gossip.Gossip,
 	nodeID *base.NodeIDContainer,
 	clusterID func() uuid.UUID,
+	settings *cluster.Settings,
 ) *Registry {
-	r := &Registry{clock: clock, db: db, ex: ex, gossip: gossip, nodeID: nodeID, clusterID: clusterID}
+	r := &Registry{
+		clock:     clock,
+		db:        db,
+		ex:        ex,
+		gossip:    gossip,
+		nodeID:    nodeID,
+		clusterID: clusterID,
+		settings:  settings,
+	}
 	r.mu.epoch = 1
 	r.mu.jobs = make(map[int64]*Job)
 	return r
@@ -180,7 +191,7 @@ func (r *Registry) maybeCancelJobs(ctx context.Context, nl nodeLiveness) {
 	}
 }
 
-type resumeHookFn func(Type) func(context.Context, *Job) error
+type resumeHookFn func(Type, *cluster.Settings) func(context.Context, *Job) error
 
 var resumeHooks []resumeHookFn
 
@@ -270,7 +281,7 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl nodeLiveness) error {
 
 		var resumeFn func(context.Context, *Job) error
 		for _, hook := range resumeHooks {
-			if resumeFn = hook(payload.Type()); resumeFn != nil {
+			if resumeFn = hook(payload.Type(), r.settings); resumeFn != nil {
 				break
 			}
 		}

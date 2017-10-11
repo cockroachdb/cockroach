@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -78,7 +79,7 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	nodeID := &base.NodeIDContainer{}
 
-	registry := jobs.MakeRegistry(clock, db, ex, gossip, nodeID, jobs.FakeClusterID)
+	registry := jobs.MakeRegistry(clock, db, ex, gossip, nodeID, jobs.FakeClusterID, s.ClusterSettings())
 	nodeLiveness := jobs.NewFakeNodeLiveness(clock, 4)
 
 	const cancelInterval = time.Duration(math.MaxInt64)
@@ -124,7 +125,7 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 	resumeCounts := make(map[roachpb.NodeID]int)
 	resumeCalled := make(chan struct{})
 	var newJobs []*jobs.Job
-	jobs.AddResumeHook(func(_ jobs.Type) func(context.Context, *jobs.Job) error {
+	jobs.AddResumeHook(func(_ jobs.Type, _ *cluster.Settings) func(context.Context, *jobs.Job) error {
 		hookCallCount++
 		return func(_ context.Context, job *jobs.Job) error {
 			resumeCounts[jobMap[*job.ID()]]++
@@ -183,7 +184,7 @@ func TestRegistryResumeActiveLease(t *testing.T) {
 
 	resumeCh := make(chan int64)
 	defer jobs.ResetResumeHooks()()
-	jobs.AddResumeHook(func(_ jobs.Type) func(context.Context, *jobs.Job) error {
+	jobs.AddResumeHook(func(_ jobs.Type, _ *cluster.Settings) func(context.Context, *jobs.Job) error {
 		return func(ctx context.Context, job *jobs.Job) error {
 			resumeCh <- *job.ID()
 			return nil

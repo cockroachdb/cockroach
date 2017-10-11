@@ -128,7 +128,7 @@ func evalExport(
 	defer exportRequestLimiter.endLimitedRequest()
 	log.Infof(ctx, "export [%s,%s)", args.Key, args.EndKey)
 
-	exportStore, err := MakeExportStorage(ctx, args.Storage)
+	exportStore, err := MakeExportStorage(ctx, args.Storage, cArgs.EvalCtx.ClusterSettings())
 	if err != nil {
 		return storage.EvalResult{}, err
 	}

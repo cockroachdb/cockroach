@@ -25,7 +25,9 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"golang.org/x/net/context"
+	"golang.org/x/oauth2/google"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -39,13 +41,23 @@ func appendPath(t *testing.T, s, add string) string {
 	return u.String()
 }
 
+var testSettings *cluster.Settings
+
+func init() {
+	testSettings = cluster.MakeTestingClusterSettings()
+	up := testSettings.MakeUpdater()
+	if err := up.Set(cloudstorageGSDefaultKey, os.Getenv("GS_JSONKEY"), gcsDefault.Typ()); err != nil {
+		panic(err)
+	}
+}
+
 func storeFromURI(ctx context.Context, t *testing.T, uri string) ExportStorage {
 	conf, err := ExportStorageConfFromURI(uri)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Setup a sink for the given args.
-	s, err := MakeExportStorage(ctx, conf)
+	s, err := MakeExportStorage(ctx, conf, testSettings)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +72,7 @@ func testExportStore(t *testing.T, storeURI string, skipSingleFile bool) {
 		t.Fatal(err)
 	}
 	// Setup a sink for the given args.
-	s, err := MakeExportStorage(ctx, conf)
+	s, err := MakeExportStorage(ctx, conf, testSettings)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,10 +155,11 @@ func testExportStore(t *testing.T, storeURI string, skipSingleFile bool) {
 		return
 	}
 	t.Run("read-single-file-by-uri", func(t *testing.T) {
-		if err := s.WriteFile(ctx, "A", bytes.NewReader([]byte("aaa"))); err != nil {
+		const testingFilename = "A"
+		if err := s.WriteFile(ctx, testingFilename, bytes.NewReader([]byte("aaa"))); err != nil {
 			t.Fatal(err)
 		}
-		singleFile := storeFromURI(ctx, t, appendPath(t, storeURI, "A"))
+		singleFile := storeFromURI(ctx, t, appendPath(t, storeURI, testingFilename))
 		defer singleFile.Close()
 
 		res, err := singleFile.ReadFile(ctx, "")
@@ -162,16 +175,20 @@ func testExportStore(t *testing.T, storeURI string, skipSingleFile bool) {
 		if !bytes.Equal(content, []byte("aaa")) {
 			t.Fatalf("wrong content")
 		}
+		if err := s.Delete(ctx, testingFilename); err != nil {
+			t.Fatal(err)
+		}
 	})
 	t.Run("write-single-file-by-uri", func(t *testing.T) {
-		singleFile := storeFromURI(ctx, t, appendPath(t, storeURI, "B"))
+		const testingFilename = "B"
+		singleFile := storeFromURI(ctx, t, appendPath(t, storeURI, testingFilename))
 		defer singleFile.Close()
 
 		if err := singleFile.WriteFile(ctx, "", bytes.NewReader([]byte("bbb"))); err != nil {
 			t.Fatal(err)
 		}
 
-		res, err := s.ReadFile(ctx, "B")
+		res, err := s.ReadFile(ctx, testingFilename)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -183,6 +200,9 @@ func testExportStore(t *testing.T, storeURI string, skipSingleFile bool) {
 		// Verify the result contains what we wrote.
 		if !bytes.Equal(content, []byte("bbb")) {
 			t.Fatalf("wrong content")
+		}
+		if err := s.Delete(ctx, testingFilename); err != nil {
+			t.Fatal(err)
 		}
 	})
 }
@@ -294,7 +314,7 @@ func TestPutHttp(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		s, err := MakeExportStorage(ctx, conf)
+		s, err := MakeExportStorage(ctx, conf, testSettings)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -358,7 +378,19 @@ func TestPutGoogleCloud(t *testing.T) {
 	// TODO(dt): this prevents leaking an http conn goroutine.
 	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
 
-	testExportStore(t, fmt.Sprintf("gs://%s/%s", bucket, "backup-test"), false)
+	t.Run("empty", func(t *testing.T) {
+		testExportStore(t, fmt.Sprintf("gs://%s/%s", bucket, "backup-test-empty"), false)
+	})
+	t.Run("default", func(t *testing.T) {
+		testExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s", bucket, "backup-test-default", AuthParam, authParamDefault), false)
+	})
+	t.Run("implicit", func(t *testing.T) {
+		// Only test these if they exist.
+		if _, err := google.FindDefaultCredentials(context.TODO()); err != nil {
+			t.Skip(err)
+		}
+		testExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s", bucket, "backup-test-implicit", AuthParam, authParamImplicit), false)
+	})
 }
 
 func TestPutAzure(t *testing.T) {
