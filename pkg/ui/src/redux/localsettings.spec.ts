@@ -1,6 +1,6 @@
 import { Action } from "redux";
 import reducer, {
-  LocalSettingData, LocalSetting, setLocalSetting, LocalSettingsDict,
+  LocalSettingData, LocalSetting, setLocalSetting, LocalSettingsState,
 } from "./localsettings";
 import { assert } from "chai";
 
@@ -31,7 +31,7 @@ describe("Local Settings", function() {
       it("should correctly set UI values by key.", function() {
         const key = "test-setting";
         const value = "test-value";
-        const expected: LocalSettingsDict = {
+        const expected: LocalSettingsState = {
           [key]: value,
         };
         let actual = reducer(undefined, setLocalSetting(key, value));
@@ -46,10 +46,10 @@ describe("Local Settings", function() {
       it("should correctly overwrite previous values.", function() {
         const key = "test-setting";
         const value = "test-value";
-        const expected: LocalSettingsDict = {
+        const expected: LocalSettingsState = {
           [key]: value,
         };
-        const initial: LocalSettingsDict = {
+        const initial: LocalSettingsState = {
           [key]: "oldvalue",
         };
         assert.deepEqual(
@@ -61,7 +61,7 @@ describe("Local Settings", function() {
   });
 
   describe("LocalSetting helper class", function() {
-    let topLevelState: { localSettings: LocalSettingsDict};
+    let topLevelState: { localSettings: LocalSettingsState};
     const dispatch = function(action: Action) {
       topLevelState = {
         localSettings: reducer(topLevelState.localSettings, action),
