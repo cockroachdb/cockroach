@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -63,7 +64,7 @@ func Load(
 	if err != nil {
 		return BackupDescriptor{}, err
 	}
-	dir, err := storageccl.MakeExportStorage(ctx, conf)
+	dir, err := storageccl.MakeExportStorage(ctx, conf, cluster.NoSettings)
 	if err != nil {
 		return BackupDescriptor{}, errors.Wrap(err, "export storage from URI")
 	}
