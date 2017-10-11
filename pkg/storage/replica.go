@@ -3597,6 +3597,11 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	return stats, "", nil
 }
 
+func fatalOnRaftReadyErr(ctx context.Context, expl string, err error) {
+	// Mimic the behavior in processRaft.
+	log.Fatalf(ctx, "%s: %s", log.Safe(expl), err) // TODO(bdarnell)
+}
+
 // tick the Raft group, returning any error and true if the raft group exists
 // and false otherwise.
 func (r *Replica) tick() (bool, error) {

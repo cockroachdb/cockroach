@@ -2970,8 +2970,7 @@ func (s *Store) processRaftRequestAndReady(
 		}
 
 		if _, expl, err := r.handleRaftReadyRaftMuLocked(noSnap); err != nil {
-			// Mimic the behavior in processRaft.
-			log.Fatalf(ctx, "%s: %s", log.Safe(expl), err) // TODO(bdarnell)
+			fatalOnRaftReadyErr(ctx, expl, err)
 		}
 		return nil
 	})
@@ -3233,8 +3232,7 @@ func (s *Store) processRaftSnapshotRequest(
 		}
 
 		if _, expl, err := r.handleRaftReadyRaftMuLocked(inSnap); err != nil {
-			// Mimic the behavior in processRaft.
-			log.Fatalf(ctx, "%s: %s", log.Safe(expl), err) // TODO(bdarnell)
+			fatalOnRaftReadyErr(ctx, expl, err)
 		}
 		removePlaceholder = false
 		return nil
@@ -3594,21 +3592,25 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 	q.Unlock()
 
 	var lastRepl *Replica
-	for _, info := range infos {
+	for i, info := range infos {
+		last := i == len(infos)-1
 		pErr := s.withReplicaForRequest(info.respStream.Context(), info.req,
 			func(ctx context.Context, r *Replica) *roachpb.Error {
 				// Save the last Replica we see, since we don't know in advance which
 				// requests will fail during Replica retrieval. We want this later
 				// so we can handle the Raft Ready state all at once.
-				//
-				// TODO DURING REVIEW: getOrCreateReplica has some weird error cases.
-				// I'm not sure which ones we can expect here. For instance, is it
-				// possible that the first of two requests will getOrCreateReplica
-				// successfully but the second request won't? It seems like the
-				// ReplicaTooOldError case is one situation where this is possible.
-				// If none of that is possible, we can simplify this.
 				lastRepl = r
-				return s.processRaftRequestWithReplica(ctx, r, info.req)
+				pErr := s.processRaftRequestWithReplica(ctx, r, info.req)
+				if last {
+					// If this is the last request, we can handle raft.Ready without
+					// giving up the lock. Set lastRepl to nil, so we don't handle it
+					// down below as well.
+					lastRepl = nil
+					if _, expl, err := r.handleRaftReadyRaftMuLocked(noSnap); err != nil {
+						fatalOnRaftReadyErr(ctx, expl, err)
+					}
+				}
+				return pErr
 			})
 		if pErr != nil {
 			// If we're unable to process the request, clear the request queue. This
@@ -3629,14 +3631,16 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 		}
 	}
 
+	// If lastRepl is not nil, that means that some of the requests succeeded during
+	// Replica retrieval (withReplicaForRequest) but that the last request did not,
+	// otherwise we would have handled this above and set lastRepl to nil.
 	if lastRepl != nil {
 		// lastRepl will be unlocked when we exit withReplicaForRequest above.
 		// It's fine to relock it here (by calling handleRaftReady instead of
 		// handleRaftReadyRaftMuLocked) since racing to handle Raft Ready won't
 		// have any undesirable results.
 		if _, expl, err := lastRepl.handleRaftReady(noSnap); err != nil {
-			// Mimic the behavior in processRaft.
-			log.Fatalf(lastRepl.AnnotateCtx(ctx), "%s: %s", log.Safe(expl), err) // TODO(bdarnell)
+			fatalOnRaftReadyErr(lastRepl.AnnotateCtx(ctx), expl, err)
 		}
 	}
 }
