@@ -3,10 +3,10 @@
 # -0 and 0 should not be possible in a unique index.
 
 statement ok
-CREATE TABLE p (f float primary key)
+CREATE TABLE p (f float null, unique index (f))
 
 statement ok
-INSERT INTO p VALUES ('NaN'::float), ('Inf'::float), ('-Inf'::float), ('0'::float), (1), (-1)
+INSERT INTO p VALUES (NULL), ('NaN'::float), ('Inf'::float), ('-Inf'::float), ('0'::float), (1), (-1)
 
 # -0 and 0 should both equate to zero with or without an index.
 
@@ -21,23 +21,26 @@ INSERT INTO p VALUES ('-0'::float)
 query ITTT
 EXPLAIN SELECT * FROM p WHERE f IS NaN
 ----
-0  scan  ·      ·
-0  ·     table  p@primary
-0  ·     spans  /NaN-/-Inf
+0  render  ·      ·
+1  scan    ·      ·
+1  ·       table  p@p_f_key
+1  ·       spans  /NaN-/-Inf
 
 query ITTT
 EXPLAIN SELECT * FROM p WHERE f = 'NaN'
 ----
-0  scan  ·      ·
-0  ·     table  p@primary
-0  ·     spans  /NaN-/-Inf
+0  render  ·      ·
+1  scan    ·      ·
+1  ·       table  p@p_f_key
+1  ·       spans  /NaN-/-Inf
 
 query ITTT
 EXPLAIN SELECT * FROM p WHERE isnan(f)
 ----
-0  scan  ·      ·
-0  ·     table  p@primary
-0  ·     spans  ALL
+0  render  ·      ·
+1  scan    ·      ·
+1  ·       table  p@p_f_key
+1  ·       spans  ALL
 
 query R
 SELECT * FROM p WHERE f = 'NaN'
@@ -45,14 +48,44 @@ SELECT * FROM p WHERE f = 'NaN'
 NaN
 
 query RBBB
-SELECT f, f IS NaN, f = 'NaN', isnan(f) FROM p ORDER BY 1
+SELECT f, f IS NaN, f = 'NaN', isnan(f) FROM p@{FORCE_INDEX=primary} ORDER BY 1
 ----
+NULL  NULL   NULL   NULL
 NaN   true   true   true
 -Inf  false  false  false
 -1    false  false  false
 0     false  false  false
 1     false  false  false
 +Inf  false  false  false
+
+query RBBB
+SELECT f, f IS NaN, f = 'NaN', isnan(f) FROM p@{FORCE_INDEX=p_f_key} ORDER BY 1
+----
+NULL  NULL   NULL   NULL
+NaN   true   true   true
+-Inf  false  false  false
+-1    false  false  false
+0     false  false  false
+1     false  false  false
++Inf  false  false  false
+
+query RB rowsort
+select f, f > 'NaN' from p@{FORCE_INDEX=primary} where f > 'NaN' ORDER BY f
+----
+-Inf  true
+-1    true
+0     true
+1     true
++Inf  true
+
+query RB rowsort
+select f, f > 'NaN' from p@{FORCE_INDEX=p_f_key} where f > 'NaN' ORDER BY f
+----
+-Inf  true
+-1    true
+0     true
+1     true
++Inf  true
 
 statement ok
 CREATE TABLE i (f float)
