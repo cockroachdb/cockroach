@@ -143,8 +143,8 @@ See our separate [style guide](STYLE.md) document.
   Commits which affect many packages as a result of a shared dependency change
   should probably begin their subjects with the name of the shared dependency.
   Finally, some commits may need to affect many packages in a way which does
-  not point to a specific package; those commits may begin with "*:" or "all:"
-  to indicate their reach.
+  not point to a specific package; those commits may begin with "*:" to indicate
+  their reach.
 
 - Run the linters, code generators, and unit test suites locally:
 
