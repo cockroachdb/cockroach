@@ -56,6 +56,73 @@ short and related arguments (e.g. `start, end int64`) should either go on the sa
 or the type should be repeated on each line -- no argument should appear by itself
 on a line with no type (confusing and brittle when edited).
 
+### Inline comments for literals
+
+Literals of "basic" types (predeclared boolean, numeric, string types) used as
+function arguments have to be accompanied by an inline comment containing the
+name of the parameter, to aid code readability. Similarly, the `nil` identifier
+needs to be commented when used in this way.
+For example:
+
+```
+x := intentsToEvalResult(externalIntents, args, false /* alwaysReturn */)
+```
+
+Literals used as return values for function with multiple named results have to
+be accompanied by an inline comment containing the name of the result. For
+example:
+
+```
+func countVals() (numVals int, numIntents int) {
+  return 5 /* numVals */, 1 /* numIntents */
+}
+```
+
+Note: For `bool` constants, like for all literals, the comment indicates the
+name of the argument / result and does not depend on the argument value. *Do
+not* put a bang in the comment when commenting the `false` constant. Also, do
+not adapt the comment to negate the name of the parameter. For example:
+```
+func endTxn(commit bool){}
+
+OK:     endTxn(false /* commit */)
+NOT OK: endTxn(false /* !commit */)
+NOT OK: endTxn(false /* abort */)
+```
+
+Exceptions:
+1. `nil` errors shouldn't be commented when they are the last return value.
+2. `nils` and other zero vals and sentinels shouldn't be commented in return
+   values when the last return value is a non-nil error.
+3. Single return values (for functions with a single named result) shouldn't be
+   commented.
+
+
+Although  not required, consider using inline comments with names similar in
+spirit to the rules above whenever they help readability. In particular:
+1. Comment the blank identifier (i.e. `_`), when used in assignments from function results. For example:
+
+   ```
+   numVals, _ /* numIntents */ := countVals()
+   ```
+
+2. Comment other identifiers when their name (or type name, when they don't have
+   a basic type) is not sufficient. For example:
+
+    ```
+    foo(i /* myParam1 */, Bar{} /* myParam2 */)
+    ```
+
+The inline comments for literals represent a basic requirement. The presence of
+these comments should not preclude adding more explanation to the code when more
+explanation is needed. Such commentary can be placed inline, or in any other
+way that makes sense at a particular site. When placed inline, the format for
+the explanation is `<literal> /* <param name> - explanation */`. For example:
+```
+endTxn(false /* commit - this transaction has no chance of committing; see above */)
+```
+
+
 ### fmt Verbs
 
 Prefer the most specific verb for your use. In other words, prefer to avoid %v
