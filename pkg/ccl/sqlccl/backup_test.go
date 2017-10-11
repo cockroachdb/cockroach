@@ -343,7 +343,7 @@ func backupAndRestore(
 			var count int
 			sqlDBRestore.QueryRow(`
 			SELECT count(*) FROM crdb_internal.ranges
-			WHERE start_key = (
+			WHERE start_pretty = (
 				('/Table/' ||
 				(SELECT table_id FROM crdb_internal.tables
 					WHERE database_name = $1 AND name = $2
