@@ -495,8 +495,8 @@ type InterleaveDescriptor_Ancestor struct {
 	// SharedPrefixLen is how many fields are shared between a parent and child
 	// being interleaved, excluding any fields shared between parent and
 	// grandparent. Thus, the sum of SharedPrefixLens in the components of an
-	// InterleaveDescriptor is always strictly less than the number of fields
-	// in the index being interleaved.
+	// InterleaveDescriptor is never more than the number of fields in the index
+	// being interleaved.
 	SharedPrefixLen uint32 `protobuf:"varint,3,opt,name=shared_prefix_len,json=sharedPrefixLen" json:"shared_prefix_len"`
 }
 
