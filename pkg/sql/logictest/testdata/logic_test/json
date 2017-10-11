@@ -119,3 +119,215 @@ query B
 SELECT 'false'::JSON IN ('"hello"'::JSON, '1'::JSON, '[]'::JSON)
 ----
 false
+
+## Operators
+
+query T
+SELECT '{"a": 1}'::JSONB->'a'
+----
+1
+
+query T
+SELECT pg_typeof('{"a": 1}'::JSONB->'a')
+----
+jsonb
+
+query T
+SELECT '{"a": 1, "b": 2}'::JSONB->'b'
+----
+2
+
+query T
+SELECT '{"a": 1, "b": {"c": 3}}'::JSONB->'b'->'c'
+----
+3
+
+query TT
+SELECT '{"a": 1, "b": 2}'::JSONB->'c', '{"c": 1}'::JSONB->'a'
+----
+NULL NULL
+
+query TT
+SELECT '2'::JSONB->'b', '[1,2,3]'::JSONB->'0'
+----
+NULL NULL
+
+query T
+SELECT '[1, 2, 3]'::JSONB->0
+----
+1
+
+query T
+SELECT '[1, 2, 3]'::JSONB->3
+----
+NULL
+
+query T
+SELECT '{"a": "b"}'::JSONB->>'a'
+----
+b
+
+query T
+SELECT pg_typeof('{"a": 1}'::JSONB->>'a')
+----
+string
+
+query T
+SELECT '{"a": 1, "b": 2}'::JSONB->>'b'
+----
+2
+
+query TT
+SELECT '{"a": 1, "b": 2}'::JSONB->>'c', '{"c": 1}'::JSONB->>'a'
+----
+NULL NULL
+
+query TT
+SELECT '2'::JSONB->>'b', '[1,2,3]'::JSONB->>'0'
+----
+NULL NULL
+
+query T
+SELECT '[1, 2, 3]'::JSONB->>0
+----
+1
+
+query T
+SELECT '[1, 2, 3]'::JSONB->>3
+----
+NULL
+
+query T
+SELECT '{"a": 1}'::JSONB#>'{a}'::STRING[]
+----
+1
+
+query T
+SELECT '{"a": {"b": "c"}}'::JSONB#>'{a,b}'::STRING[]
+----
+"c"
+
+query T
+SELECT '{"a": ["b"]}'::JSONB#>'{a,b}'::STRING[]
+----
+NULL
+
+query T
+SELECT '{"a": ["b"]}'::JSONB#>'{a,0}'::STRING[]
+----
+"b"
+
+query T
+SELECT '{"a": 1}'::JSONB#>>'{a}'::STRING[]
+----
+1
+
+query T
+SELECT '{"a": {"b": "c"}}'::JSONB#>>'{a,b}'::STRING[]
+----
+c
+
+query T
+SELECT '{"a": ["b"]}'::JSONB#>>'{a,b}'::STRING[]
+----
+NULL
+
+query T
+SELECT '{"a": ["b"]}'::JSONB#>>'{a,0}'::STRING[]
+----
+b
+
+
+query BB
+SELECT '{"a": 1}'::JSONB ? 'a', '{"a": 1}'::JSONB ? 'b'
+----
+true false
+
+query BB
+SELECT '{"a": 1, "b": 1}'::JSONB ? 'a', '{"a": 1, "b": 1}'::JSONB ? 'b'
+----
+true true
+
+query BB
+SELECT '{"a": 1}'::JSONB ?| ARRAY['a', 'b'], '{"b": 1}'::JSONB ?| ARRAY['a', 'b']
+----
+true true
+
+query B
+SELECT '{"c": 1}'::JSONB ?| ARRAY['a', 'b']
+----
+false
+
+query BB
+SELECT '{"a": 1}'::JSONB ?& ARRAY['a', 'b'], '{"b": 1}'::JSONB ?& ARRAY['a', 'b']
+----
+false false
+
+query B
+SELECT '{"a": 1, "b": 1, "c": 1}'::JSONB ?& ARRAY['a', 'b']
+----
+true
+
+## Arrays do not `?` their stringified indices.
+query B
+SELECT '[1, 2, 3]'::JSONB ? '0'
+----
+false
+
+## Arrays `?` string elements.
+query B
+SELECT '["foo", "bar", "baz"]'::JSONB ? 'foo'
+----
+true
+
+query B
+SELECT '["foo", "bar", "baz"]'::JSONB ? 'baz'
+----
+true
+
+query B
+SELECT '["foo", "bar", "baz"]'::JSONB ? 'gup'
+----
+false
+
+query B
+SELECT '["foo", "bar", "baz"]'::JSONB ?| ARRAY['foo', 'gup']
+----
+true
+
+query B
+SELECT '["foo", "bar", "baz"]'::JSONB ?| ARRAY['buh', 'gup']
+----
+false
+
+query B
+SELECT '["foo", "bar", "baz"]'::JSONB ?& ARRAY['foo', 'bar']
+----
+true
+
+query B
+SELECT '["foo", "bar", "baz"]'::JSONB ?& ARRAY['foo', 'buh']
+----
+false
+
+query T
+SELECT '{"a": 1}'::JSONB - 'a'
+----
+{}
+
+query T
+SELECT '{"a": 1}'::JSONB - 'b'
+----
+{"a":1}
+
+# `-` is one of the very few cases that PG errors in a JSON type mismatch with operators.
+query T
+SELECT '[1,2,3]'::JSONB - 1
+----
+[1,3]
+
+statement error pgcode 22023 cannot delete from scalar
+SELECT '3'::JSONB - 'b'
+
+statement error pgcode 22023 cannot delete from object using integer index
+SELECT '{}'::JSONB - 1

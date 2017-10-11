@@ -303,9 +303,9 @@ const (
 	IsNot
 	Contains
 	ContainedBy
-	HasKey
-	HasSomeKey
-	HasAllKeys
+	Existence
+	SomeExistence
+	AllExistence
 
 	// The following operators will always be used with an associated SubOperator.
 	// If Go had algebraic data types they would be defined in a self-contained
@@ -350,9 +350,9 @@ var comparisonOpName = [...]string{
 	IsNot:             "IS NOT",
 	Contains:          "@>",
 	ContainedBy:       "<@",
-	HasKey:            "?",
-	HasSomeKey:        "?|",
-	HasAllKeys:        "?&",
+	Existence:         "?",
+	SomeExistence:     "?|",
+	AllExistence:      "?&",
 	Any:               "ANY",
 	Some:              "SOME",
 	All:               "ALL",

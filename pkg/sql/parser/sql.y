@@ -385,7 +385,7 @@ func (u *sqlSymUnion) referenceActions() ReferenceActions {
 
 // Ordinary key words in alphabetical order.
 %token <str>   ACTION ADD
-%token <str>   ALL ALTER ANALYSE ANALYZE AND ANY ANNOTATE_TYPE ARRAY AS ASC
+%token <str>   ALL ALL_EXISTENCE ALTER ANALYSE ANALYZE AND ANY ANNOTATE_TYPE ARRAY AS ASC
 %token <str>   ASYMMETRIC AT
 
 %token <str>   BACKUP BEGIN BETWEEN BIGINT BIGSERIAL BIT
@@ -413,7 +413,7 @@ func (u *sqlSymUnion) referenceActions() ReferenceActions {
 
 %token <str>   GRANT GRANTS GREATEST GROUP GROUPING
 
-%token <str>   HAVING HELP HIGH HOUR HAS_SOME HAS_ALL
+%token <str>   HAVING HELP HIGH HOUR
 
 %token <str>   IMPORT INCREMENTAL IF IFNULL ILIKE IN INET INTERLEAVE
 %token <str>   INDEX INDEXES INITIALLY
@@ -450,7 +450,7 @@ func (u *sqlSymUnion) referenceActions() ReferenceActions {
 
 %token <str>   SAVEPOINT SCATTER SCRUB SEARCH SECOND SELECT SEQUENCES
 %token <str>   SERIAL SERIALIZABLE SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
-%token <str>   SHOW SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
+%token <str>   SHOW SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SOME_EXISTENCE SPLIT SQL
 %token <str>   START STATUS STDIN STRICT STRING STORE STORING SUBSTRING
 %token <str>   SYMMETRIC SYSTEM
 
@@ -834,7 +834,7 @@ func (u *sqlSymUnion) referenceActions() ReferenceActions {
 %left      AND
 %right     NOT
 %nonassoc  IS                  // IS sets precedence for IS NULL, etc
-%nonassoc  '<' '>' '=' LESS_EQUALS GREATER_EQUALS NOT_EQUALS CONTAINS CONTAINED_BY '?' HAS_SOME_KEY HAS_ALL_KEYS
+%nonassoc  '<' '>' '=' LESS_EQUALS GREATER_EQUALS NOT_EQUALS CONTAINS CONTAINED_BY '?' SOME_EXISTENCE ALL_EXISTENCE
 %nonassoc  '~' BETWEEN IN LIKE ILIKE SIMILAR NOT_REGMATCH REGIMATCH NOT_REGIMATCH NOT_LA
 %nonassoc  ESCAPE              // ESCAPE must be just above LIKE/ILIKE/SIMILAR
 %nonassoc  OVERLAPS
@@ -5129,15 +5129,15 @@ a_expr:
   }
 | a_expr '?' a_expr
   {
-    $$.val = &ComparisonExpr{Operator: HasKey, Left: $1.expr(), Right: $3.expr()}
+    $$.val = &ComparisonExpr{Operator: Existence, Left: $1.expr(), Right: $3.expr()}
   }
-| a_expr HAS_SOME_KEY a_expr
+| a_expr SOME_EXISTENCE a_expr
   {
-    $$.val = &ComparisonExpr{Operator: HasSomeKey, Left: $1.expr(), Right: $3.expr()}
+    $$.val = &ComparisonExpr{Operator: SomeExistence, Left: $1.expr(), Right: $3.expr()}
   }
-| a_expr HAS_ALL_KEYS a_expr
+| a_expr ALL_EXISTENCE a_expr
   {
-    $$.val = &ComparisonExpr{Operator: HasAllKeys, Left: $1.expr(), Right: $3.expr()}
+    $$.val = &ComparisonExpr{Operator: AllExistence, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr CONTAINS a_expr
   {

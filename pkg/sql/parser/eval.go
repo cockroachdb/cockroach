@@ -655,6 +655,22 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				return &DInterval{Duration: left.(*DInterval).Duration.Sub(right.(*DInterval).Duration)}, nil
 			},
 		},
+		BinOp{
+			LeftType:   TypeJSON,
+			RightType:  TypeString,
+			ReturnType: TypeJSON,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				return left.(*DJSON).removeKey(MustBeDString(right))
+			},
+		},
+		BinOp{
+			LeftType:   TypeJSON,
+			RightType:  TypeInt,
+			ReturnType: TypeJSON,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				return left.(*DJSON).removeIndex(MustBeDInt(right))
+			},
+		},
 	},
 
 	Mult: {
@@ -1066,6 +1082,81 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				dd.SetCoefficient(int64(l))
 				_, err := DecimalCtx.Pow(&dd.Decimal, &dd.Decimal, r)
 				return dd, err
+			},
+		},
+	},
+
+	FetchVal: {
+		BinOp{
+			LeftType:   TypeJSON,
+			RightType:  TypeString,
+			ReturnType: TypeJSON,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				return left.(*DJSON).fetchValKey(MustBeDString(right)), nil
+			},
+		},
+		BinOp{
+			LeftType:   TypeJSON,
+			RightType:  TypeInt,
+			ReturnType: TypeJSON,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				return left.(*DJSON).fetchValIdx(int(MustBeDInt(right))), nil
+			},
+		},
+	},
+
+	FetchValPath: {
+		BinOp{
+			LeftType:   TypeJSON,
+			RightType:  TArray{TypeString},
+			ReturnType: TypeJSON,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				return left.(*DJSON).fetchPath(*right.(*DArray)), nil
+			},
+		},
+	},
+
+	FetchText: {
+		BinOp{
+			LeftType:   TypeJSON,
+			RightType:  TypeString,
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				res := left.(*DJSON).fetchValKey(MustBeDString(right))
+				if res == DNull {
+					return DNull, nil
+				}
+				str := res.(*DJSON).asText()
+				return &str, nil
+			},
+		},
+		BinOp{
+			LeftType:   TypeJSON,
+			RightType:  TypeInt,
+			ReturnType: TypeString,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				res := left.(*DJSON).fetchValIdx(int(MustBeDInt(right)))
+				if res == DNull {
+					return DNull, nil
+				}
+				str := res.(*DJSON).asText()
+				return &str, nil
+			},
+		},
+	},
+
+	FetchTextPath: {
+		BinOp{
+			LeftType:   TypeJSON,
+			RightType:  TArray{TypeString},
+			ReturnType: TypeJSON,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				res := left.(*DJSON).fetchPath(*right.(*DArray))
+				if res == DNull {
+					return DNull, nil
+				}
+				str := res.(*DJSON).asText()
+				return &str, nil
 			},
 		},
 	},
@@ -1624,6 +1715,49 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				key := regexpKey{s: string(MustBeDString(right)), caseInsensitive: true}
 				return matchRegexpWithKey(ctx, left, key)
+			},
+		},
+	},
+
+	Existence: {
+		CmpOp{
+			LeftType:  TypeJSON,
+			RightType: TypeString,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				if left.(*DJSON).existenceOperator(string(MustBeDString(right))) {
+					return DBoolTrue, nil
+				}
+				return DBoolFalse, nil
+			},
+		},
+	},
+
+	SomeExistence: {
+		CmpOp{
+			LeftType:  TypeJSON,
+			RightType: TArray{TypeString},
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				for _, k := range MustBeDArray(right).Array {
+					if left.(*DJSON).existenceOperator(string(MustBeDString(k))) {
+						return DBoolTrue, nil
+					}
+				}
+				return DBoolFalse, nil
+			},
+		},
+	},
+
+	AllExistence: {
+		CmpOp{
+			LeftType:  TypeJSON,
+			RightType: TArray{TypeString},
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				for _, k := range MustBeDArray(right).Array {
+					if !left.(*DJSON).existenceOperator(string(MustBeDString(k))) {
+						return DBoolFalse, nil
+					}
+				}
+				return DBoolTrue, nil
 			},
 		},
 	},

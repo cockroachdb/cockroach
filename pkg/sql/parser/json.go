@@ -17,6 +17,7 @@ package parser
 import (
 	"encoding/json"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -47,6 +48,15 @@ func ParseDJSON(s string) (Datum, error) {
 		return nil, pgerror.NewErrorf(pgerror.CodeInvalidTextRepresentationError, "error decoding JSON: %s", err.Error())
 	}
 	return &datum, nil
+}
+
+// asText formats a DJSON as required by ->>, that is, strings are returned
+// without quotes, and everything else is as normal.
+func (obj DJSON) asText() DString {
+	if obj.typ == stringJSONType {
+		return obj.strVal
+	}
+	return DString(obj.String())
 }
 
 func interpretJSON(d interface{}) (DJSON, error) {
@@ -119,4 +129,136 @@ func interpretJSON(d interface{}) (DJSON, error) {
 		}, nil
 	}
 	return DJSON{}, nil
+}
+
+// fetchValKey implements the `->` operator for strings.
+func (obj *DJSON) fetchValKey(key DString) Datum {
+	if obj.typ != objectJSONType {
+		return DNull
+	}
+	for i := range obj.objectVal {
+		if obj.objectVal[i].k == key {
+			return &obj.objectVal[i].v
+		}
+		if obj.objectVal[i].k > key {
+			break
+		}
+	}
+	return DNull
+}
+
+// fetchValIdx implements the `->` operator for ints.
+func (obj *DJSON) fetchValIdx(idx int) Datum {
+	if obj.typ != arrayJSONType {
+		return DNull
+	}
+	if idx < 0 {
+		idx = len(obj.arrayVal) + idx
+	}
+	if idx >= 0 && idx < len(obj.arrayVal) {
+		return &obj.arrayVal[idx]
+	}
+	return DNull
+}
+
+func (obj *DJSON) fetchPath(path DArray) Datum {
+	var next Datum
+	for _, v := range path.Array {
+		next = obj.fetchValKeyOrIdx(MustBeDString(v))
+		if next == DNull {
+			return DNull
+		}
+		obj = next.(*DJSON)
+	}
+	return obj
+}
+
+// fetchValKeyOrIdx is used for path access, if obj is an object, it tries to
+// access the given field. If it's an array, it interprets the key as an int
+// and tries to access the given index.
+func (obj *DJSON) fetchValKeyOrIdx(key DString) Datum {
+	switch obj.typ {
+	case objectJSONType:
+		return obj.fetchValKey(key)
+	case arrayJSONType:
+		idx, err := strconv.Atoi(string(key))
+		if err != nil {
+			return DNull
+		}
+		return obj.fetchValIdx(idx)
+	default:
+		return DNull
+	}
+}
+
+var errCannotDeleteFromScalar = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "cannot delete from scalar")
+var errCannotDeleteFromObject = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "cannot delete from object using integer index")
+
+// removeKey implements the `-` operator for strings.
+func (obj *DJSON) removeKey(key DString) (Datum, error) {
+	switch obj.typ {
+	case arrayJSONType:
+		return obj, nil
+	case objectJSONType:
+		newVal := make([]jsonKeyValuePair, 0, len(obj.objectVal))
+		for i := range obj.objectVal {
+			if obj.objectVal[i].k != key {
+				newVal = append(newVal, obj.objectVal[i])
+			}
+		}
+		return &DJSON{typ: objectJSONType, objectVal: newVal}, nil
+	default:
+		return nil, errCannotDeleteFromScalar
+	}
+}
+
+// removeIndex implements the `-` operator for ints.
+func (obj *DJSON) removeIndex(idx DInt) (Datum, error) {
+	switch obj.typ {
+	case arrayJSONType:
+		if idx < 0 {
+			idx = DInt(len(obj.arrayVal) + int(idx))
+		}
+		if int(idx) < 0 || int(idx) >= len(obj.arrayVal) {
+			return obj, nil
+		}
+		result := make([]DJSON, len(obj.arrayVal)-1)
+		for i := 0; i < int(idx); i++ {
+			result[i] = obj.arrayVal[i]
+		}
+		for i := int(idx) + 1; i < len(obj.arrayVal); i++ {
+			result[i-1] = obj.arrayVal[i]
+		}
+		return &DJSON{typ: arrayJSONType, arrayVal: result}, nil
+	case objectJSONType:
+		return nil, errCannotDeleteFromObject
+	default:
+		return nil, errCannotDeleteFromScalar
+	}
+}
+
+// existenceOperator implements the `?` operator.
+func (obj *DJSON) existenceOperator(str string) bool {
+	switch obj.typ {
+	case objectJSONType:
+		for i := 0; i < len(obj.objectVal); i++ {
+			if string(obj.objectVal[i].k) == str {
+				return true
+			}
+			// This is justified because we store keys in sorted order.
+			if string(obj.objectVal[i].k) > str {
+				return false
+			}
+		}
+		return false
+	case arrayJSONType:
+		for i := 0; i < len(obj.arrayVal); i++ {
+			if obj.arrayVal[i].typ == stringJSONType && string(obj.arrayVal[i].strVal) == str {
+				return true
+			}
+		}
+		return false
+	default:
+		return false
+	}
 }
