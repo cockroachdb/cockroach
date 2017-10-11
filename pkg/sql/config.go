@@ -38,7 +38,8 @@ func getZoneConfig(
 		return config.ZoneConfig{}, false, err
 	} else if zoneVal != nil {
 		// We're done.
-		zone, err := config.MigrateZoneConfig(zoneVal)
+		var zone config.ZoneConfig
+		err := zoneVal.GetProto(&zone)
 		return zone, true, err
 	}
 
