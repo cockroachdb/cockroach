@@ -72,7 +72,7 @@ message ZoneConfig {
   optional int32 num_replicas = 5 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"num_replicas\""];
   // Constraints constrains which stores the replicas can be stored on. The
   // order in which the constraints are stored is arbitrary and may change.
-  // https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/expressive_zone_config.md#constraint-system
+  // https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160706_expressive_zone_config.md#constraint-system
   optional Constraints constraints = 6 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"constraints,flow\""];
 }
 

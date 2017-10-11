@@ -66,6 +66,9 @@ var ignored = []string{
 	"https://localhost",
 	"https://myroach:8080",
 	"https://storage.googleapis.com/golang/go${GOVERSION}",
+	"https://%s.blob.core.windows.net/%s",
+	"https://roachfixtureseastus.blob.core.windows.net/$container",
+	"https://roachfixtureswestus.blob.core.windows.net/$container",
 	// These are cloud provider metadata endpoints.
 	"http://instance-data/latest/meta-data/public-ipv4",
 	"http://metadata/",

@@ -218,7 +218,7 @@ func (s *Server) Metrics() *ServerMetrics {
 // which connections are accepted.
 // The RFC on drain modes has more information regarding the specifics of
 // what will happen to connections in different states:
-// https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/drain_modes.md
+// https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160425_drain_modes.md
 func (s *Server) SetDraining(drain bool) error {
 	return s.setDrainingImpl(drain, drainMaxWait, cancelMaxWait)
 }
