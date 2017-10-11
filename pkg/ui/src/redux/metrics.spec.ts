@@ -7,7 +7,6 @@ import fetchMock from "src/util/fetch-mock";
 import * as protos from "src/js/protos";
 import * as api from "src/util/api";
 import * as metrics from "./metrics";
-import reducer from "./metrics";
 
 type TSRequest = protos.cockroach.ts.tspb.TimeSeriesQueryRequest;
 
@@ -39,7 +38,7 @@ describe("metrics reducer", function() {
     let state: metrics.MetricQueryState;
 
     beforeEach(() => {
-      state = reducer(undefined, { type: "unknown" });
+      state = metrics.metricsReducer(undefined, { type: "unknown" });
     });
 
     it("should have the correct default value.", function() {
@@ -63,7 +62,7 @@ describe("metrics reducer", function() {
           },
         ],
       });
-      state = reducer(state, metrics.requestMetrics(componentID, request));
+      state = metrics.metricsReducer(state, metrics.requestMetrics(componentID, request));
       assert.isDefined(state.queries);
       assert.isDefined(state.queries[componentID]);
       assert.lengthOf(_.keys(state.queries), 1);
@@ -89,7 +88,7 @@ describe("metrics reducer", function() {
           },
         ],
       });
-      state = reducer(state, metrics.receiveMetrics(componentID, request, response));
+      state = metrics.metricsReducer(state, metrics.receiveMetrics(componentID, request, response));
       assert.isDefined(state.queries);
       assert.isDefined(state.queries[componentID]);
       assert.lengthOf(_.keys(state.queries), 1);
@@ -117,8 +116,8 @@ describe("metrics reducer", function() {
         ],
       });
       // populate nextRequest
-      state = reducer(state, metrics.requestMetrics(componentID, request));
-      state = reducer(state, metrics.receiveMetrics(componentID, request, response));
+      state = metrics.metricsReducer(state, metrics.requestMetrics(componentID, request));
+      state = metrics.metricsReducer(state, metrics.receiveMetrics(componentID, request, response));
       assert.isDefined(state.queries);
       assert.isDefined(state.queries[componentID]);
       assert.lengthOf(_.keys(state.queries), 1);
@@ -129,7 +128,7 @@ describe("metrics reducer", function() {
 
     it("should correctly dispatch errorMetrics", function() {
       const error: Error = new Error("An error occurred");
-      state = reducer(state, metrics.errorMetrics(componentID, error));
+      state = metrics.metricsReducer(state, metrics.errorMetrics(componentID, error));
       assert.isDefined(state.queries);
       assert.isDefined(state.queries[componentID]);
       assert.lengthOf(_.keys(state.queries), 1);
@@ -139,11 +138,11 @@ describe("metrics reducer", function() {
     });
 
     it("should correctly dispatch fetchMetrics and fetchMetricsComplete", function() {
-      state = reducer(state, metrics.fetchMetrics());
+      state = metrics.metricsReducer(state, metrics.fetchMetrics());
       assert.equal(state.inFlight, 1);
-      state = reducer(state, metrics.fetchMetrics());
+      state = metrics.metricsReducer(state, metrics.fetchMetrics());
       assert.equal(state.inFlight, 2);
-      state = reducer(state, metrics.fetchMetricsComplete());
+      state = metrics.metricsReducer(state, metrics.fetchMetricsComplete());
       assert.equal(state.inFlight, 1);
     });
   });
@@ -167,7 +166,7 @@ describe("metrics reducer", function() {
     // Mock of metrics state.
     let mockMetricsState: metrics.MetricQueryState;
     const mockDispatch = <A extends Action>(action: A): A => {
-      mockMetricsState = reducer(mockMetricsState, action);
+      mockMetricsState = metrics.metricsReducer(mockMetricsState, action);
       return undefined;
     };
     const queryMetrics = function(id: string, request: TSRequest): Promise<void> {

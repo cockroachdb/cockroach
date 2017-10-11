@@ -1,6 +1,7 @@
 import { Action } from "redux";
-import reducer, {
-  LocalSettingData, LocalSetting, setLocalSetting, LocalSettingsState,
+import {
+  LocalSettingData, LocalSetting, setLocalSetting,
+  LocalSettingsState, localSettingsReducer,
 } from "./localsettings";
 import { assert } from "chai";
 
@@ -22,7 +23,7 @@ describe("Local Settings", function() {
   describe("reducer", function() {
     it("should have the correct default value.", function() {
       assert.deepEqual(
-        reducer(undefined, { type: "unknown" }),
+        localSettingsReducer(undefined, { type: "unknown" }),
         {},
       );
     });
@@ -34,12 +35,12 @@ describe("Local Settings", function() {
         const expected: LocalSettingsState = {
           [key]: value,
         };
-        let actual = reducer(undefined, setLocalSetting(key, value));
+        let actual = localSettingsReducer(undefined, setLocalSetting(key, value));
         assert.deepEqual(actual, expected);
 
         const key2 = "another-setting";
         expected[key2] = value;
-        actual = reducer(actual, setLocalSetting(key2, value));
+        actual = localSettingsReducer(actual, setLocalSetting(key2, value));
         assert.deepEqual(actual, expected);
       });
 
@@ -53,7 +54,7 @@ describe("Local Settings", function() {
           [key]: "oldvalue",
         };
         assert.deepEqual(
-          reducer(initial, setLocalSetting(key, value)),
+          localSettingsReducer(initial, setLocalSetting(key, value)),
           expected,
         );
       });
@@ -64,7 +65,7 @@ describe("Local Settings", function() {
     let topLevelState: { localSettings: LocalSettingsState};
     const dispatch = function(action: Action) {
       topLevelState = {
-        localSettings: reducer(topLevelState.localSettings, action),
+        localSettings: localSettingsReducer(topLevelState.localSettings, action),
       };
     };
 

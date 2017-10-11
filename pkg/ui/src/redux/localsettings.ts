@@ -31,7 +31,7 @@ export interface LocalSettingsState {
 /**
  * reducer function which handles local settings, storing them in a dictionary.
  */
-export default function reducer(state: LocalSettingsState = {}, action: Action): LocalSettingsState {
+export function localSettingsReducer(state: LocalSettingsState = {}, action: Action): LocalSettingsState {
   if (_.isNil(action)) {
     return state;
   }

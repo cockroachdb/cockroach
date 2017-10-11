@@ -144,7 +144,7 @@ export class MetricQueryState {
  * dispatching them based on ID. It also accepts actions which indicate the
  * state of the connection to the server.
  */
-export default function reducer(state: MetricQueryState = new MetricQueryState(), action: Action): MetricQueryState {
+export function metricsReducer(state: MetricQueryState = new MetricQueryState(), action: Action): MetricQueryState {
   switch (action.type) {
     // A new fetch request to the server is now in flight.
     case FETCH:
