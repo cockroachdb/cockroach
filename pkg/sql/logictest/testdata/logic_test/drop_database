@@ -16,7 +16,7 @@ test
 statement ok
 CREATE TABLE "foo-bar".t(x INT)
 
-statement error database.*is not empty and CASCADE was not specified
+statement error database.*is not empty and RESTRICT was specified
 DROP DATABASE "foo-bar" RESTRICT
 
 statement ok
@@ -225,3 +225,17 @@ test
 
 query error database "constraint_db" does not exist
 SELECT * FROM constraint_db.t1
+
+# Check that the default option is CASCADE, but that safe_updates blocks it
+
+statement ok
+CREATE DATABASE foo; CREATE TABLE foo.bar(x INT);
+
+statement ok
+SET sql_safe_updates = TRUE;
+
+statement error DROP DATABASE on non-empty database without explicit CASCADE
+DROP DATABASE foo
+
+statement ok
+SET sql_safe_updates = FALSE; DROP DATABASE foo
