@@ -1,34 +1,34 @@
 import _ from "lodash";
-import { createStore, combineReducers, applyMiddleware, compose, GenericStoreEnhancer } from "redux";
 import { hashHistory } from "react-router";
 import { syncHistoryWithStore, routerReducer, RouterState } from "react-router-redux";
+import { createStore, combineReducers, applyMiddleware, compose, GenericStoreEnhancer } from "redux";
 import thunk from "redux-thunk";
 
+import { apiReducersReducer, APIReducersState } from "./apiReducers";
 import { localSettingsReducer, LocalSettingsState } from "./localsettings";
-import { uiDataReducer, UIDataState } from "./uiData";
 import { metricsReducer, MetricsState } from "./metrics";
 import { timeWindowReducer, TimeWindowState } from "./timewindow";
-import { apiReducersReducer, APIReducersState } from "./apiReducers";
+import { uiDataReducer, UIDataState } from "./uiData";
 
 export interface AdminUIState {
-    routing: RouterState;
-    localSettings: LocalSettingsState;
-    uiData: UIDataState;
-    metrics: MetricsState;
-    timewindow: TimeWindowState;
     cachedData: APIReducersState;
+    localSettings: LocalSettingsState;
+    metrics: MetricsState;
+    routing: RouterState;
+    timewindow: TimeWindowState;
+    uiData: UIDataState;
 }
 
 // createAdminUIStore is a function that returns a new store for the admin UI.
 // It's in a function so it can be recreated as necessary for testing.
 export const createAdminUIStore = () => createStore(
   combineReducers<AdminUIState>({
-    routing: routerReducer,
-    localSettings: localSettingsReducer,
-    uiData: uiDataReducer,
-    metrics: metricsReducer,
-    timewindow: timeWindowReducer,
     cachedData: apiReducersReducer,
+    localSettings: localSettingsReducer,
+    metrics: metricsReducer,
+    routing: routerReducer,
+    timewindow: timeWindowReducer,
+    uiData: uiDataReducer,
   }),
   compose(
     applyMiddleware(thunk),
