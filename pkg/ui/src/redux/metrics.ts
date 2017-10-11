@@ -129,10 +129,10 @@ export function metricQuerySetReducer(state: MetricQuerySet = {}, action: Action
 }
 
 /**
- * MetricQueryState maintains a MetricQuerySet collection, along with some
+ * MetricsState maintains a MetricQuerySet collection, along with some
  * metadata relevant to server queries.
  */
-export class MetricQueryState {
+export class MetricsState {
   // A count of the number of in-flight fetch requests.
   inFlight = 0;
   // The collection of MetricQuery objects.
@@ -144,7 +144,7 @@ export class MetricQueryState {
  * dispatching them based on ID. It also accepts actions which indicate the
  * state of the connection to the server.
  */
-export function metricsReducer(state: MetricQueryState = new MetricQueryState(), action: Action): MetricQueryState {
+export function metricsReducer(state: MetricsState = new MetricsState(), action: Action): MetricsState {
   switch (action.type) {
     // A new fetch request to the server is now in flight.
     case FETCH:

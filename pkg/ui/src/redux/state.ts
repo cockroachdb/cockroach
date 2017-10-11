@@ -19,7 +19,7 @@ export interface AdminUIState {
     routing: RouterState;
     localSettings: localSettings.LocalSettingsState;
     uiData: uiData.UIDataState;
-    metrics: metrics.MetricQueryState;
+    metrics: metrics.MetricsState;
     timewindow: timewindow.TimeWindowState;
     cachedData: apiReducers.APIReducersState;
 }
