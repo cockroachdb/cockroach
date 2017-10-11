@@ -4,24 +4,19 @@ import { hashHistory } from "react-router";
 import { syncHistoryWithStore, routerReducer, RouterState } from "react-router-redux";
 import thunk from "redux-thunk";
 
-import { localSettingsReducer } from "./localsettings";
-import * as localSettings from "./localsettings";
-import { uiDataReducer } from "./uiData";
-import * as uiData from "./uiData";
-import { metricsReducer } from "./metrics";
-import * as metrics from "./metrics";
-import { timeWindowReducer } from "./timewindow";
-import * as timewindow from "./timewindow";
-import { apiReducersReducer } from "./apiReducers";
-import * as apiReducers from "./apiReducers";
+import { localSettingsReducer, LocalSettingsState } from "./localsettings";
+import { uiDataReducer, UIDataState } from "./uiData";
+import { metricsReducer, MetricsState } from "./metrics";
+import { timeWindowReducer, TimeWindowState } from "./timewindow";
+import { apiReducersReducer, APIReducersState } from "./apiReducers";
 
 export interface AdminUIState {
     routing: RouterState;
-    localSettings: localSettings.LocalSettingsState;
-    uiData: uiData.UIDataState;
-    metrics: metrics.MetricsState;
-    timewindow: timewindow.TimeWindowState;
-    cachedData: apiReducers.APIReducersState;
+    localSettings: LocalSettingsState;
+    uiData: UIDataState;
+    metrics: MetricsState;
+    timewindow: TimeWindowState;
+    cachedData: APIReducersState;
 }
 
 // createAdminUIStore is a function that returns a new store for the admin UI.
