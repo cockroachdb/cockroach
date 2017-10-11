@@ -308,18 +308,12 @@ func backupAndRestore(
 		// Force the ID of the restored bank table to be different.
 		sqlDBRestore.Exec(`CREATE TABLE other.empty (a INT PRIMARY KEY)`)
 
-		// Restore assumes the database exists.
-		sqlDBRestore.Exec(`CREATE DATABASE data`)
-
-		// Force the ID of the restored bank table to be different.
-		sqlDBRestore.Exec(`CREATE TABLE data.empty (a INT PRIMARY KEY)`)
-
 		var unused string
 		var restored struct {
 			rows, idx, sys, bytes int64
 		}
 
-		sqlDBRestore.QueryRow(`RESTORE data.* FROM $1`, dest).Scan(
+		sqlDBRestore.QueryRow(`RESTORE DATABASE DATA FROM $1`, dest).Scan(
 			&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.sys, &restored.bytes,
 		)
 		approxBytes := int64(backupRestoreRowPayloadSize * numAccounts)
@@ -1856,6 +1850,89 @@ func TestBackupRestorePermissions(t *testing.T) {
 		if _, err := sqlDB.DB.Exec(
 			`RESTORE data.bank FROM $1 WITH OPTIONS ('into_db'='system')`, dir,
 		); !testutils.IsError(err, "user root does not have CREATE privilege") {
+			t.Fatal(err)
+		}
+	})
+}
+
+func TestRestoreDatabaseVersusTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1
+	_, dir, _, origDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	defer cleanupFn()
+
+	for _, q := range []string{
+		`CREATE DATABASE d2`,
+		`CREATE DATABASE d3`,
+		`CREATE TABLE d3.foo (a INT)`,
+		`CREATE DATABASE d4`,
+		`CREATE TABLE d4.foo (a INT)`,
+	} {
+		origDB.Exec(q)
+	}
+
+	origDB.Exec(`BACKUP DATABASE data, d2, d3, d4 TO $1`, dir)
+
+	t.Run("db", func(t *testing.T) {
+		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{})
+		defer tcRestore.Stopper().Stop(context.TODO())
+		sqlDB := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
+		if _, err := sqlDB.DB.Exec(`RESTORE DATABASE data, d2, d3 FROM $1`, dir); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("db-exists", func(t *testing.T) {
+		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{})
+		defer tcRestore.Stopper().Stop(context.TODO())
+		sqlDB := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
+
+		if _, err := sqlDB.DB.Exec(`CREATE DATABASE data`); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := sqlDB.DB.Exec(`RESTORE DATABASE data FROM $1`, dir); !testutils.IsError(
+			err, "already exists",
+		) {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("tables", func(t *testing.T) {
+		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{})
+		defer tcRestore.Stopper().Stop(context.TODO())
+		sqlDB := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
+
+		if _, err := sqlDB.DB.Exec(`CREATE DATABASE data`); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := sqlDB.DB.Exec(`RESTORE data.* FROM $1`, dir); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("tables-missing", func(t *testing.T) {
+		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{})
+		defer tcRestore.Stopper().Stop(context.TODO())
+		sqlDB := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
+
+		if _, err := sqlDB.DB.Exec(`RESTORE data.*, d4.* FROM $1`, dir); !testutils.IsError(
+			err, "needs to exist",
+		) {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("into_db", func(t *testing.T) {
+		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{})
+		defer tcRestore.Stopper().Stop(context.TODO())
+		sqlDB := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
+
+		if _, err := sqlDB.DB.Exec(`RESTORE DATABASE data FROM $1 WITH into_db = 'other'`, dir); !testutils.IsError(
+			err, "cannot use \"into_db\"",
+		) {
 			t.Fatal(err)
 		}
 	})
