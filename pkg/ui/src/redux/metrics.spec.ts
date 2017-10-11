@@ -35,7 +35,7 @@ describe("metrics reducer", function() {
 
   describe("reducer", function() {
     const componentID = "test-component";
-    let state: metrics.MetricQueryState;
+    let state: metrics.MetricsState;
 
     beforeEach(() => {
       state = metrics.metricsReducer(undefined, { type: "unknown" });
@@ -164,7 +164,7 @@ describe("metrics reducer", function() {
     };
 
     // Mock of metrics state.
-    let mockMetricsState: metrics.MetricQueryState;
+    let mockMetricsState: metrics.MetricsState;
     const mockDispatch = <A extends Action>(action: A): A => {
       mockMetricsState = metrics.metricsReducer(mockMetricsState, action);
       return undefined;
