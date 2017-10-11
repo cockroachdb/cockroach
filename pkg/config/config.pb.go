@@ -118,8 +118,7 @@ func (m *Constraints) String() string            { return proto.CompactTextStrin
 func (*Constraints) ProtoMessage()               {}
 func (*Constraints) Descriptor() ([]byte, []int) { return fileDescriptorConfig, []int{2} }
 
-// ZoneConfig holds configuration that is needed for a range of KV pairs. This
-// and the conversion methods must stay in sync with ZoneConfigHuman.
+// ZoneConfig holds configuration that applies to one or more ranges.
 type ZoneConfig struct {
 	// TODO(d4l3k): Remove replica_attrs after a sufficient amount of time has passed.
 	ReplicaAttrs  []cockroach_roachpb.Attributes `protobuf:"bytes,1,rep,name=replica_attrs,json=replicaAttrs" json:"replica_attrs" yaml:",omitempty"`
