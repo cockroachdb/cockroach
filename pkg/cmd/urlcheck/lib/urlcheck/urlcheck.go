@@ -122,25 +122,21 @@ func checkURL(client *http.Client, url string) error {
 		return nil
 	}
 
-	if resp.StatusCode == 403 || resp.StatusCode == 405 {
-		// The server doesn't like HEAD. Try GET. This is obviously the
-		// correct strategy for 405 Method Not ALlowed responses. This is a
-		// less-correct strategy for 403 Forbidden responses, but we link to
-		// several misconfigured S3 buckets that return 403 Forbidden for HEAD
-		// requests but not for GET requests.
-		retryResp, err := client.Get(url)
-		if err != nil {
-			return err
-		}
-		if err := retryResp.Body.Close(); err != nil {
-			return err
-		}
+	// The server doesn't like HEAD. Try GET. This is obviously the correct
+	// strategy for a 405 Method Not ALlowed error, but a less-correct strategy
+	// for any other error. Still, we link to several misconfigured servers that
+	// return 403 Forbidden or 500 Internal Server Error for HEAD requests, but
+	// not for GET requests.
+	resp, err = client.Get(url)
+	if err != nil {
+		return err
+	}
+	if err := resp.Body.Close(); err != nil {
+		return err
+	}
 
-		if retryResp.StatusCode >= 200 && retryResp.StatusCode < 300 {
-			return nil
-		}
-
-		return errors.New(retryResp.Status)
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
 	}
 
 	return errors.New(resp.Status)
