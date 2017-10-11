@@ -58,7 +58,7 @@ func testDockerSuccess(ctx context.Context, t *testing.T, name string, cmd []str
 const (
 	// Iterating against a locally built version of the docker image can be done
 	// by changing postgresTestImage to the hash of the container.
-	postgresTestImage = "docker.io/cockroachdb/postgres-test:20170423-1100"
+	postgresTestImage = "docker.io/cockroachdb/postgres-test:20171011-1414"
 )
 
 func testDocker(
