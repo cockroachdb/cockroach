@@ -14,4 +14,5 @@
 
 package diagrams
 
-//go:generate go run ../../../../pkg/cmd/docgen/main.go ../../../../pkg/cmd/docgen/funcs.go ../../../../pkg/cmd/docgen/diagrams.go grammar --base . --railroad ../../../../build/Railroad.jar --addr ../../../../pkg/sql/parser/sql.y
+// to re-enable automatic generation via go generate, use a generate tag that runs:
+// go run ../../../../pkg/cmd/docgen/main.go ../../../../pkg/cmd/docgen/funcs.go ../../../../pkg/cmd/docgen/diagrams.go grammar --base . --railroad ../../../../build/Railroad.jar --addr ../../../../pkg/sql/parser/sql.y
