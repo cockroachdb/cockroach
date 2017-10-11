@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -1500,12 +1501,20 @@ func (t *logicTest) runFile(path string, config testClusterConfig) {
 	t.outf("file %s done with config: %s", path, config.name)
 }
 
+var skipLogicTests = envutil.EnvOrDefaultBool("COCKROACH_LOGIC_TESTS_SKIP", false)
+var logicTestsConfigExclude = envutil.EnvOrDefaultString("COCKROACH_LOGIC_TESTS_SKIP_CONFIG", "")
+var logicTestsConfigFilter = envutil.EnvOrDefaultString("COCKROACH_LOGIC_TESTS_CONFIG", "")
+
 func TestLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	if testutils.NightlyStress() {
 		// See https://github.com/cockroachdb/cockroach/pull/10966.
 		t.Skip()
+	}
+
+	if skipLogicTests {
+		t.Skip("COCKROACH_LOGIC_TESTS_SKIP")
 	}
 
 	// run the logic tests indicated by the bigtest and logictestdata flags.
@@ -1597,6 +1606,12 @@ func TestLogic(t *testing.T) {
 		}
 		// Top-level test: one per test configuration.
 		t.Run(cfg.name, func(t *testing.T) {
+			if logicTestsConfigExclude != "" && cfg.name == logicTestsConfigExclude {
+				t.Skip("config excluded via env var")
+			}
+			if logicTestsConfigFilter != "" && cfg.name != logicTestsConfigFilter {
+				t.Skip("config does not match env var")
+			}
 			for _, path := range paths {
 				path := path // Rebind range variable.
 				// Inner test: one per file path.
