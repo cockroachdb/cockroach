@@ -24,14 +24,14 @@ export interface LocalSettingData {
 /**
  * Local settings are stored in a simple string-keyed dictionary.
  */
-export interface LocalSettingsDict {
+export interface LocalSettingsState {
   [key: string]: any;
 }
 
 /**
  * reducer function which handles local settings, storing them in a dictionary.
  */
-export default function reducer(state: LocalSettingsDict = {}, action: Action): LocalSettingsDict {
+export function localSettingsReducer(state: LocalSettingsState = {}, action: Action): LocalSettingsState {
   if (_.isNil(action)) {
     return state;
   }
@@ -77,7 +77,7 @@ export class LocalSetting<S, T> {
   }
 
   /**
-   * Selector which retrieves this setting from the LocalSettingsDict
+   * Selector which retrieves this setting from the LocalSettingsState
    * @param state The current top-level redux state of the application.
    */
   selector = (state: S) => {
@@ -87,12 +87,12 @@ export class LocalSetting<S, T> {
   /**
    * Construct a new LocalSetting manager.
    * @param key The unique key of the setting.
-   * @param innerSelector A selector which retrieves the LocalSettingsDict from
+   * @param innerSelector A selector which retrieves the LocalSettingsState from
    * the top-level redux state of the application.
    * @param defaultValue Optional default value of the setting when it has not
    * yet been set.
    */
-  constructor(public key: string, innerSelector: Selector<S, LocalSettingsDict>, defaultValue?: T) {
+  constructor(public key: string, innerSelector: Selector<S, LocalSettingsState>, defaultValue?: T) {
     this._value = createSelector(
       innerSelector,
       (uiSettings) => {
