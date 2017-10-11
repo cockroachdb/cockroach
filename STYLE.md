@@ -56,6 +56,139 @@ short and related arguments (e.g. `start, end int64`) should either go on the sa
 or the type should be repeated on each line -- no argument should appear by itself
 on a line with no type (confusing and brittle when edited).
 
+### Inline comments for literals
+
+Literals of "basic" types (predeclared boolean, numeric, string types) used as
+function arguments should be accompanied by an inline comment containing the
+name of the parameter, to aid code readability. Similarly, the `nil` identifier
+needs to be commented when used in this way.
+For example:
+
+```
+x := intentsToEvalResult(externalIntents, args, false /* alwaysReturn */)
+```
+
+Literals used as return values for functions with multiple named results should be
+accompanied by an inline comment containing the name of the result. For example:
+
+```
+func countVals() (numVals int, numIntents int) {
+  return 5 /* numVals */, 1 /* numIntents */
+}
+```
+
+Note: For `bool` constants, like for all literals, the comment indicates the
+name of the argument / result and does not depend on the argument value. *Do
+not* put a bang in the comment when commenting the `false` constant. Also, do
+not adapt the comment to negate the name of the parameter. For example:
+```
+func endTxn(commit bool){}
+
+OK:     endTxn(false /* commit */)
+NOT OK: endTxn(false /* !commit */)
+NOT OK: endTxn(false /* abort */)
+```
+
+Exceptions:
+1. Arguments to single-param constructors and setters are exempt. For example,
+   the following are OK:
+
+    ```
+    foo.SetBar(5)
+    NewDString("I get it")
+    ```
+
+2. Arguments to well-known API's are exempt. E.g. The following is OK:
+
+    ```
+    errors.Wrap(err, "my message")
+    testutils.IsError(err, "job paused")
+    util.Pluralize(5)
+    ```
+
+3. `nil` errors shouldn't be commented when they are the last return value.
+4. `nil`s and other zero vals and sentinels shouldn't be commented in return
+   values when the last return value is a non-nil error.
+5. Single return values (for functions with a single named result) shouldn't be
+   commented.
+6. Return values for extremely short functions (particularly anonymous
+   functions) are exempt.
+7. Arguments to anonymous functions that have been declared very close to the
+   call-site are exempt. E.g. the following is OK:
+
+    ```
+    getter := func(k int, v string) {
+        ... short body ...
+    }
+    getter(1, "my val")
+    ```
+
+8. Literal format strings containing format verbs (i.e. `%s,%#v, etc`) are
+   exempt. For example, the following is OK:
+
+    ```
+    log.Infof(ctx, "reading key:%d", key)
+    ```
+
+
+Although  not required, consider using inline comments with names similar in
+spirit to the rules above whenever they help readability. In particular:
+1. Comment the blank identifier (i.e. `_`), when used in assignments from function results. For example:
+
+   ```
+   numVals, _ /* numIntents */ := countVals()
+   ```
+
+2. Comment other identifiers when their name (or type name, when they don't have
+   a basic type) is not sufficient. For example:
+
+    ```
+    foo(i /* myParam1 */, Bar{} /* myParam2 */)
+    ```
+
+The inline comments for literals represent a basic requirement. The presence of
+these comments should not preclude adding more explanation to the code when more
+explanation is needed. Such commentary can be placed inline, or in any other
+way that makes sense at a particular site. When placed inline, the format for
+the explanation is `<literal> /* <param name> - explanation */`. For example:
+```
+endTxn(false /* commit - this transaction has no chance of committing; see above */)
+```
+
+#### Try to avoid `bool` parameters
+
+`bool` arguments to functions are often dubious things, as they hint to code that
+essentially reads like:
+```
+func doSomething(shouldDoX bool) {
+  if shouldDoX {
+    doX()
+  } else {
+    doY()
+  }
+}
+```
+
+This is not always the case; e.g. `bool` arguments to constructors are fine.
+However, in cases where that is a fair assessment of the situation, consider
+whether the `doSomething` function should exist at all. In situations where the
+situation is less clear-cut, consider replacing the `bool` in question with an
+enum. For example:
+```
+type EndTxnAction int
+
+const (
+  Commit EndTxnAction = iota
+  Abort
+)
+
+func endTxn(action EndTxnAction) {}
+```
+is better than
+```
+func endTxn(commit bool) {}
+```
+
 ### fmt Verbs
 
 Prefer the most specific verb for your use. In other words, prefer to avoid %v
