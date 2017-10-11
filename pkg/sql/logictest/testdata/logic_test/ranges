@@ -235,3 +235,56 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[4], 'foo')
 
 statement error TESTING_RELOCATE data column 1 \(relocation array\) must be of type int\[\], not type string
 ALTER TABLE t TESTING_RELOCATE VALUES ('foo', 1)
+
+# Create and drop things to produce interesting data for crdb_internal.ranges.
+
+statement ok
+CREATE DATABASE d
+
+statement ok
+CREATE TABLE d.a ()
+
+statement ok
+CREATE DATABASE e
+
+statement ok
+CREATE TABLE e.b (i INT)
+
+statement ok
+ALTER TABLE e.b SPLIT AT VALUES (0)
+
+statement ok
+CREATE TABLE d.c (i INT)
+
+statement ok
+DROP DATABASE e CASCADE
+
+statement ok
+CREATE INDEX ON d.c (i)
+
+statement ok
+ALTER TABLE d.c SPLIT AT VALUES (123)
+
+statement ok
+ALTER INDEX d.c@c_i_idx SPLIT AT VALUES (0)
+
+query ITTTTTTTTI colnames
+SELECT * FROM crdb_internal.ranges
+----
+range_id  start_key                          start_pretty              end_key                            end_pretty                database  table  index    replicas  lease_holder
+1         ·                                  /Min                      [187 137 137]                      /Table/51/1/1             ·         ·      ·        {1}       1
+2         [187 137 137]                      /Table/51/1/1             [187 137 141 137]                  /Table/51/1/5/1           test      t      ·        {4,3}     3
+11        [187 137 141 137]                  /Table/51/1/5/1           [187 137 141 138]                  /Table/51/1/5/2           test      t      ·        {3,1,2}   1
+12        [187 137 141 138]                  /Table/51/1/5/2           [187 137 141 139]                  /Table/51/1/5/3           test      t      ·        {3,5,2}   5
+13        [187 137 141 139]                  /Table/51/1/5/3           [187 137 143 144 254 188 137 145]  /Table/51/1/7/8/#/52/1/9  test      t      ·        {4,1,2}   4
+14        [187 137 143 144 254 188 137 145]  /Table/51/1/7/8/#/52/1/9  [187 137 146]                      /Table/51/1/10            test      t      ·        {4,1,2}   4
+3         [187 137 146]                      /Table/51/1/10            [187 137 147]                      /Table/51/1/11            test      t      ·        {1}       1
+8         [187 137 147]                      /Table/51/1/11            [187 137 151 152 254 189 138]      /Table/51/1/15/16/#/53/2  test      t      ·        {1}       1
+9         [187 137 151 152 254 189 138]      /Table/51/1/15/16/#/53/2  [187 138 144]                      /Table/51/2/8             test      t      ·        {1}       1
+6         [187 138 144]                      /Table/51/2/8             [187 138 145]                      /Table/51/2/9             test      t      idx      {1}       1
+7         [187 138 145]                      /Table/51/2/9             [187 138 236 137]                  /Table/51/2/100/1         test      t      idx      {1}       1
+4         [187 138 236 137]                  /Table/51/2/100/1         [187 138 236 186]                  /Table/51/2/100/50        test      t      idx      {3}       3
+5         [187 138 236 186]                  /Table/51/2/100/50        [193 137 136]                      /Table/57/1/0             test      t      idx      {1}       1
+10        [193 137 136]                      /Table/57/1/0             [194 137 246 123]                  /Table/58/1/123           ·         b      ·        {1}       1
+21        [194 137 246 123]                  /Table/58/1/123           [194 138 136]                      /Table/58/2/0             d         c      ·        {1}       1
+22        [194 138 136]                      /Table/58/2/0             [255 255]                          /Max                      d         c      c_i_idx  {1}       1

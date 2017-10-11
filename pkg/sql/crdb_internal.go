@@ -27,6 +27,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -1311,15 +1312,43 @@ CREATE TABLE crdb_internal.forward_dependencies (
 var crdbInternalRangesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.ranges (
-  range_id  INT,
-  start_key STRING,
-  end_key   STRING,
-  replicas  INT
+  range_id     INT NOT NULL,
+  start_key    BYTES NOT NULL,
+  start_pretty STRING NOT NULL,
+  end_key      BYTES NOT NULL,
+  end_pretty   STRING NOT NULL,
+  database     STRING NOT NULL,
+  "table"      STRING NOT NULL,
+  "index"      STRING NOT NULL,
+  replicas     INT[] NOT NULL,
+  lease_holder INT NOT NULL
 )
 `,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error {
 		if err := p.RequireSuperUser("read crdb_internal.ranges"); err != nil {
 			return err
+		}
+		descs, err := getAllDescriptors(ctx, p.txn)
+		if err != nil {
+			return err
+		}
+		dbNames := make(map[uint64]string)
+		tableNames := make(map[uint64]string)
+		indexNames := make(map[uint64]map[sqlbase.IndexID]string)
+		parents := make(map[uint64]uint64)
+		for _, desc := range descs {
+			id := uint64(desc.GetID())
+			switch desc := desc.(type) {
+			case *sqlbase.TableDescriptor:
+				parents[id] = uint64(desc.ParentID)
+				tableNames[id] = desc.GetName()
+				indexNames[id] = make(map[sqlbase.IndexID]string)
+				for _, idx := range desc.Indexes {
+					indexNames[id][idx.ID] = idx.Name
+				}
+			case *sqlbase.DatabaseDescriptor:
+				dbNames[id] = desc.GetName()
+			}
 		}
 		ranges, err := scanMetaKVs(ctx, p.txn, roachpb.Span{
 			Key:    keys.MinKey,
@@ -1333,11 +1362,51 @@ CREATE TABLE crdb_internal.ranges (
 			if err := r.ValueProto(&desc); err != nil {
 				return err
 			}
+			arr := parser.NewDArray(parser.TypeInt)
+			for _, replica := range desc.Replicas {
+				if err := arr.Append(parser.NewDInt(parser.DInt(replica.StoreID))); err != nil {
+					return err
+				}
+			}
+			var dbName, tableName, indexName string
+			if _, id, err := keys.DecodeTablePrefix(desc.StartKey.AsRawKey()); err == nil {
+				parent := parents[id]
+				if parent != 0 {
+					tableName = tableNames[id]
+					dbName = dbNames[parent]
+					if _, _, idxID, err := sqlbase.DecodeTableIDIndexID(desc.StartKey.AsRawKey()); err == nil {
+						indexName = indexNames[id][idxID]
+					}
+				} else {
+					dbName = dbNames[id]
+				}
+			}
+
+			// Get the lease holder.
+			// TODO(radu): this will be slow if we have a lot of ranges; find a way to
+			// make this part optional.
+			b := &client.Batch{}
+			b.AddRawRequest(&roachpb.LeaseInfoRequest{
+				Span: roachpb.Span{
+					Key: desc.StartKey.AsRawKey(),
+				},
+			})
+			if err := p.txn.Run(ctx, b); err != nil {
+				return errors.Wrap(err, "error getting lease info")
+			}
+			resp := b.RawResponse().Responses[0].GetInner().(*roachpb.LeaseInfoResponse)
+
 			if err := addRow(
 				parser.NewDInt(parser.DInt(desc.RangeID)),
+				parser.NewDBytes(parser.DBytes(desc.StartKey)),
 				parser.NewDString(keys.PrettyPrint(desc.StartKey.AsRawKey())),
+				parser.NewDBytes(parser.DBytes(desc.EndKey)),
 				parser.NewDString(keys.PrettyPrint(desc.EndKey.AsRawKey())),
-				parser.NewDInt(parser.DInt(len(desc.Replicas))),
+				parser.NewDString(dbName),
+				parser.NewDString(tableName),
+				parser.NewDString(indexName),
+				arr,
+				parser.NewDInt(parser.DInt(resp.Lease.Replica.StoreID)),
 			); err != nil {
 				return err
 			}
