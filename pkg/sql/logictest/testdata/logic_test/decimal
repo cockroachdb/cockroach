@@ -215,6 +215,20 @@ EXPLAIN SELECT * FROM s WHERE isnan(d)
 1  ·       table  s@s_d_idx
 1  ·       spans  ALL
 
+query RB rowsort
+select d, d > 'NaN' from s where d > 'NaN'
+----
+-Infinity  true
+-1         true
+0          true
+-0         true
+-0.0       true
+-0.00      true
+-0.000     true
+-0.0000    true
+1          true
+Infinity   true
+
 # Verify that decimals don't lose trailing 0s even when used for an index.
 statement ok
 CREATE INDEX idx ON s (d)

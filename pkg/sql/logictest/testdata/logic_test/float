@@ -54,6 +54,15 @@ NaN   true   true   true
 1     false  false  false
 +Inf  false  false  false
 
+query RB rowsort
+select f, f > 'NaN' from p where f > 'NaN' ORDER BY f
+----
+-Inf  true
+-1    true
+0     true
+1     true
++Inf  true
+
 statement ok
 CREATE TABLE i (f float)
 
