@@ -6737,11 +6737,11 @@ func TestQuotaPoolAccessOnDestroyedReplica(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, _, err := repl.handleRaftReady(IncomingSnapshot{}); err != nil {
+	if _, _, err := repl.handleRaftReady(noSnap); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, _, err := repl.handleRaftReady(IncomingSnapshot{}); err != nil {
+	if _, _, err := repl.handleRaftReady(noSnap); err != nil {
 		t.Fatal(err)
 	}
 }

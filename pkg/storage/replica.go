@@ -3172,9 +3172,28 @@ func (r *Replica) unquiesceAndWakeLeaderLocked() {
 	}
 }
 
+// stepRaftGroup calls Step on the replica's RawNode with the provided request's
+// message. Before doing so, it assures that the replica is unquiesced and ready
+// to handle the request.
+func (r *Replica) stepRaftGroup(req *RaftMessageRequest) error {
+	return r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
+		// We're processing a message from another replica which means that the
+		// other replica is not quiesced, so we don't need to wake the leader.
+		r.unquiesceLocked()
+		if req.Message.Type == raftpb.MsgApp {
+			r.setEstimatedCommitIndexLocked(req.Message.Commit)
+		}
+		return false, /* !unquiesceAndWakeLeader */
+			raftGroup.Step(req.Message)
+	})
+}
+
 type handleRaftReadyStats struct {
 	processed int
 }
+
+// noSnap can be passed to handleRaftReady when no snapshot should be processed.
+var noSnap IncomingSnapshot
 
 // handleRaftReady processes a raft.Ready containing entries and messages that
 // are ready to read, be saved to stable storage, committed or sent to other
