@@ -672,6 +672,42 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
+	// https://www.postgresql.org/docs/10/static/functions-binarystring.html
+	"encode": {
+		Builtin{
+			Types:      ArgTypes{{"data", TypeBytes}, {"format", TypeString}},
+			ReturnType: fixedReturnType(TypeString),
+			fn: func(evalCtx *EvalContext, args Datums) (_ Datum, err error) {
+				data, format := string(*args[0].(*DBytes)), string(MustBeDString(args[1]))
+				if format != "hex" {
+					return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError, "only 'hex' format is supported for ENCODE")
+				}
+				if !utf8.ValidString(data) {
+					return nil, pgerror.NewError(pgerror.CodeCharacterNotInRepertoireError, "invalid UTF-8 sequence")
+				}
+				return NewDString(data), nil
+			},
+			Info: "Encodes `data` in the text format specified by `format` (only \"hex\" is supported).",
+		},
+	},
+
+	"decode": {
+		Builtin{
+			Types:      ArgTypes{{"text", TypeString}, {"format", TypeString}},
+			ReturnType: fixedReturnType(TypeString),
+			fn: func(evalCtx *EvalContext, args Datums) (_ Datum, err error) {
+				data, format := string(MustBeDString(args[0])), string(MustBeDString(args[1]))
+				if format != "hex" {
+					return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError, "only 'hex' format is supported for DECODE")
+				}
+				var buf bytes.Buffer
+				hexEncodeString(&buf, data)
+				return NewDString(buf.String()), nil
+			},
+			Info: "Decodes `data` as the format specified by `format` (only \"hex\" is supported).",
+		},
+	},
+
 	"ascii": {stringBuiltin1(func(_ *EvalContext, s string) (Datum, error) {
 		for _, ch := range s {
 			return NewDInt(DInt(ch)), nil
