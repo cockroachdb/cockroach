@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -92,7 +93,16 @@ func TestNodeLiveness(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := nl.Heartbeat(context.Background(), l); err != nil {
+		for {
+			err := nl.Heartbeat(context.Background(), l)
+			if err == nil {
+				break
+			}
+			if err == errSkippedHeartbeat {
+				log.Warningf(context.Background(), "retrying after %s", err)
+				continue
+			}
+
 			t.Fatal(err)
 		}
 	}
