@@ -1096,8 +1096,22 @@ func TestHealthAPI(t *testing.T) {
 	// cannot verify the authentication session.
 	expected := "500 Internal Server Error"
 	var resp serverpb.HealthResponse
-	if err := getAdminJSONProto(s, "health", &resp); !testutils.IsError(err, expected) {
-		t.Errorf("expected %q error, got %v", expected, err)
+	for {
+		if err := getAdminJSONProto(s, "health", &resp); !testutils.IsError(err, expected) {
+			type timeouter interface {
+				Timeout() bool
+			}
+			if _, ok := err.(timeouter); ok {
+				// Special case for `*http.httpError` which can happen since we
+				// have timeouts on our requests and things may not be going so smoothly
+				// on the server side. See:
+				// https://github.com/cockroachdb/cockroach/issues/18469
+				log.Warningf(context.Background(), "ignoring timeout error: %s (%T)", err, err)
+				continue
+			}
+			t.Errorf("expected %q error, got %v (%T)", expected, err, err)
+		}
+		break
 	}
 }
 
