@@ -114,11 +114,6 @@ SELECT SUBSTR('RoacH', -2, 4)
 ----
 R
 
-# See #6601 and #8210. We use three arguments to guarantee a very high
-# probability that at least one of the UUIDs is invalid UTF8.
-query error invalid UTF-8
-select cast(uuid_v4() as string), cast(uuid_v4() as string), cast(uuid_v4() as string)
-
 query T
 SELECT SUBSTR('12345', 2, 77)
 ----
@@ -1519,6 +1514,20 @@ SELECT array_upper(ARRAY[ARRAY[1, 2]], 2)
 ----
 2
 
+query error only 'hex' format is supported for ENCODE
+SELECT ENCODE('abc', 'escape')
+
+query error only 'hex' format is supported for DECODE
+SELECT DECODE('abc', 'escape')
+
+query error invalid UTF-8
+SELECT ENCODE('\xa7', 'hex')
+
+query TT
+SELECT ENCODE('\x616263', 'hex'), DECODE('abc', 'hex')
+----
+abc 616263
+
 query T
 SELECT FROM_IP(b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff\x01\x02\x03\x04')
 ----
@@ -1788,7 +1797,6 @@ SELECT i FROM (VALUES
   (sha512('3m'::interval::string)),
   (sha512('2016-11-12'::date::string)),
   (sha512('2015-08-24 23:45:45.53453'::timestamptz::string)),
-  (sha512(b'bar':::bytes::string)),
   (sha512(b'bar'::bytes))
 ) AS a(i)
 ----
@@ -1801,7 +1809,6 @@ f7fbba6e0636f890e56fbbf3283e524c6fa3204ae298382d624741d0dc6638326e282c41be5e4254
 6ca65db2a861fa0ecd0c1e29ef9566425e952d2a205706a6e955a6b1bbd721fdc2d28efdba515f9d29f34aa84223382f6ca6d11bdef23984b8ff9339b59e80f5
 b2d173023893f71caadf7cb2f9557355462570de2c9c971b9cfa5494936e28df8e13d0db4d550aab66d5e7a002f678ddb02def092c069ce473cf5fb293953986
 960b0fed9378be1e9adefd91e1be6ac9c1de7208008dfec438ff845135727bebea0f7458a5181079f61288176e0168cfea501b900c3e495b3ab9bbe4d372486d
-d82c4eb5261cb9c8aa9855edd67d1bd10482f41529858d925094d173fa662aa91ff39bc5b188615273484021dfb16fd8284cf684ccf0fc795be3aa2fc1e6c181
 d82c4eb5261cb9c8aa9855edd67d1bd10482f41529858d925094d173fa662aa91ff39bc5b188615273484021dfb16fd8284cf684ccf0fc795be3aa2fc1e6c181
 
 # We only support one encoding, UTF8, which is hardcoded to id 6 just like in
