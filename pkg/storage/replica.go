@@ -3172,9 +3172,28 @@ func (r *Replica) unquiesceAndWakeLeaderLocked() {
 	}
 }
 
+// stepRaftGroup calls Step on the replica's RawNode with the provided request's
+// message. Before doing so, it assures that the replica is unquiesced and ready
+// to handle the request.
+func (r *Replica) stepRaftGroup(req *RaftMessageRequest) error {
+	return r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
+		// We're processing a message from another replica which means that the
+		// other replica is not quiesced, so we don't need to wake the leader.
+		r.unquiesceLocked()
+		if req.Message.Type == raftpb.MsgApp {
+			r.setEstimatedCommitIndexLocked(req.Message.Commit)
+		}
+		return false, /* !unquiesceAndWakeLeader */
+			raftGroup.Step(req.Message)
+	})
+}
+
 type handleRaftReadyStats struct {
 	processed int
 }
+
+// noSnap can be passed to handleRaftReady when no snapshot should be processed.
+var noSnap IncomingSnapshot
 
 // handleRaftReady processes a raft.Ready containing entries and messages that
 // are ready to read, be saved to stable storage, committed or sent to other
@@ -3578,6 +3597,11 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	return stats, "", nil
 }
 
+func fatalOnRaftReadyErr(ctx context.Context, expl string, err error) {
+	// Mimic the behavior in processRaft.
+	log.Fatalf(ctx, "%s: %s", log.Safe(expl), err) // TODO(bdarnell)
+}
+
 // tick the Raft group, returning any error and true if the raft group exists
 // and false otherwise.
 func (r *Replica) tick() (bool, error) {
@@ -3678,10 +3702,10 @@ func (r *Replica) maybeTickQuiesced() bool {
 // pre-conditions: no pending raft commands, no pending raft ready, all of the
 // followers are up to date, etc. Quiescence is initiated by a special
 // MsgHeartbeat that is tagged as Quiesce. Upon receipt (see
-// Store.processRaftRequest), the follower checks to see if the term/commit
-// matches and marks the local replica as quiescent. If the term/commit do not
-// match the MsgHeartbeat is passed through to Raft which will generate a
-// MsgHeartbeatResp that will unquiesce the sender.
+// Store.processRaftRequestWithReplica), the follower checks to see if the
+// term/commit matches and marks the local replica as quiescent. If the
+// term/commit do not match the MsgHeartbeat is passed through to Raft which
+// will generate a MsgHeartbeatResp that will unquiesce the sender.
 //
 // Any Raft operation on the local replica will unquiesce the Replica. For
 // example, a Raft operation initiated on a follower will unquiesce the
