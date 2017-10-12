@@ -1043,15 +1043,15 @@ func TestBadRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := db.Scan(ctx, "a", "a", 0); !testutils.IsError(err, "truncation resulted in empty batch") {
+	if _, err := db.Scan(ctx, "a", "a", 0); !testutils.IsError(err, "must be greater than start") {
 		t.Fatalf("unexpected error on scan with startkey == endkey: %v", err)
 	}
 
-	if _, err := db.ReverseScan(ctx, "a", "a", 0); !testutils.IsError(err, "truncation resulted in empty batch") {
+	if _, err := db.ReverseScan(ctx, "a", "a", 0); !testutils.IsError(err, "must be greater than start") {
 		t.Fatalf("unexpected error on reverse scan with startkey == endkey: %v", err)
 	}
 
-	if err := db.DelRange(ctx, "x", "a"); !testutils.IsError(err, "truncation resulted in empty batch") {
+	if err := db.DelRange(ctx, "x", "a"); !testutils.IsError(err, "must be greater than start") {
 		t.Fatalf("unexpected error on deletion on [x, a): %v", err)
 	}
 
