@@ -26,6 +26,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1263,7 +1264,7 @@ func (w *gzipResponseWriter) Close() {
 func officialAddr(
 	ctx context.Context, cfgAddr string, lnAddr net.Addr, osHostname func() (string, error),
 ) (*util.UnresolvedAddr, error) {
-	cfgHost, _, err := net.SplitHostPort(cfgAddr)
+	cfgHost, cfgPort, err := net.SplitHostPort(cfgAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -1290,5 +1291,11 @@ func officialAddr(
 		return nil, errors.Errorf("hostname %q did not resolve to any addresses; listener address: %s", host, lnHost)
 	}
 
-	return util.NewUnresolvedAddr(lnAddr.Network(), net.JoinHostPort(host, lnPort)), nil
+	// cfgPort may need to be used if --advertise-port was set on the command line.
+	port := lnPort
+	if i, err := strconv.Atoi(cfgPort); err == nil && i > 0 {
+		port = cfgPort
+	}
+
+	return util.NewUnresolvedAddr(lnAddr.Network(), net.JoinHostPort(host, port)), nil
 }
