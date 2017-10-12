@@ -43,9 +43,9 @@ var (
 
 	errChangeDecommissioningFailed = errors.New("failed to change the decommissioning status")
 
-	// errSkippedHeartbeat is returned when a heartbeat request fails because
+	// ErrEpochIncremented is returned when a heartbeat request fails because
 	// the underlying liveness record has had its epoch incremented.
-	errSkippedHeartbeat = errors.New("heartbeat failed on epoch increment")
+	ErrEpochIncremented = errors.New("heartbeat failed on epoch increment")
 )
 
 type errRetryLiveness struct {
@@ -351,7 +351,7 @@ func (nl *NodeLiveness) StartHeartbeat(
 							log.Errorf(ctx, "unexpected error getting liveness: %v", err)
 						}
 						if err := nl.heartbeatInternal(ctx, liveness, incrementEpoch); err != nil {
-							if err == errSkippedHeartbeat {
+							if err == ErrEpochIncremented {
 								log.Infof(ctx, "%s; retrying", err)
 								continue
 							}
@@ -464,7 +464,7 @@ func (nl *NodeLiveness) heartbeatInternal(
 			return errNodeAlreadyLive
 		}
 		// Otherwise, return error.
-		return errSkippedHeartbeat
+		return ErrEpochIncremented
 	}); err != nil {
 		if err == errNodeAlreadyLive {
 			nl.metrics.HeartbeatSuccesses.Inc(1)
