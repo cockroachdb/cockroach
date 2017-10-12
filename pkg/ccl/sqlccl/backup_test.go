@@ -2147,3 +2147,23 @@ func TestBackupRestoreDropTable(t *testing.T) {
 	expected := sqlDB.QueryStr(`SELECT * FROM data.bank`)
 	sqlDB.CheckQueryResults(`SELECT * FROM data2.bank`, expected)
 }
+
+func TestBackupRestoreIncrementalNewTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	defer cleanupFn()
+	sqlDB.Exec(`CREATE TABLE data.bank2 (i int)`)
+
+	full := filepath.Join(dir, "full")
+	inc := filepath.Join(dir, "inc")
+
+	sqlDB.Exec(`BACKUP DATABASE data TO $1`, full)
+
+	sqlDB.Exec(`CREATE TABLE data.bank3 (i int)`)
+	_, err := sqlDB.DB.Exec("BACKUP DATABASE data TO $1 INCREMENTAL FROM $2", inc, full)
+	if !testutils.IsError(err, "a new full backup may be required") {
+		t.Fatal(err)
+	}
+}
