@@ -527,11 +527,14 @@ func (a Allocator) RebalanceTarget(
 			ReplicaID: rangeInfo.Desc.NextReplicaID,
 		}
 		desc := *rangeInfo.Desc
-		desc.Replicas = append(desc.Replicas, newReplica)
-		rangeInfo.Desc = &desc
+		var replicas []roachpb.ReplicaDescriptor
+		copy(replicas, rangeInfo.Desc.Replicas)
+		replicas = append(replicas, newReplica)
 
 		replicaCandidates := simulateFilterUnremovableReplicas(raftStatus, desc.Replicas, newReplica.ReplicaID)
 
+		desc.Replicas = replicas
+		rangeInfo.Desc = &desc
 		removeReplica, _, err := a.simulateRemoveTarget(ctx, target.store.StoreID, constraints, replicaCandidates, rangeInfo)
 		if err != nil {
 			log.Warningf(ctx, "simulating RemoveTarget failed: %s", err)
