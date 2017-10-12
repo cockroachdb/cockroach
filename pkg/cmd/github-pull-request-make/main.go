@@ -208,7 +208,7 @@ func main() {
 			}
 		}
 		if vendorChanged {
-			cmd := exec.Command("dep", "ensure")
+			cmd := exec.Command("dep", "ensure", "-v")
 			cmd.Dir = crdb.Dir
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
