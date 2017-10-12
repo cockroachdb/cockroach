@@ -62,7 +62,7 @@ type RowFetcher struct {
 	// The set of ColumnIDs that are required.
 	neededCols util.FastIntSet
 
-	// True if the index key must be decoded. This is only true if there are no
+	// True if the index key must be decoded. This is only false if there are no
 	// needed columns and the table has no interleave children.
 	mustDecodeIndexKey bool
 
