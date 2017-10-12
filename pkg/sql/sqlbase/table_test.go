@@ -32,6 +32,7 @@ import (
 )
 
 type indexKeyTest struct {
+	tableID              ID
 	primaryInterleaves   []ID
 	secondaryInterleaves []ID
 	primaryValues        []parser.Datum // len must be at least primaryInterleaveComponents+1
@@ -68,7 +69,7 @@ func makeTableDescForTest(test indexKeyTest) (TableDescriptor, map[ColumnID]int)
 	}
 
 	tableDesc := TableDescriptor{
-		ID:      50,
+		ID:      test.tableID,
 		Columns: columns,
 		PrimaryIndex: IndexDescriptor{
 			ID:               1,
@@ -128,31 +129,31 @@ func TestIndexKey(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 
 	tests := []indexKeyTest{
-		{nil, nil,
+		{50, nil, nil,
 			[]parser.Datum{parser.NewDInt(10)},
 			[]parser.Datum{parser.NewDInt(20)},
 		},
-		{[]ID{100}, nil,
+		{50, []ID{100}, nil,
 			[]parser.Datum{parser.NewDInt(10), parser.NewDInt(11)},
 			[]parser.Datum{parser.NewDInt(20)},
 		},
-		{[]ID{100, 200}, nil,
+		{50, []ID{100, 200}, nil,
 			[]parser.Datum{parser.NewDInt(10), parser.NewDInt(11), parser.NewDInt(12)},
 			[]parser.Datum{parser.NewDInt(20)},
 		},
-		{nil, []ID{100},
+		{50, nil, []ID{100},
 			[]parser.Datum{parser.NewDInt(10)},
 			[]parser.Datum{parser.NewDInt(20), parser.NewDInt(21)},
 		},
-		{[]ID{100}, []ID{100},
+		{50, []ID{100}, []ID{100},
 			[]parser.Datum{parser.NewDInt(10), parser.NewDInt(11)},
 			[]parser.Datum{parser.NewDInt(20), parser.NewDInt(21)},
 		},
-		{[]ID{100}, []ID{200},
+		{50, []ID{100}, []ID{200},
 			[]parser.Datum{parser.NewDInt(10), parser.NewDInt(11)},
 			[]parser.Datum{parser.NewDInt(20), parser.NewDInt(21)},
 		},
-		{[]ID{100, 200}, []ID{100, 300},
+		{50, []ID{100, 200}, []ID{100, 300},
 			[]parser.Datum{parser.NewDInt(10), parser.NewDInt(11), parser.NewDInt(12)},
 			[]parser.Datum{parser.NewDInt(20), parser.NewDInt(21), parser.NewDInt(22)},
 		},
@@ -478,5 +479,109 @@ func TestMarshalColumnValue(t *testing.T) {
 		} else if !reflect.DeepEqual(actual, testCase.exp) {
 			t.Errorf("%d: MarshalColumnValue() got %s, expected %v", i, actual, testCase.exp)
 		}
+	}
+}
+
+type tableArg struct {
+	indexKeyArgs indexKeyTest
+	values       []parser.Datum
+}
+
+// TestEquivPrefix verifies that invoking ExtractIndexKeyEquivPrefix for an encoded index key
+// for a given table-index pair returns the equivalent equivalence prefix as
+// invoking EquivPrefix on the table-index itself.
+// It also checks that the equivalence prefix is not equivalent to any other
+// tables' equivalence prefixes.
+func TestEquivPrefix(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		tables []tableArg
+	}{
+		{
+			name: "Simple",
+			tables: []tableArg{
+				{
+					indexKeyArgs: indexKeyTest{tableID: 50},
+					values:       []parser.Datum{parser.NewDInt(10)},
+				},
+				{
+					indexKeyArgs: indexKeyTest{tableID: 51},
+					values:       []parser.Datum{parser.NewDInt(20)},
+				},
+			},
+		},
+		{
+			name: "ParentAndChild",
+			tables: []tableArg{
+				{
+					indexKeyArgs: indexKeyTest{tableID: 50},
+					values:       []parser.Datum{parser.NewDInt(10)},
+				},
+				{
+					indexKeyArgs: indexKeyTest{tableID: 51, primaryInterleaves: []ID{50}},
+					values:       []parser.Datum{parser.NewDInt(10), parser.NewDInt(20)},
+				},
+			},
+		},
+		{
+			name: "Siblings",
+			tables: []tableArg{
+				{
+					indexKeyArgs: indexKeyTest{tableID: 50},
+					values:       []parser.Datum{parser.NewDInt(10)},
+				},
+				{
+					indexKeyArgs: indexKeyTest{tableID: 51, primaryInterleaves: []ID{50}},
+					values:       []parser.Datum{parser.NewDInt(10), parser.NewDInt(20)},
+				},
+				{
+					indexKeyArgs: indexKeyTest{tableID: 52, primaryInterleaves: []ID{50}},
+					values:       []parser.Datum{parser.NewDInt(30), parser.NewDInt(40)},
+				},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			keyEquivPrefixes := make([][]byte, len(tc.tables))
+			tableEquivPrefixes := make([][]byte, len(tc.tables))
+			for i, table := range tc.tables {
+				// We need to initialize this for makeTableDescForTest.
+				table.indexKeyArgs.primaryValues = table.values
+				// Setup descriptors and form an index key.
+				desc, colMap := makeTableDescForTest(table.indexKeyArgs)
+				primaryKeyPrefix := MakeIndexKeyPrefix(&desc, desc.PrimaryIndex.ID)
+				primaryKey, _, err := EncodeIndexKey(
+					&desc, &desc.PrimaryIndex, colMap, table.values, primaryKeyPrefix)
+				if err != nil {
+					t.Fatal(err)
+				}
+				// Extract out the index key's and table's equivalence prefix.
+				if keyEquivPrefixes[i], err = ExtractIndexKeyEquivPrefix(primaryKey); err != nil {
+					t.Fatal(err)
+				}
+				if tableEquivPrefixes[i], err = EquivPrefix(&desc, &desc.PrimaryIndex); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			for i, keyPrefix := range keyEquivPrefixes {
+				for j, tablePrefix := range tableEquivPrefixes {
+					if i == j {
+						// The corresponding table should have the same
+						// equivalence prefix as the one derived from the key.
+						if !bytes.Equal(keyPrefix, tablePrefix) {
+							t.Fatalf("ExtractIndexKeyEquivPrefix differs from equivalence prefix for its table.\nKeyPrefix: %v\nTablePrefix: %v", keyPrefix, tablePrefix)
+						}
+					} else {
+						// A different table should not have
+						// the same equivalence prefix.
+						if bytes.Equal(keyPrefix, tablePrefix) {
+							t.Fatalf("ExtractIndexKeyEquivPrefix produces equivalent prefix for a different table.\nKeyPrefix: %v\nTablePrefix: %v", keyPrefix, tablePrefix)
+						}
+					}
+				}
+			}
+
+		})
 	}
 }

@@ -15,6 +15,7 @@
 package sqlbase
 
 import (
+	"bytes"
 	"fmt"
 	"sort"
 	"time"
@@ -2199,4 +2200,102 @@ func MakePrimaryIndexKey(desc *TableDescriptor, vals ...interface{}) (roachpb.Ke
 		return nil, err
 	}
 	return roachpb.Key(key), nil
+}
+
+// ExtractIndexKeyEquivPrefix returns the equivalence prefix of a well-formed
+// index key.
+// The equivalence prefix defines the equivalence classes for the prefix of
+// potentially interleaved tables. For example, the
+// equivalence prefixes for the following interleaved indexes
+//    <parent@primary>
+//	<child@secondary>
+// are represented as (in normal encoding format)
+//    <parent@primary>: /<parent table id>/<parent's primary index id>
+//    <child@secondary>: /<parent table id>/<parent's primary index id>/#/<child table id>/<child's secondary index id>
+// Equivalence prefixes allow us to associate an index key with its table
+// without having to invoke DecodeIndexKey multiple times.
+func ExtractIndexKeyEquivPrefix(key []byte) (prefix []byte, err error) {
+	var isSentinel bool
+	var out bytes.Buffer
+	// Scratch space for interleave sentinel encoding.
+	scratch := make([]byte, 0, 8)
+	for {
+		// Well-formed key is guaranteed to to have 2 varints for every
+		// ancestor: the TableID and IndexID.
+		// We extract these out and add them to our buffer.
+
+		for i := 0; i < 2; i++ {
+			idLen, err := encoding.PeekLength(key)
+			if err != nil {
+				return nil, err
+			}
+			if _, err := out.Write(key[:idLen]); err != nil {
+				return nil, err
+			}
+			key = key[idLen:]
+		}
+
+		// Peek and discard encoded index values.
+		for {
+			key, isSentinel = encoding.DecodeIfNotNull(key)
+			// We stop once the key is empty or if we encounter a
+			// sentinel for the next TableID-IndexID pair.
+			if len(key) == 0 || isSentinel {
+				break
+			}
+			len, err := encoding.PeekLength(key)
+			if err != nil {
+				return nil, err
+			}
+			key = key[len:]
+		}
+
+		if isSentinel {
+			// If there was a sentinel, we know there are more descendants.
+			// We insert an interleave sentinel and continue extracting the
+			// descendant's IDs.
+			if _, err := out.Write(encoding.EncodeNotNullDescending(scratch[:0])); err != nil {
+				return nil, err
+			}
+		} else {
+			// The key has been fully decomposed.
+			break
+		}
+	}
+	return out.Bytes(), nil
+}
+
+// EquivPrefix returns the equivalence prefix for a table-index pair. See
+// ExtractIndexKeyEquivPrefix for more info.
+func EquivPrefix(desc *TableDescriptor, index *IndexDescriptor) (prefix []byte, err error) {
+	var out bytes.Buffer
+	// Scratch space for EncodeUvarintAscending and
+	// EncodeNotNullDescending. Note Uvarints are encoded to a maximum of 9
+	// bytes, but data alignment allocates 16 bytes anyways on 64-bit
+	// systems.
+	scratch := make([]byte, 0, 16)
+
+	// Encode the table's ancestors' TableIDs and IndexIDs.
+	for _, ancestor := range index.Interleave.Ancestors {
+		if _, err := out.Write(encoding.EncodeUvarintAscending(scratch[:0], uint64(ancestor.TableID))); err != nil {
+			return nil, err
+		}
+		if _, err := out.Write(encoding.EncodeUvarintAscending(scratch[:0], uint64(ancestor.IndexID))); err != nil {
+			return nil, err
+		}
+		// Append Interleave sentinel after every ancestor.
+		if _, err := out.Write(encoding.EncodeNotNullDescending(scratch[:0])); err != nil {
+			return nil, err
+		}
+	}
+
+	// Encode the table's table and index IDs.
+	if _, err := out.Write(encoding.EncodeUvarintAscending(scratch[:0], uint64(desc.ID))); err != nil {
+		return nil, err
+	}
+	if _, err := out.Write(encoding.EncodeUvarintAscending(scratch[:0], uint64(index.ID))); err != nil {
+		return nil, err
+	}
+
+	return out.Bytes(), nil
 }
