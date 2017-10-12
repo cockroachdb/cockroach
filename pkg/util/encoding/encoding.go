@@ -72,12 +72,12 @@ const (
 
 	// IntMin is chosen such that the range of int tags does not overlap the
 	// ascii character set that is frequently used in testing.
-	IntMin      = 0x80
+	IntMin      = 0x80 // 128
 	intMaxWidth = 8
-	intZero     = IntMin + intMaxWidth
+	intZero     = IntMin + intMaxWidth           // 136
 	intSmall    = IntMax - intZero - intMaxWidth // 109
 	// IntMax is the maximum int tag value.
-	IntMax = 0xfd
+	IntMax = 0xfd // 253
 
 	// Nulls come last when encoded descendingly.
 	encodedNotNullDesc = 0xfe
