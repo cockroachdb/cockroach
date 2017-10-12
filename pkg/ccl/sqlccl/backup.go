@@ -114,7 +114,9 @@ func readBackupDescriptor(
 
 // ValidatePreviousBackups checks that the timestamps of previous backups are
 // consistent. The most recently backed-up time is returned.
-func ValidatePreviousBackups(ctx context.Context, uris []string) (hlc.Timestamp, error) {
+func ValidatePreviousBackups(
+	ctx context.Context, uris []string, spans []roachpb.Span,
+) (hlc.Timestamp, error) {
 	if len(uris) == 0 || len(uris) == 1 && uris[0] == "" {
 		// Full backup.
 		return hlc.Timestamp{}, nil
@@ -123,7 +125,7 @@ func ValidatePreviousBackups(ctx context.Context, uris []string) (hlc.Timestamp,
 	for i, uri := range uris {
 		desc, err := readBackupDescriptorFromURI(ctx, uri)
 		if err != nil {
-			return hlc.Timestamp{}, err
+			return hlc.Timestamp{}, errors.Wrapf(err, "failed to read backup from %q", uri)
 		}
 		backups[i] = desc
 	}
@@ -132,8 +134,8 @@ func ValidatePreviousBackups(ctx context.Context, uris []string) (hlc.Timestamp,
 	// timestamps to validate the previous backups that this one is incremental
 	// from.
 	lowWaterMark := keys.MinKey
-	_, endTime, err := makeImportSpans(nil, backups, lowWaterMark)
-	return endTime, err
+	_, endTime, err := makeImportSpans(spans, backups, lowWaterMark)
+	return endTime, errors.Wrap(err, "invalid previous backups (a new full backup may be required if a table has been created, dropped or truncated)")
 }
 
 func allSQLDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descriptor, error) {
@@ -326,12 +328,9 @@ func writeBackupDescriptor(
 	return nil
 }
 
-func makeBackupDescriptor(
-	ctx context.Context,
-	p sql.PlanHookState,
-	startTime, endTime hlc.Timestamp,
-	targets parser.TargetList,
-) (BackupDescriptor, error) {
+func resolveTargetsToDescriptors(
+	ctx context.Context, p sql.PlanHookState, endTime hlc.Timestamp, targets parser.TargetList,
+) ([]sqlbase.Descriptor, error) {
 	var err error
 	var sqlDescs []sqlbase.Descriptor
 
@@ -350,13 +349,13 @@ func makeBackupDescriptor(
 			return err
 		})
 		if err != nil {
-			return BackupDescriptor{}, err
+			return nil, err
 		}
 	}
 
 	sessionDatabase := p.EvalContext().Database
 	if sqlDescs, err = descriptorsMatchingTargets(sessionDatabase, sqlDescs, targets); err != nil {
-		return BackupDescriptor{}, err
+		return nil, err
 	}
 
 	sqlDescs = append(sqlDescs, BackupImplicitSQLDescriptors...)
@@ -376,38 +375,7 @@ func makeBackupDescriptor(
 	// Ensure interleaved tables appear after their parent. Since parents must be
 	// created before their children, simply sorting by ID accomplishes this.
 	sort.Slice(sqlDescs, func(i, j int) bool { return sqlDescs[i].GetID() < sqlDescs[j].GetID() })
-
-	for _, desc := range sqlDescs {
-		if dbDesc := desc.GetDatabase(); dbDesc != nil {
-			if err := p.CheckPrivilege(dbDesc, privilege.SELECT); err != nil {
-				return BackupDescriptor{}, err
-			}
-		}
-	}
-
-	var tables []*sqlbase.TableDescriptor
-	for _, desc := range sqlDescs {
-		if tableDesc := desc.GetTable(); tableDesc != nil {
-			tables = append(tables, tableDesc)
-		}
-	}
-
-	for _, desc := range tables {
-		if err := p.CheckPrivilege(desc, privilege.SELECT); err != nil {
-			return BackupDescriptor{}, err
-		}
-	}
-
-	return BackupDescriptor{
-		StartTime:     startTime,
-		EndTime:       endTime,
-		Descriptors:   sqlDescs,
-		Spans:         spansForAllTableIndexes(tables),
-		FormatVersion: BackupFormatInitialVersion,
-		BuildInfo:     build.GetInfo(),
-		NodeID:        p.ExecCfg().NodeID.Get(),
-		ClusterID:     p.ExecCfg().ClusterID(),
-	}, nil
+	return sqlDescs, nil
 }
 
 // backup exports a snapshot of every kv entry into ranged sstables.
@@ -647,14 +615,6 @@ func backupPlanHook(
 			return err
 		}
 
-		var startTime hlc.Timestamp
-		if backupStmt.IncrementalFrom != nil {
-			var err error
-			startTime, err = ValidatePreviousBackups(ctx, incrementalFrom)
-			if err != nil {
-				return err
-			}
-		}
 		endTime := p.ExecCfg().Clock.Now()
 		if backupStmt.AsOf.Expr != nil {
 			var err error
@@ -681,9 +641,46 @@ func backupPlanHook(
 			}
 		}
 
-		backupDesc, err := makeBackupDescriptor(ctx, p, startTime, endTime, backupStmt.Targets)
+		targetDescs, err := resolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
 		if err != nil {
 			return err
+		}
+
+		var tables []*sqlbase.TableDescriptor
+		for _, desc := range targetDescs {
+			if dbDesc := desc.GetDatabase(); dbDesc != nil {
+				if err := p.CheckPrivilege(dbDesc, privilege.SELECT); err != nil {
+					return err
+				}
+			}
+			if tableDesc := desc.GetTable(); tableDesc != nil {
+				if err := p.CheckPrivilege(tableDesc, privilege.SELECT); err != nil {
+					return err
+				}
+				tables = append(tables, tableDesc)
+			}
+		}
+
+		spans := spansForAllTableIndexes(tables)
+
+		var startTime hlc.Timestamp
+		if backupStmt.IncrementalFrom != nil {
+			var err error
+			startTime, err = ValidatePreviousBackups(ctx, incrementalFrom, spans)
+			if err != nil {
+				return err
+			}
+		}
+
+		backupDesc := BackupDescriptor{
+			StartTime:     startTime,
+			EndTime:       endTime,
+			Descriptors:   targetDescs,
+			Spans:         spans,
+			FormatVersion: BackupFormatInitialVersion,
+			BuildInfo:     build.GetInfo(),
+			NodeID:        p.ExecCfg().NodeID.Get(),
+			ClusterID:     p.ExecCfg().ClusterID(),
 		}
 
 		description, err := backupJobDescription(backupStmt, to, incrementalFrom)
