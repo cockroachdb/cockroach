@@ -377,11 +377,6 @@ func (ds *DistSender) sendRPC(
 	// RangeNotFoundErrors.
 	ba.RangeID = rangeID
 
-	// A given RPC may generate retries to multiple replicas, but as soon as we
-	// get a response from one we want to cancel those other RPCs.
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	tracing.AnnotateTrace()
 	defer tracing.AnnotateTrace()
 
@@ -652,6 +647,28 @@ type response struct {
 func (ds *DistSender) divideAndSendBatchToRanges(
 	ctx context.Context, ba roachpb.BatchRequest, rs roachpb.RSpan, batchIdx int,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
+	// Get initial seek key depending on direction of iteration.
+	var scanDir ScanDirection
+	var seekKey roachpb.RKey
+	if !ba.IsReverse() {
+		scanDir = Ascending
+		seekKey = rs.Key
+	} else {
+		scanDir = Descending
+		seekKey = rs.EndKey
+	}
+	ri := NewRangeIterator(ds)
+	ri.Seek(ctx, seekKey, scanDir)
+	if !ri.Valid() {
+		return nil, ri.Error()
+	}
+	// Take the fast path if this batch fits within a single range.
+	if !ri.NeedAnother(rs) {
+		ba.SetNewRequest()
+		resp := ds.sendPartialBatch(ctx, ba, rs, ri.Desc(), ri.Token(), batchIdx, false /* needsTruncate */)
+		return resp.reply, resp.pErr
+	}
+
 	// Make an empty slice of responses which will be populated with responses
 	// as they come in via Combine().
 	br = &roachpb.BatchResponse{
@@ -661,7 +678,6 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	// implicated in the span (rs) and combines them into a single
 	// BatchResponse when finished.
 	var responseChs []chan response
-	var seekKey roachpb.RKey
 	var couldHaveSkippedResponses bool
 	defer func() {
 		if r := recover(); r != nil {
@@ -702,18 +718,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		}
 	}()
 
-	// Get initial seek key depending on direction of iteration.
-	var scanDir ScanDirection
-	if !ba.IsReverse() {
-		scanDir = Ascending
-		seekKey = rs.Key
-	} else {
-		scanDir = Descending
-		seekKey = rs.EndKey
-	}
-	// Send the request to one range per iteration.
-	ri := NewRangeIterator(ds)
-	for ri.Seek(ctx, seekKey, scanDir); ri.Valid(); ri.Seek(ctx, seekKey, scanDir) {
+	for ; ri.Valid(); ri.Seek(ctx, seekKey, scanDir) {
 		// Increase the sequence counter only once before sending RPCs to
 		// the ranges involved in this chunk of the batch (as opposed to
 		// for each RPC individually). On RPC errors, there's no guarantee
@@ -801,7 +806,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		} else {
 			// Send synchronously if there is no parallel capacity left, there's a
 			// max results limit, or this is the final request in the span.
-			resp := ds.sendPartialBatch(ctx, ba, rs, ri.Desc(), ri.Token(), batchIdx)
+			resp := ds.sendPartialBatch(ctx, ba, rs, ri.Desc(), ri.Token(), batchIdx, true /* needsTruncate */)
 			responseCh <- resp
 			if resp.pErr != nil {
 				return
@@ -868,7 +873,7 @@ func (ds *DistSender) sendPartialBatchAsync(
 		ds.asyncSenderSem, false, /* !wait */
 		func(ctx context.Context) {
 			atomic.AddInt32(&ds.asyncSenderCount, 1)
-			responseCh <- ds.sendPartialBatch(ctx, ba, rs, desc, evictToken, batchIdx)
+			responseCh <- ds.sendPartialBatch(ctx, ba, rs, desc, evictToken, batchIdx, true /* needsTruncate */)
 		},
 	); err != nil {
 		return false
@@ -892,6 +897,7 @@ func (ds *DistSender) sendPartialBatch(
 	desc *roachpb.RangeDescriptor,
 	evictToken *EvictionToken,
 	batchIdx int,
+	needsTruncate bool,
 ) response {
 	if batchIdx == 1 {
 		ds.metrics.PartialBatchCount.Inc(2) // account for first batch
@@ -900,23 +906,32 @@ func (ds *DistSender) sendPartialBatch(
 	}
 	var reply *roachpb.BatchResponse
 	var pErr *roachpb.Error
+	var err error
+	var intersected roachpb.RSpan
+	var truncBA roachpb.BatchRequest
+	var positions []int
 
 	isReverse := ba.IsReverse()
 
-	// Truncate the request to range descriptor.
-	intersected, err := rs.Intersect(desc)
-	if err != nil {
-		return response{pErr: roachpb.NewError(err)}
-	}
-	truncBA, positions, err := truncate(ba, intersected)
-	if len(positions) == 0 && err == nil {
-		// This shouldn't happen in the wild, but some tests exercise it.
-		return response{
-			pErr: roachpb.NewErrorf("truncation resulted in empty batch on %s: %s", intersected, ba),
+	if needsTruncate {
+		// Truncate the request to range descriptor.
+		intersected, err = rs.Intersect(desc)
+		if err != nil {
+			return response{pErr: roachpb.NewError(err)}
 		}
-	}
-	if err != nil {
-		return response{pErr: roachpb.NewError(err)}
+		truncBA, positions, err = truncate(ba, intersected)
+		if len(positions) == 0 && err == nil {
+			// This shouldn't happen in the wild, but some tests exercise it.
+			return response{
+				pErr: roachpb.NewErrorf("truncation resulted in empty batch on %s: %s", intersected, ba),
+			}
+		}
+		if err != nil {
+			return response{pErr: roachpb.NewError(err)}
+		}
+	} else {
+		intersected = rs
+		truncBA = ba
 	}
 
 	// Start a retry loop for sending the batch to the range.
@@ -1115,12 +1130,6 @@ func (ds *DistSender) sendToReplicas(
 	args roachpb.BatchRequest,
 	rpcContext *rpc.Context,
 ) (*roachpb.BatchResponse, error) {
-	if len(replicas) < 1 {
-		return nil, roachpb.NewSendError(
-			fmt.Sprintf("insufficient replicas (%d) to satisfy send request of %d",
-				len(replicas), 1))
-	}
-
 	var ambiguousError error
 	var haveCommit bool
 	// We only check for committed txns, not aborts because aborts may
