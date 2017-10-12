@@ -2218,3 +2218,135 @@ func MakePrimaryIndexKey(desc *TableDescriptor, vals ...interface{}) (roachpb.Ke
 	}
 	return roachpb.Key(key), nil
 }
+
+// IndexKeyEquivSignature parses an index key if and only if the index key
+// belongs to a table where its equivalence signature and all its interleave
+// ancestors' signatures can be found in validEquivSignatures.
+// validEquivSignatures: a map containing equivalence signatures of valid
+// ancestors of the desired table and of the desired table itself.
+// IndexKeyEquivSignature returns whether or not the index key satisfies the
+// above condition, the value mapped to by the desired table (could be a table index),
+// and the rest of the key that's not part of the signature.
+// It also requires two []byte buffers: one for the signature (signatureBuf)
+// and one for the rest of the key (keyRestBuf).
+// The equivalence signature defines the equivalence classes for the signature
+// of potentially interleaved tables. For example, the equivalence signatures
+// for the following interleaved indexes
+//    <parent@primary>
+//	<child@secondary>
+// and index keys
+//    <parent index key>:   /<parent table id>/<parent index id>/<val 1>/<val 2>
+//    <child index key>:    /<parent table id>/<parent index id>/<val 1>/<val 2>/#/<child table id>/child index id>/<val 3>/<val 4>
+// correspond to the equivalence signatures
+//    <parent@primary>:	    /<parent table id>/<parent index id>
+//    <child@secondary>:    /<parent table id>/<parent index id>/#/<child table id>/<child index id>
+// Equivalence signatures allow us to associate an index key with its table
+// without having to invoke DecodeIndexKey multiple times.
+// IndexKeyEquivSignature will return false if the a table's ancestor's
+// signature or the table's signature (table which the index key belongs to) is
+// not mapped in validEquivSignatures.
+// For example, suppose the given key is
+//    /<t2 table id>/<t2 index id>/<val t2>/#/<t3 table id>/<t3 table id>/<val t3>
+// and validEquivSignatures contains
+//    /<t1 table id>/t1 index id>
+//    /<t1 table id>/t1 index id>/#/<t4 table id>/<t4 index id
+// IndexKeyEquivSignature will short-circuit and return false once
+//    /<t2 table id>/<t2 index id>
+// is processed since t2's signature is not specified in validEquivSignatures.
+func IndexKeyEquivSignature(
+	key []byte, validEquivSignatures map[string]int, signatureBuf []byte, restBuf []byte,
+) (tableIdx int, restResult []byte, success bool, err error) {
+	signatureBuf = signatureBuf[:0]
+	restResult = restBuf[:0]
+	for {
+		// Well-formed key is guaranteed to to have 2 varints for every
+		// ancestor: the TableID and IndexID.
+		// We extract these out and add them to our buffer.
+		for i := 0; i < 2; i++ {
+			idLen, err := encoding.PeekLength(key)
+			if err != nil {
+				return 0, nil, false, err
+			}
+			signatureBuf = append(signatureBuf, key[:idLen]...)
+			key = key[idLen:]
+		}
+
+		// The current signature (either an ancestor table's or the key's)
+		// is not one of the validEquivSignatures.
+		// We can short-circuit and return false.
+		recentTableIdx, found := validEquivSignatures[string(signatureBuf)]
+		if !found {
+			return 0, nil, false, nil
+		}
+
+		var isSentinel bool
+		// Peek and discard encoded index values.
+		for {
+			key, isSentinel = encoding.DecodeIfNotNull(key)
+			// We stop once the key is empty or if we encounter a
+			// sentinel for the next TableID-IndexID pair.
+			if len(key) == 0 || isSentinel {
+				break
+			}
+			len, err := encoding.PeekLength(key)
+			if err != nil {
+				return 0, nil, false, err
+			}
+			// Append any other bytes (column values initially,
+			// then family ID and timestamp) to return.
+			restResult = append(restResult, key[:len]...)
+			key = key[len:]
+		}
+
+		if !isSentinel {
+			// The key has been fully decomposed and is valid up to
+			// this point.
+			// Return the most recent table index from
+			// validEquivSignatures.
+			return recentTableIdx, restResult, true, nil
+		}
+		// If there was a sentinel, we know there are more
+		// descendant(s).
+		// We insert an interleave sentinel and continue extracting the
+		// next descendant's IDs.
+		signatureBuf = encoding.EncodeNotNullDescending(signatureBuf)
+	}
+}
+
+// TableEquivSignatures returns the equivalence signatures for each interleave
+// ancestor and itself. See IndexKeyEquivSignature for more info.
+func TableEquivSignatures(
+	desc *TableDescriptor, index *IndexDescriptor,
+) (signatures [][]byte, err error) {
+	// signatures contains the slice reference to the signature of every
+	// ancestor of the current table-index.
+	// The last slice reference is the given table-index's signature.
+	signatures = make([][]byte, len(index.Interleave.Ancestors)+1)
+	// fullSignature is the backing byte slice for each individual signature
+	// as it buffers each block of table and index IDs.
+	// We eagerly allocate 4 bytes for each of the two IDs per ancestor
+	// (which can fit Uvarint IDs up to 2^17-1 without another allocation),
+	// 1 byte for each interleave sentinel, and 4 bytes each for the given
+	// table's and index's ID.
+	fullSignature := make([]byte, 0, len(index.Interleave.Ancestors)*9+8)
+
+	// Encode the table's ancestors' TableIDs and IndexIDs.
+	for i, ancestor := range index.Interleave.Ancestors {
+		fullSignature = encoding.EncodeUvarintAscending(fullSignature, uint64(ancestor.TableID))
+		fullSignature = encoding.EncodeUvarintAscending(fullSignature, uint64(ancestor.IndexID))
+		// Create a reference up to this point for the ancestor's
+		// signature.
+		signatures[i] = fullSignature
+		// Append Interleave sentinel after every ancestor.
+		fullSignature = encoding.EncodeNotNullDescending(fullSignature)
+	}
+
+	// Encode the table's table and index IDs.
+	fullSignature = encoding.EncodeUvarintAscending(fullSignature, uint64(desc.ID))
+	fullSignature = encoding.EncodeUvarintAscending(fullSignature, uint64(index.ID))
+	// Create a reference for the given table's signature as the last
+	// element of signatures.
+	signatures[len(signatures)-1] = fullSignature
+
+	return signatures, nil
+}
