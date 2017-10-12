@@ -526,7 +526,11 @@ func (a Allocator) RebalanceTarget(
 			StoreID:   target.store.StoreID,
 			ReplicaID: rangeInfo.Desc.NextReplicaID,
 		}
+
+		// Deep-copy the Replicas slice since we'll mutate it.
 		desc := *rangeInfo.Desc
+		desc.Replicas = append([]roachpb.ReplicaDescriptor(nil), desc.Replicas...)
+
 		desc.Replicas = append(desc.Replicas, newReplica)
 		rangeInfo.Desc = &desc
 
