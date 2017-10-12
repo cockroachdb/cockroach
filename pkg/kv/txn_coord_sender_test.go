@@ -525,7 +525,7 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 	s, sender := createTestDB(t)
 	defer s.Stop()
 
-	// Create a transaction with intent at "a".
+	// Create a transaction with intent at "x".
 	key := roachpb.Key("x")
 	txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */)
 	// Write so that the coordinator begins tracking this txn.
