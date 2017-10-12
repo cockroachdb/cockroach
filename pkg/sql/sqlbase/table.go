@@ -2200,3 +2200,88 @@ func MakePrimaryIndexKey(desc *TableDescriptor, vals ...interface{}) (roachpb.Ke
 	}
 	return roachpb.Key(key), nil
 }
+
+// IndexKeyEquivSignature returns the equivalence signature of a well-formed
+// index key as well as the byte slice of the col values appended in order.
+// The equivalence signature defines the equivalence classes for the signature of
+// potentially interleaved tables. For example, the
+// equivalence signatures for the following interleaved indexes
+//    <parent@primary>
+//	<child@secondary>
+// and index keys
+//    <parent index key>:   /<parent table id>/<parent index id>/<val 1>/<val 2>
+//    <child index key>:    /<parent table id>/<parent index id>/<val 1>/<val 2>/#/<child table id>/child index id>/<val 3>/<val 4>
+// we extract the equivalence signatures
+//    <parent@primary>:	    /<parent table id>/<parent index id>
+//    <child@secondary>:    /<parent table id>/<parent index id>/#/<child table id>/<child index id>
+// Equivalence signatures allow us to associate an index key with its table
+// without having to invoke DecodeIndexKey multiple times.
+func IndexKeyEquivSignature(key []byte) (signature []byte, colVals []byte, err error) {
+	var isSentinel bool
+	signature = make([]byte, 0, len(key))
+	colVals = make([]byte, 0, len(key))
+	for {
+		// Well-formed key is guaranteed to to have 2 varints for every
+		// ancestor: the TableID and IndexID.
+		// We extract these out and add them to our buffer.
+
+		for i := 0; i < 2; i++ {
+			idLen, err := encoding.PeekLength(key)
+			if err != nil {
+				return nil, nil, err
+			}
+			signature = append(signature, key[:idLen]...)
+			key = key[idLen:]
+		}
+
+		// Peek and discard encoded index values.
+		for {
+			key, isSentinel = encoding.DecodeIfNotNull(key)
+			// We stop once the key is empty or if we encounter a
+			// sentinel for the next TableID-IndexID pair.
+			if len(key) == 0 || isSentinel {
+				break
+			}
+			len, err := encoding.PeekLength(key)
+			if err != nil {
+				return nil, nil, err
+			}
+			// Append column values within index key to return.
+			colVals = append(colVals, key[:len]...)
+			key = key[len:]
+		}
+
+		if isSentinel {
+			// If there was a sentinel, we know there are more descendants.
+			// We insert an interleave sentinel and continue extracting the
+			// descendant's IDs.
+			signature = encoding.EncodeNotNullDescending(signature)
+		} else {
+			// The key has been fully decomposed.
+			break
+		}
+	}
+	return signature, colVals, nil
+}
+
+// TableEquivSignature returns the equivalence signature for a table-index pair. See
+// IndexKeyEquivSignature for more info.
+func TableEquivSignature(
+	desc *TableDescriptor, index *IndexDescriptor,
+) (signature []byte, err error) {
+	signature = make([]byte, 0, len(index.Interleave.Ancestors)*3+2)
+
+	// Encode the table's ancestors' TableIDs and IndexIDs.
+	for _, ancestor := range index.Interleave.Ancestors {
+		signature = encoding.EncodeUvarintAscending(signature, uint64(ancestor.TableID))
+		signature = encoding.EncodeUvarintAscending(signature, uint64(ancestor.IndexID))
+		// Append Interleave sentinel after every ancestor.
+		signature = encoding.EncodeNotNullDescending(signature)
+	}
+
+	// Encode the table's table and index IDs.
+	signature = encoding.EncodeUvarintAscending(signature, uint64(desc.ID))
+	signature = encoding.EncodeUvarintAscending(signature, uint64(index.ID))
+
+	return signature, nil
+}
