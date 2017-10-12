@@ -185,7 +185,16 @@ func (gt *grpcTransport) maybeResurrectRetryables() bool {
 func (gt *grpcTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
 	client := gt.orderedClients[gt.clientIndex]
 	gt.clientIndex++
+
 	gt.setState(client.args.Replica, true /* pending */, false /* retryable */)
+
+	// Fast path for case of a single replica; don't set cancellation
+	// on context or launch in a goroutine.
+	if len(gt.orderedClients) == 1 {
+		reply, err := gt.send(ctx, client)
+		done <- BatchCall{Reply: reply, Err: err}
+		return
+	}
 
 	{
 		var cancel func()
@@ -199,42 +208,14 @@ func (gt *grpcTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
 	gt.closeWG.Add(1)
 	go func() {
 		defer gt.closeWG.Done()
-		gt.opts.metrics.SentCount.Inc(1)
-		reply, err := func() (*roachpb.BatchResponse, error) {
-			if localServer := gt.rpcContext.GetLocalInternalServerForAddr(client.remoteAddr); localServer != nil {
-				log.VEvent(ctx, 2, "sending request to local server")
+		reply, err := gt.send(ctx, client)
+		done <- BatchCall{Reply: reply, Err: err}
+	}()
+}
 
-				// Clone the request. At the time of writing, Replica may mutate it
-				// during command execution which can lead to data races.
-				//
-				// TODO(tamird): we should clone all of client.args.Header, but the
-				// assertions in protoutil.Clone fire and there seems to be no
-				// reasonable workaround.
-				origTxn := client.args.Txn
-				if origTxn != nil {
-					clonedTxn := origTxn.Clone()
-					client.args.Txn = &clonedTxn
-				}
-
-				// Create a new context from the existing one with the "local request" field set.
-				// This tells the handler that this is an in-procress request, bypassing ctx.Peer checks.
-				localCtx := grpcutil.NewLocalRequestContext(ctx)
-
-				gt.opts.metrics.LocalSentCount.Inc(1)
-				return localServer.Batch(localCtx, &client.args)
-			}
-
-			log.VEventf(ctx, 2, "sending request to %s", client.remoteAddr)
-			reply, err := client.client.Batch(ctx, &client.args)
-			if reply != nil {
-				for i := range reply.Responses {
-					if err := reply.Responses[i].GetInner().Verify(client.args.Requests[i].GetInner()); err != nil {
-						log.Error(ctx, err)
-					}
-				}
-			}
-			return reply, err
-		}()
+func (gt *grpcTransport) send(ctx context.Context, client batchClient) (
+	reply *roachpb.BatchResponse, err error) {
+	defer func() {
 		// NotLeaseHolderErrors can be retried.
 		var retryable bool
 		if reply != nil && reply.Error != nil {
@@ -245,8 +226,31 @@ func (gt *grpcTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
 			}
 		}
 		gt.setState(client.args.Replica, false /* pending */, retryable)
-		done <- BatchCall{Reply: reply, Err: err}
 	}()
+
+	gt.opts.metrics.SentCount.Inc(1)
+	if localServer := gt.rpcContext.GetLocalInternalServerForAddr(client.remoteAddr); localServer != nil {
+		log.VEvent(ctx, 2, "sending request to local server")
+
+		// Create a new context from the existing one with the "local request" field set.
+		// This tells the handler that this is an in-procress request, bypassing ctx.Peer checks.
+		localCtx := grpcutil.NewLocalRequestContext(ctx)
+
+		gt.opts.metrics.LocalSentCount.Inc(1)
+		reply, err = localServer.Batch(localCtx, &client.args)
+		return
+	}
+
+	log.VEventf(ctx, 2, "sending request to %s", client.remoteAddr)
+	reply, err = client.client.Batch(ctx, &client.args)
+	if reply != nil {
+		for i := range reply.Responses {
+			if err := reply.Responses[i].GetInner().Verify(client.args.Requests[i].GetInner()); err != nil {
+				log.Error(ctx, err)
+			}
+		}
+	}
+	return
 }
 
 func (gt *grpcTransport) NextReplica() roachpb.ReplicaDescriptor {
