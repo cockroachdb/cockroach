@@ -62,7 +62,7 @@ type RowFetcher struct {
 	// The set of ColumnIDs that are required.
 	neededCols util.FastIntSet
 
-	// True if the index key must be decoded. This is only true if there are no
+	// True if the index key must be decoded. This is only false if there are no
 	// needed columns and the table has no interleave children.
 	mustDecodeIndexKey bool
 
@@ -312,7 +312,7 @@ func (rf *RowFetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 func (rf *RowFetcher) prettyEncDatums(types []ColumnType, vals []EncDatum) string {
 	var buf bytes.Buffer
 	for i, v := range vals {
-		if err := v.EnsureDecoded(&types[i], &DatumAlloc{}); err != nil {
+		if err := v.EnsureDecoded(&types[i], rf.alloc); err != nil {
 			fmt.Fprintf(&buf, "error decoding: %v", err)
 		}
 		fmt.Fprintf(&buf, "/%v", v.Datum)
