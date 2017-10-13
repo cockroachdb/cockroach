@@ -396,7 +396,7 @@ func setTimeZone(_ context.Context, session *Session, values []parser.TypedExpr)
 
 	var loc *time.Location
 	var offset int64
-	switch v := parser.UnwrapDatum(d).(type) {
+	switch v := parser.UnwrapDatum(&evalCtx, d).(type) {
 	case *parser.DString:
 		location := string(*v)
 		loc, err = timeutil.LoadLocation(location)
