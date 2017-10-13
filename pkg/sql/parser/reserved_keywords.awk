@@ -31,7 +31,7 @@ BEGIN {
 
 {
   if (reserved_keyword && $NF != "") {
-    printf("\"%s\": {},\n", $NF) | sort
+    printf("\"%s\": {},\n", tolower($NF)) | sort
   }
 }
 
