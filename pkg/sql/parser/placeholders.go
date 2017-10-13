@@ -139,7 +139,14 @@ func (p *PlaceholderInfo) SetValue(name string, val Datum) {
 func (p *PlaceholderInfo) SetType(name string, typ Type) error {
 	t, ok := p.Types[name]
 	if ok && !typ.Equivalent(t) {
-		return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "placeholder %s already has type %s, cannot assign %s", name, t, typ)
+		// If we already have a *value* for this expression, then we're good to go.
+		// This can happen when we're running statements with placeholders from the
+		// internal executor, which directly assigns placeholder values and types.
+		// If the directly-assigned placeholder value is null, then the type
+		// assigned will be NULL. We should set it properly rather than fail.
+		if _, ok := p.Value(name); !ok {
+			return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "placeholder %s already has type %s, cannot assign %s", name, t, typ)
+		}
 	}
 	p.Types[name] = typ
 	if _, ok := p.TypeHints[name]; !ok {
@@ -175,64 +182,4 @@ func (p *PlaceholderInfo) IsUnresolvedPlaceholder(expr Expr) bool {
 		return !res
 	}
 	return false
-}
-
-// placeholdersVisitor is a Visitor implementation used to
-// replace placeholders with their supplied values.
-type placeholdersVisitor struct {
-	placeholders PlaceholderInfo
-	err          error
-}
-
-var _ Visitor = &placeholdersVisitor{}
-
-func (v *placeholdersVisitor) VisitPre(expr Expr) (recurse bool, newNode Expr) {
-	switch t := expr.(type) {
-	case *Placeholder:
-		if e, ok := v.placeholders.Value(t.Name); ok {
-			// Placeholder expressions cannot contain other placeholders, so we do
-			// not need to recurse.
-			typ, typed := v.placeholders.Type(t.Name, false)
-			if !typed {
-				// All placeholders should be typed at this point.
-				v.err = pgerror.NewErrorf(pgerror.CodeInternalError, "missing type for placeholder %s", t.Name)
-				return false, e
-			}
-			if !e.ResolvedType().Equivalent(typ) {
-				// This happens when we overrode the placeholder's type during type
-				// checking, since the placeholder's type hint didn't match the desired
-				// type for the placeholder. In this case, we cast the expression to
-				// the desired type.
-				// TODO(jordan): introduce a restriction on what casts are allowed here.
-				colType, err := DatumTypeToColumnType(typ)
-				if err != nil {
-					v.err = err
-					return false, e
-				}
-				return false, &CastExpr{Expr: e, Type: colType}
-			}
-			return false, e
-		}
-	}
-	return true, expr
-}
-
-func (*placeholdersVisitor) VisitPost(expr Expr) Expr { return expr }
-
-// replacePlaceholders replaces all placeholders in the input expression with
-// their supplied values in the SemaContext's Placeholders map. If there is no
-// available value for a placeholder, it is left alone. A nil ctx makes
-// this a no-op and is supported for tests only.
-func replacePlaceholders(expr Expr, ctx *SemaContext) (Expr, error) {
-	// We don't need to recurse through the input if there are no values to
-	// replace, since the walk above will do no work in that case. This happens
-	// during typechecking during the prepare phase. Missing placeholder values
-	// during execute are detected before this step.
-	if ctx == nil || len(ctx.Placeholders.Values) == 0 {
-		return expr, nil
-	}
-	v := &placeholdersVisitor{placeholders: ctx.Placeholders}
-
-	expr, _ = WalkExpr(v, expr)
-	return expr, v.err
 }

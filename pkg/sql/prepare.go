@@ -353,7 +353,7 @@ func getPreparedStatementForExecute(
 	var p parser.Parser
 	for i, e := range s.Params {
 		idx := strconv.Itoa(i + 1)
-		typedExpr, err := sqlbase.SanitizeVarFreeExpr(e, prepared.TypeHints[idx], "EXECUTE parameter", session.SearchPath)
+		typedExpr, err := sqlbase.SanitizeVarFreeExpr(e, prepared.TypeHints[idx], "EXECUTE parameter", nil /* semaCtx */, nil /* evalCtx */)
 		if err != nil {
 			return ps, pInfo, pgerror.NewError(pgerror.CodeWrongObjectTypeError, err.Error())
 		}
