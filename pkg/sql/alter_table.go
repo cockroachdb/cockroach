@@ -79,7 +79,7 @@ func (n *alterTableNode) Start(params runParams) error {
 				return pgerror.Unimplemented(
 					"alter add fk", "adding a REFERENCES constraint via ALTER not supported")
 			}
-			col, idx, err := sqlbase.MakeColumnDefDescs(d, params.p.session.SearchPath, &params.p.evalCtx)
+			col, idx, err := sqlbase.MakeColumnDefDescs(d, &params.p.semaCtx, &params.p.evalCtx)
 			if err != nil {
 				return err
 			}
@@ -152,7 +152,7 @@ func (n *alterTableNode) Start(params runParams) error {
 				}
 
 			case *parser.CheckConstraintTableDef:
-				ck, err := makeCheckConstraint(*n.tableDesc, d, inuseNames, params.p.session.SearchPath)
+				ck, err := makeCheckConstraint(*n.tableDesc, d, inuseNames, &params.p.semaCtx, &params.p.evalCtx)
 				if err != nil {
 					return err
 				}
@@ -421,7 +421,7 @@ func (n *alterTableNode) Start(params runParams) error {
 				return fmt.Errorf("column %q in the middle of being dropped", t.GetColumn())
 			}
 			if err := applyColumnMutation(
-				&col, t, params.p.session.SearchPath,
+				&col, t, &params.p.semaCtx, &params.p.evalCtx,
 			); err != nil {
 				return err
 			}
@@ -494,7 +494,10 @@ func (n *alterTableNode) Close(context.Context)        {}
 func (n *alterTableNode) Values() parser.Datums        { return parser.Datums{} }
 
 func applyColumnMutation(
-	col *sqlbase.ColumnDescriptor, mut parser.ColumnMutationCmd, searchPath parser.SearchPath,
+	col *sqlbase.ColumnDescriptor,
+	mut parser.ColumnMutationCmd,
+	semaCtx *parser.SemaContext,
+	evalCtx *parser.EvalContext,
 ) error {
 	switch t := mut.(type) {
 	case *parser.AlterTableSetDefault:
@@ -503,7 +506,7 @@ func applyColumnMutation(
 		} else {
 			colDatumType := col.Type.ToDatumType()
 			if _, err := sqlbase.SanitizeVarFreeExpr(
-				t.Default, colDatumType, "DEFAULT", searchPath,
+				t.Default, colDatumType, "DEFAULT", semaCtx, evalCtx,
 			); err != nil {
 				return err
 			}

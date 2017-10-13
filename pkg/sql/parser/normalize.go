@@ -95,7 +95,7 @@ func (expr *UnaryExpr) normalize(v *normalizeVisitor) TypedExpr {
 		return val
 	case UnaryMinus:
 		// -0 -> 0 (except for float which has negative zero)
-		if val.ResolvedType() != TypeFloat && IsNumericZero(val) {
+		if val.ResolvedType() != TypeFloat && v.isNumericZero(val) {
 			return val
 		}
 		switch b := val.(type) {
@@ -134,25 +134,25 @@ func (expr *BinaryExpr) normalize(v *normalizeVisitor) TypedExpr {
 
 	switch expr.Operator {
 	case Plus:
-		if IsNumericZero(right) {
+		if v.isNumericZero(right) {
 			final, v.err = ReType(left, expectedType)
 			break
 		}
-		if IsNumericZero(left) {
+		if v.isNumericZero(left) {
 			final, v.err = ReType(right, expectedType)
 			break
 		}
 	case Minus:
-		if IsNumericZero(right) {
+		if v.isNumericZero(right) {
 			final, v.err = ReType(left, expectedType)
 			break
 		}
 	case Mult:
-		if IsNumericOne(right) {
+		if v.isNumericOne(right) {
 			final, v.err = ReType(left, expectedType)
 			break
 		}
-		if IsNumericOne(left) {
+		if v.isNumericOne(left) {
 			final, v.err = ReType(right, expectedType)
 			break
 		}
@@ -160,7 +160,7 @@ func (expr *BinaryExpr) normalize(v *normalizeVisitor) TypedExpr {
 		// because if the other operand is NULL during evaluation
 		// the result must be NULL.
 	case Div, FloorDiv:
-		if IsNumericOne(right) {
+		if v.isNumericOne(right) {
 			final, v.err = ReType(left, expectedType)
 			break
 		}
@@ -357,7 +357,7 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 				expr.Left = left.Left
 				expr.Right = newRightExpr
 				expr.memoizeFn()
-				if !isVar(expr.Left) {
+				if !isVar(v.ctx, expr.Left) {
 					// Continue as long as the left side of the comparison is not a
 					// variable.
 					continue
@@ -411,7 +411,7 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 				expr.Left = left.Right
 				expr.Right = newRightExpr
 				expr.memoizeFn()
-				if !isVar(expr.Left) {
+				if !isVar(v.ctx, expr.Left) {
 					// Continue as long as the left side of the comparison is not a
 					// variable.
 					continue
@@ -593,6 +593,28 @@ func (expr *RangeCond) normalize(v *normalizeVisitor) TypedExpr {
 	return makeOpExpr(newLeft, newRight).normalize(v)
 }
 
+func (expr *Tuple) normalize(v *normalizeVisitor) TypedExpr {
+	// A Tuple should be directly evaluated into a DTuple if it's either fully
+	// constant or contains only constants and top-level Placeholders.
+	isConst := true
+	for _, subExpr := range expr.Exprs {
+		if !v.isConst(subExpr) {
+			if _, ok := subExpr.(*Placeholder); !ok {
+				isConst = false
+				break
+			}
+		}
+	}
+	if !isConst {
+		return expr
+	}
+	e, err := expr.Eval(v.ctx)
+	if err != nil {
+		v.err = err
+	}
+	return e
+}
+
 // NormalizeExpr normalizes a typed expression, simplifying where possible,
 // but guaranteeing that the result of evaluating the expression is
 // unchanged and that resulting expression tree is still well-typed.
@@ -604,7 +626,7 @@ func (expr *RangeCond) normalize(v *normalizeVisitor) TypedExpr {
 //   a BETWEEN b AND c     -> (a >= b) AND (a <= c)
 //   a NOT BETWEEN b AND c -> (a < b) OR (a > c)
 func (ctx *EvalContext) NormalizeExpr(typedExpr TypedExpr) (TypedExpr, error) {
-	v := normalizeVisitor{ctx: ctx}
+	v := makeNormalizeVisitor(ctx)
 	expr, _ := WalkExpr(&v, typedExpr)
 	if v.err != nil {
 		return nil, v.err
@@ -620,6 +642,11 @@ type normalizeVisitor struct {
 }
 
 var _ Visitor = &normalizeVisitor{}
+
+// makeNormalizeVisistor creates a normalizeVisistor instance.
+func makeNormalizeVisitor(ctx *EvalContext) normalizeVisitor {
+	return normalizeVisitor{ctx: ctx, isConstVisitor: isConstVisitor{ctx: ctx}}
+}
 
 func (v *normalizeVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	if v.err != nil {
@@ -656,6 +683,9 @@ func (v *normalizeVisitor) VisitPost(expr Expr) Expr {
 
 	// Evaluate all constant expressions.
 	if v.isConst(expr) {
+		if _, ok := expr.(*Placeholder); ok {
+			return expr
+		}
 		newExpr, err := expr.(TypedExpr).Eval(v.ctx)
 		if err != nil {
 			return expr
@@ -667,6 +697,38 @@ func (v *normalizeVisitor) VisitPost(expr Expr) Expr {
 
 func (v *normalizeVisitor) isConst(expr Expr) bool {
 	return v.isConstVisitor.run(expr)
+}
+
+// isNumericZero returns true if the datum is a number and equal to
+// zero.
+func (v *normalizeVisitor) isNumericZero(expr TypedExpr) bool {
+	if d, ok := expr.(Datum); ok {
+		switch t := UnwrapDatum(v.ctx, d).(type) {
+		case *DDecimal:
+			return t.Decimal.Sign() == 0
+		case *DFloat:
+			return *t == 0
+		case *DInt:
+			return *t == 0
+		}
+	}
+	return false
+}
+
+// isNumericOne returns true if the datum is a number and equal to
+// one.
+func (v *normalizeVisitor) isNumericOne(expr TypedExpr) bool {
+	if d, ok := expr.(Datum); ok {
+		switch t := UnwrapDatum(v.ctx, d).(type) {
+		case *DDecimal:
+			return t.Decimal.Cmp(&DecimalOne.Decimal) == 0
+		case *DFloat:
+			return *t == 1.0
+		case *DInt:
+			return *t == 1
+		}
+	}
+	return false
 }
 
 func invertComparisonOp(op ComparisonOperator) (ComparisonOperator, error) {
@@ -687,6 +749,7 @@ func invertComparisonOp(op ComparisonOperator) (ComparisonOperator, error) {
 }
 
 type isConstVisitor struct {
+	ctx     *EvalContext
 	isConst bool
 }
 
@@ -694,7 +757,7 @@ var _ Visitor = &isConstVisitor{}
 
 func (v *isConstVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	if v.isConst {
-		if isVar(expr) {
+		if isVar(v.ctx, expr) {
 			v.isConst = false
 			return false, expr
 		}
@@ -718,19 +781,27 @@ func (v *isConstVisitor) run(expr Expr) bool {
 	return v.isConst
 }
 
-func isVar(expr Expr) bool {
-	_, ok := expr.(VariableExpr)
-	return ok
+// isVar returns true if the expression's value can vary during plan
+// execution.
+func isVar(evalCtx *EvalContext, expr Expr) bool {
+	switch expr.(type) {
+	case VariableExpr:
+		return true
+	case *Placeholder:
+		return evalCtx != nil && (!evalCtx.HasPlaceholders() || evalCtx.Placeholders.IsUnresolvedPlaceholder(expr))
+	}
+	return false
 }
 
 type containsVarsVisitor struct {
+	evalCtx      *EvalContext
 	containsVars bool
 }
 
 var _ Visitor = &containsVarsVisitor{}
 
 func (v *containsVarsVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
-	if !v.containsVars && isVar(expr) {
+	if !v.containsVars && isVar(v.evalCtx, expr) {
 		v.containsVars = true
 	}
 	if v.containsVars {
@@ -743,8 +814,8 @@ func (*containsVarsVisitor) VisitPost(expr Expr) Expr { return expr }
 
 // ContainsVars returns true if the expression contains any variables.
 // (variables = sub-expressions, placeholders, indexed vars, etc.)
-func ContainsVars(expr Expr) bool {
-	v := containsVarsVisitor{containsVars: false}
+func ContainsVars(evalCtx *EvalContext, expr Expr) bool {
+	v := containsVarsVisitor{evalCtx: evalCtx, containsVars: false}
 	WalkExprConst(&v, expr)
 	return v.containsVars
 }
@@ -754,38 +825,6 @@ var DecimalOne DDecimal
 
 func init() {
 	DecimalOne.SetCoefficient(1)
-}
-
-// IsNumericZero returns true if the datum is a number and equal to
-// zero.
-func IsNumericZero(expr TypedExpr) bool {
-	if d, ok := expr.(Datum); ok {
-		switch t := UnwrapDatum(d).(type) {
-		case *DDecimal:
-			return t.Decimal.Sign() == 0
-		case *DFloat:
-			return *t == 0
-		case *DInt:
-			return *t == 0
-		}
-	}
-	return false
-}
-
-// IsNumericOne returns true if the datum is a number and equal to
-// one.
-func IsNumericOne(expr TypedExpr) bool {
-	if d, ok := expr.(Datum); ok {
-		switch t := UnwrapDatum(d).(type) {
-		case *DDecimal:
-			return t.Decimal.Cmp(&DecimalOne.Decimal) == 0
-		case *DFloat:
-			return *t == 1.0
-		case *DInt:
-			return *t == 1
-		}
-	}
-	return false
 }
 
 // ReType ensures that the given numeric expression evaluates
