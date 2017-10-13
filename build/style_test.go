@@ -387,6 +387,7 @@ func TestStyle(t *testing.T) {
 			"--",
 			"*.go",
 			":!util/protoutil/marshal.go",
+			":!util/protoutil/marshaler.go",
 			":!settings/settings_test.go",
 		)
 		if err != nil {
@@ -425,6 +426,7 @@ func TestStyle(t *testing.T) {
 			"*.go",
 			":!*.pb.go",
 			":!util/protoutil/marshal.go",
+			":!util/protoutil/marshaler.go",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -462,7 +464,9 @@ func TestStyle(t *testing.T) {
 			"*.go",
 			":!*.pb.go",
 			":!*.pb.gw.go",
+			":!util/protoutil/jsonpb_marshal.go",
 			":!util/protoutil/marshal.go",
+			":!util/protoutil/marshaler.go",
 		)
 		if err != nil {
 			t.Fatal(err)
