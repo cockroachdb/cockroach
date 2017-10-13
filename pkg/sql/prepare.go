@@ -36,6 +36,9 @@ type PreparedStatement struct {
 	// the future to present a contextual error message based on location
 	// information.
 	Str string
+	// AnonymizedStr is the anonymized statement string suitable for recording
+	// in statement statistics.
+	AnonymizedStr string
 	// Statement is the parsed, prepared SQL statement. It may be nil if the
 	// prepared statement is empty.
 	Statement parser.Statement
@@ -67,6 +70,7 @@ func (p *PreparedStatement) close(ctx context.Context, s *Session) {
 type Statement struct {
 	AST           parser.Statement
 	ExpectedTypes sqlbase.ResultColumns
+	AnonymizedStr string
 	queryID       uint128.Uint128
 	queryMeta     *queryMeta
 }
