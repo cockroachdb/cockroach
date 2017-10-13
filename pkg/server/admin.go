@@ -1162,7 +1162,12 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 	s.server.grpc.Stop()
 
 	ctx := stream.Context()
-	go s.server.stopper.Stop(ctx)
+	go func() {
+		// The explicit closure here allows callers.Lookup() to return something
+		// sensible referring to this file (otherwise it ends up in runtime
+		// internals).
+		s.server.stopper.Stop(ctx)
+	}()
 
 	select {
 	case <-s.server.stopper.IsStopped():
