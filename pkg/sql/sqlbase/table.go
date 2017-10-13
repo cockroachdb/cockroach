@@ -63,13 +63,16 @@ func incompatibleExprTypeError(
 // type and contains no variable expressions. It returns the type-checked and
 // constant-folded expression.
 func SanitizeVarFreeExpr(
-	expr parser.Expr, expectedType parser.Type, context string, searchPath parser.SearchPath,
+	expr parser.Expr,
+	expectedType parser.Type,
+	context string,
+	semaCtx *parser.SemaContext,
+	evalCtx *parser.EvalContext,
 ) (parser.TypedExpr, error) {
-	if parser.ContainsVars(expr) {
+	if parser.ContainsVars(evalCtx, expr) {
 		return nil, exprContainsVarsError(context, expr)
 	}
-	ctx := parser.SemaContext{SearchPath: searchPath}
-	typedExpr, err := parser.TypeCheck(expr, &ctx, expectedType)
+	typedExpr, err := parser.TypeCheck(expr, semaCtx, expectedType)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +89,7 @@ func SanitizeVarFreeExpr(
 // index descriptor if the column is a primary key or unique.
 // The search path is used for name resolution for DEFAULT expressions.
 func MakeColumnDefDescs(
-	d *parser.ColumnTableDef, searchPath parser.SearchPath, evalCtx *parser.EvalContext,
+	d *parser.ColumnTableDef, semaCtx *parser.SemaContext, evalCtx *parser.EvalContext,
 ) (*ColumnDescriptor, *IndexDescriptor, error) {
 	col := &ColumnDescriptor{
 		Name:     string(d.Name),
@@ -151,8 +154,7 @@ func MakeColumnDefDescs(
 		col.Type.Width = int32(t.N)
 	case *parser.ArrayColType:
 		for i, e := range t.BoundsExprs {
-			ctx := parser.SemaContext{SearchPath: searchPath}
-			te, err := parser.TypeCheckAndRequire(e, &ctx, parser.TypeInt, "array bounds")
+			te, err := parser.TypeCheckAndRequire(e, semaCtx, parser.TypeInt, "array bounds")
 			if err != nil {
 				return nil, nil, errors.Wrapf(err, "couldn't get bound %d", i)
 			}
@@ -184,19 +186,19 @@ func MakeColumnDefDescs(
 	if d.HasDefaultExpr() {
 		// Verify the default expression type is compatible with the column type.
 		if _, err := SanitizeVarFreeExpr(
-			d.DefaultExpr.Expr, colDatumType, "DEFAULT", searchPath,
+			d.DefaultExpr.Expr, colDatumType, "DEFAULT", semaCtx, evalCtx,
 		); err != nil {
 			return nil, nil, err
 		}
 		var p parser.Parser
 		if err := p.AssertNoAggregationOrWindowing(
-			d.DefaultExpr.Expr, "DEFAULT expressions", searchPath,
+			d.DefaultExpr.Expr, "DEFAULT expressions", semaCtx.SearchPath,
 		); err != nil {
 			return nil, nil, err
 		}
 
 		// Type check and simplify: this performs constant folding and reduces the expression.
-		typedExpr, err := parser.TypeCheck(d.DefaultExpr.Expr, nil, col.Type.ToDatumType())
+		typedExpr, err := parser.TypeCheck(d.DefaultExpr.Expr, semaCtx, col.Type.ToDatumType())
 		if err != nil {
 			return nil, nil, err
 		}

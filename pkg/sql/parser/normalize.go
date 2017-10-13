@@ -357,7 +357,7 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 				expr.Left = left.Left
 				expr.Right = newRightExpr
 				expr.memoizeFn()
-				if !isVar(expr.Left) {
+				if !isVar(v.ctx, expr.Left) {
 					// Continue as long as the left side of the comparison is not a
 					// variable.
 					continue
@@ -411,7 +411,7 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 				expr.Left = left.Right
 				expr.Right = newRightExpr
 				expr.memoizeFn()
-				if !isVar(expr.Left) {
+				if !isVar(v.ctx, expr.Left) {
 					// Continue as long as the left side of the comparison is not a
 					// variable.
 					continue
@@ -604,7 +604,7 @@ func (expr *RangeCond) normalize(v *normalizeVisitor) TypedExpr {
 //   a BETWEEN b AND c     -> (a >= b) AND (a <= c)
 //   a NOT BETWEEN b AND c -> (a < b) OR (a > c)
 func (ctx *EvalContext) NormalizeExpr(typedExpr TypedExpr) (TypedExpr, error) {
-	v := normalizeVisitor{ctx: ctx}
+	v := makeNormalizeVisitor(ctx)
 	expr, _ := WalkExpr(&v, typedExpr)
 	if v.err != nil {
 		return nil, v.err
@@ -620,6 +620,11 @@ type normalizeVisitor struct {
 }
 
 var _ Visitor = &normalizeVisitor{}
+
+// makeNormalizeVisistor creates a normalizeVisistor instance.
+func makeNormalizeVisitor(ctx *EvalContext) normalizeVisitor {
+	return normalizeVisitor{ctx: ctx, isConstVisitor: isConstVisitor{ctx: ctx}}
+}
 
 func (v *normalizeVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	if v.err != nil {
@@ -687,6 +692,7 @@ func invertComparisonOp(op ComparisonOperator) (ComparisonOperator, error) {
 }
 
 type isConstVisitor struct {
+	ctx     *EvalContext
 	isConst bool
 }
 
@@ -694,7 +700,7 @@ var _ Visitor = &isConstVisitor{}
 
 func (v *isConstVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	if v.isConst {
-		if isVar(expr) {
+		if isVar(v.ctx, expr) {
 			v.isConst = false
 			return false, expr
 		}
@@ -718,19 +724,25 @@ func (v *isConstVisitor) run(expr Expr) bool {
 	return v.isConst
 }
 
-func isVar(expr Expr) bool {
-	_, ok := expr.(VariableExpr)
-	return ok
+func isVar(evalCtx *EvalContext, expr Expr) bool {
+	switch expr.(type) {
+	case VariableExpr:
+		return true
+	case *Placeholder:
+		return evalCtx != nil && (!evalCtx.HasPlaceholders() || evalCtx.Placeholders.IsUnresolvedPlaceholder(expr))
+	}
+	return false
 }
 
 type containsVarsVisitor struct {
+	evalCtx      *EvalContext
 	containsVars bool
 }
 
 var _ Visitor = &containsVarsVisitor{}
 
 func (v *containsVarsVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
-	if !v.containsVars && isVar(expr) {
+	if !v.containsVars && isVar(v.evalCtx, expr) {
 		v.containsVars = true
 	}
 	if v.containsVars {
@@ -743,8 +755,8 @@ func (*containsVarsVisitor) VisitPost(expr Expr) Expr { return expr }
 
 // ContainsVars returns true if the expression contains any variables.
 // (variables = sub-expressions, placeholders, indexed vars, etc.)
-func ContainsVars(expr Expr) bool {
-	v := containsVarsVisitor{containsVars: false}
+func ContainsVars(evalCtx *EvalContext, expr Expr) bool {
+	v := containsVarsVisitor{evalCtx: evalCtx, containsVars: false}
 	WalkExprConst(&v, expr)
 	return v.containsVars
 }
