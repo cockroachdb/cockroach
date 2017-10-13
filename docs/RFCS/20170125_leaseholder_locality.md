@@ -61,7 +61,7 @@ Given that a lease transfer mechanism already exists, the remaining difficulty
 lies in deciding when to transfer leases. We [already have
 logic](20161026_leaseholder_rebalancing.md) that decides when to transfer leases
 with the goal of ensuring each node has approximately the same number of leases.
-Anything we add to make leases follow the sun will need to place nicely with
+Anything we add to make leases follow the sun will need to play nicely with
 that existing goal.
 
 ## Tracking request origins
@@ -134,7 +134,7 @@ requests suffering from the large network RTT.
 
 Much of the infrastructure needed for making decisions about when to transfer
 leases was [already added](https://github.com/cockroachdb/cockroach/pull/10464)
-as part of the initial lease balancing work, so ll we need to do is start using
+as part of the initial lease balancing work, so all we need to do is start using
 request locality as an additional input to the decision-making process. The
 difficult problems that we really need to solve for are:
 
@@ -258,7 +258,7 @@ like this:
     worth noting and working on soon.
 * If the cluster does have locality information, then measure the RTT between
   localities. As the latency between localities increases, raise a new
-  `interLocalityRebalanceThreshold` proportionately. This will effect the
+  `interLocalityRebalanceThreshold` proportionately. This will affect the
   underfull/overfull calculations for leases when comparing replicas in
   different localities, but the normal `rebalanceThreshold` would still be used
   when comparing replicas within the same locality. The exact numbers for this
@@ -363,7 +363,7 @@ heuristic.
   that solution would be great (suggestions appreciated!).
 * We may find it more effective to measure something other than number of
   requests handled by a replica. For example, perhaps time spent processing
-  requeusts for the replica or bytes returned in response to requests to the
+  requests for the replica or bytes returned in response to requests to the
   replica would be more accurate measurements of the load on the replica. These
   are things that we could potentially experiment with using allocsim to see if
   they provide better balance.
