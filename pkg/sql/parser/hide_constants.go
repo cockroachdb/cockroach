@@ -34,7 +34,7 @@ func formatNodeOrHideConstants(buf *bytes.Buffer, f FmtFlags, n NodeFormatter) {
 					return
 				}
 			}
-		case Datum, Constant:
+		case Datum, Constant, *Placeholder:
 			buf.WriteByte('_')
 			return
 		}

@@ -113,12 +113,19 @@ func (a *appStats) recordStatement(
 	// Extend the statement key with a character that indicated whether
 	// there was an error and/or whether the query was distributed, so
 	// that we use separate buckets for the different situations.
-	var buf bytes.Buffer
+	key := stmtKey{failed: err != nil, distSQLUsed: distSQLUsed}
 
-	parser.FormatNode(&buf, parser.FmtHideConstants, stmt.AST)
+	if stmt.AnonymizedStr != "" {
+		// Use the cached anonymized string.
+		key.stmt = stmt.AnonymizedStr
+	} else {
+		var buf bytes.Buffer
+		parser.FormatNode(&buf, parser.FmtHideConstants, stmt.AST)
+		key.stmt = a.getStrForStmt(stmt)
+	}
 
 	// Get the statistics object.
-	s := a.getStatsForStmt(stmtKey{stmt: buf.String(), failed: err != nil, distSQLUsed: distSQLUsed})
+	s := a.getStatsForStmt(key)
 
 	// Collect the per-statement statistics.
 	s.Lock()
@@ -152,6 +159,12 @@ func (a *appStats) getStatsForStmt(key stmtKey) *stmtStats {
 	}
 	a.Unlock()
 	return s
+}
+
+func (a *appStats) getStrForStmt(stmt Statement) string {
+	var buf bytes.Buffer
+	parser.FormatNode(&buf, parser.FmtHideConstants, stmt.AST)
+	return buf.String()
 }
 
 // sqlStats carries per-application statistics for all applications on

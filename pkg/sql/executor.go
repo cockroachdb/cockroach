@@ -506,6 +506,8 @@ func (e *Executor) Prepare(
 	}
 
 	prepared.Statement = stmt.AST
+	prepared.AnonymizedStr = session.appStats.getStrForStmt(stmt)
+
 	if err := placeholderHints.ProcessPlaceholderAnnotations(stmt.AST); err != nil {
 		return nil, err
 	}
@@ -678,6 +680,7 @@ func (e *Executor) execPrepared(
 		stmts = StatementList{{
 			AST:           stmt.Statement,
 			ExpectedTypes: stmt.Columns,
+			AnonymizedStr: stmt.AnonymizedStr,
 		}}
 	}
 	// Send the Request for SQL execution and set the application-level error
@@ -1757,6 +1760,7 @@ func (e *Executor) execStmtInOpenTxn(
 		pinfo = newPInfo
 		stmt.AST = ps.Statement
 		stmt.ExpectedTypes = ps.Columns
+		stmt.AnonymizedStr = ps.AnonymizedStr
 	}
 
 	var p *planner
