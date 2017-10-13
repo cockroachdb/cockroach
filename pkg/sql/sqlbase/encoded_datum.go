@@ -17,7 +17,6 @@ package sqlbase
 import (
 	"bytes"
 	"fmt"
-	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -41,9 +40,6 @@ func EncodingDirToDatumEncoding(dir encoding.Direction) DatumEncoding {
 // parser.Datum. It allows "passing through" a Datum without decoding and
 // reencoding.
 type EncDatum struct {
-	// Temporary, used just for sanity checking this change.
-	typeDeprecated ColumnType
-
 	// Encoding type. Valid only if encoded is not nil.
 	encoding DatumEncoding
 
@@ -52,16 +48,6 @@ type EncDatum struct {
 
 	// Decoded datum.
 	Datum parser.Datum
-}
-
-func (ed *EncDatum) checkType(typ *ColumnType) {
-	if reflect.DeepEqual(ed.typeDeprecated, ColumnType{}) {
-		// Allow uninitialized types.
-		return
-	}
-	if ed.typeDeprecated.SemanticType != typ.SemanticType {
-		panic(fmt.Sprintf("expected type %+v, got %+v", ed.typeDeprecated, *typ))
-	}
 }
 
 func (ed *EncDatum) stringWithAlloc(typ *ColumnType, a *DatumAlloc) string {
@@ -93,10 +79,9 @@ func EncDatumFromEncoded(typ *ColumnType, enc DatumEncoding, encoded []byte) Enc
 		panic(fmt.Sprintf("empty encoded value"))
 	}
 	return EncDatum{
-		typeDeprecated: *typ,
-		encoding:       enc,
-		encoded:        encoded,
-		Datum:          nil,
+		encoding: enc,
+		encoded:  encoded,
+		Datum:    nil,
 	}
 }
 
@@ -134,10 +119,7 @@ func DatumToEncDatum(ctyp ColumnType, d parser.Datum) EncDatum {
 		panic(fmt.Sprintf("invalid datum type given: %s, expected %s",
 			d.ResolvedType(), ptyp))
 	}
-	return EncDatum{
-		typeDeprecated: ctyp,
-		Datum:          d,
-	}
+	return EncDatum{Datum: d}
 }
 
 // UnsetDatum ensures subsequent IsUnset() calls return false.
@@ -180,7 +162,6 @@ func (ed *EncDatum) IsNull() bool {
 
 // EnsureDecoded ensures that the Datum field is set (decoding if it is not).
 func (ed *EncDatum) EnsureDecoded(typ *ColumnType, a *DatumAlloc) error {
-	ed.checkType(typ)
 	if ed.Datum != nil {
 		return nil
 	}
@@ -226,7 +207,6 @@ func (ed *EncDatum) Encoding() (DatumEncoding, bool) {
 func (ed *EncDatum) Encode(
 	typ *ColumnType, a *DatumAlloc, enc DatumEncoding, appendTo []byte,
 ) ([]byte, error) {
-	ed.checkType(typ)
 	if ed.encoded != nil && enc == ed.encoding {
 		// We already have an encoding that matches that we can use.
 		return append(appendTo, ed.encoded...), nil
@@ -253,7 +233,6 @@ func (ed *EncDatum) Encode(
 func (ed *EncDatum) Compare(
 	typ *ColumnType, a *DatumAlloc, evalCtx *parser.EvalContext, rhs *EncDatum,
 ) (int, error) {
-	ed.checkType(typ)
 	// TODO(radu): if we have both the Datum and a key encoding available, which
 	// one would be faster to use?
 	if ed.encoding == rhs.encoding && ed.encoded != nil && rhs.encoded != nil {
