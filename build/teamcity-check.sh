@@ -3,6 +3,9 @@ set -exuo pipefail
 
 export BUILDER_HIDE_GOPATH_SRC=1
 
+source "$(dirname "${0}")/teamcity-support.sh"
+maybe_ccache
+
 mkdir -p artifacts
 
 build/builder.sh go install ./vendor/github.com/golang/dep/cmd/dep ./pkg/cmd/github-pull-request-make
