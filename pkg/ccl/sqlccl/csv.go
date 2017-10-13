@@ -330,11 +330,12 @@ func makeCSVTableDescriptor(
 			return nil, errors.Errorf("unsupported table definition: %s", parser.AsString(def))
 		}
 	}
+	semaCtx := parser.SemaContext{}
+	evalCtx := parser.EvalContext{}
 	tableDesc, err := sql.MakeTableDesc(
 		ctx,
 		nil, /* txn */
 		sql.NilVirtualTabler,
-		parser.SearchPath{},
 		create,
 		parentID,
 		tableID,
@@ -342,7 +343,8 @@ func makeCSVTableDescriptor(
 		sqlbase.NewDefaultPrivilegeDescriptor(),
 		nil, /* affected */
 		"",  /* sessionDB */
-		nil, /* EvalContext */
+		&semaCtx,
+		&evalCtx,
 	)
 	if err != nil {
 		return nil, err

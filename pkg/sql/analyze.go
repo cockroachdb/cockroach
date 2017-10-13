@@ -1677,7 +1677,6 @@ func makeIsNotNull(left parser.TypedExpr) parser.TypedExpr {
 // analyzeExpr performs semantic analysis of an expression, including:
 // - replacing sub-queries by a sql.subquery node;
 // - resolving names (optional);
-// - replacing placeholders by their value;
 // - type checking (with optional type enforcement);
 // - normalization.
 // The parameters sources and IndexedVars, if both are non-nil, indicate

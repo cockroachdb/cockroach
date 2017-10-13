@@ -86,12 +86,7 @@ func TypeCheck(expr Expr, ctx *SemaContext, desired Type) (TypedExpr, error) {
 		panic("the desired type for parser.TypeCheck cannot be nil, use TypeAny instead")
 	}
 
-	expr, err := replacePlaceholders(expr, ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	expr, err = foldConstantLiterals(expr)
+	expr, err := foldConstantLiterals(expr)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +115,7 @@ func (p *Parser) NormalizeExpr(ctx *EvalContext, typedExpr TypedExpr) (TypedExpr
 	if ctx.SkipNormalize {
 		return typedExpr, nil
 	}
-	p.normalizeVisitor = normalizeVisitor{ctx: ctx}
+	p.normalizeVisitor = makeNormalizeVisitor(ctx)
 	expr, _ := WalkExpr(&p.normalizeVisitor, typedExpr)
 	if err := p.normalizeVisitor.err; err != nil {
 		return nil, err

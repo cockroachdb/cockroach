@@ -34,6 +34,9 @@ func formatNodeOrHideConstants(buf *bytes.Buffer, f FmtFlags, n NodeFormatter) {
 					return
 				}
 			}
+		case *Placeholder:
+			// Placeholders should be printed as placeholder markers.
+			// Deliberately empty so we format as normal.
 		case Datum, Constant:
 			buf.WriteByte('_')
 			return
