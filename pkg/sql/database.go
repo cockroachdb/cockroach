@@ -244,7 +244,10 @@ func getAllDatabaseDescs(
 // getDatabaseDesc returns the database descriptor given its name
 // if it exists in the cache, otherwise falls back to KV operations.
 func (dc *databaseCache) getDatabaseDesc(
-	ctx context.Context, txn *client.Txn, vt VirtualTabler, name string,
+	ctx context.Context,
+	txnRunner func(context.Context, func(context.Context, *client.Txn) error) error,
+	vt VirtualTabler,
+	name string,
 ) (*sqlbase.DatabaseDescriptor, error) {
 	// Lookup the database in the cache first, falling back to the KV store if it
 	// isn't present. The cache might cause the usage of a recently renamed
@@ -252,7 +255,12 @@ func (dc *databaseCache) getDatabaseDesc(
 	desc, err := dc.getCachedDatabaseDesc(name)
 	if err != nil {
 		log.VEventf(ctx, 3, "error getting database descriptor from cache: %s", err)
-		desc, err = MustGetDatabaseDesc(ctx, txn, vt, name)
+		if err := txnRunner(ctx, func(ctx context.Context, txn *client.Txn) error {
+			desc, err = MustGetDatabaseDesc(ctx, txn, vt, name)
+			return err
+		}); err != nil {
+			return nil, err
+		}
 	}
 	return desc, err
 }
@@ -274,7 +282,10 @@ func (dc *databaseCache) getDatabaseDescByID(
 // uses the descriptor cache if possible, otherwise falls back to KV
 // operations.
 func (dc *databaseCache) getDatabaseID(
-	ctx context.Context, txn *client.Txn, vt VirtualTabler, name string,
+	ctx context.Context,
+	txnRunner func(context.Context, func(context.Context, *client.Txn) error) error,
+	vt VirtualTabler,
+	name string,
 ) (sqlbase.ID, error) {
 	if virtual := vt.getVirtualDatabaseDesc(name); virtual != nil {
 		return virtual.GetID(), nil
@@ -284,7 +295,7 @@ func (dc *databaseCache) getDatabaseID(
 		return id, nil
 	}
 
-	desc, err := dc.getDatabaseDesc(ctx, txn, vt, name)
+	desc, err := dc.getDatabaseDesc(ctx, txnRunner, vt, name)
 	if err != nil {
 		return 0, err
 	}

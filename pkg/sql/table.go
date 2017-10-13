@@ -318,14 +318,9 @@ func (tc *TableCollection) getTableVersion(
 	if dbID == 0 {
 		// Resolve the database from the database cache when the transaction
 		// hasn't modified the database.
-		if err := tc.leaseMgr.LeaseStore.db.Txn(
-			ctx,
-			func(ctx context.Context, txn *client.Txn) error {
-				var err error
-				dbID, err = tc.databaseCache.getDatabaseID(ctx, txn, vt, tn.Database())
-				return err
-			},
-		); err != nil {
+		log.VEventf(ctx, 2, "dbID=0")
+		dbID, err = tc.databaseCache.getDatabaseID(ctx, tc.leaseMgr.LeaseStore.db.Txn, vt, tn.Database())
+		if err != nil {
 			return nil, err
 		}
 	}
