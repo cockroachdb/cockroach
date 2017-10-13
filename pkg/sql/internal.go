@@ -112,7 +112,11 @@ func getTableID(ctx context.Context, p *planner, tn *parser.TableName) (sqlbase.
 		return virtual.GetID(), nil
 	}
 
-	dbID, err := p.session.tables.databaseCache.getDatabaseID(ctx, p.txn, p.getVirtualTabler(), tn.Database())
+	txnRunner := func(ctx context.Context, retryable func(ctx context.Context, txn *client.Txn) error) error {
+		return retryable(ctx, p.txn)
+	}
+
+	dbID, err := p.session.tables.databaseCache.getDatabaseID(ctx, txnRunner, p.getVirtualTabler(), tn.Database())
 	if err != nil {
 		return 0, err
 	}
