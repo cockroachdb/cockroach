@@ -636,10 +636,7 @@ func (rf *RowFetcher) finalizeRow() {
 				panic(fmt.Sprintf("Non-nullable column \"%s:%s\" with no value!",
 					rf.desc.Name, rf.cols[i].Name))
 			}
-			rf.row[i] = EncDatum{
-				typeDeprecated: rf.cols[i].Type,
-				Datum:          parser.DNull,
-			}
+			rf.row[i] = EncDatum{Datum: parser.DNull}
 		}
 	}
 }
