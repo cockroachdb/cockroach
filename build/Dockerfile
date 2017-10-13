@@ -169,3 +169,12 @@ RUN curl -fsSL https://releases.hashicorp.com/terraform/0.8.7/terraform_0.8.7_li
  && rm terraform.zip
 
 ENV PATH /opt/backtrace/bin:$PATH
+
+# Defer installing ccache until the very end to avoid filling the cache with
+# the artifacts created by building the builder image.
+RUN apt-get install -y --no-install-recommends ccache
+
+# Without CCACHE_CPP2=1, ccache can generate spurious warnings. See the manpage
+# for details. This option is enabled by default in ccache v3.3+, but our
+# version of Ubuntu ships v3.2.4.
+ENV CCACHE_CPP2=1
