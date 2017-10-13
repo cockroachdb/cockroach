@@ -31,6 +31,7 @@ const (
 	VersionRaftLogTruncationBelowRaft
 	VersionSplitHardStateBelowRaft
 	VersionStatsBasedRebalancing
+	Version1_1
 	VersionRaftLastIndex
 	VersionMVCCNetworkStats
 	VersionMeta2Splits
@@ -68,6 +69,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionStatsBasedRebalancing is https://github.com/cockroachdb/cockroach/pull/16878.
 		Key:     VersionStatsBasedRebalancing,
 		Version: roachpb.Version{Major: 1, Minor: 0, Unstable: 3},
+	},
+	{
+		// Version1_1 is CockroachDB v1.1 (it remains unchainged for all v1.1.x releases
+		// unless we need to introduce a new migration).
+		Key:     Version1_1,
+		Version: roachpb.Version{Major: 1, Minor: 1},
 	},
 	{
 		// VersionRaftLastIndex is https://github.com/cockroachdb/cockroach/pull/18717.
