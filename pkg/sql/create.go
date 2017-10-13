@@ -619,7 +619,7 @@ func (n *createTableNode) Start(params runParams) error {
 	var affected map[sqlbase.ID]*sqlbase.TableDescriptor
 	creationTime := params.p.txn.OrigTimestamp()
 	if n.n.As() {
-		desc, err = makeTableDescIfAs(n.n, n.dbDesc.ID, id, creationTime, planColumns(n.sourcePlan), privs, &params.p.evalCtx)
+		desc, err = makeTableDescIfAs(n.n, n.dbDesc.ID, id, creationTime, planColumns(n.sourcePlan), privs, &params.p.semaCtx, &params.p.evalCtx)
 	} else {
 		affected = make(map[sqlbase.ID]*sqlbase.TableDescriptor)
 		desc, err = params.p.makeTableDesc(params.ctx, n.n, n.dbDesc.ID, id, creationTime, privs, affected)
@@ -1305,8 +1305,7 @@ func (n *createViewNode) makeViewTableDesc(
 		if len(columnNames) > i {
 			columnTableDef.Name = columnNames[i]
 		}
-		// We pass an empty search path here because there are no names to resolve.
-		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, parser.SearchPath{}, evalCtx)
+		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, &n.p.semaCtx, evalCtx)
 		if err != nil {
 			return desc, err
 		}
@@ -1324,6 +1323,7 @@ func makeTableDescIfAs(
 	creationTime hlc.Timestamp,
 	resultColumns []sqlbase.ResultColumn,
 	privileges *sqlbase.PrivilegeDescriptor,
+	semaCtx *parser.SemaContext,
 	evalCtx *parser.EvalContext,
 ) (desc sqlbase.TableDescriptor, err error) {
 	tableName, err := p.Table.Normalize()
@@ -1341,8 +1341,7 @@ func makeTableDescIfAs(
 		if len(p.AsColumnNames) > i {
 			columnTableDef.Name = p.AsColumnNames[i]
 		}
-		// We pass an empty search path here because we do not have any expressions to resolve.
-		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, parser.SearchPath{}, evalCtx)
+		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, semaCtx, evalCtx)
 		if err != nil {
 			return desc, err
 		}
@@ -1357,13 +1356,13 @@ func MakeTableDesc(
 	ctx context.Context,
 	txn *client.Txn,
 	vt VirtualTabler,
-	searchPath parser.SearchPath,
 	n *parser.CreateTable,
 	parentID, id sqlbase.ID,
 	creationTime hlc.Timestamp,
 	privileges *sqlbase.PrivilegeDescriptor,
 	affected map[sqlbase.ID]*sqlbase.TableDescriptor,
 	sessionDB string,
+	semaCtx *parser.SemaContext,
 	evalCtx *parser.EvalContext,
 ) (sqlbase.TableDescriptor, error) {
 	tableName, err := n.Table.Normalize()
@@ -1382,7 +1381,7 @@ func MakeTableDesc(
 					)
 				}
 			}
-			col, idx, err := sqlbase.MakeColumnDefDescs(d, searchPath, evalCtx)
+			col, idx, err := sqlbase.MakeColumnDefDescs(d, semaCtx, evalCtx)
 			if err != nil {
 				return desc, err
 			}
@@ -1509,7 +1508,7 @@ func MakeTableDesc(
 			// pass, handled above.
 
 		case *parser.CheckConstraintTableDef:
-			ck, err := makeCheckConstraint(desc, d, generatedNames, searchPath)
+			ck, err := makeCheckConstraint(desc, d, generatedNames, semaCtx, evalCtx)
 			if err != nil {
 				return desc, err
 			}
@@ -1559,7 +1558,6 @@ func (p *planner) makeTableDesc(
 		ctx,
 		p.txn,
 		&p.session.virtualSchemas,
-		p.session.SearchPath,
 		n,
 		parentID,
 		id,
@@ -1567,6 +1565,7 @@ func (p *planner) makeTableDesc(
 		privileges,
 		affected,
 		p.session.Database,
+		&p.semaCtx,
 		&p.evalCtx,
 	)
 }
@@ -1613,7 +1612,8 @@ func makeCheckConstraint(
 	desc sqlbase.TableDescriptor,
 	d *parser.CheckConstraintTableDef,
 	inuseNames map[string]struct{},
-	searchPath parser.SearchPath,
+	semaCtx *parser.SemaContext,
+	evalCtx *parser.EvalContext,
 ) (*sqlbase.TableDescriptor_CheckConstraint, error) {
 	// CHECK expressions seem to vary across databases. Wikipedia's entry on
 	// Check_constraint (https://en.wikipedia.org/wiki/Check_constraint) says
@@ -1667,11 +1667,13 @@ func makeCheckConstraint(
 	}
 
 	var p parser.Parser
-	if err := p.AssertNoAggregationOrWindowing(expr, "CHECK expressions", searchPath); err != nil {
+	if err := p.AssertNoAggregationOrWindowing(expr, "CHECK expressions", semaCtx.SearchPath); err != nil {
 		return nil, err
 	}
 
-	if _, err := sqlbase.SanitizeVarFreeExpr(expr, parser.TypeBool, "CHECK", searchPath); err != nil {
+	if _, err := sqlbase.SanitizeVarFreeExpr(
+		expr, parser.TypeBool, "CHECK", semaCtx, evalCtx,
+	); err != nil {
 		return nil, err
 	}
 	if generateName {
