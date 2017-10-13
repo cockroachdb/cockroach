@@ -18,6 +18,7 @@ import (
 	"io"
 	"io/ioutil"
 
+	"github.com/gogo/protobuf/proto"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
 )
@@ -37,16 +38,20 @@ func (*ProtoPb) ContentType() string {
 
 // Marshal implements gwruntime.Marshaler.
 func (*ProtoPb) Marshal(v interface{}) ([]byte, error) {
-	if p, ok := v.(Message); ok {
-		return Marshal(p)
+	// NB: we use proto.Message here because grpc-gateway passes us protos that
+	// we don't control and thus don't implement protoutil.Message.
+	if p, ok := v.(proto.Message); ok {
+		return proto.Marshal(p)
 	}
 	return nil, errors.Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
 }
 
 // Unmarshal implements gwruntime.Marshaler.
 func (*ProtoPb) Unmarshal(data []byte, v interface{}) error {
-	if p, ok := v.(Message); ok {
-		return Unmarshal(data, p)
+	// NB: we use proto.Message here because grpc-gateway passes us protos that
+	// we don't control and thus don't implement protoutil.Message.
+	if p, ok := v.(proto.Message); ok {
+		return proto.Unmarshal(data, p)
 	}
 	return errors.Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
 }
@@ -62,10 +67,12 @@ func (*ProtoPb) NewDecoder(r io.Reader) gwruntime.Decoder {
 
 // Decode implements gwruntime.Marshaler.
 func (d *protoDecoder) Decode(v interface{}) error {
-	if p, ok := v.(Message); ok {
+	// NB: we use proto.Message here because grpc-gateway passes us protos that
+	// we don't control and thus don't implement protoutil.Message.
+	if p, ok := v.(proto.Message); ok {
 		bytes, err := ioutil.ReadAll(d.r)
 		if err == nil {
-			err = Unmarshal(bytes, p)
+			err = proto.Unmarshal(bytes, p)
 		}
 		return err
 	}
@@ -83,8 +90,10 @@ func (*ProtoPb) NewEncoder(w io.Writer) gwruntime.Encoder {
 
 // Encode implements gwruntime.Marshaler.
 func (e *protoEncoder) Encode(v interface{}) error {
-	if p, ok := v.(Message); ok {
-		bytes, err := Marshal(p)
+	// NB: we use proto.Message here because grpc-gateway passes us protos that
+	// we don't control and thus don't implement protoutil.Message.
+	if p, ok := v.(proto.Message); ok {
+		bytes, err := proto.Marshal(p)
 		if err == nil {
 			_, err = e.w.Write(bytes)
 		}
