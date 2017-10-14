@@ -84,6 +84,41 @@ function testSendInvalidUTF8(client) {
   });
 }
 
+function testSendNotEnoughParams(client) {
+  return new Promise(resolve => {
+    client.query({
+      text: 'SELECT 3',
+      values: ['foo']
+    }, function (err, results) {
+      let validationError = isError(err, /expected 0 arguments, got 1/, '08P01');
+      if (validationError) throw validationError;
+      resolve();
+    });
+  });
+}
+
+function testInsertArray(client) {
+  return new Promise(resolve => {
+    client.query({
+      text: 'CREATE DATABASE d',
+    }, (err) => {
+      if (err) throw err;
+      client.query({
+        text: 'CREATE TABLE d.x (y FLOAT[])',
+      }, (err) => {
+        if (err) throw err;
+        client.query({
+          text: 'INSERT INTO d.x VALUES ($1)',
+          values: [[1, 2, 3]],
+        }, (err) => {
+          if (err) throw err;
+          resolve();
+        });
+      });
+    });
+  });
+}
+
 function runTests(client, ...tests) {
   if (tests.length === 0) {
     return Promise.resolve();
@@ -97,12 +132,15 @@ client.connect(function (err) {
 
   runTests(client,
     testSendInvalidUTF8,
+    testSendNotEnoughParams,
+    testInsertArray,
     testSelect
   ).then(result => {
     client.end(function (err) {
       if (err) throw err;
     });
   }).catch(err => {
+    client.end()
     throw err;
   });
 });

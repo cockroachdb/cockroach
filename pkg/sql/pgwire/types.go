@@ -529,6 +529,11 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 				}
 			}
 			return out, nil
+		case oid.T_anyarray:
+			if err := validateStringBytes(b); err != nil {
+				return nil, err
+			}
+			return parser.NewDString(string(b)), nil
 		case oid.T__text, oid.T__name:
 			var arr pq.StringArray
 			if err := (&arr).Scan(b); err != nil {
