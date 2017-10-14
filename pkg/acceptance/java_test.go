@@ -36,6 +36,8 @@ const java = `
 set -e
 cat > main.java << 'EOF'
 import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.math.BigDecimal;
 
@@ -194,6 +196,25 @@ public class main {
 		res = stmt.executeUpdate();
 		if (res != 1) {
 		    throw new Exception("unexpected: INSERT INTO t " + res + " rows changed, expecting 0");
+		}
+
+		// jdbc does a lot of pg_catalog introspection for arrays that other
+		// drivers don't.
+
+		stmt = conn.prepareStatement("SELECT ?");
+		List<String> list = new ArrayList<String>();
+		list.add("1.0");
+		list.add("2.0");
+		list.add("3.0");
+		Array array = conn.createArrayOf("FLOAT", list.toArray());
+		stmt.setArray(1, array);
+		rs = stmt.executeQuery();
+
+		rs.next();
+		Array ar = rs.getArray(1);
+		Double[] fs = (Double[])ar.getArray();
+		if (fs[0] != 1.0 || fs[1] != 2.0 || fs[2] != 3.0) {
+			throw new Exception("Expected to select {1.0,2.0,3.0}, got " + fs);
 		}
 
 		stmt = conn.prepareStatement("SELECT nspname FROM pg_catalog.pg_namespace WHERE oid=?");

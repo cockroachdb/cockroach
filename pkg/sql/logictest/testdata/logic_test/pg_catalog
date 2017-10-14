@@ -665,15 +665,27 @@ oid   typname       typnamespace  typowner  typlen  typbyval  typtype
 26    oid           1782195457    NULL      8       true      b
 700   float4        1782195457    NULL      8       true      b
 701   float8        1782195457    NULL      8       true      b
+1000  _bool         1782195457    NULL      -1      false     b
+1001  _bytea        1782195457    NULL      -1      false     b
+1003  _name         1782195457    NULL      -1      false     b
 1005  _int2         1782195457    NULL      -1      false     b
 1007  _int4         1782195457    NULL      -1      false     b
 1009  _text         1782195457    NULL      -1      false     b
+1015  _varchar      1782195457    NULL      -1      false     b
 1016  _int8         1782195457    NULL      -1      false     b
+1021  _float4       1782195457    NULL      -1      false     b
+1022  _float8       1782195457    NULL      -1      false     b
+1028  _oid          1782195457    NULL      -1      false     b
 1043  varchar       1782195457    NULL      -1      false     b
 1082  date          1782195457    NULL      8       true      b
 1114  timestamp     1782195457    NULL      24      true      b
+1115  _timestamp    1782195457    NULL      -1      false     b
+1182  _date         1782195457    NULL      -1      false     b
 1184  timestamptz   1782195457    NULL      24      true      b
+1185  _timestamptz  1782195457    NULL      -1      false     b
 1186  interval      1782195457    NULL      24      true      b
+1187  _interval     1782195457    NULL      -1      false     b
+1231  _numeric      1782195457    NULL      -1      false     b
 1700  numeric       1782195457    NULL      -1      false     b
 2202  regprocedure  1782195457    NULL      8       true      b
 2205  regclass      1782195457    NULL      8       true      b
@@ -681,6 +693,7 @@ oid   typname       typnamespace  typowner  typlen  typbyval  typtype
 2249  record        1782195457    NULL      0       true      b
 2283  anyelement    1782195457    NULL      -1      false     b
 2950  uuid          1782195457    NULL      16      true      b
+2951  _uuid         1782195457    NULL      -1      false     b
 4089  regnamespace  1782195457    NULL      8       true      b
 
 query OTTBBTOOO colnames
@@ -689,34 +702,47 @@ FROM pg_catalog.pg_type
 ORDER BY oid
 ----
 oid   typname       typcategory  typispreferred  typisdefined  typdelim  typrelid  typelem  typarray
-16    bool          B            false           true          ,         0         0        0
-17    bytea         U            false           true          ,         0         0        0
-19    name          S            false           true          ,         0         0        0
-20    int8          N            false           true          ,         0         0        0
-21    int2          N            false           true          ,         0         0        0
+16    bool          B            false           true          ,         0         0        1000
+17    bytea         U            false           true          ,         0         0        1001
+19    name          S            false           true          ,         0         0        1003
+20    int8          N            false           true          ,         0         0        1016
+21    int2          N            false           true          ,         0         0        1005
 22    int2vector    A            false           true          ,         0         21       0
-23    int4          N            false           true          ,         0         0        0
+23    int4          N            false           true          ,         0         0        1007
 24    regproc       N            false           true          ,         0         0        0
-25    text          S            false           true          ,         0         0        0
-26    oid           N            false           true          ,         0         0        0
-700   float4        N            false           true          ,         0         0        0
-701   float8        N            false           true          ,         0         0        0
+25    text          S            false           true          ,         0         0        1009
+26    oid           N            false           true          ,         0         0        1028
+700   float4        N            false           true          ,         0         0        1021
+701   float8        N            false           true          ,         0         0        1022
+1000  _bool         A            false           true          ,         0         16       0
+1001  _bytea        A            false           true          ,         0         17       0
+1003  _name         A            false           true          ,         0         19       0
 1005  _int2         A            false           true          ,         0         21       0
 1007  _int4         A            false           true          ,         0         23       0
 1009  _text         A            false           true          ,         0         25       0
+1015  _varchar      A            false           true          ,         0         1043     0
 1016  _int8         A            false           true          ,         0         20       0
-1043  varchar       S            false           true          ,         0         0        0
-1082  date          D            false           true          ,         0         0        0
-1114  timestamp     D            false           true          ,         0         0        0
-1184  timestamptz   D            false           true          ,         0         0        0
-1186  interval      T            false           true          ,         0         0        0
-1700  numeric       N            false           true          ,         0         0        0
+1021  _float4       A            false           true          ,         0         700      0
+1022  _float8       A            false           true          ,         0         701      0
+1028  _oid          A            false           true          ,         0         26       0
+1043  varchar       S            false           true          ,         0         0        1015
+1082  date          D            false           true          ,         0         0        1182
+1114  timestamp     D            false           true          ,         0         0        1115
+1115  _timestamp    A            false           true          ,         0         1114     0
+1182  _date         A            false           true          ,         0         1082     0
+1184  timestamptz   D            false           true          ,         0         0        1185
+1185  _timestamptz  A            false           true          ,         0         1184     0
+1186  interval      T            false           true          ,         0         0        1187
+1187  _interval     A            false           true          ,         0         1186     0
+1231  _numeric      A            false           true          ,         0         1700     0
+1700  numeric       N            false           true          ,         0         0        1231
 2202  regprocedure  N            false           true          ,         0         0        0
 2205  regclass      N            false           true          ,         0         0        0
 2206  regtype       N            false           true          ,         0         0        0
 2249  record        P            false           true          ,         0         0        0
 2283  anyelement    P            false           true          ,         0         0        0
-2950  uuid          U            false           true          ,         0         0        0
+2950  uuid          U            false           true          ,         0         0        2951
+2951  _uuid         A            false           true          ,         0         2950     0
 4089  regnamespace  N            false           true          ,         0         0        0
 
 query OTOOOOOOO colnames
@@ -737,15 +763,27 @@ oid   typname       typinput        typoutput        typreceive        typsend  
 26    oid           oidin           oidout           oidrecv           oidsend           0         0          0
 700   float4        float4in        float4out        float4recv        float4send        0         0          0
 701   float8        float8in        float8out        float8recv        float8send        0         0          0
+1000  _bool         array_in        array_out        array_recv        array_send        0         0          0
+1001  _bytea        array_in        array_out        array_recv        array_send        0         0          0
+1003  _name         array_in        array_out        array_recv        array_send        0         0          0
 1005  _int2         array_in        array_out        array_recv        array_send        0         0          0
 1007  _int4         array_in        array_out        array_recv        array_send        0         0          0
 1009  _text         array_in        array_out        array_recv        array_send        0         0          0
+1015  _varchar      array_in        array_out        array_recv        array_send        0         0          0
 1016  _int8         array_in        array_out        array_recv        array_send        0         0          0
+1021  _float4       array_in        array_out        array_recv        array_send        0         0          0
+1022  _float8       array_in        array_out        array_recv        array_send        0         0          0
+1028  _oid          array_in        array_out        array_recv        array_send        0         0          0
 1043  varchar       varcharin       varcharout       varcharrecv       varcharsend       0         0          0
 1082  date          date_in         date_out         date_recv         date_send         0         0          0
 1114  timestamp     timestamp_in    timestamp_out    timestamp_recv    timestamp_send    0         0          0
+1115  _timestamp    array_in        array_out        array_recv        array_send        0         0          0
+1182  _date         array_in        array_out        array_recv        array_send        0         0          0
 1184  timestamptz   timestamptz_in  timestamptz_out  timestamptz_recv  timestamptz_send  0         0          0
+1185  _timestamptz  array_in        array_out        array_recv        array_send        0         0          0
 1186  interval      interval_in     interval_out     interval_recv     interval_send     0         0          0
+1187  _interval     array_in        array_out        array_recv        array_send        0         0          0
+1231  _numeric      array_in        array_out        array_recv        array_send        0         0          0
 1700  numeric       numeric_in      numeric_out      numeric_recv      numeric_send      0         0          0
 2202  regprocedure  regprocedurein  regprocedureout  regprocedurerecv  regproceduresend  0         0          0
 2205  regclass      regclassin      regclassout      regclassrecv      regclasssend      0         0          0
@@ -753,6 +791,7 @@ oid   typname       typinput        typoutput        typreceive        typsend  
 2249  record        record_in       record_out       record_recv       record_send       0         0          0
 2283  anyelement    anyelement_in   anyelement_out   anyelement_recv   anyelement_send   0         0          0
 2950  uuid          uuid_in         uuid_out         uuid_recv         uuid_send         0         0          0
+2951  _uuid         array_in        array_out        array_recv        array_send        0         0          0
 4089  regnamespace  regnamespacein  regnamespaceout  regnamespacerecv  regnamespacesend  0         0          0
 
 query OTTTBOI colnames
@@ -773,15 +812,27 @@ oid   typname       typalign  typstorage  typnotnull  typbasetype  typtypmod
 26    oid           NULL      NULL        false       0            -1
 700   float4        NULL      NULL        false       0            -1
 701   float8        NULL      NULL        false       0            -1
+1000  _bool         NULL      NULL        false       0            -1
+1001  _bytea        NULL      NULL        false       0            -1
+1003  _name         NULL      NULL        false       0            -1
 1005  _int2         NULL      NULL        false       0            -1
 1007  _int4         NULL      NULL        false       0            -1
 1009  _text         NULL      NULL        false       0            -1
+1015  _varchar      NULL      NULL        false       0            -1
 1016  _int8         NULL      NULL        false       0            -1
+1021  _float4       NULL      NULL        false       0            -1
+1022  _float8       NULL      NULL        false       0            -1
+1028  _oid          NULL      NULL        false       0            -1
 1043  varchar       NULL      NULL        false       0            -1
 1082  date          NULL      NULL        false       0            -1
 1114  timestamp     NULL      NULL        false       0            -1
+1115  _timestamp    NULL      NULL        false       0            -1
+1182  _date         NULL      NULL        false       0            -1
 1184  timestamptz   NULL      NULL        false       0            -1
+1185  _timestamptz  NULL      NULL        false       0            -1
 1186  interval      NULL      NULL        false       0            -1
+1187  _interval     NULL      NULL        false       0            -1
+1231  _numeric      NULL      NULL        false       0            -1
 1700  numeric       NULL      NULL        false       0            -1
 2202  regprocedure  NULL      NULL        false       0            -1
 2205  regclass      NULL      NULL        false       0            -1
@@ -789,6 +840,7 @@ oid   typname       typalign  typstorage  typnotnull  typbasetype  typtypmod
 2249  record        NULL      NULL        false       0            -1
 2283  anyelement    NULL      NULL        false       0            -1
 2950  uuid          NULL      NULL        false       0            -1
+2951  _uuid         NULL      NULL        false       0            -1
 4089  regnamespace  NULL      NULL        false       0            -1
 
 query OTIOTTT colnames
@@ -809,15 +861,27 @@ oid   typname       typndims  typcollation  typdefaultbin  typdefault  typacl
 26    oid           0         0             NULL           NULL        NULL
 700   float4        0         0             NULL           NULL        NULL
 701   float8        0         0             NULL           NULL        NULL
+1000  _bool         0         0             NULL           NULL        NULL
+1001  _bytea        0         0             NULL           NULL        NULL
+1003  _name         0         1661428263    NULL           NULL        NULL
 1005  _int2         0         0             NULL           NULL        NULL
 1007  _int4         0         0             NULL           NULL        NULL
 1009  _text         0         1661428263    NULL           NULL        NULL
+1015  _varchar      0         1661428263    NULL           NULL        NULL
 1016  _int8         0         0             NULL           NULL        NULL
+1021  _float4       0         0             NULL           NULL        NULL
+1022  _float8       0         0             NULL           NULL        NULL
+1028  _oid          0         0             NULL           NULL        NULL
 1043  varchar       0         1661428263    NULL           NULL        NULL
 1082  date          0         0             NULL           NULL        NULL
 1114  timestamp     0         0             NULL           NULL        NULL
+1115  _timestamp    0         0             NULL           NULL        NULL
+1182  _date         0         0             NULL           NULL        NULL
 1184  timestamptz   0         0             NULL           NULL        NULL
+1185  _timestamptz  0         0             NULL           NULL        NULL
 1186  interval      0         0             NULL           NULL        NULL
+1187  _interval     0         0             NULL           NULL        NULL
+1231  _numeric      0         0             NULL           NULL        NULL
 1700  numeric       0         0             NULL           NULL        NULL
 2202  regprocedure  0         0             NULL           NULL        NULL
 2205  regclass      0         0             NULL           NULL        NULL
@@ -825,6 +889,7 @@ oid   typname       typndims  typcollation  typdefaultbin  typdefault  typacl
 2249  record        0         0             NULL           NULL        NULL
 2283  anyelement    0         0             NULL           NULL        NULL
 2950  uuid          0         0             NULL           NULL        NULL
+2951  _uuid         0         0             NULL           NULL        NULL
 4089  regnamespace  0         0             NULL           NULL        NULL
 
 ## pg_catalog.pg_proc
