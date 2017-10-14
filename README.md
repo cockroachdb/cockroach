@@ -93,7 +93,7 @@ We're an open source project and welcome contributions.
 
 1.  See [CONTRIBUTING.md](https://github.com/cockroachdb/cockroach/blob/master/CONTRIBUTING.md) to get your local environment set up.
 
-2.  Take a look at our [open issues](https://github.com/cockroachdb/cockroach/issues/), in particular those with the [helpwanted label](https://github.com/cockroachdb/cockroach/labels/helpwanted).
+2.  Take a look at our [open issues](https://github.com/cockroachdb/cockroach/issues/), in particular those with the [help wanted label](https://github.com/cockroachdb/cockroach/labels/help%20wanted).
 
 3.  Review our [style guide](https://github.com/cockroachdb/cockroach/blob/master/CONTRIBUTING.md#style-guide) and follow our [code reviews](https://github.com/cockroachdb/cockroach/pulls) to learn about our style and conventions.
 
