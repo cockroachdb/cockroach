@@ -14598,6 +14598,7 @@ export const cockroach = $root.cockroach = (() => {
                  * @property {cockroach.server.serverpb.CommandQueueMetrics$Properties} [cmd_q_local] RangeInfo cmd_q_local.
                  * @property {cockroach.server.serverpb.CommandQueueMetrics$Properties} [cmd_q_global] RangeInfo cmd_q_global.
                  * @property {cockroach.storage.LeaseStatus$Properties} [lease_status] RangeInfo lease_status.
+                 * @property {boolean} [quiescent] RangeInfo quiescent.
                  */
 
                 /**
@@ -14687,6 +14688,12 @@ export const cockroach = $root.cockroach = (() => {
                 RangeInfo.prototype.lease_status = null;
 
                 /**
+                 * RangeInfo quiescent.
+                 * @type {boolean}
+                 */
+                RangeInfo.prototype.quiescent = false;
+
+                /**
                  * Creates a new RangeInfo instance using the specified properties.
                  * @param {cockroach.server.serverpb.RangeInfo$Properties=} [properties] Properties to set
                  * @returns {cockroach.server.serverpb.RangeInfo} RangeInfo instance
@@ -14729,6 +14736,8 @@ export const cockroach = $root.cockroach = (() => {
                         $root.cockroach.server.serverpb.CommandQueueMetrics.encode(message.cmd_q_global, writer.uint32(/* id 12, wireType 2 =*/98).fork()).ldelim();
                     if (message.lease_status != null && message.hasOwnProperty("lease_status"))
                         $root.cockroach.storage.LeaseStatus.encode(message.lease_status, writer.uint32(/* id 13, wireType 2 =*/106).fork()).ldelim();
+                    if (message.quiescent != null && message.hasOwnProperty("quiescent"))
+                        writer.uint32(/* id 14, wireType 0 =*/112).bool(message.quiescent);
                     return writer;
                 };
 
@@ -14794,6 +14803,9 @@ export const cockroach = $root.cockroach = (() => {
                             break;
                         case 13:
                             message.lease_status = $root.cockroach.storage.LeaseStatus.decode(reader, reader.uint32());
+                            break;
+                        case 14:
+                            message.quiescent = reader.bool();
                             break;
                         default:
                             reader.skipType(tag & 7);
@@ -14882,6 +14894,9 @@ export const cockroach = $root.cockroach = (() => {
                         if (error)
                             return "lease_status." + error;
                     }
+                    if (message.quiescent != null && message.hasOwnProperty("quiescent"))
+                        if (typeof message.quiescent !== "boolean")
+                            return "quiescent: boolean expected";
                     return null;
                 };
 
@@ -14950,6 +14965,8 @@ export const cockroach = $root.cockroach = (() => {
                             throw TypeError(".cockroach.server.serverpb.RangeInfo.lease_status: object expected");
                         message.lease_status = $root.cockroach.storage.LeaseStatus.fromObject(object.lease_status);
                     }
+                    if (object.quiescent != null)
+                        message.quiescent = Boolean(object.quiescent);
                     return message;
                 };
 
@@ -14986,6 +15003,7 @@ export const cockroach = $root.cockroach = (() => {
                         object.cmd_q_local = null;
                         object.cmd_q_global = null;
                         object.lease_status = null;
+                        object.quiescent = false;
                     }
                     if (message.span != null && message.hasOwnProperty("span"))
                         object.span = $root.cockroach.server.serverpb.PrettySpan.toObject(message.span, options);
@@ -15014,6 +15032,8 @@ export const cockroach = $root.cockroach = (() => {
                         object.cmd_q_global = $root.cockroach.server.serverpb.CommandQueueMetrics.toObject(message.cmd_q_global, options);
                     if (message.lease_status != null && message.hasOwnProperty("lease_status"))
                         object.lease_status = $root.cockroach.storage.LeaseStatus.toObject(message.lease_status, options);
+                    if (message.quiescent != null && message.hasOwnProperty("quiescent"))
+                        object.quiescent = message.quiescent;
                     return object;
                 };
 

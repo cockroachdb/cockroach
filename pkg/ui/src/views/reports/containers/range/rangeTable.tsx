@@ -37,9 +37,10 @@ const rangeTableDisplayList: RangeTableRow[] = [
   { variable: "keyRange", display: "Key Range", compareToLeader: true },
   { variable: "problems", display: "Problems", compareToLeader: true },
   { variable: "raftState", display: "Raft State", compareToLeader: false },
+  { variable: "quiescent", display: "Quiescent", compareToLeader: true },
+  { variable: "leaseType", display: "Lease Type", compareToLeader: true },
   { variable: "leaseState", display: "Lease State", compareToLeader: true },
   { variable: "leaseHolder", display: "Lease Holder", compareToLeader: true },
-  { variable: "leaseType", display: "Lease Type", compareToLeader: true },
   { variable: "leaseEpoch", display: "Lease Epoch", compareToLeader: true },
   { variable: "leaseStart", display: "Lease Start", compareToLeader: true },
   { variable: "leaseExpiration", display: "Lease Expiration", compareToLeader: true },
@@ -79,6 +80,11 @@ const rangeTableEmptyContent: RangeTableCellContent = {
 const rangeTableEmptyContentWithWarning: RangeTableCellContent = {
   value: ["-"],
   className: ["range-table__cell--warning"],
+};
+
+const rangeTableQuiescent: RangeTableCellContent = {
+  value: ["quiescent"],
+  className: ["range-table__cell--quiescent"],
 };
 
 function convertLeaseState(leaseState: protos.cockroach.storage.LeaseState) {
@@ -188,6 +194,18 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
       title: results,
       className: results.length > 0 ? ["range-table__cell--warning"] : [],
     };
+  }
+
+  // contentIf returns an empty value if the condition is false, and if true,
+  // executes and returns the content function.
+  contentIf(
+    showContent: boolean,
+    content: () => RangeTableCellContent,
+  ): RangeTableCellContent {
+    if (!showContent) {
+      return rangeTableEmptyContent;
+    }
+    return content();
   }
 
   renderRangeCell(
@@ -378,7 +396,8 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
             "range-table__cell--warning",
         );
       }
-      if (raftState.value[0] === "dormant") {
+      const dormant = raftState.value[0] === "dormant";
+      if (dormant) {
         dormantStoreIDs.add(info.source_store_id);
       }
       detailsByStoreID.set(info.source_store_id, {
@@ -391,24 +410,25 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         keyRange: this.createContent(`${info.span.start_key} to ${info.span.end_key}`),
         problems: this.contentProblems(info.problems, awaitingGC),
         raftState: raftState,
+        quiescent: info.quiescent ? rangeTableQuiescent : rangeTableEmptyContent,
         leaseState: leaseState,
         leaseHolder: this.createContent(
           Print.ReplicaID(rangeID, lease.replica),
           leaseHolder ? "range-table__cell--lease-holder" : "range-table__cell--lease-follower",
         ),
-        leaseType: this.createContent(epoch ? "Epoch" : "Expiration"),
+        leaseType: this.createContent(epoch ? "epoch" : "expiration"),
         leaseEpoch: epoch ? this.createContent(lease.epoch) : rangeTableEmptyContent,
         leaseStart: this.contentTimestamp(lease.start),
         leaseExpiration: epoch ? rangeTableEmptyContent : this.contentTimestamp(lease.expiration),
         leaseAppliedIndex: this.createContent(FixLong(info.state.state.lease_applied_index)),
-        raftLeader: this.createContent(
+        raftLeader: this.contentIf(!dormant, () => this.createContent(
           FixLong(info.raft_state.lead),
           raftLeader ? "range-table__cell--raftstate-leader" : "range-table__cell--raftstate-follower",
-        ),
-        vote: this.createContent(vote.greaterThan(0) ? vote : "-"),
-        term: this.createContent(FixLong(info.raft_state.hard_state.term)),
-        applied: this.createContent(FixLong(info.raft_state.applied)),
-        commit: this.createContent(FixLong(info.raft_state.hard_state.commit)),
+        )),
+        vote: this.contentIf(!dormant, () => this.createContent(vote.greaterThan(0) ? vote : "-")),
+        term: this.contentIf(!dormant, () => this.createContent(FixLong(info.raft_state.hard_state.term))),
+        applied: this.contentIf(!dormant, () => this.createContent(FixLong(info.raft_state.applied))),
+        commit: this.contentIf(!dormant, () => this.createContent(FixLong(info.raft_state.hard_state.commit))),
         lastIndex: this.createContent(FixLong(info.state.lastIndex)),
         logSize: this.createContent(FixLong(info.state.raft_log_size)),
         leaseHolderQPS: leaseHolder ? this.createContent(info.stats.queries_per_second.toFixed(4)) : rangeTableEmptyContent,
