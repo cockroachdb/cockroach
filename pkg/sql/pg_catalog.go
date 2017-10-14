@@ -1448,6 +1448,7 @@ CREATE TABLE pg_catalog.pg_type (
 		for o, typ := range parser.OidToType {
 			cat := typCategory(typ)
 			typElem := oidZero
+			typarray := oidZero
 			builtinPrefix := parser.PGIOBuiltinPrefix(typ)
 			if cat == typCategoryArray {
 				if typ == parser.TypeIntVector {
@@ -1462,6 +1463,8 @@ CREATE TABLE pg_catalog.pg_type (
 					builtinPrefix = "array_"
 					typElem = parser.NewDOid(parser.DInt(parser.UnwrapType(typ).(parser.TArray).Typ.Oid()))
 				}
+			} else {
+				typarray = parser.NewDOid(parser.DInt(parser.TArray{Typ: typ}.Oid()))
 			}
 			typname := parser.PGDisplayName(typ)
 
@@ -1479,7 +1482,7 @@ CREATE TABLE pg_catalog.pg_type (
 				typDelim,                // typdelim
 				oidZero,                 // typrelid
 				typElem,                 // typelem
-				oidZero,                 // typarray
+				typarray,                // typarray
 
 				// regproc references
 				h.RegProc(builtinPrefix+"in"),   // typinput

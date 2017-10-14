@@ -621,11 +621,6 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 				}
 			}
 			return out, nil
-		case oid.T_anyarray:
-			if err := validateStringBytes(b); err != nil {
-				return nil, err
-			}
-			return parser.NewDString(string(b)), nil
 		case oid.T__text, oid.T__name:
 			var arr pq.StringArray
 			if err := (&arr).Scan(b); err != nil {
@@ -645,6 +640,14 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 				}
 			}
 			return out, nil
+		}
+		if _, ok := parser.ArrayOids[id]; ok {
+			// Arrays come in in their string form, so we parse them as such and later
+			// convert them to their actual datum form.
+			if err := validateStringBytes(b); err != nil {
+				return nil, err
+			}
+			return parser.NewDString(string(b)), nil
 		}
 	case formatBinary:
 		switch id {
