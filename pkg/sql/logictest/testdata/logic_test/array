@@ -465,6 +465,25 @@ SELECT * FROM a
 statement ok
 DROP TABLE a
 
+# Ensure that additional type info stays when used as an array.
+
+statement ok
+CREATE TABLE a (b SMALLINT[])
+
+query TT
+SHOW CREATE TABLE a
+----
+a  CREATE TABLE a (
+    b SMALLINT[] NULL,
+    FAMILY "primary" (b, rowid)
+  )
+
+statement error integer out of range for type SMALLINT \(column "b"\)
+INSERT INTO a VALUES (ARRAY[100000])
+
+statement ok
+DROP TABLE a
+
 # String array columns.
 
 statement ok

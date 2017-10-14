@@ -1911,6 +1911,16 @@ func ColumnsSelectors(cols []ColumnDescriptor) parser.SelectExprs {
 	return exprs
 }
 
+func (c *ColumnType) elementColumnType() *ColumnType {
+	if c.SemanticType != ColumnType_ARRAY {
+		return nil
+	}
+	result := *c
+	result.SemanticType = *c.ArrayContents
+	result.ArrayContents = nil
+	return &result
+}
+
 // SQLString returns the SQL string corresponding to the type.
 func (c *ColumnType) SQLString() string {
 	switch c.SemanticType {
@@ -1949,7 +1959,7 @@ func (c *ColumnType) SQLString() string {
 		}
 		return fmt.Sprintf("%s COLLATE %s", ColumnType_STRING.String(), *c.Locale)
 	case ColumnType_ARRAY:
-		return c.ArrayContents.String() + "[]"
+		return c.elementColumnType().SQLString() + "[]"
 	}
 	if c.VisibleType != ColumnType_NONE {
 		return c.VisibleType.String()

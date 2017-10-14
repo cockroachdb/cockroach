@@ -82,6 +82,80 @@ func SanitizeVarFreeExpr(
 	return typedExpr, nil
 }
 
+func populateTypeAttrs(
+	base ColumnType, typ parser.ColumnType, searchPath parser.SearchPath,
+) (ColumnType, error) {
+	// Set other attributes of col.Type and perform type-specific verification.
+	switch t := typ.(type) {
+	case *parser.BoolColType:
+	case *parser.IntColType:
+		base.Width = int32(t.Width)
+		if val, present := nameToVisibleTypeMap[t.Name]; present {
+			base.VisibleType = val
+		}
+	case *parser.FloatColType:
+		// If the precision for this float col was intentionally specified as 0, return an error.
+		if t.Prec == 0 && t.PrecSpecified {
+			return ColumnType{}, errors.New("precision for type float must be at least 1 bit")
+		}
+		base.Precision = int32(t.Prec)
+		if val, present := nameToVisibleTypeMap[t.Name]; present {
+			base.VisibleType = val
+		}
+	case *parser.DecimalColType:
+		base.Width = int32(t.Scale)
+		base.Precision = int32(t.Prec)
+
+		switch {
+		case base.Precision == 0 && base.Width > 0:
+			// TODO (seif): Find right range for error message.
+			return ColumnType{}, errors.New("invalid NUMERIC precision 0")
+		case base.Precision < base.Width:
+			return ColumnType{}, fmt.Errorf("NUMERIC scale %d must be between 0 and precision %d",
+				base.Width, base.Precision)
+		}
+	case *parser.DateColType:
+	case *parser.TimestampColType:
+	case *parser.TimestampTZColType:
+	case *parser.IntervalColType:
+	case *parser.UUIDColType:
+	case *parser.IPAddrColType:
+	case *parser.StringColType:
+		base.Width = int32(t.N)
+	case *parser.NameColType:
+	case *parser.BytesColType:
+	case *parser.CollatedStringColType:
+		base.Width = int32(t.N)
+	case *parser.ArrayColType:
+		for i, e := range t.BoundsExprs {
+			ctx := parser.SemaContext{SearchPath: searchPath}
+			te, err := parser.TypeCheckAndRequire(e, &ctx, parser.TypeInt, "array bounds")
+			if err != nil {
+				return ColumnType{}, errors.Wrapf(err, "couldn't get bound %d", i)
+			}
+			d, err := te.Eval(nil)
+			if err != nil {
+				return ColumnType{}, errors.Wrapf(err, "couldn't Eval bound %d", i)
+			}
+			b := parser.MustBeDInt(d)
+			base.ArrayDimensions = append(base.ArrayDimensions, int32(b))
+		}
+		var err error
+		base, err = populateTypeAttrs(base, t.ParamType, searchPath)
+		if err != nil {
+			return ColumnType{}, err
+		}
+	case *parser.VectorColType:
+		if _, ok := t.ParamType.(*parser.IntColType); !ok {
+			return ColumnType{}, errors.Errorf("vectors of type %s are unsupported", t.ParamType)
+		}
+	case *parser.OidColType:
+	default:
+		return ColumnType{}, errors.Errorf("unexpected type %T", t)
+	}
+	return base, nil
+}
+
 // MakeColumnDefDescs creates the column descriptor for a column, as well as the
 // index descriptor if the column is a primary key or unique.
 // The search path is used for name resolution for DEFAULT expressions.
@@ -99,77 +173,20 @@ func MakeColumnDefDescs(
 	if err != nil {
 		return nil, nil, err
 	}
-	col.Type = colTyp
 
-	// Set other attributes of col.Type and perform type-specific verification.
-	switch t := d.Type.(type) {
-	case *parser.BoolColType:
-	case *parser.IntColType:
-		col.Type.Width = int32(t.Width)
+	col.Type, err = populateTypeAttrs(colTyp, d.Type, searchPath)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if t, ok := d.Type.(*parser.IntColType); ok {
 		if t.IsSerial() {
 			if d.HasDefaultExpr() {
-				return nil, nil, fmt.Errorf("SERIAL column %q cannot have a default value", col.Name)
+				return nil, nil, fmt.Errorf("SERIAL column %q cannot have a default value", d.Name)
 			}
 			s := "unique_rowid()"
 			col.DefaultExpr = &s
 		}
-		if val, present := nameToVisibleTypeMap[t.Name]; present {
-			col.Type.VisibleType = val
-		}
-	case *parser.FloatColType:
-		// If the precision for this float col was intentionally specified as 0, return an error.
-		if t.Prec == 0 && t.PrecSpecified {
-			return nil, nil, errors.New("precision for type float must be at least 1 bit")
-		}
-		col.Type.Precision = int32(t.Prec)
-		if val, present := nameToVisibleTypeMap[t.Name]; present {
-			col.Type.VisibleType = val
-		}
-	case *parser.DecimalColType:
-		col.Type.Width = int32(t.Scale)
-		col.Type.Precision = int32(t.Prec)
-
-		switch {
-		case col.Type.Precision == 0 && col.Type.Width > 0:
-			// TODO (seif): Find right range for error message.
-			return nil, nil, errors.New("invalid NUMERIC precision 0")
-		case col.Type.Precision < col.Type.Width:
-			return nil, nil, fmt.Errorf("NUMERIC scale %d must be between 0 and precision %d",
-				col.Type.Width, col.Type.Precision)
-		}
-	case *parser.DateColType:
-	case *parser.TimestampColType:
-	case *parser.TimestampTZColType:
-	case *parser.IntervalColType:
-	case *parser.UUIDColType:
-	case *parser.IPAddrColType:
-	case *parser.StringColType:
-		col.Type.Width = int32(t.N)
-	case *parser.NameColType:
-	case *parser.BytesColType:
-	case *parser.CollatedStringColType:
-		col.Type.Width = int32(t.N)
-	case *parser.ArrayColType:
-		for i, e := range t.BoundsExprs {
-			ctx := parser.SemaContext{SearchPath: searchPath}
-			te, err := parser.TypeCheckAndRequire(e, &ctx, parser.TypeInt, "array bounds")
-			if err != nil {
-				return nil, nil, errors.Wrapf(err, "couldn't get bound %d", i)
-			}
-			d, err := te.Eval(nil)
-			if err != nil {
-				return nil, nil, errors.Wrapf(err, "couldn't Eval bound %d", i)
-			}
-			b := parser.MustBeDInt(d)
-			col.Type.ArrayDimensions = append(col.Type.ArrayDimensions, int32(b))
-		}
-	case *parser.VectorColType:
-		if _, ok := t.ParamType.(*parser.IntColType); !ok {
-			return nil, nil, errors.Errorf("vectors of type %s are unsupported", t.ParamType)
-		}
-	case *parser.OidColType:
-	default:
-		return nil, nil, errors.Errorf("unexpected type %T", t)
 	}
 
 	if len(d.CheckExprs) > 0 {
@@ -1961,21 +1978,21 @@ func UnmarshalColumnValue(
 // CheckValueWidth checks that the width (for strings, byte arrays, and
 // bit string) and scale (for decimals) of the value fits the specified
 // column type. Used by INSERT and UPDATE.
-func CheckValueWidth(col ColumnDescriptor, val parser.Datum) error {
-	switch col.Type.SemanticType {
+func CheckValueWidth(typ ColumnType, val parser.Datum, name string) error {
+	switch typ.SemanticType {
 	case ColumnType_STRING:
 		if v, ok := parser.AsDString(val); ok {
-			if col.Type.Width > 0 && utf8.RuneCountInString(string(v)) > int(col.Type.Width) {
+			if typ.Width > 0 && utf8.RuneCountInString(string(v)) > int(typ.Width) {
 				return fmt.Errorf("value too long for type %s (column %q)",
-					col.Type.SQLString(), col.Name)
+					typ.SQLString(), name)
 			}
 		}
 	case ColumnType_INT:
 		if v, ok := parser.AsDInt(val); ok {
-			if col.Type.Width > 0 {
+			if typ.Width > 0 {
 
 				// Width is defined in bits.
-				width := uint(col.Type.Width - 1)
+				width := uint(typ.Width - 1)
 
 				// https://www.postgresql.org/docs/9.5/static/datatype-bit.html
 				// "bit type data must match the length n exactly; it is an error
@@ -1984,21 +2001,29 @@ func CheckValueWidth(col ColumnDescriptor, val parser.Datum) error {
 				// strings will be rejected." Bits are unsigned, so we need to
 				// increase the width for the type check below.
 				// TODO(nvanbenschoten): Because we do not propagate the "varying"
-				if col.Type.VisibleType == ColumnType_BIT {
-					width = uint(col.Type.Width)
+				if typ.VisibleType == ColumnType_BIT {
+					width = uint(typ.Width)
 				}
 
 				// We're performing bounds checks inline with Go's implementation of min and max ints in Math.go.
 				shifted := v >> width
 				if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-					return fmt.Errorf("integer out of range for type %s (column %q)", col.Type.VisibleType, col.Name)
+					return fmt.Errorf("integer out of range for type %s (column %q)", typ.VisibleType, name)
 				}
 			}
 		}
 	case ColumnType_DECIMAL:
 		if v, ok := val.(*parser.DDecimal); ok {
-			if err := parser.LimitDecimalWidth(&v.Decimal, int(col.Type.Precision), int(col.Type.Width)); err != nil {
-				return errors.Wrapf(err, "type %s (column %q)", col.Type.SQLString(), col.Name)
+			if err := parser.LimitDecimalWidth(&v.Decimal, int(typ.Precision), int(typ.Width)); err != nil {
+				return errors.Wrapf(err, "type %s (column %q)", typ.SQLString(), name)
+			}
+		}
+	case ColumnType_ARRAY:
+		d := val.(*parser.DArray)
+		elementType := *typ.elementColumnType()
+		for i := range d.Array {
+			if err := CheckValueWidth(elementType, d.Array[i], name); err != nil {
+				return err
 			}
 		}
 	}
