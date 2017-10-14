@@ -855,9 +855,6 @@ func TestPGPreparedQuery(t *testing.T) {
 		"SELECT $1::UUID": {
 			baseTest.SetArgs("63616665-6630-3064-6465-616462656562").Results("63616665-6630-3064-6465-616462656562"),
 		},
-		"SELECT $1::INET": {
-			baseTest.SetArgs("192.168.0.1/32").Results("192.168.0.1"),
-		},
 		"SELECT $1:::FLOAT[]": {
 			baseTest.SetArgs("{}").Results("{}"),
 			baseTest.SetArgs("{1.0,2.0,3.0}").Results("{1.0,2.0,3.0}"),
