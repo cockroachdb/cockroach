@@ -379,6 +379,17 @@ statement ok
 DELETE FROM a
 
 statement ok
+INSERT INTO a VALUES (NULL)
+
+query T
+SELECT b FROM a
+----
+NULL
+
+statement ok
+DELETE FROM a
+
+statement ok
 INSERT INTO a VALUES (ARRAY[])
 
 query T
@@ -461,6 +472,25 @@ query T
 SELECT * FROM a
 ----
 {1,2,3,4,5,6,7,8,NULL}
+
+statement ok
+DROP TABLE a
+
+# Ensure that additional type info stays when used as an array.
+
+statement ok
+CREATE TABLE a (b SMALLINT[])
+
+query TT
+SHOW CREATE TABLE a
+----
+a  CREATE TABLE a (
+    b SMALLINT[] NULL,
+    FAMILY "primary" (b, rowid)
+  )
+
+statement error integer out of range for type SMALLINT \(column "b"\)
+INSERT INTO a VALUES (ARRAY[100000])
 
 statement ok
 DROP TABLE a

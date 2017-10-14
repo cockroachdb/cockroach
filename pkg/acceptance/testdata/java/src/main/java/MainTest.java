@@ -142,6 +142,21 @@ public class MainTest extends CockroachDBTest {
     }
 
     @Test
+    public void testArrayWithProps() throws Exception {
+        PreparedStatement stmt = conn.prepareStatement("CREATE TABLE x (a SMALLINT[])");
+        stmt.execute();
+        stmt = conn.prepareStatement("INSERT INTO x VALUES (ARRAY[123])");
+        stmt.execute();
+        stmt = conn.prepareStatement("SELECT a FROM x");
+        ResultSet rs = stmt.executeQuery();
+        rs.next();
+
+        Array ar = rs.getArray(1);
+        Long[] fs = (Long[]) ar.getArray();
+        Assert.assertArrayEquals(new Long[]{123L}, fs);
+    }
+
+    @Test
     public void testStringArray() throws Exception {
         PreparedStatement stmt = conn.prepareStatement("SELECT '{123,\"hello\",\"\\\"hello\\\"\"}'::STRING[]");
         ResultSet rs = stmt.executeQuery();
