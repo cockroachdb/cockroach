@@ -13,6 +13,10 @@ guidelines](https://www.cockroachlabs.com/docs/stable/contribute-to-cockroachdb.
 on finding a project, determining its complexity, and learning what to
 expect in your collaboration with the Cockroach Labs team.
 
+If you *really* want to dig deep into our processes and mindset, you may also
+want to peruse our extensive [first PR guide], which is part of our on-boarding for
+new engineers.
+
 ## Getting and Building
 
 1. Install the following prerequisites, as necessary:
@@ -207,3 +211,5 @@ runs the `Put` acceptance test for 20 minutes with logging (useful to look at
 the stack trace in case of a node dying). When it starts, all the relevant
 commands for `pprof`, `trace` and logs are logged to allow for convenient
 inspection of the cluster.
+
+[first PR guide]: docs/first-pr.md
