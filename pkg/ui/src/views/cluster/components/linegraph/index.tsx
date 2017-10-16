@@ -1,16 +1,20 @@
+import d3 from "d3";
 import React from "react";
+import moment from "moment";
 import * as nvd3 from "nvd3";
 import { createSelector } from "reselect";
 
+import { HoverState, hoverOn, hoverOff } from "src/redux/hover";
 import { findChildrenOfType } from "src/util/find";
 import {
-  ConfigureLineChart, InitLineChart, updateLinkedGuidelines,
+  ConfigureLineChart, InitLineChart, CHART_MARGINS,
 } from "src/views/cluster/util/graphs";
 import {
   Metric, MetricProps, Axis, AxisProps,
 } from "src/views/shared/components/metricQuery";
 import { MetricsDataComponentProps } from "src/views/shared/components/metricQuery";
 import Visualization from "src/views/cluster/components/visualization";
+import { NanoToMilli } from "src/util/convert";
 
 interface LineGraphProps extends MetricsDataComponentProps {
   title?: string;
@@ -18,6 +22,9 @@ interface LineGraphProps extends MetricsDataComponentProps {
   legend?: boolean;
   xAxis?: boolean;
   tooltip?: React.ReactNode;
+  hoverOn?: typeof hoverOn;
+  hoverOff?: typeof hoverOff;
+  hoverState?: HoverState;
 }
 
 /**
@@ -67,8 +74,54 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     }
   }
 
-  mouseMove = () => {
-    updateLinkedGuidelines(this.graphEl);
+  mouseMove = (e: any) => {
+    const datapoints = this.props.data.results[0].datapoints;
+    const timeScale = this.chart.xAxis.scale();
+
+    // To get the x-coordinate within the chart we subtract the left side of the SVG
+    // element and the left side margin.
+    const x = e.clientX - this.graphEl.getBoundingClientRect().left - CHART_MARGINS.left;
+    // Find the time value of the coordinate by asking the scale to invert the value.
+    const t = Math.floor(timeScale.invert(x));
+
+    // Find which data point is closest to the x-coordinate.
+    let result: moment.Moment;
+    if (datapoints.length) {
+      const series: any = datapoints.map((d: any) => NanoToMilli(d.timestamp_nanos.toNumber()));
+
+      const right = d3.bisectRight(series, t);
+      const left = right - 1;
+
+      let index = 0;
+
+      if (right >= series.length) {
+        // We're hovering over the rightmost point.
+        index = left;
+      } else if (left < 0) {
+        // We're hovering over the leftmost point.
+        index = right;
+      } else {
+        // The general case: we're hovering somewhere over the middle.
+        const leftDistance = t - series[left];
+        const rightDistance = series[right] - t;
+
+        index = leftDistance < rightDistance ? left : right;
+      }
+
+      result = moment(new Date(series[index]));
+    }
+
+    // Only dispatch if we have something to change to avoid action spamming.
+    if (this.props.hoverState.hoverChart !== this.props.title || !result.isSame(this.props.hoverState.hoverTime)) {
+      this.props.hoverOn({
+        hoverChart: this.props.title,
+        hoverTime: result,
+      });
+    }
+  }
+
+  mouseLeave = () => {
+    this.props.hoverOff();
   }
 
   drawChart = () => {
@@ -88,8 +141,15 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
         return;
       }
 
+      const { currentlyHovering, hoverChart } = this.props.hoverState;
+      let hoverTime: moment.Moment;
+      // Don't draw the linked guideline on the hovered chart, NVD3 does that for us.
+      if (currentlyHovering && hoverChart !== this.props.title) {
+        hoverTime = this.props.hoverState.hoverTime;
+      }
+
       ConfigureLineChart(
-        this.chart, this.graphEl, metrics, axis, this.props.data, this.props.timeInfo, false,
+        this.chart, this.graphEl, metrics, axis, this.props.data, this.props.timeInfo, false, hoverTime,
       );
     }
   }
@@ -116,7 +176,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
 
     return <Visualization title={title} subtitle={subtitle} tooltip={tooltip} loading={!data} >
       <div className="linegraph">
-        <svg className="graph linked-guideline" ref={(svg) => this.graphEl = svg} onMouseMove={this.mouseMove} onMouseLeave={this.mouseMove} />
+        <svg className="graph linked-guideline" ref={(svg) => this.graphEl = svg} onMouseMove={this.mouseMove} onMouseLeave={this.mouseLeave} />
       </div>
     </Visualization>;
   }
