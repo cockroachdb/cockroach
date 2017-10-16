@@ -576,17 +576,22 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness *Liveness) 
 	}
 	newLiveness := *liveness
 	newLiveness.Epoch++
-	update := func(l Liveness) {
+	maybeUpdate := func(l Liveness) {
 		nl.mu.Lock()
 		defer nl.mu.Unlock()
+
 		if nodeID := nl.gossip.NodeID.Get(); nodeID == l.NodeID {
-			nl.mu.self = l
+			if shouldReplaceLiveness(nl.mu.self, l) {
+				nl.mu.self = l
+			}
 		} else {
-			nl.mu.nodes[l.NodeID] = l
+			if shouldReplaceLiveness(nl.mu.nodes[l.NodeID], l) {
+				nl.mu.nodes[l.NodeID] = l
+			}
 		}
 	}
 	if err := nl.updateLiveness(ctx, &newLiveness, liveness, func(actual Liveness) error {
-		defer update(actual)
+		defer maybeUpdate(actual)
 		if actual.Epoch > liveness.Epoch {
 			return errEpochAlreadyIncremented
 		} else if actual.Epoch < liveness.Epoch {
@@ -602,7 +607,7 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness *Liveness) 
 
 	log.VEventf(ctx, 1, "incremented node %d liveness epoch to %d",
 		newLiveness.NodeID, newLiveness.Epoch)
-	update(newLiveness)
+	maybeUpdate(newLiveness)
 	nl.metrics.EpochIncrements.Inc(1)
 	return nil
 }
