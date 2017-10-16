@@ -47,60 +47,24 @@ const (
 	btreeDegree = 64
 )
 
-// CacheRequest holds the timestamp cache data from a single batch request. The
-// requests are stored in a btree keyed by the timestamp and are "expanded" to
-// populate the read/write interval caches if a potential conflict is detected
-// due to an earlier request (based on timestamp) arriving.
-type CacheRequest struct {
-	Span      roachpb.RSpan
-	Reads     []roachpb.Span
-	Writes    []roachpb.Span
-	Txn       roachpb.Span
-	TxnID     uuid.UUID
-	Timestamp hlc.Timestamp
-	// Used to distinguish requests with identical timestamps. For actual
-	// requests, the uniqueID value is >0. When probing the btree for requests
-	// later than a particular timestamp a value of 0 is used.
-	uniqueID int64
+// A cacheValue combines the timestamp with an optional txn ID.
+type cacheValue struct {
+	timestamp hlc.Timestamp
+	txnID     uuid.UUID // zero for no transaction
 }
 
-// Less implements the btree.Item interface.
-func (cr *CacheRequest) Less(other btree.Item) bool {
-	otherReq := other.(*CacheRequest)
-	if cr.Timestamp.Less(otherReq.Timestamp) {
-		return true
+func makeCacheEntry(key cache.IntervalKey, value cacheValue) *cache.Entry {
+	alloc := struct {
+		key   cache.IntervalKey
+		value cacheValue
+		entry cache.Entry
+	}{
+		key:   key,
+		value: value,
 	}
-	if otherReq.Timestamp.Less(cr.Timestamp) {
-		return false
-	}
-	// Fallback to comparison of the uniqueID as a tie-breaker. This allows
-	// multiple requests with the same timestamp to exist in the requests btree.
-	return cr.uniqueID < otherReq.uniqueID
-}
-
-// numSpans returns the number of spans the request will expand into.
-func (cr *CacheRequest) numSpans() int {
-	n := len(cr.Reads) + len(cr.Writes)
-	if cr.Txn.Key != nil {
-		n++
-	}
-	return n
-}
-
-func (cr *CacheRequest) size() uint64 {
-	var n uint64
-	for i := range cr.Reads {
-		s := &cr.Reads[i]
-		n += cacheEntrySize(interval.Comparable(s.Key), interval.Comparable(s.EndKey))
-	}
-	for i := range cr.Writes {
-		s := &cr.Writes[i]
-		n += cacheEntrySize(interval.Comparable(s.Key), interval.Comparable(s.EndKey))
-	}
-	if cr.Txn.Key != nil {
-		n += cacheEntrySize(interval.Comparable(cr.Txn.Key), nil)
-	}
-	return n
+	alloc.entry.Key = &alloc.key
+	alloc.entry.Value = &alloc.value
+	return &alloc.entry
 }
 
 var cacheEntryOverhead = uint64(unsafe.Sizeof(cache.IntervalKey{}) +
@@ -159,26 +123,6 @@ var LowWaterTxnIDMarker = func() uuid.UUID {
 	return u
 }()
 
-// A cacheValue combines the timestamp with an optional txn ID.
-type cacheValue struct {
-	timestamp hlc.Timestamp
-	txnID     uuid.UUID // zero for no transaction
-}
-
-func makeCacheEntry(key cache.IntervalKey, value cacheValue) *cache.Entry {
-	alloc := struct {
-		key   cache.IntervalKey
-		value cacheValue
-		entry cache.Entry
-	}{
-		key:   key,
-		value: value,
-	}
-	alloc.entry.Key = &alloc.key
-	alloc.entry.Value = &alloc.value
-	return &alloc.entry
-}
-
 // NewTimestampCache returns a new timestamp cache with supplied
 // hybrid clock.
 func NewTimestampCache(clock *hlc.Clock) *TimestampCache {
@@ -190,17 +134,8 @@ func NewTimestampCache(clock *hlc.Clock) *TimestampCache {
 	tc.Clear(clock.Now())
 	tc.rCache.Config.ShouldEvict = tc.shouldEvict
 	tc.wCache.Config.ShouldEvict = tc.shouldEvict
-
-	onEvicted := func(k, v interface{}) {
-		ck := k.(*cache.IntervalKey)
-		reqSize := cacheEntrySize(ck.Start, ck.End)
-		if tc.bytes < reqSize {
-			panic(fmt.Sprintf("bad reqSize: %d < %d", tc.bytes, reqSize))
-		}
-		tc.bytes -= reqSize
-	}
-	tc.rCache.Config.OnEvicted = onEvicted
-	tc.wCache.Config.OnEvicted = onEvicted
+	tc.rCache.Config.OnEvicted = tc.onEvicted
+	tc.wCache.Config.OnEvicted = tc.onEvicted
 	return tc
 }
 
@@ -740,6 +675,16 @@ func (tc *TimestampCache) shouldEvict(size int, key, value interface{}) bool {
 		return true
 	}
 	return false
+}
+
+// onEvicted is called when an entry is evicted from the cache.
+func (tc *TimestampCache) onEvicted(k, v interface{}) {
+	ck := k.(*cache.IntervalKey)
+	reqSize := cacheEntrySize(ck.Start, ck.End)
+	if tc.bytes < reqSize {
+		panic(fmt.Sprintf("bad reqSize: %d < %d", tc.bytes, reqSize))
+	}
+	tc.bytes -= reqSize
 }
 
 // GlobalLowWater returns the low water mark for the entire TimestampCache.
