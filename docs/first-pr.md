@@ -456,6 +456,15 @@ for [production-ready code].
 No one is expected to write perfect code on the first try. That's why we have
 code reviews in the first place!
 
+## By humans for humans
+
+Probably everyone has at some time had an unpleasant interaction during a code
+review, and with code reviews being [by humans for humans], one or both of these
+humans could be having a bad day. As if that weren't enough already, text-based
+communication is fraught with miscommunication. Consider being a [minimally nice maintainer]),
+reflect upon mistakes that will inevitably be made, and take inspiration from the
+constructive and friendly reviews that are the daily staple of our repository.
+
 ### Reviewable
 
 Except for the smallest of PRs, we eschew GitHub reviews in favor of a
@@ -630,3 +639,5 @@ Here's a checklist of action items to keep you sane:
 [RocksDB]: http://rocksdb.org
 [STYLE.md]: /STYLE.md
 [this repository's wiki]: https://github.com/cockroachdb/cockroach/wiki/Jargon
+[by humans for humans]: https://mtlynch.io/human-code-reviews-1/
+[minimally nice maintainer]: https://brson.github.io/2017/04/05/minimally-nice-maintainer
