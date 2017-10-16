@@ -16,11 +16,14 @@ package log
 
 import (
 	"fmt"
+	"os"
 	"runtime"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
@@ -36,9 +39,10 @@ func TestCrashReportingSafeError(t *testing.T) {
 
 	testCases := []testCase{
 		{
-			// Intended result of panic(context.DeadlineExceeded).
+			// Intended result of panic(context.DeadlineExceeded). Note that this is a known sentinel
+			// error.
 			format: "", rs: []interface{}{context.DeadlineExceeded},
-			expType: "*log.safeError", expErr: "?:0: <context.deadlineExceededError>",
+			expType: "context.deadlineExceededError", expErr: "context deadline exceeded",
 		},
 		{
 			// Intended result of panic(runtimeErr) which exhibits special case of known safe error.
@@ -48,16 +52,26 @@ func TestCrashReportingSafeError(t *testing.T) {
 		{
 			// Special-casing switched off when format string present.
 			format: "%s", rs: []interface{}{runtimeErr},
-			expType: "*log.safeError", expErr: "?:0: %s | interface conversion: interface is nil, not ",
+			expType: "*log.safeError", expErr: "?:0: %s | <*runtime.TypeAssertionError>: interface conversion: interface is nil, not ",
 		},
 		{
 			// Special-casing switched off when more than one reportable present.
 			format: "", rs: []interface{}{runtimeErr, "foo"},
-			expType: "*log.safeError", expErr: "?:0: interface conversion: interface is nil, not ; <string>",
+			expType: "*log.safeError", expErr: "?:0: <*runtime.TypeAssertionError>: interface conversion: interface is nil, not ; <string>",
 		},
 		{
 			format: "I like %s and %q and my pin code is %d", rs: []interface{}{Safe("A"), &SafeType{V: "B"}, 1234},
 			expType: "*log.safeError", expErr: "?:0: I like %s and %q and my pin code is %d | A; B; <int>",
+		},
+		{
+			format: "outer %+v", rs: []interface{}{
+				errors.Wrapf(context.Canceled, "this will unfortunately be lost: %d", Safe(6)),
+			},
+			expType: "*log.safeError", expErr: "?:0: outer %+v | <*errors.withStack>: <redacted>: caused by <redacted>: caused by context canceled",
+		},
+		{
+			format: "", rs: []interface{}{os.NewSyscallError("write", syscall.ENOSPC)},
+			expType: "*os.SyscallError", expErr: "write: no space left on device",
 		},
 	}
 
