@@ -128,7 +128,7 @@ type ZoneConfig struct {
 	NumReplicas int32 `protobuf:"varint,5,opt,name=num_replicas,json=numReplicas" json:"num_replicas" yaml:"num_replicas"`
 	// Constraints constrains which stores the replicas can be stored on. The
 	// order in which the constraints are stored is arbitrary and may change.
-	// https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/expressive_zone_config.md#constraint-system
+	// https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160706_expressive_zone_config.md#constraint-system
 	Constraints Constraints `protobuf:"bytes,6,opt,name=constraints" json:"constraints" yaml:"constraints,flow"`
 }
 
