@@ -61,11 +61,12 @@ const (
 	defaultScanMaxIdleTime       = 200 * time.Millisecond
 	defaultMetricsSampleInterval = 10 * time.Second
 	defaultStorePath             = "cockroach-data"
-	defaultTempStorageDirPrefix  = "cockroach-temp"
-	// tempStorageDirsRecordFilename is the filename for the record file
+	// DefaultTempStorageDirPrefix is the filename prefix of any temporary
+	// subdirectory created for temp storage.
+	DefaultTempStorageDirPrefix = "cockroach-temp"
+	// TempStorageDirsRecordFilename is the filename for the record file
 	// that keeps track of the paths of the temporary directories created.
-	// This file will be stored under the first store's root.
-	tempStorageDirsRecordFilename         = "temp-storage-dirs.txt"
+	TempStorageDirsRecordFilename         = "temp-storage-dirs.txt"
 	defaultEventLogEnabled                = true
 	defaultEnableWebSessionAuthentication = false
 
@@ -128,8 +129,8 @@ type Config struct {
 	// Stores is specified to enable durable key-value storage.
 	Stores base.StoreSpecList
 
-	// TempStorageConfig is used to store ephemeral data when processing large
-	// queries.
+	// TempStorageConfig is used to configure temp storage, which stores
+	// ephemeral data when processing large queries.
 	TempStorageConfig base.TempStorageConfig
 
 	// Attrs specifies a colon-separated list of node topography or machine

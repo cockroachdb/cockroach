@@ -15,6 +15,7 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"flag"
 	"fmt"
@@ -400,6 +401,82 @@ var cacheSizeValue = newBytesOrPercentageValue(&serverCfg.CacheSize, memoryPerce
 var sqlSizeValue = newBytesOrPercentageValue(&serverCfg.SQLMemoryPoolSize, memoryPercentResolver)
 var diskTempStorageSizeValue = newBytesOrPercentageValue(nil /* v */, nil /* percentResolver */)
 
+func initTempStorageConfig(ctx context.Context) error {
+	firstStore := serverCfg.Stores.Specs[0]
+	// The temp store size can depend on the location of the first regular store
+	// (if it's expressed as a percentage), so we resolve that flag here.
+	var tempStorePercentageResolver percentResolverFunc
+	var err error
+	if !firstStore.InMemory {
+		dir := firstStore.Path
+		// Create the store dir, if it doesn't exist. The dir is required to exist
+		// by diskPercentResolverFactory.
+		if err = os.MkdirAll(dir, 0755); err != nil {
+			return errors.Wrapf(err, "failed to create dir for first store: %s", dir)
+		}
+		tempStorePercentageResolver, err = diskPercentResolverFactory(dir)
+		if err != nil {
+			return errors.Wrapf(err, "failed to create resolver for: %s", dir)
+		}
+	} else {
+		tempStorePercentageResolver = memoryPercentResolver
+	}
+	var tempStorageMaxSizeBytes int64
+	if err = diskTempStorageSizeValue.Resolve(
+		&tempStorageMaxSizeBytes, tempStorePercentageResolver,
+	); err != nil {
+		return err
+	}
+	if firstStore.InMemory && !diskTempStorageSizeValue.IsSet() {
+		// The default temp store size is different when the first
+		// store (and thus also the temp storage) is in memory.
+		tempStorageMaxSizeBytes = base.DefaultInMemTempStorageMaxSizeBytes
+	}
+
+	// Re-initialize TempStorageConfig based on cli flag-initialize values
+	// and the first store's spec.
+	serverCfg.TempStorageConfig = base.TempStorageConfigFromEnv(
+		ctx,
+		firstStore,
+		tempParentDir,
+		tempStorageMaxSizeBytes,
+	)
+
+	// Default temp parent directory to first store path if the temp
+	// storage is not in memory.
+	if tempParentDir == "" && !serverCfg.TempStorageConfig.InMemory {
+		tempParentDir = firstStore.Path
+	}
+
+	// We need to clean up abandoned temporary directories from the
+	// temporary directory record file before creating any new temporary
+	// directories.  Record file can only exist if the first store is
+	// on-disk.
+	if !firstStore.InMemory {
+		if err = cleanupTempDirs(firstStore.Path); err != nil {
+			return errors.Wrap(err, "could not cleanup temporary directories from record file")
+		}
+	}
+	// Create the temporary subdirectory for the temp engine.
+	if serverCfg.TempStorageConfig.Path, err = createTempDir(tempParentDir); err != nil {
+		return errors.Wrap(err, "could not create temporary directory for temp storage")
+	}
+
+	// We record the new temporary directory in the record file (if it
+	// exists) for cleanup in case the node crashes.
+	if !firstStore.InMemory {
+		if err = recordTempDir(firstStore.Path, serverCfg.TempStorageConfig.Path); err != nil {
+			return errors.Wrapf(
+				err,
+				"could not record temporary directory path to record file: %s",
+				filepath.Join(firstStore.Path, server.TempStorageDirsRecordFilename),
+			)
+		}
+	}
+
+	return nil
+}
+
 // runStart starts the cockroach node using --store as the list of
 // storage devices ("stores") on this machine and --join as the list
 // of other active nodes used to join this node to the cockroach
@@ -416,49 +493,13 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 	// Deal with flags that may depend on other flags.
 
-	firstStore := serverCfg.Stores.Specs[0]
-	// The temp store size can depend on the location of the first regular store
-	// (if it's expressed as a percentage), so we resolve that flag here.
-	var tempStorePercentageResolver percentResolverFunc
-	var err error
-	if !firstStore.InMemory {
-		dir := firstStore.Path
-		// Create the store dir, if it doesn't exist. The dir is required to exist
-		// by diskPercentResolverFactory.
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return errors.Wrapf(err, "failed to create dir for first store: %s", dir)
-		}
-		tempStorePercentageResolver, err = diskPercentResolverFactory(dir)
-		if err != nil {
-			return errors.Wrapf(err, "failed to create resolver for: %s", dir)
-		}
-	} else {
-		tempStorePercentageResolver = memoryPercentResolver
-	}
-	var tempStorageMaxSizeBytes int64
-	if err := diskTempStorageSizeValue.Resolve(
-		&tempStorageMaxSizeBytes, tempStorePercentageResolver,
-	); err != nil {
-		return err
-	}
-	if firstStore.InMemory && !diskTempStorageSizeValue.IsSet() {
-		// The default temp store size is different when the first
-		// store (and thus also the temp storage) is in memory.
-		tempStorageMaxSizeBytes = base.DefaultInMemTempStorageMaxSizeBytes
-	}
-
 	tracer := serverCfg.Settings.Tracer
 	sp := tracer.StartSpan("server start")
 	ctx := opentracing.ContextWithSpan(context.Background(), sp)
 
-	// Re-initialize temp storage based on the current attributes
-	// (initialized from CLI flags and above) and the first store's spec.
-	serverCfg.TempStorageConfig = base.TempStorageConfigFromEnv(
-		ctx,
-		firstStore,
-		serverCfg.TempStorageConfig.ParentDir,
-		tempStorageMaxSizeBytes,
-	)
+	if err := initTempStorageConfig(ctx); err != nil {
+		return err
+	}
 
 	// Use the server-specific values for some flags and settings.
 	serverCfg.Insecure = startCtx.serverInsecure
@@ -501,7 +542,8 @@ func runStart(cmd *cobra.Command, args []string) error {
 		}()
 		defer sp.Finish()
 		if err := func() error {
-			if err := serverCfg.InitNode(); err != nil {
+			var err error
+			if err = serverCfg.InitNode(); err != nil {
 				return errors.Wrap(err, "failed to initialize node")
 			}
 
@@ -510,7 +552,6 @@ func runStart(cmd *cobra.Command, args []string) error {
 				log.Infof(ctx, "using local environment variables: %s", strings.Join(envVarsUsed, ", "))
 			}
 
-			var err error
 			s, err = server.NewServer(serverCfg, stopper)
 			if err != nil {
 				return errors.Wrap(err, "failed to start server")
@@ -563,6 +604,9 @@ func runStart(cmd *cobra.Command, args []string) error {
 			}
 			if len(serverCfg.Locality.Tiers) > 0 {
 				fmt.Fprintf(tw, "locality:\t%s\n", serverCfg.Locality)
+			}
+			if s.TempDir() != "" {
+				fmt.Fprintf(tw, "temp dir:\t%s\n", s.TempDir())
 			}
 			for i, spec := range serverCfg.Stores.Specs {
 				fmt.Fprintf(tw, "store[%d]:\t%s\n", i, spec)
@@ -988,4 +1032,80 @@ func runQuit(cmd *cobra.Command, args []string) (err error) {
 	// Not passing drain modes tells the server to not bother and go
 	// straight to shutdown.
 	return errors.Wrap(doShutdown(ctx, c, nil), "hard shutdown failed")
+}
+
+// cleanupTempDirs should be invoked on startup (before creating any new
+// temporary directories) to clean up abandoned temporary directories from
+// previous startups.
+// It should also be invoked on shutdown when the server is closed.
+// It reads the temporary paths from the record file named
+// server.TempStorageDirsRecordFilename in recordDir and removes each
+// directory.
+func cleanupTempDirs(recordDir string) error {
+	// Reading the entire file into memory shouldn't be a problem since
+	// it is extremely rare for this record file to contain more than a few
+	// entries.
+	f, err := os.OpenFile(filepath.Join(recordDir, server.TempStorageDirsRecordFilename), os.O_RDWR, 0644)
+	// There is no existing record file and thus nothing to clean up.
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	// Iterate through each temporary directory path and remove the
+	// directory.
+	for scanner.Scan() {
+		path := scanner.Text()
+		if path == "" {
+			continue
+		}
+		// If path/directory does not exist, error is nil.
+		if err := os.RemoveAll(path); err != nil {
+			return err
+		}
+	}
+
+	// Clear out the record file now that we're done.
+	if err = f.Truncate(0); err != nil {
+		return err
+	}
+	return f.Sync()
+}
+
+// createTempDir creates a temporary directory under the given parentDir and
+// returns the path of the temporary directory.  One should only create
+// temporary directories after calling cleanupTempDirs (see above).
+// It is the responsibility of the server this path is passed to remove this
+// directory.
+func createTempDir(parentDir string) (string, error) {
+	// We generate a unique temporary directory with the prefix
+	// server.DefaultTempStorageDirPrefix.
+	tempPath, err := ioutil.TempDir(parentDir, server.DefaultTempStorageDirPrefix)
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Abs(tempPath)
+}
+
+// recordTempDir records tempPath to a record file named
+// server.TempStorageDirsRecordFilename in recordDir to facilitate deletion of
+// the temporary directory in case the node crashes.
+func recordTempDir(recordDir, tempPath string) error {
+	// If the file does not exist, create it, or append to the file.
+	f, err := os.OpenFile(filepath.Join(recordDir, server.TempStorageDirsRecordFilename), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	// Record tempPath to the record file.
+	if _, err = f.Write(append([]byte(tempPath), '\n')); err != nil {
+		return err
+	}
+	return f.Sync()
 }
